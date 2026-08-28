@@ -1,51 +1,54 @@
 # -*- coding: utf-8 -*-
-"""Redazione segreti nei contesti destinati a LLM esterni (finding I-1).
+"""Secret redaction in contexts destined for external LLMs (finding I-1).
 
-Espone ``redact(payload)``: funzione pura e idempotente che accetta ``str``
-oppure strutture annidate ``dict``/``list`` e ritorna lo stesso tipo con i
-segreti mascherati (``***REDACTED***``). Le chiavi dei dict sono preservate;
-solo i valori vengono mascherati.
+Exposes ``redact(payload)``: a pure, idempotent function that accepts ``str``
+or nested ``dict``/``list`` structures and returns the same type with secrets
+masked (``***REDACTED***``). Dict keys are preserved; only values are masked.
 
-Va chiamata come UNICO punto di passaggio prima che qualunque dato lasci il
-processo verso un provider LLM (assistente in-app in ``ai_assistant.chat`` e
-risposte dei tool MCP in ``mcp_server.api``).
+Should be called as the SINGLE point of passage before any data leaves the
+process toward an LLM provider (in-app assistant in ``ai_assistant.chat`` and
+MCP tool responses in ``mcp_server.api``).
 
-Limiti noti (documentati, non gestiti):
-- segreti in formati proprietari non elencati nei pattern;
-- segreti spezzati su più righe (eccetto blocchi PEM, gestiti);
-- valori binari/base64 generici non riconducibili a un pattern noto.
+Known limitations (documented, not handled):
+- secrets in proprietary formats not listed among the patterns;
+- secrets split across multiple lines (except PEM blocks, which are handled);
+- generic binary/base64 values not attributable to a known pattern.
 
-NON maschera: nomi interfaccia, VLAN, hostname, indirizzi IP (gli IP sono
-materia di policy GDPR separata, non di redazione).
+Does NOT mask: interface names, VLANs, hostnames, IP addresses (IPs are a
+matter of separate GDPR policy, not of redaction).
 """
 
 import re
 
 MASK = "***REDACTED***"
 
-# Pattern (regex, gruppo-da-mascherare). Ogni regex ha un gruppo 'secret'
-# che identifica la sola porzione da sostituire, preservando il resto della riga.
+# Patterns (regex, group-to-mask). Each regex has a 'secret' group
+# that identifies only the portion to replace, preserving the rest of the line.
 _PATTERNS = [
-    # Cisco IOS: enable secret/password (con o senza tipo hash: "enable secret 5 $1$...")
+    # Cisco IOS: enable secret/password (with or without hash type: "enable secret 5 $1$...")
     re.compile(r"(?im)^(\s*enable\s+(?:secret|password)(?:\s+level\s+\d+)?(?:\s+\d)?\s+)(?P<secret>\S+)"),
-    # Cisco IOS: username ... password/secret [tipo]
+    # Cisco IOS: username ... password/secret [type]
     re.compile(r"(?im)^(\s*username\s+\S+.*?\s(?:password|secret)(?:\s+\d)?\s+)(?P<secret>\S+)"),
     # SNMP community
     re.compile(r"(?im)^(\s*snmp-server\s+community\s+)(?P<secret>\S+)"),
-    # RADIUS/TACACS key (anche "key 7 <hash>")
+    # SNMPv3 user: both passphrases sit on one line
+    # (snmp-server user U G v3 auth sha <auth> priv aes 128 <priv>)
+    re.compile(r"(?im)(\bauth\s+(?:md5|sha)\s+)(?P<secret>\S+)"),
+    re.compile(r"(?im)(\bpriv\s+(?:aes(?:\s+\d+)?|des|3des)\s+)(?P<secret>\S+)"),
+    # RADIUS/TACACS key (also "key 7 <hash>")
     re.compile(r"(?im)^(\s*(?:key|pac\s+key|shared-secret)(?:\s+\d)?\s+)(?P<secret>\S+)"),
     re.compile(r"(?im)((?:radius|tacacs)(?:-server)?\s+.*?\bkey(?:\s+\d)?\s+)(?P<secret>\S+)"),
-    # WPA/PSK generici (Cisco WLC/AireOS, IOS wireless)
+    # generic WPA/PSK (Cisco WLC/AireOS, IOS wireless)
     re.compile(r"(?im)^(\s*(?:wpa-psk|psk|pre-shared-key|passphrase)\s+(?:ascii|hex)?\s*(?:\d\s+)?)(?P<secret>\S+)"),
     # FortiOS: set psksecret / passwd / password / private-key / passphrase
     re.compile(r"(?im)^(\s*set\s+(?:psksecret|passwd|password|private-key|passphrase|auth-pwd|key)\s+)(?P<secret>.+?)\s*$"),
-    # generici api key / token / bearer in testo o comandi
+    # generic api key / token / bearer in text or commands
     re.compile(r"(?i)((?:api[-_]?key|token|bearer|secret[-_]?key|client[-_]?secret)[\"'\s:=]+)(?P<secret>[A-Za-z0-9_\-\.\+/=]{8,})"),
-    # blocchi PEM di chiave privata (multiriga)
+    # PEM private key blocks (multiline)
     re.compile(
         r"(?s)(?P<secret>-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----)"
     ),
-    # blob Fernet (base64 urlsafe che inizia con gAAAAA)
+    # Fernet blob (urlsafe base64 starting with gAAAAA)
     re.compile(r"(?P<secret>gAAAAA[A-Za-z0-9_\-]{20,}={0,2})"),
 ]
 
@@ -60,8 +63,8 @@ def _redact_text(text: str) -> str:
 
 
 def redact(payload):
-    """Maschera i segreti in ``payload`` (str, dict, list, tuple; altri tipi
-    ritornati invariati). Idempotente: ``redact(redact(x)) == redact(x)``."""
+    """Masks secrets in ``payload`` (str, dict, list, tuple; other types
+    returned unchanged). Idempotent: ``redact(redact(x)) == redact(x)``."""
     if isinstance(payload, str):
         return _redact_text(payload)
     if isinstance(payload, dict):

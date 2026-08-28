@@ -9,8 +9,9 @@ from typing import Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from services import inventory_manager
+from services import inventory_manager, site_manager
 from security.security_manager import log_audit
+from core.csv_safe import csv_cell as _csv_cell
 from routers.deps import (
     get_current_user, require_operator, user_group_scope,
     assert_group_allowed, assert_device_allowed,
@@ -23,14 +24,22 @@ class DeviceSchema(BaseModel):
     ip: str = Field(..., pattern=r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
     vendor: str
     profile: str
-    username: str = "Admin"
-    password: str = "admin"
-    enable_secret: str = "admin"
+    # Vuoto su un dispositivo esistente = lascia invariate le credenziali
+    # salvate (vedi add_or_update_device); in creazione i default di
+    # core_engine valgono comunque a runtime via get_device_credentials.
+    username: str = ""
+    password: str = ""
+    enable_secret: str = ""
     group: str = "Generale"
+    site: str = "central"
     ssh_port: int = Field(22, ge=1, le=65535)
     # §11.6: mappa trasporti per-device {protocollo: porta|None}. None = legacy
     # (deriva ssh-only dalla porta SSH). Validazione in inventory_manager.
     transports: Optional[Dict[str, Optional[int]]] = None
+    # Community SNMP v2c in sola lettura (poller di stato). None = lascia
+    # invariata quella già salvata; "" = rimuovila.
+    snmp_community: Optional[str] = Field(None, max_length=128)
+    snmp_disabled: Optional[bool] = None
 
 class DeviceDelete(BaseModel):
     ip: str
@@ -45,6 +54,10 @@ class CSVImportRequest(BaseModel):
 class DeviceReassignSchema(BaseModel):
     ip: str
     new_group: str
+
+class DeviceSiteSchema(BaseModel):
+    ip: str
+    new_site: str
 
 class PromoteDeviceSchema(BaseModel):
     node_id: str
@@ -61,6 +74,7 @@ class PromoteDeviceSchema(BaseModel):
 
 @router.get("/api/local-devices")
 def get_devices_and_versions(current_user = Depends(get_current_user)):
+    from redundancy import service as redundancy_service
     scope = user_group_scope(current_user)
     devices = inventory_manager.get_all_devices()
     versions = inventory_manager.get_detected_versions()
@@ -70,45 +84,226 @@ def get_devices_and_versions(current_user = Depends(get_current_user)):
         allowed_ips = {d['IP'] for d in devices}
         versions = {ip: v for ip, v in versions.items() if ip in allowed_ips}
         groups = {g: v for g, v in groups.items() if g in scope}
+    from security.snmp_defaults import tenants_with_default
+    _snmp_default_tenants = tenants_with_default()
+    # One store read for the whole fleet: the per-IP lookup re-reads every
+    # redundancy group each time it is called.
+    badges = redundancy_service.redundancy_badges_by_ip()
+    devices_enriched = []
+    for d in devices:
+        dev_copy = dict(d)
+        # Stesso principio della community qui sotto, applicato alle credenziali
+        # SSH: cifrate o no, non hanno motivo di arrivare al browser. La UI non
+        # le legge (l'export CSV si costruisce la sua whitelist di colonne), e
+        # un viewer non deve poter scaricare il cifrato dell'intera flotta.
+        dev_copy.pop("Password", None)
+        dev_copy.pop("Enable Secret", None)
+        dev_copy["redundancy"] = badges.get(d["IP"])
+        # ICMP cannot cross the bastion tunnel of a jump site: the inventory
+        # table's status cell must not paint one of its devices "offline" from
+        # a ping it never actually ran (see services.site_manager.has_direct_path).
+        dev_copy["icmp_reachable"] = site_manager.has_direct_path(d.get("Site"))
+        # La community non esce mai da qui, nemmeno cifrata: alla UI serve
+        # sapere SE il polling SNMP è configurato, non quale sia il segreto.
+        # Alla UI serve sapere SE il polling e' configurato e DA DOVE arriva
+        # la community: senza il secondo campo, un apparato che eredita e uno
+        # con la sua sembrano identici, e l'admin non sa cosa sta modificando.
+        own = bool(dev_copy.pop("SNMP Community", ""))
+        disabled = str(dev_copy.get("SNMP Disabled") or "").strip() in ("1", "true", "True")
+        inherited = (not own) and (not disabled) and \
+            (d.get("Group") or "Generale") in _snmp_default_tenants
+        dev_copy["snmp_enabled"] = (own or inherited) and not disabled
+        dev_copy["snmp_inherited"] = inherited
+        v_info = versions.get(d["IP"], {})
+        dev_copy["Version"] = d.get("Version") or v_info.get("version") or "Non Rilevata"
+        dev_copy["Model"] = d.get("Model") or v_info.get("model") or "Non Rilevato"
+        devices_enriched.append(dev_copy)
     return {
-        "devices": devices,
+        "devices": devices_enriched,
         "detected_versions": versions,
         "groups": groups
     }
 
-@router.get("/api/export/devices")
-def export_devices_csv(current_user = Depends(get_current_user)):
-    import csv, io
+# Exportable columns. The key is the stable name the ?columns= query param
+# uses, the value is (CSV header, extractor). Every extractor takes the same
+# four arguments: inventory device, scan row, redundancy badge (None when
+# standalone) and physical member (empty when the row is not exploded per
+# member).
+_EXPORT_COLUMNS = {
+    "hostname":   ("Hostname",   lambda d, s, b, m: d.get("Hostname") or d["IP"]),
+    "ip":         ("IP",         lambda d, s, b, m: d["IP"]),
+    "vendor":     ("Vendor",     lambda d, s, b, m: d.get("Vendor", "")),
+    "model":      ("Model",      lambda d, s, b, m: d.get("Model") or s.get("model", "")),
+    "serial":     ("Serial",     lambda d, s, b, m: s.get("serial", "")),
+    "group":      ("Tenant",     lambda d, s, b, m: d.get("Group", "")),
+    "site":       ("Site",       lambda d, s, b, m: d.get("Site", "")),
+    "version":    ("Version",    lambda d, s, b, m: s.get("version", "Non Scansionato")),
+    "status":     ("Status",     lambda d, s, b, m: s.get("status", "unknown")),
+    "profile":    ("Profile",    lambda d, s, b, m: d.get("Profile", "")),
+    "ssh_port":   ("SSH Port",   lambda d, s, b, m: d.get("SSH Port", "")),
+    "transports": ("Transports", lambda d, s, b, m: d.get("Transports", "")),
+    "redundancy_type":   ("Redundancy",        lambda d, s, b, m: (b or {}).get("type", "standalone")),
+    "redundancy_role":   ("Redundancy Role",   lambda d, s, b, m: (b or {}).get("role", "")),
+    "redundancy_health": ("Redundancy Health", lambda d, s, b, m: (b or {}).get("health", "")),
+    "redundancy_name":   ("Redundancy Group",  lambda d, s, b, m: (b or {}).get("name", "")),
+    "member_count":      ("Members",           lambda d, s, b, m: (b or {}).get("member_count", "")),
+    "member_index":  ("Member #",      lambda d, s, b, m: m.get("index", "")),
+    "member_role":   ("Member Role",   lambda d, s, b, m: m.get("role", "")),
+    "member_serial": ("Member Serial", lambda d, s, b, m: m.get("serial", "")),
+    "member_model":  ("Member Model",  lambda d, s, b, m: m.get("model", "")),
+    "member_state":  ("Member State",  lambda d, s, b, m: m.get("state", "")),
+}
+
+# Asking for one of these columns means asking for one row per physical unit:
+# the serial of every switch in a stack, or of every HA node, does not fit in a
+# single row without being concatenated, and a concatenated serial cannot be
+# filtered or looked up in a spreadsheet.
+_MEMBER_COLUMNS = frozenset(
+    k for k in _EXPORT_COLUMNS if k.startswith("member_") and k != "member_count"
+)
+
+_DEFAULT_EXPORT_COLUMNS = ["hostname", "ip", "vendor", "group", "version", "status"]
+
+
+def _csv_filter(raw: str) -> Optional[set]:
+    """List-shaped query param: empty means no filter (None), non-empty means
+    the set of accepted values."""
+    values = {v.strip() for v in (raw or "").split(",") if v.strip()}
+    return values or None
+
+
+@router.get("/api/export/devices/columns")
+def export_devices_columns(current_user = Depends(get_current_user)):
+    """Available columns and defaults, so the UI does not duplicate the
+    registry and drift from it."""
+    return {
+        "columns": [
+            {"key": k, "header": h, "per_member": k in _MEMBER_COLUMNS}
+            for k, (h, _) in _EXPORT_COLUMNS.items()
+        ],
+        "default": _DEFAULT_EXPORT_COLUMNS,
+    }
+
+
+def assemble_device_export_rows(
+    current_user: dict,
+    groups: str = "",
+    sites: str = "",
+    vendors: str = "",
+    redundancy: str = "",
+    columns: str = "",
+):
+    from redundancy import service as redundancy_service
+
+    selected = [c.strip() for c in columns.split(",") if c.strip()] or _DEFAULT_EXPORT_COLUMNS
+    unknown = [c for c in selected if c not in _EXPORT_COLUMNS]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Colonne sconosciute: {', '.join(unknown)}")
+
+    want_groups = _csv_filter(groups)
+    want_sites = _csv_filter(sites)
+    want_vendors = _csv_filter(vendors)
+    want_redundancy = _csv_filter(redundancy)
+
     scope = user_group_scope(current_user)
     devices = inventory_manager.get_all_devices()
     if scope is not None:
         devices = [d for d in devices if d.get('Group') in scope]
+    if want_groups is not None:
+        devices = [d for d in devices if d.get('Group', '') in want_groups]
+    if want_sites is not None:
+        devices = [d for d in devices if d.get('Site', '') in want_sites]
+    if want_vendors is not None:
+        devices = [d for d in devices if str(d.get('Vendor', '')).lower() in
+                   {v.lower() for v in want_vendors}]
+
     versions = inventory_manager.get_detected_versions()
-    output = io.StringIO()
-    writer = csv.DictWriter(
-        output,
-        fieldnames=["Hostname", "IP", "Vendor", "Group", "Version", "Status"],
-        extrasaction="ignore"
-    )
-    writer.writeheader()
+    badges = redundancy_service.redundancy_badges_by_ip()
+    explode = any(c in _MEMBER_COLUMNS for c in selected)
+
+    headers = [_EXPORT_COLUMNS[c][0] for c in selected]
+    all_rows = []
     for d in devices:
         scan = versions.get(d["IP"], {})
-        writer.writerow({
-            "Hostname": d.get("Hostname") or d.get("IP"),
-            "IP":       d["IP"],
-            "Vendor":   d.get("Vendor", ""),
-            "Group":    d.get("Group", ""),
-            "Version":  scan.get("version", "Non Scansionato"),
-            "Status":   scan.get("status", "unknown"),
-        })
+        badge = badges.get(d["IP"])
+        if want_redundancy is not None:
+            if ((badge or {}).get("type") or "standalone") not in want_redundancy:
+                continue
+        members = (badge or {}).get("members") or []
+        # With no members (standalone, or a group declared without units) the
+        # device still gets one row: the per-member columns come out empty
+        # instead of the device vanishing from the export.
+        rows = members if (explode and members) else [{}]
+        for member in rows:
+            all_rows.append([
+                _EXPORT_COLUMNS[c][1](d, scan, badge, member)
+                for c in selected
+            ])
+
+    return headers, all_rows
+
+
+@router.get("/api/export/devices")
+def export_devices_csv(
+    groups: str = "",
+    sites: str = "",
+    vendors: str = "",
+    redundancy: str = "",
+    columns: str = "",
+    current_user = Depends(get_current_user),
+):
+    import csv, io
+    headers, rows = assemble_device_export_rows(
+        current_user=current_user,
+        groups=groups,
+        sites=sites,
+        vendors=vendors,
+        redundancy=redundancy,
+        columns=columns,
+    )
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(headers)
+    for r in rows:
+        writer.writerow([_csv_cell(val) for val in r])
+
     content = output.getvalue()
-    log_audit(f"Export CSV dispositivi richiesto dall'utente '{current_user.get('sub')}'.")
+    log_audit(
+        f"Export CSV dispositivi richiesto dall'utente '{current_user.get('sub')}' "
+        f"(colonne: {columns or ','.join(_DEFAULT_EXPORT_COLUMNS)})."
+    )
     from fastapi.responses import Response as FastResponse
     return FastResponse(
         content=content,
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=sentinelnet-devices.csv"}
     )
+
+
+@router.get("/api/export/devices/preview")
+def preview_devices_export(
+    groups: str = "",
+    sites: str = "",
+    vendors: str = "",
+    redundancy: str = "",
+    columns: str = "",
+    limit: int = 15,
+    current_user = Depends(get_current_user),
+):
+    headers, rows = assemble_device_export_rows(
+        current_user=current_user,
+        groups=groups,
+        sites=sites,
+        vendors=vendors,
+        redundancy=redundancy,
+        columns=columns,
+    )
+    safe_limit = max(1, min(limit, 100))
+    return {
+        "headers": headers,
+        "rows": rows[:safe_limit],
+        "total_rows": len(rows),
+    }
 
 @router.post("/api/add-device")
 def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
@@ -117,15 +312,24 @@ def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
     existing = next((d for d in inventory_manager.get_all_devices() if d['IP'] == device.ip), None)
     if existing:
         assert_group_allowed(current_user, existing.get('Group', 'Generale'))
+
+    site_val = (device.site or 'central').strip()
+    all_sites = {s['id'] for s in site_manager.list_sites()}
+    if site_val not in all_sites:
+        raise HTTPException(status_code=400, detail=f"Sede '{site_val}' inesistente")
+
     try:
         inventory_manager.add_or_update_device(
             device.ip, device.vendor, device.profile,
             device.username, device.password, device.enable_secret, device.group,
-            ssh_port=device.ssh_port, transports=device.transports
+            site=site_val,
+            ssh_port=device.ssh_port, transports=device.transports,
+            snmp_community=device.snmp_community,
+            snmp_disabled=device.snmp_disabled,
         )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
-    log_audit(f"Dispositivo '{device.ip}' (vendor: '{device.vendor}', gruppo: '{device.group}') aggiunto/aggiornato dall'utente '{current_user.get('sub')}'.")
+    log_audit(f"Dispositivo '{device.ip}' (vendor: '{device.vendor}', gruppo: '{device.group}', sede: '{site_val}') aggiunto/aggiornato dall'utente '{current_user.get('sub')}'.")
     # §11.6: Telnet è in chiaro — traccia esplicitamente l'abilitazione.
     if device.transports and 'telnet' in device.transports:
         log_audit(f"ATTENZIONE: Telnet (trasmissione in chiaro) abilitato per il dispositivo '{device.ip}' dall'utente '{current_user.get('sub')}'.")
@@ -150,16 +354,24 @@ def rename_device(payload: DeviceRenameSchema, current_user = Depends(require_op
     log_audit(f"Dispositivo '{payload.ip}' rinominato in '{hostname or '(vuoto)'}' dall'utente '{current_user.get('sub')}'.")
     return {"status": "success"}
 
+# La lettura tollerante del CSV vive in inventory_manager: la usa anche
+# l'agente di sede, che gira senza FastAPI. Qui resta il nome storico.
+_CSV_ALIASES = inventory_manager._CSV_ALIASES
+_canonical_header = inventory_manager._canonical_header
+_read_inventory_csv = inventory_manager._read_inventory_csv
+
+
 @router.post("/api/import-csv")
 def import_csv(payload: CSVImportRequest, current_user = Depends(require_operator)):
-    lines = payload.csv_data.split('\n')
-    import csv as csv_parser
-    reader = csv_parser.DictReader(lines)
+    try:
+        parsed = _read_inventory_csv(payload.csv_data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     results = {"imported": [], "failed": []}
     scope = user_group_scope(current_user)
 
-    for i, row in enumerate(reader, start=2):  # start=2 perché riga 1 è l'header
+    for i, row in parsed:
         try:
             ip = row.get('IP')
             if not ip or not ip.strip():
@@ -178,22 +390,38 @@ def import_csv(payload: CSVImportRequest, current_user = Depends(require_operato
             password = (row.get('Password') or '').strip()
             enable_secret = (row.get('Enable Secret') or '').strip()
 
-            # Il campo Hostname (nome switch) viene estratto ma attualmente ignorato nel salvataggio
             hostname = (row.get('Hostname') or '').strip()
 
             vendor = (row.get('Vendor') or '').strip() or 'cisco'
+
+            # Site (sede fisica) è cosa diversa da Group (tenant): la colonna
+            # veniva letta e buttata via, quindi un inventario esportato e
+            # reimportato perdeva l'assegnazione alle sedi con agente.
+            # Non si crea al volo come si fa con il tenant: una sede ha una
+            # modalità e un token, inventarla qui produrrebbe un apparato che
+            # nessun agente raccoglierà mai. Meglio un errore sulla riga.
+            site_name = (row.get('Site') or '').strip()
+            if site_name and site_name not in {s['id'] for s in site_manager.list_sites()}:
+                raise ValueError(f"Sede '{site_name}' inesistente: creala nella "
+                                 f"scheda Sedi prima di importare")
 
             # Rimozione Profile: passa forzatamente il valore "custom" come parametro profile
             inventory_manager.add_or_update_device(
                 ip, vendor, "custom",
                 username, password, enable_secret,
-                group_name
+                group_name, site=site_name or None
             )
+            # L'hostname del CSV veniva letto e buttato via: chi compilava la
+            # colonna vedeva l'inventario restare senza nomi e non capiva
+            # perche'. Si scrive dopo perche' add_or_update_device non ha il
+            # parametro, e sovrascriverlo li' cambierebbe la firma per tutti.
+            if hostname:
+                inventory_manager.update_device_hostname(ip, hostname)
             results["imported"].append(ip)
         except Exception as e:
             results["failed"].append({
                 "row": i,
-                "ip": row.get('IP', '?'),
+                "ip": (row.get('IP') or '?').strip() or '?',
                 "error": str(e)
             })
 
@@ -215,7 +443,10 @@ def promote_device(payload: PromoteDeviceSchema, current_user = Depends(require_
         payload.ip, payload.vendor, "custom", "", "", "", payload.group
     )
     # Trasferisce l'eventuale classificazione manuale dal nodo scoperto all'IP.
-    inventory_manager.migrate_assignment(payload.node_id, payload.ip)
+    # Il nodo scoperto sta sotto 'Generale' (non era in inventario, quindi non
+    # aveva una sede); da qui in poi appartiene alla sede in cui è stato promosso.
+    inventory_manager.migrate_assignment(payload.node_id, payload.ip,
+                                         new_tenant=payload.group)
     # Eredita ciò che è già stato scoperto via CDP/LLDP: categoria, modello,
     # versione e hostname, così il dispositivo promosso non riparte "vuoto".
     meta = {}
@@ -270,3 +501,34 @@ def reassign_device(payload: DeviceReassignSchema, current_user = Depends(requir
         f"al gruppo '{payload.new_group}' dall'utente '{current_user.get('sub')}'."
     )
     return {"status": "success", "message": f"Dispositivo spostato in '{payload.new_group}'"}
+
+@router.post("/api/reassign-device-site")
+def reassign_device_site(payload: DeviceSiteSchema, current_user = Depends(require_operator)):
+    """Sposta un dispositivo in un'altra sede aggiornando solo il campo Site.
+
+    Separata da /api/reassign-device perche' cambia una cosa diversa: il
+    tenant e' il confine di autorizzazione, la sede decide COME si raggiunge
+    l'apparato (diretto, agente, tunnel sul bastione). Spostarlo su una sede
+    jump lo toglie dal ping ICMP e lo mette dietro il bastione al giro dopo.
+    """
+    from services import site_manager
+    if not site_manager.get_site(payload.new_site):
+        raise HTTPException(status_code=400,
+                            detail=f"Sede '{payload.new_site}' non esiste.")
+    devices = inventory_manager.get_all_devices()
+    target = next((d for d in devices if d['IP'] == payload.ip), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="Dispositivo non trovato in inventario.")
+    # Il tenant resta il confine di scoping: chi non puo' gestire il tenant del
+    # dispositivo non ne cambia nemmeno la sede.
+    assert_group_allowed(current_user, target.get('Group', 'Generale'))
+
+    old_site = target.get('Site', 'central')
+    target['Site'] = payload.new_site
+    inventory_manager.safe_write_hosts_csv(devices)
+
+    log_audit(
+        f"Dispositivo '{payload.ip}' spostato dalla sede '{old_site}' "
+        f"alla sede '{payload.new_site}' dall'utente '{current_user.get('sub')}'."
+    )
+    return {"status": "success", "message": f"Dispositivo spostato nella sede '{payload.new_site}'"}

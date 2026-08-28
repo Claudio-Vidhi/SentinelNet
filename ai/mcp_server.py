@@ -1,27 +1,27 @@
 # -*- coding: utf-8 -*-
-"""SentinelNet MCP Server — espone SentinelNet come server MCP (Model Context
-Protocol) su stdio, così qualunque client LLM esterno (Claude Desktop, LM
-Studio, Cline, ecc.) può interrogare inventario, mappa di rete, MAC tracker,
-config analyzer ed eseguire comandi CLI tramite l'API REST del centrale.
+"""SentinelNet MCP Server — exposes SentinelNet as an MCP (Model Context
+Protocol) server over stdio, so any external LLM client (Claude Desktop, LM
+Studio, Cline, etc.) can query inventory, network map, MAC tracker,
+config analyzer and run CLI commands through the central server's REST API.
 
-Il server NON reimplementa alcuna logica: è un ponte autenticato verso l'API
-HTTP di SentinelNet. Autorizzazione (ruoli, gruppi/tenant, blacklist comandi)
-resta interamente lato server.
+The server does NOT reimplement any logic: it is an authenticated bridge to
+SentinelNet's HTTP API. Authorization (roles, groups/tenant, command blacklist)
+remains entirely server-side.
 
-Configurazione (variabili d'ambiente):
-    SENTINELNET_URL        Base URL del centrale (default http://127.0.0.1:8765)
-    SENTINELNET_USERNAME   Utente SentinelNet con cui autenticarsi
+Configuration (environment variables):
+    SENTINELNET_URL        Base URL of the central server (default http://127.0.0.1:8000)
+    SENTINELNET_USERNAME   SentinelNet user for authentication
     SENTINELNET_PASSWORD   Password
-    SENTINELNET_VERIFY_TLS "0" per non verificare il certificato (default "1")
+    SENTINELNET_VERIFY_TLS "0" to skip certificate verification (default "1")
 
-Esempio (Claude Desktop / claude_desktop_config.json):
+Example (Claude Desktop / claude_desktop_config.json):
     {"mcpServers": {"sentinelnet": {
-        "command": "python", "args": ["/percorso/SentinelNet/mcp_server.py"],
-        "env": {"SENTINELNET_URL": "http://127.0.0.1:8765",
+        "command": "python", "args": ["/path/to/SentinelNet/mcp_server.py"],
+        "env": {"SENTINELNET_URL": "http://127.0.0.1:8000",
                 "SENTINELNET_USERNAME": "admin",
                 "SENTINELNET_PASSWORD": "..."}}}}
 
-Trasporto: JSON-RPC 2.0, un messaggio per riga su stdin/stdout (MCP stdio).
+Transport: JSON-RPC 2.0, one message per line on stdin/stdout (MCP stdio).
 """
 import os
 import sys
@@ -29,26 +29,28 @@ import json
 import time
 
 import requests
+from typing import Any, Dict, List, Optional
 
 from security.redaction import redact
 
 PROTOCOL_VERSION = "2025-06-18"
 SERVER_INFO = {"name": "sentinelnet", "version": "1.0.0"}
-MAX_TEXT = 200_000   # limite prudenziale sul testo restituito a un client LLM
+MAX_TEXT = 200_000   # conservative limit on text returned to an LLM client
 
-BASE_URL = os.environ.get("SENTINELNET_URL", "http://127.0.0.1:8765").rstrip("/")
+BASE_URL = os.environ.get("SENTINELNET_URL", "http://127.0.0.1:8000").rstrip("/")
 USERNAME = os.environ.get("SENTINELNET_USERNAME", "")
 PASSWORD = os.environ.get("SENTINELNET_PASSWORD", "")
 VERIFY_TLS = os.environ.get("SENTINELNET_VERIFY_TLS", "1") != "0"
 
 _token = None
+_session = requests.Session()
 
 
-# --- Client HTTP autenticato verso il centrale -----------------------------
+# --- Authenticated HTTP client toward the central server --------------------
 
 def _login() -> str:
     global _token
-    r = requests.post(f"{BASE_URL}/api/auth/login",
+    r = _session.post(f"{BASE_URL}/api/auth/login",
                       json={"username": USERNAME, "password": PASSWORD},
                       verify=VERIFY_TLS, timeout=15)
     r.raise_for_status()
@@ -56,13 +58,13 @@ def _login() -> str:
     return _token
 
 
-def api(method: str, path: str, params: dict = None, body: dict = None):
-    """Chiama l'API REST con JWT; su 401 riprova una volta dopo re-login."""
+def api(method: str, path: str, params: Optional[dict] = None, body: Optional[dict] = None):
+    """Call the REST API with JWT; on 401 retry once after re-login."""
     global _token
     if _token is None:
         _login()
     for attempt in (1, 2):
-        r = requests.request(method, BASE_URL + path,
+        r = _session.request(method, BASE_URL + path,
                              headers={"Authorization": f"Bearer {_token}"},
                              params=params, json=body,
                              verify=VERIFY_TLS, timeout=60)
@@ -76,19 +78,19 @@ def api(method: str, path: str, params: dict = None, body: dict = None):
         except Exception:
             detail = r.text
         raise RuntimeError(f"HTTP {r.status_code}: {detail}")
-    # Redazione segreti (finding I-1): il risultato dei tool va a un client
-    # LLM esterno, quindi passa per lo stesso choke-point dell'assistente in-app.
+    # Secret redaction (finding I-1): tool results go to an external LLM
+    # client, so they pass through the same choke-point as the in-app assistant.
     try:
         return redact(r.json())
     except ValueError:
         return redact(r.text)
 
 
-# --- Definizione dei tool MCP ----------------------------------------------
-# Ogni voce: (descrizione, inputSchema, funzione(args) -> oggetto/testo)
+# --- MCP tool definitions ---------------------------------------------------
+# Each entry: (description, inputSchema, function(args) -> object/text)
 
-def _obj(props: dict = None, required: list = None) -> dict:
-    schema = {"type": "object", "properties": props or {}}
+def _obj(props: Optional[dict] = None, required: Optional[list] = None) -> dict:
+    schema: Dict[str, Any] = {"type": "object", "properties": props or {}}
     if required:
         schema["required"] = required
     return schema
@@ -125,7 +127,9 @@ TOOLS = {
         "Search the historical MAC address table across all switches. All "
         "filters optional.",
         _obj({"mac": _S, "vlan": _S, "interface": _S,
-              "switch": {**_S, "description": "Switch IP"}}),
+              "switch": {**_S, "description": "Switch IP"},
+              "frm": {**_S, "description": "From ISO timestamp (optional)"},
+              "to": {**_S, "description": "To ISO timestamp (optional)"}}),
         lambda a: api("GET", "/api/mac/search",
                       params={k: v for k, v in a.items() if v}),
     ),
@@ -134,16 +138,29 @@ TOOLS = {
         "ARP tables of the L3 gateways (L3 switches or firewalls, whichever "
         "routes the VLAN). Search by MAC (full or fragment) or IP prefix.",
         _obj({"mac": {**_S, "description": "MAC address or fragment"},
-              "ip": {**_S, "description": "IP address or prefix"}}),
+              "ip": {**_S, "description": "IP address or prefix"},
+              "frm": {**_S, "description": "From ISO timestamp (optional)"},
+              "to": {**_S, "description": "To ISO timestamp (optional)"}}),
         lambda a: api("GET", "/api/arp/search",
                       params={k: v for k, v in a.items() if v}),
     ),
     "client_map": (
         "Unified client view: MAC + current IP (from the routing gateway's "
         "ARP) + access switch/port (from the MAC table). Answers 'who is "
-        "10.0.0.5 and which port is it attached to'.",
-        _obj({"mac": _S, "ip": _S}),
+        "192.0.2.10 and which port is it attached to'.",
+        _obj({"mac": _S, "ip": _S,
+              "frm": {**_S, "description": "From ISO timestamp (optional)"},
+              "to": {**_S, "description": "To ISO timestamp (optional)"}}),
         lambda a: api("GET", "/api/arp/client-map",
+                      params={k: v for k, v in a.items() if v}),
+    ),
+    "endpoint_inventory": (
+        "Endpoint inventory: one entry per (MAC, tenant) with current or historical "
+        "IPs, access switch/port, VLAN, vendor, classification, and flags.",
+        _obj({"tenant": _S, "switch": _S, "vlan": _S, "q": _S,
+              "frm": {**_S, "description": "From ISO timestamp (optional)"},
+              "to": {**_S, "description": "To ISO timestamp (optional)"}}),
+        lambda a: api("GET", "/api/endpoints/list",
                       params={k: v for k, v in a.items() if v}),
     ),
     "arp_scan": (
@@ -319,6 +336,38 @@ TOOLS = {
                       body={k: a.get(k) for k in ("client", "dest", "dest_port", "protocol")
                             if a.get(k) is not None}),
     ),
+    "fortigate_policy_stats": (
+        "Runtime counters per firewall policy: hit count, bytes, active "
+        "sessions, first/last used. Answers 'which rules are dead' (zero hits "
+        "over the counters' lifetime, so candidates for removal) and 'which "
+        "rule is actually carrying this traffic'. Pair with fortigate_policies "
+        "to map policy id to name and to what it permits.",
+        _obj({"ip": {**_S, "description": "FortiGate IP"}}, ["ip"]),
+        lambda a: api("GET", f"/api/fortigate/{a['ip']}/policy-stats"),
+    ),
+    "diagnose_client": (
+        "End-to-end L2+L3 diagnosis of ONE client (IP or MAC), across switch "
+        "and firewall in a single report: access switch and port, port VLAN, "
+        "link state and error-counter delta, whether the client VLAN is "
+        "allowed on the switch trunks, the logical traffic path, the matching "
+        "firewall policy toward an optional destination, and how many blocks "
+        "it suffered in the last hour grouped by policy. Prefer this over "
+        "fortigate_diagnose_client when the question is about a client rather "
+        "than about one firewall: it picks the right FortiGate itself and adds "
+        "the switch-side half. Sections that cannot be answered say so "
+        "('known': false with a reason) instead of being omitted.",
+        _obj({"client": {**_S, "description": "Client IP or MAC address"},
+              "dest": {**_S, "description": "Optional destination IP/FQDN: enables policy lookup and the path"},
+              "dest_port": {"type": "integer", "description": "Default 443"},
+              "protocol": {**_S, "description": "TCP | UDP | ICMP (default TCP)"},
+              "tenant": {**_S, "description": "Restrict to one tenant/site when the address exists in several "
+                                              "(a prior call returns 'status': 'ambiguous' with the candidate "
+                                              "tenants in that case)"}},
+             ["client"]),
+        lambda a: api("POST", "/api/diagnose/client",
+                      body={k: a.get(k) for k in ("client", "dest", "dest_port", "protocol", "tenant")
+                            if a.get(k) is not None}),
+    ),
     "wlc_status": (
         "Get status of a Cisco wireless LAN controller (AireOS or Catalyst "
         "9800): version, uptime, AP/client counts.",
@@ -407,9 +456,9 @@ TOOLS = {
              ["hostname"]),
         lambda a: api("POST", "/api/provisioner/generate", body=a),
     ),
-    # --- Observability (fase 4.4): SOLO lettura, dati aggregati/riassunti
-    # (mai dump raw), scoping tenant e redazione applicati lato server.
-    # Disabilitati di default: l'admin li abilita dal tab MCP Server.
+    # --- Observability (phase 4.4): READ-ONLY, aggregated/summarized data
+    # (never raw dump), tenant scoping and redaction applied server-side.
+    # Disabled by default: admin enables them from the MCP Server tab.
     "get_top_talkers": (
         "Get the top bandwidth consumers (aggregated flow records) for a time "
         "window. Read-only, tenant-scoped, summarized (top-N only).",
@@ -431,11 +480,43 @@ TOOLS = {
             "window": a.get("window", "24h"),
             "limit": 50}),
     ),
+    "linux_health": (
+        "Get the latest health snapshot of a managed Linux host: uptime, "
+        "kernel, failed systemd units and the measured CPU / memory / disk "
+        "usage. Read-only, tenant-scoped.",
+        _obj({"ip": {**_S, "description": "Management IP of the Linux host"}},
+             ["ip"]),
+        lambda a: api("GET", "/api/observability/api-context",
+                      params={"device_ip": a["ip"]}),
+    ),
+    "policy_trace": (
+        "Traces a packet flow through device ACLs, routes, and firewall policies from backup configs (offline). Answers reachability and path validation questions.",
+        _obj({
+            "ip": {**_S, "description": "Device IP"},
+            "src": {**_S, "description": "Source IP address"},
+            "dst": {**_S, "description": "Destination IP address"},
+            "proto": {**_S, "description": "Protocol: tcp (default), udp, icmp, ip"},
+            "dport": {"type": "integer", "description": "Destination port (e.g. 443, 80)"},
+            "ingress": {**_S, "description": "Ingress interface name (optional)"},
+        }, ["ip", "src", "dst"]),
+        lambda a: api("POST", f"/api/policy-test/{a['ip']}/trace", body={
+            "src_ip": a["src"],
+            "dst_ip": a["dst"],
+            "proto": a.get("proto", "tcp"),
+            "dport": a.get("dport"),
+            "ingress_intf": a.get("ingress"),
+        }),
+    ),
+    "policy_findings": (
+        "Returns static configuration findings (shadowed rules, unreachable rules, any-any permits, routes to nowhere, unresolved objects) for a device.",
+        _obj({"ip": {**_S, "description": "Device IP"}}, ["ip"]),
+        lambda a: api("GET", f"/api/policy-test/{a['ip']}/findings"),
+    ),
 }
 
 
-# --- Tool disabilitati dall'amministratore (tab "MCP Server" del centrale) ---
-# Cache con TTL: si evita una chiamata HTTP per ogni tools/list o tools/call.
+# --- Tools disabled by the administrator (central server "MCP Server" tab) ---
+# Cache with TTL: avoids one HTTP call per tools/list or tools/call.
 
 _disabled = {"at": 0.0, "tools": set()}
 
@@ -447,12 +528,12 @@ def disabled_tools() -> set:
         data = api("GET", "/api/mcp/tool-config")
         _disabled["tools"] = set(data.get("disabled_tools") or [])
     except Exception:
-        pass                     # centrale irraggiungibile: si tiene l'ultimo noto
+        pass                     # central server unreachable: keep last known value
     _disabled["at"] = time.monotonic()
     return _disabled["tools"]
 
 
-# --- Ciclo JSON-RPC su stdio -------------------------------------------------
+# --- JSON-RPC loop on stdio -------------------------------------------------
 
 def _reply(msg_id, result=None, error=None):
     out = {"jsonrpc": "2.0", "id": msg_id}
@@ -485,7 +566,17 @@ def _tool_call(params):
     try:
         result = TOOLS[name][2](args)
     except Exception as e:
-        return {"content": [{"type": "text", "text": f"Error: {e}"}],
+        err_msg = str(e)
+        hint = ""
+        if "HTTP 404" in err_msg:
+            hint = " [Hint: check target device IP, site parameter, or resource path]"
+        elif "HTTP 403" in err_msg:
+            hint = " [Hint: action unauthorized for current account permissions]"
+        elif "HTTP 422" in err_msg:
+            hint = " [Hint: check tool parameter types and required fields]"
+        elif "Connection" in err_msg or "ConnectTimeout" in err_msg:
+            hint = f" [Hint: failed to reach base URL {BASE_URL}]"
+        return {"content": [{"type": "text", "text": f"Error: {err_msg}{hint}"}],
                 "isError": True}
     text = result if isinstance(result, str) \
         else json.dumps(result, ensure_ascii=False, indent=1)
@@ -515,7 +606,7 @@ def main():
                 "serverInfo": SERVER_INFO,
             })
         elif method == "notifications/initialized":
-            pass                       # notifica: nessuna risposta
+            pass                       # notification: no response
         elif method == "ping":
             _reply(msg_id, {})
         elif method == "tools/list":

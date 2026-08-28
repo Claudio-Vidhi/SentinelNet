@@ -1,57 +1,68 @@
+import logging
 import os
 import subprocess
 import sys
 
-# Leggi la directory dati dall'ambiente (es. '/app/data' in Docker).
-# In assenza della variabile, i file di stato vengono confinati in ./data
-# invece di riempire la directory corrente accanto all'eseguibile (DF-1).
+# Read the data directory from the environment (e.g. '/app/data' in Docker).
+# Without the variable, state files are confined to ./data
+# instead of filling the current directory next to the executable (DF-1).
 DATA_DIR = os.getenv("SENTINELNET_DATA_DIR") or os.path.join(os.getcwd(), "data")
 
-# File di stato noti, candidati alla migrazione una tantum da CWD a DATA_DIR.
+# Known state files, candidates for one-time migration from CWD to DATA_DIR.
 _STATE_FILES = [
     "app_settings.json", "audit.log", "error_log.txt", "groups.json",
     "jwt_secret.key", "mac_history.db", "mac_history.db-shm",
-    "mac_history.db-wal", "secret.key", "sites.json", "users.json",
+    "mac_history.db-wal", "redundancy.db", "redundancy.db-shm",
+    "redundancy.db-wal", "secret.key", "sites.json", "users.json",
     "vendors.json", "detected_versions.json", "device_models.json",
     "device_categories.json", "network_hosts.csv",
 ]
 
-# File sensibili da proteggere con ACL restrittive.
+# Sensitive files to protect with restrictive ACLs.
 _SENSITIVE_FILES = {"secret.key", "jwt_secret.key", "users.json",
                     "sites.json", "mac_history.db"}
 
 
 def restrict_permissions(path: str):
-    """Restringe i permessi del file al solo utente corrente (best effort)."""
+    """Restricts the file permissions to the current user only (best effort)."""
     try:
         if sys.platform == "win32":
-            subprocess.run(
+            # icacls non solleva su fallimento: senza guardare il returncode
+            # l'irrigidimento delle ACL fallisce in silenzio e il file resta
+            # coi permessi ereditati dalla cartella.
+            res = subprocess.run(
                 ["icacls", path, "/inheritance:r",
                  "/grant:r", f"{os.environ.get('USERNAME', '')}:F"],
                 capture_output=True, timeout=15)
+            if res.returncode != 0:
+                logging.warning(
+                    "ACL non ristrette su %s: icacls uscito con %s (%s)",
+                    path, res.returncode,
+                    res.stderr.decode(errors="ignore").strip()[:200])
         else:
             os.chmod(path, 0o600)
-    except Exception:
-        pass
+    except (OSError, subprocess.SubprocessError) as e:
+        logging.warning("ACL non ristrette su %s: %s", path, e)
 
 
 def get_path(filename: str) -> str:
     """
-    Risolve il percorso assoluto di un file di configurazione o database
-    all'interno di DATA_DIR, creando la cartella se necessario.
+    Resolves the absolute path of a configuration or database file
+    inside SENTINELNET_DATA_DIR / DATA_DIR, creating the folder if necessary.
     """
-    if DATA_DIR:
+    active_dir = os.getenv("SENTINELNET_DATA_DIR") or DATA_DIR
+    if active_dir:
         try:
-            os.makedirs(DATA_DIR, exist_ok=True)
+            os.makedirs(active_dir, exist_ok=True)
         except Exception:
             pass
-        return os.path.join(DATA_DIR, filename)
+        return os.path.join(active_dir, filename)
     return filename
 
 
 def _app_adv(key, default=None):
-    """Sezione 'app' di app_settings.json (impostazioni avanzate da GUI).
-    Fallback quando la variabile d'ambiente corrispondente non è impostata."""
+    """'app' section of app_settings.json (advanced settings from GUI).
+    Fallback when the corresponding environment variable is not set."""
     try:
         import json as _json
         with open(get_path("app_settings.json"), encoding="utf-8") as _f:
@@ -61,15 +72,15 @@ def _app_adv(key, default=None):
 
 
 def obs_config() -> dict:
-    """Configurazione dei listener di osservabilità (fase 3.6).
+    """Configuration of the observability listeners (phase 3.6).
 
-    Default sicuri: TUTTO SPENTO (exe/desktop e Docker), bind su loopback,
-    porte alte non privilegiate (mai 514 in-process: mapping privilegiato solo
-    via Docker). ``0.0.0.0`` richiede opt-in esplicito.
+    Safe defaults: EVERYTHING OFF (exe/desktop and Docker), bind on loopback,
+    high non-privileged ports (never 514 in-process: privileged mapping only
+    via Docker). ``0.0.0.0`` requires explicit opt-in.
     """
-    # Base: sezione "observability" di app_settings.json (config da GUI, §9.5);
-    # le variabili d'ambiente, se impostate, hanno la precedenza. I listener
-    # partono all'avvio: le modifiche richiedono riavvio.
+    # Base: "observability" section of app_settings.json (GUI config, §9.5);
+    # environment variables, if set, take precedence. Listeners
+    # start at boot: changes require a restart.
     try:
         import json as _json
         with open(get_path("app_settings.json"), encoding="utf-8") as _f:
@@ -87,7 +98,8 @@ def obs_config() -> dict:
         env = os.environ.get(name)
         if env is not None:
             return int(env)
-        return int(_saved.get(key, default))
+        val = _saved.get(key)
+        return int(val) if val is not None else int(default)
 
     enabled = _flag("SENTINELNET_OBS_ENABLE", "enabled")
     return {
@@ -106,41 +118,57 @@ def obs_config() -> dict:
             "enabled": enabled and _flag("SENTINELNET_OBS_SYSLOG_ENABLE", "syslog_enabled", True),
             "port": _port("SENTINELNET_OBS_SYSLOG_PORT", "syslog_port", 5514),
         },
-        # NetFlow classico (v5/v9) sulla porta canonica 2055: stesso decoder
-        # di ipfix.parse (gestisce v5/v9/IPFIX dall'header).
+        # Classic NetFlow (v5/v9) on the canonical port 2055: same decoder
+        # as ipfix.parse (handles v5/v9/IPFIX from the header).
         "netflow": {
             "enabled": enabled and _flag("SENTINELNET_OBS_NETFLOW_ENABLE", "netflow_enabled", True),
             "port": _port("SENTINELNET_OBS_NETFLOW_PORT", "netflow_port", 2055),
         },
-        # Poller REST (§9.2): intervallo in secondi, 0 = disattivato.
+        # REST poller (§9.2): interval in seconds, 0 = disabled.
         "api_poll_s": _port("SENTINELNET_OBS_API_POLL_S", "api_poll_s", 300),
+        # SNMP poller: default 0 (off). It must be turned on deliberately, because
+        # it queries devices with a credential — it must not start on its own
+        # just because observability is active.
+        "snmp_poll_s": _port("SENTINELNET_OBS_SNMP_POLL_S", "snmp_poll_s", 0),
+        # Linux host health poller: default 0 (off), same reason
+        # as the SNMP poller — it opens an SSH session with a credential.
+        "linux_poll_s": _port("SENTINELNET_OBS_LINUX_POLL_S", "linux_poll_s", 0),
         "retention_days": {
             "flow_aggregates": int(os.environ.get("SENTINELNET_OBS_RETENTION_FLOWS_DAYS")
                                    or _app_adv("retention_flows_days") or 30),
             "syslog_events": int(os.environ.get("SENTINELNET_OBS_RETENTION_SYSLOG_DAYS")
                                  or _app_adv("retention_syslog_days") or 7),
-            "correlated_events": int(os.environ.get("SENTINELNET_OBS_RETENTION_EVENTS_DAYS")
-                                     or _app_adv("retention_events_days") or 90),
+            # The unified model mixes projections with different lifetimes: the
+            # flow window is kept, the longest among the projected sources,
+            # so no event disappears before its own origin.
+            "events": int(os.environ.get("SENTINELNET_OBS_RETENTION_FLOWS_DAYS")
+                          or _app_adv("retention_flows_days") or 30),
+            # Orphan evidence (rule fired, incident never formed): those
+            # tied to an incident follow the incident via CASCADE.
+            "evidence": int(os.environ.get("SENTINELNET_OBS_RETENTION_EVENTS_DAYS")
+                            or _app_adv("retention_events_days") or 90),
+            "incidents": int(os.environ.get("SENTINELNET_OBS_RETENTION_EVENTS_DAYS")
+                             or _app_adv("retention_events_days") or 90),
         },
     }
 
 
 class TlsConfigError(Exception):
-    """Configurazione TLS nativa incompleta o non valida (fail-closed)."""
+    """Incomplete or invalid native TLS configuration (fail-closed)."""
     pass
 
 
 def resolve_tls_config():
-    """Risolve la configurazione TLS nativa opzionale (finding H-1).
+    """Resolves the optional native TLS configuration (finding H-1).
 
-    Legge SENTINELNET_SSL_CERTFILE e SENTINELNET_SSL_KEYFILE. Ritorna
-    (certfile, keyfile) se entrambe presenti e leggibili, (None, None) se
-    entrambe assenti (HTTP invariato). Se ne è impostata una sola, o un file
-    non è leggibile, solleva TlsConfigError con messaggio in italiano
-    (il chiamante deve terminare con exit code != 0).
+    Reads SENTINELNET_SSL_CERTFILE and SENTINELNET_SSL_KEYFILE. Returns
+    (certfile, keyfile) if both present and readable, (None, None) if
+    both absent (HTTP unchanged). If only one is set, or a file is
+    not readable, raises TlsConfigError with an Italian message
+    (the caller must terminate with exit code != 0).
 
-    I percorsi relativi sono risolti rispetto a DATA_DIR, così il
-    comportamento è identico tra sorgente, exe e Docker.
+    Relative paths are resolved against DATA_DIR, so the
+    behavior is identical across source, exe, and Docker.
     """
     cert = (os.environ.get("SENTINELNET_SSL_CERTFILE")
             or _app_adv("ssl_certfile") or "").strip()
@@ -174,8 +202,8 @@ def resolve_tls_config():
 
 
 def _migrate_legacy_files():
-    """Migrazione una tantum: sposta i file di stato lasciati in CWD dalle
-    versioni precedenti dentro DATA_DIR (senza toccare backup-config/ e
+    """One-time migration: moves state files left in CWD by
+    previous versions into DATA_DIR (without touching backup-config/ and
     templates/)."""
     cwd = os.getcwd()
     if not DATA_DIR or os.path.abspath(DATA_DIR) == os.path.abspath(cwd):
@@ -187,7 +215,19 @@ def _migrate_legacy_files():
             try:
                 os.makedirs(DATA_DIR, exist_ok=True)
                 os.replace(src, dst)
-            except Exception:
+            except OSError as e:
+                if name in _SENSITIVE_FILES:
+                    # Se secret.key non arriva in DATA_DIR, load_or_create la
+                    # legge come primo avvio e ne genera una NUOVA: tutte le
+                    # password gia' cifrate in inventario diventano
+                    # indecifrabili, decrypt_password ritorna "" e ogni
+                    # apparato prova ad autenticarsi con password vuota.
+                    # Non ripartire e' meglio che ripartire senza chiave.
+                    raise RuntimeError(
+                        f"Migrazione di '{name}' in {DATA_DIR} fallita: {e}. "
+                        f"Spostare il file a mano prima di riavviare."
+                    ) from e
+                logging.error("Migrazione di '%s' fallita: %s", name, e)
                 continue
         if name in _SENSITIVE_FILES and os.path.exists(dst):
             restrict_permissions(dst)

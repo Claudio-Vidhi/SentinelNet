@@ -2,6 +2,9 @@
 """Router Topology. Estratto da app_server.py (fase 6.6): percorsi, metodi,
 parametri e risposte identici al monolite."""
 
+import asyncio
+import json
+import logging
 import os
 from typing import Optional, List, Dict, Any
 
@@ -10,7 +13,7 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from services import inventory_manager
-from core import core_engine
+from core import core_engine, db
 from services import visio_export
 from security.security_manager import log_audit
 from routers.deps import get_current_user, require_admin, filter_map_to_scope, user_group_scope, require_operator
@@ -55,11 +58,53 @@ def get_topology_adjacency(group: str = "all", current_user = Depends(get_curren
     data = core_engine.generate_network_map(group_filter=group)
     return filter_map_to_scope(data, user_group_scope(current_user))
 
+def enrich_map_nodes(data: dict) -> dict:
+    """Adds to the map the identity facts the app already holds elsewhere.
+
+    The inspector panel showed "—" for data that was merely stored in another
+    file: a discovered node carries the IP announced via CDP/LLDP, not its
+    synthetic ``discovered_<hostname>`` id, and an access point never announces
+    its own serial — only the controller that adopted it knows it. Same lookup
+    order as the classification table, so the two never disagree.
+    """
+    from services import ap_store
+
+    versions = inventory_manager.get_detected_versions()
+    entries = ap_store.read_all()
+    for node in data.get("nodes") or []:
+        discovered = node.get("status") == "discovered"
+        node["display_ip"] = (node.get("reported_ip") or "") if discovered else node["id"]
+        if node.get("serial"):
+            continue
+        name = node.get("label") or node["id"]
+        scan = (versions.get(node["id"])
+                or (versions.get(node["display_ip"]) if node["display_ip"] else None)
+                or {})
+        entry = (ap_store.lookup_in(entries, name, node.get("group"),
+                                    ip=node["display_ip"] or None)
+                 or ap_store.lookup_in(entries, name, node.get("group")))
+        node["serial"] = scan.get("serial") or (entry or {}).get("serial") or ""
+        if entry:
+            if entry.get("mac"):
+                node["mac"] = entry["mac"]
+            if entry.get("ip") and not node["display_ip"]:
+                node["display_ip"] = entry["ip"]
+            # Provenance: an access point has no backup and no management VLAN,
+            # but the controller that adopted it knows which one it joined and
+            # when it last reported it. Shown as coming from the WLC, never
+            # mixed with data the device itself gave.
+            if entry.get("wlc_ip"):
+                node["wlc_ip"] = entry["wlc_ip"]
+            if entry.get("seen_at"):
+                node["wlc_seen_at"] = entry["seen_at"]
+    return data
+
+
 @router.get("/api/network-map")
 def get_network_map(group: str = "all", current_user = Depends(get_current_user)):
     """Restituisce il grafo topologico strutturato per Vis.js."""
     data = core_engine.generate_network_map(group_filter=group)
-    return filter_map_to_scope(data, user_group_scope(current_user))
+    return enrich_map_nodes(filter_map_to_scope(data, user_group_scope(current_user)))
 
 @router.post("/api/map/export/vsdx")
 def export_map_vsdx(payload: VisioExportSchema, current_user = Depends(get_current_user)):
@@ -78,15 +123,78 @@ def export_map_vsdx(payload: VisioExportSchema, current_user = Depends(get_curre
     )
 
 @router.get("/api/portchannels")
-def get_portchannels(group: str = "all", current_user = Depends(get_current_user)):
-    """Report Port-channel per apparato (per il tab Adjacency List), filtrato per sede."""
+async def get_portchannels(group: str = "all",
+                           current_user = Depends(get_current_user)):
+    """Report Port-channel per apparato (per il tab Adjacency List).
+
+    Due sorgenti, ciascuna per ciò che sa davvero:
+    - la **configurazione** (backup) dice chi è MEMBRO dell'aggregato e chi è
+      spento da comando;
+    - lo **stato SNMP** dice chi è SU adesso.
+
+    Prima il report si reggeva solo sul backup, e lo stato operativo veniva da
+    un ``show etherchannel summary`` presente solo in alcuni backup vecchi: una
+    porta caduta dopo l'ultimo backup non compariva, e un badge di due
+    settimane prima si leggeva come se fosse di adesso.
+    """
     scope = user_group_scope(current_user)
     if group != "all" and scope is not None and group not in scope:
         raise HTTPException(status_code=403, detail="Sede non consentita.")
-    report = core_engine.get_portchannel_report(group_filter=group)
+    report = await asyncio.to_thread(core_engine.get_portchannel_report,
+                                     group_filter=group)
     if scope is not None:
         report = [r for r in report if r["group"] in scope]
+    await _attach_live_state(report)
     return {"devices": report}
+
+
+async def _attach_live_state(report: list) -> None:
+    """Aggiunge a ogni membro lo stato osservato via SNMP, quando c'è.
+
+    I nomi vanno normalizzati: la configurazione scrive ``Ethernet0/0``, IF-MIB
+    espone ``Et0/0``. Confrontarli così com'erano non avrebbe agganciato nulla.
+    """
+    if not report:
+        return
+    from collectors.mac_collector import expand_iface
+    # Joining the newest id per entity beats "id IN (subquery)": the latter made
+    # SQLite scan every interface.state row to test membership, while the join
+    # resolves the handful of winners by rowid. With idx_events_type_entity this
+    # went from ~3.1s to ~0.4s on a 1M-row events table.
+    rows = await db.read(
+        """SELECT e.device_ip, e.interface, e.attrs_json, e.ts
+           FROM events e
+           JOIN (SELECT MAX(id) AS mid FROM events
+                 WHERE event_type = 'interface.state'
+                 GROUP BY tenant, entity_id) m ON m.mid = e.id""")
+    live: dict = {}
+    for r in rows:
+        try:
+            attrs = json.loads(r["attrs_json"] or "{}")
+        except (ValueError, TypeError):
+            continue
+        live[(r["device_ip"], expand_iface(r["interface"] or ""))] = {
+            "link": attrs.get("link"), "admin_status": attrs.get("admin_status"),
+            "ts": r["ts"]}
+
+    for device in report:
+        seen = False
+        for po in device.get("portchannels") or []:
+            states = {}
+            for member in po.get("members") or []:
+                state = live.get((device["ip"], expand_iface(member)))
+                if state:
+                    states[member] = state
+                    seen = True
+            po["live"] = states
+            if states:
+                # Conteggio dal vivo: sostituisce quello del backup quando c'è,
+                # perché descrive adesso invece dell'ultimo salvataggio.
+                po["live_up"] = sum(
+                    1 for s in states.values()
+                    if str(s.get("link")).lower() == "up")
+                po["live_total"] = len(states)
+        device["live_state"] = seen
 
 @router.post("/api/topology/reset")
 def reset_topology(current_user = Depends(require_operator)):
@@ -96,12 +204,18 @@ def reset_topology(current_user = Depends(require_operator)):
         # Ricorsivo: i backup sono organizzati in sottocartelle per gruppo/sede.
         for root, _dirs, files in os.walk(backup_dir):
             for f in files:
-                if f.endswith(".txt"):
+                # ".txt" also matches archived versions under ".history"; their
+                # "{ip}-index.json" sits in the same folder and must go with
+                # them, or the drift tab lists versions whose files no longer
+                # exist and every diff/baseline call for that device 404s.
+                if f.endswith(".txt") or f.endswith("-index.json"):
                     try:
                         os.remove(os.path.join(root, f))
                         deleted_count += 1
-                    except Exception:
-                        pass
+                    except OSError as e:
+                        # Il file resta: il conteggio dell'audit sarebbe una
+                        # mezza verita' senza questa riga.
+                        logging.warning("Reset topologia: %s non rimosso: %s", f, e)
     
     # Svuota detected_versions.json
     inventory_manager.safe_json_write(inventory_manager.VERSION_DATA_FILE, {})

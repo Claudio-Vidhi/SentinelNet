@@ -15,7 +15,7 @@ network_hosts.csv nella sua data dir (SENTINELNET_DATA_DIR), gestito con gli
 stessi strumenti/CLI del centrale.
 
 Uso:
-    python site_agent.py --central-url https://central:8765 \
+    python site_agent.py --central-url https://central:8000 \
                          --site-id milano --token <TOKEN> [--interval 60]
 oppure:
     python site_agent.py --config agent.json
@@ -28,9 +28,65 @@ import os
 import sys
 import json
 import time
+import socket
+import threading
+import collections
 import argparse
 
 import requests
+
+# Ensure project root is in sys.path so 'services', 'core', 'collectors' modules import cleanly
+_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
+from services import inventory_manager
+from core import core_engine
+from collectors import arp_collector, mac_collector
+
+
+
+class SyslogCollector:
+    """Listener UDP leggero per raccogliere eventi syslog dai dispositivi locali."""
+    def __init__(self, host="0.0.0.0", port=5514, maxlen=2000):
+        self.host = host
+        self.port = port
+        self.queue = collections.deque(maxlen=maxlen)
+        self.running = False
+        self.sock = None
+        self.thread = None
+
+    def start(self):
+        try:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.sock.bind((self.host, self.port))
+            self.running = True
+            self.thread = threading.Thread(target=self._listen_loop, daemon=True)
+            self.thread.start()
+            print(f"[syslog] collector avviato su UDP {self.host}:{self.port}")
+        except Exception as e:
+            print(f"[syslog] impossibile avviare listener UDP su porta {self.port}: {e}")
+
+    def _listen_loop(self):
+        while self.running and self.sock is not None:
+            try:
+                data, addr = self.sock.recvfrom(8192)
+                if data:
+                    raw_str = data.decode("utf-8", errors="replace")
+                    self.queue.append({
+                        "ts": int(time.time()),
+                        "src_ip": addr[0],
+                        "raw": raw_str
+                    })
+            except Exception:
+                if not self.running:
+                    break
+
+    def drain(self, limit=500):
+        items = []
+        while self.queue and len(items) < limit:
+            items.append(self.queue.popleft())
+        return items
 
 
 def load_config():
@@ -43,12 +99,15 @@ def load_config():
     p.add_argument("--data-dir", help="Directory dati locale (inventario)")
     p.add_argument("--no-verify-tls", action="store_true",
                    help="Non verificare il certificato TLS del centrale")
+    p.add_argument("--syslog-port", type=int, help="Porta UDP listener syslog locale (default 5514)")
+    p.add_argument("--no-syslog", action="store_true", help="Disattiva il listener syslog locale")
     args = p.parse_args()
 
     cfg = {}
     if args.config:
         with open(args.config, encoding="utf-8") as f:
             cfg = json.load(f)
+        cfg["config_file"] = os.path.abspath(args.config)
     if args.central_url:
         cfg["central_url"] = args.central_url
     if args.site_id:
@@ -61,6 +120,10 @@ def load_config():
         cfg["interval"] = args.interval
     if args.no_verify_tls:
         cfg["verify_tls"] = False
+    if args.syslog_port:
+        cfg["syslog_port"] = args.syslog_port
+    if args.no_syslog:
+        cfg["syslog_enabled"] = False
 
     for key in ("central_url", "site_id", "token"):
         if not cfg.get(key):
@@ -68,7 +131,9 @@ def load_config():
 
     cfg.setdefault("interval", 60)
     cfg.setdefault("verify_tls", True)
-    # La data dir determina dove i moduli riusati cercano network_hosts.csv ecc.
+    cfg.setdefault("data_dir", "./agent-data")
+    cfg.setdefault("syslog_enabled", True)
+    cfg.setdefault("syslog_port", 5514)
     if cfg.get("data_dir"):
         os.environ["SENTINELNET_DATA_DIR"] = cfg["data_dir"]
     return cfg
@@ -76,6 +141,7 @@ def load_config():
 
 class Agent:
     def __init__(self, cfg):
+        self._start_ts = time.time()
         self.cfg = cfg
         self.base = cfg["central_url"].rstrip("/")
         self.verify = cfg.get("verify_tls", True)
@@ -84,11 +150,36 @@ class Agent:
             "X-Site-Token": cfg["token"],
             "Content-Type": "application/json",
         }
-        # Import ritardato: dipende da SENTINELNET_DATA_DIR già impostata.
-        global inventory_manager, core_engine, mac_collector
-        from services import inventory_manager
-        from core import core_engine
-        from collectors import mac_collector
+        self.syslog_collector = None
+        self.syslog_worker_running = False
+        if cfg.get("syslog_enabled", True):
+            syslog_port = int(cfg.get("syslog_port", 5514))
+            self.syslog_collector = SyslogCollector(port=syslog_port)
+            self.syslog_collector.start()
+            self._start_syslog_worker()
+
+    def _start_syslog_worker(self):
+        """Worker thread in background che trasmette in tempo reale (ogni 2s)
+        gli eventi syslog al centrale, stile Checkmk / streaming."""
+        self.syslog_worker_running = True
+        t = threading.Thread(target=self._syslog_flush_loop, daemon=True)
+        t.start()
+
+    def _syslog_flush_loop(self):
+        # Un push che fallisce sempre svuota l'inoltro syslog senza che si veda:
+        # si stampa il cambio di stato, non ogni giro (uno ogni 2s).
+        failing = False
+        while self.syslog_worker_running:
+            try:
+                self.push_syslog()
+                if failing:
+                    print("[agent] push syslog ripristinato.")
+                    failing = False
+            except Exception as e:
+                if not failing:
+                    print(f"[agent] push syslog fallito, inoltro fermo: {e}")
+                    failing = True
+            time.sleep(2)
 
     # --- HTTP helper ---
     def _post(self, path, payload):
@@ -101,15 +192,24 @@ class Agent:
 
     # --- Cicli di lavoro ---
     def heartbeat(self):
-        r = self._post("/api/agent/heartbeat", {})
+        payload = {
+            "version": "2.6.0",
+            "python_version": sys.version.split()[0],
+            "syslog_enabled": self.cfg.get("syslog_enabled", True),
+            "syslog_port": int(self.cfg.get("syslog_port", 5514)),
+            "interval": int(self.cfg.get("interval", 60)),
+            "uptime_s": int(time.time() - self._start_ts) if hasattr(self, "_start_ts") else 0,
+        }
+        r = self._post("/api/agent/heartbeat", payload)
         r.raise_for_status()
         return r.json()
 
     def push_inventory(self, devices):
         payload = {"devices": [
             {"ip": d["IP"], "vendor": d.get("Vendor", "cisco"),
-             "hostname": d.get("Hostname", "")}
-            for d in devices]}
+             "hostname": d.get("Hostname", ""),
+             "group": d.get("Group") or d.get("Tenant", "")}
+            for d in devices if isinstance(d, dict) and d.get("IP")]}
         r = self._post("/api/agent/inventory", payload)
         r.raise_for_status()
         return r.json()
@@ -117,6 +217,8 @@ class Agent:
     def push_mac(self, devices):
         collections = []
         for d in devices:
+            if not isinstance(d, dict) or not d.get("IP"):
+                continue
             ip = d["IP"]
             vendor = (d.get("Vendor") or "cisco").lower()
             username, password, secret = core_engine.get_device_credentials(d)
@@ -145,28 +247,219 @@ class Agent:
         r.raise_for_status()
         return r.json()
 
+    def push_arp(self, devices):
+        """Spinge i binding MAC<->IP letti dalle tabelle ARP dei gateway locali.
+
+        Senza questo, un client di una sede remota ha una porta di switch ma
+        NESSUN indirizzo IP: ``arp_entries`` e' l'unico posto dove vive il
+        legame MAC<->IP, e tutto cio' che sta a valle (Client Map, flow path,
+        diagnosi) parte dall'IP. La MAC table da sola non basta.
+
+        Solo i gateway L3 hanno una tabella ARP utile: uno switch di accesso
+        risponde 'vuoto' e la sua raccolta viene saltata dal chiamante.
+        """
+        collections = []
+        for d in devices:
+            if not isinstance(d, dict) or not d.get("IP"):
+                continue
+            ip = d["IP"]
+            try:
+                res = arp_collector.collect_from_device(d)
+            except Exception as e:
+                print(f"[arp] {ip}: errore raccolta: {e}")
+                continue
+            if res.get("status") != "success":
+                print(f"[arp] {ip}: {res.get('message', 'errore')}")
+                continue
+            if not res.get("entries"):
+                continue          # non ruota VLAN: non e' un errore
+            collections.append({
+                "source_ip": ip,
+                "source_name": d.get("Hostname", ""),
+                "source_type": res.get("source_type", ""),
+                "entries": res["entries"],
+            })
+        if not collections:
+            return {"recorded": 0}
+        r = self._post("/api/agent/arp", {"collections": collections})
+        r.raise_for_status()
+        return r.json()
+
+    def _execute_agent_rpc(self, cmd: str) -> dict:
+        """Esegue comandi di gestione remota dell'agente (_agent_self_update, _agent_restart, _agent_config)."""
+        import subprocess
+        parts = cmd.split(maxsplit=1)
+        action = parts[0]
+        arg = parts[1] if len(parts) > 1 else ""
+
+        if action == "_agent_self_update":
+            try:
+                proc = subprocess.run(
+                    ["git", "pull"], cwd=_ROOT, capture_output=True, text=True, timeout=60
+                )
+                output = proc.stdout + proc.stderr
+                status = "done" if proc.returncode == 0 else "error"
+                return {"status": status, "result": f"[git pull] code={proc.returncode}\n{output}"}
+            except Exception as e:
+                return {"status": "error", "result": f"Errore git pull: {e}"}
+
+        elif action == "_agent_restart":
+            def _deferred_restart():
+                time.sleep(1.5)
+                os._exit(0)  # Exit process so systemd auto-restarts service cleanly
+            threading.Thread(target=_deferred_restart, daemon=True).start()
+            return {"status": "done", "result": "Riavvio agente programmato tra 1.5 secondi (systemd auto-restart)."}
+
+        elif action == "_agent_get_inventory":
+            try:
+                from services import inventory_manager
+                hosts_csv = inventory_manager.get_hosts_csv()
+                if os.path.exists(hosts_csv):
+                    with open(hosts_csv, "r", encoding="utf-8") as f:
+                        content = f.read()
+                else:
+                    content = ("IP,Vendor,Profile,Username,Password,Enable Secret,"
+                               "Group,Hostname,Site,SSH Port,Transports,SNMP Community,"
+                               "SNMP Disabled\n")
+                return {"status": "done", "result": content}
+            except Exception as e:
+                return {"status": "error", "result": f"Errore lettura inventario locale: {e}"}
+
+        elif action == "_agent_save_inventory":
+            try:
+                from services import inventory_manager
+                # Scrivere `arg` verbatim significava accettare qualunque cosa:
+                # una colonna 'Tenant' (che il parser chiama 'Group') mandava
+                # ogni apparato nel gruppo sbagliato, un CSV con il punto e
+                # virgola o il BOM di Excel faceva esplodere get_all_devices(),
+                # e un comando senza argomento azzerava il file. Si passa dal
+                # lettore tollerante e si riscrive nelle colonne canoniche.
+                # ponytail: Password/Enable Secret/SNMP Community restano come
+                # arrivano. Cifrarle richiederebbe la chiave Fernet dell'agente,
+                # che la centrale non ha; un valore in chiaro viene ignorato da
+                # get_device_credentials. Documentato in docs/remote-sites.md.
+                rows = [rec for _, rec in inventory_manager._read_inventory_csv(arg)]
+                os.makedirs(os.path.dirname(inventory_manager.get_hosts_csv()), exist_ok=True)
+                inventory_manager.safe_write_hosts_csv(rows)
+                return {"status": "done",
+                        "result": f"Inventario locale salvato con successo ({len(rows)} apparati)."}
+            except ValueError as e:
+                return {"status": "error", "result": f"CSV non valido: {e}"}
+            except Exception as e:
+                return {"status": "error", "result": f"Errore salvataggio inventario: {e}"}
+
+        elif action == "_agent_config":
+            try:
+                new_cfg = json.loads(arg)
+                self.cfg.update(new_cfg)
+
+                # Persiste su disco solo se l'agente e' stato avviato con
+                # --config (load_config imposta config_file solo in quel caso).
+                # Se avviato da flag CLI, la modifica resta solo in memoria e
+                # va persa al riavvio: il risultato del job deve dirlo
+                # onestamente, non limitarsi a "done".
+                persisted = False
+                if self.cfg.get("config_file"):
+                    with open(self.cfg["config_file"], "w", encoding="utf-8") as f:
+                        json.dump(self.cfg, f, indent=2)
+                    persisted = True
+
+                # Rebind syslog listener if port changed
+                if "syslog_port" in new_cfg and self.syslog_collector:
+                    new_port = int(new_cfg["syslog_port"])
+                    if self.syslog_collector.port != new_port:
+                        self.syslog_collector.running = False
+                        if self.syslog_collector.sock:
+                            try:
+                                self.syslog_collector.sock.close()
+                            except Exception:
+                                pass
+                        self.syslog_collector = SyslogCollector(port=new_port)
+                        self.syslog_collector.start()
+
+                if persisted:
+                    note = "applicata in memoria e salvata su disco (config_file)"
+                else:
+                    note = ("applicata SOLO in memoria: nessun config_file attivo "
+                            "(agente avviato da flag CLI), verra' persa al riavvio")
+                return {"status": "done", "result": f"Configurazione agent aggiornata ({note}): {new_cfg}"}
+            except Exception as e:
+                return {"status": "error", "result": f"Errore aggiornamento config: {e}"}
+
+        return {"status": "error", "result": f"Comando RPC sconosciuto: {action}"}
+
+    def _execute_rest_job(self, device, spec_json: str) -> dict:
+        """Esegue una chiamata REST di sola lettura verso un apparato locale.
+
+        Il centrale non raggiunge gli apparati di una sede agent, e le domande
+        che contano per una diagnosi (quale policy matcherebbe, quale rotta,
+        il tunnel è su?) non hanno un equivalente CLI affidabile.
+
+        L'allowlist viene RIVERIFICATA qui, non solo dal centrale che ha
+        accodato il job. Non è ridondanza: il modello della modalità agent è
+        che le credenziali restino nella sede anche se il centrale viene
+        compromesso, e accettare qualunque percorso arrivi dal centrale
+        annullerebbe proprio quella garanzia.
+        """
+        from services import fortigate_service, site_manager
+        try:
+            spec = json.loads(spec_json)
+        except (TypeError, ValueError):
+            return {"status": "error", "result": "Job REST malformato."}
+        path = spec.get("path", "")
+        if not site_manager.rest_path_allowed(path):
+            print(f"[job] percorso REST rifiutato dall'agente: {path!r}")
+            return {"status": "error",
+                    "result": f"Percorso REST non consentito: {path!r}"}
+        try:
+            data = fortigate_service.api_get(device["IP"], path,
+                                             spec.get("params") or None)
+            return {"status": "done", "result": json.dumps(data)}
+        except Exception as e:
+            return {"status": "error", "result": str(e)}
+
     def run_jobs(self, devices):
         r = self._get("/api/agent/jobs")
         r.raise_for_status()
         jobs = r.json().get("jobs", [])
-        by_ip = {d["IP"]: d for d in devices}
+        by_ip = {d["IP"]: d for d in devices if isinstance(d, dict) and d.get("IP")}
         for job in jobs:
-            ip = job["device_ip"]
-            cmd = job["command"]
-            device = by_ip.get(ip)
-            if not device:
-                out = {"status": "error", "result": f"Dispositivo {ip} non in inventario locale."}
+            ip = job.get("device_ip")
+            cmd = job.get("command", "")
+            if job.get("kind") == "rest":
+                device = by_ip.get(ip)
+                out = ({"status": "error",
+                        "result": f"Dispositivo {ip} non in inventario locale."}
+                       if not device else self._execute_rest_job(device, cmd))
+            elif cmd.startswith("_agent_"):
+                out = self._execute_agent_rpc(cmd)
             else:
-                res = core_engine.send_custom_command(device, cmd)
-                if res.get("status") == "success":
-                    out = {"status": "done", "result": res.get("output", "")}
+                device = by_ip.get(ip)
+                if not device:
+                    out = {"status": "error", "result": f"Dispositivo {ip} non in inventario locale."}
                 else:
-                    out = {"status": "error", "result": res.get("message", "errore")}
+                    res = core_engine.send_custom_command(device, cmd)
+                    if res.get("status") == "success":
+                        out = {"status": "done", "result": res.get("output", "")}
+                    else:
+                        out = {"status": "error", "result": res.get("message", "errore")}
             try:
                 self._post(f"/api/agent/jobs/{job['id']}/result", out).raise_for_status()
-                print(f"[job] {job['id']} su {ip}: {out['status']}")
+                print(f"[job] {job['id']} '{cmd}': {out['status']}")
             except Exception as e:
                 print(f"[job] {job['id']}: invio risultato fallito: {e}")
+
+    def push_syslog(self):
+        if not self.syslog_collector:
+            return {"ingested": 0}
+        events = self.syslog_collector.drain()
+        if not events:
+            return {"ingested": 0}
+        r = self._post("/api/agent/syslog", {"events": events})
+        r.raise_for_status()
+        res = r.json()
+        print(f"[syslog] {res.get('ingested', 0)} eventi inviati al centrale")
+        return res
 
     def cycle(self):
         devices = inventory_manager.get_all_devices()
@@ -181,20 +474,47 @@ class Agent:
         except Exception as e:
             print(f"[mac] errore: {e}")
         try:
+            self.push_arp(devices)
+        except Exception as e:
+            print(f"[arp] errore: {e}")
+        try:
+            self.push_syslog()
+        except Exception as e:
+            print(f"[syslog] errore: {e}")
+        try:
             self.run_jobs(devices)
         except Exception as e:
             print(f"[jobs] errore: {e}")
 
+    def stop(self):
+        self.syslog_worker_running = False
+        if self.syslog_collector:
+            self.syslog_collector.running = False
+            if self.syslog_collector.sock:
+                try:
+                    self.syslog_collector.sock.close()
+                except Exception:
+                    pass
+        print("[agent] arrestato con successo.")
+
     def run(self):
-        interval = int(self.cfg.get("interval", 60))
-        print(f"[agent] avviato: centrale={self.base} sede={self.cfg['site_id']} "
-              f"intervallo={interval}s")
-        while True:
-            try:
-                self.cycle()
-            except Exception as e:
-                print(f"[agent] ciclo fallito: {e}")
-            time.sleep(interval)
+        print(f"[agent] avviato: centrale={self.base} sede={self.cfg['site_id']}")
+        try:
+            while True:
+                try:
+                    self.cycle()
+                except Exception as e:
+                    print(f"[agent] ciclo fallito: {e}")
+                # L'intervallo va riletto DOPO cycle(): run_jobs() (chiamato da
+                # cycle()) puo' applicare un _agent_config che aggiorna
+                # self.cfg["interval"]. Leggendolo prima del ciclo, come in
+                # precedenza, il nuovo valore veniva usato solo al giro
+                # successivo, ritardando di un ciclo intero l'effetto della
+                # modifica.
+                interval = int(self.cfg.get("interval", 60))
+                time.sleep(interval)
+        except (KeyboardInterrupt, SystemExit):
+            self.stop()
 
 
 def main():

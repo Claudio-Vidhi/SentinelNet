@@ -63,6 +63,16 @@ class FgtLogQuerySchema(BaseModel):
     action: Optional[str] = None   # accept | deny | ...
     count: int = 100
     log_device: str = "disk"       # disk | memory
+    # Categoria del log. Il service costruisce log/{device}/{type}/{subtype}
+    # e usa cli_category per il fallback CLI; i default riproducono il
+    # traffico forward, cioè il comportamento storico di questo endpoint.
+    log_type: str = "traffic"      # traffic | event | utm
+    log_subtype: str = "forward"   # forward | local | virus | webfilter | ips | ...
+    cli_category: str = "traffic"
+    # Intervallo di date YYYY-MM-DD, entrambi opzionali. Omessi = ultime
+    # `count` righe, cioè il comportamento storico.
+    since: Optional[str] = None
+    until: Optional[str] = None
 
 class FgtDiagnoseClientSchema(BaseModel):
     client: str                    # IP o MAC del client da diagnosticare
@@ -146,6 +156,38 @@ def fgt_update_target(ip: str, payload: FgtTargetUpdateSchema,
 def fgt_status(ip: str, current_user = Depends(get_current_user)):
     return _fgt_call(fortigate_service.get_system_status, _fgt_device(ip, current_user))
 
+@router.get("/api/fortigate/{ip}/system/resources")
+def fgt_system_resources(ip: str, current_user = Depends(get_current_user)):
+    """Uso CPU/memoria/disco/sessioni e ora di sistema."""
+    return _fgt_call(fortigate_service.get_system_resources, _fgt_device(ip, current_user))
+
+@router.get("/api/fortigate/{ip}/system/ha")
+def fgt_system_ha(ip: str, current_user = Depends(get_current_user)):
+    """Stato HA e checksum di sincronizzazione del cluster."""
+    return _fgt_call(fortigate_service.get_ha, _fgt_device(ip, current_user))
+
+@router.get("/api/fortigate/{ip}/system/admins")
+def fgt_system_admins(ip: str, current_user = Depends(require_admin)):
+    """Account amministrativi del FortiGate (proiettati: nessuna credenziale).
+    Admin-only: è l'elenco di chi può amministrare il firewall."""
+    log_audit(f"Elenco admin FortiGate richiesto per '{ip}' da '{current_user.get('sub')}'.")
+    return _fgt_call(fortigate_service.get_admins, _fgt_device(ip, current_user))
+
+@router.get("/api/fortigate/{ip}/system/banned-users")
+def fgt_system_banned_users(ip: str, current_user = Depends(get_current_user)):
+    """Utenti/IP in quarantena."""
+    return _fgt_call(fortigate_service.get_banned_users, _fgt_device(ip, current_user))
+
+@router.get("/api/fortigate/{ip}/system/config-revisions")
+def fgt_system_config_revisions(ip: str, current_user = Depends(get_current_user)):
+    """Revisioni di configurazione salvate a bordo."""
+    return _fgt_call(fortigate_service.get_config_revisions, _fgt_device(ip, current_user))
+
+@router.get("/api/fortigate/{ip}/system/certificates")
+def fgt_system_certificates(ip: str, current_user = Depends(get_current_user)):
+    """Certificati disponibili con data di scadenza."""
+    return _fgt_call(fortigate_service.get_certificates, _fgt_device(ip, current_user))
+
 @router.get("/api/fortigate/{ip}/interfaces")
 def fgt_interfaces(ip: str, current_user = Depends(get_current_user)):
     return _fgt_call(fortigate_service.get_interfaces, _fgt_device(ip, current_user))
@@ -181,10 +223,82 @@ def fgt_firewall_policy_objects(ip: str, current_user = Depends(get_current_user
     """Policy firewall (cmdb) con soli campi rilevanti per l'osservabilità."""
     return _fgt_call(fortigate_service.get_firewall_policy_objects, _fgt_device(ip, current_user))
 
+def _shadow_by_policy_id(ip: str) -> dict:
+    """Difetti statici per policyid, letti dal backup piu' recente.
+
+    I contatori dicono che una regola non ha mai colpito; non dicono perche'.
+    L'analisi statica dice che una regola e' coperta da una precedente; non
+    dice se il traffico ci sarebbe mai passato. Le due insieme distinguono
+    "regola morta per come e' scritta" da "regola che nessuno ha ancora usato",
+    e solo la prima e' un difetto da correggere.
+
+    Il join e' sul backup, non sulla risposta REST: il motore di analisi legge
+    il testo della configurazione, e il backup e' la stessa configurazione.
+    Senza backup non si sa: si restituisce vuoto e la colonna non compare,
+    invece di dichiarare sane delle regole mai esaminate.
+    """
+    from ai import config_analyzer
+    path, _tenant = config_analyzer._find_freshest_backup(ip)
+    if not path:
+        return {}
+    try:
+        with open(path, encoding="utf-8", errors="ignore") as fh:
+            content = fh.read()
+    except OSError:
+        return {}
+    out: dict = {}
+    for f in config_analyzer.policy_findings(content, 'fortios'):
+        rid = f.get("rule_id")
+        if rid:
+            out.setdefault(str(rid), []).append(f)
+    return out
+
+
+@router.get("/api/fortigate/{ip}/firewall/policies-with-stats")
+def fgt_firewall_policies_with_stats(ip: str, current_user = Depends(get_current_user)):
+    """Policy firewall unite ai contatori runtime (hit, byte, sessioni) e ai
+    difetti statici del backup: una sola richiesta invece di due, le regole mai
+    colpite sono gia' marcate, e quelle che non possono scattare per come sono
+    scritte lo dicono."""
+    result = _fgt_call(fortigate_service.get_policies_with_stats,
+                       _fgt_device(ip, current_user))
+    shadows = _shadow_by_policy_id(ip)
+    if isinstance(result, dict):
+        result["shadow_analysis"] = "backup" if shadows else "unavailable"
+        for row in (result.get("policies") or result.get("data") or []):
+            if isinstance(row, dict):
+                row["findings"] = shadows.get(str(row.get("policyid")), [])
+    return result
+
 @router.get("/api/fortigate/{ip}/firewall/services")
 def fgt_firewall_services(ip: str, current_user = Depends(get_current_user)):
     """Servizi custom (firewall.service/custom), sola lettura."""
     return _fgt_call(fortigate_service.get_firewall_custom_services, _fgt_device(ip, current_user))
+
+@router.get("/api/fortigate/{ip}/firewall/address-groups")
+def fgt_firewall_address_groups(ip: str, current_user = Depends(get_current_user)):
+    """Gruppi di indirizzi, sola lettura."""
+    return _fgt_call(fortigate_service.get_address_groups, _fgt_device(ip, current_user))
+
+@router.get("/api/fortigate/{ip}/firewall/service-groups")
+def fgt_firewall_service_groups(ip: str, current_user = Depends(get_current_user)):
+    """Gruppi di servizi, sola lettura."""
+    return _fgt_call(fortigate_service.get_service_groups, _fgt_device(ip, current_user))
+
+@router.get("/api/fortigate/{ip}/firewall/vips")
+def fgt_firewall_vips(ip: str, current_user = Depends(get_current_user)):
+    """Virtual IP (DNAT), sola lettura."""
+    return _fgt_call(fortigate_service.get_vips, _fgt_device(ip, current_user))
+
+@router.get("/api/fortigate/{ip}/firewall/ip-pools")
+def fgt_firewall_ip_pools(ip: str, current_user = Depends(get_current_user)):
+    """IP pool (SNAT), sola lettura."""
+    return _fgt_call(fortigate_service.get_ip_pools, _fgt_device(ip, current_user))
+
+@router.get("/api/fortigate/{ip}/firewall/security-profiles")
+def fgt_firewall_security_profiles(ip: str, current_user = Depends(get_current_user)):
+    """Profili di sicurezza (antivirus, IPS, webfilter, application control)."""
+    return _fgt_call(fortigate_service.get_security_profiles, _fgt_device(ip, current_user))
 
 @router.post("/api/fortigate/{ip}/policy-lookup")
 def fgt_policy_lookup(ip: str, payload: FgtPolicyLookupSchema,
@@ -201,9 +315,28 @@ def fgt_sessions(ip: str, payload: FgtSessionQuerySchema,
                      src_ip=payload.src_ip, dst_ip=payload.dst_ip,
                      dst_port=payload.dst_port, count=payload.count)
 
+@router.delete("/api/fortigate/{ip}/sessions")
+def fgt_delete_sessions(ip: str, payload: FgtSessionQuerySchema,
+                        current_user = Depends(require_operator)):
+    """Termina sessioni attive che matchano i filtri indicati (richiede ruolo operator+)."""
+    log_audit(f"Session kill FortiGate '{ip}' da '{current_user.get('sub')}' (src={payload.src_ip}, dst={payload.dst_ip}, dport={payload.dst_port}).")
+    return _fgt_call(fortigate_service.delete_sessions, _fgt_device(ip, current_user),
+                     src_ip=payload.src_ip, dst_ip=payload.dst_ip, dst_port=payload.dst_port)
+
 @router.get("/api/fortigate/{ip}/routes")
 def fgt_routes(ip: str, current_user = Depends(get_current_user)):
     return _fgt_call(fortigate_service.get_routes, _fgt_device(ip, current_user))
+
+@router.get("/api/fortigate/{ip}/vpn/tunnels")
+def fgt_vpn_tunnels(ip: str, current_user = Depends(get_current_user)):
+    """Stato vivo dei tunnel IPsec: quali stanno in piedi adesso, non quali
+    sono configurati."""
+    return _fgt_call(fortigate_service.get_vpn_tunnels, _fgt_device(ip, current_user))
+
+@router.get("/api/fortigate/{ip}/sdwan/health")
+def fgt_sdwan_health(ip: str, current_user = Depends(get_current_user)):
+    """Qualità dei link SD-WAN (latenza, jitter, perdita per SLA)."""
+    return _fgt_call(fortigate_service.get_sdwan_health, _fgt_device(ip, current_user))
 
 @router.post("/api/fortigate/{ip}/logs")
 def fgt_logs(ip: str, payload: FgtLogQuerySchema,
@@ -211,7 +344,10 @@ def fgt_logs(ip: str, payload: FgtLogQuerySchema,
     return _fgt_call(fortigate_service.get_traffic_logs, _fgt_device(ip, current_user),
                      src_ip=payload.src_ip, dst_ip=payload.dst_ip,
                      action=payload.action, count=payload.count,
-                     log_device=payload.log_device)
+                     log_device=payload.log_device, log_type=payload.log_type,
+                     log_subtype=payload.log_subtype,
+                     cli_category=payload.cli_category,
+                     since=payload.since, until=payload.until)
 
 @router.get("/api/fortigate/{ip}/wifi/clients")
 def fgt_wifi_clients(ip: str, current_user = Depends(get_current_user)):

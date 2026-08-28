@@ -7,5 +7,10 @@ class PaloAltoDriver(BaseDriver):
         match = re.search(r'sw-version:\s*(\S+)', output, re.IGNORECASE)
         return match.group(1).strip() if match else "Unknown"
 
+    def get_serial(self):
+        output = self.connection.send_command("show system info")
+        match = re.search(r'^\s*serial:\s*(\S+)', output, re.IGNORECASE | re.MULTILINE)
+        return match.group(1).strip() if match else ""
+
     def get_backup_command(self):
         return "show config running"

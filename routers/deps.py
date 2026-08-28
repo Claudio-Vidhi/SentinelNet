@@ -24,7 +24,7 @@ security_scheme = HTTPBearer(auto_error=False)
 SESSION_COOKIE = "net_session"
 # Metodi che modificano stato: su autenticazione via cookie richiedono la
 # prova anti-CSRF (header custom X-Requested-With, non impostabile cross-site
-# da un form; vedi docs/HARDENING.md).
+# da un form; vedi docs/hardening.md).
 _CSRF_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 CSRF_HEADER = "x-requested-with"
 
@@ -54,6 +54,8 @@ def get_current_user(request: Request,
             detail="Invalid or expired token."
         )
     sub = payload.get("sub")
+    if not sub:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject.")
     # L'utente deve esistere ancora (gestisce account eliminati con token valido)
     role = user_manager.get_role(sub)
     if role is None:
@@ -99,18 +101,56 @@ def assert_group_allowed(current_user, group):
     if scope is not None and group not in scope:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Site '{group}' is not allowed for your profile."
+            detail=f"Group '{group}' is not allowed for your profile."
         )
 
 
-def assert_device_allowed(current_user, ip):
-    """Verifica che il dispositivo (per IP) appartenga a una sede consentita.
-    Ritorna il device se trovato, None altrimenti (lascia gestire il 404 a valle)."""
-    device = next((d for d in inventory_manager.get_all_devices() if d['IP'] == ip), None)
-    if device is None:
+def assert_device_allowed(current_user, ip, tenant=None):
+    """Resolve an IP to a device the caller may see.
+
+    Identity is (tenant, IP): two customers may each own 192.0.2.10. A scoped
+    user has exactly one candidate, because an IP is unique inside a tenant, so
+    their existing IP-keyed URLs stay unambiguous. Only an unscoped admin can
+    see more than one, and only then is `tenant` needed.
+    """
+    all_matches = [d for d in inventory_manager.get_all_devices() if d.get("IP") == ip]
+    if not all_matches:
         return None
-    assert_group_allowed(current_user, device.get('Group', 'Generale'))
-    return device
+
+    scope = user_group_scope(current_user)
+    if scope is not None:
+        scope_matches = [d for d in all_matches if (d.get("Group") or "Generale") in scope]
+        if not scope_matches:
+            # Device exists in inventory but outside user's scope -> 403
+            assert_group_allowed(current_user, all_matches[0].get("Group", "Generale"))
+        if tenant:
+            scope_matches = [d for d in scope_matches if (d.get("Group") or "Generale") == tenant]
+        if len(scope_matches) > 1:
+            tenants = ", ".join(sorted(m.get("Group", "Generale") for m in scope_matches))
+            raise HTTPException(
+                status_code=409,
+                detail=f"{ip} esiste in piu' tenant ({tenants}). Specificare il tenant."
+            )
+        if not scope_matches:
+            return None
+        device = scope_matches[0]
+        assert_group_allowed(current_user, device.get("Group", "Generale"))
+        return device
+
+    # Unscoped user (admin)
+    if tenant:
+        matches = [d for d in all_matches if (d.get("Group") or "Generale") == tenant]
+        if not matches:
+            return None
+        return matches[0]
+
+    if len(all_matches) > 1:
+        tenants = ", ".join(sorted(m.get("Group", "Generale") for m in all_matches))
+        raise HTTPException(
+            status_code=409,
+            detail=f"{ip} esiste in piu' tenant ({tenants}). Specificare il tenant."
+        )
+    return all_matches[0]
 
 
 def filter_map_to_scope(data, scope):

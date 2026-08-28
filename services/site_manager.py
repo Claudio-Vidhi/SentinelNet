@@ -6,6 +6,9 @@ Ogni sito ha una modalità:
   - "agent":   un processo agente leggero gira nella sede remota, si connette
     IN USCITA verso il centrale (HTTPS) e vi spinge inventario, MAC e stato;
     il centrale gli inoltra comandi CLI tramite una coda di job.
+  # - "jump": the central reaches remote devices through an SSH bastion
+  #   (jump_host/jump_port/jump_identity below); no token, no agent process.
+  #   The tunnel itself is built on top of this data model in a later task.
 
 I siti sono persistiti in sites.json (come user_manager/inventory_manager).
 Il token per-sede è generato una sola volta e memorizzato SOLO come hash
@@ -23,6 +26,7 @@ import hashlib
 import secrets
 import sqlite3
 import threading
+from typing import Optional
 
 from core import data_config
 
@@ -30,7 +34,7 @@ SITES_JSON = data_config.get_path("sites.json")
 JOBS_DB = data_config.get_path("agent_jobs.db")
 
 DEFAULT_SITE_ID = "central"
-VALID_MODES = ("central", "agent")
+VALID_MODES = ("central", "agent", "jump")
 
 _lock = threading.RLock()
 _jobs_lock = threading.Lock()
@@ -106,6 +110,33 @@ def _public(site: dict) -> dict:
     return d
 
 
+def _validate_jump(values: dict) -> dict:
+    """Normalize and check the bastion fields of a 'jump' site."""
+    host = (values.get("jump_host") or "").strip()
+    if not host:
+        raise ValueError("Un sito 'jump' richiede jump_host.")
+    identity = (values.get("jump_identity") or "").strip()
+    if not identity:
+        raise ValueError("Un sito 'jump' richiede jump_identity.")
+    raw_port = values.get("jump_port")
+    if raw_port is None or raw_port == "":
+        port = 22
+    else:
+        try:
+            port = int(raw_port)
+        except (TypeError, ValueError):
+            raise ValueError("jump_port non valida.")
+    if not (1 <= port <= 65535):
+        raise ValueError("jump_port non valida.")
+    # Default identity for the DEVICES behind the bastion, distinct from the
+    # bastion's own login. Optional: a device row may still name its own
+    # identity, which wins. Empty means "no site default", and the caller
+    # falls back to the global admin credentials.
+    device_identity = (values.get("device_identity") or "").strip()
+    return {"jump_host": host, "jump_port": port, "jump_identity": identity,
+            "device_identity": device_identity}
+
+
 # --- CRUD siti ---
 
 def list_sites() -> list:
@@ -119,15 +150,31 @@ def get_site(site_id: str):
         return _public(s) if s else None
 
 
-def create_site(name: str, mode: str, subnets=None):
+def has_direct_path(site_id: Optional[str]) -> bool:
+    """True when the central has a direct IP path to this site's devices.
+
+    False only for bastion-only ('jump') sites: their devices are reached
+    exclusively through an SSH tunnel we initiate, so neither ICMP nor a raw
+    TCP connect from the central can reach them. Callers use it to SKIP a
+    direct probe, never to report the device as down: the state is "not
+    measurable".
+    """
+    site = get_site(site_id or "")
+    return not (site and site.get("mode") == "jump")
+
+
+def create_site(name: str, mode: str, subnets=None, **kwargs):
     """Crea un sito. Ritorna (site_pubblico, token_in_chiaro|None).
-    Per i siti in modalità 'agent' viene generato un token (mostrato una volta)."""
+    Per i siti in modalità 'agent' viene generato un token (mostrato una volta).
+    # For 'jump' sites, kwargs carries jump_host/jump_port/jump_identity
+    # (validated by _validate_jump) and no token is generated."""
     name = (name or "").strip()
     if not name:
         raise ValueError("Il nome del sito è obbligatorio.")
     if mode not in VALID_MODES:
         raise ValueError(f"Modalità non valida: {mode}")
     subnets = [s.strip() for s in (subnets or []) if s and s.strip()]
+    jump_fields = _validate_jump(kwargs) if mode == "jump" else {}
     with _lock:
         data = _load()
         base = _slugify(name)
@@ -147,18 +194,35 @@ def create_site(name: str, mode: str, subnets=None):
             "token_hash": token_hash,
             "created": time.time(),
             "last_seen": None,
+            **jump_fields,
         }
         _save(data)
         return _public(data[site_id]), token_plain
 
 
-def update_site(site_id: str, name=None, mode=None, subnets=None) -> bool:
+def set_site_flow_status(site_id: str, active: bool) -> bool:
     with _lock:
         data = _load()
         site = data.get(site_id)
         if not site:
             return False
-        if name is not None and name.strip():
+        site["flow_active"] = bool(active)
+        _save(data)
+        return True
+
+
+def update_site(site_id: str, name=None, mode=None, subnets=None, **kwargs) -> bool:
+    with _lock:
+        data = _load()
+        site = data.get(site_id)
+        if not site:
+            return False
+        if isinstance(name, dict):
+            kwargs.update(name)
+            name = kwargs.pop("name", None)
+            mode = kwargs.pop("mode", mode)
+            subnets = kwargs.pop("subnets", subnets)
+        if name is not None and isinstance(name, str) and name.strip():
             site["name"] = name.strip()
         if mode is not None:
             if mode not in VALID_MODES:
@@ -168,7 +232,17 @@ def update_site(site_id: str, name=None, mode=None, subnets=None) -> bool:
             if mode == "central":
                 site["token_hash"] = None
         if subnets is not None:
-            site["subnets"] = [s.strip() for s in subnets if s and s.strip()]
+            site["subnets"] = [s.strip() for s in subnets if isinstance(s, str) and s.strip()]
+        # If the resulting mode is 'jump', validate the bastion fields (existing
+        # values merged with any incoming kwargs) before the generic passthrough
+        # below can write an invalid jump site.
+        if site["mode"] == "jump":
+            site.update(_validate_jump({**site, **kwargs}))
+            kwargs = {k: v for k, v in kwargs.items()
+                      if k not in ("jump_host", "jump_port", "jump_identity",
+                                   "device_identity")}
+        for k, v in kwargs.items():
+            site[k] = v
         _save(data)
         return True
 
@@ -209,7 +283,7 @@ def touch_last_seen(site_id: str) -> None:
 
 # --- Autenticazione agente (token per-sede, separata dal JWT utente) ---
 
-def authenticate(token: str):
+def authenticate(token: Optional[str] = None) -> Optional[str]:
     """Ritorna l'id del sito agent il cui token corrisponde, altrimenti None."""
     if not token:
         return None
@@ -232,6 +306,50 @@ def _connect():
     return conn
 
 
+VALID_JOB_KINDS = ("cli", "rest")
+
+# Percorsi REST che l'agente può eseguire per conto del centrale.
+#
+# Il relay esiste perché in modalità agent il centrale non raggiunge gli
+# apparati, e le domande più utili di una diagnosi (quale policy matcherebbe,
+# quali sessioni, quale rotta, il tunnel è su?) non hanno un equivalente CLI
+# affidabile — ``policy_lookup`` non ne ha proprio uno.
+#
+# La lista è il confine di autorità: senza, un token di sede diventerebbe
+# accesso arbitrario alle API di ogni apparato della sede, e la separazione fra
+# piano agente e piano apparato (roadmap §2) sparirebbe. Sola LETTURA:
+# ``monitor/`` e ``log/``. Mai ``cmdb/`` (scrive configurazione), mai
+# ``config-script/upload``. Vedi ADR-0008.
+REST_RELAY_ALLOWLIST = (
+    "monitor/firewall/policy-lookup",
+    "monitor/firewall/session",
+    "monitor/firewall/policy",
+    "monitor/router/ipv4",
+    "monitor/vpn/ipsec",
+    "monitor/network/arp",
+    "monitor/system/interface",
+    "monitor/system/status",
+    "log/*/traffic/forward",
+)
+
+
+def rest_path_allowed(path: str) -> bool:
+    """Il percorso REST è fra quelli che l'agente può eseguire.
+
+    Applicata DUE volte di proposito: dal centrale quando accoda il job, e
+    dall'agente prima di eseguirlo. La seconda non è ridondante — il modello
+    della modalità agent è che le credenziali restino nella sede anche se il
+    centrale viene compromesso, e un centrale compromesso che detta percorsi
+    arbitrari annullerebbe proprio quella garanzia.
+    """
+    import fnmatch
+
+    p = (path or "").strip().lstrip("/")
+    if not p or ".." in p or "://" in p:
+        return False
+    return any(fnmatch.fnmatchcase(p, pat) for pat in REST_RELAY_ALLOWLIST)
+
+
 def _init_jobs():
     global _jobs_init_done
     with _jobs_lock:
@@ -252,19 +370,44 @@ def _init_jobs():
                 )
             """)
             c.execute("CREATE INDEX IF NOT EXISTS ix_jobs_site ON command_jobs(site_id, status)")
+            # Migrazione in avanti: i job esistenti sono tutti CLI, ed è il
+            # default giusto — un agente vecchio che riceve solo 'cli' continua
+            # a funzionare senza sapere che 'rest' esiste.
+            cols = {r["name"] for r in c.execute("PRAGMA table_info(command_jobs)")}
+            if "kind" not in cols:
+                c.execute("ALTER TABLE command_jobs ADD COLUMN kind TEXT NOT NULL DEFAULT 'cli'")
         _jobs_init_done = True
 
 
-def enqueue_job(site_id: str, device_ip: str, command: str, requested_by: str = "") -> dict:
+def enqueue_job(site_id: str, device_ip: str, command: str,
+                requested_by: str = "", kind: str = "cli") -> dict:
+    """Accoda un lavoro per l'agente della sede.
+
+    ``kind='cli'``: ``command`` è il comando da eseguire in SSH.
+    ``kind='rest'``: ``command`` è un JSON ``{"path": ..., "params": {...}}``
+    e il percorso deve stare nell'allowlist.
+    """
+    if kind not in VALID_JOB_KINDS:
+        raise ValueError(f"Tipo di job non valido: {kind}")
+    if kind == "rest":
+        try:
+            spec = json.loads(command)
+        except (TypeError, ValueError):
+            raise ValueError("Job REST: 'command' deve essere un JSON valido.")
+        if not rest_path_allowed(spec.get("path", "")):
+            raise ValueError(
+                f"Percorso REST non consentito nel relay: {spec.get('path')!r}. "
+                f"Consentiti (sola lettura): {', '.join(REST_RELAY_ALLOWLIST)}")
     _init_jobs()
     job_id = uuid.uuid4().hex
     now = time.time()
     with _jobs_lock, _connect() as c:
         c.execute("""INSERT INTO command_jobs
-                     (id, site_id, device_ip, command, status, result, requested_by, created, updated)
-                     VALUES (?,?,?,?, 'pending', '', ?, ?, ?)""",
-                  (job_id, site_id, device_ip, command, requested_by, now, now))
-    return get_job(job_id)
+                     (id, site_id, device_ip, command, kind, status, result, requested_by, created, updated)
+                     VALUES (?,?,?,?,?, 'pending', '', ?, ?, ?)""",
+                   (job_id, site_id, device_ip, command, kind, requested_by, now, now))
+    res = get_job(job_id)
+    return res if res is not None else {}
 
 
 def get_job(job_id: str):
@@ -305,7 +448,55 @@ def complete_job(job_id: str, site_id: str, status: str, result: str) -> bool:
         return cur.rowcount > 0
 
 
-def list_jobs(site_id: str = None, limit: int = 100) -> list:
+def find_recent_rest_result(site_id: str, device_ip: str, path: str,
+                            max_age_s: int = 300):
+    """Ultimo job REST concluso per quell'apparato e quel percorso, se recente.
+
+    L'agente esegue in polling (default 60s): una richiesta sincrona non può
+    aspettarlo. Il referto quindi accoda e torna subito; alla chiamata
+    successiva questo recupera il risultato ormai pronto. ``max_age_s`` evita
+    di spacciare per attuale la risposta di mezz'ora fa.
+
+    Ritorna il job (dict) oppure ``None``.
+    """
+    _init_jobs()
+    cutoff = time.time() - max_age_s
+    with _jobs_lock, _connect() as c:
+        rows = c.execute(
+            """SELECT * FROM command_jobs
+               WHERE site_id=? AND device_ip=? AND kind='rest'
+                 AND status IN ('done','error') AND updated >= ?
+               ORDER BY updated DESC LIMIT 20""",
+            (site_id, device_ip, cutoff)).fetchall()
+    for row in rows:
+        try:
+            if json.loads(row["command"]).get("path") == path:
+                return dict(row)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def has_pending_rest_job(site_id: str, device_ip: str, path: str) -> bool:
+    """Un job identico è già in coda o in esecuzione: non se ne accoda un
+    altro a ogni apertura del referto."""
+    _init_jobs()
+    with _jobs_lock, _connect() as c:
+        rows = c.execute(
+            """SELECT command FROM command_jobs
+               WHERE site_id=? AND device_ip=? AND kind='rest'
+                 AND status IN ('pending','running')""",
+            (site_id, device_ip)).fetchall()
+    for row in rows:
+        try:
+            if json.loads(row["command"]).get("path") == path:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def list_jobs(site_id: Optional[str] = None, limit: int = 100) -> list:
     _init_jobs()
     with _jobs_lock, _connect() as c:
         if site_id:

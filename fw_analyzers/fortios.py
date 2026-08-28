@@ -1,20 +1,23 @@
 # -*- coding: utf-8 -*-
-"""Analizzatore firewall FortiOS (FortiGate).
+"""FortiOS (FortiGate) firewall analyzer.
 
-Espone ``analyze(text)`` che ritorna l'envelope generico
-``{"vendor": "fortios", "sections": [...]}`` renderizzato genericamente dal
-frontend (T7). Contiene inoltre le primitive di parsing della struttura a
-blocchi ``config/edit/set/next/end`` (``_forti_tree`` & co.), riusate dai
-converter in ``config_analyzer`` (che le reimporta da qui — nessuna
-duplicazione).
+Exposes ``analyze(text)`` which returns the generic envelope
+``{"vendor": "fortios", "sections": [...]}`` rendered generically by the
+frontend (T7). Also contains the parsing primitives for the
+``config/edit/set/next/end`` block structure (``_forti_tree`` & co.), reused by
+the converters in ``config_analyzer`` (which re-imports them from here — no
+duplication).
 
-Puro e tollerante: ``analyze`` non solleva MAI eccezioni.
+Pure and tolerant: ``analyze`` NEVER raises exceptions.
 """
+import logging
 import re
 
 from ._ip import _ip_addr_to_cidr
 
-# Chiavi il cui valore e' un segreto e va mascherato nell'envelope.
+logger = logging.getLogger(__name__)
+
+# Keys whose value is a secret and must be masked in the envelope.
 _SECRET_KEYS = {
     'passwd', 'password', 'psksecret', 'secret', 'key', 'private-key',
     'passphrase', 'auth-pwd', 'ppk-secret', 'ldap-password',
@@ -25,15 +28,15 @@ _FORTI_TOKEN = re.compile(r'"[^"]*"|\S+')
 
 
 def _forti_tokens(s):
-    """Tokenizza una riga FortiOS rispettando le stringhe tra doppi apici."""
+    """Tokenizes a FortiOS line, respecting double-quoted strings."""
     return [t[1:-1] if t.startswith('"') and t.endswith('"') and len(t) >= 2 else t
             for t in _FORTI_TOKEN.findall(s)]
 
 
 def _forti_tree(content):
-    """Parsa la struttura a blocchi config/edit/next/end di FortiOS in un albero:
-    nodo = {"sets": {chiave: [valori]}, "children": {nome: nodo}}. Tollerante a
-    blocchi non chiusi o annidamenti anomali."""
+    """Parses the FortiOS config/edit/next/end block structure into a tree:
+    node = {"sets": {key: [values]}, "children": {name: node}}. Tolerant of
+    unclosed blocks or anomalous nesting."""
     root = {"sets": {}, "children": {}}
     stack = [root]
     for raw in (content or '').splitlines():
@@ -65,13 +68,13 @@ def _forti_tree(content):
 
 
 def _forti_get(root, path):
-    """Naviga l'albero FortiOS per nome sezione (es. 'firewall policy').
-    Ritorna il nodo o None."""
+    """Navigates the FortiOS tree by section name (e.g. 'firewall policy').
+    Returns the node or None."""
     return root["children"].get(path)
 
 
 def _forti_set1(node, key, default=''):
-    """Primo valore di un 'set' (stringa), oppure default."""
+    """First value of a 'set' (string), or default."""
     vals = node["sets"].get(key)
     return vals[0] if vals else default
 
@@ -92,6 +95,20 @@ def _join(vals):
     return ', '.join(vals) if isinstance(vals, (list, tuple)) else (vals or '')
 
 
+def _multi(vals):
+    """Multi-element value kept as a LIST up to the UI.
+
+    A policy can reference dozens of address objects: flattening them here into a
+    string forces the table into one huge cell, and the client no longer has a way
+    to expand it on demand because the structure is gone. Reassembling it
+    browser-side by splitting on ", " is not equivalent: an object name can
+    contain a comma.
+    """
+    if isinstance(vals, (list, tuple)):
+        return [str(v) for v in vals]
+    return [str(vals)] if vals else []
+
+
 def _section(sid, columns, rows):
     return {
         "id": sid,
@@ -107,11 +124,16 @@ def _children(root, path):
 
 
 def analyze(text):
-    """FortiOS -> envelope generico a sezioni. Puro e tollerante."""
+    """FortiOS -> generic sectioned envelope. Pure and tolerant."""
     try:
         return _analyze(text)
     except Exception:
-        return {"vendor": "fortios", "sections": []}
+        # An empty envelope is also what a genuinely empty config produces:
+        # without ``error`` the UI would show a parser crash as "no policies",
+        # i.e. a failed analysis read as a clean firewall.
+        logger.exception("FortiOS analysis failed")
+        return {"vendor": "fortios", "sections": [], "vlan_interfaces": [],
+                "error": True}
 
 
 def _analyze(text):
@@ -124,11 +146,11 @@ def _analyze(text):
         rows.append({
             "id": pid,
             "name": _forti_set1(n, 'name'),
-            "srcintf": _join(n["sets"].get('srcintf', [])),
-            "dstintf": _join(n["sets"].get('dstintf', [])),
-            "srcaddr": _join(n["sets"].get('srcaddr', [])),
-            "dstaddr": _join(n["sets"].get('dstaddr', [])),
-            "service": _join(n["sets"].get('service', [])),
+            "srcintf": _multi(n["sets"].get('srcintf', [])),
+            "dstintf": _multi(n["sets"].get('dstintf', [])),
+            "srcaddr": _multi(n["sets"].get('srcaddr', [])),
+            "dstaddr": _multi(n["sets"].get('dstaddr', [])),
+            "service": _multi(n["sets"].get('service', [])),
             "action": _forti_set1(n, 'action', 'deny'),
             "nat": _forti_set1(n, 'nat', 'disable'),
             "status": _forti_set1(n, 'status', 'enable'),
@@ -155,7 +177,7 @@ def _analyze(text):
     sections.append(_section("addresses", ["name", "type", "subnet", "comment"], rows))
 
     # 3) Address groups
-    rows = [{"name": name, "members": _join(n["sets"].get('member', []))}
+    rows = [{"name": name, "members": _multi(n["sets"].get('member', []))}
             for name, n in _children(root, 'firewall addrgrp')]
     sections.append(_section("address_groups", ["name", "members"], rows))
 
@@ -165,8 +187,8 @@ def _analyze(text):
         rows.append({
             "name": name,
             "protocol": _forti_set1(n, 'protocol'),
-            "tcp_portrange": _join(n["sets"].get('tcp-portrange', [])),
-            "udp_portrange": _join(n["sets"].get('udp-portrange', [])),
+            "tcp_portrange": _multi(n["sets"].get('tcp-portrange', [])),
+            "udp_portrange": _multi(n["sets"].get('udp-portrange', [])),
         })
     sections.append(_section(
         "services", ["name", "protocol", "tcp_portrange", "udp_portrange"], rows))
@@ -179,7 +201,7 @@ def _analyze(text):
             rows.append({
                 "name": name,
                 "type": kind,
-                "day": _join(n["sets"].get('day', [])),
+                "day": _multi(n["sets"].get('day', [])),
                 "start": _forti_set1(n, 'start'),
                 "end": _forti_set1(n, 'end'),
             })
@@ -210,21 +232,33 @@ def _analyze(text):
         })
     sections.append(_section("ippools", ["name", "type", "startip", "endip"], rows))
 
-    # 8) Interfaces (+ zona)
+    # 8) Interfaces (+ zone)
     zone_of_iface = {}
     for zname, n in _children(root, 'system zone'):
         for member in n["sets"].get('interface', []):
             zone_of_iface[member] = zname
     rows = []
+    vlan_ifaces = []
     for name, n in _children(root, 'system interface'):
         rows.append({
             "name": name,
             "ip": _forti_ip_cidr(n),
             "zone": zone_of_iface.get(name, ''),
             "vdom": _forti_set1(n, 'vdom'),
-            "allowaccess": _join(n["sets"].get('allowaccess', [])),
+            "allowaccess": _multi(n["sets"].get('allowaccess', [])),
             "status": _forti_set1(n, 'status', 'up'),
         })
+        # VLAN sub-interface: it is the FortiOS equivalent of an SVI, and it is
+        # what makes a gateway sitting on the firewall deducible.
+        vlanid = _forti_set1(n, 'vlanid')
+        if vlanid:
+            vlan_ifaces.append({
+                "name": name,
+                "vlan": vlanid,
+                "ip": _forti_ip_cidr(n),
+                "status": _forti_set1(n, 'status', 'up'),
+                "parent": _forti_set1(n, 'interface'),
+            })
     sections.append(_section(
         "interfaces", ["name", "ip", "zone", "vdom", "allowaccess", "status"], rows))
 
@@ -241,8 +275,8 @@ def _analyze(text):
                 "name": name,
                 "remote_gw": _forti_set1(n, 'remote-gw'),
                 "interface": _forti_set1(n, 'interface'),
-                "proposal": _join(n["sets"].get('proposal', [])),
-                "phase2": _join(p2_by_p1.get(name, [])),
+                "proposal": _multi(n["sets"].get('proposal', [])),
+                "phase2": _multi(p2_by_p1.get(name, [])),
             })
     sections.append(_section(
         "vpn_ipsec", ["name", "remote_gw", "interface", "proposal", "phase2"], rows))
@@ -265,13 +299,13 @@ def _analyze(text):
         rows.append({
             "name": name,
             "accprofile": _forti_set1(n, 'accprofile'),
-            "trusthost": _join(trusthosts),
+            "trusthost": _multi(trusthosts),
             "remote_auth": _forti_set1(n, 'remote-auth', 'disable'),
         })
     sections.append(_section(
         "administrators", ["name", "accprofile", "trusthost", "remote_auth"], rows))
 
-    # 12) Authentication (radius/tacacs+/ldap/fsso + user group con flag SSO)
+    # 12) Authentication (radius/tacacs+/ldap/fsso + user group with SSO flag)
     rows = []
     for section, kind in (('user radius', 'radius'),
                           ('user tacacs+', 'tacacs+'),
@@ -281,9 +315,12 @@ def _analyze(text):
             rows.append({
                 "name": name,
                 "kind": kind,
-                "server": (_forti_set1(n, 'server')
-                           or _forti_set1(n, 'primary-server')
-                           or _forti_set1(n, 'host')),
+                # A list even when the value is a single one: the same column
+                # hosts the members of a group, and two different types in the same
+                # column is an error that awaits the right data.
+                "server": _multi(_forti_set1(n, 'server')
+                                 or _forti_set1(n, 'primary-server')
+                                 or _forti_set1(n, 'host')),
                 "sso": "yes" if kind == 'fsso' else "",
             })
     for name, n in _children(root, 'user group'):
@@ -291,10 +328,11 @@ def _analyze(text):
         rows.append({
             "name": name,
             "kind": "group",
-            "server": _join(n["sets"].get('member', [])),
+            "server": _multi(n["sets"].get('member', [])),
             "sso": "yes" if 'fsso' in gtype.lower() else "",
         })
     sections.append(_section(
         "authentication", ["name", "kind", "server", "sso"], rows))
 
-    return {"vendor": "fortios", "sections": sections}
+    return {"vendor": "fortios", "sections": sections,
+            "vlan_interfaces": vlan_ifaces}

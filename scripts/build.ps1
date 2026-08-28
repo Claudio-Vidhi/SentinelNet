@@ -33,7 +33,23 @@ if (-not $SkipSmoke) {
         if (-not $ok) { Write-Error "Smoke test fallito: exe non risponde"; exit 1 }
         Write-Host "Smoke test OK"
     } finally {
-        if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+        # L'exe one-file di PyInstaller e' un bootloader che avvia un processo
+        # FIGLIO: fermare solo il padre lascia il figlio vivo e orfano, e l'exe
+        # resta lockato -> la build successiva muore con "Accesso negato".
+        # Si termina l'albero (/T), non il singolo processo.
+        if (-not $proc.HasExited) {
+            & taskkill.exe /PID $proc.Id /T /F *>$null
+        }
+        # Rete di sicurezza: se il padre e' gia' uscito il figlio e' stato
+        # reparentato e /T non lo raggiunge. Si chiude solo cio' che gira da
+        # QUESTA dist, mai un'istanza avviata altrove dall'utente.
+        $distExe = (Resolve-Path "dist\SentinelNet.exe").Path
+        Get-Process -Name SentinelNet -ErrorAction SilentlyContinue |
+            Where-Object { $_.Path -eq $distExe } |
+            ForEach-Object {
+                Write-Host "Smoke test: chiudo processo residuo PID $($_.Id)"
+                Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+            }
     }
 }
 Write-Host "Build OK: dist\SentinelNet.exe"

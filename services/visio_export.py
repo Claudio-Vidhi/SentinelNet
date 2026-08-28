@@ -22,7 +22,9 @@ _PAGE_H_IN = 8.5
 _MIN_MARGIN_IN = 0.5
 
 
-def _hex_to_rgb_fraction(hex_color: str):
+from typing import Optional
+
+def _hex_to_rgb_fraction(hex_color: Optional[str] = None):
     """'#RRGGBB' -> '#RRGGBB' normalizzato (fallback al viola di default)."""
     h = (hex_color or "#6A5FC1").lstrip("#")
     if len(h) != 6:
@@ -297,7 +299,9 @@ def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
     # direttamente sul connettore o sulle forme incollate.
     connects_xml = []
     for g in conn_glue:
-        c = g["c"]
+        c = g.get("c")
+        if not c or not isinstance(c, dict) or not c.get("points"):
+            continue
         pts = [(tx(p[0]), ty(p[1])) for p in c["points"]]
         xs = [p[0] for p in pts]; ys = [p[1] for p in pts]
         x0, y0 = min(xs), min(ys)

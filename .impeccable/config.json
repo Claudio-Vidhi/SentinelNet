@@ -1,0 +1,97 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [
+      "static/vendor/**"
+    ],
+    "ignoreValues": [
+      {
+        "rule": "design-system-color",
+        "value": "*",
+        "files": [
+          "static/js/netsec-audit.js"
+        ],
+        "createdAt": "2026-08-05T16:33:24.772Z",
+        "reason": "Exported standalone audit report: a self-contained HTML document that leaves the app and cannot reference app tokens"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "static/js/config-analyzer.js"
+        ],
+        "createdAt": "2026-08-08T21:04:39.325Z",
+        "reason": "Pre-existing 2px help-bar accent on an inline help strip, not a card; matches existing UI convention"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "*",
+        "files": [
+          "static/css/themes/design-1.css",
+          "static/css/themes/design-2.css",
+          "static/css/themes/design-3.css"
+        ],
+        "createdAt": "2026-08-09T10:20:00.000Z",
+        "reason": "Alternate UI variants the user can select (settings route ui-variant, picker in dashboard.html, covered by test_ui_variant.py). Each one IS its own palette by definition, so measuring it against the Mimic Panel tokens flags the feature rather than a defect. Font-size rules still apply here: the type ramp is shared across variants, the colours are not"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "*",
+        "files": [
+          "static/js/topology.js"
+        ],
+        "createdAt": "2026-08-09T14:40:00.000Z",
+        "reason": "Canvas and data-viz colours, not UI chrome. vis.js paints on a canvas where CSS custom properties do not resolve, so these must be literals: the device-type palette (DEVICE_TYPE_META) and the VTP domain palette (VTP_PALETTE) are categorical encodings that must stay mutually distinguishable across all three themes, the greys and shadows are canvas drawing, and the rest are cssVar() fallbacks whose whole purpose is to be a literal when the token is missing. The two genuine defects in this file - a var(--x) reaching the canvas and another reaching the .vsdx export - were fixed in 647209f rather than waived"
+      },
+      {
+        "rule": "design-system-radius",
+        "value": "*",
+        "files": [
+          "static/css/themes/design-1.css",
+          "static/css/themes/design-2.css",
+          "static/css/themes/design-3.css"
+        ],
+        "createdAt": "2026-08-09T14:40:00.000Z",
+        "reason": "Same reasoning as the colour waiver above: DESIGN.md prescribes square corners for the Mimic Panel identity, and these three selectable variants exist precisely to offer a different one. Rounded corners are the variant, not drift"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          "static/css/themes/design-1.css",
+          "static/css/themes/design-3.css"
+        ],
+        "createdAt": "2026-08-09T14:40:00.000Z",
+        "reason": "Inter is the typeface of these two variants, declared in their own :root. The shared type ramp (sizes) still applies and is still enforced; the family is part of what makes a variant a variant"
+      },
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "files": [
+          "static/css/themes/design-1.css",
+          "static/css/themes/design-3.css"
+        ],
+        "createdAt": "2026-08-09T14:40:00.000Z",
+        "reason": "Deliberate choice for two alternate variants, not the default identity: the Mimic Panel default uses Saira Condensed and Azeret Mono"
+      },
+      {
+        "rule": "design-system-font-size",
+        "value": "*",
+        "files": [
+          "static/js/netsec-audit.js"
+        ],
+        "createdAt": "2026-08-09T14:40:00.000Z",
+        "reason": "Extends the existing colour waiver on this file to the type ramp, for the same reason: the sizes flagged live in the exported standalone audit report, a self-contained print document with its own stylesheet that cannot reference app tokens"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "static/js/netsec-audit.js"
+        ],
+        "createdAt": "2026-08-17T16:55:58.354Z",
+        "reason": "Left rule on the guidance callout in the printed A4 audit report; present in the reference PDF the output must match"
+      }
+    ]
+  }
+}

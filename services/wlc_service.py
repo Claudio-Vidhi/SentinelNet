@@ -10,8 +10,11 @@ essere interpretato da un LLM (MCP / AI assistant).
 """
 
 import re
+from contextlib import contextmanager
+from typing import Optional
 
 from core.core_engine import resolve_driver, get_device_credentials
+from services.ap_store import normalize_ap_name
 
 
 class WlcError(Exception):
@@ -36,6 +39,10 @@ COMMANDS = {
     "ap_summary": {
         "aireos": "show ap summary",
         "iosxe": "show ap summary",
+    },
+    "ap_inventory": {
+        "aireos": "show ap inventory all",
+        "iosxe": "show ap inventory all",
     },
     "client_summary": {
         "aireos": "show client summary",
@@ -72,10 +79,29 @@ def normalize_mac(mac: str, platform: str) -> str:
     return ":".join(digits[i:i + 2] for i in range(0, 12, 2))
 
 
-def ssh_run(device: dict, command: str, timeout: int = 30) -> str:
-    """Esegue un comando show sul WLC. Su IOS-XE entra in enable (best
-    effort); su AireOS l'enable non esiste."""
-    from netmiko import ConnectHandler
+def detect_platform(sysinfo: str, device: dict) -> str:
+    """Piattaforma dedotta dalla risposta a 'show sysinfo': AireOS la
+    implementa, IOS-XE la rifiuta. Il vendor dell'inventario resta solo come
+    ripiego: un 5508 registrato come 'cisco' generico veniva altrimenti
+    interrogato con la CLI del 9800, che non capisce."""
+    if "Product Version" in sysinfo:
+        return "aireos"
+    if "% Invalid input" in sysinfo or "% Ambiguous" in sysinfo:
+        return "iosxe"
+    return platform_of(device)
+
+
+def _send(conn, command: str, timeout: int = 30) -> str:
+    res = conn.send_command(command, read_timeout=timeout)
+    return res if isinstance(res, str) else str(res or "")
+
+
+@contextmanager
+def _session(device: dict, timeout: int = 30):
+    """Apre una sola sessione SSH e ne cede (conn, platform, sysinfo).
+    AireOS accetta al massimo 5 sessioni SSH concorrenti: un comando per
+    connessione esauriva il controller a ogni refresh del tab."""
+    from core.net_ssh import ConnectHandler
     vendor = (device.get("Vendor") or "").lower()
     try:
         _, netmiko_type = resolve_driver(vendor)
@@ -84,46 +110,358 @@ def ssh_run(device: dict, command: str, timeout: int = 30) -> str:
     username, password, secret = get_device_credentials(device)
     params = {"device_type": netmiko_type, "host": device["IP"],
               "username": username, "password": password, "secret": secret,
-              "timeout": timeout, "auth_timeout": 15, "banner_timeout": 15}
+              "timeout": timeout, "auth_timeout": 15, "banner_timeout": 15,
+              # An unreachable controller must fail on the TCP connect rather
+              # than spend the whole read budget on it: the WLC tab stays blank
+              # for exactly as long as this call takes.
+              "conn_timeout": 4}
     try:
-        with ConnectHandler(**params) as conn:
-            if platform_of(device) == "iosxe":
-                try:
-                    conn.enable()
-                except Exception:
-                    pass
-            return conn.send_command(command, read_timeout=timeout)
+        conn = ConnectHandler(**params)
     except Exception as e:
         raise WlcError(f"SSH {device.get('IP')}: {e}")
+    try:
+        try:
+            sysinfo = _send(conn, "show sysinfo", timeout)
+        except Exception as e:
+            raise WlcError(f"SSH {device.get('IP')}: {e}")
+        platform = detect_platform(sysinfo, device)
+        try:
+            if platform == "aireos":
+                # Il driver netmiko cisco_ios manda 'terminal length 0', che
+                # AireOS rifiuta: senza questo l'output si ferma al '--More--'
+                # e le tabelle arrivano troncate.
+                conn.send_command_timing("config paging disable")
+            else:
+                conn.enable()
+                try:
+                    conn.send_command("terminal length 0")
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        yield conn, platform, sysinfo
+    finally:
+        try:
+            conn.disconnect()
+        except Exception:
+            pass
 
 
-def query(device: dict, service: str, mac: str = None) -> dict:
+def query(device: dict, service: str, mac: Optional[str] = None) -> dict:
     """Esegue il servizio richiesto sul WLC e ritorna
     {"platform", "command", "data"}."""
     if service not in COMMANDS:
         raise WlcError(f"Servizio WLC sconosciuto: '{service}'")
-    platform = platform_of(device)
-    command = COMMANDS[service][platform]
-    if "{mac}" in command:
-        if not mac:
-            raise WlcError(f"Il servizio '{service}' richiede un MAC address.")
-        command = command.format(mac=normalize_mac(mac, platform))
-    data = ssh_run(device, command, timeout=60 if service == "client_detail" else 30)
+    needs_mac = any("{mac}" in c for c in COMMANDS[service].values())
+    if needs_mac and not mac:
+        raise WlcError(f"Il servizio '{service}' richiede un MAC address.")
+    timeout = 60 if service == "client_detail" else 30
+    with _session(device, timeout) as (conn, platform, sysinfo):
+        command = COMMANDS[service][platform]
+        if "{mac}" in command:
+            command = command.format(mac=normalize_mac(mac or "", platform))
+        if service == "status" and platform == "aireos":
+            data = sysinfo  # gia' letto in fase di rilevamento
+        else:
+            try:
+                data = _send(conn, command, timeout)
+            except Exception as e:
+                raise WlcError(f"SSH {device.get('IP')}: {e}")
     return {"platform": platform, "command": command, "data": data}
+
+
+# --- parsing dell'output CLI -------------------------------------------------
+# Il tab Live riceveva {"data": "<testo grezzo>"} e cercava data.aps /
+# data.clients: le tabelle restavano vuote su qualunque piattaforma. Qui il
+# testo diventa le liste che la UI (e l'MCP) si aspettano.
+
+_RULER_RE = re.compile(r"^[-\s]*-{3,}[-\s]*$")
+
+# frammento di intestazione (minuscolo) -> chiave prodotta. L'ordine conta:
+# vince il primo frammento contenuto nel nome di colonna.
+_AP_FIELDS = {"ap name": "name", "ip address": "ip", "ethernet mac": "mac",
+              "ap model": "model", "clients": "clients", "state": "status",
+              "status": "status"}
+_CLIENT_FIELDS = {"mac address": "mac", "ap name": "ap_name",
+                  "ip address": "ip", "wlan": "wlan", "protocol": "protocol",
+                  "state": "status", "status": "status"}
+_WLAN_FIELDS = {"ssid": "ssid", "profile name": "ssid", "wlan id": "id",
+                "id": "id", "status": "status", "security": "security"}
+_ROGUE_FIELDS = {"mac address": "mac", "ssid": "ssid", "channel": "channel",
+                 "rssi": "rssi", "status": "status"}
+
+
+def _table_rows(text: str, fields: dict) -> list:
+    """Converte una tabella 'show ...' in lista di dict.
+
+    I confini di colonna vengono dalla riga di trattini quando e' spezzata per
+    colonna (AireOS) e dalle posizioni delle intestazioni altrimenti (IOS-XE
+    stampa un unico trattino lungo). Ogni colonna arriva fino all'inizio della
+    successiva, cosi' un valore piu' largo dell'intestazione non viene tagliato.
+    """
+    lines = (text or "").splitlines()
+    header_i = next((i for i, ln in enumerate(lines)
+                     if sum(1 for k in fields if k in ln.lower()) >= 2), None)
+    if header_i is None:
+        return []
+    header = lines[header_i]
+    starts, first_row = None, header_i + 1
+    if header_i + 1 < len(lines) and lines[header_i + 1].strip() \
+            and _RULER_RE.match(lines[header_i + 1]):
+        first_row = header_i + 2
+        groups = [m.start() for m in re.finditer(r"-+", lines[header_i + 1])]
+        if len(groups) > 1:
+            starts = groups
+    if not starts:
+        starts = [m.start() for m in re.finditer(r"\S+(?: \S+)*", header)]
+    if not starts:
+        return []
+    spans = [(s, starts[i + 1] if i + 1 < len(starts) else len(header) + 4096)
+             for i, s in enumerate(starts)]
+
+    keymap = {}
+    for idx, (a, b) in enumerate(spans):
+        col = header[a:b].strip().lower()
+        for frag, key in fields.items():
+            if frag in col and key not in keymap.values():
+                keymap[idx] = key
+                break
+    if not keymap:
+        return []
+
+    rows = []
+    for line in lines[first_row:]:
+        if not line.strip():
+            if rows:
+                break
+            continue
+        if _RULER_RE.match(line):
+            continue
+        cells = re.split(r"\s{2,}", line.strip())
+        if len(cells) != len(spans):
+            cells = [line[a:b].strip() for a, b in spans]
+        row = {key: cells[idx] for idx, key in keymap.items()
+               if idx < len(cells)}
+        if any(row.values()):
+            rows.append(row)
+    return rows
+
+
+def parse_sysinfo(text: str) -> dict:
+    """'show sysinfo' AireOS: righe 'Etichetta.......... valore'."""
+    out = {}
+    for line in (text or "").splitlines():
+        m = re.match(r"^(.*?)\.{2,}\s*(.*)$", line)
+        if m and m.group(1).strip():
+            out[m.group(1).strip().lower()] = m.group(2).strip()
+    return out
+
+
+def parse_ap_autorf(text: str) -> dict:
+    """Channel, channel width and radio load from 'show ap auto-rf 802.11a|b
+    <ap>' (AireOS). 'show ap summary' carries none of it, and the width is the
+    first thing to look at on a slow cell: only auto-rf prints it. Both bands
+    print the same labels: the caller knows which radio it asked for."""
+    out = {}
+    for line in (text or "").splitlines():
+        m = re.match(r"^\s*(.*?)\s*(?:\.{2,}|:)\s*(\S.*?)\s*$", line)
+        if not m or not m.group(1).strip():
+            continue
+        label, value = m.group(1).strip().lower(), m.group(2)
+        if "channel width" in label and "channel_width" not in out:
+            out["channel_width"] = value
+        elif "current channel" in label and "energy" not in label \
+                and "channel" not in out:
+            out["channel"] = value
+        elif "channel utilization" in label and "channel_utilization" not in out:
+            out["channel_utilization"] = value
+        elif "noise profile" in label and "noise_profile" not in out:
+            out["noise_profile"] = value
+    return out
+
+
+def parse_ap_inventory(text: str) -> dict:
+    """{ap name: serial} from the bulk AP inventory output."""
+    out, current = {}, None
+    for line in (text or "").splitlines():
+        m = re.match(r"\s*(?:AP Name\s*:|NAME:\s*\"?)\s*([^,\"]+)", line, re.IGNORECASE)
+        if m:
+            current = m.group(1).strip().strip('"')
+            continue
+        m = re.search(r"\bSN\s*:\s*(\S+)", line, re.IGNORECASE)
+        if m and current:
+            sn = m.group(1).split(',')[0].strip().strip('"')
+            if sn and sn.upper() not in ("N/A", "NONE", ""):
+                out[current] = sn
+                out[normalize_ap_name(current)] = sn
+                clean_name = re.sub(r"\s+Slot\s+\d+.*$", "", current, flags=re.IGNORECASE).strip()
+                out[clean_name] = sn
+                out[normalize_ap_name(clean_name)] = sn
+            current = None
+    return out
+
+
+def parse_client_detail(text: str) -> dict:
+    """IP, RSSI e SNR dal dettaglio di un client. AireOS scrive
+    'Etichetta.......... valore', IOS-XE 'Etichetta : valore'."""
+    out = {}
+    for line in (text or "").splitlines():
+        m = re.match(r"^\s*(.*?)\s*(?:\.{2,}|:)\s*(\S.*?)\s*$", line)
+        if not m or not m.group(1).strip():
+            continue
+        label, value = m.group(1).strip().lower(), m.group(2)
+        if ("signal strength" in label or "rssi" in label) and "rssi" not in out:
+            out["rssi"] = re.sub(r"\s*dBm$", "", value, flags=re.I)
+        elif ("signal to noise" in label or "snr" in label) and "snr" not in out:
+            out["snr"] = re.sub(r"\s*dB$", "", value, flags=re.I)
+        elif ("ip address" in label or "ipv4 address" in label) \
+                and "ipv6" not in label and "ip" not in out:
+            out["ip"] = value
+    return out
+
+
+# Numero massimo di client interrogati singolarmente per non bloccare la pagina.
+# Un comando per client: oltre questa soglia il refresh del tab durerebbe piu'
+# di quanto il dato resta valido. I client in eccesso restano senza RSSI/SNR,
+# il bottone Diagnostica li copre uno per uno.
+_CLIENT_DETAIL_LIMIT = 40
+
+# Stessa logica per l'auto-RF: due comandi per AP, uno per radio.
+_AP_AUTORF_LIMIT = 40
+# Suffisso della chiave e comando. La radio 5 GHz tiene le chiavi senza
+# suffisso: e' quella che il tab mostrava da sempre. La 6 GHz non esiste su
+# AireOS (si ferma all'11ax 2.4/5), quindi non c'e' un terzo comando.
+_AP_AUTORF_CMDS = (("", "show ap auto-rf 802.11a {ap}"),
+                   ("_24", "show ap auto-rf 802.11b {ap}"))
+# Il nome AP arriva dall'output del controller e finisce dentro un comando: si
+# accettano solo i caratteri di un nome AP legittimo, cosi' una riga malformata
+# non puo' allungare la CLI con un secondo comando.
+_AP_NAME_RE = re.compile(r"^[\w.:@-]{1,32}$")
+
+
+def overview(device: dict) -> dict:
+    """Fotografia del controller in una sola sessione SSH: AP, client, WLAN e
+    rogue AP gia' strutturati. Ogni comando e' best-effort (un account
+    read-only puo' non vedere i rogue AP: il resto del tab resta popolato)."""
+    raw, version, uptime = {}, "", ""
+    with _session(device) as (conn, platform, sysinfo):
+        for svc in ("ap_summary", "client_summary", "wlan_summary", "rogue_aps"):
+            try:
+                raw[svc] = _send(conn, COMMANDS[svc][platform])
+            except Exception as e:
+                raw[svc] = ""
+                raw[svc + "_error"] = str(e)
+        # IP, RSSI e SNR non esistono in 'show client summary' su nessuna delle
+        # due piattaforme: solo il dettaglio per client li espone.
+        clients = _table_rows(raw["client_summary"], _CLIENT_FIELDS)
+        for client in clients[:_CLIENT_DETAIL_LIMIT]:
+            try:
+                cmd = COMMANDS["client_detail"][platform].format(
+                    mac=normalize_mac(client.get("mac", ""), platform))
+                client.update(parse_client_detail(_send(conn, cmd, 60)))
+            except Exception:
+                continue
+        aps = _table_rows(raw["ap_summary"], _AP_FIELDS)
+        # Best-effort like every other command here: a controller that will not
+        # answer costs the serial column, not the tab.
+        cmd = COMMANDS["ap_inventory"].get(platform)
+        if cmd:
+            try:
+                serials = parse_ap_inventory(_send(conn, cmd))
+            except Exception:
+                serials = {}
+            for ap in aps:
+                name = ap.get("name", "")
+                serial = (serials.get(name)
+                          or serials.get(normalize_ap_name(name))
+                          or serials.get(name.split('.')[0])
+                          or "")
+                if serial:
+                    ap["serial"] = serial
+        for ap in aps:
+            if ap.get("serial"):
+                continue
+            name = ap.get("name", "")
+            if not name or not _AP_NAME_RE.match(name):
+                continue
+            try:
+                cmd_inv = f"show ap name {name} inventory" if platform == "iosxe" else f"show ap inventory {name}"
+                inv_out = _send(conn, cmd_inv, 15)
+                m = re.search(r'\bSN\s*:\s*(\S+)', inv_out, re.IGNORECASE)
+                if not m and platform == "aireos":
+                    inv_out = _send(conn, f"show ap config general {name}", 15)
+                    m = re.search(r'(?:Serial Number|SN)\s*[\.:]+\s*([A-Za-z0-9]{8,16})', inv_out, re.IGNORECASE)
+                if m:
+                    sn = m.group(1).split(',')[0].strip().strip('"')
+                    if sn and sn.upper() not in ("N/A", "NONE", ""):
+                        ap["serial"] = sn
+            except Exception:
+                continue
+        if platform == "aireos":
+            # Canale e larghezza di canale non stanno in 'show ap summary':
+            # l'auto-RF delle radio e' l'unico posto che li stampa. La 2.4 GHz
+            # e' una radio a se': stesso AP, canale e utilizzo diversi, ed e'
+            # la banda dove la congestione morde per prima.
+            for ap in aps[:_AP_AUTORF_LIMIT]:
+                name = ap.get("name", "")
+                if not _AP_NAME_RE.match(name):
+                    continue
+                for suffix, cmd in _AP_AUTORF_CMDS:
+                    try:
+                        radio = parse_ap_autorf(_send(conn, cmd.format(ap=name)))
+                    except Exception:
+                        continue
+                    ap.update({k + suffix: v for k, v in radio.items()})
+            info = parse_sysinfo(sysinfo)
+            version = info.get("product version", "")
+            uptime = info.get("system up time", "")
+        else:
+            try:
+                ver_txt = _send(conn, "show version")
+            except Exception:
+                ver_txt = ""
+            m = re.search(r"Version\s+([\w.:()]+)", ver_txt)
+            version = m.group(1).rstrip(",") if m else ""
+            m = re.search(r"uptime is (.+)", ver_txt)
+            uptime = m.group(1).strip() if m else ""
+
+    wlans = _table_rows(raw["wlan_summary"], _WLAN_FIELDS)
+    rogues = _table_rows(raw["rogue_aps"], _ROGUE_FIELDS)
+    # 'show client summary' da' solo il WLAN ID: il nome arriva dalla tabella
+    # WLAN. Su AireOS la colonna e' 'profilo / SSID', tiene la parte dopo la
+    # barra.
+    ssid_by_id = {w.get("id"): w.get("ssid", "") for w in wlans}
+    for client in clients:
+        ssid = ssid_by_id.get(client.get("wlan"), "").split("/")[-1].strip()
+        if ssid:
+            client["wlan"] = f"{client['wlan']} - {ssid}"
+
+    from services import ap_store
+    ap_store.record_aps(device["IP"], device.get("Group", "Generale"), aps)
+
+    return {"platform": platform, "version": version, "uptime": uptime,
+            "ap_count": len(aps), "client_count": len(clients),
+            "aps": aps, "clients": clients, "wlans": wlans, "rogues": rogues,
+            "raw": raw}
 
 
 def diagnose_wifi_client(device: dict, mac: str) -> dict:
     """Diagnosi aggregata di un client wireless: dettaglio client, stato AP,
     WLAN e rogue AP vicini. Ogni sezione è best-effort (errore riportato
     nella sezione, la diagnosi non fallisce)."""
-    result = {"wlc": device.get("IP"), "client_mac": mac,
-              "platform": platform_of(device), "sections": {}}
-    for name, svc, kw in (("client_detail", "client_detail", {"mac": mac}),
-                          ("ap_summary", "ap_summary", {}),
-                          ("wlan_summary", "wlan_summary", {}),
-                          ("rogue_aps", "rogue_aps", {})):
-        try:
-            result["sections"][name] = query(device, svc, **kw)
-        except Exception as e:
-            result["sections"][name] = {"error": str(e)}
+    result = {"wlc": device.get("IP"), "client_mac": mac, "sections": {}}
+    # Una sola sessione per tutte le sezioni: con una query per comando erano
+    # quattro login SSH di fila, ognuno con il suo rilevamento piattaforma.
+    with _session(device, 60) as (conn, platform, _sysinfo):
+        result["platform"] = platform
+        for svc in ("client_detail", "ap_summary", "wlan_summary", "rogue_aps"):
+            command = COMMANDS[svc][platform]
+            try:
+                if "{mac}" in command:
+                    command = command.format(mac=normalize_mac(mac, platform))
+                result["sections"][svc] = {
+                    "platform": platform, "command": command,
+                    "data": _send(conn, command, 60)}
+            except Exception as e:
+                result["sections"][svc] = {"error": str(e)}
     return result

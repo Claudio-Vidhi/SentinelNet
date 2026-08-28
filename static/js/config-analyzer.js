@@ -4,8 +4,17 @@
     let caData = null;
     let caView = 'home';
     let caFwView = null; // sub-menu del pill "Firewall": id sezione vendor-driven (fw_analyzers envelope), auto-inizializzato al primo render
+    let caSrvView = null; // idem per il pill "Server" (envelope ai/linux_analyzer)
     let caRouteGroupMode = 'flat'; // 'flat' | 'byhop' — ricordato per la sessione
     let caNetworks = {};   // ip -> vis.Network istanza mappa route (lazy, per device aperto)
+    // Lista EFFETTIVAMENTE renderizzata negli accordion per-apparato. Non e'
+    // caData: le viste VLAN/Routing/ACL/Interfacce escludono firewall e server,
+    // e ``data-ca-idx`` e' l'indice in QUESTA lista. Cercare quell'indice in
+    // caData restituisce un altro apparato ogni volta che un firewall o un
+    // server lo precede — la mappa route finiva sul device sbagliato.
+    // ponytail: indice posizionale, non chiave. Se un giorno una vista ordina
+    // o filtra la lista dopo il render, si passa a data-ca-ip.
+    let caList = [];
 
     function loadConfigAnalyzer(forceRefresh) {
         const sel = document.getElementById('configGroupSelect');
@@ -43,12 +52,53 @@
         renderCaResults();
     }
 
+    // Triage per-apparato dalla scheda del Config Analyzer. Il bottone e' lo
+    // stesso dell'inventario (icona, colore, endpoint): e' la stessa azione, e
+    // due controlli diversi per la stessa cosa si imparano due volte.
+    // L'eta' del backup sta accanto al bottone perche' e' cio' che rende il
+    // bottone una decisione: e' il dato vecchio che si vuole rinfrescare.
+    // 'requires-write' e' il gancio gia' in uso (body.role-viewer lo nasconde):
+    // il triage e' operator-only e a un viewer il bottone non serve.
+    function caTriageButton(dev, L) {
+        return `<span style="display:inline-flex; align-items:center; gap:8px; margin-left:8px;">
+            ${backupAgeLabel(dev.backup_ts)}
+            <button type="button" class="btn btn-secondary btn-small requires-write"
+                style="margin:0; padding:4px 8px; color:var(--warning);"
+                title="${escapeHtml(L.titleCaTriage)}"
+                data-action="ca-triage" data-ip="${escapeHtml(dev.ip)}"><i class="fa-solid fa-bolt-lightning"></i></button>
+        </span>`;
+    }
+
+    // Il bottone vive dentro <summary>: senza preventDefault il click aprirebbe
+    // e chiuderebbe anche l'accordion.
+    async function caTriageDevice(ip, btnEl, ev) {
+        if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+        // triageSingleDevice() e' quello dell'inventario. Fuori da una tabella
+        // le sue letture di riga sono tutte opzionali e protette, quindi gira
+        // qui senza modifiche: disabilita il bottone, gira, e lo ripristina con
+        // la stessa icona che questo bottone usa.
+        await triageSingleDevice(ip, btnEl);
+        // Il triage ha riscritto il backup: quello a schermo e' il vecchio.
+        await fetchConfigAnalyzer();
+        // caView e' stato di modulo e sopravvive al refetch: si riapre solo la
+        // scheda su cui si stava lavorando.
+        const card = document.querySelector(`details[data-ca-ip="${CSS.escape(ip)}"]`);
+        if (card) {
+            card.open = true;
+            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
     function destroyCaNetworks() {
         Object.keys(caNetworks).forEach(k => { try { caNetworks[k].destroy(); } catch (e) {} });
         caNetworks = {};
     }
 
     function caDeviceCount(dev) {
+        if (dev.config_type === 'linux') {
+            const secs = ((dev.server || {}).sections) || [];
+            return secs.reduce((n, s) => n + ((s.rows || []).length), 0);
+        }
         if (dev.config_type === 'fortios') return (dev.policies || []).length;
         if (dev.config_type === 'wlc-aireos') return (dev.wlans || []).length;
         if (caView === 'vlan') return (dev.vlans || []).length;
@@ -79,49 +129,70 @@
         });
     }
 
+    function isFirewallDevice(dev) {
+        if (!dev) return false;
+        const ct = (dev.config_type || '').toLowerCase();
+        const vendor = (dev.vendor || '').toLowerCase();
+        const cat = (dev.category || '').toLowerCase();
+        return !!(dev.is_firewall || ct === 'fortios' || ct === 'panos' || vendor === 'fortigate' || vendor === 'paloalto' || vendor === 'fortinet' || cat === 'firewall');
+    }
+
+    // Un host Linux non ha VLAN, ACL o interfacce in senso Cisco: sta solo nel
+    // pill "Server", e viene escluso dalle viste che descrivono uno switch.
+    function isServerDevice(dev) {
+        return !!(dev && (dev.config_type || '').toLowerCase() === 'linux');
+    }
+
     function caRenderResultsInner() {
         const box = document.getElementById('caResults');
         if (!box) return;
         const L = i18n[currentLang];
         const en = currentLang === 'en';
         if (caView === 'home') {
-            // Il deep-link (caApplyFocus) deve poter scavalcare la home:
-            // se c'è un focus pendente si passa subito alla vista interfacce.
             if (caFocusIp && caData && caData.length) {
                 caApplyFocus();
-                if (caView !== 'home') return; // ha commutato su 'iface'
+                if (caView !== 'home') return;
             }
             box.innerHTML = caRenderHome(L);
             return;
         }
         if (caView === 'convert') { box.innerHTML = caRenderConvert(L); return; }
         if (caView === 'firewall') { box.innerHTML = caRenderFirewallView(L, en); return; }
+        if (caView === 'server') { box.innerHTML = caRenderServerView(L, en); return; }
         if (!caData || !caData.length) {
             box.innerHTML = `<div style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.msgCaNoDevices)}</div>`;
             return;
         }
+        let list = caData;
+        if (['vlan', 'routing', 'acl', 'iface'].includes(caView)) {
+            list = caData.filter(dev => !isFirewallDevice(dev) && !isServerDevice(dev));
+        }
+        caList = list;
+        if (!list.length) {
+            box.innerHTML = `<div style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.msgCaNoDevices)}</div>`;
+            return;
+        }
         if (caView === 'validation') {
-            box.innerHTML = caData.map(dev => caRenderValidation(dev, L, en)).join('');
+            box.innerHTML = list.map(dev => caRenderValidation(dev, L, en)).join('');
             caApplyFocus();
             return;
         }
-        const openAll = caData.length === 1;
-        box.innerHTML = caData.map((dev, idx) => {
+        const openAll = list.length === 1;
+        box.innerHTML = list.map((dev, idx) => {
             const count = caDeviceCount(dev);
             const tenant = dev.tenant ? ` <span class="badge" style="font-size:10px;">${escapeHtml(dev.tenant)}</span>` : '';
-            const body = dev.config_type === 'fortios' ? caRenderFortios(dev, L, en)
-                       : dev.config_type === 'wlc-aireos' ? caRenderWlc(dev, L, en)
-                       : caView === 'vlan' ? caRenderVlans(dev, L, en)
+            const body = caView === 'vlan' ? caRenderVlans(dev, L, en)
                        : caView === 'routing' ? caRenderRouting(dev, L, en, idx)
                        : caView === 'acl' ? caRenderAcls(dev, L, en)
                        : caRenderIfaces(dev, L, en);
-            return `<details class="mac-switch" data-ca-idx="${idx}" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" ${openAll ? 'open' : ''} ontoggle="caOnToggle(this, ${idx})">
+            return `<details class="mac-switch" data-ca-idx="${idx}" data-ca-ip="${escapeHtml(dev.ip)}" style="border:1px solid var(--border); border-radius:0; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" ${openAll ? 'open' : ''} ontoggle="caOnToggle(this, ${idx})">
                 <summary style="cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; list-style:none;">
                     <i class="fa-solid fa-chevron-right mac-chev" style="font-size:11px;"></i>
                     <strong>${escapeHtml(dev.hostname || dev.ip)}</strong>
                     <span style="color:var(--text-muted); font-family:var(--font-code); font-size:12px;">${escapeHtml(dev.ip)}</span>
                     ${tenant}
                     <span style="margin-left:auto; color:var(--text-muted); font-size:12px;">${count}</span>
+                    ${caTriageButton(dev, L)}
                 </summary>
                 <div style="padding:0 14px 14px;">${body}</div>
             </details>`;
@@ -137,15 +208,19 @@
     // Deep-link dal modale "Config porta": apre il device e evidenzia l'interfaccia.
     function caApplyFocus() {
         if (!caFocusIp || !caData || !caData.length) return;
-        const idx = caData.findIndex(d => d.ip === caFocusIp);
-        if (idx === -1) { caFocusIp = caFocusPort = null; return; }
+        // Esistenza nel dataset COMPLETO: decide solo se vale la pena cambiare
+        // vista, e va cercata prima che caList sia stata popolata.
+        if (!caData.some(d => d.ip === caFocusIp)) { caFocusIp = caFocusPort = null; return; }
         if (caView !== 'iface') {
             // caSwitchView richiama renderCaResults, che a sua volta rientra qui con la vista giusta.
             caSwitchView('iface');
             return;
         }
+        // L'indice del DOM e' quello della lista renderizzata, non di caData.
+        const idx = caList.findIndex(d => d.ip === caFocusIp);
         const port = caFocusPort;
         caFocusIp = caFocusPort = null;
+        if (idx === -1) return;
         const detailsEl = document.querySelector(`details[data-ca-idx="${idx}"]`);
         if (!detailsEl) return;
         detailsEl.open = true;
@@ -172,9 +247,8 @@
 
     function caRenderHome(L) {
         const card = (view, icon, title, desc) => `
-            <div class="hero-card" onclick="caSwitchView('${view}')" style="cursor:pointer; flex:1; min-width:220px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2); padding:22px 18px; transition:var(--transition);"
-                 onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'">
-                <div style="font-size:26px; color:var(--primary); margin-bottom:10px;"><i class="fa-solid ${icon}"></i></div>
+            <div class="hero-card" data-action="ca-switch-view" data-view="${view}" style="cursor:pointer; flex:1; min-width:220px; border:1px solid var(--border); border-radius:0; background:var(--surface-2); padding:22px 18px; transition:var(--transition);">
+                <div style="font-size:var(--font-size-3xl); color:var(--primary); margin-bottom:10px;"><i class="fa-solid ${icon}"></i></div>
                 <div style="font-weight:600; font-size:15px; margin-bottom:6px;">${escapeHtml(title)}</div>
                 <div style="font-size:12px; color:var(--text-muted); line-height:1.5;">${escapeHtml(desc)}</div>
             </div>`;
@@ -189,19 +263,19 @@
     function caRenderConvert(L) {
         const vendorOpts = (sel) => ['fortios', 'panos'].map(v =>
             `<option value="${v}" ${v === sel ? 'selected' : ''}>${v === 'fortios' ? 'FortiGate (FortiOS)' : 'Palo Alto (PAN-OS)'}</option>`).join('');
-        return `<div style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); padding:16px;">
+        return `<div style="border:1px solid var(--border); border-radius:0; background:var(--surface-2); padding:16px;">
             <div style="font-weight:600; margin-bottom:12px;"><i class="fa-solid fa-right-left" style="color:var(--primary); margin-right:8px;"></i>${escapeHtml(L.caConvertTitle)}</div>
             <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
-                <select id="caConvDevice" onchange="caConvPickDevice()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px; min-width:240px;">
+                <select id="caConvDevice" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px; min-width:240px;">
                     ${caDeviceOptions(L, 'caConvDevicePick')}
                 </select>
                 <label style="font-size:12px; color:var(--text-muted);">${escapeHtml(L.caConvSource)}</label>
-                <select id="caConvSource" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts('fortios')}</select>
+                <select id="caConvSource" style="padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts('fortios')}</select>
                 <label style="font-size:12px; color:var(--text-muted);">${escapeHtml(L.caConvTarget)}</label>
-                <select id="caConvTarget" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts('panos')}</select>
-                <button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="caConvertPreview()"><i class="fa-solid fa-eye"></i> ${escapeHtml(L.caConvPreviewBtn)}</button>
+                <select id="caConvTarget" style="padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts('panos')}</select>
+                <button class="btn btn-primary btn-small" style="width:auto; margin:0;" data-action="ca-convert-preview"><i class="fa-solid fa-eye"></i> ${escapeHtml(L.caConvPreviewBtn)}</button>
             </div>
-            <textarea id="caConvText" rows="8" placeholder="${escapeHtml(L.caConvTextPh)}" style="width:100%; font-family:var(--font-code); font-size:12px; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); color:var(--text); padding:10px; resize:vertical;"></textarea>
+            <textarea id="caConvText" rows="8" placeholder="${escapeHtml(L.caConvTextPh)}" style="width:100%; font-family:var(--font-code); font-size:12px; border:1px solid var(--border); border-radius:0; background:var(--surface-3); color:var(--text); padding:10px; resize:vertical;"></textarea>
             <div id="caConvResult" style="margin-top:12px;"></div>
         </div>`;
     }
@@ -252,19 +326,19 @@
             const unmapped = (d.unmapped || []);
             out.innerHTML = `
                 <div style="font-weight:600; font-size:13px; margin:8px 0;">${escapeHtml(L.caConvMapped)} (${(d.mapped || []).length})</div>
-                <div style="max-height:320px; overflow:auto; border:1px solid var(--border); border-radius:8px;">
+                <div style="max-height:320px; overflow:auto; border:1px solid var(--border); border-radius:0;">
                 <table class="data-table" style="width:100%;"><thead><tr>
                     <th>${escapeHtml(L.thCaConvSource)}</th><th>${escapeHtml(L.thCaConvTarget)}</th><th>${escapeHtml(L.thCaConvNote)}</th>
                 </tr></thead><tbody>${rows || `<tr><td colspan="3" style="color:var(--text-muted); font-size:12px;">—</td></tr>`}</tbody></table></div>
                 <details style="margin-top:10px;">
                     <summary style="cursor:pointer; font-weight:600; font-size:13px;">${escapeHtml(L.caConvUnmapped)} (${unmapped.length})</summary>
-                    <pre style="white-space:pre-wrap; font-size:11px; background:var(--surface-3); border:1px solid var(--border); border-radius:8px; padding:10px; margin-top:8px; max-height:240px; overflow:auto;">${escapeHtml(unmapped.join('\n\n'))}</pre>
+                    <pre style="white-space:pre-wrap; font-size:11px; background:var(--surface-3); border:1px solid var(--border); border-radius:0; padding:10px; margin-top:8px; max-height:240px; overflow:auto;">${escapeHtml(unmapped.join('\n\n'))}</pre>
                 </details>
                 <div style="display:flex; align-items:center; gap:10px; margin-top:12px;">
                     <div style="font-weight:600; font-size:13px;">Preview</div>
-                    <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="caConvDownload()"><i class="fa-solid fa-download"></i> ${escapeHtml(L.caConvDownload)}</button>
+                    <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-action="ca-conv-download"><i class="fa-solid fa-download"></i> ${escapeHtml(L.caConvDownload)}</button>
                 </div>
-                <pre style="white-space:pre-wrap; font-size:11px; background:var(--surface-3); border:1px solid var(--border); border-radius:8px; padding:10px; margin-top:8px; max-height:320px; overflow:auto;">${escapeHtml(caConvLastPreview)}</pre>`;
+                <pre style="white-space:pre-wrap; font-size:11px; background:var(--surface-3); border:1px solid var(--border); border-radius:0; padding:10px; margin-top:8px; max-height:320px; overflow:auto;">${escapeHtml(caConvLastPreview)}</pre>`;
         } catch (e) {
             out.innerHTML = `<div style="color:var(--danger); font-size:13px;"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(e.message || 'Error')}</div>`;
         }
@@ -286,7 +360,7 @@
     // aperto e vengono distrutte alla chiusura, per evitare leak di canvas.
     function caOnToggle(detailsEl, idx) {
         if (caView !== 'routing') return;
-        const dev = caData[idx];
+        const dev = caList[idx];
         if (!dev) return;
         if (detailsEl.open) {
             caBuildRouteMap(dev, idx);
@@ -335,7 +409,6 @@
     function caSwitchRouteGroupMode(mode, idx) {
         caRouteGroupMode = mode;
         renderCaResults();
-        const dev = caData[idx];
         const detailsEl = document.querySelector(`details[data-ca-idx="${idx}"]`);
         if (detailsEl) {
             detailsEl.open = true;
@@ -350,7 +423,7 @@
         if (!lines.length) return '';
         const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(lines))));
         return `<button type="button" class="ca-pill" title="${escapeHtml(L.lblCaShowRawRoute)}" data-i18n-title="lblCaShowRawRoute"
-            data-raw="${encoded}" onclick="caShowRawRoute(this)" style="padding:2px 8px;">
+            data-raw="${encoded}" data-action="ca-show-raw-route" style="padding:2px 8px;">
             <i class="fa-solid fa-code"></i>
         </button>`;
     }
@@ -400,7 +473,7 @@
                 <td>${caRawRouteButton(r, L)}</td>
                 </tr>`).join('');
             const defaultBadge = g.hasDefault ? ` <span class="badge" style="font-size:10px; color:var(--warning); border:1px solid var(--warning);">${escapeHtml(L.lblCaDefaultRoute)}</span>` : '';
-            return `<details style="border:1px solid var(--border); border-radius:8px; margin-bottom:8px; background:var(--surface);">
+            return `<details style="border:1px solid var(--border); border-radius:0; margin-bottom:8px; background:var(--surface);">
                 <summary style="cursor:pointer; padding:8px 10px; font-size:12px; font-weight:700; display:flex; align-items:center; gap:8px;">
                     <span style="font-family:var(--font-code);">${escapeHtml(hop)}</span>
                     <span class="badge" style="font-size:10px;">${g.rows.length}</span>
@@ -412,12 +485,12 @@
             </details>`;
         }).join('') : `<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">—</div>`;
         const routeToggle = `<div style="display:flex; gap:6px; margin-bottom:8px;">
-            <button type="button" class="ca-pill ${caRouteGroupMode === 'flat' ? 'active' : ''}" onclick="caSwitchRouteGroupMode('flat', ${idx})">${escapeHtml(L.lblCaRouteFlat)}</button>
-            <button type="button" class="ca-pill ${caRouteGroupMode === 'byhop' ? 'active' : ''}" onclick="caSwitchRouteGroupMode('byhop', ${idx})">${escapeHtml(L.lblCaRouteByHop)}</button>
+            <button type="button" class="ca-pill ${caRouteGroupMode === 'flat' ? 'active' : ''}" data-action="ca-switch-route-group" data-mode="flat" data-idx="${idx}">${escapeHtml(L.lblCaRouteFlat)}</button>
+            <button type="button" class="ca-pill ${caRouteGroupMode === 'byhop' ? 'active' : ''}" data-action="ca-switch-route-group" data-mode="byhop" data-idx="${idx}">${escapeHtml(L.lblCaRouteByHop)}</button>
         </div>`;
         const staticSection = `${routeToggle}${caRouteGroupMode === 'byhop' ? groupedHtml : staticTable}`;
         const protoCards = protocols.length ? protocols.map(p => `
-            <details style="border:1px solid var(--border); border-radius:8px; margin-top:8px; background:var(--surface);">
+            <details style="border:1px solid var(--border); border-radius:0; margin-top:8px; background:var(--surface);">
                 <summary style="cursor:pointer; padding:8px 10px; font-size:12px; font-weight:700;">${escapeHtml(p.proto)}${p.id ? ' ' + escapeHtml(p.id) : ''}</summary>
                 <div style="padding:8px 10px; border-top:1px solid var(--border);">
                     ${(p.details || []).length ? `<pre style="font-family:var(--font-code); font-size:11px; background:var(--surface); margin:0 0 6px; white-space:pre-wrap;">${escapeHtml((p.details || []).join('\\n'))}</pre>` : ''}
@@ -442,12 +515,28 @@
         if (!container || typeof vis === 'undefined') return;
         const statics = (dev.routing && dev.routing.static) || [];
         const hostname = dev.hostname || dev.ip;
-        const nodeFont = { color: '#ffffff', size: 13, face: 'Rubik, sans-serif' };
-        const hopFont = { color: '#ffffff', size: 12, face: 'Rubik, sans-serif' };
+        // Nodi e testo seguono la resa attiva: in chiara l'etichetta e' inchiostro
+        // su targa, in scura e' chiara su ardesia. vis.js vuole colori veri.
+        const nodeInk = cssVar('--text', '#e8ebe6');
+        const nodeFont = { color: nodeInk, size: 13, face: 'Saira Condensed, sans-serif' };
+        const hopFont = { color: nodeInk, size: 12, face: 'Saira Condensed, sans-serif' };
+        // Senza un 'highlight' esplicito vis.js usa il proprio: sfondo #D2E5FF,
+        // quasi bianco, e in resa scura l'etichetta chiara ci sparisce sopra. Il
+        // selezionato tiene quindi una superficie del sistema — e' li' che sta il
+        // contrasto col testo — e si distingue con l'anello di selezione.
+        const centerColor = {
+            background: cssVar('--surface-3', '#2a333a'), border: nodeInk,
+            highlight: { background: cssVar('--surface-3', '#2a333a'), border: nodeInk }
+        };
+        const hopColor = {
+            background: cssVar('--surface-2', '#181e23'), border: cssVar('--border-strong', '#46535c'),
+            highlight: { background: cssVar('--surface-2', '#181e23'), border: nodeInk }
+        };
+        /** @type {any[]} */ // vis.js nodes: shape differs between center and hop
         const nodes = [{
             id: 'center', label: hostname, shape: 'box',
-            color: { background: '#6a5fc1', border: '#a99ff2' },
-            font: nodeFont, borderWidth: 2, margin: 8
+            color: centerColor,
+            font: nodeFont, borderWidth: 2, borderWidthSelected: 4, margin: 8
         }];
         const edges = [];
         const hopCounts = {};
@@ -461,22 +550,28 @@
             const nid = 'hop_' + hop;
             nodes.push({
                 id: nid, label: hop, shape: 'ellipse',
-                color: { background: '#2b2144', border: '#a99ff2' },
-                font: hopFont, borderWidth: 1.5
+                color: hopColor,
+                font: hopFont, borderWidth: 1.5, borderWidthSelected: 3
             });
             edges.push({
                 from: 'center', to: nid,
                 label: `${hopCounts[hop]} ${i18n[currentLang].lblCaRouteMapEdge}`,
-                color: hopHasDefault[hop] ? { color: '#ffb84d' } : { color: 'rgba(169,159,242,0.65)' },
+                // Anche l'arco selezionato ha un default vis.js fuori palette
+                // (#2B7CE9): si tiene la tinta dell'arco, schiarita.
+                color: hopHasDefault[hop]
+                    ? { color: cssVar('--lamp-warn', '#e0a03c'),
+                        highlight: cssVar('--lamp-warn-ink', '#e8b055') }
+                    : { color: cssVar('--cond-trace', '#7b3fb5'),
+                        highlight: cssVar('--text', '#e8ebe6') },
                 width: hopHasDefault[hop] ? 3 : 2,
-                font: { color: '#ffffff', size: 12, strokeWidth: 0, background: '#150f23' }
+                font: { color: nodeInk, size: 12, strokeWidth: 0, background: cssVar('--surface-2', '#181e23') }
             });
         });
         if (caNetworks[idx]) { try { caNetworks[idx].destroy(); } catch (e) {} }
         const network = new vis.Network(container, { nodes, edges }, {
             physics: { stabilization: { iterations: 100 } },
             interaction: { dragView: true, zoomView: true },
-            edges: { font: { color: '#ffffff', size: 12, strokeWidth: 0, background: '#150f23' } }
+            edges: { font: { color: nodeInk, size: 12, strokeWidth: 0, background: cssVar('--surface-2', '#181e23') } }
         });
         let frozen = false;
         const freeze = () => { if (!frozen) { frozen = true; network.setOptions({ physics: false }); } };
@@ -498,7 +593,7 @@
                 const color = act === 'permit' ? 'var(--success)' : act === 'deny' ? 'var(--danger)' : 'var(--text-muted)';
                 return `<tr><td>${escapeHtml(e.seq != null ? String(e.seq) : '—')}</td><td style="color:${color}; font-weight:700;">${escapeHtml(e.action || '—')}</td><td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(e.text || '—')}</td></tr>`;
             }).join('');
-            return `<details style="border:1px solid var(--border); border-radius:8px; margin-bottom:8px; background:var(--surface);">
+            return `<details style="border:1px solid var(--border); border-radius:0; margin-bottom:8px; background:var(--surface);">
                 <summary style="cursor:pointer; padding:10px 12px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; list-style:none;">
                     <strong>${escapeHtml(acl.name)}</strong>
                     <span class="badge" style="font-size:10px;">${escapeHtml(acl.kind || '—')}</span>
@@ -522,13 +617,13 @@
                 ? `<span class="ca-chip" style="color:var(--danger); border-color:var(--danger);">shutdown</span>`
                 : `<span class="ca-chip" style="color:var(--success); border-color:var(--success);">${escapeHtml(L.lblCaActive)}</span>`;
             const rowId = `caIfaceRaw_${dev.ip || ''}_${ii}`.replace(/[^a-zA-Z0-9_]/g, '_');
-            return `<tr style="cursor:pointer;" data-ca-iface="${escapeHtml(expandIface(i.name).toLowerCase())}" onclick="caToggleIfaceRaw('${rowId}')">
+            return `<tr style="cursor:pointer;" data-ca-iface="${escapeHtml(expandIface(i.name).toLowerCase())}" data-action="ca-toggle-iface-raw" data-target="${rowId}">
                     <td>${escapeHtml(i.name)}</td><td>${escapeHtml(i.description || '—')}</td><td><span class="badge" style="font-size:10px;">${escapeHtml(mode)}</span></td>
                     <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(String(vlanCol))}</td>
                     <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(i.ip || '—')}</td>
                     <td>${aclChips || '—'}</td><td>${state}</td>
                 </tr>
-                <tr id="${rowId}" style="display:none;"><td colspan="7"><pre style="font-family:var(--font-code); background:var(--surface); border-radius:6px; padding:8px; margin:0; white-space:pre-wrap; font-size:11px;">${escapeHtml(i.raw || '—')}</pre></td></tr>`;
+                <tr id="${rowId}" style="display:none;"><td colspan="7"><pre style="font-family:var(--font-code); background:var(--surface); border-radius:0; padding:8px; margin:0; white-space:pre-wrap; font-size:11px;">${escapeHtml(i.raw || '—')}</pre></td></tr>`;
         }).join('');
         return `<div class="table-container"><table><thead><tr>
             <th>${L.thCaIface}</th><th>${L.thCaDesc}</th><th>${L.thCaMode}</th><th>${L.thCaVlanCol}</th><th>${L.thCaIp}</th><th>${L.thCaAclInOut}</th><th>${L.thCaState}</th>
@@ -585,23 +680,72 @@
             }
         });
         if (total === 0) {
-            return { total: 0, body: `<div style="display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:8px; background:rgba(59,225,136,0.12); border:1px solid rgba(59,225,136,0.35); color:var(--success); font-size:12px;">
+            return { total: 0, body: `<div style="display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:0; background:var(--lamp-up-wash); border:1px solid var(--success); color:var(--success); font-size:12px;">
                 <i class="fa-solid fa-circle-check"></i><span>${escapeHtml(L.msgCaNoIssues)}</span></div>` };
         }
         return { total, body: sections.join('') };
+    }
+
+    // Severity -> the lamp token for that state. Colour means state here, as
+    // everywhere else in this interface; it is never decoration.
+    const CA_DEFECT_LAMP = {
+        high: { color: 'var(--danger)', wash: 'var(--lamp-fault-wash)', icon: 'fa-circle-xmark' },
+        medium: { color: 'var(--warning)', wash: 'var(--lamp-warn-wash)', icon: 'fa-triangle-exclamation' },
+        low: { color: 'var(--text-muted)', wash: 'var(--surface-2)', icon: 'fa-circle-info' },
+        info: { color: 'var(--text-muted)', wash: 'var(--surface-2)', icon: 'fa-circle-info' },
+    };
+
+    function caDefectLine(f, L) {
+        const p = f.params || {};
+        const acl = f.acl_name || p.acl || '';
+        const rule = f.rule_id || p.rule_id || '';
+        switch (f.key) {
+            case 'shadowed':
+                return L.msgCaDefectShadowed
+                    .replace('{rule}', rule).replace('{by}', p.shadowed_by || '?').replace('{acl}', acl);
+            case 'unreachable':
+                return L.msgCaDefectUnreachable
+                    .replace('{rule}', rule).replace('{by}', p.blocked_by || '?').replace('{acl}', acl);
+            case 'any_any':
+                return L.msgCaDefectAnyAny.replace('{rule}', rule).replace('{acl}', acl);
+            case 'unresolved_object':
+                return L.msgCaDefectUnresolved
+                    .replace('{rule}', rule).replace('{acl}', acl)
+                    .replace('{objects}', (p.objects || []).join(', '));
+            case 'route_to_nowhere':
+                return L.msgCaDefectRouteNowhere
+                    .replace('{prefix}', p.prefix || '?').replace('{next_hop}', p.next_hop || '?');
+            default:
+                return `${f.key} - ${acl} ${rule}`.trim();
+        }
+    }
+
+    function caPolicyDefectsSection(defects, L) {
+        const order = { high: 0, medium: 1, low: 2, info: 3 };
+        const sorted = defects.slice().sort(
+            (a, b) => (order[a.severity] ?? 9) - (order[b.severity] ?? 9));
+        const rows = sorted.map(f => {
+            const lamp = CA_DEFECT_LAMP[f.severity] || CA_DEFECT_LAMP.info;
+            return `<div style="display:flex; align-items:flex-start; gap:8px; padding:7px 10px; background:${lamp.wash}; border-left:1px solid ${lamp.color}; margin-bottom:4px; font-size:12px;">
+                <i class="fa-solid ${lamp.icon}" style="color:${lamp.color}; margin-top:2px;"></i>
+                <span>${escapeHtml(caDefectLine(f, L))}</span>
+            </div>`;
+        }).join('');
+        return `<h4 style="font-size:12px; margin:10px 0 4px; color:var(--danger);">${L.titleCaPolicyDefects}</h4><div>${rows}</div>`;
     }
 
     function caRenderValidation(dev, L, en) {
         if (dev.config_type === 'fortios' || dev.config_type === 'wlc-aireos') {
             const mv = caRenderMvValidationBody(dev, L, en);
             const tenantMv = dev.tenant ? ` <span class="badge" style="font-size:10px;">${escapeHtml(dev.tenant)}</span>` : '';
-            return `<details class="mac-switch" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" open>
+            return `<details class="mac-switch" data-ca-ip="${escapeHtml(dev.ip)}" style="border:1px solid var(--border); border-radius:0; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" open>
                 <summary style="cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; list-style:none;">
                     <i class="fa-solid fa-chevron-right mac-chev" style="font-size:11px;"></i>
                     <strong>${escapeHtml(dev.hostname || dev.ip)}</strong>
                     <span style="color:var(--text-muted); font-family:var(--font-code); font-size:12px;">${escapeHtml(dev.ip)}</span>
                     ${tenantMv}
                     <span style="margin-left:auto; color:var(--text-muted); font-size:12px;">${mv.total}</span>
+                    ${caTriageButton(dev, L)}
                 </summary>
                 <div style="padding:0 14px 14px;">${mv.body}</div>
             </details>`;
@@ -612,15 +756,21 @@
         const unusedVlans = v.unused_vlans || [];
         const undefinedVlans = v.undefined_vlans || [];
         const routeAclRefs = v.route_acl_refs || [];
-        const total = unusedAcls.length + missingAcls.length + unusedVlans.length + undefinedVlans.length + routeAclRefs.length;
+        const policyDefects = v.policy_findings || [];
+        const total = unusedAcls.length + missingAcls.length + unusedVlans.length + undefinedVlans.length + routeAclRefs.length + policyDefects.length;
         const tenant = dev.tenant ? ` <span class="badge" style="font-size:10px;">${escapeHtml(dev.tenant)}</span>` : '';
         const chips = arr => arr.map(x => `<span class="ca-chip" style="color:var(--warning); border-color:var(--warning);">${escapeHtml(x)}</span>`).join('');
         let body;
         if (total === 0) {
-            body = `<div style="display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:8px; background:rgba(59,225,136,0.12); border:1px solid rgba(59,225,136,0.35); color:var(--success); font-size:12px;">
+            body = `<div style="display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:0; background:var(--lamp-up-wash); border:1px solid var(--success); color:var(--success); font-size:12px;">
                 <i class="fa-solid fa-circle-check"></i><span>${escapeHtml(L.msgCaNoIssues)}</span></div>`;
         } else {
             const sections = [];
+            // First, not last: a rule that can never fire is the worst defect
+            // in this list. An unused ACL does nothing and was never applied;
+            // a shadowed ACE is applied, states an intent, and silently does
+            // nothing anyway.
+            if (policyDefects.length) sections.push(caPolicyDefectsSection(policyDefects, L));
             if (unusedAcls.length) sections.push(`<h4 style="font-size:12px; margin:10px 0 4px; color:var(--warning);">${L.titleCaUnusedAcls}</h4><div>${chips(unusedAcls)}</div>`);
             if (missingAcls.length) sections.push(`<h4 style="font-size:12px; margin:10px 0 4px; color:var(--danger);">${L.titleCaMissingAcls}</h4><div>${missingAcls.map(m => `<span class="ca-chip" style="color:var(--danger); border-color:var(--danger);">${escapeHtml(m.name)} (${L.lblCaReferencedIn}: ${escapeHtml(m.referenced_in || '—')})</span>`).join('')}</div>`);
             if (unusedVlans.length) sections.push(`<h4 style="font-size:12px; margin:10px 0 4px; color:var(--warning);">${L.titleCaUnusedVlans}</h4><div>${chips(unusedVlans)}</div>`);
@@ -628,13 +778,14 @@
             if (routeAclRefs.length) sections.push(`<h4 style="font-size:12px; margin:10px 0 4px; color:var(--primary);">${L.titleCaRouteAclRefs}</h4><div>${routeAclRefs.map(r => `<span class="ca-chip">${escapeHtml(r.context)} → ${escapeHtml(r.acl)}</span>`).join('')}</div>`);
             body = sections.join('');
         }
-        return `<details class="mac-switch" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" open>
+        return `<details class="mac-switch" data-ca-ip="${escapeHtml(dev.ip)}" style="border:1px solid var(--border); border-radius:0; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" open>
             <summary style="cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; list-style:none;">
                 <i class="fa-solid fa-chevron-right mac-chev" style="font-size:11px;"></i>
                 <strong>${escapeHtml(dev.hostname || dev.ip)}</strong>
                 <span style="color:var(--text-muted); font-family:var(--font-code); font-size:12px;">${escapeHtml(dev.ip)}</span>
                 ${tenant}
                 <span style="margin-left:auto; color:var(--text-muted); font-size:12px;">${total}</span>
+                ${caTriageButton(dev, L)}
             </summary>
             <div style="padding:0 14px 14px;">${body}</div>
         </details>`;
@@ -673,7 +824,7 @@
                 <td>${escapeHtml(i.name)}</td>
                 <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(i.ip || '—')}</td>
                 <td>${escapeHtml(i.vlanid != null ? String(i.vlanid) : '—')}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((i.allowaccess || []).join(', ') || '—')}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${caMultiCell(i.allowaccess || [])}</td>
                 <td>${state}</td>
             </tr>`;
         }).join('');
@@ -688,15 +839,17 @@
         const polRows = policies.map(p => {
             const act = (p.action || '').toLowerCase();
             const actColor = act === 'accept' ? 'var(--success)' : act === 'deny' ? 'var(--danger)' : 'var(--text-muted)';
-            const disabled = (p.status || '').toLowerCase() === 'disable';
-            return `<tr${disabled ? ' style="opacity:0.5;"' : ''}>
+            // Stessa resa del pill Firewall: la riga disattivata si attenua e
+            // prende una barra neutra a sinistra, senza il rosso che in questa
+            // stessa tabella significa gia' azione "deny".
+            return `<tr${caRowIsDisabled(p) ? ' class="ca-row-off"' : ''}>
                 <td>${escapeHtml(p.id != null ? String(p.id) : '—')}</td>
-                <td>${escapeHtml(p.name || '—')}${disabled ? ` <span class="ca-chip" style="color:var(--danger); border-color:var(--danger);">disable</span>` : ''}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.srcintf || []).join(', ') || '—')}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.dstintf || []).join(', ') || '—')}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.srcaddr || []).join(', ') || '—')}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.dstaddr || []).join(', ') || '—')}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.service || []).join(', ') || '—')}</td>
+                <td>${escapeHtml(p.name || '—')}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${caMultiCell(p.srcintf || [])}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${caMultiCell(p.dstintf || [])}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${caMultiCell(p.srcaddr || [])}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${caMultiCell(p.dstaddr || [])}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${caMultiCell(p.service || [])}</td>
                 <td style="color:${actColor}; font-weight:700;">${escapeHtml(p.action || '—')}</td>
                 <td>${escapeHtml(p.nat || '—')}</td>
                 <td>${escapeHtml(p.logtraffic || '—')}</td>
@@ -756,7 +909,48 @@
         renderCaResults();
     }
 
-    // Renderer generico di una sezione firewall (envelope vendor-driven: {id, label_key, columns, rows}).
+    function caSwitchSrvView(view) {
+        caSrvView = view;
+        renderCaResults();
+    }
+
+    // Valori mostrati in chiaro prima di collassare il resto dietro un "+N".
+    const CA_CELL_PREVIEW = 2;
+
+    // Cella multi-valore: una policy puo' citare decine di oggetti indirizzo, e
+    // stamparli tutti rende la colonna piu' larga dello schermo. L'elenco intero
+    // resta nel DOM (ricerca del browser, copia-incolla), solo nascosto.
+    function caMultiCell(values) {
+        const all = values.map(v => escapeHtml(v));
+        if (!all.length) return '—';
+        // Nascondere un solo valore non fa guadagnare spazio: costa un clic e basta.
+        if (all.length <= CA_CELL_PREVIEW + 1) return all.join(', ');
+        const head = all.slice(0, CA_CELL_PREVIEW).join(', ');
+        return `<span class="ca-cell-short">${head}<button type="button" class="ca-more" data-action="ca-toggle-cell">+${all.length - CA_CELL_PREVIEW}</button></span>`
+             + `<span class="ca-cell-full" style="display:none;">${all.join(', ')}<button type="button" class="ca-more" data-action="ca-toggle-cell">&minus;</button></span>`;
+    }
+
+    function caToggleCell(btn) {
+        const td = btn.closest('td');
+        if (!td) return;
+        const short = td.querySelector('.ca-cell-short');
+        const full = td.querySelector('.ca-cell-full');
+        if (!short || !full) return;
+        const expanded = full.style.display !== 'none';
+        short.style.display = expanded ? '' : 'none';
+        full.style.display = expanded ? 'none' : '';
+    }
+
+    // Una regola disattivata è ancora scritta nella configurazione ma non filtra
+    // niente: leggerla come attiva è il modo più facile di sbagliare una analisi.
+    function caRowIsDisabled(r) {
+        const status = String(r.status == null ? '' : r.status).toLowerCase();
+        if (status === 'disable' || status === 'disabled' || status === 'off') return true;
+        return r.disabled === true || String(r.disabled || '').toLowerCase() === 'yes';
+    }
+
+    // Renderer generico di una sezione firewall/server (envelope vendor-driven:
+    // {id, label_key, columns, rows}).
     function caRenderFwSection(sec, L) {
         const cols = sec.columns || [];
         const rows = sec.rows || [];
@@ -764,60 +958,98 @@
         const thead = cols.map(c => `<th>${escapeHtml(L[c.label_key] || c.label_key)}</th>`).join('');
         const trs = rows.map(r => {
             const tds = cols.map(c => {
-                let v = r[c.key];
-                if (Array.isArray(v)) v = v.join(', ');
-                if (c.key === 'trusthost' && (v === null || v === undefined || v === '')) v = L.lblCaTrusthostAny;
-                else if (v === null || v === undefined || v === '') v = '—';
-                return `<td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(jsStr(v))}</td>`;
+                const v = r[c.key];
+                let cell;
+                if (Array.isArray(v)) {
+                    // trusthost vuoto non è "nessuno": è "da qualunque IP".
+                    cell = (!v.length && c.key === 'trusthost')
+                        ? escapeHtml(L.lblCaTrusthostAny) : caMultiCell(v);
+                } else if (c.key === 'trusthost' && (v === null || v === undefined || v === '')) {
+                    cell = escapeHtml(L.lblCaTrusthostAny);
+                } else {
+                    cell = (v === null || v === undefined || v === '') ? '—' : escapeHtml(v);
+                }
+                return `<td style="font-family:var(--font-code); font-size:12px;">${cell}</td>`;
             }).join('');
-            return `<tr>${tds}</tr>`;
+            return `<tr${caRowIsDisabled(r) ? ' class="ca-row-off"' : ''}>${tds}</tr>`;
         }).join('');
         return `<div class="table-container"><table><thead><tr>${thead}</tr></thead><tbody>${trs}</tbody></table></div>`;
     }
 
-    function caRenderFirewallView(L, en) {
-        const fwDevices = (caData || []).filter(d => d.is_firewall);
-        // Unione delle sezioni (per id, prima occorrenza vince) su tutti i device firewall mostrati:
-        // i pill sono comuni, ma ogni device renderizza solo le proprie sezioni (vendor-driven).
+    // Vista a sotto-pill guidata dall'envelope. Firewall e Server condividono
+    // la stessa forma dei dati ({vendor, sections}), quindi anche il renderer:
+    // cambia solo dove sta l'envelope sul device e quale variabile ricorda il
+    // sotto-pill attivo.
+    function caRenderEnvelopeView(devices, envelopeKey, activeId, switchFn,
+                                  unsupportedMsg, L) {
         const sectionMap = {};
-        fwDevices.forEach(dev => {
-            ((dev.firewall && dev.firewall.sections) || []).forEach(s => {
+        devices.forEach(dev => {
+            (((dev[envelopeKey] || {}).sections) || []).forEach(s => {
                 if (!(s.id in sectionMap)) sectionMap[s.id] = s.label_key;
             });
         });
         const sectionIds = Object.keys(sectionMap);
         if (!sectionIds.length) {
-            return `<div style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.msgCaNoDevices)}</div>`;
+            return { view: activeId, html: `<div style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.msgCaNoDevices)}</div>` };
         }
-        if (!sectionIds.includes(caFwView)) caFwView = sectionIds[0];
+        if (!sectionIds.includes(activeId)) activeId = sectionIds[0];
         const subPills = sectionIds.map(id => {
             const lbl = L[sectionMap[id]] || sectionMap[id];
-            return `<button class="ca-pill${caFwView === id ? ' active' : ''}" onclick="caSwitchFwView('${jsStr(id)}')">${escapeHtml(lbl)}</button>`;
+            return `<button class="ca-pill${activeId === id ? ' active' : ''}" data-action="ca-switch-envelope-section" data-fn="${escapeHtml(switchFn)}" data-id="${escapeHtml(id)}">${escapeHtml(lbl)}</button>`;
         }).join('');
         const subBar = `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">${subPills}</div>`;
+        // Riga di aiuto della sezione attiva. La chiave si ricava da quella
+        // dell'etichetta (srv.sec.X -> srv.help.X): le sezioni che non hanno un
+        // testo non mostrano niente, quindi l'envelope firewall resta invariato
+        // finche' non gli si scrivono le sue.
+        const helpText = L[(sectionMap[activeId] || '').replace('.sec.', '.help.')] || '';
+        const helpBar = helpText
+            ? `<div style="margin:-6px 0 14px; padding:9px 12px; border-left:2px solid var(--primary); background:var(--surface-2); border-radius:var(--radius); font-size:12px; line-height:1.5; color:var(--text-muted);">${escapeHtml(helpText)}</div>`
+            : '';
 
-        const openAll = fwDevices.length === 1;
-        const body = fwDevices.map(dev => {
+        const openAll = devices.length === 1;
+        const body = devices.map(dev => {
             const tenant = dev.tenant ? ` <span class="badge" style="font-size:10px;">${escapeHtml(dev.tenant)}</span>` : '';
+            const envelope = dev[envelopeKey] || {};
+            const sections = envelope.sections || [];
             let inner;
-            const sections = (dev.firewall && dev.firewall.sections) || [];
-            if (!dev.firewall || !sections.length) {
-                inner = `<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">${escapeHtml(L.msgCaFwUnsupportedVendor)}</div>`;
+            if (envelope.error) {
+                // Un envelope vuoto per crash del parser non e' un apparato
+                // pulito: dirlo "vendor non supportato" farebbe leggere
+                // un'analisi fallita come "nessuna policy".
+                inner = `<div style="font-size:12px; color:var(--danger); padding:8px 0;"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(L.msgCaAnalyzeFailed)}</div>`;
+            } else if (!sections.length) {
+                inner = `<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">${escapeHtml(unsupportedMsg)}</div>`;
             } else {
-                const sec = sections.find(s => s.id === caFwView);
+                const sec = sections.find(s => s.id === activeId);
                 inner = sec ? caRenderFwSection(sec, L) : caMvEmpty();
             }
-            return `<details class="mac-switch" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" ${openAll ? 'open' : ''}>
+            return `<details class="mac-switch" data-ca-ip="${escapeHtml(dev.ip)}" style="border:1px solid var(--border); border-radius:0; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" ${openAll ? 'open' : ''}>
                 <summary style="cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; list-style:none;">
                     <i class="fa-solid fa-chevron-right mac-chev" style="font-size:11px;"></i>
                     <strong>${escapeHtml(dev.hostname || dev.ip)}</strong>
                     <span style="color:var(--text-muted); font-family:var(--font-code); font-size:12px;">${escapeHtml(dev.ip)}</span>
                     ${tenant}
+                    <span style="margin-left:auto;">${caTriageButton(dev, L)}</span>
                 </summary>
                 <div style="padding:0 14px 14px;">${inner}</div>
             </details>`;
         }).join('');
-        return subBar + body;
+        return { view: activeId, html: subBar + helpBar + body };
+    }
+
+    function caRenderFirewallView(L, en) {
+        const res = caRenderEnvelopeView((caData || []).filter(isFirewallDevice),
+            'firewall', caFwView, 'caSwitchFwView', L.msgCaFwUnsupportedVendor, L);
+        caFwView = res.view;
+        return res.html;
+    }
+
+    function caRenderServerView(L, en) {
+        const res = caRenderEnvelopeView((caData || []).filter(isServerDevice),
+            'server', caSrvView, 'caSwitchSrvView', L.msgCaSrvNoBackup, L);
+        caSrvView = res.view;
+        return res.html;
     }
 
     function caRenderWlc(dev, L, en) {
@@ -882,3 +1114,87 @@
             ${iosHtml}
             ${caMvSectionTitle(L.titleCaValidation)}${val.body}`;
     }
+
+    // Delegated event listeners for Config Analyzer
+    document.getElementById('caPills')?.addEventListener('click', (e) => {
+        const pill = e.target.closest('.ca-pill[data-view]');
+        if (pill && pill.dataset.view) {
+            caSwitchView(pill.dataset.view);
+        }
+    });
+
+    document.getElementById('caResults')?.addEventListener('change', (e) => {
+        if (e.target.id === 'caConvDevice') {
+            caConvPickDevice();
+        }
+    });
+
+    document.getElementById('caResults')?.addEventListener('click', (e) => {
+        const triageBtn = e.target.closest('[data-action="ca-triage"]');
+        if (triageBtn && triageBtn.dataset.ip) {
+            caTriageDevice(triageBtn.dataset.ip, triageBtn, e);
+            return;
+        }
+        const switchViewCard = e.target.closest('[data-action="ca-switch-view"]');
+        if (switchViewCard && switchViewCard.dataset.view) {
+            caSwitchView(switchViewCard.dataset.view);
+            return;
+        }
+        const convPrevBtn = e.target.closest('[data-action="ca-convert-preview"]');
+        if (convPrevBtn) {
+            caConvertPreview();
+            return;
+        }
+        const convDlBtn = e.target.closest('[data-action="ca-conv-download"]');
+        if (convDlBtn) {
+            caConvDownload();
+            return;
+        }
+        const rawRouteBtn = e.target.closest('[data-action="ca-show-raw-route"]');
+        if (rawRouteBtn) {
+            caShowRawRoute(rawRouteBtn);
+            return;
+        }
+        const switchRouteGrpBtn = e.target.closest('[data-action="ca-switch-route-group"]');
+        if (switchRouteGrpBtn && switchRouteGrpBtn.dataset.mode) {
+            caSwitchRouteGroupMode(switchRouteGrpBtn.dataset.mode, Number(switchRouteGrpBtn.dataset.idx));
+            return;
+        }
+        const toggleIfaceRow = e.target.closest('[data-action="ca-toggle-iface-raw"]');
+        if (toggleIfaceRow && toggleIfaceRow.dataset.target) {
+            caToggleIfaceRaw(toggleIfaceRow.dataset.target);
+            return;
+        }
+        const toggleCellBtn = e.target.closest('[data-action="ca-toggle-cell"]');
+        if (toggleCellBtn) {
+            caToggleCell(toggleCellBtn);
+            return;
+        }
+        const switchEnvPill = e.target.closest('[data-action="ca-switch-envelope-section"]');
+        if (switchEnvPill && switchEnvPill.dataset.fn && switchEnvPill.dataset.id) {
+            const fn = switchEnvPill.dataset.fn;
+            if (fn === 'caSwitchFwView') caSwitchFwView(switchEnvPill.dataset.id);
+            else if (fn === 'caSwitchSrvView') caSwitchSrvView(switchEnvPill.dataset.id);
+            return;
+        }
+    });
+
+    document.getElementById('caRawRouteModal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'caRawRouteModal' || e.target.closest('#btnCaCloseRawRouteModal')) {
+            caCloseRawRouteModal();
+        }
+    });
+
+    document.getElementById('caSearch')?.addEventListener('input', () => {
+        if (typeof caApplySearch === 'function') caApplySearch();
+    });
+
+    document.getElementById('configGroupSelect')?.addEventListener('change', () => {
+        if (typeof loadConfigAnalyzer === 'function') loadConfigAnalyzer();
+    });
+
+    document.getElementById('btnCaRefresh')?.addEventListener('click', () => {
+        if (typeof loadConfigAnalyzer === 'function') loadConfigAnalyzer(true);
+    });
+
+

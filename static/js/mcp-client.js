@@ -1,6 +1,6 @@
 // ===== MCP Client (PREVIEW) tab — SentinelNet come client verso server MCP esterni =====
 // Gating: la tab e il flag sono admin-only (rispecchia tab-mcp). Le stringhe
-// derivate dal server esterno passano sempre da escapeHtml(jsStr(x)).
+// derivate dal server esterno passano sempre da escapeHtml(x).
 
 const jsStr = s => String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
@@ -9,8 +9,11 @@ async function applyMcpClientGating() {
     const res = await apiFetch('/api/mcp-client/settings');
     if (!res || !res.ok) return;
     const data = await res.json();
-    const nav = document.getElementById('navMcpClient');
-    if (nav) nav.style.display = data.preview_enabled ? '' : 'none';
+    // Accorpato sotto "Integrazioni": gate su classe, non su id, perche' i
+    // punti d'ingresso sono piu' d'uno (vedi flow-analytics.js).
+    document.querySelectorAll('.preview-mcp-client').forEach(el => {
+        el.style.display = data.preview_enabled ? '' : 'none';
+    });
     const toggle = document.getElementById('mcpPreviewToggle');
     if (toggle) toggle.checked = !!data.preview_enabled;
 }
@@ -50,14 +53,14 @@ function renderMcpClientServers(servers) {
         return;
     }
     list.innerHTML = servers.map(s => {
-        const nm = escapeHtml(jsStr(s.name));
-        return `<div style="border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:10px; background:var(--surface);">
+        const nm = escapeHtml(s.name);
+        return `<div style="border:1px solid var(--border); border-radius:0; padding:12px; margin-bottom:10px; background:var(--surface);">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
               <span><strong>${escapeHtml(s.name)}</strong> <code style="font-size:11px; color:var(--text-muted);">${escapeHtml(s.url)}</code>
                 ${s.has_auth ? '<span class="chip"><i class="fa-solid fa-key"></i> auth</span>' : ''}</span>
               <span style="display:flex; gap:8px;">
-                <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="mcpClientListTools('${nm}')"><i class="fa-solid fa-list"></i> ${escapeHtml(L.btnMcpListTools)}</button>
-                <button class="btn btn-secondary btn-small" style="width:auto; margin:0; color:var(--danger);" onclick="deleteMcpClientServer('${nm}')"><i class="fa-solid fa-trash-can"></i></button>
+                <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-action="mcp-list-tools" data-server="${nm}"><i class="fa-solid fa-list"></i> ${escapeHtml(L.btnMcpListTools)}</button>
+                <button class="btn btn-secondary btn-small" style="width:auto; margin:0; color:var(--danger);" data-action="mcp-delete-server" data-server="${nm}"><i class="fa-solid fa-trash-can"></i></button>
               </span>
             </div>
             <div id="mcpcTools-${nm}" style="margin-top:10px;"></div>
@@ -108,17 +111,17 @@ async function mcpClientListTools(name) {
     const tools = data.tools || [];
     if (!target) return;
     if (!tools.length) { target.innerHTML = `<span style="color:var(--text-muted); font-size:12px;">${escapeHtml(L.mcpNoTools)}</span>`; return; }
-    const nm = escapeHtml(jsStr(name));
+    const nm = escapeHtml(name);
     target.innerHTML = tools.map((t, i) => {
-        const tn = escapeHtml(jsStr(t.name));
+        const tn = escapeHtml(t.name);
         const schema = t.inputSchema ? escapeHtml(JSON.stringify(t.inputSchema, null, 2)) : '';
-        return `<div style="border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:8px;">
+        return `<div style="border:1px solid var(--border); border-radius:0; padding:10px; margin-bottom:8px;">
           <div><code style="font-size:12px;">${escapeHtml(t.name)}</code></div>
           <div style="color:var(--text-muted); font-size:11px; margin:4px 0;">${escapeHtml(t.description || '')}</div>
-          ${schema ? `<pre style="background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:8px; font-size:11px; overflow-x:auto; white-space:pre;">${schema}</pre>` : ''}
+          ${schema ? `<pre style="background:var(--bg); border:1px solid var(--border); border-radius:0; padding:8px; font-size:11px; overflow-x:auto; white-space:pre;">${schema}</pre>` : ''}
           <textarea id="mcpcArgs-${nm}-${i}" class="input" rows="3" style="font-family:var(--font-code); font-size:12px;" placeholder='{ }'>{}</textarea>
-          <div style="margin-top:6px;"><button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="mcpClientCall('${nm}','${tn}','mcpcArgs-${nm}-${i}','mcpcResult-${nm}-${i}')"><i class="fa-solid fa-play"></i> ${escapeHtml(L.btnMcpInvoke)}</button></div>
-          <pre id="mcpcResult-${nm}-${i}" style="margin-top:8px; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:8px; font-size:11px; overflow-x:auto; white-space:pre-wrap; display:none;"></pre>
+          <div style="margin-top:6px;"><button class="btn btn-primary btn-small" style="width:auto; margin:0;" data-action="mcp-invoke-tool" data-server="${nm}" data-tool="${tn}" data-args-id="mcpcArgs-${nm}-${i}" data-res-id="mcpcResult-${nm}-${i}"><i class="fa-solid fa-play"></i> ${escapeHtml(L.btnMcpInvoke)}</button></div>
+          <pre id="mcpcResult-${nm}-${i}" style="margin-top:8px; background:var(--bg); border:1px solid var(--border); border-radius:0; padding:8px; font-size:11px; overflow-x:auto; white-space:pre-wrap; display:none;"></pre>
         </div>`;
     }).join('');
 }
@@ -154,3 +157,32 @@ function mcpClientPreset(kind) {
     document.getElementById('mcpcUrl').value = p.url;
     document.getElementById('mcpcHint').textContent = p.hint;
 }
+
+// Delegated event listener for MCP client servers & tools
+document.getElementById('mcpClientServerList')?.addEventListener('click', (e) => {
+    const listBtn = e.target.closest('[data-action="mcp-list-tools"]');
+    if (listBtn && listBtn.dataset.server) {
+        mcpClientListTools(listBtn.dataset.server);
+        return;
+    }
+    const delBtn = e.target.closest('[data-action="mcp-delete-server"]');
+    if (delBtn && delBtn.dataset.server) {
+        deleteMcpClientServer(delBtn.dataset.server);
+        return;
+    }
+    const invokeBtn = e.target.closest('[data-action="mcp-invoke-tool"]');
+    if (invokeBtn && invokeBtn.dataset.server && invokeBtn.dataset.tool) {
+        mcpClientCall(invokeBtn.dataset.server, invokeBtn.dataset.tool, invokeBtn.dataset.argsId, invokeBtn.dataset.resId);
+        return;
+    }
+});
+
+document.getElementById('btnSaveMcpClientServer')?.addEventListener('click', saveMcpClientServer);
+
+document.getElementById('tab-mcp-client')?.addEventListener('click', (e) => {
+    const presetBtn = e.target.closest('[data-action="mcp-preset"]');
+    if (presetBtn && presetBtn.dataset.preset) {
+        mcpClientPreset(presetBtn.dataset.preset);
+    }
+});
+

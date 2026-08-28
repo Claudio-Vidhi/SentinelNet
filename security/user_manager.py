@@ -47,7 +47,7 @@ def get_role(username: str):
     return user.get("role", "admin")
 
 def create_user(username: str, password: str, role: str = "viewer", groups=None,
-                must_change_password: bool = False) -> bool:
+                must_change_password: bool = False, email: str = "") -> bool:
     if role not in VALID_ROLES:
         role = "viewer"
     users = get_users()
@@ -61,6 +61,9 @@ def create_user(username: str, password: str, role: str = "viewer", groups=None,
         "role": role,
         # Elenco delle sedi/gruppi visibili e gestibili. Lista vuota = tutte.
         "groups": list(groups) if groups else [],
+        # Indirizzo per il recupero password. Vuoto = recupero via email non
+        # disponibile per questo account (resta il break-glass da CLI).
+        "email": (email or "").strip(),
         # Tab dashboard visibili all'utente. Lista vuota = tutte (come per "groups").
         "allowed_tabs": [],
         "disabled": False,
@@ -104,6 +107,7 @@ def list_users() -> list:
         {
             "username": u,
             "role": d.get("role", "admin"),
+            "email": d.get("email", ""),
             "groups": d.get("groups", []),
             "allowed_tabs": d.get("allowed_tabs", []),
             "disabled": d.get("disabled", False),
@@ -128,6 +132,21 @@ def count_active_admins() -> int:
     """Amministratori attivi (ruolo admin e non disabilitati)."""
     return sum(1 for d in get_users().values()
                if d.get("role", "admin") == "admin" and not d.get("disabled", False))
+
+def is_last_active_admin(username: str) -> bool:
+    """True se togliere a questo utente il ruolo, l'accesso o l'account intero
+    lascerebbe l'installazione senza un amministratore UTILIZZABILE.
+
+    Il conteggio è sugli amministratori ATTIVI, non su tutti: uno disabilitato
+    non supera ``get_current_user``, quindi tenerlo nel quorum equivale a non
+    avere nessuno e l'applicazione si riapre solo modificando users.json a mano.
+    Per lo stesso motivo un amministratore già disabilitato non è mai "l'ultimo":
+    rimuoverlo non toglie niente a chi può ancora entrare.
+    """
+    user = get_users().get(username)
+    if not user or user.get("role", "admin") != "admin" or user.get("disabled", False):
+        return False
+    return count_active_admins() <= 1
 
 def get_user_groups(username: str):
     """Sedi/gruppi assegnati all'utente. Lista vuota o assente = nessuna
@@ -179,5 +198,43 @@ def set_role(username: str, role: str) -> bool:
     _save_users(users)
     return True
 
-def count_admins() -> int:
-    return sum(1 for d in get_users().values() if d.get("role", "admin") == "admin")
+
+def first_admin_username():
+    """First admin account in alphabetical order, or None if there is none.
+    Used by the break-glass CLI when no username is given."""
+    admins = sorted(u for u, d in get_users().items()
+                    if d.get("role", "admin") == "admin")
+    return admins[0] if admins else None
+
+def reset_password_break_glass(username: str, new_password: str) -> bool:
+    """Reimposta la password senza conoscere quella attuale (recupero da CLI).
+
+    Riabilita l'account e impone il cambio password al primo accesso: chi
+    esegue il recupero non deve restare in possesso di credenziali valide.
+    Ritorna False se l'utente non esiste.
+    """
+    users = get_users()
+    if username not in users:
+        return False
+    hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt(rounds=12))
+    users[username]["hashed_password"] = hashed.decode('utf-8')
+    users[username]["must_change_password"] = True
+    users[username]["disabled"] = False
+    _save_users(users)
+    return True
+
+
+def get_email(username: str) -> str:
+    """Recovery address of the user, or "" when none is on file."""
+    user = get_users().get(username)
+    return (user or {}).get("email", "") or ""
+
+
+def set_email(username: str, email: str) -> bool:
+    """Sets or clears ("" clears) the recovery address. False if no such user."""
+    users = get_users()
+    if username not in users:
+        return False
+    users[username]["email"] = (email or "").strip()
+    _save_users(users)
+    return True

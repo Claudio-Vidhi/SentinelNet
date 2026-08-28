@@ -1,31 +1,32 @@
 # -*- coding: utf-8 -*-
-"""Client MCP verso server ESTERNI via Streamable HTTP (JSON-RPC 2.0).
+"""MCP client to EXTERNAL servers via Streamable HTTP (JSON-RPC 2.0).
 
-PREVIEW: supporta solo il trasporto HTTP "streamable" (POST JSON-RPC con
-risposta application/json oppure text/event-stream). Il trasporto stdio NON
-e' supportato in questa preview (limitazione documentata).
+PREVIEW: supports only the "streamable" HTTP transport (POST JSON-RPC with
+application/json or text/event-stream response). The stdio transport is NOT
+supported in this preview (documented limitation).
 
-Nessuna dipendenza pip aggiuntiva: usa `requests` (gia' nel bundle). La sessione
-MCP e' per-richiesta: si esegue `initialize` (catturando l'header
-`Mcp-Session-Id`), poi la chiamata effettiva (`tools/list` / `tools/call`).
+No extra pip dependencies: uses `requests` (already in the bundle). The MCP
+session is per-request: runs `initialize` (capturing the `Mcp-Session-Id`
+header), then the actual call (`tools/list` / `tools/call`).
 """
 
 import json
+from typing import Optional
 import requests
 
 _TIMEOUT = 30
-# Versione del protocollo MCP richiesta in initialize.
+# MCP protocol version requested in initialize.
 _PROTOCOL_VERSION = "2025-06-18"
-# Limite dimensione risposta da server MCP esterni (non fidati): evita di
-# caricare in memoria body arbitrariamente grandi.
+# Response size limit from untrusted external MCP servers: avoids
+# loading arbitrarily large bodies into memory.
 _MAX_RESPONSE_BYTES = 5 * 1024 * 1024
 
 
 def _read_capped(resp: "requests.Response", max_bytes: int = _MAX_RESPONSE_BYTES) -> str:
-    """Legge il body di `resp` (richiesta con stream=True) fino a `max_bytes`.
+    """Reads the body of `resp` (request with stream=True) up to `max_bytes`.
 
-    Solleva McpClientError se il body supera il limite, senza caricare oltre
-    il cap in memoria.
+    Raises McpClientError if the body exceeds the limit, without loading
+    beyond the cap into memory.
     """
     chunks = []
     total = 0
@@ -49,16 +50,16 @@ def _read_capped(resp: "requests.Response", max_bytes: int = _MAX_RESPONSE_BYTES
 
 
 class McpClientError(Exception):
-    """Errore lato client MCP (rete, HTTP, JSON-RPC o SSE malformato)."""
+    """MCP client-side error (network, HTTP, JSON-RPC, or malformed SSE)."""
 
 
 def parse_sse_last_data(text: str) -> str:
-    """Estrae l'ultimo evento `data:` da una risposta text/event-stream.
+    """Extracts the last `data:` event from a text/event-stream response.
 
-    Un server MCP streamable puo' rispondere in SSE: piu' eventi separati da
-    riga vuota, ognuno con una o piu' righe `data:`. La risposta JSON-RPC utile
-    e' l'ultimo evento con dati. Le righe che iniziano con `:` sono commenti SSE
-    e vanno ignorate. Ritorna la stringa (JSON) dell'ultimo evento, o "".
+    A streamable MCP server may respond in SSE: multiple events separated by
+    blank lines, each with one or more `data:` lines. The useful JSON-RPC
+    response is the last event with data. Lines starting with `:` are SSE
+    comments and are ignored. Returns the (JSON) string of the last event, or "".
     """
     events = []
     current = []
@@ -70,7 +71,7 @@ def parse_sse_last_data(text: str) -> str:
                 current = []
             continue
         if line.startswith(":"):
-            continue  # commento SSE (keep-alive)
+            continue  # SSE comment (keep-alive)
         if line.startswith("data:"):
             current.append(line[5:].lstrip(" "))
     if current:
@@ -95,7 +96,7 @@ def _parse_response(resp: "requests.Response") -> dict:
         raise McpClientError(f"Risposta non e' JSON valido: {e}")
 
 
-def _base_headers(auth_token: str = None) -> dict:
+def _base_headers(auth_token: Optional[str] = None) -> dict:
     h = {
         "Content-Type": "application/json",
         "Accept": "application/json, text/event-stream",
@@ -106,7 +107,7 @@ def _base_headers(auth_token: str = None) -> dict:
 
 
 def _rpc(url, headers, method, params, req_id):
-    """POST JSON-RPC; ritorna (data, response). Solleva McpClientError su errore."""
+    """POST JSON-RPC; returns (data, response). Raises McpClientError on error."""
     body = {"jsonrpc": "2.0", "id": req_id, "method": method, "params": params or {}}
     try:
         resp = requests.post(url, json=body, headers=headers, timeout=_TIMEOUT, stream=True)
@@ -121,9 +122,9 @@ def _rpc(url, headers, method, params, req_id):
     return data, resp
 
 
-def _open_session(url, auth_token=None) -> dict:
-    """Esegue initialize + notifications/initialized; ritorna gli header (con
-    l'eventuale Mcp-Session-Id) da riusare per la chiamata successiva."""
+def _open_session(url: str, auth_token: Optional[str] = None) -> dict:
+    """Runs initialize + notifications/initialized; returns headers (with
+    any Mcp-Session-Id) to reuse for the subsequent call."""
     headers = _base_headers(auth_token)
     params = {
         "protocolVersion": _PROTOCOL_VERSION,
@@ -134,7 +135,7 @@ def _open_session(url, auth_token=None) -> dict:
     session_id = resp.headers.get("Mcp-Session-Id") or resp.headers.get("mcp-session-id")
     if session_id:
         headers["Mcp-Session-Id"] = session_id
-    # Notifica di completamento handshake (best-effort: alcuni server la esigono).
+    # Handshake completion notification (best-effort: some servers require it).
     try:
         requests.post(url, json={"jsonrpc": "2.0", "method": "notifications/initialized"},
                       headers=headers, timeout=_TIMEOUT)

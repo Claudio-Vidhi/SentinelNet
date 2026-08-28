@@ -20,6 +20,7 @@ Nessun record viene mai scritto con tenant 'default'.
 import asyncio
 import logging
 import time
+from typing import Optional
 
 from core import db
 from services import inventory_manager
@@ -86,7 +87,7 @@ def _resolve_tenant(exporter_ip: str, recv_ts: float):
     return device["tenant"]
 
 
-def _handle_records(records, kind: str, recv_ts: float, name: str = None):
+def _handle_records(records, kind: str, recv_ts: float, name: Optional[str] = None):
     for rec in records:
         tenant = _resolve_tenant(rec["exporter_ip"], recv_ts)
         if tenant is None:

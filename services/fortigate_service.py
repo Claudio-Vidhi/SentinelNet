@@ -16,10 +16,15 @@ e ritornano sempre {"source": "api"|"ssh", "data": ...} oppure sollevano
 FortiGateError con il dettaglio di entrambi i tentativi.
 """
 
+import datetime
 import json
+import logging
 import os
 import re
 import threading
+import time
+import warnings
+from typing import Optional, Any, Dict
 
 import requests
 import urllib3
@@ -28,6 +33,8 @@ from core import data_config
 from security.crypto_vault import encrypt_password, decrypt_password
 
 TOKENS_FILE = data_config.get_path("fortigate_tokens.json")
+
+logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 
@@ -39,10 +46,17 @@ class FortiGateError(Exception):
 # --- Persistenza token API ---------------------------------------------------
 
 def _load_tokens() -> dict:
+    if not os.path.exists(TOKENS_FILE):
+        # Prima esecuzione: nessun token configurato, caso normale.
+        return {}
     try:
         with open(TOKENS_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    except Exception:
+    except (OSError, ValueError):
+        # Un file illeggibile fa cadere ogni FortiGate sul fallback SSH come
+        # se l'API non fosse configurata: senza questo log i due casi sono
+        # indistinguibili.
+        logger.exception("Token store FortiGate illeggibile: %s", TOKENS_FILE)
         return {}
 
 
@@ -90,8 +104,8 @@ def token_status() -> dict:
 
 # --- Multi-target: nome, target attivo, elenco, test connessione ------------
 
-def update_target(ip: str, *, name: str = None, port: int = None,
-                  verify_tls: bool = None, token: str = None) -> None:
+def update_target(ip: str, *, name: Optional[str] = None, port: Optional[int] = None,
+                  verify_tls: Optional[bool] = None, token: Optional[str] = None) -> None:
     """Aggiorna solo i campi forniti di un target FortiGate già configurato
     (usato dal manager multi-target per modifiche parziali: rinomina, cambio
     porta/TLS senza dover reinserire il token). Token omesso o vuoto = il
@@ -163,20 +177,38 @@ def test_connection(ip: str) -> dict:
 
 # --- Trasporto REST ----------------------------------------------------------
 
-def api_request(ip: str, method: str, path: str, params: dict = None,
+# Connect timeout, split from the caller's read timeout. An unreachable
+# FortiGate used to burn the whole read budget (30s by default, 60s on a config
+# pull) just failing to open the socket, and the dashboard tab that asked for it
+# stayed blank the entire time. A box that is up answers the TCP handshake in
+# milliseconds; one that is down should say so straight away.
+CONNECT_TIMEOUT = 4
+
+
+def api_request(ip: str, method: str, path: str, params: Optional[dict] = None,
                 json_body=None, timeout: int = 30):
     """Richiesta su /api/v2/<path> con Bearer token. Solleva FortiGateError."""
     token, port, verify = get_api_config(ip)
     if not token:
         raise FortiGateError(f"Nessun token API configurato per {ip}.")
-    if not verify:
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     url = f"https://{ip}:{port}/api/v2/{path.lstrip('/')}"
     try:
-        r = requests.request(method, url,
-                             headers={"Authorization": f"Bearer {token}"},
-                             params=params or {}, json=json_body,
-                             verify=verify, timeout=timeout)
+        # Il silenziamento vale solo per questa richiesta: ``disable_warnings``
+        # spegneva il warning per l'intero processo, quindi il primo apparato
+        # con verify_tls=False nascondeva l'avviso anche a quelli che il
+        # certificato lo verificano.
+        # ponytail: catch_warnings tocca uno stato globale, quindi sotto
+        # richieste concorrenti l'avviso puo' comparire o sparire a sproposito;
+        # se servisse deterministico, filtrare a livello di logging handler.
+        with warnings.catch_warnings():
+            if not verify:
+                warnings.simplefilter(
+                    "ignore", urllib3.exceptions.InsecureRequestWarning)
+            r = requests.request(method, url,
+                                 headers={"Authorization": f"Bearer {token}"},
+                                 params=params or {}, json=json_body,
+                                 verify=verify,
+                                 timeout=(CONNECT_TIMEOUT, timeout))
     except requests.exceptions.SSLError as e:
         raise FortiGateError(
             f"REST API {ip} non raggiungibile: certificato TLS non attendibile ({e}). "
@@ -199,19 +231,30 @@ def api_request(ip: str, method: str, path: str, params: dict = None,
         return {"raw": r.text}
 
 
-def api_get(ip: str, path: str, params: dict = None, timeout: int = 30):
+def api_get(ip: str, path: str, params: Optional[dict] = None, timeout: int = 30):
     """GET su /api/v2/<path> con Bearer token. Solleva FortiGateError."""
     return api_request(ip, "GET", path, params=params, timeout=timeout)
 
 
-def api_post(ip: str, path: str, json_body=None, params: dict = None,
+def get_ha_status(device: dict) -> dict:
+    # `monitor/system/ha-status` NON esiste: su 7.4.12 risponde HTTP 404 e la
+    # vista HA finiva in errore 502 invece che in un pannello vuoto. I path
+    # reali, verificati sul box: ha-peer, ha-statistics, ha-checksums.
+    return api_get(device["IP"], "monitor/system/ha-peer")
+
+
+def get_ha_checksums(device: dict) -> dict:
+    return api_get(device["IP"], "monitor/system/ha-checksums")
+
+
+def api_post(ip: str, path: str, json_body=None, params: Optional[dict] = None,
              timeout: int = 60):
     """POST su /api/v2/<path> con Bearer token. Solleva FortiGateError."""
     return api_request(ip, "POST", path, params=params, json_body=json_body,
                        timeout=timeout)
 
 
-def api_get_cmdb(ip: str, path: str, fmt: str = None, flt: str = None,
+def api_get_cmdb(ip: str, path: str, fmt: Optional[str] = None, flt: Optional[str] = None,
                  timeout: int = 30):
     """GET su un endpoint cmdb con proiezione dei campi (query `format`,
     es. 'name|type|subnet') ed eventuale filtro (query `filter`, es.
@@ -229,16 +272,21 @@ def api_get_cmdb(ip: str, path: str, fmt: str = None, flt: str = None,
 
 def ssh_command(device: dict, command: str, timeout: int = 30) -> str:
     """Esegue un comando CLI FortiOS via Netmiko e ritorna l'output testuale."""
-    from netmiko import ConnectHandler
+    from core.net_ssh import ConnectHandler
     from core.core_engine import get_device_credentials, get_device_port
     username, password, _secret = get_device_credentials(device)
     params = {"device_type": "fortinet", "host": device["IP"],
               "port": get_device_port(device),
               "username": username, "password": password,
-              "timeout": timeout, "auth_timeout": 15, "banner_timeout": 15}
+              "timeout": timeout, "auth_timeout": 15, "banner_timeout": 15,
+              # Same reason as CONNECT_TIMEOUT above: the SSH fallback runs
+              # after REST already failed, so an unreachable device must not
+              # spend another full timeout on the TCP connect.
+              "conn_timeout": CONNECT_TIMEOUT}
     try:
         with ConnectHandler(**params) as conn:
-            return conn.send_command(command, read_timeout=timeout)
+            res = conn.send_command(command, read_timeout=timeout)
+            return res if isinstance(res, str) else str(res or "")
     except Exception as e:
         raise FortiGateError(f"SSH {device.get('IP')}: {e}")
 
@@ -311,6 +359,60 @@ def get_system_status(device):
         raise FortiGateError(f"API: {api_err} | SSH: {ssh_err}")
 
 
+# --- Sistema: risorse, HA, account, revisioni, certificati -------------------
+# Sola REST: nessuno di questi ha un equivalente CLI 1:1 affidabile, quindi
+# niente fallback SSH (stessa scelta di policy_lookup e dell'inventario cmdb).
+
+# Proiezione degli account amministrativi. È l'unica barriera fra gli account
+# del FortiGate e il browser: elencare i campi voluti, mai filtrare quelli
+# indesiderati dalla risposta, perché una versione futura di FortiOS potrebbe
+# aggiungerne uno nuovo che nessuno ha pensato di escludere.
+ADMIN_FIELDS = "name|accprofile|trusthost1|trusthost2|two-factor|comments"
+
+
+def get_system_resources(device):
+    """Uso CPU/memoria/disco/sessioni più l'ora di sistema, in una risposta
+    sola: la Overview ne fa una card, non quattro richieste."""
+    ip = device["IP"]
+    return {"source": "api",
+            "data": {"usage": api_get(ip, "monitor/system/resource/usage").get("results"),
+                     "time": api_get(ip, "monitor/system/time").get("results")}}
+
+
+def get_ha(device):
+    """Stato HA e checksum di sincronizzazione insieme: due cluster allineati
+    ma con checksum diversi sono il caso che conta, e serve vederli vicini."""
+    return {"source": "api",
+            "data": {"status": get_ha_status(device).get("results"),
+                     "checksums": get_ha_checksums(device).get("results")}}
+
+
+def get_admins(device):
+    """Account amministrativi (cmdb/system/admin), proiettati su ADMIN_FIELDS:
+    nessuna credenziale lascia questa funzione."""
+    data = api_get_cmdb(device["IP"], "cmdb/system/admin", fmt=ADMIN_FIELDS)
+    return {"source": "api", "data": data.get("results", data)}
+
+
+def get_banned_users(device):
+    """Utenti/IP bannati dalle azioni di quarantena FortiOS."""
+    data = api_get(device["IP"], "monitor/user/banned")
+    return {"source": "api", "data": data.get("results", data)}
+
+
+def get_config_revisions(device):
+    """Revisioni di configurazione salvate a bordo (config-revision)."""
+    data = api_get(device["IP"], "monitor/system/config-revision")
+    return {"source": "api", "data": data.get("results", data)}
+
+
+def get_certificates(device):
+    """Certificati disponibili con scadenza. Endpoint monitor: metadati e
+    scadenza, mai il materiale della chiave privata."""
+    data = api_get(device["IP"], "monitor/system/available-certificates")
+    return {"source": "api", "data": data.get("results", data)}
+
+
 def get_interfaces(device):
     """Stato interfacce con IP, link, contatori."""
     return _api_or_ssh(device, "monitor/system/interface",
@@ -379,6 +481,41 @@ def get_firewall_policy_objects(device):
         raise FortiGateError(f"firewall/policy (slim) disponibile solo via REST API: {e}")
 
 
+def get_policies_with_stats(device):
+    """Policy (cmdb, slim) unite ai contatori runtime, join su ``policyid``.
+
+    ``never_hit`` è vero solo per le policy che HANNO un contatore e vale
+    zero: senza contatore non si può dire che la regola sia morta, e
+    marcarla produrrebbe un falso positivo in audit. Se i contatori non
+    arrivano la configurazione viene restituita comunque, con l'errore in
+    ``stats_error``: metà risposta è meglio di un 502."""
+    policies = get_firewall_policy_objects(device)
+    rows = policies.get("data") or []
+    stats_error = None
+    by_id = {}
+    try:
+        stats = get_policy_stats(device)
+        data = stats.get("data")
+        if isinstance(data, list):
+            by_id = {s.get("policyid"): s for s in data if isinstance(s, dict)}
+    except FortiGateError as e:
+        stats_error = str(e)
+
+    merged = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        s = by_id.get(row.get("policyid"))
+        merged.append({**row,
+                       "hit_count": (s or {}).get("hit_count", 0),
+                       "bytes": (s or {}).get("bytes", 0),
+                       "active_sessions": (s or {}).get("active_sessions", 0),
+                       "last_used": (s or {}).get("last_used"),
+                       "never_hit": bool(s) and not (s or {}).get("hit_count")})
+    return {"source": policies.get("source", "api"), "data": merged,
+            "stats_error": stats_error}
+
+
 def get_firewall_custom_services(device):
     """Servizi custom (firewall.service/custom): nome, range porte TCP/UDP,
     commento."""
@@ -391,8 +528,64 @@ def get_firewall_custom_services(device):
         raise FortiGateError(f"firewall.service/custom disponibile solo via REST API: {e}")
 
 
+def get_address_groups(device):
+    """Gruppi di indirizzi: nome, membri, commento."""
+    data = api_get_cmdb(device["IP"], "cmdb/firewall/addrgrp",
+                        fmt="name|member|comment")
+    return {"source": "api", "data": data.get("results", data)}
+
+
+def get_service_groups(device):
+    """Gruppi di servizi."""
+    data = api_get_cmdb(device["IP"], "cmdb/firewall.service/group",
+                        fmt="name|member|comment")
+    return {"source": "api", "data": data.get("results", data)}
+
+
+def get_vips(device):
+    """Virtual IP (DNAT): da quale indirizzo esterno a quale interno."""
+    data = api_get_cmdb(device["IP"], "cmdb/firewall/vip",
+                        fmt="name|extip|extintf|mappedip|portforward|"
+                            "extport|mappedport|protocol|comment")
+    return {"source": "api", "data": data.get("results", data)}
+
+
+def get_ip_pools(device):
+    """IP pool (SNAT)."""
+    data = api_get_cmdb(device["IP"], "cmdb/firewall/ippool",
+                        fmt="name|type|startip|endip|comments")
+    return {"source": "api", "data": data.get("results", data)}
+
+
+# Famiglie di profili di sicurezza: chiave usata dalla UI -> percorso cmdb.
+_SECURITY_PROFILES = {
+    "antivirus": "cmdb/antivirus/profile",
+    "ips": "cmdb/ips/sensor",
+    "webfilter": "cmdb/webfilter/profile",
+    "application": "cmdb/application/list",
+}
+
+
+def get_security_profiles(device):
+    """Profili di sicurezza per famiglia.
+
+    Una famiglia che manca (licenza senza IPS, feature non abilitata)
+    risponde 404: si registra in ``errors`` e le altre passano comunque.
+    Fallire tutto perché una sola manca renderebbe il pannello inutile
+    sulla metà dei FortiGate."""
+    out, errors = {}, {}
+    for key, path in _SECURITY_PROFILES.items():
+        try:
+            data = api_get_cmdb(device["IP"], path, fmt="name|comment")
+            out[key] = data.get("results", data)
+        except FortiGateError as e:
+            out[key] = []
+            errors[key] = str(e)
+    return {"source": "api", "data": out, "errors": errors}
+
+
 def policy_lookup(device, src_ip: str, dest: str, protocol: str = "TCP",
-                  dest_port: int = 443, srcintf: str = None):
+                  dest_port: int = 443, srcintf: Optional[str] = None):
     """Chiede al FortiGate QUALE policy matcherebbe un flusso (senza generare
     traffico): fondamentale per 'perché il client X non raggiunge il sito Y'.
     `dest` può essere IP o FQDN."""
@@ -409,10 +602,10 @@ def policy_lookup(device, src_ip: str, dest: str, protocol: str = "TCP",
         raise FortiGateError(f"policy-lookup disponibile solo via REST API: {e}")
 
 
-def get_sessions(device, src_ip: str = None, dst_ip: str = None,
-                 dst_port: int = None, count: int = 100):
+def get_sessions(device, src_ip: Optional[str] = None, dst_ip: Optional[str] = None,
+                 dst_port: Optional[int] = None, count: int = 100):
     """Sessioni attive (session table), filtrabili per src/dst/porta."""
-    params = {"count": int(count)}
+    params: Dict[str, Any] = {"count": int(count)}
     if src_ip:
         params["srcaddr"] = src_ip
     if dst_ip:
@@ -431,17 +624,229 @@ def get_sessions(device, src_ip: str = None, dst_ip: str = None,
     return _api_or_ssh(device, "monitor/firewall/session", params, ssh_cmd)
 
 
+def delete_sessions(device, src_ip: Optional[str] = None, dst_ip: Optional[str] = None,
+                    dst_port: Optional[int] = None):
+    """Termina le sessioni attive nel firewall in base ai filtri specificati."""
+    filt = []
+    if src_ip:
+        filt.append(f"diagnose sys session filter src {src_ip}")
+    if dst_ip:
+        filt.append(f"diagnose sys session filter dst {dst_ip}")
+    if dst_port:
+        filt.append(f"diagnose sys session filter dport {dst_port}")
+    if not filt:
+        raise FortiGateError("At least one filter (src_ip, dst_ip, dst_port) is required to clear sessions.")
+
+    ssh_cmd = "\n".join(["diagnose sys session filter clear", *filt, "diagnose sys session clear"])
+    out = ssh_command(device, ssh_cmd)
+    return {"source": "ssh", "status": "success", "message": "Filter applied and sessions cleared", "output": out}
+
+
 def get_routes(device):
     return _api_or_ssh(device, "monitor/router/ipv4", None,
                        "get router info routing-table all")
 
 
-def get_traffic_logs(device, src_ip: str = None, dst_ip: str = None,
-                     action: str = None, count: int = 100,
-                     log_device: str = "disk"):
-    """Log di traffico forward (disk o memory), filtrabili. Risponde a
-    'cosa dicono i log del firewall per questo client?'."""
-    params = {"rows": int(count)}
+def get_vpn_tunnels(device):
+    """Stato VIVO dei tunnel IPsec: phase1 su/giù, phase2 e selettori.
+
+    La configurazione statica diceva quali tunnel ESISTONO; questo dice quali
+    stanno in piedi adesso. Per una diagnosi fra due sedi è la differenza fra
+    "il tunnel c'è" e "il tunnel funziona"."""
+    return _api_or_ssh(device, "monitor/vpn/ipsec", None,
+                       "get vpn ipsec tunnel summary")
+
+
+def get_sdwan_health(device):
+    """Qualità dei link SD-WAN (latenza, jitter, packet loss per SLA).
+
+    Un FortiGate senza SD-WAN configurata risponde 404 e questa solleva
+    FortiGateError: è corretto, la tab lo rende come pannello vuoto invece
+    che come errore."""
+    data = api_get(device["IP"], "monitor/virtual-wan/health-check")
+    return {"source": "api", "data": data.get("results", data)}
+
+
+def get_route_for(device, dst_ip: str):
+    """La rotta che il FortiGate userebbe per ``dst_ip``: prefisso più
+    specifico che lo contiene, con gateway e interfaccia di uscita.
+
+    Risponde a "non c'è rotta verso la subnet del datacenter", che nessuna
+    ispezione delle policy può rivelare: una policy che permette il traffico
+    e una rotta che non esiste danno lo stesso sintomo e richiedono due
+    interventi diversi.
+
+    Solo REST, come ``policy_lookup``: l'uscita CLI è testo libero che varia
+    per versione, e un parser che sbaglia qui manderebbe a cercare un guasto
+    di routing che non c'è.
+    """
+    import ipaddress
+
+    ip = device["IP"]
+    try:
+        addr = ipaddress.ip_address(dst_ip)
+    except ValueError:
+        raise FortiGateError(f"'{dst_ip}' non è un indirizzo IP valido.")
+    try:
+        data = api_get(ip, "monitor/router/ipv4")
+    except FortiGateError as e:
+        raise FortiGateError(f"tabella di routing disponibile solo via REST API: {e}")
+
+    best = None
+    best_len = -1
+    for r in (data.get("results") or []):
+        if not isinstance(r, dict):
+            continue
+        raw = r.get("ip_mask") or r.get("dst") or ""
+        try:
+            net = ipaddress.ip_network(str(raw), strict=False)
+        except ValueError:
+            continue
+        if addr in net and net.prefixlen > best_len:
+            best, best_len = r, net.prefixlen
+
+    if best is None:
+        return {"source": "api", "data": {"matched": False, "dst_ip": dst_ip}}
+    return {"source": "api", "data": {
+        "matched": True, "dst_ip": dst_ip,
+        "destination": best.get("ip_mask") or best.get("dst"),
+        "gateway": best.get("gateway"),
+        "interface": best.get("interface"),
+        "distance": best.get("distance"), "metric": best.get("metric"),
+        "type": best.get("type")}}
+
+
+def _enforce_log_subtype(rows, log_subtype: str):
+    """Tiene solo le righe del sottotipo richiesto, se le righe lo dichiarano.
+
+    Perché serve: la GUI del FortiGate separa *Forward Traffic* (traffico che
+    ATTRAVERSA il firewall, gestito dalle policy normali) da *Local Traffic*
+    (traffico verso gli IP del FortiGate stesso o da lui generato, gestito
+    dalle local-in policy). Entrambi possono mostrare policy id 0 — l'implicit
+    deny nel forward, la local-in di default nel local — quindi l'id della
+    policy NON basta a distinguerli. Il campo che li distingue è ``subtype``.
+
+    Su alcune versioni di FortiOS il percorso ``log/{dev}/traffic/{subtype}``
+    non restringe davvero il risultato e torna traffico locale a chi ha
+    chiesto forward. Qui si riallinea la risposta alla domanda.
+
+    Il filtro si applica SOLO se almeno una riga porta ``subtype``: filtrare
+    su un campo che non esiste svuoterebbe la vista e sembrerebbe "nessun
+    log", che in diagnosi è peggio del problema che risolve. Ritorna
+    ``(righe, filtrato)`` così il chiamante può dire se è stato necessario.
+    """
+    if not isinstance(rows, list):
+        return rows, False
+    if not any(isinstance(r, dict) and r.get("subtype") for r in rows):
+        return rows, False
+    kept = [r for r in rows
+            if not isinstance(r, dict) or r.get("subtype") == log_subtype]
+    return kept, len(kept) != len(rows)
+
+
+def _log_search(ip: str, path: str, params: dict, deadline: float = 10.0):
+    """Una ricerca sui log portata a termine, non la sua prima risposta.
+
+    La ricerca log del FortiGate è ASINCRONA: la prima chiamata avvia un
+    motore che scorre il file e può tornare subito con ``ready: False``,
+    ``total_lines: 0`` e zero righe mentre il lavoro è appena cominciato.
+    Prendere quella risposta per buona mostra "nessun log" a una query che
+    ha migliaia di match — misurato: ``date==<giorno>`` tornava 0 righe al
+    primo colpo e 2761 righe un secondo dopo.
+
+    Si ripete con lo stesso ``session_id`` finché ``ready``. Il tetto di
+    tempo serve perché una ricerca su un log grande non blocchi la pagina:
+    scaduto, si restituisce il parziale, che resta la risposta migliore
+    disponibile.
+
+    Nota sui campi: ``completed`` e ``percent_logs_processed`` sono
+    percentuali (2, 30, 35...), non booleani. L'unico flag è ``ready``.
+    """
+    sid = None
+    stop_at = time.monotonic() + deadline
+    while True:
+        p = dict(params)
+        if sid:
+            p["session_id"] = sid
+        data = api_get(ip, path, p)
+        if not isinstance(data, dict):
+            return data
+        sid = data.get("session_id", sid)
+        # `ready` assente = risposta non asincrona (altra versione, altro
+        # endpoint): è già il risultato, non c'è niente da attendere.
+        if data.get("ready", True) or time.monotonic() >= stop_at:
+            return data
+        time.sleep(0.4)
+
+
+def _log_range_days(since: Optional[str], until: Optional[str], cap: int = 31):
+    """I giorni da interrogare per un intervallo, dal più recente al più vecchio.
+
+    Perché un giorno alla volta invece di un filtro di intervallo: su FortiOS
+    7.4 il log API rifiuta gli operatori ``>=`` e ``<=`` con HTTP 500 (provato
+    su ``date`` e su ``eventtime``), e ripetere lo stesso campo non produce un
+    OR — vince l'ultimo filtro. ``date==<giorno>`` invece funziona ed è esatto,
+    quindi l'intervallo si copre enumerando le giornate. Campi diversi sono
+    in AND, così il filtro sul sottotipo resta valido dentro ogni giornata.
+
+    Il chiamante si ferma appena ha le righe che gli servono, perciò di solito
+    parte una sola richiesta. ``cap`` limita il caso patologico (intervallo di
+    un anno su un log vuoto = una richiesta per giorno).
+    """
+    if not since and not until:
+        return []
+    fmt = "%Y-%m-%d"
+    end = datetime.datetime.strptime(until, fmt).date() if until \
+        else datetime.date.today()
+    start = datetime.datetime.strptime(since, fmt).date() if since \
+        else end - datetime.timedelta(days=cap - 1)
+    if start > end:
+        return []
+    days = []
+    d = end
+    while d >= start and len(days) < cap:
+        days.append(d.strftime(fmt))
+        d -= datetime.timedelta(days=1)
+    return days
+
+
+def get_traffic_logs(device, src_ip: Optional[str] = None, dst_ip: Optional[str] = None,
+                     action: Optional[str] = None, count: int = 100,
+                     log_device: str = "disk", log_type: str = "traffic",
+                     log_subtype: str = "forward", cli_category: str = "traffic",
+                     since: Optional[str] = None, until: Optional[str] = None):
+    """Log del firewall (disk o memory), filtrabili. Risponde a 'cosa dicono i
+    log per questo client?'.
+
+    ``log_type``/``log_subtype`` compongono il percorso REST
+    ``log/{device}/{type}/{subtype}``; ``cli_category`` è la categoria per il
+    fallback ``execute log filter category``. I default danno il traffico
+    forward, cioè il comportamento storico invariato.
+
+    Perché parametri e non un elenco di categorie UTM predefinite: un sito che
+    "si carica a metà" di solito è web filter, application control o SSL deep
+    inspection, non un deny di policy — ma i sottotipi REST esatti variano per
+    versione di FortiOS, e non sono stati verificati contro un apparato con
+    profili di sicurezza attivi (licenza eval: nessun profilo attivabile).
+    Codificare qui una lista indovinata produrrebbe 404 travestiti da "nessun
+    log", che in diagnosi è peggio di un buco dichiarato. Il chiamante passa
+    la coppia che il suo FortiOS espone; l'unica verificata è quella di
+    default.
+
+    Nota: chi inoltra i syslog al collector integrato vede comunque i verdetti
+    UTM, perché ``observability/fieldmap.py`` legge ``utmaction`` e ``subtype``
+    dal messaggio grezzo — quella strada non dipende da questi percorsi REST.
+
+    ``since``/``until`` sono date ``YYYY-MM-DD``. Diventano una richiesta per
+    giornata (``date==<giorno>``), dalla più recente alla più vecchia, perché
+    gli operatori di intervallo non esistono su questo API — vedi
+    ``_log_range_days``. Omesse, il comportamento è quello storico (le ultime
+    ``count`` righe). Restano applicate solo al percorso REST: la sintassi di
+    ``execute log filter`` per gli intervalli varia per versione di FortiOS e
+    indovinarla darebbe zero righe travestite da "nessun log" — lo stesso
+    rischio che questa funzione documenta già per i sottotipi UTM.
+    """
+    base_params: Dict[str, Any] = {"rows": int(count)}
     filters = []
     if src_ip:
         filters.append(f"srcip=={src_ip}")
@@ -449,19 +854,60 @@ def get_traffic_logs(device, src_ip: str = None, dst_ip: str = None,
         filters.append(f"dstip=={dst_ip}")
     if action:
         filters.append(f"action=={action}")
-    if filters:
-        params["filter"] = filters
+    days = _log_range_days(since, until)
     ip = device["IP"]
     api_err = None
+    # Il sottotipo va chiesto anche come filtro, non solo nel percorso: dove
+    # FortiOS ignora `log/{dev}/{type}/{subtype}` (vedi _enforce_log_subtype)
+    # `rows` conta righe di TUTTI i sottotipi, quindi chiedere 100 righe
+    # forward su un apparato pieno di traffico locale ne restituisce zero e
+    # sembra "nessun log". Col filtro le `count` righe sono già quelle giuste.
+    # Failsafe: se la versione rifiuta il filtro (errore) o lo accetta ma
+    # svuota il risultato (nome/valore di campo diverso), si ritenta senza —
+    # lì _enforce_log_subtype fa lo stesso lavoro a valle, sul campione più
+    # ampio possibile. Un filtro non supportato non deve costare i log.
     for dev in (log_device, "memory" if log_device == "disk" else "disk"):
-        try:
-            data = api_get(ip, f"log/{dev}/traffic/forward", params)
+        path = f"log/{dev}/{log_type}/{log_subtype}"
+        for extra in ([f"subtype=={log_subtype}"], []):
+            try:
+                rows = []
+                # Senza intervallo è una sola ricerca; con l'intervallo una per
+                # giornata, e ci si ferma appena `count` righe sono raccolte.
+                for day in (days or [None]):
+                    params = dict(base_params)
+                    flt = filters + extra + ([f"date=={day}"] if day else [])
+                    if flt:
+                        params["filter"] = flt
+                    data = _log_search(ip, path, params)
+                    got = data.get("results", data) if isinstance(data, dict) else data
+                    if not isinstance(got, list):
+                        rows = got
+                        break
+                    rows += got
+                    if len(rows) >= count:
+                        rows = rows[:count]
+                        break
+            except FortiGateError as e:
+                api_err = str(e)
+                continue
+            if extra and not rows:
+                continue
+            rows, enforced = _enforce_log_subtype(rows, log_subtype)
             return {"source": "api", "log_device": dev,
-                    "data": data.get("results", data)}
-        except FortiGateError as e:
-            api_err = str(e)
+                    "log_type": log_type, "log_subtype": log_subtype,
+                    "subtype_enforced": enforced,
+                    "days_queried": len(days) or None,
+                    "data": rows}
     # Fallback CLI: execute log filter + display.
-    lines = ["execute log filter reset", "execute log filter category traffic"]
+    # ``category`` da solo NON restringe il sottotipo: con category=traffic la
+    # CLI restituisce forward, local e multicast mescolati, così il fallback
+    # mostrava traffico locale a chi aveva chiesto forward. Il percorso REST
+    # sopra distingue i due (log/{dev}/{type}/{subtype}); qui serve il filtro
+    # esplicito sul campo, altrimenti REST e SSH rispondono a due domande
+    # diverse senza dirlo.
+    lines = ["execute log filter reset",
+             f"execute log filter category {cli_category}",
+             f"execute log filter field subtype {log_subtype}"]
     ssh_filters = []
     if src_ip:
         ssh_filters.append(f"execute log filter field srcip {src_ip}")
@@ -497,13 +943,16 @@ def get_full_config(device):
     token, port, verify = get_api_config(ip)
     api_err = None
     if token:
-        if not verify:
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         try:
-            r = requests.get(
-                f"https://{ip}:{port}/api/v2/monitor/system/config/backup",
-                headers={"Authorization": f"Bearer {token}"},
-                params={"scope": "global"}, verify=verify, timeout=60)
+            # Vedi api_request: silenziamento limitato alla singola richiesta.
+            with warnings.catch_warnings():
+                if not verify:
+                    warnings.simplefilter(
+                        "ignore", urllib3.exceptions.InsecureRequestWarning)
+                r = requests.get(
+                    f"https://{ip}:{port}/api/v2/monitor/system/config/backup",
+                    headers={"Authorization": f"Bearer {token}"},
+                    params={"scope": "global"}, verify=verify, timeout=60)
             if r.status_code < 400:
                 return {"source": "api", "data": r.text}
             api_err = f"HTTP {r.status_code}: {r.text[:200]}"
@@ -520,8 +969,8 @@ def get_full_config(device):
 
 # --- Diagnosi aggregata client ------------------------------------------------
 
-def diagnose_client(device, client: str, dest: str = None,
-                    dest_port: int = 443, protocol: str = "TCP") -> dict:
+def diagnose_client(device, client: str, dest: Optional[str] = None,
+                    dest_port: Optional[int] = 443, protocol: str = "TCP") -> dict:
     """Raccoglie in un colpo solo tutto ciò che il FortiGate sa di un client
     (IP o MAC) ed eventualmente del flusso verso `dest`: inventario device,
     ARP/DHCP, sessioni, policy match e ultimi log. Pensato per l'AI assistant

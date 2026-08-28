@@ -1,17 +1,20 @@
 # -*- coding: utf-8 -*-
-"""Analizzatore firewall PAN-OS (Palo Alto) in formato ``set`` CLI.
+"""PAN-OS (Palo Alto) firewall analyzer in ``set`` CLI format.
 
-Espone ``analyze(text)`` che ritorna l'envelope generico
-``{"vendor": "panos", "sections": [...]}``. Contiene le primitive di parsing
-delle righe ``set`` (``_panos_tokens``/``_panos_lines``/``_panos_collect`` &
-co.), riusate dai converter in ``config_analyzer`` (che le reimporta da qui).
+Exposes ``analyze(text)`` which returns the generic envelope
+``{"vendor": "panos", "sections": [...]}``. Contains the parsing primitives for
+``set`` lines (``_panos_tokens``/``_panos_lines``/``_panos_collect`` & co.),
+reused by the converters in ``config_analyzer`` (which re-imports them from here).
 
-Limitazione nota (v1): supportato SOLO il formato ``set`` CLI. Le config
-esportate in XML PAN-OS non sono gestite (fuori scope).
+Known limitation (v1): ONLY the ``set`` CLI format is supported. PAN-OS configs
+exported as XML are not handled (out of scope).
 
-Puro e tollerante: ``analyze`` non solleva MAI eccezioni.
+Pure and tolerant: ``analyze`` NEVER raises exceptions.
 """
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 _SECRET_ATTRS = {'phash', 'passphrase', 'secret', 'pre-shared-key', 'password'}
 _MASK = '***REDACTED***'
@@ -20,14 +23,14 @@ _PANOS_TOKEN = re.compile(r'"[^"]*"|\S+')
 
 
 def _panos_tokens(s):
-    """Tokenizza una riga PAN-OS 'set' rispettando le stringhe tra apici."""
+    """Tokenizes a PAN-OS 'set' line, respecting quoted strings."""
     return [t[1:-1] if t.startswith('"') and t.endswith('"') and len(t) >= 2 else t
             for t in _PANOS_TOKEN.findall(s)]
 
 
 def _panos_lines(text):
-    """Ritorna [(tokens-dopo-'set', riga-grezza), ...] per ogni riga PAN-OS
-    che inizia con 'set '. Tollerante a righe vuote/commenti."""
+    """Returns [(tokens-after-'set', raw-line), ...] for every PAN-OS line
+    that starts with 'set '. Tolerant of blank lines/comments."""
     out = []
     for raw in (text or '').splitlines():
         s = raw.strip()
@@ -38,9 +41,9 @@ def _panos_lines(text):
 
 
 def _panos_collect(lines, prefix):
-    """Raggruppa le righe il cui path inizia con 'prefix' (tupla di token) e
-    ha un nome subito dopo (es. prefix=('address',) su 'set address NAME ip-netmask X').
-    Ritorna {name: {"parts": [[resto-token...], ...], "raw": [riga, ...]}}."""
+    """Groups lines whose path starts with 'prefix' (tuple of tokens) and
+    has a name right after (e.g. prefix=('address',) on 'set address NAME ip-netmask X').
+    Returns {name: {"parts": [[rest-token...], ...], "raw": [line, ...]}}."""
     out = {}
     n = len(prefix)
     for toks, raw in lines:
@@ -56,8 +59,8 @@ def _panos_collect(lines, prefix):
 
 
 def _panos_attr(entry, attr):
-    """Primo valore associato all'attributo 'attr' tra le 'parts' raccolte
-    (es. parts=[['from','LAN'], ['action','allow']], attr='action' -> 'allow')."""
+    """First value associated with attribute 'attr' among the collected 'parts'
+    (e.g. parts=[['from','LAN'], ['action','allow']], attr='action' -> 'allow')."""
     for p in entry["parts"]:
         if p and p[0].lower() == attr and len(p) > 1:
             return p[1]
@@ -65,16 +68,16 @@ def _panos_attr(entry, attr):
 
 
 def _panos_attr_all(entry, attr):
-    """Tutti i valori associati all'attributo 'attr' (una riga per valore)."""
+    """All values associated with attribute 'attr' (one line per value)."""
     return [p[1] for p in entry["parts"] if p and p[0].lower() == attr and len(p) > 1]
 
 
 # --- Envelope helpers --------------------------------------------------------
 
 def _values(entry, *path):
-    """Estrae i valori dopo 'path' (sequenza di token) da una entry
-    _panos_collect, gestendo liste tra parentesi quadre '[ a b c ]' e valori
-    singoli. Ritorna una lista di stringhe (piatta)."""
+    """Extracts the values after 'path' (sequence of tokens) from a _panos_collect
+    entry, handling lists in square brackets '[ a b c ]' and single values.
+    Returns a (flat) list of strings."""
     plen = len(path)
     low = tuple(p.lower() for p in path)
     out = []
@@ -105,6 +108,20 @@ def _join(vals):
     return ', '.join(vals) if isinstance(vals, (list, tuple)) else (vals or '')
 
 
+def _multi(vals):
+    """Multi-element value kept as a LIST up to the UI.
+
+    A policy can reference dozens of address objects: flattening them here into a
+    string forces the table into one huge cell, and the client no longer has a way
+    to expand it on demand because the structure is gone. Reassembling it
+    browser-side by splitting on ", " is not equivalent: an object name can
+    contain a comma.
+    """
+    if isinstance(vals, (list, tuple)):
+        return [str(v) for v in vals]
+    return [str(vals)] if vals else []
+
+
 def _section(sid, columns, rows):
     return {
         "id": sid,
@@ -115,11 +132,14 @@ def _section(sid, columns, rows):
 
 
 def analyze(text):
-    """PAN-OS (set-CLI) -> envelope generico a sezioni. Puro e tollerante."""
+    """PAN-OS (set-CLI) -> generic sectioned envelope. Pure and tolerant."""
     try:
         return _analyze(text)
     except Exception:
-        return {"vendor": "panos", "sections": []}
+        # See fortios.analyze: an empty envelope alone cannot be told apart
+        # from a clean config, so a crash must be marked as such.
+        logger.exception("PAN-OS analysis failed")
+        return {"vendor": "panos", "sections": [], "error": True}
 
 
 def _analyze(text):
@@ -143,7 +163,7 @@ def _analyze(text):
     rows = []
     for name, e in _panos_collect(lines, ('address-group',)).items():
         members = _values(e, 'static') or _values(e, 'dynamic', 'filter')
-        rows.append({"name": name, "members": _join(members)})
+        rows.append({"name": name, "members": _multi(members)})
     sections.append(_section("address_groups", ["name", "members"], rows))
 
     # 3) Services
@@ -158,7 +178,7 @@ def _analyze(text):
     # 4) Service groups
     rows = []
     for name, e in _panos_collect(lines, ('service-group',)).items():
-        rows.append({"name": name, "members": _join(_values(e, 'members'))})
+        rows.append({"name": name, "members": _multi(_values(e, 'members'))})
     sections.append(_section("service_groups", ["name", "members"], rows))
 
     # 5) Security rules
@@ -166,12 +186,12 @@ def _analyze(text):
     for name, e in _panos_collect(lines, ('rulebase', 'security', 'rules')).items():
         rows.append({
             "name": name,
-            "from": _join(_values(e, 'from')),
-            "to": _join(_values(e, 'to')),
-            "source": _join(_values(e, 'source')),
-            "destination": _join(_values(e, 'destination')),
-            "application": _join(_values(e, 'application')),
-            "service": _join(_values(e, 'service')),
+            "from": _multi(_values(e, 'from')),
+            "to": _multi(_values(e, 'to')),
+            "source": _multi(_values(e, 'source')),
+            "destination": _multi(_values(e, 'destination')),
+            "application": _multi(_values(e, 'application')),
+            "service": _multi(_values(e, 'service')),
             "action": _first(e, 'action'),
         })
     sections.append(_section(
@@ -187,10 +207,10 @@ def _analyze(text):
                        or _first(e, 'destination-translation', 'translated-address'))
         rows.append({
             "name": name,
-            "from": _join(_values(e, 'from')),
-            "to": _join(_values(e, 'to')),
-            "source": _join(_values(e, 'source')),
-            "destination": _join(_values(e, 'destination')),
+            "from": _multi(_values(e, 'from')),
+            "to": _multi(_values(e, 'to')),
+            "source": _multi(_values(e, 'source')),
+            "destination": _multi(_values(e, 'destination')),
             "service": _first(e, 'service'),
             "translation": translation,
         })
@@ -204,7 +224,7 @@ def _analyze(text):
     for name, e in _panos_collect(lines, ('zone',)).items():
         ifaces = (_values(e, 'network', 'layer3') or _values(e, 'network', 'layer2')
                   or _values(e, 'network', 'tap'))
-        rows.append({"name": name, "interfaces": _join(ifaces)})
+        rows.append({"name": name, "interfaces": _multi(ifaces)})
     sections.append(_section("zones", ["name", "interfaces"], rows))
 
     # 8) VPN (IKE gateway + tunnel IPsec)
@@ -248,8 +268,8 @@ def _analyze(text):
 
 
 def _panos_server_addr(entry):
-    """PAN-OS: 'server <SRV> address <IP>' o 'server <SRV> ip-address <IP>'.
-    Ritorna il primo indirizzo trovato tra le parts."""
+    """PAN-OS: 'server <SRV> address <IP>' or 'server <SRV> ip-address <IP>'.
+    Returns the first address found among the parts."""
     for p in entry["parts"]:
         if len(p) >= 4 and p[0].lower() == 'server' and p[2].lower() in ('address', 'ip-address', 'host'):
             return p[3]

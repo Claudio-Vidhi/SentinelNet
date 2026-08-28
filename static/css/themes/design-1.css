@@ -1,0 +1,199 @@
+/* =====================================================================
+   SentinelNet — Modern Glassmorphic Enterprise UI Design Language
+   Full visual design language transformation: Deep slate glass, cyan glows,
+   rounded 12px cards, backdrop-filters, floating ambient elevation.
+   ===================================================================== */
+:root[data-ui-variant="design-1"] {
+  --bg: #070d19;
+  --surface: rgba(15, 23, 42, 0.85);
+  --surface-2: rgba(30, 41, 59, 0.75);
+  --surface-3: rgba(51, 65, 85, 0.7);
+  --border: rgba(56, 189, 248, 0.2);
+  --border-strong: #38bdf8;
+
+  --text: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-soft: #cbd5e1;
+
+  --cta: #0284c7;
+  --cta-text: #ffffff;
+  --cta-press: #0369a1;
+
+  --primary: #38bdf8;
+  --lamp-up: #10b981;
+  --lamp-warn: #f59e0b;
+  --lamp-fault: #f43f5e;
+  --lamp-idle: #64748b;
+
+  --lamp-up-wash: rgba(16, 185, 129, 0.16);
+  --lamp-warn-wash: rgba(245, 158, 11, 0.16);
+  --lamp-fault-wash: rgba(244, 63, 94, 0.16);
+
+  --shadow-float: 0 20px 40px -10px rgba(2, 132, 199, 0.3);
+  --shadow-lift: 0 10px 25px -5px rgba(2, 132, 199, 0.2);
+
+  --card-border-radius: 12px;
+}
+
+/* --- GLOBAL BODY & BACKGROUND --- */
+:root[data-ui-variant="design-1"] body {
+  background: radial-gradient(circle at 50% -10%, #172a4d 0%, #070d19 75%) fixed !important;
+  color: #f8fafc;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* --- GLASSMORPHIC CARDS & PANELS --- */
+:root[data-ui-variant="design-1"] .panel,
+:root[data-ui-variant="design-1"] .hero-card,
+:root[data-ui-variant="design-1"] .card,
+:root[data-ui-variant="design-1"] .kpi,
+:root[data-ui-variant="design-1"] .vuln-card,
+:root[data-ui-variant="design-1"] .login-card,
+:root[data-ui-variant="design-1"] .modal {
+  border-radius: 12px !important;
+  border: 1px solid rgba(56, 189, 248, 0.25) !important;
+  background: rgba(15, 23, 42, 0.8) !important;
+  backdrop-filter: blur(16px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s ease, box-shadow 0.25s ease !important;
+}
+
+:root[data-ui-variant="design-1"] .panel:hover,
+:root[data-ui-variant="design-1"] .hero-card:hover {
+  border-color: rgba(56, 189, 248, 0.5) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 16px 40px -10px rgba(2, 132, 199, 0.25) !important;
+}
+
+/* --- SIDEBAR NAVIGATION --- */
+:root[data-ui-variant="design-1"] .sidenav {
+  background: rgba(7, 13, 25, 0.85) !important;
+  border-right: 1px solid rgba(56, 189, 248, 0.18) !important;
+  backdrop-filter: blur(20px) !important;
+}
+
+:root[data-ui-variant="design-1"] .sidenav .nav-item {
+  border-radius: 8px !important;
+  margin: 3px 10px !important;
+  padding: 10px 14px !important;
+  color: #94a3b8 !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+:root[data-ui-variant="design-1"] .sidenav .nav-item:hover {
+  background: rgba(56, 189, 248, 0.12) !important;
+  color: #f8fafc !important;
+}
+
+:root[data-ui-variant="design-1"] .sidenav .nav-item .nav-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+:root[data-ui-variant="design-1"] .sidenav .nav-item .nav-left i {
+  width: 18px !important;
+  text-align: center !important;
+  color: #38bdf8 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+:root[data-ui-variant="design-1"] .sidenav .nav-item.active {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 16px 0 rgba(2, 132, 199, 0.4) !important;
+  font-weight: 600 !important;
+}
+
+:root[data-ui-variant="design-1"] .sidenav .nav-item.active .nav-left i {
+  color: #ffffff !important;
+}
+
+/* --- BUTTONS & CONTROLS --- */
+:root[data-ui-variant="design-1"] .btn-primary {
+  background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 14px 0 rgba(56, 189, 248, 0.35) !important;
+  transition: all 0.2s ease !important;
+}
+
+:root[data-ui-variant="design-1"] .btn-primary:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 20px 0 rgba(56, 189, 248, 0.5) !important;
+}
+
+:root[data-ui-variant="design-1"] .btn-secondary {
+  background: rgba(30, 41, 59, 0.8) !important;
+  border: 1px solid rgba(56, 189, 248, 0.25) !important;
+  border-radius: 8px !important;
+  color: #f8fafc !important;
+  transition: all 0.2s ease !important;
+}
+
+:root[data-ui-variant="design-1"] .btn-secondary:hover {
+  background: rgba(51, 65, 85, 0.9) !important;
+  border-color: #38bdf8 !important;
+}
+
+/* --- TABLES & DATA GRIDS --- */
+:root[data-ui-variant="design-1"] table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  border-radius: 10px !important;
+  overflow: hidden !important;
+  background: rgba(15, 23, 42, 0.6) !important;
+}
+
+:root[data-ui-variant="design-1"] th {
+  background: rgba(30, 41, 59, 0.9) !important;
+  color: #38bdf8 !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  font-size: 11px !important;
+  padding: 12px 14px !important;
+  border-bottom: 1px solid rgba(56, 189, 248, 0.2) !important;
+}
+
+:root[data-ui-variant="design-1"] td {
+  padding: 12px 14px !important;
+  border-bottom: 1px solid rgba(56, 189, 248, 0.1) !important;
+}
+
+:root[data-ui-variant="design-1"] tr:hover td {
+  background: rgba(56, 189, 248, 0.08) !important;
+}
+
+/* --- INPUTS & SELECTS --- */
+:root[data-ui-variant="design-1"] input,
+:root[data-ui-variant="design-1"] select,
+:root[data-ui-variant="design-1"] textarea {
+  border-radius: 8px !important;
+  border: 1px solid rgba(56, 189, 248, 0.25) !important;
+  background: rgba(15, 23, 42, 0.8) !important;
+  color: #f8fafc !important;
+  transition: all 0.2s ease !important;
+}
+
+:root[data-ui-variant="design-1"] input:focus,
+:root[data-ui-variant="design-1"] select:focus,
+:root[data-ui-variant="design-1"] textarea:focus {
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25) !important;
+  outline: none !important;
+}
+
+/* --- BADGES & CHIPS --- */
+:root[data-ui-variant="design-1"] .badge,
+:root[data-ui-variant="design-1"] .chip {
+  border-radius: 20px !important;
+  padding: 4px 10px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.02em !important;
+}

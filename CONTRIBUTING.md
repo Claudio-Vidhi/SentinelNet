@@ -1,87 +1,157 @@
-# Contribuire a SentinelNet
+# Contributing to SentinelNet
 
-Regole vincolanti per ogni modifica (umana o via agente AI). Derivano dal
-piano in [docs/MASTER-IMPLEMENTATION-PLAN.md](docs/MASTER-IMPLEMENTATION-PLAN.md).
+Binding rules for every change, human or AI-authored. Architectural context is in
+[docs/architecture.md](docs/architecture.md); layout, tests and build in
+[docs/development.md](docs/development.md).
 
-## 1. Lingua
+## 1. Language
 
-- **Stringhe utente, log, messaggi d'errore, commenti e docstring: italiano.**
-- **Identificatori (funzioni, variabili, moduli, endpoint): inglese.**
+- **User-facing strings, logs, error messages, comments and docstrings: Italian.**
+- **Identifiers (functions, variables, modules, endpoints): English.**
+- **Documentation under `docs/`: English.**
 
 ```python
-# ✅ corretto
+# ✅ correct
 def resolve_tls_config():
     raise TlsConfigError("Configurazione TLS incompleta: ...")
 
-# ❌ sbagliato
+# ❌ wrong
 def risolvi_config_tls():
     raise TlsConfigError("Incomplete TLS configuration: ...")
 ```
 
-## 2. Doppio artefatto (exe + Docker)
+## 2. Dual artifact (exe + Docker)
 
-Ogni PR deve lasciare buildabili **entrambi** gli artefatti:
+Every change must leave **both** artifacts buildable:
 
 ```sh
-uv run pyinstaller SentinelNet.spec   # exe Windows
-docker compose build                  # immagine Docker
+uv run pyinstaller SentinelNet.spec   # Windows exe
+docker compose build                  # Docker image
 ```
 
-Nuovi file dati (es. `schema.sql`) vanno aggiunti a `datas` in
-`SentinelNet.spec` e verificati in tutte e tre le modalità (sorgente, exe,
-Docker). I percorsi bundled si risolvono via `sys._MEIPASS`.
+New data files (e.g. `schema.sql`) must be added to `datas` in
+`SentinelNet.spec` and verified in all three modes (source, exe, Docker).
+Bundled paths resolve via `sys._MEIPASS`.
 
-## 3. Regola async-DB (non negoziabile)
+## 3. Async-DB rule (non-negotiable)
 
-- **Mai `sqlite3` diretto nei percorsi async** (endpoint FastAPI, handler UDP).
-- Letture: `await db.read(sql, params)` (off-load su thread).
-- Scritture: `db.enqueue_write(...)` / `db.enqueue_flow(...)` (coda bounded,
-  writer dedicato, commit batch).
-- `db.get_observability_connection()` è consentita SOLO in migrazioni e test.
+- **Never use `sqlite3` directly on async paths** (FastAPI endpoints, UDP
+  handlers).
+- Reads: `await db.read(sql, params)` (off-loaded to a thread).
+- Writes: `db.enqueue_write(...)` / `db.enqueue_flow(...)` (bounded queue,
+  dedicated writer, batch commit).
+- `db.get_observability_connection()` is permitted ONLY in migrations and tests.
 
 ```python
-# ✅ corretto (endpoint async)
+# ✅ correct (async endpoint)
 rows = await db.read("SELECT ... WHERE tenant IN (...)", scoped)
 
-# ❌ sbagliato: blocca l'event loop (terminale WS, API, tutto)
+# ❌ wrong: blocks the event loop (WS terminal, API, everything)
 conn = db.get_observability_connection()
 rows = conn.execute("SELECT ...").fetchall()
 ```
 
-## 4. Regola di scope multi-gruppo
+Rationale: [docs/adr/0004-single-process-sqlite-writer.md](docs/adr/0004-single-process-sqlite-writer.md).
 
-Un utente può avere **più** gruppi (`user_group_scope`). Mai usare uno scalare
-`user.group` nelle query o nei check di autorizzazione:
+## 4. Multi-group scope rule
+
+A user can belong to **multiple** groups (`user_group_scope`). Never use a scalar
+`user.group` in queries or authorization checks:
 
 ```python
-# ✅ corretto
+# ✅ correct
 placeholders = ",".join("?" * len(groups))
 await db.read(f"SELECT ... WHERE tenant IN ({placeholders})", tuple(groups))
 
-# ❌ sbagliato: nasconde o espone dati con utenti multi-gruppo
+# ❌ wrong: hides or exposes data for multi-group users
 await db.read("SELECT ... WHERE tenant = ?", (user.group,))
 ```
 
-Per i device: `assert_group_allowed` / `assert_device_allowed`.
+For devices: `assert_group_allowed` / `assert_device_allowed`.
 
-## 5. Assunzione single-process
+An IP with no inventory row is **out of scope, not unscoped**. A route that
+serves a stored artifact addressed by IP — a backup, its parsed analysis — must
+deny it, because the artifact is read off disk by IP and outlives the device row
+it belonged to. `assert_device_allowed` returns `None` for an unknown device and
+raises nothing, so the caller owns that decision:
 
-Il writer SQLite è single-process. Non avviare l'app con `--workers > 1` a
-osservabilità attiva; la scalabilità orizzontale non è supportata per il
-modulo observability.
+```python
+# ✅ correct: unknown IP is refused
+if scope is not None and (device is None
+                          or device.get('Group', 'Generale') not in scope):
+    raise HTTPException(status_code=403, detail="...")
 
-## 6. Gate di sicurezza permanenti (grep in review/CI)
+# ❌ wrong: an IP absent from inventory skips the check entirely
+if device is not None and scope is not None:
+    ...
+```
 
-| Gate | Comando | Atteso |
-|---|---|---|
-| Token in sessionStorage (L-1) | `grep -c "sessionStorage" templates/dashboard.html` | 0 usi per token |
-| sqlite3 nei path async | `grep -n "get_observability_connection" app_server.py routers/ observability/ingesters/` | solo migrazioni/test |
-| Segreti in chiaro nel provisioner (I-2) | test `test_provisioning_secrets.py` | verde |
-| Redazione LLM (I-1) | test `test_redaction.py` | verde |
-| TLS fail-closed (H-1) | test `test_tls_config.py` | verde |
+## 5. Single-process assumption
 
-## 7. Test
+The SQLite writer is single-process. Do not start the app with `--workers > 1`
+while observability is enabled; horizontal scaling is not supported for the
+observability module.
 
-I test sono `unittest` eseguibili come script: `uv run python test_<nome>.py`.
-Ogni nuovo modulo porta il proprio `test_<modulo>.py`; i test usano
-`SENTINELNET_DATA_DIR` temporanea, mai lo stato reale.
+## 6. Permanent security gates
+
+| Gate | What it protects | Command | Expected |
+|---|---|---|---|
+| L-1 | Session JWT must not be readable by JavaScript — cookie only | `grep -c "sessionStorage" templates/dashboard.html` | No token usage |
+| — | No `sqlite3` on async paths | `grep -n "get_observability_connection" app_server.py routers/ observability/ingesters/` | Migrations and tests only |
+| I-2 | Provisioner day-0 config must not emit cleartext secrets | `tests/test_provisioning_secrets.py` | Green |
+| I-1 | LLM context passes the redaction choke-point | `tests/test_redaction.py` | Green |
+| H-1 | TLS config is fail-closed, no silent HTTP fallback | `tests/test_tls_config.py` | Green |
+
+Each gate carries its own meaning above; the audit documents that assigned these
+identifiers are kept outside the public tree (see the next section).
+
+### Security findings stay out of the public tree
+
+**This repository is public.** A document that names an unfixed vulnerability at
+`file:line` is an exploitation roadmap for source anyone can already read.
+
+Audit and scan results live in `data/security/`, which is gitignored. A finding
+may be written up publicly only once it is fixed and the fix is covered by a
+gate above.
+
+### Do not launder gitignored data into tracked files
+
+`data/` is gitignored — `backup-config/`, `detected_versions.json`,
+`network_hosts.csv`, `mac_history.db` — because it holds real customer network
+state. **Conclusions derived from it are as sensitive as the files themselves**
+and must not be written into tracked files, including documentation.
+
+Device models, software versions, hostnames, serial numbers, management IPs and
+topology roles are all customer intelligence. Software versions in particular
+are CVE-relevant: recording that a given model runs a given release publishes an
+attack surface.
+
+Using a real backup to *verify* a parser is correct and encouraged. Writing what
+that backup revealed about a customer's network into `docs/` is not.
+
+Reference material under `docs/reference/` describes **vendor products**, never a
+deployment. Examples and IP addresses there must come from vendor
+documentation, not from `data/`.
+
+## 7. Tests
+
+`unittest.TestCase` classes under `tests/`, run with pytest from the repository
+root:
+
+```sh
+uv run pytest tests -n 4                         # everything
+uv run pytest tests/test_db.py                   # one file
+```
+
+Do not use `unittest discover`: it collects only `TestCase` methods, so any
+module-level `def test_*()` silently never runs. See
+[docs/development.md](docs/development.md) §3.
+
+Every new module ships its own `test_<module>.py`. Tests use a temporary
+`SENTINELNET_DATA_DIR`, never real state.
+
+## 8. Documentation
+
+A change that invalidates a line in `docs/` is not finished until that line is
+corrected. A decision that changes an invariant gets an
+[ADR](docs/adr/README.md).

@@ -1,0 +1,41 @@
+# SentinelNet Workspace Rules for Cline
+
+## Communication Style
+- Keep responses concise and focused.
+- Drop filler words and unnecessary preambles/postampling.
+- Direct execution first; explain only when requested.
+
+## Code Quality & Verification (Mandatory before completion)
+Run the following verification checks before concluding tasks:
+```sh
+uv run pyrefly check                          # Must be 0 errors
+uv run python -m unittest discover -s tests   # All tests green
+graphify update .                             # Refresh knowledge graph
+```
+
+## Privacy & Sensitive Data Protection
+- `data/` directory contains real customer network state and is gitignored.
+- NEVER write real device models, software versions, real IPs, hostnames, serial numbers, or MACs into tracked files or comments.
+- ALWAYS use RFC 5737 example data (`192.0.2.x`, `198.51.100.x`), placeholder hostnames (`switch-01`), and sample MACs (`AA:BB:CC:DD:EE:FF`).
+
+## Knowledge Graph Navigation
+- Query knowledge graph before deep source scanning:
+```sh
+uv run graphify query "<question>"
+uv run graphify path "<nodeA>" "<nodeB>"
+uv run graphify explain "<concept>"
+```
+- After code changes, run `graphify update .` to update graphify output.
+
+## Coding Style & Architecture
+- Keep simple solutions; do not add unrequested abstractions or feature flags.
+- Maintain existing API contracts and type annotations.
+
+## Software Versioning (SemVer)
+- Single source of truth is `core/version.py` (`__version__ = "X.Y.Z"`).
+- `pyproject.toml` version must always match `core/version.py`.
+- Bump version based on modification scope:
+  - **PATCH** (`0.2.0` -> `0.2.1`): bug fixes, security patches, minor UI refinements.
+  - **MINOR** (`0.2.0` -> `0.3.0`): new features, new modules/tabs, vendor engines, significant architectural updates.
+  - **MAJOR** (`0.2.0` -> `1.0.0`): breaking API/schema changes, incompatible DB changes.
+- When updating version, update both `core/version.py` and `pyproject.toml`.

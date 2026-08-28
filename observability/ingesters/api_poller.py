@@ -68,6 +68,11 @@ def poll_once() -> int:
                 (ts, tenant, ip, kind, summary),
             )
             n += 1
+        try:
+            from redundancy import service as redundancy_service
+            redundancy_service.discover_fgcp(device)
+        except Exception as e:
+            logger.debug("FGCP discovery %s fallito: %s", ip, e)
     return n
 
 

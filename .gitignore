@@ -8,7 +8,11 @@
 venv/
 ENV/
 
-# Sensitive data (Device credentials and inventories)
+# Test run artifacts
+.coverage
+htmlcov/
+
+# Sensitive data (Device credentials, inventories, tokens, identities)
 fortigate_tokens.json
 network_hosts.csv
 detected_versions.json
@@ -17,8 +21,12 @@ device_models.json
 users.json
 groups.json
 sites.json
-# Per-installation vendor registry (custom vendors are local, not shared)
+identities.json
+tenant_snmp.json
 vendors.json
+ap_inventory.json
+config_baselines.json
+
 # MAC address tracking history (local SQLite DB + WAL/SHM)
 mac_history.db
 mac_history.db-wal
@@ -34,14 +42,26 @@ audit.log
 # PyInstaller / Compilation output
 build/
 dist/
-*.spec
-# Key file
-secret.key
 
+
+# Key files & Secrets
+secret.key
 jwt_secret.key
+*.key
+*.pem
+*.p12
+*.pfx
+secrets.json
+*secret*.json
+apikey*
+*_api_key*
+.env.local
+credentials.json
+service-account*.json
+app_settings.json
+c_api_key.txt
 
 # Local / IDE files
-.claude/
 .vscode/
 .idea/
 .env
@@ -80,9 +100,41 @@ observability.db
 observability.db-wal
 observability.db-shm
 
-# Local API key (never commit)
-c_api_key.txt
-
-#others
+# Data folder runtime files & databases
 Semgrep_Code_Combined_Findings_2026_07_19.csv
 data/identities.json
+data/tenant_snmp.json
+data/redundancy.db
+data/redundancy.db-shm
+data/redundancy.db-wal
+data/agent_jobs.db
+data/agent_jobs.db-shm
+data/agent_jobs.db-wal
+# Host key store: one line per managed device, with its management IP
+data/ssh_known_hosts
+checklist_x_c.docx
+
+# Security findings: never public while issues are open (see CLAUDE.md)
+data/security/
+data/vendors.json
+HANDOFF.md
+.qwen/settings.json
+
+# Vendored AI skill packages: third-party, reinstallable
+.claude/skills/
+.agents/skills/impeccable/
+.impeccable/live/
+.impeccable/questions/
+data/ssh_known_hosts
+cont.txt
+
+# Workspace della subagent-driven-development: ledger, brief, report e diff
+# di lavorazione. Scratch rigenerabile, la storia git e il record vero.
+.superpowers/
+.claude/settings.local.json
+
+# Frontend type-check tooling (nessun bundle: solo tsc)
+node_modules/
+data/config_baselines.json
+data/ap_inventory.json
+data/cloud_backup_state.json
