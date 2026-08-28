@@ -57,8 +57,8 @@ class TestRouterParity(unittest.TestCase):
     #
     # /api/provisioner/fgt/push-ssh, /api/provisioner/fgt/push-serial:
     #   il push FortiGate (SSH, REST e console/seriale) e' stato rimosso ad
-    #   agosto 2026 — il modo di lavorare corrente non ne ha bisogno. Restano
-    #   generate/download; il push Cisco e' intatto.
+    #   agosto 2026 — il modo di lavorare corrente non ne ha bisogno. Resta
+    #   generate; il push Cisco e' intatto.
     # /api/provisioner/download, /api/provisioner/fgt/download:
     #   dead code (audit 2026-08): nessun chiamante in static/js, nessun form
     #   nel template, nessun test. Il download avviene client-side dalla

@@ -810,9 +810,9 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
         for key in ('macEyebrow:', 'titleMacTracker:', 'descMacTracker:',
                     'macKpiSightingsLabel:', 'macKpiUniqueLabel:', 'macKpiSwitchesLabel:',
                     'macKpiRetentionLabel:', 'titleMacScanPanel:', 'titleMacSearchPanel:',
-                    'clientmapEyebrow:', 'titleClientMap:', 'descClientMap:',
-                    'arpKpiBindingsLabel:', 'arpKpiUniqueLabel:', 'arpKpiGatewaysLabel:',
-                    'titleArpCollectPanel:', 'titleArpSearchPanel:'):
+                    # The Client Map search surface is gone; only the ARP
+                    # collection panel is still rendered.
+                    'titleArpCollectPanel:', 'titleArpScanSummary:'):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
 
