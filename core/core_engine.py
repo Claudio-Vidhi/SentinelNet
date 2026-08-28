@@ -253,10 +253,6 @@ def resolve_driver(vendor):
         )
     return spec
 
-def driver_factory(vendor, connection):
-    driver_cls, _ = resolve_driver(vendor)
-    return driver_cls(connection)
-
 def get_device_port(device) -> int:
     """SSH port of the device from inventory ('SSH Port'), fallback 22."""
     try:
