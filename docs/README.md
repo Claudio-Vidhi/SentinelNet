@@ -54,7 +54,6 @@ for user-facing strings, logs and comments, English for identifiers — see
 | Document | Contents |
 |---|---|
 | [development.md](development.md) | Layout, tests, type checking, build, pre-commit checklist |
-| [design-system.md](design-system.md) | UI design language: palette, typography, component rules |
 | [reference/](reference/) | External vendor documentation, distilled |
 
 ## Maintenance rule
