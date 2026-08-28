@@ -183,6 +183,39 @@
         redrawInteractiveMap();
     }
 
+    // Core scelto a mano per Sede: {"<gruppo>": "<id>"}. La deduzione automatica
+    // parte dal confine (firewall/router) o dal nodo piu' connesso: dove non
+    // coincide con la realta' del rack, l'utente indica il core e i piani si
+    // ricalcolano da li'.
+    let layeredRoots = {};
+    try { layeredRoots = JSON.parse(localStorage.getItem('layeredRoots') || '{}'); } catch (e) { layeredRoots = {}; }
+    function setLayeredRoot(group, id) {
+        if (id) {
+            layeredRoots[group] = id;
+            // Un piano riassegnato a mano su questo nodo vincerebbe sul suo
+            // ruolo di radice, lasciandolo a meta' mappa.
+            if (layeredLevels[group]) { delete layeredLevels[group][id]; saveLayeredLevels(); }
+        } else {
+            delete layeredRoots[group];
+        }
+        localStorage.setItem('layeredRoots', JSON.stringify(layeredRoots));
+        redrawInteractiveMap();
+    }
+
+    // Tendina "Core" nella barra della vista a livelli: gli apparati della mappa
+    // corrente, con quello scelto selezionato.
+    function fillLayeredCoreSelect(nodesData, group) {
+        const sel = document.getElementById('layeredCoreSelect');
+        if (!sel) return;
+        const chosen = layeredRoots[group] || '';
+        const auto = currentLang === 'en' ? 'Core: auto' : 'Core: automatico';
+        sel.innerHTML = `<option value="">${escapeHtml(auto)}</option>` + nodesData
+            .filter(n => n.device_type === 'switch' || n.device_type === 'router')
+            .map(n => `<option value="${attrEsc(n.id)}">${escapeHtml(n.label || n.id)}</option>`)
+            .join('');
+        sel.value = chosen;
+    }
+
     // ===== Vista "A livelli": raggruppamento delle foglie =====
     // Otto access point appesi allo stesso switch sono otto riquadri che dicono
     // la stessa cosa. Le foglie dello stesso TIPO sotto lo STESSO padre
@@ -478,9 +511,12 @@
             }
         });
         let roots = [];
+        // Il core indicato a mano vince sulla deduzione: e' l'unica radice.
+        const chosenRoot = layeredRoots[group];
+        if (chosenRoot && adj.has(chosenRoot)) roots = [chosenRoot];
         for (const t of ROOT_TYPES) {
-            roots = nodesData.filter(n => n.device_type === t).map(n => n.id);
             if (roots.length) break;
+            roots = nodesData.filter(n => n.device_type === t).map(n => n.id);
         }
         if (!roots.length && nodesData.length) {
             const best = nodesData.slice().sort((a, b) => adj.get(b.id).length - adj.get(a.id).length)[0];
@@ -1001,6 +1037,7 @@
         layeredGroup = selectedGroup;
         layeredGroupOfChild = {};
         if (getMapView() === 'layered') {
+            fillLayeredCoreSelect(filteredNodesData, selectedGroup);
             layeredAssigned = computeLayeredLevels(filteredNodesData, filteredLinksData, selectedGroup);
             const grouped = groupLayeredLeaves(filteredNodesData, filteredLinksData, selectedGroup);
             layeredGroupOfChild = grouped.groupOfChild;
@@ -1525,6 +1562,20 @@
             const key = layeredGroupOfChild[nodeId];
             btnCollapseGrp.style.display = key ? '' : 'none';
             btnCollapseGrp.onclick = key ? () => { closeTopologyNodeDrawer(); toggleLayeredGroup(layeredGroup, key); } : null;
+        }
+
+        // Core a mano: solo nella vista a livelli, dove i piani hanno senso.
+        const btnCore = document.getElementById('drawerBtnSetCore');
+        if (btnCore) {
+            const layered = getMapView() === 'layered';
+            btnCore.style.display = layered ? '' : 'none';
+            const isCore = layeredRoots[layeredGroup] === nodeId;
+            btnCore.querySelector('span').textContent = isCore
+                ? (currentLang === 'en' ? 'Clear core' : 'Togli core')
+                : (currentLang === 'en' ? 'Set as core' : 'Segna come core');
+            btnCore.onclick = layered
+                ? () => { closeTopologyNodeDrawer(); setLayeredRoot(layeredGroup, isCore ? null : nodeId); }
+                : null;
         }
 
         drawer.classList.add('open');
@@ -3583,6 +3634,10 @@
     document.getElementById('layeredResetBtn')?.addEventListener('click', () => {
         const g = document.getElementById('interactiveGroupSelect');
         resetLayeredLevels(g ? g.value : 'all');
+    });
+    document.getElementById('layeredCoreSelect')?.addEventListener('change', ev => {
+        const g = document.getElementById('interactiveGroupSelect');
+        setLayeredRoot(g ? g.value : 'all', ev.target.value);
     });
     document.getElementById('layeredCollapseBtn')?.addEventListener('click', () => {
         const g = document.getElementById('interactiveGroupSelect');

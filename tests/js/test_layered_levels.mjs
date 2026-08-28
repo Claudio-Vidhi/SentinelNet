@@ -30,10 +30,11 @@ function constant(name) {
     return src.slice(start, src.indexOf(';', start) + 1);
 }
 
-const build = overrides => (0, eval)(`(function () {
+const build = (overrides, roots = {}) => (0, eval)(`(function () {
     ${constant('TIER_LEVEL')}
     ${constant('ROOT_TYPES')}
     const layeredLevels = ${JSON.stringify(overrides)};
+    const layeredRoots = ${JSON.stringify(roots)};
     ${extract('function tierLevel(')}
     ${extract('function computeLayeredLevels(')}
     return computeLayeredLevels;
@@ -85,5 +86,19 @@ assert.equal(levels['192.0.2.30'], 2);
 // An isolated node (no adjacency at all) falls back to its device type.
 levels = build({})(nodes.concat([{ id: '192.0.2.99', device_type: 'server' }]), links, 'site-a');
 assert.equal(levels['192.0.2.99'], 3);
+
+// A hand-picked core is the only root: the firewall is no longer tier 0 and the
+// whole map re-layers around the chosen switch, for that site only.
+levels = build({}, { 'site-a': '192.0.2.20' })(nodes, links, 'site-a');
+assert.equal(levels['192.0.2.20'], 0);
+assert.equal(levels['192.0.2.10'], 1);
+assert.equal(levels['192.0.2.30'], 1);
+assert.equal(levels['192.0.2.1'], 2);
+assert.equal(levels['192.0.2.21'], 3);
+levels = build({}, { 'site-a': '192.0.2.20' })(nodes, links, 'site-b');
+assert.equal(levels['192.0.2.1'], 0);
+// A core pointing at a device that left the map falls back to the deduction.
+levels = build({}, { 'site-a': '192.0.2.77' })(nodes, links, 'site-a');
+assert.equal(levels['192.0.2.1'], 0);
 
 console.log('layered_levels: ok');

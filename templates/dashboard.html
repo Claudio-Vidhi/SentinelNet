@@ -1021,7 +1021,10 @@
 
           <!-- Vista "A livelli": suggerimento + azzeramento dei piani riassegnati a mano -->
           <span id="layeredResetWrap" style="display:none; align-items:center; gap:8px; padding-left:10px; border-left:1px solid var(--border);">
-            <span style="font-size:12px; color:var(--text-muted);" data-i18n="lblLayeredHint">Trascina in verticale per cambiare piano · click su un gruppo per aprirlo</span>
+            <span style="font-size:12px; color:var(--text-muted);" data-i18n="lblLayeredHint">Trascina in verticale per cambiare piano · click su un gruppo per aprirlo · apri un apparato per segnarlo come core</span>
+            <!-- Il core dedotto (confine o nodo piu' connesso) puo' non essere
+                 quello vero: qui l'utente lo indica e i piani si rifanno da li'. -->
+            <select id="layeredCoreSelect" title="Core" style="padding:4px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:inherit; font-size:12px; font-weight:700;"><option value="">Core: automatico</option></select>
             <button id="layeredCollapseBtn" class="chip" style="width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnLayeredCollapse">Comprimi gruppi</button>
             <button id="layeredResetBtn" class="chip" style="width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnLayeredReset">Azzera piani</button>
           </span>
@@ -1130,6 +1133,9 @@
             <!-- Compare solo se il nodo scelto sta dentro un gruppo aperto:
                  su touch il doppio click non è una via praticabile. -->
             <button type="button" id="drawerBtnCollapseGroup" class="btn btn-secondary btn-small" style="display:none; width:auto; margin:0;"><i class="fa-solid fa-compress"></i> <span data-i18n="btnLayeredCollapseOne">Richiudi gruppo</span></button>
+            <!-- Vista "A livelli": il core dedotto puo' non essere quello vero.
+                 Il testo lo scrive topology.js (segna/togli). -->
+            <button type="button" id="drawerBtnSetCore" class="btn btn-secondary btn-small" style="display:none; width:auto; margin:0;"><i class="fa-solid fa-crown"></i> <span>Segna come core</span></button>
             <button type="button" id="drawerBtnAnalyzer" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-file-code"></i> Config Analyzer</button>
             <button type="button" id="drawerBtnTriage" class="btn btn-primary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-stethoscope"></i> Triage SSH</button>
           </div>
