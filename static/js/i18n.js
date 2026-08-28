@@ -880,7 +880,7 @@ const i18n = {
         btnLayeredCollapse: "Comprimi gruppi",
         btnLayeredCollapseOne: "Richiudi gruppo",
         lblNetworkMap: "Mappa di rete",
-        lblLayeredHint: "Trascina in verticale per cambiare piano · click su un gruppo per aprirlo",
+        lblLayeredHint: "Trascina in verticale per cambiare piano · click su un gruppo per aprirlo · apri un apparato per segnarlo come core",
 
         // Tab 1
         invEyebrow: '<i class="fa-solid fa-server"></i> Inventario',
@@ -2738,7 +2738,7 @@ const i18n = {
         btnLayeredCollapse: "Collapse groups",
         btnLayeredCollapseOne: "Collapse group",
         lblNetworkMap: "Network map",
-        lblLayeredHint: "Drag vertically to change tier · click a group to expand it",
+        lblLayeredHint: "Drag vertically to change tier · click a group to expand it · open a device to mark it as core",
 
         // Tab 1
         invEyebrow: '<i class="fa-solid fa-server"></i> Inventory',

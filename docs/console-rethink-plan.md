@@ -905,6 +905,36 @@ evidence, which reads as a detection product. This decision narrows that to
 status. **Update `PRODUCT.md` in the same change** — a positioning document that
 disagrees with the plan sends the next contributor the wrong way.
 
+### 17. Manual core in the layered map — S
+
+The layered view derives tiers by breadth-first search from a deduced root:
+the first firewall or router on the map, or, failing that, the most connected
+node. On a site whose boundary device is not managed by SentinelNet — or whose
+real core is simply not the best-connected switch — the deduction puts the
+wrong device on row 0 and every tier below it is wrong too.
+
+**Decided:** the operator names the core. Two paths to the same setting:
+
+- a `Core` dropdown in the layered toolbar, listing the switches and routers of
+  the map currently drawn;
+- `Segna come core` in the node drawer, which also offers `Togli core` on the
+  node already chosen.
+
+The chosen node becomes the sole BFS root, so the whole map re-layers under it.
+The choice is **per site**, kept in `localStorage` under `layeredRoots`
+(`{"<site>": "<node-id>"}`), the same shape and lifetime as the existing
+per-site tier overrides (`layeredLevels`). Setting a core drops that node's own
+manual tier, which would otherwise win over its new role and strand it
+mid-map. A core that names a device no longer on the map falls back to the
+deduction rather than flattening the view.
+
+Not done, and why: no backend persistence. The choice is a drawing preference
+next to two that already live in the browser; move all three together the day
+they must follow a user across machines.
+
+Covered by `tests/js/test_layered_levels.mjs` (re-layering, per-site scoping,
+stale-id fallback), run from `tests/test_map_layered.py`.
+
 ---
 
 ## Traps
