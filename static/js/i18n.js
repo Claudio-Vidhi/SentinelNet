@@ -1661,6 +1661,7 @@ const i18n = {
         phNewUserName: "es. mario.rossi",
         phNewSiteName: "es. Milano",
         phNewSiteJumpHost: "es. 198.51.100.10",
+        phNewSiteSubnets: "es. 10.0.0.0/24, 10.0.1.0/24",
 
         tabPolicyTest: '<i class="fa-solid fa-route"></i> Validazione Policy &amp; Routing',
         ptTitle: "Validazione Policy &amp; Routing",
@@ -2605,7 +2606,7 @@ const i18n = {
         // Sidebar nav groups
 
         // Tabs
-        tabHome: '<i class="fa-solid fa-gauge-high"></i> Situazione',
+        tabHome: '<i class="fa-solid fa-gauge-high"></i> Overview',
         tabInventory: '<i class="fa-solid fa-list-check"></i> Network Inventory',
         tabRedundancy: '<i class="fa-solid fa-layer-group"></i> High Availability (HA)',
         tabWlc: '<i class="fa-solid fa-wifi"></i> Cisco WLC',
@@ -3692,7 +3693,7 @@ const i18n = {
         jumpLimitsScan: "No subnet scan or discovery from the central node.",
         jumpLimitsUdp: "No inbound syslog, flow or SNMP.",
         jumpLimitsRest: "No vendor REST API (FortiGate): CLI only.",
-        jumpLimitsWorks: "Work fine: inventory, config backup, MAC/ARP, CLI commands, audit.",
+        jumpLimitsWorks: "Works fine: inventory, config backup, MAC/ARP, CLI commands, audit.",
         mcpEyebrow: '<i class="fa-solid fa-plug"></i> Integrations',
         titleMcp: "MCP Server — external LLM clients",
         descMcp: "SentinelNet can be used by external LLM clients (Claude Desktop, LM Studio, Cline…) via the <strong>MCP</strong> protocol (Model Context Protocol): the <code>mcp_server.py</code> bridge runs on the client machine, authenticates with a SentinelNet account and forwards requests to the REST API. Roles, tenants and the command blacklist stay enforced server-side. Tip: create a dedicated account (<em>viewer</em> for read-only, <em>operator</em> if CLI commands are needed).",
@@ -4166,6 +4167,7 @@ const i18n = {
         phNewUserName: "e.g. john.doe",
         phNewSiteName: "e.g. Milan",
         phNewSiteJumpHost: "e.g. 198.51.100.10",
+        phNewSiteSubnets: "e.g. 10.0.0.0/24, 10.0.1.0/24",
 
         tabPolicyTest: '<i class="fa-solid fa-route"></i> Policy &amp; Route Validation',
         ptTitle: "Policy &amp; Route Validation",
