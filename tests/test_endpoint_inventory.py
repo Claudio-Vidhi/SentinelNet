@@ -65,14 +65,20 @@ class _Base(unittest.TestCase):
                  tenant, site, _iso(first_days), _iso(last_days)))
 
     def _arp(self, mac=MAC_A, ip="192.0.2.10", tenant="sede-a",
-             source_ip="192.0.2.254", first_days=10, last_days=0):
+             source_ip="192.0.2.254", first_days=10, last_days=0,
+             last_iso=None):
+        # last_iso: orologio condiviso tra righe della stessa scansione.
+        # Senza, due insert a cavallo di un secondo producono last_seen
+        # diversi e la logica "vince il piu' recente per sorgente" scarta
+        # un binding legittimo (flaky sotto carico parallelo).
+        ts_last = last_iso if last_iso is not None else _iso(last_days)
         with mac_history._lock, mac_history._connect() as c:
             c.execute(
                 """INSERT INTO arp_entries
                    (mac, ip, vlan, interface, source_ip, source_name,
                     source_type, tenant, site, first_seen, last_seen, seen_count)
                    VALUES (?,?,'','',?,'gw','firewall',?,'central',?,?,1)""",
-                (mac, ip, source_ip, tenant, _iso(first_days), _iso(last_days)))
+                (mac, ip, source_ip, tenant, _iso(first_days), ts_last))
 
     def _infra_mac(self, mac=MAC_INFRA, switch_ip="192.0.2.1",
                    interface="Vlan10"):
@@ -132,9 +138,10 @@ class TestRollup(_Base):
     def test_dual_stack_conserva_entrambi(self):
         """Due IP visti nella stessa scansione (es. IPv4 + IPv6) sono entrambi
         attuali e attivano legittimamente MULTI-IP."""
+        same_scan = _iso(0)
         self._sighting()
-        self._arp(ip="192.0.2.10", last_days=0)
-        self._arp(ip="2001:db8::1", last_days=0)
+        self._arp(ip="192.0.2.10", last_iso=same_scan)
+        self._arp(ip="2001:db8::1", last_iso=same_scan)
 
         out = mac_history.endpoint_inventory()
 
@@ -235,9 +242,10 @@ class TestFlag(_Base):
         self.assertIn("NO-IP", self._flags())
 
     def test_multi_ip(self):
+        same_scan = _iso(0)
         self._sighting()
-        self._arp(ip="192.0.2.10")
-        self._arp(ip="192.0.2.11")
+        self._arp(ip="192.0.2.10", last_iso=same_scan)
+        self._arp(ip="192.0.2.11", last_iso=same_scan)
 
         self.assertIn("MULTI-IP", self._flags())
 

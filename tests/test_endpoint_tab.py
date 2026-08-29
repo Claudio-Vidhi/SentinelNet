@@ -33,7 +33,8 @@ class TestEndpointShell(unittest.TestCase):
         cls.js = _read("static", "js", "client-map.js")
 
     def test_the_tab_exists(self):
-        self.assertIn('<div id="tab-endpoint" class="tab-content">', self.html)
+        # role="tabpanel"/tabindex si sono aggiunti al tag (pass a11y).
+        self.assertRegex(self.html, r'<div id="tab-endpoint" class="tab-content"[^>]*>')
 
     def test_pills_and_panes_exist(self):
         for v in VIEWS:

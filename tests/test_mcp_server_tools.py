@@ -5,6 +5,7 @@ Un indirizzo presente in più sedi fa tornare 'status': 'ambiguous' dalla rotta
 REST (/api/diagnose/client). Senza un modo di indicare il tenant, il tool MCP
 non poteva far altro che ripetere la stessa domanda ambigua all'infinito."""
 
+import io
 import unittest
 from unittest.mock import patch
 
@@ -56,6 +57,70 @@ class TestPolicyMCPTools(unittest.TestCase):
         with patch("ai.mcp_server.api") as mock_api:
             fn({"ip": "192.0.2.1"})
         mock_api.assert_called_once_with("GET", "/api/policy-test/192.0.2.1/findings")
+
+
+class TestDisabledToolsFailClosed(unittest.TestCase):
+    """WP3 (docs/app-review-fix-plan.md): il gating dei tool deve fallire
+    chiuso prima del primo sync riuscito, mai aperto con l'insieme vuoto."""
+
+    def setUp(self):
+        self._orig = dict(mcp_server._disabled)
+        mcp_server._disabled.update({"at": 0.0, "tools": set(), "synced": False})
+
+    def tearDown(self):
+        mcp_server._disabled.clear()
+        mcp_server._disabled.update(self._orig)
+
+    def test_first_fetch_failure_disables_everything(self):
+        with patch("ai.mcp_server.api", side_effect=RuntimeError("centrale irraggiungibile")):
+            self.assertEqual(mcp_server.disabled_tools(), set(mcp_server.TOOLS))
+        self.assertFalse(mcp_server._disabled["synced"])
+
+    def test_failure_after_sync_keeps_last_known_state(self):
+        mcp_server._disabled.update({"at": 0.0, "tools": {"arp_scan"}, "synced": True})
+        with patch("ai.mcp_server.api", side_effect=RuntimeError("centrale irraggiungibile")):
+            self.assertEqual(mcp_server.disabled_tools(), {"arp_scan"})
+
+    def test_successful_sync_updates_the_set(self):
+        with patch("ai.mcp_server.api",
+                   return_value={"disabled_tools": ["arp_scan", "send_cli_command"]}):
+            self.assertEqual(mcp_server.disabled_tools(),
+                             {"arp_scan", "send_cli_command"})
+        self.assertTrue(mcp_server._disabled["synced"])
+
+    def test_tool_list_is_empty_when_fail_closed(self):
+        with patch("ai.mcp_server.api", side_effect=RuntimeError("centrale irraggiungibile")):
+            listing = mcp_server._tool_list()
+        self.assertEqual(listing["tools"], [])
+
+
+class TestAccountPostureWarning(unittest.TestCase):
+    """Follow-up WP3: ogni client MCP eredita il ruolo dell'account
+    configurato; sopra viewer il modello puo' eseguire strumenti di azione
+    e l'operatore deve vederlo."""
+
+    def _warning_for(self, role):
+        with patch.object(mcp_server, "api", return_value={"role": role}), \
+             patch("sys.stderr", new_callable=io.StringIO) as err:
+            mcp_server._warn_if_privileged_account()
+            return err.getvalue()
+
+    def test_admin_account_warns(self):
+        out = self._warning_for("admin")
+        self.assertIn("admin", out)
+        self.assertIn("viewer", out)
+
+    def test_operator_account_warns(self):
+        self.assertIn("operator", self._warning_for("operator"))
+
+    def test_viewer_account_is_silent(self):
+        self.assertEqual(self._warning_for("viewer"), "")
+
+    def test_unreachable_me_is_silent(self):
+        with patch.object(mcp_server, "api", side_effect=RuntimeError("giu'")), \
+             patch("sys.stderr", new_callable=io.StringIO) as err:
+            mcp_server._warn_if_privileged_account()
+            self.assertEqual(err.getvalue(), "")
 
 
 if __name__ == "__main__":

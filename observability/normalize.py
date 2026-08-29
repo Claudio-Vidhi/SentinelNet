@@ -425,6 +425,16 @@ def normalize_once(now: Optional[int] = None) -> dict:
         conn.commit()
         metrics.set_gauge("last_normalize_ts", now)
         metrics.inc("events_normalized", sum(counts.values()))
+        # WP8: a source reading exactly its per-cycle cap may be falling
+        # behind permanently — say it, instead of losing rows in silence.
+        for source in ("flow", "syslog", "api"):
+            if counts.get(source, 0) >= MAX_ROWS_PER_SOURCE:
+                metrics.inc("normalize_capped", 1, source=source)
+                if metrics.should_warn(f"normalize_capped_{source}"):
+                    logger.warning(
+                        "Normalizzazione %s al limite di %d righe per ciclo: "
+                        "la sorgente potrebbe accumulare ritardo.",
+                        source, MAX_ROWS_PER_SOURCE)
         return counts
     finally:
         conn.close()

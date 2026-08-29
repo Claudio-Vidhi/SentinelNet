@@ -303,10 +303,10 @@
                 if (statusEl) statusEl.textContent = '⏳ ' + (err.detail || L.errAiRateLimited || 'Quota AI superata, riprova più tardi.');
             } else {
                 const err = res ? await res.json().catch(() => ({})) : {};
-                if (statusEl) statusEl.textContent = (currentLang === 'en' ? 'Error: ' : 'Errore: ') + (err.detail || res?.status || 'richiesta fallita.');
+                if (statusEl) statusEl.textContent = (tr('uiError')) + (err.detail || res?.status || 'richiesta fallita.');
             }
         } catch (e) {
-            if (statusEl) statusEl.textContent = (currentLang === 'en' ? 'Network error: ' : 'Errore di rete: ') + e;
+            if (statusEl) statusEl.textContent = (tr('aiNetworkError')) + e;
         } finally {
             if (btn) btn.disabled = false;
         }
@@ -320,7 +320,7 @@
             await navigator.clipboard.writeText(out.textContent);
             if (statusEl) statusEl.textContent = i18n[currentLang].msgGenCfgCopied || 'Configurazione copiata negli appunti.';
         } catch (e) {
-            if (statusEl) statusEl.textContent = (currentLang === 'en' ? 'Copy failed: ' : 'Copia fallita: ') + e;
+            if (statusEl) statusEl.textContent = (tr('aiCopyFailed')) + e;
         }
     }
 
@@ -511,7 +511,7 @@
             if (!res || !res.ok) {
                 if (!silent) {
                     const err = res ? await res.json().catch(() => ({})) : {};
-                    if (statusEl) statusEl.textContent = (currentLang==='en' ? 'Model list error: ' : 'Errore elenco modelli: ') + (err.detail || res?.status);
+                    if (statusEl) statusEl.textContent = (tr('aiModelListError')) + (err.detail || res?.status);
                 }
                 return;
             }
@@ -525,9 +525,9 @@
             sel.onchange = () => {
                 if (sel.value) document.getElementById('aiModel').value = sel.value;
             };
-            if (!silent && statusEl) statusEl.textContent = currentLang==='en' ? `Found ${(data.models || []).length} models.` : `Trovati ${(data.models || []).length} modelli.`;
+            if (!silent && statusEl) statusEl.textContent = tr('aiFoundModels', {length: (data.models || []).length});
         } catch (e) {
-            if (!silent && statusEl) statusEl.textContent = (currentLang==='en' ? 'Network error: ' : 'Errore di rete: ') + e;
+            if (!silent && statusEl) statusEl.textContent = (tr('aiNetworkError')) + e;
         }
     }
 
@@ -571,10 +571,10 @@
                 if (editSel2 && saved.id) { editSel2.value = saved.id; onAiProfileEditSelectChange(); }
             } else {
                 const err = res ? await res.json().catch(() => ({})) : {};
-                if (statusEl) statusEl.textContent = (currentLang==='en' ? 'Error: ' : 'Errore: ') + (err.detail || res?.status);
+                if (statusEl) statusEl.textContent = (tr('uiError')) + (err.detail || res?.status);
             }
         } catch (e) {
-            if (statusEl) statusEl.textContent = (currentLang==='en' ? 'Network error: ' : 'Errore di rete: ') + e;
+            if (statusEl) statusEl.textContent = (tr('aiNetworkError')) + e;
         }
     }
 
@@ -590,10 +590,10 @@
                 await loadAiProfiles();
             } else {
                 const err = res ? await res.json().catch(() => ({})) : {};
-                if (statusEl) statusEl.textContent = (currentLang==='en' ? 'Error: ' : 'Errore: ') + (err.detail || res?.status);
+                if (statusEl) statusEl.textContent = (tr('uiError')) + (err.detail || res?.status);
             }
         } catch (e) {
-            if (statusEl) statusEl.textContent = (currentLang==='en' ? 'Network error: ' : 'Errore di rete: ') + e;
+            if (statusEl) statusEl.textContent = (tr('aiNetworkError')) + e;
         }
     }
 
@@ -628,17 +628,17 @@
         const card = document.createElement('div');
         card.style.cssText = 'border:1px solid var(--warning, var(--lamp-warn)); border-radius:0; padding:12px; margin:8px 0; font-size:13px;';
         if (!(attachedIps || []).includes(p.device_ip)) {
-            card.innerHTML = currentLang==='en' ? `⚠️ The AI proposed a change for <code>${escapeHtml(p.device_ip)}</code>, which is not among the attached devices. Proposal ignored for safety.` : `⚠️ L'AI ha proposto una modifica per <code>${escapeHtml(p.device_ip)}</code>, che non è tra i dispositivi allegati. Proposta ignorata per sicurezza.`;
+            card.innerHTML = tr('aiTheAiProposedA', {device_ip: escapeHtml(p.device_ip)});
             box.appendChild(card);
             box.scrollTop = box.scrollHeight;
             return;
         }
         card.innerHTML = `
-            <div style="font-weight:600; margin-bottom:6px;"><i class="fa-solid fa-screwdriver-wrench"></i> ${currentLang==='en' ? 'Proposed configuration change' : 'Modifica di configurazione proposta'} — <code>${escapeHtml(p.device_ip)}</code></div>
+            <div style="font-weight:600; margin-bottom:6px;"><i class="fa-solid fa-screwdriver-wrench"></i> ${tr('aiProposedConfigurationChange')} — <code>${escapeHtml(p.device_ip)}</code></div>
             <pre style="background:var(--surface-2); border-radius:0; padding:10px; overflow:auto; margin:0 0 8px 0;">${escapeHtml(p.commands.join('\n'))}</pre>
             <div style="display:flex; gap:8px; align-items:center;">
-                <button class="btn btn-primary btn-small requires-write" style="width:auto;"><i class="fa-solid fa-play"></i> ${currentLang==='en' ? 'Apply…' : 'Applica…'}</button>
-                <button class="btn btn-secondary btn-small" style="width:auto;">${currentLang==='en' ? 'Cancel' : 'Annulla'}</button>
+                <button class="btn btn-primary btn-small requires-write" style="width:auto;"><i class="fa-solid fa-play"></i> ${tr('aiApply')}</button>
+                <button class="btn btn-secondary btn-small" style="width:auto;">${tr('uiCancel')}</button>
                 <span class="ai-cfg-status" style="font-size:12px; color:var(--text-muted);"></span>
             </div>`;
         const [applyBtn, cancelBtn] = card.querySelectorAll('button');
@@ -653,15 +653,15 @@
         overlay.style.cssText = 'position:fixed; inset:0; background:var(--scrim); z-index:10000; display:flex; align-items:center; justify-content:center;';
         overlay.innerHTML = `
             <div style="background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:0; max-width:560px; width:92%; padding:18px;">
-                <h4 style="margin:0 0 10px 0;">${currentLang==='en' ? 'Confirm configuration push' : 'Conferma invio configurazione'}</h4>
-                <p style="font-size:13px; margin:0 0 8px 0;">${currentLang==='en' ? `You are about to send <b>${p.commands.length}</b> commands in configuration mode to <code>${escapeHtml(p.device_ip)}</code>. The operation is audited and blacklisted commands are blocked server-side.` : `Stai per inviare <b>${p.commands.length}</b> comandi in modalità configurazione a <code>${escapeHtml(p.device_ip)}</code>. L'operazione viene auditata e i comandi in blacklist vengono bloccati dal server.`}</p>
+                <h4 style="margin:0 0 10px 0;">${tr('aiConfirmConfigurationPush')}</h4>
+                <p style="font-size:13px; margin:0 0 8px 0;">${tr('aiYouAreAboutTo', {length: p.commands.length, device_ip: escapeHtml(p.device_ip)})}</p>
                 <pre style="background:var(--surface-2); border-radius:0; padding:10px; max-height:220px; overflow:auto; font-size:12px;">${escapeHtml(p.commands.join('\n'))}</pre>
                 <label style="display:flex; align-items:center; gap:6px; font-size:13px; margin:8px 0;">
-                    <input type="checkbox" id="aiCfgSaveAfter"${p.save_after ? ' checked' : ''}> ${currentLang==='en' ? 'Save startup configuration after the push' : "Salva configurazione di avvio dopo l'invio"}
+                    <input type="checkbox" id="aiCfgSaveAfter"${p.save_after ? ' checked' : ''}> ${tr('aiSaveStartupConfigurationAfter')}
                 </label>
                 <div style="display:flex; gap:8px; justify-content:flex-end;">
-                    <button class="btn btn-secondary btn-small" style="width:auto;">${currentLang==='en' ? 'Cancel' : 'Annulla'}</button>
-                    <button class="btn btn-primary btn-small" style="width:auto;"><i class="fa-solid fa-play"></i> ${currentLang==='en' ? 'Confirm and apply' : 'Conferma e applica'}</button>
+                    <button class="btn btn-secondary btn-small" style="width:auto;">${tr('uiCancel')}</button>
+                    <button class="btn btn-primary btn-small" style="width:auto;"><i class="fa-solid fa-play"></i> ${tr('aiConfirmAndApply')}</button>
                 </div>
             </div>`;
         const [cancelBtn, confirmBtn] = overlay.querySelectorAll('button');
@@ -678,7 +678,7 @@
         const statusEl = card.querySelector('.ai-cfg-status');
         const setStatus = (t, err) => { if (statusEl) { statusEl.textContent = t; statusEl.style.color = err ? 'var(--danger, #d9534f)' : 'var(--text-muted)'; } };
         card.querySelectorAll('button').forEach(b => b.disabled = true);
-        setStatus(currentLang==='en' ? 'Sending…' : 'Invio in corso…');
+        setStatus(tr('aiSending'));
         try {
             const res = await apiFetch('/api/bulk-command', {
                 method: 'POST',
@@ -692,7 +692,7 @@
             });
             if (!res || !res.ok) {
                 const err = res ? await res.json().catch(() => ({})) : {};
-                setStatus((currentLang==='en' ? 'Error: ' : 'Errore: ') + (err.detail || (currentLang==='en' ? 'request rejected.' : 'richiesta rifiutata.')), true);
+                setStatus((tr('uiError')) + (err.detail || (tr('aiRequestRejected'))), true);
                 card.querySelectorAll('button').forEach(b => b.disabled = false);
                 return;
             }
@@ -705,17 +705,17 @@
                 const job = await jr.json();
                 if (job.status !== 'running') {
                     const entry = (job.results || [])[0];
-                    const result = entry ? (entry.result || {}) : { status: 'error', message: currentLang==='en' ? 'device not found in inventory.' : 'dispositivo non trovato in inventario.' };
+                    const result = entry ? (entry.result || {}) : { status: 'error', message: tr('aiDeviceNotFoundIn') };
                     const ok = result.status === 'success';
-                    setStatus(ok ? (currentLang==='en' ? '✅ Configuration applied.' : '✅ Configurazione applicata.') : (currentLang==='en' ? 'Error: ' : 'Errore: ') + (result.message || (currentLang==='en' ? 'push failed.' : 'invio fallito.')), !ok);
-                    appendAiMessage('assistant', (ok ? (currentLang==='en' ? '✅ Configuration applied to ' : '✅ Configurazione applicata a ') : (currentLang==='en' ? '❌ Push failed to ' : '❌ Invio fallito a ')) + p.device_ip + (result.output ? '\n\n' + result.output : (result.message ? '\n\n' + result.message : '')));
+                    setStatus(ok ? (tr('aiConfigurationApplied')) : (tr('uiError')) + (result.message || (tr('aiPushFailed'))), !ok);
+                    appendAiMessage('assistant', (ok ? (tr('aiConfigurationAppliedTo')) : (tr('aiPushFailedTo'))) + p.device_ip + (result.output ? '\n\n' + result.output : (result.message ? '\n\n' + result.message : '')));
                     return;
                 }
-                setStatus(currentLang==='en' ? 'Running…' : 'In esecuzione…');
+                setStatus(tr('aiRunning'));
             }
-            setStatus(currentLang==='en' ? 'Timeout waiting for the result: check the bulk command job.' : 'Timeout in attesa del risultato: controlla il job dei comandi bulk.', true);
+            setStatus(tr('aiTimeoutWaitingForThe'), true);
         } catch (e) {
-            setStatus((currentLang==='en' ? 'Network error: ' : 'Errore di rete: ') + e, true);
+            setStatus((tr('aiNetworkError')) + e, true);
             card.querySelectorAll('button').forEach(b => b.disabled = false);
         }
     }

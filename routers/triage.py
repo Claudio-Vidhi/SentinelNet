@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from services import inventory_manager, site_manager
 from core import core_engine
+from core.ssh_pool import run_ssh
 from security.security_manager import log_audit
 from routers.deps import get_current_user, require_operator, user_group_scope, assert_device_allowed, assert_group_allowed
 
@@ -111,7 +112,7 @@ def run_triage(payload: TriageRunRequest = TriageRunRequest(),
     return {"status": "running", "message": "Scansione avviata in background"}
 
 @router.post("/api/triage/{ip}")
-def triage_single_device(ip: str, current_user = Depends(require_operator)):
+async def triage_single_device(ip: str, current_user = Depends(require_operator)):
     import re
     if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
         raise HTTPException(status_code=400, detail="IP non valido.")
@@ -120,7 +121,9 @@ def triage_single_device(ip: str, current_user = Depends(require_operator)):
     if not device:
         raise HTTPException(status_code=404, detail=f"Dispositivo {ip} non trovato in inventario.")
     assert_group_allowed(current_user, device.get('Group', 'Generale'))
-    result = core_engine.run_backup_and_triage(device)
+    # WP11: la sessione SSH (15-90s) gira sul pool dedicato, non sul threadpool
+    # condiviso delle rotte sync.
+    result = await run_ssh(core_engine.run_backup_and_triage, device)
     log_audit(f"Triage singolo eseguito su '{ip}' dall'utente '{current_user.get('sub')}': {result.get('status')}.")
     return result
 

@@ -61,7 +61,7 @@
             ${listenerRows}
             <div style="margin-top:12px;">
                 <button id="btnSaveObsSettings" class="btn btn-primary btn-small" data-action="save-obs-settings" data-i18n="btnSave">
-                    <i class="fa-solid fa-floppy-disk"></i> ${escapeHtml(L.btnSave || (currentLang === 'en' ? 'Save' : 'Salva'))}
+                    <i class="fa-solid fa-floppy-disk"></i> ${escapeHtml(L.btnSave || (tr('uiSave')))}
                 </button>
             </div>
             <div id="obsSettingsError" style="margin-top:10px; font-size:12px; color:var(--danger);"></div>
@@ -75,7 +75,6 @@
         const box = document.getElementById('obsHealthBox');
         if (!box) return;
         const L = i18n[currentLang];
-        const en = currentLang === 'en';
         const res = await apiFetch('/api/observability/health');
         if (!res || !res.ok) { box.innerHTML = ''; return; }
         const h = await res.json();
@@ -85,57 +84,62 @@
             return `<span class="status ${active ? 'ok' : 'warn'}" style="margin-right:6px;">
                         <span class="led ${active ? 'led-success' : 'led-warning'}"></span>${escapeHtml(name)}
                     </span>`;
-        }).join('') || `<span style="color:var(--text-muted); font-size:12px;">${escapeHtml(en ? 'no listener' : 'nessun listener')}</span>`;
+        }).join('') || `<span style="color:var(--text-muted); font-size:12px;">${escapeHtml(tr('obsNoListener'))}</span>`;
         const mb = (h.db_size_bytes || 0) / (1024 * 1024);
+        // WP7: la perdita dati della pipeline e' uno stato dichiarato, non un
+        // contatore nascosto: writer fermo (scritture scartate) o scarti per
+        // coda piena dall'avvio.
+        const dbh = h.db_health || {};
+        const writerChip = dbh.writer_dead
+            ? `<span class="status error"><span class="led led-danger"></span>${escapeHtml(tr('obsStoppedWritesDiscarded'))}</span>`
+            : dbh.degraded
+                ? `<span class="status warn"><span class="led led-warning"></span>${escapeHtml(tr('obsDrops'))} (${dbh.writes_dropped_queue_full || 0})</span>`
+                : `<span class="status ok"><span class="led led-success"></span>ok</span>`;
         box.innerHTML = `
             <h4 style="margin:0 0 10px; font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted);">
                 <i class="fa-solid fa-heart-pulse" style="color:var(--primary);"></i>
-                ${escapeHtml(L.obsHealthTitle || (en ? 'Pipeline health' : 'Stato della pipeline'))}
+                ${escapeHtml(L.obsHealthTitle || (tr('obsPipelineHealth')))}
             </h4>
             <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:center; font-size:12px; margin-bottom:12px;">
-                <span>${escapeHtml(en ? 'Enabled' : 'Abilitata')}:
-                    <span class="status ${h.enabled ? 'ok' : 'warn'}">${h.enabled ? (en ? 'yes' : 'si') : 'no'}</span></span>
-                <span>${escapeHtml(en ? 'Listeners' : 'Listener')}: ${badges}</span>
+                <span>${escapeHtml(tr('obsEnabled'))}:
+                    <span class="status ${h.enabled ? 'ok' : 'warn'}">${h.enabled ? (tr('obsYes')) : 'no'}</span></span>
+                <span>${escapeHtml(tr('obsListeners'))}: ${badges}</span>
+                <span>${escapeHtml(tr('obsWriter'))}: ${writerChip}</span>
                 <span>DB: <b>${mb.toFixed(1)} MB</b></span>
-                <span>${escapeHtml(en ? 'Schema' : 'Schema')}: <b>${escapeHtml(String(h.schema_version ?? '—'))}</b></span>
+                <span>${escapeHtml(tr('obsSchema'))}: <b>${escapeHtml(String(h.schema_version ?? '—'))}</b></span>
             </div>
             <p style="margin:0 0 8px; font-size:12px; color:var(--text-muted);">
-                ${escapeHtml(en
-                    ? 'A background job already prunes by the retention set below, per table. This is a one-off purge with a horizon of your choosing.'
-                    : 'Un job in background pota gia’ secondo la retention impostata piu’ sotto, tabella per tabella. Questa e’ una pulizia una-tantum con l’orizzonte che scegli.')}
+                ${escapeHtml(tr('obsABackgroundJobAlready'))}
             </p>
             <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
                 <div class="form-group" style="margin-bottom:0; max-width:170px;">
-                    <label for="obsPruneDays">${escapeHtml(L.obsPruneDays || (en ? 'Keep last (days)' : 'Conserva (giorni)'))}</label>
+                    <label for="obsPruneDays">${escapeHtml(L.obsPruneDays || (tr('obsKeepLastDays')))}</label>
                     <input id="obsPruneDays" type="number" min="1" max="3650" value="30" style="padding-left:12px;">
                 </div>
                 <button id="btnPruneObsLogs" class="btn btn-danger btn-small" style="width:auto; margin:0;" data-action="prune-obs-logs">
-                    <i class="fa-solid fa-broom"></i> ${escapeHtml(L.obsPruneRun || (en ? 'Purge older logs' : 'Elimina i log vecchi'))}
+                    <i class="fa-solid fa-broom"></i> ${escapeHtml(L.obsPruneRun || (tr('obsPurgeOlderLogs')))}
                 </button>
             </div>`;
     }
 
     // Cancellazione definitiva: syslog_events e flow_aggregates oltre la soglia.
     async function pruneObsLogs() {
-        const en = currentLang === 'en';
         const days = parseInt(document.getElementById('obsPruneDays')?.value, 10);
         if (!days || days < 1) {
-            showToast(en ? 'Enter a retention in days.' : 'Indica una retention in giorni.', 'warning');
+            showToast(tr('obsEnterARetentionIn'), 'warning');
             return;
         }
-        const question = en
-            ? `Permanently delete syslog events and flow aggregates older than ${days} days?`
-            : `Eliminare definitivamente eventi syslog e aggregati di flusso piu' vecchi di ${days} giorni?`;
+        const question = tr('obsPermanentlyDeleteSyslogEvents', {days: days});
         if (!confirm(question)) return;
         const res = await apiFetch('/api/observability/prune-logs', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ days })
         });
         if (!res || !res.ok) {
-            showToast(en ? 'Purge failed.' : 'Eliminazione non riuscita.', 'error');
+            showToast(tr('obsPurgeFailed'), 'error');
             return;
         }
-        showToast(en ? 'Old logs purged.' : 'Log vecchi eliminati.', 'success');
+        showToast(tr('obsOldLogsPurged'), 'success');
         loadObsHealth();
     }
 
@@ -160,7 +164,7 @@
         });
         if (!res || !res.ok) {
             const e = res ? await res.json() : null;
-            const msg = (e && e.detail) || (currentLang === 'en' ? 'Save error.' : 'Errore nel salvataggio.');
+            const msg = (e && e.detail) || (tr('uiSaveError'));
             if (errEl) errEl.textContent = msg; else alert(msg);
             return;
         }
@@ -399,15 +403,15 @@
             <td style="padding:4px 0; word-break:break-all;"><code style="font-family:var(--font-code); font-size:12px;">${escapeHtml(String(v))}</code></td></tr>`;
         document.getElementById('syslogDetailBody').innerHTML = `
             <table style="width:100%; border-collapse:collapse; margin-bottom:14px;">${meta.map(kvRow).join('')}</table>
-            ${pairs.length ? `<h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin:0 0 6px;">${currentLang === 'en' ? 'Parsed fields' : 'Campi'}</h4>
+            ${pairs.length ? `<h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin:0 0 6px;">${tr('obsParsedFields')}</h4>
             <table style="width:100%; border-collapse:collapse; margin-bottom:14px;">${pairs.map(kvRow).join('')}</table>` : ''}
             <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin:0 0 6px;">Raw</h4>
             <pre style="margin:0; padding:10px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; white-space:pre-wrap; word-break:break-all; font-family:var(--font-code); font-size:12px;">${escapeHtml(msg)}</pre>`;
-        document.getElementById('syslogDetailModal').style.display = 'flex';
+        openModal('syslogDetailModal');
     }
 
     function closeSyslogDetail() {
-        document.getElementById('syslogDetailModal').style.display = 'none';
+        closeModal('syslogDetailModal');
     }
 
     function flowsTabShown() {
@@ -436,14 +440,10 @@
             const listeners = h.listeners || {};
             const anyActive = Object.values(listeners).some(l => l && l.active);
             if (!h.enabled) {
-                banner.textContent = currentLang === 'en'
-                    ? '⚠️ Observability disabled: no listener running. Enable it with SENTINELNET_OBS_ENABLE=1 (or "observability.enabled" in app_settings.json) and restart.'
-                    : '⚠️ Osservabilità disabilitata: nessun listener in ascolto. Abilita con SENTINELNET_OBS_ENABLE=1 (o "observability.enabled" in app_settings.json) e riavvia.';
+                banner.textContent = tr('obsObservabilityDisabledNoListener');
                 banner.style.display = 'block';
             } else if (!anyActive) {
-                banner.textContent = currentLang === 'en'
-                    ? '⚠️ Observability enabled but no active listener (bind failed?). Check /api/observability/health and the startup logs.'
-                    : '⚠️ Osservabilità abilitata ma nessun listener attivo (bind fallito?). Controlla /api/observability/health e i log di avvio.';
+                banner.textContent = tr('obsObservabilityEnabledButNo');
                 banner.style.display = 'block';
             } else {
                 banner.style.display = 'none';
@@ -489,12 +489,12 @@
             if (_flowsSource === 'syslog') {
                 const res = await apiFetch(`/api/observability/syslog?window=${encodeURIComponent(w)}&limit=200`);
                 if (!res || !res.ok) {
-                    if (res) tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--danger);">${currentLang === 'en' ? 'Error loading syslog events.' : 'Errore nel caricamento degli eventi syslog.'}</td></tr>`;
+                    if (res) tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--danger);">${tr('obsErrorLoadingSyslogEvents')}</td></tr>`;
                     return;
                 }
                 _flowsSyslogData = (await res.json()).events || [];
                 document.getElementById('trafLastUpdate').textContent =
-                    (currentLang === 'en' ? 'Updated: ' : 'Aggiornato: ') + new Date().toLocaleTimeString();
+                    (tr('obsUpdated')) + new Date().toLocaleTimeString();
                 renderFlowsThead();
                 renderSyslogTable();
                 renderSyslogAllSection();
@@ -503,13 +503,13 @@
             const srcParam = _flowsSource === 'all' ? '' : `&source=${_flowsSource}`;
             const res = await apiFetch(`/api/observability/top?window=${encodeURIComponent(w)}&metric=${encodeURIComponent(m)}&limit=100${srcParam}${telemetryParam()}`);
             if (!res || !res.ok) {
-                if (res) tbody.innerHTML = `<tr><td colspan="10" style="padding:20px; text-align:center; color:var(--danger);">${currentLang === 'en' ? 'Error loading flows.' : 'Errore nel caricamento dei flussi.'}</td></tr>`;
+                if (res) tbody.innerHTML = `<tr><td colspan="10" style="padding:20px; text-align:center; color:var(--danger);">${tr('obsErrorLoadingFlows')}</td></tr>`;
                 return;
             }
             const flows = (await res.json()).flows || [];
             _flowsRawData = flows;                     // cache for filtering
             document.getElementById('trafLastUpdate').textContent =
-                (currentLang === 'en' ? 'Updated: ' : 'Aggiornato: ') + new Date().toLocaleTimeString();
+                (tr('obsUpdated')) + new Date().toLocaleTimeString();
 
             // "Tutte le origini": il syslog non è un flusso, va caricato a parte
             // e mostrato nella sezione dedicata sotto la tabella flussi.
@@ -662,7 +662,6 @@
         const row = (label, value) => `<tr><td style="padding:4px 8px 4px 0; color:var(--text-muted); white-space:nowrap;">${label}</td><td style="padding:4px 0;">${value}</td></tr>`;
         const body = document.getElementById('flowDetailPanelBody');
         const L = i18n[currentLang];
-        const en = currentLang === 'en';
         body.innerHTML = `
             <table style="width:100%; font-size:13px; border-collapse:collapse; margin-bottom:14px;">
                 ${row(L.thFlTenant || 'Sede', escapeHtml(f.tenant))}
@@ -671,21 +670,21 @@
                 ${row(L.thFlProto || 'Proto/Porta', `${proto}/${f.dst_port ?? '—'}`)}
                 ${row(L.thFlTraffic || 'Traffico', fmtBytes(f.total_bytes))}
                 ${row(L.thFlPackets || 'Pacchetti', f.total_packets)}
-                ${row(en ? 'Aggregated flows' : 'Flussi aggregati', f.flow_count)}
+                ${row(tr('obsAggregatedFlows'), f.flow_count)}
             </table>
             <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px;">
                 <button class="btn" style="text-align:left;" data-action="detail-hl-topo" data-ip="${escapeHtml(f.src_ip)}">
-                    <i class="fa-solid fa-diagram-project"></i> ${en ? 'Show source in topology' : 'Mostra sorgente in topologia'}
+                    <i class="fa-solid fa-diagram-project"></i> ${tr('obsShowSourceInTopology')}
                 </button>
                 <button class="btn" style="text-align:left;" data-action="detail-hl-topo" data-ip="${escapeHtml(f.dst_ip)}">
-                    <i class="fa-solid fa-diagram-project"></i> ${en ? 'Show destination in topology' : 'Mostra destinazione in topologia'}
+                    <i class="fa-solid fa-diagram-project"></i> ${tr('obsShowDestinationInTopology')}
                 </button>
-                <button class="btn requires-write" style="text-align:left;" data-action="detail-ai-flow" title="${en ? 'Send ONLY this flow to the AI assistant (identifiers; totals re-derived server-side)' : 'Invia SOLO questo flusso all\'assistente AI (identificatori; totali ri-derivati dal server)'}">
+                <button class="btn requires-write" style="text-align:left;" data-action="detail-ai-flow" title="${tr('obsSendOnlyThisFlow')}">
                     <i class="fa-solid fa-robot"></i> ${L.btnAnalyzeAi || 'Analizza con AI'}
                 </button>
             </div>
-            <h5 style="margin:0 0 8px 0;">${en ? 'Client (source)' : 'Client (sorgente)'}</h5>
-            <div id="flowPanelClientMap" style="font-size:12px; color:var(--text-muted);">${en ? 'Searching…' : 'Ricerca in corso…'}</div>
+            <h5 style="margin:0 0 8px 0;">${tr('obsClientSource')}</h5>
+            <div id="flowPanelClientMap" style="font-size:12px; color:var(--text-muted);">${tr('obsSearching')}</div>
         `;
         document.getElementById('flowDetailPanel').style.display = 'block';
         loadFlowPanelClientMap(f.src_ip);
@@ -701,24 +700,23 @@
         const box = document.getElementById('flowPanelClientMap');
         if (!box) return;
         try {
-            const en = currentLang === 'en';
             const res = await apiFetch('/api/arp/client-map?' + new URLSearchParams({ ip }).toString());
-            if (!res || !res.ok) { box.textContent = en ? 'Client-map lookup unavailable.' : 'Ricerca client-map non disponibile.'; return; }
+            if (!res || !res.ok) { box.textContent = tr('obsClientMapLookupUnavailable'); return; }
             const d = await res.json();
             const rows = d.results || [];
             if (rows.length === 0) {
-                box.textContent = en ? 'No known MAC/IP binding for this source.' : 'Nessun binding MAC/IP noto per questa sorgente.';
+                box.textContent = tr('obsNoKnownMacIp');
                 return;
             }
             box.innerHTML = rows.map(r => `
                 <div style="padding:8px; border:1px solid var(--border); border-radius:0; margin-bottom:6px;">
                     <div><b>MAC</b>: <code>${escapeHtml(r.mac)}</code></div>
                     <div><b>Gateway</b>: ${escapeHtml(r.source_name || '')} <span style="color:var(--text-muted);">${escapeHtml(r.source_ip || '')}</span></div>
-                    <div><b>${en ? 'Access switch' : 'Switch di accesso'}</b>: ${r.switch_ip ? `${escapeHtml(r.switch_name || '')} ${escapeHtml(r.switch_ip)}` : '—'}</div>
-                    <div><b>${en ? 'Port' : 'Porta'}</b>: ${escapeHtml(r.switch_port || '—')}</div>
+                    <div><b>${tr('uiAccessSwitch')}</b>: ${r.switch_ip ? `${escapeHtml(r.switch_name || '')} ${escapeHtml(r.switch_ip)}` : '—'}</div>
+                    <div><b>${tr('obsPort')}</b>: ${escapeHtml(r.switch_port || '—')}</div>
                 </div>`).join('');
         } catch (e) {
-            box.textContent = currentLang === 'en' ? 'Client-map lookup unavailable.' : 'Ricerca client-map non disponibile.';
+            box.textContent = tr('obsClientMapLookupUnavailable');
         }
     }
 
@@ -734,7 +732,7 @@
                 return;
             }
             if (attempt < 20) { setTimeout(() => tryFocus(attempt + 1), 250); return; }
-            showToast(currentLang === 'en' ? 'Node not present in the topology.' : 'Nodo non presente nella topologia.', 'warning');
+            showToast(tr('obsNodeNotPresentIn'), 'warning');
         };
         tryFocus(0);
     }
@@ -764,33 +762,16 @@
         note.style.display = 'block';
         // Il contesto è assemblato e REDATTO lato server: il browser invia solo
         // le tuple identificative (mai byte/pacchetti) e la domanda.
-        const en = currentLang === 'en';
-        note.textContent = en
-            ? '⚠️ ' + (selected
-                ? `ONLY the ${flows.length} selected flows (identifiers; totals re-derived server-side, secrets redacted)`
-                : 'The aggregated flow data (top-N summary, secrets redacted)')
-                + ' will be sent to the configured AI provider'
-                + (providerName ? ` (${providerName})` : '') + '.'
-            : '⚠️ ' + (selected
-                ? `Vengono inviati SOLO i ${flows.length} flussi selezionati (identificatori; totali ri-derivati dal server, segreti redatti)`
-                : 'I dati aggregati dei flussi (riassunto top-N, con segreti redatti)')
-                + ' verranno inviati al provider AI configurato'
-                + (providerName ? ` (${providerName})` : '') + '.';
+        note.textContent = '⚠️ ' + (selected
+            ? tr('obsAiScopeSelected', {count: flows.length})
+            : tr('obsAiScopeAggregated'))
+            + tr('obsAiWillBeSent')
+            + (providerName ? ` (${providerName})` : '') + '.';
         switchTab('tab-ai', document.querySelector(`.nav-item[onclick*="'tab-ai'"]`));
         const input = document.getElementById('aiChatInput');
-        input.value = en
-            ? (selected
-                ? `Analyze the ${flows.length} selected attached network flows: `
-                  + 'spot anomalous top talkers, possible exfiltration or scans, '
-                  + 'and correlate with the open incidents.'
-                : 'Analyze the attached network flows: spot anomalous top talkers, '
-                  + 'possible exfiltration or scans, and correlate with the open incidents.')
-            : (selected
-                ? `Analizza i ${flows.length} flussi di rete selezionati e allegati: `
-                  + 'individua top talker anomali, possibili esfiltrazioni o scansioni, '
-                  + 'e correla con gli incidenti aperti.'
-                : 'Analizza i flussi di rete allegati: individua i top talker anomali, '
-                  + 'possibili esfiltrazioni o scansioni, e correla con gli incidenti aperti.');
+        input.value = selected
+            ? tr('obsAiPromptSelected', {count: flows.length})
+            : tr('obsAiPromptAggregated');
         input.focus();
     }
 
@@ -1377,12 +1358,12 @@
 
         const html = buildFlowTelemetryDetailHtml(protoKey);
         body.innerHTML = html || '<div style="padding:20px; text-align:center; color:var(--text-muted);">Nessun dettaglio disponibile per la finestra selezionata.</div>';
-        modal.style.display = 'flex';
+        openModal(modal);
     }
 
     function closeObsInspectModal() {
         const modal = document.getElementById('obsInspectModal');
-        if (modal) modal.style.display = 'none';
+        if (modal) closeModal(modal);
     }
 
     // Expose functions globally for UI

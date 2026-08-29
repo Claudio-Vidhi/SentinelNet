@@ -19,6 +19,8 @@ detected_versions.json
 device_categories.json
 device_models.json
 users.json
+# Lockout state: failed-login timestamps keyed by source IP + account
+login_attempts.json
 groups.json
 sites.json
 identities.json
@@ -114,7 +116,8 @@ data/agent_jobs.db
 data/agent_jobs.db-shm
 data/agent_jobs.db-wal
 # Host key store: one line per managed device, with its management IP
-data/ssh_known_hosts
+# (one file per bastion for devices behind a jump site)
+data/ssh_known_hosts*
 checklist_x_c.docx
 
 # Security findings: never public while issues are open (see CLAUDE.md)

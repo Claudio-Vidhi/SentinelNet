@@ -253,6 +253,12 @@ dedicated thread owning its own connection, draining a bounded queue and
 committing in batches. Reads from async endpoints go through `await db.read()`
 (`asyncio.to_thread`, a read-only connection per call).
 
+Loss is stated, not silent: a queue-full drop increments a counter **and**
+logs at most once a minute; when the writer's restart budget is exhausted the
+writer is marked dead (`db_health` in the health endpoint, `degraded` flag),
+and the app keeps serving reads. The pipeline applies to itself the same
+principle it applies to the network: absence of data is a fact.
+
 The rule is binding for all async code — see
 [CONTRIBUTING.md](../CONTRIBUTING.md) §3 and
 [ADR-0004](adr/0004-single-process-sqlite-writer.md). Direct consequence:
@@ -308,30 +314,45 @@ and audit log unchanged.
 
 | Folder | Contents |
 |---|---|
-| [core/](../core/) | `db.py` (SQLite writer), `data_config.py` (paths and config), `app_settings.py`, `core_engine.py` (SSH, backup, triage, map) |
+| [core/](../core/) | `db.py` (SQLite writer), `data_config.py` (paths and config), `app_settings.py`, `core_engine.py` (backup, triage, map), `net_ssh.py` (bastion-aware netmiko entry point), `ssh_pool.py` (dedicated executor for device SSH) |
 | [observability/](../observability/) | The whole §2 pipeline, plus `ingesters/` |
-| [collectors/](../collectors/) | ARP, MAC tables, MAC history, subnet scanner |
-| [routers/](../routers/) | ~24 FastAPI routers, one per area |
+| [collectors/](../collectors/) | ARP, MAC tables, MAC history, subnet scanner, `l2_scheduler.py` (scheduled L2 discovery, opt-in) |
+| [routers/](../routers/) | ~31 FastAPI routers, one per area |
 | [services/](../services/) | FortiGate, WLC, inventory, provisioners, sites, agent, Visio export, `netsec_audit/` (compliance engine & `netsec_audit_runs` history), `config_drift/` (§10: per-tenant history & baseline) |
-| [security/](../security/) | JWT/RBAC/audit, credential encryption, keystore, identities, redaction |
+| [security/](../security/) | JWT/RBAC/audit, credential encryption, keystore, identities, redaction, `command_policy.py` (the one dangerous-command policy) |
 | [ai/](../ai/) | Multi-provider assistant, config analyzer, MCP server and client |
-| [drivers/](../drivers/) | One driver per vendor, `BaseDriver` as the contract |
+| [drivers/](../drivers/) | One driver per vendor, `BaseDriver` as the contract, `registry.py` (vendor → driver → netmiko mapping) |
 | [fw_analyzers/](../fw_analyzers/) | Firewall config analysis (FortiOS, PAN-OS) |
 | [redundancy/](../redundancy/) | HA group detection and state |
-| [static/js/](../static/js/) | One JS file per tab; no business logic |
+| [static/js/](../static/js/) | One JS file per tab. Rendering, formatting and presentation helpers live here; decisions (correlation, scoping, policy) stay server-side — the dashboard is a lens, never the logic |
 | [templates/](../templates/) | `dashboard.html`, single page |
 
 [app_server.py](../app_server.py) is deliberately thin: `lifespan`, the FastAPI
-instance, `include_router` calls, static files, `main()`. Logic lives in routers
-and services.
+instance, `include_router` calls, middleware (security headers, cache control,
+per-IP rate limit on the expensive endpoints), static files, `main()`. Logic
+lives in routers and services.
 
 `lifespan` does, in order: start the DB writer (with migration), start listeners
-and periodic tasks per config, seed the audit template; on the way out, stop
-listeners and drain the write queue.
+and periodic tasks per config, seed the audit template, start the ping monitor;
+on the way out, stop the ping monitor, close bastion transports, stop listeners
+and drain the write queue.
 
-Periodic tasks: retention (1h), correlation (5 min), REST poller and SNMP poller
-(configurable interval). They start on the first activation of the master switch
+Periodic tasks: retention (1h), correlation (5 min), REST poller, SNMP poller
+and Linux health poller (configurable interval), scheduled L2 discovery
+(opt-in, `l2_poll_s`). They start on the first activation of the master switch
 and stay up — they're no-ops when there's nothing to do.
+
+### Where vendor knowledge lives
+
+Deliberate placement, not drift: the **device-facing** vendor knowledge —
+backup/version commands, the vendor → driver → netmiko mapping, the ARP CLI
+table — lives in `drivers/` (`registry.py`). The **adapter-layer** vendor
+knowledge — FortiGate/PAN-OS syslog field parsing, Cisco private MIB OIDs,
+per-vendor config parsers — stays where the sources are normalized
+(`observability/` ingesters, `ai/config_analyzer.py`, `fw_analyzers/`),
+because that is the layer principle §15 assigns new sources to: one adapter
+per source, nothing downstream. Moving it into `drivers/` would couple the
+device contract to telemetry formats; the split is the contract.
 
 ---
 

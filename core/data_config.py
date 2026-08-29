@@ -133,6 +133,9 @@ def obs_config() -> dict:
         # Linux host health poller: default 0 (off), same reason
         # as the SNMP poller — it opens an SSH session with a credential.
         "linux_poll_s": _port("SENTINELNET_OBS_LINUX_POLL_S", "linux_poll_s", 0),
+        # Scheduled L2 discovery (ARP + MAC + mac_history prune, WP9):
+        # default 0 (off) — same credential-using family as the pollers above.
+        "l2_poll_s": _port("SENTINELNET_OBS_L2_POLL_S", "l2_poll_s", 0),
         "retention_days": {
             "flow_aggregates": int(os.environ.get("SENTINELNET_OBS_RETENTION_FLOWS_DAYS")
                                    or _app_adv("retention_flows_days") or 30),

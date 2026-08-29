@@ -1,13 +1,17 @@
 [project]
 name = "sentinelnet"
 version = "0.23.0"
-description = "Add your description here"
+description = "Self-hosted network management, observability, backup automation and vulnerability intelligence"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 dependencies = [
     "bcrypt>=4.1.0",
     "cryptography>=42.0.0",
-    "fastapi>=0.110.0",
+    # fastapi 0.141 introduces lazy routing (_IncludedRouter), which breaks
+    # the app.routes introspection the route-contract tests rely on;
+    # verified green with 0.136.x on Python 3.11 and 3.14 alike.
+    "fastapi>=0.110.0,<0.141",
+    "ncclient>=0.6.15",
     "netmiko>=4.3.0",
     "paramiko>=3.4.0",
     "pydantic>=2.6.0",
@@ -21,6 +25,13 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    # Gate tooling from AGENTS.md / docs/development.md: declared here so a
+    # plain `uv sync` no longer prunes them (they were env-only before).
+    "graphifyy>=0.9.51",
+    # fastapi.testclient (starlette) imports httpx at runtime: without it
+    # the TestClient-based tests do not start after a `uv sync`.
+    "httpx>=0.28.0",
+    "pyrefly>=1.2.0",
     "pytest>=8.0.0",
     "pytest-xdist>=3.5.0",
 ]

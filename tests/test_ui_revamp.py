@@ -365,7 +365,9 @@ class TestHomeTab(unittest.TestCase):
         html = _html()
         # Home tab body + startup default
         self.assertIn('id="tab-home"', html)
-        self.assertIn('<div id="tab-home" class="tab-content active">', html)
+        # Il tag porta ora anche role="tabpanel"/tabindex (pass a11y): si
+        # verifica l'identita' del pannello, non la stringa esatta.
+        self.assertRegex(html, r'<div id="tab-home" class="tab-content active"[^>]*>')
         # loadHome function present -- moved to static/js/home.js (blocco
         # inline estratto per la CSP senza 'unsafe-inline'): si asserts sul
         # frontend concatenato, non sul solo HTML.
@@ -2707,8 +2709,10 @@ class TestBackupAgeLabelShared(unittest.TestCase):
         js = frontend_source()
         fn = js[js.index("function backupAgeLabel"):]
         fn = fn[:fn.index("// --- RUOLI / PRIVILEGI ---")]
-        self.assertIn("ago", fn)
-        self.assertIn("fa`", fn)
+        # Le due lingue vivono nel dizionario (migrazione i18n): qui si
+        # verifica che il helper le CHIEDA; la copertura delle chiavi la
+        # controlla tests/test_i18n_keys.py.
+        self.assertIn("tr('coreBackupAgo'", fn)
         # Oltre una settimana il dato non descrive piu' la rete di adesso.
         self.assertIn("var(--warning)", fn)
 

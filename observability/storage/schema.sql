@@ -214,6 +214,8 @@ CREATE TABLE IF NOT EXISTS incidents (
     severity       INTEGER,            -- la peggiore (min) fra gli eventi
     event_count    INTEGER NOT NULL DEFAULT 0,
     status         TEXT DEFAULT 'new' CHECK(status IN ('new','ack','resolved')),
+    resolved_ts    INTEGER,            -- istante della transizione a resolved:
+                                       -- ancora la retention (v10). NULL finché aperto.
     cause_kind     TEXT,               -- regola deterministica che ha concluso
     confidence     INTEGER,            -- 0-100, deterministico
     reasoning_json TEXT,               -- {cause, rules_fired[], sources_used[], evidence_refs[]}

@@ -147,7 +147,10 @@
         const box = document.getElementById('caResults');
         if (!box) return;
         const L = i18n[currentLang];
+        // Passato come parametro ai render helper di questo modulo, non solo
+        // usato in ternarie: resta anche dopo la migrazione a t().
         const en = currentLang === 'en';
+        
         if (caView === 'home') {
             if (caFocusIp && caData && caData.length) {
                 caApplyFocus();
@@ -432,11 +435,11 @@
         let lines = [];
         try { lines = JSON.parse(decodeURIComponent(escape(atob(btn.dataset.raw)))); } catch (e) { lines = []; }
         document.getElementById('caRawRouteContent').textContent = lines.join('\n');
-        document.getElementById('caRawRouteModal').style.display = 'flex';
+        openModal('caRawRouteModal');
     }
 
     function caCloseRawRouteModal() {
-        document.getElementById('caRawRouteModal').style.display = 'none';
+        closeModal('caRawRouteModal');
     }
 
     function caRenderRouting(dev, L, en, idx) {
@@ -668,7 +671,7 @@
         const sections = [];
         let total = 0;
         Object.keys(v).forEach(key => {
-            const lbl = caMvValLabels[key] ? caMvValLabels[key][en ? 'en' : 'it'] : key;
+            const lbl = caMvValLabels[key] ? caMvValLabels[key][tr('cfaEn')] : key;
             const val = v[key];
             if (Array.isArray(val) && val.length) {
                 total += val.length;

@@ -16,7 +16,7 @@ DEVICE = {"IP": "192.0.2.10", "Group": "ACME", "Vendor": "cisco",
 class RetentionCap(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        patcher = mock.patch("core.core_engine.BACKUP_FOLDER", self._tmp.name)
+        patcher = mock.patch("core.backup_store.BACKUP_FOLDER", self._tmp.name)
         patcher.start()
         self.addCleanup(patcher.stop)
         self.addCleanup(self._tmp.cleanup)

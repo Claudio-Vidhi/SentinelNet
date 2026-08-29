@@ -46,6 +46,18 @@ ON CONFLICT(exporter_ip) DO UPDATE SET
 """
 
 _unknown_audit_last: dict = {}
+_ingest_drop_last: dict = {}
+
+
+def _log_ingest_drop(name: str) -> bool:
+    """Drop da coda ingest piena al più una volta al minuto per listener:
+    il burst non allaga il log, lo scarto resta comunque annunciato (WP7)."""
+    now = time.monotonic()
+    if now - _ingest_drop_last.get(name, 0.0) >= 60.0:
+        _ingest_drop_last[name] = now
+        logger.warning("Coda ingest del listener %s piena: datagramma scartato.", name)
+        return True
+    return False
 
 
 class _IngestProtocol(asyncio.DatagramProtocol):
@@ -61,6 +73,7 @@ class _IngestProtocol(asyncio.DatagramProtocol):
             self._queue.put_nowait((data, addr[0], time.time()))
         except asyncio.QueueFull:
             metrics.inc("dropped_queue_full", listener=self._name)
+            _log_ingest_drop(self._name)
 
     def error_received(self, exc):
         metrics.inc("parse_errors", proto=self._name)

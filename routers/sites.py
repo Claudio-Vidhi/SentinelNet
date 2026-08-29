@@ -124,19 +124,21 @@ def delete_site_ep(payload: SiteIdSchema, current_user = Depends(require_admin))
     return {"status": "success"}
 
 @router.post("/api/sites/test-bastion")
-def test_bastion_ep(payload: SiteIdSchema, current_user = Depends(require_admin)):
+async def test_bastion_ep(payload: SiteIdSchema, current_user = Depends(require_admin)):
     # Answers the question the device errors cannot: is it the BASTION login
     # that is wrong? A refused bastion and a refused device both surface as
     # "authentication failed" on the device row, and the operator ends up
     # rotating the credential on the wrong machine.
     from core import net_ssh
+    from core.ssh_pool import run_ssh
     site = site_manager.get_site(payload.id)
     if not site:
         raise HTTPException(status_code=404, detail="Sede non trovata.")
     if site.get("mode") != "jump":
         raise HTTPException(status_code=400, detail="La sede non e' in modalita' jump.")
     try:
-        net_ssh.probe_bastion(site)
+        # WP11: il probe SSH del bastione gira sul pool dedicato.
+        await run_ssh(net_ssh.probe_bastion, site)
     except net_ssh.BastionAuthError as e:
         log_audit(f"Test bastione sede '{payload.id}' da '{current_user.get('sub')}': credenziali rifiutate.")
         return {"status": "auth_failed", "message": str(e)}

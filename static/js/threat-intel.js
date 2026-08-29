@@ -58,7 +58,7 @@
             epss: Number.isFinite(epss) ? epss : NaN,
             exploited: exploited,
             date: date,
-            summary: summary || (currentLang === 'en' ? 'No summary provided by the feed.' : 'Nessun riassunto disponibile.'),
+            summary: summary || (tr('tiNoSummaryProvidedBy')),
             references: references,
             severity: vwSeverityClass(Number.isFinite(score) ? score : 0)
         };
@@ -313,7 +313,7 @@
         if (sel) {
             const cur = sel.value;
             const groups = Object.keys(globalGroups || {});
-            sel.innerHTML = `<option value="all">${currentLang==='en'?'All tenants':'Tutti i tenant'}</option>` +
+            sel.innerHTML = `<option value="all">${tr('uiAllTenants')}</option>` +
                 groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
             sel.value = groups.includes(cur) ? cur : 'all';
         }
@@ -534,7 +534,10 @@
         btnEl.innerHTML = i18n[currentLang].scanningEuvd;
         const validModel = (model && model !== 'Non Rilevato') ? model : '';
         const queryText = (validModel ? (validModel + ' ' + (version || '')) : (version || '')).trim();
-        await runEuvdQuery(safeIpId, vendor, queryText);
+        // Il modello va anche a parte: serve al server per capire quali CVE
+        // riguardano davvero questo apparato e quali altri modelli sullo
+        // stesso treno software.
+        await runEuvdQuery(safeIpId, vendor, queryText, null, null, validModel);
         btnEl.disabled = false;
         btnEl.innerHTML = i18n[currentLang].btnRescan;
     }
@@ -554,12 +557,12 @@
         const hidden = wrapper.style.display === 'none';
         wrapper.style.display = hidden ? '' : 'none';
         const label = hidden
-            ? (currentLang === 'en' ? 'Hide results' : 'Nascondi risultati')
-            : (currentLang === 'en' ? 'Show results' : 'Mostra risultati');
+            ? (tr('tiHideResults'))
+            : (tr('tiShowResults'));
         btn.innerHTML = `<i class="fa-solid fa-chevron-${hidden ? 'up' : 'down'}"></i> ${label}`;
     }
 
-    async function runEuvdQuery(safeId, vendor, version, statusElId, resultsElId) {
+    async function runEuvdQuery(safeId, vendor, version, statusElId, resultsElId, model) {
         const effectiveResultsId = resultsElId || `results-${safeId}`;
         const statusEl  = document.getElementById(statusElId  || `status-${safeId}`);
         const resultsEl = document.getElementById(effectiveResultsId);
@@ -570,6 +573,7 @@
         const params = new URLSearchParams();
         if (vendor && vendor.trim()) params.set('vendor', vendor.trim());
         params.set('text', version);
+        if (model && model.trim()) params.set('model', model.trim());
         params.set('size', '3');
         const queryUrl = `/api/search?${params.toString()}`;
 
@@ -582,8 +586,17 @@
                             || (Array.isArray(vulnData) ? vulnData : []);
 
                 if (items.length > 0) {
-                    statusEl.innerHTML = `<span style="color: var(--danger);"><i class="fa-solid fa-triangle-exclamation"></i> ${items.length} ${i18n[currentLang].vulnerabilitiesDetected}</span>`;
-                    const hideLabel = currentLang === 'en' ? 'Hide results' : 'Nascondi risultati';
+                    // Il totale e' quello dichiarato da NVD, non quante
+                    // schede si mostrano: dire "3" con 69 CVE che toccano
+                    // la versione installata sottostima l'esposizione.
+                    const shown = Math.min(3, items.length);
+                    const total = (typeof vulnData.total === "number" && vulnData.total > items.length)
+                        ? vulnData.total : items.length;
+                    const count = total > shown
+                        ? tr('tiFoundShowingTop', {total: total, shown: shown})
+                        : `${total} ${tr('tiVulnerabilitiesDetected')}`;
+                    statusEl.innerHTML = `<span style="color: var(--danger);"><i class="fa-solid fa-triangle-exclamation"></i> ${count}</span>`;
+                    const hideLabel = tr('tiHideResults');
                     resultsEl.innerHTML = `
                         <div style="display:flex; align-items:center; justify-content:flex-end; margin-bottom:6px;">
                             <button data-action="toggle-vuln-results" data-target="${effectiveResultsId}"
@@ -612,11 +625,17 @@
                         }
 
                         const exploitedFlag = (v.exploited === true || String(v.exploited).toLowerCase() === 'true') ? '1' : '0';
+                        // NVD attribuisce questo CVE ad altri modelli sullo
+                        // stesso sistema operativo: si mostra comunque (il suo
+                        // elenco hardware e' incompleto) ma detto chiaramente.
+                        const otherModel = v.modelScope === 'other'
+                            ? `<span class="chip" style="font-size:10px; margin-left:6px; color:var(--text-muted);">${escapeHtml(tr('tiOtherModel'))}</span>`
+                            : '';
                         cardsEl.innerHTML += `
                             <div data-sev="${severity.toLowerCase()}" data-exploited="${exploitedFlag}" style="background:var(--surface-3); border: 1px solid var(--border); padding: 12px; border-radius: 0; font-size:13px;">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
                                     <div style="display:flex; align-items:center; gap:8px;">
-                                        <strong style="color:var(--primary);">${escapeHtml(cveId)}</strong>
+                                        <strong style="color:var(--primary);">${escapeHtml(cveId)}</strong>${otherModel}
                                         <button data-action="toggle-vuln-desc" data-target="${descId}"
                                             style="padding:2px 7px; border-radius:0; border:1px solid var(--border); background:transparent; color:var(--text-muted); font-size:11px; cursor:pointer; display:inline-flex; align-items:center; gap:3px;">
                                             <i class="fa-solid fa-chevron-up"></i>
@@ -629,6 +648,12 @@
                             </div>
                         `;
                     });
+                } else if (vulnData.versionUnknown) {
+                    // NVD conosce il prodotto ma non questa versione:
+                    // dirlo, invece di mostrare il segno di spunta verde.
+                    // "Nessun dato" non e' "nessuna vulnerabilita".
+                    statusEl.innerHTML = `<span style="color: var(--warning);"><i class="fa-solid fa-circle-question"></i> ${tr('tiVersionUnknown')}</span>`;
+                    resultsEl.innerHTML = `<div style="color:var(--text-muted); font-size:13px;">${escapeHtml(tr('tiVersionUnknownHint'))}<br><code style="font-size:11px; color:var(--primary);">${escapeHtml(vulnData.query || '')}</code></div>`;
                 } else {
                     statusEl.innerHTML = `<span style="color: var(--success);"><i class="fa-solid fa-circle-check"></i> ${i18n[currentLang].safeRelease}</span>`;
                     resultsEl.innerHTML = `<div style="color:var(--text-muted); font-size:13px; font-style:italic;">${i18n[currentLang].noThreatsFound}</div>`;

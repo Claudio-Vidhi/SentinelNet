@@ -1,7 +1,13 @@
 # SentinelNet to Go: Comprehensive Multi-Task Porting Plan
 
+> **Scope:** this plan concerns the destination repository `sentinelnet-go`
+> only. It lives here for convenience but describes work that happens in the
+> Go repo. Where it summarizes the source app, note the Python repo's
+> credential vault is **Fernet** (`security/crypto_vault.py`) — the
+> "Vault AES-GCM" below is the Go port's own foundation, not this repo's.
+
 ## Overview
-Analysis of the source Python repository (`SentinelNet`, ~84 `.py` files) and the destination Go repository (`sentinelnet-go`, Go 1.26 pure-Go static binary) shows that **core foundations are complete and verified** (Auth, JWT, Vault AES-GCM, Identity Manager, Inventory, SQLite WAL store, Drivers, Topology & Visio `.vsdx` export, MAC/ARP tracker, Config & Firewall/WLC Analyzer, Day-0 Provisioner SSH/Serial, Remote Sites & Agents, Base Observability Ingest UDP IPFIX/sFlow/Syslog, AI Provider core & MCP server/client).
+Analysis of the source Python repository (`SentinelNet`, ~84 `.py` files) and the destination Go repository (`sentinelnet-go`, Go 1.26 pure-Go static binary) shows that **the Go repo's core foundations are complete and verified** (Auth, JWT, Vault AES-GCM on the Go side, Identity Manager, Inventory, SQLite WAL store, Drivers, Topology & Visio `.vsdx` export, MAC/ARP tracker, Config & Firewall/WLC Analyzer, Day-0 Provisioner SSH/Serial, Remote Sites & Agents, Base Observability Ingest UDP IPFIX/sFlow/Syslog, AI Provider core & MCP server/client).
 
 This plan structures the porting of all **remaining capabilities** into modular, test-driven, incremental tasks using pure-Go native tools (no CGO, standard library + existing dependencies).
 

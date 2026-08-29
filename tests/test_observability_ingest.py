@@ -421,9 +421,12 @@ class TestRetention(unittest.TestCase):
             conn.execute("INSERT INTO syslog_events (ts, tenant) VALUES (?, 'sede-a')", (ts,))
         elif table == "incidents":
             conn.execute("INSERT INTO incidents (tenant, entity_key, opened_ts, "
-                         "last_event_ts, status) "
-                         "VALUES ('sede-a', 'ip:10.1.0.5', ?, ?, ?)",
-                         (ts, ts, extra.get("status", "resolved")))
+                         "last_event_ts, status, resolved_ts) "
+                         "VALUES ('sede-a', 'ip:10.1.0.5', ?, ?, ?, ?)",
+                         (ts, ts, extra.get("status", "resolved"),
+                          # La retention parte dalla risoluzione (schema v10):
+                          # il seed allinea resolved_ts al tempo del seme.
+                          ts if extra.get("status", "resolved") == "resolved" else None))
         else:
             conn.execute("INSERT INTO evidence (created_ts, ts, tenant, role, "
                          "rule_id, rule_version, dedup_key) "
@@ -458,6 +461,24 @@ class TestRetention(unittest.TestCase):
         n = conn.execute("SELECT COUNT(*) AS n FROM incidents").fetchone()["n"]
         conn.close()
         self.assertEqual(n, 2)
+
+    def test_long_lived_incident_resolved_yesterday_survives(self):
+        """La retention conta dalla risoluzione, non dall'apertura (plan
+        Phase 3 item 18): un incidente durato un anno e chiuso ieri non
+        perde le sue evidenze al giro di pruning successivo."""
+        now = int(time.time())
+        opened = now - 365 * 86400
+        resolved = now - 1 * 86400
+        conn = db.get_observability_connection()
+        conn.execute(
+            "INSERT INTO incidents (tenant, entity_key, opened_ts, last_event_ts, "
+            "status, resolved_ts) VALUES ('sede-a', 'ip:10.1.0.9', ?, ?, "
+            "'resolved', ?)",
+            (opened, opened, resolved))
+        conn.commit()
+        conn.close()
+        deleted = rollup.prune_once({"incidents": 90})
+        self.assertEqual(deleted["incidents"], 0)
 
     def test_orphan_evidence_is_pruned_assigned_is_not(self):
         # Le evidenze legate a un incidente seguono l'incidente (CASCADE): qui

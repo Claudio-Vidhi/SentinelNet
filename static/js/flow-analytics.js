@@ -21,9 +21,7 @@
         if (note) {
             note.style.display = picked.length > 1 ? '' : 'none';
             note.textContent = picked.length > 1
-                ? (currentLang === 'en'
-                    ? `Showing every tenant in your scope: this view filters one tenant at a time (${picked.length} selected).`
-                    : `Mostra tutti i tenant del tuo profilo: questa vista ne filtra uno alla volta (${picked.length} selezionati).`)
+                ? (tr('flowShowingEveryTenantIn', {length: picked.length}))
                 : '';
         }
         return scoped ? `&tenant=${encodeURIComponent(picked[0])}` : '';
@@ -107,8 +105,8 @@
             btn.className = `btn btn-sm ${_isStreaming ? 'btn-secondary' : 'btn-primary'}`;
             btn.innerHTML = `<i class="fa-solid ${_isStreaming ? 'fa-pause' : 'fa-play'}"></i> ${
                 _isStreaming 
-                    ? (currentLang === 'en' ? 'Pause Stream' : 'Pausa Streaming') 
-                    : (currentLang === 'en' ? 'Resume Stream' : 'Riprendi Streaming')
+                    ? (tr('flowPauseStream')) 
+                    : (tr('flowResumeStream'))
             }`;
         }
         const badge = document.getElementById('flowSiemStreamBadge');
@@ -140,9 +138,7 @@
         if (!buckets.length) {
             ctx.fillStyle = style.getPropertyValue('--text-muted').trim() || '#888';
             ctx.font = `12px ${style.getPropertyValue('--font-main').trim() || 'sans-serif'}`;
-            ctx.fillText(currentLang === 'en'
-                ? 'No events in the selected window.'
-                : 'Nessun evento nella finestra selezionata.', 20, height / 2);
+            ctx.fillText(tr('flowNoEventsInThe'), 20, height / 2);
             return;
         }
 
@@ -175,7 +171,7 @@
         if (!facetBox) return;
 
         if (!_flowSiemFacets) {
-            facetBox.innerHTML = `<div style="font-size:12px; color:var(--text-muted);">${currentLang==='en'?'Loading facets...':'Caricamento faccette...'}</div>`;
+            facetBox.innerHTML = `<div style="font-size:12px; color:var(--text-muted);">${tr('flowLoadingFacets')}</div>`;
             return;
         }
 
@@ -217,7 +213,7 @@
         if (!tbody) return;
 
         if (!_flowSiemData.length) {
-            tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--text-muted);">${currentLang==='en'?'No matching flow events.':'Nessun evento di flusso corrispondente.'}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--text-muted);">${tr('flowNoMatchingFlowEvents')}</td></tr>`;
             return;
         }
 
@@ -286,21 +282,15 @@
                 // dalle query successive, quindi il dettaglio aperto va chiuso:
                 // punterebbe a una riga che non esiste piu'.
                 _selectedEventId = null;
-                showToast(currentLang === 'en'
-                    ? `Alert for event ${id} suppressed.`
-                    : `Allerta per l'evento ${id} soppressa.`, 'info');
+                showToast(tr('flowAlertForEventSuppressed', {id: id}), 'info');
                 loadFlowSiemTab();
             } else {
                 let detail = '';
                 try { const d = await res.json(); detail = d && d.detail; } catch (e2) {}
-                showToast(detail || (currentLang === 'en'
-                    ? 'Could not suppress the alert.'
-                    : 'Impossibile sopprimere l\'allerta.'), 'error');
+                showToast(detail || (tr('flowCouldNotSuppressThe')), 'error');
             }
         } catch (e) {
-            showToast(currentLang === 'en'
-                ? 'Error while suppressing the alert.'
-                : 'Errore durante la soppressione dell\'allerta.', 'error');
+            showToast(tr('flowErrorWhileSuppressingThe'), 'error');
         }
     }
 

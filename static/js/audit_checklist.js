@@ -104,13 +104,13 @@
             const intEl = document.getElementById("auditInterviewee");
             if (nameEl) nameEl.value = "";
             if (intEl) intEl.value = "";
-            modal.style.display = "flex";
+            openModal(modal);
         }
     }
 
     function closeNewAuditModal() {
         const modal = document.getElementById("newAuditModal");
-        if (modal) modal.style.display = "none";
+        if (modal) closeModal(modal);
     }
 
     async function submitNewAuditForm(e) {
@@ -136,7 +136,7 @@
                 })
             });
             if (!res || !res.ok) {
-                alert("Errore durante la creazione dell'audit.");
+                alert(tr('ackAuditCreateError'));
                 return;
             }
             const newEng = await res.json();
@@ -145,7 +145,7 @@
             openAuditWorkspace(newEng.id);
         } catch (err) {
             console.error("Errore creazione audit:", err);
-            alert("Errore di rete durante la creazione dell'audit.");
+            alert(tr('ackAuditCreateNetworkError'));
         }
     }
 
@@ -282,13 +282,13 @@
                 })
             });
             if (!res || !res.ok) {
-                alert("Errore durante il salvataggio dell'item.");
+                alert(tr('ackItemSaveError'));
                 return;
             }
-            alert(`Item ${itemRef} salvato con successo!`);
+            alert(tr('ackItemSaved', {itemRef: itemRef}));
         } catch (e) {
             console.error("Errore salvataggio item audit:", e);
-            alert("Errore di comunicazione durante il salvataggio.");
+            alert(tr('ackSaveCommError'));
         }
     }
 
@@ -301,7 +301,7 @@
         try {
             const res = await apiFetch(`/api/audit-checklist/engagements/${engId}/report`);
             if (!res || !res.ok) {
-                alert("Errore durante il caricamento della relazione di audit.");
+                alert(tr('ackReportLoadError'));
                 return;
             }
             const html = await res.text();
@@ -425,11 +425,11 @@
         document.getElementById("tplItemPrereq").checked = item ? !!item.is_prerequisite : false;
         document.getElementById("tplItemEvidence").checked = item ? !!item.requires_evidence : false;
 
-        document.getElementById("templateItemModal").style.display = "flex";
+        openModal('templateItemModal');
     }
 
     function closeTemplateItemModal() {
-        document.getElementById("templateItemModal").style.display = "none";
+        closeModal('templateItemModal');
         editingItemRef = null;
     }
 
@@ -473,13 +473,13 @@
             if (currentAuditEngagementId) await openAuditWorkspace(currentAuditEngagementId);
         } catch (err) {
             console.error("Errore salvataggio domanda template:", err);
-            alert("Errore di rete durante il salvataggio della domanda.");
+            alert(tr('ackQuestionSaveError'));
         }
     }
 
     async function deleteTemplateItem(ref) {
         if (!currentTemplate) return;
-        if (!confirm(`Eliminare la domanda ${ref} dalla checklist?`)) return;
+        if (!confirm(tr('ackDeleteQuestion', {ref: ref}))) return;
         try {
             const res = await apiFetch(
                 `/api/audit-checklist/templates/${currentTemplate.id}/items/${encodeURIComponent(ref)}`,
@@ -495,7 +495,7 @@
             if (currentAuditEngagementId) await openAuditWorkspace(currentAuditEngagementId);
         } catch (e) {
             console.error("Errore eliminazione domanda template:", e);
-            alert("Errore di rete durante l'eliminazione della domanda.");
+            alert(tr('ackQuestionDeleteError'));
         }
     }
 
