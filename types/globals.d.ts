@@ -66,6 +66,12 @@ declare var saveInterfaceExpectation: any;
 declare var saveRuleParameters: any;
 declare var setIncidentStatus: any;
 
+// interfaces.js
+declare var loadInterfacesTab: any;
+declare var saveSingleInterface: any;
+declare var saveBulkSelection: any;
+declare var clearBulkSelection: any;
+
 // netsec-audit.js
 declare var clearUploadedConfig: any;
 declare var closeAuditReportModal: any;
