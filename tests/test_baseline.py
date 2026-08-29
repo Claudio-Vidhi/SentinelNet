@@ -353,6 +353,19 @@ class TestCatalogKnowledge(_Base):
             self.assertTrue(entry["remediation"],
                             f"{entry['id']} senza rimedio")
 
+    def test_catalog_supports_italian_and_english(self):
+        it_cat = {r["id"]: r for r in rules.catalog(lang="it")}
+        en_cat = {r["id"]: r for r in rules.catalog(lang="en")}
+        self.assertEqual(len(it_cat), len(en_cat))
+        for rule_id, it_rule in it_cat.items():
+            en_rule = en_cat[rule_id]
+            self.assertTrue(en_rule["title"])
+            self.assertTrue(en_rule["description"])
+            self.assertTrue(en_rule["investigation"])
+            self.assertTrue(en_rule["remediation"])
+            self.assertNotEqual(it_rule["title"], en_rule["title"],
+                                f"{rule_id} title not localized in English")
+
     def test_a_rule_can_only_produce_what_it_declares(self):
         self.assertTrue(rules.declares_output("IFACE_RECOVERED_001", "retraction"))
         self.assertFalse(rules.declares_output("IFACE_DOWN_001", "retraction"))

@@ -59,6 +59,7 @@ declare var toggleSiemStream: any;
 declare var explainIncident: any;
 declare var loadIncidentsList: any;
 declare var loadIncidentsTab: any;
+declare var loadRuleCatalog: any;
 declare var openIncident: any;
 declare var saveDeviceSuppression: any;
 declare var saveInterfaceExpectation: any;

@@ -303,6 +303,8 @@ class TestFullParity(unittest.TestCase):
         ("get", "/api/arp/client-map"),
         ("get", "/api/arp/search"),
         ("get", "/api/endpoints/list"),
+        # Added optional lang parameter for localized correlation rules catalog.
+        ("get", "/api/incidents/rules"),
     )
 
     ALLOWED_ADDED_OPERATIONS = (

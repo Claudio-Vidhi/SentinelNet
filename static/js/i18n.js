@@ -1453,6 +1453,8 @@ const i18n = {
         incNoNarrative: "Nessuna narrativa generata. La conclusione qui sopra resta valida senza AI.",
         optWin6h: "Ultime 6 ore",
         incBtnRefresh: '<i class="fa-solid fa-rotate"></i> Aggiorna',
+        incConsumes: "consuma:",
+        incProduces: "produce:",
         incSrcEvidence: "Evidenza",
         incSrcSyslog: "Syslog",
         incSrcFlow: "Flussi",
@@ -3967,6 +3969,8 @@ const i18n = {
         incNoNarrative: "No narrative generated. The conclusion above stands without AI.",
         optWin6h: "Last 6 hours",
         incBtnRefresh: '<i class="fa-solid fa-rotate"></i> Refresh',
+        incConsumes: "consumes:",
+        incProduces: "produces:",
         incSrcEvidence: "Evidence",
         incSrcSyslog: "Syslog",
         incSrcFlow: "Flows",
@@ -5136,6 +5140,9 @@ function changeLanguage(lang) {
         renderDeviceTable();
         renderGroupsTable();
         renderVendorTable();
+    }
+    if (typeof loadRuleCatalog === 'function') {
+        loadRuleCatalog();
     }
 }
 

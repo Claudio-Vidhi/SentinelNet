@@ -43,7 +43,7 @@ if _IS_WINDOWS:
     _CRYPTPROTECT_UI_FORBIDDEN = 0x01
 
     def _to_blob(data: bytes) -> "_DATA_BLOB":
-        buf = ctypes.create_string_buffer(bytes(data), len(data))
+        buf = ctypes.create_string_buffer(data, len(data))
         return _DATA_BLOB(len(data), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char)))
 
     def _from_blob(blob: "_DATA_BLOB") -> bytes:
