@@ -105,6 +105,20 @@ a bug that shipped:
   button silently dead.
 - No inline handlers: the template has zero `onclick=`/`onsubmit=`. Use an id or
   `data-action` plus a delegated listener.
+- User-facing strings go through `tr('key')` (i18n.js), never an inline
+  `currentLang === 'en' ? ... : ...`. The dictionary holds both languages;
+  `scripts/check_i18n_coverage.py --strict` and `tests/test_i18n_keys.py`
+  fail on a ternary, an Italian-only alert, or a key missing from `en`.
+  The function is `tr` and not `t` because `t` is already the name of a
+  dozen local variables in this one shared scope.
+- Modals open with `openModal(id[, onClose])` and close with
+  `closeModal(id)` (`ui-modal.js`): the manager adds `role="dialog"`,
+  `aria-modal`, the focus trap, Esc and the backdrop click. Toggling
+  `style.display` by hand skips all of it and fails
+  `tests/test_ui_modal.py`.
+- A new form control needs an accessible name — a `<label for>` or
+  `aria-label` + `data-i18n-aria-label`. `scripts/check_a11y.py --strict`
+  is at zero and `tests/test_a11y_dashboard.py` keeps it there.
 - Modules are lazy-loaded per tab via `LAZY_TAB_SCRIPTS` in `core.js`. A module
   that binds controls living in **another** tab needs an entry for that tab too,
   or that tab is dead when opened cold: the bindings never run, `switchTab`'s

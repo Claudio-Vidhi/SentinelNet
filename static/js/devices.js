@@ -47,22 +47,22 @@
         Object.keys(globalGroups).forEach(g => {
             let desc = globalGroups[g].description || "Tenant";
             if (desc === "Sede Principale predefinita") {
-                desc = currentLang === 'en' ? "Default Main Tenant" : "Tenant principale";
+                desc = tr('devDefaultMainTenant');
             } else if (desc.startsWith("Sede secondaria ")) {
                 const nm = desc.slice("Sede secondaria ".length);
-                desc = (currentLang === 'en' ? "Secondary Tenant " : "Tenant secondario ") + nm;
+                desc = (tr('devSecondaryTenant')) + nm;
             }
-            const btnText = currentLang === 'en' ? '<i class="fa-solid fa-trash-can"></i> Delete Tenant' : '<i class="fa-solid fa-trash-can"></i> Elimina Tenant';
-            const renameText = currentLang === 'en' ? '<i class="fa-solid fa-pen"></i> Rename' : '<i class="fa-solid fa-pen"></i> Rinomina';
-            const reservedText = currentLang === 'en' ? 'System Reserved' : 'System Reserved';
+            const btnText = tr('devIClassFaSolid');
+            const renameText = tr('devIClassFaSolid2');
+            const reservedText = tr('devSystemReserved');
             const renameBtn = (g !== 'Generale')
                 ? `<button data-action="rename-group" data-g="${escapeHtml(g)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:12px;">${renameText}</button>` : '';
 
             const hasSnmp = snmpDefaultTenants.includes(g);
             const snmpCell = `<td>
                 <span style="font-size:11px; color:${hasSnmp ? 'var(--success)' : 'var(--text-muted)'}; border:1px solid ${hasSnmp ? 'var(--success)' : 'var(--border)'}; border-radius:0; padding:1px 6px;">
-                    ${hasSnmp ? (currentLang === 'en' ? 'configured' : 'configurata')
-                              : (currentLang === 'en' ? 'not set' : 'non impostata')}</span>
+                    ${hasSnmp ? (tr('devConfigured'))
+                              : (tr('devNotSet'))}</span>
                 ${currentRole === 'admin'
                     ? `<button data-action="set-tenant-snmp" data-g="${escapeHtml(g)}" style="margin-left:8px; color:var(--primary); background:none; border:none; cursor:pointer;">${i18n[currentLang].btnSetTenantSnmp}</button>`
                     : ''}</td>`;
@@ -179,7 +179,7 @@
         globalDevices.forEach(d => {
             if (selectedGroup !== 'all' && d.Group !== selectedGroup) return;
 
-            const scan = globalVersions[d.IP] || { version: currentLang === 'en' ? "Not Scanned" : "Non Scansionato", status: "unknown" };
+            const scan = globalVersions[d.IP] || { version: tr('devNotScanned'), status: "unknown" };
 
             // Barra di ricerca: filtra su IP, hostname, vendor, gruppo, versione, stato
             if (term) {
@@ -216,7 +216,7 @@
                 if (versionText === 'Non Rilevata') versionText = 'Not Detected';
             }
 
-            const deleteText = currentLang === 'en' ? 'Delete' : 'Elimina';
+            const deleteText = tr('uiDelete');
 
             devBody.innerHTML += `<tr>
                 <td>
@@ -236,7 +236,7 @@
                       id="grpsel_${safeIp}"
                       data-action="reassign-device"
                       data-ip="${escapeHtml(d.IP)}"
-                      title="${currentLang==='en'?'Move to another tenant without deleting':'Sposta in un altro tenant senza eliminare'}"
+                      title="${tr('devMoveToAnotherTenant')}"
                       style="font-size:11px; padding:3px 6px; border-radius:0;
                              border:1px solid var(--border); background:var(--surface-3);
                              color:var(--text-muted); cursor:pointer; outline:none;
@@ -250,7 +250,7 @@
                   : `<select
                       data-action="reassign-device-site"
                       data-ip="${escapeHtml(d.IP)}"
-                      title="${currentLang==='en'?'Move to another site (changes how the device is reached)':"Sposta in un'altra sede (cambia come si raggiunge l'apparato)"}"
+                      title="${tr('devMoveToAnotherSite')}"
                       style="font-size:11px; padding:3px 6px; border-radius:0;
                              border:1px solid var(--border); background:var(--surface-3);
                              color:var(--text-muted); cursor:pointer; outline:none;
@@ -260,7 +260,7 @@
                 <td style="font-family:monospace; font-size:12px; white-space:nowrap;">
                   ${d.Hostname ? escapeHtml(d.Hostname) : '<span style="color:var(--text-muted)">—</span>'}
                   ${isViewer ? '' : `<button data-action="rename-device" data-ip="${escapeHtml(d.IP)}"
-                      title="${currentLang==='en'?'Rename device':'Rinomina dispositivo'}"
+                      title="${tr('uiRenameDevice')}"
                       style="margin-left:6px; font-size:11px; cursor:pointer; border:none; background:none;
                              color:var(--text-muted); padding:0;">
                       <i class="fa-solid fa-pen"></i></button>`}
@@ -269,10 +269,8 @@
                 <td>${d.Vendor
                     ? escapeHtml(d.Vendor.toUpperCase())
                     : `<span style="color:var(--warning); font-style:italic;" title="${
-                        escapeHtml(currentLang === 'en'
-                            ? 'No vendor set: backup and triage will fail until you edit this device.'
-                            : "Vendor non impostato: backup e triage falliranno finche' non modifichi il dispositivo.")
-                      }">${escapeHtml(currentLang === 'en' ? 'not set' : 'non impostato')}</span>`}</td>
+                        escapeHtml(tr('devNoVendorSetBackup'))
+                      }">${escapeHtml(tr('devNotSet2'))}</span>`}</td>
                 <td style="white-space:nowrap;"><code>${escapeHtml(versionText)}</code></td>
                 <td style="white-space:nowrap;">${_renderDeviceChips(d)}</td>
                 <td class="actions-cell">
@@ -281,14 +279,14 @@
                         style="margin:0; padding:4px 8px;"
                         data-action="ping-device"
                         data-ip="${escapeHtml(d.IP)}"
-                        title="${currentLang==='en'?'Ping device':'Ping dispositivo'}">
+                        title="${tr('devPingDevice')}">
                       <i class="fa-solid fa-wifi"></i>
                     </button>
                     <button class="btn btn-secondary btn-small"
                         style="margin:0; padding:4px 8px; color:var(--warning);"
                         data-action="triage-device"
                         data-ip="${escapeHtml(d.IP)}"
-                        title="${currentLang==='en'?'Triage device':'Triage dispositivo'}">
+                        title="${tr('devTriageDevice')}">
                       <i class="fa-solid fa-bolt-lightning"></i>
                     </button>
                     <button class="btn btn-secondary btn-small" style="margin:0; padding:4px 8px;"
@@ -299,8 +297,8 @@
                     <button class="btn btn-secondary btn-small" style="margin:0; padding:4px 8px;"
                         data-action="edit-device"
                         data-ip="${escapeHtml(d.IP)}"
-                        title="${currentLang==='en'?'Edit device':'Modifica dispositivo'}">
-                        <i class="fa-solid fa-pen"></i> ${currentLang==='en'?'Edit':'Modifica'}
+                        title="${tr('devEditDevice')}">
+                        <i class="fa-solid fa-pen"></i> ${tr('uiEdit')}
                     </button>
                     <button class="btn btn-primary btn-small"
                         style="margin:0; width:auto; background:var(--cta); color:var(--cta-text); padding:4px 8px;"
@@ -549,8 +547,7 @@
         document.getElementById('devSnmp').placeholder = dev.snmp_inherited
             ? i18n[currentLang].hintSnmpInherited
             : (dev.snmp_enabled
-                ? (currentLang === 'en' ? 'configured — leave blank to keep'
-                                        : 'configurata — lascia vuoto per non cambiarla')
+                ? (tr('devConfiguredLeaveBlankTo'))
                 : '—');
         document.getElementById('devSnmpClear').checked = false;
         const dsd = document.getElementById('devSnmpDisabled');
@@ -576,8 +573,7 @@
         document.getElementById('devUser').value = dev.Username || '';
         // Il server non restituisce mai password e secret: il placeholder dice
         // che restano quelle salvate, come già fa la community SNMP.
-        const keepPh = currentLang === 'en' ? 'unchanged — fill in only to change it'
-                                            : 'invariata — compila solo per cambiarla';
+        const keepPh = tr('devUnchangedFillInOnly');
         for (const id of ['devPass', 'devSecret']) {
             const el = document.getElementById(id);
             el.value = '';
@@ -699,9 +695,7 @@
     }
 
     async function renameGroup(oldName) {
-        const newName = prompt(currentLang==='en'
-            ? `New name for tenant "${oldName}":`
-            : `Nuovo nome per il tenant "${oldName}":`, oldName);
+        const newName = prompt(tr('devNewNameForTenant', {oldName: oldName}), oldName);
         if (newName === null) return;
         const trimmed = newName.trim();
         if (!trimmed || trimmed === oldName) return;
@@ -714,7 +708,7 @@
             appInit();
         } else {
             const e = res ? await res.json().catch(()=>({})) : {};
-            alert(e.detail || (currentLang==='en'?'Rename failed.':'Rinomina non riuscita.'));
+            alert(e.detail || (tr('devRenameFailed')));
         }
     }
 
@@ -790,7 +784,7 @@
                  style="justify-content:flex-start; gap:10px;">
                <i class="fa-solid fa-location-dot" style="color:var(--primary);"></i> ${escapeHtml(g)}
              </button>`).join('');
-        document.getElementById('triageScopeModal').style.display = 'flex';
+        openModal('triageScopeModal');
     }
 
     document.getElementById('triageScopeList')?.addEventListener('click', (e) => {
@@ -801,7 +795,7 @@
     });
 
     function closeTriageScopeModal() {
-        document.getElementById('triageScopeModal').style.display = 'none';
+        closeModal('triageScopeModal');
     }
 
     async function startGroupTriage(group) {
@@ -837,7 +831,7 @@
                 const pct = Math.round((progress / total) * 100);
                 
                 document.getElementById("triageProgressPct").innerText = `${pct}%`;
-                const processingText = currentLang === 'en' ? 'Processing' : 'Elaborazione';
+                const processingText = tr('devProcessing');
                 document.getElementById("triageProgressMsg").innerText = `${processingText}: ${statusData.current_device} (${progress}/${total})`;
                 document.getElementById("triageProgressBarFill").style.transform = `scaleX(${pct / 100})`;
                 
@@ -946,8 +940,8 @@
         const subEl = document.getElementById('floatingScanSubtitle');
         if (titleEl) {
             titleEl.textContent = job.isVerify
-                ? (L.lblScanVerifyRunningShort || (currentLang === 'en' ? 'Verifying credentials...' : 'Verifica credenziali...'))
-                : (L.lblScanRunningShort ? L.lblScanRunningShort.replace('{net}', job.network) : (currentLang === 'en' ? `Scanning: ${job.network}` : `Scansione: ${job.network}`));
+                ? (L.lblScanVerifyRunningShort || (tr('devVerifyingCredentials')))
+                : (L.lblScanRunningShort ? L.lblScanRunningShort.replace('{net}', job.network) : (tr('devScanning', {network: job.network})));
         }
         if (subEl) {
             const pct = job.total > 0 ? Math.round((job.progress / job.total) * 100) : 0;
@@ -983,7 +977,7 @@
         const btn = document.createElement('button');
         btn.className = 'btn btn-primary btn-small';
         btn.style.cssText = 'width:auto; margin:0; padding:4px 10px; font-size:12px; flex-shrink:0; cursor:pointer;';
-        btn.textContent = L.btnViewResults || (currentLang === 'en' ? 'View Results' : 'Mostra Risultati');
+        btn.textContent = L.btnViewResults || (tr('devViewResults'));
         btn.onclick = () => {
             el.remove();
             if (onAction) onAction();
@@ -1031,15 +1025,11 @@
             document.getElementById('subnetScanResults').style.display = 'block';
             const pct = job.total > 0 ? Math.round((job.progress / job.total) * 100) : 0;
             document.getElementById('subnetScanProgressBar').style.transform = `scaleX(${pct / 100})`;
-            document.getElementById('subnetScanStatus').textContent = currentLang === 'en'
-                ? `Scanning — ${job.progress}/${job.total} hosts processed...`
-                : `Scansione in corso — ${job.progress}/${job.total} host elaborati...`;
+            document.getElementById('subnetScanStatus').textContent = tr('devScanningHostsProcessed', {progress: job.progress, total: job.total});
 
             const btn = document.getElementById('btnAvviaScan');
             btn.disabled = true;
-            btn.innerHTML = currentLang === 'en'
-                ? '<i class="fa-solid fa-circle-notch fa-spin"></i> Scanning...'
-                : '<i class="fa-solid fa-circle-notch fa-spin"></i> Scansione in corso...';
+            btn.innerHTML = tr('devIClassFaSolid3');
             if (bgBtn) bgBtn.style.display = 'inline-flex';
         } else if (job && job.status === 'done' && _scanRows.length > 0) {
             // Restore finished results
@@ -1063,14 +1053,14 @@
             if (bgBtn) bgBtn.style.display = 'none';
         }
 
-        document.getElementById('subnetScanModal').style.display = 'flex';
+        openModal('subnetScanModal', closeSubnetScanModal);
         updateFloatingScanWidget();
     }
 
     function closeSubnetScanModal() {
         // Leaving scan running in background: do not cancel interval if running!
         const modal = document.getElementById('subnetScanModal');
-        if (modal) modal.style.display = 'none';
+        if (modal) closeModal(modal);
         updateFloatingScanWidget();
     }
 
@@ -1078,9 +1068,7 @@
         const b = document.getElementById('btnAvviaScan');
         if (!b) return;
         b.disabled = false;
-        b.innerHTML = currentLang === 'en'
-            ? '<i class="fa-solid fa-satellite-dish"></i> Start Scan'
-            : '<i class="fa-solid fa-satellite-dish"></i> Avvia Scansione';
+        b.innerHTML = tr('devIClassFaSolid4');
     }
 
     async function startSubnetScan() {
@@ -1093,16 +1081,14 @@
 
         const btn = document.getElementById('btnAvviaScan');
         btn.disabled = true;
-        btn.innerHTML = currentLang === 'en'
-            ? '<i class="fa-solid fa-circle-notch fa-spin"></i> Starting...'
-            : '<i class="fa-solid fa-circle-notch fa-spin"></i> Avvio...';
+        btn.innerHTML = tr('devIClassFaSolid5');
         _scanRows = [];
         document.getElementById('subnetScanResults').style.display = 'block';
         document.getElementById('scanActionsBar').style.display = 'none';
         document.getElementById('subnetScanResultsTable').innerHTML = '';
         document.getElementById('subnetScanProgressBar').style.transform = 'scaleX(0)';
         document.getElementById('subnetScanStatus').textContent =
-            currentLang === 'en' ? 'Starting scan...' : 'Avvio scansione...';
+            tr('devStartingScan');
 
         const bgBtn = document.getElementById('btnScanRunBackground');
         if (bgBtn) bgBtn.style.display = 'inline-flex';
@@ -1118,21 +1104,17 @@
             body: JSON.stringify({ network, ports }),
         });
         if (!res || !res.ok) {
-            const err = res ? await res.json() : { detail: currentLang === 'en' ? 'Network error' : 'Errore di rete' };
+            const err = res ? await res.json() : { detail: tr('uiNetworkError') };
             document.getElementById('subnetScanStatus').textContent =
-                (currentLang === 'en' ? 'Error: ' : 'Errore: ') +
-                (err.detail || (currentLang === 'en' ? 'unable to start scan.' : 'impossibile avviare la scansione.'));
+                (tr('uiError')) +
+                (err.detail || (tr('devUnableToStartScan')));
             if (bgBtn) bgBtn.style.display = 'none';
             scanStartButtonIdle();
             return;
         }
         const { job_id, total_hosts } = await res.json();
-        document.getElementById('subnetScanStatus').textContent = currentLang === 'en'
-            ? `Scan started — ${total_hosts} hosts to check...`
-            : `Scansione avviata — ${total_hosts} host da verificare...`;
-        btn.innerHTML = currentLang === 'en'
-            ? '<i class="fa-solid fa-circle-notch fa-spin"></i> Scanning...'
-            : '<i class="fa-solid fa-circle-notch fa-spin"></i> Scansione in corso...';
+        document.getElementById('subnetScanStatus').textContent = tr('devScanStartedHostsTo', {total_hosts: total_hosts});
+        btn.innerHTML = tr('devIClassFaSolid3');
         pollScanJob(job_id, total_hosts, network, ports.join(','));
     }
 
@@ -1160,7 +1142,7 @@
                 const bgBtn = document.getElementById('btnScanRunBackground');
                 if (bgBtn) bgBtn.style.display = 'none';
                 const st = document.getElementById('subnetScanStatus');
-                if (st) st.textContent = currentLang === 'en' ? 'Error during polling.' : 'Errore durante il polling.';
+                if (st) st.textContent = tr('devErrorDuringPolling');
                 scanStartButtonIdle();
                 return;
             }
@@ -1176,9 +1158,7 @@
             if (pBar) pBar.style.transform = `scaleX(${pct / 100})`;
             const st = document.getElementById('subnetScanStatus');
             if (st) {
-                st.textContent = currentLang === 'en'
-                    ? `Scanning — ${data.progress}/${total} hosts processed...`
-                    : `Scansione in corso — ${data.progress}/${total} host elaborati...`;
+                st.textContent = tr('devScanningHostsProcessed2', {progress: data.progress, total: total});
             }
 
             if (data.status !== 'running') {
@@ -1192,7 +1172,7 @@
                 if (pBar) pBar.style.transform = 'scaleX(1)';
 
                 if (data.status === 'error') {
-                    if (st) st.textContent = currentLang === 'en' ? 'Scan finished with error.' : 'Scansione terminata con errore.';
+                    if (st) st.textContent = tr('devScanFinishedWithError');
                     return;
                 }
                 _scanRows = (data.results || []).map(r => ({ ...r, verify: null }));
@@ -1201,9 +1181,7 @@
                 // Multi-channel completion alert
                 const count = _scanRows.length;
                 const netStr = window._activeSubnetScanJob.network || network || 'subnet';
-                const alertMsg = currentLang === 'en'
-                    ? `Subnet scan completed! Found ${count} active host(s) on ${netStr}.`
-                    : `Scansione Subnet completata! Trovati ${count} host attivi su ${netStr}.`;
+                const alertMsg = tr('devSubnetScanCompletedFound', {count: count, netStr: netStr});
 
                 playNotificationChime();
                 sendDesktopNotification('SentinelNet', alertMsg);
@@ -1358,9 +1336,9 @@
             body: JSON.stringify({ ips, vendor, identity_id: identityId }),
         });
         if (!res || !res.ok) {
-            const err = res ? await res.json() : { detail: currentLang === 'en' ? 'Network error' : 'Errore di rete' };
+            const err = res ? await res.json() : { detail: tr('uiNetworkError') };
             const st = document.getElementById('subnetScanStatus');
-            if (st) st.textContent = (currentLang === 'en' ? 'Error: ' : 'Errore: ') + (err.detail || '');
+            if (st) st.textContent = (tr('uiError')) + (err.detail || '');
             if (bgBtn) bgBtn.style.display = 'none';
             refreshScanActionButtons();
             return;
@@ -1389,7 +1367,7 @@
                 updateFloatingScanWidget();
                 if (bgBtn) bgBtn.style.display = 'none';
                 const st = document.getElementById('subnetScanStatus');
-                if (st) st.textContent = currentLang === 'en' ? 'Error during polling.' : 'Errore durante il polling.';
+                if (st) st.textContent = tr('devErrorDuringPolling');
                 refreshScanActionButtons();
                 return;
             }
@@ -1411,7 +1389,7 @@
                 if (bgBtn) bgBtn.style.display = 'none';
 
                 if (data.status === 'error') {
-                    if (st) st.textContent = currentLang === 'en' ? 'Verify finished with error.' : 'Verifica terminata con errore.';
+                    if (st) st.textContent = tr('devVerifyFinishedWithError');
                     refreshScanActionButtons();
                     return;
                 }
@@ -1427,9 +1405,7 @@
                 refreshScanActionButtons();
 
                 const okCount = (data.results || []).filter(r => r.ok).length;
-                const alertMsg = currentLang === 'en'
-                    ? `Credential verification completed: ${okCount}/${ips.length} succeeded.`
-                    : `Verifica credenziali completata: ${okCount}/${ips.length} con successo.`;
+                const alertMsg = tr('devCredentialVerificationCompletedSucceeded', {okCount: okCount, length: ips.length});
 
                 playNotificationChime();
                 sendDesktopNotification('SentinelNet', alertMsg);
@@ -1659,7 +1635,7 @@
             exportColumns.map(c => ({ value: c.key, label: c.header + (c.per_member ? ' *' : '') })),
             prefs.columns);
         updateMemberHint();
-        document.getElementById('deviceExportModal').style.display = 'flex';
+        openModal('deviceExportModal');
         updateDeviceExportPreview();
     }
 
@@ -1691,7 +1667,7 @@
         a.download = "sentinelnet-devices-" + new Date().toISOString().slice(0,10) + ".csv";
         a.click();
         URL.revokeObjectURL(url);
-        document.getElementById('deviceExportModal').style.display = 'none';
+        closeModal('deviceExportModal');
     }
 
     // --- CSV UPLOAD ---
@@ -1772,7 +1748,7 @@
     function renderCsvImportResult(result, errorDetail) {
         const box = document.getElementById('csvImportResult');
         if (!box) return;
-        const en = currentLang === 'en';
+        
         box.style.display = '';
         if (errorDetail) {
             box.innerHTML = `<div style="padding:12px 14px; border-radius:0; border:1px solid var(--danger); background:color-mix(in srgb, var(--danger) 10%, transparent); font-size:13px; color:var(--danger);">
@@ -1789,13 +1765,13 @@
             </tr>`).join('');
         box.innerHTML = `
             <div style="padding:12px 14px; border-radius:0; border:1px solid ${failed.length ? 'var(--warning)' : 'var(--success)'}; background:${failed.length ? 'color-mix(in srgb, var(--warning) 10%, transparent)' : 'color-mix(in srgb, var(--success) 10%, transparent)'}; font-size:13px;">
-                <strong>${ok}</strong> ${en ? 'devices imported' : 'dispositivi importati'}${failed.length ? ` · <strong>${failed.length}</strong> ${en ? 'rows skipped' : 'righe scartate'}` : ''}
+                <strong>${ok}</strong> ${tr('devDevicesImported')}${failed.length ? ` · <strong>${failed.length}</strong> ${tr('devRowsSkipped')}` : ''}
             </div>
             ${failed.length ? `
             <div class="table-container" style="margin-top:10px;">
                 <table style="font-size:12px;">
                     <thead><tr>
-                        <th>${en ? 'Row' : 'Riga'}</th><th>IP</th><th>${en ? 'Reason' : 'Motivo'}</th>
+                        <th>${tr('devRow')}</th><th>IP</th><th>${tr('devReason')}</th>
                     </tr></thead>
                     <tbody>${rowsHtml}</tbody>
                 </table>
@@ -1867,7 +1843,7 @@
             } else {
                 selectEl.value = previous;
                 const e = res ? await res.json() : {};
-                alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + (e.detail || ''));
+                alert((tr('uiError')) + (e.detail || ''));
             }
         } finally {
             selectEl.disabled = false;
@@ -1905,7 +1881,7 @@
                 }
             } else {
                 const err = res ? await res.json() : null;
-                const errDetail = err?.detail || (currentLang === 'en' ? "Unknown error" : "Errore sconosciuto");
+                const errDetail = err?.detail || (tr('devUnknownError'));
                 alert(`${i18n[currentLang].alertReassignmentError}${errDetail}`);
                 selectEl.value = originalGroup;
             }
@@ -1970,7 +1946,7 @@
                     // Update globalVersions cache
                     if (!globalVersions[ip]) {
                         globalVersions[ip] = {
-                            version: currentLang === 'en' ? "Not Scanned" : "Non Scansionato",
+                            version: tr('devNotScanned'),
                             vendor: "cisco"
                         };
                     }
@@ -2039,7 +2015,7 @@
                         globalVersions[ip].status = "offline";
                     }
                     setMapNodeStatus(ip, "offline");
-                    const msgDetail = data.message || (currentLang === 'en' ? "Unknown error" : "Errore sconosciuto");
+                    const msgDetail = data.message || (tr('devUnknownError'));
                     alert(`${i18n[currentLang].alertTriageFailed}${msgDetail}`);
                 }
             }
@@ -2134,7 +2110,7 @@
             // Update globalVersions cache
             if (!globalVersions[ip]) {
                 globalVersions[ip] = {
-                    version: currentLang === 'en' ? "Not Scanned" : "Non Scansionato",
+                    version: tr('devNotScanned'),
                     vendor: "cisco"
                 };
             }
@@ -2195,7 +2171,7 @@
     });
     document.getElementById('deviceExportModal')?.addEventListener('click', (e) => {
         if (e.target.id === 'deviceExportModal' || e.target.closest('#btnCloseDeviceExport')) {
-            document.getElementById('deviceExportModal').style.display = 'none';
+            closeModal('deviceExportModal');
         }
     });
     document.getElementById('btnCancelEditDevice')?.addEventListener('click', resetDeviceForm);
@@ -2206,7 +2182,7 @@
     document.getElementById('btnScanRunBackground')?.addEventListener('click', () => {
         closeSubnetScanModal();
         const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
-        showToast(L.msgScanRunningBackground || (currentLang === 'en' ? 'Scan is continuing in the background.' : 'La scansione continua in background.'), 'info');
+        showToast(L.msgScanRunningBackground || (tr('devScanIsContinuingIn')), 'info');
     });
     document.getElementById('floatingScanWidget')?.addEventListener('click', () => {
         switchToDevicesAndOpenScan();

@@ -14,7 +14,7 @@
         if (title) title.innerHTML = `<i class="fa-solid fa-gears" style="color:var(--primary);"></i> Gestione Remota Agente Sede: <strong>${escapeHtml(siteId)}</strong>`;
 
         body.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><br><br>Caricamento telemetria agente...</div>`;
-        modal.style.display = 'flex';
+        openModal(modal);
 
         // Load jobs history and site details
         const [jobsRes, sitesRes] = await Promise.all([
@@ -202,26 +202,26 @@
     }
 
     async function triggerAgentSelfUpdate(siteId) {
-        if (!confirm(`Confermi di voler inviare il comando 'git pull' per aggiornare l'agente della sede '${siteId}'?`)) return;
+        if (!confirm(tr('agtConfirmUpdate', {siteId: siteId}))) return;
         const res = await apiFetch(`/api/sites/${siteId}/agent/update`, { method: 'POST' });
         if (res && res.ok) {
-            alert(`Comando di aggiornamento 'git pull' accodato con successo per la sede '${siteId}'. L'agente eseguirà l'aggiornamento al prossimo polling.`);
+            alert(tr('agtUpdateQueued', {siteId: siteId}));
             openAgentControlModal(siteId);
         } else {
             const err = res ? await res.json() : null;
-            alert(`Errore accodamento aggiornamento: ${err ? err.detail : 'Errore sconosciuto'}`);
+            alert(tr('agtUpdateQueueError', {detail: err ? err.detail : tr('agtUnknownError')}));
         }
     }
 
     async function triggerAgentRestart(siteId) {
-        if (!confirm(`Confermi di voler riavviare l'agente della sede '${siteId}'?`)) return;
+        if (!confirm(tr('agtConfirmRestart', {siteId: siteId}))) return;
         const res = await apiFetch(`/api/sites/${siteId}/agent/restart`, { method: 'POST' });
         if (res && res.ok) {
-            alert(`Comando di riavvio accodato per la sede '${siteId}'. Systemd riavvierà il servizio in 2 secondi.`);
+            alert(tr('agtRestartQueued', {siteId: siteId}));
             openAgentControlModal(siteId);
         } else {
             const err = res ? await res.json() : null;
-            alert(`Errore accodamento riavvio: ${err ? err.detail : 'Errore sconosciuto'}`);
+            alert(tr('agtRestartQueueError', {detail: err ? err.detail : tr('agtUnknownError')}));
         }
     }
 
@@ -234,50 +234,50 @@
             body: JSON.stringify({ syslog_port: port, interval: interval })
         });
         if (res && res.ok) {
-            alert(`Configurazione accodata per la sede '${siteId}' (Syslog Port: ${port}, Interval: ${interval}s).`);
+            alert(tr('agtConfigQueued', {siteId: siteId, port: port, interval: interval}));
             openAgentControlModal(siteId);
         } else {
             const err = res ? await res.json() : null;
-            alert(`Errore salvataggio config: ${err ? err.detail : 'Errore sconosciuto'}`);
+            alert(tr('agtConfigSaveError', {detail: err ? err.detail : tr('agtUnknownError')}));
         }
     }
 
     async function fetchAgentInventory(siteId) {
         const res = await apiFetch(`/api/sites/${siteId}/agent/inventory/get`, { method: 'POST' });
         if (res && res.ok) {
-            alert(`Comando di lettura inventario network_hosts.csv accodato per '${siteId}'. Aggiorna il modale tra qualche secondo per vedere il contenuto.`);
+            alert(tr('agtInventoryReadQueued', {siteId: siteId}));
             openAgentControlModal(siteId);
         } else {
             const err = res ? await res.json() : null;
-            alert(`Errore lettura inventario: ${err ? err.detail : 'Errore sconosciuto'}`);
+            alert(tr('agtInventoryReadError', {detail: err ? err.detail : tr('agtUnknownError')}));
         }
     }
 
     async function saveAgentInventory(siteId) {
         const content = document.getElementById('agentInventoryTextarea').value;
-        if (!content.trim()) { alert('Inserisci il contenuto CSV dell\'inventario.'); return; }
+        if (!content.trim()) { alert(tr('agtInventoryCsvRequired')); return; }
         const res = await apiFetch(`/api/sites/${siteId}/agent/inventory/save`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ content: content })
         });
         if (res && res.ok) {
-            alert(`Salvataggio inventario locale accodato per la sede '${siteId}'. L'agente applicherà le modifiche al prossimo ciclo.`);
+            alert(tr('agtInventorySaveQueued', {siteId: siteId}));
             openAgentControlModal(siteId);
         } else {
             const err = res ? await res.json() : null;
-            alert(`Errore salvataggio inventario: ${err ? err.detail : 'Errore sconosciuto'}`);
+            alert(tr('agtInventorySaveError', {detail: err ? err.detail : tr('agtUnknownError')}));
         }
     }
 
     function closeAgentControlModal() {
         const modal = document.getElementById('agentControlModal');
-        if (modal) modal.style.display = 'none';
+        if (modal) closeModal(modal);
     }
 
     async function toggleAgentDataFlow(siteId, newActiveState) {
         const actionName = newActiveState ? 'riavviare' : 'interrompere';
-        if (!confirm(`Confermi di voler ${actionName} il flusso dati per la sede '${siteId}'?`)) return;
+        if (!confirm(tr('agtConfirmFlowAction', {actionName: actionName, siteId: siteId}))) return;
         const res = await apiFetch(`/api/sites/${siteId}/agent/flow-control`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -287,7 +287,7 @@
             openAgentControlModal(siteId);
         } else {
             const err = res ? await res.json() : null;
-            alert(`Errore gestione flusso: ${err ? err.detail : 'Errore sconosciuto'}`);
+            alert(tr('agtFlowActionError', {detail: err ? err.detail : tr('agtUnknownError')}));
         }
     }
 

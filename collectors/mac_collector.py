@@ -19,6 +19,17 @@ from xml.etree import ElementTree as ET
 
 log = logging.getLogger("mac_collector")
 
+
+def _transport_verify_tls() -> bool:
+    """WP10: TLS/host-key verification for the NETCONF/RESTCONF transports.
+
+    Historically verification was unconditionally off because self-signed
+    certificates are the norm on management LANs. The advanced setting
+    'mac_transport_verify_tls' opts estates with a proper CA into real
+    verification; default stays off so existing installations do not break."""
+    from core.app_settings import _app_adv_setting
+    return bool(_app_adv_setting("mac_transport_verify_tls"))
+
 NS_MATM = "http://cisco.com/ns/yang/Cisco-IOS-XE-matm-oper"
 NS_OPENCONFIG_NI = "http://openconfig.net/yang/network-instance"
 
@@ -332,7 +343,8 @@ def collect_via_netconf(host, username, password, port=830, timeout=30):
     ]
     try:
         conn = manager.connect(host=host, port=port, username=username, password=password,
-                               hostkey_verify=False, allow_agent=False, look_for_keys=False,
+                               hostkey_verify=_transport_verify_tls(),
+                               allow_agent=False, look_for_keys=False,
                                timeout=timeout, device_params={'name': 'iosxe'})
         if conn is not None:
             with conn as m:
@@ -358,13 +370,15 @@ def collect_via_restconf(host, username, password, port=443, timeout=15):
         import requests
         import urllib3
         from urllib.parse import quote
-        urllib3.disable_warnings()
+        _verify = _transport_verify_tls()
+        if not _verify:
+            urllib3.disable_warnings()
     except ImportError:
         return None
     base = "https://%s:%s/restconf" % (host, port)
     s = requests.Session()
     s.auth = (username, password)
-    s.verify = False
+    s.verify = _verify
     s.headers.update({"Accept": "application/yang-data+json"})
     try:
         # 1) Cisco-specific: matm-oper via RESTCONF (Catalyst).
@@ -516,7 +530,8 @@ def collect_if_macs_via_netconf(host, username, password, port=830, timeout=30):
     ]
     try:
         conn = manager.connect(host=host, port=port, username=username, password=password,
-                               hostkey_verify=False, allow_agent=False, look_for_keys=False,
+                               hostkey_verify=_transport_verify_tls(),
+                               allow_agent=False, look_for_keys=False,
                                timeout=timeout, device_params={'name': 'iosxe'})
         if conn is not None:
             with conn as m:
@@ -540,13 +555,15 @@ def collect_if_macs_via_restconf(host, username, password, port=443, timeout=15)
     try:
         import requests
         import urllib3
-        urllib3.disable_warnings()
+        _verify = _transport_verify_tls()
+        if not _verify:
+            urllib3.disable_warnings()
     except ImportError:
         return None
     base = "https://%s:%s/restconf" % (host, port)
     s = requests.Session()
     s.auth = (username, password)
-    s.verify = False
+    s.verify = _verify
     s.headers.update({"Accept": "application/yang-data+json"})
     endpoints = [
         "/data/ietf-interfaces:interfaces-state/interface?fields=name;phys-address",

@@ -11,7 +11,10 @@ a = Analysis(
     # data_config.get_path() risolve su SENTINELNET_DATA_DIR o cwd/data, mai su
     # _MEIPASS, che serve solo a templates/, static/ e schema.sql. Al primo
     # avvio la cartella viene creata vuota e parte il wizard di setup.
-    datas=[('templates', 'templates'), ('static', 'static'), ('drivers', 'drivers'),
+    # drivers/ NON serve come 'data': nessun caricamento dinamico (grep
+    # importlib), li importa staticamente drivers/registry.py via
+    # core_engine, quindi PyInstaller li include gia' compilati.
+    datas=[('templates', 'templates'), ('static', 'static'),
            ('observability/storage/schema.sql', 'observability/storage')],
     # pysnmp risolve i moduli di protocollo per nome a runtime: senza questi
     # l'exe importa la libreria ma fallisce al primo GET.
@@ -49,6 +52,9 @@ exe = EXE(
     upx=True,
     upx_exclude=['python3*.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'api-ms-win-*.dll'],
     runtime_tmpdir=None,
+    # console=True e' deliberato: l'exe ha modalita' CLI (--reset-admin,
+    # --mcp) il cui output deve restare visibile; la finestra console e' il
+    # prezzo, non un difetto.
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,

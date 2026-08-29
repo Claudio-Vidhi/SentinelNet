@@ -45,6 +45,13 @@ VERIFY_TLS = os.environ.get("SENTINELNET_VERIFY_TLS", "1") != "0"
 _token = None
 _session = requests.Session()
 
+# Tool currently being executed, sent on every request so the central server
+# can attribute its audit lines to the MCP bridge and to the specific tool
+# (review item 4). Set by _tool_call, so login and config sync carry the bare
+# client name.
+_current_tool = ""
+CLIENT_TAG_HEADER = "X-SentinelNet-Client"
+
 
 # --- Authenticated HTTP client toward the central server --------------------
 
@@ -55,7 +62,26 @@ def _login() -> str:
                       verify=VERIFY_TLS, timeout=15)
     r.raise_for_status()
     _token = r.json()["access_token"]
+    _warn_if_privileged_account()
     return _token
+
+
+def _warn_if_privileged_account() -> None:
+    """Posture warning (WP3 follow-up): every MCP client — and the LLM driving
+    it — inherits the role of the configured account. Anything above viewer
+    makes action tools executable by the model. The warning goes to stderr:
+    stdout is the JSON-RPC channel and must never carry prose."""
+    try:
+        me = api("GET", "/api/auth/me")
+    except Exception:
+        return
+    role = (me or {}).get("role")
+    if role and role != "viewer":
+        print(f"[sentinelnet-mcp] ATTENZIONE: l'account configurato "
+              f"'{USERNAME}' ha ruolo '{role}'. Ogni client MCP eredita "
+              f"questo ruolo: gli strumenti di azione (send_cli_command, "
+              f"arp_scan, ...) diventano eseguibili dal modello. Per l'accesso "
+              f"in sola lettura usare un account viewer.", file=sys.stderr)
 
 
 def api(method: str, path: str, params: Optional[dict] = None, body: Optional[dict] = None):
@@ -64,8 +90,10 @@ def api(method: str, path: str, params: Optional[dict] = None, body: Optional[di
     if _token is None:
         _login()
     for attempt in (1, 2):
+        tag = f"mcp/{_current_tool}" if _current_tool else "mcp"
         r = _session.request(method, BASE_URL + path,
-                             headers={"Authorization": f"Bearer {_token}"},
+                             headers={"Authorization": f"Bearer {_token}",
+                                      CLIENT_TAG_HEADER: tag},
                              params=params, json=body,
                              verify=VERIFY_TLS, timeout=60)
         if r.status_code == 401 and attempt == 1:
@@ -518,7 +546,7 @@ TOOLS = {
 # --- Tools disabled by the administrator (central server "MCP Server" tab) ---
 # Cache with TTL: avoids one HTTP call per tools/list or tools/call.
 
-_disabled = {"at": 0.0, "tools": set()}
+_disabled = {"at": 0.0, "tools": set(), "synced": False}
 
 
 def disabled_tools() -> set:
@@ -527,8 +555,14 @@ def disabled_tools() -> set:
     try:
         data = api("GET", "/api/mcp/tool-config")
         _disabled["tools"] = set(data.get("disabled_tools") or [])
+        _disabled["synced"] = True
     except Exception:
-        pass                     # central server unreachable: keep last known value
+        if not _disabled["synced"]:
+            # Fail closed before the first successful sync: serving an empty
+            # disable set here would expose every tool, action tools
+            # included, with no operator decision ever applied.
+            return set(TOOLS)
+        # central server unreachable after a known-good sync: keep last value
     _disabled["at"] = time.monotonic()
     return _disabled["tools"]
 
@@ -563,6 +597,8 @@ def _tool_call(params):
         return {"content": [{"type": "text", "text":
                              f"Tool '{name}' disabled by the SentinelNet administrator."}],
                 "isError": True}
+    global _current_tool
+    _current_tool = name
     try:
         result = TOOLS[name][2](args)
     except Exception as e:
@@ -578,6 +614,8 @@ def _tool_call(params):
             hint = f" [Hint: failed to reach base URL {BASE_URL}]"
         return {"content": [{"type": "text", "text": f"Error: {err_msg}{hint}"}],
                 "isError": True}
+    finally:
+        _current_tool = ""
     text = result if isinstance(result, str) \
         else json.dumps(result, ensure_ascii=False, indent=1)
     if len(text) > MAX_TEXT:

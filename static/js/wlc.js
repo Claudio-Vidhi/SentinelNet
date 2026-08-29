@@ -60,14 +60,14 @@ function onWlcTargetChanged() {
     currentWlcIp = select.value;
     const statusBox = document.getElementById('wlcStatusBox');
     const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
-    const en = currentLang === 'en';
+    
     if (currentWlcIp) {
         if (statusBox) {
-            statusBox.innerHTML = `<span style="color:var(--text-muted);"><i class="fa-solid fa-wifi" style="color:var(--primary); margin-right:6px;"></i>${escapeHtml(L.wlcTargetReadyPrompt || (en ? 'WLC controller selected. Click "Query WLC" to connect.' : 'Controller WLC selezionato. Clicca "Interroga WLC" per connetterti.'))}</span>`;
+            statusBox.innerHTML = `<span style="color:var(--text-muted);"><i class="fa-solid fa-wifi" style="color:var(--primary); margin-right:6px;"></i>${escapeHtml(L.wlcTargetReadyPrompt || (tr('wlcWlcControllerSelectedClick')))}</span>`;
         }
     } else {
         if (statusBox) {
-            statusBox.innerHTML = `<span style="color:var(--text-muted);">${escapeHtml(L.wlcSelectPrompt || (en ? 'Select a WLC controller to load telemetry.' : 'Seleziona un controller WLC per caricare la telemetria.'))}</span>`;
+            statusBox.innerHTML = `<span style="color:var(--text-muted);">${escapeHtml(L.wlcSelectPrompt || (tr('wlcSelectAWlcController')))}</span>`;
         }
     }
     wlcClients = [];
@@ -83,20 +83,20 @@ function onWlcTargetChanged() {
 
 async function refreshWlcData() {
     const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
-    const en = currentLang === 'en';
+    
     if (!currentWlcIp) {
-        showToast(en ? 'Select a WLC controller first.' : 'Seleziona prima un controller WLC.', 'warning');
+        showToast(tr('wlcSelectAWlcController2'), 'warning');
         return;
     }
     
     const statusBox = document.getElementById('wlcStatusBox');
-    if (statusBox) statusBox.innerHTML = '<div class="spinner"></div> ' + (en ? 'Connecting & loading WLC state...' : 'Connessione e caricamento stato WLC...');
+    if (statusBox) statusBox.innerHTML = '<div class="spinner"></div> ' + (tr('wlcConnectingLoadingWlcState'));
     
     const btn = document.getElementById('btnRefreshWlcData');
     const origHtml = btn ? btn.innerHTML : '';
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${en ? 'Querying...' : 'Interrogazione...'}`;
+        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${tr('uiQuerying')}`;
     }
 
     try {
@@ -107,7 +107,7 @@ async function refreshWlcData() {
         // leggere: il tab restava vuoto su qualunque piattaforma.
         const res = await apiFetch(`/api/wlc/${currentWlcIp}/overview`);
         if (!res || !res.ok) {
-            let msg = en ? 'Unable to connect to WLC.' : 'Impossibile connettersi al WLC.';
+            let msg = tr('wlcUnableToConnectTo');
             try {
                 const err = await res.json();
                 if (err.detail) msg = escapeHtml(err.detail);
@@ -124,7 +124,7 @@ async function refreshWlcData() {
 
     } catch (e) {
         console.error('Errore refresh WLC:', e);
-        showToast((en ? 'Error fetching data from WLC: ' : 'Errore durante il recupero dei dati dal WLC: ') + ((e && e.message) || e), 'error');
+        showToast((tr('wlcErrorFetchingDataFrom')) + ((e && e.message) || e), 'error');
     } finally {
         if (btn) {
             btn.disabled = false;
@@ -354,7 +354,7 @@ async function wlcDiagnoseClient(mac) {
                     <pre style="font-family:var(--font-code); background:var(--surface-3); padding:12px; margin:0; max-height:260px; overflow:auto; font-size:12px; white-space:pre;">${escapeHtml(body)}</pre>
                 </div>`;
         }).join('');
-        document.getElementById('wlcDiagModal').style.display = 'flex';
+        openModal('wlcDiagModal');
     } catch (e) {
         console.error('Errore diagnostica client WLC:', e);
         showToast('Errore diagnostica: ' + e.message, 'error');
