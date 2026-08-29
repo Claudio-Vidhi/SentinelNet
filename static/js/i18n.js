@@ -5071,7 +5071,7 @@ function changeLanguage(lang) {
     localStorage.setItem("sentinelnet_lang", lang);
     document.documentElement.lang = lang;
 
-    const langSel = document.getElementById("langSelect");
+    const langSel = /** @type {HTMLSelectElement|null} */ (document.getElementById("langSelect"));
     if (langSel) langSel.value = lang;
 
     // Traduci elementi con attributo data-i18n
@@ -5116,13 +5116,13 @@ function changeLanguage(lang) {
     // Ridisegna componenti dinamici se caricati
     if (globalDevices.length > 0) {
         // Aggiorna opzioni Filtro Sede
-        const filterSelect = document.getElementById('filterGroupSelect');
+        const filterSelect = /** @type {HTMLSelectElement|null} */ (document.getElementById('filterGroupSelect'));
         if (filterSelect) {
             const prev = filterSelect.value;
             filterSelect.options[0].text = i18n[lang].optFilterAll;
             filterSelect.value = prev;
         }
-        const topoSelect = document.getElementById('topologyGroupSelect');
+        const topoSelect = /** @type {HTMLSelectElement|null} */ (document.getElementById('topologyGroupSelect'));
         if (topoSelect) {
             // options[0] è il segnaposto "nessun Tenant scelto", options[1] "Tutti".
             const prev = topoSelect.value;
@@ -5130,7 +5130,7 @@ function changeLanguage(lang) {
             if (topoSelect.options[1]) topoSelect.options[1].text = i18n[lang].optFilterAll;
             topoSelect.value = prev;
         }
-        const interSelect = document.getElementById('interactiveGroupSelect');
+        const interSelect = /** @type {HTMLSelectElement|null} */ (document.getElementById('interactiveGroupSelect'));
         if (interSelect) {
             // options[0] è il segnaposto "nessuna Sede scelta", options[1] è "Tutte".
             const prev = interSelect.value;
@@ -5161,7 +5161,10 @@ function initLanguageSelector() {
                 <option value="en">EN</option>
             `;
         select.value = currentLang;
-        select.onchange = (e) => changeLanguage(e.target.value);
+        select.onchange = (e) => {
+            const tgt = /** @type {HTMLSelectElement|null} */ (e.target);
+            if (tgt) changeLanguage(tgt.value);
+        };
 
         actions.insertBefore(select, actions.firstChild);
     }
