@@ -463,7 +463,7 @@ function provInitToggles() {
                 document.getElementById('provComPort').value = data.ports[0].device;
                 alert(data.ports.map(p => `${p.device} — ${p.description}`).join('\n'));
             } else {
-                alert(currentLang === 'en' ? 'No serial port detected on the server.' : 'Nessuna porta seriale rilevata sul server.');
+                alert(tr('provNoSerialPortDetected'));
             }
         }
     });

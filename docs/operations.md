@@ -194,6 +194,23 @@ put the newer build back, or start from a fresh `observability.db`.
 Agent-mode site with the agent stopped, or an IP missing from the agent's
 **local** inventory. See [remote-sites.md](remote-sites.md) §5.
 
+### "A device refuses every connection after a reinstall (`DeviceHostKeyError`)"
+
+Device SSH sessions pin the host key on first use into `ssh_known_hosts`
+(§1) and refuse any different key afterwards — the same protection the
+bastion hops and the WS terminal already had. After a device is reimaged,
+restored from backup or replaced, its key legitimately changes and every
+backup/triage/collection run toward it fails with
+`Credenziali… chiave host SSH diversa` until a human decides.
+
+Fix, once the change is expected: stop SentinelNet, open
+`data/ssh_known_hosts`, delete the line starting with the device address
+(`[host]:port` form for non-standard ports), restart. The next connection
+re-pins the new key and audits it.
+
+Do **not** script this deletion: the refusal is also what a
+man-in-the-middle looks like, and the decision must stay human.
+
 ---
 
 ## 5. FortiGate tokens

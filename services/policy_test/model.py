@@ -79,17 +79,6 @@ class Cube:
     def is_exact(self) -> bool:
         return self.mask == 0xFFFFFFFF
 
-    def to_str(self) -> str:
-        if self.is_any():
-            return "any"
-        if self.is_exact():
-            return f"host {int_to_ip(self.value)}"
-        prefix = mask_to_prefix_len(self.mask)
-        if prefix is not None:
-            return f"{int_to_ip(self.value)}/{prefix}"
-        wildcard_int = (~self.mask) & 0xFFFFFFFF
-        return f"{int_to_ip(self.value)} {int_to_ip(wildcard_int)}"
-
     @classmethod
     def from_ip(cls, ip: str) -> Cube:
         return cls(ip_to_int(ip), 0xFFFFFFFF)

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from collectors import arp_collector
 from services import inventory_manager
 from collectors import mac_history
+from core.ssh_pool import run_ssh
 from observability import endpoints
 from routers.mac import MacScanSchema
 from security.security_manager import log_audit
@@ -19,7 +20,7 @@ router = APIRouter(tags=["ARP"])
 # --- ENDPOINTS ---
 
 @router.post("/api/arp/scan")
-def arp_scan(payload: MacScanSchema, current_user = Depends(require_operator)):
+async def arp_scan(payload: MacScanSchema, current_user = Depends(require_operator)):
     """Raccoglie le tabelle ARP dagli apparati selezionati (scoped per tenant)
     e storicizza i binding MAC<->IP. Nel mondo reale il gateway di una VLAN
     può essere uno switch L3 o un firewall: si interroga tutto ciò che è
@@ -45,7 +46,8 @@ def arp_scan(payload: MacScanSchema, current_user = Depends(require_operator)):
     if not targets:
         raise HTTPException(status_code=404, detail="Nessun dispositivo idoneo per la scansione ARP.")
 
-    summary = arp_collector.collect_all(targets)
+    # WP11: raccolta sequenziale lunga (SSH) sul pool dedicato.
+    summary = await run_ssh(arp_collector.collect_all, targets)
     log_audit(f"ARP scan eseguita da '{current_user.get('sub')}' su {len(targets)} apparati "
               f"(nuovi: {summary['total_new']}, aggiornati: {summary['total_updated']}).")
     return summary

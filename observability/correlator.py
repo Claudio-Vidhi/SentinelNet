@@ -142,6 +142,14 @@ def correlate_once(now: Optional[int] = None) -> int:
                ORDER BY ts ASC LIMIT ?""",
             (now - LOOKBACK_S, now - LOOKBACK_S,
              MAX_EVENTS_PER_CYCLE)).fetchall()]
+        # WP8: window truncation is retried within the lookback, but under
+        # sustained overload the newest events are never evaluated — count it.
+        if len(events) >= MAX_EVENTS_PER_CYCLE:
+            metrics.inc("correlation_capped")
+            if metrics.should_warn("correlation_capped"):
+                logger.warning(
+                    "Correlazione al limite di %d eventi per ciclo: la finestra "
+                    "e' satura, gli eventi piu' recenti slittano.", MAX_EVENTS_PER_CYCLE)
 
         produced = rules.evaluate(events)
         emitted = 0

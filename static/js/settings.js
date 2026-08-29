@@ -125,7 +125,7 @@
         const mode = document.getElementById('newSiteMode').value;
         const subnets = document.getElementById('newSiteSubnets').value
             .split(',').map(x => x.trim()).filter(Boolean);
-        if (!name) { alert(currentLang==='en' ? 'Site name required.' : 'Nome sede obbligatorio.'); return; }
+        if (!name) { alert(tr('setSiteNameRequired')); return; }
         const payload = { name, mode, subnets };
         if (mode === 'jump') {
             payload.jump_host = document.getElementById('newSiteJumpHost').value.trim();
@@ -146,25 +146,25 @@
                 document.getElementById('newSiteJumpPort').value = '22';
             }
             if (data.token) {
-                prompt(currentLang==='en' ? 'Site token (shown ONLY ONCE — copy it now and configure it in the agent):' : 'Token della sede (mostrato UNA SOLA VOLTA — copialo ora e configuralo nell\'agente):', data.token);
+                prompt(tr('setSiteTokenShownOnly'), data.token);
             }
             loadSites();
         } else if (res) {
-            const e = await res.json(); alert((currentLang==='en' ? 'Error: ' : 'Errore: ') + (e.detail || ''));
+            const e = await res.json(); alert((tr('uiError')) + (e.detail || ''));
         }
     }
 
     async function regenSiteToken(id) {
-        if (!confirm(currentLang==='en' ? `Regenerate the token for site "${id}"? The old token will stop working.` : `Rigenerare il token della sede "${id}"? Il vecchio token smetterà di funzionare.`)) return;
+        if (!confirm(tr('setRegenerateTheTokenFor', {id: id}))) return;
         const res = await apiFetch('/api/sites/regenerate-token', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id })
         });
         if (res && res.ok) {
             const data = await res.json();
-            prompt(currentLang==='en' ? 'New token (shown ONLY ONCE):' : 'Nuovo token (mostrato UNA SOLA VOLTA):', data.token);
+            prompt(tr('setNewTokenShownOnly'), data.token);
             loadSites();
-        } else if (res) { const e = await res.json(); alert((currentLang==='en' ? 'Error: ' : 'Errore: ') + (e.detail || '')); }
+        } else if (res) { const e = await res.json(); alert((tr('uiError')) + (e.detail || '')); }
     }
 
     async function testBastion(id) {
@@ -191,7 +191,7 @@
         });
         if (res && !res.ok) {
             const e = await res.json();
-            alert((currentLang==='en' ? 'Error: ' : 'Errore: ') + (e.detail || ''));
+            alert((tr('uiError')) + (e.detail || ''));
         }
         loadSites();
     }
@@ -203,19 +203,19 @@
         });
         if (res && !res.ok) {
             const e = await res.json();
-            alert((currentLang==='en' ? 'Error: ' : 'Errore: ') + (e.detail || ''));
+            alert((tr('uiError')) + (e.detail || ''));
             loadSites();
         }
     }
 
     async function deleteSite(id) {
-        if (!confirm(currentLang==='en' ? `Delete site "${id}"?` : `Eliminare la sede "${id}"?`)) return;
+        if (!confirm(tr('setDeleteSite', {id: id}))) return;
         const res = await apiFetch('/api/sites/delete', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id })
         });
         if (res && res.ok) loadSites();
-        else if (res) { const e = await res.json(); alert((currentLang==='en' ? 'Error: ' : 'Errore: ') + (e.detail || '')); }
+        else if (res) { const e = await res.json(); alert((tr('uiError')) + (e.detail || '')); }
     }
 
     // --- TAB MCP SERVER (guida + selezione tool esposti ai client LLM) ---
@@ -316,7 +316,7 @@
     function renderUsersTable(users) {
         const body = document.getElementById('usersTableBody');
         if (!body) return;
-        const delText = currentLang === 'en' ? 'Delete' : 'Elimina';
+        const delText = tr('uiDelete');
         const allGroups = Object.keys(globalGroups);
         body.innerHTML = users.map(u => {
             const roleOptions = ['viewer', 'operator', 'admin'].map(r =>
@@ -327,10 +327,10 @@
             // Editor sedi: gli admin vedono tutto; per gli altri checkbox per sede (nessuna = tutte)
             let scopeCell;
             if (u.role === 'admin') {
-                scopeCell = `<span style="color:var(--text-muted); font-size:12px;">${currentLang === 'en' ? 'All tenants (admin)' : 'Tutti i tenant (admin)'}</span>`;
+                scopeCell = `<span style="color:var(--text-muted); font-size:12px;">${tr('setAllTenantsAdmin')}</span>`;
             } else {
                 const summary = scope.length === 0
-                    ? `<span style="color:var(--success);">${currentLang === 'en' ? 'All tenants' : 'Tutti i tenant'}</span>`
+                    ? `<span style="color:var(--success);">${tr('uiAllTenants')}</span>`
                     : `<span style="color:var(--primary);">${scope.map(escapeHtml).join(', ')}</span>`;
                 const checks = allGroups.map(g =>
                     `<label style="display:flex; align-items:center; gap:6px; padding:3px 4px; font-size:12px; cursor:pointer;">
@@ -344,8 +344,8 @@
                       <i class="fa-solid fa-location-dot" style="color:var(--text-muted); margin-right:4px;"></i>${summary}
                     </summary>
                     <div style="margin-top:6px; padding:6px; border:1px solid var(--border); border-radius:0; background:var(--surface-3); max-height:160px; overflow:auto;">
-                      <div style="font-size:10px; color:var(--text-muted); margin-bottom:4px;">${currentLang === 'en' ? 'None checked = all tenants' : 'Nessuno spuntato = tutti i tenant'}</div>
-                      ${checks || `<span style="color:var(--text-muted); font-size:12px;">${currentLang === 'en' ? 'No tenants' : 'Nessun tenant'}</span>`}
+                      <div style="font-size:10px; color:var(--text-muted); margin-bottom:4px;">${tr('setNoneCheckedAllTenants')}</div>
+                      ${checks || `<span style="color:var(--text-muted); font-size:12px;">${tr('setNoTenants')}</span>`}
                     </div>
                   </details>`;
             }
@@ -354,12 +354,12 @@
             // (nessuna spuntata = tutte), con salvataggio esplicito (staged, no auto-save).
             let tabsCell;
             if (u.role === 'admin') {
-                tabsCell = `<span style="color:var(--text-muted); font-size:12px;">${currentLang === 'en' ? 'All tabs (admin)' : 'Tutte le tab (admin)'}</span>`;
+                tabsCell = `<span style="color:var(--text-muted); font-size:12px;">${tr('setAllTabsAdmin')}</span>`;
             } else {
                 const allowed = normalizeAllowedTabs(u.allowed_tabs);
                 const tabsSummary = allowed.length === 0
-                    ? `<span style="color:var(--success);">${currentLang === 'en' ? 'All tabs' : 'Tutte le tab'}</span>`
-                    : `<span style="color:var(--primary);">${allowed.length} ${currentLang === 'en' ? 'tab(s)' : 'tab'}</span>`;
+                    ? `<span style="color:var(--success);">${tr('setAllTabs')}</span>`
+                    : `<span style="color:var(--primary);">${allowed.length} ${tr('setTabS')}</span>`;
                 const tabChecks = ASSIGNABLE_TABS.map(t =>
                     `<label style="display:flex; align-items:center; gap:6px; padding:3px 4px; font-size:12px; cursor:pointer;">
                        <input type="checkbox" class="tabs-box" value="${t.id}" ${allowed.includes(t.id) ? 'checked' : ''}
@@ -372,13 +372,13 @@
                       <i class="fa-solid fa-table-columns" style="color:var(--text-muted); margin-right:4px;"></i>${tabsSummary}
                     </summary>
                     <div style="margin-top:6px; padding:6px; border:1px solid var(--border); border-radius:0; background:var(--surface-3); max-height:200px; overflow:auto;">
-                      <div style="font-size:10px; color:var(--text-muted); margin-bottom:4px;">${currentLang === 'en' ? 'None checked = all tabs' : 'Nessuna spuntata = tutte le tab'}</div>
+                      <div style="font-size:10px; color:var(--text-muted); margin-bottom:4px;">${tr('setNoneCheckedAllTabs')}</div>
                       ${tabChecks}
                       <div style="margin-top:8px; display:flex; align-items:center; gap:8px;">
                         <button type="button" class="btn btn-primary btn-small tabs-save-btn" data-action="save-user-tabs" style="display:none; width:auto; margin:0; padding:4px 10px; font-size:12px;">
-                          <i class="fa-solid fa-floppy-disk"></i> ${currentLang === 'en' ? 'Save' : 'Salva'}
+                          <i class="fa-solid fa-floppy-disk"></i> ${tr('uiSave')}
                         </button>
-                        <span class="tabs-dirty-label" style="display:none; color:var(--warning); font-size:11px;">${currentLang === 'en' ? 'Unsaved changes' : 'Modifiche non salvate'}</span>
+                        <span class="tabs-dirty-label" style="display:none; color:var(--warning); font-size:11px;">${tr('setUnsavedChanges')}</span>
                       </div>
                     </div>
                   </details>`;
@@ -386,11 +386,11 @@
 
             const disabled = !!u.disabled;
             const disabledBadge = disabled
-                ? ` <span class="role-pill" style="background:color-mix(in srgb, var(--danger) 15%, transparent); color:var(--danger); border:1px solid color-mix(in srgb, var(--danger) 35%, transparent);">${currentLang === 'en' ? 'DISABLED' : 'DISABILITATO'}</span>`
+                ? ` <span class="role-pill" style="background:color-mix(in srgb, var(--danger) 15%, transparent); color:var(--danger); border:1px solid color-mix(in srgb, var(--danger) 35%, transparent);">${tr('setDisabled')}</span>`
                 : '';
             const toggleText = disabled
-                ? (currentLang === 'en' ? 'Enable' : 'Abilita')
-                : (currentLang === 'en' ? 'Disable' : 'Disabilita');
+                ? (tr('setEnable'))
+                : (tr('setDisable'));
             const toggleIcon = disabled ? 'fa-circle-check' : 'fa-ban';
             const toggleColor = disabled ? 'var(--success)' : 'var(--warning)';
             const toggleBtn = isSelf ? '' :
@@ -399,8 +399,8 @@
                     <i class="fa-solid ${toggleIcon}"></i> ${toggleText}</button>`;
 
             return `<tr style="${disabled ? 'opacity:0.55;' : ''}">
-                <td><strong>${escapeHtml(u.username)}</strong>${isSelf ? ` <span style="color:var(--text-muted); font-size:11px;">(${currentLang === 'en' ? 'you' : 'tu'})</span>` : ''}${disabledBadge}</td>
-                <td><input type="text" value="${escapeHtml(u.email || '')}" placeholder="${currentLang === 'en' ? 'none' : 'assente'}"
+                <td><strong>${escapeHtml(u.username)}</strong>${isSelf ? ` <span style="color:var(--text-muted); font-size:11px;">(${tr('setYou')})</span>` : ''}${disabledBadge}</td>
+                <td><input type="text" value="${escapeHtml(u.email || '')}" placeholder="${tr('setNone')}"
                        data-action="save-user-email" data-username="${escapeHtml(u.username)}"
                        style="font-size:12px; padding:4px 8px; width:190px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); outline:none;"></td>
                 <td><select data-action="change-user-role" data-username="${escapeHtml(u.username)}"
@@ -422,10 +422,10 @@
             body: JSON.stringify({ username, email })
         });
         if (res && res.ok) {
-            showToast(currentLang === 'en' ? 'Email updated.' : 'Email aggiornata.', 'success');
+            showToast(tr('setEmailUpdated'), 'success');
         } else if (res) {
             const e = await res.json().catch(() => ({}));
-            showToast(e.detail || (currentLang === 'en' ? 'Update failed.' : 'Aggiornamento fallito.'), 'error');
+            showToast(e.detail || (tr('setUpdateFailed')), 'error');
             loadUsers();
         }
     }
@@ -434,8 +434,7 @@
         const email = document.getElementById('inviteEmail').value.trim();
         const role = document.getElementById('inviteRole').value;
         if (!email) {
-            showToast(currentLang === 'en' ? 'Enter an email address.'
-                                           : 'Inserisci un indirizzo email.', 'error');
+            showToast(tr('setEnterAnEmailAddress'), 'error');
             return;
         }
         const res = await apiFetch('/api/users/invite', {
@@ -444,12 +443,10 @@
         });
         if (res && res.ok) {
             document.getElementById('inviteEmail').value = '';
-            showToast(currentLang === 'en' ? `Invitation sent to ${email}.`
-                                           : `Invito inviato a ${email}.`, 'success');
+            showToast(tr('setInvitationSentTo', {email: email}), 'success');
         } else if (res) {
             const e = await res.json().catch(() => ({}));
-            showToast(e.detail || (currentLang === 'en' ? 'Invitation failed.'
-                                                        : "Invio dell'invito fallito."), 'error');
+            showToast(e.detail || (tr('setInvitationFailed')), 'error');
         }
     }
 
@@ -465,7 +462,7 @@
             loadUsers();   // aggiorna il riepilogo
         } else if (res) {
             const e = await res.json();
-            alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + (e.detail || ''));
+            alert((tr('uiError')) + (e.detail || ''));
         }
     }
 
@@ -496,7 +493,7 @@
             loadUsers();
         } else if (res) {
             const e = await res.json();
-            alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + (e.detail || ''));
+            alert((tr('uiError')) + (e.detail || ''));
         }
     }
 
@@ -506,7 +503,7 @@
         const role     = document.getElementById('newUserRole').value;
         const email    = document.getElementById('newUserEmail').value.trim();
         if (!username || !password) {
-            alert(currentLang === 'en' ? 'Username and password are required.' : 'Username e password obbligatori.');
+            alert(tr('setUsernameAndPasswordAre'));
             return;
         }
         const res = await apiFetch('/api/users', {
@@ -520,17 +517,15 @@
             loadUsers();
         } else if (res) {
             const e = await res.json();
-            alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + (e.detail || ''));
+            alert((tr('uiError')) + (e.detail || ''));
         }
     }
 
     async function deleteUser(username) {
         const isSelf = username === currentUsername;
         const msg = isSelf
-            ? (currentLang === 'en'
-                ? `Delete YOUR OWN account "${username}"? You will be signed out and cannot sign back in.`
-                : `Eliminare il TUO account "${username}"? Verrai disconnesso e non potrai più accedere.`)
-            : (currentLang === 'en' ? `Delete user "${username}"?` : `Eliminare l'utente "${username}"?`);
+            ? (tr('setDeleteYourOwnAccount', {username: username}))
+            : (tr('setDeleteUser', {username: username}));
         if (!confirm(msg)) return;
         const res = await apiFetch('/api/users/delete', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -539,7 +534,7 @@
         // Cancellato il proprio account la sessione non vale più: si esce subito,
         // invece di lasciare che sia la prima chiamata a fallire con un 401.
         if (res && res.ok) { if (isSelf) logout(); else loadUsers(); }
-        else if (res) { const e = await res.json(); alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + (e.detail || '')); }
+        else if (res) { const e = await res.json(); alert((tr('uiError')) + (e.detail || '')); }
     }
 
     async function toggleUserDisabled(username, currentlyDisabled) {
@@ -548,7 +543,7 @@
             body: JSON.stringify({ username, disabled: !currentlyDisabled })
         });
         if (res && res.ok) loadUsers();
-        else if (res) { const e = await res.json(); alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + (e.detail || '')); }
+        else if (res) { const e = await res.json(); alert((tr('uiError')) + (e.detail || '')); }
     }
 
     async function changeUserRole(username, role) {
@@ -558,7 +553,7 @@
         });
         if (!res || !res.ok) {
             const e = res ? await res.json() : null;
-            alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + ((e && e.detail) || ''));
+            alert((tr('uiError')) + ((e && e.detail) || ''));
             loadUsers(); // ripristina la selezione corretta
         }
     }
@@ -594,16 +589,12 @@
         const box = document.getElementById('ssoStatusBox');
         if (!box) return;
         if (!cfg.enabled) {
-            box.textContent = currentLang === 'en'
-                ? 'Disabled: only local accounts can sign in.'
-                : 'Disattivato: si entra solo con gli account locali.';
+            box.textContent = tr('setDisabledOnlyLocalAccounts');
             return;
         }
         const provisioning = cfg.auto_provision
-            ? (currentLang === 'en' ? 'accounts created on first sign-in'
-                                    : 'account creati al primo accesso')
-            : (currentLang === 'en' ? 'existing accounts only'
-                                    : 'solo account gia\' esistenti');
+            ? (tr('setAccountsCreatedOnFirst'))
+            : (tr('setExistingAccountsOnly'));
         box.textContent = `${cfg.issuer_url} · ${cfg.client_id} · ${provisioning}`;
     }
 
@@ -624,8 +615,7 @@
         const secret = document.getElementById('ssoClientSecret');
         secret.value = '';
         secret.placeholder = cfg.has_client_secret
-            ? (currentLang === 'en' ? 'stored - leave empty to keep'
-                                    : 'salvato - lascia vuoto per mantenerlo')
+            ? (tr('setStoredLeaveEmptyTo'))
             : '';
         renderSsoStatus(cfg);
         ssoLoaded = true;
@@ -633,8 +623,7 @@
 
     async function saveSsoSettings() {
         if (!ssoLoaded) {
-            showToast(currentLang === 'en' ? 'Settings not loaded yet.'
-                                           : 'Impostazioni non ancora caricate.', 'error');
+            showToast(tr('setSettingsNotLoadedYet'), 'error');
             return;
         }
         const res = await apiFetch('/api/settings/sso', {
@@ -653,13 +642,11 @@
             })
         });
         if (res && res.ok) {
-            showToast(currentLang === 'en' ? 'SSO settings saved.'
-                                           : 'Impostazioni SSO salvate.', 'success');
+            showToast(tr('setSsoSettingsSaved'), 'success');
             loadSsoSettings();
         } else if (res) {
             const e = await res.json().catch(() => ({}));
-            showToast(e.detail || (currentLang === 'en' ? 'Save failed.'
-                                                        : 'Salvataggio fallito.'), 'error');
+            showToast(e.detail || (tr('setSaveFailed')), 'error');
         }
     }
 
@@ -674,14 +661,12 @@
         const box = document.getElementById('smtpStatusBox');
         if (!box) return;
         if (!cfg.enabled) {
-            box.textContent = currentLang === 'en'
-                ? 'Disabled: password recovery by email is unavailable.'
-                : 'Disattivato: il recupero password via email non e\' disponibile.';
+            box.textContent = tr('setDisabledPasswordRecoveryBy');
             return;
         }
         const auth = cfg.username
-            ? `${cfg.username}${cfg.has_password ? '' : (currentLang === 'en' ? ' (no password)' : ' (senza password)')}`
-            : (currentLang === 'en' ? 'anonymous' : 'anonimo');
+            ? `${cfg.username}${cfg.has_password ? '' : (tr('setNoPassword'))}`
+            : (tr('setAnonymous'));
         box.textContent = `${cfg.host}:${cfg.port} · ${cfg.tls_mode} · ${auth} · from ${cfg.from_email || '—'}`;
     }
 
@@ -700,8 +685,7 @@
         const pw = document.getElementById('smtpPassword');
         pw.value = '';
         pw.placeholder = cfg.has_password
-            ? (currentLang === 'en' ? 'stored - leave empty to keep'
-                                    : 'salvata - lascia vuoto per mantenerla')
+            ? (tr('uiStoredLeaveEmptyTo'))
             : '';
         renderSmtpStatus(cfg);
         smtpLoaded = true;
@@ -709,8 +693,7 @@
 
     async function saveSmtpSettings() {
         if (!smtpLoaded) {
-            showToast(currentLang === 'en' ? 'Settings not loaded yet.'
-                                           : 'Impostazioni non ancora caricate.', 'error');
+            showToast(tr('setSettingsNotLoadedYet'), 'error');
             return;
         }
         const res = await apiFetch('/api/settings/smtp', {
@@ -727,20 +710,18 @@
             }),
         });
         if (res && res.ok) {
-            showToast(currentLang === 'en' ? 'SMTP settings saved.'
-                                           : 'Impostazioni SMTP salvate.', 'success');
+            showToast(tr('setSmtpSettingsSaved'), 'success');
             loadSmtpSettings();
         } else {
             const d = res ? await res.json().catch(() => ({})) : {};
-            showToast(d.detail || (currentLang === 'en' ? 'Save failed.' : 'Salvataggio fallito.'), 'error');
+            showToast(d.detail || (tr('setSaveFailed')), 'error');
         }
     }
 
     async function sendSmtpTest() {
         const to = document.getElementById('smtpTestTo').value.trim();
         if (!to) {
-            showToast(currentLang === 'en' ? 'Enter a recipient address.'
-                                           : 'Inserisci un indirizzo destinatario.', 'error');
+            showToast(tr('setEnterARecipientAddress'), 'error');
             return;
         }
         const res = await apiFetch('/api/settings/smtp/test', {
@@ -749,11 +730,10 @@
             body: JSON.stringify({ to }),
         });
         if (res && res.ok) {
-            showToast(currentLang === 'en' ? `Test message sent to ${to}.`
-                                           : `Email di prova inviata a ${to}.`, 'success');
+            showToast(tr('setTestMessageSentTo', {to: to}), 'success');
         } else {
             const d = res ? await res.json().catch(() => ({})) : {};
-            showToast(d.detail || (currentLang === 'en' ? 'Send failed.' : 'Invio fallito.'), 'error');
+            showToast(d.detail || (tr('setSendFailed')), 'error');
         }
     }
 
@@ -838,7 +818,7 @@
         });
         if (!res || !res.ok) {
             const e = res ? await res.json() : null;
-            const msg = (e && e.detail) || (currentLang === 'en' ? 'Save error.' : 'Errore nel salvataggio.');
+            const msg = (e && e.detail) || (tr('uiSaveError'));
             if (errEl) errEl.textContent = msg; else alert(msg);
             return;
         }
@@ -865,7 +845,7 @@
         });
         if (!res || !res.ok) {
             const e = res ? await res.json() : null;
-            alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + ((e && e.detail) || ''));
+            alert((tr('uiError')) + ((e && e.detail) || ''));
             cb.checked = !cb.checked; // ripristina lo stato precedente
             return;
         }
@@ -899,7 +879,7 @@
             ${envNote}
             <div style="margin-top:12px;">
                 <button id="btnSaveAppSettings" class="btn btn-primary btn-small" ${d.env_override ? 'disabled' : ''} data-i18n="btnSave">
-                    <i class="fa-solid fa-floppy-disk"></i> ${escapeHtml(L.btnSave || (currentLang === 'en' ? 'Save' : 'Salva'))}
+                    <i class="fa-solid fa-floppy-disk"></i> ${escapeHtml(L.btnSave || (tr('uiSave')))}
                 </button>
             </div>
             <div id="netSettingsNotice" style="margin-top:10px; font-size:12px; color:var(--warning);"></div>`;
@@ -916,7 +896,7 @@
         const notice = document.getElementById('netSettingsNotice');
         if (!res || !res.ok) {
             const e = res ? await res.json() : null;
-            if (notice) notice.textContent = (currentLang === 'en' ? 'Error: ' : 'Errore: ') + ((e && e.detail) || '');
+            if (notice) notice.textContent = (tr('uiError')) + ((e && e.detail) || '');
             return;
         }
         if (notice) notice.textContent = L.msgRestartRequired;
@@ -954,7 +934,7 @@
         });
         if (!res || !res.ok) {
             const e = res ? await res.json() : null;
-            if (statusEl) statusEl.textContent = (currentLang === 'en' ? 'Error: ' : 'Errore: ') + ((e && e.detail) || '');
+            if (statusEl) statusEl.textContent = (tr('uiError')) + ((e && e.detail) || '');
             return;
         }
         if (statusEl) statusEl.textContent = L.msgPingMonitorSaved || 'Impostazioni monitor ping salvate.';

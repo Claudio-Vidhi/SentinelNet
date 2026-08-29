@@ -54,6 +54,7 @@ for user-facing strings, logs and comments, English for identifiers — see
 | Document | Contents |
 |---|---|
 | [development.md](development.md) | Layout, tests, type checking, build, pre-commit checklist |
+| [../DESIGN.md](../DESIGN.md) | UI design language (mimic panel): palette, typography, component rules — root-level authority, supersedes the old docs/design-system.md |
 | [reference/](reference/) | External vendor documentation, distilled |
 
 ## Maintenance rule

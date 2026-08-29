@@ -34,7 +34,10 @@ _TABLES = {
     # Le evidenze di un incidente seguono via ON DELETE CASCADE; qui si potano
     # quelle rimaste orfane (regola scattata, incidente mai formato).
     "evidence": ("ts", " AND incident_id IS NULL"),
-    "incidents": ("opened_ts", " AND status = 'resolved'"),
+    # La retention parte dalla RISOLUZIONE, non dall'apertura: un incidente
+    # durato un anno e chiuso ieri non perde le sue evidenze al giro dopo
+    # (plan Phase 3, item 18; resolved_ts da schema v10).
+    "incidents": ("resolved_ts", " AND status = 'resolved'"),
 }
 
 _running = False

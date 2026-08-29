@@ -31,7 +31,7 @@ async function setMcpPreview(enabled) {
         await applyMcpClientGating();
     } else {
         const e = res ? await res.json().catch(() => ({})) : {};
-        if (st) st.textContent = (currentLang === 'en' ? 'Error: ' : 'Errore: ') + (e.detail || '');
+        if (st) st.textContent = (tr('uiError')) + (e.detail || '');
     }
 }
 
@@ -73,7 +73,7 @@ async function saveMcpClientServer() {
     const name = document.getElementById('mcpcName').value.trim();
     const url = document.getElementById('mcpcUrl').value.trim();
     const auth_token = document.getElementById('mcpcAuth').value;
-    if (!name || !url) { if (st) st.textContent = currentLang === 'en' ? 'Name and URL required.' : 'Nome e URL obbligatori.'; return; }
+    if (!name || !url) { if (st) st.textContent = tr('mcpNameAndUrlRequired'); return; }
     const res = await apiFetch('/api/mcp-client/servers', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, url, auth_token })
@@ -87,12 +87,12 @@ async function saveMcpClientServer() {
         loadMcpClientTab();
     } else {
         const e = res ? await res.json().catch(() => ({})) : {};
-        if (st) st.textContent = (currentLang === 'en' ? 'Error: ' : 'Errore: ') + (e.detail || '');
+        if (st) st.textContent = (tr('uiError')) + (e.detail || '');
     }
 }
 
 async function deleteMcpClientServer(name) {
-    if (!confirm(currentLang === 'en' ? `Delete server "${name}"?` : `Eliminare il server "${name}"?`)) return;
+    if (!confirm(tr('mcpDeleteServer', {name: name}))) return;
     const res = await apiFetch('/api/mcp-client/servers/' + encodeURIComponent(name), { method: 'DELETE' });
     if (res && res.ok) loadMcpClientTab();
 }
@@ -131,7 +131,7 @@ async function mcpClientCall(name, tool, argsId, resultId) {
     let args = {};
     const raw = document.getElementById(argsId).value.trim() || '{}';
     try { args = JSON.parse(raw); } catch (e) {
-        if (out) { out.style.display = 'block'; out.textContent = (currentLang === 'en' ? 'Invalid JSON: ' : 'JSON non valido: ') + e.message; }
+        if (out) { out.style.display = 'block'; out.textContent = (tr('mcpInvalidJson')) + e.message; }
         return;
     }
     if (out) { out.style.display = 'block'; out.textContent = '…'; }

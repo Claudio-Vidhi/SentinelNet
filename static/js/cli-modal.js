@@ -13,7 +13,7 @@ async function openCliModal(ip) {
         loadAssetOnce('/static/vendor/xterm/xterm.js'),
     ]);
     document.getElementById("cliTargetIp").innerText = ip;
-    document.getElementById("cliModalOverlay").style.display = "flex";
+    openModal('cliModalOverlay', closeCliModal);
 
     const container = document.getElementById("terminal-container");
     container.innerHTML = "";
@@ -50,12 +50,12 @@ async function openCliModal(ip) {
         }
     });
     termInstance.open(container);
-    termInstance.write(currentLang === 'en' ? "Initializing terminal session...\r\n" : "Inizializzazione sessione terminale...\r\n");
+    termInstance.write(tr('cliInitializingTerminalSessionR'));
 
     // Fetch a single-use OTP before opening the WebSocket
     const otpRes = await apiFetch("/api/ws-token", { method: "POST" });
     if (!otpRes || !otpRes.ok) {
-        termInstance.write(currentLang === 'en' ? "[Error] Unable to obtain OTP token — JWT session expired or invalid.\r\n" : "[Errore] Impossibile ottenere il token OTP — sessione JWT scaduta o non valida.\r\n");
+        termInstance.write(tr('cliErrorUnableToObtain'));
         return;
     }
     const { ws_token } = await otpRes.json();
@@ -66,17 +66,17 @@ async function openCliModal(ip) {
     wsSocket = new WebSocket(wsUrl);
 
     wsSocket.onopen = () => {
-        termInstance.write(currentLang === 'en' ? "[WebSocket connection established]\r\n" : "[Connessione WebSocket stabilita]\r\n");
+        termInstance.write(tr('cliWebsocketConnectionEstablishedR'));
     };
     wsSocket.onmessage = (event) => {
         termInstance.write(event.data);
     };
     wsSocket.onclose = (event) => {
-        const noReason = currentLang === 'en' ? "No reason provided" : "Nessun motivo fornito";
-        termInstance.write(`\r\n[${currentLang === 'en' ? 'Terminal connection closed' : 'Connessione terminale chiusa'}: ${event.reason || noReason}]\r\n`);
+        const noReason = tr('cliNoReasonProvided');
+        termInstance.write(`\r\n[${tr('cliTerminalConnectionClosed')}: ${event.reason || noReason}]\r\n`);
     };
     wsSocket.onerror = () => {
-        termInstance.write(currentLang === 'en' ? `\r\n[WebSocket Error] Connection interrupted.\r\n` : `\r\n[Errore WebSocket] Connessione interrotta.\r\n`);
+        termInstance.write(tr('cliRNWebsocketError'));
     };
     termInstance.onData((data) => {
         if (wsSocket && wsSocket.readyState === WebSocket.OPEN) {
@@ -86,7 +86,7 @@ async function openCliModal(ip) {
 }
 
 function closeCliModal() {
-    document.getElementById("cliModalOverlay").style.display = "none";
+    closeModal('cliModalOverlay');
 
     // Rilascio pulito delle risorse per evitare memory leak e connessioni orfane
     if (wsSocket) {

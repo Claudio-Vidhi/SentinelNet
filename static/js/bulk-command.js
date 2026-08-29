@@ -23,12 +23,12 @@ function openBulkCommandModal() {
     btn.innerHTML = i18n[currentLang].btnBulkRun;
 
     renderBulkTargets();
-    document.getElementById('bulkCommandModal').style.display = 'flex';
+    openModal('bulkCommandModal');
 }
 
 function closeBulkCommandModal() {
     if (_bulkJobInterval) { clearInterval(_bulkJobInterval); _bulkJobInterval = null; }
-    document.getElementById('bulkCommandModal').style.display = 'none';
+    closeModal('bulkCommandModal');
 }
 
 function renderBulkTargets() {
@@ -48,7 +48,7 @@ function renderBulkTargets() {
                 <span class="badge" style="margin-left:auto;">${escapeHtml(d.Group)}</span>
             </label>`;
         }).join('');
-    list.innerHTML = rows || `<div style="padding:12px; color:var(--text-muted); font-size:12px;">${currentLang === 'en' ? 'No devices in this tenant.' : 'Nessun dispositivo in questo tenant.'}</div>`;
+    list.innerHTML = rows || `<div style="padding:12px; color:var(--text-muted); font-size:12px;">${tr('bulkNoDevicesInThis')}</div>`;
     syncBulkSelectAll();
 }
 
@@ -74,16 +74,16 @@ async function startBulkCommand() {
     const mode = document.getElementById('bulkMode').value;
     const save = document.getElementById('bulkSave').checked;
 
-    if (ips.length === 0) { alert(currentLang === 'en' ? 'Select at least one device.' : 'Seleziona almeno un dispositivo.'); return; }
-    if (!commands.trim()) { alert(currentLang === 'en' ? 'Enter at least one command.' : 'Inserisci almeno un comando.'); return; }
+    if (ips.length === 0) { alert(tr('bulkSelectAtLeastOne')); return; }
+    if (!commands.trim()) { alert(tr('bulkEnterAtLeastOne')); return; }
 
     const btn = document.getElementById('btnBulkRun');
     btn.disabled = true;
-    btn.innerHTML = currentLang === 'en' ? '<i class="fa-solid fa-circle-notch fa-spin"></i> Sending...' : '<i class="fa-solid fa-circle-notch fa-spin"></i> Invio in corso...';
+    btn.innerHTML = tr('bulkIClassFaSolid');
     document.getElementById('bulkResults').style.display = 'block';
     document.getElementById('bulkResultsList').innerHTML = '';
     document.getElementById('bulkProgressBar').style.transform = 'scaleX(0)';
-    document.getElementById('bulkStatus').textContent = currentLang === 'en' ? 'Starting...' : 'Avvio...';
+    document.getElementById('bulkStatus').textContent = tr('bulkStarting');
 
     const res = await apiFetch('/api/bulk-command', {
         method: 'POST',
@@ -91,9 +91,9 @@ async function startBulkCommand() {
         body: JSON.stringify({ ips, commands, mode, save }),
     });
     if (!res || !res.ok) {
-        const err = res ? await res.json() : { detail: currentLang === 'en' ? 'Network error' : 'Errore di rete' };
+        const err = res ? await res.json() : { detail: tr('uiNetworkError') };
         document.getElementById('bulkStatus').textContent =
-            (currentLang === 'en' ? 'Error: ' : 'Errore: ') + (err.detail || '');
+            (tr('uiError')) + (err.detail || '');
         btn.disabled = false;
         btn.innerHTML = i18n[currentLang].btnBulkRun;
         return;
@@ -115,7 +115,7 @@ function pollBulkJob(jobId, total) {
         const pct = total > 0 ? Math.round((data.progress / total) * 100) : 0;
         document.getElementById('bulkProgressBar').style.transform = `scaleX(${pct / 100})`;
         document.getElementById('bulkStatus').textContent =
-            currentLang === 'en' ? `Running — ${data.progress}/${total} devices...` : `In corso — ${data.progress}/${total} dispositivi...`;
+            tr('bulkRunningDevices', {progress: data.progress, total: total});
         renderBulkResults(data.results || []);
 
         if (data.status !== 'running') {
@@ -124,7 +124,7 @@ function pollBulkJob(jobId, total) {
             const ok  = (data.results || []).filter(r => r.result && r.result.status === 'success').length;
             const err = (data.results || []).length - ok;
             document.getElementById('bulkStatus').textContent =
-                currentLang === 'en' ? `Completed — ${ok} ok, ${err} errors.` : `Completato — ${ok} ok, ${err} errori.`;
+                tr('bulkCompletedOkErrors', {ok: ok, err: err});
             const b = document.getElementById('btnBulkRun');
             b.disabled = false; b.innerHTML = i18n[currentLang].btnBulkRun;
         }

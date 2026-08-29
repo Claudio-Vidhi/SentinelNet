@@ -56,35 +56,15 @@ _bulk_jobs: dict[str, dict] = {}
 
 _bulk_jobs_lock = threading.Lock()
 
-COMMAND_BLACKLIST = [
-    r"\breload\b",
-    r"\berase\b",
-    r"\bdelete\b",
-    r"\bformat\b",
-    r"\breboot\b",
-    r"\bconf\s+t\b",
-    r"\bconfigure\s+terminal\b",
-    r"\bcopy\s+.*?startup-config\b",
-    # Hardening aggiuntivo (denylist): altri comandi distruttivi/di riavvio o di
-    # scrittura config sui vari vendor. Restano fuori i comandi 'show/get/display'.
-    r"\bwr\b",                       # 'wr', 'wr mem', 'wr erase'
-    r"\bwrite\b",                    # 'write memory', 'write erase'
-    r"\bboot\s+system\b",
-    r"\bfactory[-\s]?reset\b",
-    r"\brequest\s+system\b",         # Junos: reboot/halt/zeroize/software
-    r"\brollback\b",
-    r"\bhalt\b",
-    r"\bzeroize\b",
-    r"\bclear\s+config\b",
-]
-
-BULK_DESTRUCTIVE_BLACKLIST = [
-    r"\breload\b",
-    r"\breboot\b",
-    r"\berase\b",
-    r"\bformat\b",
-    r"\bwrite\s+erase\b",
-]
+# Dangerous-command policy: lists and matchers live in ONE module
+# (security/command_policy.py, WP5). The old names stay as aliases because
+# routers/sites.py and the WS terminal import them.
+from security.command_policy import (
+    INTERACTIVE_PATTERNS as COMMAND_BLACKLIST,
+    BULK_ALWAYS_PATTERNS as BULK_DESTRUCTIVE_BLACKLIST,
+    matches_interactive as _policy_match_interactive,
+    matches_bulk as _policy_match_bulk,
+)
 
 class CommandRequest(BaseModel):
     ip: str
@@ -101,11 +81,7 @@ class BulkCommandRequest(BaseModel):
 
 def is_command_safe(command: str) -> bool:
     """Verifica se il comando contiene stringhe o pattern in blacklist per motivi di sicurezza."""
-    cmd_clean = command.strip().lower()
-    for pattern in COMMAND_BLACKLIST:
-        if re.search(pattern, cmd_clean):
-            return False
-    return True
+    return _policy_match_interactive(command) is None
 
 def command_allowed(command: str, current_user) -> bool:
     """Applica la blacklist CLI in base al ruolo (audit M-1): gli admin la
@@ -118,8 +94,7 @@ def command_allowed(command: str, current_user) -> bool:
     return is_command_safe(command)
 
 def is_bulk_command_allowed(command: str) -> bool:
-    cmd_clean = command.strip().lower()
-    return not any(re.search(p, cmd_clean) for p in BULK_DESTRUCTIVE_BLACKLIST)
+    return _policy_match_bulk(command) is None
 
 def _bypass_note(current_user) -> str:
     """Nota per l'audit log quando un comando in blacklist viene comunque consentito."""
