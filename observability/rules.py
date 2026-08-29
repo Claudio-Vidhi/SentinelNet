@@ -313,11 +313,22 @@ def _blocked_traffic(events: list, p: dict) -> list:
             continue
         if not (ev["src_ip"] and ev["dst_ip"]):
             continue
+        attrs = json.loads(ev["attrs_json"] or "{}")
+        action = str(attrs.get("action") or "").lower()
+        if action and action not in ("deny", "drop", "block", "close", "reject", "reset"):
+            continue
+        ev_proto = attrs.get("proto") or attrs.get("protocol")
+        ev_dport = attrs.get("dst_port") or attrs.get("dport")
         match = next(
             (f for f in flows
              if f["tenant"] == ev["tenant"]
              and f["src_ip"] == ev["src_ip"] and f["dst_ip"] == ev["dst_ip"]
-             and abs(f["ts"] - ev["ts"]) <= p["match_delta_s"] + 60), None)
+             and abs(f["ts"] - ev["ts"]) <= p["match_delta_s"] + 60
+             and (ev_proto is None or json.loads(f["attrs_json"] or "{}").get("protocol") is None
+                  or str(ev_proto) == str(json.loads(f["attrs_json"] or "{}").get("protocol")))
+             and (ev_dport is None or json.loads(f["attrs_json"] or "{}").get("dst_port") is None
+                  or str(ev_dport) == str(json.loads(f["attrs_json"] or "{}").get("dst_port")))),
+            None)
         if match is None:
             continue
         entity = f"ip:{ev['src_ip']}"
@@ -327,7 +338,7 @@ def _blocked_traffic(events: list, p: dict) -> list:
             src_ip=ev["src_ip"], dst_ip=ev["dst_ip"],
             summary=f"Traffico bloccato {endpoints.describe(ev['src_ip'])} → "
                     f"{endpoints.describe(ev['dst_ip'])}",
-            attrs={"action": json.loads(ev["attrs_json"] or "{}").get("action")}))
+            attrs={"action": attrs.get("action")}))
         out.append(Finding(
             event_id=match["id"], ts=match["ts"], tenant=match["tenant"],
             role="supporting", entity_key=entity,
@@ -400,6 +411,10 @@ def _interface_down(events: list, p: dict) -> list:
         if "link" not in str(attrs.get("field", "")).lower() \
                 and "status" not in str(attrs.get("field", "")).lower():
             continue
+        # Uno shutdown amministrativo è una decisione intenzionale, non un guasto
+        admin_st = str(attrs.get("admin_status") or "").lower()
+        if admin_st in ("down", "0", "false", "admin_down", "administratively down"):
+            continue
         out.append(Finding(
             event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"], role="symptom",
             entity_key=f"ip:{ev['device_ip']}", severity=ev["severity"],
@@ -426,6 +441,7 @@ def _interface_flapping(events: list, p: dict) -> list:
     legate all'APPARATO, non alla porta, e una ritrattazione per entità
     zittirebbe anche la porta accanto, davvero giù, per colpa di questa.
     """
+    max_span = p.get("max_span_s", 3600)
     changes: dict = {}
     for ev in events:
         if ev["event_type"] != "interface.change" or not ev["interface"]:
@@ -440,15 +456,19 @@ def _interface_flapping(events: list, p: dict) -> list:
     for (tenant, device_ip, interface), seen in changes.items():
         if len(seen) < p["min_transitions"]:
             continue
-        span = seen[-1]["ts"] - seen[0]["ts"]
+        # Limita alla finestra temporale recente per non allarmare su transizioni distanziate di giorni
+        recent = [e for e in seen if seen[-1]["ts"] - e["ts"] <= max_span]
+        if len(recent) < p["min_transitions"]:
+            continue
+        span = recent[-1]["ts"] - recent[0]["ts"]
         out.append(Finding(
-            event_id=seen[-1]["id"], ts=seen[-1]["ts"], tenant=tenant,
+            event_id=recent[-1]["id"], ts=recent[-1]["ts"], tenant=tenant,
             role="trigger", entity_key=f"ip:{device_ip}", severity=3,
             # Due porte instabili sullo stesso apparato sono due conclusioni.
             key=f"flap:{interface}", interface=interface,
-            summary=f"Interfaccia {interface} instabile: {len(seen)} "
+            summary=f"Interfaccia {interface} instabile: {len(recent)} "
                     f"transizioni in {max(span // 60, 1)} minuti",
-            attrs={"interface": interface, "transitions": len(seen),
+            attrs={"interface": interface, "transitions": len(recent),
                    "span_s": span}))
     return out
 
@@ -570,6 +590,13 @@ def _new_talker(events: list, p: dict) -> list:
     for ev in events:
         if ev["event_type"] != "flow.emergence":
             continue
+        src = ev.get("src_ip")
+        if not src or endpoints.traffic_direction(src, src) == "control_plane":
+            continue
+        attrs = json.loads(ev["attrs_json"] or "{}")
+        dst = attrs.get("dst_ip") or ""
+        if dst and endpoints.traffic_direction(src, dst) == "control_plane":
+            continue
         m = json.loads(ev["metrics_json"] or "{}")
         observed = m.get("observed") or 0
         if observed < p["min_bytes"]:
@@ -579,7 +606,7 @@ def _new_talker(events: list, p: dict) -> list:
             entity_key=f"ip:{ev['src_ip']}", severity=5, src_ip=ev["src_ip"],
             summary=f"{endpoints.describe(ev['src_ip'])}: host mai osservato prima, "
                     f"{observed} byte trasmessi",
-            attrs={**json.loads(ev["attrs_json"] or "{}"), **m}))
+            attrs={**attrs, **m}))
     return out
 
 

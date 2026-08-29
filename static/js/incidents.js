@@ -280,7 +280,7 @@
         }
         await loadInterfaceExpectations();
         const box = document.getElementById('ifxStatus');
-        if (box) box.textContent = `${row.device_ip}:${row.interface} aggiornata.`;
+        if (box) box.textContent = `${row.device_ip}:${row.interface} ${L('incUpdated')}`;
     }
 
     async function loadRuleCatalog() {
