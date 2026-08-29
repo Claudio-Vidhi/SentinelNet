@@ -8,7 +8,7 @@ WORKDIR /app
 # da collectors/network_scanner.py) e ripulisce la cache di apt per
 # mantenere l'immagine il più leggera possibile.
 RUN apt-get update && \
-    apt-get install --no-install-recommends iputils-ping && \
+    apt-get install -y --no-install-recommends iputils-ping && \
     rm -rf /var/lib/apt/lists/*
 
 # Copia prima il file delle dipendenze per sfruttare al meglio la cache dei layer di Docker
