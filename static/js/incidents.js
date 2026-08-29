@@ -287,7 +287,8 @@
         const box = document.getElementById('incidentRules');
         if (!box) return;
         try {
-            const res = await apiFetch('/api/incidents/rules');
+            const lang = (typeof currentLang !== 'undefined' && currentLang) ? currentLang : 'it';
+            const res = await apiFetch(`/api/incidents/rules?lang=${encodeURIComponent(lang)}`);
             if (!res || !res.ok) { box.innerHTML = ''; return; }
             const data = await res.json();
             _catalog = {};
@@ -300,8 +301,8 @@
                     </div>
                     <div style="font-size:12px; color:var(--text-muted); margin:4px 0 6px;">${escapeHtml(r.description)}</div>
                     <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">
-                        consuma: ${escapeHtml((r.inputs || []).join(', '))} ·
-                        produce: ${escapeHtml((r.outputs || []).join(', '))}
+                        ${escapeHtml(L('incConsumes'))} ${escapeHtml((r.inputs || []).join(', '))} ·
+                        ${escapeHtml(L('incProduces'))} ${escapeHtml((r.outputs || []).join(', '))}
                     </div>
                     ${r.investigation ? `<div style="font-size:12px; margin-bottom:4px;">
                         <strong>${L('incInvestigate')}</strong> ${escapeHtml(r.investigation)}</div>` : ''}
@@ -703,6 +704,7 @@
 
     window.loadIncidentsTab = loadIncidentsTab;
     window.loadIncidentsList = loadIncidentsList;
+    window.loadRuleCatalog = loadRuleCatalog;
     window.openIncident = openIncident;
     window.setIncidentStatus = setIncidentStatus;
     window.explainIncident = explainIncident;
