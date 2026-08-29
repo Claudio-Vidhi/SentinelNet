@@ -1,9 +1,25 @@
 import json
 import os
+import threading
 import bcrypt
 from core import data_config
 
 USERS_JSON = data_config.get_path("users.json")
+
+# Serializes every access to users.json. Readers hold it for the file read,
+# mutators hold it across the whole read-modify-write, so a write can never
+# be observed half-written and two concurrent mutations cannot lose updates.
+_users_lock = threading.RLock()
+
+
+class UsersStoreError(RuntimeError):
+    """users.json exists but cannot be parsed or read.
+
+    A corrupt store is treated as OCCUPIED, never empty: first-start
+    registration stays closed and authentication fails loudly. Reading it as
+    an empty dict would let an unauthenticated caller recreate the
+    administrator account over the corrupted file.
+    """
 
 # Ruoli supportati, dal più al meno privilegiato:
 #   admin    → controllo totale, incluso la gestione utenti
@@ -23,20 +39,63 @@ def password_error(password: str):
     return None
 
 def get_users():
-    if not os.path.exists(USERS_JSON):
-        return {}
-    with open(USERS_JSON, "r", encoding="utf-8") as f:
-        try:
-            return json.load(f)
-        except json.JSONDecodeError:
+    with _users_lock:
+        if not os.path.exists(USERS_JSON):
             return {}
+        try:
+            with open(USERS_JSON, "r", encoding="utf-8") as f:
+                raw = f.read()
+        except OSError as e:
+            raise UsersStoreError(f"Il file utenti non e' leggibile: {e}") from e
+    if not raw.strip():
+        raise UsersStoreError("Il file utenti e' vuoto: archivio account da ripristinare.")
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise UsersStoreError(f"Il file utenti e' corrotto: {e}") from e
+    if not isinstance(data, dict):
+        raise UsersStoreError("Il file utenti ha un formato inatteso.")
+    return data
 
 def _save_users(users: dict):
-    with open(USERS_JSON, "w", encoding="utf-8") as f:
-        json.dump(users, f, indent=4)
+    """Atomic write: the store is only ever replaced whole.
+
+    Truncating in place is how the corrupt store this module now refuses to
+    read gets created (crash or full disk mid-write). Same tmp + os.replace
+    pattern as every sibling JSON store (site_manager, ap_store, ...), with
+    the Windows PermissionError fallback they carry.
+    """
+    with _users_lock:
+        tmp = USERS_JSON + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(users, f, indent=4)
+        try:
+            os.replace(tmp, USERS_JSON)
+        except PermissionError:
+            with open(USERS_JSON, "w", encoding="utf-8") as f:
+                json.dump(users, f, indent=4)
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
 
 def has_any_user() -> bool:
-    return len(get_users()) > 0
+    try:
+        return len(get_users()) > 0
+    except UsersStoreError:
+        # Fail closed: a corrupt store counts as occupied, so the setup
+        # endpoint cannot mint a fresh administrator over it.
+        return True
+
+def store_integrity_error():
+    """Messaggio se l'archivio utenti e' corrotto o illeggibile, altrimenti
+    None. Usato dagli endpoint di autenticazione per rifiutare con una
+    spiegazione invece di restituire errori generici."""
+    try:
+        get_users()
+        return None
+    except UsersStoreError as e:
+        return str(e)
 
 def get_role(username: str):
     """Ruolo dell'utente, o None se non esiste. Gli account legacy senza campo
@@ -50,28 +109,29 @@ def create_user(username: str, password: str, role: str = "viewer", groups=None,
                 must_change_password: bool = False, email: str = "") -> bool:
     if role not in VALID_ROLES:
         role = "viewer"
-    users = get_users()
-    if username in users:
-        return False
+    with _users_lock:
+        users = get_users()
+        if username in users:
+            return False
 
-    # Hashing sicuro con bcrypt (salt automatico, cost factor 12)
-    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=12))
-    users[username] = {
-        "hashed_password": hashed_password.decode('utf-8'),
-        "role": role,
-        # Elenco delle sedi/gruppi visibili e gestibili. Lista vuota = tutte.
-        "groups": list(groups) if groups else [],
-        # Indirizzo per il recupero password. Vuoto = recupero via email non
-        # disponibile per questo account (resta il break-glass da CLI).
-        "email": (email or "").strip(),
-        # Tab dashboard visibili all'utente. Lista vuota = tutte (come per "groups").
-        "allowed_tabs": [],
-        "disabled": False,
-        # True per gli account creati da un amministratore: al primo login
-        # l'utente è obbligato a impostare una nuova password personale.
-        "must_change_password": bool(must_change_password),
-    }
-    _save_users(users)
+        # Hashing sicuro con bcrypt (salt automatico, cost factor 12)
+        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=12))
+        users[username] = {
+            "hashed_password": hashed_password.decode('utf-8'),
+            "role": role,
+            # Elenco delle sedi/gruppi visibili e gestibili. Lista vuota = tutte.
+            "groups": list(groups) if groups else [],
+            # Indirizzo per il recupero password. Vuoto = recupero via email non
+            # disponibile per questo account (resta il break-glass da CLI).
+            "email": (email or "").strip(),
+            # Tab dashboard visibili all'utente. Lista vuota = tutte (come per "groups").
+            "allowed_tabs": [],
+            "disabled": False,
+            # True per gli account creati da un amministratore: al primo login
+            # l'utente è obbligato a impostare una nuova password personale.
+            "must_change_password": bool(must_change_password),
+        }
+        _save_users(users)
     return True
 
 def verify_user(username: str, password: str) -> bool:
@@ -85,12 +145,15 @@ def change_password(username: str, old_password: str, new_password: str) -> bool
     """Permette di cambiare la password verificando quella attuale."""
     if not verify_user(username, old_password):
         return False
-    users = get_users()
-    hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt(rounds=12))
-    users[username]["hashed_password"] = hashed.decode('utf-8')
-    # La password è ora personale: rimuoviamo l'obbligo di cambio al primo accesso.
-    users[username]["must_change_password"] = False
-    _save_users(users)
+    with _users_lock:
+        users = get_users()
+        if username not in users:
+            return False
+        hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt(rounds=12))
+        users[username]["hashed_password"] = hashed.decode('utf-8')
+        # La password è ora personale: rimuoviamo l'obbligo di cambio al primo accesso.
+        users[username]["must_change_password"] = False
+        _save_users(users)
     return True
 
 def must_change_password(username: str) -> bool:
@@ -121,11 +184,12 @@ def is_disabled(username: str) -> bool:
     return bool(user and user.get("disabled", False))
 
 def set_disabled(username: str, disabled: bool) -> bool:
-    users = get_users()
-    if username not in users:
-        return False
-    users[username]["disabled"] = bool(disabled)
-    _save_users(users)
+    with _users_lock:
+        users = get_users()
+        if username not in users:
+            return False
+        users[username]["disabled"] = bool(disabled)
+        _save_users(users)
     return True
 
 def count_active_admins() -> int:
@@ -157,11 +221,12 @@ def get_user_groups(username: str):
     return user.get("groups", [])
 
 def set_groups(username: str, groups) -> bool:
-    users = get_users()
-    if username not in users:
-        return False
-    users[username]["groups"] = list(groups) if groups else []
-    _save_users(users)
+    with _users_lock:
+        users = get_users()
+        if username not in users:
+            return False
+        users[username]["groups"] = list(groups) if groups else []
+        _save_users(users)
     return True
 
 def get_allowed_tabs(username: str):
@@ -173,29 +238,32 @@ def get_allowed_tabs(username: str):
     return user.get("allowed_tabs", [])
 
 def set_allowed_tabs(username: str, tabs) -> bool:
-    users = get_users()
-    if username not in users:
-        return False
-    users[username]["allowed_tabs"] = list(tabs) if tabs else []
-    _save_users(users)
+    with _users_lock:
+        users = get_users()
+        if username not in users:
+            return False
+        users[username]["allowed_tabs"] = list(tabs) if tabs else []
+        _save_users(users)
     return True
 
 def delete_user(username: str) -> bool:
-    users = get_users()
-    if username not in users:
-        return False
-    del users[username]
-    _save_users(users)
+    with _users_lock:
+        users = get_users()
+        if username not in users:
+            return False
+        del users[username]
+        _save_users(users)
     return True
 
 def set_role(username: str, role: str) -> bool:
     if role not in VALID_ROLES:
         return False
-    users = get_users()
-    if username not in users:
-        return False
-    users[username]["role"] = role
-    _save_users(users)
+    with _users_lock:
+        users = get_users()
+        if username not in users:
+            return False
+        users[username]["role"] = role
+        _save_users(users)
     return True
 
 
@@ -213,14 +281,15 @@ def reset_password_break_glass(username: str, new_password: str) -> bool:
     esegue il recupero non deve restare in possesso di credenziali valide.
     Ritorna False se l'utente non esiste.
     """
-    users = get_users()
-    if username not in users:
-        return False
-    hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt(rounds=12))
-    users[username]["hashed_password"] = hashed.decode('utf-8')
-    users[username]["must_change_password"] = True
-    users[username]["disabled"] = False
-    _save_users(users)
+    with _users_lock:
+        users = get_users()
+        if username not in users:
+            return False
+        hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt(rounds=12))
+        users[username]["hashed_password"] = hashed.decode('utf-8')
+        users[username]["must_change_password"] = True
+        users[username]["disabled"] = False
+        _save_users(users)
     return True
 
 
@@ -232,9 +301,10 @@ def get_email(username: str) -> str:
 
 def set_email(username: str, email: str) -> bool:
     """Sets or clears ("" clears) the recovery address. False if no such user."""
-    users = get_users()
-    if username not in users:
-        return False
-    users[username]["email"] = (email or "").strip()
-    _save_users(users)
+    with _users_lock:
+        users = get_users()
+        if username not in users:
+            return False
+        users[username]["email"] = (email or "").strip()
+        _save_users(users)
     return True

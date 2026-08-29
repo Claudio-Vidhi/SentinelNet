@@ -3,8 +3,9 @@
 con prova anti-CSRF sul cookie) e scoping multi-gruppo per sede.
 
 Spostate qui da app_server.py (fase 2.1 del piano) per essere riusate dai
-router modulari senza import circolari. app_server reimporta questi nomi,
-quindi il comportamento e i punti di patch dei test restano invariati.
+router modulari senza import circolari. I router importano direttamente da
+questo modulo (il vecchio reimport in app_server, senza consumatori, e'
+stato rimosso).
 
 REGOLA (CONTRIBUTING.md §4): lo scope utente è un SET di gruppi
 (``user_group_scope`` → set | None). Mai ridurlo a un singolo gruppo scalare.

@@ -3,6 +3,8 @@
 // salvato = si segue il sistema operativo (prefers-color-scheme).
 // Estratto dal blocco inline di dashboard.html per la CSP senza 'unsafe-inline'.
 try {
-    var t = localStorage.getItem('sentinelnet_theme');
-    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+    // 'saved' e non 't': gli script classici condividono un solo scope e t()
+    // e' la funzione di traduzione di i18n.js.
+    var saved = localStorage.getItem('sentinelnet_theme');
+    if (saved === 'light' || saved === 'dark') document.documentElement.setAttribute('data-theme', saved);
 } catch (e) { /* localStorage non disponibile: si segue il sistema */ }

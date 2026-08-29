@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from services import inventory_manager
 from core import core_engine
+from core.ssh_pool import run_ssh
 from collectors import mac_collector
 from collectors import mac_history
 from security.security_manager import log_audit
@@ -103,7 +104,7 @@ def _mac_group(rows):
     return results
 
 @router.post("/api/mac/scan")
-def mac_scan(payload: MacScanSchema, current_user = Depends(require_operator)):
+async def mac_scan(payload: MacScanSchema, current_user = Depends(require_operator)):
     """Raccoglie la MAC-table degli apparati selezionati (scoped per tenant) e la
     storicizza. Manuale, parallelizzato; al termine applica la retention."""
     scope = user_group_scope(current_user)
@@ -131,7 +132,9 @@ def mac_scan(payload: MacScanSchema, current_user = Depends(require_operator)):
     # Raccolta in parallelo e storicizzazione: la sequenza vive nel collector,
     # così la riscansione mirata della diagnosi client usa la stessa e non una
     # copia che col tempo diverge (uplink, override, MAC di interfaccia).
-    out = mac_collector.collect_all(targets, transport=payload.transport)
+    # WP11: il lavoro SSH (gia' parallelizzato nel collector) gira sul pool
+    # dedicato, non sul threadpool condiviso delle rotte sync.
+    out = await run_ssh(mac_collector.collect_all, targets, transport=payload.transport)
     log_audit(f"MAC scan eseguita da '{current_user.get('sub')}' su {len(targets)} apparati "
               f"(pruned: {out['pruned']}).")
     return out

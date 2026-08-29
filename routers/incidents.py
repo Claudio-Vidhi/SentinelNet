@@ -346,9 +346,17 @@ async def set_incident_status(
                 (incident_id,)).fetchone()
             if row is None or (scope is not None and row["tenant"] not in scope):
                 return "not_found"
-            cur = conn.execute(
-                "UPDATE incidents SET status = ? WHERE id = ? AND status = ?",
-                (new_status, incident_id, from_status))
+            if new_status == "resolved":
+                # resolved_ts ancora la retention (schema v10): un incidente
+                # chiuso ieri non decade per quanto e' stato aperto.
+                cur = conn.execute(
+                    "UPDATE incidents SET status = ?, resolved_ts = ? "
+                    "WHERE id = ? AND status = ?",
+                    (new_status, int(time.time()), incident_id, from_status))
+            else:
+                cur = conn.execute(
+                    "UPDATE incidents SET status = ? WHERE id = ? AND status = ?",
+                    (new_status, incident_id, from_status))
             conn.commit()
             return "ok" if cur.rowcount == 1 else "stale"
         finally:

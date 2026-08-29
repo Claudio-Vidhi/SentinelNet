@@ -682,27 +682,25 @@ async function logout() {
 // Età in forma breve ("40 min", "6 h", "3 g"). Una sola formula per tutti i
 // riquadri che mostrano "quanto tempo fa": copiarla porta a unità divergenti.
 function relativeAge(h) {
-    const en = currentLang === 'en';
     return h < 1 ? `${Math.max(1, Math.round(h * 60))} min`
-        : (h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} ${en ? 'd' : 'g'}`);
+        : (h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} ${tr('coreD')}`);
 }
 
 function backupAgeLabel(ts) {
     if (!ts) return '';
-    const en = currentLang === 'en';
     const h = (Date.now() / 1000 - ts) / 3600;
     const txt = relativeAge(h);
-    const label = en ? `backup ${txt} ago` : `backup ${txt} fa`;
+    const label = tr('coreBackupAgo', {txt: txt});
     return `<span style="font-size:11px; color:${h > 168 ? 'var(--warning)' : 'var(--text-muted)'};"`
-        + ` title="${en ? 'backup age' : 'eta del backup'}">${escapeHtml(label)}</span>`;
+        + ` title="${tr('coreBackupAge')}">${escapeHtml(label)}</span>`;
 }
 
 // --- RUOLI / PRIVILEGI ---
 
 function roleLabel(role) {
-    if (role === 'admin') return currentLang === 'en' ? 'Administrator' : 'Amministratore';
-    if (role === 'operator') return currentLang === 'en' ? 'Operator' : 'Operatore';
-    return currentLang === 'en' ? 'Viewer' : 'Visualizzatore';
+    if (role === 'admin') return tr('coreAdministrator');
+    if (role === 'operator') return tr('coreOperator');
+    return tr('coreViewer');
 }
 
 // Tab permissions are stored per user in users.json and predate the endpoint
@@ -759,28 +757,9 @@ document.getElementById('btnLogout')?.addEventListener('click', (e) => {
     logout();
 });
 
-// Chiusura modali: click sullo sfondo oppure tasto Escape.
-// Il modale CLI non si chiude con Escape: il tasto serve dentro al terminale SSH.
-document.getElementById('subnetScanModal').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeSubnetScanModal();
-});
-document.getElementById('cliModalOverlay').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeCliModal();
-});
-document.getElementById('triageScopeModal').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeTriageScopeModal();
-});
-document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && document.getElementById('triageScopeModal').style.display === 'flex') {
-        closeTriageScopeModal();
-    }
-});
-document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' &&
-        document.getElementById('subnetScanModal').style.display === 'flex') {
-        closeSubnetScanModal();
-    }
-});
+// Chiusura modali (click sul velo, Esc, trappola del focus): la fa ui-modal.js
+// per TUTTE, non piu' a mano per due. Il terminale CLI resta escluso da Esc via
+// data-esc-close="off" nel template, perche' il tasto serve alla sessione SSH.
 
 // --- INITIALIZATION ---
 
@@ -1006,6 +985,37 @@ document.addEventListener('click', e => {
     switchTab(tabId, el.classList.contains('nav-item') ? el : undefined);
 });
 
+
+// --- Semantica tablist (WCAG 2.1 AA) ------------------------------------
+// La sidenav e' un tablist: senza aria-selected chi usa uno screen reader
+// sente 23 pulsanti senza sapere quale schermata e' aperta. Il tabindex
+// mobile ("roving") e' l'altra meta' obbligatoria del pattern: dentro un
+// tablist il Tab entra ed esce, fra le voci ci si muove con le frecce.
+function syncTablistState(activeBtn) {
+    const items = document.querySelectorAll('.nav-item[role="tab"]');
+    items.forEach(el => {
+        const on = el === activeBtn || el.classList.contains('active');
+        el.setAttribute('aria-selected', on ? 'true' : 'false');
+        el.tabIndex = on ? 0 : -1;
+    });
+}
+
+// Sul document e non sulla nav: querySelector rende un Element, e su Element
+// il gestore riceve Event senza .key (il type check lo segnala, giustamente).
+document.addEventListener('keydown', e => {
+    const KEYS = ['ArrowDown', 'ArrowUp', 'Home', 'End'];
+    if (!KEYS.includes(e.key)) return;
+    const items = Array.from(document.querySelectorAll('.nav-item[role="tab"]'))
+        .filter(el => el.offsetParent !== null);
+    const i = items.indexOf(document.activeElement);
+    if (i === -1) return;
+    e.preventDefault();
+    const next = e.key === 'Home' ? 0
+        : e.key === 'End' ? items.length - 1
+            : (i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+    items[next].focus();
+});
+
 async function switchTab(tabId, clickedBtn) {
     // Swap the visible panel FIRST, then await the module. Awaiting up here
     // meant a cold tab looked frozen for the whole download of its script
@@ -1026,6 +1036,7 @@ async function switchTab(tabId, clickedBtn) {
     if (btn) {
         btn.classList.add('active');
     }
+    syncTablistState(btn);
 
     await ensureTabScripts(tabId);
     if (tabEl) tabEl.classList.remove('tab-loading');
@@ -1123,8 +1134,8 @@ function renderVendorTable() {
     body.innerHTML = '';
     Object.entries(globalVendors).forEach(([name, meta]) => {
         const isSystem = name === 'cisco' || name === 'hpe';
-        const systemText = currentLang === 'en' ? 'System' : 'Sistema';
-        const deleteText = currentLang === 'en' ? 'Delete' : 'Elimina';
+        const systemText = tr('coreSystem');
+        const deleteText = tr('uiDelete');
         body.innerHTML += `<tr>
             <td><strong>${escapeHtml(name)}</strong></td>
             <td><span style="font-family:var(--font-code); font-size:12px; color:var(--text-muted);">${escapeHtml(meta.driver) || '—'}</span></td>
@@ -1248,7 +1259,7 @@ async function showPortConfig(switchIp, port, switchName) {
                 ${body}
                 <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:16px;">
                     <button data-action="open-port-in-analyzer" data-ip="${escapeHtml(switchIp)}" data-port="${escapeHtml(port)}" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-up-right-from-square"></i> ${escapeHtml(L.openInAnalyzer)}</button>
-                    <button data-action="close-port-config" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${currentLang === 'en' ? 'Close' : 'Chiudi'}</button>
+                    <button data-action="close-port-config" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${tr('coreClose')}</button>
                 </div>
             </div>`;
     ov.addEventListener('click', e => {
@@ -1462,7 +1473,6 @@ let _cmdItems = [];
 function buildCommandPaletteItems(query = '') {
     const q = query.trim().toLowerCase();
     const items = [];
-    const en = currentLang === 'en';
 
     // 1. Viste / Schede
     // Device tools lead the list: they no longer have a nav entry, so the
@@ -1470,29 +1480,29 @@ function buildCommandPaletteItems(query = '') {
     // inventory rows. Last in the array they sat below the fold with an
     // empty query, which is the same as not being there.
     const navItems = [
-        { id: 'tab-fortigate', title: 'Fortigate Management', desc: en ? 'Firewall policies, address objects, sessions' : 'Policy firewall, oggetti indirizzo, sessioni', group: en ? 'Device Tools' : 'Strumenti Apparati' },
-        { id: 'tab-wlc', title: 'Cisco WLC', desc: en ? 'Access points, SSIDs, and WLAN clients' : 'Access point, SSID e client wireless', group: en ? 'Device Tools' : 'Strumenti Apparati' },
-        { id: 'tab-redundancy', title: en ? 'High Availability (HA)' : 'Alta Affidabilità (HA)', desc: en ? 'Redundancy pairs and failover state' : 'Coppie di ridondanza e stato failover', group: en ? 'Device Tools' : 'Strumenti Apparati' },
-        { id: 'tab-home', title: en ? 'Overview / Posture' : 'Situazione', desc: en ? 'Fleet posture verdicts and unifilar schema' : 'Verdetti di postura e schema unifilare flotta', group: en ? 'Views' : 'Viste' },
-        { id: 'tab-incidents', title: en ? 'Incidents' : 'Incidenti', desc: en ? 'Correlated security and operational incidents' : 'Incidenti operativi e correlazione allarmi', group: en ? 'Views' : 'Viste' },
-        { id: 'tab-flows', title: en ? 'Traffic / Observability' : 'Traffico & Osservabilità', desc: en ? 'Top talkers, anomalies, and flow analytics' : 'Top talker, anomalie e analisi flussi', group: en ? 'Views' : 'Viste' },
-        { id: 'tab-endpoint', title: en ? 'Endpoint Inventory & MAC Tracker' : 'Endpoint Inventory & Tracker MAC', desc: en ? 'Discovered endpoints, MAC tracking, client diagnosis' : 'Inventario client scoperti, storico MAC e diagnosi', group: en ? 'Views' : 'Viste' },
-        { id: 'tab-ai', title: 'AI Assistant', desc: en ? 'Network assistant and config generation' : 'Assistente di rete e generatore config', group: en ? 'Views' : 'Viste' },
-        { id: 'tab-devices', title: 'Network Inventory', desc: en ? 'Device list, credentials, and actions' : 'Elenco apparati, credenziali e azioni', group: en ? 'Views' : 'Viste' },
-        { id: 'tab-map', title: en ? 'Topology' : 'Topologia', desc: en ? 'L2/L3 topology and Port-channels' : 'Mappa L2/L3 e port-channel', group: en ? 'Views' : 'Viste' },
-        { id: 'tab-categories', title: en ? 'Categories & Devices' : 'Dispositivi & Categorie', desc: en ? 'Hardware models, roles, and categories' : 'Modelli hardware, ruoli e categorie', group: en ? 'Views' : 'Viste' },
-        { id: 'tab-security', title: 'Threat Intel (NVD NIST)', desc: en ? 'CVE vulnerabilities across devices' : 'Vulnerabilità CVE apparati', group: en ? 'Views' : 'Viste' },
-        { id: 'tab-config', title: 'Config Analyzer', desc: en ? 'Configuration parsing and interface checks' : 'Analisi configurazioni e porte', group: en ? 'Views' : 'Viste' },
-        { id: 'tab-netsec-audit', title: 'NetSec Audit', desc: en ? 'Firewall and security audit rules' : 'Audit di sicurezza e conformità firewall', group: en ? 'Views' : 'Viste' },
-        { id: 'tab-policy-test', title: en ? 'Policy & Routing Validation' : 'Validazione Policy & Routing', desc: en ? 'Policy trace and routing verification' : 'Tracciamento policy e verifica routing', group: en ? 'Views' : 'Viste' },
-        { id: 'tab-config-drift', title: 'Config Drift', desc: en ? 'Running config vs backup diffs' : 'Discrepanze tra running-config e backup', group: en ? 'Views' : 'Viste' },
-        { id: 'tab-provisioning', title: 'Provisioning', desc: en ? 'Add new devices and manage identities' : 'Aggiunta nuovi apparati e profili identità', group: en ? 'Views' : 'Viste' },
-        { id: 'tab-import', title: en ? 'CSV Import' : 'Importazione CSV', desc: en ? 'Bulk import devices from CSV' : 'Importazione massiva apparati da CSV', group: en ? 'Views' : 'Viste' },
-        { id: 'tab-users', title: en ? 'Users' : 'Utenti', desc: en ? 'Manage local user accounts and roles' : 'Gestione account e ruoli locali', group: en ? 'Views' : 'Viste' },
-        { id: 'tab-groups', title: en ? 'Tenant Management' : 'Gestione Tenant', desc: en ? 'Configure tenants and SNMP defaults' : 'Configurazione tenant e default SNMP', group: en ? 'Views' : 'Viste' },
-        { id: 'tab-sites', title: en ? 'Sites' : 'Sedi', desc: en ? 'Physical sites and site agents' : 'Sedi fisiche e agenti di sede', group: en ? 'Views' : 'Viste' },
-        { id: 'tab-mcp', title: en ? 'Integrations & MCP' : 'Integrazioni & MCP', desc: en ? 'MCP servers and external integrations' : 'Server MCP e integrazioni esterne', group: en ? 'Views' : 'Viste' },
-        { id: 'tab-settings', title: en ? 'Settings' : 'Impostazioni', desc: en ? 'App settings, ping monitor, SMTP, SSO' : 'Impostazioni app, ping monitor, SMTP, SSO', group: en ? 'Views' : 'Viste' },
+        { id: 'tab-fortigate', title: 'Fortigate Management', desc: tr('coreFirewallPoliciesAddressObjects'), group: tr('coreDeviceTools') },
+        { id: 'tab-wlc', title: 'Cisco WLC', desc: tr('coreAccessPointsSsidsAnd'), group: tr('coreDeviceTools') },
+        { id: 'tab-redundancy', title: tr('coreHighAvailabilityHa'), desc: tr('coreRedundancyPairsAndFailover'), group: tr('coreDeviceTools') },
+        { id: 'tab-home', title: tr('coreOverviewPosture'), desc: tr('coreFleetPostureVerdictsAnd'), group: tr('coreViews') },
+        { id: 'tab-incidents', title: tr('coreIncidents'), desc: tr('coreCorrelatedSecurityAndOperational'), group: tr('coreViews') },
+        { id: 'tab-flows', title: tr('coreTrafficObservability'), desc: tr('coreTopTalkersAnomaliesAnd'), group: tr('coreViews') },
+        { id: 'tab-endpoint', title: tr('coreEndpointInventoryMacTracker'), desc: tr('coreDiscoveredEndpointsMacTracking'), group: tr('coreViews') },
+        { id: 'tab-ai', title: 'AI Assistant', desc: tr('coreNetworkAssistantAndConfig'), group: tr('coreViews') },
+        { id: 'tab-devices', title: 'Network Inventory', desc: tr('coreDeviceListCredentialsAnd'), group: tr('coreViews') },
+        { id: 'tab-map', title: tr('coreTopology'), desc: tr('coreLLTopologyAnd'), group: tr('coreViews') },
+        { id: 'tab-categories', title: tr('coreCategoriesDevices'), desc: tr('coreHardwareModelsRolesAnd'), group: tr('coreViews') },
+        { id: 'tab-security', title: 'Threat Intel (NVD NIST)', desc: tr('coreCveVulnerabilitiesAcrossDevices'), group: tr('coreViews') },
+        { id: 'tab-config', title: 'Config Analyzer', desc: tr('coreConfigurationParsingAndInterface'), group: tr('coreViews') },
+        { id: 'tab-netsec-audit', title: 'NetSec Audit', desc: tr('coreFirewallAndSecurityAudit'), group: tr('coreViews') },
+        { id: 'tab-policy-test', title: tr('corePolicyRoutingValidation'), desc: tr('corePolicyTraceAndRouting'), group: tr('coreViews') },
+        { id: 'tab-config-drift', title: 'Config Drift', desc: tr('coreRunningConfigVsBackup'), group: tr('coreViews') },
+        { id: 'tab-provisioning', title: 'Provisioning', desc: tr('coreAddNewDevicesAnd'), group: tr('coreViews') },
+        { id: 'tab-import', title: tr('coreCsvImport'), desc: tr('coreBulkImportDevicesFrom'), group: tr('coreViews') },
+        { id: 'tab-users', title: tr('coreUsers'), desc: tr('coreManageLocalUserAccounts'), group: tr('coreViews') },
+        { id: 'tab-groups', title: tr('coreTenantManagement'), desc: tr('coreConfigureTenantsAndSnmp'), group: tr('coreViews') },
+        { id: 'tab-sites', title: tr('coreSites'), desc: tr('corePhysicalSitesAndSite'), group: tr('coreViews') },
+        { id: 'tab-mcp', title: tr('coreIntegrationsMcp'), desc: tr('coreMcpServersAndExternal'), group: tr('coreViews') },
+        { id: 'tab-settings', title: tr('coreSettings'), desc: tr('coreAppSettingsPingMonitor'), group: tr('coreViews') },
     ];
 
     navItems.forEach(item => {
@@ -1519,7 +1529,7 @@ function buildCommandPaletteItems(query = '') {
                 type: 'device',
                 title: `${d.Hostname || d.IP} (${d.IP})`,
                 desc: `Tenant: ${d.Group || '—'} · ${d.Site || 'central'}`,
-                group: en ? 'Devices' : 'Dispositivi',
+                group: tr('coreDevices'),
                 icon: 'fa-server',
                 action: () => {
                     setGlobalDeviceContext({ ip: d.IP, name: d.Hostname || d.IP, tenant: d.Group || '' });
@@ -1531,11 +1541,11 @@ function buildCommandPaletteItems(query = '') {
 
     // 3. Azioni rapide
     const quickActions = [
-        { title: en ? 'Run Global Triage' : 'Avvia Triage Globale', desc: en ? 'Execute triage check across all devices' : 'Esegui triage su tutti i dispositivi', icon: 'fa-bolt-lightning', action: () => { const b = document.getElementById('btnHomeRunTriage'); if (b) b.click(); } },
-        { title: en ? 'Run MAC Scan' : 'Avvia MAC Scan', desc: en ? 'Collect MAC address table from switches' : 'Raccogli tabella MAC dagli switch', icon: 'fa-satellite-dish', action: () => { switchTab('tab-endpoint'); if (typeof locSwitchView === 'function') locSwitchView('mac'); const b = document.getElementById('btnMacScan'); if (b) b.click(); } },
-        { title: en ? 'Run ARP Collection' : 'Raccogli ARP (gateway L3)', desc: en ? 'Collect ARP bindings from gateways' : 'Raccogli binding ARP dai gateway L3', icon: 'fa-network-wired', action: () => { switchTab('tab-endpoint'); if (typeof locSwitchView === 'function') locSwitchView('mac'); const b = document.getElementById('btnArpScan'); if (b) b.click(); } },
-        { title: en ? 'Add New Device' : 'Aggiungi Nuovo Dispositivo', desc: en ? 'Open provisioning form for new device' : 'Apri form di provisioning nuovo apparato', icon: 'fa-circle-plus', action: () => switchTab('tab-provisioning') },
-        { title: en ? 'Toggle Theme' : 'Alterna Tema Chiaro / Scuro', desc: en ? 'Switch dark/light theme' : 'Cambia tema scuro/chiaro', icon: 'fa-circle-half-stroke', action: () => toggleTheme() },
+        { title: tr('coreRunGlobalTriage'), desc: tr('coreExecuteTriageCheckAcross'), icon: 'fa-bolt-lightning', action: () => { const b = document.getElementById('btnHomeRunTriage'); if (b) b.click(); } },
+        { title: tr('coreRunMacScan'), desc: tr('coreCollectMacAddressTable'), icon: 'fa-satellite-dish', action: () => { switchTab('tab-endpoint'); if (typeof locSwitchView === 'function') locSwitchView('mac'); const b = document.getElementById('btnMacScan'); if (b) b.click(); } },
+        { title: tr('coreRunArpCollection'), desc: tr('coreCollectArpBindingsFrom'), icon: 'fa-network-wired', action: () => { switchTab('tab-endpoint'); if (typeof locSwitchView === 'function') locSwitchView('mac'); const b = document.getElementById('btnArpScan'); if (b) b.click(); } },
+        { title: tr('coreAddNewDevice'), desc: tr('coreOpenProvisioningFormFor'), icon: 'fa-circle-plus', action: () => switchTab('tab-provisioning') },
+        { title: tr('coreToggleTheme'), desc: tr('coreSwitchDarkLightTheme'), icon: 'fa-circle-half-stroke', action: () => toggleTheme() },
     ];
 
     quickActions.forEach(a => {
@@ -1544,7 +1554,7 @@ function buildCommandPaletteItems(query = '') {
                 type: 'action',
                 title: a.title,
                 desc: a.desc,
-                group: en ? 'Quick Actions' : 'Azioni Rapide',
+                group: tr('coreQuickActions'),
                 icon: a.icon,
                 action: a.action
             });
@@ -1562,7 +1572,7 @@ function renderCommandPalette(items) {
 
     if (!items.length) {
         host.innerHTML = `<div style="padding:24px; text-align:center; color:var(--text-muted); font-size:13px;">
-            <i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(currentLang === 'en' ? 'No matching commands or devices found.' : 'Nessun comando o apparato trovato.')}</div>`;
+            <i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(tr('coreNoMatchingCommandsOr'))}</div>`;
         return;
     }
 
@@ -1597,24 +1607,24 @@ function openCommandPalette() {
     if (!modal || !input) return;
     _cmdSelectedIdx = 0;
     if (input instanceof HTMLInputElement) input.value = '';
-    modal.style.display = 'flex';
+    openModal(modal);
     renderCommandPalette(buildCommandPaletteItems(''));
     input.focus();
 }
 
 function closeCommandPalette() {
     const modal = document.getElementById('commandPaletteModal');
-    if (modal) modal.style.display = 'none';
+    if (modal) closeModal(modal);
 }
 
 function openShortcutsModal() {
     const modal = document.getElementById('shortcutsModal');
-    if (modal) modal.style.display = 'flex';
+    if (modal) openModal(modal);
 }
 
 function closeShortcutsModal() {
     const modal = document.getElementById('shortcutsModal');
-    if (modal) modal.style.display = 'none';
+    if (modal) closeModal(modal);
 }
 
 document.getElementById('btnOpenCommandPalette')?.addEventListener('click', openCommandPalette);

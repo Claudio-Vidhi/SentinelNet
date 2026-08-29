@@ -119,5 +119,12 @@ def open_target(cfg: dict) -> SftpTarget:
     else:
         kwargs["password"] = cfg.get("password") or ""
     ssh.connect(**kwargs)  # raises HostKeyMismatch from the policy before auth on mismatch
-    return SftpTarget(ssh, ssh.open_sftp(),
-                       pinned_fingerprint=cfg.get("host_key_fingerprint") or "")
+    target = SftpTarget(ssh, ssh.open_sftp(),
+                        pinned_fingerprint=cfg.get("host_key_fingerprint") or "")
+    # Defence in depth, not the primary check: _PinningPolicy runs before
+    # authentication and aborts the handshake before any credential is sent.
+    # It fires only for a host paramiko does not already know, though, so if a
+    # known-hosts source is ever loaded this call becomes the only pinning
+    # left — keep both.
+    target.verify_host_key()
+    return target

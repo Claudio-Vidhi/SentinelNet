@@ -62,7 +62,7 @@
 
             if (!devices.length) {
                 sel.innerHTML = allOption
-                    + `<option value="all" disabled>${currentLang === 'en' ? 'Inventory is empty — no devices found' : 'Inventario vuoto — nessun dispositivo presente'}</option>`;
+                    + `<option value="all" disabled>${tr('nsaInventoryIsEmptyNo')}</option>`;
                 return;
             }
 
@@ -113,12 +113,10 @@
     function syncDropzoneHint() {
         const dropText = document.getElementById('auditDropText');
         if (!dropText) return;
-        const en = currentLang === 'en';
+        
         if (!_droppedConfigText) {
             dropText.innerHTML = `<i class="fa-solid fa-cloud-arrow-up fa-2x" style="color:var(--primary); margin-bottom:8px;"></i><br>
-                <span data-i18n="nsaDropText">${en
-                    ? 'Drop the configuration file here, or click to upload'
-                    : 'Trascina qui il file di configurazione o clicca per caricare'}</span>`;
+                <span data-i18n="nsaDropText">${tr('nsaDropTheConfigurationFile')}</span>`;
             return;
         }
         const sel = document.getElementById('auditDeviceSelect');
@@ -127,9 +125,9 @@
             <i class="fa-solid fa-file-code fa-2x" style="color:var(--success); margin-bottom:8px;"></i><br>
             <strong>${escapeHtml(_droppedConfigName)}</strong><br>
             <span style="color:var(--text-muted);">${active
-                ? (en ? 'Selected as the audit target.' : 'Selezionato come oggetto dell\'audit.')
-                : (en ? 'Loaded, but a device is selected instead.' : 'Caricato, ma è selezionato un dispositivo.')}</span>
-            <br><a href="#" data-action="clear-uploaded-config" style="font-size:11px; color:var(--danger);">${en ? 'Remove file' : 'Rimuovi file'}</a>`;
+                ? (tr('nsaSelectedAsTheAudit'))
+                : (tr('nsaLoadedButADevice'))}</span>
+            <br><a href="#" data-action="clear-uploaded-config" style="font-size:11px; color:var(--danger);">${tr('nsaRemoveFile')}</a>`;
     }
 
     function clearUploadedConfig() {
@@ -173,8 +171,8 @@
         if (gradeEl) {
             if (!hasScore) {
                 gradeEl.textContent = !s.total
-                    ? (currentLang === 'en' ? 'NO SCAN RUN YET' : 'NESSUNA SCANSIONE ESEGUITA')
-                    : (currentLang === 'en' ? 'NOT ASSESSABLE' : 'NON DETERMINABILE');
+                    ? (tr('nsaNoScanRunYet'))
+                    : (tr('nsaNotAssessable'));
                 gradeEl.style.color = 'var(--text-muted)';
             } else {
                 const grade = score >= 80 ? 'GRADE A' : score >= 60 ? 'GRADE B' : 'GRADE C - RISK DETECTED';
@@ -183,7 +181,7 @@
                 // (3 regole su 6 valutabili, tutte PASS) mostrerebbe 100% GRADE A,
                 // che e' rassicurante quanto il vecchio difetto che stiamo togliendo.
                 gradeEl.textContent = unknown > 0
-                    ? `${grade} — ${currentLang === 'en' ? 'PARTIAL' : 'PARZIALE'}`
+                    ? `${grade} — ${tr('nsaPartial')}`
                     : grade;
                 gradeEl.style.color = unknown > 0
                     ? 'var(--warning)'
@@ -196,9 +194,7 @@
         if (banner && bannerText) {
             if (unknown > 0) {
                 const assessed = s.total - unknown;
-                bannerText.textContent = currentLang === 'en'
-                    ? `Only ${assessed} of ${s.total} checks could be assessed: ${unknown} config section(s) are absent from the analysed file. The score covers the assessed checks only.`
-                    : `Solo ${assessed} controlli su ${s.total} sono stati valutati: ${unknown} sezione/i di configurazione sono assenti nel file analizzato. Lo score copre soltanto i controlli valutabili.`;
+                bannerText.textContent = tr('nsaOnlyOfChecksCould', {assessed: assessed, total: s.total, unknown: unknown});
                 banner.style.display = '';
             } else {
                 banner.style.display = 'none';
@@ -223,7 +219,7 @@
     function auditGuidanceBlock(r) {
         const g = r.guidance || {};
         if (!g.why && !g.impact && !g.default) return '';
-        const en = currentLang === 'en';
+        
         const section = (label, text, color) => text ? `
             <div style="margin-bottom:10px;">
                 <div style="font-size:11px; font-weight:700; color:${color}; text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px;">${label}</div>
@@ -231,9 +227,9 @@
             </div>` : '';
         return `
             <div style="padding:2px 0 2px 12px; margin-bottom:14px;">
-                ${section(en ? 'Why it matters' : 'Perché conta', g.why, 'var(--primary)')}
-                ${section(en ? 'Impact of the fix' : 'Impatto del rimedio', g.impact, 'var(--warning)')}
-                ${section(en ? 'Factory default' : 'Valore di fabbrica', g.default, 'var(--text-muted)')}
+                ${section(tr('nsaWhyItMatters'), g.why, 'var(--primary)')}
+                ${section(tr('nsaImpactOfTheFix'), g.impact, 'var(--warning)')}
+                ${section(tr('nsaFactoryDefault'), g.default, 'var(--text-muted)')}
             </div>`;
     }
 
@@ -242,7 +238,7 @@
         if (!tbody) return;
 
         if (!_auditRules.length) {
-            tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--text-muted);">${currentLang==='en'?'No audit results yet. Select a device and run a scan.':'Nessun risultato di audit disponibile. Seleziona un dispositivo ed esegui una scansione.'}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--text-muted);">${tr('nsaNoAuditResultsYet')}</td></tr>`;
             return;
         }
 
@@ -260,7 +256,7 @@
         });
 
         if (!filtered.length) {
-            tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--text-muted);">${currentLang==='en'?'No audit rules match filter.':'Nessuna regola di audit corrisponde ai filtri.'}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--text-muted);">${tr('nsaNoAuditRulesMatch')}</td></tr>`;
             return;
         }
 
@@ -271,7 +267,7 @@
                 ? `<span class="badge" style="background:rgba(239, 68, 68, 0.15); color:var(--danger);"><i class="fa-solid fa-xmark"></i> FAIL</span>`
                 : r.status === 'WARN'
                 ? `<span class="badge" style="background:rgba(245, 158, 11, 0.15); color:var(--warning);"><i class="fa-solid fa-triangle-exclamation"></i> WARN</span>`
-                : `<span class="badge" style="background:var(--surface-3); color:var(--text-muted);" title="${currentLang==='en'?'Config section absent: not assessable, excluded from the score.':'Sezione di configurazione assente: non valutabile, esclusa dallo score.'}"><i class="fa-solid fa-circle-question"></i> N/D</span>`;
+                : `<span class="badge" style="background:var(--surface-3); color:var(--text-muted);" title="${tr('nsaConfigSectionAbsentNot')}"><i class="fa-solid fa-circle-question"></i> N/D</span>`;
 
             const sevBadge = r.severity === 'CRITICAL'
                 ? `<span class="badge" style="background:var(--danger); color:#fff; font-weight:700;">CRITICAL</span>`
@@ -283,18 +279,18 @@
             // di esso l'esito non e' verificabile contro il documento.
             const refBadge = r.ref
                 ? `<span class="badge" style="background:var(--surface-3); color:var(--text-muted); font-weight:600;"
-                         title="${currentLang === 'en' ? 'Benchmark recommendation' : 'Raccomandazione del benchmark'}">${escapeHtml(String(r.ref))}</span>`
+                         title="${tr('nsaBenchmarkRecommendation')}">${escapeHtml(String(r.ref))}</span>`
                 : '';
             const levelBadge = r.level
                 ? `<span class="badge" style="background:var(--surface-3); color:var(--text-muted);"
-                         title="${currentLang === 'en' ? 'CIS profile level' : 'Livello di profilo CIS'}">L${escapeHtml(String(r.level))}</span>`
+                         title="${tr('nsaCisProfileLevel')}">L${escapeHtml(String(r.level))}</span>`
                 : '';
             // Il benchmark distingue i controlli automatizzabili da quelli che
             // vuole verificati a mano: quelli manuali qui sono valutati su cio'
             // che la configurazione dichiara, non sul comportamento reale.
             const manualBadge = (r.automated === false)
                 ? `<span class="badge" style="background:var(--surface-3); color:var(--text-muted);"
-                         title="${currentLang === 'en' ? 'The benchmark marks this as a manual check: the verdict here reads the configuration, it does not observe the device.' : 'Il benchmark la marca come verifica manuale: il verdetto qui legge la configurazione, non osserva l\'apparato.'}"><i class="fa-solid fa-hand"></i> ${currentLang === 'en' ? 'manual' : 'manuale'}</span>`
+                         title="${tr('nsaTheBenchmarkMarksThis')}"><i class="fa-solid fa-hand"></i> ${tr('nsaManual')}</span>`
                 : '';
 
             const ev = r.evidence || [];
@@ -306,7 +302,7 @@
             // comandi sovrapposti per la stessa azione confondono.
             const evHint = ev.length
                 ? `<span class="badge" style="background:var(--surface-3); color:var(--text-muted);">
-                       <i class="fa-solid fa-code"></i> ${ev.length} ${currentLang === 'en' ? 'evidence' : 'evidenze'}
+                       <i class="fa-solid fa-code"></i> ${ev.length} ${tr('nsaEvidence')}
                    </span>`
                 : '';
 
@@ -314,24 +310,24 @@
             // comando: senza, nessuno apre la riga di un controllo PASS.
             const whyHint = (r.guidance && (r.guidance.why || r.guidance.impact))
                 ? `<span class="badge" style="background:rgba(99,102,241,0.15); color:var(--primary); font-weight:600;">
-                       <i class="fa-solid fa-circle-question"></i> ${currentLang === 'en' ? 'why' : 'perché'}
+                       <i class="fa-solid fa-circle-question"></i> ${tr('nsaWhy')}
                    </span>`
                 : '';
 
             const evRows = ev.length ? `
                 <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin:0 0 6px;">
-                    ${currentLang === 'en' ? 'Evidence in the analysed config' : 'Evidenze nella configurazione analizzata'}
+                    ${tr('nsaEvidenceInTheAnalysed')}
                 </div>
                 ${ev.map(e => `
                 <div style="display:flex; gap:10px; padding:3px 0; font-family:var(--font-code); font-size:11px; flex-wrap:wrap;">
-                    <span style="color:var(--text-muted); min-width:60px;">${e.line ? (currentLang === 'en' ? 'line ' : 'riga ') + escapeHtml(String(e.line)) : '—'}</span>
+                    <span style="color:var(--text-muted); min-width:60px;">${e.line ? (tr('nsaLine')) + escapeHtml(String(e.line)) : '—'}</span>
                     <span style="color:var(--text-muted); min-width:190px;">${escapeHtml(e.context || '')}</span>
                     <span style="color:var(--danger); word-break:break-all;">${escapeHtml(e.text || '')}</span>
                 </div>`).join('')}` : '';
 
             return `<tr style="font-size:12px; border-top:1px solid var(--border); cursor:pointer;"
                         data-action="toggle-audit-detail" data-ev-id="${escapeHtml(evId)}"
-                        title="${currentLang === 'en' ? 'Click to expand' : 'Clicca per espandere'}">
+                        title="${tr('nsaClickToExpand')}">
                 <td style="padding:8px; font-family:var(--font-code); font-weight:700; white-space:nowrap;">
                     <i class="fa-solid fa-chevron-${isOpen ? 'down' : 'right'}" style="color:var(--text-muted); font-size:9px; margin-right:6px;"></i>${escapeHtml(r.id)}
                 </td>
@@ -354,11 +350,11 @@
                     ${auditGuidanceBlock(r)}
                     ${r.audit ? `
                     <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px;">
-                        ${currentLang === 'en' ? 'Verify on the device' : 'Verifica sull\'apparato'}
+                        ${tr('nsaVerifyOnTheDevice')}
                     </div>
                     <code style="display:block; font-size:12px; color:var(--text); background:var(--surface); padding:8px 10px; border-radius:0; border:1px solid var(--border); white-space:pre-wrap; word-break:break-word; margin-bottom:12px;">${escapeHtml(r.audit)}</code>` : ''}
                     <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px;">
-                        ${currentLang === 'en' ? 'Recommendation / CLI fix' : 'Raccomandazione / Fix CLI'}
+                        ${tr('nsaRecommendationCliFix')}
                     </div>
                     <code style="display:block; font-size:12px; color:var(--primary); background:var(--surface); padding:8px 10px; border-radius:0; border:1px solid var(--border); white-space:pre-wrap; word-break:break-word; margin-bottom:${ev.length ? '12px' : '0'};">${escapeHtml(r.remediation)}</code>
                     ${evRows}
@@ -383,7 +379,7 @@
         const uploaded = (deviceIp === UPLOADED_VALUE);
 
         if (uploaded && !_droppedConfigText) {
-            showToast(currentLang === 'en' ? 'Please upload a configuration file first.' : 'Carica prima un file di configurazione.', 'error');
+            showToast(tr('nsaPleaseUploadAConfiguration'), 'error');
             return;
         }
 
@@ -434,13 +430,13 @@
                 // ignorato silenziosamente.
                 let detail = '';
                 try { const errData = await res.json(); detail = errData && errData.detail; } catch (e) {}
-                showToast(detail || (currentLang === 'en' ? 'Audit scan failed.' : 'Scansione audit non riuscita.'), 'error');
+                showToast(detail || (tr('nsaAuditScanFailed')), 'error');
             } else {
-                showToast(currentLang === 'en' ? 'Audit scan failed.' : 'Scansione audit non riuscita.', 'error');
+                showToast(tr('nsaAuditScanFailed'), 'error');
             }
         } catch (e) {
             console.error('Audit scan error:', e);
-            showToast(currentLang === 'en' ? 'Audit scan failed.' : 'Scansione audit non riuscita.', 'error');
+            showToast(tr('nsaAuditScanFailed'), 'error');
         } finally {
             if (btn) {
                 btn.disabled = false;
@@ -530,7 +526,7 @@
             };
             reader.onerror = err => {
                 console.error('File read error:', err);
-                showToast(currentLang === 'en' ? 'Failed to read file.' : 'Impossibile leggere il file.', 'error');
+                showToast(tr('nsaFailedToReadFile'), 'error');
             };
             reader.readAsText(file);
         }
@@ -562,14 +558,10 @@
             if (res && res.ok) return await res.json();
             let detail = '';
             try { const err = await res.json(); detail = err && err.detail; } catch (e) {}
-            showToast(detail || (currentLang === 'en'
-                ? 'Could not produce the report in the selected language.'
-                : 'Impossibile produrre il report nella lingua selezionata.'), 'error');
+            showToast(detail || (tr('nsaCouldNotProduceThe')), 'error');
         } catch (e) {
             console.error('Audit re-scan error:', e);
-            showToast(currentLang === 'en'
-                ? 'Could not produce the report in the selected language.'
-                : 'Impossibile produrre il report nella lingua selezionata.', 'error');
+            showToast(tr('nsaCouldNotProduceThe'), 'error');
         }
         return null;
     }
@@ -662,9 +654,7 @@
     // La lingua del report e' indipendente da quella dell'interfaccia.
     async function exportAuditReport() {
         if (!_auditRules.length) {
-            showToast(currentLang === 'en'
-                ? 'Run a scan before exporting a report.'
-                : 'Esegui una scansione prima di esportare il report.', 'warning');
+            showToast(tr('nsaRunAScanBefore'), 'warning');
             return;
         }
         const langSel = document.getElementById('auditReportLang');
@@ -1420,7 +1410,7 @@ ${pagesHtml}
             titleEl.innerHTML = `<i class="fa-solid fa-file-shield" style="color:var(--primary);"></i> <span>${escapeHtml(titleText)}</span>`;
         }
         if (modal) {
-            modal.style.display = 'flex';
+            openModal(modal);
         }
         if (frame) {
             frame.srcdoc = html;
@@ -1429,14 +1419,14 @@ ${pagesHtml}
 
     function closeAuditReportModal() {
         const modal = document.getElementById('auditReportModal');
-        if (modal) modal.style.display = 'none';
+        if (modal) closeModal(modal);
     }
 
     async function downloadModalPdf() {
         const btn = document.getElementById('auditModalBtnPdf');
         const origHtml = btn ? btn.innerHTML : '';
         if (btn) {
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ' + (currentLang === 'en' ? 'Generating PDF...' : 'Generazione PDF...');
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ' + (tr('nsaGeneratingPdf'));
             btn.disabled = true;
         }
         try {
@@ -1446,7 +1436,7 @@ ${pagesHtml}
             const frame = document.getElementById('auditReportFrame');
             const doc = frame && frame.contentDocument ? frame.contentDocument : null;
             if (!doc) {
-                throw new Error(currentLang === 'en' ? 'Report content not found' : 'Contenuto del report non trovato');
+                throw new Error(tr('nsaReportContentNotFound'));
             }
 
             const res = await apiFetch('/api/netsec-audit/report/pdf', {
@@ -1469,10 +1459,10 @@ ${pagesHtml}
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            showToast(currentLang === 'en' ? 'PDF downloaded successfully.' : 'PDF scaricato con successo.', 'info');
+            showToast(tr('nsaPdfDownloadedSuccessfully'), 'info');
         } catch (e) {
             console.error('PDF export error:', e);
-            showToast((currentLang === 'en' ? 'Failed to generate PDF: ' : 'Errore generazione PDF: ') + (e.message || e), 'error');
+            showToast((tr('nsaFailedToGeneratePdf')) + (e.message || e), 'error');
         } finally {
             if (btn) {
                 btn.innerHTML = origHtml;
@@ -1495,7 +1485,7 @@ ${pagesHtml}
         const btn = document.getElementById('auditModalBtnDoc');
         const origHtml = btn ? btn.innerHTML : '';
         if (btn) {
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ' + (currentLang === 'en' ? 'Generating DOCX...' : 'Generazione DOCX...');
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ' + (tr('nsaGeneratingDocx'));
             btn.disabled = true;
         }
 
@@ -1505,7 +1495,7 @@ ${pagesHtml}
                 body: JSON.stringify(payload)
             });
             if (!res || !res.ok) {
-                throw new Error(currentLang === 'en' ? 'Failed to generate DOCX on server' : 'Errore server durante la generazione del DOCX');
+                throw new Error(tr('nsaFailedToGenerateDocx'));
             }
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);
@@ -1516,10 +1506,10 @@ ${pagesHtml}
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            showToast(currentLang === 'en' ? 'DOCX file downloaded successfully.' : 'File DOCX scaricato con successo.', 'info');
+            showToast(tr('nsaDocxFileDownloadedSuccessfully'), 'info');
         } catch (e) {
             console.error('DOCX export error:', e);
-            showToast((currentLang === 'en' ? 'Failed to export DOCX: ' : 'Errore esportazione DOCX: ') + (e.message || e), 'error');
+            showToast((tr('nsaFailedToExportDocx')) + (e.message || e), 'error');
         } finally {
             if (btn) {
                 btn.innerHTML = origHtml;
@@ -1559,19 +1549,19 @@ ${pagesHtml}
         const body = document.getElementById('auditBenchmarkReqsBody');
         if (!body || !details || !details.open) return;
 
-        const en = currentLang === 'en';
+        
         const key = document.getElementById('auditBenchmarkSelect').value;
         if (!_benchmarkCatalog) {
-            body.innerHTML = `<div style="font-size:12px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> ${en ? 'Loading requirements…' : 'Caricamento requisiti...'}</div>`;
+            body.innerHTML = `<div style="font-size:12px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> ${tr('nsaLoadingRequirements')}</div>`;
             try {
                 const res = await apiFetch('/api/netsec-audit/benchmarks');
                 if (!res || !res.ok) {
-                    body.innerHTML = `<div style="font-size:12px; color:var(--danger);">${en ? 'Unable to load the requirements.' : 'Impossibile caricare i requisiti.'}</div>`;
+                    body.innerHTML = `<div style="font-size:12px; color:var(--danger);">${tr('nsaUnableToLoadThe')}</div>`;
                     return;
                 }
                 _benchmarkCatalog = await res.json();
             } catch (e) {
-                body.innerHTML = `<div style="font-size:12px; color:var(--danger);">${en ? 'Network error while loading the requirements.' : 'Errore di rete nel caricamento dei requisiti.'}</div>`;
+                body.innerHTML = `<div style="font-size:12px; color:var(--danger);">${tr('nsaNetworkErrorWhileLoading')}</div>`;
                 return;
             }
         }
@@ -1590,9 +1580,7 @@ ${pagesHtml}
             .map(v => `${counts[v]} ${vendorLabel[v] || v}`).join(' · ');
         body.innerHTML = `
             <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">
-                ${reqs.length} ${en ? 'checks' : 'controlli'} (${escapeHtml(breakdown)}). ${en
-                    ? 'Only the checks matching the platform detected in the analysed configuration are run.'
-                    : 'Vengono eseguiti solo i controlli della piattaforma riconosciuta nella configurazione analizzata.'}
+                ${reqs.length} ${tr('nsaChecks')} (${escapeHtml(breakdown)}). ${tr('nsaOnlyTheChecksMatching')}
             </div>
             <table style="width:100%; border-collapse:collapse; font-size:12px;">
                 ${reqs.map(r => `
@@ -1603,9 +1591,9 @@ ${pagesHtml}
                         </td>
                         <td style="padding:8px 10px 8px 0; vertical-align:top;">
                             <strong>${escapeHtml(r.title)}</strong>
-                            <div style="color:var(--text-muted); margin-top:2px;">${en ? 'Check' : 'Verifica'}: ${escapeHtml(r.checks)}</div>
-                            ${r.audit ? `<div style="color:var(--text-muted); margin-top:2px; font-family:ui-monospace,monospace; white-space:pre-wrap;">${en ? 'Audit' : 'Audit'}: ${escapeHtml(r.audit)}</div>` : ''}
-                            <div style="color:var(--text-muted); margin-top:2px;">${en ? 'Remediation' : 'Rimedio'}: ${escapeHtml(r.remediation)}</div>
+                            <div style="color:var(--text-muted); margin-top:2px;">${tr('nsaCheck')}: ${escapeHtml(r.checks)}</div>
+                            ${r.audit ? `<div style="color:var(--text-muted); margin-top:2px; font-family:ui-monospace,monospace; white-space:pre-wrap;">${tr('nsaAudit')}: ${escapeHtml(r.audit)}</div>` : ''}
+                            <div style="color:var(--text-muted); margin-top:2px;">${tr('nsaRemediation')}: ${escapeHtml(r.remediation)}</div>
                         </td>
                         <td style="padding:8px 0; vertical-align:top; text-align:right; white-space:nowrap;">
                             <span style="color:${sevColor[r.severity] || 'var(--text-muted)'}; font-weight:700; font-size:11px;">${escapeHtml(r.severity)}</span>
@@ -1624,18 +1612,18 @@ ${pagesHtml}
         try {
             const res = await apiFetch('/api/netsec-audit/history');
             if (!res || !res.ok) {
-                tbody.innerHTML = `<tr><td colspan="8" style="padding:15px; text-align:center; color:var(--text-muted);">${currentLang === 'en' ? 'Error loading history.' : 'Errore nel caricamento dello storico.'}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="8" style="padding:15px; text-align:center; color:var(--text-muted);">${tr('nsaErrorLoadingHistory')}</td></tr>`;
                 return;
             }
             const data = await res.json();
             const runs = (data && data.runs) || [];
             if (!runs.length) {
-                tbody.innerHTML = `<tr><td colspan="8" style="padding:15px; text-align:center; color:var(--text-muted);">${currentLang === 'en' ? 'No saved audits in history.' : 'Nessun audit salvato nello storico.'}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="8" style="padding:15px; text-align:center; color:var(--text-muted);">${tr('nsaNoSavedAuditsIn')}</td></tr>`;
                 return;
             }
             tbody.innerHTML = runs.map(r => {
                 const dt = new Date(r.ts * 1000).toLocaleString();
-                const dev = escapeHtml(r.device_name || r.device_ip || (currentLang === 'en' ? 'Pasted config' : 'Config incollata'));
+                const dev = escapeHtml(r.device_name || r.device_ip || (tr('nsaPastedConfig')));
                 const runName = r.run_name ? escapeHtml(r.run_name) : null;
                 const devDisplay = runName
                     ? `<strong style="color:var(--text); font-size:12px;">${runName}</strong><br><span style="font-size:11px; color:var(--text-muted);">${dev}</span>`
@@ -1645,7 +1633,7 @@ ${pagesHtml}
                 const hasScore = (r.score !== null && r.score !== undefined);
                 const scoreStr = hasScore ? `${r.score}%` : '—';
                 const gradeStr = !hasScore
-                    ? (currentLang === 'en' ? 'NOT ASSESSABLE' : 'NON DETERMINABILE')
+                    ? (tr('nsaNotAssessable'))
                     : (r.score >= 80 ? 'GRADE A' : r.score >= 60 ? 'GRADE B' : 'GRADE C - RISK DETECTED');
                 const gradeColor = !hasScore
                     ? 'var(--text-muted)'
@@ -1669,7 +1657,7 @@ ${pagesHtml}
             if (typeof applyRoleUI === 'function') applyRoleUI(currentUsername, currentRole);
         } catch (e) {
             console.error('loadAuditHistory error:', e);
-            tbody.innerHTML = `<tr><td colspan="8" style="padding:15px; text-align:center; color:var(--text-muted);">${currentLang === 'en' ? 'Error loading history.' : 'Errore nel caricamento dello storico.'}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="8" style="padding:15px; text-align:center; color:var(--text-muted);">${tr('nsaErrorLoadingHistory')}</td></tr>`;
         }
     }
 
@@ -1707,7 +1695,7 @@ ${pagesHtml}
         try {
             const res = await apiFetch(`/api/netsec-audit/history/${id}`);
             if (!res || !res.ok) {
-                showToast(currentLang === 'en' ? 'Unable to load audit run.' : 'Impossibile caricare la run di audit.', 'error');
+                showToast(tr('nsaUnableToLoadAudit'), 'error');
                 return;
             }
             const data = await res.json();
@@ -1719,7 +1707,7 @@ ${pagesHtml}
             _auditBenchmarkName = data.benchmark_title || data.benchmark || 'CIS';
             renderAuditOverview();
             renderAuditRulesTable();
-            showToast(currentLang === 'en' ? 'Audit run loaded from history.' : 'Run di audit caricata dallo storico.', 'info');
+            showToast(tr('nsaAuditRunLoadedFrom'), 'info');
 
             if (openReport) {
                 exportAuditReport();
@@ -1731,26 +1719,24 @@ ${pagesHtml}
             }
         } catch (e) {
             console.error('openAuditRun error:', e);
-            showToast(currentLang === 'en' ? 'Unable to load audit run.' : 'Impossibile caricare la run di audit.', 'error');
+            showToast(tr('nsaUnableToLoadAudit'), 'error');
         }
     }
 
     async function deleteAuditRun(id) {
-        const msg = currentLang === 'en'
-            ? 'Permanently delete this audit from history?'
-            : 'Eliminare definitivamente questo audit dallo storico?';
+        const msg = tr('nsaPermanentlyDeleteThisAudit');
         if (!confirm(msg)) return;
         try {
             const res = await apiFetch(`/api/netsec-audit/history/${id}`, { method: 'DELETE' });
             if (res && res.ok) {
-                showToast(currentLang === 'en' ? 'Audit run deleted.' : 'Run di audit eliminata.', 'info');
+                showToast(tr('nsaAuditRunDeleted'), 'info');
                 loadAuditHistory();
             } else {
-                showToast(currentLang === 'en' ? 'Failed to delete audit run.' : 'Eliminazione della run non riuscita.', 'error');
+                showToast(tr('nsaFailedToDeleteAudit'), 'error');
             }
         } catch (e) {
             console.error('deleteAuditRun error:', e);
-            showToast(currentLang === 'en' ? 'Failed to delete audit run.' : 'Eliminazione della run non riuscita.', 'error');
+            showToast(tr('nsaFailedToDeleteAudit'), 'error');
         }
     }
 

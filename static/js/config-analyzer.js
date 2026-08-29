@@ -147,7 +147,10 @@
         const box = document.getElementById('caResults');
         if (!box) return;
         const L = i18n[currentLang];
+        // Passato come parametro ai render helper di questo modulo, non solo
+        // usato in ternarie: resta anche dopo la migrazione a t().
         const en = currentLang === 'en';
+        
         if (caView === 'home') {
             if (caFocusIp && caData && caData.length) {
                 caApplyFocus();
@@ -432,11 +435,11 @@
         let lines = [];
         try { lines = JSON.parse(decodeURIComponent(escape(atob(btn.dataset.raw)))); } catch (e) { lines = []; }
         document.getElementById('caRawRouteContent').textContent = lines.join('\n');
-        document.getElementById('caRawRouteModal').style.display = 'flex';
+        openModal('caRawRouteModal');
     }
 
     function caCloseRawRouteModal() {
-        document.getElementById('caRawRouteModal').style.display = 'none';
+        closeModal('caRawRouteModal');
     }
 
     function caRenderRouting(dev, L, en, idx) {
@@ -668,7 +671,7 @@
         const sections = [];
         let total = 0;
         Object.keys(v).forEach(key => {
-            const lbl = caMvValLabels[key] ? caMvValLabels[key][en ? 'en' : 'it'] : key;
+            const lbl = caMvValLabels[key] ? caMvValLabels[key][tr('cfaEn')] : key;
             const val = v[key];
             if (Array.isArray(val) && val.length) {
                 total += val.length;
@@ -810,96 +813,6 @@
             <summary style="cursor:pointer; font-size:12px;"><span class="ca-chip">${escapeHtml(label)}: ${items.length}</span></summary>
             <div style="font-family:var(--font-code); font-size:11px; color:var(--text-muted); margin:4px 0 8px; max-width:520px;">${names}</div>
         </details>`;
-    }
-
-    function caRenderFortios(dev, L, en) {
-        // Interfacce
-        const ifaces = dev.interfaces || [];
-        const ifaceRows = ifaces.map(i => {
-            const st = (i.status || '').toLowerCase();
-            const state = st === 'down' || st === 'disable'
-                ? `<span class="ca-chip" style="color:var(--danger); border-color:var(--danger);">${escapeHtml(i.status)}</span>`
-                : `<span class="ca-chip" style="color:var(--success); border-color:var(--success);">${escapeHtml(i.status || L.lblCaActive)}</span>`;
-            return `<tr>
-                <td>${escapeHtml(i.name)}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(i.ip || '—')}</td>
-                <td>${escapeHtml(i.vlanid != null ? String(i.vlanid) : '—')}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${caMultiCell(i.allowaccess || [])}</td>
-                <td>${state}</td>
-            </tr>`;
-        }).join('');
-        const ifaceTable = ifaces.length
-            ? `<div class="table-container"><table><thead><tr>
-                <th>${L.thCaIface}</th><th>${L.thCaIp}</th><th>${L.thCaVlanCol}</th><th>${L.thCaFgAllowaccess}</th><th>${L.thCaState}</th>
-                </tr></thead><tbody>${ifaceRows}</tbody></table></div>`
-            : caMvEmpty();
-
-        // Policy firewall
-        const policies = dev.policies || [];
-        const polRows = policies.map(p => {
-            const act = (p.action || '').toLowerCase();
-            const actColor = act === 'accept' ? 'var(--success)' : act === 'deny' ? 'var(--danger)' : 'var(--text-muted)';
-            // Stessa resa del pill Firewall: la riga disattivata si attenua e
-            // prende una barra neutra a sinistra, senza il rosso che in questa
-            // stessa tabella significa gia' azione "deny".
-            return `<tr${caRowIsDisabled(p) ? ' class="ca-row-off"' : ''}>
-                <td>${escapeHtml(p.id != null ? String(p.id) : '—')}</td>
-                <td>${escapeHtml(p.name || '—')}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${caMultiCell(p.srcintf || [])}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${caMultiCell(p.dstintf || [])}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${caMultiCell(p.srcaddr || [])}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${caMultiCell(p.dstaddr || [])}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${caMultiCell(p.service || [])}</td>
-                <td style="color:${actColor}; font-weight:700;">${escapeHtml(p.action || '—')}</td>
-                <td>${escapeHtml(p.nat || '—')}</td>
-                <td>${escapeHtml(p.logtraffic || '—')}</td>
-            </tr>`;
-        }).join('');
-        const polTable = policies.length
-            ? `<div class="table-container"><table><thead><tr>
-                <th>ID</th><th>${L.lblCaName}</th><th>${L.thCaFgSrcIntf}</th><th>${L.thCaFgDstIntf}</th><th>${L.thCaFgSrcAddr}</th><th>${L.thCaFgDstAddr}</th><th>${L.thCaFgService}</th><th>${L.thCaFgAction}</th><th>NAT</th><th>Log</th>
-                </tr></thead><tbody>${polRows}</tbody></table></div>`
-            : caMvEmpty();
-
-        // Oggetti
-        const objects = `<div>
-            ${caMvObjList(L.lblCaFgAddresses, dev.addresses)}
-            ${caMvObjList(L.lblCaFgAddrGroups, dev.addr_groups)}
-            ${caMvObjList(L.lblCaFgServices, dev.services)}
-            ${caMvObjList(L.lblCaFgSvcGroups, dev.service_groups)}
-            ${caMvObjList(L.lblCaFgVips, dev.vips)}
-        </div>`;
-
-        // Routing statico + VPN
-        const statics = (dev.routing && dev.routing.static) || [];
-        const routeRows = statics.map(r => `<tr>
-            <td>${escapeHtml(r.seq != null ? String(r.seq) : '—')}</td>
-            <td style="font-family:var(--font-code);">${escapeHtml(r.prefix || '—')}</td>
-            <td style="font-family:var(--font-code);">${escapeHtml(r.next_hop || '—')}</td>
-            <td>${escapeHtml(r.device || '—')}</td>
-            <td>${escapeHtml(r.distance != null ? String(r.distance) : '—')}</td>
-            </tr>`).join('');
-        const routeTable = statics.length
-            ? `<div class="table-container"><table><thead><tr>
-                <th>${L.thCaAclSeq}</th><th>${L.lblCaPrefix}</th><th>${L.lblCaNextHop}</th><th>${L.thCaFgDevice}</th><th>${L.thCaFgDistance}</th>
-                </tr></thead><tbody>${routeRows}</tbody></table></div>`
-            : caMvEmpty();
-        const vpn = dev.vpn || {};
-        const p1 = vpn.phase1 || [];
-        const p2 = vpn.phase2 || [];
-        const vpnChips = list => list.map(x => `<span class="ca-chip">${escapeHtml(caMvValItemText(x))}</span>`).join('');
-        const vpnHtml = (p1.length || p2.length)
-            ? `${p1.length ? `${caMvSectionTitle(L.titleCaVpnP1)}<div>${vpnChips(p1)}</div>` : ''}
-               ${p2.length ? `${caMvSectionTitle(L.titleCaVpnP2)}<div>${vpnChips(p2)}</div>` : ''}`
-            : '';
-
-        const val = caRenderMvValidationBody(dev, L, en);
-
-        return `${caMvSectionTitle(L.titleCaFgIfaces)}${ifaceTable}
-            ${caMvSectionTitle(L.titleCaFgPolicies)}${polTable}
-            ${caMvSectionTitle(L.titleCaFgObjects)}${objects}
-            ${caMvSectionTitle(L.titleCaFgRouting)}${routeTable}${vpnHtml}
-            ${caMvSectionTitle(L.titleCaValidation)}${val.body}`;
     }
 
     // ===== Config Analyzer: sub-tab Firewall (FortiGate) =====
@@ -1050,69 +963,6 @@
             'server', caSrvView, 'caSwitchSrvView', L.msgCaSrvNoBackup, L);
         caSrvView = res.view;
         return res.html;
-    }
-
-    function caRenderWlc(dev, L, en) {
-        // WLAN
-        const wlans = dev.wlans || [];
-        const wlanRows = wlans.map(w => {
-            const state = w.enabled
-                ? `<span class="ca-chip" style="color:var(--success); border-color:var(--success);">${escapeHtml(L.lblCaActive)}</span>`
-                : `<span class="ca-chip" style="color:var(--danger); border-color:var(--danger);">disabled</span>`;
-            const bcast = w.broadcast_ssid === false ? 'off' : 'on';
-            return `<tr>
-                <td>${escapeHtml(w.id != null ? String(w.id) : '—')}</td>
-                <td>${escapeHtml(w.ssid || '—')}</td>
-                <td>${escapeHtml(w.profile || '—')}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(w.security || '—')}${w.tkip ? ` <span class="ca-chip" style="color:var(--warning); border-color:var(--warning);">TKIP</span>` : ''}</td>
-                <td>${state}</td>
-                <td>${escapeHtml(w.interface || '—')}</td>
-                <td>${escapeHtml(bcast)}</td>
-            </tr>`;
-        }).join('');
-        const wlanTable = wlans.length
-            ? `<div class="table-container"><table><thead><tr>
-                <th>ID</th><th>${L.thCaSsid}</th><th>${L.thCaProfile}</th><th>${L.thCaSecurity}</th><th>${L.thCaState}</th><th>${L.thCaIface}</th><th>${L.thCaBroadcast}</th>
-                </tr></thead><tbody>${wlanRows}</tbody></table></div>`
-            : caMvEmpty();
-
-        // Interfacce dinamiche
-        const dyns = dev.dynamic_interfaces || [];
-        const dynRows = dyns.map(d => `<tr>
-            <td>${escapeHtml(d.name || '—')}</td>
-            <td>${escapeHtml(d.vlan != null ? String(d.vlan) : '—')}</td>
-            <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(d.ip || '—')}</td>
-            </tr>`).join('');
-        const dynTable = dyns.length
-            ? `<div class="table-container"><table><thead><tr>
-                <th>${L.lblCaName}</th><th>${L.thCaVlanCol}</th><th>${L.thCaIp}</th>
-                </tr></thead><tbody>${dynRows}</tbody></table></div>`
-            : caMvEmpty();
-
-        // RADIUS + mobility group
-        const radius = dev.radius_servers || [];
-        const radiusChips = radius.length
-            ? `<div>${radius.map(r => `<span class="ca-chip">${escapeHtml([r.kind, r.index != null ? '#' + r.index : '', r.ip + (r.port ? ':' + r.port : '')].filter(Boolean).join(' '))}</span>`).join('')}</div>`
-            : caMvEmpty();
-        const mobility = dev.mobility_group
-            ? `<div><span class="ca-chip">${escapeHtml(L.lblCaMobility)}: ${escapeHtml(dev.mobility_group)}</span></div>`
-            : '';
-
-        const val = caRenderMvValidationBody(dev, L, en);
-
-        // Fallback IOS-XE: riusa il rendering IOS esistente su ios_base.
-        let iosHtml = '';
-        if (dev.platform === 'iosxe' && dev.ios_base) {
-            const iosDev = Object.assign({ ip: dev.ip }, dev.ios_base);
-            iosHtml = `${caMvSectionTitle(L.thCaIface)}${caRenderIfaces(iosDev, L, en)}
-                ${caMvSectionTitle('VLAN')}${caRenderVlans(iosDev, L, en)}`;
-        }
-
-        return `${caMvSectionTitle(L.titleCaWlans)}${wlanTable}
-            ${caMvSectionTitle(L.titleCaDynIfaces)}${dynTable}
-            ${caMvSectionTitle(L.titleCaRadius)}${radiusChips}${mobility}
-            ${iosHtml}
-            ${caMvSectionTitle(L.titleCaValidation)}${val.body}`;
     }
 
     // Delegated event listeners for Config Analyzer

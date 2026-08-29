@@ -19,17 +19,8 @@ import logging
 
 log = logging.getLogger("arp_collector")
 
-# ARP command per driver (default 'show arp' if not listed).
-ARP_COMMANDS = {
-    "cisco_ios":      "show ip arp",
-    "cisco_s300":     "show arp",
-    "cisco_9800":     "show ip arp",
-    "cisco_wlc":      "show arp switch",
-    "hp_procurve":    "show arp",
-    "juniper_junos":  "show arp no-resolve",
-    "aruba_os":       "show arp",
-    "paloalto_panos": "show arp all",
-}
+# ARP command per driver lives in the drivers layer (plan item 15).
+from drivers.registry import arp_command_for
 
 _MAC_ANY = re.compile(
     r'\b([0-9a-fA-F]{2}([:\-][0-9a-fA-F]{2}){5}|[0-9a-fA-F]{4}(\.[0-9a-fA-F]{4}){2})\b')
@@ -109,7 +100,7 @@ def collect_from_device(device: dict) -> dict:
     except ValueError as e:
         return {"status": "error", "source_type": "switch", "message": str(e)}
 
-    command = ARP_COMMANDS.get(driver_name or "", "show arp")
+    command = arp_command_for(driver_name)
     source_type = "firewall" if driver_name == "paloalto_panos" else "switch"
 
     from core.net_ssh import ConnectHandler
@@ -134,12 +125,22 @@ def collect_from_device(device: dict) -> dict:
 
 def collect_all(devices: list) -> dict:
     """Collects ARP from all the listed devices and records them in the DB.
-    Returns the per-device summary + totals."""
+    Returns the per-device summary + totals.
+
+    Collection is pooled, twin of mac_collector.collect_all: the sequential
+    loop made one dead gateway cost ~50 s of wall time and scale linearly
+    with the estate (app review item 13). Recording stays sequential —
+    mac_history owns its own lock and the write phase is cheap next to SSH.
+    """
+    from concurrent.futures import ThreadPoolExecutor
     from collectors import mac_history
     summary = {"devices": {}, "total_new": 0, "total_updated": 0}
-    for device in devices:
+    if not devices:
+        return summary
+    with ThreadPoolExecutor(max_workers=min(8, len(devices))) as ex:
+        collected = list(ex.map(collect_from_device, devices))
+    for device, res in zip(devices, collected):
         ip = device.get("IP")
-        res = collect_from_device(device)
         if res["status"] != "success":
             summary["devices"][ip] = {"status": "error",
                                       "message": res.get("message", "")}

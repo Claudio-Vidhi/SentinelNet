@@ -9,6 +9,8 @@ services:
       # Monta solo la cartella dei dati persistenti (db di autenticazione, credenziali degli apparati, chiavi crittografiche, backup)
       # Questo consente di distribuire ed eseguire l'applicazione come immagine standalone pre-compilata da Docker Hub
       # senza sovrascrivere o aver bisogno del codice sorgente Python locale.
+      # L'immagine gira come uid 1000: su host Linux la directory deve essere
+      # scrivibile da quell'utente ('chown -R 1000:1000 ./data').
       - ./data:/app/data
     environment:
       # Forza l'applicazione a salvare database, chiavi e backup all'interno della directory del volume condiviso
@@ -18,15 +20,15 @@ services:
       - SENTINELNET_NO_BROWSER=true
       # - SENTINELNET_MASTER_KEY=chiave_segreta_fernet_personalizzata
       # - SENTINELNET_JWT_SECRET=chiave_segreta_jwt_personalizzata
-      # - SENTINELNET_ADMIN_USER=Admin
-      # - SENTINELNET_ADMIN_PASS=admin
-      # - SENTINELNET_ADMIN_SECRET=admin
-      # TLS nativo opzionale (vedi docs/HARDENING.md). Percorsi relativi a SENTINELNET_DATA_DIR.
+      # Le credenziali device di default (SENTINELNET_ADMIN_*) non vanno messe
+      # qui: sono il fallback degli apparati senza credenziali proprie e un
+      # esempio admin/admin in un file di deploy è un invito a lasciarle cosi'.
+      # TLS nativo opzionale (vedi docs/hardening.md). Percorsi relativi a SENTINELNET_DATA_DIR.
       # - SENTINELNET_SSL_CERTFILE=certs/server.crt
       # - SENTINELNET_SSL_KEYFILE=certs/server.key
     restart: unless-stopped
 
-  # Reverse proxy consigliato per l'esposizione del pannello (docs/HARDENING.md).
+  # Reverse proxy consigliato per l'esposizione del pannello (docs/hardening.md).
   # Decommentare e fornire ./proxy/Caddyfile con TLS + security header.
   # proxy:
   #   image: caddy:2

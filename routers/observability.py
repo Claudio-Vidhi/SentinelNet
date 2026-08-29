@@ -647,6 +647,9 @@ def obs_health(current_user = Depends(require_admin)):
         "enabled": data_config.obs_config()["enabled"],
         "listeners": listener_status,
         "metrics": snap,
+        # WP7: writer loss is a STATE the operator reads, not just counters:
+        # "degraded" is true on any drop or a dead writer since startup.
+        "db_health": db.health_state(),
         "template_cache_size": ipfix.template_cache_size(),
         "db_size_bytes": db_size,
         "schema_version": db.SCHEMA_VERSION,
