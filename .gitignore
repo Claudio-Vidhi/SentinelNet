@@ -124,20 +124,13 @@ checklist_x_c.docx
 data/security/
 data/vendors.json
 HANDOFF.md
-.qwen/settings.json
-
-# Vendored AI skill packages: third-party, reinstallable
-.claude/skills/
-.agents/skills/impeccable/
-.impeccable/live/
-.impeccable/questions/
-data/ssh_known_hosts
-cont.txt
-
-# Workspace della subagent-driven-development: ledger, brief, report e diff
-# di lavorazione. Scratch rigenerabile, la storia git e il record vero.
+# Agent and assistant scratch directories
+.claude/
+.agents/
+.qwen/
+.impeccable/
 .superpowers/
-.claude/settings.local.json
+cont.txt
 
 # Frontend type-check tooling (nessun bundle: solo tsc)
 node_modules/
