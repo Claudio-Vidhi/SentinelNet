@@ -14,9 +14,9 @@ uv pip install -r requirements.txt
 uv run app_server.py
 ```
 
-`pyproject.toml` declares `requires-python = ">=3.14"`; the root README still
-says 3.11+. The compiled artifacts in the tree are CPython 3.14 — treat
-`pyproject.toml` as authoritative and don't assume 3.11 works.
+`pyproject.toml` declares `requires-python = ">=3.14"`. The compiled
+artifacts in the tree are CPython 3.14 — treat `pyproject.toml` as
+authoritative.
 
 ---
 
