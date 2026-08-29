@@ -40,13 +40,14 @@ def _parse_json(raw):
 
 
 @router.get("/rules")
-def list_rules(current_user = Depends(get_current_user)):
+def list_rules(lang: str = Query("it", description="Language: 'it' or 'en'"),
+               current_user = Depends(get_current_user)):
     """Catalogo delle regole di correlazione: il motore descrive se stesso.
 
     La UI ci costruisce il pannello soglie, l'assistente AI sa quali regole
     esistono e la documentazione deriva dal codice — una sola fonte di verità.
     Nessun dato di tenant qui dentro, solo la definizione del motore."""
-    return {"rules": rules.catalog()}
+    return {"rules": rules.catalog(lang=lang)}
 
 
 @router.post("/rules/{rule_id}/parameters")
