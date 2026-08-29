@@ -12,7 +12,9 @@ ENV/
 .coverage
 htmlcov/
 
-# Sensitive data (Device credentials, inventories, tokens, identities)
+# Sensitive data & local runtime directory (credentials, databases, backups, keys)
+data/
+*.posix
 fortigate_tokens.json
 network_hosts.csv
 detected_versions.json
