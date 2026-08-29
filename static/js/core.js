@@ -929,6 +929,7 @@ const LAZY_TAB_SCRIPTS = {
     'tab-users': ['/static/js/settings.js'],
     'tab-mcp': ['/static/js/settings.js'],
     'tab-incidents': ['/static/js/incidents.js'],
+    'tab-interfaces': ['/static/js/interfaces.js'],
     'tab-redundancy': ['/static/js/redundancy.js'],
     // The Firewall Audit Checklist is a sub-tab of NetSec Audit: its module
     // has to load together with the tab that contains it.
@@ -1076,6 +1077,7 @@ async function switchTab(tabId, clickedBtn) {
     // dopo il caricamento lazy del modulo.
     else if (tabId === 'tab-flows') flowsTabShown();
     else if (tabId === 'tab-incidents') loadIncidentsTab();
+    else if (tabId === 'tab-interfaces' && typeof loadInterfacesTab === 'function') loadInterfacesTab();
     else if (tabId === 'tab-redundancy') loadRedundancyTab();
     else if (tabId === 'tab-netsec-audit') loadNetSecAuditTab();
     else if (tabId === 'tab-policy-test') loadPolicyTestTab();
