@@ -41,6 +41,17 @@ features and the same fixes** — a change landing on one belongs on the other.
 - So `master` carries no test suite. Verify on `Dev`, where the gate runs,
   then port. Never `git merge --ff-only master` from `Dev`: master's history
   contains those deletions, and fast-forwarding would wipe `Dev`'s tests.
+- Port with `uv run python scripts/dev/port_to_master.py`, not by hand. A
+  plain `git merge Dev` on master raises a modify/delete conflict for every
+  stripped file that changed, and silently leaves the unchanged ones staged
+  for re-adding — which is how tests or `AGENTS.md` end up back on the public
+  branch. The script merges, resolves those conflicts the only admissible
+  way, drops the whole strip from the index and stops, leaving the merge
+  staged for you to review and commit. `--check` verifies the invariant
+  (master == Dev minus the strip) without touching anything.
+- The README screenshots live in `docs/images/` and are regenerated with
+  `uv run python scripts/dev/capture_screenshots.py`. Rerun it when the UI
+  changes visibly: no test catches a stale screenshot.
 
 ## Software Versioning (SemVer)
 - Single source of truth is `core/version.py` (`__version__ = "X.Y.Z"`); `pyproject.toml` must match it. Update both.
