@@ -8,8 +8,16 @@ mano dall'indice. Farlo a mano ogni volta e' il modo piu' semplice di
 rimettere per sbaglio i test o AGENTS.md sul ramo pubblico.
 
 Questo script fa il merge, risolve quei conflitti nell'unico modo ammesso
-(sul ramo pubblico il file non esiste) e toglie dall'indice tutto lo strip.
-Lascia il merge STAGED e non committa: il messaggio lo scrive chi porta.
+(sul ramo pubblico il file non esiste) e toglie tutto lo strip dall'indice e
+dal disco. Lascia il merge STAGED e non committa: il messaggio lo scrive chi
+porta.
+
+Dopo il porting l'albero e' davvero "Dev meno lo strip", e `git checkout Dev`
+rimette ogni file al suo posto. Cancellare e' necessario, non cosmetico: un
+file dello strip NUOVO su Dev resterebbe li' non tracciato, e git si rifiuta
+di sovrascrivere un file non tracciato quando il contenuto non coincide con
+quello che sta per scrivere -- un fine riga normalizzato diverso basta a
+bloccare il ritorno su Dev.
 
     uv run python scripts/dev/port_to_master.py          # esegue
     uv run python scripts/dev/port_to_master.py --check  # solo diagnosi
@@ -17,8 +25,11 @@ Lascia il merge STAGED e non committa: il messaggio lo scrive chi porta.
 Regola di riferimento: AGENTS.md, sezione "Branches".
 """
 
+import pathlib
 import subprocess
 import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 
 # Lo strip, come elencato in AGENTS.md. Aggiungere qui una voce nuova
 # significa aggiungerla anche li': questo script e' l'applicazione di quella
@@ -50,6 +61,19 @@ STRIP = (
     "docs/test_optimization_findings.md",
     "docs/ui_tab_overlap_analysis.md",
 )
+
+
+def _prune_empty_dirs(files):
+    """Toglie le cartelle rimaste vuote dopo la cancellazione, dalla piu'
+    profonda in su. Una cartella con dentro solo __pycache__ resta: non e'
+    tracciata su Dev, quindi cancellarla non e' compito di questo script."""
+    dirs = {ROOT / f for f in files}
+    dirs = sorted({d.parent for d in dirs}, key=lambda d: len(d.parts), reverse=True)
+    for d in dirs:
+        try:
+            d.rmdir()
+        except OSError:
+            pass
 
 
 def git(*args, check=True):
@@ -125,8 +149,7 @@ def main():
     for f in unmerged:
         git("rm", "-q", "-f", "--", f)
 
-    # E tutto il resto dello strip esce dall'indice (restando su disco:
-    # tornando su Dev git li ritraccia).
+    # E tutto il resto dello strip esce dall'indice.
     present = [f for f in files
                if f not in unmerged
                and git("ls-files", "--", f, check=False)]
@@ -134,8 +157,28 @@ def main():
         for i in range(0, len(present), 200):
             git("rm", "-q", "-r", "--cached", "--", *present[i:i + 200])
 
+    # ...e anche dal disco. Lasciarli li' era gia' incoerente -- il ramo dei
+    # modify/delete qui sopra li cancella eccome -- e per i file NUOVI su Dev
+    # era una trappola: restavano non tracciati, e `git checkout Dev` si
+    # rifiuta di sovrascrivere un file non tracciato il cui contenuto non
+    # coincide con quello che sta per scrivere. Basta un fine riga
+    # normalizzato diverso e il ritorno su Dev si blocca, con un elenco di
+    # file che sembrano modifiche non salvate e non lo sono.
+    #
+    # Si cancella SOLO cio' che e' tracciato su Dev (`files` viene da li'):
+    # `git checkout Dev` li riscrive tutti, quindi non si perde niente.
+    removed = 0
+    for f in present:
+        path = ROOT / f
+        try:
+            path.unlink()
+            removed += 1
+        except OSError:
+            pass
+    _prune_empty_dirs(files)
+
     print(f"strip applicato: {len(unmerged)} conflitti modify/delete risolti, "
-          f"{len(present)} file tolti dall'indice.")
+          f"{len(present)} file tolti dall'indice, {removed} tolti dal disco.")
 
     staged = git("diff", "--cached", "--name-only", "Dev")
     extra = [l for l in staged.splitlines() if l and l not in files]
