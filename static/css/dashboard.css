@@ -2036,14 +2036,17 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   border-color: var(--cta);
   box-shadow: var(--shadow-card);
 }
+/* The state is carried by the status pill inside the card. This is the 1px
+   accent DESIGN.md allows ("Borders are uniformly 1px"), not the 4px slab that
+   was here: the card already says what it says, twice over. */
 .verdict-card.state-ok {
-  border-left: 4px solid var(--success) !important;
+  border-left-color: var(--success);
 }
 .verdict-card.state-warn {
-  border-left: 4px solid var(--warning) !important;
+  border-left-color: var(--warning);
 }
 .verdict-card.state-crit {
-  border-left: 4px solid var(--danger) !important;
+  border-left-color: var(--danger);
 }
 
 .status-badge {
@@ -2115,4 +2118,62 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   letter-spacing: 0.1em;
   color: var(--text-muted);
   background: var(--surface-1);
+}
+
+
+/* ---------------------------------------------------------------
+   INTERFACCE — cartelle di stato porta, filtri della tabella.
+   Six copies of the same inline block used to live in the template,
+   all off the type ramp (22px) and tinted with literal rgba. Label is
+   Pill Label, value is Reading, tints are the lamp washes.
+   --------------------------------------------------------------- */
+.if-stat {
+  padding: 12px 14px;
+  text-align: center;
+  cursor: pointer;
+}
+.if-stat-label {
+  font-family: var(--font-legend);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.if-stat-value {
+  font-family: var(--font-data);
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.if-stat.state-up { border-color: var(--success); }
+.if-stat.state-up .if-stat-label,
+.if-stat.state-up .if-stat-value { color: var(--success); }
+.if-stat.state-outage { border-color: var(--danger); }
+.if-stat.state-outage .if-stat-label,
+.if-stat.state-outage .if-stat-value { color: var(--danger); }
+.if-stat.state-flap { border-color: var(--warning); }
+.if-stat.state-flap .if-stat-label,
+.if-stat.state-flap .if-stat-value { color: var(--warning); }
+.if-stat.state-maint { border-color: var(--primary); }
+.if-stat.state-maint .if-stat-label,
+.if-stat.state-maint .if-stat-value { color: var(--primary); }
+.if-stat.state-idle .if-stat-label,
+.if-stat.state-idle .if-stat-value { color: var(--text-muted); }
+
+/* Stato porta nella tabella: gli stessi lampeggianti del resto del sistema. */
+.if-badge-up { background: var(--lamp-up-wash); color: var(--success); border: var(--seam) solid var(--success); }
+.if-badge-down { background: var(--lamp-fault-wash); color: var(--danger); border: var(--seam) solid var(--danger); }
+.if-badge-dot { font-size: 9px; margin-right: 4px; }
+.if-empty-icon { font-size: 25px; margin-bottom: 8px; display: block; opacity: 0.5; }
+
+/* La freccia del KPI cliccabile: a 11px si leggeva come un punto, e quell'item
+   sembrava soltanto diverso dagli altri invece che cliccabile. */
+.kpi-cue {
+  font-size: 13px;
+  color: var(--primary);
+  margin-left: 4px;
 }

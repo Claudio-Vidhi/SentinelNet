@@ -160,7 +160,27 @@ SENTINELNET_OBS_RETENTION_FLOWS_DAYS=30   # _SYSLOG_DAYS=7, _EVENTS_DAYS=90
 
 ---
 
-## 5. Other recommendations
+## 5. FortiGate REST: an accepted risk, stated
+
+Per-device TLS certificate verification for the FortiGate REST API defaults to
+**off**, because a FortiGate almost always presents a self-signed certificate
+and verifying it out of the box would leave every new install unable to poll
+anything.
+
+What that costs, so the decision is made with open eyes: the API token travels
+as a `Bearer` header over a connection whose peer is not authenticated. Anyone
+positioned on the path between SentinelNet and the firewall's management
+interface can read that token and then use it directly against the FortiGate.
+
+- Keep the management path a network you trust. This is the same assumption the
+  panel itself makes (see the core rule at the top of this document).
+- Where the FortiGate carries a certificate from a CA you run, **turn
+  verification on** for that device: the checkbox is per-target, in the token
+  dialog of the FortiGate Management tab.
+- Treat a stolen API token as a full compromise of that firewall, and rotate it
+  from the FortiGate side, not from here.
+
+## 6. Other recommendations
 
 - Never publish port 8000 directly on the Internet.
 - Restrict panel access to a VPN or management network.
