@@ -110,6 +110,19 @@ class TestPortVlan(unittest.IsolatedAsyncioTestCase):
 
 class TestDeviceSelection(unittest.TestCase):
 
+    def setUp(self):
+        # La selezione dipende anche dal default di tenant, che vive in un file
+        # condiviso da tutto il processo: senza fissarlo, questi test leggono
+        # quello che un altro modulo ha lasciato in giro invece del proprio.
+        from security import snmp_defaults
+        self.snmp_defaults = snmp_defaults
+        for tenant in ("sede-a", "Generale"):
+            snmp_defaults.set_tenant_community(tenant, "")
+
+    def tearDown(self):
+        for tenant in ("sede-a", "Generale"):
+            self.snmp_defaults.set_tenant_community(tenant, "")
+
     def _devices(self, rows):
         return patch("services.inventory_manager.get_all_devices",
                      return_value=rows)
@@ -127,6 +140,23 @@ class TestDeviceSelection(unittest.TestCase):
         # Cifrata a riposo, in chiaro solo in memoria al momento del poll.
         self.assertEqual(selected[0]["community"], "segreta")
         self.assertNotEqual(rows[0]["SNMP Community"], "segreta")
+
+    def test_a_tenant_default_brings_in_the_devices_without_one(self):
+        """L'altra meta' della regola, che qui non era coperta: il default di
+        tenant e' esattamente cio' che rendeva intermittente il test sopra."""
+        rows = [
+            {"IP": "10.1.0.1", "Group": "sede-a",
+             "SNMP Community": crypto_vault.encrypt_password("propria")},
+            {"IP": "10.1.0.2", "Group": "sede-a", "SNMP Community": ""},
+        ]
+        self.snmp_defaults.set_tenant_community("sede-a", "del-tenant")
+        with self._devices(rows):
+            selected = snmp_poller._snmp_devices()
+
+        self.assertEqual([d["ip"] for d in selected], ["10.1.0.1", "10.1.0.2"])
+        # La community dell'apparato batte quella del tenant.
+        self.assertEqual([d["community"] for d in selected],
+                         ["propria", "del-tenant"])
 
 
 class TestSnapshotsReachTheEngine(unittest.TestCase):

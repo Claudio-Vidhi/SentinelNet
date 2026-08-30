@@ -69,6 +69,10 @@ def _save_users(users: dict):
         tmp = USERS_JSON + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(users, f, indent=4)
+        # This file holds every password hash. Tighten the temp copy BEFORE the
+        # rename -- it already holds them, and on POSIX os.replace carries the
+        # source's mode onto the destination.
+        data_config.restrict_permissions(tmp)
         try:
             os.replace(tmp, USERS_JSON)
         except PermissionError:
@@ -78,6 +82,7 @@ def _save_users(users: dict):
                 os.remove(tmp)
             except OSError:
                 pass
+        data_config.restrict_permissions(USERS_JSON)
 
 def has_any_user() -> bool:
     try:

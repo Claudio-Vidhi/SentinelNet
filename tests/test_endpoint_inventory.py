@@ -39,6 +39,12 @@ class _Base(unittest.TestCase):
         with mac_history._lock, mac_history._connect() as c:
             for table in ("mac_sightings", "arp_entries", "switch_if_macs"):
                 c.execute(f"DELETE FROM {table}")
+        # Truncating the tables resets the DATA, not the report derived from
+        # it. endpoint_inventory() memoises on a stamp of those tables, and two
+        # tests that write the same shape of rows inside the same second can
+        # land on the same stamp -- which is how this file produced a failure
+        # once every few full runs and none in isolation.
+        mac_history._INVENTORY_CACHE.clear()
         # La topologia non e' il soggetto di questi test: senza switch noti,
         # reclassify_sightings conserva l'is_uplink scritto in raccolta.
         self.topo = patch("collectors.mac_history.topology_uplinks",
@@ -859,3 +865,40 @@ class TestInventarioMemoizzato(_Base):
         self.assertEqual(a["counts"]["endpoints"], 1)
         self.assertEqual(b["counts"]["endpoints"], 1)
         self.assertNotEqual(a["results"][0]["mac"], b["results"][0]["mac"])
+
+
+class TestInventoryCacheStamp(_Base):
+    """The cache key must change when ``switch_if_macs`` changes.
+
+    ``_inventory_stamp`` carries COUNT + MAX(last_seen) + MAX(id) for the two
+    tables that have an id, and its own docstring says why the first two alone
+    are not enough: retention deletes N rows, a scan rewrites N others with the
+    same last_seen, and the stale report passes for fresh. ``switch_if_macs``
+    has no id column, so it was left with exactly the pair the docstring calls
+    insufficient -- and that table decides which MACs are infrastructure, i.e.
+    which endpoints disappear from the inventory entirely.
+    """
+
+    def test_swapping_the_infra_set_is_not_a_cache_hit(self):
+        mac_b = "aa:bb:cc:dd:ee:02"
+        self._sighting(mac=MAC_A)
+        self._sighting(mac=mac_b)
+
+        # MAC_A is infrastructure: the inventory shows only mac_b.
+        self._infra_mac(MAC_A)
+        first = mac_history.endpoint_inventory()
+        self.assertEqual([r["mac"] for r in first["results"]], [mac_b])
+
+        # A retention pass drops it and a rescan writes the OTHER one, in the
+        # same second: same row count, same MAX(last_seen), different meaning.
+        with mac_history._lock, mac_history._connect() as c:
+            c.execute("DELETE FROM switch_if_macs")
+        self._infra_mac(mac_b)
+
+        second = mac_history.endpoint_inventory()
+        self.assertEqual([r["mac"] for r in second["results"]], [MAC_A],
+                         "served the previous infra set from cache")
+
+
+if __name__ == "__main__":
+    unittest.main()

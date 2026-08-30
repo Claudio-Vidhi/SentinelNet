@@ -449,3 +449,37 @@ def _tearDownModule():
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestApiContextTenantScope(_Base):
+    """The "latest snapshot per kind" subquery must be tenant-scoped too.
+
+    Two customers may each own 192.0.2.10. With an unscoped subquery, MAX(id)
+    picks whichever tenant wrote last; the outer tenant filter then drops that
+    row and the scoped user sees nothing instead of their own snapshot.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        conn = db.get_observability_connection()
+        for tenant, payload in (("sede-a", {"cpu": 11}), ("sede-b", {"cpu": 99})):
+            conn.execute(
+                "INSERT INTO api_observations (ts, tenant, device_ip, kind, "
+                "summary_json) VALUES (?, ?, '192.0.2.10', 'system', ?)",
+                (NOW, tenant, json.dumps(payload)))
+        conn.commit()
+
+    def test_scoped_user_sees_their_own_latest_snapshot(self):
+        c = self._client("op_a")
+        r = c.get("/api/observability/api-context", params={"device_ip": "192.0.2.10"})
+        self.assertEqual(r.status_code, 200)
+        obs = r.json()["observations"]
+        self.assertEqual(len(obs), 1, "sede-b's newer row hid sede-a's own snapshot")
+        self.assertEqual(obs[0]["tenant"], "sede-a")
+
+    def test_unscoped_admin_still_sees_one_row_per_tenant_kind(self):
+        c = self._client("adm")
+        r = c.get("/api/observability/api-context", params={"device_ip": "192.0.2.10"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(r.json()["observations"]), 1)
