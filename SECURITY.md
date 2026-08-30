@@ -24,11 +24,13 @@ We take the security of SentinelNet seriously. If you believe you have found a s
 
 ## Supported Versions
 
+SentinelNet is pre-1.0 and ships from a single line of development. Only the
+latest released minor is supported: fixes land there, not in older tags.
+
 | Version | Supported |
 | --- | --- |
-| 0.2.x (Current / Dev) | Yes |
-| 0.1.x | Security fixes only |
-| < 0.1.0 | No |
+| 0.24.x (current) | Yes |
+| < 0.24.0 | No — upgrade to the latest release |
 
 ---
 

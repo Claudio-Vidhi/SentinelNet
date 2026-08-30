@@ -7,6 +7,9 @@
 .idea/
 .editorconfig
 *.md
+# pyproject.toml dichiara readme = "README.md": senza questa eccezione un
+# 'pip install .' dentro l'immagine fallirebbe per file mancante.
+!README.md
 
 # --- Ambienti virtuali Python ---
 .venv/

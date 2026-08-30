@@ -1,0 +1,36 @@
+name: Feature request
+description: Propose a capability SentinelNet does not have yet.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: >
+        What you are trying to do today and why the current behaviour gets in
+        the way. Describe the operational situation, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like instead
+    validations:
+      required: true
+
+  - type: input
+    id: vendor
+    attributes:
+      label: Vendor or device involved
+      description: >
+        For a new driver or collector: vendor, model and OS version. A feature
+        nobody can test against real hardware is unlikely to land.
+
+  - type: checkboxes
+    id: checked
+    attributes:
+      label: Before opening
+      options:
+        - label: I checked [docs/roadmap.md](../../docs/roadmap.md) and the existing issues.
+          required: true

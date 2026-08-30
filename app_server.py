@@ -15,6 +15,16 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 from contextlib import asynccontextmanager
 
+# La console Windows usa una code page legacy (cp1252): senza questo i messaggi
+# di avvio in italiano escono con caratteri corrotti ("osservabilit?"). Su
+# console gia' UTF-8 e' un no-op; se lo stream non e' riconfigurabile (output
+# rediretto a una pipe che non espone reconfigure) si prosegue com'era.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError, ValueError):
+        pass
+
 from core import data_config
 from core import db
 from security import crypto_vault  # noqa: F401 (compat: patched by tests as app_server.crypto_vault)

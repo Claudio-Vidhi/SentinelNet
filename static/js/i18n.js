@@ -5133,7 +5133,12 @@ const i18n = {
     }
 };
 
-let currentLang = localStorage.getItem("sentinelnet_lang") || "it";
+// Prima visita: si segue la lingua del browser invece di imporre l'italiano.
+// Il repo e' pubblico e la documentazione e' in inglese, quindi un visitatore
+// non italiano si trovava il wizard di primo accesso in una lingua che non
+// legge. La scelta esplicita dal selettore resta in localStorage e vince.
+let currentLang = localStorage.getItem("sentinelnet_lang") ||
+    ((navigator.language || "en").toLowerCase().startsWith("it") ? "it" : "en");
 
 // Runtime lookup of a translated string. Its absence is why 414 inline
 // `currentLang === 'en' ? ... : ...` ternaries grew across the modules: the

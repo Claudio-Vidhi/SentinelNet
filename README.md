@@ -1,5 +1,9 @@
 # SentinelNet
 
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](pyproject.toml)
+[![Docker image](https://img.shields.io/badge/Docker-claudiovidhi%2Fsentinelnet-2496ED.svg)](https://hub.docker.com/r/claudiovidhi/sentinelnet)
+
 > Self-hosted network management, observability, backup automation and
 > vulnerability intelligence for sysadmins and small IT teams.
 
@@ -95,7 +99,9 @@ Detailed map with responsibilities: [docs/architecture.md](docs/architecture.md)
 
 ## Requirements and installation
 
-Python **3.14+** (see `pyproject.toml`). Key dependencies: `netmiko` for SSH
+Python **3.11+** (`requires-python` in `pyproject.toml` is authoritative). The
+Docker image ships 3.11; development happens on 3.14. Key dependencies:
+`netmiko` for SSH
 sessions, `fastapi`/`uvicorn` for the web server, `cryptography` for credential
 encryption, `pysnmp` for the SNMP poller.
 
@@ -324,3 +330,24 @@ verify these files are excluded:
 - `groups.json` — configured groups and sites
 - `secret.key` / `jwt_secret.key` — local cryptographic keys
 - `users.json` — local administrator accounts
+
+---
+
+## Contributing
+
+Bug reports and pull requests are welcome. Read
+[CONTRIBUTING.md](CONTRIBUTING.md) first: it carries the binding rules
+(language convention, the dual exe/Docker artifact, the async-DB rule, the
+multi-group scope rule). Security issues go through
+[SECURITY.md](SECURITY.md), never a public issue.
+
+Note on branches: `master` is the public branch and carries the product with
+the development-only files stripped, so **it ships no test suite**. The tests
+live on `Dev`, which is otherwise identical — verify there, then port.
+
+---
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE). Licenses of bundled
+third-party components: [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
