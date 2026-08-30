@@ -46,8 +46,14 @@ features and the same fixes** — a change landing on one belongs on the other.
   stripped file that changed, and silently leaves the unchanged ones staged
   for re-adding — which is how tests or `AGENTS.md` end up back on the public
   branch. The script merges, resolves those conflicts the only admissible
-  way, drops the whole strip from the index and stops, leaving the merge
-  staged for you to review and commit. `--check` verifies the invariant
+  way, drops the whole strip from the index **and from the working tree**,
+  and stops, leaving the merge staged for you to review and commit. The tree
+  on master is therefore genuinely "Dev minus the strip"; `git checkout Dev`
+  puts every file back. That deletion is load-bearing, not tidiness: a
+  stripped file that is NEW on Dev would otherwise sit there untracked, and
+  git refuses to overwrite an untracked file whose content differs from what
+  it is about to write — one normalized line ending is enough to block the
+  way back to `Dev`. `--check` verifies the invariant
   (master == Dev minus the strip) without touching anything.
 - The README screenshots live in `docs/images/` and are regenerated with
   `uv run python scripts/dev/capture_screenshots.py`. Rerun it when the UI
