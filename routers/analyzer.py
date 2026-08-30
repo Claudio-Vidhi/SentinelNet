@@ -120,6 +120,27 @@ def _browser_executable() -> Optional[str]:
     return next((c for c in candidates if os.path.isfile(c)), None)
 
 
+def _print_argv(exe: str, src: str, out: str, profile_dir: str) -> list:
+    """Argv for the headless print. Extracted so the isolation flag below has a
+    check that does not need a browser installed."""
+    return [
+        exe, "--headless=new", "--disable-gpu", "--disable-extensions",
+        "--no-first-run", f"--user-data-dir={profile_dir}",
+        # The report HTML arrives from the client. Without this, the browser
+        # would resolve and fetch any subresource it names -- an authenticated
+        # SSRF reading internal services from the appliance's network position
+        # and painting the answer into the PDF we hand back. The report is a
+        # self-contained local file, so refusing every name costs nothing.
+        "--host-resolver-rules=MAP * ~NOTFOUND",
+        # Le due varianti del flag: Chrome ignora quella che non conosce.
+        "--no-pdf-header-footer", "--print-to-pdf-no-header-footer",
+        # Senza budget la stampa parte prima che i font siano pronti e
+        # l'impaginazione misurata dallo script slitta.
+        "--virtual-time-budget=5000",
+        f"--print-to-pdf={out}", Path(src).as_uri(),
+    ]
+
+
 @router.post("/api/netsec-audit/report/pdf")
 def netsec_audit_report_pdf(payload: ReportPdfSchema,
                             current_user = Depends(get_current_user)):
@@ -138,16 +159,7 @@ def netsec_audit_report_pdf(payload: ReportPdfSchema,
         out = os.path.join(tmp, "report.pdf")
         with open(src, "w", encoding="utf-8") as fh:
             fh.write(payload.html)
-        cmd = [
-            exe, "--headless=new", "--disable-gpu", "--disable-extensions",
-            "--no-first-run", f"--user-data-dir={os.path.join(tmp, 'profile')}",
-            # Le due varianti del flag: Chrome ignora quella che non conosce.
-            "--no-pdf-header-footer", "--print-to-pdf-no-header-footer",
-            # Senza budget la stampa parte prima che i font siano pronti e
-            # l'impaginazione misurata dallo script slitta.
-            "--virtual-time-budget=5000",
-            f"--print-to-pdf={out}", Path(src).as_uri(),
-        ]
+        cmd = _print_argv(exe, src, out, os.path.join(tmp, "profile"))
         try:
             proc = subprocess.run(cmd, capture_output=True, timeout=180)
         except subprocess.TimeoutExpired:
