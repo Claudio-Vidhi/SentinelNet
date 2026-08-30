@@ -59,6 +59,13 @@ class TestContentSecurityPolicy(unittest.TestCase):
         self.assertIn("frame-ancestors 'none'", self.csp)
         self.assertIn("object-src 'none'", self.csp)
 
+    def test_base_uri_and_form_action_are_clamped(self):
+        # script-src 'self' resolves relative srcs against <base>, so an
+        # injected <base href> walks around it; form-action stops injected
+        # markup from posting the page's data to somebody else.
+        self.assertIn("base-uri 'none'", self.csp)
+        self.assertIn("form-action 'self'", self.csp)
+
     def test_the_header_is_actually_sent(self):
         # La costante potrebbe essere giusta e non essere applicata a nulla.
         from fastapi.testclient import TestClient
