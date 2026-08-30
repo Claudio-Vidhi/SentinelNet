@@ -298,6 +298,9 @@
         <button id="navWlc" class="nav-item" data-tab="tab-wlc" role="tab" aria-controls="tab-wlc" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabWlc"><i class="fa-solid fa-wifi"></i> Cisco WLC</span>
         </button>
+        <button id="navInterfaces" class="nav-item" data-tab="tab-interfaces" role="tab" aria-controls="tab-interfaces" aria-selected="false" tabindex="-1">
+          <span class="nav-left" data-i18n="tabInterfaces"><i class="fa-solid fa-network-wired"></i> Interfacce &amp; Stato Atteso</span>
+        </button>
         <button id="navRedundancy" class="nav-item" data-tab="tab-redundancy" role="tab" aria-controls="tab-redundancy" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabRedundancy"><i class="fa-solid fa-layer-group"></i> Alta Affidabilità (HA)</span>
         </button>
@@ -2556,7 +2559,7 @@
             </select>
           </div>
           <div class="form-group" style="margin-bottom:0;">
-            <label for="newSiteSubnets" data-i18n="lblSiteSubnets">Subnet (separate da virgola)</label><input id="newSiteSubnets" type="text" placeholder="es. 10.0.0.0/24, 10.0.1.0/24" style="padding-left:12px;">
+            <label for="newSiteSubnets" data-i18n="lblSiteSubnets">Subnet (separate da virgola)</label><input id="newSiteSubnets" type="text" placeholder="es. 10.0.0.0/24, 10.0.1.0/24" data-i18n-placeholder="phNewSiteSubnets" style="padding-left:12px;">
           </div>
           <button class="btn btn-primary btn-small" id="btnCreateSite" style="margin:0; white-space:nowrap;">
             <i class="fa-solid fa-plus"></i> <span data-i18n="btnCreateSite">Crea sede</span>
@@ -3509,6 +3512,118 @@
           feed, cambia solo se <code>IFACE_DOWN_001</code> lo consideri un sintomo.
         </p>
         <div id="incidentInterfaces"></div>
+      </details>
+    </div>
+
+    <!-- TAB: Interfaces & Expected State (Monitoraggio Interfacce) -->
+    <div id="tab-interfaces" class="tab-content" role="tabpanel" tabindex="0">
+      <div class="panel-header" style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+        <div>
+          <h2 style="font-size:18px; font-weight:700; margin:0 0 4px 0; color:var(--text);">
+            <i class="fa-solid fa-network-wired" style="color:var(--primary); margin-right:8px;"></i>
+            <span data-i18n="ifTabTitle">Monitoraggio Interfacce &amp; Stato Atteso</span>
+          </h2>
+          <p style="font-size:12px; color:var(--text-muted); margin:0;" data-i18n="ifTabSubtitle">
+            Visione consolidata dello stato dei collegamenti, anomalie di flapping e finestre di manutenzione.
+          </p>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <span id="ifTabStatus" style="font-size:12px; color:var(--primary); font-weight:600;"></span>
+          <button id="ifBtnRefresh" class="btn btn-secondary btn-sm" style="margin:0;">
+            <i class="fa-solid fa-rotate"></i> <span data-i18n="ifBtnRefresh">Aggiorna</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Health Cards -->
+      <div class="hero" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin-bottom:18px;">
+        <div class="hero-card" style="padding:12px 14px; text-align:center; border:1px solid var(--border); background:var(--surface-1); cursor:pointer;" data-if-filter="all">
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px;" data-i18n="ifCardTotal">Totale Porte</div>
+          <div id="ifCardTotal" style="font-size:22px; font-weight:800; color:var(--text);">0</div>
+        </div>
+        <div class="hero-card" style="padding:12px 14px; text-align:center; border:1px solid rgba(34,197,94,0.3); background:var(--surface-1); cursor:pointer;" data-if-filter="up">
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--success); margin-bottom:4px;" data-i18n="ifCardUp">Operative (UP)</div>
+          <div id="ifCardUp" style="font-size:22px; font-weight:800; color:var(--success);">0</div>
+        </div>
+        <div class="hero-card" style="padding:12px 14px; text-align:center; border:1px solid rgba(239,68,68,0.3); background:var(--surface-1); cursor:pointer;" data-if-filter="outage">
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--danger); margin-bottom:4px;" data-i18n="ifCardOutage">Interruzioni Impreviste</div>
+          <div id="ifCardOutage" style="font-size:22px; font-weight:800; color:var(--danger);">0</div>
+        </div>
+        <div class="hero-card" style="padding:12px 14px; text-align:center; border:1px solid rgba(245,158,11,0.3); background:var(--surface-1); cursor:pointer;" data-if-filter="flapping">
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--warning); margin-bottom:4px;" data-i18n="ifCardFlap">Instabili (Flapping)</div>
+          <div id="ifCardFlap" style="font-size:22px; font-weight:800; color:var(--warning);">0</div>
+        </div>
+        <div class="hero-card" style="padding:12px 14px; text-align:center; border:1px solid rgba(59,130,246,0.3); background:var(--surface-1); cursor:pointer;" data-if-filter="maint">
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--primary); margin-bottom:4px;" data-i18n="ifCardMaint">In Manutenzione</div>
+          <div id="ifCardMaint" style="font-size:22px; font-weight:800; color:var(--primary);">0</div>
+        </div>
+        <div class="hero-card" style="padding:12px 14px; text-align:center; border:1px solid var(--border); background:var(--surface-1); cursor:pointer;" data-if-filter="by_design">
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px;" data-i18n="ifCardByDesign">Spente per Progetto</div>
+          <div id="ifCardByDesign" style="font-size:22px; font-weight:800; color:var(--text-muted);">0</div>
+        </div>
+      </div>
+
+      <!-- Controls & Search Toolbar -->
+      <div class="panel" style="padding:12px 16px; margin-bottom:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <!-- Filter Chips -->
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button class="btn btn-secondary btn-sm active" data-if-filter="all" style="margin:0; font-size:11px; font-weight:600;" data-i18n="ifFilterAll">Tutte</button>
+            <button class="btn btn-secondary btn-sm" data-if-filter="outage" style="margin:0; font-size:11px; font-weight:600; color:var(--danger);" data-i18n="ifFilterOutages">Solo Interruzioni</button>
+            <button class="btn btn-secondary btn-sm" data-if-filter="flapping" style="margin:0; font-size:11px; font-weight:600; color:var(--warning);" data-i18n="ifFilterFlap">Solo Flapping</button>
+            <button class="btn btn-secondary btn-sm" data-if-filter="maint" style="margin:0; font-size:11px; font-weight:600; color:var(--primary);" data-i18n="ifFilterMaint">In Manutenzione</button>
+            <button class="btn btn-secondary btn-sm" data-if-filter="by_design" style="margin:0; font-size:11px; font-weight:600;" data-i18n="ifFilterByDesign">Per Progetto</button>
+            <button class="btn btn-secondary btn-sm" data-if-filter="up" style="margin:0; font-size:11px; font-weight:600; color:var(--success);" data-i18n="ifFilterUp">Operative (UP)</button>
+          </div>
+
+          <!-- Search & Preset Dropdown -->
+          <div style="display:flex; gap:8px; align-items:center; flex-grow:1; justify-content:flex-end; max-width:500px;">
+            <div class="input-wrapper" style="margin:0; flex-grow:1;">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" id="ifSearchInput" placeholder="Cerca apparato, IP, porta, nota..." data-i18n-placeholder="ifSearchPl" aria-label="Cerca interfacce" data-i18n-aria-label="ifSearchAria" style="font-size:12px; padding:6px 10px 6px 30px;">
+            </div>
+            <select id="ifPresetSelect" aria-label="Preset rapido manutenzione" data-i18n-aria-label="ifPresetAria" style="padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px; cursor:pointer;">
+              <option value="" selected data-i18n="ifOptPresetPlaceholder">Preset Rapido Selezionate...</option>
+              <option value="1" data-i18n="ifOptPreset1h">Manutenzione +1 Ora</option>
+              <option value="2" data-i18n="ifOptPreset2h">Manutenzione +2 Ore</option>
+              <option value="4" data-i18n="ifOptPreset4h">Manutenzione +4 Ore</option>
+              <option value="24" data-i18n="ifOptPreset24h">Manutenzione +24 Ore</option>
+              <option value="permanent" data-i18n="ifOptPresetPermanent">Perenne (Non Usata / Progetto)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Bulk Actions Bar -->
+        <div id="ifBulkActionsBar" style="display:none; margin-top:12px; padding-top:10px; border-top:1px dashed var(--border); align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+          <div style="font-size:12px; font-weight:600; color:var(--text);">
+            <i class="fa-solid fa-check-double" style="color:var(--primary); margin-right:6px;"></i>
+            <span id="ifSelectedCount">0</span> <span data-i18n="ifSelectedLabel">interfacce selezionate</span>
+          </div>
+          <div style="display:flex; gap:6px;">
+            <button id="ifBtnBulkSave" class="btn btn-primary btn-sm" style="margin:0; font-size:11px;">
+              <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="ifBtnBulkSave">Applica Modifiche</span>
+            </button>
+            <button id="ifBtnBulkClear" class="btn btn-secondary btn-sm" style="margin:0; font-size:11px;">
+              <i class="fa-solid fa-trash-can"></i> <span data-i18n="ifBtnBulkClear">Annulla Soppressioni</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Interface Table Box -->
+      <div class="panel" style="padding:0; overflow-x:auto;">
+        <div id="ifacesTableBox" style="min-height:200px;"></div>
+      </div>
+
+      <!-- Declared Active / Expired Suppressions Box -->
+      <details class="panel" style="padding:12px 16px; margin-top:18px;">
+        <summary style="cursor:pointer; font-size:13px; color:var(--primary); font-weight:600;">
+          <i class="fa-solid fa-calendar-check"></i> <span data-i18n="ifDeclaredSuppTitle">Storico &amp; Finestre Dichiarate</span>
+        </summary>
+        <p style="font-size:12px; color:var(--text-muted); margin:8px 0;" data-i18n="ifDeclaredSuppDesc">
+          Elenco di tutte le soppressioni registrate. Le voci barrate sono finestre terminate: restano visibili per spiegare perché fatti passati non hanno generato incidenti.
+        </p>
+        <div id="ifDeclaredSuppressionsBox"></div>
       </details>
     </div>
 

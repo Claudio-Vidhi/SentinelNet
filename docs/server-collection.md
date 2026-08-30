@@ -1,10 +1,8 @@
 # Linux server collection
 
 What SentinelNet reads off a managed Linux host, where each piece comes from,
-and which view shows it. For the *design* behind making a server a managed
-device at all, see [linux-server-management-plan.md](linux-server-management-plan.md);
-for the health poller as a collector among the others, see
-[collectors.md](collectors.md) §7b.
+and which view shows it. For the health poller as a collector among the
+others, see [collectors.md](collectors.md) §7b.
 
 There are **two independent paths**, and which one a fact belongs to is a
 design decision, not an accident:

@@ -126,25 +126,162 @@ def params_for(rule_id: str) -> dict:
     return out
 
 
-def catalog() -> list:
+RULES_EN = {
+    "BLOCKED_TRAFFIC_001": {
+        "title": "Blocked traffic with flow evidence",
+        "description": "A blocking security event corroborated by real network flow between the same endpoints.",
+        "investigation": "Verify if the block is expected by policy or if a legitimate service was blocked by mistake. Check the client switch port and whether attempts repeat toward different destinations.",
+        "remediation": "If traffic is legitimate, update the firewall rule. If not, isolate the host and check for malware.",
+        "parameters": {
+            "match_delta_s": "Maximum time delta between security event and flow bucket.",
+        },
+    },
+    "HIGH_SEVERITY_LOG_001": {
+        "title": "High severity event log",
+        "description": "A log event severe enough to emerge even without flow corroboration.",
+        "investigation": "Read the full device message and correlate with any configuration changes or reboots in the same time window.",
+        "remediation": "Intervene according to the reported device error; if recurring, investigate hardware health or firmware version.",
+        "parameters": {
+            "max_severity": "Maximum syslog severity considered (0 = emerg).",
+        },
+    },
+    "CFG_CHANGE_001": {
+        "title": "Configuration or state change",
+        "description": "Something changed on a device: subsequent events should be evaluated in this context.",
+        "investigation": "Identify who made the change and whether it was scheduled. Compare the changed field with the previous configuration backup.",
+        "remediation": "If the change was unauthorized, restore from backup and verify administrative access to the device.",
+        "parameters": {},
+    },
+    "IFACE_DOWN_001": {
+        "title": "Interface down",
+        "description": "A port transitioned to down: observed state symptom, not root cause.",
+        "investigation": "Inspect cabling, transceiver optics, and port error counters. Check if the link drop coincided with a configuration change. If the port is down by design (Loopback, Null, decommissioned VLAN), confirm it as expected in the interfaces panel instead of treating it as noise.",
+        "remediation": "Replace the faulty link or re-enable the port. If link drop recurs, investigate duplex mismatch or insufficient PoE power.",
+        "parameters": {},
+    },
+    "IFACE_RECOVERED_001": {
+        "title": "Interface recovered (retracts symptom)",
+        "description": "Port link returned up: retracts interface down evidence without deleting it.",
+        "investigation": "None: records recovery. If down/up cycles repeat frequently, the real issue is link flapping, not a single drop.",
+        "remediation": "In case of repeated flapping, investigate cabling and transceiver optics rather than considering the incident closed.",
+        "parameters": {
+            "window_s": "Lookback window to find the symptom to retract.",
+        },
+    },
+    "BASELINE_SPIKE_001": {
+        "title": "Historical baseline deviation",
+        "description": "A host's traffic volume significantly deviates from its historical baseline (same day and hour of preceding weeks).",
+        "investigation": "Identify the process driving volume (backup, replication, sync). Check whether the spike is East-West or crosses the firewall, and if it aligns with a scheduled window.",
+        "remediation": "If legitimate unscheduled activity, reschedule it. If unrecognized, isolate the host and inspect active sessions.",
+        "parameters": {
+            "min_deviation_pct": "Minimum deviation above expected volume to trigger a spike.",
+            "min_quality": "Minimum baseline quality confidence score required.",
+        },
+    },
+    "NEW_TALKER_001": {
+        "title": "New host never observed before",
+        "description": "An IP that has never transmitted in the retention window starts generating traffic.",
+        "investigation": "Trace MAC, VLAN, and switch port from client mapping. Check if the IP is in inventory, a legitimate DHCP lease, or an uninventoried device.",
+        "remediation": "If uninventoried, register in inventory or remove from network. Verify that the access switch port has the expected security profile.",
+        "parameters": {
+            "min_bytes": "Minimum byte volume threshold for new host emergence.",
+        },
+    },
+    "FLOW_EXPORTER_UNKNOWN_001": {
+        "title": "Uninventoried flow exporter",
+        "description": "A flow exporter is sending packets from an IP not present in inventory and records are discarded. Platform health monitoring.",
+        "investigation": "Verify if the IP belongs to a legitimate uninventoried device, a device with a changed address, or an unintended exporter. Check `first_seen` for recent activity.\nFIRST OF ALL: Is the reported IP the SERVER itself, or a router/gateway? Then it is NAT rewriting the source IP along the path. Compare with server local IPs and listener bind addresses.",
+        "remediation": "If the IP is rewritten by NAT, bind listeners to the interface reached directly and point export to THAT address. Only this way does the source IP remain that of the device.\nDO NOT add the NAT IP to inventory: it would attribute all exporter traffic to a non-existent device.\nIf the exporter is legitimate, add it to inventory. If not, block its traffic to the listeners.",
+        "parameters": {
+            "min_persistence_s": "Quarantine duration before alerting: newly added devices are normal for a few minutes.",
+            "min_packets": "Minimum dropped packets threshold to trigger an alert.",
+        },
+    },
+    "TOP_TALKER_001": {
+        "title": "Dominant traffic contributor",
+        "description": "A host accounts for a dominant share of hourly traffic. Explains high link utilization rather than being an issue by itself.",
+        "investigation": "Identify the process driving volume (backup, replication, sync) and whether scheduled. Cross-reference with the host baseline: dominating traffic while staying in pattern is normal, doing so while deviating is not.",
+        "remediation": "No direct intervention needed: provides context for the primary incident trigger. Reschedule if out of window.",
+        "parameters": {
+            "min_share_pct": "Hourly traffic share threshold to qualify as top talker.",
+            "min_bytes": "Minimum byte volume required.",
+        },
+    },
+    "BASELINE_NORMAL_RETRACT_001": {
+        "title": "Volume within historical norm (retracts window spike)",
+        "description": "Historical baseline indicates traffic is within normal bounds: retracts window spike.",
+        "investigation": "None: rule removes noise. If retraction appears incorrect, verify baseline sample count and quality.",
+        "remediation": "If the spike was authentic, increase min_quality or narrow normal_band_pct.",
+        "parameters": {
+            "normal_band_pct": "Deviation percentage within which volume is considered normal.",
+            "min_quality": "Minimum baseline quality confidence score to retract.",
+            "window_s": "Lookback window to find the spike to retract.",
+        },
+    },
+    "IFACE_FLAPPING_001": {
+        "title": "Unstable flapping interface",
+        "description": "A port transitions down and up repeatedly in the same window, indicating link instability.",
+        "investigation": "Inspect cabling, transceiver optics, and port error counters. Check for duplex negotiation failures or PoE power budget limits. Do not treat the last drop as the primary event.",
+        "remediation": "Replace cable or transceiver. In a port-channel, disable the flapping member to prevent frequent bundle recalculations.",
+        "parameters": {
+            "min_transitions": "Link transition count in correlation window required to qualify as flapping (4 = two full cycles).",
+        },
+    },
+    "DEVICE_LOAD_001": {
+        "title": "Device resource load over threshold",
+        "description": "CPU, memory, or disk exceeded threshold. Indicates high resource strain, not root cause.",
+        "investigation": "Search the same window for entity triggers: traffic spike, config change, flapping interface. Check active process list (on Cisco: `show processes cpu sorted`).",
+        "remediation": "Reschedule if caused by legitimate heavy jobs. Otherwise, check for firmware memory leaks or software bugs before replacing hardware.",
+        "parameters": {
+            "max_cpu_pct": "CPU threshold percentage. Evaluates highest single core load rather than average.",
+            "max_memory_pct": "Memory utilization threshold percentage.",
+            "max_disk_pct": "Root filesystem disk utilization threshold percentage (Linux hosts).",
+        },
+    },
+    "TRAFFIC_SPIKE_001": {
+        "title": "Window traffic volume spike",
+        "description": "Flow volume significantly higher than current window median.",
+        "investigation": "Cross-reference with historical baseline before taking action: window comparison only reflects short-term metrics.",
+        "remediation": "No direct action required: serves as supporting context for the primary incident trigger.",
+        "parameters": {
+            "min_flows": "Minimum flow count required for median calculation.",
+            "spike_ratio": "Multiplier over median to qualify as a spike.",
+            "include_control_plane": "1 to include control plane multicast/broadcast traffic (0 = excluded).",
+        },
+    },
+}
+
+
+def catalog(lang: str = "it") -> list:
     """Il motore descrive se stesso: la UI costruisce il pannello soglie da
     qui, l'assistente AI sa quali regole esistono e la documentazione deriva
     dal codice. Una sola fonte di verità."""
-    return [{
-        "id": rule_id,
-        "version": rule["version"],
-        "title": rule["title"],
-        "description": rule["description"],
-        "inputs": list(rule["inputs"]),
-        "outputs": list(rule["outputs"]),
-        "base_confidence": rule.get("base_confidence"),
-        # Knowledge base derivata dal codice, non scritta a parte: il catalogo
-        # dice quali regole esistono E cosa farci quando scattano.
-        "investigation": rule.get("investigation"),
-        "remediation": rule.get("remediation"),
-        "parameters": [dict(p) for p in parameter_specs(rule_id)],
-        "effective": params_for(rule_id),
-    } for rule_id, rule in RULES.items()]
+    is_en = str(lang).lower().startswith("en")
+    out = []
+    for rule_id, rule in RULES.items():
+        tr = (RULES_EN.get(rule_id) or {}) if is_en else {}
+        param_tr = tr.get("parameters") or {}
+        specs = []
+        for p in parameter_specs(rule_id):
+            spec = dict(p)
+            if is_en and p["name"] in param_tr:
+                spec["description"] = param_tr[p["name"]]
+            specs.append(spec)
+
+        out.append({
+            "id": rule_id,
+            "version": rule["version"],
+            "title": tr.get("title") or rule["title"],
+            "description": tr.get("description") or rule["description"],
+            "inputs": list(rule["inputs"]),
+            "outputs": list(rule["outputs"]),
+            "base_confidence": rule.get("base_confidence"),
+            "investigation": tr.get("investigation") or rule.get("investigation"),
+            "remediation": tr.get("remediation") or rule.get("remediation"),
+            "parameters": specs,
+            "effective": params_for(rule_id),
+        })
+    return out
 
 
 def declares_output(rule_id: str, name: str) -> bool:
@@ -176,11 +313,22 @@ def _blocked_traffic(events: list, p: dict) -> list:
             continue
         if not (ev["src_ip"] and ev["dst_ip"]):
             continue
+        attrs = json.loads(ev["attrs_json"] or "{}")
+        action = str(attrs.get("action") or "").lower()
+        if action and action not in ("deny", "drop", "block", "close", "reject", "reset"):
+            continue
+        ev_proto = attrs.get("proto") or attrs.get("protocol")
+        ev_dport = attrs.get("dst_port") or attrs.get("dport")
         match = next(
             (f for f in flows
              if f["tenant"] == ev["tenant"]
              and f["src_ip"] == ev["src_ip"] and f["dst_ip"] == ev["dst_ip"]
-             and abs(f["ts"] - ev["ts"]) <= p["match_delta_s"] + 60), None)
+             and abs(f["ts"] - ev["ts"]) <= p["match_delta_s"] + 60
+             and (ev_proto is None or json.loads(f["attrs_json"] or "{}").get("protocol") is None
+                  or str(ev_proto) == str(json.loads(f["attrs_json"] or "{}").get("protocol")))
+             and (ev_dport is None or json.loads(f["attrs_json"] or "{}").get("dst_port") is None
+                  or str(ev_dport) == str(json.loads(f["attrs_json"] or "{}").get("dst_port")))),
+            None)
         if match is None:
             continue
         entity = f"ip:{ev['src_ip']}"
@@ -190,7 +338,7 @@ def _blocked_traffic(events: list, p: dict) -> list:
             src_ip=ev["src_ip"], dst_ip=ev["dst_ip"],
             summary=f"Traffico bloccato {endpoints.describe(ev['src_ip'])} → "
                     f"{endpoints.describe(ev['dst_ip'])}",
-            attrs={"action": json.loads(ev["attrs_json"] or "{}").get("action")}))
+            attrs={"action": attrs.get("action")}))
         out.append(Finding(
             event_id=match["id"], ts=match["ts"], tenant=match["tenant"],
             role="supporting", entity_key=entity,
@@ -263,6 +411,10 @@ def _interface_down(events: list, p: dict) -> list:
         if "link" not in str(attrs.get("field", "")).lower() \
                 and "status" not in str(attrs.get("field", "")).lower():
             continue
+        # Uno shutdown amministrativo è una decisione intenzionale, non un guasto
+        admin_st = str(attrs.get("admin_status") or "").lower()
+        if admin_st in ("down", "0", "false", "admin_down", "administratively down"):
+            continue
         out.append(Finding(
             event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"], role="symptom",
             entity_key=f"ip:{ev['device_ip']}", severity=ev["severity"],
@@ -289,6 +441,7 @@ def _interface_flapping(events: list, p: dict) -> list:
     legate all'APPARATO, non alla porta, e una ritrattazione per entità
     zittirebbe anche la porta accanto, davvero giù, per colpa di questa.
     """
+    max_span = p.get("max_span_s", 3600)
     changes: dict = {}
     for ev in events:
         if ev["event_type"] != "interface.change" or not ev["interface"]:
@@ -303,15 +456,19 @@ def _interface_flapping(events: list, p: dict) -> list:
     for (tenant, device_ip, interface), seen in changes.items():
         if len(seen) < p["min_transitions"]:
             continue
-        span = seen[-1]["ts"] - seen[0]["ts"]
+        # Limita alla finestra temporale recente per non allarmare su transizioni distanziate di giorni
+        recent = [e for e in seen if seen[-1]["ts"] - e["ts"] <= max_span]
+        if len(recent) < p["min_transitions"]:
+            continue
+        span = recent[-1]["ts"] - recent[0]["ts"]
         out.append(Finding(
-            event_id=seen[-1]["id"], ts=seen[-1]["ts"], tenant=tenant,
+            event_id=recent[-1]["id"], ts=recent[-1]["ts"], tenant=tenant,
             role="trigger", entity_key=f"ip:{device_ip}", severity=3,
             # Due porte instabili sullo stesso apparato sono due conclusioni.
             key=f"flap:{interface}", interface=interface,
-            summary=f"Interfaccia {interface} instabile: {len(seen)} "
+            summary=f"Interfaccia {interface} instabile: {len(recent)} "
                     f"transizioni in {max(span // 60, 1)} minuti",
-            attrs={"interface": interface, "transitions": len(seen),
+            attrs={"interface": interface, "transitions": len(recent),
                    "span_s": span}))
     return out
 
@@ -433,6 +590,13 @@ def _new_talker(events: list, p: dict) -> list:
     for ev in events:
         if ev["event_type"] != "flow.emergence":
             continue
+        src = ev.get("src_ip")
+        if not src or endpoints.traffic_direction(src, src) == "control_plane":
+            continue
+        attrs = json.loads(ev["attrs_json"] or "{}")
+        dst = attrs.get("dst_ip") or ""
+        if dst and endpoints.traffic_direction(src, dst) == "control_plane":
+            continue
         m = json.loads(ev["metrics_json"] or "{}")
         observed = m.get("observed") or 0
         if observed < p["min_bytes"]:
@@ -442,7 +606,7 @@ def _new_talker(events: list, p: dict) -> list:
             entity_key=f"ip:{ev['src_ip']}", severity=5, src_ip=ev["src_ip"],
             summary=f"{endpoints.describe(ev['src_ip'])}: host mai osservato prima, "
                     f"{observed} byte trasmessi",
-            attrs={**json.loads(ev["attrs_json"] or "{}"), **m}))
+            attrs={**attrs, **m}))
     return out
 
 

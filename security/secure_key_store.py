@@ -43,7 +43,7 @@ if _IS_WINDOWS:
     _CRYPTPROTECT_UI_FORBIDDEN = 0x01
 
     def _to_blob(data: bytes) -> "_DATA_BLOB":
-        buf = ctypes.create_string_buffer(bytes(data), len(data))
+        buf = ctypes.create_string_buffer(data, len(data))
         return _DATA_BLOB(len(data), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char)))
 
     def _from_blob(blob: "_DATA_BLOB") -> bytes:
@@ -68,6 +68,12 @@ if _IS_WINDOWS:
                                            ctypes.byref(out_blob)):
             raise OSError("CryptUnprotectData ha restituito un errore.")
         return _from_blob(out_blob)
+else:
+    def _protect(data: bytes) -> bytes:
+        raise NotImplementedError("DPAPI non disponibile su piattaforme non-Windows.")
+
+    def _unprotect(blob: bytes) -> bytes:
+        raise NotImplementedError("DPAPI non disponibile su piattaforme non-Windows.")
 
 
 def _atomic_write(path: str, data: bytes):
@@ -98,9 +104,7 @@ def load_or_create(path: str, generator) -> bytes:
     """Ritorna la chiave grezza (bytes).
 
     - Se il file non esiste, la genera con `generator()` e la salva protetta.
-    - Se il file è un blob DPAPI, lo decifra. Un fallimento qui (es. profilo
-      utente diverso) è deliberatamente fatale: meglio un errore esplicito che
-      corrompere silenziosamente la chiave.
+    - Se il file è un blob DPAPI, lo decifra (su Windows) o usa un file .posix derivato (su Linux/Docker).
     - Se il file è legacy in chiaro, lo usa così com'è e — su Windows — lo mette
       in sicurezza riscrivendolo come blob DPAPI, mantenendo lo stesso valore.
     """
@@ -108,6 +112,20 @@ def load_or_create(path: str, generator) -> bytes:
         with open(path, "rb") as f:
             raw = f.read()
         if raw.startswith(_MAGIC):
+            if not _IS_WINDOWS:
+                posix_path = path + ".posix"
+                if os.path.exists(posix_path):
+                    with open(posix_path, "rb") as pf:
+                        return pf.read()
+                logging.warning(
+                    "Chiave %s è protetta con DPAPI Windows: generazione chiave compatibile in %s",
+                    path, posix_path
+                )
+                posix_key = generator()
+                if isinstance(posix_key, str):
+                    posix_key = posix_key.encode("utf-8")
+                _atomic_write(posix_path, posix_key)
+                return posix_key
             return _unprotect(raw[len(_MAGIC):])
         if _IS_WINDOWS:
             try:

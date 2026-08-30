@@ -303,6 +303,11 @@ class TestFullParity(unittest.TestCase):
         ("get", "/api/arp/client-map"),
         ("get", "/api/arp/search"),
         ("get", "/api/endpoints/list"),
+        # Catalogo regole: query param ``lang`` opzionale ('it'/'en') per
+        # servire titoli e descrizioni tradotti alla UI multilingua. Aggiunta
+        # additiva — il default e' 'it', quindi omettendolo la risposta e'
+        # quella storica — ma i parametri dell'operazione cambiano.
+        ("get", "/api/incidents/rules"),
     )
 
     ALLOWED_ADDED_OPERATIONS = (
