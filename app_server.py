@@ -20,9 +20,15 @@ from contextlib import asynccontextmanager
 # console gia' UTF-8 e' un no-op; se lo stream non e' riconfigurabile (output
 # rediretto a una pipe che non espone reconfigure) si prosegue com'era.
 for _stream in (sys.stdout, sys.stderr):
+    # getattr, not a try/except AttributeError: reconfigure lives on
+    # TextIOWrapper, not on the TextIO protocol sys.stdout is typed as, so the
+    # attribute access itself is what the type checker rejects.
+    _reconfigure = getattr(_stream, "reconfigure", None)
+    if _reconfigure is None:
+        continue
     try:
-        _stream.reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, OSError, ValueError):
+        _reconfigure(encoding="utf-8", errors="replace")
+    except (OSError, ValueError):
         pass
 
 from core import data_config
@@ -169,6 +175,11 @@ _CSP = (
     "img-src 'self' data:; "
     "connect-src 'self' ws: wss:; "
     "frame-ancestors 'none'; "
+    # Without base-uri an injected <base href> repoints every relative script
+    # src, which is how script-src 'self' gets walked around. form-action stops
+    # injected markup from posting the page's data somewhere else.
+    "base-uri 'none'; "
+    "form-action 'self'; "
     "object-src 'none'"
 )
 
