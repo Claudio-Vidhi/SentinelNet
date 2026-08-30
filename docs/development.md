@@ -57,8 +57,9 @@ written in English.
 
 ## 3. Tests
 
-> **The test suite lives on the `Dev` branch.** This branch carries the
-> application only; clone or check out `Dev` to run the commands below.
+> **The test suite lives on the `Dev` branch**, not on `master`: the public
+> branch carries the application with the development-only files stripped.
+> Run the commands below from a `Dev` checkout.
 
 `unittest`. Each test sets a temporary `SENTINELNET_DATA_DIR` **before**
 importing project modules — that ordering is load-bearing, since
