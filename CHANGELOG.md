@@ -65,6 +65,15 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Changed
 
+- **Interfaces & Expected State reads as a monitoring console.** Filters for
+  tenant and device, the seven state cards became one continuous bank of real
+  buttons that reach the keyboard and say which one is engaged, and the second
+  row of chips that duplicated them is gone. The table is dense and aligned:
+  addresses and counts in the data face, a header that stays put while the list
+  scrolls, and the per-row date and note editors appear on the row being
+  declared instead of on all of them. The view says how old its data is, and how
+  many ports the current filters are showing.
+
 - The Interfaces tab's six port-state cards, the verdict cards on Home and two
   modals now draw from the design system instead of inline styles: type-ramp
   sizes, lamp-wash tints, and the 1px state accent the system specifies rather

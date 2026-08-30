@@ -2122,65 +2122,180 @@ body:not(.role-admin) .requires-admin { display: none !important; }
 
 
 /* ---------------------------------------------------------------
-   INTERFACCE — cartelle di stato porta, filtri della tabella.
-   Six copies of the same inline block used to live in the template,
-   all off the type ramp (22px) and tinted with literal rgba. Label is
-   Pill Label, value is Reading, tints are the lamp washes.
+   INTERFACCE — banco di stato porta.
+   I sette cartelli sono il filtro di stato: sono <button>, non div con
+   un listener, cosi' la tastiera li raggiunge e aria-pressed dice quale
+   e' inserito. Etichetta in legenda, valore nella faccia dati.
    --------------------------------------------------------------- */
-.if-stat {
-  padding: 12px 14px;
-  text-align: center;
-  cursor: pointer;
+.if-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1px;
+  margin-bottom: 14px;
+  background-color: var(--border);
+  border: var(--seam) solid var(--border);
 }
+
+/* Un banco: i cartelli si toccano, come le targhe di un quadro. Il filo di
+   fondo che si vede fra loro e' il gap sopra, non un bordo per cartello. */
+.if-stat {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 14px 11px;
+  border: 0;
+  border-top: 2px solid transparent;
+  border-radius: 0;
+  background-color: var(--surface);
+  background-image: var(--plate-grain);
+  background-size: 140px 140px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--transition), border-color var(--transition);
+}
+.if-stat:hover { background-color: var(--surface-2); }
+.if-stat:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .if-stat-label {
   font-family: var(--font-legend);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.16em;
   color: var(--text-muted);
-  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 .if-stat-value {
   font-family: var(--font-data);
-  font-size: 30px;
+  font-size: 25px;
   font-weight: 500;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
+  line-height: 1.1;
   color: var(--text);
 }
-.if-stat.state-up { border-color: var(--success); }
-.if-stat.state-up .if-stat-label,
+
+/* Lo stato tinge il valore e accende la barra in testa al cartello, non il
+   bordo intero: sette bordi colorati affiancati sono un arcobaleno, non un
+   quadro. La barra e' 2px perche' e' un indicatore, non un bordo di card. */
+.if-stat.state-up { border-top-color: var(--success); }
 .if-stat.state-up .if-stat-value { color: var(--success); }
-.if-stat.state-outage { border-color: var(--danger); }
-.if-stat.state-outage .if-stat-label,
+.if-stat.state-outage { border-top-color: var(--danger); }
 .if-stat.state-outage .if-stat-value { color: var(--danger); }
-.if-stat.state-flap { border-color: var(--warning); }
-.if-stat.state-flap .if-stat-label,
+.if-stat.state-flap { border-top-color: var(--warning); }
 .if-stat.state-flap .if-stat-value { color: var(--warning); }
-.if-stat.state-maint { border-color: var(--primary); }
-.if-stat.state-maint .if-stat-label,
+.if-stat.state-maint { border-top-color: var(--primary); }
 .if-stat.state-maint .if-stat-value { color: var(--primary); }
-.if-stat.state-idle .if-stat-label,
+.if-stat.state-idle { border-top-color: var(--border-strong); }
 .if-stat.state-idle .if-stat-value { color: var(--text-muted); }
-.if-stat.state-unknown .if-stat-label,
+.if-stat.state-unknown { border-top-color: var(--border-strong); }
 .if-stat.state-unknown .if-stat-value { color: var(--text-soft); }
-/* Il filtro attivo si vedeva solo nel DOM: il JS metteva .active e nessuna
-   regola la disegnava, quindi il clic non confermava niente. */
-.if-stat.active { border-color: var(--cta); background-color: var(--surface-3); }
-.if-stat.active .if-stat-label { color: var(--text); }
 
-.if-empty { text-align: center; padding: 32px; color: var(--text-muted); font-size: 13px; }
-.if-truncated {
-  margin: -6px 0 14px;
-  padding: 8px 12px;
-  border: var(--seam) solid var(--warning);
-  background: var(--lamp-warn-wash);
+/* Il filtro inserito: il cartello si incava. Prima il JS metteva .active e
+   nessuna regola la disegnava, quindi il clic non confermava niente. */
+.if-stat.active { background-color: var(--surface-3); }
+.if-stat.active .if-stat-label { color: var(--text); }
+.if-stat.active::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 2px;
+  background-color: var(--cta);
+}
+.if-stat { position: relative; }
+
+/* --- Barra d'ambito: chi, dove, poi il testo libero -------------------- */
+.if-toolbar { padding: 10px 14px; margin-bottom: 12px; }
+.if-scope { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 10px 14px; }
+.if-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.if-field-grow { flex: 1 1 220px; }
+.if-field-label {
+  font-family: var(--font-legend);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--text-soft);
+}
+.if-select {
+  padding: 5px 10px;
+  border: var(--seam) solid var(--border);
+  border-radius: 0;
+  background-color: var(--surface-2);
   color: var(--text);
+  font-family: var(--font-data);
   font-size: 12px;
+  cursor: pointer;
+  max-width: 240px;
+}
+.if-select:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.if-search { margin: 0; }
+.if-search input { font-family: var(--font-data); font-size: 12px; padding: 5px 10px 5px 30px; }
+.if-matchcount {
+  margin: 0 0 5px auto;
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.if-updated {
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
 }
 
-/* Stato porta nella tabella: gli stessi lampeggianti del resto del sistema. */
+/* --- Tabella: densa, intestazione ferma, numeri incolonnati ------------ */
+.if-table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+.if-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 7px 10px;
+  background-color: var(--surface-3);
+  border-bottom: var(--seam) solid var(--border-strong);
+  font-family: var(--font-legend);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.if-table tbody td { padding: 7px 10px; border-bottom: var(--seam) solid var(--border); vertical-align: middle; }
+.if-table tbody tr:hover { background-color: var(--surface-2); }
+.if-table tbody tr.is-selected { background-color: var(--lamp-idle-wash); }
+.if-table .if-col-check { width: 34px; text-align: center; }
+.if-table .if-col-num { width: 70px; text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.if-table .if-col-act { width: 76px; text-align: right; }
+.if-host { font-weight: 600; color: var(--text); }
+.if-addr { font-family: var(--font-data); font-size: 11px; color: var(--text-muted); }
+.if-port { font-family: var(--font-data); font-size: 12px; font-weight: 600; color: var(--text); }
+.if-admin { font-family: var(--font-data); font-size: 10px; color: var(--text-soft); }
+.if-flaps-hot { color: var(--warning); font-weight: 700; }
+.if-scroll { max-height: 60vh; overflow: auto; }
+.if-addr-lead { font-size: 12px; color: var(--text); font-weight: 600; }
+.if-quiet { color: var(--text-soft); font-family: var(--font-data); font-size: 11px; }
+.if-declare { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; cursor: pointer; }
+.if-input {
+  padding: 3px 6px;
+  border: var(--seam) solid var(--border);
+  border-radius: 0;
+  background-color: var(--surface-2);
+  color: var(--text);
+  font-family: var(--font-data);
+  font-size: 11px;
+}
+.if-input-wide { width: 100%; min-width: 120px; }
+.if-save { padding: 3px 8px; font-size: 11px; margin: 0; }
+
 .if-badge-up { background: var(--lamp-up-wash); color: var(--success); border: var(--seam) solid var(--success); }
 .if-badge-down { background: var(--lamp-fault-wash); color: var(--danger); border: var(--seam) solid var(--danger); }
 .if-badge-flap { background: var(--lamp-warn-wash); color: var(--warning); border: var(--seam) solid var(--warning); }
@@ -2188,7 +2303,17 @@ body:not(.role-admin) .requires-admin { display: none !important; }
 .if-badge-design { background: var(--surface-3); color: var(--text-muted); border: var(--seam) solid var(--border); }
 .if-badge-unknown { background: var(--surface-3); color: var(--text-soft); border: var(--seam) dashed var(--border-strong); }
 .if-badge-dot { font-size: 9px; margin-right: 4px; }
+
+.if-empty { text-align: center; padding: 32px; color: var(--text-muted); font-size: 13px; }
 .if-empty-icon { font-size: 25px; margin-bottom: 8px; display: block; opacity: 0.5; }
+.if-truncated {
+  margin: -6px 0 12px;
+  padding: 7px 12px;
+  border: var(--seam) solid var(--warning);
+  background: var(--lamp-warn-wash);
+  color: var(--text);
+  font-size: 12px;
+}
 
 /* La freccia del KPI cliccabile: a 11px si leggeva come un punto, e quell'item
    sembrava soltanto diverso dagli altri invece che cliccabile. */
