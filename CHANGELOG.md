@@ -10,6 +10,28 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Interfaces & Expected State: ports that were not up were shown, and
+  counted, as operational.** Only `down`/`0`/`false` were treated as down and
+  everything else fell through to UP, so a port whose transceiver had been
+  pulled (`notPresent`) or whose lower layer had failed (`lowerLayerDown`) read
+  as operational on the one view whose job is saying what broke. There is now
+  an explicit third state — neither up nor broken — with its own card, filter
+  and badge, and only `up` counts as up.
+- The same tab silently capped its list at 500 interfaces while presenting
+  "Total Ports" as the truth. The response says when it is capped and the tab
+  shows it. Twenty 48-port switches were already past it.
+- The interface state machine existed twice, in Python and in JavaScript, with
+  two different vocabularies. It is computed once, server side, and travels
+  with each row.
+- Declaring expected state for many ports rewrote the whole settings blob once
+  per port, so a concurrent operator's save was lost to whoever finished last.
+  One read, one write, whatever the batch size.
+- The tab told a new user their *filter* was wrong when nothing had been
+  collected at all, and the active filter card had no styling, so clicking one
+  confirmed nothing.
+
 ### Security
 
 - `users.json` (every password hash) and `sites.json` (every agent site-token

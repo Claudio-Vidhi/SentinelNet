@@ -2163,10 +2163,30 @@ body:not(.role-admin) .requires-admin { display: none !important; }
 .if-stat.state-maint .if-stat-value { color: var(--primary); }
 .if-stat.state-idle .if-stat-label,
 .if-stat.state-idle .if-stat-value { color: var(--text-muted); }
+.if-stat.state-unknown .if-stat-label,
+.if-stat.state-unknown .if-stat-value { color: var(--text-soft); }
+/* Il filtro attivo si vedeva solo nel DOM: il JS metteva .active e nessuna
+   regola la disegnava, quindi il clic non confermava niente. */
+.if-stat.active { border-color: var(--cta); background-color: var(--surface-3); }
+.if-stat.active .if-stat-label { color: var(--text); }
+
+.if-empty { text-align: center; padding: 32px; color: var(--text-muted); font-size: 13px; }
+.if-truncated {
+  margin: -6px 0 14px;
+  padding: 8px 12px;
+  border: var(--seam) solid var(--warning);
+  background: var(--lamp-warn-wash);
+  color: var(--text);
+  font-size: 12px;
+}
 
 /* Stato porta nella tabella: gli stessi lampeggianti del resto del sistema. */
 .if-badge-up { background: var(--lamp-up-wash); color: var(--success); border: var(--seam) solid var(--success); }
 .if-badge-down { background: var(--lamp-fault-wash); color: var(--danger); border: var(--seam) solid var(--danger); }
+.if-badge-flap { background: var(--lamp-warn-wash); color: var(--warning); border: var(--seam) solid var(--warning); }
+.if-badge-maint { background: var(--lamp-idle-wash); color: var(--primary); border: var(--seam) solid var(--primary); }
+.if-badge-design { background: var(--surface-3); color: var(--text-muted); border: var(--seam) solid var(--border); }
+.if-badge-unknown { background: var(--surface-3); color: var(--text-soft); border: var(--seam) dashed var(--border-strong); }
 .if-badge-dot { font-size: 9px; margin-right: 4px; }
 .if-empty-icon { font-size: 25px; margin-bottom: 8px; display: block; opacity: 0.5; }
 

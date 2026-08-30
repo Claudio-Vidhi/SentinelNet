@@ -3561,7 +3561,13 @@
           <div class="if-stat-label" data-i18n="ifCardByDesign">Spente per Progetto</div>
           <div class="if-stat-value" id="ifCardByDesign">0</div>
         </div>
+        <div class="hero-card if-stat state-unknown" data-if-filter="unknown">
+          <div class="if-stat-label" data-i18n="ifCardUnknown">Stato Non Determinato</div>
+          <div class="if-stat-value" id="ifCardUnknown">0</div>
+        </div>
       </div>
+
+      <p id="ifTruncatedNote" class="if-truncated" hidden></p>
 
       <!-- Controls & Search Toolbar -->
       <div class="panel" style="padding:12px 16px; margin-bottom:14px;">
@@ -3574,6 +3580,7 @@
             <button class="btn btn-secondary btn-sm" data-if-filter="maint" style="margin:0; font-size:11px; font-weight:600; color:var(--primary);" data-i18n="ifFilterMaint">In Manutenzione</button>
             <button class="btn btn-secondary btn-sm" data-if-filter="by_design" style="margin:0; font-size:11px; font-weight:600;" data-i18n="ifFilterByDesign">Per Progetto</button>
             <button class="btn btn-secondary btn-sm" data-if-filter="up" style="margin:0; font-size:11px; font-weight:600; color:var(--success);" data-i18n="ifFilterUp">Operative (UP)</button>
+            <button class="btn btn-secondary btn-sm" data-if-filter="unknown" style="margin:0; font-size:11px; font-weight:600;" data-i18n="ifFilterUnknown">Stato Ignoto</button>
           </div>
 
           <!-- Search & Preset Dropdown -->
