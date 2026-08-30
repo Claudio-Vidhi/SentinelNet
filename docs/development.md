@@ -14,9 +14,9 @@ uv pip install -r requirements.txt
 uv run app_server.py
 ```
 
-`pyproject.toml` declares `requires-python = ">=3.14"`; the root README still
-says 3.11+. The compiled artifacts in the tree are CPython 3.14 — treat
-`pyproject.toml` as authoritative and don't assume 3.11 works.
+`pyproject.toml` declares `requires-python = ">=3.14"`. The compiled
+artifacts in the tree are CPython 3.14 — treat `pyproject.toml` as
+authoritative.
 
 ---
 
@@ -50,6 +50,9 @@ written in English.
 ---
 
 ## 3. Tests
+
+> **The test suite lives on the `Dev` branch.** This branch carries the
+> application only; clone or check out `Dev` to run the commands below.
 
 `unittest`. Each test sets a temporary `SENTINELNET_DATA_DIR` **before**
 importing project modules — that ordering is load-bearing, since

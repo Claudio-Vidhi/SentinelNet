@@ -70,7 +70,6 @@ Three things a neighboring product could not truthfully copy:
 **One question, one surface, one collector.** Before a panel is added, name the
 question it answers and check that nothing already answers it; before a
 collector is added, check whether an existing one already learns the same fact.
-See item 16 of `docs/console-rethink-plan.md`.
 
 ## Operating Context
 

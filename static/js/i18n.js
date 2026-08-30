@@ -92,6 +92,7 @@ const i18n = {
         // Tabs
         tabHome: '<i class="fa-solid fa-gauge-high"></i> Situazione',
         tabInventory: '<i class="fa-solid fa-list-check"></i> Network Inventory',
+        tabInterfaces: '<i class="fa-solid fa-network-wired"></i> Interfacce &amp; Stato Atteso',
         tabRedundancy: '<i class="fa-solid fa-layer-group"></i> Alta Affidabilità (HA)',
         tabWlc: '<i class="fa-solid fa-wifi"></i> Cisco WLC',
         tabGroups: '<i class="fa-solid fa-folder-open"></i> Gestione Tenant',
@@ -1453,6 +1454,9 @@ const i18n = {
         incNoNarrative: "Nessuna narrativa generata. La conclusione qui sopra resta valida senza AI.",
         optWin6h: "Ultime 6 ore",
         incBtnRefresh: '<i class="fa-solid fa-rotate"></i> Aggiorna',
+        incConsumes: "consuma:",
+        incProduces: "produce:",
+        incUpdated: "aggiornato.",
         incSrcEvidence: "Evidenza",
         incSrcSyslog: "Syslog",
         incSrcFlow: "Flussi",
@@ -1508,6 +1512,52 @@ const i18n = {
         incOptResolved: "Risolti",
         incOptAll: "Tutti",
         incFilterWindow: "Finestra",
+
+        // Monitoraggio Interfacce
+        ifTabTitle: "Monitoraggio Interfacce &amp; Stato Atteso",
+        ifTabSubtitle: "Visione consolidata dello stato dei collegamenti, anomalie di flapping e finestre di manutenzione.",
+        ifBtnRefresh: "Aggiorna",
+        ifCardTotal: "Totale Porte",
+        ifCardUp: "Operative (UP)",
+        ifCardOutage: "Interruzioni Impreviste",
+        ifCardFlap: "Instabili (Flapping)",
+        ifCardMaint: "In Manutenzione",
+        ifCardByDesign: "Spente per Progetto",
+        ifFilterAll: "Tutte",
+        ifFilterOutages: "Solo Interruzioni",
+        ifFilterFlap: "Solo Flapping",
+        ifFilterMaint: "In Manutenzione",
+        ifFilterByDesign: "Per Progetto",
+        ifFilterUp: "Operative (UP)",
+        ifSearchPl: "Cerca apparato, IP, porta, nota...",
+        ifSearchAria: "Cerca interfacce",
+        ifPresetAria: "Preset rapido manutenzione",
+        ifOptPresetPlaceholder: "Preset Rapido Selezionate...",
+        ifOptPreset1h: "Manutenzione +1 Ora",
+        ifOptPreset2h: "Manutenzione +2 Ore",
+        ifOptPreset4h: "Manutenzione +4 Ore",
+        ifOptPreset24h: "Manutenzione +24 Ore",
+        ifOptPresetPermanent: "Perenne (Non Usata / Progetto)",
+        ifSelectedLabel: "interfacce selezionate",
+        ifBtnBulkSave: "Applica Modifiche",
+        ifBtnBulkClear: "Annulla Soppressioni",
+        ifDeclaredSuppTitle: "Storico &amp; Finestre Dichiarate",
+        ifDeclaredSuppDesc: "Elenco di tutte le soppressioni registrate. Le voci barrate sono finestre terminate: restano visibili per spiegare perché fatti passati non hanno generato incidenti.",
+        ifErrLoad: "Impossibile caricare l'elenco delle interfacce.",
+        ifNoMatching: "Nessuna interfaccia corrispondente ai filtri correnti.",
+        ifThDevice: "Apparato",
+        ifThInterface: "Interfaccia",
+        ifThStatus: "Stato",
+        ifThFlaps: "Flap (24h)",
+        ifThExpected: "Stato Atteso",
+        ifThUntil: "Fino a",
+        ifThReason: "Nota / Motivo",
+        ifThActions: "Azione",
+        ifOptSuppressed: "Soppressa",
+        ifBtnSaveTooltip: "Salva stato interfaccia",
+        ifNoDeclaredSupp: "Nessuna soppressione o finestra di manutenzione dichiarata.",
+        ifBtnClearMaint: "Rimuovi manutenzione",
+        ifBulkUpdated: "interfacce aggiornate.",
         nsaEyebrow: '<i class="fa-solid fa-shield-cat"></i> Network Security &amp; Compliance Audit (Preview)',
         nsaTitle: "Auditing Configurazione Firewall, Router e Switch",
         nsaDesc: "Valutazione automatizzata delle policy di sicurezza, regole di accesso, cifrari e hardening degli apparati gestiti, contro i benchmark CIS per FortiGate 7.4.x, Cisco IOS XE 17.x e Ubuntu Linux 24.04 LTS.",
@@ -1661,6 +1711,7 @@ const i18n = {
         phNewUserName: "es. mario.rossi",
         phNewSiteName: "es. Milano",
         phNewSiteJumpHost: "es. 198.51.100.10",
+        phNewSiteSubnets: "es. 10.0.0.0/24, 10.0.1.0/24",
 
         tabPolicyTest: '<i class="fa-solid fa-route"></i> Validazione Policy &amp; Routing',
         ptTitle: "Validazione Policy &amp; Routing",
@@ -2605,8 +2656,9 @@ const i18n = {
         // Sidebar nav groups
 
         // Tabs
-        tabHome: '<i class="fa-solid fa-gauge-high"></i> Situazione',
+        tabHome: '<i class="fa-solid fa-gauge-high"></i> Overview',
         tabInventory: '<i class="fa-solid fa-list-check"></i> Network Inventory',
+        tabInterfaces: '<i class="fa-solid fa-network-wired"></i> Interfaces &amp; Expected State',
         tabRedundancy: '<i class="fa-solid fa-layer-group"></i> High Availability (HA)',
         tabWlc: '<i class="fa-solid fa-wifi"></i> Cisco WLC',
         tabGroups: '<i class="fa-solid fa-folder-open"></i> Manage Tenants',
@@ -3692,7 +3744,7 @@ const i18n = {
         jumpLimitsScan: "No subnet scan or discovery from the central node.",
         jumpLimitsUdp: "No inbound syslog, flow or SNMP.",
         jumpLimitsRest: "No vendor REST API (FortiGate): CLI only.",
-        jumpLimitsWorks: "Work fine: inventory, config backup, MAC/ARP, CLI commands, audit.",
+        jumpLimitsWorks: "Works fine: inventory, config backup, MAC/ARP, CLI commands, audit.",
         mcpEyebrow: '<i class="fa-solid fa-plug"></i> Integrations',
         titleMcp: "MCP Server — external LLM clients",
         descMcp: "SentinelNet can be used by external LLM clients (Claude Desktop, LM Studio, Cline…) via the <strong>MCP</strong> protocol (Model Context Protocol): the <code>mcp_server.py</code> bridge runs on the client machine, authenticates with a SentinelNet account and forwards requests to the REST API. Roles, tenants and the command blacklist stay enforced server-side. Tip: create a dedicated account (<em>viewer</em> for read-only, <em>operator</em> if CLI commands are needed).",
@@ -3966,6 +4018,9 @@ const i18n = {
         incNoNarrative: "No narrative generated. The conclusion above stands without AI.",
         optWin6h: "Last 6 hours",
         incBtnRefresh: '<i class="fa-solid fa-rotate"></i> Refresh',
+        incConsumes: "consumes:",
+        incProduces: "produces:",
+        incUpdated: "updated.",
         incSrcEvidence: "Evidence",
         incSrcSyslog: "Syslog",
         incSrcFlow: "Flows",
@@ -4021,6 +4076,52 @@ const i18n = {
         incOptResolved: "Resolved",
         incOptAll: "All",
         incFilterWindow: "Window",
+
+        // Interface Monitoring
+        ifTabTitle: "Interface Monitoring &amp; Expected State",
+        ifTabSubtitle: "Consolidated link state visibility, port flapping anomalies, and scheduled maintenance windows.",
+        ifBtnRefresh: "Refresh",
+        ifCardTotal: "Total Ports",
+        ifCardUp: "Operational (UP)",
+        ifCardOutage: "Unexpected Outages",
+        ifCardFlap: "Unstable (Flapping)",
+        ifCardMaint: "In Maintenance",
+        ifCardByDesign: "Down by Design",
+        ifFilterAll: "All",
+        ifFilterOutages: "Outages Only",
+        ifFilterFlap: "Flapping Only",
+        ifFilterMaint: "In Maintenance",
+        ifFilterByDesign: "By Design",
+        ifFilterUp: "Operational (UP)",
+        ifSearchPl: "Search device, IP, interface, note...",
+        ifSearchAria: "Search interfaces",
+        ifPresetAria: "Quick maintenance preset",
+        ifOptPresetPlaceholder: "Quick Preset for Selected...",
+        ifOptPreset1h: "Maintenance +1 Hour",
+        ifOptPreset2h: "Maintenance +2 Hours",
+        ifOptPreset4h: "Maintenance +4 Hours",
+        ifOptPreset24h: "Maintenance +24 Hours",
+        ifOptPresetPermanent: "Permanent (Unused / By Design)",
+        ifSelectedLabel: "interfaces selected",
+        ifBtnBulkSave: "Apply Changes",
+        ifBtnBulkClear: "Cancel Suppressions",
+        ifDeclaredSuppTitle: "History &amp; Declared Windows",
+        ifDeclaredSuppDesc: "List of all declared suppressions. Strikethrough items are expired windows: kept visible to explain why past events did not trigger incidents.",
+        ifErrLoad: "Failed to load interfaces list.",
+        ifNoMatching: "No interfaces matching the current filters.",
+        ifThDevice: "Device",
+        ifThInterface: "Interface",
+        ifThStatus: "Status",
+        ifThFlaps: "Flaps (24h)",
+        ifThExpected: "Expected State",
+        ifThUntil: "Until",
+        ifThReason: "Note / Reason",
+        ifThActions: "Action",
+        ifOptSuppressed: "Suppressed",
+        ifBtnSaveTooltip: "Save interface state",
+        ifNoDeclaredSupp: "No declared suppressions or maintenance windows.",
+        ifBtnClearMaint: "Remove maintenance",
+        ifBulkUpdated: "interfaces updated.",
         nsaEyebrow: '<i class="fa-solid fa-shield-cat"></i> Network Security &amp; Compliance Audit (Preview)',
         nsaTitle: "Firewall, Router and Switch Configuration Audit",
         nsaDesc: "Automated assessment of security policies, access rules, ciphers and hardening on the managed devices, against the CIS benchmarks for FortiGate 7.4.x, Cisco IOS XE 17.x and Ubuntu Linux 24.04 LTS.",
@@ -4166,6 +4267,7 @@ const i18n = {
         phNewUserName: "e.g. john.doe",
         phNewSiteName: "e.g. Milan",
         phNewSiteJumpHost: "e.g. 198.51.100.10",
+        phNewSiteSubnets: "e.g. 10.0.0.0/24, 10.0.1.0/24",
 
         tabPolicyTest: '<i class="fa-solid fa-route"></i> Policy &amp; Route Validation',
         ptTitle: "Policy &amp; Route Validation",
@@ -5063,7 +5165,7 @@ function changeLanguage(lang) {
     localStorage.setItem("sentinelnet_lang", lang);
     document.documentElement.lang = lang;
 
-    const langSel = document.getElementById("langSelect");
+    const langSel = /** @type {HTMLSelectElement|null} */ (document.getElementById("langSelect"));
     if (langSel) langSel.value = lang;
 
     // Traduci elementi con attributo data-i18n
@@ -5108,13 +5210,13 @@ function changeLanguage(lang) {
     // Ridisegna componenti dinamici se caricati
     if (globalDevices.length > 0) {
         // Aggiorna opzioni Filtro Sede
-        const filterSelect = document.getElementById('filterGroupSelect');
+        const filterSelect = /** @type {HTMLSelectElement|null} */ (document.getElementById('filterGroupSelect'));
         if (filterSelect) {
             const prev = filterSelect.value;
             filterSelect.options[0].text = i18n[lang].optFilterAll;
             filterSelect.value = prev;
         }
-        const topoSelect = document.getElementById('topologyGroupSelect');
+        const topoSelect = /** @type {HTMLSelectElement|null} */ (document.getElementById('topologyGroupSelect'));
         if (topoSelect) {
             // options[0] è il segnaposto "nessun Tenant scelto", options[1] "Tutti".
             const prev = topoSelect.value;
@@ -5122,7 +5224,7 @@ function changeLanguage(lang) {
             if (topoSelect.options[1]) topoSelect.options[1].text = i18n[lang].optFilterAll;
             topoSelect.value = prev;
         }
-        const interSelect = document.getElementById('interactiveGroupSelect');
+        const interSelect = /** @type {HTMLSelectElement|null} */ (document.getElementById('interactiveGroupSelect'));
         if (interSelect) {
             // options[0] è il segnaposto "nessuna Sede scelta", options[1] è "Tutte".
             const prev = interSelect.value;
@@ -5134,6 +5236,9 @@ function changeLanguage(lang) {
         renderDeviceTable();
         renderGroupsTable();
         renderVendorTable();
+    }
+    if (typeof loadRuleCatalog === 'function') {
+        loadRuleCatalog();
     }
 }
 
@@ -5150,7 +5255,10 @@ function initLanguageSelector() {
                 <option value="en">EN</option>
             `;
         select.value = currentLang;
-        select.onchange = (e) => changeLanguage(e.target.value);
+        select.onchange = (e) => {
+            const tgt = /** @type {HTMLSelectElement|null} */ (e.target);
+            if (tgt) changeLanguage(tgt.value);
+        };
 
         actions.insertBefore(select, actions.firstChild);
     }
