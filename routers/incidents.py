@@ -90,6 +90,39 @@ def set_rule_parameters(rule_id: str, payload: dict,
 INSTABILITY_WINDOW_S = 86400
 
 
+# ifOperStatus, translated to words by the SNMP poller (_IF_STATUS there).
+# "up" is the ONLY value that means the port carries traffic; three of the
+# others are outright faults, and the rest are neither up nor broken.
+_LINK_UP = {"up", "1", "true"}
+_LINK_DOWN = {"down", "0", "false", "lowerlayerdown", "notpresent"}
+
+
+def _iface_state(item: dict, min_flaps: int) -> str:
+    """The one classifier. It used to exist twice -- here and again in
+    interfaces.js -- with two different vocabularies, so a change to one left
+    the KPI cards disagreeing with the table under them.
+
+    Order matters: a declared expectation outranks a fault, because that is
+    what declaring it is for.
+
+    An unrecognised or missing link value is NOT up. Only "down"/"0"/"false"
+    used to count as down and everything else fell through to up, which read a
+    port whose transceiver had been pulled (notPresent) or whose lower layer
+    had failed (lowerLayerDown) as operational -- on the one view whose job is
+    saying what is broken.
+    """
+    if item.get("suppressed"):
+        return "maint" if item.get("to_ts") is not None else "by_design"
+    if (item.get("transitions") or 0) >= min_flaps:
+        return "flapping"
+    link = str(item.get("link") or "").strip().lower()
+    if link in _LINK_DOWN:
+        return "outage"
+    if link in _LINK_UP:
+        return "up"
+    return "unknown"
+
+
 @router.get("/interfaces")
 async def list_interfaces(current_user = Depends(get_current_user)):
     """Interfacce viste dal motore: ultimo stato, instabilità recente e la
@@ -134,33 +167,21 @@ async def list_interfaces(current_user = Depends(get_current_user)):
                     "note": (rule or {}).get("note", "")})
 
     min_flaps = rules.params_for("IFACE_FLAPPING_001")["min_transitions"]
-    counts = {
-        "total": len(out),
-        "up": 0,
-        "down": 0,
-        "flapping": 0,
-        "in_maintenance": 0,
-        "by_design": 0,
-    }
+    counts = {"total": len(out), "up": 0, "outage": 0, "flapping": 0,
+              "maint": 0, "by_design": 0, "unknown": 0}
     for item in out:
-        is_supp = item["suppressed"]
-        to_ts = item["to_ts"]
-        link = str(item.get("link") or "").lower()
-        flaps_cnt = item.get("transitions", 0)
-        if is_supp:
-            if to_ts is None:
-                counts["by_design"] += 1
-            else:
-                counts["in_maintenance"] += 1
-        elif flaps_cnt >= min_flaps:
-            counts["flapping"] += 1
-        elif link in ("down", "0", "false"):
-            counts["down"] += 1
-        else:
-            counts["up"] += 1
+        # Computed once, server side, and shipped with the row: the client
+        # renders this value instead of deriving its own.
+        item["state"] = _iface_state(item, min_flaps)
+        counts[item["state"]] += 1
 
     return {"interfaces": out, "counts": counts, "window_s": INSTABILITY_WINDOW_S,
             "min_transitions": min_flaps,
+            # The cap is not a detail the reader can afford to miss: past it,
+            # every count above describes the first MAX_LIMIT ports and nothing
+            # says so. 20 switches x 48 ports is already over.
+            "truncated": len(out) >= MAX_LIMIT,
+            "limit": MAX_LIMIT,
             "suppressions": _visible_suppressions(current_user)}
 
 
@@ -202,9 +223,13 @@ def _visible_suppressions(current_user) -> list:
                                       r.get("interface") or ""))
 
 
-async def _apply_single_suppression(payload: dict, current_user) -> dict:
-    from core.app_settings import get_app_settings, save_app_settings
+def _mutate_suppression(saved: dict, payload: dict, current_user) -> dict:
+    """Apply one declaration to ``saved`` in place, and report it.
 
+    Takes the dict instead of loading and saving it: a bulk call used to
+    read-modify-write the whole settings blob once PER ITEM, so fifty
+    ports meant fifty rewrites and a concurrent operator's save was lost
+    to whoever finished last."""
     tenant = str((payload or {}).get("tenant") or "")
     device_ip = str((payload or {}).get("device_ip") or "")
     interface = str((payload or {}).get("interface") or "") or None
@@ -223,7 +248,6 @@ async def _apply_single_suppression(payload: dict, current_user) -> dict:
 
     entity_key = f"ip:{device_ip}"
     key = suppression.key(tenant, entity_key, interface)
-    saved = dict(get_app_settings().get("suppressions") or {})
     if (payload or {}).get("suppressed"):
         saved[key] = {"tenant": tenant, "entity_key": entity_key,
                       "device_ip": device_ip, "interface": interface,
@@ -236,7 +260,6 @@ async def _apply_single_suppression(payload: dict, current_user) -> dict:
     else:
         saved.pop(key, None)
         action = "riportata sotto osservazione"
-    save_app_settings({"suppressions": saved})
     log_audit(f"{device_ip}:{interface or 'tutto l apparato'} ({tenant}) "
               f"{action} da '{current_user.get('sub')}'.")
     return {"status": "success", "key": key, "suppressed": key in saved}
@@ -254,15 +277,22 @@ async def set_suppression(payload: dict,
     Non cancella e non nasconde niente: l'evento resta in ``events`` e nel
     feed. Cambia solo se le regole ne traggano un'evidenza — l'interpretazione,
     che è dove la conoscenza dell'operatore deve entrare."""
+    from core.app_settings import get_app_settings, save_app_settings
+
     items = (payload or {}).get("items")
-    if isinstance(items, list):
-        results = []
-        for item in items:
-            if isinstance(item, dict):
-                res = await _apply_single_suppression(item, current_user)
-                results.append(res)
-        return {"status": "success", "count": len(results), "results": results}
-    return await _apply_single_suppression(payload, current_user)
+    batch = [i for i in items if isinstance(i, dict)] if isinstance(items, list) else None
+
+    saved = dict(get_app_settings().get("suppressions") or {})
+    if batch is None:
+        result = _mutate_suppression(saved, payload, current_user)
+        save_app_settings({"suppressions": saved})
+        return result
+
+    # One read, one write, whatever the size of the batch. A rejected item
+    # raises before anything is saved, so the batch does not land half applied.
+    results = [_mutate_suppression(saved, item, current_user) for item in batch]
+    save_app_settings({"suppressions": saved})
+    return {"status": "success", "count": len(results), "results": results}
 
 
 def _optional_ts(payload: dict, name: str):

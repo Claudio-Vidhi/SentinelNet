@@ -41,32 +41,21 @@
         return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     };
 
-    const _computeState = (r) => {
-        const link = String(r.link || '').toLowerCase();
-        const flaps = r.transitions || 0;
-        const isSupp = !!r.suppressed;
-        const toTs = r.to_ts;
-
-        if (isSupp) {
-            return toTs ? 'maint' : 'by_design';
-        }
-        if (flaps >= _minTransitions) {
-            return 'flapping';
-        }
-        if (link === 'down' || link === '0' || link === 'false') {
-            return 'outage';
-        }
-        return 'up';
-    };
+    // Lo stato lo calcola il server e viaggia con la riga. Prima esisteva
+    // anche qui, con un vocabolario diverso: bastava correggerne uno perche'
+    // i cartelli in cima smettessero di combaciare con la tabella sotto.
+    const _computeState = (r) => r.state || 'unknown';
 
     const _renderCards = (counts) => {
+        const tally = (state) => _ifaces.filter(i => _computeState(i) === state).length;
         const c = counts || {
             total: _ifaces.length,
-            up: _ifaces.filter(i => _computeState(i) === 'up').length,
-            down: _ifaces.filter(i => _computeState(i) === 'outage').length,
-            flapping: _ifaces.filter(i => _computeState(i) === 'flapping').length,
-            in_maintenance: _ifaces.filter(i => _computeState(i) === 'maint').length,
-            by_design: _ifaces.filter(i => _computeState(i) === 'by_design').length,
+            up: tally('up'),
+            outage: tally('outage'),
+            flapping: tally('flapping'),
+            maint: tally('maint'),
+            by_design: tally('by_design'),
+            unknown: tally('unknown'),
         };
 
         const setVal = (id, val) => {
@@ -76,10 +65,11 @@
 
         setVal('ifCardTotal', c.total);
         setVal('ifCardUp', c.up);
-        setVal('ifCardOutage', c.down);
+        setVal('ifCardOutage', c.outage);
         setVal('ifCardFlap', c.flapping);
-        setVal('ifCardMaint', c.in_maintenance);
+        setVal('ifCardMaint', c.maint);
         setVal('ifCardByDesign', c.by_design);
+        setVal('ifCardUnknown', c.unknown);
     };
 
     const _getFilteredRows = () => {
@@ -112,9 +102,10 @@
         }
 
         if (!rows.length) {
-            box.innerHTML = `<div style="text-align:center; padding:32px; color:var(--text-muted); font-size:13px;">
-                <i class="fa-solid fa-filter if-empty-icon"></i>
-                ${_ifL('ifNoMatching')}
+            const nothingCollected = _ifaces.length === 0;
+            box.innerHTML = `<div class="if-empty">
+                <i class="fa-solid ${nothingCollected ? 'fa-satellite-dish' : 'fa-filter'} if-empty-icon"></i>
+                ${_ifL(nothingCollected ? 'ifNoData' : 'ifNoMatching')}
             </div>`;
             return;
         }
@@ -148,11 +139,14 @@
             } else if (state === 'outage') {
                 badge = `<span class="badge if-badge-down"><i class="fa-solid fa-circle-exclamation if-badge-dot"></i>DOWN</span>`;
             } else if (state === 'flapping') {
-                badge = `<span class="badge" style="background:rgba(245,158,11,0.15); color:var(--warning); font-weight:700; border:1px solid rgba(245,158,11,0.3);"><i class="fa-solid fa-bolt" style="margin-right:4px;"></i>FLAP</span>`;
+                badge = `<span class="badge if-badge-flap"><i class="fa-solid fa-bolt if-badge-dot"></i>FLAP</span>`;
             } else if (state === 'maint') {
-                badge = `<span class="badge" style="background:rgba(59,130,246,0.15); color:var(--primary); font-weight:700; border:1px solid rgba(59,130,246,0.3);"><i class="fa-solid fa-screwdriver-wrench" style="margin-right:4px;"></i>MAINT</span>`;
+                badge = `<span class="badge if-badge-maint"><i class="fa-solid fa-screwdriver-wrench if-badge-dot"></i>MAINT</span>`;
+            } else if (state === 'by_design') {
+                badge = `<span class="badge if-badge-design"><i class="fa-solid fa-ban if-badge-dot"></i>DESIGN</span>`;
             } else {
-                badge = `<span class="badge" style="background:var(--surface-3); color:var(--text-muted); font-weight:700; border:1px solid var(--border);"><i class="fa-solid fa-ban" style="margin-right:4px;"></i>DESIGN</span>`;
+                // Ne' su ne' rotta: dirlo e' il punto. Finiva fra le operative.
+                badge = `<span class="badge if-badge-unknown" title="${_ifEsc(String(r.link || ''))}"><i class="fa-solid fa-question if-badge-dot"></i>?</span>`;
             }
 
             const adminBadge = r.admin_status
@@ -367,6 +361,14 @@
             _renderCards(data.counts);
             _renderTable();
             _renderDeclaredSuppressions();
+
+            const capNote = document.getElementById('ifTruncatedNote');
+            if (capNote) {
+                capNote.hidden = !data.truncated;
+                if (data.truncated) {
+                    capNote.textContent = _ifL('ifTruncated').replace('{n}', String(data.limit));
+                }
+            }
         } catch (err) {
             console.error('[interfaces]', err);
         }
