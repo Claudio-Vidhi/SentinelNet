@@ -49,7 +49,7 @@
         // reti di clienti diversi senza che nessuno l'avesse chiesto.
         if (!selectedGroup) {
             cachedPortchannelsData = null;
-            box.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${escapeHtml(currentLang === 'en' ? 'Choose a tenant to see its Port-Channels.' : 'Scegli un Tenant per vederne i Port-Channel.')}</p>`;
+            box.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${escapeHtml(tr('topoChooseATenantTo'))}</p>`;
             return;
         }
         try {
@@ -59,10 +59,10 @@
             cachedPortchannelsData = data;
             const devices = (data.devices || []).filter(d => (d.portchannels || []).length);
             if (!devices.length) {
-                box.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${currentLang==='en'?'No Port-Channel data (run a triage first).':'Nessun dato Port-Channel (esegui prima un triage).'}</p>`;
+                box.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${tr('topoNoPortChannelData')}</p>`;
                 return;
             }
-            const toText = currentLang==='en' ? 'to' : 'verso';
+            const toText = tr('topoTo');
             // backupAgeLabel() sta in core.js: lo stesso dato lo mostra anche il
             // Config Analyzer, e una seconda copia della formula divergerebbe.
             const age = ts => ts ? ` · ${backupAgeLabel(ts)}` : '';
@@ -73,19 +73,19 @@
                 const pcHtml = pcs.length ? pcs.map(po => {
                     const neigh = (po.neighbors && po.neighbors.length)
                         ? `<span style="font-size:11px; color:var(--primary);"> <i class="fa-solid fa-arrow-right-long"></i> ${toText} <strong>${po.neighbors.map(escapeHtml).join(', ')}</strong></span>`
-                        : `<span style="font-size:11px; color:var(--text-muted);"> <i class="fa-solid fa-arrow-right-long"></i> ${currentLang==='en'?'unknown neighbor':'vicino sconosciuto'}</span>`;
+                        : `<span style="font-size:11px; color:var(--text-muted);"> <i class="fa-solid fa-arrow-right-long"></i> ${tr('topoUnknownNeighbor')}</span>`;
                     // Stato operativo. Lo stato VIVO (SNMP) vince sul backup:
                     // descrive adesso, non l'ultimo salvataggio.
                     let stateBadge = '';
                     if (po.live_total) {
                         const ok = po.live_up === po.live_total;
                         const col = ok ? 'var(--lamp-up-ink)' : 'var(--lamp-fault-ink)';
-                        stateBadge = `<span title="${currentLang==='en'?'Live SNMP state':'Stato vivo da SNMP'}" style="font-size:10px; color:${col}; border:1px solid ${col}; border-radius:0; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-tower-broadcast"></i> ${po.live_up}/${po.live_total} UP</span>`;
+                        stateBadge = `<span title="${tr('topoLiveSnmpState')}" style="font-size:10px; color:${col}; border:1px solid ${col}; border-radius:0; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-tower-broadcast"></i> ${po.live_up}/${po.live_total} UP</span>`;
                     } else if (po.status === 'up' && !po.issue) {
-                        stateBadge = `<span title="${currentLang==='en'?'All members bundled':'Tutti i membri aggregati'}" style="font-size:10px; color:var(--success); border:1px solid var(--success); border-radius:0; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-circle-check"></i> ${po.up}/${po.total} UP</span>`;
+                        stateBadge = `<span title="${tr('topoAllMembersBundled')}" style="font-size:10px; color:var(--success); border:1px solid var(--success); border-radius:0; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-circle-check"></i> ${po.up}/${po.total} UP</span>`;
                     } else if (po.issue) {
                         const down = po.status === 'down';
-                        stateBadge = `<span title="${escapeHtml(po.issue_msg||'')}" style="font-size:10px; color:${down?'var(--lamp-fault-ink)':'var(--lamp-warn-ink)'}; border:1px solid ${down?'var(--lamp-fault)':'var(--lamp-warn)'}; border-radius:0; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(po.issue_msg || (currentLang==='en'?'issue':'problema'))}</span>`;
+                        stateBadge = `<span title="${escapeHtml(po.issue_msg||'')}" style="font-size:10px; color:${down?'var(--lamp-fault-ink)':'var(--lamp-warn-ink)'}; border:1px solid ${down?'var(--lamp-fault)':'var(--lamp-warn)'}; border-radius:0; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(po.issue_msg || (tr('topoIssue')))}</span>`;
                     }
                     return `<div style="margin-bottom:6px;">
                         <span style="display:inline-block; font-weight:700; color:var(--warning); font-size:12px; min-width:120px;"><i class="fa-solid fa-link"></i> ${escapeHtml(po.name)}</span>
@@ -93,19 +93,19 @@
                             const st = (po.live || {})[m];
                             const shut = (po.shut_members || []).includes(m);
                             const down = shut || (st && String(st.link).toLowerCase() === 'down');
-                            const title = shut ? (currentLang==='en'?'administratively shut':'spenta da configurazione')
-                                : (down ? (currentLang==='en'?'link down':'link giu') : '');
+                            const title = shut ? (tr('topoAdministrativelyShut'))
+                                : (down ? (tr('topoLinkDown')) : '');
                             // Un membro spento resta membro, ma non compone il
                             // bundle: mostrarlo verde come gli altri fa credere
                             // che l'aggregato sia integro.
                             return `<span style="color:${down ? 'var(--lamp-fault-ink)' : 'var(--lamp-up-ink)'};"${title ? ` title="${escapeHtml(title)}"` : ''}>${escapeHtml(m)}${shut ? ' ⛔' : ''}</span>`;
                         }).join(', ')}</span>
-                        <span style="font-size:11px; color:var(--text-muted);"> (${(po.members||[]).length} ${currentLang==='en'?'members':'membri'})</span>
+                        <span style="font-size:11px; color:var(--text-muted);"> (${(po.members||[]).length} ${tr('topoMembers')})</span>
                         ${stateBadge}
                         ${neigh}
                     </div>`;
                 }).join('')
-                    : `<div style="font-size:12px; color:var(--text-muted);">${currentLang==='en'?'No Port-Channels.':'Nessun Port-Channel.'}</div>`;
+                    : `<div style="font-size:12px; color:var(--text-muted);">${tr('topoNoPortChannels')}</div>`;
                 return `<div style="background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px; margin-bottom:12px;">
                     <h4 style="font-size:14px; margin-bottom:10px;"><i class="fa-solid fa-network-wired" style="color:var(--primary);"></i> ${escapeHtml(d.hostname)} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">${escapeHtml(d.ip)} · ${escapeHtml(d.group)}</span>${age(d.backup_ts)}</h4>
                     ${pcHtml}
@@ -208,7 +208,7 @@
         const sel = document.getElementById('layeredCoreSelect');
         if (!sel) return;
         const chosen = layeredRoots[group] || '';
-        const auto = currentLang === 'en' ? 'Core: auto' : 'Core: automatico';
+        const auto = tr('topoCoreAuto');
         sel.innerHTML = `<option value="">${escapeHtml(auto)}</option>` + nodesData
             .filter(n => n.device_type === 'switch' || n.device_type === 'router')
             .map(n => `<option value="${attrEsc(n.id)}">${escapeHtml(n.label || n.id)}</option>`)
@@ -341,17 +341,17 @@
         const pcCountEl = document.getElementById('drawerPortChannelCount');
         if (pcCountEl) pcCountEl.textContent = pcItems.length ? `(${pcItems.length})` : '';
         if (!pcItems.length) {
-            const noPcTxt = currentLang === 'en' ? 'No Port-Channels configured on this node.' : 'Nessun Port-Channel configurato su questo nodo.';
+            const noPcTxt = tr('topoNoPortChannelsConfigured');
             pcListEl.innerHTML = `<div style="font-size:12px; color:var(--text-muted);">${escapeHtml(noPcTxt)}</div>`;
             return;
         }
-        const membersTxt = currentLang === 'en' ? 'Members' : 'Membri';
-        const towardTxt = currentLang === 'en' ? 'Toward' : 'Verso';
+        const membersTxt = tr('topoMembers2');
+        const towardTxt = tr('topoToward');
         pcListEl.innerHTML = pcItems.map(pc => {
             const members = (pc.members || pc.interfaces || []).map(shortIface).join(', ') || '—';
             const neigh = (pc.neighbors && pc.neighbors.length) ? pc.neighbors.join(', ') : (pc.neighbor || '—');
             // Lo stato dal vivo, quando il report ce l'ha: "2/2 su".
-            const live = (pc.live_total ? `${pc.live_up}/${pc.live_total} ${currentLang === 'en' ? 'up' : 'su'}` : 'LACP ACTIVE');
+            const live = (pc.live_total ? `${pc.live_up}/${pc.live_total} ${tr('topoUp')}` : 'LACP ACTIVE');
             const allUp = !pc.live_total || pc.live_up === pc.live_total;
             return `<div class="drawer-list-item">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
@@ -404,7 +404,7 @@
         }
         if (!tags.length && fromPort && fromPort.tags.length) {
             tags = fromPort.tags;
-            source = `${currentLang === 'en' ? 'from' : 'da'} ${fromPort.neighbor} · ${shortIface(fromPort.port)}`;
+            source = `${tr('topoFrom')} ${fromPort.neighbor} · ${shortIface(fromPort.port)}`;
         }
         if (!tags.length && Array.isArray(topNode.vlans) && topNode.vlans.length) {
             tags = topNode.vlans;
@@ -416,7 +416,7 @@
         if (!tags.length && topNode.vtp_domain) tags = [`VTP: ${topNode.vtp_domain}`];
         vlanEl.innerHTML = (tags.length
             ? tags.map(v => `<span class="drawer-tag">${escapeHtml(String(v))}</span>`).join('')
-            : `<span style="font-size:12px; color:var(--text-muted);">${escapeHtml(currentLang === 'en' ? 'Default / Trunk' : 'Default / Trunk')}</span>`)
+            : `<span style="font-size:12px; color:var(--text-muted);">${escapeHtml(tr('topoDefaultTrunk'))}</span>`)
             + (source ? `<div style="width:100%; font-size:11px; color:var(--text-muted); margin-top:4px;">${escapeHtml(source)}</div>` : '');
     }
 
@@ -480,7 +480,7 @@
     }
 
     function groupHint() {
-        return currentLang === 'en' ? 'click to expand' : 'click per aprire';
+        return tr('topoClickToExpand');
     }
 
     // Tooltip dell'aggregato: i membri, con il loro indirizzo quando c'è.
@@ -493,7 +493,7 @@
         container.innerHTML = `<div style="background:var(--surface-2); border:1px solid var(--border); padding:10px 12px; max-width:260px;">
             <div style="font-weight:700; font-size:12px; margin-bottom:6px;">${escapeHtml(n.label)}</div>
             ${rows}
-            <div style="font-size:10.5px; color:var(--text-muted); margin-top:6px;">${escapeHtml(currentLang === 'en' ? 'Click to expand · double-click a member to collapse' : 'Click per aprire · doppio click su un membro per richiudere')}</div>
+            <div style="font-size:10.5px; color:var(--text-muted); margin-top:6px;">${escapeHtml(tr('topoClickToExpandDouble'))}</div>
         </div>`;
         return container;
     }
@@ -637,7 +637,7 @@
     function stackLine(stack, vendorTxt, fallbackModel) {
         const parts = [vendorTxt, stack.model || fallbackModel || ''].filter(Boolean).join(' ').trim();
         const n = stack.member_count;
-        if (!parts) return currentLang === 'en' ? `${n} units in STACK` : `${n} unità in STACK`;
+        if (!parts) return tr('topoUnitsInStack', {n: n});
         return `${n} × ${parts} in STACK`;
     }
 
@@ -669,7 +669,7 @@
             statusColor = cssVar('--lamp-idle-ink', '#93a0a8');
             statusBg = cssVar('--lamp-idle-wash', 'rgba(108, 122, 131, 0.16)');
             statusGlow = cssVar('--lamp-idle', '#6c7a83');
-            statusText = currentLang === 'en' ? "DISCOVERED" : "RILEVATO";
+            statusText = tr('topoDiscovered');
         } else if (status === "unknown") {
             // Jump-site device: the SSH bastion tunnel carries no ICMP, so
             // reachability is not measurable — never paint it as the red
@@ -684,7 +684,7 @@
             statusColor = cssVar('--text-soft', '#909ba2');
             statusBg = cssVar('--lamp-idle-wash', 'rgba(108, 122, 131, 0.16)');
             statusGlow = "transparent";
-            statusText = currentLang === 'en' ? "EXTERNAL" : "ESTERNO";
+            statusText = tr('topoExternal');
         }
 
         // Colore per TIPO di apparato (feature: colori per tipo di device).
@@ -763,7 +763,7 @@
 
         const escapedLabel = label.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         const escapedIp = ip.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        const escapedVendor = (vendor && vendor !== 'discovered' ? vendor : (currentLang === 'en' ? 'Neighbor' : 'Vicino')).toUpperCase();
+        const escapedVendor = (vendor && vendor !== 'discovered' ? vendor : (tr('topoNeighbor'))).toUpperCase();
         const escapedBadge = String(badgeText).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").slice(0, 22);
 
         // Stringa ID per gradienti isolati per ciascun apparato per prevenire conflitti DOM
@@ -832,13 +832,13 @@
         else if (n.status === "discovered") statusLed = `<span style="color: var(--lamp-idle-ink); font-weight: bold;">● DISCOVERED</span>`;
         else if (n.status === "unknown") statusLed = `<span style="color: var(--lamp-idle-ink); font-weight: bold;">● ${escapeHtml(i18n[currentLang].mapStatusUnknown)}</span>`;
         
-        const firmware = (n.version) ? n.version : ((scan && scan.version) ? scan.version : (currentLang === 'en' ? "Not detected / Offline" : "Non rilevato / Offline"));
-        const vendorName = (resolvedVendor && resolvedVendor !== 'discovered') ? resolvedVendor : (currentLang === 'en' ? "LLDP/CDP Neighbor" : "Vicino LLDP/CDP");
+        const firmware = (n.version) ? n.version : ((scan && scan.version) ? scan.version : (tr('topoNotDetectedOffline')));
+        const vendorName = (resolvedVendor && resolvedVendor !== 'discovered') ? resolvedVendor : (tr('topoLldpCdpNeighbor'));
         
-        const titleText = currentLang === 'en' ? 'Device Metadata' : 'Metadati Apparato';
-        const labelIpText = currentLang === 'en' ? 'IP Address:' : 'Indirizzo IP:';
-        const labelGroupText = currentLang === 'en' ? 'Tenant:' : 'Tenant:';
-        const labelStatusText = currentLang === 'en' ? 'Network Status:' : 'Stato Rete:';
+        const titleText = tr('topoDeviceMetadata');
+        const labelIpText = tr('topoIpAddress');
+        const labelGroupText = tr('topoTenant');
+        const labelStatusText = tr('topoNetworkStatus');
 
         // IP annunciato via CDP/LLDP diverso dall'IP di management reale: il vicino
         // ha pubblicato l'indirizzo di una SVI (es. Vlan1). Lo mostriamo come nota.
@@ -848,7 +848,7 @@
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">Stack:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:${STACK_COLOR};">${escapeHtml(stackLine(stackInfo, '', n.model))}${stackInfo.health === 'degraded' ? ' <i class="fa-solid fa-triangle-exclamation"></i>' : ''}<div style="font-weight: 400; font-size: 10px; color: var(--text-muted); margin-top: 2px;">${(stackInfo.members || []).map(m => escapeHtml(`${m.role || '?'} · ${m.serial || '—'}`)).join('<br>')}</div></td></tr>` : '';
 
         const reportedRow = (n.reported_ip && n.reported_ip !== n.id) ? `
-            <tr style="border: none;"><td style="color: var(--warning); font-size: 11px; padding: 2px 0; border: none; background:none;">${currentLang === 'en' ? 'Announced IP:' : 'IP Annunciato:'}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:var(--warning);" title="${currentLang === 'en' ? 'CDP/LLDP advertised a non-management IP; resolved by hostname' : 'CDP/LLDP ha annunciato un IP non di management; risolto via hostname'}">${escapeHtml(n.reported_ip)} <i class="fa-solid fa-triangle-exclamation"></i></td></tr>` : '';
+            <tr style="border: none;"><td style="color: var(--warning); font-size: 11px; padding: 2px 0; border: none; background:none;">${tr('topoAnnouncedIp')}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:var(--warning);" title="${tr('topoCdpLldpAdvertisedA')}">${escapeHtml(n.reported_ip)} <i class="fa-solid fa-triangle-exclamation"></i></td></tr>` : '';
 
         const htmlString = `
         <div style="font-family: var(--font-main); min-width: 230px; color: var(--text);">
@@ -861,7 +861,7 @@
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">Vendor:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; text-transform: uppercase; color:#fff;">${escapeHtml(vendorName)}</td></tr>
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelGroupText}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:var(--text);">${escapeHtml(n.group)}</td></tr>
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelStatusText}</td><td style="font-size: 11px; padding: 2px 0; border: none; background:none;">${statusLed}</td></tr>
-            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${currentLang === 'en' ? 'Type:' : 'Tipo:'}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:${deviceTypeMeta(n.device_type).color};">${escapeHtml(deviceTypeLabel(n.device_type))}</td></tr>
+            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${tr('topoType')}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:${deviceTypeMeta(n.device_type).color};">${escapeHtml(deviceTypeLabel(n.device_type))}</td></tr>
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">Firmware:</td><td style="font-size: 11px; padding: 2px 0; border: none; background:none;"><code style="font-family: var(--font-code); color: var(--primary); font-size: 10px;">${escapeHtml(firmware)}</code></td></tr>
             ${(n.vtp_domain || n.vtp_mode) ? `<tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">VTP:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:${vtpDomainColor(n.vtp_domain)};">${escapeHtml([n.vtp_domain, n.vtp_mode].filter(Boolean).join(' · '))}</td></tr>` : ''}
             ${stackRow}
@@ -909,7 +909,7 @@
             });
         }
         if (!nodesData || !nodesData.length) {
-            box.innerHTML = `<div style="font-size:12px; color:var(--text-muted);">${currentLang==='en'?'No devices':'Nessun dispositivo'}</div>`;
+            box.innerHTML = `<div style="font-size:12px; color:var(--text-muted);">${tr('uiNoDevices')}</div>`;
             return;
         }
         box.innerHTML = nodesData.map(n => `
@@ -937,9 +937,7 @@
         const container = document.getElementById("networkGraphContainer");
         if (!container) return;
         container.style.background = '';
-        const txt = currentLang === 'en'
-            ? 'Choose a tenant to draw its map.'
-            : 'Scegli un Tenant per disegnarne la mappa.';
+        const txt = tr('topoChooseATenantTo2');
         container.innerHTML = `<div style="display:flex; align-items:center; justify-content:center; height:100%; color:var(--text-muted); font-size:14px; gap:8px;"><i class="fa-solid fa-diagram-project"></i>${escapeHtml(txt)}</div>`;
     }
 
@@ -1054,7 +1052,7 @@
 
         // Trasforma nodi filtrati per l'interfaccia interattiva Vis.js
         const nodes = filteredNodesData.map(n => {
-            const scan = globalVersions[n.id] || { version: currentLang === 'en' ? "Not detected" : "Non rilevato", status: n.status };
+            const scan = globalVersions[n.id] || { version: tr('topoNotDetected'), status: n.status };
             const effectiveStatus = (scan && scan.status && scan.status !== 'unknown') ? scan.status : (n.status || 'offline');
             n.status = effectiveStatus;
             
@@ -1149,13 +1147,13 @@
 
             const pcBadge = isPC ? `
               <div style="display:inline-flex; align-items:center; gap:6px; font-size:10px; font-weight:700; color:var(--warning); background:color-mix(in srgb, var(--warning) 12%, transparent); border:1px solid color-mix(in srgb, var(--warning) 30%, transparent); padding:2px 7px; border-radius:0; margin-bottom:8px;">
-                <i class="fa-solid fa-link"></i> ${currentLang === 'en' ? 'AGGREGATED' : 'AGGREGATO'} · ${escapeHtml(l.pc_name || (currentLang === 'en' ? 'Port-Channel / LAG' : 'Port-Channel / LAG'))}${l.member_count > 1 ? ` · ${l.member_count} ${currentLang === 'en' ? 'members' : 'membri'}` : ''}
+                <i class="fa-solid fa-link"></i> ${tr('topoAggregated')} · ${escapeHtml(l.pc_name || (tr('topoPortChannelLag')))}${l.member_count > 1 ? ` · ${l.member_count} ${tr('topoMembers')}` : ''}
               </div>` : '';
 
             // Interfacce membro per lato, mostrate solo per gli aggregati
             const memberRows = (isPC && (localMembers || remoteMembers)) ? `
               <div style="margin-top:8px; border-top:1px solid rgba(255,255,255,0.08); padding-top:6px; font-family:var(--font-code); font-size:10px;">
-                <div style="color:var(--text-muted); font-size:9px; text-transform:uppercase; margin-bottom:4px;">${currentLang === 'en' ? 'Member interfaces' : 'Interfacce membro'}</div>
+                <div style="color:var(--text-muted); font-size:9px; text-transform:uppercase; margin-bottom:4px;">${tr('topoMemberInterfaces')}</div>
                 <div style="display:flex; justify-content:space-between; gap:10px; padding:1px 0;"><span style="color:var(--text-muted);">${escapeHtml(l.source)}</span><span style="color:var(--success);">${escapeHtml(localMembers || '—')}</span></div>
                 <div style="display:flex; justify-content:space-between; gap:10px; padding:1px 0;"><span style="color:var(--text-muted);">${escapeHtml(l.target)}</span><span style="color:var(--success);">${escapeHtml(remoteMembers || '—')}</span></div>
               </div>` : '';
@@ -1164,20 +1162,20 @@
             const linkTooltip = `
             <div style="font-family: var(--font-main); min-width: 240px; color: var(--text);">
               <div style="font-size: 13px; font-weight: 700; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px; color: var(--primary); display: flex; align-items: center; gap: 8px;">
-                <i class="fa-solid fa-circle-nodes"></i> ${currentLang === 'en' ? 'Interconnection Link' : 'Link di Interconnessione'}
+                <i class="fa-solid fa-circle-nodes"></i> ${tr('topoInterconnectionLink')}
               </div>
               ${pcBadge}
               <div style="display: grid; grid-template-columns: 1fr 30px 1fr; gap: 8px; align-items: center; font-size: 11px; line-height: 1.4;">
                 <div>
-                  <span style="color: var(--text-muted); font-size: 9px; display: block; text-transform: uppercase; margin-bottom: 2px;">${currentLang === 'en' ? 'Source' : 'Origine'}</span>
+                  <span style="color: var(--text-muted); font-size: 9px; display: block; text-transform: uppercase; margin-bottom: 2px;">${tr('topoSource')}</span>
                   <strong style="font-size:11px; color:var(--text);">${escapeHtml(l.source)}</strong>
-                  <code style="color: var(--success); display: block; font-family: var(--font-code); margin-top: 2px; font-size: 10px;">${escapeHtml(isPC ? (l.pc_name ? shortIface(l.pc_name) : (localMembers || l.local_port)) : l.local_port) || (currentLang === 'en' ? 'Port N/A' : 'Porta N/A')}</code>
+                  <code style="color: var(--success); display: block; font-family: var(--font-code); margin-top: 2px; font-size: 10px;">${escapeHtml(isPC ? (l.pc_name ? shortIface(l.pc_name) : (localMembers || l.local_port)) : l.local_port) || (tr('topoPortNA'))}</code>
                 </div>
                 <div style="color: var(--primary); font-size: 14px; text-align: center;"><i class="fa-solid fa-right-left"></i></div>
                 <div style="text-align: right;">
-                  <span style="color: var(--text-muted); font-size: 9px; display: block; text-transform: uppercase; margin-bottom: 2px;">${currentLang === 'en' ? 'Destination' : 'Destinazione'}</span>
+                  <span style="color: var(--text-muted); font-size: 9px; display: block; text-transform: uppercase; margin-bottom: 2px;">${tr('topoDestination')}</span>
                   <strong style="font-size:11px; color:var(--text);">${escapeHtml(l.target)}</strong>
-                  <code style="color: var(--success); display: block; font-family: var(--font-code); margin-top: 2px; font-size: 10px;">${escapeHtml(isPC ? (remoteMembers || l.remote_port) : l.remote_port) || (currentLang === 'en' ? 'Port N/A' : 'Porta N/A')}</code>
+                  <code style="color: var(--success); display: block; font-family: var(--font-code); margin-top: 2px; font-size: 10px;">${escapeHtml(isPC ? (remoteMembers || l.remote_port) : l.remote_port) || (tr('topoPortNA'))}</code>
                 </div>
               </div>
               ${memberRows}
@@ -1414,7 +1412,7 @@
         const ts = Date.parse(iso);
         if (isNaN(ts)) return '';
         const age = relativeAge((Date.now() - ts) / 3600000);
-        return currentLang === 'en' ? `seen by WLC ${age} ago` : `visto dal WLC ${age} fa`;
+        return tr('topoSeenByWlcAgo', {age: age});
     }
 
     function openTopologyNodeDrawer(nodeId) {
@@ -1451,7 +1449,7 @@
         // Un AP non ha né VLAN di management né VTP: al loro posto vale sapere a
         // quale controller si è agganciato.
         const joinedWlc = topNode.wlc_ip
-            ? `${currentLang === 'en' ? 'joined WLC' : 'agganciato al WLC'} ${topNode.wlc_ip}`
+            ? `${tr('topoJoinedWlc')} ${topNode.wlc_ip}`
             : '';
 
         const hostEl = document.getElementById('drawerNodeHostname');
@@ -1531,7 +1529,7 @@
             if (neighCountEl) neighCountEl.textContent = rows.length ? `(${rows.length})` : '';
             neighEl.innerHTML = rows.length
                 ? rows.join('')
-                : `<div style="font-size:12px; color:var(--text-muted);">${escapeHtml(currentLang === 'en' ? 'No adjacency discovered for this node.' : 'Nessuna adiacenza rilevata su questo nodo.')}</div>`;
+                : `<div style="font-size:12px; color:var(--text-muted);">${escapeHtml(tr('topoNoAdjacencyDiscoveredFor'))}</div>`;
         }
 
         renderDrawerPortChannels(ip, hostname, topNode);
@@ -1571,8 +1569,8 @@
             btnCore.style.display = layered ? '' : 'none';
             const isCore = layeredRoots[layeredGroup] === nodeId;
             btnCore.querySelector('span').textContent = isCore
-                ? (currentLang === 'en' ? 'Clear core' : 'Togli core')
-                : (currentLang === 'en' ? 'Set as core' : 'Segna come core');
+                ? (tr('topoClearCore'))
+                : (tr('topoSetAsCore'));
             btnCore.onclick = layered
                 ? () => { closeTopologyNodeDrawer(); setLayeredRoot(layeredGroup, isCore ? null : nodeId); }
                 : null;
@@ -1812,28 +1810,28 @@
         const box = document.getElementById('minimalCustomCatList');
         if (!box) return;
         const names = Object.keys(minimalCustomCats.categories);
-        const dashLabel = d => d === 'dashed' ? (currentLang==='en'?'Dashed':'Tratteggiata')
-                              : d === 'dotted' ? (currentLang==='en'?'Dotted':'Punteggiata')
-                              : (currentLang==='en'?'Solid':'Continua');
+        const dashLabel = d => d === 'dashed' ? (tr('topoDashed'))
+                              : d === 'dotted' ? (tr('topoDotted'))
+                              : (tr('topoSolid'));
         const rows = names.map(nm => {
             const c = minimalCustomCats.categories[nm];
             return `<div style="display:flex; align-items:center; gap:6px; padding:3px 0;">
                 <span style="width:14px; height:14px; border-radius:0; background:${c.color}; border:1px solid var(--border); display:inline-block;"></span>
                 <span style="flex:1; font-size:12px; color:var(--text);">${escapeHtml(nm)}</span>
                 <span style="font-size:10px; color:var(--text-muted);">${dashLabel(c.dash)}</span>
-                <button data-action="delete-minimal-custom-cat" data-name="${attrEsc(nm)}" title="${currentLang==='en'?'Delete':'Elimina'}" style="background:none; border:none; color:var(--lamp-fault-ink); cursor:pointer; font-size:12px; padding:2px;"><i class="fa-solid fa-trash-can"></i></button>
+                <button data-action="delete-minimal-custom-cat" data-name="${attrEsc(nm)}" title="${tr('uiDelete')}" style="background:none; border:none; color:var(--lamp-fault-ink); cursor:pointer; font-size:12px; padding:2px;"><i class="fa-solid fa-trash-can"></i></button>
             </div>`;
-        }).join('') || `<div style="font-size:12px; color:var(--text-muted); padding:4px 0;">${currentLang==='en'?'No categories yet':'Nessuna categoria'}</div>`;
+        }).join('') || `<div style="font-size:12px; color:var(--text-muted); padding:4px 0;">${tr('topoNoCategoriesYet')}</div>`;
         box.innerHTML = rows + `
             <div style="display:flex; align-items:center; gap:6px; margin-top:8px; padding-top:8px; border-top:1px solid var(--border);">
-                <input id="minimalCatNameInput" type="text" placeholder="${currentLang==='en'?'Name':'Nome'}" style="flex:1; min-width:0; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface-1); color:var(--text); font-size:12px;">
+                <input id="minimalCatNameInput" type="text" placeholder="${tr('topoName')}" style="flex:1; min-width:0; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface-1); color:var(--text); font-size:12px;">
                 <input id="minimalCatColorInput" type="color" value="#607d8b" style="width:24px; height:24px; padding:0; border:1px solid var(--border); border-radius:0; background:none; cursor:pointer;">
                 <select id="minimalCatDashInput" style="padding:3px; border-radius:0; border:1px solid var(--border); background:var(--surface-1); color:var(--text); font-size:11px;">
-                    <option value="solid">${currentLang==='en'?'Solid':'Continua'}</option>
-                    <option value="dashed">${currentLang==='en'?'Dashed':'Tratteggiata'}</option>
-                    <option value="dotted">${currentLang==='en'?'Dotted':'Punteggiata'}</option>
+                    <option value="solid">${tr('topoSolid')}</option>
+                    <option value="dashed">${tr('topoDashed')}</option>
+                    <option value="dotted">${tr('topoDotted')}</option>
                 </select>
-                <button data-action="add-minimal-custom-cat" title="${currentLang==='en'?'Add category':'Aggiungi categoria'}" style="background:var(--cta); color:var(--cta-text); border:none; border-radius:0; padding:4px 8px; cursor:pointer; font-size:12px;"><i class="fa-solid fa-plus"></i></button>
+                <button data-action="add-minimal-custom-cat" title="${tr('topoAddCategory')}" style="background:var(--cta); color:var(--cta-text); border:none; border-radius:0; padding:4px 8px; cursor:pointer; font-size:12px;"><i class="fa-solid fa-plus"></i></button>
             </div>`;
     }
 
@@ -1871,8 +1869,8 @@
                 <span style="width:10px; height:10px; border-radius:50%; background:${minimalCustomCats.categories[nm].color}; display:inline-block;"></span>
                 <span>${escapeHtml(nm)}</span>
             </div>`).join('')
-            : `<div style="padding:4px 6px; color:var(--text-muted);">${currentLang==='en'?'No custom categories yet':'Nessuna categoria personalizzata'}</div>`;
-        const noneRow = `<div class="edgeCatRow" data-nm="" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:0; cursor:pointer; color:var(--text-muted);">${currentLang==='en'?'None (default style)':'Nessuna (stile predefinito)'}</div>`;
+            : `<div style="padding:4px 6px; color:var(--text-muted);">${tr('topoNoCustomCategoriesYet')}</div>`;
+        const noneRow = `<div class="edgeCatRow" data-nm="" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:0; cursor:pointer; color:var(--text-muted);">${tr('topoNoneDefaultStyle')}</div>`;
         div.innerHTML = rowsHtml + `<div style="border-top:1px solid var(--border); margin:4px 0;"></div>` + noneRow;
         document.body.appendChild(div);
         div.querySelectorAll('.edgeCatRow').forEach(row => {
@@ -1914,7 +1912,7 @@
         });
 
         const nodes = nodeData.map((n, idx) => {
-            const scan = globalVersions[n.id] || { version: currentLang === 'en' ? "Not detected" : "Non rilevato", status: n.status };
+            const scan = globalVersions[n.id] || { version: tr('topoNotDetected'), status: n.status };
             const effectiveStatus = (scan && scan.status && scan.status !== 'unknown') ? scan.status : (n.status || 'offline');
             n.status = effectiveStatus;
             const matchedDev = globalDevices.find(d => d.IP === n.id);
@@ -1934,7 +1932,7 @@
             // (SVI con l'IP di management); se assente si mostra solo l'IP.
             const mgmtIp = n.mgmt_ip || (n.status === 'discovered' ? n.reported_ip : n.id) || '';
             const mgmtBits = [];
-            if (n.mgmt_vlan) mgmtBits.push((currentLang === 'en' ? 'VLAN ' : 'VLAN ') + n.mgmt_vlan);
+            if (n.mgmt_vlan) mgmtBits.push((tr('topoVlan')) + n.mgmt_vlan);
             if (mgmtIp) mgmtBits.push(mgmtIp);
             const mgmtLine = mgmtBits.join('  ·  ');
             let label = `<b>${n.label}</b>`;
@@ -2112,7 +2110,7 @@
             const tip = document.createElement('div');
             tip.innerHTML = `<div style="font-family:var(--font-main); min-width:180px; color:var(--text); font-size:11px;">
                 <strong style="color:var(--primary);">${escapeHtml(l.source)} ⇄ ${escapeHtml(l.target)}</strong>
-                ${isPC ? `<div style="margin-top:4px; color:var(--text-muted);">${currentLang==='en'?'Aggregate':'Aggregato'}: <span style="color:var(--warning);">${escapeHtml(pcTag)}</span>${l.member_count > 1 ? ` · ${l.member_count} ${currentLang==='en'?'members':'membri'}` : ''}</div>
+                ${isPC ? `<div style="margin-top:4px; color:var(--text-muted);">${tr('topoAggregate')}: <span style="color:var(--warning);">${escapeHtml(pcTag)}</span>${l.member_count > 1 ? ` · ${l.member_count} ${tr('topoMembers')}` : ''}</div>
                 <div style="font-family:var(--font-code); font-size:10px; margin-top:2px;">${escapeHtml(members||'—')} ⇄ ${escapeHtml(remoteMembers||'—')}</div>`
                 : `<div style="font-family:var(--font-code); font-size:10px; margin-top:4px;">${escapeHtml(shortIface(l.local_port)||'—')} ⇄ ${escapeHtml(shortIface(l.remote_port)||'—')}</div>`}
             </div>`;
@@ -2228,9 +2226,7 @@
         if (!container) return;
         pillInteractionReady = true;
         // Suggerimento d'uso (tooltip nativo del contenitore).
-        container.title = currentLang === 'en'
-            ? 'Port-Channel pill: drag to move, drag the corner handle to resize'
-            : 'Pillola Port-Channel: trascina per spostare, angolo per ridimensionare';
+        container.title = tr('topoPortChannelPillDrag');
         // Punto del mouse in coordinate RETE (le stesse dell'overlay).
         const toNet = ev => {
             const cv = container.querySelector('canvas');
@@ -2700,7 +2696,7 @@
     async function loadCategoriesData() {
         const devList = document.getElementById("categoriesDeviceList");
         if (!categoriesData && devList && devList.innerHTML.trim() === '') {
-            devList.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><p style="margin-top:10px; font-size:13px;">${currentLang === 'en' ? 'Scanning backups and classifying devices...' : 'Analisi backup e classificazione dispositivi in corso...'}</p></div>`;
+            devList.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><p style="margin-top:10px; font-size:13px;">${tr('topoScanningBackupsAndClassifying')}</p></div>`;
         }
         const res = await apiFetch("/api/device-classification");
         if (!res || !res.ok) {
@@ -2716,7 +2712,7 @@
         if (gsel) {
             const cur = gsel.value;
             const groups = Object.keys(categoriesData.counts_by_group).sort();
-            gsel.innerHTML = `<option value="all">${currentLang==='en'?'Filter by Tenant: All':'Filtra per Tenant: Tutti'}</option>` +
+            gsel.innerHTML = `<option value="all">${tr('topoFilterByTenantAll')}</option>` +
                 groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join("");
             gsel.value = groups.includes(cur) ? cur : "all";
         }
@@ -2726,7 +2722,7 @@
         const catKeys = Object.keys(categoriesData.categories);
         if (csel) {
             const cur = csel.value;
-            csel.innerHTML = `<option value="all">${currentLang==='en'?'All categories':'Tutte le categorie'}</option>` +
+            csel.innerHTML = `<option value="all">${tr('topoAllCategories')}</option>` +
                 catKeys.map(k => `<option value="${escapeHtml(k)}">${escapeHtml(categoriesData.categories[k].label)}</option>`).join("");
             csel.value = catKeys.includes(cur) ? cur : "all";
         }
@@ -2801,7 +2797,7 @@
         const save = document.getElementById('btnSaveCatEdits');
         const disc = document.getElementById('btnDiscardCatEdits');
         [save, disc].forEach(b => { if (b) { b.disabled = !n; b.style.opacity = n ? '1' : '0.5'; } });
-        if (save) save.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> ${currentLang==='en'?'Save changes':'Salva Modifiche'}${n?` (${n})`:''}`;
+        if (save) save.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> ${tr('topoSaveChanges')}${n?` (${n})`:''}`;
     }
 
     function renderCategoriesPanel() {
@@ -2826,9 +2822,9 @@
                 const color = deviceTypeMeta(k).color;
                 const n = counts[k] || 0;
                 const delBtn = (!c.builtin && canWrite)
-                    ? `<i class="fa-solid fa-trash" title="${currentLang==='en'?'Delete category':'Elimina categoria'}" style="position:absolute; top:8px; right:8px; font-size:11px; color:var(--text-muted); cursor:pointer;" data-action="delete-category" data-k="${escapeHtml(k)}"></i>` : '';
+                    ? `<i class="fa-solid fa-trash" title="${tr('topoDeleteCategory')}" style="position:absolute; top:8px; right:8px; font-size:11px; color:var(--text-muted); cursor:pointer;" data-action="delete-category" data-k="${escapeHtml(k)}"></i>` : '';
                 const subChips = c.subcategories.length
-                    ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;">${c.subcategories.map(s => `<span style="display:inline-flex; align-items:center; gap:4px; font-size:10px; color:var(--text-muted); background:var(--surface-3); border:1px solid var(--border); border-radius:9999px; padding:1px 8px;">${escapeHtml(s)}${canWrite?`<i class="fa-solid fa-xmark" title="${currentLang==='en'?'Remove subcategory':'Rimuovi sottocategoria'}" data-action="delete-subcategory" data-k="${escapeHtml(k)}" data-s="${escapeHtml(s)}" style="cursor:pointer; color:var(--danger); margin-left:3px;"></i>`:''}</span>`).join('')}</div>` : '';
+                    ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;">${c.subcategories.map(s => `<span style="display:inline-flex; align-items:center; gap:4px; font-size:10px; color:var(--text-muted); background:var(--surface-3); border:1px solid var(--border); border-radius:9999px; padding:1px 8px;">${escapeHtml(s)}${canWrite?`<i class="fa-solid fa-xmark" title="${tr('topoRemoveSubcategory')}" data-action="delete-subcategory" data-k="${escapeHtml(k)}" data-s="${escapeHtml(s)}" style="cursor:pointer; color:var(--danger); margin-left:3px;"></i>`:''}</span>`).join('')}</div>` : '';
                 return `<div class="category-card">
                     ${delBtn}
                     <div style="font-size:var(--font-size-2xl); font-weight:800; color:${color}; font-family:var(--font-data); line-height:1.1;">${n}</div>
@@ -2856,7 +2852,7 @@
 
         const listBox = document.getElementById("categoriesDeviceList");
         if (!listBox) return;
-        if (!nodes.length) { listBox.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${currentLang==='en'?'No devices.':'Nessun dispositivo.'}</p>`; return; }
+        if (!nodes.length) { listBox.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${tr('topoNoDevices')}</p>`; return; }
 
         // Datalist condivise per vendor e modelli (per editing inline).
         const vendorDL = `<datalist id="catVendorDL">${(categoriesData.vendors||[]).map(v=>`<option value="${attrEsc(v)}">`).join('')}</datalist>`;
@@ -2870,29 +2866,29 @@
             switch (col.key) {
                 case 'hostname': {
                     const conflictIcon = (canWrite && n.name_options && n.name_options.length > 1)
-                        ? ` <i class="fa-solid fa-triangle-exclamation" title="${currentLang==='en'?'CDP/LLDP name conflict — click to resolve':'Conflitto nome CDP/LLDP — clicca per risolvere'}" data-action="open-conflict-modal" data-node-id="${escapeHtml(n.id)}" style="cursor:pointer; color:var(--warning); font-size:11px;"></i>` : '';
+                        ? ` <i class="fa-solid fa-triangle-exclamation" title="${tr('topoCdpLldpNameConflict')}" data-action="open-conflict-modal" data-node-id="${escapeHtml(n.id)}" style="cursor:pointer; color:var(--warning); font-size:11px;"></i>` : '';
                     // Chevron di espansione: mostra le unità fisiche dello stack.
                     const chevron = n.stack
-                        ? `<i class="fa-solid fa-chevron-right" id="stackChev_${attrEsc(n.id)}" title="${currentLang==='en'?'Show stack units':'Mostra unità dello stack'}" data-action="toggle-stack-row" data-node-id="${escapeHtml(n.id)}" style="cursor:pointer; color:${STACK_COLOR}; font-size:10px; margin-right:6px; width:9px;"></i>`
+                        ? `<i class="fa-solid fa-chevron-right" id="stackChev_${attrEsc(n.id)}" title="${tr('topoShowStackUnits')}" data-action="toggle-stack-row" data-node-id="${escapeHtml(n.id)}" style="cursor:pointer; color:${STACK_COLOR}; font-size:10px; margin-right:6px; width:9px;"></i>`
                         : '';
                     const dot = `${chevron}<span style="display:inline-block; width:9px; height:9px; border-radius:0; background:${meta.color}; margin-right:6px;"></span>`;
                     // Rinomina inline: modifica il nome mostrato (stage 'name', salvato col pulsante).
                     if (canWrite) {
                         const p = pendingEdits[n.id];
                         const curName = (p && Object.prototype.hasOwnProperty.call(p, 'name')) ? p.name : (n.label || '');
-                        return td(`${dot}<input value="${attrEsc(curName)}" data-action="stage-edit-name" data-node-id="${escapeHtml(n.id)}" title="${currentLang==='en'?'Rename device':'Rinomina dispositivo'}" placeholder="${currentLang==='en'?'name':'nome'}" style="width:150px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">${conflictIcon}`);
+                        return td(`${dot}<input value="${attrEsc(curName)}" data-action="stage-edit-name" data-node-id="${escapeHtml(n.id)}" title="${tr('uiRenameDevice')}" placeholder="${tr('topoName2')}" style="width:150px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">${conflictIcon}`);
                     }
-                    return td(`${dot}${escapeHtml(n.label)} ${n.is_manual?'<i class="fa-solid fa-user-pen" title="'+(currentLang==='en'?'Manually classified':'Classificato manualmente')+'" style="font-size:10px; color:var(--warning);"></i>':''}${conflictIcon}`);
+                    return td(`${dot}${escapeHtml(n.label)} ${n.is_manual?'<i class="fa-solid fa-user-pen" title="'+(tr('topoManuallyClassified'))+'" style="font-size:10px; color:var(--warning);"></i>':''}${conflictIcon}`);
                 }
                 case 'ip':
                     return td(escapeHtml(n.display_ip || '—'), 'font-family:var(--font-code); font-size:12px; color:var(--text-muted);');
                 case 'source': {
                     const badge = n.discovered
-                        ? `<span style="font-size:10px; color:var(--lamp-idle-ink); border:1px solid var(--lamp-idle); border-radius:0; padding:1px 5px;">${currentLang==='en'?'DISCOVERED':'SCOPERTO'}</span>`
-                        : `<span style="font-size:10px; color:var(--primary); border:1px solid var(--primary); border-radius:0; padding:1px 5px;">${currentLang==='en'?'MANAGED':'GESTITO'}</span>`;
+                        ? `<span style="font-size:10px; color:var(--lamp-idle-ink); border:1px solid var(--lamp-idle); border-radius:0; padding:1px 5px;">${tr('topoDiscovered2')}</span>`
+                        : `<span style="font-size:10px; color:var(--primary); border:1px solid var(--primary); border-radius:0; padding:1px 5px;">${tr('topoManaged')}</span>`;
                     // Promozione di un dispositivo scoperto a gestito (operator/admin).
                     const promote = (n.discovered && canWrite && n.display_ip)
-                        ? ` <button data-action="promote-device" data-node-id="${escapeHtml(n.id)}" title="${currentLang==='en'?'Add to managed (triage)':'Aggiungi ai gestiti (triage)'}" style="font-size:10px; cursor:pointer; border:1px solid var(--success); color:var(--success); background:transparent; border-radius:0; padding:1px 5px;"><i class="fa-solid fa-arrow-up-from-bracket"></i> ${currentLang==='en'?'Promote':'Promuovi'}</button>` : '';
+                        ? ` <button data-action="promote-device" data-node-id="${escapeHtml(n.id)}" title="${tr('topoAddToManagedTriage')}" style="font-size:10px; cursor:pointer; border:1px solid var(--success); color:var(--success); background:transparent; border-radius:0; padding:1px 5px;"><i class="fa-solid fa-arrow-up-from-bracket"></i> ${tr('topoPromote')}</button>` : '';
                     return td(badge + promote);
                 }
                 case 'vendor': {
@@ -2917,19 +2913,19 @@
                     const hg = effVal(n,'ha_group') || '';
                     const badge = hg ? `<span title="HA" style="font-size:9px; font-weight:900; color:var(--cond-d); border:1px solid var(--cond-d); border-radius:0; padding:1px 4px; margin-right:4px;">HA</span>` : '';
                     return td(canWrite
-                        ? `${badge}<input value="${attrEsc(hg)}" data-action="stage-edit-ha-group" data-node-id="${escapeHtml(n.id)}" placeholder="${currentLang==='en'?'HA group':'gruppo HA'}" style="width:110px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
+                        ? `${badge}<input value="${attrEsc(hg)}" data-action="stage-edit-ha-group" data-node-id="${escapeHtml(n.id)}" placeholder="${tr('topoHaGroup')}" style="width:110px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
                         : (hg ? `${badge}<span style="font-size:12px; color:var(--cond-d);">${escapeHtml(hg)}</span>` : '<span style="color:var(--text-muted);">—</span>'));
                 }
                 case 'stack': {
                     if (n.stack) {
                         const warn = n.stack.health === 'degraded'
-                            ? ` <i class="fa-solid fa-triangle-exclamation" title="${currentLang==='en'?'Degraded stack':'Stack degradato'}" style="color:var(--danger); font-size:10px;"></i>` : '';
+                            ? ` <i class="fa-solid fa-triangle-exclamation" title="${tr('topoDegradedStack')}" style="color:var(--danger); font-size:10px;"></i>` : '';
                         return td(`<span title="${attrEsc(stackLine(n.stack, '', n.model))}" style="display:inline-block; white-space:nowrap; font-size:10px; font-weight:900; color:${STACK_COLOR}; border:1px solid ${STACK_COLOR}; border-radius:0; padding:2px 6px; cursor:pointer;" data-action="toggle-stack-row" data-node-id="${escapeHtml(n.id)}"><i class="fa-solid fa-layer-group"></i> STACK ×${n.stack.member_count}</span>${warn}`, 'white-space:nowrap;');
                     }
                     // Solo switch/router gestiti possono essere marcati a mano.
                     const canMark = canAdmin && !n.discovered && ['switch','router'].includes(effVal(n,'category'));
                     return td(canMark
-                        ? `<button data-action="mark-as-stack" data-node-id="${escapeHtml(n.id)}" title="${currentLang==='en'?'Declare this device as a stack':'Dichiara questo apparato come stack'}" style="white-space:nowrap; font-size:10px; cursor:pointer; border:1px solid var(--border); color:var(--text-muted); background:transparent; border-radius:0; padding:2px 6px;"><i class="fa-solid fa-layer-group"></i> ${currentLang==='en'?'Mark':'Segna'}</button>`
+                        ? `<button data-action="mark-as-stack" data-node-id="${escapeHtml(n.id)}" title="${tr('topoDeclareThisDeviceAs')}" style="white-space:nowrap; font-size:10px; cursor:pointer; border:1px solid var(--border); color:var(--text-muted); background:transparent; border-radius:0; padding:2px 6px;"><i class="fa-solid fa-layer-group"></i> ${tr('topoMark')}</button>`
                         : '<span style="color:var(--text-muted);">—</span>', 'white-space:nowrap;');
                 }
                 case 'category': {
@@ -2940,7 +2936,7 @@
                     // così, rimuovendo l'ultima sottocategoria, non resta spazio vuoto.
                     const subSel = (canWrite && subs.length)
                         ? `<select class="subcat-sel" data-action="stage-edit-subcategory" data-node-id="${escapeHtml(n.id)}" style="padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
-                            <option value="">${currentLang==='en'?'— subcat —':'— sottocat —'}</option>
+                            <option value="">${tr('topoSubcat')}</option>
                             ${subs.map(s => `<option value="${escapeHtml(s)}"${s===curSub?' selected':''}>${escapeHtml(s)}</option>`).join('')}
                         </select>` : '';
                     const ctrl = canWrite
@@ -2958,8 +2954,7 @@
         const stackRowHtml = (n) => {
             if (!n.stack) return '';
             const members = n.stack.members || [];
-            const hdr = currentLang === 'en'
-                ? ['#', 'Role', 'Model', 'Serial', 'State'] : ['#', 'Ruolo', 'Modello', 'Serial', 'Stato'];
+            const hdr = ['#', tr('topoRole'), tr('topoModel'), tr('topoSerial'), tr('topoState')];
             // Gli input riempiono la colonna: la tabella unità occupa tutta la
             // larghezza della riga espansa invece di stringersi a sinistra.
             const inp = (i, field, val) => canAdmin
@@ -2974,8 +2969,8 @@
             </tr>`).join('');
             // Azioni accanto al titolo: sfruttano lo spazio orizzontale libero.
             const actions = canAdmin ? `<div style="display:flex; gap:8px;">
-                <button data-action="save-stack-members" data-node-id="${escapeHtml(n.id)}" style="white-space:nowrap; font-size:11px; cursor:pointer; border:1px solid var(--success); color:var(--success); background:transparent; border-radius:0; padding:3px 10px;"><i class="fa-solid fa-floppy-disk"></i> ${currentLang==='en'?'Save stack':'Salva stack'}</button>
-                <button data-action="remove-stack" data-node-id="${escapeHtml(n.id)}" style="white-space:nowrap; font-size:11px; cursor:pointer; border:1px solid var(--danger); color:var(--danger); background:transparent; border-radius:0; padding:3px 10px;"><i class="fa-solid fa-trash"></i> ${currentLang==='en'?'Remove stack':'Rimuovi stack'}</button>
+                <button data-action="save-stack-members" data-node-id="${escapeHtml(n.id)}" style="white-space:nowrap; font-size:11px; cursor:pointer; border:1px solid var(--success); color:var(--success); background:transparent; border-radius:0; padding:3px 10px;"><i class="fa-solid fa-floppy-disk"></i> ${tr('topoSaveStack')}</button>
+                <button data-action="remove-stack" data-node-id="${escapeHtml(n.id)}" style="white-space:nowrap; font-size:11px; cursor:pointer; border:1px solid var(--danger); color:var(--danger); background:transparent; border-radius:0; padding:3px 10px;"><i class="fa-solid fa-trash"></i> ${tr('topoRemoveStack')}</button>
             </div>` : '';
             // Larghezze: #, Ruolo, Modello, Serial, Stato.
             const widths = ['36px', '18%', '32%', '30%', '90px'];
@@ -3068,7 +3063,7 @@
             if (!(res && res.ok)) failed++;
         }
         pendingEdits = {};
-        if (failed) alert((currentLang==='en'?'Some changes failed: ':'Alcune modifiche non salvate: ') + failed);
+        if (failed) alert((tr('topoSomeChangesFailed')) + failed);
         await loadCategoriesData();
         updateSaveBar();
     }
@@ -3100,7 +3095,7 @@
             })
         });
         if (!(res && res.ok)) {
-            alert(currentLang==='en' ? 'Stack save failed.' : 'Salvataggio stack non riuscito.');
+            alert(tr('topoStackSaveFailed'));
             return false;
         }
         await loadCategoriesData();
@@ -3128,20 +3123,18 @@
     async function removeStack(nodeId) {
         const n = categoriesData.nodes.find(x => x.id === nodeId);
         if (!n || !n.stack) return;
-        if (!confirm(currentLang==='en'
-            ? `Remove the stack group for "${n.label}"? It will be re-detected on the next triage.`
-            : `Rimuovere il gruppo stack di "${n.label}"? Verrà ricreato al prossimo triage se rilevato.`)) return;
+        if (!confirm(tr('topoRemoveTheStackGroup', {label: n.label}))) return;
         const res = await apiFetch(`/api/redundancy/groups/${n.stack.group_id}`, { method: 'DELETE' });
-        if (!(res && res.ok)) { alert(currentLang==='en'?'Delete failed.':'Eliminazione non riuscita.'); return; }
+        if (!(res && res.ok)) { alert(tr('topoDeleteFailed')); return; }
         await loadCategoriesData();
     }
 
     async function markAsStack(nodeId) {
         const n = categoriesData.nodes.find(x => x.id === nodeId);
         if (!n) return;
-        const count = parseInt(prompt(currentLang==='en' ? 'Number of units in the stack:' : 'Numero di unità dello stack:', '2') || '', 10);
+        const count = parseInt(prompt(tr('topoNumberOfUnitsIn'), '2') || '', 10);
         if (!(count >= 2)) return;
-        const model = (prompt(currentLang==='en' ? 'Unit model:' : 'Modello delle unità:', n.model || '') || '').trim();
+        const model = (prompt(tr('topoUnitModel'), n.model || '') || '').trim();
         const members = Array.from({ length: count }, (_, i) => ({
             role: i === 0 ? 'master' : 'member',
             model: model || null, state: 'ready', device_ip: n.id, mgmt_ip: n.id,
@@ -3151,11 +3144,9 @@
 
     async function promoteDevice(nodeId) {
         const n = categoriesData.nodes.find(x => x.id === nodeId);
-        if (!n || !n.display_ip) { alert(currentLang==='en'?'No announced IP available.':'Nessun IP annunciato disponibile.'); return; }
+        if (!n || !n.display_ip) { alert(tr('topoNoAnnouncedIpAvailable')); return; }
         const vendor = (effVal(n,'vendor') && effVal(n,'vendor') !== 'discovered') ? effVal(n,'vendor') : 'cisco';
-        const msg = currentLang==='en'
-            ? `Promote "${n.label}" (${n.display_ip}) to managed in tenant "${n.group}"? You can set credentials afterwards in Inventory.`
-            : `Promuovere "${n.label}" (${n.display_ip}) a gestito nel tenant "${n.group}"? Le credenziali si impostano dopo, in Inventario.`;
+        const msg = tr('topoPromoteToManagedIn', {label: n.label, display_ip: n.display_ip, group: n.group});
         if (!confirm(msg)) return;
         const res = await apiFetch("/api/promote-device", {
             method: "POST",
@@ -3183,7 +3174,7 @@
             } catch (e) {}
         } else {
             const e = res ? await res.json().catch(()=>({})) : {};
-            alert(e.detail || (currentLang==='en'?'Promotion failed.':'Promozione non riuscita.'));
+            alert(e.detail || (tr('topoPromotionFailed')));
         }
     }
 
@@ -3207,12 +3198,12 @@
         ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:color-mix(in srgb, var(--bg) 82%, transparent); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
         ov.innerHTML = `
             <div style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:22px; width:min(480px,92vw); box-shadow:var(--shadow-float);">
-                <h3 style="font-size:17px; margin-bottom:6px;"><i class="fa-solid fa-code-branch" style="color:var(--warning);"></i> ${currentLang==='en'?'Resolve CDP/LLDP conflict':'Risolvi conflitto CDP/LLDP'}</h3>
-                <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">${currentLang==='en'?'The same device was discovered with different names. Choose the name and version to keep.':'Lo stesso dispositivo è stato rilevato con nomi diversi. Scegli nome e versione da mantenere.'}</p>
+                <h3 style="font-size:17px; margin-bottom:6px;"><i class="fa-solid fa-code-branch" style="color:var(--warning);"></i> ${tr('topoResolveCdpLldpConflict')}</h3>
+                <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">${tr('topoTheSameDeviceWas')}</p>
                 ${rows}
                 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px;">
-                    <button data-action="close-conflict-modal" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${currentLang==='en'?'Cancel':'Annulla'}</button>
-                    <button data-action="confirm-conflict" data-node-id="${escapeHtml(nodeId)}" class="btn btn-primary btn-small" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);">${currentLang==='en'?'Apply':'Applica'}</button>
+                    <button data-action="close-conflict-modal" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${tr('uiCancel')}</button>
+                    <button data-action="confirm-conflict" data-node-id="${escapeHtml(nodeId)}" class="btn btn-primary btn-small" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);">${tr('topoApply')}</button>
                 </div>
             </div>`;
         ov.addEventListener('click', e => {
@@ -3239,14 +3230,14 @@
             body: JSON.stringify({ node_id: nodeId, name, version })
         });
         if (res && res.ok) loadCategoriesData();
-        else alert(currentLang==='en'?'Failed to resolve conflict.':'Risoluzione conflitto non riuscita.');
+        else alert(tr('topoFailedToResolveConflict'));
     }
 
     async function createCategory() {
         const key = document.getElementById("newCatKey").value.trim();
         const label = document.getElementById("newCatLabel").value.trim();
         const sub = document.getElementById("newSubcat").value.trim();
-        if (!key) { alert(currentLang==='en'?'Category key required.':'Chiave categoria obbligatoria.'); return; }
+        if (!key) { alert(tr('topoCategoryKeyRequired')); return; }
         const res = await apiFetch("/api/device-categories", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -3258,30 +3249,30 @@
             document.getElementById("newSubcat").value = "";
             loadCategoriesData();
         } else {
-            alert(currentLang==='en'?'Failed to create category.':'Creazione categoria non riuscita.');
+            alert(tr('topoFailedToCreateCategory'));
         }
     }
 
     async function deleteCategory(key) {
-        if (!confirm(currentLang==='en'?`Delete category "${key}"?`:`Eliminare la categoria "${key}"?`)) return;
+        if (!confirm(tr('topoDeleteCategoryConfirm', {key: key}))) return;
         const res = await apiFetch("/api/device-categories/delete", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ key })
         });
         if (res && res.ok) loadCategoriesData();
-        else alert(currentLang==='en'?'Cannot delete this category.':'Categoria non eliminabile.');
+        else alert(tr('topoCannotDeleteThisCategory'));
     }
 
     async function deleteSubcategory(key, sub) {
-        if (!confirm(currentLang==='en'?`Remove subcategory "${sub}"?`:`Rimuovere la sottocategoria "${sub}"?`)) return;
+        if (!confirm(tr('topoRemoveSubcategoryConfirm', {sub: sub}))) return;
         const res = await apiFetch("/api/device-categories/delete-subcategory", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ key, subcategory: sub })
         });
         if (res && res.ok) loadCategoriesData();
-        else alert(currentLang==='en'?'Cannot remove subcategory.':'Impossibile rimuovere la sottocategoria.');
+        else alert(tr('topoCannotRemoveSubcategory'));
     }
 
     function updateTopologyMapNodeStatus(ip, newStatus) {
@@ -3295,7 +3286,7 @@
                 if (node.nodeDataVal) node.nodeDataVal.status = newStatus;
                 else node.nodeDataVal = { id: ip, label: node.labelVal || ip, status: newStatus };
 
-                const scan = globalVersions[ip] || { version: currentLang === 'en' ? "Not detected" : "Non rilevato", status: newStatus };
+                const scan = globalVersions[ip] || { version: tr('topoNotDetected'), status: newStatus };
                 const vtp = node.vtpVal || {};
                 const stack = nodeStack(node.nodeDataVal);
 
@@ -3780,7 +3771,7 @@
             clsExportColumns.map(c => ({
                 value: c.key, label: c.header + (c.explodes ? ' *' : '') })),
             prefs.columns);
-        document.getElementById('classificationExportModal').style.display = 'flex';
+        openModal('classificationExportModal');
         updateClsExportPreview();
     }
 
@@ -3810,7 +3801,7 @@
         a.download = 'sentinelnet-classification-' + new Date().toISOString().slice(0, 10) + '.csv';
         a.click();
         URL.revokeObjectURL(url);
-        document.getElementById('classificationExportModal').style.display = 'none';
+        closeModal('classificationExportModal');
     }
 
     document.getElementById('btnExportClassification')
@@ -3819,7 +3810,7 @@
         ?.addEventListener('click', runClassificationExport);
     document.getElementById('btnCloseClassificationExport')
         ?.addEventListener('click', () => {
-            document.getElementById('classificationExportModal').style.display = 'none';
+            closeModal('classificationExportModal');
         });
     document.getElementById('clsColumnList')?.addEventListener('change', updateClsExportPreview);
     ['clsFilterGroups', 'clsFilterCategories', 'clsFilterNeighbourSourceCategories', 'clsFilterNeighbourCategories'].forEach(id => {

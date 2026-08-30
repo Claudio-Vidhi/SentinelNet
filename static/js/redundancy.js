@@ -243,12 +243,12 @@
 
     function openCreateRedundancyModal() {
         const modal = document.getElementById('createRedundancyModal');
-        if (modal) modal.style.display = 'flex';
+        if (modal) openModal(modal);
     }
 
     function closeCreateRedundancyModal() {
         const modal = document.getElementById('createRedundancyModal');
-        if (modal) modal.style.display = 'none';
+        if (modal) closeModal(modal);
     }
 
     async function submitCreateRedundancyGroup() {

@@ -217,15 +217,18 @@
     }
 
     async function saveDeviceSuppression(tenant, ip) {
-        const until = document.getElementById('dvu-' + ip).value;
+        const uEl = /** @type {HTMLInputElement|null} */ (document.getElementById('dvu-' + ip));
+        const xEl = /** @type {HTMLInputElement|null} */ (document.getElementById('dvx-' + ip));
+        const nEl = /** @type {HTMLInputElement|null} */ (document.getElementById('dvn-' + ip));
+        const until = uEl ? uEl.value : '';
         const res = await apiFetch('/api/incidents/interfaces/expected', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 tenant: tenant, device_ip: ip, interface: null,
-                suppressed: document.getElementById('dvx-' + ip).checked,
+                suppressed: xEl ? xEl.checked : false,
                 to_ts: until ? Math.floor(new Date(until).getTime() / 1000) : null,
-                note: document.getElementById('dvn-' + ip).value
+                note: nEl ? nEl.value : ''
             })
         });
         if (!res) return;
@@ -260,16 +263,19 @@
         const row = _interfaces[index];
         if (!row) return;
         const st = document.getElementById('ifxStatus');
-        const until = document.getElementById(`ifu-${index}`).value;
+        const uEl = /** @type {HTMLInputElement|null} */ (document.getElementById(`ifu-${index}`));
+        const xEl = /** @type {HTMLInputElement|null} */ (document.getElementById(`ifx-${index}`));
+        const nEl = /** @type {HTMLInputElement|null} */ (document.getElementById(`ifn-${index}`));
+        const until = uEl ? uEl.value : '';
         const res = await apiFetch('/api/incidents/interfaces/expected', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 tenant: row.tenant, device_ip: row.device_ip,
                 interface: row.interface,
-                suppressed: document.getElementById(`ifx-${index}`).checked,
+                suppressed: xEl ? xEl.checked : false,
                 to_ts: until ? Math.floor(new Date(until).getTime() / 1000) : null,
-                note: document.getElementById(`ifn-${index}`).value
+                note: nEl ? nEl.value : ''
             })
         });
         if (!res) return;
@@ -280,14 +286,15 @@
         }
         await loadInterfaceExpectations();
         const box = document.getElementById('ifxStatus');
-        if (box) box.textContent = `${row.device_ip}:${row.interface} aggiornata.`;
+        if (box) box.textContent = `${row.device_ip}:${row.interface} ${L('incUpdated')}`;
     }
 
     async function loadRuleCatalog() {
         const box = document.getElementById('incidentRules');
         if (!box) return;
         try {
-            const res = await apiFetch('/api/incidents/rules');
+            const lang = (typeof currentLang !== 'undefined' && currentLang) ? currentLang : 'it';
+            const res = await apiFetch(`/api/incidents/rules?lang=${encodeURIComponent(lang)}`);
             if (!res || !res.ok) { box.innerHTML = ''; return; }
             const data = await res.json();
             _catalog = {};
@@ -300,8 +307,8 @@
                     </div>
                     <div style="font-size:12px; color:var(--text-muted); margin:4px 0 6px;">${escapeHtml(r.description)}</div>
                     <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">
-                        consuma: ${escapeHtml((r.inputs || []).join(', '))} ·
-                        produce: ${escapeHtml((r.outputs || []).join(', '))}
+                        ${escapeHtml(L('incConsumes'))} ${escapeHtml((r.inputs || []).join(', '))} ·
+                        ${escapeHtml(L('incProduces'))} ${escapeHtml((r.outputs || []).join(', '))}
                     </div>
                     ${r.investigation ? `<div style="font-size:12px; margin-bottom:4px;">
                         <strong>${L('incInvestigate')}</strong> ${escapeHtml(r.investigation)}</div>` : ''}
@@ -329,7 +336,8 @@
     async function saveRuleParameters(ruleId) {
         const st = document.getElementById(`rp-status-${ruleId}`);
         const payload = {};
-        document.querySelectorAll(`[id^="rp-${ruleId}-"]`).forEach(input => {
+        document.querySelectorAll(`[id^="rp-${ruleId}-"]`).forEach(el => {
+            const input = /** @type {HTMLInputElement} */ (el);
             payload[input.id.slice(`rp-${ruleId}-`.length)] = Number(input.value);
         });
         try {
@@ -353,8 +361,10 @@
     async function loadIncidentsList() {
         const box = document.getElementById('incidentsList');
         if (!box) return;
-        const status = (document.getElementById('incStatusFilter') || {}).value || 'new';
-        const window_ = (document.getElementById('incWindowFilter') || {}).value || '24h';
+        const stEl = /** @type {HTMLSelectElement|null} */ (document.getElementById('incStatusFilter'));
+        const winEl = /** @type {HTMLSelectElement|null} */ (document.getElementById('incWindowFilter'));
+        const status = (stEl && stEl.value) || 'new';
+        const window_ = (winEl && winEl.value) || '24h';
         box.innerHTML = '<div style="text-align:center; padding:16px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i></div>';
         try {
             const res = await apiFetch(`/api/incidents?status=${encodeURIComponent(status)}&window=${encodeURIComponent(window_)}`);
@@ -662,19 +672,21 @@
     document.getElementById('incWindowFilter')?.addEventListener('change', loadIncidentsList);
 
     document.getElementById('incidentsList')?.addEventListener('click', (e) => {
-        const item = e.target.closest('.incident-list-item[data-id]');
-        if (item && item.dataset.id) {
-            openIncident(Number(item.dataset.id));
+        const target = /** @type {HTMLElement|null} */ (e.target);
+        const item = target?.closest('.incident-list-item[data-id]');
+        if (item && /** @type {HTMLElement} */ (item).dataset.id) {
+            openIncident(Number(/** @type {HTMLElement} */ (item).dataset.id));
         }
     });
 
     document.getElementById('incidentDetail')?.addEventListener('click', (e) => {
-        const expBtn = e.target.closest('[data-action="explain-incident"]');
+        const target = /** @type {HTMLElement|null} */ (e.target);
+        const expBtn = /** @type {HTMLElement|null} */ (target?.closest('[data-action="explain-incident"]'));
         if (expBtn && expBtn.dataset.id) {
             explainIncident(Number(expBtn.dataset.id));
             return;
         }
-        const stBtn = e.target.closest('[data-action="set-incident-status"]');
+        const stBtn = /** @type {HTMLElement|null} */ (target?.closest('[data-action="set-incident-status"]'));
         if (stBtn && stBtn.dataset.id && stBtn.dataset.from && stBtn.dataset.to) {
             setIncidentStatus(Number(stBtn.dataset.id), stBtn.dataset.from, stBtn.dataset.to);
             return;
@@ -682,19 +694,21 @@
     });
 
     document.getElementById('incidentRules')?.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-action="save-rule-params"]');
+        const target = /** @type {HTMLElement|null} */ (e.target);
+        const btn = /** @type {HTMLElement|null} */ (target?.closest('[data-action="save-rule-params"]'));
         if (btn && btn.dataset.ruleId) {
             saveRuleParameters(btn.dataset.ruleId);
         }
     });
 
     document.getElementById('incidentInterfaces')?.addEventListener('change', (e) => {
-        const devEl = e.target.closest('[data-action="save-dev-suppression"]');
+        const target = /** @type {HTMLElement|null} */ (e.target);
+        const devEl = /** @type {HTMLElement|null} */ (target?.closest('[data-action="save-dev-suppression"]'));
         if (devEl && devEl.dataset.tenant && devEl.dataset.ip) {
             saveDeviceSuppression(devEl.dataset.tenant, devEl.dataset.ip);
             return;
         }
-        const ifEl = e.target.closest('[data-action="save-if-expectation"]');
+        const ifEl = /** @type {HTMLElement|null} */ (target?.closest('[data-action="save-if-expectation"]'));
         if (ifEl && ifEl.dataset.index != null) {
             saveInterfaceExpectation(Number(ifEl.dataset.index));
             return;
@@ -703,6 +717,7 @@
 
     window.loadIncidentsTab = loadIncidentsTab;
     window.loadIncidentsList = loadIncidentsList;
+    window.loadRuleCatalog = loadRuleCatalog;
     window.openIncident = openIncident;
     window.setIncidentStatus = setIncidentStatus;
     window.explainIncident = explainIncident;

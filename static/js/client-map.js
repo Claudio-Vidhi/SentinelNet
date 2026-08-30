@@ -99,14 +99,14 @@ function locTenantChanged() {
         const box = document.getElementById('macOverridesList');
         if (!box) return;
         if (!list.length) {
-            box.innerHTML = `<div style="font-size:12px; color:var(--text-muted);">${currentLang==='en'?'No ad-hoc commands configured.':'Nessun comando ad-hoc configurato.'}</div>`;
+            box.innerHTML = `<div style="font-size:12px; color:var(--text-muted);">${tr('cmapNoAdHocCommands')}</div>`;
             return;
         }
         box.innerHTML = list.map(o => `<div style="display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid var(--border); font-size:12px;">
             <span style="font-family:var(--font-code); color:var(--primary); min-width:120px;">${escapeHtml(o.switch_ip)}</span>
             <span style="font-family:var(--font-code); flex:1;">${escapeHtml(o.command)}</span>
             <span class="badge" style="font-size:10px;">${escapeHtml(o.fmt)}</span>
-            <button data-action="remove-mac-override" data-switch-ip="${escapeHtml(o.switch_ip)}" title="${currentLang==='en'?'Remove':'Rimuovi'}" style="border:none; background:none; color:var(--danger); cursor:pointer;"><i class="fa-solid fa-trash-can"></i></button>
+            <button data-action="remove-mac-override" data-switch-ip="${escapeHtml(o.switch_ip)}" title="${tr('cmapRemove')}" style="border:none; background:none; color:var(--danger); cursor:pointer;"><i class="fa-solid fa-trash-can"></i></button>
         </div>`).join('');
     }
 
@@ -115,7 +115,7 @@ function locTenantChanged() {
         const ip = val('macOvDevice');
         const command = (val('macOvCommand') || '').trim();
         const fmt = val('macOvFmt') || 'generic';
-        if (!ip || !command) { alert(currentLang==='en'?'Select a device and enter a command.':'Seleziona un apparato e inserisci un comando.'); return; }
+        if (!ip || !command) { alert(tr('cmapSelectADeviceAnd')); return; }
         const res = await apiFetch('/api/mac/overrides', {
             method: 'POST', headers: {'Content-Type':'application/json'},
             body: JSON.stringify({ ip, command, fmt })
@@ -125,7 +125,7 @@ function locTenantChanged() {
             loadMacOverrides();
         } else if (res) {
             const e = await res.json().catch(() => ({}));
-            alert((currentLang==='en'?'Error: ':'Errore: ') + (e.detail || ''));
+            alert((tr('uiError')) + (e.detail || ''));
         }
     }
 
@@ -164,7 +164,7 @@ function locTenantChanged() {
         const sel = document.getElementById('macSearchSwitch');
         if (!sel || sel.tagName !== 'SELECT') return;
         const cur = sel.value;
-        const allLabel = currentLang==='en' ? 'All switches' : 'Tutti gli switch';
+        const allLabel = tr('cmapAllSwitches');
         sel.innerHTML = `<option value="">${allLabel}</option>` +
             macFilteredDevices().map(d => {
                 const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
@@ -190,7 +190,7 @@ function locTenantChanged() {
             const devs = macFilteredDevices();
             const head = `<label style="display:flex; align-items:center; gap:8px; padding:5px 6px; font-size:12px; cursor:pointer; border-bottom:1px solid var(--border); margin-bottom:4px;">
                 <input type="checkbox" id="macDevAll" data-action="toggle-all-mac-devices" style="accent-color:var(--primary);">
-                <strong>${currentLang==='en'?'All devices':'Tutti i dispositivi'}</strong></label>`;
+                <strong>${tr('cmapAllDevices')}</strong></label>`;
             const items = devs.map(d => {
                 const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
                 return `<label style="display:flex; align-items:center; gap:8px; padding:4px 6px; font-size:12px; cursor:pointer;">
@@ -199,7 +199,7 @@ function locTenantChanged() {
                     <span style="color:var(--text-muted);">${name}</span></label>`;
             }).join('');
             box.innerHTML = head + (items ||
-                `<div style="font-size:12px; color:var(--text-muted); padding:6px;">${currentLang==='en'?'No devices':'Nessun dispositivo'}</div>`);
+                `<div style="font-size:12px; color:var(--text-muted); padding:6px;">${tr('uiNoDevices')}</div>`);
         }
         updateMacDeviceSummary();
         fillMacDeviceSelect(document.getElementById('macOvDevice'), false);
@@ -222,8 +222,8 @@ function locTenantChanged() {
         if (all) all.checked = (total > 0 && sel === total);
         const sum = document.getElementById('macDeviceSummary');
         if (sum) sum.textContent = (sel === 0)
-            ? (currentLang==='en' ? 'All devices' : 'Tutti i dispositivi')
-            : `${sel} ${currentLang==='en' ? 'selected' : 'selezionati'}`;
+            ? (tr('cmapAllDevices'))
+            : `${sel} ${tr('cmapSelected')}`;
     }
 
     async function refreshMacStats(fillRetention) {
@@ -253,7 +253,7 @@ function locTenantChanged() {
         if (ips.length) payload.ips = ips;   // device specifici (multi-selezione)
         const orig = btn.innerHTML;
         btn.disabled = true;
-        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${currentLang==='en'?'Scanning...':'Scansione...'}`;
+        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${tr('cmapScanning')}`;
         try {
             const res = await apiFetch('/api/mac/scan', {
                 method: 'POST', headers: {'Content-Type':'application/json'},
@@ -263,14 +263,12 @@ function locTenantChanged() {
                 const d = await res.json();
                 const okc = d.results.filter(r => !r.error).length;
                 const errc = d.results.filter(r => r.error).length;
-                alert(currentLang==='en'
-                    ? `MAC scan done: ${d.scanned} devices (${okc} ok, ${errc} errors), pruned ${d.pruned}.`
-                    : `MAC scan completata: ${d.scanned} apparati (${okc} ok, ${errc} errori), rimossi ${d.pruned}.`);
+                alert(tr('cmapMacScanDoneDevices', {scanned: d.scanned, okc: okc, errc: errc, pruned: d.pruned}));
                 macSearch();
                 refreshMacStats(false);
             } else if (res) {
                 const e = await res.json().catch(() => ({}));
-                alert((currentLang==='en'?'Error: ':'Errore: ') + (e.detail || ''));
+                alert((tr('uiError')) + (e.detail || ''));
             }
         } finally {
             btn.disabled = false;
@@ -302,7 +300,7 @@ function locTenantChanged() {
 
     function fmtMacTime(iso) {
         if (!iso) return '—';
-        try { return new Date(iso).toLocaleString(currentLang==='en' ? 'en-US' : 'it-IT'); }
+        try { return new Date(iso).toLocaleString(tr('cmapEnUs')); }
         catch (e) { return iso; }
     }
 
@@ -379,11 +377,10 @@ function locTenantChanged() {
             });
             if (!res) return;
             const box = document.getElementById('arpScanSummary');
-            const en = currentLang === 'en';
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
                 box.style.display = 'block';
-                box.innerHTML = `<span style="color:var(--danger);">${escapeHtml(err.detail || (en ? 'ARP scan error' : 'Errore scansione ARP'))}</span>`;
+                box.innerHTML = `<span style="color:var(--danger);">${escapeHtml(err.detail || (tr('cmapArpScanError')))}</span>`;
                 return;
             }
             const d = await res.json();
@@ -391,8 +388,7 @@ function locTenantChanged() {
                 const color = r.status === 'success' ? 'var(--success, #7bd88f)'
                             : r.status === 'empty' ? 'var(--text-muted)' : 'var(--danger)';
                 const detail = r.status === 'success'
-                    ? (en ? `${r.entries} entries (${r.new} new, ${r.updated} updated)`
-                          : `${r.entries} entry (nuove ${r.new}, aggiornate ${r.updated})`)
+                    ? (tr('cmapEntriesNewUpdated', {entries: r.entries, new: r.new, updated: r.updated}))
                     : escapeHtml(r.message || r.status);
                 return `<div>• <b>${escapeHtml(ip)}</b> — <span style="color:${color};">${r.status}</span>: ${detail}</div>`;
             }).join('');
@@ -412,7 +408,7 @@ function locTenantChanged() {
         if (!box) return;
         if (!rows.length) {
             box.innerHTML = `<div style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;">
-                <i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${currentLang==='en'?'No MAC sightings. Run a MAC Scan to populate the history.':'Nessun avvistamento MAC. Avvia una MAC Scan per popolare lo storico.'}</div>`;
+                <i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${tr('cmapNoMacSightingsRun')}</div>`;
             return;
         }
         const groups = {};
@@ -438,11 +434,11 @@ function locTenantChanged() {
                     ? `${escapeHtml(r.interface||'—')} <span class="badge" style="font-size:10px;">${escapeHtml(r.port_channel)}</span>`
                     : escapeHtml(r.interface || '—');
                 const uplink = r.is_uplink
-                    ? ` <span title="${currentLang==='en'?'Seen on a trunk/uplink (transit, not the access location)':'Visto su trunk/uplink (transito, non posizione di accesso)'}" style="font-size:10px; color:var(--warning); border:1px solid var(--warning); border-radius:0; padding:0 4px;">uplink</span>`
+                    ? ` <span title="${tr('cmapSeenOnATrunk')}" style="font-size:10px; color:var(--warning); border:1px solid var(--warning); border-radius:0; padding:0 4px;">uplink</span>`
                     : '';
                 const originCell = r.is_uplink
-                    ? `<span title="${currentLang==='en'?'In transit on an uplink':'In transito su un uplink'}" style="font-size:10px; color:var(--warning); border:1px solid var(--warning); border-radius:0; padding:1px 5px;"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${currentLang==='en'?'transit':'transito'}${r.uplink_to?` → ${escapeHtml(r.uplink_to)}`:''}</span>`
-                    : `<span title="${currentLang==='en'?'Access port – device attached here':'Porta di accesso – dispositivo collegato qui'}" style="font-size:10px; color:var(--success); border:1px solid var(--success); border-radius:0; padding:1px 5px;"><i class="fa-solid fa-location-crosshairs"></i> ${currentLang==='en'?'access':'accesso'}</span>`;
+                    ? `<span title="${tr('cmapInTransitOnAn')}" style="font-size:10px; color:var(--warning); border:1px solid var(--warning); border-radius:0; padding:1px 5px;"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${tr('cmapTransit')}${r.uplink_to?` → ${escapeHtml(r.uplink_to)}`:''}</span>`
+                    : `<span title="${tr('cmapAccessPortDeviceAttached')}" style="font-size:10px; color:var(--success); border:1px solid var(--success); border-radius:0; padding:1px 5px;"><i class="fa-solid fa-location-crosshairs"></i> ${tr('cmapAccess')}</span>`;
                 const portCfgBtn = (g.ip && r.interface)
                     ? `<button data-action="show-port-config" data-switch-ip="${escapeHtml(g.ip)}" data-switch-port="${escapeHtml(r.interface)}" data-switch-name="${escapeHtml(g.name || '')}" title="${escapeHtml(i18n[currentLang].btnPortConfig)}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-file-lines"></i></button>`
                     : '';
@@ -450,13 +446,13 @@ function locTenantChanged() {
                 // switch di UNA sede, e la risposta deve essere di quella sede.
                 // Senza, il modale univa gli avvistamenti di tutti i tenant
                 // visibili e dichiarava ambigue porte che ambigue non erano.
-                const locateBtn = `<button data-action="mac-locate" data-mac="${escapeHtml(r.mac)}" data-tenant="${escapeHtml(g.tenant || '')}" title="${currentLang==='en'?'Locate origin across switches':'Localizza origine tra gli switch'}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-magnifying-glass-location"></i></button>`;
+                const locateBtn = `<button data-action="mac-locate" data-mac="${escapeHtml(r.mac)}" data-tenant="${escapeHtml(g.tenant || '')}" title="${tr('cmapLocateOriginAcrossSwitches')}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-magnifying-glass-location"></i></button>`;
                 // MAC di un'interfaccia propria dello switch: infrastruttura, non endpoint.
                 const isSwitchIf = (r.origin_type || r.device_type) === 'switch-interface';
                 const swName = r.origin_switch || r.switch_name || r.switch_ip;
                 const swIf = r.origin_interface || '';
                 const switchBadge = isSwitchIf
-                    ? ` <span title="${currentLang==='en'?`Interface of ${swName}${swIf?` (${swIf})`:''}`:`Interfaccia di ${swName}${swIf?` (${swIf})`:''}`}" style="font-size:10px; color:var(--text-muted); border:1px solid var(--border); border-radius:0; padding:0 4px;"><i class="fa-solid fa-microchip"></i> SWITCH</span>`
+                    ? ` <span title="${tr('cmapInterfaceOf', {swName: swName, suffix: swIf ? ` (${swIf})` : ''})}" style="font-size:10px; color:var(--text-muted); border:1px solid var(--border); border-radius:0; padding:0 4px;"><i class="fa-solid fa-microchip"></i> SWITCH</span>`
                     : '';
                 const rowStyle = isSwitchIf ? ' style="color:var(--text-muted);"' : '';
                 return `<tr${rowStyle}>
@@ -468,7 +464,7 @@ function locTenantChanged() {
                     <td style="font-size:11px; color:var(--text-muted);">${escapeHtml(fmtMacTime(r.last_seen))}</td>
                 </tr>`;
             }).join('');
-            const macWord = currentLang==='en' ? (g.rows.length===1?'MAC':'MACs') : 'MAC';
+            const macWord = (g.rows.length === 1 ? tr('cmapMacOne') : tr('cmapMacMany'));
             return `<details class="mac-switch" ${openAll?'open':''} style="margin-bottom:10px; border:1px solid var(--border); border-radius:0; background:var(--surface-2); overflow:hidden;">
                 <summary style="cursor:pointer; padding:12px 14px; font-weight:700; display:flex; align-items:center; gap:8px;">
                     <i class="fa-solid fa-chevron-right mac-chev"></i>
@@ -492,9 +488,8 @@ function locTenantChanged() {
         const q = '/api/mac/locate?mac=' + encodeURIComponent(mac)
             + (tenant ? '&tenant=' + encodeURIComponent(tenant) : '');
         const res = await apiFetch(q);
-        if (!res || !res.ok) { alert(currentLang==='en'?'Locate failed.':'Localizzazione non riuscita.'); return; }
+        if (!res || !res.ok) { alert(tr('cmapLocateFailed')); return; }
         const d = await res.json();
-        const en = currentLang === 'en';
 
         // Una voce per (MAC, tenant). Con più sedi NON si appiattisce e non si
         // sceglie: un tenant è una rete a sé, e due posizioni in due sedi sono
@@ -522,7 +517,7 @@ function locTenantChanged() {
         // di una palette morta e non cambiavano con il tema.
         const tint = (tok, pct) => `color-mix(in srgb, var(${tok}) ${pct}%, transparent)`;
 
-        const mostRecent = ` <span class="role-pill" style="background:${tint('--success',15)}; color:var(--success); border:1px solid ${tint('--success',35)};">${en?'most recent':'più recente'}</span>`;
+        const mostRecent = ` <span class="role-pill" style="background:${tint('--success',15)}; color:var(--success); border:1px solid ${tint('--success',35)};">${tr('cmapMostRecent')}</span>`;
 
         // Una sezione per tenant: stesso renderer, ciclato. Due modali o due
         // renderer sarebbero due copie da tenere allineate.
@@ -533,10 +528,10 @@ function locTenantChanged() {
 
             const originHtml = origin.length
                 ? origin.map((s, i) => sightRow(s, 'var(--success)', (status==='ambiguous' && i===0) ? mostRecent : '')).join('')
-                : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${en?'No access port found – the device may be behind an unmanaged switch. Scan more switches.':'Nessuna porta di accesso trovata – il dispositivo potrebbe essere dietro uno switch non gestito. Scansiona altri switch.'}</div>`;
+                : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${tr('cmapNoAccessPortFound')}</div>`;
             const transitHtml = transit.length
                 ? transit.map(s => sightRow(s, 'var(--warning)')).join('')
-                : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${en?'Not seen in transit elsewhere.':'Non visto in transito altrove.'}</div>`;
+                : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${tr('cmapNotSeenInTransit')}</div>`;
 
             // Banner di stato: chiarisce all'utente quanto è affidabile l'origine.
             let banner = '';
@@ -547,21 +542,21 @@ function locTenantChanged() {
                 const swIf = g.origin_interface || '';
                 banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:${tint('--primary',12)}; border:1px solid ${tint('--primary',35)}; color:var(--primary); font-size:12px; margin-bottom:14px;">
                     <i class="fa-solid fa-microchip" style="margin-top:2px;"></i>
-                    <span>${escapeHtml(en?`This MAC belongs to interface ${swIf} of ${swName}`:`Questo MAC appartiene all'interfaccia ${swIf} di ${swName}`)}</span></div>`;
+                    <span>${escapeHtml(tr('cmapThisMacBelongsTo', {swIf: swIf, swName: swName}))}</span></div>`;
             } else if (status === 'ambiguous') {
                 // Ambiguo significa più porte plausibili NELLA STESSA rete: qui
                 // una scansione più fresca serve davvero.
                 banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:${tint('--warning',12)}; border:1px solid ${tint('--warning',35)}; color:var(--warning); font-size:12px; margin-bottom:14px;">
                     <i class="fa-solid fa-triangle-exclamation" style="margin-top:2px;"></i>
-                    <span>${en?`Multiple possible access ports (${g.access_count}) in this tenant. The most recent is the likeliest; run a fresh MAC Scan to disambiguate.`:`Più porte d'accesso possibili (${g.access_count}) in questo tenant. La più recente è la più probabile; esegui una MAC Scan aggiornata per disambiguare.`}</span></div>`;
+                    <span>${tr('cmapMultiplePossibleAccessPorts', {access_count: g.access_count})}</span></div>`;
             } else if (status === 'transit_only') {
                 banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:${tint('--warning',12)}; border:1px solid ${tint('--warning',35)}; color:var(--warning); font-size:12px; margin-bottom:14px;">
                     <i class="fa-solid fa-circle-info" style="margin-top:2px;"></i>
-                    <span>${en?'Only seen in transit on uplinks – the device is behind an unmanaged/unscanned switch. Scan more switches to find the access port.':'Visto solo in transito sugli uplink – il dispositivo è dietro uno switch non gestito/non scansionato. Scansiona altri switch per trovare la porta di accesso.'}</span></div>`;
+                    <span>${tr('cmapOnlySeenInTransit')}</span></div>`;
             } else if (status === 'resolved' && origin.length) {
                 banner = `<div style="display:flex; gap:8px; align-items:center; padding:10px 12px; border-radius:0; background:${tint('--success',12)}; border:1px solid ${tint('--success',35)}; color:var(--success); font-size:12px; margin-bottom:14px;">
                     <i class="fa-solid fa-circle-check"></i>
-                    <span>${en?'Single access port resolved.':'Porta di accesso univoca risolta.'}</span></div>`;
+                    <span>${tr('cmapSingleAccessPortResolved')}</span></div>`;
             }
 
             // Intestazione di tenant solo quando ce n'è più d'uno: con una sede
@@ -572,9 +567,9 @@ function locTenantChanged() {
                 : '';
 
             return `${head}${banner}
-                <h4 style="font-size:13px; margin-bottom:8px; color:var(--success);"><i class="fa-solid fa-location-crosshairs"></i> ${en?'Access location (origin)':'Posizione di accesso (origine)'}</h4>
+                <h4 style="font-size:13px; margin-bottom:8px; color:var(--success);"><i class="fa-solid fa-location-crosshairs"></i> ${tr('cmapAccessLocationOrigin')}</h4>
                 ${originHtml}
-                <h4 style="font-size:13px; margin:16px 0 8px; color:var(--warning);"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${en?'Seen in transit (uplinks)':'Visto in transito (uplink)'}</h4>
+                <h4 style="font-size:13px; margin:16px 0 8px; color:var(--warning);"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${tr('cmapSeenInTransitUplinks')}</h4>
                 ${transitHtml}`;
         };
 
@@ -583,7 +578,7 @@ function locTenantChanged() {
         const multiBanner = multi
             ? `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:${tint('--primary',12)}; border:1px solid ${tint('--primary',35)}; color:var(--primary); font-size:12px; margin-bottom:4px;">
                 <i class="fa-solid fa-layer-group" style="margin-top:2px;"></i>
-                <span>${en?`This MAC exists in ${entries.length} tenants. Each position below is true for its own network — they are not alternatives to pick from.`:`Questo MAC esiste in ${entries.length} tenant. Ogni posizione qui sotto è vera per la sua rete — non sono alternative fra cui scegliere.`}</span></div>`
+                <span>${tr('cmapThisMacExistsIn', {length: entries.length})}</span></div>`
             : '';
 
         const sectionsHtml = multiBanner + entries.map(entrySection).join('');
@@ -594,7 +589,7 @@ function locTenantChanged() {
         ov.innerHTML = `
             <div style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:22px; width:min(560px,94vw); max-height:86vh; overflow:auto; box-shadow:var(--shadow-float);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                    <h3 style="font-size:17px;"><i class="fa-solid fa-magnifying-glass-location" style="color:var(--primary);"></i> ${en?'MAC origin':'Origine MAC'}</h3>
+                    <h3 style="font-size:17px;"><i class="fa-solid fa-magnifying-glass-location" style="color:var(--primary);"></i> ${tr('cmapMacOrigin')}</h3>
                     <i class="fa-solid fa-xmark" data-action="close-mac-locate-modal" style="cursor:pointer; color:var(--text-muted); font-size:17px;"></i>
                 </div>
                 <div style="font-family:var(--font-code); font-size:13px; color:var(--primary); margin-bottom:16px;">${escapeHtml(macStr)}</div>
@@ -602,7 +597,7 @@ function locTenantChanged() {
                 ${sectionsHtml}
 
                 <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:16px;">
-                    <button data-action="close-mac-locate-modal" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${en?'Close':'Chiudi'}</button>
+                    <button data-action="close-mac-locate-modal" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${tr('cmapClose')}</button>
                 </div>
             </div>`;
         ov.addEventListener('click', e => {
@@ -628,18 +623,18 @@ function locTenantChanged() {
 
     async function saveMacRetention() {
         const days = parseInt(document.getElementById('macRetentionDays') ? document.getElementById('macRetentionDays').value : '', 10);
-        if (!days || days < 1) { alert(currentLang==='en'?'Enter a valid number of days.':'Inserisci un numero di giorni valido.'); return; }
+        if (!days || days < 1) { alert(tr('cmapEnterAValidNumber')); return; }
         const res = await apiFetch('/api/mac/settings', {
             method: 'POST', headers: {'Content-Type':'application/json'},
             body: JSON.stringify({ days })
         });
         if (res && res.ok) {
             const d = await res.json();
-            alert((currentLang==='en'?'Retention set to ':'Retention impostata a ') + d.retention_days + (currentLang==='en'?' days.':' giorni.'));
+            alert((tr('cmapRetentionSetTo')) + d.retention_days + (tr('cmapDays')));
             refreshMacStats(false);
         } else if (res) {
             const e = await res.json().catch(() => ({}));
-            alert((currentLang==='en'?'Error: ':'Errore: ') + (e.detail || ''));
+            alert((tr('uiError')) + (e.detail || ''));
         }
     }
 

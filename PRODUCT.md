@@ -123,8 +123,9 @@ and SNMP from the management LAN; remote sites via site agents.
 
 - Name: **SentinelNet**. Favicon is an inline SVG shield with connected network
   nodes — no external asset.
-- An incumbent visual system exists and is fully implemented: dark-first tokens
-  in `static/css/dashboard.css` and the analysis in `docs/design-system.md`.
+- An incumbent visual system exists and is fully implemented: the mimic-panel
+  design language authored via the impeccable plugin — `DESIGN.md` at the
+  repo root is the authority, implemented by `static/css/dashboard.css`.
   Recorded here as fact, not declared binding; `/impeccable document` is what
   captures it as an authority.
 - Voice in the UI follows the product principle: state the finding and its

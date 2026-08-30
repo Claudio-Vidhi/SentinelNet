@@ -1,12 +1,19 @@
-fastapi>=0.110.0
-uvicorn>=0.28.0
-pydantic>=2.6.0
-cryptography>=42.0.0
-bcrypt>=4.1.0
-netmiko>=4.3.0
-pyjwt>=2.8.0
-websockets>=12.0
-paramiko>=3.4.0
-requests>=2.31.0
-ncclient>=0.6.15
-pyserial>=3.5
+# Python floor: >=3.11 (verified 2026-08-28: full suite green on 3.11.15
+# with exactly these versions; same suite green on 3.14 via uv.lock).
+# Pinned to the versions that pass the full test suite — the Docker artifact
+# must install the same runtime as the lockfile, not a fresh re-resolution
+# (fastapi >=0.141 alone breaks the route-contract tests).
+fastapi==0.136.3
+uvicorn==0.49.0
+pydantic==2.13.4
+cryptography==48.0.0
+bcrypt==5.0.0
+netmiko==4.7.0
+pyjwt==2.13.0
+websockets==16.0
+paramiko==4.0.0
+requests==2.34.2
+ncclient==0.7.1
+pyserial==3.5
+pysnmp==7.1.27
+python-docx==1.2.0

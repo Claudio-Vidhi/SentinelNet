@@ -25,8 +25,7 @@
         // "keep the stored one", and the placeholder says so.
         document.getElementById('cbSecret').value = '';
         document.getElementById('cbSecret').placeholder = (cfg.has_password || cfg.has_key_passphrase)
-            ? (currentLang === 'en' ? 'stored - leave empty to keep'
-                                    : 'salvata - lascia vuoto per mantenerla')
+            ? (tr('uiStoredLeaveEmptyTo'))
             : '';
     }
 
