@@ -14,9 +14,15 @@ uv pip install -r requirements.txt
 uv run app_server.py
 ```
 
-`pyproject.toml` declares `requires-python = ">=3.14"`. The compiled
-artifacts in the tree are CPython 3.14 — treat `pyproject.toml` as
-authoritative.
+`pyproject.toml` declares `requires-python = ">=3.11"` — treat it as
+authoritative. The floor is real: the Docker image builds on
+`python:3.11-slim`, and the header of `requirements.txt` records the suite
+running green on 3.11.15 with exactly those pins.
+
+Development happens on 3.14 (`uv.lock`), so syntax newer than 3.11 accepts
+will pass locally and break the Docker artifact. Keep to 3.11-compatible
+syntax, or raise the floor deliberately in `pyproject.toml`, `requirements.txt`
+and the `Dockerfile` together.
 
 ---
 
@@ -51,8 +57,9 @@ written in English.
 
 ## 3. Tests
 
-> **The test suite lives on the `Dev` branch.** This branch carries the
-> application only; clone or check out `Dev` to run the commands below.
+> **The test suite lives on the `Dev` branch**, not on `master`: the public
+> branch carries the application with the development-only files stripped.
+> Run the commands below from a `Dev` checkout.
 
 `unittest`. Each test sets a temporary `SENTINELNET_DATA_DIR` **before**
 importing project modules — that ordering is load-bearing, since
