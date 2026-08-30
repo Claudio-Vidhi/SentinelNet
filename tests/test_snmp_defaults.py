@@ -30,13 +30,24 @@ def _device(ip="192.0.2.1", group="sede-a", community=None, disabled=""):
 
 
 class _Base(unittest.TestCase):
+    # "Generale" compreso: TENANT_SNMP_JSON e' fissata all'import del modulo
+    # (come identities.json), quindi lo stato lasciato qui vive anche per i
+    # moduli di test importati dopo questo.
+    #
+    # Pulire solo in setUp rendeva questo modulo pulito ENTRANDO e sporco
+    # USCENDO: l'ultimo test lasciava il suo default addosso al processo, e
+    # test_snmp_poller -- che ha tutte le righe nel tenant "sede-a" -- vedeva
+    # tre apparati con community invece di uno. Sotto -n 4 dipendeva da quali
+    # moduli finivano nello stesso worker, quindi falliva una volta ogni tanto.
+    def _reset_tenants(self):
+        for tenant in ("sede-a", "sede-b", "Generale"):
+            snmp_defaults.set_tenant_community(tenant, "")
+
     def setUp(self):
-        # "Generale" compreso: TENANT_SNMP_JSON e' fissata all'import del
-        # modulo (come identities.json), quindi lo stato lasciato qui vive
-        # anche per i moduli di test importati dopo questo.
-        snmp_defaults.set_tenant_community("sede-a", "")
-        snmp_defaults.set_tenant_community("sede-b", "")
-        snmp_defaults.set_tenant_community("Generale", "")
+        self._reset_tenants()
+
+    def tearDown(self):
+        self._reset_tenants()
 
 
 class TestStore(_Base):
