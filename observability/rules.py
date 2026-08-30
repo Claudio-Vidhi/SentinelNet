@@ -399,6 +399,21 @@ def _config_change(events: list, p: dict) -> list:
     return out
 
 
+# ifOperStatus, in the words the SNMP poller translates it to
+# (_IF_STATUS there). Two lists, not one list and an else: "up" is the only
+# value that means the port carries traffic, three others are faults, and what
+# is left -- dormant, testing, unknown, a missing field -- is neither. Deciding
+# the leftovers by falling through to one side is what made a port whose
+# transceiver had been pulled read as operational.
+#
+# routers/incidents.py imports these: the classifier that fills the Interfaces
+# tab and the rule that raises the incident must not drift apart.
+LINK_UP = frozenset({"up", "1", "true"})
+LINK_DOWN = frozenset({"down", "0", "false", "lowerlayerdown", "notpresent"})
+ADMIN_DOWN = frozenset({"down", "0", "false", "admin_down",
+                        "administratively down"})
+
+
 def _interface_down(events: list, p: dict) -> list:
     """Interfaccia passata a down: sintomo osservato sullo stato, non causa."""
     out = []
@@ -406,14 +421,14 @@ def _interface_down(events: list, p: dict) -> list:
         if ev["event_type"] != "interface.change":
             continue
         attrs = json.loads(ev["attrs_json"] or "{}")
-        if str(attrs.get("after")).lower() not in ("down", "0", "false"):
+        if str(attrs.get("after")).lower() not in LINK_DOWN:
             continue
         if "link" not in str(attrs.get("field", "")).lower() \
                 and "status" not in str(attrs.get("field", "")).lower():
             continue
         # Uno shutdown amministrativo è una decisione intenzionale, non un guasto
         admin_st = str(attrs.get("admin_status") or "").lower()
-        if admin_st in ("down", "0", "false", "admin_down", "administratively down"):
+        if admin_st in ADMIN_DOWN:
             continue
         out.append(Finding(
             event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"], role="symptom",
@@ -727,7 +742,7 @@ def _interface_recovered(events: list, p: dict) -> list:
         field = str(attrs.get("field", "")).lower()
         if "link" not in field and "status" not in field:
             continue
-        if str(attrs.get("after")).lower() not in ("up", "1", "true"):
+        if str(attrs.get("after")).lower() not in LINK_UP:
             continue
         witness = Finding(
             event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"],
