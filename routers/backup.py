@@ -70,16 +70,19 @@ def download_backup(ip_or_filename: str, current_user = Depends(require_operator
     # Scoping: ricava l'IP dal nome richiesto e verifica la sede del dispositivo.
     scope = user_group_scope(current_user)
     if scope is not None:
-        ip_guess = ip_or_filename
-        m = re.search(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})", ip_or_filename)
-        if m:
-            ip_guess = m.group(1)
-        dev = next((d for d in inventory_manager.get_all_devices() if d['IP'] == ip_guess), None)
-        if dev is None or dev.get('Group', 'Generale') not in scope:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Backup non consentito per il tuo profilo."
-            )
+        # EVERY IP in the requested name must be in scope, not just the first.
+        # The lookup below derives its own IP from the LAST '-'/'_' token, so
+        # checking only the first let "<own-ip>-<their-ip>.txt" pass the check
+        # on one device and fetch the backup of another.
+        found = re.findall(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", ip_or_filename)
+        devices = inventory_manager.get_all_devices()
+        for ip_guess in (found or [ip_or_filename]):
+            dev = next((d for d in devices if d['IP'] == ip_guess), None)
+            if dev is None or dev.get('Group', 'Generale') not in scope:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Backup non consentito per il tuo profilo."
+                )
 
     # Radice ASSOLUTA dei backup (stessa usata da core_engine): un percorso
     # relativo alla CWD sarebbe fragile sotto exe/servizio e indebolirebbe il
