@@ -28,8 +28,16 @@ features and the same fixes** — a change landing on one belongs on the other.
   straight to `master`.
 - `master` is the public branch: it holds the product with dev-only files
   stripped (`tests/`, `tests_data/`, `AGENTS.md`, `.claude/`, `.agents/`,
-  `scripts/dev/`, the dev-only `docs/` and helper scripts). That strip is the
-  *only* thing that may differ — never app code, never `.gitignore`.
+  `scripts/dev/`, the dev-only `docs/` and helper scripts, plus `.github/`
+  and `CHANGELOG.md`). That strip is the *only* thing that may differ —
+  never app code, never `.gitignore`.
+- What `master` is FOR: someone who has never seen SentinelNet, evaluating
+  it or putting it into a real network. It answers "what is this, how do I
+  run it, how do I run it safely". Nothing else belongs there — not badges,
+  not contribution machinery, not release bookkeeping, not anything whose
+  audience is a person working *on* the app rather than *with* it. When in
+  doubt about a new top-level file, the question is not "is it useful?" but
+  "does a first-time user need it to run this thing?"
 - So `master` carries no test suite. Verify on `Dev`, where the gate runs,
   then port. Never `git merge --ff-only master` from `Dev`: master's history
   contains those deletions, and fast-forwarding would wipe `Dev`'s tests.
