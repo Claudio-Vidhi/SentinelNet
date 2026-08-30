@@ -10,6 +10,32 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Security
+
+- A user restricted to some sites could download another customer's device
+  backup. `GET /api/download-backup/{name}` checked the caller's scope against
+  the FIRST IP in the requested name but resolved the file from the LAST one,
+  so `192.0.2.10-198.51.100.7.txt` passed the check on a device the caller owns
+  and returned the backup of one they do not. Every IP in the name is now
+  checked. The path-traversal guard was already correct and now has a test.
+- The audit report PDF is rendered from client-supplied HTML by a real browser
+  running on the server, which would fetch any subresource that HTML named —
+  an authenticated request forgery reading internal services from the
+  appliance's network position, with the answer painted into the returned PDF.
+  The browser is now started with name resolution refused outright (literal IP
+  addresses included).
+- The Content-Security-Policy gains `base-uri 'none'` and `form-action 'self'`.
+  Without `base-uri`, an injected `<base href>` repoints every relative script
+  URL and walks around `script-src 'self'`.
+- The encryption key file is no longer briefly readable by anyone the data
+  directory allows: permissions are tightened on the temporary file before it
+  is renamed into place, not only afterwards.
+- New guard test: every API route that takes a device IP must reach
+  `assert_device_allowed`, directly or through a helper. The deliberate
+  exceptions are listed one by one with the reason, so adding an unguarded
+  route now fails the suite.
+
+
 ### Changed
 
 - The web interface now follows the browser's language on a first visit
@@ -17,6 +43,10 @@ happened — `git log --grep="chore(release)"` is the record for those.
   selector is still remembered and still wins.
 - Startup messages no longer come out garbled on a Windows console using a
   legacy code page: `stdout`/`stderr` are reconfigured to UTF-8.
+- The "latest snapshot per kind" query behind the observability API context
+  now filters by tenant in the inner query too. When two customers each had a
+  device on the same IP, a restricted user saw an empty panel instead of their
+  own snapshot.
 
 ### Fixed
 
