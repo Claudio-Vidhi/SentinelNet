@@ -91,6 +91,15 @@
         ],
         "createdAt": "2026-08-17T16:55:58.354Z",
         "reason": "Left rule on the guidance callout in the printed A4 audit report; present in the reference PDF the output must match"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "*",
+        "files": [
+          "static/js/config-analyzer.js"
+        ],
+        "createdAt": "2026-08-30T00:00:00.000Z",
+        "reason": "vis.js canvas palette: the literals are the FALLBACKS passed to cssVar() for the network drawing, not colours applied to DOM. Same case as the existing topology.js waiver -- a canvas cannot read a CSS custom property, so the token name and a literal have to travel together. The colours applied to DOM in this file are tokens."
       }
     ]
   }

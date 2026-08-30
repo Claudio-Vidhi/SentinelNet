@@ -12,6 +12,11 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Security
 
+- `users.json` (every password hash) and `sites.json` (every agent site-token
+  hash) had no permission tightening at all — not on the temp copy, not on the
+  final file — so on a shared data directory they were readable by whoever the
+  directory allowed. Both are now restricted, temp copy first.
+
 - A user restricted to some sites could download another customer's device
   backup. `GET /api/download-backup/{name}` checked the caller's scope against
   the FIRST IP in the requested name but resolved the file from the LAST one,
@@ -37,6 +42,16 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 
 ### Changed
+
+- The Interfaces tab's six port-state cards, the verdict cards on Home and two
+  modals now draw from the design system instead of inline styles: type-ramp
+  sizes, lamp-wash tints, and the 1px state accent the system specifies rather
+  than a 4px slab. The clickable KPI in MAC Tracker has a cue that reads as one.
+- `DESIGN.md` documents the 8px plate radius the app actually ships and no
+  longer claims modal titles use the 21px Plate Title step; both had drifted
+  from the code.
+- `docs/hardening.md` states the accepted risk behind FortiGate REST TLS
+  verification defaulting to off, and what to do about it.
 
 - The web interface now follows the browser's language on a first visit
   instead of always starting in Italian. An explicit choice from the language

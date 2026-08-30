@@ -113,7 +113,7 @@
 
         if (!rows.length) {
             box.innerHTML = `<div style="text-align:center; padding:32px; color:var(--text-muted); font-size:13px;">
-                <i class="fa-solid fa-filter" style="font-size:24px; margin-bottom:8px; display:block; opacity:0.5;"></i>
+                <i class="fa-solid fa-filter if-empty-icon"></i>
                 ${_ifL('ifNoMatching')}
             </div>`;
             return;
@@ -144,9 +144,9 @@
             const isChecked = _selectedIndices.has(r._idx);
             let badge = '';
             if (state === 'up') {
-                badge = `<span class="badge" style="background:rgba(34,197,94,0.15); color:var(--success); font-weight:700; border:1px solid rgba(34,197,94,0.3);"><i class="fa-solid fa-circle" style="font-size:7px; margin-right:4px;"></i>UP</span>`;
+                badge = `<span class="badge if-badge-up"><i class="fa-solid fa-circle if-badge-dot"></i>UP</span>`;
             } else if (state === 'outage') {
-                badge = `<span class="badge" style="background:rgba(239,68,68,0.15); color:var(--danger); font-weight:700; border:1px solid rgba(239,68,68,0.3);"><i class="fa-solid fa-circle-exclamation" style="margin-right:4px;"></i>DOWN</span>`;
+                badge = `<span class="badge if-badge-down"><i class="fa-solid fa-circle-exclamation if-badge-dot"></i>DOWN</span>`;
             } else if (state === 'flapping') {
                 badge = `<span class="badge" style="background:rgba(245,158,11,0.15); color:var(--warning); font-weight:700; border:1px solid rgba(245,158,11,0.3);"><i class="fa-solid fa-bolt" style="margin-right:4px;"></i>FLAP</span>`;
             } else if (state === 'maint') {

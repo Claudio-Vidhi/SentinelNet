@@ -103,6 +103,7 @@ typography:
 rounded:
   square: "0"
   edge: "2px"
+  plate: "8px"
   lens: "50%"
   pill: "999px"
 spacing:
@@ -386,7 +387,10 @@ platform condensed sans there would take the system's whole voice with it.
 - **Legend Title** (600, 17px): panel and section headings.
 - **Plate Header** (600, 12px, uppercase, +0.14em): the engraved strip across the
   top of a bay panel.
-- **Plate Title** (600, 21px): login and modal titles.
+- **Plate Title** (600, 21px): the login title.
+  Modal headers do NOT use it — `.modal-header h3` shares the Plate Header
+  step with `.panel > h3:first-child`, because a modal header is the same
+  engraved strip across the top of a bay.
 - **Legend Sub** (600, 15px): sub-section headings inside a bay.
 - **Pill Label** (600, 11px, uppercase, +0.1em): status pills, the title-block
   cartouche, the one-line legend. The most repeated small step in the system.
@@ -498,10 +502,16 @@ strength stays legible and adjustable.
 
 ## Shapes
 
-Square. `border-radius: 0` on every panel, card, table, field, tag and modal;
-2px only on controls, as the smallest possible chamfer on a machined edge. The
-sole curves in the system are the **lamp lens** (a perfect circle) and the
-**status pill** (999px) — and both are curved because the object they depict is.
+Square where the edge is a cut: `border-radius: 0` on every table, field and
+tag, 2px on controls, as the smallest possible chamfer on a machined edge.
+
+Panels, cards and modals carry a single 8px token, `--card-border-radius` —
+one value, in one place, which the three selectable theme variants raise to
+12-14px. It is the only rounded step in the base palette, and adding a second
+one is the drift this rule exists to catch.
+
+The other curves in the system are the **lamp lens** (a perfect circle) and the
+**status pill** (999px) — both curved because the object they depict is.
 The isolator is a 13px square rotated 45°, which is the IEC symbol.
 
 Borders are uniformly 1px. There is no 2px variant and no dashed stroke except
