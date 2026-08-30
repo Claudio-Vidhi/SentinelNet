@@ -30,7 +30,7 @@ from core import data_config
 
 logger = logging.getLogger("sentinelnet.db")
 
-SCHEMA_VERSION = 9          # schema version supported by this code (v9: AI conversations)
+SCHEMA_VERSION = 10         # schema version supported by this code (v10: incidents.resolved_ts)
 QUEUE_MAX = 10_000          # max payloads in the write queue
 BATCH_SIZE = 500            # max payloads per single commit
 MAX_WRITER_RESTARTS = 5     # writer restarts allowed before fail-open
@@ -41,12 +41,46 @@ metrics = {
     "writes_dropped_queue_full": 0,
     "writes_dropped_error": 0,
     "writer_restarts": 0,
+    "writer_dead": 0,
     "clock_skew_fallback": 0,
 }
 
 _write_queue: "queue.Queue[tuple[str, tuple]]" = queue.Queue(maxsize=QUEUE_MAX)
 _writer_thread: threading.Thread | None = None
 _stop_event = threading.Event()
+
+# Drop announcements are rate-limited: a burst must not flood the log, but
+# the first drop and its recurrence must be visible (WP7: loss stays loud).
+DROP_LOG_INTERVAL_S = 60.0
+_drop_last_log_ts = 0.0
+
+
+def _log_queue_full_drops(total_dropped: int) -> bool:
+    """Logs a queue-full drop at most once per DROP_LOG_INTERVAL_S.
+    Returns True when a line was actually emitted (test hook)."""
+    global _drop_last_log_ts
+    now = time.monotonic()
+    if now - _drop_last_log_ts >= DROP_LOG_INTERVAL_S:
+        _drop_last_log_ts = now
+        logger.warning("Coda scritture observability piena: payload scartato "
+                       "(totale scartati dall'avvio: %d).", total_dropped)
+        return True
+    return False
+
+
+def health_state() -> dict:
+    """Writer health for the /api/observability/health endpoint: data loss
+    must surface as a state the operator can read, not just a counter."""
+    dropped = metrics.get("writes_dropped_queue_full", 0)
+    dead = bool(metrics.get("writer_dead"))
+    return {
+        "writer_dead": dead,
+        "writes_dropped_queue_full": dropped,
+        "writes_dropped_error": metrics.get("writes_dropped_error", 0),
+        "writer_restarts": metrics.get("writer_restarts", 0),
+        "queue_depth": _write_queue.qsize(),
+        "degraded": dead or dropped > 0,
+    }
 
 
 def get_db_path() -> str:
@@ -172,6 +206,16 @@ def migrate() -> None:
             "PRAGMA table_info(netsec_audit_runs)").fetchall()}
         if ar_cols and "run_name" not in ar_cols:
             conn.execute("ALTER TABLE netsec_audit_runs ADD COLUMN run_name TEXT")
+        # v10: retention anchors to the RESOLUTION moment, not the opening
+        # (plan Phase 3 item 18). Existing resolved rows backfill from
+        # closed_ts/opened_ts so nothing already closed changes behaviour.
+        inc_cols = {r["name"] for r in conn.execute(
+            "PRAGMA table_info(incidents)").fetchall()}
+        if inc_cols and "resolved_ts" not in inc_cols:
+            conn.execute("ALTER TABLE incidents ADD COLUMN resolved_ts INTEGER")
+            conn.execute(
+                "UPDATE incidents SET resolved_ts = COALESCE(closed_ts, opened_ts) "
+                "WHERE status = 'resolved' AND resolved_ts IS NULL")
         if current < SCHEMA_VERSION:
             conn.execute("DELETE FROM schema_version")
             conn.execute("INSERT INTO schema_version(version) VALUES (?)", (SCHEMA_VERSION,))
@@ -203,6 +247,7 @@ def enqueue_write(sql: str, params: tuple = ()) -> bool:
         return True
     except queue.Full:
         metrics["writes_dropped_queue_full"] += 1
+        _log_queue_full_drops(metrics["writes_dropped_queue_full"])
         return False
 
 
@@ -298,6 +343,7 @@ def _writer_supervisor():
             restarts += 1
             metrics["writer_restarts"] = restarts
             if restarts > MAX_WRITER_RESTARTS:
+                metrics["writer_dead"] = 1
                 logger.error(
                     "Writer observability terminato definitivamente dopo %d riavvii: %s. "
                     "Le nuove scritture verranno scartate; l'app resta operativa.",
@@ -315,6 +361,7 @@ def start_writer() -> None:
     if _writer_thread and _writer_thread.is_alive():
         return
     migrate()
+    metrics["writer_dead"] = 0
     _stop_event.clear()
     _writer_thread = threading.Thread(
         target=_writer_supervisor, name="obs-db-writer", daemon=True)

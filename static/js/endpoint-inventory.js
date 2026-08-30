@@ -29,7 +29,6 @@ async function endpointsApplyFilters() {
 async function endpointsSearch() {
     const host = document.getElementById('epResults');
     if (!host) return;
-    const en = currentLang === 'en';
     const L = i18n[currentLang];
 
     const q = ((document.getElementById('epFilterQ') || {}).value || '').trim();
@@ -39,7 +38,7 @@ async function endpointsSearch() {
     const toVal = ((document.getElementById('epFilterTo') || {}).value || '').trim();
 
     host.innerHTML = `<div class="panel" style="padding:26px; text-align:center; color:var(--text-muted); font-size:13px;">
-        <i class="fa-solid fa-circle-notch fa-spin" style="margin-right:8px;"></i>${escapeHtml(en ? 'Loading…' : 'Caricamento…')}</div>`;
+        <i class="fa-solid fa-circle-notch fa-spin" style="margin-right:8px;"></i>${escapeHtml(tr('epiLoading'))}</div>`;
 
     const params = new URLSearchParams({ stale_days: String(staleDays) });
     if (q) params.set('q', q);
@@ -53,7 +52,7 @@ async function endpointsSearch() {
 
     const res = await apiFetch('/api/endpoints/list?' + params.toString());
     if (!res || !res.ok) {
-        host.innerHTML = `<div class="panel" style="padding:22px; text-align:center; color:var(--danger); font-size:13px;">${escapeHtml(en ? 'Could not load the inventory.' : 'Inventario non caricabile.')}</div>`;
+        host.innerHTML = `<div class="panel" style="padding:22px; text-align:center; color:var(--danger); font-size:13px;">${escapeHtml(tr('epiCouldNotLoadThe'))}</div>`;
         return;
     }
     endpointsRender(await res.json());
@@ -83,11 +82,10 @@ function endpointsRender(d) {
     const host = document.getElementById('epResults');
     if (!host) return;
 
-    const en = currentLang === 'en';
     const retentionBanner = d.outside_retention
         ? `<div style="padding:10px 12px; margin-bottom:10px; border-radius:0; background:color-mix(in srgb, var(--danger) 12%, transparent); border:1px solid color-mix(in srgb, var(--danger) 35%, transparent); color:var(--danger); font-size:12px;">
             <i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(
-                en ? `The requested start date is outside the retention window (${d.retention_days} days).` : `La data iniziale richiesta è fuori dal periodo di retention (${d.retention_days} giorni).`)}</div>`
+                tr('epiTheRequestedStartDate', {retention_days: d.retention_days}))}</div>`
         : '';
 
     if (!_epRows.length) {
@@ -264,7 +262,6 @@ async function endpointsPorts() {
     const host = document.getElementById('epResults');
     const picker = document.getElementById('epPortsSwitch');
     const L = i18n[currentLang];
-    const en = currentLang === 'en';
     if (!host) return;
     const sw = picker ? picker.value : '';
     if (!sw) {
@@ -273,7 +270,7 @@ async function endpointsPorts() {
     }
     const res = await apiFetch('/api/endpoints/ports?switch=' + encodeURIComponent(sw));
     if (!res || !res.ok) {
-        host.innerHTML = `<div class="panel" style="padding:22px; text-align:center; color:var(--danger); font-size:13px;">${escapeHtml(en ? 'Could not load port occupancy.' : 'Occupazione porte non caricabile.')}</div>`;
+        host.innerHTML = `<div class="panel" style="padding:22px; text-align:center; color:var(--danger); font-size:13px;">${escapeHtml(tr('epiCouldNotLoadPort'))}</div>`;
         return;
     }
     endpointsPortsRender(await res.json());

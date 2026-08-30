@@ -10,7 +10,7 @@ import webbrowser
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 from contextlib import asynccontextmanager
@@ -65,7 +65,6 @@ app = FastAPI(title="SentinelNet API", version=__version__, lifespan=lifespan)
 def get_app_version():
     return {"app": "SentinelNet", "version": __version__}
 
-from routers import deps as _deps_router  # noqa: F401 (reimport contract, see routers/deps.py)
 from routers import fortigate as _fortigate_router
 from routers import wlc as _wlc_router
 from routers import observability as _observability_router
@@ -164,6 +163,17 @@ _CSP = (
 )
 
 @app.middleware("http")
+async def client_tag_middleware(request: Request, call_next):
+    """Records which client claims to be making the call, so audit lines say
+    whether an action came from the dashboard or from an MCP tool run
+    (review item 4). Header-supplied, hence declared, never asserted."""
+    from security import security_manager
+    security_manager.set_client_tag(
+        request.headers.get(security_manager.CLIENT_TAG_HEADER))
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -185,6 +195,37 @@ async def cache_control_middleware(request: Request, call_next):
         response.headers["Cache-Control"] = "public, max-age=300"
     return response
 
+# WP6: per-IP rate limit on the expensive authenticated endpoints (scans,
+# triage, bulk commands, audits, terminal tokens). Deliberately generous —
+# it exists to stop a stuck script or an abused session from monopolizing the
+# device SSH paths, not to meter normal use. In-memory on purpose: a restart
+# clears it, and persisting it would add state for no security gain here.
+_RATE_LIMIT_PREFIXES = (
+    "/api/run-triage", "/api/triage", "/api/scan-subnet", "/api/bulk-command",
+    "/api/netsec-audit/scan", "/api/ws-token", "/api/arp/scan", "/api/mac/scan",
+)
+_RATE_LIMIT_MAX = 30
+_RATE_LIMIT_WINDOW_S = 60.0
+_rate_hits: dict = {}
+_rate_lock = threading.Lock()
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    if request.method == "POST" and request.url.path.startswith(_RATE_LIMIT_PREFIXES):
+        ip = request.client.host if request.client else "unknown"
+        now = time.monotonic()
+        with _rate_lock:
+            hits = [t for t in _rate_hits.get(ip, []) if now - t < _RATE_LIMIT_WINDOW_S]
+            if len(hits) >= _RATE_LIMIT_MAX:
+                _rate_hits[ip] = hits
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Troppe richieste: rallentare."},
+                )
+            hits.append(now)
+            _rate_hits[ip] = hits
+    return await call_next(request)
+
 # Ultimo middleware aggiunto = piu' esterno: comprime il corpo finale.
 # I JS pesano (topology.js ~175KB) e la LAN di gestione spesso e' lenta.
 app.add_middleware(GZipMiddleware, minimum_size=1024)
@@ -201,12 +242,10 @@ app.mount("/static", StaticFiles(directory=get_resource_path("static")), name="s
 def read_index():
     return FileResponse(get_resource_path(os.path.join("templates", "dashboard.html")))
 
-from routers.deps import (  # noqa: F401
-    SESSION_COOKIE, CSRF_HEADER, get_current_user, require_role,
-    require_admin, require_operator, user_group_scope,
-    assert_group_allowed, assert_device_allowed, filter_map_to_scope,
-)
-
+# Reimport contract kept ONLY for names tests actually consume through the
+# app_server namespace (the AI-profile helpers and the crypto_vault patch
+# point). The routers.deps reimports had no consumers and were removed
+# (plan follow-up: reimport contract cleanup).
 from routers.ai import (  # noqa: F401
     _get_ai_profiles_raw,
     _mask_ai_profile,

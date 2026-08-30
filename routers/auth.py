@@ -13,6 +13,7 @@ from security import user_manager
 from security.security_manager import (
     create_access_token, log_audit,
     is_locked_out, record_failed_attempt, reset_failed_attempts,
+    clear_account_lockouts,
     ACCESS_TOKEN_EXPIRE_MINUTES,
 )
 from routers.deps import SESSION_COOKIE, get_current_user, require_admin
@@ -65,6 +66,15 @@ def setup_status():
 
 @router.post("/api/auth/register")
 def setup_admin(payload: UserSchema):
+    store_err = user_manager.store_integrity_error()
+    if store_err:
+        # Fail closed: a corrupt user store must never be read as "no users
+        # yet", or this unauthenticated endpoint would mint a fresh admin.
+        log_audit(f"Registrazione rifiutata: archivio utenti corrotto ({store_err}).")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Archivio utenti corrotto: registrazione non consentita. Ripristinare users.json."
+        )
     if user_manager.has_any_user():
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -96,8 +106,21 @@ def _set_session_cookie(request: Request, response: Response, token: str):
 
 @router.post("/api/auth/login")
 def login(payload: LoginRequest, request: Request, response: Response):
-    if is_locked_out(payload.username):
-        log_audit(f"Tentativo di login bloccato per lockout (username: '{payload.username}').")
+    store_err = user_manager.store_integrity_error()
+    if store_err:
+        log_audit(f"Login sospeso: archivio utenti corrotto ({store_err}).")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Archivio utenti non disponibile: accesso sospeso. Ripristinare users.json."
+        )
+
+    # WP6: lockout keyed source+account. Username-only let an unauthenticated
+    # caller lock out any named account; the key survives restarts (persisted).
+    client_ip = request.client.host if request.client else "unknown"
+    limit_key = f"login:{client_ip}:{payload.username}"
+
+    if is_locked_out(limit_key):
+        log_audit(f"Tentativo di login bloccato per lockout (username: '{payload.username}', ip: '{client_ip}').")
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Troppi tentativi di accesso falliti. Riprova più tardi."
@@ -110,7 +133,7 @@ def login(payload: LoginRequest, request: Request, response: Response):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Account disabilitato. Contatta un amministratore."
             )
-        reset_failed_attempts(payload.username)
+        reset_failed_attempts(limit_key)
         role = user_manager.get_role(payload.username) or "viewer"
         access_token = create_access_token(data={"sub": payload.username, "role": role})
         log_audit(f"Utente '{payload.username}' (ruolo: {role}) loggato con successo.")
@@ -124,7 +147,7 @@ def login(payload: LoginRequest, request: Request, response: Response):
             "must_change_password": user_manager.must_change_password(payload.username),
         }
 
-    record_failed_attempt(payload.username)
+    record_failed_attempt(limit_key)
     log_audit(f"Tentativo di login fallito per l'utente '{payload.username}' (credenziali errate).")
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -367,7 +390,7 @@ def reset_password(payload: ResetPasswordSchema):
     if not user_manager.reset_password_break_glass(username, payload.new_password):
         raise HTTPException(status_code=400, detail="Aggiornamento della password fallito.")
     # Il token è bruciato: chi rientra sblocca anche il lockout accumulato.
-    reset_failed_attempts(username)
+    clear_account_lockouts(username)
     log_audit(f"Password reimpostata via email per l'utente '{username}'.")
     return {"status": "success"}
 
@@ -564,7 +587,7 @@ def sso_callback(request: Request, code: str = "", state: str = "", error: str =
             log_audit(f"Ruolo di '{username}' allineato a '{mapped_role}' dai gruppi dell'IdP.")
 
     access_token = create_access_token(data={"sub": username, "role": role})
-    reset_failed_attempts(username)
+    clear_account_lockouts(username)
     log_audit(f"Utente '{username}' (ruolo: {role}) autenticato via SSO.")
     response = RedirectResponse("/", status_code=302)
     _set_session_cookie(request, response, access_token)

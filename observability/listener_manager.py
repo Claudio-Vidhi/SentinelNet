@@ -35,6 +35,8 @@ _snmp_poller_task: "asyncio.Task | None" = None
 _snmp_poller_interval: int = 0
 _linux_poller_task: "asyncio.Task | None" = None
 _linux_poller_interval: int = 0
+_l2_poller_task: "asyncio.Task | None" = None
+_l2_poller_interval: int = 0
 
 
 def _listener_specs(cfg):
@@ -107,6 +109,7 @@ async def apply_obs_config(cfg):
     global _retention_task, _correlation_task, _api_poller_task, _api_poller_interval
     global _snmp_poller_task, _snmp_poller_interval
     global _linux_poller_task, _linux_poller_interval
+    global _l2_poller_task, _l2_poller_interval
 
     await _apply_listeners(cfg)
 
@@ -122,10 +125,12 @@ async def apply_obs_config(cfg):
         desired_interval = int(cfg.get("api_poll_s", 0) or 0)
         desired_snmp = int(cfg.get("snmp_poll_s", 0) or 0)
         desired_linux = int(cfg.get("linux_poll_s", 0) or 0)
+        desired_l2 = int(cfg.get("l2_poll_s", 0) or 0)
     else:
         desired_interval = 0
         desired_snmp = 0
         desired_linux = 0
+        desired_l2 = 0
 
     if desired_interval != _api_poller_interval or \
             (desired_interval > 0 and _api_poller_task is None):
@@ -160,14 +165,26 @@ async def apply_obs_config(cfg):
                 linux_poller.poll_loop(desired_linux), name="obs-linux-poller")
         _linux_poller_interval = desired_linux
 
+    if desired_l2 != _l2_poller_interval or \
+            (desired_l2 > 0 and _l2_poller_task is None):
+        if _l2_poller_task is not None:
+            _l2_poller_task.cancel()
+            _l2_poller_task = None
+        if desired_l2 > 0:
+            from collectors import l2_scheduler
+            _l2_poller_task = asyncio.create_task(
+                l2_scheduler.poll_loop(desired_l2), name="obs-l2-poller")
+        _l2_poller_interval = desired_l2
+
 
 async def shutdown():
     """Ferma tutti i listener e i task di background (spegnimento app)."""
     global _retention_task, _correlation_task, _api_poller_task, _api_poller_interval
     global _snmp_poller_task, _snmp_poller_interval
     global _linux_poller_task, _linux_poller_interval
+    global _l2_poller_task, _l2_poller_interval
     for task in (_retention_task, _correlation_task, _api_poller_task,
-                 _snmp_poller_task, _linux_poller_task):
+                 _snmp_poller_task, _linux_poller_task, _l2_poller_task):
         if task is not None:
             task.cancel()
     _retention_task = None
@@ -178,6 +195,8 @@ async def shutdown():
     _snmp_poller_interval = 0
     _linux_poller_task = None
     _linux_poller_interval = 0
+    _l2_poller_task = None
+    _l2_poller_interval = 0
 
     for name in list(_handles):
         handle = _handles.pop(name)

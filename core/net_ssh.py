@@ -16,12 +16,15 @@ only stall the threads dialling THAT site, not every jump-mode connection in
 the process. The registry lock below only ever guards a dict lookup, never
 network I/O, so it is held for microseconds.
 """
+import logging
 import os
 import socket
 import threading
 
 import paramiko
 import netmiko
+
+logger = logging.getLogger("sentinelnet.ssh")
 
 # Bounds on connecting to a bastion. Without them, paramiko.Transport handed a
 # bare (host, port) tuple uses a blocking socket with no timeout, and a dead
@@ -65,7 +68,16 @@ class BastionHostKeyError(Exception):
     """
 
 
-def _known_hosts_path() -> str:
+class DeviceHostKeyError(Exception):
+    """A DEVICE presented a different SSH host key than the one recorded.
+
+    Same class of event as the bastion: either the device was reimaged or
+    someone is on the path. The stale line in ssh_known_hosts must be
+    removed by a human, never automatically.
+    """
+
+
+def _known_hosts_path(scope: "str | None" = None) -> str:
     """The same known_hosts the WS terminal pins to, created if missing.
 
     paramiko.HostKeys.save() does not create the parent file's directory tree
@@ -74,6 +86,14 @@ def _known_hosts_path() -> str:
     """
     from core import data_config
     path = data_config.get_path("ssh_known_hosts")
+    if scope:
+        # Devices behind a bastion get their own file, one per bastion.
+        # Two tenants may legitimately run the same private IP behind two
+        # different bastions; a single file keyed by bare IP would make the
+        # second one look like a key change (and paramiko rejects on the
+        # name it loads, so scoping our own bookkeeping alone is not enough).
+        path += "." + "".join(c if c.isalnum() or c in "-_." else "_"
+                              for c in scope)
     if not os.path.exists(path):
         open(path, "a").close()
     return path
@@ -85,18 +105,31 @@ def _host_key_id(host: str, port: int) -> str:
     return host if port == 22 else f"[{host}]:{port}"
 
 
-def _pinned_host_key(host: str, port: int):
-    """The key pinned for this bastion, or None on first contact."""
-    entry = paramiko.HostKeys(_known_hosts_path()).lookup(_host_key_id(host, port))
+def _load_host_keys(scope: "str | None" = None) -> paramiko.HostKeys:
+    """HostKeys from the shared file; a corrupt file must not crash every
+    SSH connection in the app. It degrades to 'no pin' with a loud error
+    instead — the alternative, a hard failure, would take down collection,
+    backups and terminals together."""
+    try:
+        return paramiko.HostKeys(_known_hosts_path(scope))
+    except Exception as e:
+        logger.error("ssh_known_hosts illeggibile (%s): i pin esistenti sono "
+                     "ignorati finche' il file non viene riparato.", e)
+        return paramiko.HostKeys()
+
+
+def _pinned_host_key(host: str, port: int, scope: "str | None" = None):
+    """The key pinned for this host, or None on first contact."""
+    entry = _load_host_keys(scope).lookup(_host_key_id(host, port))
     if not entry:
         return None
     return next(iter(entry.values()))
 
 
-def _pin_host_key(host: str, port: int, key) -> None:
+def _pin_host_key(host: str, port: int, key, scope: "str | None" = None) -> None:
     """Trust on first use: record the key so a later change is detectable."""
-    path = _known_hosts_path()
-    keys = paramiko.HostKeys(path)
+    path = _known_hosts_path(scope)
+    keys = _load_host_keys(scope)
     keys.add(_host_key_id(host, port), key.get_name(), key)
     keys.save(path)
 
@@ -210,6 +243,56 @@ def _netmiko_connect(**params):
     return netmiko.ConnectHandler(**params)
 
 
+def _device_ssh_params(params: dict, scope: "str | None" = None) -> dict:
+    """Load the shared known_hosts into device sessions.
+
+    Device SSH was the unpersisted TOFU link (app review P0-6): netmiko's
+    default policy accepted whatever key answered, in memory only. With the
+    known_hosts loaded, a pinned key that differs from the one presented
+    fails the connection instead of being silently replaced."""
+    if params.get("alt_host_keys") or params.get("ssh_strict"):
+        return params
+    params = dict(params)
+    params["alt_host_keys"] = True
+    params["alt_key_file"] = _known_hosts_path(scope)
+    return params
+
+
+def _raise_if_host_key_error(exc: Exception, host: str, port: int) -> None:
+    """Translate a host-key mismatch (plain or vendor-wrapped) into the
+    typed error an operator can act on."""
+    if isinstance(exc, paramiko.BadHostKeyException) or \
+            "host key" in str(exc).lower():
+        raise DeviceHostKeyError(
+            f"Il dispositivo {_host_key_id(host, port)} presenta una chiave "
+            f"host SSH diversa da quella registrata in ssh_known_hosts. Se il "
+            f"dispositivo e' stato reinstallato, rimuovere quella riga dal "
+            f"file; altrimenti la tratta non e' fidata.") from exc
+
+
+def _persist_device_key(host: "str | None", port: int, conn,
+                        scope: "str | None" = None) -> None:
+    """TOFU for device sessions: record the key on first use so a later
+    change is detected. A session that yields no key is simply not pinned."""
+    if not host or _pinned_host_key(host, port, scope) is not None:
+        return
+    try:
+        key = conn.remote_conn.get_transport().get_remote_server_key()
+    except Exception:
+        return
+    # Only a real key gets pinned: anything else (mocks, odd transports)
+    # would write a line that poisons every later read of the file.
+    if not isinstance(key, paramiko.pkey.PKey):
+        return
+    try:
+        _pin_host_key(host, port, key, scope)
+    except Exception:
+        return
+    from security.security_manager import log_audit
+    log_audit(f"SSH: chiave host del dispositivo '{_host_key_id(host, port)}' "
+              f"registrata al primo uso (TOFU).")
+
+
 def jump_channel(site: dict, host: str, port: int) -> paramiko.Channel:
     """Open a direct-tcpip channel from the bastion to host:port."""
     return _transport(site).open_channel(
@@ -246,11 +329,32 @@ def ConnectHandler(site_id: "str | None" = None, tenant: "str | None" = None, **
         from services import site_manager
         candidate = site_manager.get_site(site_id)
         site = candidate if candidate and candidate.get("mode") == "jump" else None
+    port = int(params.get("port") or 22)
+    # Host keys of devices behind a bastion are pinned in that bastion's own
+    # file: private IPs are only unique within their site.
+    scope = (_host_key_id(site.get("jump_host") or "", int(site.get("jump_port") or 22))
+             if site else None)
+    if host:
+        params = _device_ssh_params(params, scope)
     if not (host and site):
-        return _netmiko_connect(**params)
-    chan = jump_channel(site, host, int(params.get("port") or 22))
+        try:
+            conn = _netmiko_connect(**params)
+        except Exception as e:
+            if host and _pinned_host_key(host, port) is not None:
+                _raise_if_host_key_error(e, host, port)
+            raise
+        _persist_device_key(host, port, conn)
+        return conn
+    chan = jump_channel(site, host, port)
     try:
-        return _netmiko_connect(sock=chan, **params)
+        try:
+            conn = _netmiko_connect(sock=chan, **params)
+        except Exception as e:
+            if _pinned_host_key(host, port, scope) is not None:
+                _raise_if_host_key_error(e, host, port)
+            raise
+        _persist_device_key(host, port, conn, scope)
+        return conn
     except Exception:
         # The channel lives on the shared, long-lived per-site transport, so
         # nothing reclaims it on failure: `with ConnectHandler(...)` at the

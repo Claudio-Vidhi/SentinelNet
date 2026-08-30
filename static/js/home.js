@@ -140,7 +140,7 @@ async function loadHome() {
     setText('homeStatAttention', `${L.homeOutOf} ${measurable}`);
 
     // Cartiglio del disegno: revisione = istante dell'ultima lettura.
-    setText('homeOnelineRev', new Date().toLocaleString(currentLang === 'en' ? 'en-GB' : 'it-IT'));
+    setText('homeOnelineRev', new Date().toLocaleString(tr('homeEnGb')));
 
     renderHomeVerdicts(devs);
     renderFleetOneline(devs);
@@ -173,7 +173,6 @@ async function loadHome() {
 }
 
 function renderHomeVerdicts(devs) {
-    const en = currentLang === 'en';
 
     // 1. Raggiungibilità
     let online = 0, offline = 0, authFailed = 0;
@@ -187,10 +186,10 @@ function renderHomeVerdicts(devs) {
             online++;
         } else if (scan.status === 'auth_failed') {
             authFailed++;
-            reachEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${en ? 'Auth Failed' : 'Autenticazione fallita'}`);
+            reachEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${tr('homeAuthFailed')}`);
         } else {
             offline++;
-            reachEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${en ? 'Unreachable' : 'Non raggiungibile'}`);
+            reachEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${tr('homeUnreachable')}`);
         }
     });
 
@@ -204,17 +203,13 @@ function renderHomeVerdicts(devs) {
         bReach.className = 'status-badge ' + (offline > 0 ? 'crit' : (authFailed > 0 ? 'warn' : 'ok'));
         bReach.textContent = offline > 0 ? 'CRIT' : (authFailed > 0 ? 'WARN' : 'OK');
         if (offline > 0 || authFailed > 0) {
-            sReach.textContent = en
-                ? `${offline} device(s) unreachable, ${authFailed} authentication error(s).`
-                : `${offline} apparati non raggiungibili, ${authFailed} errori di credenziali.`;
+            sReach.textContent = tr('homeDeviceSUnreachableAuthentication', {offline: offline, authFailed: authFailed});
             if (eReach && ebReach) {
                 eReach.style.display = '';
                 ebReach.innerHTML = reachEvidences.map(e => `<div>• ${escapeHtml(e)}</div>`).join('');
             }
         } else {
-            sReach.textContent = en
-                ? `All ${online} measurable devices are online and responsive.`
-                : `Tutti i ${online} apparati misurabili sono online e raggiungibili.`;
+            sReach.textContent = tr('homeAllMeasurableDevicesAre', {online: online});
             if (eReach) eReach.style.display = 'none';
         }
     }
@@ -228,10 +223,10 @@ function renderHomeVerdicts(devs) {
         const bTs = scan.backup_timestamp || scan.last_backup;
         if (!bTs) {
             noBackup++;
-            backupEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${en ? 'Never backed up' : 'Nessun backup registrato'}`);
+            backupEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${tr('homeNeverBackedUp')}`);
         } else if ((nowSec - bTs) > 7 * 86400) {
             staleBackup++;
-            backupEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${en ? 'Backup older than 7 days' : 'Backup obsoleto (> 7 giorni)'}`);
+            backupEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${tr('homeBackupOlderThanDays')}`);
         }
     });
 
@@ -246,17 +241,13 @@ function renderHomeVerdicts(devs) {
         bBackup.className = 'status-badge ' + (hasBackupIssue ? 'warn' : 'ok');
         bBackup.textContent = hasBackupIssue ? 'WARN' : 'OK';
         if (hasBackupIssue) {
-            sBackup.textContent = en
-                ? `${noBackup + staleBackup} device(s) without recent backup (> 7 days).`
-                : `${noBackup + staleBackup} apparati senza backup recente (< 7 giorni).`;
+            sBackup.textContent = tr('homeDeviceSWithoutRecent', {staleBackup: noBackup + staleBackup});
             if (eBackup && ebBackup) {
                 eBackup.style.display = '';
                 ebBackup.innerHTML = backupEvidences.slice(0, 10).map(e => `<div>• ${escapeHtml(e)}</div>`).join('');
             }
         } else {
-            sBackup.textContent = en
-                ? `All devices have recent configuration backups saved.`
-                : `Tutti gli apparati dispongono di backup aggiornato.`;
+            sBackup.textContent = tr('homeAllDevicesHaveRecent');
             if (eBackup) eBackup.style.display = 'none';
         }
     }
@@ -287,17 +278,13 @@ function renderHomeVerdicts(devs) {
         bCve.className = 'status-badge ' + (hasCve ? 'warn' : 'ok');
         bCve.textContent = hasCve ? 'WARN' : 'OK';
         if (hasCve) {
-            sCve.textContent = en
-                ? `${critCves} known CVE vulnerabilities detected across fleet.`
-                : `Rilevate ${critCves} vulnerabilità CVE note nella flotta.`;
+            sCve.textContent = tr('homeKnownCveVulnerabilitiesDetected', {critCves: critCves});
             if (eCve && ebCve) {
                 eCve.style.display = '';
                 ebCve.innerHTML = cveEvidences.slice(0, 10).map(e => `<div>• ${escapeHtml(e)}</div>`).join('');
             }
         } else {
-            sCve.textContent = en
-                ? `No unmitigated critical CVE vulnerabilities detected.`
-                : `Nessuna criticità CVE non mitigata rilevata.`;
+            sCve.textContent = tr('homeNoUnmitigatedCriticalCve');
             if (eCve) eCve.style.display = 'none';
         }
     }
@@ -309,7 +296,7 @@ function renderHomeVerdicts(devs) {
         const scan = globalVersions[d.IP] || {};
         if (scan.drift || scan.has_drift) {
             driftCount++;
-            driftEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${en ? 'Config drift detected' : 'Discrepanza di configurazione'}`);
+            driftEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${tr('homeConfigDriftDetected')}`);
         }
     });
 
@@ -324,17 +311,13 @@ function renderHomeVerdicts(devs) {
         bDrift.className = 'status-badge ' + (hasDrift ? 'warn' : 'ok');
         bDrift.textContent = hasDrift ? 'WARN' : 'OK';
         if (hasDrift) {
-            sDrift.textContent = en
-                ? `${driftCount} device(s) have configuration drift from baseline.`
-                : `${driftCount} apparati presentano drift rispetto all'archivio.`;
+            sDrift.textContent = tr('homeDeviceSHaveConfiguration', {driftCount: driftCount});
             if (eDrift && ebDrift) {
                 eDrift.style.display = '';
                 ebDrift.innerHTML = driftEvidences.slice(0, 10).map(e => `<div>• ${escapeHtml(e)}</div>`).join('');
             }
         } else {
-            sDrift.textContent = en
-                ? `All running configurations match authorized backups.`
-                : `Tutte le configurazioni attive risultano allineate.`;
+            sDrift.textContent = tr('homeAllRunningConfigurationsMatch');
             if (eDrift) eDrift.style.display = 'none';
         }
     }
@@ -488,7 +471,7 @@ function renderEventStrip(rows) {
         const sev = (a.severity || '').toString().toLowerCase();
         const cls = (sev === 'high' || sev === 'critical') ? 'bad' : (sev === 'medium' ? 'warn' : 'ok');
         const when = a.created_ts
-            ? new Date(a.created_ts * 1000).toLocaleTimeString(currentLang === 'en' ? 'en-GB' : 'it-IT')
+            ? new Date(a.created_ts * 1000).toLocaleTimeString(tr('homeEnGb'))
             : '--:--:--';
         const src = escapeHtml((a.src_ip || '').toString());
         const dst = escapeHtml((a.dst_ip || '').toString());

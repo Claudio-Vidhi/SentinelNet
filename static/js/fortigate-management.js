@@ -152,21 +152,16 @@ async function fgtKillSessions() {
     const ip = fgtCurrentTarget();
     if (!ip) return;
     const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
-    const en = currentLang === 'en';
     const src = _fgtVal('fgtSessSrc');
     const dst = _fgtVal('fgtSessDst');
     const port = _fgtVal('fgtSessPort');
     if (!src && !dst && !port) {
-        showToast(L.msgFgtKillNeedsFilter || (en
-            ? 'Set at least one filter: an empty filter would kill every session.'
-            : 'Indica almeno un filtro: senza, verrebbero terminate tutte le sessioni.'), 'warning');
+        showToast(L.msgFgtKillNeedsFilter || (tr('fgtSetAtLeastOne')), 'warning');
         return;
     }
     const shown = [src && `src=${src}`, dst && `dst=${dst}`, port && `dport=${port}`]
         .filter(Boolean).join(', ');
-    const question = en
-        ? `Kill the sessions matching ${shown} on ${ip}?`
-        : `Terminare le sessioni che corrispondono a ${shown} su ${ip}?`;
+    const question = tr('fgtKillTheSessionsMatching', {shown: shown, ip: ip});
     if (!confirm(question)) return;
     const body = {};
     if (src) body.src_ip = src;
@@ -179,10 +174,10 @@ async function fgtKillSessions() {
     });
     if (!res || !res.ok) {
         const e = res ? await res.json().catch(() => ({})) : {};
-        showToast(e.detail || (en ? 'Session kill failed.' : 'Terminazione sessioni non riuscita.'), 'error');
+        showToast(e.detail || (tr('fgtSessionKillFailed')), 'error');
         return;
     }
-    showToast(en ? 'Sessions killed.' : 'Sessioni terminate.', 'success');
+    showToast(tr('fgtSessionsKilled'), 'success');
     loadFgtDataset('sessions');
 }
 
@@ -195,14 +190,14 @@ async function loadFgtDataset(key) {
     if (!ip) {
         const host = document.getElementById('fgtView-' + key);
         if (host) {
-            host.innerHTML = _fgtEmpty(L.msgFgtNoTarget || (en ? 'No target selected.' : 'Nessun target selezionato.'));
+            host.innerHTML = _fgtEmpty(L.msgFgtNoTarget || (tr('fgtNoTargetSelected')));
         }
         return;
     }
     if (!fgtConnectedTarget || fgtConnectedTarget !== ip) {
         const host = document.getElementById('fgtView-' + key);
         if (host) {
-            host.innerHTML = _fgtEmpty(L.fgtSelectPrompt || (en ? 'Target selected. Click "Query FortiGate (API)" to load data.' : 'Target selezionato. Clicca "Interroga FortiGate (API)" per caricare i dati.'));
+            host.innerHTML = _fgtEmpty(L.fgtSelectPrompt || (tr('fgtTargetSelectedClickQuery')));
         }
         return;
     }
@@ -213,10 +208,8 @@ async function loadFgtDataset(key) {
         const host = document.getElementById('fgtView-' + key);
         if (host) {
             const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
-            const en = currentLang === 'en';
             host.innerHTML = _fgtEmpty(L.msgFgtFormRequired
-                || (en ? 'Fill the form above, then run the query.'
-                       : 'Compila il modulo qui sopra, poi lancia la query.'));
+                || (tr('fgtFillTheFormAbove')));
         }
         return;
     }
@@ -263,11 +256,10 @@ function renderFgtDataset(key) {
     const spec = FGT_DATASETS[key];
     const st = fgtDatasetRows[key];
     const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
-    const en = currentLang === 'en';
 
-    if (!st) { host.innerHTML = _fgtEmpty(L.msgFgtNotLoaded || (en ? 'Not loaded.' : 'Non caricato.')); return; }
+    if (!st) { host.innerHTML = _fgtEmpty(L.msgFgtNotLoaded || (tr('fgtNotLoaded'))); return; }
     if (st.error) {
-        host.innerHTML = _fgtEmpty(en ? 'Not available on this device.' : 'Non disponibile su questo dispositivo.', st.error);
+        host.innerHTML = _fgtEmpty(tr('fgtNotAvailableOnThis'), st.error);
         return;
     }
 
@@ -276,7 +268,7 @@ function renderFgtDataset(key) {
     // nascondeva.
     const badge = st.source === 'ssh'
         ? `<div style="margin-bottom:8px;"><span class="status warn" title="${escapeHtml(st.apiError || '')}">
-             <i class="fa-solid fa-terminal"></i> ${escapeHtml(L.badgeFgtSshFallback || (en ? 'CLI fallback — REST failed' : 'Fallback CLI — REST fallita'))}</span></div>`
+             <i class="fa-solid fa-terminal"></i> ${escapeHtml(L.badgeFgtSshFallback || (tr('fgtCliFallbackRestFailed')))}</span></div>`
         : '';
 
     // Eco della query che il FortiGate ha effettivamente servito. Senza,
@@ -286,16 +278,15 @@ function renderFgtDataset(key) {
     const eq = st.query || {};
     const qEcho = (eq.log_type || eq.log_subtype || eq.log_device)
         ? `<div style="margin-bottom:8px; font-size:11px; color:var(--text-muted);">
-             ${escapeHtml(L.lblFgtLogEffective || (en ? 'Executed query' : 'Query eseguita'))}:
+             ${escapeHtml(L.lblFgtLogEffective || (tr('fgtExecutedQuery')))}:
              <code style="font-family:var(--font-code);">log/${escapeHtml(eq.log_device || '?')}/${escapeHtml(eq.log_type || '?')}/${escapeHtml(eq.log_subtype || '?')}</code>
              ${eq.subtype_enforced ? `<span class="status warn" style="margin-left:8px;"
-                  title="${escapeHtml(L.msgFgtSubtypeEnforcedHint || (en ? 'FortiOS returned other subtypes for this path; rows were filtered on the log subtype field so the view matches the FortiGate GUI 1:1.' : 'FortiOS ha restituito altri sottotipi per questo percorso; le righe sono state filtrate sul campo subtype perché la vista corrisponda 1:1 alla GUI del FortiGate.'))}">${escapeHtml(L.badgeFgtSubtypeEnforced || (en ? 'subtype filtered' : 'sottotipo filtrato'))}</span>` : ''}
+                  title="${escapeHtml(L.msgFgtSubtypeEnforcedHint || (tr('fgtFortiosReturnedOtherSubtypes')))}">${escapeHtml(L.badgeFgtSubtypeEnforced || (tr('fgtSubtypeFiltered')))}</span>` : ''}
              ${eq.days_queried ? `<span style="margin-left:8px;">${escapeHtml(
-                  (L.lblFgtLogDaysQueried || (en ? '{n} day(s) queried' : '{n} giorno/i interrogato/i'))
+                  (L.lblFgtLogDaysQueried || (tr('fgtNDaySQueried')))
                       .replace('{n}', String(eq.days_queried)))}${
                   eq.days_queried >= 31 ? ' — ' + escapeHtml(L.msgFgtLogRangeCapped
-                      || (en ? 'range capped at 31 days, older days not queried'
-                            : 'intervallo limitato a 31 giorni, i giorni più vecchi non sono stati interrogati')) : ''}</span>` : ''}
+                      || (tr('fgtRangeCappedAtDays'))) : ''}</span>` : ''}
            </div>`
         : '';
     const head = badge + qEcho;
@@ -313,14 +304,14 @@ function renderFgtDataset(key) {
         const counter = q ? `${lines.length} / ${all.length}` : `${all.length}`;
         host.innerHTML = head + `<details open>
             <summary style="cursor:pointer; font-size:12px; color:var(--text-muted); margin-bottom:8px;">
-              ${escapeHtml(counter)} ${escapeHtml(L.lblFgtLines || (en ? 'lines' : 'righe'))}</summary>
+              ${escapeHtml(counter)} ${escapeHtml(L.lblFgtLines || (tr('fgtLines')))}</summary>
             <pre style="font-family:var(--font-code); font-size:12px; background:var(--surface);
             border:1px solid var(--border); border-radius:0; padding:12px; margin:0;
             white-space:pre-wrap; max-height:420px; overflow:auto;">${escapeHtml(lines.join('\n'))}</pre>
           </details>`;
         return;
     }
-    if (!st.rows.length) { host.innerHTML = head + _fgtEmpty(L.msgFgtObjEmpty || (en ? 'No data.' : 'Nessun dato.')); return; }
+    if (!st.rows.length) { host.innerHTML = head + _fgtEmpty(L.msgFgtObjEmpty || (tr('fgtNoData'))); return; }
 
     // Le risorse sono serie storiche, non un dict piatto: hanno un renderer
     // proprio (piccoli multipli + sparkline). Vedi renderFgtResources.
@@ -537,9 +528,9 @@ function renderFgtResources(host, usage, badge) {
             </div>
             <div style="margin:10px 0 8px; min-height:48px;">${pts.length
                 ? _fgtSparkline(pts, kind, 240, 48)
-                : `<div style="font-size:12px; color:var(--text-muted); padding:14px 0;">${escapeHtml(L.msgFgtNoHistory || (en ? 'No history in this window.' : 'Nessuno storico in questa finestra.'))}</div>`}</div>
+                : `<div style="font-size:12px; color:var(--text-muted); padding:14px 0;">${escapeHtml(L.msgFgtNoHistory || (tr('fgtNoHistoryInThis')))}</div>`}</div>
             <div style="display:flex; gap:12px; font-size:11px; flex-wrap:wrap;">
-              ${stat(en ? 'min' : 'min', hist.min)}${stat(en ? 'avg' : 'media', hist.average)}${stat('max', hist.max)}
+              ${stat(tr('fgtMin'), hist.min)}${stat(tr('fgtAvg'), hist.average)}${stat('max', hist.max)}
             </div>
           </div>`;
     }).join('');
@@ -555,13 +546,13 @@ function renderFgtResources(host, usage, badge) {
             ${c(e.current)}${c(h.min)}${c(h.average)}${c(h.max)}</tr>`;
     }).join('');
     const table = `<details style="margin-top:12px;">
-        <summary style="cursor:pointer; font-size:12px; color:var(--text-muted);">${escapeHtml(L.lblFgtTableView || (en ? 'Table view' : 'Vista tabellare'))}</summary>
+        <summary style="cursor:pointer; font-size:12px; color:var(--text-muted);">${escapeHtml(L.lblFgtTableView || (tr('fgtTableView')))}</summary>
         <div class="table-wrap" style="margin-top:8px;"><table style="width:100%; font-size:13px; border-collapse:collapse;">
           <thead><tr style="border-bottom:1px solid var(--border); background:var(--surface-3);">
             <th style="padding:6px 12px; text-align:left;"></th>
-            <th style="padding:6px 12px; text-align:left;">${escapeHtml(en ? 'current' : 'attuale')}</th>
+            <th style="padding:6px 12px; text-align:left;">${escapeHtml(tr('fgtCurrent'))}</th>
             <th style="padding:6px 12px; text-align:left;">min</th>
-            <th style="padding:6px 12px; text-align:left;">${escapeHtml(en ? 'avg' : 'media')}</th>
+            <th style="padding:6px 12px; text-align:left;">${escapeHtml(tr('fgtAvg'))}</th>
             <th style="padding:6px 12px; text-align:left;">max</th>
           </tr></thead><tbody>${rows}</tbody></table></div>
       </details>`;
@@ -737,16 +728,16 @@ async function saveFgtPrevToken() {
     const verifyTls = document.getElementById('fgtPrevTokenVerifyTls').checked;
     const st = document.getElementById('fgtPrevTokenStatus');
 
-    if (!ip) { showToast(currentLang === 'en' ? 'Select a FortiGate device' : 'Selezionare un dispositivo FortiGate', 'warning'); return; }
-    if (port < 1 || port > 65535) { showToast(currentLang === 'en' ? 'Invalid port (1-65535)' : 'Porta non valida (1-65535)', 'error'); return; }
-    if (!token) { showToast(currentLang === 'en' ? 'Enter a token' : 'Inserire un token', 'warning'); return; }
+    if (!ip) { showToast(tr('fgtSelectAFortigateDevice'), 'warning'); return; }
+    if (port < 1 || port > 65535) { showToast(tr('fgtInvalidPort'), 'error'); return; }
+    if (!token) { showToast(tr('fgtEnterAToken'), 'warning'); return; }
 
     const res = await apiFetch('/api/fortigate/token', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ip, token, port, verify_tls: verifyTls })
     });
     if (res && res.ok) {
-        showToast(currentLang === 'en' ? 'Token saved successfully (encrypted)' : 'Token salvato con successo (cifrato)', 'success');
+        showToast(tr('fgtTokenSavedSuccessfullyEncrypted'), 'success');
         document.getElementById('fgtPrevTokenValue').value = '';
         document.getElementById('fgtPrevTokenPort').value = '443';
         document.getElementById('fgtPrevTokenVerifyTls').checked = false;
@@ -755,35 +746,35 @@ async function saveFgtPrevToken() {
         await loadFgtPrevTokens();
     } else {
         const err = res ? await res.json().catch(() => ({})) : {};
-        showToast(`${currentLang === 'en' ? 'Error: ' : 'Errore: '}${err.detail || (currentLang === 'en' ? 'Token save failed' : 'Salvataggio token fallito')}`, 'error');
+        showToast(`${tr('uiError')}${err.detail || (tr('fgtTokenSaveFailed'))}`, 'error');
     }
 }
 
 async function removeFgtPrevToken() {
     const ip = document.getElementById('fgtPrevTokenDevice').value.trim();
-    if (!ip) { showToast(currentLang === 'en' ? 'Select a FortiGate device' : 'Selezionare un dispositivo FortiGate', 'warning'); return; }
-    if (!confirm(currentLang === 'en' ? `Remove the API token for ${ip}?` : `Rimuovere il token API per ${ip}?`)) return;
+    if (!ip) { showToast(tr('fgtSelectAFortigateDevice'), 'warning'); return; }
+    if (!confirm(tr('fgtRemoveTheApiToken', {ip: ip}))) return;
 
     const res = await apiFetch('/api/fortigate/token', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ip, token: "", port: 443, verify_tls: false })
     });
     if (res && res.ok) {
-        showToast(currentLang === 'en' ? 'Token removed successfully' : 'Token rimosso con successo', 'success');
+        showToast(tr('fgtTokenRemovedSuccessfully'), 'success');
         document.getElementById('fgtPrevTokenDevice').value = '';
         await loadFgtPrevTokens();
     } else {
         const err = res ? await res.json().catch(() => ({})) : {};
-        showToast(`${currentLang === 'en' ? 'Error: ' : 'Errore: '}${err.detail || (currentLang === 'en' ? 'Token removal failed' : 'Rimozione token fallita')}`, 'error');
+        showToast(`${tr('uiError')}${err.detail || (tr('fgtTokenRemovalFailed'))}`, 'error');
     }
 }
 
 async function testFgtPrevToken() {
     const ip = document.getElementById('fgtPrevTokenDevice').value.trim();
-    if (!ip) { showToast(currentLang === 'en' ? 'Select a FortiGate device' : 'Selezionare un dispositivo FortiGate', 'warning'); return; }
+    if (!ip) { showToast(tr('fgtSelectAFortigateDevice'), 'warning'); return; }
 
     const statusDiv = document.getElementById('fgtPrevTokenStatus');
-    statusDiv.textContent = currentLang === 'en' ? 'Testing...' : 'Test in corso...';
+    statusDiv.textContent = tr('fgtTesting');
     statusDiv.style.color = 'var(--text-muted)';
 
     const res = await apiFetch(`/api/fortigate/${encodeURIComponent(ip)}/status`);
@@ -799,14 +790,14 @@ async function testFgtPrevToken() {
         }
         let msg = `Test OK (${source}): ${hostname} v${version}`;
         if (source === 'ssh' && data.api_error) {
-            msg += currentLang === 'en' ? ` — REST API failed: ${data.api_error}` : ` — REST API fallita: ${data.api_error}`;
+            msg += tr('fgtRestApiFailed', {api_error: data.api_error});
         }
         showToast(msg, 'success');
         statusDiv.textContent = msg;
         statusDiv.style.color = 'var(--success)';
     } else {
         const err = res ? await res.json().catch(() => ({})) : {};
-        const msg = `${currentLang === 'en' ? 'Test failed: ' : 'Test fallito: '}${err.detail || (currentLang === 'en' ? 'Device unreachable' : 'Dispositivo non raggiungibile')}`;
+        const msg = `${tr('fgtTestFailed')}${err.detail || (tr('fgtDeviceUnreachable'))}`;
         showToast(msg, 'error');
         statusDiv.textContent = msg;
         statusDiv.style.color = 'var(--danger)';
@@ -870,11 +861,11 @@ function openFgtManageModal() {
     populateFgtMgrDeviceSelect();
     resetFgtMgrForm();
     renderFgtMgrTable();
-    document.getElementById('fgtManageModal').style.display = 'flex';
+    openModal('fgtManageModal');
 }
 
 function closeFgtManageModal() {
-    document.getElementById('fgtManageModal').style.display = 'none';
+    closeModal('fgtManageModal');
 }
 
 function populateFgtMgrDeviceSelect() {
@@ -927,7 +918,7 @@ function renderFgtMgrTable() {
                 <span class="fgt-mgr-test-result" style="margin-left:6px; font-size:11px;"></span>
             </td>
             <td style="padding:8px 12px; text-align:right; white-space:nowrap;">
-                <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-fgt-action="edit-target" data-ip="${ip}" title="${currentLang === 'en' ? 'Edit' : 'Modifica'}"><i class="fa-solid fa-pen"></i></button>
+                <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-fgt-action="edit-target" data-ip="${ip}" title="${tr('uiEdit')}"><i class="fa-solid fa-pen"></i></button>
                 <button type="button" class="btn btn-danger btn-small" style="width:auto; margin:0;" data-fgt-action="delete-target" data-ip="${ip}">${L.btnFgtMgrDelete || '<i class="fa-solid fa-trash"></i>'}</button>
             </td>
         </tr>`;
@@ -974,8 +965,8 @@ async function saveFgtMgrTarget() {
     const st = document.getElementById('fgtMgrStatus');
     const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
 
-    if (!ip) { showToast(currentLang === 'en' ? 'Select a FortiGate device' : 'Selezionare un dispositivo FortiGate', 'warning'); return; }
-    if (port < 1 || port > 65535) { showToast(currentLang === 'en' ? 'Invalid port (1-65535)' : 'Porta non valida (1-65535)', 'error'); return; }
+    if (!ip) { showToast(tr('fgtSelectAFortigateDevice'), 'warning'); return; }
+    if (port < 1 || port > 65535) { showToast(tr('fgtInvalidPort'), 'error'); return; }
 
     let res;
     if (editIp) {
@@ -987,7 +978,7 @@ async function saveFgtMgrTarget() {
         });
     } else {
         // Nuovo target: il token è obbligatorio (flusso esistente di creazione).
-        if (!token) { showToast(currentLang === 'en' ? 'Enter a token' : 'Inserire un token', 'warning'); return; }
+        if (!token) { showToast(tr('fgtEnterAToken'), 'warning'); return; }
         res = await apiFetch('/api/fortigate/token', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ip, token, port, verify_tls: verifyTls, name })
@@ -1002,7 +993,7 @@ async function saveFgtMgrTarget() {
         populateFgtPrevDeviceSelects();
     } else {
         const err = res ? await res.json().catch(() => ({})) : {};
-        showToast(`${currentLang === 'en' ? 'Error: ' : 'Errore: '}${err.detail || ''}`, 'error');
+        showToast(`${tr('uiError')}${err.detail || ''}`, 'error');
     }
 }
 
@@ -1023,7 +1014,7 @@ async function testFgtMgrTarget(ip, btn) {
     const row = btn.closest('tr');
     const resultSpan = row ? row.querySelector('.fgt-mgr-test-result') : null;
     const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
-    if (resultSpan) resultSpan.textContent = currentLang === 'en' ? 'Testing...' : 'Test in corso...';
+    if (resultSpan) resultSpan.textContent = tr('fgtTesting');
     const res = await apiFetch(`/api/fortigate/targets/${encodeURIComponent(ip)}/test`, { method: 'POST' });
     const data = res ? await res.json().catch(() => ({ ok: false })) : { ok: false };
     if (resultSpan) {
@@ -1050,7 +1041,7 @@ async function deleteFgtMgrTarget(ip) {
         populateFgtPrevDeviceSelects();
     } else {
         const err = res ? await res.json().catch(() => ({})) : {};
-        showToast(`${currentLang === 'en' ? 'Error: ' : 'Errore: '}${err.detail || ''}`, 'error');
+        showToast(`${tr('uiError')}${err.detail || ''}`, 'error');
     }
 }
 
@@ -1119,18 +1110,17 @@ async function renderFgtOverview() {
     const ip = fgtCurrentTarget();
     const host = document.getElementById('fgtOverviewTiles');
     const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
-    const en = currentLang === 'en';
     if (!host) return;
     if (!ip) {
         host.style.display = 'block';
-        host.innerHTML = _fgtEmpty(L.msgFgtNoTarget || (en ? 'No target configured.' : 'Nessun target configurato.'));
+        host.innerHTML = _fgtEmpty(L.msgFgtNoTarget || (tr('fgtNoTargetConfigured')));
         return;
     }
     if (!fgtConnectedTarget || fgtConnectedTarget !== ip) {
         host.style.display = 'block';
         host.innerHTML = `<div class="panel" style="text-align:center; padding:32px; color:var(--text-muted); font-size:13.5px;">
             <i class="fa-solid fa-shield-halved fa-2x" style="color:var(--primary); margin-bottom:12px; opacity:0.7; display:block;"></i>
-            ${escapeHtml(L.fgtSelectPrompt || (en ? 'Target selected. Click "Query FortiGate (API)" to start API calls and load telemetry.' : 'Target selezionato. Clicca "Interroga FortiGate (API)" per avviare le chiamate API e caricare la telemetria.'))}
+            ${escapeHtml(L.fgtSelectPrompt || (tr('fgtTargetSelectedClickQuery2')))}
         </div>`;
         return;
     }
@@ -1165,7 +1155,7 @@ async function renderFgtOverview() {
     const haBody = !hstat
         ? plain(null)
         : FGT_FMT.badge(hstat) + (inSync === null ? '' :
-            ` ${FGT_FMT.badge(inSync ? (en ? 'in-sync' : 'in-sync') : 'out-of-sync')}`);
+            ` ${FGT_FMT.badge(inSync ? (tr('fgtInSync')) : 'out-of-sync')}`);
 
     host.style.display = 'grid';
     host.style.gridTemplateColumns = 'repeat(auto-fit, minmax(190px, 1fr))';
@@ -1175,9 +1165,9 @@ async function renderFgtOverview() {
         tile('FortiOS', plain(s.version)) +
         tile('HA', haBody) +
         tile('CPU', gauge(u.cpu)) +
-        tile(en ? 'Memory' : 'Memoria', gauge(u.mem)) +
-        tile(en ? 'Disk' : 'Disco', gauge(u.disk)) +
-        tile(en ? 'Sessions' : 'Sessioni', plain(num(u.session)));
+        tile(tr('fgtMemory'), gauge(u.mem)) +
+        tile(tr('fgtDisk'), gauge(u.disk)) +
+        tile(tr('fgtSessions'), plain(num(u.session)));
 
     loadFgtDataset('resources');
     loadFgtDataset('ha');
@@ -1186,16 +1176,15 @@ async function renderFgtOverview() {
 async function connectAndLoadFgt() {
     const ip = fgtCurrentTarget();
     const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
-    const en = currentLang === 'en';
     if (!ip) {
-        showToast(en ? 'Select a FortiGate target first.' : 'Seleziona prima un target FortiGate.', 'warning');
+        showToast(tr('fgtSelectAFortigateTarget'), 'warning');
         return;
     }
     const btn = document.getElementById('btnFgtConnect');
     const origHtml = btn ? btn.innerHTML : '';
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${en ? 'Querying...' : 'Interrogazione...'}`;
+        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${tr('uiQuerying')}`;
     }
     try {
         await apiFetch('/api/fortigate/targets/active', {
@@ -1210,10 +1199,10 @@ async function connectAndLoadFgt() {
             const key = FGT_PANE_DEFAULT[fgtPane];
             if (key) loadFgtDataset(key);
         }
-        showToast(en ? 'FortiGate API queried successfully.' : 'Chiamata API FortiGate completata.', 'success');
+        showToast(tr('fgtFortigateApiQueriedSuccessfully'), 'success');
     } catch (e) {
         console.error('Errore chiamata API FortiGate:', e);
-        showToast((en ? 'Error querying FortiGate API: ' : 'Errore durante la chiamata API FortiGate: ') + ((e && e.message) || e), 'error');
+        showToast((tr('fgtErrorQueryingFortigateApi')) + ((e && e.message) || e), 'error');
     } finally {
         if (btn) {
             btn.disabled = false;

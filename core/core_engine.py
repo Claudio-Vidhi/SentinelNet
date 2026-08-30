@@ -11,125 +11,44 @@ from services.inventory_manager import (
     update_device_hostname, get_all_vendors, get_category_assignments,
     parse_transports, CATEGORIES_FILE,
 )
-from drivers.cisco_ios import CiscoIosDriver
-from drivers.cisco_cbs import CiscoCbsDriver
-from drivers.hp_procurve import HpProcurveDriver
-from drivers.juniper_junos import JuniperJunosDriver
-from drivers.aruba_os import ArubaOsDriver
-from drivers.fortinet import FortinetDriver
-from drivers.cisco_wlc import CiscoWlcDriver
-from drivers.paloalto_panos import PaloAltoDriver
-from drivers.linux import LinuxDriver, sanitize_session
-from security.crypto_vault import decrypt_password
+from drivers.linux import sanitize_session
+# Vendor → driver → netmiko mapping lives in the drivers layer (plan Phase 3
+# items 12/15); re-imported here because existing call sites import these
+# names from core_engine.
+from drivers.registry import (  # noqa: F401 (reimport contract)
+    DRIVER_REGISTRY, VENDOR_DRIVER_DEFAULTS, resolve_driver,
+)
 from services import site_manager
 from security.security_manager import log_audit
 from core import data_config
 
-BACKUP_FOLDER = data_config.get_path('backup-config')
 logging.basicConfig(filename=data_config.get_path('error_log.txt'), level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
-if not os.path.exists(BACKUP_FOLDER):
-    os.makedirs(BACKUP_FOLDER)
-
-DEFAULT_USERNAME = os.getenv("SENTINELNET_ADMIN_USER", "admin")
-DEFAULT_PASSWORD = os.getenv("SENTINELNET_ADMIN_PASS", "admin")
-DEFAULT_SECRET   = os.getenv("SENTINELNET_ADMIN_SECRET", "admin")
+# Plan Phase 3 item 12: the credential fallback chain lives in
+# core/device_credentials.py and the backup storage in core/backup_store.py.
+# The names stay re-exported here: call sites and test patch points keep
+# working unchanged.
+from core.device_credentials import (  # noqa: F401 (re-export)
+    DEFAULT_USERNAME, DEFAULT_PASSWORD, DEFAULT_SECRET,
+    CredentialDecryptError, get_device_credentials,
+)
+# BACKUP_FOLDER is a re-exported VALUE, so this name and
+# core.backup_store.BACKUP_FOLDER are two bindings of the same string.
+# Redirecting the backup tree (tests) must patch core.backup_store.BACKUP_FOLDER:
+# patching it here changes only the scans below, and save_backup would keep
+# writing into the real tree.
+from core.backup_store import (  # noqa: F401 (re-export)
+    BACKUP_FOLDER, sanitize_filename, group_backup_dir, save_backup,
+    remove_stale_backups, maybe_mirror_offsite,
+)
 
 # Substring blacklist applied to commands sent by an operator.
 # This is not a sandbox — it is a parachute against a destructive command typed
 # by mistake on twenty devices at once; an admin can override it.
-# ponytail: substring matching, so it does not cover variants ('rm -fr',
-# '--recursive'). If real coverage were needed, the path is a per-vendor
-# allowlist, not a longer blacklist.
-DANGEROUS_COMMANDS = [
-    # Network CLI
-    "write erase", "reload", "delete", "format", "no boot", "erase",
-    # Linux: without these, a managed host has no protection net.
-    # 'shutdown' is NOT included: on Cisco it is the normal command to shut down a
-    # port, and blocking it would break everyday use.
-    "rm -rf", "mkfs", "dd if=", "shred ", "reboot", "poweroff", ":(){",
-]
+# Lists and matchers of the whole dangerous-command policy live in ONE place:
+# security/command_policy.py (WP5). This alias keeps the old public name.
+from security.command_policy import SYSTEM_SUBSTRINGS as DANGEROUS_COMMANDS
 
-def sanitize_filename(filename: str) -> str:
-    sanitized = ''.join(
-        '_' if char in r'\/:*?"<>| ' else char
-        for char in filename
-        if ord(char) > 31
-    )
-    return sanitized or "device_unknown"
-
-def group_backup_dir(group: str, vendor: Optional[str] = None) -> str:
-    """Backup folder dedicated to a group/site, with subfolder per
-    vendor (backup-config/<group>/<vendor>/), created if absent."""
-    path = os.path.join(BACKUP_FOLDER, sanitize_filename(group or "Generale"))
-    if vendor:
-        path = os.path.join(path, sanitize_filename(vendor.lower()))
-    os.makedirs(path, exist_ok=True)
-    return path
-
-def save_backup(device, sys_name: str, config_out: str) -> str:
-    """Saves the text backup in backup-config/<group>/<vendor>/<name>-<ip>.txt,
-    moving first any residual copies of the same IP elsewhere within the tenant."""
-    ip = device['IP']
-    tenant = device.get('Group', 'Generale')
-    group_dir = group_backup_dir(tenant, device.get('Vendor', ''))
-    target_name = f"{sanitize_filename(sys_name)}-{ip}.txt"
-    remove_stale_backups(ip, new_dir=group_dir, keep=target_name, tenant=tenant)
-    file_path = os.path.join(group_dir, target_name)
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.write(config_out)
-    return file_path
-
-def remove_stale_backups(ip: str, new_dir: Optional[str] = None, keep: Optional[str] = None, tenant: Optional[str] = None):
-    """Move a device's backup and its history when it changes vendor or hostname.
-
-    Scoped strictly to the device's tenant: never walks or moves directories
-    belonging to a different tenant.
-    """
-    if not os.path.exists(BACKUP_FOLDER):
-        return
-    if tenant is not None:
-        walk_root = os.path.join(BACKUP_FOLDER, sanitize_filename(tenant or "Generale"))
-        if not os.path.exists(walk_root):
-            return
-    else:
-        walk_root = BACKUP_FOLDER
-
-    for root, _dirs, files in os.walk(walk_root):
-        in_dest = new_dir and os.path.abspath(root) == os.path.abspath(new_dir)
-        for f in files:
-            if not (f.endswith(f"-{ip}.txt") or f.endswith(f"_{ip}.txt") or f == f"{ip}.txt"):
-                continue
-            if in_dest and f == keep:
-                continue
-            src = os.path.join(root, f)
-            try:
-                if new_dir and not in_dest:
-                    os.makedirs(new_dir, exist_ok=True)
-                    os.replace(src, os.path.join(new_dir, f))
-                else:
-                    os.remove(src)
-            except OSError as e:
-                logging.warning(f"Backup obsoleto non spostato ({f}): {e}")
-        if not in_dest:
-            _move_history(root, ip, new_dir)
-
-
-def _move_history(root: str, ip: str, new_dir: Optional[str]) -> None:
-    """Carry the device's .history entries across with its current backup."""
-    src_hist = os.path.join(root, ".history")
-    if not new_dir or not os.path.isdir(src_hist):
-        return
-    dst_hist = os.path.join(new_dir, ".history")
-    if os.path.abspath(src_hist) == os.path.abspath(dst_hist):
-        return
-    os.makedirs(dst_hist, exist_ok=True)
-    for f in os.listdir(src_hist):
-        if f"-{ip}." in f or f.startswith(f"{ip}-"):
-            try:
-                os.replace(os.path.join(src_hist, f), os.path.join(dst_hist, f))
-            except OSError as e:
-                logging.warning(f"Storico non spostato ({f}): {e}")
 
 def _failure_status(exc) -> str:
     """Inventory status for a failed triage: 'auth_failed' or 'offline'.
@@ -145,113 +64,6 @@ def _failure_status(exc) -> str:
     return "auth_failed" if ("auth" in msg or "credentials" in msg
                              or "credenziali" in msg) else "offline"
 
-
-def _fallback_credentials(device):
-    """Credentials to use when the device row names none of its own.
-
-    A site may declare a default identity for the devices behind it
-    (site_manager: 'device_identity'). Without it the only fallback is the
-    global admin account, which for a customer site behind a bastion means
-    dialling that customer's devices with this installation's default
-    login — the wrong credential, sent to the right device.
-    """
-    # hosts.csv rows carry 'Site'; the get_device_by_ip cache carries 'site'
-    # (see services/inventory_manager.py). Both shapes reach this function.
-    site_id = device.get('Site') or device.get('site') or ''
-    if site_id:
-        from services import site_manager
-        from security import identity_manager
-        site = site_manager.get_site(site_id)
-        identity = (site or {}).get('device_identity')
-        if identity:
-            creds = identity_manager.get_identity_credentials(identity)
-            if creds:
-                return creds
-    return DEFAULT_USERNAME, DEFAULT_PASSWORD, DEFAULT_SECRET
-
-
-def get_device_credentials(device):
-    profile = device.get('Profile', 'custom').lower()
-    if profile == 'default':
-        return _fallback_credentials(device)
-    if profile.startswith('identity:'):
-        # Tenant identity (identity_manager): fallback to the site default if
-        # the identity no longer exists (it should not: delete is blocked if in use).
-        from security import identity_manager
-        creds = identity_manager.get_identity_credentials(
-            device.get('Profile', '')[len('identity:'):])
-        if creds:
-            return creds
-        return _fallback_credentials(device)
-    fb_user, fb_pass, fb_secret = _fallback_credentials(device)
-    username = device.get('Username') or fb_user
-    password = decrypt_password(device.get('Password')) or fb_pass
-    secret   = decrypt_password(device.get('Enable Secret')) or fb_secret
-    return username, password, secret
-
-# --- REGISTRY DRIVER ↔ NETMIKO ---
-# Maps the driver-name (vendor registry 'driver' field) to the driver class and
-# the corresponding netmiko device_type. Adding a new driver here is
-# enough to make it selectable from the whole system.
-DRIVER_REGISTRY = {
-    'cisco_ios':      (CiscoIosDriver,   'cisco_ios'),
-    'cisco_s300':     (CiscoCbsDriver,   'cisco_s300'),
-    'hp_procurve':    (HpProcurveDriver, 'hp_procurve'),
-    'juniper_junos':  (JuniperJunosDriver, 'juniper_junos'),
-    'aruba_os':       (ArubaOsDriver,    'aruba_os'),
-    'fortinet':       (FortinetDriver,   'fortinet'),
-    'paloalto_panos': (PaloAltoDriver,   'paloalto_panos'),
-    'cisco_wlc':      (CiscoWlcDriver,   'cisco_wlc_ssh'),   # AireOS
-    'cisco_9800':     (CiscoIosDriver,   'cisco_xe'),        # Catalyst 9800 (IOS-XE)
-    'linux':          (LinuxDriver,      'linux'),
-}
-
-# Fallback vendor-name → driver-name, used when the vendor registry does not
-# specify a driver (e.g. installations with legacy vendors.json or 'driver': null).
-VENDOR_DRIVER_DEFAULTS = {
-    'cisco':    'cisco_ios',
-    'cisco_cbs': 'cisco_s300',
-    'hpe':      'hp_procurve',
-    'hp':       'hp_procurve',
-    'juniper':  'juniper_junos',
-    'aruba':    'aruba_os',
-    'fortinet': 'fortinet',
-    'paloalto': 'paloalto_panos',
-    'cisco_wlc': 'cisco_wlc',
-    'cisco_9800': 'cisco_9800',
-    'linux':    'linux',
-}
-
-def resolve_driver(vendor):
-    """Resolves a vendor into the (driver class, netmiko device_type) pair.
-
-    Resolution order:
-      1. 'driver' field of the vendor registry (get_all_vendors)
-      2. fallback vendor-name → driver (VENDOR_DRIVER_DEFAULTS)
-    Raises ValueError if no driver is associated with the vendor.
-    """
-    from services import inventory_manager
-    vendor = inventory_manager.normalize_vendor(vendor)
-
-    driver_name = None
-    try:
-        vendors = get_all_vendors()
-        entry = vendors.get(vendor)
-        if entry:
-            driver_name = entry.get('driver')
-    except Exception:
-        pass
-
-    if not driver_name:
-        driver_name = VENDOR_DRIVER_DEFAULTS.get(vendor)
-
-    spec = DRIVER_REGISTRY.get(driver_name) if driver_name else None
-    if not spec:
-        raise ValueError(
-            f"Vendor '{vendor}' non supportato: nessun driver associato "
-            f"(driver='{driver_name}')."
-        )
-    return spec
 
 def get_device_port(device) -> int:
     """SSH port of the device from inventory ('SSH Port'), fallback 22."""
@@ -2403,25 +2215,4 @@ def _generate_network_map(group_filter=None) -> dict:
 def invalidate_netmap_cache():
     _netmap_cache["by_filter"] = {}
     _pcreport_cache["by_filter"] = {}
-
-
-def maybe_mirror_offsite() -> None:
-    """Runs the offsite mirror after a backup cycle, when configured.
-
-    Imported lazily and never allowed to raise: the mirror is redundancy, and a
-    broken remote must not turn a successful backup collection into a failed
-    one. The failure is recorded in the mirror's own state and shown in its
-    status panel.
-    """
-    try:
-        from services import cloud_backup
-        from services.cloud_backup import settings as cb_settings
-        cfg = cb_settings.read()
-        if not (cfg.get("enabled") and cfg.get("run_after_backup")):
-            return
-        result = cloud_backup.run_mirror()
-        if not result.get("ok"):
-            logging.warning("[cloud_backup] mirror non riuscito: %s", result.get("error"))
-    except Exception as exc:
-        logging.warning("[cloud_backup] mirror non eseguito: %s", exc)
 
