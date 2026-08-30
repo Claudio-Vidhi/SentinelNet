@@ -3529,75 +3529,72 @@
         </div>
         <div style="display:flex; gap:8px; align-items:center;">
           <span id="ifTabStatus" style="font-size:12px; color:var(--primary); font-weight:600;"></span>
+          <span id="ifUpdatedAt" class="if-updated"></span>
           <button id="ifBtnRefresh" class="btn btn-secondary btn-sm" style="margin:0;">
             <i class="fa-solid fa-rotate"></i> <span data-i18n="ifBtnRefresh">Aggiorna</span>
           </button>
         </div>
       </div>
 
-      <!-- Health Cards -->
-      <div class="hero" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin-bottom:18px;">
-        <div class="hero-card if-stat" data-if-filter="all">
-          <div class="if-stat-label" data-i18n="ifCardTotal">Totale Porte</div>
-          <div class="if-stat-value" id="ifCardTotal">0</div>
-        </div>
-        <div class="hero-card if-stat state-up" data-if-filter="up">
-          <div class="if-stat-label" data-i18n="ifCardUp">Operative (UP)</div>
-          <div class="if-stat-value" id="ifCardUp">0</div>
-        </div>
-        <div class="hero-card if-stat state-outage" data-if-filter="outage">
-          <div class="if-stat-label" data-i18n="ifCardOutage">Interruzioni Impreviste</div>
-          <div class="if-stat-value" id="ifCardOutage">0</div>
-        </div>
-        <div class="hero-card if-stat state-flap" data-if-filter="flapping">
-          <div class="if-stat-label" data-i18n="ifCardFlap">Instabili (Flapping)</div>
-          <div class="if-stat-value" id="ifCardFlap">0</div>
-        </div>
-        <div class="hero-card if-stat state-maint" data-if-filter="maint">
-          <div class="if-stat-label" data-i18n="ifCardMaint">In Manutenzione</div>
-          <div class="if-stat-value" id="ifCardMaint">0</div>
-        </div>
-        <div class="hero-card if-stat state-idle" data-if-filter="by_design">
-          <div class="if-stat-label" data-i18n="ifCardByDesign">Spente per Progetto</div>
-          <div class="if-stat-value" id="ifCardByDesign">0</div>
-        </div>
-        <div class="hero-card if-stat state-unknown" data-if-filter="unknown">
-          <div class="if-stat-label" data-i18n="ifCardUnknown">Stato Non Determinato</div>
-          <div class="if-stat-value" id="ifCardUnknown">0</div>
-        </div>
+      <!-- Stato: i cartelli SONO il filtro. Sotto c'era una seconda fila di
+           chip che faceva la stessa cosa, e occupava la barra dove ora stanno
+           i filtri veri. -->
+      <div class="if-stats" role="group" aria-label="Filtra per stato" data-i18n-aria-label="ifStatsAria">
+        <button type="button" class="if-stat active" data-if-filter="all" aria-pressed="true">
+          <span class="if-stat-label" data-i18n="ifCardTotal">Totale Porte</span>
+          <span class="if-stat-value" id="ifCardTotal">0</span>
+        </button>
+        <button type="button" class="if-stat state-up" data-if-filter="up" aria-pressed="false">
+          <span class="if-stat-label" data-i18n="ifCardUp">Operative (UP)</span>
+          <span class="if-stat-value" id="ifCardUp">0</span>
+        </button>
+        <button type="button" class="if-stat state-outage" data-if-filter="outage" aria-pressed="false">
+          <span class="if-stat-label" data-i18n="ifCardOutage">Interruzioni Impreviste</span>
+          <span class="if-stat-value" id="ifCardOutage">0</span>
+        </button>
+        <button type="button" class="if-stat state-flap" data-if-filter="flapping" aria-pressed="false">
+          <span class="if-stat-label" data-i18n="ifCardFlap">Instabili (Flapping)</span>
+          <span class="if-stat-value" id="ifCardFlap">0</span>
+        </button>
+        <button type="button" class="if-stat state-maint" data-if-filter="maint" aria-pressed="false">
+          <span class="if-stat-label" data-i18n="ifCardMaint">In Manutenzione</span>
+          <span class="if-stat-value" id="ifCardMaint">0</span>
+        </button>
+        <button type="button" class="if-stat state-idle" data-if-filter="by_design" aria-pressed="false">
+          <span class="if-stat-label" data-i18n="ifCardByDesign">Spente per Progetto</span>
+          <span class="if-stat-value" id="ifCardByDesign">0</span>
+        </button>
+        <button type="button" class="if-stat state-unknown" data-if-filter="unknown" aria-pressed="false">
+          <span class="if-stat-label" data-i18n="ifCardUnknown">Stato Non Determinato</span>
+          <span class="if-stat-value" id="ifCardUnknown">0</span>
+        </button>
       </div>
 
       <p id="ifTruncatedNote" class="if-truncated" hidden></p>
 
-      <!-- Controls & Search Toolbar -->
-      <div class="panel" style="padding:12px 16px; margin-bottom:14px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-          <!-- Filter Chips -->
-          <div style="display:flex; gap:6px; flex-wrap:wrap;">
-            <button class="btn btn-secondary btn-sm active" data-if-filter="all" style="margin:0; font-size:11px; font-weight:600;" data-i18n="ifFilterAll">Tutte</button>
-            <button class="btn btn-secondary btn-sm" data-if-filter="outage" style="margin:0; font-size:11px; font-weight:600; color:var(--danger);" data-i18n="ifFilterOutages">Solo Interruzioni</button>
-            <button class="btn btn-secondary btn-sm" data-if-filter="flapping" style="margin:0; font-size:11px; font-weight:600; color:var(--warning);" data-i18n="ifFilterFlap">Solo Flapping</button>
-            <button class="btn btn-secondary btn-sm" data-if-filter="maint" style="margin:0; font-size:11px; font-weight:600; color:var(--primary);" data-i18n="ifFilterMaint">In Manutenzione</button>
-            <button class="btn btn-secondary btn-sm" data-if-filter="by_design" style="margin:0; font-size:11px; font-weight:600;" data-i18n="ifFilterByDesign">Per Progetto</button>
-            <button class="btn btn-secondary btn-sm" data-if-filter="up" style="margin:0; font-size:11px; font-weight:600; color:var(--success);" data-i18n="ifFilterUp">Operative (UP)</button>
-            <button class="btn btn-secondary btn-sm" data-if-filter="unknown" style="margin:0; font-size:11px; font-weight:600;" data-i18n="ifFilterUnknown">Stato Ignoto</button>
-          </div>
-
-          <!-- Search & Preset Dropdown -->
-          <div style="display:flex; gap:8px; align-items:center; flex-grow:1; justify-content:flex-end; max-width:500px;">
-            <div class="input-wrapper" style="margin:0; flex-grow:1;">
-              <i class="fa-solid fa-magnifying-glass"></i>
-              <input type="text" id="ifSearchInput" placeholder="Cerca apparato, IP, porta, nota..." data-i18n-placeholder="ifSearchPl" aria-label="Cerca interfacce" data-i18n-aria-label="ifSearchAria" style="font-size:12px; padding:6px 10px 6px 30px;">
-            </div>
-            <select id="ifPresetSelect" aria-label="Preset rapido manutenzione" data-i18n-aria-label="ifPresetAria" style="padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px; cursor:pointer;">
-              <option value="" selected data-i18n="ifOptPresetPlaceholder">Preset Rapido Selezionate...</option>
-              <option value="1" data-i18n="ifOptPreset1h">Manutenzione +1 Ora</option>
-              <option value="2" data-i18n="ifOptPreset2h">Manutenzione +2 Ore</option>
-              <option value="4" data-i18n="ifOptPreset4h">Manutenzione +4 Ore</option>
-              <option value="24" data-i18n="ifOptPreset24h">Manutenzione +24 Ore</option>
-              <option value="permanent" data-i18n="ifOptPresetPermanent">Perenne (Non Usata / Progetto)</option>
+      <!-- Ambito: chi e dove, prima del testo libero -->
+      <div class="panel if-toolbar">
+        <div class="if-scope">
+          <div class="if-field">
+            <label class="if-field-label" for="ifTenantFilter" data-i18n="ifScopeTenant">Tenant</label>
+            <select id="ifTenantFilter" class="if-select">
+              <option value="all" data-i18n="ifScopeAll">Tutti</option>
             </select>
           </div>
+          <div class="if-field">
+            <label class="if-field-label" for="ifDeviceFilter" data-i18n="ifScopeDevice">Apparato</label>
+            <select id="ifDeviceFilter" class="if-select">
+              <option value="all" data-i18n="ifScopeAll">Tutti</option>
+            </select>
+          </div>
+          <div class="if-field if-field-grow">
+            <label class="if-field-label" for="ifSearchInput" data-i18n="ifScopeSearch">Cerca</label>
+            <div class="input-wrapper if-search">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" id="ifSearchInput" placeholder="apparato, IP, porta, nota" data-i18n-placeholder="ifSearchPl">
+            </div>
+          </div>
+          <p class="if-matchcount" id="ifMatchCount"></p>
         </div>
 
         <!-- Bulk Actions Bar -->
@@ -3606,7 +3603,15 @@
             <i class="fa-solid fa-check-double" style="color:var(--primary); margin-right:6px;"></i>
             <span id="ifSelectedCount">0</span> <span data-i18n="ifSelectedLabel">interfacce selezionate</span>
           </div>
-          <div style="display:flex; gap:6px;">
+          <div style="display:flex; gap:6px; align-items:center;">
+            <select id="ifPresetSelect" class="if-select" aria-label="Preset rapido manutenzione" data-i18n-aria-label="ifPresetAria">
+              <option value="" selected data-i18n="ifOptPresetPlaceholder">Preset Rapido Selezionate...</option>
+              <option value="1" data-i18n="ifOptPreset1h">Manutenzione +1 Ora</option>
+              <option value="2" data-i18n="ifOptPreset2h">Manutenzione +2 Ore</option>
+              <option value="4" data-i18n="ifOptPreset4h">Manutenzione +4 Ore</option>
+              <option value="24" data-i18n="ifOptPreset24h">Manutenzione +24 Ore</option>
+              <option value="permanent" data-i18n="ifOptPresetPermanent">Perenne (Non Usata / Progetto)</option>
+            </select>
             <button id="ifBtnBulkSave" class="btn btn-primary btn-sm" style="margin:0; font-size:11px;">
               <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="ifBtnBulkSave">Applica Modifiche</span>
             </button>
