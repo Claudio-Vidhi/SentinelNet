@@ -1,9 +1,5 @@
 # SentinelNet
 
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](pyproject.toml)
-[![Docker image](https://img.shields.io/badge/Docker-claudiovidhi%2Fsentinelnet-2496ED.svg)](https://hub.docker.com/r/claudiovidhi/sentinelnet)
-
 > Self-hosted network management, observability, backup automation and
 > vulnerability intelligence for sysadmins and small IT teams.
 
@@ -14,6 +10,18 @@ NIST NVD vulnerability database — and it collects passive network telemetry
 (NetFlow, IPFIX, sFlow, syslog, SNMP), correlates it with deterministic rules,
 and turns it into explainable incidents. Everything is reachable from a single
 browser console.
+
+![The operational posture dashboard](docs/images/dashboard.png)
+
+The console on a fresh install: posture verdicts across the fleet, the one-line
+diagram and the attention queue. Every screenshot on this page is a clean
+install with no devices yet — this is what you get on first run, not a
+populated demo.
+
+| | |
+|---|---|
+| ![First run](docs/images/first-run.png) | ![Network inventory](docs/images/inventory.png) |
+| First run asks for one local administrator account. No cloud sign-up, no licence key. | The inventory, where devices are added, triaged, pinged, scanned and exported. |
 
 ---
 
@@ -330,20 +338,6 @@ verify these files are excluded:
 - `groups.json` — configured groups and sites
 - `secret.key` / `jwt_secret.key` — local cryptographic keys
 - `users.json` — local administrator accounts
-
----
-
-## Contributing
-
-Bug reports and pull requests are welcome. Read
-[CONTRIBUTING.md](CONTRIBUTING.md) first: it carries the binding rules
-(language convention, the dual exe/Docker artifact, the async-DB rule, the
-multi-group scope rule). Security issues go through
-[SECURITY.md](SECURITY.md), never a public issue.
-
-Note on branches: `master` is the public branch and carries the product with
-the development-only files stripped, so **it ships no test suite**. The tests
-live on `Dev`, which is otherwise identical — verify there, then port.
 
 ---
 
