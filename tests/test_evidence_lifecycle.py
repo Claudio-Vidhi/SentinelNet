@@ -270,3 +270,49 @@ class TestRuleCatalogAndThresholds(_Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLinkVocabulary(_Base):
+    """ifOperStatus has seven values, and the rule tested three of them.
+
+    IFACE_DOWN_001 fired only when the new value was "down"/"0"/"false", so a
+    port that dropped to lowerLayerDown (the layer beneath it failed) or to
+    notPresent (the transceiver was pulled) produced no symptom, no evidence
+    and no incident. Same defect as the one fixed in the Interfaces tab, one
+    layer further in: there it made the count wrong, here it means the estate
+    is quiet about a port that is genuinely gone.
+    """
+
+    def _snapshot(self, conn, link, ts):
+        conn.execute(
+            "INSERT INTO api_observations (ts, tenant, device_ip, kind, "
+            "summary_json) VALUES (?, 'sede-a', '10.1.0.254', 'interfaces', ?)",
+            (ts, json.dumps({"results": {"port1": {"link": link}}})))
+
+    def _fell_to(self, state):
+        conn = db.get_observability_connection()
+        self._snapshot(conn, "up", NOW - 900)
+        self._snapshot(conn, state, NOW - 600)
+        conn.commit()
+        conn.close()
+        with patch("collectors.mac_history.client_map", return_value=[]):
+            correlator.correlate_once(NOW)
+        return self._rows(
+            "SELECT * FROM evidence WHERE rule_id = 'IFACE_DOWN_001'")
+
+    def test_every_value_that_means_not_up_raises_the_symptom(self):
+        for state in ("down", "lowerLayerDown", "notPresent"):
+            with self.subTest(link=state):
+                self.setUp()
+                self.assertEqual(
+                    len(self._fell_to(state)), 1,
+                    f"a port that went to {state} produced no symptom")
+
+    def test_a_value_that_is_merely_not_up_does_not(self):
+        """dormant and testing are not faults: alarming on them would train
+        the operator to ignore the rule."""
+        for state in ("dormant", "testing"):
+            with self.subTest(link=state):
+                self.setUp()
+                self.assertEqual(len(self._fell_to(state)), 0,
+                                 f"{state} is not a fault")

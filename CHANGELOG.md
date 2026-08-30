@@ -12,6 +12,13 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Fixed
 
+- **No incident was raised for a port that dropped to `lowerLayerDown` or
+  `notPresent`.** The rule matched only `down`/`0`/`false`, so a failed lower
+  layer or a pulled transceiver produced no symptom, no evidence and no
+  incident — the estate stayed quiet about a port that was genuinely gone. The
+  link vocabulary now lives in one place, shared by the rule that raises the
+  incident and the view that counts the ports, so the two cannot drift.
+
 - **Interfaces & Expected State: ports that were not up were shown, and
   counted, as operational.** Only `down`/`0`/`false` were treated as down and
   everything else fell through to UP, so a port whose transceiver had been
