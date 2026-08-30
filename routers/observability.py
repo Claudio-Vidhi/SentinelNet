@@ -616,9 +616,9 @@ async def obs_api_context(
             FROM api_observations
             WHERE device_ip = ?{clause}
               AND id IN (SELECT MAX(id) FROM api_observations
-                         WHERE device_ip = ? GROUP BY kind)
+                         WHERE device_ip = ?{clause} GROUP BY kind)
             ORDER BY kind""",
-        (device_ip, *params, device_ip))
+        (device_ip, *params, device_ip, *params))
     return {"device_ip": device_ip, "observations": [dict(r) for r in rows]}
 
 
