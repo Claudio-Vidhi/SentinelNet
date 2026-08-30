@@ -712,6 +712,19 @@ def _inventory_stamp() -> tuple:
     last_seen, e il referto vecchio passerebbe per buono. Gli id sono
     AUTOINCREMENT, quindi crescono anche dopo una cancellazione.
 
+    ``switch_if_macs`` non ha una colonna id (la chiave e' la tripla
+    mac/switch_ip/interface), quindi al posto del MAX(id) porta gli estremi
+    del MAC: una tabella riscritta per intero cambia almeno un estremo, ed e'
+    esattamente il caso che il paragrafo sopra descrive. Quella tabella decide
+    quali MAC sono infrastruttura, cioe' quali endpoint spariscono
+    dall'inventario: una collisione qui non invecchia un numero, cambia
+    l'elenco.
+
+    ponytail: gli estremi, non un hash della tabella. Uno scambio interamente
+    COMPRESO fra MIN e MAX, a parita' di conteggio e last_seen, collide
+    ancora; se un giorno servisse esatto, la strada e' una colonna id
+    AUTOINCREMENT anche qui, non un group_concat che scansiona tutto.
+
     Nel mucchio anche il file delle assegnazioni manuali, che decide
     ``client_type`` e non sta nel database."""
     from services import inventory_manager
@@ -724,7 +737,9 @@ def _inventory_stamp() -> tuple:
             "       (SELECT MAX(last_seen) FROM arp_entries),"
             "       (SELECT MAX(id) FROM arp_entries),"
             "       (SELECT COUNT(*) FROM switch_if_macs),"
-            "       (SELECT MAX(last_seen) FROM switch_if_macs)").fetchone()
+            "       (SELECT MAX(last_seen) FROM switch_if_macs),"
+            "       (SELECT MIN(mac) FROM switch_if_macs),"
+            "       (SELECT MAX(mac) FROM switch_if_macs)").fetchone()
     try:
         assign_mtime = os.path.getmtime(inventory_manager.CATEGORIES_FILE)
     except OSError:
