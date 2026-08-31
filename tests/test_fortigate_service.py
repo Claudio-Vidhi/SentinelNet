@@ -116,11 +116,99 @@ class ApiOrSshTest(unittest.TestCase):
         fgs.set_api_token(DEVICE["IP"], "tok")
         payload = {"results": {"policy_id": 7, "success": True}}
         with mock.patch.object(fgs.requests, "request", return_value=_resp(200, payload)) as m:
-            out = fgs.policy_lookup(DEVICE, "10.0.0.5", "example.com", dest_port=443)
+            out = fgs.policy_lookup(DEVICE, "10.0.0.5", "example.com",
+                                    dest_port=443, srcintf="port2")
         self.assertEqual(out["data"]["policy_id"], 7)
         params = m.call_args.kwargs["params"]
-        self.assertEqual(params["srcip"], "10.0.0.5")
+        # I nomi sono quelli di FortiOS, non quelli della CLI: `srcip` e un
+        # protocollo per nome facevano fallire la lookup con un 4xx che la UI
+        # rendeva come "non disponibile su questo dispositivo".
+        self.assertEqual(params["sourceip"], "10.0.0.5")
+        self.assertNotIn("srcip", params)
         self.assertEqual(params["dest"], "example.com")
+        self.assertEqual(params["srcintf"], "port2")
+        self.assertEqual(params["protocol"], 6)
+        self.assertEqual(params["destport"], 443)
+
+    def test_policy_lookup_icmp_sends_no_port(self):
+        params = fgs.policy_lookup_params("10.0.0.5", "8.8.8.8",
+                                          protocol="ICMP", srcintf="port2")
+        self.assertEqual(params["protocol"], 1)
+        self.assertNotIn("destport", params)
+
+    def test_policy_lookup_derives_ingress_interface_from_route(self):
+        """srcintf omesso: si deduce dalla rotta verso il client."""
+        fgs.set_api_token(DEVICE["IP"], "tok")
+        route = {"source": "api", "data": {"matched": True, "interface": "port3"}}
+        payload = {"results": {"policy_id": 4}}
+        with mock.patch.object(fgs, "get_route_for", return_value=route),              mock.patch.object(fgs.requests, "request", return_value=_resp(200, payload)) as m:
+            out = fgs.policy_lookup(DEVICE, "10.0.0.5", "example.com")
+        self.assertEqual(out["srcintf"], "port3")
+        self.assertEqual(m.call_args.kwargs["params"]["srcintf"], "port3")
+
+    def test_policy_lookup_without_interface_or_route_is_explicit(self):
+        fgs.set_api_token(DEVICE["IP"], "tok")
+        with mock.patch.object(fgs, "get_route_for",
+                               return_value={"data": {"matched": False}}):
+            with self.assertRaises(fgs.FortiGateError) as ctx:
+                fgs.policy_lookup(DEVICE, "10.0.0.5", "example.com")
+        self.assertIn("interfaccia di ingresso", str(ctx.exception))
+
+
+class PolicyAddressResolutionTest(unittest.TestCase):
+    """Gli indirizzi di una policy sono nomi di oggetti: la tabella deve
+    poterli mostrare come reti, senza aprire l'address book a parte."""
+
+    def test_subnet_and_range_become_literals(self):
+        self.assertEqual(
+            fgs._address_literal({"type": "ipmask", "subnet": "192.0.2.0 255.255.255.0"}),
+            "192.0.2.0/24")
+        self.assertEqual(
+            fgs._address_literal({"type": "iprange", "start-ip": "192.0.2.10",
+                                  "end-ip": "192.0.2.20"}),
+            "192.0.2.10-192.0.2.20")
+
+    def test_fqdn_has_no_literal(self):
+        """None, non il nome o una stringa vuota: un FQDN non HA un indirizzo
+        finche' non lo si risolve, e inventarne uno sarebbe peggio."""
+        self.assertIsNone(fgs._address_literal({"type": "fqdn", "fqdn": "example.com"}))
+        self.assertIsNone(fgs._address_literal({"type": "geography", "country": "IT"}))
+
+    def test_resolve_field_expands_names_and_all(self):
+        amap = {"LAN": "192.0.2.0/24", "port2 address": "198.51.100.1"}
+        self.assertEqual(fgs._resolve_addr_field([{"name": "LAN"}], amap), "192.0.2.0/24")
+        self.assertEqual(fgs._resolve_addr_field([{"name": "all"}], amap), "0.0.0.0/0")
+        self.assertEqual(fgs._resolve_addr_field([{"name": "port2 address"}], amap),
+                         "198.51.100.1")
+        self.assertIsNone(fgs._resolve_addr_field([{"name": "web-servers-fqdn"}], amap))
+
+    def test_interface_objects_come_from_the_interface_ip(self):
+        """"port2 address" non sta nell'address book: senza questo ramo la
+        policy della schermata resta illeggibile."""
+        with mock.patch.object(fgs, "get_firewall_addresses", return_value={"data": []}),              mock.patch.object(fgs, "get_interfaces",
+                               return_value={"data": [{"name": "port2",
+                                                       "ip": "198.51.100.1"}]}),              mock.patch.object(fgs, "get_address_groups", return_value={"data": []}):
+            amap = fgs._address_map(DEVICE)
+        self.assertEqual(amap["port2 address"], "198.51.100.1")
+
+    def test_group_expands_to_member_literals(self):
+        with mock.patch.object(fgs, "get_firewall_addresses", return_value={"data": [
+                {"name": "A", "type": "ipmask", "subnet": "192.0.2.0 255.255.255.0"},
+                {"name": "B", "type": "ipmask", "subnet": "198.51.100.0 255.255.255.0"}]}),              mock.patch.object(fgs, "get_interfaces", return_value={"data": []}),              mock.patch.object(fgs, "get_address_groups", return_value={"data": [
+                 {"name": "G", "member": [{"name": "A"}, {"name": "B"}]}]}):
+            amap = fgs._address_map(DEVICE)
+        self.assertEqual(amap["G"], "192.0.2.0/24, 198.51.100.0/24")
+
+    def test_address_map_survives_a_missing_source(self):
+        """Ogni sorgente e' best-effort: un errore su una non deve far
+        fallire l'elenco delle policy."""
+        with mock.patch.object(fgs, "get_firewall_addresses",
+                               side_effect=fgs.FortiGateError("403")),              mock.patch.object(fgs, "get_interfaces",
+                               return_value={"data": [{"name": "port1",
+                                                       "ip": "192.0.2.1"}]}),              mock.patch.object(fgs, "get_address_groups",
+                               side_effect=fgs.FortiGateError("403")):
+            amap = fgs._address_map(DEVICE)
+        self.assertEqual(amap, {"port1 address": "192.0.2.1"})
 
 
 class FirewallCmdbSlimTest(unittest.TestCase):
@@ -155,7 +243,7 @@ class FirewallCmdbSlimTest(unittest.TestCase):
         url = m.call_args.args[1] if m.call_args.args else m.call_args.kwargs.get("url")
         self.assertIn("cmdb/firewall/address", url)
         self.assertEqual(m.call_args.kwargs["params"]["format"],
-                         "name|type|subnet|fqdn|comment")
+                         "name|type|subnet|fqdn|start-ip|end-ip|comment")
 
     def test_get_firewall_policy_objects(self):
         payload = {"results": [{"policyid": 1, "name": "allow-out", "action": "accept",

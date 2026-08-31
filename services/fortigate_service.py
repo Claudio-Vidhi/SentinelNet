@@ -17,6 +17,7 @@ FortiGateError con il dettaglio di entrambi i tentativi.
 """
 
 import datetime
+import ipaddress
 import json
 import logging
 import os
@@ -454,10 +455,96 @@ def get_firewall_addresses(device):
     ip = device["IP"]
     try:
         data = api_get_cmdb(ip, "cmdb/firewall/address",
-                            fmt="name|type|subnet|fqdn|comment")
+                            fmt="name|type|subnet|fqdn|start-ip|end-ip|comment")
         return {"source": "api", "data": data.get("results", data)}
     except FortiGateError as e:
         raise FortiGateError(f"firewall/address disponibile solo via REST API: {e}")
+
+
+def _address_literal(obj: dict) -> Optional[str]:
+    """L'indirizzo LETTERALE di un oggetto dell'address book, o None.
+
+    None non è un errore: un FQDN o un oggetto geography non HA un indirizzo
+    finché non lo si risolve, e stampare comunque qualcosa al suo posto
+    significherebbe far leggere all'operatore un valore inventato. Il nome
+    dell'oggetto resta la risposta giusta in quel caso."""
+    typ = str(obj.get("type") or "ipmask").lower()
+    if typ in ("ipmask", "subnet", ""):
+        raw = str(obj.get("subnet") or "").strip()
+        if not raw:
+            return None
+        parts = raw.replace("/", " ").split()
+        if len(parts) == 2:
+            try:
+                return str(ipaddress.ip_network(f"{parts[0]}/{parts[1]}",
+                                                strict=False))
+            except ValueError:
+                return None
+        return parts[0] if parts else None
+    if typ == "iprange":
+        start, end = obj.get("start-ip"), obj.get("end-ip")
+        return f"{start}-{end}" if start and end else None
+    return None
+
+
+def _address_map(device) -> dict:
+    """name -> indirizzo letterale, per gli oggetti che ne hanno uno.
+
+    Include i gruppi (espansi nei membri) e gli oggetti impliciti
+    "<interfaccia> address", che NON stanno nell'address book: sono derivati
+    dall'IP dell'interfaccia a runtime, ed è esattamente il caso in cui il
+    nome da solo non dice nulla ("port2 address" non è consultabile). Ogni
+    sorgente è best-effort: quello che non arriva semplicemente non viene
+    risolto."""
+    out: Dict[str, str] = {}
+    try:
+        for a in (get_firewall_addresses(device).get("data") or []):
+            if isinstance(a, dict) and a.get("name"):
+                lit = _address_literal(a)
+                if lit:
+                    out[a["name"]] = lit
+    except FortiGateError:
+        pass
+
+    try:
+        for it in (get_interfaces(device).get("data") or []):
+            if not isinstance(it, dict):
+                continue
+            name = it.get("name") or it.get("interface")
+            addr = it.get("ip") or it.get("ipv4_address")
+            if name and addr:
+                out[f"{name} address"] = str(addr)
+    except FortiGateError:
+        pass
+
+    try:
+        for g in (get_address_groups(device).get("data") or []):
+            if not isinstance(g, dict) or not g.get("name"):
+                continue
+            members = [m.get("name") if isinstance(m, dict) else str(m)
+                       for m in (g.get("member") or [])]
+            vals = [out[m] for m in members if m in out]
+            if vals:
+                out[g["name"]] = ", ".join(vals)
+    except FortiGateError:
+        pass
+    return out
+
+
+def _resolve_addr_field(value, amap: dict) -> Optional[str]:
+    """Rende ``srcaddr``/``dstaddr`` di una policy come indirizzi letterali."""
+    if not isinstance(value, list):
+        value = [value]
+    parts = []
+    for m in value:
+        name = m.get("name") if isinstance(m, dict) else str(m)
+        if not name:
+            continue
+        if name == "all":
+            parts.append("0.0.0.0/0")
+        elif name in amap:
+            parts.append(amap[name])
+    return ", ".join(parts) or None
 
 
 def get_firewall_policy_objects(device):
@@ -494,12 +581,19 @@ def get_policies_with_stats(device):
     except FortiGateError as e:
         stats_error = str(e)
 
+    # Gli indirizzi in una policy sono NOMI di oggetti: "port2 address" o
+    # "LAN_Uffici" non dicono che rete intercettano, e per saperlo si apre
+    # l'address book in un'altra scheda. Qui si risolvono una volta sola.
+    amap = _address_map(device)
+
     merged = []
     for row in rows:
         if not isinstance(row, dict):
             continue
         s = by_id.get(row.get("policyid"))
         merged.append({**row,
+                       "srcaddr_ips": _resolve_addr_field(row.get("srcaddr"), amap),
+                       "dstaddr_ips": _resolve_addr_field(row.get("dstaddr"), amap),
                        "hit_count": (s or {}).get("hit_count", 0),
                        "bytes": (s or {}).get("bytes", 0),
                        "active_sessions": (s or {}).get("active_sessions", 0),
@@ -577,19 +671,70 @@ def get_security_profiles(device):
     return {"source": "api", "data": out, "errors": errors}
 
 
+# IP protocol numbers. monitor/firewall/policy-lookup wants the NUMBER, not
+# the name: "tcp" is rejected where 6 is accepted.
+_PROTO_NUM = {"tcp": 6, "udp": 17, "icmp": 1, "icmpv6": 58,
+              "sctp": 132, "gre": 47, "esp": 50, "ah": 51}
+
+
+def policy_lookup_params(src_ip: str, dest: str, protocol: str = "TCP",
+                         dest_port: Optional[int] = 443,
+                         srcintf: Optional[str] = None) -> dict:
+    """Query string for monitor/firewall/policy-lookup.
+
+    The parameter names are not the ones the CLI or the cmdb schema suggest,
+    and getting them wrong costs a 4xx that reads like "the box does not
+    support this": the source address is ``sourceip`` (not ``srcip``), the
+    source port would be ``sourceport``, and ``protocol`` is the IP protocol
+    number.
+    ``srcintf`` is mandatory — the lookup is evaluated per ingress interface,
+    exactly like the GUI Policy Lookup tool, which also refuses to run without
+    it. Shared with the relay path in ``client_diagnosis`` so both spellings
+    cannot drift apart again.
+    """
+    proto = str(protocol or "tcp").strip().lower()
+    num = _PROTO_NUM.get(proto, proto if proto.isdigit() else None)
+    if num is None:
+        raise FortiGateError(f"Protocollo '{protocol}' non riconosciuto.")
+    params: Dict[str, Any] = {"sourceip": src_ip, "dest": dest,
+                              "protocol": int(num), "policy_type": "policy",
+                              "ipv6": "false"}
+    if srcintf:
+        params["srcintf"] = srcintf
+    # Ports only mean something for TCP/UDP. Sending destport on an ICMP
+    # lookup is how you get a match against the wrong service object.
+    if int(num) in (6, 17):
+        params["destport"] = int(dest_port or 443)
+    return params
+
+
 def policy_lookup(device, src_ip: str, dest: str, protocol: str = "TCP",
                   dest_port: int = 443, srcintf: Optional[str] = None):
     """Chiede al FortiGate QUALE policy matcherebbe un flusso (senza generare
     traffico): fondamentale per 'perché il client X non raggiunge il sito Y'.
-    `dest` può essere IP o FQDN."""
-    params = {"srcip": src_ip, "protocol": protocol.lower(),
-              "dest": dest, "destport": int(dest_port), "ipv6": "false"}
-    if srcintf:
-        params["srcintf"] = srcintf
+    `dest` può essere IP o FQDN.
+
+    ``srcintf`` omesso viene dedotto dalla rotta verso ``src_ip``: è
+    l'interfaccia da cui quel client entra, cioè esattamente quella che la
+    lookup richiede. Il chiamante che la conosce la passa e si risparmia la
+    lettura della tabella di routing."""
     ip = device["IP"]
+    if not srcintf:
+        try:
+            route = get_route_for(device, src_ip).get("data")
+            intf = route.get("interface") if isinstance(route, dict) else None
+            srcintf = str(intf) if intf else None
+        except FortiGateError:
+            srcintf = None
+        if not srcintf:
+            raise FortiGateError(
+                f"policy-lookup richiede l'interfaccia di ingresso e non è "
+                f"deducibile da una rotta verso {src_ip}: indicarla.")
+    params = policy_lookup_params(src_ip, dest, protocol, dest_port, srcintf)
     try:
         data = api_get(ip, "monitor/firewall/policy-lookup", params)
-        return {"source": "api", "data": data.get("results", data)}
+        return {"source": "api", "srcintf": srcintf,
+                "data": data.get("results", data)}
     except FortiGateError as e:
         # Nessun equivalente CLI 1:1 affidabile: si riporta l'errore API.
         raise FortiGateError(f"policy-lookup disponibile solo via REST API: {e}")
