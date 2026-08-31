@@ -46,6 +46,8 @@ for user-facing strings, logs and comments, English for identifiers — see
 | Document | Contents |
 |---|---|
 | [operations.md](operations.md) | Runbook: paths, logs, metrics, retention, symptoms and causes, backup |
+| [fedora-central-install.md](fedora-central-install.md) | Fedora Server: step-by-step Central server installation, systemd, SELinux, firewall |
+| [ubuntu-agent-install.md](ubuntu-agent-install.md) | Ubuntu Server 24.04 LTS: step-by-step Site Agent deployment, token auth, systemd |
 | [provisioning-tutorial.md](provisioning-tutorial.md) | Day-0 walkthrough: generate a switch/FortiGate config, push a switch config via SSH or console, and what to do when it fails |
 | [hardening.md](hardening.md) | TLS, reverse proxy, session cookie, listener exposure |
 
