@@ -24,8 +24,8 @@ Canonical for this repo. `CLAUDE.md` and `.agents/AGENTS.md` point here.
 Only two branches matter: `Dev` and `master`. They carry the **same app
 features and the same fixes** — a change landing on one belongs on the other.
 
-- A new branch merges into `Dev` first. `Dev` → `master` after that, never
-  straight to `master`.
+- A new branch merges into `Dev` first. `Dev` is then **published** to
+  `master`, never committed to directly.
 - `master` is the public branch: it holds the product with dev-only files
   stripped (`tests/`, `tests_data/`, `AGENTS.md`, `.claude/`, `.agents/`,
   `scripts/dev/`, the dev-only `docs/` and helper scripts, plus `.github/`
@@ -39,22 +39,29 @@ features and the same fixes** — a change landing on one belongs on the other.
   doubt about a new top-level file, the question is not "is it useful?" but
   "does a first-time user need it to run this thing?"
 - So `master` carries no test suite. Verify on `Dev`, where the gate runs,
-  then port. Never `git merge --ff-only master` from `Dev`: master's history
-  contains those deletions, and fast-forwarding would wipe `Dev`'s tests.
-- Port with `uv run python scripts/dev/port_to_master.py`, not by hand. A
-  plain `git merge Dev` on master raises a modify/delete conflict for every
-  stripped file that changed, and silently leaves the unchanged ones staged
-  for re-adding — which is how tests or `AGENTS.md` end up back on the public
-  branch. The script merges, resolves those conflicts the only admissible
-  way, drops the whole strip from the index **and from the working tree**,
-  and stops, leaving the merge staged for you to review and commit. The tree
-  on master is therefore genuinely "Dev minus the strip"; `git checkout Dev`
-  puts every file back. That deletion is load-bearing, not tidiness: a
-  stripped file that is NEW on Dev would otherwise sit there untracked, and
-  git refuses to overwrite an untracked file whose content differs from what
-  it is about to write — one normalized line ending is enough to block the
-  way back to `Dev`. `--check` verifies the invariant
-  (master == Dev minus the strip) without touching anything.
+  then publish.
+- **`master` is an output, not a merge.** Each publication is one commit
+  whose tree is "Dev minus the strip" and whose parent is the previous
+  publication. `Dev` is *not* its parent, and nothing is ever merged in
+  either direction. That is what keeps the two branches from fighting: a
+  merge used to record "this Dev commit is contained in master" while
+  carrying the strip's deletions on its master side, so a merge the other
+  way would have deleted `Dev`'s tests — and because a fresh merge commit
+  was minted on every run, two clones publishing the same state produced
+  two different commits with the same tree and the push was rejected for
+  divergence. Neither failure exists without a merge.
+- Publish with `uv run python scripts/dev/port_to_master.py`, not by hand.
+  It builds the tree in a temporary index, so the working tree is never
+  touched — no checkout, no conflicts, nothing deleted from disk — moves
+  `master` to the new commit and stops. Review it, then
+  `git push --force-with-lease origin master`.
+- **Force-pushing `master` is correct here**, not a last resort: its content
+  is derived from `Dev` in full, so a discarded publication loses nothing.
+  If another clone published first, re-run the script — it parents the new
+  publication on `origin/master` — and push again.
+- `--check` verifies the invariant (master == Dev minus the strip) without
+  touching anything. It is the only thing that proves a publication is
+  correct, so run it before pushing.
 - The README screenshots live in `docs/images/` and are regenerated with
   `uv run python scripts/dev/capture_screenshots.py`. Rerun it when the UI
   changes visibly: no test catches a stale screenshot.

@@ -1,30 +1,36 @@
 # -*- coding: utf-8 -*-
-"""Porta Dev su master applicando lo strip, in un colpo solo.
+"""Pubblica Dev su master applicando lo strip: master e' un OUTPUT, non un merge.
 
-Il merge Dev -> master non e' mai pulito da solo: ogni file dello strip che
-cambia su Dev arriva come conflitto modify/delete (modificato su Dev,
-cancellato su master), e i file dello strip che *non* cambiano vanno tolti a
-mano dall'indice. Farlo a mano ogni volta e' il modo piu' semplice di
-rimettere per sbaglio i test o AGENTS.md sul ramo pubblico.
+master resta il ramo di produzione, con lo stesso codice di Dev e i file
+dev-only tolti. Cambia solo come ci arriva: non piu' un merge di Dev, ma un
+commit costruito, il cui albero e' "Dev meno lo strip" e il cui genitore e'
+la pubblicazione precedente. Dev non e' suo genitore.
 
-Questo script fa il merge, risolve quei conflitti nell'unico modo ammesso
-(sul ramo pubblico il file non esiste) e toglie tutto lo strip dall'indice e
-dal disco. Lascia il merge STAGED e non committa: il messaggio lo scrive chi
-porta.
+Perche' non un merge. Il merge dichiarava "il commit X di Dev e' contenuto in
+master", e il lato master di quel merge conteneva le cancellazioni dello
+strip: bastava un merge nel verso opposto per riportarle su Dev e cancellare
+i test -- il motivo per cui AGENTS.md doveva vietare `git merge --ff-only
+master`. In piu' il commit di merge veniva coniato daccapo a ogni esecuzione,
+quindi due cloni che pubblicavano lo stesso stato di Dev producevano due
+commit diversi con lo stesso albero, e il push veniva rifiutato per
+divergenza senza un solo conflitto di codice a spiegarla.
 
-Dopo il porting l'albero e' davvero "Dev meno lo strip", e `git checkout Dev`
-rimette ogni file al suo posto. Cancellare e' necessario, non cosmetico: un
-file dello strip NUOVO su Dev resterebbe li' non tracciato, e git si rifiuta
-di sovrascrivere un file non tracciato quando il contenuto non coincide con
-quello che sta per scrivere -- un fine riga normalizzato diverso basta a
-bloccare il ritorno su Dev.
+Senza merge nessuna delle due cose esiste. Non c'e' niente che possa tornare
+indietro su Dev, e il contenuto di master e' interamente derivato da Dev:
+perdere una pubblicazione non perde nulla, quindi il push forzato e' sicuro e
+la divergenza smette di essere un problema da risolvere.
 
-    uv run python scripts/dev/port_to_master.py          # esegue
+L'albero di lavoro non viene mai toccato: si costruisce tutto in un indice
+temporaneo. Niente checkout, niente conflitti modify/delete, niente file
+cancellati dal disco.
+
+    uv run python scripts/dev/port_to_master.py          # pubblica
     uv run python scripts/dev/port_to_master.py --check  # solo diagnosi
 
 Regola di riferimento: AGENTS.md, sezione "Branches".
 """
 
+import os
 import pathlib
 import subprocess
 import sys
@@ -63,21 +69,8 @@ STRIP = (
 )
 
 
-def _prune_empty_dirs(files):
-    """Toglie le cartelle rimaste vuote dopo la cancellazione, dalla piu'
-    profonda in su. Una cartella con dentro solo __pycache__ resta: non e'
-    tracciata su Dev, quindi cancellarla non e' compito di questo script."""
-    dirs = {ROOT / f for f in files}
-    dirs = sorted({d.parent for d in dirs}, key=lambda d: len(d.parts), reverse=True)
-    for d in dirs:
-        try:
-            d.rmdir()
-        except OSError:
-            pass
-
-
-def git(*args, check=True):
-    r = subprocess.run(("git",) + args, capture_output=True, text=True)
+def git(*args, check=True, env=None):
+    r = subprocess.run(("git",) + args, capture_output=True, text=True, env=env)
     if check and r.returncode != 0:
         sys.exit(f"git {' '.join(args)} ha fallito:\n{r.stdout}{r.stderr}")
     return r.stdout.strip()
@@ -97,54 +90,8 @@ def stripped_paths():
     return files
 
 
-def _is_ancestor(a, b):
-    return subprocess.run(["git", "merge-base", "--is-ancestor", a, b],
-                          capture_output=True).returncode == 0
-
-
-def _require_master_synced():
-    """master locale non deve essere indietro ne' divergente da origin/master.
-
-    Questo script NON condivide i commit di master: ne conia uno nuovo a ogni
-    esecuzione. L'albero e' deterministico ("Dev meno lo strip"), l'hash no --
-    dipende dai genitori e dalla data. Due cloni che portano lo stesso stato
-    di Dev producono percio' due commit diversi con lo stesso contenuto, e git
-    non puo' fast-forward-are l'uno sull'altro: il push viene rifiutato per
-    divergenza, senza un solo conflitto di codice a spiegarla. E' gia'
-    successo due volte, e la seconda l'ha risolta un merge `-s ours`.
-
-    Il rimedio e' partire sempre da origin/master. Qui si verifica soltanto,
-    non si tocca niente: e' chi porta a decidere.
-    """
-    if not git("rev-parse", "--verify", "-q", "origin/master", check=False):
-        return                                  # nessun remoto: niente da dire
-    if subprocess.run(["git", "fetch", "-q", "origin", "master"],
-                      capture_output=True, text=True).returncode != 0:
-        print("ATTENZIONE: fetch di origin/master fallito (offline?). "
-              "Se qualcun altro ha portato nel frattempo, il push verra' "
-              "rifiutato per divergenza.")
-        return
-
-    if _is_ancestor("origin/master", "master"):
-        return                                  # locale contiene il remoto
-    if _is_ancestor("master", "origin/master"):
-        sys.exit("master locale e' INDIETRO rispetto a origin/master.\n"
-                 "Portare da qui creerebbe un commit che non si puo' "
-                 "pushare. Prima:\n"
-                 "    git checkout master && git merge --ff-only origin/master "
-                 "&& git checkout Dev")
-    sys.exit("master locale e' DIVERGENTE da origin/master: entrambi hanno un "
-             "porting che l'altro non ha.\n"
-             "L'albero di master si rigenera da Dev, quindi il porting locale "
-             "non contiene niente di suo: buttalo e rifallo sopra al remoto.\n"
-             "    git checkout master && git reset --hard origin/master "
-             "&& git checkout Dev\n"
-             "poi rilancia questo script. (--hard qui e' sicuro SOLO perche' "
-             "si tratta di master: il suo contenuto viene tutto da Dev.)")
-
-
 def check():
-    """Le due cose che devono valere dopo un porting corretto."""
+    """Le due cose che devono valere dopo una pubblicazione corretta."""
     expected = set(stripped_paths())
     on_master = set(git("ls-tree", "-r", "--name-only", "master").splitlines())
     leaked = sorted(expected & on_master)
@@ -167,6 +114,26 @@ def check():
     return 1 if (leaked or diff) else 0
 
 
+def build_tree(files):
+    """L'albero di Dev senza i file dello strip, senza toccare il disco.
+
+    Si lavora su un indice temporaneo (GIT_INDEX_FILE): `git rm --cached` li'
+    dentro non ha nessun effetto sull'albero di lavoro ne' sull'indice vero,
+    quindi lo script si puo' lanciare da Dev senza checkout e senza rischiare
+    di lasciare il repo a meta'."""
+    tmp = ROOT / ".git" / "port-to-master.index"
+    tmp.unlink(missing_ok=True)
+    env = {**os.environ, "GIT_INDEX_FILE": str(tmp)}
+    try:
+        git("read-tree", "Dev", env=env)
+        for i in range(0, len(files), 200):
+            git("rm", "-q", "-r", "--cached", "--ignore-unmatch", "--",
+                *files[i:i + 200], env=env)
+        return git("write-tree", env=env)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 def main():
     if "--check" in sys.argv:
         return check()
@@ -174,69 +141,39 @@ def main():
     if git("status", "--porcelain"):
         sys.exit("Albero di lavoro sporco: committa o metti da parte prima.")
 
-    _require_master_synced()
+    # Si pubblica sopra a cio' che e' gia' pubblicato, non sopra al master
+    # locale: se un altro clone ha pubblicato nel frattempo, la sua
+    # pubblicazione e' il genitore giusto. Offline si ripiega sul locale e lo
+    # si dice -- il push chiedera' comunque un --force-with-lease consapevole.
+    parent = "master"
+    if git("rev-parse", "--verify", "-q", "origin/master", check=False):
+        if subprocess.run(["git", "fetch", "-q", "origin", "master"],
+                          capture_output=True).returncode == 0:
+            parent = "origin/master"
+        else:
+            print("ATTENZIONE: fetch fallito (offline?), si pubblica sopra al "
+                  "master locale.")
 
-    git("checkout", "master")
-    print("su master; merge di Dev...")
-
-    # Il merge fallisce sui modify/delete dello strip: e' previsto, si
-    # prosegue e si risolvono sotto.
-    subprocess.run(["git", "merge", "--no-ff", "--no-commit", "Dev"],
-                   capture_output=True, text=True)
-
-    unmerged = [l for l in git("diff", "--name-only",
-                               "--diff-filter=U").splitlines() if l]
     files = stripped_paths()
+    tree = build_tree(files)
 
-    # Un conflitto fuori dallo strip e' vero conflitto di codice: si ferma.
-    real = [f for f in unmerged if f not in files]
-    if real:
-        sys.exit("Conflitti veri, da risolvere a mano:\n  " + "\n  ".join(real))
+    if tree == git("rev-parse", f"{parent}^{{tree}}"):
+        print(f"Niente da pubblicare: {parent} ha gia' questo albero.")
+        return 0
 
-    # I file dello strip in conflitto sono modify/delete: su master non esistono.
-    for f in unmerged:
-        git("rm", "-q", "-f", "--", f)
+    dev = git("rev-parse", "--short", "Dev")
+    subject = git("log", "-1", "--format=%s", "Dev")
+    msg = (f"publish: Dev {dev} ({subject})\n\n"
+           f"Albero = Dev {dev} meno i file dev-only.\n"
+           f"Vedi AGENTS.md, sezione \"Branches\".\n")
+    commit = git("commit-tree", tree, "-p", git("rev-parse", parent), "-m", msg)
+    git("branch", "-f", "master", commit)
 
-    # E tutto il resto dello strip esce dall'indice.
-    present = [f for f in files
-               if f not in unmerged
-               and git("ls-files", "--", f, check=False)]
-    if present:
-        for i in range(0, len(present), 200):
-            git("rm", "-q", "-r", "--cached", "--", *present[i:i + 200])
-
-    # ...e anche dal disco. Lasciarli li' era gia' incoerente -- il ramo dei
-    # modify/delete qui sopra li cancella eccome -- e per i file NUOVI su Dev
-    # era una trappola: restavano non tracciati, e `git checkout Dev` si
-    # rifiuta di sovrascrivere un file non tracciato il cui contenuto non
-    # coincide con quello che sta per scrivere. Basta un fine riga
-    # normalizzato diverso e il ritorno su Dev si blocca, con un elenco di
-    # file che sembrano modifiche non salvate e non lo sono.
-    #
-    # Si cancella SOLO cio' che e' tracciato su Dev (`files` viene da li'):
-    # `git checkout Dev` li riscrive tutti, quindi non si perde niente.
-    removed = 0
-    for f in present:
-        path = ROOT / f
-        try:
-            path.unlink()
-            removed += 1
-        except OSError:
-            pass
-    _prune_empty_dirs(files)
-
-    print(f"strip applicato: {len(unmerged)} conflitti modify/delete risolti, "
-          f"{len(present)} file tolti dall'indice, {removed} tolti dal disco.")
-
-    staged = git("diff", "--cached", "--name-only", "Dev")
-    extra = [l for l in staged.splitlines() if l and l not in files]
-    if extra:
-        sys.exit("Lo staged differisce da Dev fuori dallo strip:\n  "
-                 + "\n  ".join(extra))
-
-    print("\nmaster staged = Dev meno lo strip. Nessuna differenza di codice.")
-    print("Rileggi con 'git diff --cached --stat' e poi committa il merge.")
-    return 0
+    print(f"master -> {commit[:9]} (albero di Dev {dev} meno {len(files)} "
+          f"file dello strip), genitore {parent}.")
+    print("\nRileggi con 'git show --stat master' e 'git diff Dev master --stat',")
+    print("poi pubblica:  git push --force-with-lease origin master")
+    return check()
 
 
 if __name__ == "__main__":
