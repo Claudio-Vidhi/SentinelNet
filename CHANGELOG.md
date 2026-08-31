@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-08-31
+
 ### Fixed
 
 - **FortiGate Policy Lookup always failed, on every device, with "Not
