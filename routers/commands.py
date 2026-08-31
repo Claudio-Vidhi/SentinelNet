@@ -300,8 +300,19 @@ def _ssh_failure_hint(exc) -> str:
 
 @router.websocket("/api/ws-terminal/{ip}")
 async def ws_terminal(websocket: WebSocket, ip: str):
-    # Leggi l'OTP dal query param
-    otp = websocket.query_params.get("token")
+    # The OTP arrives as the FIRST frame, not as a query parameter: a URL is
+    # written verbatim into uvicorn's access log, journald, any reverse-proxy
+    # log and the browser history, so a token carried there is a secret sitting
+    # in plain text on disk. A frame is logged nowhere. This means accepting
+    # the socket before knowing who is calling, so nothing is sent until the
+    # frame is validated, and a client that never sends it is dropped.
+    await websocket.accept()
+    try:
+        otp = await asyncio.wait_for(websocket.receive_text(), timeout=10)
+    except (asyncio.TimeoutError, WebSocketDisconnect):
+        with contextlib.suppress(RuntimeError, WebSocketDisconnect):
+            await websocket.close(code=1008)
+        return
     now = time.time()
     
     # Pulisce vecchi token scaduti (più vecchi di 30 secondi) per evitare accumulo in memoria
@@ -310,19 +321,16 @@ async def ws_terminal(websocket: WebSocket, ip: str):
         _ws_tokens.pop(k, None)
         
     if not otp or otp not in _ws_tokens:
-        await websocket.accept()
         await websocket.send_text("[Errore Autenticazione] Token OTP non valido o scaduto. Connessione rifiutata.\r\n")
         await websocket.close(code=1008)
         return
 
     username_from_otp, timestamp = _ws_tokens.pop(otp)
     if now - timestamp > 30:
-        await websocket.accept()
         await websocket.send_text("[Errore Autenticazione] Token OTP scaduto. Connessione rifiutata.\r\n")
         await websocket.close(code=1008)
         return
 
-    await websocket.accept()
     await websocket.send_text(f"[1/3] Risoluzione apparato e credenziali ({ip})...\r\n")
 
     # 1. Recupero delle credenziali attuali

@@ -61,11 +61,15 @@ async function openCliModal(ip) {
     const { ws_token } = await otpRes.json();
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/api/ws-terminal/${ip}?token=${encodeURIComponent(ws_token)}`;
+    const wsUrl = `${protocol}//${window.location.host}/api/ws-terminal/${ip}`;
 
     wsSocket = new WebSocket(wsUrl);
 
     wsSocket.onopen = () => {
+        // The OTP travels as the first frame, never in the URL: a query string
+        // ends up in the server access log and the browser history. onopen runs
+        // before any keystroke can reach onData, so it is always frame #1.
+        wsSocket.send(ws_token);
         termInstance.write(tr('cliWebsocketConnectionEstablishedR'));
     };
     wsSocket.onmessage = (event) => {
