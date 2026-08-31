@@ -12,6 +12,18 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Fixed
 
+- **FortiGate Policy Lookup always failed, on every device, with "Not
+  available on this device".** The query was built with the CLI's parameter
+  names instead of the API's: the source address went out as `srcip` where
+  FortiOS expects `sourceip`, the protocol as a name where it expects the IP
+  protocol number, and the mandatory ingress interface was omitted entirely.
+  FortiOS answered 4xx and the generic error renderer turned that into a
+  sentence about the device's capabilities — so the failure read as "your
+  firewall does not support this" no matter how privileged the API user was.
+  The query builder is now shared with the agent-relay path, which carried the
+  identical defect where nobody could see it, and a lookup without an explicit
+  interface derives one from the route to the source instead of failing.
+
 - **No incident was raised for a port that dropped to `lowerLayerDown` or
   `notPresent`.** The rule matched only `down`/`0`/`false`, so a failed lower
   layer or a pulled transceiver produced no symptom, no evidence and no
@@ -38,6 +50,29 @@ happened — `git log --grep="chore(release)"` is the record for those.
 - The tab told a new user their *filter* was wrong when nothing had been
   collected at all, and the active filter card had no styling, so clicking one
   confirmed nothing.
+
+### Added
+
+- **Firewall policies now show their source and destination as addresses, not
+  just as object names.** `LAN_Uffici` or `port2 address` said nothing about
+  which network a rule actually catches, and answering that meant opening the
+  address book in another tab and expanding groups by hand. Subnets, ranges,
+  groups and the implicit `<interface> address` objects — which are not in the
+  address book at all, being derived from the interface's live IP — are
+  resolved once and shown in two new columns. FQDN and geography objects
+  deliberately show nothing: they have no address until resolved, and printing
+  a placeholder there would be inventing one.
+
+### Changed
+
+- **Policy & Route Validation no longer lists firewalls.** Its offline trace
+  reads a stored backup, so it cannot resolve an interface-derived address
+  object or a dynamically learned route and lands on UNKNOWN — while the same
+  question is answered authoritatively by the box itself in FortiGate
+  Management. Two answers to one question, one of them structurally worse, is
+  how an operator ends up trusting the wrong one. The dropdown says how many
+  devices it left out and where to trace them, because a device silently
+  missing from a list reads as a broken inventory.
 
 ### Security
 

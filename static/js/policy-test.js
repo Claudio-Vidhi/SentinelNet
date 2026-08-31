@@ -34,6 +34,19 @@
         return sel ? sel.value : '';
     }
 
+    // Firewalls are excluded from this tab. Their live equivalents answer
+    // authoritatively from the box (policy-lookup and the FIB route lookup in
+    // FortiGate Management), while an offline trace over a backup cannot
+    // resolve interface-derived address objects or dynamically learned routes
+    // and lands on UNKNOWN. Two answers to the same question, one of them
+    // structurally worse, is how an operator ends up trusting the wrong one.
+    const PT_FIREWALL_VENDORS = ['fortinet', 'fortigate', 'paloalto', 'panos'];
+
+    function ptIsFirewall(d) {
+        return PT_FIREWALL_VENDORS.includes(
+            String(d.Vendor || d.Type || '').toLowerCase());
+    }
+
     function populatePolicyDeviceSelect() {
         const sel = document.getElementById('ptDeviceSelect');
         if (!sel) return;
@@ -52,12 +65,15 @@
             return;
         }
 
-        const devices = (globalDevices || []).filter(
+        const inTenant = (globalDevices || []).filter(
             d => (d.Group || 'Generale') === tenant);
+        const devices = inTenant.filter(d => !ptIsFirewall(d));
+        const hiddenFirewalls = inTenant.length - devices.length;
         sel.disabled = devices.length === 0;
 
         if (devices.length === 0) {
-            sel.innerHTML = `<option value="">${escapeHtml(L.ptNoDevicesInTenant)}</option>`;
+            const msg = hiddenFirewalls ? L.ptOnlyFirewallsInTenant : L.ptNoDevicesInTenant;
+            sel.innerHTML = `<option value="">${escapeHtml(msg)}</option>`;
             ptSelectedIp = null;
             updateDeviceMeta();
             return;
@@ -72,7 +88,13 @@
                 const host = d.Hostname || ip;
                 const vendor = (d.Vendor || d.Type || 'cisco').toUpperCase();
                 return `<option value="${escapeHtml(ip)}">${escapeHtml(host)} (${escapeHtml(ip)}) — ${escapeHtml(vendor)}</option>`;
-            }).join('');
+            }).join('') +
+            // Say that something was removed. A device silently missing from a
+            // dropdown reads as a bug in the inventory, not as a decision.
+            (hiddenFirewalls
+                ? `<option value="" disabled>${escapeHtml(
+                     L.ptFirewallsHidden.replace('{n}', String(hiddenFirewalls)))}</option>`
+                : '');
         sel.value = devices.some(d => d.IP === cur) ? cur : '';
         ptSelectedIp = sel.value || null;
         updateDeviceMeta();
