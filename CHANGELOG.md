@@ -70,6 +70,26 @@ happened — `git log --grep="chore(release)"` is the record for those.
   route now fails the suite.
 
 
+### Fixed
+
+- The NetSec Audit and Policy & Routing Validation tabs no longer carry a
+  `preview` badge: both evaluate stored configuration offline, both are among
+  the best-covered surfaces in the tree, and neither was waiting on anything. A
+  preview tag that outlives its reason teaches people to ignore the ones that
+  still mean something. Incidents, Sites and Client Diagnosis keep theirs —
+  those are waiting on evidence from the field.
+- The Client Diagnosis heading rendered its preview badge twice.
+
+### Removed
+
+- **The MCP Client preview tab is gone.** SentinelNet acting as a client
+  *towards* external MCP servers never left preview, and it was hidden behind a
+  settings toggle rather than shown with a badge — so it got no real use, and
+  real use is what would have validated it. Router, frontend module, external
+  client, tab, sub-tab, settings toggle and its i18n keys are deleted outright,
+  not left as a flag. The MCP **server** — SentinelNet exposed to Claude
+  Desktop and other LLM clients — is untouched.
+
 ### Changed
 
 - **Interfaces & Expected State reads as a monitoring console.** Filters for

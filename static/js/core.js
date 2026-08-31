@@ -1,3 +1,11 @@
+// Escape di una stringa dentro un literal JavaScript, per la convenzione di
+// casa escapeHtml(jsStr(x)). Viveva in mcp-client.js, che era caricato con un
+// <script> fisso: alla rimozione di quella tab sarebbe sparito da sotto ai
+// tre moduli che lo usano (diagnosi, incidents, fortigate-management), tutti
+// lazy, tutti in questo unico scope globale. Sta qui perche' core.js c'e'
+// sempre.
+const jsStr = s => String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
 // --- SIDEBAR RAIL (collasso a icone) ---
 
 const SIDEBAR_COLLAPSED_KEY = 'sidebarCollapsed';
@@ -799,11 +807,6 @@ async function appInit() {
         }
     } catch (e) { /* non bloccante */ }
 
-    // Gating tab MCP Client (preview): visibile solo ad admin col flag attivo.
-    if (currentRole === 'admin' && typeof applyMcpClientGating === 'function') {
-        try { await applyMcpClientGating(); } catch (e) { /* non bloccante */ }
-    }
-
     // Flow SIEM, NetSec Audit, Incidenti e Fortigate Management non sono piu'
     // dietro un flag: le tab sono sempre presenti, gated solo dalla RBAC di
     // nav come ogni altra voce.
@@ -1068,7 +1071,6 @@ async function switchTab(tabId, clickedBtn) {
     else if (tabId === 'tab-users') loadUsers();
     else if (tabId === 'tab-sites') loadSites();
     else if (tabId === 'tab-mcp') loadMcpTab();
-    else if (tabId === 'tab-mcp-client') loadMcpClientTab();
     else if (tabId === 'tab-fortigate') loadFgtTab();
     else if (tabId === 'tab-wlc' && typeof loadWlcTab === 'function') loadWlcTab();
     else if (tabId === 'tab-settings') loadAppSettings();

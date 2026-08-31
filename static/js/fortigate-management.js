@@ -3,7 +3,7 @@
 // preview. Questa è l'unica proprietaria della UI token/oggetti FortiGate:
 // il duplicato che viveva in tab-provisioner (provisioning.js) è stato
 // rimosso. Le stringhe derivate dal FortiGate passano sempre da
-// escapeHtml(x) (jsStr definito in mcp-client.js).
+// escapeHtml(x) (jsStr definito in core.js).
 
 // Registro delle viste di sola lettura. Ogni voce dice DOVE prendere i dati
 // e QUALI colonne mostrarne: un solo loader e un solo renderer li servono

@@ -91,7 +91,11 @@ class TestRouterParity(unittest.TestCase):
                           "/api/users/invite", "/api/auth/accept-invite",
                           # Single Sign-On OIDC: configurazione, avvio del login e
                           # ritorno dall'identity provider.
-                          "/api/settings/sso", "/api/auth/sso")
+                          "/api/settings/sso", "/api/auth/sso",
+                    # MCP Client: la tab in preview e' stata rimossa, non
+                    # promossa. Come per fortigate-preview il filtro vale su
+                    # entrambi i lati, quindi copre anche la sparizione.
+                    "/api/mcp-client")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
@@ -211,10 +215,16 @@ class TestFullParity(unittest.TestCase):
                     "/api/users/invite", "/api/auth/accept-invite",
                     # Single Sign-On OIDC: configurazione, avvio del login e
                     # ritorno dall'identity provider.
-                    "/api/settings/sso", "/api/auth/sso")
+                    "/api/settings/sso", "/api/auth/sso",
+                    # MCP Client: la tab in preview e' stata RIMOSSA, non
+                    # promossa. Come per fortigate-preview il filtro vale su
+                    # entrambi i lati, quindi copre anche la sparizione.
+                    "/api/mcp-client")
     # Come NEW_PREFIXES, filtra entrambi i lati: copre anche FortigatePreviewSchema,
     # rimosso insieme al flag di preview /api/settings/fortigate-preview.
     NEW_SCHEMAS = ("DeviceSiteSchema", "GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "ReportPdfSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection", "FortigatePreviewSchema",
+                   # Schemi del router MCP Client, rimosso con la sua tab.
+                   "PreviewSchema", "ServerSchema", "CallSchema",
                    # Bounce della porta di accesso trovata dalla diagnosi: unica
                    # scrittura della tab, rotta sotto /api/diagnose (già in NEW_PREFIXES).
                    "PortBounceSchema",

@@ -1484,10 +1484,10 @@ class TestMcpTabRestyle(unittest.TestCase):
 
     def _tab(self, html):
         start = html.index('<div id="tab-mcp"')
-        # NOT '<div id="tab-settings"': the MCP client preview tab
-        # (#tab-mcp-client) sits between #tab-mcp and #tab-settings, so that
-        # boundary would leak its panels into this tab's slice.
-        end = html.index('<div id="tab-mcp-client"')
+        # The MCP client preview tab used to sit between this one and
+        # #tab-fortigate and was the boundary here; it was removed, so the
+        # next panel is the boundary again.
+        end = html.index('<div id="tab-fortigate"')
         return html[start:end]
 
     def test_preserve_ids(self):
@@ -1540,10 +1540,10 @@ class TestMcpTabRestyle(unittest.TestCase):
         for cls in ('class="hero"', 'class="hero-card"',
                     'class="panel"'):
             self.assertIn(cls, tab)
-        # client-config panel + tool-list panel + MCP Client preview-toggle panel.
-        # La Checklist Audit Firewall e Fortigate Management non sono piu' in
-        # preview: i loro toggle sono stati rimossi.
-        self.assertEqual(tab.count('class="panel"'), 3)
+        # client-config panel + tool-list panel. La Checklist Audit Firewall,
+        # Fortigate Management e MCP Client non sono piu' in preview: i loro
+        # toggle sono stati rimossi (l'ultima insieme alla tab stessa).
+        self.assertEqual(tab.count('class="panel"'), 2)
 
     def test_status_chip_classes_present_in_render_fn(self):
         # loadMcpTab() moved to static/js/settings.js.
