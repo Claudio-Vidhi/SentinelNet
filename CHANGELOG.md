@@ -10,6 +10,17 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Security
+
+- **The web terminal's one-time token travelled in the WebSocket URL**, so
+  every session wrote it verbatim into the uvicorn access log, journald, any
+  reverse-proxy log and the browser history. The token is single-use and
+  expires in 30 seconds, so what was logged was already spent — but a secret
+  in a URL stops being harmless the moment the lifetime or the single-use
+  property changes. The client now sends it as the first WebSocket frame,
+  which is logged nowhere, and the endpoint drops a connection that does not
+  produce one within 10 seconds.
+
 ## [0.25.0] - 2026-08-31
 
 ### Fixed

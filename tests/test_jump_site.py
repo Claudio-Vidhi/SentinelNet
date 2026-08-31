@@ -8,7 +8,9 @@ like test_sites.py / test_remote_site.py: SITES_JSON is resolved via
 core.data_config.get_path at module import time, so setting the env var
 afterwards would have no effect.
 """
+import asyncio
 import os
+import pathlib
 import shutil
 import socket
 import subprocess
@@ -1018,22 +1020,32 @@ class CliPathsSkipTheDirectPrecheckForJumpSites(unittest.TestCase):
         self.assertEqual(out, [])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class _FakeWebSocket:
     """Minimal WebSocket double: ws_terminal only accepts, sends and closes on
     the failure paths exercised here."""
 
     def __init__(self, token, send_exc=None):
-        self.query_params = {"token": token}
+        # No query_params on purpose: the OTP is the first frame now, and a
+        # double that still offered it in the URL would keep passing if the
+        # endpoint regressed to reading it from there.
+        self.query_params = {}
+        self.frames = [token] if token is not None else []
         self.sent = []
         self.closed = False
+        self.close_code = None
         self._send_exc = send_exc
 
     async def accept(self):
         pass
+
+    async def receive_text(self):
+        if not self.frames:
+            # A browser that opened the socket and went quiet: the endpoint's
+            # wait_for must give up on it. Raising here is what a real timeout
+            # looks like to the caller, without a 10s wait in the suite.
+            raise asyncio.TimeoutError
+        return self.frames.pop(0)
 
     async def send_text(self, text):
         self.sent.append(text)
@@ -1044,6 +1056,7 @@ class _FakeWebSocket:
 
     async def close(self, code=1000):
         self.closed = True
+        self.close_code = code
 
 
 class WsTerminalThroughBastion(unittest.TestCase):
@@ -1358,3 +1371,42 @@ class TheBastionIdentityIsEditableAfterCreation(unittest.TestCase):
         for key in ("lblIdentityBastionShort", "lblIdentityDeviceShort",
                     "optMissingIdentity"):
             self.assertEqual(i18n.count(key + ":"), 2, key)
+
+
+class WsTerminalTokenIsNotInTheUrl(unittest.TestCase):
+    """The OTP used to ride in the query string, so every terminal session wrote
+    a live token into uvicorn's access log and journald."""
+
+    def test_the_endpoint_ignores_a_token_offered_in_the_query_string(self):
+        import asyncio
+        from routers import commands
+
+        otp = "otp-in-url"
+        commands._ws_tokens[otp] = ("admin-user", time.time())
+        ws = _FakeWebSocket(None)
+        ws.query_params = {"token": otp}
+        asyncio.run(commands.ws_terminal(ws, "192.0.2.20"))
+        self.assertTrue(ws.closed)
+        self.assertEqual(ws.close_code, 1008)
+        # Still spendable: the query string never authenticated anything.
+        self.assertIn(otp, commands._ws_tokens)
+        commands._ws_tokens.pop(otp, None)
+
+    def test_a_bad_first_frame_is_refused(self):
+        import asyncio
+        from routers import commands
+
+        ws = _FakeWebSocket("not-a-real-otp")
+        asyncio.run(commands.ws_terminal(ws, "192.0.2.20"))
+        self.assertTrue(ws.closed)
+        self.assertEqual(ws.close_code, 1008)
+
+    def test_the_frontend_does_not_put_the_token_in_the_websocket_url(self):
+        js = pathlib.Path(__file__).resolve().parents[1] / "static" / "js" / "cli-modal.js"
+        src = js.read_text(encoding="utf-8")
+        self.assertNotIn("ws-terminal/${ip}?", src)
+        self.assertIn("wsSocket.send(ws_token)", src)
+
+
+if __name__ == "__main__":
+    unittest.main()
