@@ -3,7 +3,7 @@
 // preview. Questa è l'unica proprietaria della UI token/oggetti FortiGate:
 // il duplicato che viveva in tab-provisioner (provisioning.js) è stato
 // rimosso. Le stringhe derivate dal FortiGate passano sempre da
-// escapeHtml(x) (jsStr definito in mcp-client.js).
+// escapeHtml(x) (jsStr definito in core.js).
 
 // Registro delle viste di sola lettura. Ogni voce dice DOVE prendere i dati
 // e QUALI colonne mostrarne: un solo loader e un solo renderer li servono
@@ -57,7 +57,8 @@ const FGT_DATASETS = {
     policies:     { url: ip => `/api/fortigate/${ip}/firewall/policies-with-stats`,
                     cols: [['policyid','colFgtPolId'], ['name','colFgtPolName'],
                            ['srcintf','colFgtPolSrcIntf'], ['dstintf','colFgtPolDstIntf'],
-                           ['srcaddr','colFgtPolSrcAddr'], ['dstaddr','colFgtPolDstAddr'],
+                           ['srcaddr','colFgtPolSrcAddr'], ['srcaddr_ips','colFgtPolSrcAddrIps'],
+                           ['dstaddr','colFgtPolDstAddr'], ['dstaddr_ips','colFgtPolDstAddrIps'],
                            ['service','colFgtPolService'], ['action','colFgtPolAction','badge'],
                            ['status','colFgtPolStatus','badge'], ['hit_count','colFgtPolHits'],
                            ['active_sessions','colFgtPolSessions'], ['last_used','colFgtPolLastUsed','time']] },

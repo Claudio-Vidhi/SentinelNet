@@ -1059,7 +1059,4 @@
     document.getElementById('ssoBtnSave')?.addEventListener('click', saveSsoSettings);
     document.getElementById('btnCopyMcpConfig')?.addEventListener('click', copyMcpConfig);
     document.getElementById('btnSaveMcpSettings')?.addEventListener('click', saveMcpSettings);
-    document.getElementById('mcpPreviewToggle')?.addEventListener('change', (e) => {
-        if (typeof setMcpPreview === 'function') setMcpPreview(e.target.checked);
-    });
 
