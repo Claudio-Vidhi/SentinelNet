@@ -61,6 +61,8 @@ Key principles:
 From the dashboard (**admin** account): **Multi-site** tab → *New site*.
 
 1. **Name** — e.g. `Milan-VM` (the derived alphanumeric id will be `milan-vm`).
+   *Note: all non-alphanumeric characters including spaces and underscores (`_`)
+   are converted to hyphens (`-`). For example, `test_ub_agent` produces id `test-ub-agent`.*
 2. **Mode** — select `Site agent`.
 3. **Subnets** — the site's networks, e.g. `192.168.56.0/24` (for reference and
    documentation).
@@ -217,7 +219,8 @@ facing strings are Italian, identifiers are English. See
 
 `/etc/systemd/system/sentinelnet-agent.service`:
 
-```ini
+```bash
+sudo tee /etc/systemd/system/sentinelnet-agent.service << EOF
 [Unit]
 Description=SentinelNet Site Agent
 After=network-online.target
@@ -225,7 +228,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=root
+User=$USER
 WorkingDirectory=/opt/SentinelNet
 ExecStart=/opt/SentinelNet/.venv/bin/python services/site_agent.py --config /opt/SentinelNet/agent.json
 Restart=always
@@ -233,9 +236,8 @@ RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
-```
+EOF
 
-```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now sentinelnet-agent
 sudo systemctl status sentinelnet-agent
