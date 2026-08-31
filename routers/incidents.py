@@ -90,13 +90,6 @@ def set_rule_parameters(rule_id: str, payload: dict,
 INSTABILITY_WINDOW_S = 86400
 
 
-# ifOperStatus, translated to words by the SNMP poller (_IF_STATUS there).
-# "up" is the ONLY value that means the port carries traffic; three of the
-# others are outright faults, and the rest are neither up nor broken.
-_LINK_UP = {"up", "1", "true"}
-_LINK_DOWN = {"down", "0", "false", "lowerlayerdown", "notpresent"}
-
-
 def _iface_state(item: dict, min_flaps: int) -> str:
     """The one classifier. It used to exist twice -- here and again in
     interfaces.js -- with two different vocabularies, so a change to one left
@@ -110,15 +103,19 @@ def _iface_state(item: dict, min_flaps: int) -> str:
     port whose transceiver had been pulled (notPresent) or whose lower layer
     had failed (lowerLayerDown) as operational -- on the one view whose job is
     saying what is broken.
+
+    The vocabulary lives in observability.rules, next to the rule that raises
+    the incident from the same values. Two copies is how this view and that
+    rule would come to disagree about what "down" means.
     """
     if item.get("suppressed"):
         return "maint" if item.get("to_ts") is not None else "by_design"
     if (item.get("transitions") or 0) >= min_flaps:
         return "flapping"
     link = str(item.get("link") or "").strip().lower()
-    if link in _LINK_DOWN:
+    if link in rules.LINK_DOWN:
         return "outage"
-    if link in _LINK_UP:
+    if link in rules.LINK_UP:
         return "up"
     return "unknown"
 

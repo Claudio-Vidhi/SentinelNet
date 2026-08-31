@@ -314,11 +314,9 @@
         </button>
         <button id="navNetSecAudit" class="nav-item" data-tab="tab-netsec-audit" role="tab" aria-controls="tab-netsec-audit" aria-selected="false" tabindex="-1">
           <span class="nav-left"><i class="fa-solid fa-shield-cat"></i> NetSec Audit</span>
-          <span class="preview-badge">preview</span>
         </button>
         <button id="navPolicyTest" class="nav-item" data-tab="tab-policy-test" role="tab" aria-controls="tab-policy-test" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabPolicyTest"><i class="fa-solid fa-route"></i> Validazione Policy &amp; Routing</span>
-          <span class="preview-badge">preview</span>
         </button>
         <button id="navConfigDrift" class="nav-item" data-tab="tab-config-drift" role="tab" aria-controls="tab-config-drift" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabConfigDrift"><i class="fa-solid fa-code-compare"></i> Config Drift</span>
@@ -343,7 +341,7 @@
           <span class="nav-left" data-i18n="tabSites"><i class="fa-solid fa-building"></i> Sedi</span>
           <span class="preview-badge">preview</span>
         </button>
-        <button class="nav-item requires-admin" data-tabs="tab-mcp tab-mcp-client" data-tab="tab-mcp" role="tab" aria-controls="tab-mcp" aria-selected="false" tabindex="-1">
+        <button class="nav-item requires-admin" data-tab="tab-mcp" role="tab" aria-controls="tab-mcp" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabIntegrations"><i class="fa-solid fa-plug"></i> Integrazioni</span>
         </button>
         <button class="nav-item requires-admin" data-tab="tab-settings" role="tab" aria-controls="tab-settings" aria-selected="false" tabindex="-1">
@@ -1486,7 +1484,6 @@
           <span data-i18n="titleDiagnosi"></span>
           <span class="preview-badge" data-i18n-title="titleDiagPreview"
                 title="Non ancora validato su hardware reale. I risultati possono essere incompleti.">preview</span>
-          <span class="preview-badge" style="background:color-mix(in srgb, var(--warning) 15%, transparent); border-color:var(--warning); color:var(--warning); margin-left:8px;" title="Non ancora validato su hardware reale. I risultati possono essere incompleti. Rimosso dopo validazione su hardware reale.">preview</span>
         </h3>
         <div class="diag-form" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; align-items:end;">
           <div class="form-group" style="margin-bottom:0;">
@@ -2596,10 +2593,6 @@
     </div>
 
     <div id="tab-mcp" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
-        <button class="btn btn-secondary ti-subtab active" data-switch-tab="tab-mcp" data-i18n="tabMcp"></button>
-        <button class="btn btn-secondary ti-subtab preview-mcp-client" style="display:none;" data-switch-tab="tab-mcp-client" data-i18n="tabMcpClient"></button>
-      </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleMcp">MCP Server — client LLM esterni</h2>
@@ -2642,56 +2635,7 @@
         </div>
       </div>
 
-      <div class="panel" style="margin-top:18px;">
-        <h3 style="font-size:15px; margin-bottom:6px;"><i class="fa-solid fa-flask" style="color:var(--primary);"></i> <span data-i18n="titleMcpClientPreview">MCP Client (anteprima)</span></h3>
-        <p style="color:var(--text-muted); font-size:12px; margin-bottom:12px;" data-i18n="descMcpClientPreview">
-          Abilita la tab sperimentale "MCP Client": SentinelNet come client verso server MCP esterni (Jira, ServiceNow…) via Streamable HTTP. Funzionalita' in anteprima.
-        </p>
-        <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
-          <input type="checkbox" id="mcpPreviewToggle">
-          <span data-i18n="lblMcpClientPreviewToggle">Abilita la tab MCP Client (preview)</span>
-        </label>
-        <span id="mcpPreviewStatus" style="font-size:12px; color:var(--text-muted);"></span>
-      </div>
 
-    </div>
-
-    <div id="tab-mcp-client" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
-        <button class="btn btn-secondary ti-subtab" data-switch-tab="tab-mcp" data-i18n="tabMcp"></button>
-        <button class="btn btn-secondary ti-subtab preview-mcp-client active" style="display:none;" data-switch-tab="tab-mcp-client" data-i18n="tabMcpClient"></button>
-      </div>
-      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
-        <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleMcpClient">MCP Client — server esterni</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:70ch;" data-i18n="descMcpClient">
-            SentinelNet come <strong>client</strong> MCP verso server esterni via Streamable HTTP (JSON-RPC 2.0). Aggiungi un server, elenca i tool esposti e invocali. Anteprima: solo trasporto HTTP (niente stdio). I token di autenticazione sono cifrati a riposo e mai restituiti al browser.
-          </p>
-        </div>
-      </div>
-
-      <div class="panel" style="margin-bottom:18px;">
-        <h3 style="font-size:15px; margin-bottom:10px;"><i class="fa-solid fa-plus" style="color:var(--primary);"></i> <span data-i18n="titleMcpClientAdd">Aggiungi server</span></h3>
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
-          <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-action="mcp-preset" data-preset="jira"><i class="fa-brands fa-jira"></i> Jira (MCP)</button>
-          <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-action="mcp-preset" data-preset="servicenow"><i class="fa-solid fa-headset"></i> ServiceNow (MCP)</button>
-        </div>
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:10px;">
-          <input id="mcpcName" class="input" placeholder="Nome" data-i18n-placeholder="phMcpClientName" aria-label="Nome" data-i18n-aria-label="phMcpClientName">
-          <input id="mcpcUrl" class="input" placeholder="https://server/mcp" data-i18n-placeholder="phMcpClientUrl" aria-label="https://server/mcp" data-i18n-aria-label="phMcpClientUrl">
-          <input id="mcpcAuth" class="input" type="password" placeholder="Bearer token (opzionale)" data-i18n-placeholder="phMcpClientAuth" aria-label="Bearer token (opzionale)" data-i18n-aria-label="phMcpClientAuth">
-        </div>
-        <p id="mcpcHint" style="color:var(--text-muted); font-size:11px; margin:8px 0 0;"></p>
-        <div style="display:flex; gap:10px; align-items:center; margin-top:12px;">
-          <button class="btn btn-primary btn-small" id="btnSaveMcpClientServer" style="width:auto; margin:0;"><i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btnSave">Salva</span></button>
-          <span id="mcpcSaveStatus" style="font-size:12px; color:var(--text-muted);"></span>
-        </div>
-      </div>
-
-      <div class="panel">
-        <h3 style="font-size:15px; margin-bottom:10px;"><i class="fa-solid fa-server" style="color:var(--primary);"></i> <span data-i18n="titleMcpClientServers">Server configurati</span></h3>
-        <div id="mcpClientServerList"></div>
-      </div>
     </div>
 
     <div id="tab-fortigate" class="tab-content" role="tabpanel" tabindex="0">
@@ -4768,7 +4712,6 @@
   <script src="/static/js/client-map.js"></script>
   <script src="/static/js/diagnosi.js"></script>
   <script src="/static/js/endpoint-inventory.js"></script>
-  <script src="/static/js/mcp-client.js"></script>
   <script src="/static/js/site-agent.js"></script>
   <script src="/static/js/home.js"></script>
   <script src="/static/js/cli-modal.js"></script>

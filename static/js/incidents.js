@@ -3,7 +3,7 @@
 // La conclusione mostrata in testa e' SEMPRE quella deterministica del backend
 // (causa, confidenza, regole attivate, fonti). La narrativa AI, quando richiesta,
 // vive in un blocco separato e dichiaratamente generato: non e' la conclusione.
-// Escaping: escapeHtml(x) su ogni valore interpolato (jsStr in mcp-client.js).
+// Escaping: escapeHtml(x) su ogni valore interpolato (jsStr in core.js).
 
 (function () {
     let _incidents = [];

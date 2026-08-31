@@ -856,11 +856,14 @@ def _relay_policy_lookup(device: dict, site_id: str, src_ip: str, dest: str,
     accoda e si torna subito. Il risultato viene raccolto alla chiamata
     successiva — il bottone "Rilancia" del referto esiste per questo.
     """
-    from services import site_manager
+    from services import fortigate_service, site_manager
 
     path = "monitor/firewall/policy-lookup"
-    params = {"srcip": src_ip, "protocol": (protocol or "TCP").lower(),
-              "dest": dest, "destport": int(dest_port or 443), "ipv6": "false"}
+    # Stessi nomi di parametro della lookup diretta: l'agente inoltra la query
+    # tale e quale, quindi una divergenza qui si vedrebbe solo come un 4xx
+    # nella sede che nessuno raggiunge.
+    params = fortigate_service.policy_lookup_params(
+        src_ip, dest, protocol, dest_port)
     spec = json.dumps({"path": path, "params": params})
 
     done = site_manager.find_recent_rest_result(site_id, device["IP"], path)
