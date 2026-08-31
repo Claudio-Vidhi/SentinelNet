@@ -97,6 +97,52 @@ def stripped_paths():
     return files
 
 
+def _is_ancestor(a, b):
+    return subprocess.run(["git", "merge-base", "--is-ancestor", a, b],
+                          capture_output=True).returncode == 0
+
+
+def _require_master_synced():
+    """master locale non deve essere indietro ne' divergente da origin/master.
+
+    Questo script NON condivide i commit di master: ne conia uno nuovo a ogni
+    esecuzione. L'albero e' deterministico ("Dev meno lo strip"), l'hash no --
+    dipende dai genitori e dalla data. Due cloni che portano lo stesso stato
+    di Dev producono percio' due commit diversi con lo stesso contenuto, e git
+    non puo' fast-forward-are l'uno sull'altro: il push viene rifiutato per
+    divergenza, senza un solo conflitto di codice a spiegarla. E' gia'
+    successo due volte, e la seconda l'ha risolta un merge `-s ours`.
+
+    Il rimedio e' partire sempre da origin/master. Qui si verifica soltanto,
+    non si tocca niente: e' chi porta a decidere.
+    """
+    if not git("rev-parse", "--verify", "-q", "origin/master", check=False):
+        return                                  # nessun remoto: niente da dire
+    if subprocess.run(["git", "fetch", "-q", "origin", "master"],
+                      capture_output=True, text=True).returncode != 0:
+        print("ATTENZIONE: fetch di origin/master fallito (offline?). "
+              "Se qualcun altro ha portato nel frattempo, il push verra' "
+              "rifiutato per divergenza.")
+        return
+
+    if _is_ancestor("origin/master", "master"):
+        return                                  # locale contiene il remoto
+    if _is_ancestor("master", "origin/master"):
+        sys.exit("master locale e' INDIETRO rispetto a origin/master.\n"
+                 "Portare da qui creerebbe un commit che non si puo' "
+                 "pushare. Prima:\n"
+                 "    git checkout master && git merge --ff-only origin/master "
+                 "&& git checkout Dev")
+    sys.exit("master locale e' DIVERGENTE da origin/master: entrambi hanno un "
+             "porting che l'altro non ha.\n"
+             "L'albero di master si rigenera da Dev, quindi il porting locale "
+             "non contiene niente di suo: buttalo e rifallo sopra al remoto.\n"
+             "    git checkout master && git reset --hard origin/master "
+             "&& git checkout Dev\n"
+             "poi rilancia questo script. (--hard qui e' sicuro SOLO perche' "
+             "si tratta di master: il suo contenuto viene tutto da Dev.)")
+
+
 def check():
     """Le due cose che devono valere dopo un porting corretto."""
     expected = set(stripped_paths())
@@ -127,6 +173,8 @@ def main():
 
     if git("status", "--porcelain"):
         sys.exit("Albero di lavoro sporco: committa o metti da parte prima.")
+
+    _require_master_synced()
 
     git("checkout", "master")
     print("su master; merge di Dev...")
