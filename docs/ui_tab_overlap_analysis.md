@@ -37,14 +37,14 @@ implemented more than once in different tabs that could live in a single tab.
 | | Cisco WLC | `#tab-wlc` |
 | **Valuta** | Threat Intel (EUVD) | `#tab-security` (Matcher / Vendor Watch views) |
 | | Config Analyzer | `#tab-config` (9 pills) |
-| | NetSec Audit (preview, admin) | `#tab-netsec-audit` |
+| | NetSec Audit (admin) | `#tab-netsec-audit` |
 | | Checklist Audit Firewall (admin) | `#tab-audit-checklist` |
 | **Modifica** | Provisioning (write) | `#tab-provisioning` (Provisioning Apparato), `#tab-provisioner` (Apparato da Zero) |
 | | Importazione CSV (write) | `#tab-import` |
 | **Amministra** | Utenti (admin) | `#tab-users` |
 | | Gestione Tenant (admin) | `#tab-groups` |
 | | Sedi (admin, preview) | `#tab-sites` |
-| | Integrazioni (admin) | `#tab-mcp`, `#tab-mcp-client` |
+| | Integrazioni (admin) | `#tab-mcp` |
 | | Impostazioni (admin) | `#tab-settings` |
 
 ---

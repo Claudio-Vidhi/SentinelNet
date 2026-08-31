@@ -120,18 +120,6 @@ class TestRbacScope(unittest.TestCase):
         for path, _group in ROUTES:
             self.assertEqual(client.get(path).status_code, 401, path)
 
-    def test_mcp_client_routes_admin_only(self):
-        # La tab MCP Client (preview) rispecchia la RBAC admin-only della tab
-        # MCP Server: operator negato (403), admin ammesso, anonimo 401.
-        op = self._client("single")
-        self.assertEqual(op.get("/api/mcp-client/servers").status_code, 403)
-        self.assertEqual(op.get("/api/mcp-client/settings").status_code, 403)
-        adm = self._client("adm")
-        self.assertNotIn(adm.get("/api/mcp-client/servers").status_code, (401, 403))
-        self.assertNotIn(adm.get("/api/mcp-client/settings").status_code, (401, 403))
-        anon = TestClient(app_server.app)
-        self.assertEqual(anon.get("/api/mcp-client/servers").status_code, 401)
-
     def test_tenant_rename_and_delete_are_admin_only(self):
         # La voce di nav "Gestione Tenant" e' requires-admin: se gli endpoint
         # restassero operator il gate sarebbe solo cosmetico, perche' l'API
