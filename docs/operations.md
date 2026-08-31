@@ -318,3 +318,85 @@ backing that key up separately, offline.
   repeated every 5 s by the live tail. If it becomes a problem, the path is
   materializing the derived fields as columns at ingestion, not optimizing the
   loop ([live-flows-and-siem.md](live-flows-and-siem.md) §9).
+
+---
+
+## 9. Running as a Linux systemd service
+
+### Environment file (`/etc/sentinelnet.env`)
+
+Store process environment in `/etc/sentinelnet.env` (`chmod 644`):
+
+```ini
+SENTINELNET_HOST=0.0.0.0
+SENTINELNET_PORT=8000
+SENTINELNET_NO_BROWSER=true
+SENTINELNET_DATA_DIR=/opt/sentinelnet/data
+
+# Optional: Observability listeners
+# SENTINELNET_OBS_ENABLE=1
+# SENTINELNET_OBS_BIND=0.0.0.0
+# SENTINELNET_OBS_SYSLOG_ENABLE=1
+# SENTINELNET_OBS_SYSLOG_PORT=5514
+# SENTINELNET_OBS_NETFLOW_ENABLE=1
+# SENTINELNET_OBS_NETFLOW_PORT=2055
+```
+
+### Systemd service unit (`/etc/systemd/system/sentinelnet.service`)
+
+```ini
+[Unit]
+Description=SentinelNet Network Management Service
+After=network.target
+
+[Service]
+Type=simple
+User=sentinel
+Group=sentinel
+WorkingDirectory=/opt/sentinelnet/app
+EnvironmentFile=/etc/sentinelnet.env
+ExecStart=/opt/sentinelnet/app/.venv/bin/python app_server.py
+Restart=always
+RestartSec=5
+
+# Hardening
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/opt/sentinelnet/data
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now sentinelnet
+sudo systemctl status sentinelnet
+```
+
+### Fedora / RHEL / SELinux notes
+
+1. **EnvironmentFile location**: Systemd (`init_t`) is blocked by default SELinux
+   policy from reading files in `/home/`. Always place `EnvironmentFile` under
+   `/etc/` (e.g. `/etc/sentinelnet.env`).
+2. **Virtualenv binaries under `/home` (`status=203/EXEC`)**: If deploying in a
+   user directory (e.g. `/home/admin/...`) instead of `/opt/`, systemd will fail
+   to execute the Python interpreter with exit status `203/EXEC` due to SELinux
+   `user_home_t` restrictions. Re-label the virtualenv binaries:
+   ```bash
+   sudo chcon -R -t bin_t /path/to/.venv/bin
+   chmod -R 755 /path/to/.venv/bin
+   ```
+3. **Firewall (`firewalld`)**:
+   ```bash
+   sudo firewall-cmd --permanent --add-port=8000/tcp
+   # Observability ports (if enabled):
+   # sudo firewall-cmd --permanent --add-port=5514/udp
+   # sudo firewall-cmd --permanent --add-port=2055/udp
+   # sudo firewall-cmd --permanent --add-port=4739/udp
+   # sudo firewall-cmd --permanent --add-port=6343/udp
+   sudo firewall-cmd --reload
+   ```
+
