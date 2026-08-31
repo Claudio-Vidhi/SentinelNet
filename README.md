@@ -146,6 +146,11 @@ transmitted in clear text.
 Starting a second time while SentinelNet is already running does not fail on
 the busy port: it opens the interface of the running instance and exits.
 
+### As a Linux service (systemd)
+
+For running as a background service on Linux (Fedora, RHEL, Ubuntu/Debian), see
+the systemd unit and SELinux setup guide in [docs/operations.md](docs/operations.md) §9.
+
 ### Password recovery by email
 
 Optional, and off until an SMTP server is configured under **Settings → Mail
