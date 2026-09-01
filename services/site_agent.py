@@ -95,7 +95,14 @@ def load_config():
     p.add_argument("--central-url", help="URL base del SentinelNet centrale")
     p.add_argument("--site-id", help="Id della sede (X-Site-Id)")
     p.add_argument("--token", help="Token per-sede")
-    p.add_argument("--interval", type=int, default=60, help="Secondi tra i cicli")
+    # default=None, like every other option here, and NOT 60: the flags below
+    # are applied with "if args.X", which asks "did the user pass it?". With a
+    # default of 60 that question was always true, so the flag overwrote the
+    # interval read from --config on every start -- an interval changed from
+    # the dashboard was persisted into agent.json correctly and then thrown
+    # away at the next restart. The 60s default still applies, from the
+    # cfg.setdefault below, which is where the other defaults live.
+    p.add_argument("--interval", type=int, help="Secondi tra i cicli (default 60)")
     p.add_argument("--data-dir", help="Directory dati locale (inventario)")
     p.add_argument("--no-verify-tls", action="store_true",
                    help="Non verificare il certificato TLS del centrale")
