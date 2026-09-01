@@ -671,6 +671,29 @@ class RemoteSiteE2E(unittest.TestCase):
             inventory_manager.get_detected_versions()["10.9.0.81"]["status"], "online")
 
 
+    def test_run_triage_does_not_pile_up_duplicate_jobs(self):
+        # With the agent offline the queue must not grow without bound: a
+        # second run-triage while a triage job is still pending/running for
+        # the same device must not enqueue a second copy.
+        from services import site_manager
+        sid, token = self._create_agent_site("Triage-Dedupe")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={
+            "devices": [{"ip": "10.9.0.71", "vendor": "cisco",
+                        "hostname": "switch-01", "group": "Generale"}]})
+
+        r1 = self.client.post("/api/run-triage", headers=self.admin_h,
+                              json={"group": "Generale"})
+        self.assertEqual(r1.status_code, 200, r1.text)
+        r2 = self.client.post("/api/run-triage", headers=self.admin_h,
+                              json={"group": "Generale"})
+        self.assertEqual(r2.status_code, 200, r2.text)
+
+        jobs = [j for j in site_manager.list_jobs(sid)
+               if j["device_ip"] == "10.9.0.71" and j["kind"] == "triage"]
+        self.assertEqual(len(jobs), 1, jobs)
+
+
 class CentralDoesNotTouchAgentSiteDevices(unittest.TestCase):
     """Mode B promises the central needs no path to the site. It did anyway.
 
