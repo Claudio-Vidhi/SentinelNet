@@ -215,6 +215,7 @@ class AgentConfigUpdateSchema(BaseModel):
     syslog_port: Optional[int] = None
     interval: Optional[int] = None
     backup_interval: Optional[int] = None
+    l2_interval: Optional[int] = None
     syslog_enabled: Optional[bool] = None
 
 

@@ -165,6 +165,16 @@ class RemoteSiteE2E(unittest.TestCase):
         r = self.client.get("/api/agent/jobs", headers=ah)
         self.assertEqual(r.json()["jobs"], [])
 
+    def test_l2_interval_round_trips_through_the_heartbeat(self):
+        from services import site_manager
+        sid, token = self._create_agent_site("L2-Interval")
+        ah = self._agent_headers(sid, token)
+        r = self.client.post("/api/agent/heartbeat", headers=ah,
+                             json={"l2_interval": 0})
+        self.assertEqual(r.status_code, 200, r.text)
+        # 0 must survive: it is "every cycle", not "unset".
+        self.assertEqual(site_manager.get_site(sid)["l2_interval"], 0)
+
     def test_backup_interval_round_trips_through_the_heartbeat(self):
         from services import site_manager
         sid, token = self._create_agent_site("Backup-Interval")
@@ -838,6 +848,64 @@ class CentralDoesNotTouchAgentSiteDevices(unittest.TestCase):
             out = core_engine.run_bulk_command(device, ["show version"])
         self.assertEqual(out["status"], "error")
         self.assertIn("agente", out["message"])
+
+
+class AgentL2Cadence(unittest.TestCase):
+    """MAC/ARP collection is the only cycle phase that opens an SSH session to
+    every device, and it had no clock of its own: at interval=10 that was six
+    sessions a minute per switch, forever, for tables that do not change that
+    fast."""
+
+    def _agent(self, l2_interval=300):
+        from unittest import mock
+        from services import site_agent
+        agent = site_agent.Agent.__new__(site_agent.Agent)
+        agent.cfg = {"site_id": "milan", "interval": 10, "l2_interval": l2_interval}
+        agent._last_l2 = 0.0
+        agent.push_mac = mock.MagicMock()
+        agent.push_arp = mock.MagicMock()
+        return agent
+
+    def test_the_first_cycle_collects_immediately(self):
+        agent = self._agent()
+        self.assertTrue(agent.maybe_push_l2([{"IP": "10.9.0.80"}]))
+        agent.push_mac.assert_called_once()
+        agent.push_arp.assert_called_once()
+
+    def test_a_second_cycle_inside_the_interval_does_not_collect(self):
+        agent = self._agent(l2_interval=300)
+        agent.maybe_push_l2([{"IP": "10.9.0.80"}])
+        self.assertFalse(agent.maybe_push_l2([{"IP": "10.9.0.80"}]))
+        self.assertEqual(agent.push_mac.call_count, 1)
+        self.assertEqual(agent.push_arp.call_count, 1)
+
+    def test_zero_means_every_cycle_not_disabled(self):
+        # Deliberately unlike backup_interval, where 0 disables: collecting
+        # every cycle is the behaviour this phase had before it got a clock,
+        # so 0 has to be the way back to it.
+        agent = self._agent(l2_interval=0)
+        agent.maybe_push_l2([{"IP": "10.9.0.80"}])
+        agent.maybe_push_l2([{"IP": "10.9.0.80"}])
+        self.assertEqual(agent.push_mac.call_count, 2)
+        self.assertEqual(agent.push_arp.call_count, 2)
+
+    def test_a_failing_mac_phase_does_not_stop_the_arp_one(self):
+        agent = self._agent()
+        agent.push_mac.side_effect = RuntimeError("ssh down")
+        self.assertTrue(agent.maybe_push_l2([{"IP": "10.9.0.80"}]))
+        agent.push_arp.assert_called_once()
+
+    def test_the_default_is_five_minutes(self):
+        import sys, json as _json, tempfile as _tf
+        from unittest import mock
+        from services import site_agent
+        d = _tf.mkdtemp(prefix="sentinelnet_l2cfg_")
+        path = os.path.join(d, "agent.json")
+        with open(path, "w", encoding="utf-8") as f:
+            _json.dump({"central_url": "https://192.0.2.10:8000",
+                        "site_id": "milan", "token": "tok"}, f)
+        with mock.patch.object(sys, "argv", ["site_agent.py", "--config", path]):
+            self.assertEqual(site_agent.load_config()["l2_interval"], 300)
 
 
 class AgentConfigFileWins(unittest.TestCase):
