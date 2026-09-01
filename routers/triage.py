@@ -36,14 +36,8 @@ class PingCheckRequest(BaseModel):
 
 # --- ROTTE ---
 
-def run_triage_background(allowed_groups=None):
+def run_triage_background(devices):
     global triage_job
-    devices = inventory_manager.get_all_devices()
-    if allowed_groups is not None:
-        devices = [d for d in devices if d.get('Group') in allowed_groups]
-    # Le sedi con agente sono già state accodate come job da run_triage():
-    # niente SSH diretto qui, e niente doppione del job.
-    devices = [d for d in devices if not site_manager.is_agent_site(d.get('Site'))]
     with triage_lock:
         triage_job["status"] = "running"
         triage_job["total"] = len(devices)
@@ -105,25 +99,33 @@ def run_triage(payload: TriageRunRequest = TriageRunRequest(),
         triage_job["total"] = 0
         triage_job["current_device"] = "Inizializzazione..."
 
-    # Il centrale non apre SSH verso una sede con agente: la richiesta
-    # diventa un job che l'agente ritira al prossimo polling.
+    # Lista costruita UNA VOLTA sola e poi partizionata: le due vie (job
+    # accodato per l'agente / triage diretto qui sotto) devono essere
+    # complementari per costruzione, non per due filtri scritti a mano che
+    # per ora coincidono e domani no.
     devices = inventory_manager.get_all_devices()
     if target_groups is not None:
         devices = [d for d in devices if d.get('Group') in target_groups]
+    direct_devices = []
     queued = 0
     for d in devices:
         if site_manager.is_agent_site(d.get('Site')):
+            # Il centrale non apre SSH verso una sede con agente: la
+            # richiesta diventa un job che l'agente ritira al prossimo
+            # polling.
             site_manager.enqueue_job(d['Site'], d['IP'], "",
                                      requested_by=current_user.get('sub', ''),
                                      kind="triage")
             queued += 1
+        else:
+            direct_devices.append(d)
 
     log_audit(
         f"Triage avviato dall'utente '{current_user.get('sub')}' "
         f"(sede: {payload.group})."
     )
     thread = threading.Thread(target=run_triage_background,
-                              args=(target_groups,), daemon=True)
+                              args=(direct_devices,), daemon=True)
     thread.start()
     return {"status": "running", "message": "Scansione avviata in background",
             "queued": queued}
