@@ -806,6 +806,25 @@ class CentralDoesNotTouchAgentSiteDevices(unittest.TestCase):
         self.assertEqual(out["status"], "error")
         self.assertIn("agente", out["message"])
 
+    def test_triage_refuses_a_fortigate_at_an_agent_site_before_dialling_it(self):
+        # The FortiGate branch dispatches BEFORE the agent-site refusal used
+        # to run, so the central still opened a REST/SSH connection to a
+        # FortiGate at an agent site -- the exact thing this mode exists to
+        # prevent. The refusal must fire first, with nothing above it that
+        # could have opened a connection.
+        from unittest import mock
+        from core import core_engine
+        from services import fortigate_service, site_manager
+
+        device = {"IP": "192.0.2.21", "Vendor": "fortinet", "Group": "Generale",
+                  "Site": "milan"}
+        with mock.patch.object(site_manager, "get_site", return_value=self.AGENT), \
+             mock.patch.object(fortigate_service, "get_full_config",
+                               side_effect=AssertionError("dialled the FortiGate")):
+            out = core_engine.run_backup_and_triage(device)
+        self.assertEqual(out["status"], "error")
+        self.assertIn("agente", out["message"])
+
     def test_bulk_command_refuses_instead_of_opening_ssh(self):
         from unittest import mock
         from core import core_engine
