@@ -206,6 +206,12 @@ def agent_push_backup(payload: AgentBackupSchema, site = Depends(get_agent_site)
         raise HTTPException(
             status_code=413,
             detail="Config oltre il limite di 5 MB: rifiutata, non troncata.")
+    if not payload.config.strip():
+        # Un push parziale o vuoto non deve MAI sovrascrivere un backup buono
+        # gia' salvato: meglio rifiutare qui che scriverlo e perdere lo storico.
+        raise HTTPException(
+            status_code=400,
+            detail="Config vuota: rifiutata, non sovrascrive il backup esistente.")
     sys_name = payload.hostname or payload.ip
     file_path = backup_store.save_backup(device, sys_name, payload.config)
     # Stesso punto unico di storicizzazione di core_engine: senza, la
