@@ -92,6 +92,15 @@ class RemoteSiteE2E(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(r.json()["site_id"], sid)
 
+    def test_backup_interval_round_trips_through_the_heartbeat(self):
+        from services import site_manager
+        sid, token = self._create_agent_site("Backup-Interval")
+        ah = self._agent_headers(sid, token)
+        r = self.client.post("/api/agent/heartbeat", headers=ah,
+                             json={"backup_interval": 900})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(site_manager.get_site(sid)["backup_interval"], 900)
+
         # 3. push inventario locale
         r = self.client.post("/api/agent/inventory", headers=ah, json={"devices": [
             {"ip": "10.9.0.2", "vendor": "cisco", "hostname": "acc-sw-milano"},

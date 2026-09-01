@@ -210,6 +210,7 @@ class Agent:
             "syslog_enabled": self.cfg.get("syslog_enabled", True),
             "syslog_port": int(self.cfg.get("syslog_port", 5514)),
             "interval": int(self.cfg.get("interval", 60)),
+            "backup_interval": int(self.cfg.get("backup_interval") or 0),
             "uptime_s": int(time.time() - self._start_ts) if hasattr(self, "_start_ts") else 0,
         }
         r = self._post("/api/agent/heartbeat", payload)

@@ -214,6 +214,7 @@ def list_site_command_jobs_ep(site_id: str, current_user = Depends(require_opera
 class AgentConfigUpdateSchema(BaseModel):
     syslog_port: Optional[int] = None
     interval: Optional[int] = None
+    backup_interval: Optional[int] = None
     syslog_enabled: Optional[bool] = None
 
 
