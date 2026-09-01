@@ -52,9 +52,13 @@ Key principles:
    nothing on central contradicts it, so an agent site's devices are excluded
    from every direct probe: no ICMP from the ping check or the ping monitor,
    no TCP/22 reachability test, no SSH session for triage or bulk commands.
-   Their status is what the agent pushes, and where nothing has been pushed
-   the answer is "not measurable" rather than a guessed "offline" — the same
-   tri-state a jump site uses. The predicates are
+   Their status is what the agent pushes: ping results every cycle
+   (`POST /api/agent/status`), a config snapshot and version report on its own
+   `backup_interval` (`POST /api/agent/backup`), and — on demand, rather than
+   on a schedule — a `triage` job an operator can enqueue from the dashboard
+   the same way as a CLI command. Where nothing has been pushed yet the answer
+   is "not measurable" rather than a guessed "offline" — the same tri-state a
+   jump site uses. The predicates are
    `site_manager.has_direct_path()` (false for `jump` **and** `agent`) and
    `site_manager.is_agent_site()` (the operation belongs to the agent, not
    merely the network path). A site id central does not know keeps its direct
@@ -312,6 +316,12 @@ Also pushed by the agent, alongside inventory and MAC tables: **ARP tables**
 (`POST /api/agent/arp`). Without them a remote client has a switch port but no
 IP address — `arp_entries` holds the only MAC↔IP binding, and every view
 downstream starts from the IP.
+
+Two more pushes complete the protocol: **device status** every cycle
+(`POST /api/agent/status`, ping results feeding the tri-state described in
+principle 5) and **backup/version reports** (`POST /api/agent/backup`) on the
+agent's own `backup_interval` — 3600 seconds by default, `0` disables it —
+rather than on any schedule central controls.
 
 ---
 
