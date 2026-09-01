@@ -185,6 +185,16 @@ def run_backup_and_triage(device):
         return _fortigate_backup_and_triage(device)
 
     cli_kind, ssh_port = get_cli_transport(device)
+    # An agent-site device is not the central's to reach: the agent runs this
+    # same triage locally and pushes the result. Opening an SSH session from
+    # here would duplicate its work over a path the mode does not require to
+    # exist, and on the sites where it does exist it shows up as denied SSH
+    # from the central on the customer's firewall.
+    if site_manager.is_agent_site(device.get('Site')):
+        return {"status": "error",
+                "message": (f"Il dispositivo {ip} appartiene a una sede con agente: "
+                            "il triage viene eseguito dall'agente e inviato al "
+                            "centrale, non aperto da qui.")}
     # A jump-site device has no direct route from the central by design: the
     # session is tunnelled through the bastion by core.net_ssh. Probing the
     # direct path here would always fail and persist a false "offline".
@@ -527,6 +537,13 @@ def run_bulk_command(device, commands, config_mode=False, save_after=False):
     """
     ip = device['IP']
     cli_kind, ssh_port = get_cli_transport(device)
+    # See run_backup_and_triage: an agent-site device is reached by its agent,
+    # through the job queue, never by an SSH session opened here.
+    if site_manager.is_agent_site(device.get('Site')):
+        return {"status": "error",
+                "message": (f"Il dispositivo {ip} appartiene a una sede con agente: "
+                            "i comandi passano dalla coda job dell'agente, non da "
+                            "una sessione SSH aperta dal centrale.")}
     # See run_backup_and_triage: no direct probe for a bastion-only site.
     if site_manager.has_direct_path(device.get('Site')) and not is_reachable(ip, ssh_port):
         return {"status": "error", "message": f"Device {ip} non raggiungibile sulla porta {ssh_port} ({cli_kind.upper()})"}

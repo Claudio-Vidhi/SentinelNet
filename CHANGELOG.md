@@ -23,6 +23,28 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Fixed
 
+- **Central dialled the devices of an agent site, which is the one thing the
+  mode exists to avoid.** The agent mirrors its inventory into central so the
+  dashboard can show it, and every central-side prober then treated those rows
+  as its own devices: ICMP from the ping check and the ping monitor, a TCP/22
+  reachability test, and SSH sessions for triage and bulk commands. The only
+  site gate, `has_direct_path()`, exempted `jump` sites alone. On a routed lab
+  this shows up as denied ICMP and denied SSH from central in the customer's
+  firewall log; on a NAT'd site it is a device reported permanently "offline"
+  because the probe cannot arrive at all. An agent site is now excluded from
+  every direct probe and reports the same "not measurable" tri-state a jump
+  site does, with a second predicate, `is_agent_site()`, for the operations
+  that belong to the agent rather than merely to the network path. A site id
+  central does not know keeps its direct path, which is what lets the agent
+  run the same code over its own inventory.
+
+- **An agent's polling interval reverted to 60s at every restart.** `--interval`
+  carried an argparse default of 60 while being applied with `if args.interval`
+  — a test of "did the operator pass this flag?" that was true on every start.
+  So an interval changed from the dashboard was persisted into `agent.json`
+  correctly and then overwritten by a flag nobody had typed. The default now
+  comes from the same `setdefault` as every other one.
+
 - **A device was classified from its hostname while its model sat unused three
   lines away.** The map computed the model out of the device's own backup for
   the table column only, so an inventoried switch with no CDP neighbour to
