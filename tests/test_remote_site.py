@@ -527,6 +527,29 @@ class RemoteSiteE2E(unittest.TestCase):
         self.assertEqual(entry["status"], "online")
         self.assertEqual(entry["version"], "15.2(7)E2")
 
+    def test_agent_backup_push_populates_config_drift(self):
+        # b9ecd63-era gap: a central-poll triage records drift history, an
+        # agent-site push did not, so the Config Drift tab stayed empty.
+        sid, token = self._create_agent_site("Drift-Push")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={"devices": [
+            {"ip": "10.9.0.45", "vendor": "cisco", "hostname": "switch-05"},
+        ]})
+
+        r = self.client.post("/api/agent/backup", headers=ah, json={
+            "ip": "10.9.0.45", "hostname": "switch-05", "vendor": "cisco",
+            "version": "15.2(7)E2", "serial": "",
+            "config": "hostname switch-05\n!\nend\n",
+        })
+        self.assertEqual(r.status_code, 200, r.text)
+
+        from services import inventory_manager
+        from services.config_drift import history
+        device = next(d for d in inventory_manager.get_all_devices()
+                     if d["IP"] == "10.9.0.45")
+        versions = history.list_versions(device)
+        self.assertTrue(versions, "config drift history vuota per la sede agent")
+
     def test_an_oversized_config_is_refused_without_writing(self):
         # Truncating is worse than refusing: config drift would report a
         # spurious change and the model classifier would read half a file.
