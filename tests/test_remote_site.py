@@ -568,6 +568,33 @@ class RemoteSiteE2E(unittest.TestCase):
         versions = history.list_versions(device)
         self.assertTrue(versions, "config drift history vuota per la sede agent")
 
+    def test_an_empty_config_is_refused_without_overwriting_a_good_backup(self):
+        # A partial or empty push must never overwrite a good stored config.
+        sid, token = self._create_agent_site("Backup-Empty")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={
+            "devices": [{"ip": "10.9.0.47", "vendor": "cisco"}]})
+
+        good = self.client.post("/api/agent/backup", headers=ah, json={
+            "ip": "10.9.0.47", "hostname": "switch-08", "vendor": "cisco",
+            "version": "15.2(7)E2", "serial": "",
+            "config": "hostname switch-08\n!\nend\n",
+        })
+        self.assertEqual(good.status_code, 200, good.text)
+        saved = good.json()["file"]
+        with open(saved, encoding="utf-8") as f:
+            good_text = f.read()
+
+        for empty in ("", "   \n\t  "):
+            r = self.client.post("/api/agent/backup", headers=ah, json={
+                "ip": "10.9.0.47", "hostname": "switch-08", "vendor": "cisco",
+                "version": "15.2(7)E2", "serial": "", "config": empty,
+            })
+            self.assertEqual(r.status_code, 400, r.text)
+
+        with open(saved, encoding="utf-8") as f:
+            self.assertEqual(f.read(), good_text)
+
     def test_an_oversized_config_is_refused_without_writing(self):
         # Truncating is worse than refusing: config drift would report a
         # spurious change and the model classifier would read half a file.
