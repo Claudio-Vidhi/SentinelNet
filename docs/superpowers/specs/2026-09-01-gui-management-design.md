@@ -89,42 +89,54 @@ origins, the public base URL and the observability retention windows. The
 operator was walked through editing `/etc/sentinelnet.env` by hand today; the
 dashboard could have written the same two values.
 
-It would not have helped, and the reason generalises:
+It would not have helped, for one reason and one only:
 
-1. **Environment variables win.** `_app_adv` is consulted only when the
-   matching variable is unset (`core/data_config.py`). Once
-   `SENTINELNET_SSL_CERTFILE` is exported by the unit file, the GUI field is
-   dead input — it saves, it displays, and it changes nothing. Nothing in the
-   UI says which of the two is in force for a given key.
-2. **They need a restart, and there is no restart.** The UI is honest about it
-   — *"Le modifiche richiedono il riavvio dell'applicazione"* — but the only
-   way to perform that restart is a shell on the box. So every setting in that
-   panel is, in practice, a shell-assisted setting.
+**Those settings need a restart, and there is no restart.** The UI is honest
+about it — *"Le modifiche richiedono il riavvio dell'applicazione"* — but the
+only way to perform that restart is a shell on the box. So every setting in
+that panel is, in practice, a shell-assisted setting.
 
-So the largest GUI-management gap is not a missing form. It is that **a whole
-category of existing settings is already exposed and cannot be applied**, and
-that the app cannot say whether what is displayed is what is running.
+A first draft of this review claimed a second reason: that environment
+variables silently win and the UI does not say so. **That was wrong, and the
+code says so.** `/api/settings/app` returns an `env_overrides` map alongside
+the values, and `renderAppAdvanced` in `static/js/settings.js` already renders
+each environment-backed field **disabled**, with a visible
+*"Sovrascritto da variabile d'ambiente"* note. Precedence is real —
+`_app_adv` is consulted only when the variable is unset — but it is displayed
+correctly and needs no work. The claim is retracted rather than quietly
+dropped, because it would otherwise have produced a task rebuilding something
+that already exists.
 
-Three consequences for the plan:
+So the largest GUI-management gap is narrower and sharper than the draft said:
+**an existing settings panel is complete, correct, and inapplicable, because
+the app cannot restart itself.**
 
-- **Item 11 (central restart) is promoted.** It was the last item of Phase 3
+Two consequences for the plan:
+
+- **Item 11 (central restart) is promoted, and split.** It was last in Phase 3
   because it is the riskiest; it is also the one that makes an entire existing
   settings panel work. The restart half is separable from the update half and
-  much simpler: restarting a service is not the same as changing its code, so
-  it can ship first, with the same external-unit mechanism and none of the
-  fetch/checkout/rollback machinery.
-- **Add: show which source is in force per setting.** Beside each advanced
-  setting, state whether the value comes from the environment or from
-  `app_settings.json`, and mark the environment ones read-only. This is small,
-  and without it the panel actively misleads.
-- **Add: a "generate self-signed certificate" action** for an agent or lab
-  central. Today it is an `openssl req` incantation with a
-  `subjectAltName` that must carry the IP, or clients reject it — exactly the
-  kind of thing that belongs behind a button and not in a runbook.
+  far simpler: restarting a service is not changing its code, so it ships with
+  the same external-unit mechanism and none of the fetch, checkout or rollback
+  machinery.
+- **Add: a "generate self-signed certificate" action** for a lab central or an
+  agent host. Today it is an `openssl req` incantation whose `subjectAltName`
+  must carry the address clients will use, or they reject the certificate —
+  exactly the kind of detail that belongs behind a button rather than in a
+  runbook.
 
-The revised ordering is therefore Phase 1 unchanged, then **restart plus
-setting-source display** ahead of the rest of Phase 2, because they unlock
-settings that already exist rather than adding new ones.
+### A second correction: finding E is worse than "reports nothing"
+
+The agent's heartbeat **does** send a version — a hardcoded `"2.6.0"` string
+literal in `Agent.heartbeat` (`services/site_agent.py`), matching nothing. The
+application is at 0.26.0 and the literal appears nowhere else in the tree. The
+central then discards it: `agent_heartbeat` reads only `syslog_port`,
+`interval`, `backup_interval` and `l2_interval` from the payload.
+
+So an agent does not merely fail to report its identity — it reports a fixed,
+false one that no code consumes. Item 1 must therefore *replace* that literal
+with the real `core.version.__version__` plus the git commit and branch, not
+merely add fields beside it.
 
 ## Phases
 
@@ -159,10 +171,7 @@ update path's risk.
     exact sudoers rule — but restart only: no fetch, no checkout, no code
     change, so no rollback machinery is needed. Every advanced setting that
     says "requires a restart" becomes reachable.
-3c. **Show which source is in force for each advanced setting.** Environment
-    or `app_settings.json`, per key, with the environment-backed ones marked
-    read-only. Without this the panel accepts values it will never apply.
-3d. **Generate a self-signed certificate** for a lab or agent host, with the
+3c. **Generate a self-signed certificate** for a lab or agent host, with the
     `subjectAltName` carrying the address clients will use — the detail whose
     omission makes a hand-rolled certificate fail verification.
 
