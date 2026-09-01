@@ -180,22 +180,24 @@ def run_backup_and_triage(device):
     ip     = device['IP']
     vendor = device['Vendor'].lower()
 
+    # An agent-site device is not the central's to reach: the agent runs this
+    # same triage locally and pushes the result. This MUST run before the
+    # FortiGate dispatch below: that branch opens a REST/SSH connection of
+    # its own, so a check placed after it would still let the central dial
+    # a FortiGate at an agent site over HTTPS -- the exact thing this mode
+    # exists to prevent.
+    if site_manager.is_agent_site(device.get('Site')):
+        return {"status": "error",
+                "message": (f"Il dispositivo {ip} appartiene a una sede con agente: "
+                            "il triage viene eseguito dall'agente e inviato al "
+                            "centrale, non aperto da qui.")}
+
     # FortiGate: REST-primary (port 443) with internal SSH fallback in the service,
     # so no pre-check on port 22.
     if vendor in FORTINET_VENDORS:
         return _fortigate_backup_and_triage(device)
 
     cli_kind, ssh_port = get_cli_transport(device)
-    # An agent-site device is not the central's to reach: the agent runs this
-    # same triage locally and pushes the result. Opening an SSH session from
-    # here would duplicate its work over a path the mode does not require to
-    # exist, and on the sites where it does exist it shows up as denied SSH
-    # from the central on the customer's firewall.
-    if site_manager.is_agent_site(device.get('Site')):
-        return {"status": "error",
-                "message": (f"Il dispositivo {ip} appartiene a una sede con agente: "
-                            "il triage viene eseguito dall'agente e inviato al "
-                            "centrale, non aperto da qui.")}
     # A jump-site device has no direct route from the central by design: the
     # session is tunnelled through the bastion by core.net_ssh. Probing the
     # direct path here would always fail and persist a false "offline".
