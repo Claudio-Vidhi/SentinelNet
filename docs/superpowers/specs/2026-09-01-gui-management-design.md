@@ -59,6 +59,73 @@ prerequisite. It is also a live bug: `DATA_DIR` is CWD-relative
 launched from a different folder silently opens a different, empty install. It
 deserves fixing on its own merits, whether or not an installer is ever built.
 
+## Audit findings
+
+What follows was found by reading the code rather than by asking what would be
+nice. Each row is a capability the data model or the API already supports and
+the UI does not reach, so the cost is a control and a handler, not a feature.
+
+| # | Gap | Evidence |
+|---|---|---|
+| A | A site cannot be renamed, and its subnets cannot be corrected, after creation | `update_site` accepts `name` and `subnets`; `renderSitesTable` prints both as text (`static/js/settings.js`) |
+| B | A bastion's address cannot be changed after creation | `jump_host` occurs once in `static/js/settings.js`, in the creation form |
+| C | A site's mode cannot be changed | `update_site` validates and applies `mode`; no control offers it |
+| D | The agent's syslog listener cannot be turned off | `syslog_enabled` occurs **zero** times across all of `static/js/` |
+| E | The agent never reports which code it runs | no version, commit or branch in the heartbeat payload (`services/site_agent.py`) |
+| F | Neither the central nor an agent can show its log | no endpoint serves `error_log.txt` or the journal; `_agent_*` RPC verbs are update, restart, get/save inventory, config |
+| G | TLS is configurable from the GUI but unusable there | see the review below — this one is not a missing control |
+
+Gaps A-D are Phase 2. E and F are Phase 1. G is the subject of the review.
+
+## Review: the restart gap is the real blocker
+
+An audit pass after the phases were drafted found something that changes their
+emphasis, and corrects advice given earlier the same day.
+
+**TLS is already editable from the GUI.** `ssl_certfile` and `ssl_keyfile` are
+in the advanced application settings — `_APP_ADV_ENV` in `routers/settings.py`
+and the field list in `static/js/settings.js` — alongside the HTTP port, CORS
+origins, the public base URL and the observability retention windows. The
+operator was walked through editing `/etc/sentinelnet.env` by hand today; the
+dashboard could have written the same two values.
+
+It would not have helped, and the reason generalises:
+
+1. **Environment variables win.** `_app_adv` is consulted only when the
+   matching variable is unset (`core/data_config.py`). Once
+   `SENTINELNET_SSL_CERTFILE` is exported by the unit file, the GUI field is
+   dead input — it saves, it displays, and it changes nothing. Nothing in the
+   UI says which of the two is in force for a given key.
+2. **They need a restart, and there is no restart.** The UI is honest about it
+   — *"Le modifiche richiedono il riavvio dell'applicazione"* — but the only
+   way to perform that restart is a shell on the box. So every setting in that
+   panel is, in practice, a shell-assisted setting.
+
+So the largest GUI-management gap is not a missing form. It is that **a whole
+category of existing settings is already exposed and cannot be applied**, and
+that the app cannot say whether what is displayed is what is running.
+
+Three consequences for the plan:
+
+- **Item 11 (central restart) is promoted.** It was the last item of Phase 3
+  because it is the riskiest; it is also the one that makes an entire existing
+  settings panel work. The restart half is separable from the update half and
+  much simpler: restarting a service is not the same as changing its code, so
+  it can ship first, with the same external-unit mechanism and none of the
+  fetch/checkout/rollback machinery.
+- **Add: show which source is in force per setting.** Beside each advanced
+  setting, state whether the value comes from the environment or from
+  `app_settings.json`, and mark the environment ones read-only. This is small,
+  and without it the panel actively misleads.
+- **Add: a "generate self-signed certificate" action** for an agent or lab
+  central. Today it is an `openssl req` incantation with a
+  `subjectAltName` that must carry the IP, or clients reject it — exactly the
+  kind of thing that belongs behind a button and not in a runbook.
+
+The revised ordering is therefore Phase 1 unchanged, then **restart plus
+setting-source display** ahead of the rest of Phase 2, because they unlock
+settings that already exist rather than adding new ones.
+
 ## Phases
 
 Ordered so each phase is useful alone and lowers the risk of the next. Phase 1
@@ -80,6 +147,24 @@ No new authority, nothing that can break a running system. Read-only.
 3. **Agent log tail.** An `_agent_logs` RPC returning the last N lines of the
    agent's journal, rendered in the agent panel. Read-only, and it removes the
    most common reason to SSH into a site.
+
+### Phase 1b — Make the settings that already exist usable
+
+Promoted out of Phase 3 by the review above: these unlock an existing panel
+rather than adding new surface, and the restart half carries none of the
+update path's risk.
+
+3b. **Restart the central from the GUI.** The same external-unit mechanism as
+    item 11 — `systemctl start --no-block sentinelnet-restart` through one
+    exact sudoers rule — but restart only: no fetch, no checkout, no code
+    change, so no rollback machinery is needed. Every advanced setting that
+    says "requires a restart" becomes reachable.
+3c. **Show which source is in force for each advanced setting.** Environment
+    or `app_settings.json`, per key, with the environment-backed ones marked
+    read-only. Without this the panel accepts values it will never apply.
+3d. **Generate a self-signed certificate** for a lab or agent host, with the
+    `subjectAltName` carrying the address clients will use — the detail whose
+    omission makes a hand-rolled certificate fail verification.
 
 ### Phase 2 — Configure a site completely
 
