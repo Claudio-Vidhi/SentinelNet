@@ -319,6 +319,7 @@ class Agent:
         r.raise_for_status()
         return r.json()
 
+    # Task 4: Scheduled backup phase
     def push_backup(self, device):
         """Triage+backup locale di un dispositivo, spinto al centrale.
 
