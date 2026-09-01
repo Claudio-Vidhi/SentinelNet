@@ -456,5 +456,127 @@ class RemoteSiteE2E(unittest.TestCase):
         self.assertIn("IP", res.json()["detail"])
 
 
+class CentralDoesNotTouchAgentSiteDevices(unittest.TestCase):
+    """Mode B promises the central needs no path to the site. It did anyway.
+
+    The agent mirrors its inventory into the central so the dashboard can show
+    it, and every central-side prober then read those rows as its own devices.
+    On a routed lab that is denied ICMP and denied SSH from the central in the
+    customer's firewall log; on a real NAT'd site it is a device permanently
+    reported "offline" because the probe cannot arrive.
+    """
+
+    AGENT = {"id": "milan", "name": "Milan", "mode": "agent"}
+    JUMP = {"id": "roma", "name": "Roma", "mode": "jump"}
+    CENTRAL = {"id": "central", "name": "Central", "mode": "central"}
+
+    def test_an_agent_site_has_no_direct_path(self):
+        from unittest import mock
+        from services import site_manager
+        with mock.patch.object(site_manager, "get_site", return_value=self.AGENT):
+            self.assertFalse(site_manager.has_direct_path("milan"))
+
+    def test_a_central_site_still_has_one(self):
+        from unittest import mock
+        from services import site_manager
+        with mock.patch.object(site_manager, "get_site", return_value=self.CENTRAL):
+            self.assertTrue(site_manager.has_direct_path("central"))
+
+    def test_a_site_the_central_does_not_know_keeps_its_direct_path(self):
+        # This is what keeps the AGENT itself working: it runs the same code
+        # over its local inventory, whose Site column names a site absent from
+        # its own sites.json. Return False here and the agent would refuse to
+        # reach the very devices it exists to manage.
+        from unittest import mock
+        from services import site_manager
+        with mock.patch.object(site_manager, "get_site", return_value=None):
+            self.assertTrue(site_manager.has_direct_path("milan"))
+            self.assertFalse(site_manager.is_agent_site("milan"))
+
+    def test_is_agent_site_separates_agent_from_jump(self):
+        # Both lack a direct path, but only the jump site is still operated BY
+        # the central (tunnelled through the bastion), so the two cannot share
+        # one predicate.
+        from unittest import mock
+        from services import site_manager
+        for site, expected in ((self.AGENT, True), (self.JUMP, False),
+                               (self.CENTRAL, False)):
+            with self.subTest(mode=site["mode"]):
+                with mock.patch.object(site_manager, "get_site", return_value=site):
+                    self.assertEqual(site_manager.is_agent_site(site["id"]), expected)
+                    if not expected:
+                        continue
+                    self.assertFalse(site_manager.has_direct_path(site["id"]))
+
+    def test_triage_refuses_instead_of_opening_ssh(self):
+        from unittest import mock
+        from core import core_engine
+        from services import site_manager
+
+        device = {"IP": "192.0.2.20", "Vendor": "cisco", "Group": "Generale",
+                  "Site": "milan"}
+        # is_reachable is the TCP/22 probe: reaching it at all is the failure.
+        with mock.patch.object(site_manager, "get_site", return_value=self.AGENT), \
+             mock.patch.object(core_engine, "is_reachable",
+                               side_effect=AssertionError("probed the network")):
+            out = core_engine.run_backup_and_triage(device)
+        self.assertEqual(out["status"], "error")
+        self.assertIn("agente", out["message"])
+
+    def test_bulk_command_refuses_instead_of_opening_ssh(self):
+        from unittest import mock
+        from core import core_engine
+        from services import site_manager
+
+        device = {"IP": "192.0.2.20", "Vendor": "cisco", "Group": "Generale",
+                  "Site": "milan"}
+        with mock.patch.object(site_manager, "get_site", return_value=self.AGENT), \
+             mock.patch.object(core_engine, "is_reachable",
+                               side_effect=AssertionError("probed the network")):
+            out = core_engine.run_bulk_command(device, ["show version"])
+        self.assertEqual(out["status"], "error")
+        self.assertIn("agente", out["message"])
+
+
+class AgentConfigFileWins(unittest.TestCase):
+    """An interval set from the dashboard must survive an agent restart.
+
+    The dashboard's change is persisted into agent.json by the _agent_config
+    job, but --interval carried an argparse default of 60 while being applied
+    with "if args.interval" — a test of "did the operator pass this flag?"
+    that was true on every start. So the file was read, then overwritten by a
+    flag nobody had typed.
+    """
+
+    BASE = {"central_url": "http://192.0.2.10:8000", "site_id": "test-site",
+            "token": "tok"}
+
+    def _load(self, argv, cfg):
+        import json as _json
+        import sys
+        import tempfile as _tf
+        from unittest import mock
+        from services import site_agent
+
+        d = _tf.mkdtemp(prefix="sentinelnet_agentcfg_")
+        path = os.path.join(d, "agent.json")
+        with open(path, "w", encoding="utf-8") as f:
+            _json.dump(cfg, f)
+        with mock.patch.object(sys, "argv", ["site_agent.py", "--config", path] + argv):
+            return site_agent.load_config()
+
+    def test_the_interval_in_the_config_file_survives(self):
+        out = self._load([], dict(self.BASE, interval=5))
+        self.assertEqual(out["interval"], 5)
+
+    def test_an_explicit_flag_still_overrides_the_file(self):
+        out = self._load(["--interval", "120"], dict(self.BASE, interval=5))
+        self.assertEqual(out["interval"], 120)
+
+    def test_a_file_without_an_interval_gets_the_default(self):
+        out = self._load([], dict(self.BASE))
+        self.assertEqual(out["interval"], 60)
+
+
 if __name__ == "__main__":
     unittest.main()
