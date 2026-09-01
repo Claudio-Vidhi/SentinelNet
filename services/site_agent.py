@@ -137,6 +137,7 @@ def load_config():
             p.error(f"Parametro obbligatorio mancante: {key}")
 
     cfg.setdefault("interval", 60)
+    cfg.setdefault("backup_interval", 3600)
     cfg.setdefault("verify_tls", True)
     cfg.setdefault("data_dir", "./agent-data")
     cfg.setdefault("syslog_enabled", True)
@@ -149,6 +150,10 @@ def load_config():
 class Agent:
     def __init__(self, cfg):
         self._start_ts = time.time()
+        # 0.0 = mai eseguito, quindi il primo ciclo fa subito un backup e poi
+        # l'intervallo governa. Attendere un'ora prima del primo lascerebbe
+        # mappa e versioni vuote per un'ora dopo il deploy.
+        self._last_backup = 0.0
         self.cfg = cfg
         self.base = cfg["central_url"].rstrip("/")
         self.verify = cfg.get("verify_tls", True)
@@ -205,6 +210,7 @@ class Agent:
             "syslog_enabled": self.cfg.get("syslog_enabled", True),
             "syslog_port": int(self.cfg.get("syslog_port", 5514)),
             "interval": int(self.cfg.get("interval", 60)),
+            "backup_interval": int(self.cfg.get("backup_interval") or 0),
             "uptime_s": int(time.time() - self._start_ts) if hasattr(self, "_start_ts") else 0,
         }
         r = self._post("/api/agent/heartbeat", payload)
@@ -291,6 +297,73 @@ class Agent:
         r = self._post("/api/agent/arp", {"collections": collections})
         r.raise_for_status()
         return r.json()
+
+    def push_status(self, devices):
+        """Ping locale dei propri dispositivi, spinto al centrale.
+
+        Il centrale non ha (e non deve avere) un percorso diretto verso questi
+        apparati: senza questo push la sede resta senza stato up/down."""
+        from collectors.network_scanner import _ping as icmp_ping
+        items = []
+        for d in devices:
+            ip = (d.get("IP") or "").strip()
+            if not ip:
+                continue
+            try:
+                up = bool(icmp_ping(ip))
+            except Exception:
+                up = False
+            items.append({"ip": ip, "up": up})
+        if not items:
+            return {"updated": 0}
+        r = self._post("/api/agent/status", {"devices": items})
+        r.raise_for_status()
+        return r.json()
+
+    # Task 4: Scheduled backup phase
+    def push_backup(self, device):
+        """Triage+backup locale di un dispositivo, spinto al centrale.
+
+        La copia locale in data/backup-config resta: e' quella che l'agente
+        scrive comunque. Al centrale va il testo, perche' e' li' che vivono
+        mappa, config drift e classificazione per modello."""
+        res = core_engine.run_backup_and_triage(device)
+        if res.get("status") != "success":
+            return {"status": "error", "message": res.get("message", "errore")}
+        try:
+            with open(res["file"], encoding="utf-8") as f:
+                config_out = f.read()
+        except OSError as e:
+            return {"status": "error", "message": f"backup illeggibile: {e}"}
+        r = self._post("/api/agent/backup", {
+            "ip": device["IP"],
+            "hostname": res.get("hostname", ""),
+            "vendor": device.get("Vendor", "cisco"),
+            "version": res.get("version", "Non Rilevata"),
+            "model": res.get("model", ""),
+            "serial": res.get("serial", ""),
+            "config": config_out,
+        })
+        r.raise_for_status()
+        return {"status": "success", **r.json()}
+
+    def maybe_run_backups(self, devices):
+        """Fase di backup schedulata. Ritorna quanti dispositivi sono passati."""
+        every = int(self.cfg.get("backup_interval") or 0)
+        if every <= 0:
+            return 0
+        now = time.time()
+        if self._last_backup and now - self._last_backup < every:
+            return 0
+        self._last_backup = now
+        n = 0
+        for d in devices:
+            try:
+                if self.push_backup(d).get("status") == "success":
+                    n += 1
+            except Exception as e:
+                print(f"[backup] {d.get('IP')}: {e}")
+        return n
 
     def _execute_agent_rpc(self, cmd: str) -> dict:
         """Esegue comandi di gestione remota dell'agente (_agent_self_update, _agent_restart, _agent_config)."""
@@ -438,6 +511,19 @@ class Agent:
                 out = ({"status": "error",
                         "result": f"Dispositivo {ip} non in inventario locale."}
                        if not device else self._execute_rest_job(device, cmd))
+            elif job.get("kind") == "triage":
+                device = by_ip.get(ip)
+                if not device:
+                    out = {"status": "error",
+                           "result": f"Dispositivo {ip} non in inventario locale."}
+                else:
+                    res = self.push_backup(device)
+                    # Un riassunto, mai la config: questa colonna viene resa
+                    # tale e quale nel pannello storico job.
+                    out = ({"status": "done", "result": "backup inviato al centrale"}
+                           if res.get("status") == "success"
+                           else {"status": "error",
+                                 "result": res.get("message", "errore")})
             elif cmd.startswith("_agent_"):
                 out = self._execute_agent_rpc(cmd)
             else:
@@ -484,6 +570,14 @@ class Agent:
             self.push_arp(devices)
         except Exception as e:
             print(f"[arp] errore: {e}")
+        try:
+            self.push_status(devices)
+        except Exception as e:
+            print(f"[status] errore: {e}")
+        try:
+            self.maybe_run_backups(devices)
+        except Exception as e:
+            print(f"[backup] errore: {e}")
         try:
             self.push_syslog()
         except Exception as e:

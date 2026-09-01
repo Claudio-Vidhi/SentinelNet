@@ -807,6 +807,13 @@
         if (res && res.ok) {
             closeTriageScopeModal();
             startTriageStatusPolling();
+            const body = await res.json();
+            // A group made entirely of agent-site devices queues jobs and
+            // runs zero direct triages: without this the progress box just
+            // completes at 0/0 with no explanation.
+            if (body.queued > 0) {
+                showToast(tr('triageQueuedForAgentSites', { n: body.queued }), 'info');
+            }
         }
     }
 

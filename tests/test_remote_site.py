@@ -165,6 +165,15 @@ class RemoteSiteE2E(unittest.TestCase):
         r = self.client.get("/api/agent/jobs", headers=ah)
         self.assertEqual(r.json()["jobs"], [])
 
+    def test_backup_interval_round_trips_through_the_heartbeat(self):
+        from services import site_manager
+        sid, token = self._create_agent_site("Backup-Interval")
+        ah = self._agent_headers(sid, token)
+        r = self.client.post("/api/agent/heartbeat", headers=ah,
+                             json={"backup_interval": 900})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(site_manager.get_site(sid)["backup_interval"], 900)
+
     def test_csv_import_assigns_the_site(self):
         """La colonna Site veniva letta e buttata via: un inventario esportato
         e reimportato perdeva l'assegnazione alle sedi con agente."""
@@ -455,6 +464,280 @@ class RemoteSiteE2E(unittest.TestCase):
         self.assertEqual(400, res.status_code)
         self.assertIn("IP", res.json()["detail"])
 
+    def test_agent_status_push_updates_the_central_state(self):
+        sid, token = self._create_agent_site("Status-Push")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={"devices": [
+            {"ip": "10.9.0.20", "vendor": "cisco", "hostname": "switch-01"},
+            {"ip": "10.9.0.21", "vendor": "cisco", "hostname": "switch-02"},
+        ]})
+
+        r = self.client.post("/api/agent/status", headers=ah, json={"devices": [
+            {"ip": "10.9.0.20", "up": True},
+            {"ip": "10.9.0.21", "up": False},
+        ]})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["updated"], 2)
+
+        from services import inventory_manager
+        versions = inventory_manager.get_detected_versions()
+        self.assertEqual(versions["10.9.0.20"]["status"], "online")
+        self.assertEqual(versions["10.9.0.21"]["status"], "offline")
+
+    def test_agent_status_push_uses_the_inventorys_real_vendor(self):
+        # A device with no prior detected_versions entry used to fall back
+        # to "cisco" even though the inventory scan just above already
+        # knows its real vendor.
+        sid, token = self._create_agent_site("Status-Vendor")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={"devices": [
+            {"ip": "10.9.0.22", "vendor": "fortinet", "hostname": "fgt-01"},
+        ]})
+
+        r = self.client.post("/api/agent/status", headers=ah,
+                             json={"devices": [{"ip": "10.9.0.22", "up": True}]})
+        self.assertEqual(r.status_code, 200, r.text)
+
+        from services import inventory_manager
+        self.assertEqual(
+            inventory_manager.get_detected_versions()["10.9.0.22"]["vendor"], "fortinet")
+
+    def test_agent_status_push_cannot_touch_another_sites_device(self):
+        # One site's token must never write another site's state: the agent
+        # job feed is already over-broad (docs/remote-sites.md), and the
+        # write path must not inherit that.
+        sid_a, token_a = self._create_agent_site("Status-A")
+        sid_b, token_b = self._create_agent_site("Status-B")
+        self.client.post("/api/agent/inventory",
+                         headers=self._agent_headers(sid_b, token_b),
+                         json={"devices": [{"ip": "10.9.0.30", "vendor": "cisco"}]})
+
+        r = self.client.post("/api/agent/status",
+                             headers=self._agent_headers(sid_a, token_a),
+                             json={"devices": [{"ip": "10.9.0.30", "up": True}]})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["updated"], 0)
+
+        from services import inventory_manager
+        self.assertNotIn("10.9.0.30", inventory_manager.get_detected_versions())
+
+    def test_agent_backup_push_lands_in_backup_config_and_versions(self):
+        sid, token = self._create_agent_site("Backup-Push")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={"devices": [
+            {"ip": "10.9.0.40", "vendor": "cisco", "hostname": "switch-01"},
+        ]})
+
+        r = self.client.post("/api/agent/backup", headers=ah, json={
+            "ip": "10.9.0.40", "hostname": "switch-01", "vendor": "cisco",
+            "version": "15.2(7)E2", "serial": "ABC1234DEFG",
+            "config": "hostname switch-01\n!\nend\n",
+        })
+        self.assertEqual(r.status_code, 200, r.text)
+
+        saved = r.json()["file"]
+        self.assertTrue(os.path.exists(saved))
+        with open(saved, encoding="utf-8") as f:
+            self.assertIn("hostname switch-01", f.read())
+
+        from services import inventory_manager
+        entry = inventory_manager.get_detected_versions()["10.9.0.40"]
+        self.assertEqual(entry["status"], "online")
+        self.assertEqual(entry["version"], "15.2(7)E2")
+
+    def test_agent_backup_push_populates_config_drift(self):
+        # b9ecd63-era gap: a central-poll triage records drift history, an
+        # agent-site push did not, so the Config Drift tab stayed empty.
+        sid, token = self._create_agent_site("Drift-Push")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={"devices": [
+            {"ip": "10.9.0.45", "vendor": "cisco", "hostname": "switch-05"},
+        ]})
+
+        r = self.client.post("/api/agent/backup", headers=ah, json={
+            "ip": "10.9.0.45", "hostname": "switch-05", "vendor": "cisco",
+            "version": "15.2(7)E2", "serial": "",
+            "config": "hostname switch-05\n!\nend\n",
+        })
+        self.assertEqual(r.status_code, 200, r.text)
+
+        from services import inventory_manager
+        from services.config_drift import history
+        device = next(d for d in inventory_manager.get_all_devices()
+                     if d["IP"] == "10.9.0.45")
+        versions = history.list_versions(device)
+        self.assertTrue(versions, "config drift history vuota per la sede agent")
+
+    def test_an_empty_config_is_refused_without_overwriting_a_good_backup(self):
+        # A partial or empty push must never overwrite a good stored config.
+        sid, token = self._create_agent_site("Backup-Empty")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={
+            "devices": [{"ip": "10.9.0.47", "vendor": "cisco"}]})
+
+        good = self.client.post("/api/agent/backup", headers=ah, json={
+            "ip": "10.9.0.47", "hostname": "switch-08", "vendor": "cisco",
+            "version": "15.2(7)E2", "serial": "",
+            "config": "hostname switch-08\n!\nend\n",
+        })
+        self.assertEqual(good.status_code, 200, good.text)
+        saved = good.json()["file"]
+        with open(saved, encoding="utf-8") as f:
+            good_text = f.read()
+
+        for empty in ("", "   \n\t  "):
+            r = self.client.post("/api/agent/backup", headers=ah, json={
+                "ip": "10.9.0.47", "hostname": "switch-08", "vendor": "cisco",
+                "version": "15.2(7)E2", "serial": "", "config": empty,
+            })
+            self.assertEqual(r.status_code, 400, r.text)
+
+        with open(saved, encoding="utf-8") as f:
+            self.assertEqual(f.read(), good_text)
+
+    def test_an_oversized_config_is_refused_without_writing(self):
+        # Truncating is worse than refusing: config drift would report a
+        # spurious change and the model classifier would read half a file.
+        sid, token = self._create_agent_site("Backup-Huge")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={
+            "devices": [{"ip": "10.9.0.41", "vendor": "cisco"}]})
+
+        r = self.client.post("/api/agent/backup", headers=ah, json={
+            "ip": "10.9.0.41", "hostname": "switch-02", "vendor": "cisco",
+            "version": "1.0", "serial": "",
+            "config": "x" * (5 * 1024 * 1024 + 1),
+        })
+        self.assertEqual(r.status_code, 413, r.text)
+        from services import inventory_manager
+        self.assertNotIn("10.9.0.41", inventory_manager.get_detected_versions())
+
+    def test_agent_backup_push_carries_model_and_serial(self):
+        # push_backup used to hardcode serial "" and run_backup_and_triage
+        # never returned model/serial at all, so the model-based classifier
+        # never received its input for an agent-site device.
+        sid, token = self._create_agent_site("Model-Serial-Push")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={
+            "devices": [{"ip": "10.9.0.46", "vendor": "cisco", "hostname": "switch-06"}]})
+
+        r = self.client.post("/api/agent/backup", headers=ah, json={
+            "ip": "10.9.0.46", "hostname": "switch-06", "vendor": "cisco",
+            "version": "15.2(7)E2", "model": "WS-C2960X-24", "serial": "FDO12345678",
+            "config": "hostname switch-06\n!\nend\n",
+        })
+        self.assertEqual(r.status_code, 200, r.text)
+
+        from services import inventory_manager
+        entry = inventory_manager.get_detected_versions()["10.9.0.46"]
+        self.assertEqual(entry.get("model"), "WS-C2960X-24")
+        self.assertEqual(entry.get("serial"), "FDO12345678")
+
+    def test_backup_push_cannot_target_another_sites_device(self):
+        sid_a, token_a = self._create_agent_site("Backup-A")
+        sid_b, token_b = self._create_agent_site("Backup-B")
+        self.client.post("/api/agent/inventory",
+                         headers=self._agent_headers(sid_b, token_b),
+                         json={"devices": [{"ip": "10.9.0.42", "vendor": "cisco"}]})
+
+        r = self.client.post("/api/agent/backup",
+                             headers=self._agent_headers(sid_a, token_a),
+                             json={"ip": "10.9.0.42", "hostname": "switch-03",
+                                   "vendor": "cisco", "version": "1.0",
+                                   "serial": "", "config": "end\n"})
+        self.assertEqual(r.status_code, 404, r.text)
+
+    def test_the_job_queue_accepts_a_triage_kind(self):
+        from services import site_manager
+        sid, _token = self._create_agent_site("Triage-Kind")
+        job = site_manager.enqueue_job(sid, "10.9.0.65", "", requested_by=ADMIN,
+                                       kind="triage")
+        self.assertEqual(job["kind"], "triage")
+        with self.assertRaises(ValueError):
+            site_manager.enqueue_job(sid, "10.9.0.65", "", kind="nonsense")
+
+    def test_triage_on_an_agent_device_is_queued_not_refused(self):
+        # b9ecd63 made the direct path refuse. The operator-visible answer is
+        # now "queued": the agent runs it and pushes the result back.
+        from services import site_manager
+        sid, token = self._create_agent_site("Triage-Queue")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={
+            "devices": [{"ip": "10.9.0.70", "vendor": "cisco",
+                         "hostname": "switch-01", "group": "Generale"}]})
+
+        r = self.client.post("/api/run-triage", headers=self.admin_h,
+                             json={"group": "Generale"})
+        self.assertEqual(r.status_code, 200, r.text)
+
+        jobs = site_manager.list_jobs(sid)
+        self.assertTrue(any(j["device_ip"] == "10.9.0.70" and j["kind"] == "triage"
+                            for j in jobs), jobs)
+
+
+    def test_ping_check_does_not_overwrite_the_status_the_agent_just_pushed(self):
+        # has_direct_path is False for an agent site, so ping_check's own
+        # probe returns None (not measurable). Writing "unknown" over that
+        # would erase the real online/offline the agent pushed moments ago.
+        sid, token = self._create_agent_site("Ping-No-Overwrite")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={
+            "devices": [{"ip": "10.9.0.80", "vendor": "cisco",
+                        "hostname": "switch-01", "group": "Generale"}]})
+        self.client.post("/api/agent/status", headers=ah,
+                         json={"devices": [{"ip": "10.9.0.80", "up": True}]})
+
+        from services import inventory_manager
+        self.assertEqual(
+            inventory_manager.get_detected_versions()["10.9.0.80"]["status"], "online")
+
+        r = self.client.post("/api/ping-check", headers=self.admin_h,
+                             json={"group": "Generale"})
+        self.assertEqual(r.status_code, 200, r.text)
+
+        self.assertEqual(
+            inventory_manager.get_detected_versions()["10.9.0.80"]["status"], "online")
+
+    def test_ping_single_does_not_overwrite_the_status_the_agent_just_pushed(self):
+        sid, token = self._create_agent_site("Ping-Single-No-Overwrite")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={
+            "devices": [{"ip": "10.9.0.81", "vendor": "cisco",
+                        "hostname": "switch-02", "group": "Generale"}]})
+        self.client.post("/api/agent/status", headers=ah,
+                         json={"devices": [{"ip": "10.9.0.81", "up": True}]})
+
+        from services import inventory_manager
+        r = self.client.get("/api/ping/10.9.0.81", headers=self.admin_h)
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertIsNone(r.json()["reachable"])
+
+        self.assertEqual(
+            inventory_manager.get_detected_versions()["10.9.0.81"]["status"], "online")
+
+
+    def test_run_triage_does_not_pile_up_duplicate_jobs(self):
+        # With the agent offline the queue must not grow without bound: a
+        # second run-triage while a triage job is still pending/running for
+        # the same device must not enqueue a second copy.
+        from services import site_manager
+        sid, token = self._create_agent_site("Triage-Dedupe")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={
+            "devices": [{"ip": "10.9.0.71", "vendor": "cisco",
+                        "hostname": "switch-01", "group": "Generale"}]})
+
+        r1 = self.client.post("/api/run-triage", headers=self.admin_h,
+                              json={"group": "Generale"})
+        self.assertEqual(r1.status_code, 200, r1.text)
+        r2 = self.client.post("/api/run-triage", headers=self.admin_h,
+                              json={"group": "Generale"})
+        self.assertEqual(r2.status_code, 200, r2.text)
+
+        jobs = [j for j in site_manager.list_jobs(sid)
+               if j["device_ip"] == "10.9.0.71" and j["kind"] == "triage"]
+        self.assertEqual(len(jobs), 1, jobs)
+
 
 class CentralDoesNotTouchAgentSiteDevices(unittest.TestCase):
     """Mode B promises the central needs no path to the site. It did anyway.
@@ -523,6 +806,25 @@ class CentralDoesNotTouchAgentSiteDevices(unittest.TestCase):
         self.assertEqual(out["status"], "error")
         self.assertIn("agente", out["message"])
 
+    def test_triage_refuses_a_fortigate_at_an_agent_site_before_dialling_it(self):
+        # The FortiGate branch dispatches BEFORE the agent-site refusal used
+        # to run, so the central still opened a REST/SSH connection to a
+        # FortiGate at an agent site -- the exact thing this mode exists to
+        # prevent. The refusal must fire first, with nothing above it that
+        # could have opened a connection.
+        from unittest import mock
+        from core import core_engine
+        from services import fortigate_service, site_manager
+
+        device = {"IP": "192.0.2.21", "Vendor": "fortinet", "Group": "Generale",
+                  "Site": "milan"}
+        with mock.patch.object(site_manager, "get_site", return_value=self.AGENT), \
+             mock.patch.object(fortigate_service, "get_full_config",
+                               side_effect=AssertionError("dialled the FortiGate")):
+            out = core_engine.run_backup_and_triage(device)
+        self.assertEqual(out["status"], "error")
+        self.assertIn("agente", out["message"])
+
     def test_bulk_command_refuses_instead_of_opening_ssh(self):
         from unittest import mock
         from core import core_engine
@@ -576,6 +878,172 @@ class AgentConfigFileWins(unittest.TestCase):
     def test_a_file_without_an_interval_gets_the_default(self):
         out = self._load([], dict(self.BASE))
         self.assertEqual(out["interval"], 60)
+
+
+class AgentPushesItsOwnPingResults(unittest.TestCase):
+    """The central does not reach an agent site's devices, so the agent's own
+    ping is the only source of up/down for them."""
+
+    def _agent(self):
+        from unittest import mock
+        from services import site_agent
+        agent = site_agent.Agent.__new__(site_agent.Agent)
+        agent.cfg = {"site_id": "milan", "interval": 60}
+        agent._post = mock.MagicMock()
+        agent._post.return_value.json.return_value = {"status": "success",
+                                                      "updated": 2}
+        return agent
+
+    def test_every_device_is_reported_including_the_unreachable_one(self):
+        # An unreachable device is pushed as down, never omitted: a skipped
+        # device silently vanishes from the ping monitor, which is the
+        # failure this change exists to remove.
+        from unittest import mock
+
+        agent = self._agent()
+        devices = [{"IP": "10.9.0.50"}, {"IP": "10.9.0.51"}]
+        with mock.patch("collectors.network_scanner._ping",
+                        side_effect=lambda ip: ip == "10.9.0.50"):
+            agent.push_status(devices)
+
+        path, payload = agent._post.call_args[0]
+        self.assertEqual(path, "/api/agent/status")
+        self.assertEqual(payload["devices"],
+                         [{"ip": "10.9.0.50", "up": True},
+                          {"ip": "10.9.0.51", "up": False}])
+
+    def test_no_devices_means_no_call(self):
+        agent = self._agent()
+        agent.push_status([])
+        agent._post.assert_not_called()
+
+
+class AgentScheduledBackup(unittest.TestCase):
+    """The backup interval is deliberately not the polling interval: a 15s
+    poll must not mean a config backup every 15 seconds."""
+
+    def _agent(self, backup_interval=3600):
+        from unittest import mock
+        from services import site_agent
+        agent = site_agent.Agent.__new__(site_agent.Agent)
+        agent.cfg = {"site_id": "milan", "interval": 60,
+                     "backup_interval": backup_interval}
+        agent._last_backup = 0.0
+        agent._post = mock.MagicMock()
+        agent._post.return_value.json.return_value = {"status": "success",
+                                                      "file": "/x"}
+        return agent
+
+    def test_a_successful_triage_is_pushed_with_its_config_text(self):
+        import tempfile
+        from unittest import mock
+        from core import core_engine
+
+        agent = self._agent()
+        d = tempfile.mkdtemp(prefix="sentinelnet_bk_")
+        path = os.path.join(d, "switch-01-10.9.0.60.txt")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("hostname switch-01\nend\n")
+
+        device = {"IP": "10.9.0.60", "Vendor": "cisco", "Group": "Generale"}
+        with mock.patch.object(core_engine, "run_backup_and_triage",
+                               return_value={"status": "success",
+                                             "version": "15.2(7)E2",
+                                             "hostname": "switch-01",
+                                             "file": path}):
+            agent.push_backup(device)
+
+        call_path, payload = agent._post.call_args[0]
+        self.assertEqual(call_path, "/api/agent/backup")
+        self.assertEqual(payload["ip"], "10.9.0.60")
+        self.assertEqual(payload["hostname"], "switch-01")
+        self.assertIn("hostname switch-01", payload["config"])
+
+    def test_push_backup_forwards_model_and_serial(self):
+        # push_backup used to hardcode serial "" regardless of what
+        # run_backup_and_triage returned, dropping the classifier's input.
+        import tempfile
+        from unittest import mock
+        from core import core_engine
+
+        agent = self._agent()
+        d = tempfile.mkdtemp(prefix="sentinelnet_bk_")
+        path = os.path.join(d, "switch-07-10.9.0.66.txt")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("hostname switch-07\nend\n")
+
+        device = {"IP": "10.9.0.66", "Vendor": "cisco", "Group": "Generale"}
+        with mock.patch.object(core_engine, "run_backup_and_triage",
+                               return_value={"status": "success",
+                                             "version": "15.2(7)E2",
+                                             "hostname": "switch-07",
+                                             "model": "WS-C2960X-24",
+                                             "serial": "FDO12345678",
+                                             "file": path}):
+            agent.push_backup(device)
+
+        _call_path, payload = agent._post.call_args[0]
+        self.assertEqual(payload["model"], "WS-C2960X-24")
+        self.assertEqual(payload["serial"], "FDO12345678")
+
+    def test_a_failed_triage_pushes_nothing(self):
+        # A partial or empty push must never overwrite a good stored config.
+        from unittest import mock
+        from core import core_engine
+
+        agent = self._agent()
+        device = {"IP": "10.9.0.61", "Vendor": "cisco", "Group": "Generale"}
+        with mock.patch.object(core_engine, "run_backup_and_triage",
+                               return_value={"status": "error", "message": "boom"}):
+            out = agent.push_backup(device)
+        agent._post.assert_not_called()
+        self.assertEqual(out["status"], "error")
+
+    def test_interval_zero_disables_the_scheduled_phase(self):
+        from unittest import mock
+        agent = self._agent(backup_interval=0)
+        with mock.patch.object(agent, "push_backup") as pb:
+            n = agent.maybe_run_backups([{"IP": "10.9.0.62"}])
+        pb.assert_not_called()
+        self.assertEqual(n, 0)
+
+    def test_the_phase_does_not_run_again_before_its_interval(self):
+        from unittest import mock
+        agent = self._agent(backup_interval=3600)
+        with mock.patch.object(agent, "push_backup",
+                               return_value={"status": "success"}) as pb:
+            first = agent.maybe_run_backups([{"IP": "10.9.0.63"}])
+            second = agent.maybe_run_backups([{"IP": "10.9.0.63"}])
+        self.assertEqual(first, 1)
+        self.assertEqual(second, 0)
+        self.assertEqual(pb.call_count, 1)
+        self.assertGreater(agent._last_backup, 0.0)
+
+    def test_a_triage_job_runs_the_local_backup_and_reports_a_short_result(self):
+        # The job result column is rendered verbatim in the job-history panel,
+        # so it carries a summary and never the config text.
+        from unittest import mock
+        agent = self._agent()
+        agent._get = mock.MagicMock()
+        agent._get.return_value.json.return_value = {"jobs": [
+            {"id": "j1", "device_ip": "10.9.0.64", "command": "", "kind": "triage"},
+        ]}
+        posted = []
+
+        def _capture(path, body):
+            posted.append((path, body))
+            return mock.MagicMock()
+
+        agent._post = mock.MagicMock(side_effect=_capture)
+
+        with mock.patch.object(agent, "push_backup",
+                               return_value={"status": "success", "file": "/x"}) as pb:
+            agent.run_jobs([{"IP": "10.9.0.64", "Vendor": "cisco"}])
+
+        pb.assert_called_once()
+        results = [body for path, body in posted if path.endswith("/result")]
+        self.assertEqual(results[0]["status"], "done")
+        self.assertNotIn("hostname", results[0]["result"])
 
 
 if __name__ == "__main__":

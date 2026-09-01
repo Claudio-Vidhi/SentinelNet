@@ -3,6 +3,7 @@
 
 import re
 import time
+import logging
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -12,6 +13,7 @@ from services import site_manager
 from services import inventory_manager
 from collectors import mac_history
 from security.security_manager import log_audit
+from core import backup_store
 
 router = APIRouter(tags=["Agent"])
 
@@ -53,6 +55,24 @@ class AgentSyslogItemSchema(BaseModel):
 class AgentSyslogBatchSchema(BaseModel):
     events: List[AgentSyslogItemSchema] = []
 
+class AgentStatusItemSchema(BaseModel):
+    ip: str
+    up: bool
+
+class AgentStatusSchema(BaseModel):
+    devices: List[AgentStatusItemSchema] = []
+
+MAX_CONFIG_BYTES = 5 * 1024 * 1024
+
+class AgentBackupSchema(BaseModel):
+    ip: str
+    hostname: str = ""
+    vendor: str = "cisco"
+    version: str = "Non Rilevata"
+    model: str = ""
+    serial: str = ""
+    config: str
+
 def get_agent_site(request: Request):
     """Autentica un agente tramite header X-Site-Token (+ opzionale X-Site-Id).
     Ritorna il dict della sede agent. 401 se il token non corrisponde."""
@@ -74,6 +94,8 @@ def agent_heartbeat(payload: Optional[dict] = None, site = Depends(get_agent_sit
             updates["syslog_port"] = payload["syslog_port"]
         if "interval" in payload:
             updates["interval"] = payload["interval"]
+        if "backup_interval" in payload:
+            updates["backup_interval"] = payload["backup_interval"]
         if updates:
             site_manager.update_site(site_id, **updates)
     return {"ok": True, "site_id": site["id"], "name": site["name"], "subnets": site.get("subnets", [])}
@@ -137,6 +159,76 @@ def agent_push_arp(payload: AgentArpSchema, site = Depends(get_agent_site)):
     log_audit(f"Agente sede '{site_id}': {len(payload.collections)} tabelle ARP "
               f"ricevute ({total} binding).")
     return {"status": "success", "recorded": total}
+
+@router.post("/api/agent/status")
+def agent_push_status(payload: AgentStatusSchema, site = Depends(get_agent_site)):
+    """Esiti del ping che l'agente esegue sui PROPRI dispositivi.
+
+    Il centrale non raggiunge i dispositivi di una sede con agente (vedi
+    site_manager.has_direct_path): questo push e' l'unica fonte di stato
+    up/down per quella sede."""
+    site_id = site["id"]
+    own = {d.get("IP"): d for d in inventory_manager.get_all_devices()
+           if d.get("Site") == site_id}
+    known = inventory_manager.get_detected_versions()
+    n = 0
+    for d in payload.devices:
+        # Il token di una sede non deve poter alterare lo stato di un'altra.
+        if d.ip not in own:
+            continue
+        prev = known.get(d.ip, {})
+        # Il vendor reale e' gia' noto dallo scan d'inventario appena sopra:
+        # "cisco" resta solo l'ultima spiaggia, non il default di partenza
+        # per un apparato senza voce pregressa in detected_versions.
+        vendor = own[d.ip].get("Vendor") or "cisco"
+        inventory_manager.update_version_inventory(
+            d.ip, vendor,
+            prev.get("version", "Non Rilevata"),
+            "online" if d.up else "offline")
+        n += 1
+    return {"status": "success", "updated": n}
+
+@router.post("/api/agent/backup")
+def agent_push_backup(payload: AgentBackupSchema, site = Depends(get_agent_site)):
+    """Config e versione raccolte dall'agente sui propri dispositivi.
+
+    Passa dalle STESSE funzioni del triage centrale (backup_store.save_backup e
+    update_version_inventory), cosi' mappa, config drift e classificazione per
+    modello si popolano senza nuovi lettori."""
+    site_id = site["id"]
+    device = next((d for d in inventory_manager.get_all_devices()
+                   if d.get("IP") == payload.ip and d.get("Site") == site_id), None)
+    if device is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Dispositivo {payload.ip} non appartiene alla sede '{site_id}'.")
+    if len(payload.config.encode("utf-8")) > MAX_CONFIG_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="Config oltre il limite di 5 MB: rifiutata, non troncata.")
+    if not payload.config.strip():
+        # Un push parziale o vuoto non deve MAI sovrascrivere un backup buono
+        # gia' salvato: meglio rifiutare qui che scriverlo e perdere lo storico.
+        raise HTTPException(
+            status_code=400,
+            detail="Config vuota: rifiutata, non sovrascrive il backup esistente.")
+    sys_name = payload.hostname or payload.ip
+    file_path = backup_store.save_backup(device, sys_name, payload.config)
+    # Stesso punto unico di storicizzazione di core_engine: senza, la
+    # scheda Config Drift resta vuota per ogni sede con agente.
+    try:
+        from services.config_drift import history
+        history.record_version(device, payload.config)
+    except Exception as e:
+        logging.warning(f"Storico config non aggiornato per {payload.ip}: {e}")
+    inventory_manager.update_version_inventory(
+        payload.ip, payload.vendor, payload.version, "online",
+        model=payload.model or None, serial=payload.serial or None)
+    if payload.hostname:
+        inventory_manager.update_device_hostname(payload.ip, payload.hostname)
+    log_audit(f"Agente sede '{site_id}': backup ricevuto per {payload.ip} "
+              f"({len(payload.config)} caratteri).")
+    return {"status": "success", "file": file_path}
 
 @router.get("/api/agent/jobs")
 def agent_poll_jobs(site = Depends(get_agent_site)):
