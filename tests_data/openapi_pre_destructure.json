@@ -42,6 +42,24 @@
         "title": "AaaServerSchema",
         "type": "object"
       },
+      "AcceptInviteSchema": {
+        "properties": {
+          "password": {
+            "title": "Password",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "password"
+        ],
+        "title": "AcceptInviteSchema",
+        "type": "object"
+      },
       "AddEvidenceRequest": {
         "properties": {
           "confidential": {
@@ -143,6 +161,44 @@
           }
         },
         "title": "AgentArpSchema",
+        "type": "object"
+      },
+      "AgentBackupSchema": {
+        "properties": {
+          "config": {
+            "title": "Config",
+            "type": "string"
+          },
+          "hostname": {
+            "default": "",
+            "title": "Hostname",
+            "type": "string"
+          },
+          "ip": {
+            "title": "Ip",
+            "type": "string"
+          },
+          "serial": {
+            "default": "",
+            "title": "Serial",
+            "type": "string"
+          },
+          "vendor": {
+            "default": "cisco",
+            "title": "Vendor",
+            "type": "string"
+          },
+          "version": {
+            "default": "Non Rilevata",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip",
+          "config"
+        ],
+        "title": "AgentBackupSchema",
         "type": "object"
       },
       "AgentConfigUpdateSchema": {
@@ -300,6 +356,38 @@
           }
         },
         "title": "AgentMacSchema",
+        "type": "object"
+      },
+      "AgentStatusItemSchema": {
+        "properties": {
+          "ip": {
+            "title": "Ip",
+            "type": "string"
+          },
+          "up": {
+            "title": "Up",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ip",
+          "up"
+        ],
+        "title": "AgentStatusItemSchema",
+        "type": "object"
+      },
+      "AgentStatusSchema": {
+        "properties": {
+          "devices": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AgentStatusItemSchema"
+            },
+            "title": "Devices",
+            "type": "array"
+          }
+        },
+        "title": "AgentStatusSchema",
         "type": "object"
       },
       "AgentSyslogBatchSchema": {
@@ -704,6 +792,17 @@
         "title": "AlertSuppressSchema",
         "type": "object"
       },
+      "BaselineSchema": {
+        "properties": {
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "title": "BaselineSchema",
+        "type": "object"
+      },
       "BulkAssignIdentitySchema": {
         "description": "Assegnazione massiva di un'identita' (o del profilo 'default') a più\ndispositivi: evita di ripetere l'operazione scheda per scheda.",
         "properties": {
@@ -911,6 +1010,166 @@
           "client"
         ],
         "title": "ClientDiagnosisSchema",
+        "type": "object"
+      },
+      "CloudBackupSettingsSchema": {
+        "properties": {
+          "auth": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "encrypt_payload": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Encrypt Payload"
+          },
+          "host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host"
+          },
+          "host_key_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Key Fingerprint"
+          },
+          "key_passphrase": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Passphrase"
+          },
+          "key_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Path"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          },
+          "port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Port"
+          },
+          "remote_root": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remote Root"
+          },
+          "run_after_backup": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run After Backup"
+          },
+          "stale_after_hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stale After Hours"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "title": "CloudBackupSettingsSchema",
         "type": "object"
       },
       "CommandRequest": {
@@ -1290,6 +1549,24 @@
         "title": "DeviceSchema",
         "type": "object"
       },
+      "DeviceSiteSchema": {
+        "properties": {
+          "ip": {
+            "title": "Ip",
+            "type": "string"
+          },
+          "new_site": {
+            "title": "New Site",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip",
+          "new_site"
+        ],
+        "title": "DeviceSiteSchema",
+        "type": "object"
+      },
       "FgtActiveTargetSchema": {
         "properties": {
           "ip": {
@@ -1635,6 +1912,119 @@
           "protocol"
         ],
         "title": "FlowKeySchema",
+        "type": "object"
+      },
+      "FlowRequest": {
+        "properties": {
+          "dport": {
+            "anyOf": [
+              {
+                "maximum": 65535.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dport"
+          },
+          "dst_ip": {
+            "title": "Dst Ip",
+            "type": "string"
+          },
+          "egress_intf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Egress Intf"
+          },
+          "established": {
+            "default": false,
+            "title": "Established",
+            "type": "boolean"
+          },
+          "icmp_type": {
+            "anyOf": [
+              {
+                "maximum": 255.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icmp Type"
+          },
+          "ingress_intf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingress Intf"
+          },
+          "proto": {
+            "default": "tcp",
+            "title": "Proto",
+            "type": "string"
+          },
+          "sport": {
+            "anyOf": [
+              {
+                "maximum": 65535.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sport"
+          },
+          "src_ip": {
+            "title": "Src Ip",
+            "type": "string"
+          },
+          "tcp_flags": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tcp Flags"
+          }
+        },
+        "required": [
+          "src_ip",
+          "dst_ip"
+        ],
+        "title": "FlowRequest",
+        "type": "object"
+      },
+      "ForgotPasswordSchema": {
+        "properties": {
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username"
+        ],
+        "title": "ForgotPasswordSchema",
         "type": "object"
       },
       "FortiGateProvisionSSHSchema": {
@@ -2490,6 +2880,24 @@
         "title": "IdentitySchema",
         "type": "object"
       },
+      "InviteUserSchema": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "role": {
+            "default": "viewer",
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "InviteUserSchema",
+        "type": "object"
+      },
       "MacOverrideDeleteSchema": {
         "properties": {
           "ip": {
@@ -2816,6 +3224,40 @@
         "title": "PortBounceSchema",
         "type": "object"
       },
+      "PortControlSchema": {
+        "properties": {
+          "action": {
+            "default": "shutdown",
+            "title": "Action",
+            "type": "string"
+          },
+          "client_mac": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Mac"
+          },
+          "ip": {
+            "title": "Ip",
+            "type": "string"
+          },
+          "port": {
+            "title": "Port",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip",
+          "port"
+        ],
+        "title": "PortControlSchema",
+        "type": "object"
+      },
       "PreviewSchema": {
         "properties": {
           "enabled": {
@@ -2900,6 +3342,101 @@
           "ip"
         ],
         "title": "PromoteDeviceSchema",
+        "type": "object"
+      },
+      "ProofRequest": {
+        "description": "A finding's witness packet plus the rule the finding says will catch it.",
+        "properties": {
+          "expected_rule_id": {
+            "title": "Expected Rule Id",
+            "type": "string"
+          },
+          "witness": {
+            "$ref": "#/components/schemas/FlowRequest"
+          }
+        },
+        "required": [
+          "witness",
+          "expected_rule_id"
+        ],
+        "title": "ProofRequest",
+        "type": "object"
+      },
+      "PruneLogsSchema": {
+        "properties": {
+          "days": {
+            "default": 30,
+            "title": "Days",
+            "type": "integer"
+          }
+        },
+        "title": "PruneLogsSchema",
+        "type": "object"
+      },
+      "ReportPdfSchema": {
+        "description": "HTML gia' impaginato dall'anteprima, da stampare cosi' com'e'.",
+        "properties": {
+          "filename": {
+            "default": "compliance-report",
+            "title": "Filename",
+            "type": "string"
+          },
+          "html": {
+            "title": "Html",
+            "type": "string"
+          }
+        },
+        "required": [
+          "html"
+        ],
+        "title": "ReportPdfSchema",
+        "type": "object"
+      },
+      "ResetPasswordSchema": {
+        "properties": {
+          "new_password": {
+            "title": "New Password",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "new_password"
+        ],
+        "title": "ResetPasswordSchema",
+        "type": "object"
+      },
+      "ScanVerifyRequest": {
+        "properties": {
+          "identity_id": {
+            "title": "Identity Id",
+            "type": "string"
+          },
+          "ips": {
+            "items": {
+              "pattern": "^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$",
+              "type": "string"
+            },
+            "maxItems": 512,
+            "minItems": 1,
+            "title": "Ips",
+            "type": "array"
+          },
+          "vendor": {
+            "title": "Vendor",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ips",
+          "vendor",
+          "identity_id"
+        ],
+        "title": "ScanVerifyRequest",
         "type": "object"
       },
       "ServerSchema": {
@@ -3037,6 +3574,62 @@
         "title": "SiteUpdateSchema",
         "type": "object"
       },
+      "SmtpSettingsSchema": {
+        "properties": {
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "from_email": {
+            "default": "",
+            "title": "From Email",
+            "type": "string"
+          },
+          "host": {
+            "default": "",
+            "title": "Host",
+            "type": "string"
+          },
+          "password": {
+            "default": "",
+            "title": "Password",
+            "type": "string"
+          },
+          "port": {
+            "default": 587,
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Port",
+            "type": "integer"
+          },
+          "tls_mode": {
+            "default": "starttls",
+            "title": "Tls Mode",
+            "type": "string"
+          },
+          "username": {
+            "default": "",
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "title": "SmtpSettingsSchema",
+        "type": "object"
+      },
+      "SmtpTestSchema": {
+        "properties": {
+          "to": {
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "to"
+        ],
+        "title": "SmtpTestSchema",
+        "type": "object"
+      },
       "SnmpDefaultSchema": {
         "properties": {
           "community": {
@@ -3053,6 +3646,62 @@
           "tenant"
         ],
         "title": "SnmpDefaultSchema",
+        "type": "object"
+      },
+      "SsoSettingsSchema": {
+        "properties": {
+          "admin_group": {
+            "default": "",
+            "title": "Admin Group",
+            "type": "string"
+          },
+          "auto_provision": {
+            "default": false,
+            "title": "Auto Provision",
+            "type": "boolean"
+          },
+          "client_id": {
+            "default": "",
+            "title": "Client Id",
+            "type": "string"
+          },
+          "client_secret": {
+            "default": "",
+            "title": "Client Secret",
+            "type": "string"
+          },
+          "default_role": {
+            "default": "viewer",
+            "title": "Default Role",
+            "type": "string"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "issuer_url": {
+            "default": "",
+            "title": "Issuer Url",
+            "type": "string"
+          },
+          "operator_group": {
+            "default": "",
+            "title": "Operator Group",
+            "type": "string"
+          },
+          "provider_name": {
+            "default": "Single Sign-On",
+            "title": "Provider Name",
+            "type": "string"
+          },
+          "sync_roles": {
+            "default": false,
+            "title": "Sync Roles",
+            "type": "boolean"
+          }
+        },
+        "title": "SsoSettingsSchema",
         "type": "object"
       },
       "SubcategoryDeleteSchema": {
@@ -4009,6 +4658,19 @@
         "title": "TemplateItemRequest",
         "type": "object"
       },
+      "TracerouteGatewaySchema": {
+        "properties": {
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "title": "TracerouteGatewaySchema",
+        "type": "object"
+      },
       "TriageRunRequest": {
         "properties": {
           "group": {
@@ -4018,6 +4680,17 @@
           }
         },
         "title": "TriageRunRequest",
+        "type": "object"
+      },
+      "UiVariantSchema": {
+        "properties": {
+          "ui_variant": {
+            "default": "default",
+            "title": "Ui Variant",
+            "type": "string"
+          }
+        },
+        "title": "UiVariantSchema",
         "type": "object"
       },
       "UpdateEngagementMetadataRequest": {
@@ -4192,6 +4865,24 @@
           "disabled"
         ],
         "title": "UserDisableSchema",
+        "type": "object"
+      },
+      "UserEmailSchema": {
+        "properties": {
+          "email": {
+            "default": "",
+            "title": "Email",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username"
+        ],
+        "title": "UserEmailSchema",
         "type": "object"
       },
       "UserGroupsSchema": {
@@ -4627,6 +5318,46 @@
         ]
       }
     },
+    "/api/agent/backup": {
+      "post": {
+        "description": "Config e versione raccolte dall'agente sui propri dispositivi.\n\nPassa dalle STESSE funzioni del triage centrale (backup_store.save_backup e\nupdate_version_inventory), cosi' mappa, config drift e classificazione per\nmodello si popolano senza nuovi lettori.",
+        "operationId": "agent_push_backup_api_agent_backup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentBackupSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Agent Push Backup",
+        "tags": [
+          "Agent"
+        ]
+      }
+    },
     "/api/agent/heartbeat": {
       "post": {
         "operationId": "agent_heartbeat_api_agent_heartbeat_post",
@@ -4819,6 +5550,46 @@
           }
         },
         "summary": "Agent Push Mac",
+        "tags": [
+          "Agent"
+        ]
+      }
+    },
+    "/api/agent/status": {
+      "post": {
+        "description": "Esiti del ping che l'agente esegue sui PROPRI dispositivi.\n\nIl centrale non raggiunge i dispositivi di una sede con agente (vedi\nsite_manager.has_direct_path): questo push e' l'unica fonte di stato\nup/down per quella sede.",
+        "operationId": "agent_push_status_api_agent_status_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentStatusSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Agent Push Status",
         "tags": [
           "Agent"
         ]

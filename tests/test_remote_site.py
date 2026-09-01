@@ -672,5 +672,118 @@ class AgentConfigFileWins(unittest.TestCase):
         self.assertEqual(out["interval"], 60)
 
 
+class AgentPushesItsOwnPingResults(unittest.TestCase):
+    """The central does not reach an agent site's devices, so the agent's own
+    ping is the only source of up/down for them."""
+
+    def _agent(self):
+        from unittest import mock
+        from services import site_agent
+        agent = site_agent.Agent.__new__(site_agent.Agent)
+        agent.cfg = {"site_id": "milan", "interval": 60}
+        agent._post = mock.MagicMock()
+        agent._post.return_value.json.return_value = {"status": "success",
+                                                      "updated": 2}
+        return agent
+
+    def test_every_device_is_reported_including_the_unreachable_one(self):
+        # An unreachable device is pushed as down, never omitted: a skipped
+        # device silently vanishes from the ping monitor, which is the
+        # failure this change exists to remove.
+        from unittest import mock
+
+        agent = self._agent()
+        devices = [{"IP": "10.9.0.50"}, {"IP": "10.9.0.51"}]
+        with mock.patch("collectors.network_scanner._ping",
+                        side_effect=lambda ip: ip == "10.9.0.50"):
+            agent.push_status(devices)
+
+        path, payload = agent._post.call_args[0]
+        self.assertEqual(path, "/api/agent/status")
+        self.assertEqual(payload["devices"],
+                         [{"ip": "10.9.0.50", "up": True},
+                          {"ip": "10.9.0.51", "up": False}])
+
+    def test_no_devices_means_no_call(self):
+        agent = self._agent()
+        agent.push_status([])
+        agent._post.assert_not_called()
+
+
+class AgentScheduledBackup(unittest.TestCase):
+    """The backup interval is deliberately not the polling interval: a 15s
+    poll must not mean a config backup every 15 seconds."""
+
+    def _agent(self, backup_interval=3600):
+        from unittest import mock
+        from services import site_agent
+        agent = site_agent.Agent.__new__(site_agent.Agent)
+        agent.cfg = {"site_id": "milan", "interval": 60,
+                     "backup_interval": backup_interval}
+        agent._last_backup = 0.0
+        agent._post = mock.MagicMock()
+        agent._post.return_value.json.return_value = {"status": "success",
+                                                      "file": "/x"}
+        return agent
+
+    def test_a_successful_triage_is_pushed_with_its_config_text(self):
+        import tempfile
+        from unittest import mock
+        from core import core_engine
+
+        agent = self._agent()
+        d = tempfile.mkdtemp(prefix="sentinelnet_bk_")
+        path = os.path.join(d, "switch-01-10.9.0.60.txt")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("hostname switch-01\nend\n")
+
+        device = {"IP": "10.9.0.60", "Vendor": "cisco", "Group": "Generale"}
+        with mock.patch.object(core_engine, "run_backup_and_triage",
+                               return_value={"status": "success",
+                                             "version": "15.2(7)E2",
+                                             "hostname": "switch-01",
+                                             "file": path}):
+            agent.push_backup(device)
+
+        call_path, payload = agent._post.call_args[0]
+        self.assertEqual(call_path, "/api/agent/backup")
+        self.assertEqual(payload["ip"], "10.9.0.60")
+        self.assertEqual(payload["hostname"], "switch-01")
+        self.assertIn("hostname switch-01", payload["config"])
+
+    def test_a_failed_triage_pushes_nothing(self):
+        # A partial or empty push must never overwrite a good stored config.
+        from unittest import mock
+        from core import core_engine
+
+        agent = self._agent()
+        device = {"IP": "10.9.0.61", "Vendor": "cisco", "Group": "Generale"}
+        with mock.patch.object(core_engine, "run_backup_and_triage",
+                               return_value={"status": "error", "message": "boom"}):
+            out = agent.push_backup(device)
+        agent._post.assert_not_called()
+        self.assertEqual(out["status"], "error")
+
+    def test_interval_zero_disables_the_scheduled_phase(self):
+        from unittest import mock
+        agent = self._agent(backup_interval=0)
+        with mock.patch.object(agent, "push_backup") as pb:
+            n = agent.maybe_run_backups([{"IP": "10.9.0.62"}])
+        pb.assert_not_called()
+        self.assertEqual(n, 0)
+
+    def test_the_phase_does_not_run_again_before_its_interval(self):
+        from unittest import mock
+        agent = self._agent(backup_interval=3600)
+        with mock.patch.object(agent, "push_backup",
+                               return_value={"status": "success"}) as pb:
+            first = agent.maybe_run_backups([{"IP": "10.9.0.63"}])
+            second = agent.maybe_run_backups([{"IP": "10.9.0.63"}])
+        self.assertEqual(first, 1)
+        self.assertEqual(second, 0)
+        self.assertEqual(pb.call_count, 1)
+        self.assertGreater(agent._last_backup, 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()
