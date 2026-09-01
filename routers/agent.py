@@ -69,6 +69,7 @@ class AgentBackupSchema(BaseModel):
     hostname: str = ""
     vendor: str = "cisco"
     version: str = "Non Rilevata"
+    model: str = ""
     serial: str = ""
     config: str
 
@@ -212,7 +213,7 @@ def agent_push_backup(payload: AgentBackupSchema, site = Depends(get_agent_site)
         logging.warning(f"Storico config non aggiornato per {payload.ip}: {e}")
     inventory_manager.update_version_inventory(
         payload.ip, payload.vendor, payload.version, "online",
-        serial=payload.serial or None)
+        model=payload.model or None, serial=payload.serial or None)
     if payload.hostname:
         inventory_manager.update_device_hostname(payload.ip, payload.hostname)
     log_audit(f"Agente sede '{site_id}': backup ricevuto per {payload.ip} "

@@ -567,6 +567,27 @@ class RemoteSiteE2E(unittest.TestCase):
         from services import inventory_manager
         self.assertNotIn("10.9.0.41", inventory_manager.get_detected_versions())
 
+    def test_agent_backup_push_carries_model_and_serial(self):
+        # push_backup used to hardcode serial "" and run_backup_and_triage
+        # never returned model/serial at all, so the model-based classifier
+        # never received its input for an agent-site device.
+        sid, token = self._create_agent_site("Model-Serial-Push")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={
+            "devices": [{"ip": "10.9.0.46", "vendor": "cisco", "hostname": "switch-06"}]})
+
+        r = self.client.post("/api/agent/backup", headers=ah, json={
+            "ip": "10.9.0.46", "hostname": "switch-06", "vendor": "cisco",
+            "version": "15.2(7)E2", "model": "WS-C2960X-24", "serial": "FDO12345678",
+            "config": "hostname switch-06\n!\nend\n",
+        })
+        self.assertEqual(r.status_code, 200, r.text)
+
+        from services import inventory_manager
+        entry = inventory_manager.get_detected_versions()["10.9.0.46"]
+        self.assertEqual(entry.get("model"), "WS-C2960X-24")
+        self.assertEqual(entry.get("serial"), "FDO12345678")
+
     def test_backup_push_cannot_target_another_sites_device(self):
         sid_a, token_a = self._create_agent_site("Backup-A")
         sid_b, token_b = self._create_agent_site("Backup-B")
@@ -850,6 +871,33 @@ class AgentScheduledBackup(unittest.TestCase):
         self.assertEqual(payload["ip"], "10.9.0.60")
         self.assertEqual(payload["hostname"], "switch-01")
         self.assertIn("hostname switch-01", payload["config"])
+
+    def test_push_backup_forwards_model_and_serial(self):
+        # push_backup used to hardcode serial "" regardless of what
+        # run_backup_and_triage returned, dropping the classifier's input.
+        import tempfile
+        from unittest import mock
+        from core import core_engine
+
+        agent = self._agent()
+        d = tempfile.mkdtemp(prefix="sentinelnet_bk_")
+        path = os.path.join(d, "switch-07-10.9.0.66.txt")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("hostname switch-07\nend\n")
+
+        device = {"IP": "10.9.0.66", "Vendor": "cisco", "Group": "Generale"}
+        with mock.patch.object(core_engine, "run_backup_and_triage",
+                               return_value={"status": "success",
+                                             "version": "15.2(7)E2",
+                                             "hostname": "switch-07",
+                                             "model": "WS-C2960X-24",
+                                             "serial": "FDO12345678",
+                                             "file": path}):
+            agent.push_backup(device)
+
+        _call_path, payload = agent._post.call_args[0]
+        self.assertEqual(payload["model"], "WS-C2960X-24")
+        self.assertEqual(payload["serial"], "FDO12345678")
 
     def test_a_failed_triage_pushes_nothing(self):
         # A partial or empty push must never overwrite a good stored config.
