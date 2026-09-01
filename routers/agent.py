@@ -92,6 +92,8 @@ def agent_heartbeat(payload: Optional[dict] = None, site = Depends(get_agent_sit
             updates["syslog_port"] = payload["syslog_port"]
         if "interval" in payload:
             updates["interval"] = payload["interval"]
+        if "backup_interval" in payload:
+            updates["backup_interval"] = payload["backup_interval"]
         if updates:
             site_manager.update_site(site_id, **updates)
     return {"ok": True, "site_id": site["id"], "name": site["name"], "subnets": site.get("subnets", [])}
