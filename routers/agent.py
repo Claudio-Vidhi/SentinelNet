@@ -12,6 +12,7 @@ from services import site_manager
 from services import inventory_manager
 from collectors import mac_history
 from security.security_manager import log_audit
+from core import backup_store
 
 router = APIRouter(tags=["Agent"])
 
@@ -59,6 +60,16 @@ class AgentStatusItemSchema(BaseModel):
 
 class AgentStatusSchema(BaseModel):
     devices: List[AgentStatusItemSchema] = []
+
+MAX_CONFIG_BYTES = 5 * 1024 * 1024
+
+class AgentBackupSchema(BaseModel):
+    ip: str
+    hostname: str = ""
+    vendor: str = "cisco"
+    version: str = "Non Rilevata"
+    serial: str = ""
+    config: str
 
 def get_agent_site(request: Request):
     """Autentica un agente tramite header X-Site-Token (+ opzionale X-Site-Id).
@@ -168,6 +179,35 @@ def agent_push_status(payload: AgentStatusSchema, site = Depends(get_agent_site)
             "online" if d.up else "offline")
         n += 1
     return {"status": "success", "updated": n}
+
+@router.post("/api/agent/backup")
+def agent_push_backup(payload: AgentBackupSchema, site = Depends(get_agent_site)):
+    """Config e versione raccolte dall'agente sui propri dispositivi.
+
+    Passa dalle STESSE funzioni del triage centrale (backup_store.save_backup e
+    update_version_inventory), cosi' mappa, config drift e classificazione per
+    modello si popolano senza nuovi lettori."""
+    site_id = site["id"]
+    device = next((d for d in inventory_manager.get_all_devices()
+                   if d.get("IP") == payload.ip and d.get("Site") == site_id), None)
+    if device is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Dispositivo {payload.ip} non appartiene alla sede '{site_id}'.")
+    if len(payload.config.encode("utf-8")) > MAX_CONFIG_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="Config oltre il limite di 5 MB: rifiutata, non troncata.")
+    sys_name = payload.hostname or payload.ip
+    file_path = backup_store.save_backup(device, sys_name, payload.config)
+    inventory_manager.update_version_inventory(
+        payload.ip, payload.vendor, payload.version, "online",
+        serial=payload.serial or None)
+    if payload.hostname:
+        inventory_manager.update_device_hostname(payload.ip, payload.hostname)
+    log_audit(f"Agente sede '{site_id}': backup ricevuto per {payload.ip} "
+              f"({len(payload.config)} caratteri).")
+    return {"status": "success", "file": file_path}
 
 @router.get("/api/agent/jobs")
 def agent_poll_jobs(site = Depends(get_agent_site)):
