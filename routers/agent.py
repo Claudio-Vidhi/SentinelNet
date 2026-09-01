@@ -53,6 +53,13 @@ class AgentSyslogItemSchema(BaseModel):
 class AgentSyslogBatchSchema(BaseModel):
     events: List[AgentSyslogItemSchema] = []
 
+class AgentStatusItemSchema(BaseModel):
+    ip: str
+    up: bool
+
+class AgentStatusSchema(BaseModel):
+    devices: List[AgentStatusItemSchema] = []
+
 def get_agent_site(request: Request):
     """Autentica un agente tramite header X-Site-Token (+ opzionale X-Site-Id).
     Ritorna il dict della sede agent. 401 se il token non corrisponde."""
@@ -137,6 +144,30 @@ def agent_push_arp(payload: AgentArpSchema, site = Depends(get_agent_site)):
     log_audit(f"Agente sede '{site_id}': {len(payload.collections)} tabelle ARP "
               f"ricevute ({total} binding).")
     return {"status": "success", "recorded": total}
+
+@router.post("/api/agent/status")
+def agent_push_status(payload: AgentStatusSchema, site = Depends(get_agent_site)):
+    """Esiti del ping che l'agente esegue sui PROPRI dispositivi.
+
+    Il centrale non raggiunge i dispositivi di una sede con agente (vedi
+    site_manager.has_direct_path): questo push e' l'unica fonte di stato
+    up/down per quella sede."""
+    site_id = site["id"]
+    own = {d.get("IP") for d in inventory_manager.get_all_devices()
+           if d.get("Site") == site_id}
+    known = inventory_manager.get_detected_versions()
+    n = 0
+    for d in payload.devices:
+        # Il token di una sede non deve poter alterare lo stato di un'altra.
+        if d.ip not in own:
+            continue
+        prev = known.get(d.ip, {})
+        inventory_manager.update_version_inventory(
+            d.ip, prev.get("vendor", "cisco"),
+            prev.get("version", "Non Rilevata"),
+            "online" if d.up else "offline")
+        n += 1
+    return {"status": "success", "updated": n}
 
 @router.get("/api/agent/jobs")
 def agent_poll_jobs(site = Depends(get_agent_site)):
