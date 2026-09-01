@@ -340,7 +340,8 @@ class Agent:
             "hostname": res.get("hostname", ""),
             "vendor": device.get("Vendor", "cisco"),
             "version": res.get("version", "Non Rilevata"),
-            "serial": "",
+            "model": res.get("model", ""),
+            "serial": res.get("serial", ""),
             "config": config_out,
         })
         r.raise_for_status()

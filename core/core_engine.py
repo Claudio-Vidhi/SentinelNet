@@ -173,7 +173,8 @@ def _fortigate_backup_and_triage(device):
     log_audit(f"Triage e backup completati con successo per dispositivo '{ip}' "
               f"(Firmware: '{version}', fonte config: {cfg['source']}).")
     return {"status": "success", "version": version, "hostname": sys_name,
-            "file": file_path, "source": cfg["source"]}
+            "file": file_path, "source": cfg["source"],
+            "model": fg_model, "serial": fg_serial}
 
 def run_backup_and_triage(device):
     ip     = device['IP']
@@ -427,7 +428,8 @@ def run_backup_and_triage(device):
                 logging.warning(f"Rilevamento ridondanza fallito per {ip}: {stack_err}")
 
             log_audit(f"Triage e backup completati con successo per dispositivo '{ip}' (Firmware: '{version}').")
-            return {"status": "success", "version": version, "hostname": sys_name, "file": file_path}
+            return {"status": "success", "version": version, "hostname": sys_name, "file": file_path,
+                    "model": model, "serial": serial}
 
     except Exception as e:
         logging.error(f"Errore su {ip}: {str(e)}")
