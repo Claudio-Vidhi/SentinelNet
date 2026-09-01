@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-09-01
+
 ### Added
 
 - **The central can own an agent site's inventory.** A per-site switch,
