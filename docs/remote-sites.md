@@ -48,6 +48,18 @@ Key principles:
    `--syslog-port`), batches messages and transmits them to central over HTTPS
    (`POST /api/agent/syslog`), where they are stored in central observability
    tagged by site and tenant.
+5. **Central never dials the devices.** Principle 1 is only worth anything if
+   nothing on central contradicts it, so an agent site's devices are excluded
+   from every direct probe: no ICMP from the ping check or the ping monitor,
+   no TCP/22 reachability test, no SSH session for triage or bulk commands.
+   Their status is what the agent pushes, and where nothing has been pushed
+   the answer is "not measurable" rather than a guessed "offline" — the same
+   tri-state a jump site uses. The predicates are
+   `site_manager.has_direct_path()` (false for `jump` **and** `agent`) and
+   `site_manager.is_agent_site()` (the operation belongs to the agent, not
+   merely the network path). A site id central does not know keeps its direct
+   path, which is what lets the agent run this same code over its own
+   inventory.
 
 > **Known gap:** an authenticated agent currently receives *all* pending jobs
 > for its site and executes them against whichever local device record matches

@@ -157,14 +157,41 @@ def get_site(site_id: str):
 def has_direct_path(site_id: Optional[str]) -> bool:
     """True when the central has a direct IP path to this site's devices.
 
-    False only for bastion-only ('jump') sites: their devices are reached
-    exclusively through an SSH tunnel we initiate, so neither ICMP nor a raw
-    TCP connect from the central can reach them. Callers use it to SKIP a
-    direct probe, never to report the device as down: the state is "not
-    measurable".
+    False for the two modes where the central is not meant to touch the
+    devices itself:
+
+    * 'jump' — reached exclusively through an SSH tunnel we initiate, so
+      neither ICMP nor a raw TCP connect from the central arrives;
+    * 'agent' — the site agent owns the devices and connects outbound to the
+      central. A direct probe contradicts the mode's whole premise (no
+      inbound path required, credentials kept at the site) and, wherever the
+      network happens to route anyway, it lands on the customer's firewall as
+      denied ICMP/SSH coming from the central.
+
+    Callers use it to SKIP a direct probe, never to report the device as
+    down: the state is "not measurable". For an agent site the real status
+    arrives from the agent's own pushes.
+
+    A site id the central does not know returns True, and that is what keeps
+    the agent itself working: the agent runs this same code over its local
+    inventory, and its own sites.json has no entry for the site it serves.
     """
     site = get_site(site_id or "")
-    return not (site and site.get("mode") == "jump")
+    return not (site and site.get("mode") in ("jump", "agent"))
+
+
+def is_agent_site(site_id: Optional[str]) -> bool:
+    """True when this site's devices belong to a site agent.
+
+    Distinct from ``not has_direct_path``: for a jump site the central still
+    performs the operation, tunnelled through the bastion, so callers there
+    only skip the pre-probe. For an agent site the central must not perform
+    it at all — the agent does, and the job queue is how the request reaches
+    it. Same "unknown site means no" rule as above, so the agent's own local
+    runs are unaffected.
+    """
+    site = get_site(site_id or "")
+    return bool(site and site.get("mode") == "agent")
 
 
 def create_site(name: str, mode: str, subnets=None, **kwargs):
