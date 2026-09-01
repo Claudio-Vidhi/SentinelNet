@@ -509,6 +509,19 @@ class Agent:
                 out = ({"status": "error",
                         "result": f"Dispositivo {ip} non in inventario locale."}
                        if not device else self._execute_rest_job(device, cmd))
+            elif job.get("kind") == "triage":
+                device = by_ip.get(ip)
+                if not device:
+                    out = {"status": "error",
+                           "result": f"Dispositivo {ip} non in inventario locale."}
+                else:
+                    res = self.push_backup(device)
+                    # Un riassunto, mai la config: questa colonna viene resa
+                    # tale e quale nel pannello storico job.
+                    out = ({"status": "done", "result": "backup inviato al centrale"}
+                           if res.get("status") == "success"
+                           else {"status": "error",
+                                 "result": res.get("message", "errore")})
             elif cmd.startswith("_agent_"):
                 out = self._execute_agent_rpc(cmd)
             else:
