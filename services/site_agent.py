@@ -357,6 +357,45 @@ class Agent:
         r.raise_for_status()
         return {"status": "success", **r.json()}
 
+    def apply_central_devices(self, items):
+        """Applica l'inventario che il centrale gestisce per questa sede.
+
+        Tre regole, e la terza e' quella che tiene in piedi tutto il resto:
+        si AGGIUNGE e si AGGIORNA, non si CANCELLA mai. Un dispositivo assente
+        dalla lista significa "il centrale non lo conosce", non "rimuovilo":
+        l'agente puo' legittimamente averne di suoi, ed e' cosi' che funziona
+        il push in salita, che resta la strada per farglieli sapere.
+
+        Le credenziali arrivano in chiaro e add_or_update_device le cifra con
+        la chiave LOCALE. Una stringa vuota su un dispositivo esistente vuol
+        gia' dire "tieni quelle che ci sono", quindi un push senza segreti
+        (centrale in HTTP) non azzera quelle che l'agente ha gia'.
+        """
+        applied = 0
+        for it in items or []:
+            ip = (it.get("ip") or "").strip()
+            if not ip:
+                continue
+            group = it.get("group") or "Generale"
+            # Il gruppo dev'esistere localmente o add_or_update_device fa
+            # cadere il dispositivo in 'Generale', perdendo il tenant.
+            if group not in inventory_manager.get_all_groups():
+                inventory_manager.add_group(group)
+            try:
+                inventory_manager.add_or_update_device(
+                    ip, it.get("vendor") or "cisco", "custom",
+                    it.get("username") or "", it.get("password") or "",
+                    it.get("enable_secret") or "", group,
+                    site=self.cfg["site_id"], ssh_port=it.get("ssh_port"))
+                if it.get("hostname"):
+                    inventory_manager.update_device_hostname(ip, it["hostname"])
+                applied += 1
+            except ValueError as e:
+                print(f"[devices] {ip} ignorato: {e}")
+        if applied:
+            print(f"[devices] {applied} dispositivi dal centrale")
+        return applied
+
     def maybe_push_l2(self, devices):
         """Raccolta MAC e ARP, alla cadenza 'l2_interval'.
 
@@ -588,8 +627,15 @@ class Agent:
         return res
 
     def cycle(self):
-        devices = inventory_manager.get_all_devices()
         info = self.heartbeat()
+        # Prima dell'inventario locale: un dispositivo appena spinto dal
+        # centrale dev'essere gia' nella lista che le fasi qui sotto usano,
+        # altrimenti resta invisibile per un giro intero.
+        try:
+            self.apply_central_devices(info.get("devices"))
+        except Exception as e:
+            print(f"[devices] errore: {e}")
+        devices = inventory_manager.get_all_devices()
         print(f"[heartbeat] sede '{info.get('site_id')}' ok, {len(devices)} dispositivi locali")
         try:
             self.push_inventory(devices)

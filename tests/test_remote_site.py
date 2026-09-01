@@ -850,6 +850,168 @@ class CentralDoesNotTouchAgentSiteDevices(unittest.TestCase):
         self.assertIn("agente", out["message"])
 
 
+class CentralManagedDevicePush(unittest.TestCase):
+    """With the flag on, the central owns the site's device list and hands it
+    to the agent on the heartbeat it already makes."""
+
+    @classmethod
+    def setUpClass(cls):
+        # Same bootstrap as RemoteSiteE2E: this class must stand alone, or a
+        # filtered run (-k) fails on a user that another class happened to
+        # create.
+        cls.client = TestClient(app_server.app)
+        from security import user_manager
+        import bcrypt
+        users = user_manager.get_users()
+        pw_hash = bcrypt.hashpw(ADMIN_PW.encode("utf-8"),
+                                bcrypt.gensalt()).decode("utf-8")
+        users[ADMIN] = {"hashed_password": pw_hash, "role": "admin",
+                        "disabled": False}
+        user_manager._save_users(users)
+        r = cls.client.post("/api/auth/login",
+                            json={"username": ADMIN, "password": ADMIN_PW})
+        assert r.status_code == 200, r.text
+        cls.admin_h = {"Authorization": "Bearer " + r.json()["access_token"]}
+
+    def _site_with_device(self, name, managed):
+        from services import inventory_manager
+        rr = self.client.post("/api/sites", headers=self.admin_h,
+                              json={"name": name, "mode": "agent",
+                                    "subnets": ["10.9.0.0/24"]})
+        assert rr.status_code == 200, rr.text
+        sid, token = rr.json()["site"]["id"], rr.json()["token"]
+        if managed:
+            rr = self.client.post("/api/sites/update", headers=self.admin_h,
+                                  json={"id": sid, "central_manages_devices": True})
+            assert rr.status_code == 200, rr.text
+        inventory_manager.add_or_update_device(
+            "10.9.0.90", "cisco", "custom", "admin", "s3cret", "", "Generale",
+            site=sid, ssh_port=22)
+        return sid, token
+
+    def test_the_flag_off_pushes_nothing(self):
+        sid, token = self._site_with_device("Push-Off", managed=False)
+        r = self.client.post("/api/agent/heartbeat",
+                         headers={"X-Site-Id": sid, "X-Site-Token": token})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertNotIn("devices", r.json())
+
+    def test_the_flag_on_pushes_the_sites_devices(self):
+        sid, token = self._site_with_device("Push-On", managed=True)
+        r = self.client.post("/api/agent/heartbeat",
+                         headers={"X-Site-Id": sid, "X-Site-Token": token})
+        self.assertEqual(r.status_code, 200, r.text)
+        ips = [d["ip"] for d in r.json()["devices"]]
+        self.assertIn("10.9.0.90", ips)
+
+    def test_credentials_are_withheld_over_plain_http(self):
+        # The TestClient speaks http, which is the point: sending passwords in
+        # clear over the customer's network would be worse than not having the
+        # feature. Identity still travels.
+        sid, token = self._site_with_device("Push-Http", managed=True)
+        r = self.client.post("/api/agent/heartbeat",
+                         headers={"X-Site-Id": sid, "X-Site-Token": token})
+        body = r.json()
+        self.assertFalse(body["credentials_included"])
+        dev = next(d for d in body["devices"] if d["ip"] == "10.9.0.90")
+        self.assertNotIn("password", dev)
+        self.assertEqual(dev["vendor"], "cisco")
+
+    def test_credentials_travel_when_the_request_is_https(self):
+        sid, token = self._site_with_device("Push-Https", managed=True)
+        r = self.client.post("/api/agent/heartbeat",
+                         headers={"X-Site-Id": sid, "X-Site-Token": token,
+                                  "X-Forwarded-Proto": "https"})
+        body = r.json()
+        self.assertTrue(body["credentials_included"])
+        dev = next(d for d in body["devices"] if d["ip"] == "10.9.0.90")
+        self.assertEqual(dev["password"], "s3cret")
+
+    def test_another_sites_devices_are_never_included(self):
+        sid_a, token_a = self._site_with_device("Push-A", managed=True)
+        sid_b, _tok_b = self._site_with_device("Push-B", managed=True)
+        from services import inventory_manager
+        inventory_manager.add_or_update_device(
+            "10.9.0.91", "cisco", "custom", "u", "p", "", "Generale",
+            site=sid_b, ssh_port=22)
+        r = self.client.post("/api/agent/heartbeat",
+                         headers={"X-Site-Id": sid_a, "X-Site-Token": token_a})
+        ips = [d["ip"] for d in r.json()["devices"]]
+        self.assertNotIn("10.9.0.91", ips)
+
+
+class AgentAppliesCentralDevices(unittest.TestCase):
+    """The agent side of the push: add and update, never delete."""
+
+    def _agent(self):
+        from services import site_agent
+        agent = site_agent.Agent.__new__(site_agent.Agent)
+        agent.cfg = {"site_id": "milan", "interval": 60}
+        return agent
+
+    def test_a_pushed_device_is_created_locally(self):
+        from services import inventory_manager
+        agent = self._agent()
+        n = agent.apply_central_devices([
+            {"ip": "10.9.0.95", "vendor": "cisco", "group": "Generale",
+             "hostname": "switch-01", "ssh_port": 22,
+             "username": "admin", "password": "pw", "enable_secret": ""},
+        ])
+        self.assertEqual(n, 1)
+        d = next(x for x in inventory_manager.get_all_devices()
+                 if x["IP"] == "10.9.0.95")
+        self.assertEqual(d["Site"], "milan")
+        self.assertEqual(d["Vendor"], "cisco")
+
+    def test_a_push_without_credentials_keeps_the_ones_already_held(self):
+        from services import inventory_manager
+        agent = self._agent()
+        agent.apply_central_devices([
+            {"ip": "10.9.0.96", "vendor": "cisco", "group": "Generale",
+             "username": "admin", "password": "keepme", "enable_secret": ""},
+        ])
+        before = next(x for x in inventory_manager.get_all_devices()
+                      if x["IP"] == "10.9.0.96")["Password"]
+        self.assertTrue(before)
+        # Second push carries no secrets, as happens over plain http.
+        agent.apply_central_devices([
+            {"ip": "10.9.0.96", "vendor": "cisco", "group": "Generale"},
+        ])
+        after = next(x for x in inventory_manager.get_all_devices()
+                     if x["IP"] == "10.9.0.96")["Password"]
+        self.assertEqual(after, before)
+
+    def test_a_device_missing_from_the_push_is_never_deleted(self):
+        # "The central does not know it" is not "remove it": the agent may
+        # legitimately hold devices the central has never seen, and the
+        # upward push is how it tells it about them.
+        from services import inventory_manager
+        agent = self._agent()
+        agent.apply_central_devices([{"ip": "10.9.0.97", "vendor": "cisco",
+                                      "group": "Generale"}])
+        agent.apply_central_devices([{"ip": "10.9.0.98", "vendor": "cisco",
+                                      "group": "Generale"}])
+        ips = {x["IP"] for x in inventory_manager.get_all_devices()}
+        self.assertIn("10.9.0.97", ips)
+        self.assertIn("10.9.0.98", ips)
+
+    def test_an_empty_or_missing_list_does_nothing(self):
+        agent = self._agent()
+        self.assertEqual(agent.apply_central_devices(None), 0)
+        self.assertEqual(agent.apply_central_devices([]), 0)
+
+    def test_a_malformed_entry_does_not_stop_the_others(self):
+        from services import inventory_manager
+        agent = self._agent()
+        n = agent.apply_central_devices([
+            {"ip": "not-an-ip", "vendor": "cisco", "group": "Generale"},
+            {"ip": "10.9.0.99", "vendor": "cisco", "group": "Generale"},
+        ])
+        self.assertEqual(n, 1)
+        ips = {x["IP"] for x in inventory_manager.get_all_devices()}
+        self.assertIn("10.9.0.99", ips)
+
+
 class AgentL2Cadence(unittest.TestCase):
     """MAC/ARP collection is the only cycle phase that opens an SSH session to
     every device, and it had no clock of its own: at interval=10 that was six
