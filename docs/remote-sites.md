@@ -70,6 +70,15 @@ Key principles:
 > the requested IP. The agent control plane and the device data plane are not
 > yet fully separated. See [roadmap.md](roadmap.md).
 
+> **Known gap:** two agent sites that use the same RFC 1918 address for
+> different devices will overwrite each other's status and hostname on the
+> central. Each endpoint refuses an IP that is not tagged to the calling site,
+> so no site can write another's *record* — but `detected_versions.json` and
+> the hostname store are keyed by IP alone across the whole product, so the
+> second site's device resolves to the first one's row. This predates the
+> agent relay and applies equally to a central-poll site; it is an inventory
+> keying limitation, not an authentication one.
+
 ---
 
 ## 2. Creating a site on central
