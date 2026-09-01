@@ -455,6 +455,100 @@ class RemoteSiteE2E(unittest.TestCase):
         self.assertEqual(400, res.status_code)
         self.assertIn("IP", res.json()["detail"])
 
+    def test_agent_status_push_updates_the_central_state(self):
+        sid, token = self._create_agent_site("Status-Push")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={"devices": [
+            {"ip": "10.9.0.20", "vendor": "cisco", "hostname": "switch-01"},
+            {"ip": "10.9.0.21", "vendor": "cisco", "hostname": "switch-02"},
+        ]})
+
+        r = self.client.post("/api/agent/status", headers=ah, json={"devices": [
+            {"ip": "10.9.0.20", "up": True},
+            {"ip": "10.9.0.21", "up": False},
+        ]})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["updated"], 2)
+
+        from services import inventory_manager
+        versions = inventory_manager.get_detected_versions()
+        self.assertEqual(versions["10.9.0.20"]["status"], "online")
+        self.assertEqual(versions["10.9.0.21"]["status"], "offline")
+
+    def test_agent_status_push_cannot_touch_another_sites_device(self):
+        # One site's token must never write another site's state: the agent
+        # job feed is already over-broad (docs/remote-sites.md), and the
+        # write path must not inherit that.
+        sid_a, token_a = self._create_agent_site("Status-A")
+        sid_b, token_b = self._create_agent_site("Status-B")
+        self.client.post("/api/agent/inventory",
+                         headers=self._agent_headers(sid_b, token_b),
+                         json={"devices": [{"ip": "10.9.0.30", "vendor": "cisco"}]})
+
+        r = self.client.post("/api/agent/status",
+                             headers=self._agent_headers(sid_a, token_a),
+                             json={"devices": [{"ip": "10.9.0.30", "up": True}]})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["updated"], 0)
+
+        from services import inventory_manager
+        self.assertNotIn("10.9.0.30", inventory_manager.get_detected_versions())
+
+    def test_agent_backup_push_lands_in_backup_config_and_versions(self):
+        sid, token = self._create_agent_site("Backup-Push")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={"devices": [
+            {"ip": "10.9.0.40", "vendor": "cisco", "hostname": "switch-01"},
+        ]})
+
+        r = self.client.post("/api/agent/backup", headers=ah, json={
+            "ip": "10.9.0.40", "hostname": "switch-01", "vendor": "cisco",
+            "version": "15.2(7)E2", "serial": "ABC1234DEFG",
+            "config": "hostname switch-01\n!\nend\n",
+        })
+        self.assertEqual(r.status_code, 200, r.text)
+
+        saved = r.json()["file"]
+        self.assertTrue(os.path.exists(saved))
+        with open(saved, encoding="utf-8") as f:
+            self.assertIn("hostname switch-01", f.read())
+
+        from services import inventory_manager
+        entry = inventory_manager.get_detected_versions()["10.9.0.40"]
+        self.assertEqual(entry["status"], "online")
+        self.assertEqual(entry["version"], "15.2(7)E2")
+
+    def test_an_oversized_config_is_refused_without_writing(self):
+        # Truncating is worse than refusing: config drift would report a
+        # spurious change and the model classifier would read half a file.
+        sid, token = self._create_agent_site("Backup-Huge")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={
+            "devices": [{"ip": "10.9.0.41", "vendor": "cisco"}]})
+
+        r = self.client.post("/api/agent/backup", headers=ah, json={
+            "ip": "10.9.0.41", "hostname": "switch-02", "vendor": "cisco",
+            "version": "1.0", "serial": "",
+            "config": "x" * (5 * 1024 * 1024 + 1),
+        })
+        self.assertEqual(r.status_code, 413, r.text)
+        from services import inventory_manager
+        self.assertNotIn("10.9.0.41", inventory_manager.get_detected_versions())
+
+    def test_backup_push_cannot_target_another_sites_device(self):
+        sid_a, token_a = self._create_agent_site("Backup-A")
+        sid_b, token_b = self._create_agent_site("Backup-B")
+        self.client.post("/api/agent/inventory",
+                         headers=self._agent_headers(sid_b, token_b),
+                         json={"devices": [{"ip": "10.9.0.42", "vendor": "cisco"}]})
+
+        r = self.client.post("/api/agent/backup",
+                             headers=self._agent_headers(sid_a, token_a),
+                             json={"ip": "10.9.0.42", "hostname": "switch-03",
+                                   "vendor": "cisco", "version": "1.0",
+                                   "serial": "", "config": "end\n"})
+        self.assertEqual(r.status_code, 404, r.text)
+
 
 class CentralDoesNotTouchAgentSiteDevices(unittest.TestCase):
     """Mode B promises the central needs no path to the site. It did anyway.
