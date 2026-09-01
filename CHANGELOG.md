@@ -10,6 +10,20 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **An agent site's devices used to go quiet between deploy and the next
+  manual check-in**: the agent mirrored inventory and MAC/ARP tables, but
+  nothing told central whether a device was actually up, whether its config
+  had drifted, or let an operator ask for a fresh diagnosis without waiting
+  for the next scheduled pass. The agent now pushes ping-based status every
+  cycle, and backs up each device's config and version on its own
+  `backup_interval` (3600 seconds by default, configurable per site from the
+  dashboard's agent panel, `0` to disable). An operator can also enqueue a
+  `triage` job for an agent-site device the same way they already send a CLI
+  command, and get an answer on the agent's next poll — all without central
+  ever dialling into the site.
+
 ### Security
 
 - **The web terminal's one-time token travelled in the WebSocket URL**, so
