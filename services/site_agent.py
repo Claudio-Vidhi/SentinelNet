@@ -138,6 +138,12 @@ def load_config():
 
     cfg.setdefault("interval", 60)
     cfg.setdefault("backup_interval", 3600)
+    # Raccolta MAC/ARP: cadenza propria, perche' e' l'unica fase del ciclo che
+    # apre una sessione SSH su OGNI apparato. Legata a 'interval' significava
+    # sei sessioni al minuto per dispositivo con un polling a 10s: rumore
+    # inutile su uno switch di produzione, e in dieci secondi una tabella
+    # MAC/ARP non e' cambiata. 0 = ad ogni ciclo, per chi la vuole com'era.
+    cfg.setdefault("l2_interval", 300)
     cfg.setdefault("verify_tls", True)
     cfg.setdefault("data_dir", "./agent-data")
     cfg.setdefault("syslog_enabled", True)
@@ -154,6 +160,9 @@ class Agent:
         # l'intervallo governa. Attendere un'ora prima del primo lascerebbe
         # mappa e versioni vuote per un'ora dopo il deploy.
         self._last_backup = 0.0
+        # Stessa regola del backup: 0.0 = mai eseguito, quindi la prima
+        # raccolta parte subito e solo dopo comanda l'intervallo.
+        self._last_l2 = 0.0
         self.cfg = cfg
         self.base = cfg["central_url"].rstrip("/")
         self.verify = cfg.get("verify_tls", True)
@@ -211,6 +220,7 @@ class Agent:
             "syslog_port": int(self.cfg.get("syslog_port", 5514)),
             "interval": int(self.cfg.get("interval", 60)),
             "backup_interval": int(self.cfg.get("backup_interval") or 0),
+            "l2_interval": int(self.cfg.get("l2_interval") or 0),
             "uptime_s": int(time.time() - self._start_ts) if hasattr(self, "_start_ts") else 0,
         }
         r = self._post("/api/agent/heartbeat", payload)
@@ -346,6 +356,29 @@ class Agent:
         })
         r.raise_for_status()
         return {"status": "success", **r.json()}
+
+    def maybe_push_l2(self, devices):
+        """Raccolta MAC e ARP, alla cadenza 'l2_interval'.
+
+        Le due fasi restano indipendenti fra loro (una che fallisce non ferma
+        l'altra), ma condividono l'orologio: aprono la stessa sessione SSH
+        verso gli stessi apparati, quindi separarle raddoppierebbe le
+        connessioni senza dare nulla in cambio.
+        """
+        every = int(self.cfg.get("l2_interval") or 0)
+        now = time.time()
+        if every > 0 and self._last_l2 and now - self._last_l2 < every:
+            return False
+        self._last_l2 = now
+        try:
+            self.push_mac(devices)
+        except Exception as e:
+            print(f"[mac] errore: {e}")
+        try:
+            self.push_arp(devices)
+        except Exception as e:
+            print(f"[arp] errore: {e}")
+        return True
 
     def maybe_run_backups(self, devices):
         """Fase di backup schedulata. Ritorna quanti dispositivi sono passati."""
@@ -563,13 +596,9 @@ class Agent:
         except Exception as e:
             print(f"[inventory] errore: {e}")
         try:
-            self.push_mac(devices)
+            self.maybe_push_l2(devices)
         except Exception as e:
-            print(f"[mac] errore: {e}")
-        try:
-            self.push_arp(devices)
-        except Exception as e:
-            print(f"[arp] errore: {e}")
+            print(f"[l2] errore: {e}")
         try:
             self.push_status(devices)
         except Exception as e:
