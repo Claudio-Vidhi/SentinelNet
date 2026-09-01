@@ -609,6 +609,47 @@ class RemoteSiteE2E(unittest.TestCase):
                             for j in jobs), jobs)
 
 
+    def test_ping_check_does_not_overwrite_the_status_the_agent_just_pushed(self):
+        # has_direct_path is False for an agent site, so ping_check's own
+        # probe returns None (not measurable). Writing "unknown" over that
+        # would erase the real online/offline the agent pushed moments ago.
+        sid, token = self._create_agent_site("Ping-No-Overwrite")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={
+            "devices": [{"ip": "10.9.0.80", "vendor": "cisco",
+                        "hostname": "switch-01", "group": "Generale"}]})
+        self.client.post("/api/agent/status", headers=ah,
+                         json={"devices": [{"ip": "10.9.0.80", "up": True}]})
+
+        from services import inventory_manager
+        self.assertEqual(
+            inventory_manager.get_detected_versions()["10.9.0.80"]["status"], "online")
+
+        r = self.client.post("/api/ping-check", headers=self.admin_h,
+                             json={"group": "Generale"})
+        self.assertEqual(r.status_code, 200, r.text)
+
+        self.assertEqual(
+            inventory_manager.get_detected_versions()["10.9.0.80"]["status"], "online")
+
+    def test_ping_single_does_not_overwrite_the_status_the_agent_just_pushed(self):
+        sid, token = self._create_agent_site("Ping-Single-No-Overwrite")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={
+            "devices": [{"ip": "10.9.0.81", "vendor": "cisco",
+                        "hostname": "switch-02", "group": "Generale"}]})
+        self.client.post("/api/agent/status", headers=ah,
+                         json={"devices": [{"ip": "10.9.0.81", "up": True}]})
+
+        from services import inventory_manager
+        r = self.client.get("/api/ping/10.9.0.81", headers=self.admin_h)
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertIsNone(r.json()["reachable"])
+
+        self.assertEqual(
+            inventory_manager.get_detected_versions()["10.9.0.81"]["status"], "online")
+
+
 class CentralDoesNotTouchAgentSiteDevices(unittest.TestCase):
     """Mode B promises the central needs no path to the site. It did anyway.
 
