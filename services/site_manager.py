@@ -337,7 +337,7 @@ def _connect():
     return conn
 
 
-VALID_JOB_KINDS = ("cli", "rest")
+VALID_JOB_KINDS = ("cli", "rest", "triage")
 
 # Percorsi REST che l'agente può eseguire per conto del centrale.
 #

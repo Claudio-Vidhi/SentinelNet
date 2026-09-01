@@ -549,6 +549,15 @@ class RemoteSiteE2E(unittest.TestCase):
                                    "serial": "", "config": "end\n"})
         self.assertEqual(r.status_code, 404, r.text)
 
+    def test_the_job_queue_accepts_a_triage_kind(self):
+        from services import site_manager
+        sid, _token = self._create_agent_site("Triage-Kind")
+        job = site_manager.enqueue_job(sid, "10.9.0.65", "", requested_by=ADMIN,
+                                       kind="triage")
+        self.assertEqual(job["kind"], "triage")
+        with self.assertRaises(ValueError):
+            site_manager.enqueue_job(sid, "10.9.0.65", "", kind="nonsense")
+
 
 class CentralDoesNotTouchAgentSiteDevices(unittest.TestCase):
     """Mode B promises the central needs no path to the site. It did anyway.
@@ -783,6 +792,32 @@ class AgentScheduledBackup(unittest.TestCase):
         self.assertEqual(second, 0)
         self.assertEqual(pb.call_count, 1)
         self.assertGreater(agent._last_backup, 0.0)
+
+    def test_a_triage_job_runs_the_local_backup_and_reports_a_short_result(self):
+        # The job result column is rendered verbatim in the job-history panel,
+        # so it carries a summary and never the config text.
+        from unittest import mock
+        agent = self._agent()
+        agent._get = mock.MagicMock()
+        agent._get.return_value.json.return_value = {"jobs": [
+            {"id": "j1", "device_ip": "10.9.0.64", "command": "", "kind": "triage"},
+        ]}
+        posted = []
+
+        def _capture(path, body):
+            posted.append((path, body))
+            return mock.MagicMock()
+
+        agent._post = mock.MagicMock(side_effect=_capture)
+
+        with mock.patch.object(agent, "push_backup",
+                               return_value={"status": "success", "file": "/x"}) as pb:
+            agent.run_jobs([{"IP": "10.9.0.64", "Vendor": "cisco"}])
+
+        pb.assert_called_once()
+        results = [body for path, body in posted if path.endswith("/result")]
+        self.assertEqual(results[0]["status"], "done")
+        self.assertNotIn("hostname", results[0]["result"])
 
 
 if __name__ == "__main__":
