@@ -41,6 +41,13 @@
             let actions = '';
             if (s.mode === 'agent') {
                 actions += `<button data-action="open-agent-control" data-site-id="${escapeHtml(s.id)}" style="color:var(--warning); background:none; border:none; cursor:pointer; margin-right:10px;" title="Pannello di controllo ed aggiornamento agente remoti"><i class="fa-solid fa-gears"></i> Gestione Agente</button>`;
+                // Chi possiede l'inventario di questa sede. Spento: l'agente,
+                // e le credenziali non lasciano la sede. Acceso: il centrale,
+                // che le spinge all'agente -- comodo, ma e' una scelta di
+                // sicurezza, quindi va vista nella riga della sede.
+                actions += `<label style="margin-right:10px; font-size:11px; color:var(--text-muted); cursor:pointer;">`
+                    + `<input type="checkbox" data-action="set-site-central-managed" data-site-id="${escapeHtml(s.id)}"${s.central_manages_devices ? ' checked' : ''} style="vertical-align:middle; margin-right:4px;">`
+                    + `${escapeHtml(L.lblCentralManagesDevices)}</label>`;
                 actions += `<button data-action="regen-site-token" data-site-id="${escapeHtml(s.id)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-key"></i> ${L.btnRegenSiteToken}</button>`;
             }
             if (s.mode === 'jump') {
@@ -206,6 +213,18 @@
             alert((tr('uiError')) + (e.detail || ''));
             loadSites();
         }
+    }
+
+    async function setSiteCentralManaged(id, enabled) {
+        const res = await apiFetch('/api/sites/update', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, central_manages_devices: enabled })
+        });
+        if (res && !res.ok) {
+            const e = await res.json();
+            alert((tr('uiError')) + (e.detail || ''));
+        }
+        loadSites();
     }
 
     async function deleteSite(id) {
@@ -1007,6 +1026,8 @@
         if (sel && sel.dataset.siteId) setSiteDeviceIdentity(sel.dataset.siteId, sel.value);
         const jump = e.target.closest('[data-action="set-site-jump-identity"]');
         if (jump && jump.dataset.siteId) setSiteJumpIdentity(jump.dataset.siteId, jump.value);
+        const cm = e.target.closest('[data-action="set-site-central-managed"]');
+        if (cm && cm.dataset.siteId) setSiteCentralManaged(cm.dataset.siteId, cm.checked);
     });
 
     document.getElementById('usersTableBody')?.addEventListener('change', (e) => {

@@ -12,6 +12,26 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Added
 
+- **The central can own an agent site's inventory.** A per-site switch,
+  *Inventario dal centrale*, makes the central the source of truth for that
+  site's device list and hands it to the agent on the heartbeat it already
+  makes — so a device added on the central shows up at the site instead of
+  having to be typed into a CSV there. Off by default, because switching it on
+  means the device credentials live on the central as well as at the site.
+  Secrets are withheld unless the agent's connection is TLS: over plain HTTP
+  the device identity still travels and the passwords do not. The push adds and
+  updates but never deletes, so the agent keeps devices the central has never
+  seen.
+
+- **MAC/ARP collection has its own interval.** It is the only phase of the
+  agent cycle that opens an SSH session to every device, and it used to run
+  once per poll: at a 10 second polling interval that was six sessions a
+  minute per switch, for tables that do not change in ten seconds. The new
+  `l2_interval` defaults to 300s and is settable from the agent panel; 0 keeps
+  the old every-cycle behaviour.
+
+### Added
+
 - **An agent site's devices used to go quiet between deploy and the next
   manual check-in**: the agent mirrored inventory and MAC/ARP tables, but
   nothing told central whether a device was actually up, whether its config

@@ -14,6 +14,7 @@ from services import inventory_manager
 from collectors import mac_history
 from security.security_manager import log_audit
 from core import backup_store
+from core import device_credentials
 
 router = APIRouter(tags=["Agent"])
 
@@ -85,8 +86,38 @@ def get_agent_site(request: Request):
     site_manager.touch_last_seen(site_id)
     return site_manager.get_site(site_id)
 
+def _devices_for_site(site_id: str, with_credentials: bool) -> List[dict]:
+    """I dispositivi che il centrale gestisce per questa sede.
+
+    Solo identita' se ``with_credentials`` e' falso. Le credenziali vengono
+    risolte in chiaro (get_device_credentials scioglie sia la cifratura della
+    chiave del centrale sia le identita' di tenant) perche' l'agente ha una
+    chiave Fernet DIVERSA: non potrebbe decifrare il testo cifrato del
+    centrale. Le ricifra con la propria appena arrivate.
+    """
+    out = []
+    for d in inventory_manager.get_all_devices():
+        if d.get("Site") != site_id:
+            continue
+        item = {
+            "ip": d.get("IP"),
+            "vendor": d.get("Vendor", "cisco"),
+            "group": d.get("Group", "Generale"),
+            "hostname": d.get("Hostname", "") or "",
+            "ssh_port": d.get("SSH Port") or 22,
+        }
+        if with_credentials:
+            username, password, secret = device_credentials.get_device_credentials(d)
+            item["username"] = username or ""
+            item["password"] = password or ""
+            item["enable_secret"] = secret or ""
+        out.append(item)
+    return out
+
+
 @router.post("/api/agent/heartbeat")
-def agent_heartbeat(payload: Optional[dict] = None, site = Depends(get_agent_site)):
+def agent_heartbeat(request: Request, payload: Optional[dict] = None,
+                    site = Depends(get_agent_site)):
     if payload and isinstance(payload, dict):
         site_id = site["id"]
         updates = {}
@@ -96,9 +127,23 @@ def agent_heartbeat(payload: Optional[dict] = None, site = Depends(get_agent_sit
             updates["interval"] = payload["interval"]
         if "backup_interval" in payload:
             updates["backup_interval"] = payload["backup_interval"]
+        if "l2_interval" in payload:
+            updates["l2_interval"] = payload["l2_interval"]
         if updates:
             site_manager.update_site(site_id, **updates)
-    return {"ok": True, "site_id": site["id"], "name": site["name"], "subnets": site.get("subnets", [])}
+    resp = {"ok": True, "site_id": site["id"], "name": site["name"],
+            "subnets": site.get("subnets", [])}
+    # Push discendente dell'inventario: opzionale per sede, spento di default,
+    # cosi' una installazione esistente non cambia comportamento aggiornando.
+    if site.get("central_manages_devices"):
+        # Le credenziali viaggiano in chiaro dentro il corpo della risposta:
+        # su HTTP sarebbero password in chiaro sulla rete del cliente, cioe'
+        # peggio di non avere affatto la funzione. L'identita' dei dispositivi
+        # passa comunque, sono solo i segreti a fermarsi.
+        secure = request.url.scheme == "https" or             request.headers.get("x-forwarded-proto", "").lower() == "https"
+        resp["devices"] = _devices_for_site(site["id"], with_credentials=secure)
+        resp["credentials_included"] = secure
+    return resp
 
 @router.post("/api/agent/inventory")
 def agent_push_inventory(payload: AgentInventorySchema, site = Depends(get_agent_site)):
