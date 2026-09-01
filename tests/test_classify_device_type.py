@@ -9,7 +9,7 @@ evidence still classifies as "ap".
 """
 import unittest
 
-from core.core_engine import classify_device_type
+from core.core_engine import classify_by_model, classify_device_type
 
 
 class TestClassifyDeviceType(unittest.TestCase):
@@ -160,6 +160,84 @@ class TestClassifyDeviceType(unittest.TestCase):
                 description="ACME M1234 Fixed Dome Network Camera 1.2.3",
             ),
             "camera",
+        )
+
+
+class TestClassifyByModel(unittest.TestCase):
+    """The model number alone must name the product line.
+
+    Every string below is a family Cisco actually ships. The interesting cases
+    are the collisions: the same number means different hardware depending on
+    the line it belongs to, which is why the rules are ordered.
+    """
+
+    SWITCHES = ("WS-C2960X-24PS-L", "WS-C3850-24T", "C9300-48P", "C9500-16X",
+                "Catalyst 9200L", "WS-C6807-XL", "IE-4010-16S12P", "C9350-48T",
+                "C9610R", "N9K-C93180YC-EX")
+    APS = ("C9105AXW", "C9115AXI-E", "C9124AXD", "C9136I-B", "C9163E",
+           "CW9166I-E", "IW9167EH", "AIR-AP1852I-E-K9", "AIR-CAP2702I-E-K9")
+    WLCS = ("C9800-40-K9", "C9800-CL", "AIR-CT5520-K9")
+    ROUTERS = ("ISR4331/K9", "ASR1001-X", "C8300-1N1S-4T2X", "C8500L-8S4X",
+               "C1111-8P")
+    FIREWALLS = ("ASA5525-X", "FPR-2110", "FPR9300")
+
+    def test_each_family_resolves_to_its_product_line(self):
+        for expected, models in (("switch", self.SWITCHES), ("ap", self.APS),
+                                 ("wlc", self.WLCS), ("router", self.ROUTERS),
+                                 ("firewall", self.FIREWALLS)):
+            for model in models:
+                with self.subTest(model=model):
+                    self.assertEqual(classify_by_model(model), expected)
+
+    def test_an_unknown_or_empty_model_decides_nothing(self):
+        # None, never a guess: the caller has to fall through to the weaker
+        # signals instead of being handed a wrong answer with full authority.
+        for model in ("", "Non Rilevato", "FortiGate-120G", "VM (VMware)"):
+            with self.subTest(model=model):
+                self.assertIsNone(classify_by_model(model))
+
+    def test_catalyst_9000_is_split_across_three_product_lines(self):
+        # The collision that motivates the ordering: one "c9..." prefix spans
+        # an access point, a switch and a wireless controller.
+        self.assertEqual(classify_by_model("C9115AXI-E"), "ap")
+        self.assertEqual(classify_by_model("C9300-24U"), "switch")
+        self.assertEqual(classify_by_model("C9800-80-K9"), "wlc")
+
+    def test_nexus_9800_is_a_switch_not_a_wireless_controller(self):
+        # Nexus 9000 includes a 9800: a data-centre switch with nothing to do
+        # with the Catalyst 9800 controller.
+        self.assertEqual(classify_by_model("Nexus 9800"), "switch")
+
+    def test_firepower_9300_is_a_firewall_not_a_catalyst_9300(self):
+        self.assertEqual(classify_by_model("FPR9300"), "firewall")
+
+    def test_catalyst_8000_is_a_router_despite_the_catalyst_name(self):
+        # "catalyst" is switch evidence everywhere else in this classifier.
+        self.assertEqual(classify_by_model("Catalyst C8300-1N1S-4T2X"), "router")
+
+    def test_a_known_model_outranks_a_misleading_hostname(self):
+        # The reported bug: an access switch reporting WS-C2960X in its own
+        # backup was classified from its hostname, because the model was
+        # computed for display and never handed to the classifier.
+        self.assertEqual(
+            classify_device_type("site-ap-lab", model="WS-C2960X-24PS-L"),
+            "switch",
+        )
+
+    def test_a_known_model_outranks_cdp_capabilities(self):
+        # A lightweight AP announces "Router Trans-Bridge". The model does not
+        # lie about what the box is.
+        self.assertEqual(
+            classify_device_type("node-7", platform="cisco C9130AXI-E",
+                                 capabilities="Router Trans-Bridge"),
+            "ap",
+        )
+
+    def test_an_unknown_model_leaves_the_other_signals_in_charge(self):
+        self.assertEqual(
+            classify_device_type("SW-WIFI-01", capabilities="Access Point",
+                                 model="Non Rilevato"),
+            "ap",
         )
 
 

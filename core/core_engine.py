@@ -707,13 +707,67 @@ _AP_MODEL_RE = re.compile(r'\b(?:c9\d{3}ax|cw91\d{2})')
 # as "switch". The model in the Platform is more specific.
 _ROUTER_MODEL_RE = re.compile(r'\b(?:isr|asr|csr)\d')
 
+# Model number -> device type, built from Cisco's own product-family lists.
+#
+# The model is the only field that names the hardware. Everything else lies:
+# CDP Capabilities are coarse (a lightweight AP announces "Router
+# Trans-Bridge", an L3 switch and a router both announce "Router Switch
+# IGMP"), and a hostname is whatever the last technician typed. So when a
+# model is recognised here, nothing below gets a vote.
+#
+# First match wins, and the order is the whole point, because Cisco reuses the
+# same number across product lines:
+#   * "Catalyst" spans the campus switches, the 8000 routers, the 9800
+#     controller and the 9124/9136/9163 outdoor APs, so the name alone
+#     classifies nothing;
+#   * 9200/9300/9500/9800 name both Catalyst and Nexus families, so Nexus is
+#     claimed first;
+#   * Firepower 9300 would otherwise read as a Catalyst 9300 switch;
+#   * every Catalyst / Cisco Wireless AP is a 91xx (9105 through 9179), and
+#     that is exactly what separates them from the 92xx-96xx switches.
+# The Aironet families (1540-4800) are matched only behind their AIR- prefix:
+# bare "2800"/"3800" collide with the ISR generations of the same numbers.
+_MODEL_TYPE_RULES = (
+    ("firewall", r"\basa5\d|\bfpr-?\d|firepower|\bftd\b"),
+    ("switch",   r"nexus|\bn[23579]k\b"),
+    # (?!\d) rather than \b after a family number: a real model string glues the
+    # variant straight onto it ("C9115AXI-E", "C9800-CL"), and \b would demand a
+    # separator that is not there while still refusing "C93180YC".
+    ("wlc",      r"air-ct|\b(?:c-?)?9800(?!\d)|wism|mobility express"),
+    ("ap",       r"air-(?:ap|cap|lap|sap)|aironet|\b(?:c|cw|iw)?91\d{2}(?!\d)"),
+    # Before the switches, because the Catalyst 8000 edge platforms are
+    # routers and would otherwise be claimed by the bare "catalyst" keyword.
+    ("router",   r"\b(?:isr|asr|csr)\d|\bc?8[1-5]\d{2}(?!\d)|\bc11\d{2}(?!\d)"
+                 r"|\bir1\d{3}(?!\d)|\bncs\d|\besr\d{4}(?!\d)"),
+    ("switch",   r"ws-c|catalyst|\b(?:c-?)?9[2-6]\d{2}(?!\d)|\bcbs\d{3}(?!\d)"
+                 r"|\b(?:2960|3560|3650|3750|3850|4500|4900|4948|6500|6800|6807|6880)(?!\d)"
+                 r"|\bie-?\d{4}(?!\d)|\bme-3400(?!\d)"),
+)
+
+
+def classify_by_model(*fields: str) -> str | None:
+    """Device type deduced from a model number, or None if none is recognised.
+
+    Several fields because the model reaches us under a different name per
+    source: ``model`` from the device's own backup, ``platform`` from CDP, and
+    the System Description from LLDP, which usually spells the model out too.
+    """
+    text = " ".join(f for f in fields if f).lower()
+    if not text.strip():
+        return None
+    for dtype, rx in _MODEL_TYPE_RULES:
+        if re.search(rx, text):
+            return dtype
+    return None
+
 
 def _has_token(text: str, token: str) -> bool:
     return bool(re.search(r'(?:^|[^a-z0-9])' + re.escape(token) + r'(?:[^a-z0-9]|$)', text))
 
 
 def classify_device_type(hostname: str = "", description: str = "",
-                         platform: str = "", capabilities: str = "") -> str:
+                         platform: str = "", capabilities: str = "",
+                         model: str = "") -> str:
     """Deduces the device type by combining hostname, System Description (LLDP),
     Platform and Capabilities (CDP). Returns: firewall|wlc|ap|router|phone|camera|
     server|pc|switch."""
@@ -721,6 +775,10 @@ def classify_device_type(hostname: str = "", description: str = "",
     caps = (capabilities or "").lower()
     if not text.strip() and not caps.strip():
         return "client"
+    # A recognised model number settles it: see _MODEL_TYPE_RULES.
+    by_model = classify_by_model(model, platform, description)
+    if by_model:
+        return by_model
     # A precise model in Platform/System Description beats the Capabilities:
     # CDP bits are coarse (a lightweight AP declares "Router Trans-Bridge",
     # an L3 router "Router Switch IGMP" like any multilayer switch).
@@ -1939,11 +1997,19 @@ def _generate_network_map(group_filter=None) -> dict:
                   or neighbor_info.get(label.split('.')[0].lower())
                   or neighbor_info.get(ip)
                   or {})
+        # The model the device states in its own backup, which is the strongest
+        # signal there is and used to be computed for display only, three lines
+        # below the classification that needed it: an inventoried switch with
+        # no CDP neighbour to describe it was classified from its hostname
+        # alone, so "SW06-LAB" reporting WS-C2960X came out as whatever token
+        # the name happened to contain.
+        model = extract_model_from_backup(pinfo.get("content", "")) if pinfo else None
         auto_type = classify_device_type(
             label,
             description=_ninfo.get("description") or vendor,
             platform=_ninfo.get("platform", ""),
             capabilities=_ninfo.get("capabilities", ""),
+            model=model or versions.get(ip, {}).get("model") or "",
         )
         nodes_map[ip] = {
             "id":          ip,
@@ -1955,7 +2021,7 @@ def _generate_network_map(group_filter=None) -> dict:
             "version":     versions.get(ip, {}).get("version"),
             "vtp_mode":    pinfo.get("vtp_mode"),
             "vtp_domain":  pinfo.get("vtp_domain"),
-            "model":       extract_model_from_backup(pinfo.get("content", "")) if pinfo else None,
+            "model":       model,
             "serial":      (versions.get(ip, {}).get("serial")
                            or (extract_serial_from_backup(pinfo.get("content", "")) if pinfo else None)),
             # Management IP and VLAN shown inside the box on the minimalist
