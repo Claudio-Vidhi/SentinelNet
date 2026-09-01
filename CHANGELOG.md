@@ -21,6 +21,18 @@ happened — `git log --grep="chore(release)"` is the record for those.
   which is logged nowhere, and the endpoint drops a connection that does not
   produce one within 10 seconds.
 
+### Fixed
+
+- **A device was classified from its hostname while its model sat unused three
+  lines away.** The map computed the model out of the device's own backup for
+  the table column only, so an inventoried switch with no CDP neighbour to
+  describe it was typed from whatever token its name happened to contain — a
+  2960X access switch could land in the map as an access point. The model is
+  now the first signal the classifier reads, matched against Cisco's product
+  families: 91xx is an access point, 92xx-96xx a switch, 9800 a controller,
+  Catalyst 8000 a router, Firepower 9300 a firewall and Nexus 9800 a switch,
+  none of which the shared "Catalyst"/"c9" prefixes could tell apart.
+
 ## [0.25.0] - 2026-08-31
 
 ### Fixed
