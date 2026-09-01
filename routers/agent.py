@@ -3,6 +3,7 @@
 
 import re
 import time
+import logging
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -202,6 +203,13 @@ def agent_push_backup(payload: AgentBackupSchema, site = Depends(get_agent_site)
             detail="Config oltre il limite di 5 MB: rifiutata, non troncata.")
     sys_name = payload.hostname or payload.ip
     file_path = backup_store.save_backup(device, sys_name, payload.config)
+    # Stesso punto unico di storicizzazione di core_engine: senza, la
+    # scheda Config Drift resta vuota per ogni sede con agente.
+    try:
+        from services.config_drift import history
+        history.record_version(device, payload.config)
+    except Exception as e:
+        logging.warning(f"Storico config non aggiornato per {payload.ip}: {e}")
     inventory_manager.update_version_inventory(
         payload.ip, payload.vendor, payload.version, "online",
         serial=payload.serial or None)
