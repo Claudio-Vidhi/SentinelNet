@@ -168,7 +168,7 @@ def agent_push_status(payload: AgentStatusSchema, site = Depends(get_agent_site)
     site_manager.has_direct_path): questo push e' l'unica fonte di stato
     up/down per quella sede."""
     site_id = site["id"]
-    own = {d.get("IP") for d in inventory_manager.get_all_devices()
+    own = {d.get("IP"): d for d in inventory_manager.get_all_devices()
            if d.get("Site") == site_id}
     known = inventory_manager.get_detected_versions()
     n = 0
@@ -177,8 +177,12 @@ def agent_push_status(payload: AgentStatusSchema, site = Depends(get_agent_site)
         if d.ip not in own:
             continue
         prev = known.get(d.ip, {})
+        # Il vendor reale e' gia' noto dallo scan d'inventario appena sopra:
+        # "cisco" resta solo l'ultima spiaggia, non il default di partenza
+        # per un apparato senza voce pregressa in detected_versions.
+        vendor = own[d.ip].get("Vendor") or "cisco"
         inventory_manager.update_version_inventory(
-            d.ip, prev.get("vendor", "cisco"),
+            d.ip, vendor,
             prev.get("version", "Non Rilevata"),
             "online" if d.up else "offline")
         n += 1

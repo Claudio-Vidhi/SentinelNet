@@ -484,6 +484,24 @@ class RemoteSiteE2E(unittest.TestCase):
         self.assertEqual(versions["10.9.0.20"]["status"], "online")
         self.assertEqual(versions["10.9.0.21"]["status"], "offline")
 
+    def test_agent_status_push_uses_the_inventorys_real_vendor(self):
+        # A device with no prior detected_versions entry used to fall back
+        # to "cisco" even though the inventory scan just above already
+        # knows its real vendor.
+        sid, token = self._create_agent_site("Status-Vendor")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={"devices": [
+            {"ip": "10.9.0.22", "vendor": "fortinet", "hostname": "fgt-01"},
+        ]})
+
+        r = self.client.post("/api/agent/status", headers=ah,
+                             json={"devices": [{"ip": "10.9.0.22", "up": True}]})
+        self.assertEqual(r.status_code, 200, r.text)
+
+        from services import inventory_manager
+        self.assertEqual(
+            inventory_manager.get_detected_versions()["10.9.0.22"]["vendor"], "fortinet")
+
     def test_agent_status_push_cannot_touch_another_sites_device(self):
         # One site's token must never write another site's state: the agent
         # job feed is already over-broad (docs/remote-sites.md), and the
