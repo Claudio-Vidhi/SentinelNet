@@ -112,10 +112,13 @@ def run_triage(payload: TriageRunRequest = TriageRunRequest(),
         if site_manager.is_agent_site(d.get('Site')):
             # Il centrale non apre SSH verso una sede con agente: la
             # richiesta diventa un job che l'agente ritira al prossimo
-            # polling.
-            site_manager.enqueue_job(d['Site'], d['IP'], "",
-                                     requested_by=current_user.get('sub', ''),
-                                     kind="triage")
+            # polling. Con l'agente offline la coda crescerebbe senza
+            # limite a ogni richiesta: se un job di triage per questo
+            # apparato e' gia' pendente, non se ne accoda un altro.
+            if not site_manager.has_pending_triage_job(d['Site'], d['IP']):
+                site_manager.enqueue_job(d['Site'], d['IP'], "",
+                                         requested_by=current_user.get('sub', ''),
+                                         kind="triage")
             queued += 1
         else:
             direct_devices.append(d)
