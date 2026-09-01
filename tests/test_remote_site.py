@@ -558,6 +558,24 @@ class RemoteSiteE2E(unittest.TestCase):
         with self.assertRaises(ValueError):
             site_manager.enqueue_job(sid, "10.9.0.65", "", kind="nonsense")
 
+    def test_triage_on_an_agent_device_is_queued_not_refused(self):
+        # b9ecd63 made the direct path refuse. The operator-visible answer is
+        # now "queued": the agent runs it and pushes the result back.
+        from services import site_manager
+        sid, token = self._create_agent_site("Triage-Queue")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={
+            "devices": [{"ip": "10.9.0.70", "vendor": "cisco",
+                         "hostname": "switch-01", "group": "Generale"}]})
+
+        r = self.client.post("/api/run-triage", headers=self.admin_h,
+                             json={"group": "Generale"})
+        self.assertEqual(r.status_code, 200, r.text)
+
+        jobs = site_manager.list_jobs(sid)
+        self.assertTrue(any(j["device_ip"] == "10.9.0.70" and j["kind"] == "triage"
+                            for j in jobs), jobs)
+
 
 class CentralDoesNotTouchAgentSiteDevices(unittest.TestCase):
     """Mode B promises the central needs no path to the site. It did anyway.

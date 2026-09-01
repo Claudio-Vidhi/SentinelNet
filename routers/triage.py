@@ -41,6 +41,9 @@ def run_triage_background(allowed_groups=None):
     devices = inventory_manager.get_all_devices()
     if allowed_groups is not None:
         devices = [d for d in devices if d.get('Group') in allowed_groups]
+    # Le sedi con agente sono già state accodate come job da run_triage():
+    # niente SSH diretto qui, e niente doppione del job.
+    devices = [d for d in devices if not site_manager.is_agent_site(d.get('Site'))]
     with triage_lock:
         triage_job["status"] = "running"
         triage_job["total"] = len(devices)
@@ -95,12 +98,25 @@ def run_triage(payload: TriageRunRequest = TriageRunRequest(),
 
     with triage_lock:
         if triage_job["status"] == "running":
-            return {"status": "running", "message": "Scansione già in corso"}
+            return {"status": "running", "message": "Scansione già in corso", "queued": 0}
 
         triage_job["status"] = "running"
         triage_job["progress"] = 0
         triage_job["total"] = 0
         triage_job["current_device"] = "Inizializzazione..."
+
+    # Il centrale non apre SSH verso una sede con agente: la richiesta
+    # diventa un job che l'agente ritira al prossimo polling.
+    devices = inventory_manager.get_all_devices()
+    if target_groups is not None:
+        devices = [d for d in devices if d.get('Group') in target_groups]
+    queued = 0
+    for d in devices:
+        if site_manager.is_agent_site(d.get('Site')):
+            site_manager.enqueue_job(d['Site'], d['IP'], "",
+                                     requested_by=current_user.get('sub', ''),
+                                     kind="triage")
+            queued += 1
 
     log_audit(
         f"Triage avviato dall'utente '{current_user.get('sub')}' "
@@ -109,7 +125,8 @@ def run_triage(payload: TriageRunRequest = TriageRunRequest(),
     thread = threading.Thread(target=run_triage_background,
                               args=(target_groups,), daemon=True)
     thread.start()
-    return {"status": "running", "message": "Scansione avviata in background"}
+    return {"status": "running", "message": "Scansione avviata in background",
+            "queued": queued}
 
 @router.post("/api/triage/{ip}")
 async def triage_single_device(ip: str, current_user = Depends(require_operator)):
