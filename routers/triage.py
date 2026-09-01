@@ -36,11 +36,8 @@ class PingCheckRequest(BaseModel):
 
 # --- ROTTE ---
 
-def run_triage_background(allowed_groups=None):
+def run_triage_background(devices):
     global triage_job
-    devices = inventory_manager.get_all_devices()
-    if allowed_groups is not None:
-        devices = [d for d in devices if d.get('Group') in allowed_groups]
     with triage_lock:
         triage_job["status"] = "running"
         triage_job["total"] = len(devices)
@@ -95,21 +92,46 @@ def run_triage(payload: TriageRunRequest = TriageRunRequest(),
 
     with triage_lock:
         if triage_job["status"] == "running":
-            return {"status": "running", "message": "Scansione già in corso"}
+            return {"status": "running", "message": "Scansione già in corso", "queued": 0}
 
         triage_job["status"] = "running"
         triage_job["progress"] = 0
         triage_job["total"] = 0
         triage_job["current_device"] = "Inizializzazione..."
 
+    # Lista costruita UNA VOLTA sola e poi partizionata: le due vie (job
+    # accodato per l'agente / triage diretto qui sotto) devono essere
+    # complementari per costruzione, non per due filtri scritti a mano che
+    # per ora coincidono e domani no.
+    devices = inventory_manager.get_all_devices()
+    if target_groups is not None:
+        devices = [d for d in devices if d.get('Group') in target_groups]
+    direct_devices = []
+    queued = 0
+    for d in devices:
+        if site_manager.is_agent_site(d.get('Site')):
+            # Il centrale non apre SSH verso una sede con agente: la
+            # richiesta diventa un job che l'agente ritira al prossimo
+            # polling. Con l'agente offline la coda crescerebbe senza
+            # limite a ogni richiesta: se un job di triage per questo
+            # apparato e' gia' pendente, non se ne accoda un altro.
+            if not site_manager.has_pending_triage_job(d['Site'], d['IP']):
+                site_manager.enqueue_job(d['Site'], d['IP'], "",
+                                         requested_by=current_user.get('sub', ''),
+                                         kind="triage")
+            queued += 1
+        else:
+            direct_devices.append(d)
+
     log_audit(
         f"Triage avviato dall'utente '{current_user.get('sub')}' "
         f"(sede: {payload.group})."
     )
     thread = threading.Thread(target=run_triage_background,
-                              args=(target_groups,), daemon=True)
+                              args=(direct_devices,), daemon=True)
     thread.start()
-    return {"status": "running", "message": "Scansione avviata in background"}
+    return {"status": "running", "message": "Scansione avviata in background",
+            "queued": queued}
 
 @router.post("/api/triage/{ip}")
 async def triage_single_device(ip: str, current_user = Depends(require_operator)):
@@ -171,12 +193,18 @@ def ping_check(payload: PingCheckRequest, current_user = Depends(require_operato
         for d in devices:
             ip = d['IP']
             alive = results.get(ip, False)
+            # None = non misurabile da qui (sede agent/jump): un apparato con
+            # agent ha gia' spinto il proprio stato reale via /api/agent/status
+            # pochi istanti prima, scriverci sopra "unknown" lo cancellerebbe
+            # fino al prossimo ciclo dell'agente.
+            if alive is None:
+                continue
             vendor = d.get('Vendor', 'cisco')
             version = 'Non Rilevata'
             if ip in data:
                 vendor = data[ip].get('vendor', vendor)
                 version = data[ip].get('version', version)
-            status = "unknown" if alive is None else ("online" if alive else "offline")
+            status = "online" if alive else "offline"
             inventory_manager.update_version_inventory(ip, vendor, version, status)
     except Exception as e:
         logging.warning(f"Stato ping non persistito in detected_versions.json: {e}")
@@ -205,23 +233,26 @@ def ping_single(ip: str, current_user = Depends(require_operator)):
         from collectors.network_scanner import _ping as icmp_ping
         alive = icmp_ping(ip)
 
-    # Aggiorna lo stato nel file detected_versions.json
-    try:
-        data = inventory_manager.get_detected_versions()
-        vendor = "cisco"
-        version = "Non Rilevata"
-        if ip in data:
-            vendor = data[ip].get("vendor", vendor)
-            version = data[ip].get("version", version)
-        else:
-            devices = inventory_manager.get_all_devices()
-            dev = next((d for d in devices if d["IP"] == ip), None)
-            if dev:
-                vendor = dev.get("Vendor", vendor)
-        status = "unknown" if alive is None else ("online" if alive else "offline")
-        inventory_manager.update_version_inventory(ip, vendor, version, status)
-    except Exception as e:
-        logging.warning(f"Stato ping non persistito per '{ip}': {e}")
+    # Aggiorna lo stato nel file detected_versions.json. None = non misurabile
+    # (sede agent/jump): scrivere "unknown" cancellerebbe lo stato reale che
+    # una sede agent ha appena spinto via /api/agent/status.
+    if alive is not None:
+        try:
+            data = inventory_manager.get_detected_versions()
+            vendor = "cisco"
+            version = "Non Rilevata"
+            if ip in data:
+                vendor = data[ip].get("vendor", vendor)
+                version = data[ip].get("version", version)
+            else:
+                devices = inventory_manager.get_all_devices()
+                dev = next((d for d in devices if d["IP"] == ip), None)
+                if dev:
+                    vendor = dev.get("Vendor", vendor)
+            status = "online" if alive else "offline"
+            inventory_manager.update_version_inventory(ip, vendor, version, status)
+        except Exception as e:
+            logging.warning(f"Stato ping non persistito per '{ip}': {e}")
 
     alive_txt = "non misurabile (sito jump)" if alive is None else ("raggiungibile" if alive else "non raggiungibile")
     log_audit(f"Ping singolo verso '{ip}' eseguito dall'utente '{current_user.get('sub')}': {alive_txt}.")

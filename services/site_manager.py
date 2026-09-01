@@ -337,7 +337,7 @@ def _connect():
     return conn
 
 
-VALID_JOB_KINDS = ("cli", "rest")
+VALID_JOB_KINDS = ("cli", "rest", "triage")
 
 # Percorsi REST che l'agente può eseguire per conto del centrale.
 #
@@ -525,6 +525,22 @@ def has_pending_rest_job(site_id: str, device_ip: str, path: str) -> bool:
         except (TypeError, ValueError):
             continue
     return False
+
+
+def has_pending_triage_job(site_id: str, device_ip: str) -> bool:
+    """Un job di triage per questo apparato e' gia' in coda o in esecuzione.
+
+    Senza, un agente offline vede la coda crescere senza limite a ogni
+    richiesta di triage sul gruppo, ed esegue ogni copia accodata al polling
+    successivo."""
+    _init_jobs()
+    with _jobs_lock, _connect() as c:
+        row = c.execute(
+            """SELECT 1 FROM command_jobs
+               WHERE site_id=? AND device_ip=? AND kind='triage'
+                 AND status IN ('pending','running') LIMIT 1""",
+            (site_id, device_ip)).fetchone()
+    return row is not None
 
 
 def list_jobs(site_id: Optional[str] = None, limit: int = 100) -> list:

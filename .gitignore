@@ -14,6 +14,10 @@ htmlcov/
 
 # Sensitive data & local runtime directory (credentials, databases, backups, keys)
 data/
+# Same content as data/, under the name the site agent uses: agent.json's
+# data_dir defaults to ./agent-data, so an agent started from the repo root
+# fills it with the remote SITE's real inventory and credentials.
+agent-data/
 *.posix
 fortigate_tokens.json
 network_hosts.csv

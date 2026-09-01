@@ -45,6 +45,7 @@
         // abbia già avuto effetto.
         let curPort = (site && site.syslog_port) || 5514;
         let curInterval = (site && site.interval) || 60;
+        let curBackupInterval = (site && site.backup_interval) || 3600;
 
         // jobs arriva già ordinato dal più recente al più vecchio (site_manager.list_jobs
         // usa ORDER BY created DESC), quindi il primo match è già l'ultimo richiesto.
@@ -130,7 +131,7 @@
 
         <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px; margin-bottom:16px;">
             <h4 style="margin:0 0 10px; font-size:13px; color:var(--primary);"><i class="fa-solid fa-sliders"></i> Configurazione Porta Syslog & Timing Polling</h4>
-            <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:end;">
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:10px; align-items:end;">
                 <div>
                     <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;">Porta Syslog UDP Listener</label>
                     <input id="agentCfgSyslogPort" type="number" value="${curPort}" style="width:100%; padding:6px 10px; font-size:12px; border:1px solid var(--border); border-radius:0; background:var(--surface-3); color:var(--text);">
@@ -138,6 +139,10 @@
                 <div>
                     <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;">Intervallo Polling Inventario (sec)</label>
                     <input id="agentCfgInterval" type="number" value="${curInterval}" style="width:100%; padding:6px 10px; font-size:12px; border:1px solid var(--border); border-radius:0; background:var(--surface-3); color:var(--text);">
+                </div>
+                <div>
+                    <label for="agentCfgBackupInterval" style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;">${tr('agentBackupInterval')}</label>
+                    <input id="agentCfgBackupInterval" type="number" value="${curBackupInterval}" style="width:100%; padding:6px 10px; font-size:12px; border:1px solid var(--border); border-radius:0; background:var(--surface-3); color:var(--text);">
                 </div>
                 <button class="btn btn-sm" data-action="save-config" data-site-id="${escapeHtml(siteId)}" style="padding:6px 14px; background:var(--cta); color:var(--cta-text);">
                     <i class="fa-solid fa-floppy-disk"></i> Salva Config
@@ -228,10 +233,11 @@
     async function triggerAgentConfigSave(siteId) {
         const port = parseInt(document.getElementById('agentCfgSyslogPort').value, 10) || 514;
         const interval = parseInt(document.getElementById('agentCfgInterval').value, 10) || 60;
+        const backupInterval = parseInt(document.getElementById('agentCfgBackupInterval').value, 10) || 0;
         const res = await apiFetch(`/api/sites/${siteId}/agent/config`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ syslog_port: port, interval: interval })
+            body: JSON.stringify({ syslog_port: port, interval: interval, backup_interval: backupInterval })
         });
         if (res && res.ok) {
             alert(tr('agtConfigQueued', {siteId: siteId, port: port, interval: interval}));

@@ -414,7 +414,10 @@ class ManualPingSkipsJumpSites(unittest.TestCase):
                 triage_router.PingCheckRequest(group="all"), current_user=self.ADMIN)
         p.assert_not_called()
         self.assertIsNone(result["results"]["192.0.2.5"])
-        uvi.assert_called_once_with("192.0.2.5", "cisco", "Non Rilevata", "unknown")
+        # Not measurable is not "unknown": persisting would clobber whatever
+        # real status an agent site pushed moments earlier. Response stays
+        # None either way, only the write is skipped.
+        uvi.assert_not_called()
 
     def test_ping_check_still_pings_a_central_device(self):
         from routers import triage as triage_router
@@ -443,7 +446,9 @@ class ManualPingSkipsJumpSites(unittest.TestCase):
             result = triage_router.ping_single("192.0.2.5", current_user=self.ADMIN)
         p.assert_not_called()
         self.assertIsNone(result["reachable"])
-        uvi.assert_called_once_with("192.0.2.5", "cisco", "Non Rilevata", "unknown")
+        # Same rationale as ping-check: not measurable must not become a
+        # write, or it would clobber a status an agent site just pushed.
+        uvi.assert_not_called()
 
     def test_ping_single_still_pings_a_central_device(self):
         from routers import triage as triage_router
