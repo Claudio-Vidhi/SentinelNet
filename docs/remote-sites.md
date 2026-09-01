@@ -65,6 +65,39 @@ Key principles:
    path, which is what lets the agent run this same code over its own
    inventory.
 
+6. **Who owns the inventory, per site.** By default the agent does: it holds
+   the device list and the credentials, and the central mirrors what is pushed
+   up. Turning on **Inventario dal centrale**
+   (`central_manages_devices` on the site) reverses it — the central owns the
+   list for that site and hands it to the agent on each heartbeat, so a device
+   added on the central appears at the site without anyone editing a CSV
+   there.
+
+   The flag is off by default, and that is deliberate: switching it on trades
+   away principle 2. The credentials stop being site-only and live on the
+   central too, which is the right call when one team runs both ends and the
+   wrong one when the customer's passwords must not sit on a shared server.
+
+   Two rules make it safe to run:
+
+   - **Credentials never travel over plain HTTP.** They are resolved to
+     cleartext before sending (the agent has a different Fernet key and could
+     not decrypt the central's ciphertext), so the push includes them only
+     when the request arrived over TLS. Over HTTP the device identity still
+     flows and the secrets do not; the response says which, in
+     `credentials_included`.
+   - **The push adds and updates, never deletes.** A device absent from the
+     list means "the central does not know it", not "remove it" — the agent
+     may hold devices the central has never seen, and the upward push is how
+     it tells the central about them. A push carrying no credentials likewise
+     leaves the ones the agent already holds untouched.
+
+7. **MAC/ARP collection has its own cadence.** `l2_interval` (default 300s)
+   governs the only phase that opens an SSH session to every device. It is
+   deliberately not tied to `interval`: at a 10s poll that meant six sessions
+   a minute per switch for tables that do not change that fast. `0` means
+   every cycle, which is how it behaved before it had a clock.
+
 > **Known gap:** an authenticated agent currently receives *all* pending jobs
 > for its site and executes them against whichever local device record matches
 > the requested IP. The agent control plane and the device data plane are not
