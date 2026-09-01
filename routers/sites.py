@@ -50,6 +50,10 @@ class SiteUpdateSchema(BaseModel):
     jump_port: Optional[int] = None
     jump_identity: Optional[str] = None
     device_identity: Optional[str] = None
+    # Il centrale gestisce l'inventario di questa sede e lo spinge all'agente.
+    # Spento di default: acceso, le credenziali dei dispositivi lasciano la
+    # sede e vivono anche sul centrale (vedi docs/remote-sites.md, principio 2).
+    central_manages_devices: Optional[bool] = None
 
 class SiteIdSchema(BaseModel):
     id: str
@@ -100,6 +104,8 @@ def update_site_ep(payload: SiteUpdateSchema, current_user = Depends(require_adm
         jump_kwargs["jump_identity"] = payload.jump_identity
     if payload.device_identity is not None:
         jump_kwargs["device_identity"] = payload.device_identity
+    if payload.central_manages_devices is not None:
+        jump_kwargs["central_manages_devices"] = bool(payload.central_manages_devices)
     try:
         ok = site_manager.update_site(payload.id, payload.name, payload.mode,
                                       payload.subnets, **jump_kwargs)
