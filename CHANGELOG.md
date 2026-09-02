@@ -10,6 +10,57 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-09-02
+
+### Added
+
+- **You could not tell what any part of the fleet was running without SSH.**
+  The agent's heartbeat reported a hardcoded `2.6.0` — a string matching
+  nothing in the tree — which the central then discarded, so "did my update
+  reach that site?" had no answer from the dashboard. The agent now sends its
+  real version plus the commit, branch and whether the checkout is dirty, and
+  a **Versioni della flotta** panel in Settings lists the central and every
+  agent site side by side, marking any agent whose version differs or whose
+  checkout is modified.
+
+- **Reading an agent's log meant opening a shell on the site.** A *Leggi log
+  agente* button in the agent panel enqueues an RPC that returns the last 200
+  journal lines, capped because that string is rendered verbatim in the job
+  history where a whole journal is unusable.
+
+- **Settings that need a restart could be changed but not applied.** A restart
+  button in Settings starts a separate oneshot systemd unit
+  (`sentinelnet-restart.service`, shipped in `docs/deploy/`) which restarts the
+  service — the application never exits on its own, so a failed restart leaves
+  the old process serving the panel. The endpoint runs one fixed argv with
+  nothing from the request body in it, and refuses with 409 when no supervisor
+  would bring the process back. On Windows it drives the service instead, when
+  the installer declares `SENTINELNET_WINDOWS_SERVICE=1`.
+
+- **A self-signed certificate for this host**, generated from Settings with the
+  address in the `subjectAltName` — without which modern clients reject the
+  certificate whatever its CN. Built with `cryptography` rather than the
+  `openssl` binary, so it behaves the same on Linux, Windows and macOS, and the
+  private key is written with restricted permissions on all three. It refuses
+  to overwrite an existing certificate, because doing so would drop every agent
+  that verifies it, with no undo.
+
+### Changed
+
+- **`Dev` and `master` now carry the same tree.** The publication strip that
+  hid `tests/`, `AGENTS.md` and the design documents from the public branch is
+  gone, along with `scripts/dev/port_to_master.py`: publishing is
+  `git push origin Dev:master`. The strip also meant the test gate could not
+  run on the public branch. Since every tracked file is now published, the
+  privacy boundary is `git add`, and it has a guard:
+  `scripts/check_no_private_data.py` scans the tracked tree for public IP
+  addresses, tracked state files and pasted secrets, and runs inside the suite.
+
+- **The site agent is documented as Linux-only**, and a Windows agent is
+  explicitly not planned: its remote management is built on systemd and
+  `journalctl`. The NSSM instructions that produced an unmanageable Windows
+  agent have been removed. Central itself runs on Linux, Windows or Docker.
+
 ## [0.26.0] - 2026-09-01
 
 ### Added

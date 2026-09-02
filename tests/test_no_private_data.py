@@ -41,7 +41,7 @@ class TrackedTreeIsClean(unittest.TestCase):
     def test_the_scanner_recognises_a_real_looking_address(self):
         # Se il riconoscitore smettesse di funzionare, il test sopra passerebbe
         # sempre e non direbbe piu' nulla.
-        self.assertFalse(checker._is_allowed_ip("93.184.216.34"))
+        self.assertFalse(checker._is_allowed_ip("93.184.216.34"))  # check-private-data: ok, example.com, indirizzo di esempio IANA
         self.assertTrue(checker._is_allowed_ip("192.0.2.10"))
         self.assertTrue(checker._is_allowed_ip("10.9.0.1"))
         self.assertTrue(checker._is_allowed_ip("198.51.100.7"))

@@ -90,7 +90,7 @@ NEUTRAL_NETS = tuple(ipaddress.IPv4Network(n) for n in (
 ))
 
 # Alberi in cui una quadrupla puntata NON e' un indirizzo. I controlli CIS si
-# numerano 5.4.1.1 e le versioni firmware sono 3.2.0.84: indistinguibili da un
+# numerano 5.4.1.1 e le versioni firmware sono 3.2.0.84: indistinguibili da un  (check-private-data: ok)
 # IP per una regex, e nessuno dei due file vede mai dati di un cliente.
 # Restano soggetti al controllo sui segreti.
 IP_EXEMPT_PREFIXES = ("services/netsec_audit/", "drivers/")
