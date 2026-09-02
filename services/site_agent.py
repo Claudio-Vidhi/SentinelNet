@@ -507,6 +507,25 @@ class Agent:
                 # esca. Nessun riavvio se non e' cambiato nulla (interromperebbe
                 # i job in corso per niente) o se il pull e' fallito.
                 if status == "done" and "Already up to date" not in output:
+                    # Le dipendenze PRIMA del riavvio: un aggiornamento che ne
+                    # aggiunge una, riavviato senza installarla, manda l'agente
+                    # in crash-loop (systemd lo rialza, l'import fallisce, la
+                    # sede resta senza agente). Con l'interprete che sta
+                    # girando, cosi' finisce nel venv giusto senza sapere come
+                    # e' stato creato.
+                    dep = subprocess.run(
+                        [sys.executable, "-m", "pip", "install", "-r",
+                         os.path.join(_ROOT, "requirements.txt")],
+                        cwd=_ROOT, capture_output=True, text=True, timeout=600)
+                    if dep.returncode != 0:
+                        # Niente riavvio: il codice vecchio in memoria funziona,
+                        # quello nuovo sul disco no. Meglio una sede che gira
+                        # indietro di una versione che una sede spenta.
+                        return {"status": "error", "result": result +
+                                "\n[pip] installazione delle dipendenze fallita "
+                                f"(code={dep.returncode}), riavvio annullato:\n"
+                                f"{(dep.stderr or dep.stdout or '').strip()[-2000:]}"}
+                    result += f"\n[pip] dipendenze aggiornate (code={dep.returncode})."
                     threading.Thread(target=self._deferred_exit, daemon=True).start()
                     result += "\nRiavvio dell'agente programmato per applicare l'aggiornamento."
                 return {"status": status, "result": result}

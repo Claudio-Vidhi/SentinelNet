@@ -1370,6 +1370,47 @@ class AgentSelfUpdateRestarts(unittest.TestCase):
         thread.assert_called_once()
         self.assertIn("riavvio", out["result"].lower())
 
+    def test_it_installs_requirements_before_restarting(self):
+        # Un aggiornamento che aggiunge una dipendenza, riavviato senza
+        # installarla, manda l'agente in crash-loop: systemd lo rialza, il
+        # nuovo import fallisce, e la sede resta senza agente. L'ordine
+        # (installa, poi riavvia) e' il punto del test.
+        from unittest import mock
+        from services import site_agent
+        agent = self._agent()
+        calls = []
+
+        def _run(argv, **kw):
+            calls.append(argv)
+            return mock.MagicMock(returncode=0, stdout="3 files changed", stderr="")
+
+        with mock.patch("subprocess.run", side_effect=_run),              mock.patch.object(site_agent.threading, "Thread") as thread:
+            out = agent._execute_agent_rpc("_agent_self_update")
+        self.assertEqual(out["status"], "done")
+        self.assertEqual(calls[0][:2], ["git", "pull"])
+        self.assertIn("-m", calls[1])
+        self.assertIn("pip", calls[1])
+        self.assertTrue(any("requirements.txt" in a for a in calls[1]), calls[1])
+        thread.assert_called_once()
+
+    def test_a_failed_install_does_not_restart(self):
+        # Riavviare dopo un'installazione fallita e' esattamente il crash-loop
+        # che si vuole evitare: meglio restare sul codice vecchio, che gira.
+        from unittest import mock
+        from services import site_agent
+        agent = self._agent()
+
+        def _run(argv, **kw):
+            if argv[0] == "git":
+                return mock.MagicMock(returncode=0, stdout="3 files changed", stderr="")
+            return mock.MagicMock(returncode=1, stdout="", stderr="No matching distribution")
+
+        with mock.patch("subprocess.run", side_effect=_run),              mock.patch.object(site_agent.threading, "Thread") as thread:
+            out = agent._execute_agent_rpc("_agent_self_update")
+        self.assertEqual(out["status"], "error")
+        self.assertIn("dipendenze", out["result"].lower())
+        thread.assert_not_called()
+
     def test_an_up_to_date_pull_does_not_restart(self):
         # Riavviare a vuoto interrompe i job in corso per niente.
         from unittest import mock
@@ -1381,6 +1422,7 @@ class AgentSelfUpdateRestarts(unittest.TestCase):
             out = agent._execute_agent_rpc("_agent_self_update")
         self.assertEqual(out["status"], "done")
         thread.assert_not_called()
+        self.assertEqual(run.call_count, 1, "nessuna installazione se non e' cambiato nulla")
 
     def test_a_failed_pull_does_not_restart(self):
         from unittest import mock
