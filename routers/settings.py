@@ -3,6 +3,7 @@
 parametri e risposte identici al monolite."""
 
 import os
+import sys
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -401,3 +402,41 @@ def set_sso_settings(payload: SsoSettingsSchema, current_user = Depends(require_
               f"(issuer='{issuer}', attivo={payload.enabled}, "
               f"provisioning automatico={payload.auto_provision}).")
     return {"status": "success"}
+
+
+def _install_kind() -> str:
+    """Come gira questa istanza: da repo git, da exe PyInstaller, o da una
+    copia dei sorgenti senza repo. La terza non e' un dettaglio: chi ha
+    scaricato uno zip non puo' aggiornare con git piu' di quanto possa un exe."""
+    if getattr(sys, "frozen", False):
+        return "exe"
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return "git" if os.path.isdir(os.path.join(root, ".git")) else "source"
+
+
+@router.get("/api/fleet/versions")
+def get_fleet_versions(current_user = Depends(require_admin)):
+    """Cosa sta girando in ogni pezzo della flotta: il centrale e ogni agente.
+
+    Risponde senza SSH alla domanda "l'aggiornamento e' arrivato ovunque?"."""
+    from core.version import __version__
+    from services import site_manager
+    kind = _install_kind()
+    agents = []
+    for s in site_manager.list_sites():
+        if s.get("mode") != "agent":
+            continue
+        v = s.get("agent_version") or ""
+        agents.append({
+            "site_id": s["id"], "name": s.get("name", ""),
+            "version": v, "commit": s.get("agent_commit", ""),
+            "branch": s.get("agent_branch", ""),
+            "dirty": bool(s.get("agent_dirty")),
+            "last_seen": s.get("last_seen"),
+            # Confronto grezzo di stringhe: una versione diversa da quella del
+            # centrale e' esattamente cio' che l'operatore deve vedere, e non
+            # serve un parser SemVer per dirlo.
+            "behind": bool(v) and v != __version__,
+        })
+    return {"central": {"version": __version__, "install_kind": kind},
+            "install_kind": kind, "agents": agents}
