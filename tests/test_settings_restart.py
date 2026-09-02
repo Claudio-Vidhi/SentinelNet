@@ -131,6 +131,121 @@ class SettingsRestart(unittest.TestCase):
         self.assertEqual(r.status_code, 409, r.text)
 
 
+class CentralSelfUpdate(unittest.TestCase):
+    """L'aggiornamento del centrale, la meta' che mancava.
+
+    L'agente sa aggiornarsi da solo dal 0.27.1; il centrale no, e per lui
+    restava la sequenza a mano su SSH (pull, pip install, systemctl restart) --
+    cioe' la shell che tutta questa tab esiste per evitare."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.client, cls.admin_h = _admin_client()
+
+    def setUp(self):
+        os.environ["INVOCATION_ID"] = "test-invocation"
+
+    def tearDown(self):
+        os.environ.pop("INVOCATION_ID", None)
+
+    def test_it_pulls_installs_and_restarts_in_that_order(self):
+        from unittest import mock
+        calls = []
+
+        def _run(argv, **kw):
+            calls.append(argv)
+            return mock.MagicMock(returncode=0, stdout="3 files changed", stderr="")
+
+        with mock.patch("subprocess.run", side_effect=_run):
+            r = self.client.post("/api/settings/update", headers=self.admin_h)
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(calls[0][:2], ["git", "pull"])
+        self.assertTrue(any("requirements.txt" in a for a in calls[1]), calls[1])
+        self.assertIn("sentinelnet-restart.service", calls[2])
+
+    def test_a_failed_install_does_not_restart(self):
+        # Riavviare su dipendenze rotte spegne il pannello e non lo riaccende.
+        from unittest import mock
+
+        def _run(argv, **kw):
+            if argv[0] == "git":
+                return mock.MagicMock(returncode=0, stdout="3 files changed", stderr="")
+            if "pip" in argv:
+                return mock.MagicMock(returncode=1, stdout="", stderr="No matching distribution")
+            raise AssertionError("riavvio non atteso dopo un'installazione fallita")
+
+        with mock.patch("subprocess.run", side_effect=_run):
+            r = self.client.post("/api/settings/update", headers=self.admin_h)
+        self.assertEqual(r.status_code, 409, r.text)
+
+    def test_a_failed_pull_does_not_install_or_restart(self):
+        from unittest import mock
+        calls = []
+
+        def _run(argv, **kw):
+            calls.append(argv)
+            return mock.MagicMock(returncode=1, stdout="", stderr="error: cannot pull")
+
+        with mock.patch("subprocess.run", side_effect=_run):
+            r = self.client.post("/api/settings/update", headers=self.admin_h)
+        self.assertEqual(r.status_code, 409, r.text)
+        self.assertEqual(len(calls), 1)
+
+    def test_nothing_to_do_says_so_without_restarting(self):
+        from unittest import mock
+        calls = []
+
+        def _run(argv, **kw):
+            calls.append(argv)
+            return mock.MagicMock(returncode=0, stdout="Already up to date.", stderr="")
+
+        with mock.patch("subprocess.run", side_effect=_run):
+            r = self.client.post("/api/settings/update", headers=self.admin_h)
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["status"], "up-to-date")
+        self.assertEqual(len(calls), 1, "nessuna installazione, nessun riavvio")
+
+    def test_it_refuses_on_an_installation_without_a_repository(self):
+        # Un exe PyInstaller non ha un repo da cui tirare: dirlo e' meglio che
+        # far fallire git con un messaggio incomprensibile.
+        from unittest import mock
+        from routers import settings as settings_router
+        with mock.patch.object(settings_router, "_install_kind", return_value="exe"):
+            r = self.client.post("/api/settings/update", headers=self.admin_h)
+        self.assertEqual(r.status_code, 409, r.text)
+
+    def test_it_refuses_when_the_app_is_not_supervised(self):
+        # Senza supervisore l'aggiornamento si applicherebbe solo spegnendo
+        # il pannello per sempre.
+        from unittest import mock
+        from routers import settings as settings_router
+        with mock.patch.object(settings_router, "_supervisor", return_value=""):
+            r = self.client.post("/api/settings/update", headers=self.admin_h)
+        self.assertEqual(r.status_code, 409, r.text)
+
+    def test_the_body_never_reaches_the_command_line(self):
+        # Il corpo non deve toccare nessun argv: se questo test cade, la rotta
+        # e' diventata una shell remota sulla macchina del pannello.
+        from unittest import mock
+        calls = []
+
+        def _run(argv, **kw):
+            calls.append(argv)
+            return mock.MagicMock(returncode=0, stdout="Already up to date.", stderr="")
+
+        with mock.patch("subprocess.run", side_effect=_run):
+            self.client.post("/api/settings/update", headers=self.admin_h,
+                             json={"remote": 'evil; rm -rf /', "ref": "--upload-pack=evil"})
+        for argv in calls:
+            self.assertNotIn("evil", " ".join(argv))
+
+    def test_it_is_admin_only(self):
+        anon = TestClient(app_server.app)
+        r = anon.post("/api/settings/update")
+        self.assertIn(r.status_code, (401, 403))
+
+
+
 class SelfSignedCertificate(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

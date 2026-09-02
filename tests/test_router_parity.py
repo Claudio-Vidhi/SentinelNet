@@ -100,6 +100,8 @@ class TestRouterParity(unittest.TestCase):
                     "/api/fleet",
                     # Riavvio dell'applicazione dal pannello (unit oneshot).
                     "/api/settings/restart",
+                    # Aggiornamento del centrale dal pannello (pull, dipendenze, riavvio).
+                    "/api/settings/update",
                     # Certificato self-signed generato dal pannello.
                     "/api/settings/tls")
 
@@ -232,6 +234,8 @@ class TestFullParity(unittest.TestCase):
                     "/api/fleet",
                     # Riavvio dell'applicazione dal pannello (unit oneshot).
                     "/api/settings/restart",
+                    # Aggiornamento del centrale dal pannello (pull, dipendenze, riavvio).
+                    "/api/settings/update",
                     # Certificato self-signed generato dal pannello.
                     "/api/settings/tls")
     # Come NEW_PREFIXES, filtra entrambi i lati: copre anche FortigatePreviewSchema,

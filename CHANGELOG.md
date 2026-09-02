@@ -10,6 +10,20 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **The central can update itself.** The agent has been able to since 0.27.1;
+  the central still needed the manual SSH sequence — `git pull`,
+  `pip install`, `systemctl restart` — which is the shell the Settings tab
+  exists to avoid. An *Aggiorna e riavvia* button now runs those three in
+  order, and stops at the first one that fails. A failed dependency install
+  cancels the restart, so the previous version keeps serving; a pull that
+  changed nothing neither installs nor restarts. It refuses on an installation
+  with no git repository (an exe), and when nothing supervises the process —
+  downloading code that cannot be applied only produces a tree ahead of the
+  process running it. Every argv is fixed: there is no parameter for the
+  remote, the branch or the repository.
+
 ## [0.27.1] - 2026-09-02
 
 ### Fixed

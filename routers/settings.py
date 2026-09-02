@@ -487,7 +487,6 @@ def restart_application(current_user = Depends(require_admin)):
     L'argv e' FISSO su entrambi i sistemi: nulla del corpo della richiesta lo
     raggiunge, altrimenti questa rotta sarebbe una shell remota sulla macchina
     che custodisce le credenziali di ogni sede."""
-    import subprocess
     kind = _supervisor()
     if not kind:
         raise HTTPException(
@@ -495,7 +494,20 @@ def restart_application(current_user = Depends(require_admin)):
             detail="L'applicazione non e' gestita da un supervisore: un "
                    "riavvio la spegnerebbe soltanto. Riavviala da systemd o "
                    "dal gestore servizi di Windows.")
+    _spawn_restart(kind)
+    log_audit(f"Riavvio dell'applicazione richiesto da '{current_user.get('sub')}' "
+              f"(supervisore: {kind}).")
+    return {"status": "scheduled", "supervisor": kind}
 
+
+def _spawn_restart(kind: str) -> None:
+    """Fa partire il riavvio delegandolo a un processo separato.
+
+    Estratta perche' ha due chiamanti: il pulsante di riavvio e
+    l'aggiornamento, che deve riavviare per applicare il codice appena
+    scaricato. Due copie di questa logica divergerebbero, e la copia
+    sbagliata sarebbe quella che spegne il pannello."""
+    import subprocess
     if kind == "windows-service":
         # Staccato, e senza aspettarlo: Restart-Service ferma QUESTO processo,
         # quindi un subprocess.run atteso non tornerebbe mai. Il prezzo e' che
@@ -523,9 +535,70 @@ def restart_application(current_user = Depends(require_admin)):
                 detail="sudo ha rifiutato il comando di riavvio: "
                        f"{(proc.stderr or proc.stdout or '').strip()}")
 
-    log_audit(f"Riavvio dell'applicazione richiesto da '{current_user.get('sub')}' "
-              f"(supervisore: {kind}).")
-    return {"status": "scheduled", "supervisor": kind}
+
+@router.post("/api/settings/update")
+def update_application(current_user = Depends(require_admin)):
+    """Aggiorna il centrale: git pull, dipendenze, riavvio. In quest'ordine.
+
+    L'agente si aggiorna da solo dal 0.27.1; qui c'era ancora la sequenza a
+    mano via SSH, cioe' la shell che questa tab esiste per evitare.
+
+    Ogni argv e' FISSO: niente del corpo della richiesta lo raggiunge. Non
+    esiste un parametro per il remote, il branch o il repository, perche' un
+    parametro qui sarebbe esecuzione di codice arbitrario sulla macchina che
+    custodisce le credenziali di ogni sede."""
+    import subprocess
+    kind = _install_kind()
+    if kind != "git":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Installazione '{kind}': non c'e' un repository git da cui "
+                   "aggiornare. Sostituisci l'eseguibile, o reinstalla da sorgenti.")
+    supervisor = _supervisor()
+    if not supervisor:
+        # Scaricare il codice nuovo e non poterlo applicare lascia l'albero
+        # avanti e il processo indietro: lo stato piu' confuso possibile.
+        raise HTTPException(
+            status_code=409,
+            detail="L'applicazione non e' gestita da un supervisore: "
+                   "l'aggiornamento non potrebbe essere applicato.")
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        pull = subprocess.run(["git", "pull"], cwd=root, capture_output=True,
+                              text=True, timeout=120)
+    except Exception as e:
+        raise HTTPException(status_code=409, detail=f"git non disponibile: {e}")
+    output = (pull.stdout or "") + (pull.stderr or "")
+    if pull.returncode != 0:
+        raise HTTPException(status_code=409,
+                            detail=f"git pull fallito:\n{output.strip()[-2000:]}")
+    if "Already up to date" in output:
+        # Niente installazione e niente riavvio: interromperebbero le sessioni
+        # aperte per applicare esattamente nulla.
+        log_audit(f"Aggiornamento richiesto da '{current_user.get('sub')}': "
+                  "gia' aggiornato.")
+        return {"status": "up-to-date", "output": output.strip()}
+
+    # Le dipendenze PRIMA del riavvio, con l'interprete che sta girando: un
+    # aggiornamento che ne aggiunge una, riavviato senza installarla, non
+    # riparte piu' e lascia la rete senza pannello.
+    dep = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-r",
+         os.path.join(root, "requirements.txt")],
+        cwd=root, capture_output=True, text=True, timeout=900)
+    if dep.returncode != 0:
+        raise HTTPException(
+            status_code=409,
+            detail="Dipendenze non installate, riavvio annullato (resta in "
+                   "esecuzione la versione precedente, che funziona):\n"
+                   f"{(dep.stderr or dep.stdout or '').strip()[-2000:]}")
+
+    _spawn_restart(supervisor)
+    log_audit(f"Aggiornamento dell'applicazione eseguito da "
+              f"'{current_user.get('sub')}' (supervisore: {supervisor}).")
+    return {"status": "updating", "supervisor": supervisor,
+            "output": output.strip()}
 
 
 class SelfSignedCertSchema(BaseModel):
