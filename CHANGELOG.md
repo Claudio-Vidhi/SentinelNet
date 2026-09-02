@@ -10,6 +10,25 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- **An agent update left the old code running.** `git pull` writes the new
+  files but the process keeps the old modules in memory, so the fleet panel
+  went on reporting the previous version until someone ran
+  `systemctl restart sentinelnet-agent` by hand on the site host — the very
+  shell the button exists to avoid. A self-update that actually changed
+  something now restarts the agent itself, deferred so the job result reaches
+  the central first. A pull that changed nothing, or failed, does not restart.
+
+- **The dashboard served stale JavaScript for five minutes after an update.**
+  App assets carried `Cache-Control: public, max-age=300`, so the browser used
+  its cached copy without even asking, and the only cure was the user knowing
+  to press Ctrl+F5. They are now sent with `no-cache`: the browser revalidates
+  every load and gets an empty 304 while the file is unchanged. The dashboard
+  page itself gets the same treatment, since revalidating the scripts while
+  serving a cached page that lists them fixes nothing. Vendor code and fonts
+  keep their one-year immutable cache.
+
 ## [0.27.0] - 2026-09-02
 
 ### Added

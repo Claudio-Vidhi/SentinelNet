@@ -1343,6 +1343,58 @@ class AgentReportsItsRealVersion(unittest.TestCase):
             self.assertIn(key, payload)
 
 
+class AgentSelfUpdateRestarts(unittest.TestCase):
+    """git pull da solo non cambia il processo in esecuzione.
+
+    Il codice nuovo sta sul disco e quello vecchio resta in memoria: il
+    pannello flotta continuava a mostrare la versione vecchia e l'unico
+    rimedio era un systemctl restart a mano sull'host della sede -- cioe'
+    esattamente la shell che questa funzione esiste per evitare."""
+
+    def _agent(self):
+        from services import site_agent
+        agent = site_agent.Agent.__new__(site_agent.Agent)
+        agent.cfg = {"site_id": "milan"}
+        return agent
+
+    def test_a_pull_that_changed_something_restarts_the_agent(self):
+        from unittest import mock
+        from services import site_agent
+        agent = self._agent()
+        with mock.patch("subprocess.run") as run,              mock.patch.object(site_agent.threading, "Thread") as thread:
+            run.return_value = mock.MagicMock(
+                returncode=0, stdout="Updating 1234567..89abcde\n 3 files changed\n",
+                stderr="")
+            out = agent._execute_agent_rpc("_agent_self_update")
+        self.assertEqual(out["status"], "done")
+        thread.assert_called_once()
+        self.assertIn("riavvio", out["result"].lower())
+
+    def test_an_up_to_date_pull_does_not_restart(self):
+        # Riavviare a vuoto interrompe i job in corso per niente.
+        from unittest import mock
+        from services import site_agent
+        agent = self._agent()
+        with mock.patch("subprocess.run") as run,              mock.patch.object(site_agent.threading, "Thread") as thread:
+            run.return_value = mock.MagicMock(
+                returncode=0, stdout="Already up to date.\n", stderr="")
+            out = agent._execute_agent_rpc("_agent_self_update")
+        self.assertEqual(out["status"], "done")
+        thread.assert_not_called()
+
+    def test_a_failed_pull_does_not_restart(self):
+        from unittest import mock
+        from services import site_agent
+        agent = self._agent()
+        with mock.patch("subprocess.run") as run,              mock.patch.object(site_agent.threading, "Thread") as thread:
+            run.return_value = mock.MagicMock(
+                returncode=1, stdout="", stderr="error: cannot pull\n")
+            out = agent._execute_agent_rpc("_agent_self_update")
+        self.assertEqual(out["status"], "error")
+        thread.assert_not_called()
+
+
+
 class AgentLogTail(unittest.TestCase):
     def test_the_log_tail_rpc_returns_bounded_output(self):
         from unittest import mock
