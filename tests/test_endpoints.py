@@ -158,7 +158,7 @@ class TestMacClassification(unittest.TestCase):
         self.assertIsNone(info["vendor_kind"])
 
     def test_vendor_assigned_is_universal(self):
-        info = endpoints.classify_mac("84:ba:59:a1:87:15")
+        info = endpoints.classify_mac("00:11:22:33:44:55")
         self.assertEqual(info["administration"], "universale")
         self.assertIsNone(info["label"])
 
@@ -184,12 +184,12 @@ class TestMacClassification(unittest.TestCase):
         self.assertFalse(endpoints.is_stable_identity("fa:d7:28:11:22:33"))
         # Una VM invece conserva il proprio indirizzo fra i riavvii.
         self.assertTrue(endpoints.is_stable_identity("00:50:56:aa:bb:cc"))
-        self.assertTrue(endpoints.is_stable_identity("84:ba:59:a1:87:15"))
+        self.assertTrue(endpoints.is_stable_identity("00:11:22:33:44:55"))
         self.assertFalse(endpoints.is_stable_identity("ff:ff:ff:ff:ff:ff"))
 
     def test_describe_mac_says_something_only_when_there_is_something_to_say(self):
-        self.assertEqual(endpoints.describe_mac("84:ba:59:a1:87:15"),
-                         "84:ba:59:a1:87:15")
+        self.assertEqual(endpoints.describe_mac("00:11:22:33:44:55"),
+                         "00:11:22:33:44:55")
         self.assertIn("VMware", endpoints.describe_mac("00:50:56:aa:bb:cc"))
         self.assertIn("localmente", endpoints.describe_mac("aa:bb:cc:80:01:00"))
 

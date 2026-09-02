@@ -21,50 +21,34 @@ Canonical for this repo. `CLAUDE.md` and `.agents/AGENTS.md` point here.
 
 ## Branches
 
-Only two branches matter: `Dev` and `master`. They carry the **same app
-features and the same fixes** — a change landing on one belongs on the other.
+Only two branches matter: `Dev` and `master`, and **they have the same
+content**. No strip, no dev-only exclusions: what is committed on `Dev` is
+what the world sees.
 
-- A new branch merges into `Dev` first. `Dev` is then **published** to
-  `master`, never committed to directly.
-- `master` is the public branch: it holds the product with dev-only files
-  stripped (`tests/`, `tests_data/`, `AGENTS.md`, `.claude/`, `.agents/`,
-  `scripts/dev/`, the dev-only `docs/` and helper scripts, plus `.github/`
-  and `CHANGELOG.md`). That strip is the *only* thing that may differ —
-  never app code, never `.gitignore`.
-- What `master` is FOR: someone who has never seen SentinelNet, evaluating
-  it or putting it into a real network. It answers "what is this, how do I
-  run it, how do I run it safely". Nothing else belongs there — not badges,
-  not contribution machinery, not release bookkeeping, not anything whose
-  audience is a person working *on* the app rather than *with* it. When in
-  doubt about a new top-level file, the question is not "is it useful?" but
-  "does a first-time user need it to run this thing?"
-- So `master` carries no test suite. Verify on `Dev`, where the gate runs,
-  then publish.
-- **`master` is an output, not a merge.** Each publication is one commit
-  whose tree is "Dev minus the strip" and whose parent is the previous
-  publication. `Dev` is *not* its parent, and nothing is ever merged in
-  either direction. That is what keeps the two branches from fighting: a
-  merge used to record "this Dev commit is contained in master" while
-  carrying the strip's deletions on its master side, so a merge the other
-  way would have deleted `Dev`'s tests — and because a fresh merge commit
-  was minted on every run, two clones publishing the same state produced
-  two different commits with the same tree and the push was rejected for
-  divergence. Neither failure exists without a merge.
-- Publish with `uv run python scripts/dev/port_to_master.py`, not by hand.
-  It builds the tree in a temporary index, so the working tree is never
-  touched — no checkout, no conflicts, nothing deleted from disk — moves
-  `master` to the new commit and stops. Review it, then
-  `git push --force-with-lease origin master`.
-- **Force-pushing `master` is correct here**, not a last resort: its content
-  is derived from `Dev` in full, so a discarded publication loses nothing.
-  If another clone published first, re-run the script — it parents the new
-  publication on `origin/master` — and push again.
-- `--check` verifies the invariant (master == Dev minus the strip) without
-  touching anything. It is the only thing that proves a publication is
-  correct, so run it before pushing.
-- The README screenshots live in `docs/images/` and are regenerated with
-  `uv run python scripts/dev/capture_screenshots.py`. Rerun it when the UI
-  changes visibly: no test catches a stale screenshot.
+- Work lands on `Dev` first. Publishing is one command, always a
+  fast-forward:
+
+  ```sh
+  git push origin Dev:master
+  ```
+
+- `master` is not a merge and never has been. It is now simply the commit
+  `Dev` points at. Nothing is ever merged from `master` back into `Dev`:
+  there is nothing there that is not already here.
+- **This means the privacy boundary is `git add`, not the branch.** The old
+  strip hid `tests/`, `AGENTS.md`, the plans and the CI templates from the
+  public branch as a side effect; that accident is gone. Before committing a
+  file, the question is not "is this dev-only?" but "would I publish this?".
+  See **Protect real data** below and run
+  `uv run python scripts/check_no_private_data.py`.
+- The strip existed because `master` was meant for someone who had never seen
+  SentinelNet. That audience is still served by `README.md` being the first
+  thing they read — not by hiding the test suite from them. A contributor who
+  can run the gate is worth more than a tidy file listing.
+- If the two branches ever diverge (someone committed straight to `master`),
+  the fix is to bring that commit onto `Dev` and publish again, never to
+  merge `master` into `Dev`.
+
 
 ## Software Versioning (SemVer)
 - Single source of truth is `core/version.py` (`__version__ = "X.Y.Z"`); `pyproject.toml` must match it. Update both.
@@ -74,24 +58,36 @@ features and the same fixes** — a change landing on one belongs on the other.
 
 ## Protect real data (repo is PUBLIC on GitHub)
 
-- `data/` is gitignored because it holds real customer network state. **Facts
-  derived from it are as sensitive as the files.** Never write device models,
-  software versions, hostnames, serial numbers, management IPs or topology roles
-  into tracked files — code, docs, comments, commit messages.
+**Every tracked file is published.** `Dev` and `master` carry the same tree, so
+there is no branch left that quietly keeps something private. The boundary is
+`git add`.
+
+- `data/` and `agent-data/` are gitignored **as directories**, not file by
+  file: a new state file the code writes there is ignored the moment it
+  appears, without anyone remembering to add a rule. Keep it that way — a
+  per-file list is one forgotten line away from a leak.
+- **Facts derived from customer data are as sensitive as the files.** Never
+  write device models, software versions, hostnames, serial numbers,
+  management IPs or topology roles into tracked files — code, docs, comments,
+  commit messages.
 - Using real backups to verify a parser: correct. Writing what they revealed
   about a customer network into the repo: not.
-- **Always use example data instead.** `192.0.2.x` / `198.51.100.x` (RFC 5737),
-  `switch-01`, `<hostname>`, `AA:BB:CC:DD:EE:FF`, vendor-doc examples. Never a
-  real value, even "just as an illustration".
-- Security findings that name unfixed issues at `file:line` stay out of the
-  public tree — see `.gitignore`.
-- **New state file under `data/` → `.gitignore` entry in the same change, before
-  the user runs the tool.** `data/` is ignored file by file, not wholesale: a
-  new `data/*.json` (or `.db`, `.db-shm`, `.db-wal`, and any sibling the code
-  writes) is tracked by default. As soon as the feature runs once against a real
-  network that file fills with customer state, and the next `git add` leaks it.
-  Add the ignore rule while writing the code that creates the file, never after
-  testing, and verify with `git status --porcelain data/` printing nothing.
+- **Always use example data instead.** `192.0.2.x` / `198.51.100.x` /
+  `203.0.113.x` (RFC 5737), private ranges, `switch-01`, `<hostname>`,
+  `AA:BB:CC:DD:EE:FF`, vendor-doc examples. Never a real value, even "just as
+  an illustration". A real OUI with a real host part counts as a real value.
+- Security findings that name unfixed issues at `file:line` stay under
+  `data/security/`, which is ignored with the rest of `data/`.
+- **The check is not a matter of memory.** `scripts/check_no_private_data.py`
+  scans every tracked file for public IPs, tracked state files and pasted
+  secrets, and `tests/test_no_private_data.py` runs it inside the suite. A
+  line that legitimately must contain a public address (a vendor manual's
+  example) is marked with the comment `check-private-data: ok`, which is
+  reviewable — silently widening the scanner's allow-list is not.
+- A state file that must live outside `data/` needs its `.gitignore` entry in
+  the same change that creates it, before the tool runs against a real
+  network. Verify with `git status --porcelain` printing nothing for it.
+
 
 ## Before each commit
 
@@ -104,12 +100,18 @@ Non-negotiable, verify by running them and reading the output:
 uv run pyrefly check                          # 0 errors
 uv run python scripts/check_frontend.py       # if static/js or templates/ changed
 uv run pytest tests -n 4                      # all green
+uv run python scripts/check_no_private_data.py  # nessun dato di cliente
 graphify update .                             # after code changes
 ```
 
 Never claim a check passed without having run it.
 
 ## Verification
+
+The README screenshots live in `docs/images/` and are regenerated with
+`uv run python scripts/dev/capture_screenshots.py`. Rerun it when the UI
+changes visibly: no test catches a stale screenshot.
+
 
 After editing a file in any language, run the compile/syntax/test check for it
 before reporting completion — that is what catches `NameError`, `ImportError`,

@@ -51,12 +51,12 @@ class TestCubePrimitives(unittest.TestCase):
 
     def test_non_contiguous_wildcard_cube(self):
         # Cisco IOS wildcard: 0.0.255.0 means 2nd byte fixed, 3rd byte don't care, 4th byte fixed
-        # e.g. 192.0.255.10 with wildcard 0.0.255.0 matches 192.0.X.10
+        # e.g. 192.0.255.10 with wildcard 0.0.255.0 matches 192.0.X.10  # check-private-data: ok
         c_wild = Cube.from_wildcard("192.0.0.10", "0.0.255.0")
-        self.assertTrue(c_wild.contains_ip(ip_to_int("192.0.1.10")))
-        self.assertTrue(c_wild.contains_ip(ip_to_int("192.0.200.10")))
-        self.assertFalse(c_wild.contains_ip(ip_to_int("192.0.1.11")))
-        self.assertFalse(c_wild.contains_ip(ip_to_int("192.1.1.10")))
+        self.assertTrue(c_wild.contains_ip(ip_to_int("192.0.1.10")))  # check-private-data: ok
+        self.assertTrue(c_wild.contains_ip(ip_to_int("192.0.200.10")))  # check-private-data: ok
+        self.assertFalse(c_wild.contains_ip(ip_to_int("192.0.1.11")))  # check-private-data: ok
+        self.assertFalse(c_wild.contains_ip(ip_to_int("192.1.1.10")))  # check-private-data: ok
 
     def test_cube_intersection(self):
         c_24 = Cube.from_cidr("192.0.2.0", 24)

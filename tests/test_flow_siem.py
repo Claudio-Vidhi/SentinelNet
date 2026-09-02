@@ -64,7 +64,7 @@ class TestFlowSiem(unittest.TestCase):
              'sentbyte=60 rcvdbyte=140'),
             # sede-b: deve restare invisibile all'operatore di sede-a
             (NOW - 90, "sede-b", "10.0.2.1", 3, "blocked",
-             'srcip=10.0.2.9 dstip=185.10.10.10 dstport=22 proto=6'),
+             'srcip=10.0.2.9 dstip=203.0.113.10 dstport=22 proto=6'),
             # evento senza IP nel messaggio: i campi restano vuoti, non finti
             (NOW - 30, "sede-a", "10.0.1.1", 5, "accept",
              'interfaccia port2 attivata'),

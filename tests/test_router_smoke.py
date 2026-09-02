@@ -30,7 +30,7 @@ SMOKE_ENDPOINTS = [
     ("get", "/api/settings/ui-variant", None),
     ("post", "/api/settings/ui-variant", {"ui_variant": "design-1"}),
     ("get", "/api/redundancy/groups", None),
-    ("post", "/api/policy-test/192.0.2.1/trace", {"src_ip": "1.1.1.1", "dst_ip": "2.2.2.2"}),
+    ("post", "/api/policy-test/192.0.2.1/trace", {"src_ip": "1.1.1.1", "dst_ip": "203.0.113.2"}),
     ("get", "/api/policy-test/192.0.2.1/examples", None),
     ("get", "/api/policy-test/192.0.2.1/findings", None),
     ("get", "/api/cloud-backup/settings", None),

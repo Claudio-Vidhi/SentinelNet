@@ -20,7 +20,7 @@ data_config.DATA_DIR = _TMP_DATA_DIR
 from observability import flowpath  # noqa: E402
 
 # Come lo restituisce mac_history.client_map().
-CLIENT_A = {"mac": "84:ba:59:a1:87:15", "ip": "10.1.0.5", "vlan": "10",
+CLIENT_A = {"mac": "00:11:22:33:44:55", "ip": "10.1.0.5", "vlan": "10",
             "source_ip": "10.1.0.1", "source_name": "SW1", "source_type": "switch",
             "switch_ip": "10.1.0.20", "switch_name": "ACC-SW1",
             "switch_port": "GigabitEthernet1/0/5", "port_vlan": "10"}

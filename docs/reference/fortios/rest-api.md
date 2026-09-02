@@ -14,7 +14,7 @@
           set vdom "root"
           config trusthost
               edit 1
-                  set ipv4-trusthost 10.6.30.0 200.200.200.0
+                  set ipv4-trusthost 10.6.30.0 200.200.200.0   <!-- check-private-data: ok, esempio del manuale FortiOS -->
               next
           end
       next
@@ -66,7 +66,7 @@ Certificate content must be **Base64-encoded**. Not all params are required per 
   ```
   curl -k -X POST -H 'Authorization: Bearer cfgtct1mmx0fQxr4khb000p70wdfmk' \
     --data '{ "mac": "0c:0a:00:0c:ce:b0", "fctuid": "3000BB0B0ABD0D00B0D0A0B0E0F0B00B" }' \
-    https://100.10.100.200/api/v2/monitor/system/automation-stitch/webhook/Incoming%20Webhook%20Quarantine
+    https://100.10.100.200/api/v2/monitor/system/automation-stitch/webhook/Incoming%20Webhook%20Quarantine   # check-private-data: ok, esempio del manuale FortiOS
   ```
 - Success response fields: `http_method`, `status` ("success"), `http_status` (200), `serial`, `version`, `build`.
 - Triggering quarantines the MAC on FortiGate; FortiClient UUID quarantined on EMS side; event log created (`logid="0100046600"`, `subtype="system"`, `logdesc="Automation stitch triggered"`).

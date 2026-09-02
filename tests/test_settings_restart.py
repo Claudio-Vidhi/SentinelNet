@@ -205,7 +205,7 @@ class SelfSignedCertificate(unittest.TestCase):
 
     def test_the_host_is_validated_not_interpolated(self):
         r = self.client.post("/api/settings/tls/self-signed", headers=self.admin_h,
-                             json={"host": "1.2.3.4/CN=x" + chr(10) + "DNS:evil"})
+                             json={"host": "192.0.2.4/CN=x" + chr(10) + "DNS:evil"})
         self.assertEqual(r.status_code, 400, r.text)
 
 

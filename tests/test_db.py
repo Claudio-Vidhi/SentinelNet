@@ -116,7 +116,7 @@ class TestDb(unittest.TestCase):
     def test_bad_write_does_not_kill_writer(self):
         db.start_writer()
         db.enqueue_write("INSERT INTO tabella_inesistente VALUES (1)")
-        db.enqueue_flow("sede-a", "1.1.1.1", "2.2.2.2", 17, 53, 5, 1, "10.9.9.9")
+        db.enqueue_flow("sede-a", "1.1.1.1", "203.0.113.2", 17, 53, 5, 1, "10.9.9.9")
         self._drain()
         conn = db.get_observability_connection()
         n = conn.execute("SELECT COUNT(*) AS n FROM flow_aggregates").fetchone()["n"]

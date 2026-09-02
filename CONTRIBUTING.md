@@ -135,9 +135,6 @@ documentation, not from `data/`.
 
 ## 7. Tests
 
-> **The test suite lives on the `Dev` branch.** This branch carries the
-> application only; clone or check out `Dev` to run the commands below.
-
 `unittest.TestCase` classes under `tests/`, run with pytest from the repository
 root:
 

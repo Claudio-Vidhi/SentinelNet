@@ -1,59 +1,58 @@
-# Python compiled files
-**/__pycache__/
-*.py[cod]
-*$py.class
+# .gitignore — SentinelNet
+#
+# `master` e `Dev` hanno lo stesso contenuto: non esiste piu' uno strip che,
+# per effetto collaterale, teneva fuori dal pubblico i file di sviluppo.
+# Quindi TUTTO cio' che e' tracciato e' pubblicato, e questo file e' il
+# confine della privacy. Regola: se un file si riempie girando sulla rete di
+# un cliente, sta qui.
+#
+# Controllo automatico: scripts/check_no_private_data.py, eseguito anche da
+# tests/test_no_private_data.py dentro la suite.
 
-# Virtual environments
-.venv/
-venv/
-ENV/
-
-# Test run artifacts
-.coverage
-htmlcov/
-
-# Sensitive data & local runtime directory (credentials, databases, backups, keys)
+# --- Dati reali del cliente -------------------------------------------------
+# La directory di stato, per intero: inventario, credenziali cifrate, database,
+# backup, chiavi, e le security findings sotto data/security/. Un file nuovo
+# scritto qui dall'applicazione e' ignorato per default, senza bisogno di
+# aggiungere una regola: e' il motivo per cui la regola e' sulla cartella.
 data/
-# Same content as data/, under the name the site agent uses: agent.json's
-# data_dir defaults to ./agent-data, so an agent started from the repo root
-# fills it with the remote SITE's real inventory and credentials.
+# Stesso contenuto sotto il nome che usa l'agente di sede: il data_dir di
+# agent.json vale ./agent-data, quindi un agente avviato dalla radice del repo
+# la riempie con inventario e credenziali della SEDE remota.
 agent-data/
-*.posix
-fortigate_tokens.json
+# Configurazioni scaricate dagli apparati.
+backup-config/
+# Configurazione dell'agente: contiene il token per-sede.
+agent.json
+
+# Gli stessi file di stato quando l'applicazione gira dalla radice del repo
+# invece che da una data dir (installazioni vecchie, esecuzioni a mano).
 network_hosts.csv
+users.json
+sites.json
+groups.json
+identities.json
+vendors.json
+tenant_snmp.json
+ap_inventory.json
+config_baselines.json
 detected_versions.json
 device_categories.json
 device_models.json
-users.json
-# Lockout state: failed-login timestamps keyed by source IP + account
+fortigate_tokens.json
+app_settings.json
 login_attempts.json
-groups.json
-sites.json
-identities.json
-tenant_snmp.json
-vendors.json
-ap_inventory.json
-config_baselines.json
-
-# MAC address tracking history (local SQLite DB + WAL/SHM)
+observability.db
+observability.db-wal
+observability.db-shm
 mac_history.db
 mac_history.db-wal
 mac_history.db-shm
 
-# Network Backup configs
-backup-config/
+# Report di analisi e documenti di lavoro con contenuto del cliente.
+Semgrep_Code_Combined_Findings_*.csv
+checklist_x_c.docx
 
-# Logging
-error_log.txt
-audit.log
-*.log
-
-# PyInstaller / Compilation output
-build/
-dist/
-
-
-# Key files & Secrets
+# --- Segreti ----------------------------------------------------------------
 secret.key
 jwt_secret.key
 *.key
@@ -64,83 +63,54 @@ secrets.json
 *secret*.json
 apikey*
 *_api_key*
-.env.local
 credentials.json
 service-account*.json
-app_settings.json
 c_api_key.txt
-
-# Local / IDE files
-.vscode/
-.idea/
+q_api_key.txt
 .env
 .env.*
-.DS_Store
-Thumbs.db
-*.tmp
-*.bak
 
-# Python tool caches
+# --- Log e artefatti di esecuzione ------------------------------------------
+error_log.txt
+audit.log
+*.log
+*.posix
+.coverage
+htmlcov/
+
+# --- Build ------------------------------------------------------------------
+build/
+dist/
+**/__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+node_modules/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
 
-# Graphify knowledge-graph artifacts (generated, not source)
-graphify-out/
-.graphifyignore
+# --- Strumenti locali dell'assistente ---------------------------------------
+# Non sono segreti, ma sono configurazione della postazione di chi sviluppa,
+# non del prodotto. AGENTS.md invece E' tracciato: sono le regole del repo, e
+# non contiene niente di privato.
 CLAUDE.md
-
-# API keys & secrets
-*.key
-*.pem
-*.p12
-*.pfx
-secrets.json
-*secret*.json
-apikey*
-*_api_key*
-.env.local
-credentials.json
-service-account*.json
-identities.json
-
-app_settings.json
-
-# Observability DB (runtime data, never commit)
-observability.db
-observability.db-wal
-observability.db-shm
-
-# Data folder runtime files & databases
-Semgrep_Code_Combined_Findings_2026_07_19.csv
-data/identities.json
-data/tenant_snmp.json
-data/redundancy.db
-data/redundancy.db-shm
-data/redundancy.db-wal
-data/agent_jobs.db
-data/agent_jobs.db-shm
-data/agent_jobs.db-wal
-# Host key store: one line per managed device, with its management IP
-# (one file per bastion for devices behind a jump site)
-data/ssh_known_hosts*
-checklist_x_c.docx
-
-# Security findings: never public while issues are open (see CLAUDE.md)
-data/security/
-data/vendors.json
 HANDOFF.md
-# Agent and assistant scratch directories
 .claude/
 .agents/
 .qwen/
 .impeccable/
 .superpowers/
+graphify-out/
+.graphifyignore
 cont.txt
 
-# Frontend type-check tooling (nessun bundle: solo tsc)
-node_modules/
-data/config_baselines.json
-data/ap_inventory.json
-data/cloud_backup_state.json
-data/login_attempts.json
+# --- File locali / IDE ------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
