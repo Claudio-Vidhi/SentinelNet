@@ -82,5 +82,21 @@ class PromoteChangelog(unittest.TestCase):
             self.assertIn("## [9.9.9] - 2026-01-01", out)
 
 
+class PrintedCommandsRunInPowerShell(unittest.TestCase):
+    def test_no_backslash_line_continuations_are_printed(self):
+        # I comandi finali si incollano in PowerShell, dove la barra rovesciata
+        # non continua la riga: diventa un argomento in piu'. gh l'ha presa per
+        # un file da allegare e la pubblicazione della 0.28.0 e' fallita a
+        # meta', creando e poi cancellando due release.
+        src = (ROOT / "scripts" / "dev" / "release.py").read_text(encoding="utf-8")
+        printed = src.split('Per pubblicarla', 1)[1].split('"""', 1)[0]
+        for line in printed.splitlines():
+            # Una barra sola, non due: nel sorgente la continuazione si scrive
+            # "\\\\" ma un "\\" singolo verrebbe stampato ugualmente, e cercare
+            # solo la forma doppia lascerebbe passare proprio quel caso.
+            self.assertFalse(line.rstrip().endswith("\\"),
+                             f"continuazione di riga in stile bash: {line!r}")
+
+
 if __name__ == "__main__":
     unittest.main()

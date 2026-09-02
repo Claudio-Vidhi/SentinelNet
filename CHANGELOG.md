@@ -10,6 +10,15 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The release script printed commands that PowerShell could not run.** It
+  used a bash line-continuation backslash, which PowerShell passes through as
+  an extra argument: `gh` read it as an asset file to upload, and publishing
+  0.28.0 failed halfway (twice) before `gh` rolled the releases back. The
+  commands are now one per line, and a test reads the printed block back and
+  fails if a line ever ends in a backslash again.
+
 ## [0.28.0] - 2026-09-02
 
 ### Added
