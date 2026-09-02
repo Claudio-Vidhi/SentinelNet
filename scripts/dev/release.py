@@ -158,16 +158,19 @@ def main():
     notes = pathlib.Path(tempfile.gettempdir()) / f"sentinelnet-{new}-notes.md"
     notes.write_text(body + "\n", encoding="utf-8")
 
+    # Un comando per riga, SENZA la barra rovesciata di continuazione: questi
+    # comandi si incollano in PowerShell, dove "\" non continua la riga ma
+    # diventa un argomento in piu'. gh l'ha interpretato come un file da
+    # allegare alla release e la pubblicazione della 0.28.0 e' fallita a meta'.
     print(f"""
 Release {new} pronta in locale. Niente e' stato pubblicato.
 
-Per pubblicarla:
+Per pubblicarla (una riga alla volta):
 
   git push origin Dev
   git push --force-with-lease origin master
   git push origin v{new}
-  gh release create v{new} --title "SentinelNet {new}" \\
-      --notes-file "{notes}" --latest
+  gh release create v{new} --title "SentinelNet {new}" --notes-file "{notes}" --latest
 
 Per annullarla, finche' non hai spinto:
 
