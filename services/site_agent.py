@@ -1,5 +1,10 @@
 """SentinelNet - Agente di sede (Mode B).
 
+LINUX SOLTANTO. Un agente Windows non e' in roadmap: la sua gestione remota
+dalla dashboard (lettura log, riavvio) e' costruita su systemd e journalctl,
+che altrove non esistono. Il centrale, al contrario, gira anche su Windows.
+Vedi docs/remote-sites.md, sezione "Supported platforms".
+
 Processo leggero da eseguire nella sede remota. Si connette IN USCITA verso il
 SentinelNet centrale (HTTPS su VPN) autenticandosi con il token per-sede, e
 periodicamente:
@@ -461,7 +466,14 @@ class Agent:
         return n
 
     def _execute_agent_rpc(self, cmd: str) -> dict:
-        """Esegue comandi di gestione remota dell'agente (_agent_self_update, _agent_restart, _agent_config)."""
+        """Esegue comandi di gestione remota dell'agente (_agent_self_update,
+        _agent_restart, _agent_logs, _agent_config).
+
+        LINUX SOLTANTO, e un agente Windows non e' in roadmap: _agent_logs
+        legge il journal con journalctl e _agent_restart esce dal processo
+        contando su systemd per riavviarlo. Su un host senza systemd il primo
+        darebbe errore e il secondo lascerebbe la sede senza agente. Vedi
+        docs/remote-sites.md, "Supported platforms"."""
         import subprocess
         parts = cmd.split(maxsplit=1)
         action = parts[0]

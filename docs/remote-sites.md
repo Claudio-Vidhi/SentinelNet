@@ -12,6 +12,24 @@ determines how central interacts with that site's devices:
 
 The default site `central` always exists and cannot be deleted.
 
+## Supported platforms
+
+**The site agent runs on Linux only, and a Windows agent is not on the
+roadmap.** The agent is not merely "untested" elsewhere: remote management of
+it assumes systemd. Reading its log from the dashboard runs `journalctl -u
+sentinelnet-agent`, and "Restart agent" exits the process expecting systemd to
+bring it back. Neither has an equivalent on a host without systemd, so both
+would fail -- the first with an error, the second by leaving the site with no
+agent at all.
+
+**Central is the part that may run on Windows**, as a service or as the exe;
+see [hardening.md](hardening.md) section 6 for restarting it from the dashboard
+there. Central being on Windows says nothing about the sites: their agents
+still need Linux.
+
+A site whose only available host is Windows is a **jump site** (Mode C) or
+central poll (Mode A), not an agent site.
+
 ---
 
 ## 1. Site agent architecture (Mode B)
@@ -150,7 +168,8 @@ curl -X POST http://<CENTRAL_IP>:8000/api/sites \
 
 ### 3.1 Prepare the remote host
 
-On the VM or server that represents the remote site:
+On the **Linux** VM or server that represents the remote site (see **Supported
+platforms**):
 
 ```bash
 git clone https://github.com/Claudio-Vidhi/SentinelNet.git && cd SentinelNet
@@ -301,13 +320,13 @@ sudo systemctl enable --now sentinelnet-agent
 sudo systemctl status sentinelnet-agent
 ```
 
-### Windows (NSSM)
+### Windows
 
-```cmd
-nssm install SentinelNetAgent C:\SentinelNet\.venv\Scripts\python.exe C:\SentinelNet\services\site_agent.py --config C:\SentinelNet\agent.json
-nssm set SentinelNetAgent AppDirectory C:\SentinelNet
-nssm start SentinelNetAgent
-```
+Not supported, and not planned. This section used to carry NSSM instructions;
+they are gone because what they produced was an agent the dashboard could
+neither read the log of nor restart -- see **Supported platforms** at the top
+of this document. Use a Linux host for the agent, or connect the site as a jump
+site (Mode C, section 6) instead.
 
 ---
 

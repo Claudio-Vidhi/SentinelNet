@@ -209,5 +209,44 @@ class SelfSignedCertificate(unittest.TestCase):
         self.assertEqual(r.status_code, 400, r.text)
 
 
+class AgentIsLinuxOnlyAndSaysSo(unittest.TestCase):
+    """La piattaforma dell'agente e' una promessa, non un dettaglio.
+
+    docs/remote-sites.md conteneva istruzioni NSSM per installare l'agente
+    come servizio Windows: chi le seguiva otteneva un agente di cui la
+    dashboard non sa leggere il log ne' fare il riavvio. Questi test tengono
+    ferma la dichiarazione, e impediscono che quelle istruzioni tornino.
+    """
+
+    @staticmethod
+    def _read(*parts):
+        import pathlib
+        root = pathlib.Path(__file__).resolve().parents[1]
+        return root.joinpath(*parts).read_text(encoding="utf-8")
+
+    def test_remote_sites_states_the_agent_is_linux_only(self):
+        doc = self._read("docs", "remote-sites.md")
+        self.assertIn("## Supported platforms", doc)
+        self.assertIn("site agent runs on Linux only", doc)
+        self.assertIn("not on the" + chr(10) + "roadmap", doc)
+
+    def test_no_document_explains_how_to_install_the_agent_on_windows(self):
+        # La riga NSSM sopravvissuta e' quella del CENTRALE, in hardening.md,
+        # che su Windows e' supportato: si distingue dal nome del servizio.
+        doc = self._read("docs", "remote-sites.md")
+        self.assertNotIn("nssm install", doc.lower())
+        self.assertNotIn("SentinelNetAgent", doc)
+
+    def test_the_readme_says_which_part_may_run_on_windows(self):
+        readme = self._read("README.md")
+        self.assertIn("site agent is Linux-only", readme)
+
+    def test_the_agent_module_says_it_in_its_own_docstring(self):
+        # Chi apre il file per portarlo su Windows deve leggerlo li', non
+        # scoprirlo dal primo journalctl che fallisce.
+        from services import site_agent
+        self.assertIn("LINUX SOLTANTO", site_agent.__doc__ or "")
+
+
 if __name__ == "__main__":
     unittest.main()

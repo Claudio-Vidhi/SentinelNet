@@ -4,6 +4,12 @@ Step-by-step guide for deploying a SentinelNet Site Agent on Ubuntu Server 24.04
 
 ---
 
+> **Linux only.** The site agent is supported on Linux, and a Windows agent is
+> not on the roadmap: the dashboard reads its log with `journalctl` and
+> restarts it through systemd, neither of which exists elsewhere. Central
+> itself may run on Windows — that is a separate choice. See
+> [remote-sites.md](remote-sites.md) under *Supported platforms*.
+
 ## 1. Register Site on Central Server
 
 On Central Web UI (`http://<CENTRAL_IP>:8000/`):

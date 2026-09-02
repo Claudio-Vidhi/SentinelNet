@@ -108,7 +108,16 @@ Detailed map with responsibilities: [docs/architecture.md](docs/architecture.md)
 ## Requirements and installation
 
 Python **3.11+** (`requires-python` in `pyproject.toml` is authoritative). The
-Docker image ships 3.11; development happens on 3.14. Key dependencies:
+Docker image ships 3.11; development happens on 3.14.
+
+**Operating systems.** The central server runs on Linux, Windows or Docker.
+The **site agent is Linux-only, and a Windows agent is not planned** — its
+remote management (log tail, restart) is built on systemd and has no
+equivalent elsewhere. A site with no Linux host connects as a jump site or by
+central poll instead; see
+[docs/remote-sites.md](docs/remote-sites.md).
+
+Key dependencies:
 `netmiko` for SSH
 sessions, `fastapi`/`uvicorn` for the web server, `cryptography` for credential
 encryption, `pysnmp` for the SNMP poller.
@@ -276,8 +285,9 @@ Observability listener variables (`SENTINELNET_OBS_*`) are documented in
 
 SentinelNet manages multiple sites over VPN from a single central server, in
 **central poll** mode (direct SSH over VPN) or **site agent** mode (a remote
-agent that connects outbound and receives commands from a queue). Full
-deployment guide: [docs/remote-sites.md](docs/remote-sites.md).
+agent that connects outbound and receives commands from a queue). The agent
+requires a Linux host; central does not. Full deployment guide:
+[docs/remote-sites.md](docs/remote-sites.md).
 
 ---
 
