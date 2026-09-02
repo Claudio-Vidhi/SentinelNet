@@ -440,3 +440,45 @@ def get_fleet_versions(current_user = Depends(require_admin)):
         })
     return {"central": {"version": __version__, "install_kind": kind},
             "install_kind": kind, "agents": agents}
+
+
+def _is_supervised() -> bool:
+    """Vero solo se qualcosa rimettera' in piedi il processo dopo l'uscita.
+
+    systemd esporta INVOCATION_ID a ogni unit che avvia; la sua assenza (o un
+    exe PyInstaller lanciato a mano) significa che "riavvia" e' solo
+    "termina"."""
+    if getattr(sys, "frozen", False):
+        return False
+    return bool(os.environ.get("INVOCATION_ID"))
+
+
+@router.post("/api/settings/restart")
+def restart_application(current_user = Depends(require_admin)):
+    """Riavvia l'applicazione facendo partire una unit oneshot dedicata.
+
+    L'app non si uccide da sola: e' sentinelnet-restart.service a riavviare
+    sentinelnet.service, cosi' un riavvio fallito lascia in piedi il processo
+    vecchio. L'argv e' FISSO: nulla del corpo della richiesta lo raggiunge,
+    altrimenti questo endpoint sarebbe una shell remota sulla macchina che
+    custodisce le credenziali di ogni sede."""
+    import subprocess
+    if not _is_supervised():
+        raise HTTPException(
+            status_code=409,
+            detail="L'applicazione non e' gestita da systemd: un riavvio la "
+                   "spegnerebbe soltanto. Riavviala dal supervisore.")
+    try:
+        proc = subprocess.run(
+            ["sudo", "-n", "systemctl", "start", "--no-block",
+             "sentinelnet-restart.service"],
+            capture_output=True, text=True, timeout=15)
+    except Exception as e:
+        raise HTTPException(status_code=409, detail=f"Riavvio non disponibile: {e}")
+    if proc.returncode != 0:
+        raise HTTPException(
+            status_code=409,
+            detail="sudo ha rifiutato il comando di riavvio: "
+                   f"{(proc.stderr or proc.stdout or '').strip()}")
+    log_audit(f"Riavvio dell'applicazione richiesto da '{current_user.get('sub')}'.")
+    return {"status": "scheduled"}

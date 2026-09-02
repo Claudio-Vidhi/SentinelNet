@@ -1,0 +1,19 @@
+# Unit oneshot che riavvia SentinelNet.
+#
+# Esiste perche' l'applicazione non deve uccidersi da sola: se si limitasse a
+# uscire, un riavvio fallito lascerebbe la macchina senza pannello. Qui il
+# riavvio e' compito di un processo separato, quindi un fallimento lascia in
+# piedi il processo vecchio.
+#
+# Installazione:
+#   sudo cp docs/deploy/sentinelnet-restart.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#
+# Non va abilitata (nessun [Install]): viene avviata su richiesta dal pannello.
+
+[Unit]
+Description=Riavvio di SentinelNet richiesto dal pannello
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl restart sentinelnet.service

@@ -180,7 +180,51 @@ interface can read that token and then use it directly against the FortiGate.
 - Treat a stolen API token as a full compromise of that firewall, and rotate it
   from the FortiGate side, not from here.
 
-## 6. Other recommendations
+## 6. Restarting the application from the dashboard
+
+The Settings tab can restart SentinelNet, so a changed listening port or a new
+certificate can be applied without a shell. Two properties make that safe, and
+both are worth stating explicitly.
+
+**The application never kills itself.** The endpoint starts a separate oneshot
+unit, `sentinelnet-restart.service`, whose only job is
+`systemctl restart sentinelnet.service`. If the restart fails, the old process
+is still running and still serving the panel. An app that exited on its own
+would leave the machine with no panel and no way back in.
+
+**The endpoint runs one fixed command line.** Nothing from the request body
+reaches it — there is no unit-name parameter, no path, no arguments. The argv
+is literally:
+
+```
+sudo -n systemctl start --no-block sentinelnet-restart.service
+```
+
+Install the two files from `docs/deploy/`:
+
+```sh
+sudo cp docs/deploy/sentinelnet-restart.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo install -m 0440 docs/deploy/sentinelnet-restart.sudoers      /etc/sudoers.d/sentinelnet-restart
+sudo visudo -c
+```
+
+The sudoers fragment grants exactly that one command, with its exact arguments:
+
+```
+sentinelnet ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block sentinelnet-restart.service
+```
+
+It names one command rather than `systemctl` with a wildcard because a wildcard
+would hand the application control of every service on the host — including the
+firewall and the SSH daemon — and `ALL` would hand it the host. The blast radius
+of a bug in the panel should be "the panel restarts", not "anything restarts".
+
+Without systemd (a PyInstaller exe, or a process started by hand) the endpoint
+answers 409 instead of pretending: with nothing to bring the process back,
+"restart" would only mean "stop".
+
+## 7. Other recommendations
 
 - Never publish port 8000 directly on the Internet.
 - Restrict panel access to a VPN or management network.
