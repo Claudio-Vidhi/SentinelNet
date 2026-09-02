@@ -57,10 +57,6 @@ written in English.
 
 ## 3. Tests
 
-> **The test suite lives on the `Dev` branch**, not on `master`: the public
-> branch carries the application with the development-only files stripped.
-> Run the commands below from a `Dev` checkout.
-
 `unittest`. Each test sets a temporary `SENTINELNET_DATA_DIR` **before**
 importing project modules — that ordering is load-bearing, since
 `data_config.DATA_DIR` is resolved at import time.
@@ -167,11 +163,14 @@ local.
 2. `uv run python scripts/check_frontend.py` clean, if the change touched
    `static/js` or `templates/`.
 3. Full test suite green.
-4. New data files added to `SentinelNet.spec`, verified in source / exe / Docker.
-5. Documentation touched by the change updated (see the maintenance rule in
+4. `uv run python scripts/check_no_private_data.py` clean. `Dev` and `master`
+   carry the same tree, so anything committed is published: this is what
+   stands between a customer's addresses and GitHub.
+5. New data files added to `SentinelNet.spec`, verified in source / exe / Docker.
+6. Documentation touched by the change updated (see the maintenance rule in
    [README.md](README.md)); a decision that changes an invariant gets an
    [ADR](adr/).
-6. `graphify update .` to keep the knowledge graph current.
+7. `graphify update .` to keep the knowledge graph current.
 
 ---
 

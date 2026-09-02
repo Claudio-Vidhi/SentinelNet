@@ -22,7 +22,9 @@ class TestIOSAceParser(unittest.TestCase):
         self.assertIsNotNone(rule)
         self.assertEqual(rule.action, "permit")
         self.assertTrue(rule.fields.matches(Flow(src_ip="192.0.2.100", dst_ip="198.51.100.1")))
-        self.assertFalse(rule.fields.matches(Flow(src_ip="192.0.3.100", dst_ip="198.51.100.1")))
+        # Fuori dalla 192.0.2.0/24 dell'ACL: e' il caso negativo, e deve
+        # restare un indirizzo DIVERSO da quello della riga sopra.
+        self.assertFalse(rule.fields.matches(Flow(src_ip="198.51.100.100", dst_ip="198.51.100.1")))
 
     def test_extended_named_acl_ports_and_proto(self):
         rule = parse_ace_line("10 permit tcp 192.0.2.0 0.0.0.255 host 198.51.100.10 eq 443")
@@ -55,15 +57,15 @@ class TestIOSAceParser(unittest.TestCase):
     def test_neq_and_range_port_operators(self):
         rule_range = parse_ace_line("permit tcp any any range 8000 8080")
         self.assertIsNotNone(rule_range)
-        self.assertTrue(rule_range.fields.matches(Flow(src_ip="1.1.1.1", dst_ip="2.2.2.2", proto="tcp", dport=8000)))
-        self.assertTrue(rule_range.fields.matches(Flow(src_ip="1.1.1.1", dst_ip="2.2.2.2", proto="tcp", dport=8050)))
-        self.assertTrue(rule_range.fields.matches(Flow(src_ip="1.1.1.1", dst_ip="2.2.2.2", proto="tcp", dport=8080)))
-        self.assertFalse(rule_range.fields.matches(Flow(src_ip="1.1.1.1", dst_ip="2.2.2.2", proto="tcp", dport=8081)))
+        self.assertTrue(rule_range.fields.matches(Flow(src_ip="1.1.1.1", dst_ip="203.0.113.2", proto="tcp", dport=8000)))
+        self.assertTrue(rule_range.fields.matches(Flow(src_ip="1.1.1.1", dst_ip="203.0.113.2", proto="tcp", dport=8050)))
+        self.assertTrue(rule_range.fields.matches(Flow(src_ip="1.1.1.1", dst_ip="203.0.113.2", proto="tcp", dport=8080)))
+        self.assertFalse(rule_range.fields.matches(Flow(src_ip="1.1.1.1", dst_ip="203.0.113.2", proto="tcp", dport=8081)))
 
         rule_neq = parse_ace_line("permit tcp any any neq 22")
         self.assertIsNotNone(rule_neq)
-        self.assertFalse(rule_neq.fields.matches(Flow(src_ip="1.1.1.1", dst_ip="2.2.2.2", proto="tcp", dport=22)))
-        self.assertTrue(rule_neq.fields.matches(Flow(src_ip="1.1.1.1", dst_ip="2.2.2.2", proto="tcp", dport=80)))
+        self.assertFalse(rule_neq.fields.matches(Flow(src_ip="1.1.1.1", dst_ip="203.0.113.2", proto="tcp", dport=22)))
+        self.assertTrue(rule_neq.fields.matches(Flow(src_ip="1.1.1.1", dst_ip="203.0.113.2", proto="tcp", dport=80)))
 
     def test_opaque_fallback_on_unparseable_ace(self):
         rule = parse_ace_line("permit ip strange syntax cannot parse ???")

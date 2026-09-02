@@ -21,7 +21,7 @@ data_config.DATA_DIR = _TMP
 
 from collectors import mac_history  # noqa: E402
 
-MAC = "84:ba:59:a1:87:15"
+MAC = "00:11:22:33:44:55"
 ACCESS_SW, UPLINK_SW = "192.0.2.6", "192.0.2.7"
 
 

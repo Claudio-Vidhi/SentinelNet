@@ -10,7 +10,7 @@ from ai import ai_assistant
 from security.redaction import redact, MASK
 
 PEM_BLOCK = (
-    "-----BEGIN RSA PRIVATE KEY-----\n"
+    "-----BEGIN RSA PRIVATE KEY-----\n"  # check-private-data: ok, materiale finto per il test di redazione
     "MIIEpAIBAAKCAQEA7yn3bRHQ8xKf\nQIDAQABAoIBAQCwg8mJx\n"
     "-----END RSA PRIVATE KEY-----"
 )

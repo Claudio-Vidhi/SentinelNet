@@ -416,7 +416,7 @@ class TestRetention(unittest.TestCase):
         if table == "flow_aggregates":
             conn.execute("INSERT INTO flow_aggregates (window_start, tenant, src_ip, "
                          "dst_ip, protocol, dst_port) VALUES (?, 'sede-a', '1.1.1.1', "
-                         "'2.2.2.2', 6, 443)", (ts,))
+                         "'203.0.113.2', 6, 443)", (ts,))
         elif table == "syslog_events":
             conn.execute("INSERT INTO syslog_events (ts, tenant) VALUES (?, 'sede-a')", (ts,))
         elif table == "incidents":

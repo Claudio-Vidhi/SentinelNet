@@ -22,10 +22,10 @@ class TestInterfaceNormAndEuvdSort(unittest.TestCase):
         mac_history.init_db()
         switch_ip = "192.168.1.250"
         with mac_history._connect() as c:
-            c.execute("DELETE FROM mac_sightings WHERE mac=? AND switch_ip=?", ("14:33:5c:13:9f:a4", switch_ip))
+            c.execute("DELETE FROM mac_sightings WHERE mac=? AND switch_ip=?", ("00:11:22:33:44:66", switch_ip))
 
-        rows_eth = [{"mac": "14:33:5c:13:9f:a4", "vlan": "10", "interface": "Eth0/0"}]
-        rows_ethernet = [{"mac": "14:33:5c:13:9f:a4", "vlan": "10", "interface": "Ethernet0/0"}]
+        rows_eth = [{"mac": "00:11:22:33:44:66", "vlan": "10", "interface": "Eth0/0"}]
+        rows_ethernet = [{"mac": "00:11:22:33:44:66", "vlan": "10", "interface": "Ethernet0/0"}]
 
         mac_history.record_sightings(rows_eth, switch_ip)
         mac_history.record_sightings(rows_ethernet, switch_ip)
@@ -33,7 +33,7 @@ class TestInterfaceNormAndEuvdSort(unittest.TestCase):
         with mac_history._connect() as c:
             records = c.execute(
                 "SELECT * FROM mac_sightings WHERE mac=? AND switch_ip=?",
-                ("14:33:5c:13:9f:a4", switch_ip)
+                ("00:11:22:33:44:66", switch_ip)
             ).fetchall()
 
         self.assertEqual(len(records), 1)

@@ -121,10 +121,10 @@ class TestJobQueueLifecycle(ResetMixin):
         sid_a, _ = self._site()
         sid_b = site_manager.create_site("Palermo", "agent", [])[0]["id"]
         site_manager.enqueue_job(sid_a, "1.1.1.1", "a")
-        site_manager.enqueue_job(sid_b, "2.2.2.2", "b")
+        site_manager.enqueue_job(sid_b, "203.0.113.2", "b")
         claimed_b = site_manager.claim_pending_jobs(sid_b)
         self.assertEqual(len(claimed_b), 1)
-        self.assertEqual(claimed_b[0]["device_ip"], "2.2.2.2")
+        self.assertEqual(claimed_b[0]["device_ip"], "203.0.113.2")
 
 
 if __name__ == "__main__":
