@@ -69,6 +69,30 @@ class RemoteSiteE2E(unittest.TestCase):
 
     # --- test ---
 
+    def test_the_fleet_panel_lists_the_central_and_every_agent(self):
+        from core.version import __version__
+        sid, token = self._create_agent_site("Fleet")
+        self.client.post("/api/agent/heartbeat",
+                         headers=self._agent_headers(sid, token),
+                         json={"version": "0.25.0", "commit": "dead123",
+                               "branch": "Dev", "dirty": False})
+        r = self.client.get("/api/fleet/versions", headers=self.admin_h)
+        self.assertEqual(r.status_code, 200, r.text)
+        body = r.json()
+        self.assertEqual(body["central"]["version"], __version__)
+        self.assertIn(body["install_kind"], ("git", "exe", "source"))
+        agent = next(a for a in body["agents"] if a["site_id"] == sid)
+        self.assertEqual(agent["version"], "0.25.0")
+        # Il senso del pannello: un agente indietro rispetto al centrale si vede.
+        self.assertTrue(agent["behind"])
+
+    def test_the_fleet_panel_is_admin_only(self):
+        # Client dedicato: quello di classe porta il cookie di sessione
+        # dell'admin dal login di setUpClass, quindi non e' anonimo.
+        anon = TestClient(app_server.app)
+        r = anon.get("/api/fleet/versions")
+        self.assertIn(r.status_code, (401, 403))
+
     def test_the_agent_identity_is_stored_on_the_site(self):
         from core.version import __version__
         from services import site_manager

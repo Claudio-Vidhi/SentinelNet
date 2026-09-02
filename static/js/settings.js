@@ -589,6 +589,7 @@
         renderAppSettings(d);
         loadCliBlacklistSetting();
         loadPingMonitorSettings();
+        loadFleetVersions();
         if (typeof loadObsSettings === 'function') {
             loadObsSettings();
         }
@@ -919,6 +920,46 @@
             return;
         }
         if (notice) notice.textContent = L.msgRestartRequired;
+    }
+
+    // --- VERSIONI DELLA FLOTTA (solo admin) ---
+
+    async function loadFleetVersions() {
+        if (currentRole !== 'admin') return;
+        const body = document.getElementById('fleetVersionsBody');
+        if (!body) return;
+        const res = await apiFetch('/api/fleet/versions');
+        if (!res || !res.ok) { body.innerHTML = ''; return; }
+        const d = await res.json();
+        const dash = '—';
+        const rows = [`<tr>
+            <td><strong>${escapeHtml(tr('lblFleetCentral'))}</strong></td>
+            <td>${escapeHtml(d.central.version || dash)}</td>
+            <td>${dash}</td>
+            <td>${dash}</td>
+            <td>${dash}</td>
+            <td><span class="chip">${escapeHtml(tr('lblFleetInstallKind'))}: ${escapeHtml(d.install_kind || dash)}</span></td>
+        </tr>`];
+        for (const a of (d.agents || [])) {
+            // Marcatore visibile: una versione diversa o un checkout sporco
+            // sono esattamente cio' per cui si guarda questo pannello.
+            const marks = [];
+            if (a.behind) marks.push(`<span class="status bad"><span class="led led-danger"></span>${escapeHtml(tr('lblFleetBehind'))}</span>`);
+            if (a.dirty) marks.push(`<span class="status bad"><span class="led led-warning"></span>${escapeHtml(tr('lblFleetDirty'))}</span>`);
+            if (!marks.length) marks.push(`<span class="status ok"><span class="led led-success"></span>${escapeHtml(tr('lblFleetAligned'))}</span>`);
+            rows.push(`<tr>
+                <td>${escapeHtml(a.name || a.site_id)}</td>
+                <td>${escapeHtml(a.version || dash)}</td>
+                <td>${escapeHtml(a.commit || dash)}</td>
+                <td>${escapeHtml(a.branch || dash)}</td>
+                <td>${a.last_seen ? escapeHtml(new Date(a.last_seen * 1000).toLocaleString()) : dash}</td>
+                <td>${marks.join(' ')}</td>
+            </tr>`);
+        }
+        if (!(d.agents || []).length) {
+            rows.push(`<tr><td colspan="6" style="color:var(--text-muted);">${escapeHtml(tr('msgFleetNoAgents'))}</td></tr>`);
+        }
+        body.innerHTML = rows.join('');
     }
 
     // --- MONITOR PING CONTINUO (solo admin) ---

@@ -95,7 +95,9 @@ class TestRouterParity(unittest.TestCase):
                     # MCP Client: la tab in preview e' stata rimossa, non
                     # promossa. Come per fortigate-preview il filtro vale su
                     # entrambi i lati, quindi copre anche la sparizione.
-                    "/api/mcp-client")
+                    "/api/mcp-client",
+                    # Pannello versioni della flotta (centrale + agenti).
+                    "/api/fleet")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
@@ -221,7 +223,9 @@ class TestFullParity(unittest.TestCase):
                     # MCP Client: la tab in preview e' stata RIMOSSA, non
                     # promossa. Come per fortigate-preview il filtro vale su
                     # entrambi i lati, quindi copre anche la sparizione.
-                    "/api/mcp-client")
+                    "/api/mcp-client",
+                    # Pannello versioni della flotta (centrale + agenti).
+                    "/api/fleet")
     # Come NEW_PREFIXES, filtra entrambi i lati: copre anche FortigatePreviewSchema,
     # rimosso insieme al flag di preview /api/settings/fortigate-preview.
     NEW_SCHEMAS = ("DeviceSiteSchema", "GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "ReportPdfSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection", "AgentBackupSchema", "AgentStatusItemSchema", "AgentStatusSchema", "FortigatePreviewSchema",
