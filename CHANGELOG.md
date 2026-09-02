@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.27.1] - 2026-09-02
+
 ### Fixed
 
 - **An agent update left the old code running.** `git pull` writes the new
@@ -17,8 +19,12 @@ happened — `git log --grep="chore(release)"` is the record for those.
   went on reporting the previous version until someone ran
   `systemctl restart sentinelnet-agent` by hand on the site host — the very
   shell the button exists to avoid. A self-update that actually changed
-  something now restarts the agent itself, deferred so the job result reaches
-  the central first. A pull that changed nothing, or failed, does not restart.
+  something now installs `requirements.txt` and then restarts the agent itself,
+  deferred so the job result reaches the central first. The order matters: an
+  update that adds a dependency, restarted without installing it, would
+  crash-loop under systemd and leave the site with no agent at all — so a
+  failed install cancels the restart and leaves the working old code running.
+  A pull that changed nothing, or failed, neither installs nor restarts.
 
 - **The dashboard served stale JavaScript for five minutes after an update.**
   App assets carried `Cache-Control: public, max-age=300`, so the browser used
