@@ -3103,6 +3103,21 @@
         <div id="cliBlacklistStatus" style="margin-top:10px; font-size:12px; color:var(--text-muted);"></div>
       </div>
 
+      <!-- Ambito: certificato TLS self-signed -->
+      <div class="panel requires-admin" style="margin-bottom:18px;">
+        <h3 style="font-size:15px; margin-bottom:8px;"><i class="fa-solid fa-lock" style="color:var(--primary);"></i> <span data-i18n="titleSelfSignedCert">Certificato TLS self-signed</span></h3>
+        <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descSelfSignedCert">
+          Genera certificato e chiave per questo host, con l'indirizzo nel subjectAltName. Vanno poi indicati in SENTINELNET_SSL_CERTFILE / SENTINELNET_SSL_KEYFILE, e l'applicazione va riavviata perche' abbiano effetto: il riavvio si fa dal pannello qui sopra.
+        </p>
+        <div style="display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap;">
+          <div class="form-group" style="margin:0; max-width:260px;">
+            <label for="selfSignedHost" style="font-size:12px;" data-i18n="lblSelfSignedHost">Indirizzo IP o nome DNS</label><input type="text" id="selfSignedHost" placeholder="192.0.2.10" style="padding-left:12px;">
+          </div>
+          <button id="btnGenerateSelfSigned" class="btn btn-primary btn-small" style="width:auto; margin:0;" data-i18n="btnSelfSignedGenerate">Genera certificato</button>
+        </div>
+        <div id="selfSignedStatus" style="margin-top:10px; font-size:12px; color:var(--text-muted);"></div>
+      </div>
+
       <!-- Ambito: riavvio dell'applicazione -->
       <div class="panel requires-admin" style="margin-bottom:18px;">
         <h3 style="font-size:15px; margin-bottom:8px;"><i class="fa-solid fa-power-off" style="color:var(--warning);"></i> <span data-i18n="titleRestartApp">Riavvio dell'applicazione</span></h3>

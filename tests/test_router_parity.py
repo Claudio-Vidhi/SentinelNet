@@ -99,7 +99,9 @@ class TestRouterParity(unittest.TestCase):
                     # Pannello versioni della flotta (centrale + agenti).
                     "/api/fleet",
                     # Riavvio dell'applicazione dal pannello (unit oneshot).
-                    "/api/settings/restart")
+                    "/api/settings/restart",
+                    # Certificato self-signed generato dal pannello.
+                    "/api/settings/tls")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
@@ -229,7 +231,9 @@ class TestFullParity(unittest.TestCase):
                     # Pannello versioni della flotta (centrale + agenti).
                     "/api/fleet",
                     # Riavvio dell'applicazione dal pannello (unit oneshot).
-                    "/api/settings/restart")
+                    "/api/settings/restart",
+                    # Certificato self-signed generato dal pannello.
+                    "/api/settings/tls")
     # Come NEW_PREFIXES, filtra entrambi i lati: copre anche FortigatePreviewSchema,
     # rimosso insieme al flag di preview /api/settings/fortigate-preview.
     NEW_SCHEMAS = ("DeviceSiteSchema", "GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "ReportPdfSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection", "AgentBackupSchema", "AgentStatusItemSchema", "AgentStatusSchema", "FortigatePreviewSchema",
@@ -238,6 +242,9 @@ class TestFullParity(unittest.TestCase):
                    # Bounce della porta di accesso trovata dalla diagnosi: unica
                    # scrittura della tab, rotta sotto /api/diagnose (già in NEW_PREFIXES).
                    "PortBounceSchema",
+                    # Certificato self-signed generato dal pannello: schema
+                    # del solo host per POST /api/settings/tls/self-signed.
+                    "SelfSignedCertSchema",
                     # Default SNMP di tenant: schema nuovo per le rotte sotto
                     # /api/settings/snmp-defaults (già in NEW_PREFIXES).
                     "SnmpDefaultSchema",

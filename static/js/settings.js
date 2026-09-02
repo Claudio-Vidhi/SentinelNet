@@ -922,6 +922,25 @@
         if (notice) notice.textContent = L.msgRestartRequired;
     }
 
+    // --- CERTIFICATO TLS SELF-SIGNED (solo admin) ---
+
+    async function generateSelfSignedCert() {
+        const hostEl = document.getElementById('selfSignedHost');
+        const statusEl = document.getElementById('selfSignedStatus');
+        if (!hostEl) return;
+        const res = await apiFetch('/api/settings/tls/self-signed', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ host: hostEl.value.trim() })
+        });
+        if (!res || !res.ok) {
+            const e = res ? await res.json() : null;
+            if (statusEl) statusEl.textContent = (tr('uiError')) + ((e && e.detail) || '');
+            return;
+        }
+        const d = await res.json();
+        if (statusEl) statusEl.textContent = tr('msgSelfSignedDone', {certfile: d.certfile});
+    }
+
     // --- RIAVVIO DELL'APPLICAZIONE (solo admin) ---
 
     async function restartApplication() {
@@ -1057,6 +1076,7 @@
     document.getElementById('cliBlacklistToggle')?.addEventListener('change', saveCliBlacklistSetting);
     document.getElementById('btnSavePingMonitor')?.addEventListener('click', savePingMonitorSettings);
     document.getElementById('btnRestartApp')?.addEventListener('click', restartApplication);
+    document.getElementById('btnGenerateSelfSigned')?.addEventListener('click', generateSelfSignedCert);
 
     document.getElementById('appAdvBody')?.addEventListener('click', (e) => {
         if (e.target.closest('#btnSaveAppAdv')) saveAppAdvSettings();

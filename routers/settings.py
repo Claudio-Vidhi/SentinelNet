@@ -3,6 +3,7 @@
 parametri e risposte identici al monolite."""
 
 import os
+import re
 import sys
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -482,3 +483,65 @@ def restart_application(current_user = Depends(require_admin)):
                    f"{(proc.stderr or proc.stdout or '').strip()}")
     log_audit(f"Riavvio dell'applicazione richiesto da '{current_user.get('sub')}'.")
     return {"status": "scheduled"}
+
+
+class SelfSignedCertSchema(BaseModel):
+    host: str
+
+
+# Solo un IPv4 letterale o un nome DNS: l'host finisce dentro -subj e -addext,
+# dove una barra o un a capo aggiungerebbero campi al soggetto o SAN arbitrari.
+_IPV4_RE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
+_DNS_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+                     r"(?:\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$")
+
+
+@router.post("/api/settings/tls/self-signed")
+def generate_self_signed_cert(payload: SelfSignedCertSchema,
+                              current_user = Depends(require_admin)):
+    """Genera certificato e chiave self-signed per questo host.
+
+    Il subjectAltName porta l'indirizzo con cui i client contattano davvero il
+    pannello: senza, ogni client moderno rifiuta il certificato qualunque sia
+    il CN."""
+    import subprocess
+    host = (payload.host or "").strip()
+    is_ip = bool(_IPV4_RE.match(host))
+    if is_ip:
+        if any(int(o) > 255 for o in host.split(".")):
+            raise HTTPException(status_code=400, detail="Indirizzo IPv4 non valido.")
+    elif not (host and len(host) <= 253 and _DNS_RE.match(host)):
+        raise HTTPException(
+            status_code=400,
+            detail="Host non valido: usare un indirizzo IPv4 o un nome DNS.")
+
+    certs_dir = data_config.get_path("certs")
+    os.makedirs(certs_dir, exist_ok=True)
+    certfile = os.path.join(certs_dir, "server.crt")
+    keyfile = os.path.join(certs_dir, "server.key")
+    if os.path.exists(certfile) or os.path.exists(keyfile):
+        raise HTTPException(
+            status_code=409,
+            detail="Un certificato esiste gia'. Rimuovi o archivia "
+                   f"{certfile} e {keyfile} prima di generarne uno nuovo.")
+
+    san = f"IP:{host}" if is_ip else f"DNS:{host}"
+    try:
+        proc = subprocess.run(
+            ["openssl", "req", "-x509", "-newkey", "rsa:4096", "-sha256",
+             "-days", "825", "-nodes", "-keyout", keyfile, "-out", certfile,
+             "-subj", f"/CN={host}", "-addext", f"subjectAltName={san}"],
+            capture_output=True, text=True, timeout=120)
+    except Exception as e:
+        raise HTTPException(status_code=409, detail=f"openssl non disponibile: {e}")
+    if proc.returncode != 0:
+        raise HTTPException(status_code=409,
+                            detail=f"openssl ha fallito: {(proc.stderr or '').strip()}")
+    try:
+        os.chmod(keyfile, 0o600)
+    except Exception:
+        # Su Windows chmod non fa quasi nulla: non e' motivo per fallire.
+        pass
+    log_audit(f"Certificato self-signed generato per '{host}' da "
+              f"'{current_user.get('sub')}'.")
+    return {"certfile": certfile, "keyfile": keyfile, "days": 825}
