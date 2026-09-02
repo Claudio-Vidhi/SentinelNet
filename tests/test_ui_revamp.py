@@ -1657,10 +1657,10 @@ class TestSettingsTabRestyle(unittest.TestCase):
         self.assertIn(
             "class=\"nav-item requires-admin\" data-tab=\"tab-settings\"",
             html)
-        # The fleet-versions, ping-monitor, observability, application,
-        # cloud-backup, SMTP and SSO panels stay admin-gated in-body (7 gates:
-        # one per admin-only concern).
-        self.assertEqual(self._tab(html).count("requires-admin"), 7)
+        # The restart, fleet-versions, ping-monitor, observability,
+        # application, cloud-backup, SMTP and SSO panels stay admin-gated
+        # in-body (8 gates: one per admin-only concern).
+        self.assertEqual(self._tab(html).count("requires-admin"), 8)
         self.assertIn('class="panel requires-admin"', self._tab(html))
         # Every loader is also role-gated server-side of the render.
         self.assertIn("if (currentRole !== 'admin') return;", html)
@@ -1670,10 +1670,11 @@ class TestSettingsTabRestyle(unittest.TestCase):
         tab = self._tab(html)
         for cls in ('class="hero"', 'class="hero-card"'):
             self.assertIn(cls, tab)
-        # Ten one-concern cards: ui variant, network exposure, command safety,
-        # fleet versions, ping monitor, observability, application (general),
-        # cloud backup, SMTP, single sign-on.
-        self.assertEqual(tab.count("class=\"panel"), 10)
+        # Eleven one-concern cards: ui variant, network exposure, command
+        # safety, application restart, fleet versions, ping monitor,
+        # observability, application (general), cloud backup, SMTP,
+        # single sign-on.
+        self.assertEqual(tab.count("class=\"panel"), 11)
 
     def test_i18n_icon_not_clobbered_by_innerhtml(self):
         # applyI18n does `el.innerHTML = i18n[lang][key]`, so a data-i18n key

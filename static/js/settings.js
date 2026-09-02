@@ -922,6 +922,20 @@
         if (notice) notice.textContent = L.msgRestartRequired;
     }
 
+    // --- RIAVVIO DELL'APPLICAZIONE (solo admin) ---
+
+    async function restartApplication() {
+        if (!confirm(tr('msgConfirmRestartApp'))) return;
+        const statusEl = document.getElementById('restartAppStatus');
+        const res = await apiFetch('/api/settings/restart', { method: 'POST' });
+        if (!res || !res.ok) {
+            const e = res ? await res.json() : null;
+            if (statusEl) statusEl.textContent = (tr('uiError')) + ((e && e.detail) || '');
+            return;
+        }
+        if (statusEl) statusEl.textContent = tr('msgRestartScheduled');
+    }
+
     // --- VERSIONI DELLA FLOTTA (solo admin) ---
 
     async function loadFleetVersions() {
@@ -1042,6 +1056,7 @@
 
     document.getElementById('cliBlacklistToggle')?.addEventListener('change', saveCliBlacklistSetting);
     document.getElementById('btnSavePingMonitor')?.addEventListener('click', savePingMonitorSettings);
+    document.getElementById('btnRestartApp')?.addEventListener('click', restartApplication);
 
     document.getElementById('appAdvBody')?.addEventListener('click', (e) => {
         if (e.target.closest('#btnSaveAppAdv')) saveAppAdvSettings();

@@ -1,0 +1,14 @@
+# Permette all'account di servizio di SentinelNet di far partire SOLO la unit
+# di riavvio, senza password.
+#
+# Installazione (visudo controlla la sintassi, un file rotto blocca sudo):
+#   sudo install -m 0440 docs/deploy/sentinelnet-restart.sudoers \
+#        /etc/sudoers.d/sentinelnet-restart
+#   sudo visudo -c
+#
+# Sostituisci 'sentinelnet' con l'utente sotto cui gira sentinelnet.service.
+#
+# Un solo comando, con i suoi argomenti esatti: 'systemctl' con un jolly
+# darebbe all'applicazione il controllo di ogni servizio della macchina, e
+# ALL:ALL le darebbe la macchina.
+sentinelnet ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block sentinelnet-restart.service
