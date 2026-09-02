@@ -80,5 +80,46 @@ class SettingsRestart(unittest.TestCase):
         self.assertEqual(r.status_code, 409, r.text)
 
 
+class SelfSignedCertificate(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.client = SettingsRestart.client
+        cls.admin_h = SettingsRestart.admin_h
+
+    def setUp(self):
+        # Ogni test parte senza certificato: la rotta rifiuta di sovrascrivere.
+        from core import data_config
+        certs = data_config.get_path("certs")
+        for name in ("server.crt", "server.key"):
+            path = os.path.join(certs, name)
+            if os.path.exists(path):
+                os.remove(path)
+
+    def test_the_generated_certificate_carries_the_host_in_its_san(self):
+        r = self.client.post("/api/settings/tls/self-signed",
+                             headers=self.admin_h, json={"host": "192.0.2.10"})
+        self.assertEqual(r.status_code, 200, r.text)
+        import subprocess
+        text = subprocess.run(["openssl", "x509", "-in", r.json()["certfile"],
+                               "-noout", "-text"],
+                              capture_output=True, text=True).stdout
+        self.assertIn("192.0.2.10", text)
+        self.assertIn("Subject Alternative Name", text)
+
+    def test_it_refuses_to_overwrite_an_existing_certificate(self):
+        # Sovrascrivere il certificato in uso senza chiedere farebbe cadere
+        # ogni agente che lo verifica, e non c'e' un undo.
+        self.client.post("/api/settings/tls/self-signed",
+                         headers=self.admin_h, json={"host": "192.0.2.10"})
+        r = self.client.post("/api/settings/tls/self-signed",
+                             headers=self.admin_h, json={"host": "192.0.2.10"})
+        self.assertEqual(r.status_code, 409, r.text)
+
+    def test_the_host_is_validated_not_interpolated(self):
+        r = self.client.post("/api/settings/tls/self-signed", headers=self.admin_h,
+                             json={"host": "1.2.3.4/CN=x" + chr(10) + "DNS:evil"})
+        self.assertEqual(r.status_code, 400, r.text)
+
+
 if __name__ == "__main__":
     unittest.main()
