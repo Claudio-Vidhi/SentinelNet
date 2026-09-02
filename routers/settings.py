@@ -443,54 +443,99 @@ def get_fleet_versions(current_user = Depends(require_admin)):
             "install_kind": kind, "agents": agents}
 
 
-def _is_supervised() -> bool:
-    """Vero solo se qualcosa rimettera' in piedi il processo dopo l'uscita.
+# Nome FISSO del servizio Windows. Non e' configurabile di proposito: e' il
+# nome che finisce in una riga di comando, e un nome che arriva da fuori
+# trasformerebbe questa rotta in una shell remota.
+WINDOWS_SERVICE_NAME = "SentinelNet"
 
-    systemd esporta INVOCATION_ID a ogni unit che avvia; la sua assenza (o un
-    exe PyInstaller lanciato a mano) significa che "riavvia" e' solo
-    "termina"."""
-    if getattr(sys, "frozen", False):
-        return False
-    return bool(os.environ.get("INVOCATION_ID"))
+
+def _supervisor() -> str:
+    """Chi rimettera' in piedi il processo dopo l'uscita: '' se nessuno.
+
+    Su Linux: systemd esporta INVOCATION_ID a ogni unit che avvia, quindi la
+    sua assenza significa che "riavvia" e' solo "termina".
+
+    Su Windows non esiste una variabile equivalente -- un servizio non si
+    distingue dall'esterno da un exe lanciato a mano -- quindi e' chi installa
+    il servizio a dichiararlo con SENTINELNET_WINDOWS_SERVICE=1. Stessa
+    logica del caso systemd: e' il supervisore a dire di esserci."""
+    if os.environ.get("INVOCATION_ID"):
+        return "systemd"
+    if sys.platform == "win32" and os.environ.get("SENTINELNET_WINDOWS_SERVICE"):
+        return "windows-service"
+    # Un exe PyInstaller avviato a mano non ha nessuno che lo rialzi. Sotto un
+    # servizio Windows invece e' normale che sia frozen, ed e' il ramo sopra
+    # a coprirlo.
+    return ""
+
+
+def _is_supervised() -> bool:
+    """Compatibilita': la rotta ragiona su _supervisor(), i test su questo."""
+    return bool(_supervisor())
 
 
 @router.post("/api/settings/restart")
 def restart_application(current_user = Depends(require_admin)):
-    """Riavvia l'applicazione facendo partire una unit oneshot dedicata.
+    """Riavvia l'applicazione delegando a un processo separato.
 
-    L'app non si uccide da sola: e' sentinelnet-restart.service a riavviare
-    sentinelnet.service, cosi' un riavvio fallito lascia in piedi il processo
-    vecchio. L'argv e' FISSO: nulla del corpo della richiesta lo raggiunge,
-    altrimenti questo endpoint sarebbe una shell remota sulla macchina che
-    custodisce le credenziali di ogni sede."""
+    L'app non si uccide MAI da sola: su Linux e' la unit oneshot
+    sentinelnet-restart.service a riavviare sentinelnet.service, su Windows e'
+    un powershell staccato a fare Restart-Service. Cosi' un riavvio fallito
+    lascia in piedi il processo vecchio, invece di lasciare la macchina senza
+    pannello.
+
+    L'argv e' FISSO su entrambi i sistemi: nulla del corpo della richiesta lo
+    raggiunge, altrimenti questa rotta sarebbe una shell remota sulla macchina
+    che custodisce le credenziali di ogni sede."""
     import subprocess
-    if not _is_supervised():
+    kind = _supervisor()
+    if not kind:
         raise HTTPException(
             status_code=409,
-            detail="L'applicazione non e' gestita da systemd: un riavvio la "
-                   "spegnerebbe soltanto. Riavviala dal supervisore.")
-    try:
-        proc = subprocess.run(
-            ["sudo", "-n", "systemctl", "start", "--no-block",
-             "sentinelnet-restart.service"],
-            capture_output=True, text=True, timeout=15)
-    except Exception as e:
-        raise HTTPException(status_code=409, detail=f"Riavvio non disponibile: {e}")
-    if proc.returncode != 0:
-        raise HTTPException(
-            status_code=409,
-            detail="sudo ha rifiutato il comando di riavvio: "
-                   f"{(proc.stderr or proc.stdout or '').strip()}")
-    log_audit(f"Riavvio dell'applicazione richiesto da '{current_user.get('sub')}'.")
-    return {"status": "scheduled"}
+            detail="L'applicazione non e' gestita da un supervisore: un "
+                   "riavvio la spegnerebbe soltanto. Riavviala da systemd o "
+                   "dal gestore servizi di Windows.")
+
+    if kind == "windows-service":
+        # Staccato, e senza aspettarlo: Restart-Service ferma QUESTO processo,
+        # quindi un subprocess.run atteso non tornerebbe mai. Il prezzo e' che
+        # l'esito non si conosce -- lo stesso prezzo di --no-block su Linux.
+        try:
+            subprocess.Popen(
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                 "Restart-Service", "-Name", WINDOWS_SERVICE_NAME],
+                creationflags=getattr(subprocess, "DETACHED_PROCESS", 0)
+                | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+        except Exception as e:
+            raise HTTPException(status_code=409,
+                                detail=f"Riavvio non disponibile: {e}")
+    else:
+        try:
+            proc = subprocess.run(
+                ["sudo", "-n", "systemctl", "start", "--no-block",
+                 "sentinelnet-restart.service"],
+                capture_output=True, text=True, timeout=15)
+        except Exception as e:
+            raise HTTPException(status_code=409, detail=f"Riavvio non disponibile: {e}")
+        if proc.returncode != 0:
+            raise HTTPException(
+                status_code=409,
+                detail="sudo ha rifiutato il comando di riavvio: "
+                       f"{(proc.stderr or proc.stdout or '').strip()}")
+
+    log_audit(f"Riavvio dell'applicazione richiesto da '{current_user.get('sub')}' "
+              f"(supervisore: {kind}).")
+    return {"status": "scheduled", "supervisor": kind}
 
 
 class SelfSignedCertSchema(BaseModel):
     host: str
 
 
-# Solo un IPv4 letterale o un nome DNS: l'host finisce dentro -subj e -addext,
-# dove una barra o un a capo aggiungerebbero campi al soggetto o SAN arbitrari.
+# Solo un IPv4 letterale o un nome DNS: e' cio' che un SAN puo' contenere, e
+# un host fuori da queste due forme e' un errore di battitura, non un caso
+# d'uso. La validazione resta anche ora che il certificato non passa piu' da
+# una riga di comando.
 _IPV4_RE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
 _DNS_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
                      r"(?:\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$")
@@ -503,8 +548,20 @@ def generate_self_signed_cert(payload: SelfSignedCertSchema,
 
     Il subjectAltName porta l'indirizzo con cui i client contattano davvero il
     pannello: senza, ogni client moderno rifiuta il certificato qualunque sia
-    il CN."""
-    import subprocess
+    il CN.
+
+    Il certificato e' costruito con `cryptography`, che e' gia' una dipendenza
+    obbligatoria (la usa crypto_vault). Chiamare `openssl` costringeva a
+    sperare che fosse nel PATH -- su Windows di norma non c'e' -- e la versione
+    di macOS e' LibreSSL, che rifiuta -addext. Qui la funzione si comporta
+    identica su ogni sistema operativo."""
+    from datetime import datetime, timedelta, timezone
+    import ipaddress
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID
+
     host = (payload.host or "").strip()
     is_ip = bool(_IPV4_RE.match(host))
     if is_ip:
@@ -525,22 +582,38 @@ def generate_self_signed_cert(payload: SelfSignedCertSchema,
             detail="Un certificato esiste gia'. Rimuovi o archivia "
                    f"{certfile} e {keyfile} prima di generarne uno nuovo.")
 
-    san = f"IP:{host}" if is_ip else f"DNS:{host}"
-    try:
-        proc = subprocess.run(
-            ["openssl", "req", "-x509", "-newkey", "rsa:4096", "-sha256",
-             "-days", "825", "-nodes", "-keyout", keyfile, "-out", certfile,
-             "-subj", f"/CN={host}", "-addext", f"subjectAltName={san}"],
-            capture_output=True, text=True, timeout=120)
-    except Exception as e:
-        raise HTTPException(status_code=409, detail=f"openssl non disponibile: {e}")
-    if proc.returncode != 0:
-        raise HTTPException(status_code=409,
-                            detail=f"openssl ha fallito: {(proc.stderr or '').strip()}")
+    days = 825
+    now = datetime.now(timezone.utc)
+    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, host)])
+    san = x509.IPAddress(ipaddress.ip_address(host)) if is_ip else x509.DNSName(host)
+    key = rsa.generate_private_key(public_exponent=65537, key_size=4096)
+    cert = (x509.CertificateBuilder()
+            .subject_name(subject)
+            .issuer_name(subject)
+            .public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now - timedelta(minutes=5))
+            .not_valid_after(now + timedelta(days=days))
+            .add_extension(x509.SubjectAlternativeName([san]), critical=False)
+            .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+            .sign(key, hashes.SHA256()))
+
+    # La chiave prima del certificato, e i permessi subito dopo averla scritta:
+    # tra la creazione e restrict_permissions il file esiste con i permessi
+    # ereditati dalla cartella, e quella finestra va tenuta corta.
+    with open(keyfile, "wb") as f:
+        f.write(key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption()))
     # Non os.chmod: su Windows non restringe nulla e la chiave privata
     # resterebbe leggibile da chiunque erediti i permessi della cartella.
     # restrict_permissions usa icacls la' e chmod 600 su POSIX.
     data_config.restrict_permissions(keyfile)
+    with open(certfile, "wb") as f:
+        f.write(cert.public_bytes(serialization.Encoding.PEM))
+
     log_audit(f"Certificato self-signed generato per '{host}' da "
               f"'{current_user.get('sub')}'.")
-    return {"certfile": certfile, "keyfile": keyfile, "days": 825}
+    return {"certfile": certfile, "keyfile": keyfile, "days": days,
+            "not_after": cert.not_valid_after_utc.isoformat()}
