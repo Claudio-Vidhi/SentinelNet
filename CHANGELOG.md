@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-09-02
+
 ### Added
 
 - **The central can update itself.** The agent has been able to since 0.27.1;
