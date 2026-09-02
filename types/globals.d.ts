@@ -117,6 +117,7 @@ declare var saveAgentInventory: any;
 declare var toggleAgentDataFlow: any;
 declare var triggerAgentConfigSave: any;
 declare var triggerAgentRestart: any;
+declare var triggerAgentLogs: any;
 declare var triggerAgentSelfUpdate: any;
 
 // threat-intel.js

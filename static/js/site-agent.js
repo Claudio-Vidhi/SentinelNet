@@ -188,6 +188,9 @@
                 <button class="btn btn-sm" data-action="self-update" data-site-id="${escapeHtml(siteId)}" style="background:var(--primary); color:#fff; padding:8px 14px;">
                     <i class="fa-solid fa-rotate"></i> Aggiorna Agente da Git (git pull)
                 </button>
+                <button class="btn btn-sm btn-secondary" data-action="agent-logs" data-site-id="${escapeHtml(siteId)}" style="padding:8px 14px;">
+                    <i class="fa-solid fa-file-lines"></i> ${escapeHtml(tr('agtBtnLogs'))}
+                </button>
                 <button class="btn btn-sm btn-secondary" data-action="restart-agent" data-site-id="${escapeHtml(siteId)}" style="padding:8px 14px;">
                     <i class="fa-solid fa-power-off" style="color:var(--warning);"></i> Riavvia Agente
                 </button>
@@ -234,6 +237,17 @@
         } else {
             const err = res ? await res.json() : null;
             alert(tr('agtRestartQueueError', {detail: err ? err.detail : tr('agtUnknownError')}));
+        }
+    }
+
+    async function triggerAgentLogs(siteId) {
+        const res = await apiFetch(`/api/sites/${siteId}/agent/logs`, { method: 'POST' });
+        if (res && res.ok) {
+            alert(tr('agtLogsQueued', {siteId: siteId}));
+            openAgentControlModal(siteId);
+        } else {
+            const err = res ? await res.json() : null;
+            alert(tr('agtLogsQueueError', {detail: err ? err.detail : tr('agtUnknownError')}));
         }
     }
 
@@ -329,6 +343,7 @@
         else if (action === 'save-inv') saveAgentInventory(siteId);
         else if (action === 'self-update') triggerAgentSelfUpdate(siteId);
         else if (action === 'restart-agent') triggerAgentRestart(siteId);
+        else if (action === 'agent-logs') triggerAgentLogs(siteId);
     });
 
     // Expose functions globally for UI buttons
@@ -336,6 +351,7 @@
     window.closeAgentControlModal = closeAgentControlModal;
     window.triggerAgentSelfUpdate = triggerAgentSelfUpdate;
     window.triggerAgentRestart = triggerAgentRestart;
+    window.triggerAgentLogs = triggerAgentLogs;
     window.triggerAgentConfigSave = triggerAgentConfigSave;
     window.fetchAgentInventory = fetchAgentInventory;
     window.saveAgentInventory = saveAgentInventory;

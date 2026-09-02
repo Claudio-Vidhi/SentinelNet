@@ -1343,5 +1343,19 @@ class AgentReportsItsRealVersion(unittest.TestCase):
             self.assertIn(key, payload)
 
 
+class AgentLogTail(unittest.TestCase):
+    def test_the_log_tail_rpc_returns_bounded_output(self):
+        from unittest import mock
+        from services import site_agent
+        agent = site_agent.Agent.__new__(site_agent.Agent)
+        agent.cfg = {"site_id": "milan"}
+        fake = chr(10).join(f"line {i}" for i in range(1000))
+        with mock.patch("subprocess.run") as run:
+            run.return_value = mock.MagicMock(returncode=0, stdout=fake, stderr="")
+            out = agent._execute_agent_rpc("_agent_logs")
+        self.assertEqual(out["status"], "done")
+        self.assertLessEqual(len(out["result"].splitlines()), 200)
+
+
 if __name__ == "__main__":
     unittest.main()

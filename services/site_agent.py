@@ -485,6 +485,19 @@ class Agent:
             threading.Thread(target=_deferred_restart, daemon=True).start()
             return {"status": "done", "result": "Riavvio agente programmato tra 1.5 secondi (systemd auto-restart)."}
 
+        elif action == "_agent_logs":
+            try:
+                proc = subprocess.run(
+                    ["journalctl", "-u", "sentinelnet-agent", "-n", "200",
+                     "--no-pager"],
+                    capture_output=True, text=True, timeout=20)
+                # Ultime 200 righe e basta: questa stringa finisce tale e quale
+                # nel pannello storico job, dove un journal intero e' inservibile.
+                tail = "\n".join((proc.stdout or proc.stderr).splitlines()[-200:])
+                return {"status": "done", "result": tail}
+            except Exception as e:
+                return {"status": "error", "result": f"journalctl non disponibile: {e}"}
+
         elif action == "_agent_get_inventory":
             try:
                 from services import inventory_manager
