@@ -94,9 +94,13 @@ variables:
 - If neither is set, behaviour stays HTTP — suitable for localhost and lab use
   only.
 
-**Certificate renewal is the operator's responsibility**: SentinelNet neither
-generates nor renews certificates. Restart the service after replacing the
-files.
+**Certificate renewal is the operator's responsibility**: SentinelNet does not
+renew certificates. It can *generate* a self-signed one for a single host from
+the Settings tab (Python's `cryptography`, so no `openssl` binary is needed on
+any platform), with the address in the `subjectAltName` — without which modern
+clients reject the certificate whatever its CN. That is a starting point for a
+lab or an isolated management network, not a substitute for a real CA. Restart
+the service after replacing the files.
 
 Docker example:
 
@@ -220,9 +224,36 @@ would hand the application control of every service on the host — including th
 firewall and the SSH daemon — and `ALL` would hand it the host. The blast radius
 of a bug in the panel should be "the panel restarts", not "anything restarts".
 
-Without systemd (a PyInstaller exe, or a process started by hand) the endpoint
-answers 409 instead of pretending: with nothing to bring the process back,
-"restart" would only mean "stop".
+### Windows service
+
+On Windows there is no oneshot unit, and no environment variable that tells a
+process it is running as a service — a service and a double-clicked exe look
+identical from the inside. So the supervisor declares itself: set
+`SENTINELNET_WINDOWS_SERVICE=1` in the service's environment when you install
+it. With NSSM that is `nssm set SentinelNet AppEnvironmentExtra
+SENTINELNET_WINDOWS_SERVICE=1`.
+
+The service must be named `SentinelNet` — the name is fixed in the code
+precisely because it ends up on a command line. The restart then runs, detached
+and unwaited:
+
+```
+powershell -NoProfile -NonInteractive -Command Restart-Service -Name SentinelNet
+```
+
+Detached because `Restart-Service` stops this very process: a call that waited
+for the result would never return. The account running the service needs
+permission to stop and start it (grant it with `sc.exe sdset`, or run the
+service as an account that already has it).
+
+Without the variable the endpoint answers 409 rather than guessing — a wrong
+guess here means "the panel stopped and did not come back".
+
+### Neither supervisor
+
+With no systemd and no declared Windows service (a PyInstaller exe, or a
+process started by hand) the endpoint answers 409 instead of pretending: with
+nothing to bring the process back, "restart" would only mean "stop".
 
 ## 7. Other recommendations
 
