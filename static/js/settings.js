@@ -943,6 +943,23 @@
 
     // --- RIAVVIO DELL'APPLICAZIONE (solo admin) ---
 
+    async function updateApplication() {
+        if (!confirm(tr('msgConfirmUpdateApp'))) return;
+        const statusEl = document.getElementById('restartAppStatus');
+        if (statusEl) statusEl.textContent = tr('msgUpdateRunning');
+        const res = await apiFetch('/api/settings/update', { method: 'POST' });
+        if (!res || !res.ok) {
+            const e = res ? await res.json() : null;
+            if (statusEl) statusEl.textContent = (tr('uiError')) + ((e && e.detail) || '');
+            return;
+        }
+        const d = await res.json();
+        if (statusEl) {
+            statusEl.textContent = d.status === 'up-to-date'
+                ? tr('msgUpdateUpToDate') : tr('msgUpdateRunning');
+        }
+    }
+
     async function restartApplication() {
         if (!confirm(tr('msgConfirmRestartApp'))) return;
         const statusEl = document.getElementById('restartAppStatus');
@@ -1076,6 +1093,7 @@
     document.getElementById('cliBlacklistToggle')?.addEventListener('change', saveCliBlacklistSetting);
     document.getElementById('btnSavePingMonitor')?.addEventListener('click', savePingMonitorSettings);
     document.getElementById('btnRestartApp')?.addEventListener('click', restartApplication);
+    document.getElementById('btnUpdateApp')?.addEventListener('click', updateApplication);
     document.getElementById('btnGenerateSelfSigned')?.addEventListener('click', generateSelfSignedCert);
 
     document.getElementById('appAdvBody')?.addEventListener('click', (e) => {
