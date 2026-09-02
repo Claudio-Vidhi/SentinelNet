@@ -45,11 +45,30 @@ class TestStaticAssetDelivery(unittest.TestCase):
         self.assertEqual(res.headers.get("cache-control"),
                          "public, max-age=31536000, immutable")
 
-    def test_app_code_keeps_short_ttl(self):
+    def test_app_code_is_revalidated_never_served_stale(self):
+        # max-age=300 significava che dopo un aggiornamento il browser serviva
+        # per cinque minuti il JS vecchio senza nemmeno chiedere: l'utente
+        # doveva fare Ctrl+F5 per vedere la nuova versione. Con no-cache il
+        # browser chiede sempre, e con ETag/Last-Modified la risposta e' un
+        # 304 vuoto finche' il file non cambia davvero.
         res = self.client.get("/static/js/core.js")
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.headers.get("cache-control"),
-                         "public, max-age=300")
+        self.assertEqual(res.headers.get("cache-control"), "no-cache")
+        self.assertTrue(res.headers.get("etag") or res.headers.get("last-modified"),
+                        "senza validatore no-cache costerebbe un download intero")
+
+    def test_an_unchanged_asset_costs_a_304_not_a_download(self):
+        res = self.client.get("/static/js/core.js")
+        etag = res.headers.get("etag")
+        self.assertTrue(etag)
+        again = self.client.get("/static/js/core.js", headers={"If-None-Match": etag})
+        self.assertEqual(again.status_code, 304)
+
+    def test_the_dashboard_itself_is_revalidated(self):
+        # Serve a poco rivalidare il JS se la pagina che lo elenca e' vecchia.
+        res = self.client.get("/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.headers.get("cache-control"), "no-cache")
 
     def test_api_responses_get_no_cache_control(self):
         res = self.client.get("/api/auth/status")

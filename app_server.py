@@ -202,16 +202,24 @@ async def security_headers_middleware(request: Request, call_next):
     return response
 
 # Vendor e font sono pinnati in static/ e cambiano solo di versione: un anno
-# di cache e' sicuro. Il codice dell'app cambia a ogni release: TTL corto
-# finche' non esiste il fingerprinting dei nomi file.
+# di cache e' sicuro.
+#
+# Il codice dell'app cambia a ogni release, e prima aveva max-age=300: per
+# cinque minuti dopo un aggiornamento il browser serviva il JS vecchio senza
+# nemmeno chiedere, e l'unico rimedio era che l'utente sapesse fare Ctrl+F5.
+# Con "no-cache" il browser chiede sempre, ma StaticFiles risponde con ETag e
+# Last-Modified: finche' il file non cambia la risposta e' un 304 vuoto. Su
+# una LAN di gestione quel giro vale molto meno di un aggiornamento che non
+# si vede. Vale anche per la pagina che elenca quegli asset: rivalidare il JS
+# e servire dalla cache l'HTML che lo referenzia non risolverebbe nulla.
 @app.middleware("http")
 async def cache_control_middleware(request: Request, call_next):
     response = await call_next(request)
     path = request.url.path
     if path.startswith("/static/vendor/") or path.startswith("/static/fonts/"):
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-    elif path.startswith("/static/"):
-        response.headers["Cache-Control"] = "public, max-age=300"
+    elif path.startswith("/static/") or path == "/":
+        response.headers["Cache-Control"] = "no-cache"
     return response
 
 # WP6: per-IP rate limit on the expensive authenticated endpoints (scans,

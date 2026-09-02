@@ -465,6 +465,16 @@ class Agent:
                 print(f"[backup] {d.get('IP')}: {e}")
         return n
 
+    @staticmethod
+    def _deferred_exit():
+        """Esce dal processo dopo un attimo, lasciando che systemd lo rialzi.
+
+        L'attesa non e' cosmetica: il risultato del job viene postato al
+        centrale dopo il ritorno di _execute_agent_rpc, e uscire subito lo
+        farebbe sparire."""
+        time.sleep(1.5)
+        os._exit(0)
+
     def _execute_agent_rpc(self, cmd: str) -> dict:
         """Esegue comandi di gestione remota dell'agente (_agent_self_update,
         _agent_restart, _agent_logs, _agent_config).
@@ -486,15 +496,25 @@ class Agent:
                 )
                 output = proc.stdout + proc.stderr
                 status = "done" if proc.returncode == 0 else "error"
-                return {"status": status, "result": f"[git pull] code={proc.returncode}\n{output}"}
+                result = f"[git pull] code={proc.returncode}\n{output}"
+                # Il pull scrive il codice nuovo sul disco; il processo continua
+                # a girare con quello vecchio in memoria. Senza questo riavvio
+                # il pannello flotta mostrava ancora la versione precedente e
+                # l'unico rimedio era un systemctl restart a mano sull'host
+                # della sede: proprio la shell che questa funzione evita.
+                # Il riavvio e' differito, come in _agent_restart, cosi' il
+                # risultato del job arriva al centrale prima che il processo
+                # esca. Nessun riavvio se non e' cambiato nulla (interromperebbe
+                # i job in corso per niente) o se il pull e' fallito.
+                if status == "done" and "Already up to date" not in output:
+                    threading.Thread(target=self._deferred_exit, daemon=True).start()
+                    result += "\nRiavvio dell'agente programmato per applicare l'aggiornamento."
+                return {"status": status, "result": result}
             except Exception as e:
                 return {"status": "error", "result": f"Errore git pull: {e}"}
 
         elif action == "_agent_restart":
-            def _deferred_restart():
-                time.sleep(1.5)
-                os._exit(0)  # Exit process so systemd auto-restarts service cleanly
-            threading.Thread(target=_deferred_restart, daemon=True).start()
+            threading.Thread(target=self._deferred_exit, daemon=True).start()
             return {"status": "done", "result": "Riavvio agente programmato tra 1.5 secondi (systemd auto-restart)."}
 
         elif action == "_agent_logs":
