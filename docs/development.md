@@ -174,6 +174,26 @@ local.
 
 ---
 
+## 7. Releasing
+
+```sh
+uv run python scripts/dev/release.py minor --dry-run   # what it would do
+uv run python scripts/dev/release.py minor             # do it, locally
+```
+
+It checks you are on `Dev` with a clean tree, refuses if `[Unreleased]` in the
+CHANGELOG is empty, runs the gate, bumps `core/version.py` + `pyproject.toml` +
+`uv.lock`, promotes the changelog section, commits, tags `vX.Y.Z` and moves
+`master` onto `Dev`.
+
+**It never pushes.** It prints the push commands — including the
+`gh release create` that turns the tag into a GitHub Release, which a pushed
+tag does not do on its own — and stops. A release that has not left the
+machine is undone with one command; a published one can only be corrected by
+another release. It also prints that undo.
+
+---
+
 ## 7. Knowledge graph
 
 `graphify-out/` holds an AST-derived graph of the codebase. For "where is X"
