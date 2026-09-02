@@ -537,11 +537,10 @@ def generate_self_signed_cert(payload: SelfSignedCertSchema,
     if proc.returncode != 0:
         raise HTTPException(status_code=409,
                             detail=f"openssl ha fallito: {(proc.stderr or '').strip()}")
-    try:
-        os.chmod(keyfile, 0o600)
-    except Exception:
-        # Su Windows chmod non fa quasi nulla: non e' motivo per fallire.
-        pass
+    # Non os.chmod: su Windows non restringe nulla e la chiave privata
+    # resterebbe leggibile da chiunque erediti i permessi della cartella.
+    # restrict_permissions usa icacls la' e chmod 600 su POSIX.
+    data_config.restrict_permissions(keyfile)
     log_audit(f"Certificato self-signed generato per '{host}' da "
               f"'{current_user.get('sub')}'.")
     return {"certfile": certfile, "keyfile": keyfile, "days": 825}
