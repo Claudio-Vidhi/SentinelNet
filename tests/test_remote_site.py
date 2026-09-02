@@ -68,6 +68,22 @@ class RemoteSiteE2E(unittest.TestCase):
         return {"X-Site-Id": site_id, "X-Site-Token": token}
 
     # --- test ---
+
+    def test_the_agent_identity_is_stored_on_the_site(self):
+        from core.version import __version__
+        from services import site_manager
+        sid, token = self._create_agent_site("Identity")
+        ah = self._agent_headers(sid, token)
+        r = self.client.post("/api/agent/heartbeat", headers=ah, json={
+            "version": __version__, "commit": "abc1234",
+            "branch": "Dev", "dirty": False,
+        })
+        self.assertEqual(r.status_code, 200, r.text)
+        site = site_manager.get_site(sid)
+        self.assertEqual(site["agent_version"], __version__)
+        self.assertEqual(site["agent_commit"], "abc1234")
+        self.assertEqual(site["agent_branch"], "Dev")
+        self.assertFalse(site["agent_dirty"])
     def test_password_policy_enforced_server_side(self):
         # La policy password minima è applicata lato server: un admin che crea
         # un utente con password troppo corta riceve 400 (il controllo JS del
@@ -1274,6 +1290,33 @@ class AgentScheduledBackup(unittest.TestCase):
         results = [body for path, body in posted if path.endswith("/result")]
         self.assertEqual(results[0]["status"], "done")
         self.assertNotIn("hostname", results[0]["result"])
+
+
+class AgentReportsItsRealVersion(unittest.TestCase):
+    def test_the_hardcoded_version_literal_is_gone(self):
+        # L'heartbeat mandava "2.6.0", una stringa che non corrisponde a nulla
+        # nell'albero e che il centrale buttava via. Una risposta sbagliata e'
+        # peggio di nessuna: e' cio' che rendeva "l'aggiornamento e' passato?"
+        # una domanda senza risposta dalla dashboard.
+        import pathlib
+        src = (pathlib.Path(__file__).resolve().parents[1]
+               / "services" / "site_agent.py").read_text(encoding="utf-8")
+        self.assertNotIn('"2.6.0"', src)
+
+    def test_the_payload_carries_the_real_version_and_git_identity(self):
+        from unittest import mock
+        from core.version import __version__
+        from services import site_agent
+        agent = site_agent.Agent.__new__(site_agent.Agent)
+        agent.cfg = {"site_id": "milan", "interval": 60, "syslog_port": 5514}
+        agent._start_ts = 0
+        agent._post = mock.MagicMock()
+        agent._post.return_value.json.return_value = {"ok": True}
+        agent.heartbeat()
+        _path, payload = agent._post.call_args[0]
+        self.assertEqual(payload["version"], __version__)
+        for key in ("commit", "branch", "dirty"):
+            self.assertIn(key, payload)
 
 
 if __name__ == "__main__":

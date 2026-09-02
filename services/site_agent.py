@@ -89,6 +89,27 @@ class SyslogCollector:
         return items
 
 
+def _git_identity():
+    """Commit, branch e stato del checkout dell'agente.
+
+    Best-effort: un agente installato da zip non ha un repo e non deve
+    fallire per questo. Serve a rispondere "quale codice sta girando qui",
+    che senza SSH era una domanda senza risposta."""
+    def _run(args):
+        try:
+            import subprocess
+            out = subprocess.run(["git"] + args, cwd=_ROOT, capture_output=True,
+                                 text=True, timeout=5)
+            return out.stdout.strip() if out.returncode == 0 else ""
+        except Exception:
+            return ""
+    return {
+        "commit": _run(["rev-parse", "--short", "HEAD"]),
+        "branch": _run(["rev-parse", "--abbrev-ref", "HEAD"]),
+        "dirty": bool(_run(["status", "--porcelain"])),
+    }
+
+
 def load_config():
     p = argparse.ArgumentParser(description="SentinelNet - Agente di sede")
     p.add_argument("--config", help="File JSON di configurazione")
@@ -213,8 +234,10 @@ class Agent:
 
     # --- Cicli di lavoro ---
     def heartbeat(self):
+        from core.version import __version__
         payload = {
-            "version": "2.6.0",
+            "version": __version__,
+            **_git_identity(),
             "python_version": sys.version.split()[0],
             "syslog_enabled": self.cfg.get("syslog_enabled", True),
             "syslog_port": int(self.cfg.get("syslog_port", 5514)),
