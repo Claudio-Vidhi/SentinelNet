@@ -129,6 +129,11 @@ def agent_heartbeat(request: Request, payload: Optional[dict] = None,
             updates["backup_interval"] = payload["backup_interval"]
         if "l2_interval" in payload:
             updates["l2_interval"] = payload["l2_interval"]
+        # Identita' del codice che gira nella sede: senza questa, "l'update
+        # e' passato?" restava una domanda a cui si rispondeva solo via SSH.
+        for key in ("version", "commit", "branch", "dirty"):
+            if key in payload:
+                updates[f"agent_{key}"] = payload[key]
         if updates:
             site_manager.update_site(site_id, **updates)
     resp = {"ok": True, "site_id": site["id"], "name": site["name"],
