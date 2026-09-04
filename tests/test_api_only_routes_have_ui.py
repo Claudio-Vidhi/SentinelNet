@@ -18,6 +18,7 @@ import unittest
 os.environ.setdefault("SENTINELNET_DATA_DIR", tempfile.mkdtemp(prefix="sentinelnet_uiroutes_"))
 
 import app_server  # noqa: E402
+from tests.routes import iter_routes  # noqa: E402
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -28,7 +29,7 @@ def _read(*parts):
 
 
 def _route_exists(method, path):
-    for route in app_server.app.routes:
+    for route in iter_routes(app_server.app):
         raw = getattr(route, "path", "")
         if method.upper() not in (getattr(route, "methods", None) or set()):
             continue

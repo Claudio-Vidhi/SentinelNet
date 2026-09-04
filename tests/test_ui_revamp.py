@@ -10,6 +10,7 @@ data_config.DATA_DIR = _TMP
 import app_server  # noqa: E402
 import routers.inventory, routers.topology, routers.catalog, routers.mac, routers.analyzer, routers.backup, routers.sites, routers.mcp
 from tests.test_helpers_frontend import frontend_source  # noqa: E402
+from tests.routes import iter_routes  # noqa: E402
 
 
 def _html():
@@ -1315,7 +1316,7 @@ class TestUsersTabRestyle(unittest.TestCase):
         # shared per-tab rules, relaxed to asserting the real POST routes
         # exist server-side rather than fabricating a GET call that isn't made.
         import app_server as _app_server  # noqa: F401 (deliberate side-effect import)
-        routes = {(getattr(r, "path", ""), m) for r in _app_server.app.routes
+        routes = {(getattr(r, "path", ""), m) for r in iter_routes(_app_server.app)
                   for m in getattr(r, 'methods', set()) or set()}
         self.assertIn(('/api/users/groups', 'POST'), routes)
         self.assertIn(('/api/users/tabs', 'POST'), routes)

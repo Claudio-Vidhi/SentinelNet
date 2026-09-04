@@ -21,6 +21,7 @@ _TMP_DATA_DIR = tempfile.mkdtemp(prefix="sentinelnet_test_leak_")
 os.environ["SENTINELNET_DATA_DIR"] = _TMP_DATA_DIR
 
 from core import data_config  # noqa: E402
+from tests.routes import iter_routes  # noqa: E402
 data_config.DATA_DIR = _TMP_DATA_DIR
 
 INVENTORY = [{
@@ -119,7 +120,7 @@ class TestProvisionerPushIsAdminOnly(unittest.TestCase):
         from routers.deps import require_admin
 
         for path in self.PATHS:
-            route = next((r for r in app_server.app.routes
+            route = next((r for r in iter_routes(app_server.app)
                           if getattr(r, "path", None) == path), None)
             self.assertIsNotNone(route, f"rotta {path} non trovata")
             calls = {d.call for d in route.dependant.dependencies}
