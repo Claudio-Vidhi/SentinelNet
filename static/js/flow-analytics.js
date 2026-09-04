@@ -233,7 +233,7 @@
             const isDeny = !!e.is_deny;
             const actionCol = isDeny ? 'var(--danger)' : 'var(--success)';
             const timeStr = e.timestamp ? new Date(e.timestamp).toLocaleTimeString() : '—';
-            const isSelected = _selectedEventId === e.id;
+            const isSelected = _selectedEventId === String(e.id);
             const volume = (e.bytes === null || e.bytes === undefined)
                 ? dash
                 : `${(e.bytes / 1024).toFixed(1)} KB`;
@@ -265,7 +265,12 @@
     }
 
     function toggleEventDrawer(id) {
-        _selectedEventId = (_selectedEventId === id) ? null : id;
+        // Sempre stringa. L'id arriva da row.dataset.id, che il DOM restituisce
+        // come stringa, mentre e.id viene dal JSON dove syslog_events.id e' un
+        // INTEGER: `"42" === 42` e' false, quindi il cassetto non si apriva mai.
+        // La riga aveva cursor:pointer e il clic non faceva nulla.
+        const key = (id === null || id === undefined) ? null : String(id);
+        _selectedEventId = (_selectedEventId === key) ? null : key;
         renderSiemTable();
     }
 

@@ -14,6 +14,8 @@ chiamata dai due moduli JS del tab sia una rotta davvero registrata.
 
 import os
 import re
+import shutil
+import subprocess
 import tempfile
 import unittest
 
@@ -152,6 +154,20 @@ class TestTrafficoCallsRealRoutes(unittest.TestCase):
                     self._is_registered(probe),
                     f"{module} chiama {raw!r}, che non e' una rotta registrata",
                 )
+
+
+class TriageFlowLogRowOpens(unittest.TestCase):
+    """La riga del Triage Flow Log ha cursor:pointer: al clic deve succedere
+    qualcosa. Non apriva niente perche' l'id confrontato era una stringa da un
+    lato e un intero dall'altro, e il sorgente conteneva comunque tutte le
+    parole giuste — quindi il controllo esegue il renderer, non lo legge."""
+
+    @unittest.skipUnless(shutil.which("node"), "node non disponibile")
+    def test_the_detail_drawer_opens_on_click(self):
+        harness = os.path.join(_REPO_ROOT, "tests", "js", "test_siem_row_click.mjs")
+        proc = subprocess.run([shutil.which("node"), harness],
+                              capture_output=True, text=True, cwd=_REPO_ROOT)
+        self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
 
 
 if __name__ == "__main__":
