@@ -112,6 +112,118 @@ async def obs_top_talkers(
             "flows": [dict(r) for r in rows]}
 
 
+# Quanti secondi per barra nel grafico dell'andamento. Il numero di barre e'
+# fisso, la loro larghezza no: 24 punti si leggono su un'ora come su una
+# settimana, mentre un bucket fisso darebbe 4 punti in un caso e 10.000
+# nell'altro. Non scende sotto il minuto: e' la granularita' con cui l'ingest
+# scrive window_start, e bucket piu' fini sarebbero colonne vuote fra i dati.
+_SERIES_BUCKETS = 24
+
+
+def _bucket_seconds(window_s: int) -> int:
+    return max(60, window_s // _SERIES_BUCKETS)
+
+
+@router.get("/api/observability/hosts")
+async def obs_hosts(
+    window: str = Query("1h"),
+    limit: int = Query(50, ge=1, le=MAX_LIMIT),
+    q: str = Query("", max_length=100),
+    exclude_telemetry: bool = Query(False),
+    current_user = Depends(get_current_user),
+):
+    """Traffico per HOST, non per conversazione.
+
+    /top risponde "quali coppie parlano di piu'", che e' la domanda del
+    troubleshooting. Questa risponde "quali macchine consumano di piu'", che e'
+    la domanda della capacita' — e non si ricava sommando i top talker, perche'
+    lo stesso host compare in decine di righe come sorgente e come
+    destinazione.
+
+    IN e' cio' che arriva all'host (e' la destinazione del flusso), OUT cio'
+    che ne esce. Un flusso contribuisce a entrambe le colonne, di due host
+    diversi: la UNION ALL sotto e' esattamente questo, non una duplicazione.
+    """
+    import time as _time
+    seconds = _parse_window(window)
+    cutoff = int(_time.time()) - seconds
+    clause, params = _tenant_filter(current_user)
+    tele_clause, tele_params = _telemetry_filter(exclude_telemetry)
+    leg = f"WHERE window_start >= ?{clause}{tele_clause}"
+    leg_params = (cutoff, *params, *tele_params)
+
+    like_clause, like_params = "", ()
+    if q.strip():
+        like_clause = " WHERE ip LIKE ?"
+        like_params = (f"%{q.strip()}%",)
+
+    rows = await db.read(
+        f"""SELECT ip, tenant,
+                   SUM(in_bytes) AS in_bytes, SUM(out_bytes) AS out_bytes,
+                   SUM(in_bytes) + SUM(out_bytes) AS total_bytes,
+                   SUM(in_packets) AS in_packets, SUM(out_packets) AS out_packets,
+                   SUM(flows) AS flow_count
+            FROM (
+                SELECT dst_ip AS ip, tenant, total_bytes AS in_bytes, 0 AS out_bytes,
+                       total_packets AS in_packets, 0 AS out_packets, flow_count AS flows
+                FROM flow_aggregates {leg} AND dst_ip IS NOT NULL
+                UNION ALL
+                SELECT src_ip AS ip, tenant, 0 AS in_bytes, total_bytes AS out_bytes,
+                       0 AS in_packets, total_packets AS out_packets, flow_count AS flows
+                FROM flow_aggregates {leg} AND src_ip IS NOT NULL
+            ){like_clause}
+            GROUP BY ip, tenant
+            ORDER BY total_bytes DESC
+            LIMIT ?""",
+        (*leg_params, *leg_params, *like_params, limit))
+    return {"window": window, "exclude_telemetry": exclude_telemetry,
+            "hosts": [dict(r) for r in rows]}
+
+
+@router.get("/api/observability/host-series")
+async def obs_host_series(
+    ip: str = Query(..., min_length=1, max_length=45),
+    window: str = Query("1h"),
+    exclude_telemetry: bool = Query(False),
+    current_user = Depends(get_current_user),
+):
+    """Andamento IN/OUT di UN host, a bucket regolari.
+
+    I bucket vuoti sono emessi a zero: senza, una linea che salta un'ora di
+    silenzio la disegna come se il traffico fosse continuato, ed e' proprio
+    l'interruzione la cosa che si sta cercando."""
+    import time as _time
+    seconds = _parse_window(window)
+    now = int(_time.time())
+    cutoff = now - seconds
+    bucket = _bucket_seconds(seconds)
+    clause, params = _tenant_filter(current_user)
+    tele_clause, tele_params = _telemetry_filter(exclude_telemetry)
+
+    rows = await db.read(
+        f"""SELECT (window_start / ?) * ? AS bucket,
+                   SUM(CASE WHEN dst_ip = ? THEN total_bytes ELSE 0 END) AS in_bytes,
+                   SUM(CASE WHEN src_ip = ? THEN total_bytes ELSE 0 END) AS out_bytes
+            FROM flow_aggregates
+            WHERE window_start >= ? AND (src_ip = ? OR dst_ip = ?)
+                  {clause}{tele_clause}
+            GROUP BY bucket
+            ORDER BY bucket""",
+        (bucket, bucket, ip, ip, cutoff, ip, ip, *params, *tele_params))
+
+    seen = {int(r["bucket"]): (int(r["in_bytes"] or 0), int(r["out_bytes"] or 0))
+            for r in rows}
+    start = (cutoff // bucket) * bucket
+    points = []
+    t = start
+    while t <= now:
+        got = seen.get(t, (0, 0))
+        points.append({"ts": t, "in_bytes": got[0], "out_bytes": got[1]})
+        t += bucket
+    return {"ip": ip, "window": window, "bucket_seconds": bucket,
+            "points": points}
+
+
 @router.get("/api/observability/protocol-distribution")
 async def obs_protocol_distribution(
     window: str = Query("15m"),

@@ -1734,6 +1734,7 @@
         <button type="button" class="ca-pill active" id="trafPill-overview" data-traf-view="overview" data-i18n="trafPillOverview">Panoramica</button>
         <button type="button" class="ca-pill" id="trafPill-flows" data-traf-view="flows" data-i18n="trafPillFlows">Flussi</button>
         <button type="button" class="ca-pill" id="trafPill-search" data-traf-view="search" data-i18n="trafPillSearch">Ricerca</button>
+        <button type="button" class="ca-pill" id="trafPill-hosts" data-traf-view="hosts" data-i18n="trafPillHosts">Per IP</button>
       </div>
 
       <div id="trafPane-overview" class="traf-pane">
@@ -1841,6 +1842,58 @@
       </div>
 
       </div>
+      <div id="trafPane-hosts" class="traf-pane" style="display:none;">
+      <div class="filterbar" style="align-items:center; margin:0 0 12px;">
+        <div class="input-wrapper" style="flex:1; max-width:320px;">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" id="trafHostSearch" placeholder="Filtra per indirizzo IP"
+                 data-i18n-placeholder="trafHostSearchPl"
+                 aria-label="Filtra per indirizzo IP" data-i18n-aria-label="trafHostSearchPl">
+        </div>
+        <span id="trafHostsCount" style="font-size:12px; color:var(--text-muted);"></span>
+      </div>
+
+      <div class="panel" style="margin-bottom:18px;">
+        <h4 style="margin:0 0 10px; font-size:14px; color:var(--text-muted);">
+          <i class="fa-solid fa-server"></i> <span data-i18n="trafHostsTitle">Traffico per host</span>
+        </h4>
+        <div class="table-container" style="max-height:420px; overflow:auto;">
+          <table style="width:100%; border-collapse:collapse;">
+            <thead>
+              <tr>
+                <th style="text-align:left; padding:6px 8px;" data-i18n="trafHostColIp">Indirizzo IP</th>
+                <th style="text-align:left; padding:6px 8px;" data-i18n="trafHostColName">Hostname</th>
+                <th style="text-align:left; padding:6px 8px;" data-i18n="trafHostColTenant">Sede</th>
+                <th style="text-align:left; padding:6px 8px;" data-i18n="trafHostColIn">In</th>
+                <th style="text-align:left; padding:6px 8px;" data-i18n="trafHostColOut">Out</th>
+                <th style="text-align:right; padding:6px 8px;" data-i18n="trafHostColTotal">Totale</th>
+              </tr>
+            </thead>
+            <tbody id="trafHostsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
+          <h4 style="margin:0; font-size:14px; color:var(--text-muted);">
+            <i class="fa-solid fa-chart-line"></i> <span data-i18n="trafHostSeriesTitle">Andamento nel tempo</span>
+          </h4>
+          <label for="trafHostSeriesSelect" style="font-size:12px; color:var(--text-muted);"
+                 data-i18n="trafHostSeriesFor">Host</label>
+          <select id="trafHostSeriesSelect" style="max-width:280px;"
+                  aria-label="Host di cui mostrare l'andamento"
+                  data-i18n-aria-label="trafHostSeriesAria"></select>
+          <span id="trafHostSeriesLegend" style="font-size:12px; color:var(--text-muted);"></span>
+        </div>
+        <div style="position:relative; width:100%; height:260px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; overflow:hidden;">
+          <canvas id="trafHostSeriesCanvas" style="width:100%; height:100%; display:block;"></canvas>
+        </div>
+        <p id="trafHostSeriesEmpty" style="display:none; margin:10px 0 0; font-size:12px; color:var(--text-muted);"
+           data-i18n="trafHostSeriesEmpty">Nessun traffico per questo host nella finestra scelta.</p>
+      </div>
+      </div>
+
       <div id="trafPane-search" class="traf-pane" style="display:none;">
       <div class="filterbar" style="align-items:center; margin:0 0 12px;">
         <span id="flowSiemStreamBadge" class="status ok"><span class="led led-success"></span>LIVE TAIL</span>
