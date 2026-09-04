@@ -41,6 +41,28 @@ ADMIN_PW = "adminpw12345"          # >= MIN_PASSWORD_LENGTH
 class RemoteSiteE2E(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        # data_config.DATA_DIR e' un GLOBALE: l'env var qui sopra decide dove
+        # puntava all'import, ma ogni altro modulo di test che lo riscrive lo
+        # sposta anche per noi, e sullo stesso worker xdist l'ordine di import
+        # cambia da una run all'altra (vedi conftest.py). Ripuntarlo QUI lo
+        # rende vero mentre girano questi test, qualunque cosa sia successa
+        # prima: senza, l'inventario spinto dall'agente e la lettura fatta dal
+        # triage finivano in due file diversi e la coda risultava vuota.
+        from unittest import mock
+        from core import data_config
+        from services import inventory_manager
+        cls._prev_data_dir = data_config.DATA_DIR
+        data_config.DATA_DIR = _TMP
+        cls.addClassCleanup(setattr, data_config, "DATA_DIR", cls._prev_data_dir)
+        # E l'inventario esplicitamente: get_hosts_csv() risolve da DATA_DIR
+        # ogni volta, quindi bastava che un altro modulo importato dopo di noi
+        # sullo stesso worker lo spostasse perche' l'inventario spinto
+        # dall'agente e la lettura fatta dal triage finissero in due file
+        # diversi -- e la coda dei job risultasse vuota.
+        _hosts = mock.patch.object(inventory_manager, "get_hosts_csv",
+                                   return_value=os.path.join(_TMP, "network_hosts.csv"))
+        _hosts.start()
+        cls.addClassCleanup(_hosts.stop)
         cls.client = TestClient(app_server.app)
         from security import user_manager
         import bcrypt

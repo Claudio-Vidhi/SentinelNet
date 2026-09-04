@@ -8,18 +8,17 @@ fatto che un apparato irraggiungibile non svuoti la tabella degli altri, e che
 un tipo di rotta sconosciuto non venga ribattezzato.
 """
 import os
-import tempfile
 import unittest
 from unittest import mock
 
-_TMP = tempfile.mkdtemp(prefix="sentinelnet_test_routetbl_")
-os.environ["SENTINELNET_DATA_DIR"] = _TMP
-
 from fastapi.testclient import TestClient  # noqa: E402
 
-from core import data_config  # noqa: E402
-data_config.DATA_DIR = _TMP
-
+# Nessun SENTINELNET_DATA_DIR nostro, e nessun data_config.DATA_DIR riscritto:
+# conftest.py ha gia' scelto la directory della suite e vi ha legato le
+# costanti. Ripuntarla qui la sposterebbe per OGNI modulo importato dopo di
+# noi sullo stesso worker xdist, e cio' che quel modulo scrive finirebbe dove
+# nessun altro lo cerca. Questo modulo non ne ha bisogno: l'inventario e' un
+# mock, e gli utenti stanno bene dove stanno tutti gli altri.
 import app_server  # noqa: E402
 from security import user_manager  # noqa: E402
 from services import fortigate_service, route_table  # noqa: E402
