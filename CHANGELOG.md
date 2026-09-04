@@ -12,6 +12,26 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Added
 
+- **A Routing Tables tab: every device's RIB in one view.** The FortiGate tab
+  has shown one firewall's routes since it shipped; the question engineers
+  actually ask is the other one — "who has a route to this network, and do the
+  two devices agree" — and answering it meant opening that tab once per device
+  and comparing by eye. Rows are grouped by device and route type, filterable
+  by device, type and a free search over network, next-hop and interface, with
+  a stacked bar chart above.
+
+  Nothing new is collected: `/api/routes` calls the same
+  `fortigate_service.get_routes` across the devices in the caller's scope. Two
+  consequences are stated in the UI rather than papered over. Devices that
+  only answer over SSH return CLI text, and they are listed as such instead of
+  being parsed — a routing-table parser is a collector, and this is not one.
+  And the bars count **routes**, not packets: no device exposes per-route
+  counters, so a traffic bar there would be an invented number, and the note
+  under the chart says so. A device that does not answer appears as a warning
+  beside the others, because a missing table otherwise reads as "it has no
+  routes".
+
+
 - **Policy Lookup answers the question it was asked.** "Which policy would
   match this flow" came back as a flat key/value table, with the verdict and
   the policy number two rows among many. It now opens with a banner —
