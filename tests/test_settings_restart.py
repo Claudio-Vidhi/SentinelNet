@@ -84,8 +84,8 @@ class SettingsRestart(unittest.TestCase):
         # STACCATO, perche' Restart-Service ferma questo stesso processo e un
         # subprocess.run atteso non tornerebbe mai.
         from unittest import mock
-        from routers import settings as settings_router
-        with mock.patch.object(settings_router, "_supervisor",
+        from services import self_update
+        with mock.patch.object(self_update, "supervisor",
                                return_value="windows-service"),              mock.patch("subprocess.Popen") as popen:
             r = self.client.post("/api/settings/restart", headers=self.admin_h,
                                  json={"unit": "evil; rm -rf /"})
@@ -102,31 +102,31 @@ class SettingsRestart(unittest.TestCase):
         # a mano: senza la variabile la rotta deve rifiutare, non indovinare.
         import sys as _sys
         from unittest import mock
-        from routers import settings as settings_router
+        from services import self_update
         os.environ.pop("INVOCATION_ID", None)
         with mock.patch.object(_sys, "platform", "win32"):
-            self.assertEqual(settings_router._supervisor(), "")
+            self.assertEqual(self_update.supervisor(), "")
             os.environ["SENTINELNET_WINDOWS_SERVICE"] = "1"
             try:
-                self.assertEqual(settings_router._supervisor(), "windows-service")
+                self.assertEqual(self_update.supervisor(), "windows-service")
             finally:
                 os.environ.pop("SENTINELNET_WINDOWS_SERVICE", None)
 
     def test_systemd_wins_when_both_are_declared(self):
         from unittest import mock
-        from routers import settings as settings_router
+        from services import self_update
         os.environ["SENTINELNET_WINDOWS_SERVICE"] = "1"
         try:
             with mock.patch.dict(os.environ, {"INVOCATION_ID": "x"}):
-                self.assertEqual(settings_router._supervisor(), "systemd")
+                self.assertEqual(self_update.supervisor(), "systemd")
         finally:
             os.environ.pop("SENTINELNET_WINDOWS_SERVICE", None)
 
     def test_it_refuses_when_the_app_is_not_supervised(self):
         # Senza supervisore "riavvia" significa solo "termina". Meglio dirlo.
         from unittest import mock
-        from routers import settings as settings_router
-        with mock.patch.object(settings_router, "_is_supervised", return_value=False):
+        from services import self_update
+        with mock.patch.object(self_update, "is_supervised", return_value=False):
             r = self.client.post("/api/settings/restart", headers=self.admin_h)
         self.assertEqual(r.status_code, 409, r.text)
 
@@ -209,8 +209,8 @@ class CentralSelfUpdate(unittest.TestCase):
         # Un exe PyInstaller non ha un repo da cui tirare: dirlo e' meglio che
         # far fallire git con un messaggio incomprensibile.
         from unittest import mock
-        from routers import settings as settings_router
-        with mock.patch.object(settings_router, "_install_kind", return_value="exe"):
+        from services import self_update
+        with mock.patch.object(self_update, "install_kind", return_value="exe"):
             r = self.client.post("/api/settings/update", headers=self.admin_h)
         self.assertEqual(r.status_code, 409, r.text)
 
@@ -218,8 +218,8 @@ class CentralSelfUpdate(unittest.TestCase):
         # Senza supervisore l'aggiornamento si applicherebbe solo spegnendo
         # il pannello per sempre.
         from unittest import mock
-        from routers import settings as settings_router
-        with mock.patch.object(settings_router, "_supervisor", return_value=""):
+        from services import self_update
+        with mock.patch.object(self_update, "supervisor", return_value=""):
             r = self.client.post("/api/settings/update", headers=self.admin_h)
         self.assertEqual(r.status_code, 409, r.text)
 
