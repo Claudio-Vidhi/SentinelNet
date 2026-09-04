@@ -95,7 +95,7 @@
         // vuota per tutti: senza dirlo, l'assenza delle sue rotte si legge
         // come "non ne ha".
         box.style.display = '';
-        box.innerHTML = `<div style="border:1px solid var(--warning); border-left:4px solid var(--warning);
+        box.innerHTML = `<div style="border:1px solid var(--warning);
               background:color-mix(in srgb, var(--warning) 8%, transparent); padding:10px 14px; font-size:12px;">
             <strong>${escapeHtml(tr('rtPartial', { n: _rtErrors.length }))}</strong>
             <ul style="margin:6px 0 0; padding-left:18px;">${
