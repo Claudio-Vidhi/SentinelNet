@@ -10,6 +10,7 @@ button silently does nothing.
 That is what happened to the Sites tab: its whole CRUD lives in settings.js,
 which the map only loaded for the Settings tab.
 """
+import functools
 import pathlib
 import re
 import unittest
@@ -151,7 +152,14 @@ def _strip_comments(src: str) -> str:
     return _COMMENT.sub("", src)
 
 
-def _defined_in(path: pathlib.Path) -> set:
+@functools.lru_cache(maxsize=None)
+def _stripped_src(path: pathlib.Path) -> str:
+    """Comment-free source of one module, read once per run."""
+    return _strip_comments(path.read_text(encoding="utf-8"))
+
+
+@functools.lru_cache(maxsize=None)
+def _defined_in(path: pathlib.Path) -> frozenset:
     """The module's callable surface: its `function f()` declarations.
 
     Only this form, because only a hoisted top-level function is what a bare
@@ -159,33 +167,44 @@ def _defined_in(path: pathlib.Path) -> set:
     some other function is not reachable from outside and must not be counted
     as owned, or every one-letter helper becomes a false positive.
     """
-    return set(_FUNC_DEF.findall(path.read_text(encoding="utf-8")))
+    return frozenset(_FUNC_DEF.findall(path.read_text(encoding="utf-8")))
 
 
-def _declared_in(path: pathlib.Path) -> set:
+@functools.lru_cache(maxsize=None)
+def _declared_in(path: pathlib.Path) -> frozenset:
     """Every name the file binds itself, `function f()` or `const f = ...`.
 
     Used only to subtract: a module with its own local `const sevColor = s =>`
     is not calling the same-named function of another module.
     """
     src = path.read_text(encoding="utf-8")
-    return set(_FUNC_DEF.findall(src)) | set(_CONST_DEF.findall(src))
+    return frozenset(_FUNC_DEF.findall(src)) | frozenset(_CONST_DEF.findall(src))
 
 
-def _bare_calls(src: str, names: set) -> set:
+_BARE_CALL = re.compile(r"(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(")
+_TYPEOF_GUARD = re.compile(r"typeof\s+([A-Za-z_$][\w$]*)\s*===")
+
+
+@functools.lru_cache(maxsize=None)
+def _call_surface(src: str) -> frozenset:
+    """Every name ``src`` calls as a bare identifier, minus the typeof-guarded.
+
+    One pass over the file, not one compiled lookbehind per candidate name
+    rescanning the whole file: that form was 26 of the suite's ~80 seconds.
+    JS keywords (`if (`, `for (`) match too and are harmless — callers
+    intersect this with a set of declared function names.
+    """
+    return frozenset(_BARE_CALL.findall(src)) - frozenset(_TYPEOF_GUARD.findall(src))
+
+
+def _bare_calls(src: str, names) -> set:
     """Names in ``names`` that ``src`` calls as bare identifiers.
 
     window.NAME(...), obj.NAME(...) and window.NAME?.(...) do not count: those
     are undefined rather than a ReferenceError when the module is absent. A
     `typeof NAME === 'function'` guard makes a bare call safe too.
     """
-    hits = set()
-    for name in names:
-        if re.search(r"typeof\s+" + re.escape(name) + r"\s*===", src):
-            continue
-        if re.search(r"(?<![.\w$])" + re.escape(name) + r"\s*\(", src):
-            hits.add(name)
-    return hits
+    return set(names) & _call_surface(src)
 
 
 class CrossModuleCallsMustBeOptional(unittest.TestCase):
@@ -221,7 +240,7 @@ class CrossModuleCallsMustBeOptional(unittest.TestCase):
                 caller = js_dir / caller_name
                 if not caller.exists():
                     continue
-                src = _strip_comments(caller.read_text(encoding="utf-8"))
+                src = _stripped_src(caller)
                 for name in sorted(_bare_calls(src, owned - _declared_in(caller))):
                     offenders.append(f"{caller_name} calls {owner_name}:{name}() bare")
         self.assertEqual(offenders, [], "\n".join(offenders))
@@ -247,7 +266,7 @@ class CrossModuleCallsMustBeOptional(unittest.TestCase):
             caller = js_dir / caller_name
             if not caller.exists() or caller_name in self.EXEMPT_CALLERS:
                 continue
-            src = _strip_comments(caller.read_text(encoding="utf-8"))
+            src = _stripped_src(caller)
             local = _declared_in(caller)
             for owner_name, owner_tabs in sorted(tabs_of.items()):
                 owner = js_dir / owner_name
