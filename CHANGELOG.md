@@ -10,7 +10,69 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **`tests/test_python_floor.py` parses every tracked module at the declared
+  floor.** Development runs on 3.14 and the Docker image builds on 3.11, and
+  nothing enforced the gap: syntax the floor rejects passed every local check
+  and only failed at `docker build`, or on an agent's first start. The floor
+  is read from `pyproject.toml`, so raising it moves the guard with it.
+
+- **`tests/routes.py` walks the route tree instead of iterating `app.routes`
+  flat.** The eight suites that assert which routes exist, and with which
+  dependencies, would have gone *silently green* on fastapi 0.141+, which
+  mounts included routers one level down instead of copying them up. They now
+  hold on both sides of the `fastapi<0.141` pin, so lifting it is one line.
+
+- `httpx2` declared next to `httpx` in the dev group: starlette 1.x asks for
+  it and warns on every test run when it finds only `httpx`.
+
+### Changed
+
+- **Restart, self-update and certificate generation left the settings
+  router.** `routers/settings.py` ran `git pull`, `pip install`, the
+  systemd/Windows restart and an 80-line X.509 build between an auth
+  dependency and a response dict. That work now lives in
+  `services/self_update.py` and `services/cert_manager.py`, and the router is
+  490 lines instead of 692. Same routes, same status codes, same audit lines.
+
+- **The inventory is parsed once per version of the file, not once per
+  call.** `get_all_devices()` has 64 callers, several inside loops and one on
+  every device-scoped route, and each of them re-read and re-parsed
+  `network_hosts.csv`. Rows are now kept against the file's `(mtime, size)` —
+  so a write from anywhere, the site agent or a spreadsheet, invalidates them
+  without anyone remembering to — and handed out as fresh dicts, because
+  callers modify what they get. A file written in the last 1.1 s is always
+  re-read: ext3 and FAT stamp mtime to the whole second, and two same-size
+  writes inside one tick would otherwise pin the cache forever. Measured
+  1.4x faster at 200 devices, 4.6x at 1000.
+
 ### Fixed
+
+- **The 5k pps loop-latency test failed roughly one full run in three.** It
+  asserted an absolute p99 under 50 ms, but that number measures the machine's
+  scheduling floor, and under `pytest -n 4` the other three workers push it
+  past the threshold with the ingest stopped — a red that said nothing about
+  the code. It now measures a zero-traffic baseline on the same loop and
+  asserts the delta, which is the property it was always about.
+
+- **`test_access_position` left `mac_history.DB_PATH` pointing outside the
+  suite directory.** It reassigned the module global in `setUp` and never put
+  it back, so `test_shared_paths_are_pinned` failed whenever xdist handed it
+  that worker second — about one full run in three, never in isolation. It now
+  restores it in `tearDown`, the way `test_arp_collector` already did.
+
+- **`test_gli_ip_arrivano_dall_arp_dello_stesso_tenant` used two clocks for
+  one scan.** Two ARP rows inserted either side of a second boundary get
+  different `last_seen`, and "most recent per source wins" then discards a
+  legitimate binding. Both rows now share one timestamp, like the two
+  neighbouring tests that had already been fixed this way.
+
+- **The lazy-tab frontend contract test took 80 seconds.** It compiled a
+  lookbehind regex per candidate name and rescanned all 30k lines of JS with
+  it, 14,368 times over. One pass per file instead: 0.5 s, same assertions.
+  Full suite under `-n 4`: 152 s before, 55-107 s after over four
+  consecutive runs, all green.
 
 - **The release script printed commands that PowerShell could not run.** It
   used a bash line-continuation backslash, which PowerShell passes through as
