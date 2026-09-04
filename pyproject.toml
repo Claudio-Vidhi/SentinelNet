@@ -29,8 +29,11 @@ dev = [
     # plain `uv sync` no longer prunes them (they were env-only before).
     "graphifyy>=0.9.51",
     # fastapi.testclient (starlette) imports httpx at runtime: without it
-    # the TestClient-based tests do not start after a `uv sync`.
+    # the TestClient-based tests do not start after a `uv sync`. starlette 1.x
+    # asks for httpx2 and warns on every run when it finds only httpx; both
+    # are declared so the warning goes away without losing the fallback.
     "httpx>=0.28.0",
+    "httpx2>=2.12.0",
     "pyrefly>=1.2.0",
     "pytest>=8.0.0",
     "pytest-xdist>=3.5.0",
