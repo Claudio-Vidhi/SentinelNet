@@ -4,6 +4,7 @@ import os
 import csv
 import re
 import threading
+import time
 from typing import Any, Dict, Optional, Tuple
 from security import crypto_vault
 from core import data_config
@@ -267,6 +268,8 @@ _hosts_csv_lock = threading.RLock()
 
 def safe_write_hosts_csv(devices):
     invalidate_device_ip_cache()  # l'inventario cambia: la cache IP→device decade
+    _invalidate_rows_cache()  # idem per le righe: due scritture nello stesso
+    # tick di clock, di pari dimensione, avrebbero la stessa firma di stat.
     from ai import config_analyzer
     # idem: Vendor/tenant/hostname dell'inventario pilotano analyze_device, e
     # la chiave del memo e' solo (ip, mtime del backup) — un Vendor corretto
@@ -306,22 +309,67 @@ def safe_write_hosts_csv(devices):
                     pass
             raise e
 
-def get_all_devices():
-    devices = []
-    hosts_csv = get_hosts_csv()
-    if not os.path.exists(hosts_csv):
-        return devices
-    with _hosts_csv_lock, open(hosts_csv, mode='r', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
+# Righe gia' analizzate, con la firma del file da cui vengono. 64 chiamanti
+# rileggevano e ri-parsavano lo stesso CSV, alcuni dentro cicli e uno
+# (routers/deps.py) a ogni rotta con un IP. Misurato: 1.4x a 200 apparati,
+# 4.6x a 1000 -- il guadagno cresce con l'inventario, che e' dove serve.
+#
+# La chiave e' (mtime_ns, size) da un os.stat, non un flag da invalidare a
+# mano: cosi' decade anche per una scrittura che non passa da qui - l'agente
+# di sede, un Excel aperto sul file - che nessun invalidatore vedrebbe.
+_rows_cache_key = None
+_rows_cache: "list | None" = None
+
+
+def _read_hosts_csv(hosts_csv) -> list:
+    rows = []
+    with open(hosts_csv, mode='r', encoding='utf-8') as f:
+        for row in csv.DictReader(f):
             # Inventari legacy senza colonna 'Site': default alla sede centrale.
             if not row.get('Site'):
                 row['Site'] = 'central'
             # Inventari legacy senza colonna 'SSH Port': default 22.
             if not row.get('SSH Port'):
                 row['SSH Port'] = '22'
-            devices.append(row)
-    return devices
+            rows.append(row)
+    return rows
+
+
+def _invalidate_rows_cache():
+    global _rows_cache_key, _rows_cache
+    _rows_cache_key = None
+    _rows_cache = None
+
+
+def get_all_devices():
+    """L'inventario come lista di dict, uno per apparato.
+
+    Torna sempre dict NUOVI: i chiamanti li modificano prima di riscriverli
+    (routers/inventory.py) e una riga condivisa con la cache la avvelenerebbe.
+    Copiare 1000 righe costa 0.2 ms contro i 2.8 di rileggere il file."""
+    global _rows_cache_key, _rows_cache
+    hosts_csv = get_hosts_csv()
+    with _hosts_csv_lock:
+        try:
+            st = os.stat(hosts_csv)
+        except OSError:
+            return []
+        # Una firma appena timbrata non e' affidabile. Il filesystem data i
+        # file con la SUA granularita': 100ns su NTFS, ma un secondo intero su
+        # ext3 e FAT. Due scritture di pari dimensione dentro lo stesso tick
+        # lasciano (mtime, size) identici, e la cache resterebbe stantia per
+        # sempre -- non per un secondo. Sotto la soglia si rilegge e non si
+        # memorizza; la soglia e' quindi tarata sul filesystem piu' grezzo su
+        # cui giriamo, non sul piu' fine.
+        # ponytail: 1.1s fisso. Misurare la granularita' vera all'avvio si puo'
+        # fare, ma costa una scrittura di prova per ogni data dir e il tetto
+        # dei filesystem in circolazione e' noto e fermo a un secondo.
+        if time.time_ns() - st.st_mtime_ns < 1_100_000_000:
+            return _read_hosts_csv(hosts_csv)
+        key = (hosts_csv, st.st_mtime_ns, st.st_size)
+        if key != _rows_cache_key:
+            _rows_cache_key, _rows_cache = key, _read_hosts_csv(hosts_csv)
+        return [dict(r) for r in _rows_cache]
 
 # --- Cache IP → device per l'attribuzione tenant all'ingest (fase 3.5) ---
 # Invalidata a ogni scrittura dell'inventario (safe_write_hosts_csv).
@@ -516,8 +564,12 @@ VENDOR_ALIASES = {
     "proxmox": "linux",
 }
 
-def normalize_vendor(raw_vendor: str) -> str:
-    """Canonicalizza un nome vendor traducendo alias e refusi comuni."""
+def normalize_vendor(raw_vendor: "str | None") -> str:
+    """Canonicalizza un nome vendor traducendo alias e refusi comuni.
+
+    None e' un ingresso valido -- il corpo lo gestisce da sempre con
+    `or ""`, e un inventario legacy senza colonna Vendor lo produce -- ma
+    l'annotazione diceva `str` e nascondeva il caso ai chiamanti."""
     v = (raw_vendor or "").lower().strip()
     return VENDOR_ALIASES.get(v, v)
 
