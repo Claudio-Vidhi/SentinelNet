@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 import routers
 import app_server
 from security import user_manager
+from tests.routes import route_paths  # noqa: E402
 
 ROUTER_MODULES = [
     f"routers.{m.name}"
@@ -58,7 +59,7 @@ class TestRouterSmoke(unittest.TestCase):
                 importlib.import_module(modname)
 
     def test_app_builds_and_has_routes(self):
-        routes = [r.path for r in self.client.app.routes]
+        routes = sorted(route_paths(self.client.app))
         self.assertTrue(routes, "app registered no routes")
 
     def test_endpoints_execute_without_server_error(self):
@@ -100,6 +101,52 @@ class TestRouterSmoke(unittest.TestCase):
         self.assertEqual(_ssh_failure_hint(paramiko.AuthenticationException("Authentication failed.")),
                          "Authentication failed.")
         self.assertEqual(_ssh_failure_hint(OSError("No route to host")), "No route to host")
+
+
+class RouteWalkerSurvivesNesting(unittest.TestCase):
+    """The whole point of tests/routes.py: it must find a route that
+    include_router did NOT copy into the parent.
+
+    Without this, the walker is indistinguishable from the flat loop it
+    replaced on the pinned fastapi, and the day the pin is lifted nobody
+    would know whether it works — the contract suites would just go quiet.
+    """
+
+    def test_it_finds_routes_a_parent_only_mounts(self):
+        from fastapi import APIRouter, FastAPI
+        from tests.routes import iter_routes, route_paths
+
+        child = APIRouter()
+
+        @child.get("/api/deep")
+        def _deep():  # pragma: no cover - never called, only registered
+            return {}
+
+        parent = FastAPI()
+        # Mounted, not copied: this is the shape fastapi 0.141 produces for
+        # every include_router, and the shape a flat app.routes loop misses.
+        parent.mount("/", child)
+
+        self.assertNotIn("/api/deep", {getattr(r, "path", "") for r in parent.routes},
+                         "premessa del test caduta: il mount ha copiato le rotte")
+        self.assertIn("/api/deep", route_paths(parent))
+        self.assertTrue(any(getattr(r, "path", "") == "/api/deep"
+                            for r in iter_routes(parent)))
+
+    def test_a_cycle_does_not_hang_the_walk(self):
+        from tests.routes import iter_routes
+
+        class Loop:
+            path = "/loop"
+
+        node = Loop()
+        node.routes = [node]
+
+        class App:
+            routes = [node]
+
+        self.assertEqual([r.path for r in iter_routes(App())], ["/loop"])
+
 
 if __name__ == '__main__':
     unittest.main()

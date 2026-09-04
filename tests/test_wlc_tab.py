@@ -14,13 +14,14 @@ import unittest
 os.environ.setdefault("SENTINELNET_DATA_DIR", tempfile.mkdtemp(prefix="sentinelnet_wlctab_"))
 
 import app_server  # noqa: E402
+from tests.routes import iter_routes  # noqa: E402
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _registered_api_paths():
     literal, templated = set(), []
-    for route in app_server.app.routes:
+    for route in iter_routes(app_server.app):
         path = getattr(route, "path", "")
         if not path.startswith("/api/"):
             continue

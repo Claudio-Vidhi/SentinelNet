@@ -20,6 +20,7 @@ from core import data_config  # noqa: E402
 data_config.DATA_DIR = _TMP_DATA_DIR
 
 from collectors import mac_history  # noqa: E402
+from tests.routes import route_paths  # noqa: E402
 
 MAC_A = "aa:bb:cc:dd:ee:01"
 MAC_RANDOM = "7a:bb:cc:dd:ee:02"      # bit U/L a 1 = amministrato localmente
@@ -590,7 +591,7 @@ class TestLetturaSenzaLock(_Base):
 class TestRotteRegistrate(unittest.TestCase):
     def test_le_rotte_sono_nell_app(self):
         import app_server
-        paths = {r.path for r in app_server.app.routes}
+        paths = route_paths(app_server.app)
         self.assertIn("/api/endpoints/list", paths)
         self.assertIn("/api/endpoints/ports", paths)
 

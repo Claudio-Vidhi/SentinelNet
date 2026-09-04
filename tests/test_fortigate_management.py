@@ -11,10 +11,11 @@ os.environ.setdefault("SENTINELNET_DATA_DIR",
 
 import app_server  # noqa: E402
 from routers import deps  # noqa: E402
+from tests.routes import iter_routes  # noqa: E402
 
 
 def _dependency_names(path: str, method: str = "get"):
-    for route in app_server.app.routes:
+    for route in iter_routes(app_server.app):
         if getattr(route, "path", None) == path and method.upper() in getattr(route, "methods", ()):
             return {d.call.__name__ for d in route.dependant.dependencies if d.call}
     raise AssertionError(f"rotta non trovata: {method.upper()} {path}")
