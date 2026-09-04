@@ -12,6 +12,18 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Added
 
+- **Policy Lookup answers the question it was asked.** "Which policy would
+  match this flow" came back as a flat key/value table, with the verdict and
+  the policy number two rows among many. It now opens with a banner —
+  ALLOWED, DENIED, POLICY MATCHED or NO MATCH — the flow it refers to
+  (source, destination, port, protocol, ingress interface, and whether that
+  interface was derived from the route), and the firewall's full answer
+  underneath in a `<details>`, unchanged. FortiOS returns `policy_id` and
+  `success` but not the action: that is read from the policy list the Policy
+  pill already downloads, and when it has not been opened the view says where
+  to find the action instead of guessing a colour.
+
+
 - **`tests/test_python_floor.py` parses every tracked module at the declared
   floor.** Development runs on 3.14 and the Docker image builds on 3.11, and
   nothing enforced the gap: syntax the floor rejects passed every local check
@@ -48,6 +60,13 @@ happened — `git log --grep="chore(release)"` is the record for those.
   1.4x faster at 200 devices, 4.6x at 1000.
 
 ### Fixed
+
+- **A row in the Triage Flow Log did nothing when clicked.** The row carried
+  `cursor:pointer` and the detail drawer never opened: the selected id came
+  from `row.dataset.id`, which the DOM always returns as a string, and was
+  compared with `===` against `e.id`, an INTEGER from `syslog_events`. The
+  comparison is on strings now.
+
 
 - **The 5k pps loop-latency test failed roughly one full run in three.** It
   asserted an absolute p99 under 50 ms, but that number measures the machine's
