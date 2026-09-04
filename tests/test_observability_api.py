@@ -72,6 +72,113 @@ class _Base(unittest.TestCase):
         return c
 
 
+class TestPerHostTraffic(_Base):
+    """Traffico per HOST, non per conversazione.
+
+    /top dice quali coppie parlano di piu'; questa vista dice quali macchine
+    consumano di piu', e non si ricava sommando i top talker perche' lo stesso
+    host compare come sorgente in certe righe e come destinazione in altre.
+    Lo scope per tenant vale qui come su ogni altra query (CONTRIBUTING.md §4).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        conn = db.get_observability_connection()
+        # 192.0.2.10 manda 3000 e riceve 500: due colonne diverse, un host solo.
+        _seed_flow(conn, "sede-a", "192.0.2.10", "198.51.100.1", nbytes=3000, npkts=30)
+        _seed_flow(conn, "sede-a", "198.51.100.1", "192.0.2.10", nbytes=500, npkts=5)
+        _seed_flow(conn, "sede-b", "192.0.2.99", "198.51.100.9", nbytes=8000, npkts=80)
+        # Vecchio di due giorni: fuori dalla finestra di un'ora.
+        _seed_flow(conn, "sede-a", "192.0.2.10", "198.51.100.1",
+                   ts=NOW - 2 * 86400, nbytes=999999)
+        conn.commit()
+        conn.close()
+
+    def _host(self, user, ip, **params):
+        qs = "&".join(f"{k}={v}" for k, v in {"window": "1h", **params}.items())
+        r = self._client(user).get(f"/api/observability/hosts?{qs}")
+        self.assertEqual(r.status_code, 200)
+        return next((h for h in r.json()["hosts"] if h["ip"] == ip), None)
+
+    def test_in_and_out_are_counted_separately(self):
+        h = self._host("adm", "192.0.2.10")
+        self.assertIsNotNone(h, "l'host non compare fra quelli con traffico")
+        self.assertEqual(h["out_bytes"], 3000)
+        self.assertEqual(h["in_bytes"], 500)
+        self.assertEqual(h["total_bytes"], 3500)
+
+    def test_the_window_is_respected(self):
+        # Il flusso da 999999 byte e' di due giorni fa: se la finestra non
+        # filtrasse, dominerebbe la classifica.
+        self.assertEqual(self._host("adm", "192.0.2.10")["total_bytes"], 3500)
+
+    def test_scope_hides_other_tenants(self):
+        self.assertIsNone(self._host("op_a", "192.0.2.99"))
+        self.assertIsNotNone(self._host("op_ab", "192.0.2.99"))
+
+    def test_search_filters_by_address(self):
+        r = self._client("adm").get(
+            "/api/observability/hosts?window=1h&q=192.0.2.9")
+        ips = {h["ip"] for h in r.json()["hosts"]}
+        self.assertIn("192.0.2.99", ips)
+        self.assertNotIn("192.0.2.10", ips)
+
+    def test_an_invalid_window_is_refused(self):
+        r = self._client("adm").get("/api/observability/hosts?window=99y")
+        self.assertEqual(r.status_code, 400)
+
+
+class TestHostSeries(_Base):
+    """L'andamento nel tempo di un host, a bucket regolari."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        conn = db.get_observability_connection()
+        _seed_flow(conn, "sede-a", "192.0.2.20", "198.51.100.2", nbytes=1000)
+        _seed_flow(conn, "sede-a", "198.51.100.2", "192.0.2.20", nbytes=400)
+        _seed_flow(conn, "sede-b", "192.0.2.21", "198.51.100.3", nbytes=7000)
+        conn.commit()
+        conn.close()
+
+    def _series(self, user, ip, window="1h"):
+        r = self._client(user).get(
+            f"/api/observability/host-series?ip={ip}&window={window}")
+        self.assertEqual(r.status_code, 200)
+        return r.json()
+
+    def test_empty_buckets_are_emitted_as_zero(self):
+        # Un buco nella serie e' l'informazione: saltarlo disegna una linea
+        # continua sopra un'interruzione di traffico.
+        out = self._series("adm", "192.0.2.20")
+        self.assertGreater(len(out["points"]), 1)
+        self.assertTrue(any(p["in_bytes"] == 0 and p["out_bytes"] == 0
+                            for p in out["points"]))
+        self.assertEqual(sum(p["out_bytes"] for p in out["points"]), 1000)
+        self.assertEqual(sum(p["in_bytes"] for p in out["points"]), 400)
+
+    def test_the_buckets_are_evenly_spaced(self):
+        out = self._series("adm", "192.0.2.20")
+        step = out["bucket_seconds"]
+        ts = [p["ts"] for p in out["points"]]
+        self.assertEqual(ts, sorted(ts))
+        self.assertTrue(all(b - a == step for a, b in zip(ts, ts[1:])))
+
+    def test_a_wider_window_keeps_the_same_number_of_points(self):
+        # I bucket si allargano, non si moltiplicano: 24 punti si leggono su
+        # un'ora come su una settimana.
+        short = self._series("adm", "192.0.2.20", "1h")
+        long_ = self._series("adm", "192.0.2.20", "7d")
+        self.assertGreater(long_["bucket_seconds"], short["bucket_seconds"])
+        self.assertLessEqual(abs(len(long_["points"]) - len(short["points"])), 2)
+
+    def test_scope_applies_to_the_series_too(self):
+        out = self._series("op_a", "192.0.2.21")
+        self.assertEqual(sum(p["in_bytes"] + p["out_bytes"]
+                             for p in out["points"]), 0)
+
+
 class TestTopTalkers(_Base):
     @classmethod
     def setUpClass(cls):

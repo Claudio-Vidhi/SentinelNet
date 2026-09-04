@@ -156,6 +156,48 @@ class TestTrafficoCallsRealRoutes(unittest.TestCase):
                 )
 
 
+class PerIpViewIsWiredEndToEnd(unittest.TestCase):
+    """La pill "Per IP" e i suoi controlli.
+
+    Una pill aggiunta senza il suo pane, o un pane senza la sua voce in
+    TRAF_VIEWS, non da' errore: lascia visibile la vista precedente sotto
+    quella nuova. E un listener agganciato a un id che nel template non esiste
+    non solleva niente e lascia il controllo muto.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.html = _read("templates", "dashboard.html")
+        cls.js = _read("static", "js", "observability.js")
+
+    def test_the_pill_and_its_pane_both_exist(self):
+        self.assertIn('id="trafPill-hosts"', self.html)
+        self.assertIn('data-traf-view="hosts"', self.html)
+        self.assertIn('id="trafPane-hosts"', self.html)
+
+    def test_the_view_is_declared_where_the_panes_are_toggled(self):
+        # Senza questo, aprire la pill mostra il pane nuovo e NON nasconde
+        # quello vecchio.
+        self.assertIn("const TRAF_VIEWS = ['overview', 'flows', 'search', 'hosts']", self.js)
+        self.assertIn("for (const v of TRAF_VIEWS)", self.js)
+        self.assertIn("hosts:     () => loadTrafHosts()", self.js)
+
+    def test_every_bound_id_exists_in_the_template(self):
+        for element_id in ("trafHostSearch", "trafHostSeriesSelect",
+                           "trafHostsBody", "trafHostsCount",
+                           "trafHostSeriesCanvas", "trafHostSeriesEmpty",
+                           "trafHostSeriesLegend"):
+            self.assertIn(f'id="{element_id}"', self.html,
+                          f"{element_id} e' usato da observability.js ma non "
+                          "esiste nel template")
+
+    def test_the_search_reloads_from_the_server(self):
+        # Filtrare in locale farebbe divergere il conteggio mostrato accanto
+        # al titolo da quello che il server ha davvero contato.
+        self.assertIn("setTimeout(loadTrafHosts", self.js)
+        self.assertIn("&q=${encodeURIComponent(q.trim())}", self.js)
+
+
 class TriageFlowLogRowOpens(unittest.TestCase):
     """La riga del Triage Flow Log ha cursor:pointer: al clic deve succedere
     qualcosa. Non apriva niente perche' l'id confrontato era una stringa da un

@@ -231,12 +231,17 @@
         overview:  () => { loadTopTalkers(); loadObsProtocolDist(); },
         flows:     () => loadTopTalkers(),
         search:    () => loadFlowSiemTab(),
+        hosts:     () => loadTrafHosts(),
     };
+
+    // Una lista sola: aggiungere una pill e dimenticare questo array lasciava
+    // il pane precedente visibile sotto quello nuovo.
+    const TRAF_VIEWS = ['overview', 'flows', 'search', 'hosts'];
 
     function trafSwitchView(view) {
         if (!document.getElementById('trafPane-' + view)) return;
         _trafView = view;
-        for (const v of ['overview', 'flows', 'search']) {
+        for (const v of TRAF_VIEWS) {
             const pane = document.getElementById('trafPane-' + v);
             const pill = document.getElementById('trafPill-' + v);
             if (pane) pane.style.display = (v === view) ? '' : 'none';
@@ -244,6 +249,187 @@
         }
         const loader = TRAF_LOADERS[view];
         if (loader) loader();
+    }
+
+    // --- VISTA "PER IP": chi consuma, non chi parla con chi -----------------
+    // I top talker rispondono "quali coppie parlano di piu'", che e' la domanda
+    // del troubleshooting. Questa risponde "quali macchine consumano di piu'",
+    // che e' la domanda della capacita', e non si ottiene sommando le righe dei
+    // top talker: lo stesso host vi compare come sorgente e come destinazione.
+
+    let _trafHosts = [];
+    let _trafHostSeries = null;
+    let _trafSeriesIp = null;
+
+    function trafHostName(ip) {
+        // L'hostname dell'inventario, quando c'e'. Un IP nudo si legge molto
+        // peggio di "192.0.2.10 - WS-ADMIN-01" davanti a una barra.
+        if (typeof globalDevices === 'undefined' || !Array.isArray(globalDevices)) return '';
+        const d = globalDevices.find(x => x && x.IP === ip);
+        return (d && d.Hostname) || '';
+    }
+
+    async function loadTrafHosts() {
+        const box = /** @type {HTMLInputElement|null} */ (
+            document.getElementById('trafHostSearch'));
+        const q = box ? box.value : '';
+        const url = `/api/observability/hosts?window=${encodeURIComponent(trafState.window)}`
+            + `&q=${encodeURIComponent(q.trim())}${telemetryParam()}`;
+        try {
+            const res = await apiFetch(url);
+            if (!res || !res.ok) return;
+            _trafHosts = (await res.json()).hosts || [];
+        } catch (e) {
+            _trafHosts = [];
+        }
+        renderTrafHosts();
+        syncTrafSeriesSelect();
+        loadTrafHostSeries();
+    }
+
+    function renderTrafHosts() {
+        const tbody = document.getElementById('trafHostsBody');
+        const count = document.getElementById('trafHostsCount');
+        if (!tbody) return;
+        if (count) count.textContent = tr('trafHostsCount', { n: _trafHosts.length });
+        if (!_trafHosts.length) {
+            tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center;
+                color:var(--text-muted);">${escapeHtml(tr('trafHostsEmpty'))}</td></tr>`;
+            return;
+        }
+        // Le barre sono in scala sul MASSIMO della vista, non sul totale: e'
+        // il confronto fra host che si sta guardando, e una barra rapportata
+        // al totale sarebbe un filo sottile per tutti.
+        const max = Math.max(...(_trafHosts.map(h => h.total_bytes || 0)), 1);
+        const bar = (value, color) => {
+            const pct = Math.max(1, Math.round(((value || 0) / max) * 100));
+            return `<div style="position:relative; height:14px; background:var(--surface-3);
+                        border-radius:0; overflow:hidden; min-width:110px;">
+                <div style="height:100%; width:${pct}%; background:${color};"></div>
+                <span style="position:absolute; right:4px; top:50%; transform:translateY(-50%);
+                      font-size:10px; font-family:var(--font-code); color:var(--text);">${
+                          escapeHtml(fmtBytes(value || 0))}</span>
+            </div>`;
+        };
+        tbody.innerHTML = _trafHosts.map(h => {
+            const name = trafHostName(h.ip);
+            return `<tr style="border-top:1px solid var(--border); font-size:12px;">
+                <td style="padding:6px 8px; font-family:var(--font-code);">${escapeHtml(h.ip)}</td>
+                <td style="padding:6px 8px;">${name ? escapeHtml(name)
+                    : '<span style="color:var(--text-muted);">&mdash;</span>'}</td>
+                <td style="padding:6px 8px;"><span class="badge">${escapeHtml(h.tenant || '')}</span></td>
+                <td style="padding:6px 8px;">${bar(h.in_bytes, 'var(--success)')}</td>
+                <td style="padding:6px 8px;">${bar(h.out_bytes, 'var(--primary)')}</td>
+                <td style="padding:6px 8px; text-align:right; font-family:var(--font-code);
+                    font-weight:700;">${escapeHtml(fmtBytes(h.total_bytes || 0))}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function syncTrafSeriesSelect() {
+        const sel = /** @type {HTMLSelectElement|null} */ (
+            document.getElementById('trafHostSeriesSelect'));
+        if (!sel) return;
+        const previous = _trafSeriesIp;
+        sel.innerHTML = _trafHosts.slice(0, 50).map(h => {
+            const name = trafHostName(h.ip);
+            return `<option value="${escapeHtml(h.ip)}">${escapeHtml(h.ip)}${
+                name ? ' &mdash; ' + escapeHtml(name) : ''}</option>`;
+        }).join('');
+        // La scelta dell'utente sopravvive a un refresh, se quell'host c'e'
+        // ancora: cambiare finestra non deve riportare il grafico in cima.
+        if (previous && _trafHosts.some(h => h.ip === previous)) sel.value = previous;
+        _trafSeriesIp = sel.value || (_trafHosts[0] && _trafHosts[0].ip) || null;
+    }
+
+    async function loadTrafHostSeries() {
+        if (!_trafSeriesIp) { _trafHostSeries = null; renderTrafHostSeries(); return; }
+        const url = `/api/observability/host-series?ip=${encodeURIComponent(_trafSeriesIp)}`
+            + `&window=${encodeURIComponent(trafState.window)}${telemetryParam()}`;
+        try {
+            const res = await apiFetch(url);
+            _trafHostSeries = (res && res.ok) ? await res.json() : null;
+        } catch (e) {
+            _trafHostSeries = null;
+        }
+        renderTrafHostSeries();
+    }
+
+    function renderTrafHostSeries() {
+        const canvas = /** @type {HTMLCanvasElement|null} */ (
+            document.getElementById('trafHostSeriesCanvas'));
+        const empty = document.getElementById('trafHostSeriesEmpty');
+        const legend = document.getElementById('trafHostSeriesLegend');
+        if (!canvas) return;
+        const points = (_trafHostSeries && _trafHostSeries.points) || [];
+        const peak = points.reduce(
+            (m, p) => Math.max(m, p.in_bytes || 0, p.out_bytes || 0), 0);
+        if (empty) empty.style.display = peak ? 'none' : '';
+        if (legend) {
+            legend.innerHTML = peak
+                ? `<span style="color:var(--success);">&#9632;</span> ${escapeHtml(tr('trafHostIn'))}
+                   &nbsp; <span style="color:var(--primary);">&#9632;</span> ${escapeHtml(tr('trafHostOut'))}`
+                : '';
+        }
+
+        const ratio = window.devicePixelRatio || 1;
+        const width = canvas.clientWidth || 600;
+        const height = canvas.clientHeight || 260;
+        canvas.width = width * ratio;
+        canvas.height = height * ratio;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        ctx.clearRect(0, 0, width, height);
+        if (!peak) return;
+
+        const css = getComputedStyle(document.body);
+        const textColor = css.getPropertyValue('--text-muted') || '#888';
+        const borderColor = css.getPropertyValue('--border') || '#444';
+        const inColor = css.getPropertyValue('--success') || '#10b981';
+        const outColor = css.getPropertyValue('--primary') || '#3b82f6';
+        const pad = { top: 14, right: 14, bottom: 26, left: 62 };
+        const graphW = width - pad.left - pad.right;
+        const graphH = height - pad.top - pad.bottom;
+
+        ctx.font = '10px sans-serif';
+        ctx.lineWidth = 1;
+        [0, 0.5, 1].forEach(factor => {
+            const y = height - pad.bottom - factor * graphH;
+            ctx.strokeStyle = factor === 0 ? borderColor : 'rgba(128,128,128,0.18)';
+            ctx.beginPath();
+            ctx.moveTo(pad.left, y);
+            ctx.lineTo(width - pad.right, y);
+            ctx.stroke();
+            ctx.fillStyle = textColor;
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(fmtBytes(Math.round(peak * factor)), pad.left - 8, y);
+        });
+
+        const step = Math.max(1, Math.floor(points.length / 5));
+        points.forEach((pt, i) => {
+            if (i % step && i !== points.length - 1) return;
+            const x = pad.left + (i / Math.max(1, points.length - 1)) * graphW;
+            ctx.fillStyle = textColor;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText(new Date(pt.ts * 1000).toLocaleTimeString(
+                [], { hour: '2-digit', minute: '2-digit' }), x, height - pad.bottom + 6);
+        });
+
+        [['in_bytes', inColor], ['out_bytes', outColor]].forEach(([key, color]) => {
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            points.forEach((pt, i) => {
+                const x = pad.left + (i / Math.max(1, points.length - 1)) * graphW;
+                const y = height - pad.bottom - ((pt[key] || 0) / peak) * graphH;
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+        });
     }
 
     function trafSetWindow(value) {
@@ -1456,6 +1642,20 @@
         const pill = e.target.closest('[data-traf-view]');
         if (pill && pill.dataset.trafView) trafSwitchView(pill.dataset.trafView);
     });
+    // Vista Per IP. Il campo di ricerca ricarica dal server e non filtra le
+    // righe gia' scaricate: il conteggio accanto al titolo deve corrispondere
+    // a quello che il server ha davvero contato, non a quante ne sono rimaste
+    // visibili.
+    let _trafHostSearchTimer = null;
+    document.getElementById('trafHostSearch')?.addEventListener('input', () => {
+        clearTimeout(_trafHostSearchTimer);
+        _trafHostSearchTimer = setTimeout(loadTrafHosts, 350);
+    });
+    document.getElementById('trafHostSeriesSelect')?.addEventListener('change', (e) => {
+        _trafSeriesIp = e.target.value;
+        loadTrafHostSeries();
+    });
+
     document.getElementById('btnChartTypeDonut')?.addEventListener('click', () => setObsChartType('donut'));
     document.getElementById('btnChartTypeBar')?.addEventListener('click', () => setObsChartType('bar'));
     document.getElementById('btnChartTypeTrend')?.addEventListener('click', () => setObsChartType('trend'));
