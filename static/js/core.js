@@ -939,6 +939,7 @@ const LAZY_TAB_SCRIPTS = {
     'tab-netsec-audit': ['/static/vendor/html2pdf/html2pdf.bundle.min.js', '/static/js/netsec-audit.js', '/static/js/audit_checklist.js'],
     'tab-policy-test': ['/static/js/policy-test.js'],
     'tab-config-drift': ['/static/js/config-drift.js'],
+    'tab-routes': ['/static/js/routes-view.js'],
 };
 
 const _lazyLoaded = new Set();
@@ -1084,6 +1085,7 @@ async function switchTab(tabId, clickedBtn) {
     else if (tabId === 'tab-netsec-audit') loadNetSecAuditTab();
     else if (tabId === 'tab-policy-test') loadPolicyTestTab();
     else if (tabId === 'tab-config-drift') loadConfigDriftTab();
+    else if (tabId === 'tab-routes') loadRoutesTab();
 }
 
 // --- FLUSSI LIVE (fase 5): top talker + anomalie correlate -------------
@@ -1500,6 +1502,7 @@ function buildCommandPaletteItems(query = '') {
         { id: 'tab-netsec-audit', title: 'NetSec Audit', desc: tr('coreFirewallAndSecurityAudit'), group: tr('coreViews') },
         { id: 'tab-policy-test', title: tr('corePolicyRoutingValidation'), desc: tr('corePolicyTraceAndRouting'), group: tr('coreViews') },
         { id: 'tab-config-drift', title: 'Config Drift', desc: tr('coreRunningConfigVsBackup'), group: tr('coreViews') },
+        { id: 'tab-routes', title: tr('coreRoutingTables'), desc: tr('coreRoutesAcrossDevices'), group: tr('coreViews') },
         { id: 'tab-provisioning', title: 'Provisioning', desc: tr('coreAddNewDevicesAnd'), group: tr('coreViews') },
         { id: 'tab-import', title: tr('coreCsvImport'), desc: tr('coreBulkImportDevicesFrom'), group: tr('coreViews') },
         { id: 'tab-users', title: tr('coreUsers'), desc: tr('coreManageLocalUserAccounts'), group: tr('coreViews') },

@@ -318,6 +318,9 @@
         <button id="navPolicyTest" class="nav-item" data-tab="tab-policy-test" role="tab" aria-controls="tab-policy-test" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabPolicyTest"><i class="fa-solid fa-route"></i> Validazione Policy &amp; Routing</span>
         </button>
+        <button id="navRoutes" class="nav-item" data-tab="tab-routes" role="tab" aria-controls="tab-routes" aria-selected="false" tabindex="-1">
+          <span class="nav-left" data-i18n="tabRoutes"><i class="fa-solid fa-signs-post"></i> Tabelle di Routing</span>
+        </button>
         <button id="navConfigDrift" class="nav-item" data-tab="tab-config-drift" role="tab" aria-controls="tab-config-drift" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabConfigDrift"><i class="fa-solid fa-code-compare"></i> Config Drift</span>
         </button>
@@ -4010,6 +4013,79 @@
       </div>
     </div> <!-- End #netsecSubtabChecklist -->
   </div> <!-- End #tab-netsec-audit -->
+
+  <!-- TAB: ROUTING TABLES -->
+  <div id="tab-routes" class="tab-content" role="tabpanel" tabindex="0">
+    <div class="hero" style="margin-bottom:18px;">
+      <div class="hero-card" style="flex:1;">
+        <h2 data-i18n="rtTitle">Tabelle di Routing</h2>
+        <p data-i18n="rtDesc">Le tabelle di routing degli apparati che le pubblicano, in una sola vista raggruppata per apparato e tipo di rotta. Sola lettura: nessuna modifica viene scritta.</p>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:18px;">
+      <div class="filterbar" style="align-items:flex-end; gap:14px; flex-wrap:wrap;">
+        <div class="form-group" style="margin-bottom:0; min-width:200px;">
+          <label for="rtDeviceFilter" data-i18n="rtFilterDevice">Apparato</label>
+          <select id="rtDeviceFilter"></select>
+        </div>
+        <div class="form-group" style="margin-bottom:0; min-width:180px;">
+          <label for="rtTypeFilter" data-i18n="rtFilterType">Tipo rotta</label>
+          <select id="rtTypeFilter">
+            <option value="" data-i18n="rtTypeAll">Tutti</option>
+            <option value="connected" data-i18n="rtTypeConnected">Connected</option>
+            <option value="static" data-i18n="rtTypeStatic">Statica</option>
+            <option value="ospf">OSPF</option>
+            <option value="bgp">BGP</option>
+            <option value="rip">RIP</option>
+            <option value="other" data-i18n="rtTypeOther">Altro</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0; flex:1; min-width:220px;">
+          <label for="rtSearch" data-i18n="rtFilterSearch">Cerca rete, next-hop o interfaccia</label>
+          <input type="text" id="rtSearch" placeholder="es. 10.0.0.0/16"
+                 data-i18n-placeholder="rtSearchPl">
+        </div>
+        <button id="btnRtRefresh" class="btn btn-secondary" style="width:auto; margin:0;">
+          <i class="fa-solid fa-rotate"></i> <span data-i18n="rtRefresh">Aggiorna</span>
+        </button>
+      </div>
+      <div id="rtErrors" style="display:none; margin-top:12px;"></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:18px;">
+      <h4 style="margin:0 0 10px; font-size:14px; color:var(--text-muted);">
+        <i class="fa-solid fa-chart-simple"></i> <span data-i18n="rtChartTitle">Rotte per apparato e tipo</span>
+      </h4>
+      <div style="position:relative; width:100%; height:220px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; overflow:hidden;">
+        <canvas id="rtChartCanvas" style="width:100%; height:100%; display:block;"></canvas>
+      </div>
+      <p style="margin:8px 0 0; font-size:12px; color:var(--text-muted);" data-i18n="rtChartNote">Le barre contano le rotte visibili con i filtri correnti. Nessun apparato espone i pacchetti per singola rotta: una barra di traffico qui sarebbe un numero inventato.</p>
+    </div>
+
+    <div class="panel">
+      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
+        <h4 style="margin:0; font-size:14px; color:var(--text-muted);">
+          <i class="fa-solid fa-table-list"></i> <span data-i18n="rtTableTitle">Rotte</span>
+        </h4>
+        <span id="rtCount" style="font-size:12px; color:var(--text-muted);"></span>
+      </div>
+      <div class="table-container" style="max-height:520px; overflow:auto;">
+        <table style="width:100%; border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="text-align:left; padding:6px 8px;" data-i18n="rtColNetwork">Rete</th>
+              <th style="text-align:left; padding:6px 8px;" data-i18n="rtColNextHop">Next-hop / Interfaccia</th>
+              <th style="text-align:left; padding:6px 8px;" data-i18n="rtColType">Tipo</th>
+              <th style="text-align:right; padding:6px 8px;" data-i18n="rtColDistance">Distanza</th>
+              <th style="text-align:right; padding:6px 8px;" data-i18n="rtColMetric">Metrica</th>
+            </tr>
+          </thead>
+          <tbody id="rtTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div> <!-- End #tab-routes -->
 
   <!-- TAB: POLICY & ROUTE VALIDATION -->
   <div id="tab-policy-test" class="tab-content" role="tabpanel" tabindex="0">

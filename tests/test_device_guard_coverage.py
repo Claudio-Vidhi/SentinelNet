@@ -43,6 +43,11 @@ WAIVED = {
         "Reads the tenant-scoped switch table; no device is contacted.",
     ("observability.py", "obs_api_context"):
         "Tenant-filtered SQL read of stored snapshots, not a device target.",
+    ("observability.py", "obs_host_series"):
+        "ip is a host SEEN in flow records - a client, a server on the "
+        "internet - not a managed device: assert_device_allowed would return "
+        "None for every one of them. The boundary is the tenant filter on the "
+        "query, which is applied.",
     ("triage.py", "ping_single"):
         "Probing an IP before it is in inventory is the point; when the IP IS "
         "known, assert_group_allowed runs.",
