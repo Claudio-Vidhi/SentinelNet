@@ -92,6 +92,7 @@ declare var toggleAuditSaveNameInput: any;
 
 // config-drift.js
 declare var loadConfigDriftTab: any;
+declare var loadRoutesTab: any;
 
 // policy-test.js
 declare var loadPolicyTestTab: any;
