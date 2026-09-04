@@ -35,9 +35,19 @@ def _sighting(switch_ip, interface, port_channel="", is_uplink=0, last_seen="202
 class TestAccessPosition(unittest.TestCase):
 
     def setUp(self):
+        self._orig_db = mac_history.DB_PATH
         mac_history.DB_PATH = os.path.join(_TMP, f"mac_{id(self)}.db")
         mac_history._init_done = False
         mac_history.init_db()
+
+    def tearDown(self):
+        # DB_PATH e' un globale del modulo: lasciarlo puntare fuori dalla
+        # directory della suite faceva fallire test_shared_paths_are_pinned
+        # ogni volta che xdist gli assegnava questo worker per secondo --
+        # circa una run completa su tre, mai in isolamento. Stesso ripristino
+        # che fa gia' test_arp_collector.
+        mac_history.DB_PATH = self._orig_db
+        mac_history._init_done = False
 
     def _store(self, rows):
         with mac_history._lock, mac_history._connect() as c:

@@ -121,9 +121,14 @@ class TestRollup(_Base):
         self.assertEqual([r["mac"] for r in out["results"]], [MAC_A])
 
     def test_gli_ip_arrivano_dall_arp_dello_stesso_tenant(self):
+        # Stesso orologio per le due righe, come in test_dual_stack e
+        # test_multi_ip: due insert a cavallo di un secondo davano last_seen
+        # diversi, e "vince il piu' recente per sorgente" scartava un binding
+        # legittimo. Falliva circa una run completa su tre sotto -n 4.
+        same_scan = _iso(0)
         self._sighting(tenant="sede-a")
-        self._arp(ip="192.0.2.10", tenant="sede-a", last_days=0)
-        self._arp(ip="192.0.2.11", tenant="sede-a", last_days=0)
+        self._arp(ip="192.0.2.10", tenant="sede-a", last_iso=same_scan)
+        self._arp(ip="192.0.2.11", tenant="sede-a", last_iso=same_scan)
 
         out = mac_history.endpoint_inventory()
 
