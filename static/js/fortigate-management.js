@@ -214,9 +214,14 @@ async function loadFgtDataset(key) {
         }
         return;
     }
+    // Il corpo si costruisce UNA volta e si conserva: la vista lo rimostra, e
+    // rileggerlo dal form al momento del disegno mostrerebbe la domanda che
+    // l'utente sta scrivendo ora al posto di quella a cui il firewall ha
+    // risposto.
+    const sent = spec.body ? spec.body() : {};
     const opts = spec.method === 'POST'
         ? { method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(spec.body ? spec.body() : {}) }
+            body: JSON.stringify(sent) }
         : undefined;
     try {
         const res = await apiFetch(spec.url(encodeURIComponent(ip)), opts);
@@ -228,6 +233,11 @@ async function loadFgtDataset(key) {
             fgtDatasetRows[key] = {
                 rows: _fgtRows(data, spec),
                 raw: data, source: body.source, apiError: body.api_error || null,
+                sent,
+                // policy-lookup risponde anche con l'interfaccia di ingresso
+                // effettivamente usata, dedotta dalla rotta quando non e'
+                // stata indicata: senza, il verdetto non e' interpretabile.
+                srcintf: body.srcintf || null,
                 errors: body.errors || null, error: null,
                 // Eco della query effettiva (i log la restituiscono): serve a
                 // distinguere "il firewall non ha quei log" da "abbiamo
@@ -318,7 +328,12 @@ function renderFgtDataset(key) {
     // proprio (piccoli multipli + sparkline). Vedi renderFgtResources.
     if (key === 'resources') { renderFgtResources(host, st.rows[0] || {}, badge); return; }
 
-    // Un dict singolo (HA, policy lookup) diventa una tabella chiave/valore.
+    // Quale policy matcherebbe un flusso e' una RISPOSTA, non un dizionario:
+    // l'operatore vuole leggere consentito/negato e il numero di policy, non
+    // cercarli fra le chiavi. La risposta grezza resta sotto, per intero.
+    if (key === 'policyLookup') { renderFgtPolicyLookup(host, st, head, L); return; }
+
+    // Un dict singolo (HA) diventa una tabella chiave/valore.
     const isKv = st.rows.length === 1 && !spec.cols.some(([k]) => k in (st.rows[0] || {}));
     const filter = (_fgtVal('fgtFilter-' + key) || '').toLowerCase();
     const html = isKv ? _fgtKvTable(st.rows[0], st.errors) : _fgtColTable(spec.cols, st.rows, filter, L, key);
@@ -566,6 +581,82 @@ function renderFgtResources(host, usage, badge) {
 // `errors` (opzionale): mappa chiave->motivo per i rami che sono falliti
 // senza far fallire l'intero dataset (es. security-profiles per famiglia
 // senza licenza). Si evidenzia la riga col motivo nel title.
+// Il verdetto di una policy-lookup, ricavato SOLO da cio' che il firewall ha
+// detto. FortiOS risponde con `policy_id` e `success`; l'azione della policy
+// non e' in questa risposta, sta nella policy stessa — che la pill Policy ha
+// gia' scaricato quando e' stata aperta. Se non c'e', si mostra il numero e si
+// dice dove leggerla, invece di indovinare un consentito/negato.
+function _fgtLookupVerdict(data, policiesRows) {
+    const d = data || {};
+    const id = (d.policy_id !== undefined && d.policy_id !== null) ? Number(d.policy_id) : null;
+    if (d.success === false || id === null || Number.isNaN(id)) {
+        return { kind: 'nomatch', color: 'var(--warning)', icon: 'fa-circle-question',
+                 label: tr('fgtLookupNoMatch'), note: tr('fgtLookupNoMatchNote') };
+    }
+    // policyid 0 e' la deny implicita di FortiOS: una corrispondenza vera, e
+    // la risposta piu' frequente quando qualcosa "non passa".
+    if (id === 0) {
+        return { kind: 'deny', color: 'var(--danger)', icon: 'fa-ban', policyId: 0,
+                 label: tr('fgtLookupDenied'), note: tr('fgtLookupImplicitDeny') };
+    }
+    const pol = (policiesRows || []).find(r => Number(r.policyid) === id) || null;
+    const action = pol && String(pol.action || '').toLowerCase();
+    if (action === 'accept') {
+        return { kind: 'accept', color: 'var(--success)', icon: 'fa-circle-check',
+                 policyId: id, policyName: pol.name, label: tr('fgtLookupAllowed') };
+    }
+    if (action === 'deny') {
+        return { kind: 'deny', color: 'var(--danger)', icon: 'fa-ban',
+                 policyId: id, policyName: pol.name, label: tr('fgtLookupDenied') };
+    }
+    return { kind: 'matched', color: 'var(--primary)', icon: 'fa-circle-info',
+             policyId: id, policyName: pol && pol.name,
+             label: tr('fgtLookupMatched'), note: tr('fgtLookupOpenPolicies') };
+}
+
+function renderFgtPolicyLookup(host, st, head, L) {
+    const data = st.raw || {};
+    const sent = st.sent || {};
+    const v = _fgtLookupVerdict(data, (fgtDatasetRows.policies || {}).rows);
+    const dash = '<span style="color:var(--text-muted);">—</span>';
+    const port = sent.dest_port ? ':' + escapeHtml(String(sent.dest_port)) : '';
+    const policyLine = (v.policyId === undefined || v.policyId === null)
+        ? ''
+        : `<div style="font-size:13px; opacity:.85;">${escapeHtml(tr('fgtLookupPolicyN', { n: v.policyId }))}${
+              v.policyName ? ' · ' + escapeHtml(v.policyName) : ''}</div>`;
+
+    host.innerHTML = head + `
+      <div style="border:1px solid ${v.color}; border-left:4px solid ${v.color};
+                  background:color-mix(in srgb, ${v.color} 8%, transparent);
+                  padding:14px 16px; margin-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <i class="fa-solid ${v.icon}" style="color:${v.color}; font-size:20px;" aria-hidden="true"></i>
+          <strong style="font-size:18px; color:${v.color}; letter-spacing:.3px;">${escapeHtml(v.label)}</strong>
+          ${policyLine}
+        </div>
+        ${v.note ? `<div style="margin-top:6px; font-size:12px; color:var(--text-muted);">${escapeHtml(v.note)}</div>` : ''}
+      </div>
+
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+                  font-family:var(--font-code); font-size:13px; background:var(--surface-2);
+                  border:1px solid var(--border); padding:10px 14px; margin-bottom:12px;">
+        <strong>${sent.src_ip ? escapeHtml(sent.src_ip) : dash}</strong>
+        <i class="fa-solid fa-arrow-right" style="color:var(--text-muted);" aria-hidden="true"></i>
+        <strong>${sent.dest ? escapeHtml(sent.dest) + port : dash}</strong>
+        <span class="badge">${escapeHtml(sent.protocol || 'TCP')}</span>
+        <span style="color:var(--text-muted); font-family:var(--font-main, sans-serif); font-size:12px;">
+          ${escapeHtml(tr('fgtLookupIngress'))}: ${st.srcintf ? escapeHtml(st.srcintf) : dash}${
+            st.srcintf && !sent.srcintf ? ' <em>(' + escapeHtml(tr('fgtLookupIngressDerived')) + ')</em>' : ''}
+        </span>
+      </div>
+
+      <details>
+        <summary style="cursor:pointer; font-size:12px; color:var(--text-muted); margin-bottom:8px;">
+          ${escapeHtml(tr('fgtLookupRawAnswer'))}</summary>
+        ${_fgtKvTable(data, st.errors)}
+      </details>`;
+}
+
 function _fgtKvTable(obj, errors) {
     const rows = Object.entries(obj || {}).map(([k, v]) => {
         const err = errors && errors[k];

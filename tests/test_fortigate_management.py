@@ -3,6 +3,8 @@
 non deve mai uscire dal service."""
 import os
 import re
+import shutil
+import subprocess
 import tempfile
 import unittest
 
@@ -74,6 +76,44 @@ class DatasetRegistryTest(unittest.TestCase):
         # (sessions, logs, policy-lookup), mai PUT/DELETE/PATCH.
         for verb in ("'PUT'", "'DELETE'", "'PATCH'"):
             self.assertNotIn(verb, self.registry, f"metodo di scrittura nel registro: {verb}")
+
+
+class PolicyLookupIsAnAnswerNotADict(unittest.TestCase):
+    """La lookup risponde "quale policy matcherebbe": consentito/negato e il
+    numero devono leggersi subito, e cio' che il firewall NON ha detto non si
+    inventa. FortiOS restituisce policy_id e success, non l'azione: quella sta
+    nella policy, che la pill Policy scarica quando viene aperta."""
+
+    _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def test_the_lookup_has_its_own_view_not_the_key_value_table(self):
+        src = open(os.path.join(self._ROOT, "static", "js",
+                                "fortigate-management.js"), encoding="utf-8").read()
+        self.assertIn("renderFgtPolicyLookup", src)
+        self.assertIn("if (key === 'policyLookup')", src)
+        # La risposta grezza resta raggiungibile: la vista aggiunge una
+        # lettura, non toglie dati.
+        self.assertIn("fgtLookupRawAnswer", src)
+
+    def test_every_verdict_string_exists_in_both_languages(self):
+        i18n = open(os.path.join(self._ROOT, "static", "js", "i18n.js"),
+                    encoding="utf-8").read()
+        for key in ("fgtLookupAllowed", "fgtLookupDenied", "fgtLookupMatched",
+                    "fgtLookupNoMatch", "fgtLookupImplicitDeny",
+                    "fgtLookupOpenPolicies", "fgtLookupPolicyN",
+                    "fgtLookupIngress", "fgtLookupRawAnswer"):
+            # count() e non una regex: la chiave e' una stringa letterale e
+            # due occorrenze significano "una per lingua".
+            self.assertEqual(2, i18n.count(key + ":"),
+                             f"{key} non e' definita in entrambe le lingue")
+
+    @unittest.skipUnless(shutil.which("node"), "node non disponibile")
+    def test_the_verdict_mapping_runs_for_real(self):
+        harness = os.path.join(self._ROOT, "tests", "js",
+                               "test_policy_lookup_verdict.mjs")
+        proc = subprocess.run([shutil.which("node"), harness],
+                              capture_output=True, text=True, cwd=self._ROOT)
+        self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
 
 
 if __name__ == "__main__":
