@@ -3,8 +3,6 @@
 parametri e risposte identici al monolite."""
 
 import os
-import re
-import sys
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -15,6 +13,7 @@ from security import crypto_vault
 from security.security_manager import log_audit
 from routers.deps import require_admin, get_current_user, user_group_scope
 from core import data_config
+from services import cert_manager, self_update
 
 _APP_ADV_ENV = {
     "port": "SENTINELNET_PORT",
@@ -405,16 +404,6 @@ def set_sso_settings(payload: SsoSettingsSchema, current_user = Depends(require_
     return {"status": "success"}
 
 
-def _install_kind() -> str:
-    """Come gira questa istanza: da repo git, da exe PyInstaller, o da una
-    copia dei sorgenti senza repo. La terza non e' un dettaglio: chi ha
-    scaricato uno zip non puo' aggiornare con git piu' di quanto possa un exe."""
-    if getattr(sys, "frozen", False):
-        return "exe"
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return "git" if os.path.isdir(os.path.join(root, ".git")) else "source"
-
-
 @router.get("/api/fleet/versions")
 def get_fleet_versions(current_user = Depends(require_admin)):
     """Cosa sta girando in ogni pezzo della flotta: il centrale e ogni agente.
@@ -422,7 +411,7 @@ def get_fleet_versions(current_user = Depends(require_admin)):
     Risponde senza SSH alla domanda "l'aggiornamento e' arrivato ovunque?"."""
     from core.version import __version__
     from services import site_manager
-    kind = _install_kind()
+    kind = self_update.install_kind()
     agents = []
     for s in site_manager.list_sites():
         if s.get("mode") != "agent":
@@ -443,175 +432,45 @@ def get_fleet_versions(current_user = Depends(require_admin)):
             "install_kind": kind, "agents": agents}
 
 
-# Nome FISSO del servizio Windows. Non e' configurabile di proposito: e' il
-# nome che finisce in una riga di comando, e un nome che arriva da fuori
-# trasformerebbe questa rotta in una shell remota.
-WINDOWS_SERVICE_NAME = "SentinelNet"
-
-
-def _supervisor() -> str:
-    """Chi rimettera' in piedi il processo dopo l'uscita: '' se nessuno.
-
-    Su Linux: systemd esporta INVOCATION_ID a ogni unit che avvia, quindi la
-    sua assenza significa che "riavvia" e' solo "termina".
-
-    Su Windows non esiste una variabile equivalente -- un servizio non si
-    distingue dall'esterno da un exe lanciato a mano -- quindi e' chi installa
-    il servizio a dichiararlo con SENTINELNET_WINDOWS_SERVICE=1. Stessa
-    logica del caso systemd: e' il supervisore a dire di esserci."""
-    if os.environ.get("INVOCATION_ID"):
-        return "systemd"
-    if sys.platform == "win32" and os.environ.get("SENTINELNET_WINDOWS_SERVICE"):
-        return "windows-service"
-    # Un exe PyInstaller avviato a mano non ha nessuno che lo rialzi. Sotto un
-    # servizio Windows invece e' normale che sia frozen, ed e' il ramo sopra
-    # a coprirlo.
-    return ""
-
-
-def _is_supervised() -> bool:
-    """Compatibilita': la rotta ragiona su _supervisor(), i test su questo."""
-    return bool(_supervisor())
-
-
 @router.post("/api/settings/restart")
 def restart_application(current_user = Depends(require_admin)):
     """Riavvia l'applicazione delegando a un processo separato.
 
-    L'app non si uccide MAI da sola: su Linux e' la unit oneshot
-    sentinelnet-restart.service a riavviare sentinelnet.service, su Windows e'
-    un powershell staccato a fare Restart-Service. Cosi' un riavvio fallito
-    lascia in piedi il processo vecchio, invece di lasciare la macchina senza
-    pannello.
-
     L'argv e' FISSO su entrambi i sistemi: nulla del corpo della richiesta lo
     raggiunge, altrimenti questa rotta sarebbe una shell remota sulla macchina
-    che custodisce le credenziali di ogni sede."""
-    kind = _supervisor()
-    if not kind:
-        raise HTTPException(
-            status_code=409,
-            detail="L'applicazione non e' gestita da un supervisore: un "
-                   "riavvio la spegnerebbe soltanto. Riavviala da systemd o "
-                   "dal gestore servizi di Windows.")
-    _spawn_restart(kind)
+    che custodisce le credenziali di ogni sede. Il come sta in
+    services/self_update.py."""
+    try:
+        kind = self_update.restart()
+    except self_update.SelfUpdateError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     log_audit(f"Riavvio dell'applicazione richiesto da '{current_user.get('sub')}' "
               f"(supervisore: {kind}).")
     return {"status": "scheduled", "supervisor": kind}
-
-
-def _spawn_restart(kind: str) -> None:
-    """Fa partire il riavvio delegandolo a un processo separato.
-
-    Estratta perche' ha due chiamanti: il pulsante di riavvio e
-    l'aggiornamento, che deve riavviare per applicare il codice appena
-    scaricato. Due copie di questa logica divergerebbero, e la copia
-    sbagliata sarebbe quella che spegne il pannello."""
-    import subprocess
-    if kind == "windows-service":
-        # Staccato, e senza aspettarlo: Restart-Service ferma QUESTO processo,
-        # quindi un subprocess.run atteso non tornerebbe mai. Il prezzo e' che
-        # l'esito non si conosce -- lo stesso prezzo di --no-block su Linux.
-        try:
-            subprocess.Popen(
-                ["powershell", "-NoProfile", "-NonInteractive", "-Command",
-                 "Restart-Service", "-Name", WINDOWS_SERVICE_NAME],
-                creationflags=getattr(subprocess, "DETACHED_PROCESS", 0)
-                | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
-        except Exception as e:
-            raise HTTPException(status_code=409,
-                                detail=f"Riavvio non disponibile: {e}")
-    else:
-        try:
-            proc = subprocess.run(
-                ["sudo", "-n", "systemctl", "start", "--no-block",
-                 "sentinelnet-restart.service"],
-                capture_output=True, text=True, timeout=15)
-        except Exception as e:
-            raise HTTPException(status_code=409, detail=f"Riavvio non disponibile: {e}")
-        if proc.returncode != 0:
-            raise HTTPException(
-                status_code=409,
-                detail="sudo ha rifiutato il comando di riavvio: "
-                       f"{(proc.stderr or proc.stdout or '').strip()}")
 
 
 @router.post("/api/settings/update")
 def update_application(current_user = Depends(require_admin)):
     """Aggiorna il centrale: git pull, dipendenze, riavvio. In quest'ordine.
 
-    L'agente si aggiorna da solo dal 0.27.1; qui c'era ancora la sequenza a
-    mano via SSH, cioe' la shell che questa tab esiste per evitare.
-
-    Ogni argv e' FISSO: niente del corpo della richiesta lo raggiunge. Non
-    esiste un parametro per il remote, il branch o il repository, perche' un
-    parametro qui sarebbe esecuzione di codice arbitrario sulla macchina che
-    custodisce le credenziali di ogni sede."""
-    import subprocess
-    kind = _install_kind()
-    if kind != "git":
-        raise HTTPException(
-            status_code=409,
-            detail=f"Installazione '{kind}': non c'e' un repository git da cui "
-                   "aggiornare. Sostituisci l'eseguibile, o reinstalla da sorgenti.")
-    supervisor = _supervisor()
-    if not supervisor:
-        # Scaricare il codice nuovo e non poterlo applicare lascia l'albero
-        # avanti e il processo indietro: lo stato piu' confuso possibile.
-        raise HTTPException(
-            status_code=409,
-            detail="L'applicazione non e' gestita da un supervisore: "
-                   "l'aggiornamento non potrebbe essere applicato.")
-
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    La sequenza e i suoi rifiuti stanno in services/self_update.py; qui resta
+    la riga di audit, che e' l'unica parte che ha bisogno di sapere chi ha
+    premuto il pulsante."""
     try:
-        pull = subprocess.run(["git", "pull"], cwd=root, capture_output=True,
-                              text=True, timeout=120)
-    except Exception as e:
-        raise HTTPException(status_code=409, detail=f"git non disponibile: {e}")
-    output = (pull.stdout or "") + (pull.stderr or "")
-    if pull.returncode != 0:
-        raise HTTPException(status_code=409,
-                            detail=f"git pull fallito:\n{output.strip()[-2000:]}")
-    if "Already up to date" in output:
-        # Niente installazione e niente riavvio: interromperebbero le sessioni
-        # aperte per applicare esattamente nulla.
-        log_audit(f"Aggiornamento richiesto da '{current_user.get('sub')}': "
-                  "gia' aggiornato.")
-        return {"status": "up-to-date", "output": output.strip()}
-
-    # Le dipendenze PRIMA del riavvio, con l'interprete che sta girando: un
-    # aggiornamento che ne aggiunge una, riavviato senza installarla, non
-    # riparte piu' e lascia la rete senza pannello.
-    dep = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "-r",
-         os.path.join(root, "requirements.txt")],
-        cwd=root, capture_output=True, text=True, timeout=900)
-    if dep.returncode != 0:
-        raise HTTPException(
-            status_code=409,
-            detail="Dipendenze non installate, riavvio annullato (resta in "
-                   "esecuzione la versione precedente, che funziona):\n"
-                   f"{(dep.stderr or dep.stdout or '').strip()[-2000:]}")
-
-    _spawn_restart(supervisor)
-    log_audit(f"Aggiornamento dell'applicazione eseguito da "
-              f"'{current_user.get('sub')}' (supervisore: {supervisor}).")
-    return {"status": "updating", "supervisor": supervisor,
-            "output": output.strip()}
+        result = self_update.update()
+    except self_update.SelfUpdateError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    who = current_user.get("sub")
+    if result["status"] == "up-to-date":
+        log_audit(f"Aggiornamento richiesto da '{who}': gia' aggiornato.")
+    else:
+        log_audit(f"Aggiornamento dell'applicazione eseguito da '{who}' "
+                  f"(supervisore: {result['supervisor']}).")
+    return result
 
 
 class SelfSignedCertSchema(BaseModel):
     host: str
-
-
-# Solo un IPv4 letterale o un nome DNS: e' cio' che un SAN puo' contenere, e
-# un host fuori da queste due forme e' un errore di battitura, non un caso
-# d'uso. La validazione resta anche ora che il certificato non passa piu' da
-# una riga di comando.
-_IPV4_RE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
-_DNS_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
-                     r"(?:\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$")
 
 
 @router.post("/api/settings/tls/self-signed")
@@ -619,74 +478,12 @@ def generate_self_signed_cert(payload: SelfSignedCertSchema,
                               current_user = Depends(require_admin)):
     """Genera certificato e chiave self-signed per questo host.
 
-    Il subjectAltName porta l'indirizzo con cui i client contattano davvero il
-    pannello: senza, ogni client moderno rifiuta il certificato qualunque sia
-    il CN.
-
-    Il certificato e' costruito con `cryptography`, che e' gia' una dipendenza
-    obbligatoria (la usa crypto_vault). Chiamare `openssl` costringeva a
-    sperare che fosse nel PATH -- su Windows di norma non c'e' -- e la versione
-    di macOS e' LibreSSL, che rifiuta -addext. Qui la funzione si comporta
-    identica su ogni sistema operativo."""
-    from datetime import datetime, timedelta, timezone
-    import ipaddress
-    from cryptography import x509
-    from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.primitives.asymmetric import rsa
-    from cryptography.x509.oid import NameOID
-
-    host = (payload.host or "").strip()
-    is_ip = bool(_IPV4_RE.match(host))
-    if is_ip:
-        if any(int(o) > 255 for o in host.split(".")):
-            raise HTTPException(status_code=400, detail="Indirizzo IPv4 non valido.")
-    elif not (host and len(host) <= 253 and _DNS_RE.match(host)):
-        raise HTTPException(
-            status_code=400,
-            detail="Host non valido: usare un indirizzo IPv4 o un nome DNS.")
-
-    certs_dir = data_config.get_path("certs")
-    os.makedirs(certs_dir, exist_ok=True)
-    certfile = os.path.join(certs_dir, "server.crt")
-    keyfile = os.path.join(certs_dir, "server.key")
-    if os.path.exists(certfile) or os.path.exists(keyfile):
-        raise HTTPException(
-            status_code=409,
-            detail="Un certificato esiste gia'. Rimuovi o archivia "
-                   f"{certfile} e {keyfile} prima di generarne uno nuovo.")
-
-    days = 825
-    now = datetime.now(timezone.utc)
-    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, host)])
-    san = x509.IPAddress(ipaddress.ip_address(host)) if is_ip else x509.DNSName(host)
-    key = rsa.generate_private_key(public_exponent=65537, key_size=4096)
-    cert = (x509.CertificateBuilder()
-            .subject_name(subject)
-            .issuer_name(subject)
-            .public_key(key.public_key())
-            .serial_number(x509.random_serial_number())
-            .not_valid_before(now - timedelta(minutes=5))
-            .not_valid_after(now + timedelta(days=days))
-            .add_extension(x509.SubjectAlternativeName([san]), critical=False)
-            .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
-            .sign(key, hashes.SHA256()))
-
-    # La chiave prima del certificato, e i permessi subito dopo averla scritta:
-    # tra la creazione e restrict_permissions il file esiste con i permessi
-    # ereditati dalla cartella, e quella finestra va tenuta corta.
-    with open(keyfile, "wb") as f:
-        f.write(key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
-            encryption_algorithm=serialization.NoEncryption()))
-    # Non os.chmod: su Windows non restringe nulla e la chiave privata
-    # resterebbe leggibile da chiunque erediti i permessi della cartella.
-    # restrict_permissions usa icacls la' e chmod 600 su POSIX.
-    data_config.restrict_permissions(keyfile)
-    with open(certfile, "wb") as f:
-        f.write(cert.public_bytes(serialization.Encoding.PEM))
-
-    log_audit(f"Certificato self-signed generato per '{host}' da "
+    La validazione dell'host e la costruzione dell'X.509 stanno in
+    services/cert_manager.py."""
+    try:
+        result = cert_manager.generate_self_signed(payload.host)
+    except cert_manager.CertError as e:
+        raise HTTPException(status_code=e.status, detail=str(e))
+    log_audit(f"Certificato self-signed generato per '{payload.host.strip()}' da "
               f"'{current_user.get('sub')}'.")
-    return {"certfile": certfile, "keyfile": keyfile, "days": days,
-            "not_after": cert.not_valid_after_utc.isoformat()}
+    return result
