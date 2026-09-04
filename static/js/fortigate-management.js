@@ -626,7 +626,7 @@ function renderFgtPolicyLookup(host, st, head, L) {
               v.policyName ? ' · ' + escapeHtml(v.policyName) : ''}</div>`;
 
     host.innerHTML = head + `
-      <div style="border:1px solid ${v.color}; border-left:4px solid ${v.color};
+      <div style="border:1px solid ${v.color};
                   background:color-mix(in srgb, ${v.color} 8%, transparent);
                   padding:14px 16px; margin-bottom:12px;">
         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
