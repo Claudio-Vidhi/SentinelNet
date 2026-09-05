@@ -178,7 +178,7 @@ class PerIpViewIsWiredEndToEnd(unittest.TestCase):
     def test_the_view_is_declared_where_the_panes_are_toggled(self):
         # Senza questo, aprire la pill mostra il pane nuovo e NON nasconde
         # quello vecchio.
-        self.assertIn("const TRAF_VIEWS = ['overview', 'flows', 'search', 'hosts']", self.js)
+        self.assertIn("const TRAF_VIEWS = ['overview', 'flows', 'search', 'hosts', 'policies']", self.js)
         self.assertIn("for (const v of TRAF_VIEWS)", self.js)
         self.assertIn("hosts:     () => loadTrafHosts()", self.js)
 

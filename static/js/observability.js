@@ -232,11 +232,12 @@
         flows:     () => loadTopTalkers(),
         search:    () => loadFlowSiemTab(),
         hosts:     () => loadTrafHosts(),
+        policies:  () => loadTrafPolicies(),
     };
 
     // Una lista sola: aggiungere una pill e dimenticare questo array lasciava
     // il pane precedente visibile sotto quello nuovo.
-    const TRAF_VIEWS = ['overview', 'flows', 'search', 'hosts'];
+    const TRAF_VIEWS = ['overview', 'flows', 'search', 'hosts', 'policies'];
 
     function trafSwitchView(view) {
         if (!document.getElementById('trafPane-' + view)) return;
@@ -430,6 +431,144 @@
             });
             ctx.stroke();
         });
+    }
+
+    // --- VISTA "PER POLICY": i contatori che il firewall tiene da se' --------
+    // Non e' telemetria di rete come il resto del tab: byte e sessioni per
+    // policy vivono SUL FortiGate e sono cumulativi dall'ultimo azzeramento.
+    // La finestra del tab non li filtra, e il pannello lo dice a schermo: 850
+    // MB letti sotto un selettore "ultime 6 ore" si leggono come 850 MB in sei
+    // ore, che e' sbagliato di un ordine di grandezza.
+
+    let _trafPolicies = [];
+    let _trafPolErrors = [];
+    let _trafPolDevices = [];
+
+    function trafPolFilters() {
+        const val = id => {
+            const el = /** @type {HTMLInputElement|HTMLSelectElement|null} */ (
+                document.getElementById(id));
+            return el ? el.value : '';
+        };
+        return { device: val('trafPolDevice'), action: val('trafPolAction'),
+                 q: val('trafPolSearch') };
+    }
+
+    async function loadTrafPolicies() {
+        const f = trafPolFilters();
+        const url = `/api/firewall-traffic/policies?device=${encodeURIComponent(f.device)}`
+            + `&action=${encodeURIComponent(f.action)}&q=${encodeURIComponent(f.q.trim())}`;
+        const body = document.getElementById('trafPolBody');
+        if (body) {
+            body.innerHTML = `<tr><td colspan="8" style="padding:20px; text-align:center;
+                color:var(--text-muted);">${escapeHtml(tr('trafPolLoading'))}</td></tr>`;
+        }
+        let totals = { total_bytes: 0, total_sessions: 0 };
+        try {
+            const res = await apiFetch(url);
+            if (!res || !res.ok) throw new Error('HTTP ' + (res ? res.status : '?'));
+            const data = await res.json();
+            _trafPolicies = data.rows || [];
+            _trafPolErrors = data.errors || [];
+            totals = data;
+        } catch (e) {
+            _trafPolicies = [];
+            _trafPolErrors = [{ device_ip: '', error: String(e) }];
+        }
+        syncTrafPolDevice();
+        renderTrafPolErrors();
+        renderTrafPolicies(totals);
+    }
+
+    function syncTrafPolDevice() {
+        const sel = /** @type {HTMLSelectElement|null} */ (
+            document.getElementById('trafPolDevice'));
+        if (!sel) return;
+        // Come nel tab Rotte: l'elenco si ricostruisce solo senza filtro
+        // attivo, altrimenti si svuoterebbe da solo lasciando selezionato
+        // l'unico firewall rimasto.
+        const current = sel.value;
+        if (!current) {
+            _trafPolDevices = [...new Set(_trafPolicies.map(r => r.device))].sort();
+        }
+        sel.innerHTML = [`<option value="">${escapeHtml(tr('trafPolDeviceAll'))}</option>`]
+            .concat(_trafPolDevices.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`))
+            .join('');
+        sel.value = current;
+    }
+
+    function renderTrafPolErrors() {
+        const box = document.getElementById('trafPolErrors');
+        if (!box) return;
+        if (!_trafPolErrors.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+        box.style.display = '';
+        box.innerHTML = `<div style="border:1px solid var(--warning);
+              background:color-mix(in srgb, var(--warning) 8%, transparent); padding:10px 14px; font-size:12px;">
+            <strong>${escapeHtml(tr('trafPolPartial', { n: _trafPolErrors.length }))}</strong>
+            <ul style="margin:6px 0 0; padding-left:18px;">${
+                _trafPolErrors.map(e => `<li><span style="font-family:var(--font-code);">${
+                    escapeHtml(e.device_ip || '?')}</span> &mdash; ${escapeHtml(e.error)}</li>`).join('')}</ul>
+          </div>`;
+    }
+
+    function renderTrafPolicies(totals) {
+        const tbody = document.getElementById('trafPolBody');
+        const totalsBox = document.getElementById('trafPolTotals');
+        if (!tbody) return;
+        if (totalsBox) {
+            totalsBox.textContent = tr('trafPolTotals', {
+                n: _trafPolicies.length,
+                bytes: fmtBytes((totals && totals.total_bytes) || 0),
+                sessions: (totals && totals.total_sessions) || 0,
+            });
+        }
+        if (!_trafPolicies.length) {
+            tbody.innerHTML = `<tr><td colspan="8" style="padding:20px; text-align:center;
+                color:var(--text-muted);">${escapeHtml(tr('trafPolEmpty'))}</td></tr>`;
+            return;
+        }
+        // Barra in scala sulla policy piu' carica della vista: si sta leggendo
+        // il confronto fra regole, non la loro quota sul totale.
+        const max = Math.max(..._trafPolicies.map(r => r.bytes || 0), 1);
+        const dash = '<span style="color:var(--text-muted);">&mdash;</span>';
+        tbody.innerHTML = _trafPolicies.map(r => {
+            const deny = r.action === 'deny';
+            const actionColor = deny ? 'var(--danger)' : 'var(--success)';
+            const pct = Math.max(1, Math.round(((r.bytes || 0) / max) * 100));
+            // never_hit distingue "contatore a zero" da "nessun contatore":
+            // una policy di cui non sappiamo nulla non e' una regola morta.
+            const traffic = r.bytes
+                ? `<div style="position:relative; height:14px; background:var(--surface-3); overflow:hidden; min-width:120px;">
+                     <div style="height:100%; width:${pct}%; background:${actionColor};"></div>
+                     <span style="position:absolute; right:4px; top:50%; transform:translateY(-50%);
+                           font-size:10px; font-family:var(--font-code); color:var(--text);">${
+                               escapeHtml(fmtBytes(r.bytes))}</span>
+                   </div>`
+                : (r.never_hit
+                    ? `<span class="badge" style="border-color:var(--warning); color:var(--warning);">${
+                          escapeHtml(tr('trafPolNeverHit'))}</span>`
+                    : dash);
+            const flow = `${escapeHtml(r.srcaddr || '?')} &rarr; ${escapeHtml(r.dstaddr || '?')}`;
+            const ips = [r.srcaddr_ips, r.dstaddr_ips].filter(Boolean).join(' -> ');
+            const disabled = r.status && r.status !== 'enable';
+            return `<tr style="border-top:1px solid var(--border); font-size:12px; ${
+                       disabled ? 'opacity:.55;' : ''}">
+                <td style="padding:6px 8px;">${escapeHtml(r.device)}</td>
+                <td style="padding:6px 8px; text-align:right; font-family:var(--font-code);">${
+                    r.policyid === null || r.policyid === undefined ? dash : escapeHtml(String(r.policyid))}</td>
+                <td style="padding:6px 8px;">${r.name ? escapeHtml(r.name) : dash}${
+                    disabled ? ` <span class="badge" style="border-color:var(--text-muted); color:var(--text-muted);">${
+                        escapeHtml(tr('trafPolDisabled'))}</span>` : ''}</td>
+                <td style="padding:6px 8px; font-family:var(--font-code);" ${
+                    ips ? `title="${escapeHtml(ips)}"` : ''}>${flow}</td>
+                <td style="padding:6px 8px;">${r.service ? escapeHtml(r.service) : dash}</td>
+                <td style="padding:6px 8px; font-weight:700; color:${actionColor};">${
+                    escapeHtml((r.action || '').toUpperCase() || 'N/D')}</td>
+                <td style="padding:6px 8px;">${traffic}</td>
+                <td style="padding:6px 8px; text-align:right; font-family:var(--font-code);">${
+                    escapeHtml(String(r.active_sessions || 0))}</td>
+            </tr>`;
+        }).join('');
     }
 
     function trafSetWindow(value) {
@@ -1651,6 +1790,14 @@
         clearTimeout(_trafHostSearchTimer);
         _trafHostSearchTimer = setTimeout(loadTrafHosts, 350);
     });
+    let _trafPolSearchTimer = null;
+    document.getElementById('trafPolSearch')?.addEventListener('input', () => {
+        clearTimeout(_trafPolSearchTimer);
+        _trafPolSearchTimer = setTimeout(loadTrafPolicies, 350);
+    });
+    document.getElementById('trafPolDevice')?.addEventListener('change', loadTrafPolicies);
+    document.getElementById('trafPolAction')?.addEventListener('change', loadTrafPolicies);
+
     document.getElementById('trafHostSeriesSelect')?.addEventListener('change', (e) => {
         _trafSeriesIp = e.target.value;
         loadTrafHostSeries();

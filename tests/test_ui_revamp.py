@@ -1822,10 +1822,10 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         # Il tab ora tiene anche le viste Ricerca, Anomalie e Per IP: ai
         # pannelli di prima (top talker, ripartizione protocolli, tabella
         # flussi) si aggiungono istogramma, query, faccette e registro della
-        # Ricerca, piu' la tabella per host e il suo andamento nel tempo.
+        # Ricerca, la tabella per host col suo andamento e quella per policy.
         # Il pannello "Dettaglio Flussi" inline non c'e' piu': era la terza
         # copia della stessa ripartizione per protocollo.
-        self.assertEqual(tab.count('<div class="panel"'), 9)
+        self.assertEqual(tab.count('<div class="panel"'), 10)
         self.assertEqual(tab.count('<div class="panel" style="margin-bottom:18px;"'), 6)
         # All tables wrapped: flows, syslog-in-all-sources, protocol breakdown,
         # top talkers. The anomalies table left with its pane.
