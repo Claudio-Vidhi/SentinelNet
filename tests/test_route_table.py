@@ -242,6 +242,116 @@ class GroupCounts(unittest.TestCase):
                          {"fw-edge": {"static": 1, "connected": 1, "bgp": 1}})
 
 
+class BackupFallback(unittest.TestCase):
+    """Quando l'apparato non risponde, le statiche del backup.
+
+    Il backup non e' la tabella di routing: non contiene le apprese, non
+    contiene le connesse, e non sa dire se una statica fosse attiva. Percio'
+    si sorveglia che arrivi marcata (from_backup) e con la data, e che
+    l'errore dell'apparato non sparisca dietro alle righe."""
+
+    IOS_CONFIG = """hostname sw-core
+!
+interface Vlan10
+ ip address 10.1.10.1 255.255.255.0
+!
+ip route 0.0.0.0 0.0.0.0 192.0.2.254
+ip route 10.2.0.0 255.255.0.0 10.1.10.2 200
+ip route vrf CLIENTI 10.9.0.0 255.255.0.0 10.1.10.9
+!
+end
+"""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            user_manager.create_user("adm_rt", PASS, role="admin", groups=None)
+        except Exception:
+            pass
+
+    def _analysis(self, config, ts=1_756_000_000):
+        from ai import config_analyzer
+        result = dict(config_analyzer.analyze_config(config))
+        result["backup_ts"] = ts
+        return result
+
+    def _unreachable(self):
+        return mock.patch.object(
+            route_table, "_collect_live",
+            return_value={"device_ip": SWITCH["IP"], "error": "SSH fallito"})
+
+    def test_the_static_routes_of_an_unreachable_switch_come_from_the_backup(self):
+        with self._unreachable(), \
+             mock.patch("ai.config_analyzer.analyze_device",
+                        return_value=self._analysis(self.IOS_CONFIG)):
+            out = route_table.collect_for(SWITCH)
+        self.assertEqual(out["source"], "backup")
+        self.assertEqual({r["network"] for r in out["rows"]},
+                         {"0.0.0.0/0", "10.2.0.0/16"})
+        self.assertTrue(all(r["from_backup"] for r in out["rows"]))
+        self.assertTrue(all(r["type"] == "static" for r in out["rows"]))
+        # L'errore resta: perche' l'apparato non ha risposto conta quanto le
+        # righe che si riescono a mostrare lo stesso.
+        self.assertIn("SSH fallito", out["error"])
+
+    def test_a_next_hop_that_is_an_interface_is_not_shown_as_a_gateway(self):
+        config = "ip route 10.3.0.0 255.255.0.0 GigabitEthernet0/1\n"
+        with self._unreachable(), \
+             mock.patch("ai.config_analyzer.analyze_device",
+                        return_value=self._analysis(config)):
+            out = route_table.collect_for(SWITCH)
+        row = out["rows"][0]
+        self.assertEqual(row["gateway"], "")
+        self.assertEqual(row["interface"], "GigabitEthernet0/1")
+
+    def test_a_vrf_route_is_left_out(self):
+        # Non c'e' una colonna in cui dire di quale VRF sia: accanto alle
+        # altre si leggerebbe come una rotta della tabella globale.
+        with self._unreachable(), \
+             mock.patch("ai.config_analyzer.analyze_device",
+                        return_value=self._analysis(self.IOS_CONFIG)):
+            out = route_table.collect_for(SWITCH)
+        self.assertNotIn("10.9.0.0/16", {r["network"] for r in out["rows"]})
+
+    def test_a_device_that_answers_is_not_read_from_the_backup(self):
+        # Il ripiego e' un ripiego: se l'apparato risponde, il backup non
+        # viene nemmeno aperto.
+        with mock.patch.object(route_table, "_collect_live",
+                               return_value={"device_ip": SWITCH["IP"],
+                                             "rows": [{"network": "10.0.0.0/8"}]}), \
+             mock.patch("ai.config_analyzer.analyze_device") as analyze:
+            out = route_table.collect_for(SWITCH)
+        analyze.assert_not_called()
+        self.assertEqual(out["rows"][0]["network"], "10.0.0.0/8")
+
+    def test_without_a_backup_the_error_stays_the_answer(self):
+        with self._unreachable(), \
+             mock.patch("ai.config_analyzer.analyze_device", return_value=None):
+            out = route_table.collect_for(SWITCH)
+        self.assertEqual(out["error"], "SSH fallito")
+        self.assertNotIn("rows", out)
+
+    def test_the_api_names_the_backup_and_its_date(self):
+        # La riga nel box degli errori e' l'unico posto in cui la vista dice
+        # che quelle rotte hanno una data diversa da "adesso".
+        client = TestClient(app_server.app)
+        r = client.post("/api/auth/login",
+                        json={"username": "adm_rt", "password": PASS})
+        assert r.status_code == 200, r.text
+        with mock.patch("services.inventory_manager.get_all_devices",
+                        return_value=[SWITCH]), \
+             self._unreachable(), \
+             mock.patch("ai.config_analyzer.analyze_device",
+                        return_value=self._analysis(self.IOS_CONFIG)):
+            out = client.get(f"/api/routes?device={SWITCH['IP']}").json()
+        self.assertTrue(out["rows"])
+        self.assertEqual(len(out["errors"]), 1)
+        message = out["errors"][0]["error"]
+        self.assertIn("SSH fallito", message)
+        self.assertIn("backup", message)
+        self.assertIn("statiche", message)
+
+
 class RouteApi(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -398,7 +508,14 @@ class RoutesTabIsWiredEndToEnd(unittest.TestCase):
     def test_every_bound_id_exists_in_the_template(self):
         for element_id in ("rtDeviceFilter", "rtTypeFilter", "rtSearch",
                            "btnRtRefresh", "rtTableBody", "rtChartCanvas",
-                           "rtErrors", "rtCount"):
+                           "rtErrors", "rtCount",
+                           # Analisi di percorso: un id agganciato e assente
+                           # dal template non solleva niente, lascia solo un
+                           # pulsante muto.
+                           "rtTraceSrc", "rtTraceDst", "btnRtTrace",
+                           "btnRtTracePlay", "rtTraceVerdict", "rtTraceRail",
+                           "rtTraceSteps", "rtProbeBox", "btnRtProbe",
+                           "rtProbeOut"):
             self.assertIn(f'id="{element_id}"', self.html,
                           f"{element_id} e' agganciato da routes-view.js ma "
                           "non esiste nel template")

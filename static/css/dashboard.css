@@ -2322,3 +2322,158 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   color: var(--primary);
   margin-left: 4px;
 }
+
+/* --- Analisi di percorso (tab Rotte) ---------------------------------------
+   Il pannello e' letto come uno strumento, non come una pagina: un accento
+   solo, tipografia dati in mono, e lo stato di ogni salto detto dal bordo
+   invece che da un colore di sfondo. */
+.rt-trace-desc {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  max-width: 80ch;
+}
+
+.rt-verdict {
+  font-family: var(--font-code);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  border: var(--seam) solid currentColor;
+  display: none;
+}
+.rt-verdict.on { display: inline-flex; align-items: center; gap: 7px; }
+.rt-verdict::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+  display: inline-block;
+}
+.rt-verdict.ok { color: var(--success); }
+.rt-verdict.warn { color: var(--warning); }
+.rt-verdict.bad { color: var(--danger); }
+.rt-verdict.muted { color: var(--text-muted); }
+
+.rt-rail {
+  margin-top: 14px;
+  padding: 10px 4px 0;
+  background: var(--surface-2);
+  border: var(--seam) solid var(--border);
+  overflow-x: auto;
+}
+.rt-rail svg { display: block; width: 100%; height: auto; }
+.rt-rail text { font-family: var(--font-code); }
+
+.rt-steps { margin-top: 14px; }
+.rt-step {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  border: var(--seam) solid var(--border);
+  border-bottom: 0;
+  background: var(--surface-2);
+  transition: background-color .25s ease, opacity .35s ease;
+}
+.rt-step:last-child { border-bottom: var(--seam) solid var(--border); }
+.rt-step.pending { opacity: .32; }
+.rt-step.focus { background: var(--surface-3); }
+.rt-step-gutter {
+  border-right: var(--seam) solid var(--border);
+  padding-top: 14px;
+  text-align: center;
+}
+.rt-step-n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: var(--seam) solid var(--border);
+  font-family: var(--font-code);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.rt-step.decided .rt-step-n { border-color: var(--success); color: var(--success); }
+.rt-step-body { padding: 13px 14px 14px; min-width: 0; overflow-x: auto; }
+.rt-step-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.rt-step-dev { font-family: var(--font-code); font-size: 13.5px; font-weight: 700; }
+.rt-step-ip { font-family: var(--font-code); font-size: 11px; color: var(--text-muted); }
+.rt-step-say { font-size: 12.5px; color: var(--text-muted); margin-left: auto; }
+
+.rt-cand { width: 100%; border-collapse: collapse; font-family: var(--font-code); font-size: 12px; }
+.rt-cand th {
+  text-align: left;
+  font-weight: 400;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0 12px 6px 0;
+  border-bottom: var(--seam) solid var(--border);
+  white-space: nowrap;
+}
+.rt-cand td {
+  padding: 6px 12px 6px 0;
+  border-bottom: var(--seam) solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+  transition: color .35s ease, opacity .35s ease;
+}
+.rt-cand tr:last-child td { border-bottom: 0; }
+.rt-cand .rt-num { text-align: right; }
+.rt-cand td.rt-lead { padding-left: 10px; border-left: 2px solid transparent; }
+.rt-cand tr.won td { color: var(--text); background: var(--lamp-up-wash); }
+.rt-cand tr.won td.rt-lead { border-left-color: var(--success); }
+.rt-cand tr.lost td { opacity: .45; }
+
+.rt-rule { display: flex; align-items: center; flex-wrap: wrap; margin-top: 11px; font-family: var(--font-code); font-size: 11px; }
+.rt-rule-step {
+  padding: 4px 10px;
+  border: var(--seam) solid var(--border);
+  color: var(--text-muted);
+  margin-left: -1px;
+  transition: color .3s ease, border-color .3s ease;
+}
+.rt-rule-step:first-child { margin-left: 0; }
+.rt-rule-step.hit { color: var(--success); border-color: var(--success); }
+/* I criteri dopo quello che ha deciso non vengono nemmeno guardati: barrarli
+   dice esattamente questo. */
+.rt-rule-step.moot { text-decoration: line-through; }
+
+.rt-kind {
+  font-family: var(--font-code);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--bg);
+  padding: 1px 5px;
+  margin-right: 7px;
+}
+
+.rt-probe { margin-top: 16px; border: var(--seam) solid var(--border); border-left: 2px solid var(--warning); padding: 12px 14px; }
+.rt-probe-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-muted); }
+.rt-probe-head span { flex: 1; min-width: 260px; }
+.rt-probe-out { margin-top: 12px; font-family: var(--font-code); font-size: 12px; }
+.rt-probe-out pre {
+  margin: 8px 0 0;
+  padding: 10px;
+  background: var(--surface-2);
+  border: var(--seam) solid var(--border);
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  max-height: 220px;
+  overflow: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rt-step, .rt-cand td, .rt-rule-step { transition: none; }
+}

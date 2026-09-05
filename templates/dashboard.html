@@ -4113,6 +4113,48 @@
       <div id="rtErrors" style="display:none; margin-top:12px;"></div>
     </div>
 
+    <!-- Analisi di percorso: dalle tabelle raccolte, non sondando la rete. -->
+    <div class="panel rt-trace" style="margin-bottom:18px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+        <h4 style="margin:0; font-size:14px; color:var(--text-muted);">
+          <i class="fa-solid fa-route"></i> <span data-i18n="rtTraceTitle">Analisi di percorso</span>
+        </h4>
+        <span id="rtTraceVerdict" class="rt-verdict"></span>
+      </div>
+      <p class="rt-trace-desc" data-i18n="rtTraceDesc">Dove finisce un indirizzo partendo da un apparato, e quale rotta vince su ogni salto. Calcolato sulle tabelle gia' raccolte: nessun pacchetto viene inviato.</p>
+
+      <div class="filterbar" style="align-items:flex-end; gap:14px; flex-wrap:wrap;">
+        <div class="form-group" style="margin-bottom:0; min-width:200px;">
+          <label for="rtTraceSrc" data-i18n="rtTraceSrc">Apparato di partenza</label>
+          <select id="rtTraceSrc"></select>
+        </div>
+        <div class="form-group" style="margin-bottom:0; min-width:200px;">
+          <label for="rtTraceDst" data-i18n="rtTraceDst">Indirizzo di destinazione</label>
+          <input type="text" id="rtTraceDst" placeholder="es. 10.30.0.7"
+                 data-i18n-placeholder="rtTraceDstPl" autocomplete="off" spellcheck="false">
+        </div>
+        <button id="btnRtTrace" class="btn btn-primary" style="width:auto; margin:0;">
+          <i class="fa-solid fa-diagram-project"></i> <span data-i18n="rtTraceRun">Analizza</span>
+        </button>
+        <button id="btnRtTracePlay" class="btn btn-secondary" style="width:auto; margin:0; display:none;">
+          <i class="fa-solid fa-play"></i> <span data-i18n="rtTracePlay">Riproduci</span>
+        </button>
+      </div>
+
+      <div id="rtTraceRail" class="rt-rail" style="display:none;"></div>
+      <div id="rtTraceSteps" class="rt-steps"></div>
+
+      <div id="rtProbeBox" class="rt-probe" style="display:none;">
+        <div class="rt-probe-head">
+          <span data-i18n="rtProbeNote">La prova sul campo lancia un traceroute vero dall'apparato di partenza: e' l'unica azione di questa vista che manda pacchetti.</span>
+          <button id="btnRtProbe" class="btn btn-secondary" style="width:auto; margin:0;">
+            <i class="fa-solid fa-satellite-dish"></i> <span data-i18n="rtProbeRun">Prova sul campo</span>
+          </button>
+        </div>
+        <div id="rtProbeOut" class="rt-probe-out" style="display:none;"></div>
+      </div>
+    </div>
+
     <div class="panel" style="margin-bottom:18px;">
       <h4 style="margin:0 0 10px; font-size:14px; color:var(--text-muted);">
         <i class="fa-solid fa-chart-simple"></i> <span data-i18n="rtChartTitle">Rotte per apparato e tipo</span>

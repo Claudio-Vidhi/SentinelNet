@@ -155,6 +155,11 @@ def _row(device, entry: dict) -> dict:
         "raw_type": entry.get("type") or "",
         "distance": entry.get("distance"),
         "metric": entry.get("metric"),
+        # Una riga letta dal backup non e' una riga letta dall'apparato: e'
+        # quello che era CONFIGURATO l'ultima volta che il backup e' stato
+        # preso. La vista la marca, perche' altrimenti una configurazione
+        # vecchia di un mese si legge come la tabella di adesso.
+        "from_backup": bool(entry.get("from_backup")),
     }
 
 
@@ -183,11 +188,83 @@ def _is_agent_site(site_id: str) -> bool:
     return bool(site and site.get("mode") == "agent")
 
 
+# --- Ripiego sul backup ------------------------------------------------------
+#
+# Un apparato che non risponde lascia la vista senza le sue rotte, ed e' quasi
+# sempre il momento in cui servono. Il backup di configurazione che il prodotto
+# gia' conserva ne contiene una parte: le rotte STATICHE configurate.
+#
+# Una parte, non la tabella. Dal backup non escono le rotte apprese (OSPF, BGP,
+# RIP), non escono le connesse, e nulla dice se una statica fosse attiva: la
+# next-hop poteva essere gia' irraggiungibile. Per questo ogni riga porta
+# from_backup e la risposta dichiara la data: "rotte statiche del 3 settembre"
+# e' un'informazione utile, "la tabella di routing" sarebbe una bugia.
+
+def _hop(value: str) -> tuple:
+    """(gateway, interfaccia) da una next-hop che puo' essere l'uno o l'altra.
+
+    IOS accetta sia `ip route 10.0.0.0 255.0.0.0 192.0.2.254` sia la stessa
+    riga con un'interfaccia al posto dell'indirizzo."""
+    text = (value or "").strip()
+    if re.fullmatch(r"\d{1,3}(?:\.\d{1,3}){3}", text):
+        return text, ""
+    return "", text
+
+
+def routes_from_backup(device) -> "dict | None":
+    """Le rotte statiche dell'ultimo backup, o None se backup non ce n'e'.
+
+    Nessuna sessione verso l'apparato: si rilegge un file che il prodotto ha
+    gia'. L'analisi (IOS o FortiOS a seconda del contenuto) e' la stessa che
+    usa la tab Analisi Configurazione, non un secondo parser che le puo'
+    divergere accanto."""
+    from ai import config_analyzer
+    analysis = config_analyzer.analyze_device(device.get("IP"))
+    if not analysis:
+        return None
+    entries = []
+    for r in (analysis.get("routing") or {}).get("static") or []:
+        # Le rotte di una VRF non hanno una colonna in cui dire di quale VRF
+        # sono: mostrarle accanto alle altre le farebbe leggere come rotte
+        # della tabella globale.
+        if r.get("vrf"):
+            continue
+        gateway, interface = _hop(r.get("next_hop") or "")
+        distance = r.get("distance") or r.get("ad")
+        entries.append({
+            "network": r.get("prefix") or "",
+            "gateway": gateway,
+            "interface": interface or (r.get("device") or ""),
+            "type": "static",
+            "distance": int(distance) if str(distance or "").isdigit() else None,
+            "from_backup": True,
+        })
+    if not entries:
+        return None
+    return {"device_ip": device.get("IP"), "source": "backup",
+            "backup_ts": analysis.get("backup_ts"),
+            "rows": [_row(device, e) for e in entries]}
+
+
 def collect_for(device) -> dict:
     """Rotte di UN apparato: ``{"rows": [...]}`` oppure ``{"error": ...}``.
 
     Non solleva: un apparato irraggiungibile e' una riga di errore accanto
-    agli altri, non una tabella vuota per tutti."""
+    agli altri, non una tabella vuota per tutti. Se pero' un backup c'e', le
+    sue statiche arrivano lo stesso, marcate, con l'errore che resta accanto:
+    dire perche' l'apparato non ha risposto conta quanto mostrare le righe."""
+    answer = _collect_live(device)
+    if answer.get("rows"):
+        return answer
+    fallback = routes_from_backup(device)
+    if not fallback:
+        return answer
+    fallback["error"] = answer.get("error") or ""
+    return fallback
+
+
+def _collect_live(device) -> dict:
+    """L'apparato, interrogato davvero."""
     ip = device.get("IP")
     if _is_agent_site(device.get("Site") or "central"):
         # Provarci finirebbe in timeout: il centrale non ha una rotta verso
