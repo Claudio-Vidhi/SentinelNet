@@ -12,6 +12,23 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Added
 
+- **A "By policy" view completes the Traffico tab.** Byte, sessioni e hit per
+  policy firewall, aggregate across the firewalls in scope, sorted heaviest
+  first — the order in which a traffic table is actually read. Filters by
+  firewall, action and a free search over policy name, address objects,
+  resolved networks and service; totals beside the filters are computed after
+  them, so the summary matches the rows below it.
+
+  These numbers do **not** come from `flow_aggregates` like the rest of the
+  tab: they are counters the FortiGate keeps for itself, cumulative since the
+  last reset. The tab's time window does not filter them, and the pane says so
+  in a banner — 850 MB read under an "Ultime 6 ore" selector otherwise reads as
+  850 MB in six hours, wrong by an order of magnitude. "Never hit" is shown as
+  its own badge rather than a zero, because a policy with no counter is not a
+  dead rule; and a firewall that returns its configuration without its
+  counters is reported as a partial answer instead of a table of zeros.
+
+
 - **Switches reach the Routing Tables tab: `show ip route` is parsed.** The tab
   shipped with FortiGates only, because they are the one vendor that publishes
   a routing table over REST. A switch publishes its RIB too, just as text, and

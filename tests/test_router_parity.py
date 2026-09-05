@@ -105,7 +105,10 @@ class TestRouterParity(unittest.TestCase):
                     # Certificato self-signed generato dal pannello.
                     "/api/settings/tls",
                     # Tabelle di routing di piu' apparati in una vista sola.
-                    "/api/routes")
+                    "/api/routes",
+                    # Traffico per policy firewall, aggregato sugli apparati
+                    # in scope (vista "Per policy" del tab Traffico).
+                    "/api/firewall-traffic")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
@@ -198,7 +201,8 @@ class TestFullParity(unittest.TestCase):
     # i percorsi RIMOSSI: /api/settings/fortigate-preview era il flag della
     # tab FortiGate in anteprima, sparito quando la tab è diventata normale.
     NEW_PREFIXES = ("/api/redundancy", "/api/agent/syslog", "/api/observability/protocol-distribution", "/api/sites/{site_id}/agent", "/api/sites/test-bastion", "/api/reassign-device-site", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/settings/fortigate-preview", "/api/flow-siem", "/api/wlc/{ip}/diagnose-client", "/api/ws-token", "/api/wlc/{ip}/wlan-summary", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/observability/events", "/api/ai/conversations", "/api/diagnose", "/api/agent/arp",
-                    "/api/routes", "/api/observability/hosts",
+                    "/api/routes", "/api/firewall-traffic",
+                    "/api/observability/hosts",
                     "/api/observability/host-series",
                     # Relay dell'agente: stato dei dispositivi e push della config.
                     "/api/agent/status", "/api/agent/backup", "/api/endpoints",

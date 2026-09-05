@@ -1738,6 +1738,7 @@
         <button type="button" class="ca-pill" id="trafPill-flows" data-traf-view="flows" data-i18n="trafPillFlows">Flussi</button>
         <button type="button" class="ca-pill" id="trafPill-search" data-traf-view="search" data-i18n="trafPillSearch">Ricerca</button>
         <button type="button" class="ca-pill" id="trafPill-hosts" data-traf-view="hosts" data-i18n="trafPillHosts">Per IP</button>
+        <button type="button" class="ca-pill" id="trafPill-policies" data-traf-view="policies" data-i18n="trafPillPolicies">Per policy</button>
       </div>
 
       <div id="trafPane-overview" class="traf-pane">
@@ -1845,6 +1846,58 @@
       </div>
 
       </div>
+      <div id="trafPane-policies" class="traf-pane" style="display:none;">
+      <div style="border:1px solid var(--info); background:color-mix(in srgb, var(--info) 8%, transparent);
+                  padding:10px 14px; margin-bottom:12px; font-size:12px;">
+        <i class="fa-solid fa-circle-info" style="color:var(--info); margin-right:4px;" aria-hidden="true"></i>
+        <span data-i18n="trafPolCumulativeNote">I contatori per policy vivono sul firewall e sono cumulativi dall'ultimo azzeramento: la finestra temporale del tab non li filtra.</span>
+      </div>
+      <div class="filterbar" style="align-items:flex-end; gap:14px; flex-wrap:wrap;">
+        <div class="form-group" style="margin-bottom:0; min-width:180px;">
+          <label for="trafPolDevice" data-i18n="trafPolDevice">Firewall</label>
+          <select id="trafPolDevice"></select>
+        </div>
+        <div class="form-group" style="margin-bottom:0; min-width:150px;">
+          <label for="trafPolAction" data-i18n="trafPolAction">Azione</label>
+          <select id="trafPolAction">
+            <option value="" data-i18n="trafPolActionAll">Tutte</option>
+            <option value="accept" data-i18n="trafPolActionAccept">ACCEPT</option>
+            <option value="deny" data-i18n="trafPolActionDeny">DENY</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0; flex:1; min-width:220px;">
+          <label for="trafPolSearch" data-i18n="trafPolSearchLbl">Cerca policy, indirizzo o servizio</label>
+          <input type="text" id="trafPolSearch" placeholder="es. LAN, 10.0.0.0/8, HTTPS"
+                 data-i18n-placeholder="trafPolSearchPl">
+        </div>
+        <span id="trafPolTotals" style="font-size:12px; color:var(--text-muted);"></span>
+      </div>
+      <div id="trafPolErrors" style="display:none; margin-top:12px;"></div>
+
+      <div class="panel" style="margin-top:16px;">
+        <h4 style="margin:0 0 10px; font-size:14px; color:var(--text-muted);">
+          <i class="fa-solid fa-shield-halved"></i> <span data-i18n="trafPolTitle">Traffico per policy firewall</span>
+        </h4>
+        <div class="table-container" style="max-height:520px; overflow:auto;">
+          <table style="width:100%; border-collapse:collapse;">
+            <thead>
+              <tr>
+                <th style="text-align:left; padding:6px 8px;" data-i18n="trafPolColDevice">Firewall</th>
+                <th style="text-align:right; padding:6px 8px;" data-i18n="trafPolColId">ID</th>
+                <th style="text-align:left; padding:6px 8px;" data-i18n="trafPolColName">Nome</th>
+                <th style="text-align:left; padding:6px 8px;" data-i18n="trafPolColFlow">Src &rarr; Dst</th>
+                <th style="text-align:left; padding:6px 8px;" data-i18n="trafPolColService">Servizio</th>
+                <th style="text-align:left; padding:6px 8px;" data-i18n="trafPolColAction">Azione</th>
+                <th style="text-align:left; padding:6px 8px;" data-i18n="trafPolColTraffic">Traffico</th>
+                <th style="text-align:right; padding:6px 8px;" data-i18n="trafPolColSessions">Sessioni</th>
+              </tr>
+            </thead>
+            <tbody id="trafPolBody"></tbody>
+          </table>
+        </div>
+      </div>
+      </div>
+
       <div id="trafPane-hosts" class="traf-pane" style="display:none;">
       <div class="filterbar" style="align-items:center; margin:0 0 12px;">
         <div class="input-wrapper" style="flex:1; max-width:320px;">
