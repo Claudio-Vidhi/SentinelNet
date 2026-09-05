@@ -9,8 +9,8 @@ import asyncio
 from fastapi import APIRouter, Depends, Query
 
 from core.ssh_pool import run_ssh
-from routers.deps import get_current_user, user_group_scope
-from services import inventory_manager, route_table
+from routers.deps import devices_in_scope, get_current_user
+from services import route_table
 
 router = APIRouter(tags=["Routes"])
 
@@ -20,28 +20,38 @@ router = APIRouter(tags=["Routes"])
 MAX_CONCURRENT_DEVICES = 8
 
 
+@router.get("/api/routes/devices")
+def list_routable_devices(current_user = Depends(get_current_user)):
+    """Gli apparati selezionabili, letti dall'inventario.
+
+    Firewall e switch insieme: la lista non si costruisce piu' dalle righe
+    tornate, che e' il motivo per cui uno switch mai interrogato non compariva
+    fra quelli scegliibili."""
+    return {"devices": [
+        {"ip": d.get("IP"), "hostname": d.get("Hostname") or d.get("IP"),
+         "group": d.get("Group") or "Generale",
+         "vendor": d.get("Vendor") or ""}
+        for d in route_table.routable_devices(devices_in_scope(current_user))]}
+
+
 @router.get("/api/routes")
 async def list_routes(
-    device: str = Query("", max_length=100),
+    device: str = Query("", max_length=2000),
     type: str = Query("", max_length=20),
     q: str = Query("", max_length=100),
     current_user = Depends(get_current_user),
 ):
-    """Le tabelle di routing degli apparati in scope, in una sola risposta.
+    """Le tabelle di routing degli apparati CHIESTI, in una sola risposta.
+
+    ``device`` e' l'elenco degli IP scelti, separati da virgola: senza
+    selezione non si interroga niente.
 
     I filtri si applicano qui e non solo nel browser: la vista mostra un
     conteggio, e un conteggio calcolato su righe gia' filtrate altrove e' un
     numero che non corrisponde a niente."""
-    scope = user_group_scope(current_user)
-    devices = inventory_manager.get_all_devices()
-    if scope is not None:
-        devices = [d for d in devices if (d.get("Group") or "Generale") in scope]
-    targets = route_table.routable_devices(devices)
-    if device:
-        needle = device.lower()
-        targets = [d for d in targets
-                   if needle in (d.get("Hostname") or "").lower()
-                   or needle in (d.get("IP") or "").lower()]
+    wanted = {p.strip() for p in device.split(",") if p.strip()}
+    targets = [d for d in route_table.routable_devices(devices_in_scope(current_user))
+               if d.get("IP") in wanted]
 
     sem = asyncio.Semaphore(MAX_CONCURRENT_DEVICES)
 

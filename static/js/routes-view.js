@@ -13,7 +13,6 @@
     let _rtRows = [];
     let _rtCounts = {};
     let _rtErrors = [];
-    let _rtDevices = [];
 
     // I colori dei tipi sono gli stessi in tabella e nel grafico: una barra
     // gialla e una riga gialla devono voler dire la stessa cosa senza che
@@ -43,17 +42,60 @@
         return `var(${varName})`;
     }
 
+    function rtSelectedDevices() {
+        const sel = /** @type {HTMLSelectElement|null} */ (
+            document.getElementById('rtDeviceFilter'));
+        if (!sel) return [];
+        return [...sel.selectedOptions].map(o => o.value);
+    }
+
     function rtFilters() {
         const val = id => {
             const el = /** @type {HTMLInputElement|HTMLSelectElement|null} */ (
                 document.getElementById(id));
             return el ? el.value : '';
         };
-        return { device: val('rtDeviceFilter'), type: val('rtTypeFilter'), q: val('rtSearch') };
+        return { device: rtSelectedDevices().join(','),
+                 type: val('rtTypeFilter'), q: val('rtSearch') };
+    }
+
+    // L'elenco arriva dall'inventario, non dalle righe tornate: un apparato
+    // mai interrogato deve poter essere scelto, ed e' il motivo per cui gli
+    // switch non comparivano qui.
+    async function loadRtDeviceList() {
+        const sel = /** @type {HTMLSelectElement|null} */ (
+            document.getElementById('rtDeviceFilter'));
+        if (!sel) return;
+        let devices = [];
+        try {
+            const res = await apiFetch('/api/routes/devices');
+            if (res && res.ok) devices = (await res.json()).devices || [];
+        } catch (e) { devices = []; }
+        const chosen = new Set(rtSelectedDevices());
+        sel.innerHTML = devices
+            .sort((a, b) => (a.hostname || '').localeCompare(b.hostname || ''))
+            .map(d => `<option value="${escapeHtml(d.ip)}"${chosen.has(d.ip) ? ' selected' : ''}>${
+                escapeHtml(d.hostname)} (${escapeHtml(d.ip)})</option>`).join('');
+    }
+
+    // Apertura del tab: si popola la lista e si aspetta. Interrogare da soli
+    // tutta la flotta e' esattamente quello che questa vista non deve fare.
+    async function routesTabShown() {
+        await loadRtDeviceList();
+        renderRtTable();
+        renderRtChart();
     }
 
     async function loadRoutesTab() {
         const f = rtFilters();
+        if (!f.device) {
+            // Nessun apparato scelto: nessuna sessione aperta.
+            _rtRows = []; _rtCounts = {}; _rtErrors = [];
+            renderRtErrors();
+            renderRtTable();
+            renderRtChart();
+            return;
+        }
         const url = `/api/routes?device=${encodeURIComponent(f.device)}`
             + `&type=${encodeURIComponent(f.type)}&q=${encodeURIComponent(f.q.trim())}`;
         const body = document.getElementById('rtTableBody');
@@ -73,27 +115,9 @@
             _rtCounts = {};
             _rtErrors = [{ device_ip: '', error: String(e) }];
         }
-        syncRtDeviceFilter();
         renderRtErrors();
         renderRtTable();
         renderRtChart();
-    }
-
-    function syncRtDeviceFilter() {
-        const sel = /** @type {HTMLSelectElement|null} */ (
-            document.getElementById('rtDeviceFilter'));
-        if (!sel) return;
-        // L'elenco si ricostruisce solo quando NON c'e' un filtro apparato
-        // attivo: altrimenti si svuoterebbe da solo lasciando selezionato
-        // l'unico apparato rimasto, senza modo di tornare indietro.
-        const current = sel.value;
-        if (!current) {
-            _rtDevices = [...new Set(_rtRows.map(r => r.device))].sort();
-        }
-        sel.innerHTML = [`<option value="">${escapeHtml(tr('rtDeviceAll'))}</option>`]
-            .concat(_rtDevices.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`))
-            .join('');
-        sel.value = current;
     }
 
     function renderRtErrors() {
@@ -125,8 +149,9 @@
         if (!tbody) return;
         if (count) count.textContent = tr('rtCount', { n: _rtRows.length });
         if (!_rtRows.length) {
+            const msg = rtSelectedDevices().length ? tr('rtEmpty') : tr('rtPickDevices');
             tbody.innerHTML = `<tr><td colspan="5" style="padding:20px; text-align:center;
-                color:var(--text-muted);">${escapeHtml(tr('rtEmpty'))}</td></tr>`;
+                color:var(--text-muted);">${escapeHtml(msg)}</td></tr>`;
             return;
         }
         const dash = '<span style="color:var(--text-muted);">&mdash;</span>';
@@ -246,9 +271,10 @@
         clearTimeout(_rtSearchTimer);
         _rtSearchTimer = setTimeout(loadRoutesTab, 350);
     });
-    document.getElementById('rtDeviceFilter')?.addEventListener('change', loadRoutesTab);
+    // La selezione non fa partire da sola la query: si sceglie e si preme
+    // Aggiorna. Ogni apparato in piu' e' una sessione in piu' aperta.
     document.getElementById('rtTypeFilter')?.addEventListener('change', loadRoutesTab);
     document.getElementById('btnRtRefresh')?.addEventListener('click', loadRoutesTab);
 
-    window.loadRoutesTab = loadRoutesTab;
+    window.loadRoutesTab = routesTabShown;
 })();
