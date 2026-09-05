@@ -9,8 +9,8 @@ import asyncio
 from fastapi import APIRouter, Depends, Query
 
 from core.ssh_pool import run_ssh
-from routers.deps import get_current_user, user_group_scope
-from services import firewall_traffic, inventory_manager
+from routers.deps import devices_in_scope, get_current_user
+from services import firewall_traffic
 
 router = APIRouter(tags=["Firewall Traffic"])
 
@@ -18,29 +18,38 @@ router = APIRouter(tags=["Firewall Traffic"])
 MAX_CONCURRENT_DEVICES = 8
 
 
+@router.get("/api/firewall-traffic/devices")
+def list_policy_devices(current_user = Depends(get_current_user)):
+    """I firewall selezionabili, letti dall'inventario.
+
+    La lista serve PRIMA della query: senza, l'unico modo di sapere quali
+    apparati esistono era interrogarli tutti e guardare le righe tornate."""
+    return {"devices": [
+        {"ip": d.get("IP"), "hostname": d.get("Hostname") or d.get("IP"),
+         "group": d.get("Group") or "Generale"}
+        for d in firewall_traffic.policy_devices(devices_in_scope(current_user))]}
+
+
 @router.get("/api/firewall-traffic/policies")
 async def list_policy_traffic(
-    device: str = Query("", max_length=100),
+    device: str = Query("", max_length=2000),
     action: str = Query("", max_length=20),
     q: str = Query("", max_length=100),
     current_user = Depends(get_current_user),
 ):
-    """Byte, sessioni e hit per policy, sui firewall in scope.
+    """Byte, sessioni e hit per policy, sui firewall CHIESTI dal chiamante.
+
+    ``device`` e' l'elenco degli IP scelti, separati da virgola: senza
+    selezione non si interroga niente. Aprire la vista non deve aprire una
+    sessione REST su ogni firewall della flotta.
 
     I filtri si applicano qui e non solo nel browser: la vista mostra dei
     totali, e un totale calcolato su righe gia' filtrate altrove e' un numero
     che non corrisponde a niente.
     """
-    scope = user_group_scope(current_user)
-    devices = inventory_manager.get_all_devices()
-    if scope is not None:
-        devices = [d for d in devices if (d.get("Group") or "Generale") in scope]
-    targets = firewall_traffic.policy_devices(devices)
-    if device:
-        needle = device.lower()
-        targets = [d for d in targets
-                   if needle in (d.get("Hostname") or "").lower()
-                   or needle in (d.get("IP") or "").lower()]
+    wanted = {p.strip() for p in device.split(",") if p.strip()}
+    targets = [d for d in firewall_traffic.policy_devices(devices_in_scope(current_user))
+               if d.get("IP") in wanted]
 
     sem = asyncio.Semaphore(MAX_CONCURRENT_DEVICES)
 

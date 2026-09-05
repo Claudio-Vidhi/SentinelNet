@@ -10,6 +10,22 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Changed
+
+- **Routing tables and "By policy" ask before they query.** Both views used to
+  fan out over every device in scope the moment they were opened, and then
+  built their device dropdown out of whatever answered. Two consequences: a
+  tab opened by accident meant one REST/SSH session per managed device, and a
+  device that had never been queried could not be picked — which is why the
+  switches were missing from the routing filter even after they learned to
+  answer `show ip route`.
+
+  The selectable devices now come from the inventory (`GET /api/routes/devices`,
+  `GET /api/firewall-traffic/devices` — inventory reads, no session opened),
+  the picker is a multi-select, and the query runs only on Aggiorna / Interroga.
+  With nothing selected the API queries nothing and the table says what to do
+  instead of showing an empty result that reads like "no routes".
+
 ### Added
 
 - **A "By policy" view completes the Traffico tab.** Byte, sessioni e hit per

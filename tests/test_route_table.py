@@ -259,12 +259,19 @@ class RouteApi(unittest.TestCase):
         return c
 
     def _get(self, user, qs="", devices=None, cli=None):
+        """La vista non interroga niente da sola: la selezione fa parte della
+        richiesta. Se il test non ne indica una, si chiedono tutti."""
+        inventory = devices or [FGT_A, FGT_B, SWITCH]
+
         def fake(device):
             return {"source": "api",
                     "data": ROUTES_A if device["IP"] == FGT_A["IP"] else ROUTES_B}
         cli = cli if cli is not None else {"status": "success", "output": IOS_OUTPUT}
+        if "device=" not in qs:
+            picked = ",".join(d["IP"] for d in inventory)
+            qs = (qs + "&" if qs else "?") + "device=" + picked
         with mock.patch("services.inventory_manager.get_all_devices",
-                        return_value=devices or [FGT_A, FGT_B, SWITCH]), \
+                        return_value=inventory), \
              mock.patch.object(route_table, "_is_agent_site", return_value=False), \
              mock.patch("core.core_engine.send_custom_command", return_value=cli), \
              mock.patch.object(fortigate_service, "get_routes", side_effect=fake):
@@ -281,6 +288,39 @@ class RouteApi(unittest.TestCase):
         self.assertEqual({r["device"] for r in out["rows"]},
                          {"fw-edge", "fw-dc", "sw-core"})
         self.assertEqual(out["devices_queried"], 3)
+
+    def test_without_a_selection_nothing_is_queried(self):
+        # Aprire il tab non deve aprire una sessione su ogni apparato della
+        # flotta: senza selezione la risposta e' vuota e nessuno viene chiamato.
+        with mock.patch("services.inventory_manager.get_all_devices",
+                        return_value=[FGT_A, FGT_B, SWITCH]),              mock.patch.object(route_table, "collect_for") as collect:
+            r = self._client("adm_rt").get("/api/routes")
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["rows"], [])
+        self.assertEqual(r.json()["devices_queried"], 0)
+        collect.assert_not_called()
+
+    def test_the_selectable_devices_come_from_the_inventory(self):
+        # Firewall E switch, senza interrogare nessuno: e' l'elenco che la
+        # tendina mostra prima della query.
+        with mock.patch("services.inventory_manager.get_all_devices",
+                        return_value=[FGT_A, FGT_B, SWITCH]):
+            r = self._client("adm_rt").get("/api/routes/devices")
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual({d["hostname"] for d in r.json()["devices"]},
+                         {"fw-edge", "fw-dc", "sw-core"})
+
+    def test_the_selectable_devices_respect_the_scope(self):
+        with mock.patch("services.inventory_manager.get_all_devices",
+                        return_value=[FGT_A, FGT_B, SWITCH]):
+            r = self._client("op_a_rt").get("/api/routes/devices")
+        self.assertEqual({d["hostname"] for d in r.json()["devices"]},
+                         {"fw-edge", "sw-core"})
+
+    def test_only_the_selected_device_is_queried(self):
+        out = self._get("adm_rt", "?device=" + FGT_A["IP"])
+        self.assertEqual({r["device"] for r in out["rows"]}, {"fw-edge"})
+        self.assertEqual(out["devices_queried"], 1)
 
     def test_scope_keeps_another_site_out(self):
         # sede-a tiene il firewall e lo switch; fw-dc sta in sede-b.
@@ -320,7 +360,8 @@ class RouteApi(unittest.TestCase):
         with mock.patch("services.inventory_manager.get_all_devices",
                         return_value=[FGT_A, FGT_B]), \
              mock.patch.object(fortigate_service, "get_routes", side_effect=fake):
-            r = self._client("adm_rt").get("/api/routes")
+            r = self._client("adm_rt").get(
+                f"/api/routes?device={FGT_A['IP']},{FGT_B['IP']}")
         out = r.json()
         self.assertEqual(len(out["rows"]), 3)
         self.assertEqual(len(out["errors"]), 1)
@@ -352,7 +393,7 @@ class RoutesTabIsWiredEndToEnd(unittest.TestCase):
     def test_the_module_is_loaded_and_called_for_that_tab(self):
         self.assertIn("'tab-routes': ['/static/js/routes-view.js']", self.core)
         self.assertIn("tabId === 'tab-routes'", self.core)
-        self.assertIn("window.loadRoutesTab = loadRoutesTab", self.mod)
+        self.assertIn("window.loadRoutesTab = routesTabShown", self.mod)
 
     def test_every_bound_id_exists_in_the_template(self):
         for element_id in ("rtDeviceFilter", "rtTypeFilter", "rtSearch",

@@ -97,6 +97,15 @@ def user_group_scope(current_user):
     return set(groups) if groups else None
 
 
+def devices_in_scope(current_user) -> list:
+    """L'inventario che il chiamante puo' vedere. Nessuna sessione aperta."""
+    devices = inventory_manager.get_all_devices()
+    scope = user_group_scope(current_user)
+    if scope is None:
+        return devices
+    return [d for d in devices if (d.get("Group") or "Generale") in scope]
+
+
 def assert_group_allowed(current_user, group):
     scope = user_group_scope(current_user)
     if scope is not None and group not in scope:

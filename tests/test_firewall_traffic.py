@@ -126,11 +126,16 @@ class PolicyTrafficApi(unittest.TestCase):
         return c
 
     def _get(self, user, qs="", answer=None):
+        """La query non parte da sola: i firewall li sceglie il chiamante. Se
+        il test non ne indica nessuno, si chiedono tutti quelli in inventario."""
         def fake(device):
             if answer is not None:
                 return answer
             return {"source": "api",
                     "data": POLICIES_A if device["IP"] == FGT_A["IP"] else POLICIES_B}
+        if "device=" not in qs:
+            picked = ",".join(d["IP"] for d in (FGT_A, FGT_B, SWITCH))
+            qs = (qs + "&" if qs else "?") + "device=" + picked
         with mock.patch("services.inventory_manager.get_all_devices",
                         return_value=[FGT_A, FGT_B, SWITCH]), \
              mock.patch.object(fortigate_service, "get_policies_with_stats",
@@ -177,10 +182,36 @@ class PolicyTrafficApi(unittest.TestCase):
         self.assertEqual(self._get("adm_ft", "?q=HTTPS")["total"], 1)
         self.assertEqual(self._get("adm_ft", "?q=Guest")["total"], 1)
 
-    def test_filter_by_device(self):
-        out = self._get("adm_ft", "?device=fw-dc")
+    def test_only_the_selected_firewall_is_queried(self):
+        out = self._get("adm_ft", "?device=" + FGT_B["IP"])
         self.assertEqual({r["device"] for r in out["rows"]}, {"fw-dc"})
         self.assertEqual(out["devices_queried"], 1)
+
+    def test_without_a_selection_no_firewall_is_contacted(self):
+        # Aprire la vista non deve aprire una sessione REST su ogni firewall
+        # gestito: i contatori per policy non cambiano abbastanza per pagarla.
+        with mock.patch("services.inventory_manager.get_all_devices",
+                        return_value=[FGT_A, FGT_B, SWITCH]),              mock.patch.object(firewall_traffic, "collect_for") as collect:
+            r = self._client("adm_ft").get("/api/firewall-traffic/policies")
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["rows"], [])
+        self.assertEqual(r.json()["devices_queried"], 0)
+        collect.assert_not_called()
+
+    def test_the_selectable_firewalls_come_from_the_inventory(self):
+        # La tendina esiste prima della query, e lo switch non ci finisce.
+        with mock.patch("services.inventory_manager.get_all_devices",
+                        return_value=[FGT_A, FGT_B, SWITCH]):
+            r = self._client("adm_ft").get("/api/firewall-traffic/devices")
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual({d["hostname"] for d in r.json()["devices"]},
+                         {"fw-edge", "fw-dc"})
+
+    def test_the_selectable_firewalls_respect_the_scope(self):
+        with mock.patch("services.inventory_manager.get_all_devices",
+                        return_value=[FGT_A, FGT_B, SWITCH]):
+            r = self._client("op_a_ft").get("/api/firewall-traffic/devices")
+        self.assertEqual({d["hostname"] for d in r.json()["devices"]}, {"fw-edge"})
 
     def test_missing_counters_surface_as_a_partial_answer(self):
         out = self._get("adm_ft", answer={
@@ -199,7 +230,8 @@ class PolicyTrafficApi(unittest.TestCase):
              mock.patch.object(fortigate_service, "get_policies_with_stats",
                                side_effect=fake):
             out = self._client("adm_ft").get(
-                "/api/firewall-traffic/policies").json()
+                f"/api/firewall-traffic/policies?device={FGT_A['IP']},{FGT_B['IP']}"
+            ).json()
         self.assertEqual(len(out["rows"]), 3)
         self.assertEqual(len(out["errors"]), 1)
         self.assertEqual(out["errors"][0]["device_ip"], FGT_B["IP"])
@@ -230,9 +262,10 @@ class TheCumulativeCaveatIsOnScreen(unittest.TestCase):
                   encoding="utf-8").read()
         self.assertIn('id="trafPane-policies"', html)
         self.assertIn('data-traf-view="policies"', html)
-        self.assertIn("policies:  () => loadTrafPolicies()", js)
+        self.assertIn("policies:  () => trafPoliciesShown()", js)
         for element_id in ("trafPolDevice", "trafPolAction", "trafPolSearch",
-                           "trafPolBody", "trafPolTotals", "trafPolErrors"):
+                           "btnTrafPolRun", "trafPolBody", "trafPolTotals",
+                           "trafPolErrors"):
             self.assertIn(f'id="{element_id}"', html,
                           f"{element_id} e' agganciato da observability.js ma "
                           "non esiste nel template")

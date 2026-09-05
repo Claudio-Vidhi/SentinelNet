@@ -232,7 +232,7 @@
         flows:     () => loadTopTalkers(),
         search:    () => loadFlowSiemTab(),
         hosts:     () => loadTrafHosts(),
-        policies:  () => loadTrafPolicies(),
+        policies:  () => trafPoliciesShown(),
     };
 
     // Una lista sola: aggiungere una pill e dimenticare questo array lasciava
@@ -478,7 +478,13 @@
 
     let _trafPolicies = [];
     let _trafPolErrors = [];
-    let _trafPolDevices = [];
+
+    function trafPolSelectedDevices() {
+        const sel = /** @type {HTMLSelectElement|null} */ (
+            document.getElementById('trafPolDevice'));
+        if (!sel) return [];
+        return [...sel.selectedOptions].map(o => o.value);
+    }
 
     function trafPolFilters() {
         const val = id => {
@@ -486,12 +492,46 @@
                 document.getElementById(id));
             return el ? el.value : '';
         };
-        return { device: val('trafPolDevice'), action: val('trafPolAction'),
-                 q: val('trafPolSearch') };
+        return { device: trafPolSelectedDevices().join(','),
+                 action: val('trafPolAction'), q: val('trafPolSearch') };
+    }
+
+    // I firewall scegliibili arrivano dall'inventario, non dalle righe
+    // tornate: la lista deve esistere PRIMA di interrogare qualcuno.
+    async function loadTrafPolDeviceList() {
+        const sel = /** @type {HTMLSelectElement|null} */ (
+            document.getElementById('trafPolDevice'));
+        if (!sel) return;
+        let devices = [];
+        try {
+            const res = await apiFetch('/api/firewall-traffic/devices');
+            if (res && res.ok) devices = (await res.json()).devices || [];
+        } catch (e) { devices = []; }
+        const chosen = new Set(trafPolSelectedDevices());
+        sel.innerHTML = devices
+            .sort((a, b) => (a.hostname || '').localeCompare(b.hostname || ''))
+            .map(d => `<option value="${escapeHtml(d.ip)}"${chosen.has(d.ip) ? ' selected' : ''}>${
+                escapeHtml(d.hostname)} (${escapeHtml(d.ip)})</option>`).join('');
+    }
+
+    // Aprire la vista popola la tendina e si ferma li'. Interrogare da soli
+    // tutti i firewall gestiti apre una sessione REST per apparato, e i
+    // contatori per policy non cambiano abbastanza da giustificarlo.
+    async function trafPoliciesShown() {
+        await loadTrafPolDeviceList();
+        renderTrafPolErrors();
+        renderTrafPolicies(null);
     }
 
     async function loadTrafPolicies() {
         const f = trafPolFilters();
+        if (!f.device) {
+            _trafPolicies = [];
+            _trafPolErrors = [];
+            renderTrafPolErrors();
+            renderTrafPolicies(null);
+            return;
+        }
         const url = `/api/firewall-traffic/policies?device=${encodeURIComponent(f.device)}`
             + `&action=${encodeURIComponent(f.action)}&q=${encodeURIComponent(f.q.trim())}`;
         const body = document.getElementById('trafPolBody');
@@ -511,26 +551,8 @@
             _trafPolicies = [];
             _trafPolErrors = [{ device_ip: '', error: String(e) }];
         }
-        syncTrafPolDevice();
         renderTrafPolErrors();
         renderTrafPolicies(totals);
-    }
-
-    function syncTrafPolDevice() {
-        const sel = /** @type {HTMLSelectElement|null} */ (
-            document.getElementById('trafPolDevice'));
-        if (!sel) return;
-        // Come nel tab Rotte: l'elenco si ricostruisce solo senza filtro
-        // attivo, altrimenti si svuoterebbe da solo lasciando selezionato
-        // l'unico firewall rimasto.
-        const current = sel.value;
-        if (!current) {
-            _trafPolDevices = [...new Set(_trafPolicies.map(r => r.device))].sort();
-        }
-        sel.innerHTML = [`<option value="">${escapeHtml(tr('trafPolDeviceAll'))}</option>`]
-            .concat(_trafPolDevices.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`))
-            .join('');
-        sel.value = current;
     }
 
     function renderTrafPolErrors() {
@@ -559,8 +581,9 @@
             });
         }
         if (!_trafPolicies.length) {
+            const msg = trafPolSelectedDevices().length ? tr('trafPolEmpty') : tr('trafPolPickDevices');
             tbody.innerHTML = `<tr><td colspan="8" style="padding:20px; text-align:center;
-                color:var(--text-muted);">${escapeHtml(tr('trafPolEmpty'))}</td></tr>`;
+                color:var(--text-muted);">${escapeHtml(msg)}</td></tr>`;
             return;
         }
         // Barra in scala sulla policy piu' carica della vista: si sta leggendo
@@ -1831,7 +1854,9 @@
         clearTimeout(_trafPolSearchTimer);
         _trafPolSearchTimer = setTimeout(loadTrafPolicies, 350);
     });
-    document.getElementById('trafPolDevice')?.addEventListener('change', loadTrafPolicies);
+    // Cambiare la selezione non fa partire la query: si sceglie e si preme
+    // Interroga. Ogni firewall in piu' e' una sessione REST in piu'.
+    document.getElementById('btnTrafPolRun')?.addEventListener('click', loadTrafPolicies);
     document.getElementById('trafPolAction')?.addEventListener('change', loadTrafPolicies);
 
     document.getElementById('trafHostSeriesSelect')?.addEventListener('change', (e) => {

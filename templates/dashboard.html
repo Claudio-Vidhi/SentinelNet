@@ -1853,9 +1853,10 @@
         <span data-i18n="trafPolCumulativeNote">I contatori per policy vivono sul firewall e sono cumulativi dall'ultimo azzeramento: la finestra temporale del tab non li filtra.</span>
       </div>
       <div class="filterbar" style="align-items:flex-end; gap:14px; flex-wrap:wrap;">
-        <div class="form-group" style="margin-bottom:0; min-width:180px;">
+        <div class="form-group" style="margin-bottom:0; min-width:240px;">
           <label for="trafPolDevice" data-i18n="trafPolDevice">Firewall</label>
-          <select id="trafPolDevice"></select>
+          <select id="trafPolDevice" multiple size="4"></select>
+          <small style="color:var(--text-muted);" data-i18n="trafPolDeviceHint">Ctrl/Cmd per sceglierne piu' di uno</small>
         </div>
         <div class="form-group" style="margin-bottom:0; min-width:150px;">
           <label for="trafPolAction" data-i18n="trafPolAction">Azione</label>
@@ -1870,6 +1871,9 @@
           <input type="text" id="trafPolSearch" placeholder="es. LAN, 10.0.0.0/8, HTTPS"
                  data-i18n-placeholder="trafPolSearchPl">
         </div>
+        <button id="btnTrafPolRun" class="btn btn-secondary" style="width:auto; margin:0;">
+          <i class="fa-solid fa-play"></i> <span data-i18n="trafPolRun">Interroga</span>
+        </button>
         <span id="trafPolTotals" style="font-size:12px; color:var(--text-muted);"></span>
       </div>
       <div id="trafPolErrors" style="display:none; margin-top:12px;"></div>
@@ -4078,9 +4082,10 @@
 
     <div class="panel" style="margin-bottom:18px;">
       <div class="filterbar" style="align-items:flex-end; gap:14px; flex-wrap:wrap;">
-        <div class="form-group" style="margin-bottom:0; min-width:200px;">
+        <div class="form-group" style="margin-bottom:0; min-width:240px;">
           <label for="rtDeviceFilter" data-i18n="rtFilterDevice">Apparato</label>
-          <select id="rtDeviceFilter"></select>
+          <select id="rtDeviceFilter" multiple size="4"></select>
+          <small style="color:var(--text-muted);" data-i18n="rtDeviceHint">Ctrl/Cmd per sceglierne piu' di uno</small>
         </div>
         <div class="form-group" style="margin-bottom:0; min-width:180px;">
           <label for="rtTypeFilter" data-i18n="rtFilterType">Tipo rotta</label>
