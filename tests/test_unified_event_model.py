@@ -31,6 +31,7 @@ FGT_MSG = ('action="blocked" srcip=10.1.0.5 dstip=203.0.113.7 dstport=443 '
 class _Base(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        data_config.DATA_DIR = _TMP_DATA_DIR
         db.stop_writer()
         for suffix in ("", "-wal", "-shm"):
             try:
@@ -40,6 +41,7 @@ class _Base(unittest.TestCase):
         db.migrate()
 
     def setUp(self):
+        data_config.DATA_DIR = _TMP_DATA_DIR
         conn = db.get_observability_connection()
         for table in ("events", "normalize_cursors", "syslog_events",
                       "flow_aggregates", "api_observations"):
