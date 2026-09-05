@@ -43,10 +43,7 @@
     }
 
     function rtSelectedDevices() {
-        const sel = /** @type {HTMLSelectElement|null} */ (
-            document.getElementById('rtDeviceFilter'));
-        if (!sel) return [];
-        return [...sel.selectedOptions].map(o => o.value);
+        return pickerValues('rtDeviceFilter');
     }
 
     function rtFilters() {
@@ -63,19 +60,14 @@
     // mai interrogato deve poter essere scelto, ed e' il motivo per cui gli
     // switch non comparivano qui.
     async function loadRtDeviceList() {
-        const sel = /** @type {HTMLSelectElement|null} */ (
-            document.getElementById('rtDeviceFilter'));
-        if (!sel) return;
         let devices = [];
         try {
             const res = await apiFetch('/api/routes/devices');
             if (res && res.ok) devices = (await res.json()).devices || [];
         } catch (e) { devices = []; }
-        const chosen = new Set(rtSelectedDevices());
-        sel.innerHTML = devices
+        renderPickerItems('rtDeviceFilter', devices
             .sort((a, b) => (a.hostname || '').localeCompare(b.hostname || ''))
-            .map(d => `<option value="${escapeHtml(d.ip)}"${chosen.has(d.ip) ? ' selected' : ''}>${
-                escapeHtml(d.hostname)} (${escapeHtml(d.ip)})</option>`).join('');
+            .map(d => ({ value: d.ip, label: d.hostname || d.ip, hint: d.ip })));
     }
 
     // Apertura del tab: si popola la lista e si aspetta. Interrogare da soli
@@ -83,6 +75,7 @@
     async function routesTabShown() {
         await loadRtDeviceList();
         rtTraceSyncSources();
+        renderRtTrace();
         renderRtTable();
         renderRtChart();
     }
@@ -283,6 +276,9 @@
 
     let _trace = null;
     let _traceTimer = null;
+    // Due analisi lanciate a distanza di un istante (clic e poi Invio): vale
+    // quella chiesta per ultima, non quella che risponde per ultima.
+    let _traceSeq = 0;
 
     // I tre criteri, nell'ordine in cui un apparato li guarda. Le etichette
     // sono chiamate letterali: tr() con una chiave costruita a runtime
@@ -300,15 +296,17 @@
         'anello': 'bad',
         'biforcazione': 'warn',
         'non interrogato': 'warn',
+        'limite salti': 'warn',
     };
 
     const RT_END = {
-        'consegna': { label: 'rtTraceEndDelivery', color: 'var(--success)' },
+        'consegna': { label: 'rtTraceEndDelivery', color: 'var(--lamp-up-ink)' },
         'fuori inventario': { label: 'rtTraceEndOutside', color: 'var(--text-muted)' },
-        'nessuna rotta': { label: 'rtTraceEndDropped', color: 'var(--danger)' },
-        'anello': { label: 'rtTraceEndLoop', color: 'var(--danger)' },
-        'biforcazione': { label: 'rtTraceEndFork', color: 'var(--warning)' },
-        'non interrogato': { label: 'rtTraceEndUnknown', color: 'var(--warning)' },
+        'nessuna rotta': { label: 'rtTraceEndDropped', color: 'var(--lamp-fault-ink)' },
+        'anello': { label: 'rtTraceEndLoop', color: 'var(--lamp-fault-ink)' },
+        'biforcazione': { label: 'rtTraceEndFork', color: 'var(--lamp-warn-ink)' },
+        'non interrogato': { label: 'rtTraceEndUnknown', color: 'var(--lamp-warn-ink)' },
+        'limite salti': { label: 'rtTraceEndHopLimit', color: 'var(--lamp-warn-ink)' },
     };
 
     function rtTraceSyncSources() {
@@ -318,20 +316,18 @@
             document.getElementById('rtTraceSrc'));
         if (!sel) return;
         const current = sel.value;
-        const chosen = [...document.querySelectorAll('#rtDeviceFilter option')]
-            .map(o => /** @type {HTMLOptionElement} */ (o))
-            .filter(o => o.selected)
-            .map(o => ({ ip: o.value, label: o.textContent || '' }));
+        const chosen = pickerSelected('rtDeviceFilter');
         sel.innerHTML = chosen.length
-            ? chosen.map(d => `<option value="${escapeHtml(d.ip)}">${escapeHtml(d.label)}</option>`).join('')
+            ? chosen.map(d => `<option value="${escapeHtml(d.value)}">${
+                  escapeHtml(d.label)}</option>`).join('')
             : `<option value="">${escapeHtml(tr('rtTraceNoDevices'))}</option>`;
-        if (chosen.some(d => d.ip === current)) sel.value = current;
+        if (chosen.some(d => d.value === current)) sel.value = current;
     }
 
     function rtTraceVerdict(kind, text) {
         const box = document.getElementById('rtTraceVerdict');
         if (!box) return;
-        box.className = 'rt-verdict on ' + kind;
+        box.className = 'badge rt-verdict on ' + kind;
         box.textContent = text;
     }
 
@@ -344,6 +340,7 @@
             case 'anello': return tr('rtTraceLoop');
             case 'biforcazione': return tr('rtTraceFork');
             case 'non interrogato': return tr('rtTraceNotQueried', { ip: data.device_ip || '?' });
+            case 'limite salti': return tr('rtTraceHopLimit', { n: n });
             default: return data.outcome || '';
         }
     }
@@ -354,6 +351,8 @@
         const dst = /** @type {HTMLInputElement|null} */ (
             document.getElementById('rtTraceDst'));
         if (!src || !dst) return;
+        clearInterval(_traceTimer);
+        const mine = ++_traceSeq;
         const devices = rtSelectedDevices().join(',');
         if (!devices || !src.value) { rtTraceVerdict('muted', tr('rtPickDevices')); return; }
         if (!dst.value.trim()) { rtTraceVerdict('muted', tr('rtTraceNeedDst')); return; }
@@ -363,8 +362,9 @@
             + `&src=${encodeURIComponent(src.value)}&dst=${encodeURIComponent(dst.value.trim())}`;
         try {
             const res = await apiFetch(url);
-            if (!res) return;
+            if (!res || mine !== _traceSeq) return;
             const data = await res.json();
+            if (mine !== _traceSeq) return;
             if (!res.ok) {
                 _trace = null;
                 renderRtTrace();
@@ -391,14 +391,16 @@
         if (!_trace || !(_trace.hops || []).length) {
             rail.style.display = 'none';
             rail.innerHTML = '';
-            steps.innerHTML = '';
+            // Non un vuoto: la vista dice cosa le serve per rispondere.
+            steps.innerHTML = `<p class="rt-idle">${escapeHtml(tr('rtTraceIdle'))}</p>`;
             if (play) play.style.display = 'none';
             if (probe) probe.style.display = 'none';
             return;
         }
-        rtTraceVerdict(RT_VERDICTS[_trace.outcome] || 'muted', rtTraceOutcomeText(_trace));
+        rtTraceVerdict(RT_VERDICTS[_trace.outcome] || 'muted',
+                       tr((RT_END[_trace.outcome] || RT_END['non interrogato']).label));
         rail.style.display = '';
-        rail.innerHTML = rtRailSvg(_trace);
+        rail.innerHTML = rtRailHtml(_trace);
         steps.innerHTML = rtStepsHtml(_trace);
         if (play) play.style.display = '';
         // Il traceroute manda pacchetti: e' un'azione, non una lettura, e a un
@@ -408,62 +410,58 @@
         if (out) { out.style.display = 'none'; out.innerHTML = ''; }
     }
 
-    function rtRailSvg(data) {
+    // La catena in HTML e non in SVG: i riquadri si dimensionano sul contenuto,
+    // quindi un hostname lungo non finisce sopra il suo IP e la striscia non
+    // viene rimpicciolita per stare in larghezza — su schermo stretto va a capo.
+    function rtRailHtml(data) {
         const hops = data.hops || [];
-        const BW = 196, BH = 62, GAP = 268, X0 = 8, Y = 30, H = 118;
-        const W = X0 + hops.length * GAP + 160;
-        const parts = [];
-        hops.forEach((hop, i) => {
-            const x = X0 + i * GAP;
-            const y = Y + BH / 2;
-            const win = hop.best;
-            const color = win ? rtTypeColor(win.type) : 'var(--text-muted)';
-            if (win) {
-                const to = x + GAP;
-                const mid = (x + BW + to) / 2;
-                parts.push(`<line x1="${x + BW}" y1="${y}" x2="${to - 7}" y2="${y}"
-                    stroke="var(--border)" stroke-width="1.5"></line>`);
-                parts.push(`<path d="M ${to - 7} ${y - 4} L ${to} ${y} L ${to - 7} ${y + 4} Z"
-                    fill="var(--border-strong)"></path>`);
-                parts.push(`<line class="rt-lit" data-seg="${i}" x1="${x + BW}" y1="${y}"
-                    x2="${x + BW}" y2="${y}" stroke="${color}" stroke-width="1.5"></line>`);
-                parts.push(`<g class="rt-seg-label" data-seg="${i}" opacity="0">
-                    <text x="${mid}" y="${y - 14}" fill="var(--text)" font-size="11"
-                          text-anchor="middle">${escapeHtml(win.network || '')}</text>
-                    <text x="${mid}" y="${y + 20}" fill="var(--text-muted)" font-size="10"
-                          text-anchor="middle">${escapeHtml(win.gateway
-                              ? tr('rtTraceVia', { hop: win.gateway })
-                              : tr('rtTraceOnIface', { iface: win.interface || '?' }))}</text>
-                  </g>`);
-            }
-            parts.push(`<g class="rt-rail-node" data-hop="${i}">
-                <rect data-box="${i}" x="${x}" y="${Y}" width="${BW}" height="${BH}"
-                      fill="var(--surface-3)" stroke="var(--border)" stroke-width="1"></rect>
-                <rect x="${x}" y="${Y}" width="2" height="${BH}" fill="${color}"></rect>
-                <text x="${x + 14}" y="${Y + 20}" fill="var(--text-muted)" font-size="9"
-                      letter-spacing="1.3">${escapeHtml(
-                          (i === 0 ? tr('rtTraceStart') : tr('rtTraceHopN', { n: i })).toUpperCase())}</text>
-                <text x="${x + 14}" y="${Y + 40}" fill="var(--text)" font-size="13"
-                      font-weight="700">${escapeHtml(hop.device || '')}</text>
-                <text x="${x + BW - 14}" y="${Y + 40}" fill="var(--text-muted)" font-size="10.5"
-                      text-anchor="end">${escapeHtml(hop.device_ip || '')}</text>
-                ${hop.from_backup
-                    ? `<text x="${x + 14}" y="${Y + 55}" fill="var(--warning)" font-size="9.5">${
-                          escapeHtml(tr('rtFromBackup'))}</text>` : ''}
-              </g>`);
-        });
         const end = RT_END[data.outcome] || RT_END['non interrogato'];
-        const ex = X0 + hops.length * GAP;
-        parts.push(`<g>
-            <rect x="${ex}" y="${Y}" width="150" height="${BH}" fill="none"
-                  stroke="${end.color}" stroke-width="1" stroke-dasharray="3 3"></rect>
-            <text x="${ex + 14}" y="${Y + 20}" fill="var(--text-muted)" font-size="9"
-                  letter-spacing="1.3">${escapeHtml(tr('rtTraceEnd').toUpperCase())}</text>
-            <text x="${ex + 14}" y="${Y + 41}" fill="${end.color}" font-size="12"
-                  font-weight="700">${escapeHtml(tr(end.label))}</text>
-          </g>`);
-        return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${
-            escapeHtml(rtTraceOutcomeText(data))}">${parts.join('')}</svg>`;
+        const items = hops.map((hop, i) => {
+            const win = hop.best;
+            const role = i === 0 ? tr('rtTraceStart') : tr('rtTraceHopN', { n: i });
+            const flag = hop.from_backup
+                ? `<span class="rt-node-flag">${escapeHtml(tr('rtFromBackup'))}</span>` : '';
+            const meta = win
+                ? (win.gateway ? tr('rtTraceVia', { hop: win.gateway }) + '  ·  ad ' + win.ad
+                               : tr('rtTraceOnIface', { iface: win.interface || '?' }))
+                : '';
+            const link = win ? `
+                <div class="rt-link">
+                  <span class="rt-link-net"><b class="rt-kind" style="background:${
+                      rtTypeColor(win.type)}">${escapeHtml(
+                          (win.type || '?').slice(0, 1).toUpperCase())}</b>${
+                      escapeHtml(win.network || '')}</span>
+                  <span class="rt-link-line"></span>
+                  <span class="rt-link-meta">${escapeHtml(meta)}</span>
+                </div>` : '';
+            return `<li class="rt-hop" data-hop="${i}">
+                <div class="rt-node">
+                  <span class="rt-node-role">${escapeHtml(role)}</span>
+                  <span class="rt-node-name">${escapeHtml(hop.device || '')}</span>
+                  <span class="rt-node-ip">${escapeHtml(hop.device_ip || '')}</span>
+                  ${flag}
+                </div>${link}
+              </li>`;
+        }).join('');
+        // Il riquadro d'esito chiude la catena: e' l'unico che porta il colore
+        // dello stato, perche' in questo sistema il colore vuol dire stato.
+        const tail = `<li class="rt-hop rt-hop-end" data-hop="${hops.length}">
+            <div class="rt-node rt-node-end" style="--rt-end:${end.color}">
+              <span class="rt-node-role">${escapeHtml(tr('rtTraceEnd'))}</span>
+              <span class="rt-node-name">${escapeHtml(tr(end.label))}</span>
+              <span class="rt-node-ip">${escapeHtml(rtTraceEndDetail(data))}</span>
+            </div>
+          </li>`;
+        return `<ol class="rt-chain" aria-label="${
+            escapeHtml(rtTraceOutcomeText(data))}">${items}${tail}</ol>`;
+    }
+
+    /** Il dettaglio sotto l'esito: l'indirizzo che chiude il percorso. */
+    function rtTraceEndDetail(data) {
+        if (data.outcome === 'consegna') return data.dst || '';
+        if (data.outcome === 'fuori inventario') return data.exit_hop || '';
+        if (data.outcome === 'non interrogato') return data.device_ip || '';
+        return '';
     }
 
     function rtStepsHtml(data) {
@@ -481,7 +479,8 @@
                     <td class="rt-num">/${escapeHtml(String(r.prefixlen))}</td>
                     <td class="rt-num">${escapeHtml(String(r.ad))}</td>
                     <td class="rt-num">${escapeHtml(String(r.metric || 0))}</td>
-                    <td class="rt-num">${escapeHtml(win ? tr('rtTraceWins') : tr('rtTraceDropped'))}</td>
+                    <td class="rt-num"><span class="rt-outcome${win ? ' win' : ''}">${
+                        escapeHtml(win ? tr('rtTraceWins') : tr('rtTraceDropped'))}</span></td>
                   </tr>`;
             }).join('');
             let decided = false;
@@ -503,15 +502,15 @@
             const table = cand.length
                 ? `<table class="rt-cand">
                     <thead><tr>
-                      <th>${escapeHtml(tr('rtColNetwork'))}</th>
-                      <th>${escapeHtml(tr('rtColNextHop'))}</th>
-                      <th class="rt-num">${escapeHtml(tr('rtTraceColPrefix'))}</th>
-                      <th class="rt-num">${escapeHtml(tr('rtTraceColAd'))}</th>
-                      <th class="rt-num">${escapeHtml(tr('rtColMetric'))}</th>
-                      <th class="rt-num">${escapeHtml(tr('rtTraceColOutcome'))}</th>
+                      <th data-no-sort="1">${escapeHtml(tr('rtColNetwork'))}</th>
+                      <th data-no-sort="1">${escapeHtml(tr('rtColNextHop'))}</th>
+                      <th class="rt-num" data-no-sort="1">${escapeHtml(tr('rtTraceColPrefix'))}</th>
+                      <th class="rt-num" data-no-sort="1">${escapeHtml(tr('rtTraceColAd'))}</th>
+                      <th class="rt-num" data-no-sort="1">${escapeHtml(tr('rtColMetric'))}</th>
+                      <th class="rt-num" data-no-sort="1">${escapeHtml(tr('rtTraceColOutcome'))}</th>
                     </tr></thead><tbody>${rows}</tbody></table>
                     <div class="rt-rule">${rules}</div>`
-                : `<span style="font-size:12.5px; color:var(--text-muted);">${
+                : `<span class="rt-step-empty">${
                       escapeHtml(tr('rtTraceNoRoute'))}</span>`;
             return `<div class="rt-step pending" data-step="${i}">
                 <div class="rt-step-gutter"><span class="rt-step-n">${i + 1}</span></div>
@@ -519,8 +518,11 @@
                   <div class="rt-step-head">
                     <span class="rt-step-dev">${escapeHtml(hop.device || '')}</span>
                     <span class="rt-step-ip">${escapeHtml(hop.device_ip || '')}</span>
-                    <span class="rt-step-say">${escapeHtml(say)}${backup}</span>
+                    ${hop.from_backup
+                        ? `<span class="badge rt-badge-backup">${escapeHtml(tr('rtFromBackup'))}</span>`
+                        : ''}
                   </div>
+                  <p class="rt-step-say">${escapeHtml(say)}${backup}</p>
                   ${table}
                 </div>
               </div>`;
@@ -540,16 +542,14 @@
                 el.classList.toggle('pending', i >= n);
                 el.classList.toggle('decided', i < n);
             });
-            rail.querySelectorAll('.rt-lit').forEach((line, i) => {
-                const box = rail.querySelector(`[data-box="${i + 1}"]`);
-                const done = i < n - 1 && box;
-                const x = done ? Number(box.getAttribute('x')) - 7
-                               : Number(line.getAttribute('x1'));
-                line.setAttribute('x2', String(x));
+            // Il salto i e il tratto che ne esce si accendono insieme: il
+            // riquadro d'esito e' l'ultimo elemento della catena.
+            rail.querySelectorAll('.rt-hop').forEach((hop, i) => {
+                hop.classList.toggle('on', i < n);
             });
-            rail.querySelectorAll('.rt-seg-label').forEach((g, i) => {
-                g.setAttribute('opacity', i < n - 1 ? '1' : '0');
-            });
+            // L'esito e' l'ultimo riquadro della catena e sta oltre l'ultimo
+            // salto: si accende quando i salti sono finiti, non un giro dopo.
+            rail.querySelector('.rt-hop-end')?.classList.toggle('on', n >= steps.length);
         };
         if (reduced) { show(steps.length); return; }
         show(0);
@@ -579,16 +579,16 @@
             if (!res) return;
             data = await res.json();
             if (!res.ok) {
-                out.innerHTML = `<span style="color:var(--danger);">${
+                out.innerHTML = `<span class="rt-ink-bad">${
                     escapeHtml(data.detail || ('HTTP ' + res.status))}</span>`;
                 return;
             }
         } catch (e) {
-            out.innerHTML = `<span style="color:var(--danger);">${escapeHtml(String(e))}</span>`;
+            out.innerHTML = `<span class="rt-ink-bad">${escapeHtml(String(e))}</span>`;
             return;
         }
         if (data.error) {
-            out.innerHTML = `<span style="color:var(--danger);">${escapeHtml(data.error)}</span>`;
+            out.innerHTML = `<span class="rt-ink-bad">${escapeHtml(data.error)}</span>`;
             return;
         }
         // Confronto fra atteso e visto: un next-hop che non risponde non e' un
@@ -598,9 +598,9 @@
         const seen = (data.hops || []).map(h => h.ip).filter(Boolean);
         const missing = expected.filter(ip => seen.indexOf(ip) === -1);
         const line = missing.length
-            ? `<span style="color:var(--warning);">${escapeHtml(
+            ? `<span class="rt-ink-warn">${escapeHtml(
                   tr('rtProbeMissing', { hops: missing.join(', ') }))}</span>`
-            : `<span style="color:var(--success);">${escapeHtml(tr('rtProbeMatch'))}</span>`;
+            : `<span class="rt-ink-ok">${escapeHtml(tr('rtProbeMatch'))}</span>`;
         const path = (data.hops || []).map(h => h.ip || '*').join(' -> ') || '-';
         out.innerHTML = `<div>${escapeHtml(tr('rtProbeSeen', { hops: path }))}</div>
           <div style="margin-top:6px;">${line}</div>
@@ -610,7 +610,7 @@
     document.getElementById('btnRtTrace')?.addEventListener('click', loadRtTrace);
     document.getElementById('btnRtTracePlay')?.addEventListener('click', rtTracePlay);
     document.getElementById('btnRtProbe')?.addEventListener('click', runRtProbe);
-    document.getElementById('rtDeviceFilter')?.addEventListener('change', rtTraceSyncSources);
+    document.getElementById('rtDeviceFilter')?.addEventListener('picker-change', rtTraceSyncSources);
     document.getElementById('rtTraceDst')?.addEventListener('keydown', e => {
         if (/** @type {KeyboardEvent} */ (e).key === 'Enter') loadRtTrace();
     });

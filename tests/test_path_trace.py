@@ -137,6 +137,16 @@ class InterfaceAddresses(unittest.TestCase):
                                side_effect=fortigate_service.FortiGateError("timeout")):
             self.assertEqual(path_trace.addresses_for(FW_EDGE, []), [])
 
+    def test_the_other_field_name_for_the_address_is_read_too(self):
+        # Alcune build di FortiOS chiamano il campo ipv4_address: senza la
+        # doppia lettura l'apparato torna zero indirizzi in silenzio e ogni suo
+        # next-hop diventa "fuori inventario".
+        answer = {"source": "api", "data": {
+            "port2": {"name": "port2", "ipv4_address": "10.10.0.1", "mask": 16}}}
+        with mock.patch.object(fortigate_service, "get_interfaces", return_value=answer):
+            addrs = path_trace.addresses_for(FW_EDGE, [])
+        self.assertEqual([a["ip"] for a in addrs], ["10.10.0.1"])
+
     def test_a_cli_text_answer_is_not_guessed_at(self):
         with mock.patch.object(fortigate_service, "get_interfaces",
                                return_value={"source": "ssh", "data": "== [ port1 ]"}):
@@ -206,12 +216,79 @@ class Trace(unittest.TestCase):
         self.assertEqual(out["outcome"], "non interrogato")
         self.assertEqual(out["device_ip"], SWITCH["IP"])
 
+    def test_running_out_of_hops_is_not_called_a_loop(self):
+        # Sedici salti senza mai rivedere un apparato non sono un anello:
+        # chiamarli cosi' manda a cercare un giro che non c'e'.
+        chain, rows, addrs, devices = {}, {}, {}, {}
+        for i in range(path_trace.MAX_HOPS + 2):
+            ip = f"192.0.2.{100 + i}"
+            nxt = f"10.99.{i}.1"
+            chain[ip] = nxt
+            devices[ip] = {"IP": ip, "Hostname": f"r{i}", "Vendor": "cisco"}
+            rows[ip] = [{"network": "10.30.0.0/16", "gateway": nxt, "interface": "Gi0/0",
+                         "type": "static", "distance": 1, "metric": 0}]
+            addrs[ip] = [{"iface": "Gi0/0", "ip": f"10.99.{i - 1}.1" if i else "10.99.99.1",
+                          "network": f"10.99.{i - 1}.0/24" if i else "10.99.99.0/24"}]
+        out = path_trace.trace("10.30.0.7", "192.0.2.100", rows, addrs, devices)
+        self.assertEqual(out["outcome"], "limite salti")
+
+    def test_a_numeric_string_is_a_number(self):
+        # Alcune risposte REST mandano distanza e metrica come stringhe:
+        # scartarle farebbe sembrare identiche due rotte che non lo sono, e
+        # nascerebbe un ECMP inventato.
+        rows = [{"network": "10.30.0.0/16", "gateway": "10.20.0.2", "interface": "Vlan20",
+                 "type": "ospf", "distance": "110", "metric": "200"},
+                {"network": "10.30.0.0/16", "gateway": "10.10.0.9", "interface": "Vlan10",
+                 "type": "ospf", "distance": "110", "metric": "20"}]
+        cand = path_trace.candidates(rows, "10.30.0.7")
+        self.assertEqual(cand[0]["gateway"], "10.10.0.9")
+        self.assertEqual(path_trace.decided_by(cand), "metrica")
+
     def test_a_hop_read_from_the_backup_is_marked(self):
         stale = [dict(r, from_backup=True) for r in ROWS_DC]
         rows = dict(ROWS, **{FW_DC["IP"]: stale})
         out = path_trace.trace("10.30.0.7", FW_EDGE["IP"], rows, ADDRESSES, DEVICES)
         self.assertTrue(out["hops"][-1]["from_backup"])
         self.assertFalse(out["hops"][0]["from_backup"])
+
+
+class TenantSeparation(unittest.TestCase):
+    """Il backup si cerca dentro il tenant, non per solo IP.
+
+    Due clienti possono avere lo stesso indirizzo — e' la premessa su cui e'
+    scritto assert_device_allowed — e i backup stanno in cartelle separate
+    apposta. Cercare per suffisso IP in tutto l'albero consegna a chi chiede la
+    copia piu' recente, che puo' essere di un altro cliente."""
+
+    def test_the_backup_lookup_carries_the_tenant(self):
+        with mock.patch("ai.config_analyzer.analyze_device",
+                        return_value=None) as analyze:
+            route_table.routes_from_backup(SWITCH)
+        analyze.assert_called_once_with(SWITCH["IP"], SWITCH["Group"])
+
+    def test_the_walk_stays_inside_that_tenant(self):
+        import os
+        import tempfile
+        from ai import config_analyzer
+        from core import core_engine
+        root = tempfile.mkdtemp(prefix="sentinelnet_tenant_")
+        mine = os.path.join(root, "sede-a", "cisco")
+        theirs = os.path.join(root, "sede-b", "cisco")
+        os.makedirs(mine)
+        os.makedirs(theirs)
+        ours = os.path.join(mine, f"sw-core-{SWITCH['IP']}.txt")
+        with open(ours, "w", encoding="utf-8") as fh:
+            fh.write("hostname sw-core")
+        # Quello dell'altro cliente e' il piu' fresco: senza scoping vincerebbe.
+        other = os.path.join(theirs, f"altro-{SWITCH['IP']}.txt")
+        with open(other, "w", encoding="utf-8") as fh:
+            fh.write("hostname non-mio")
+        os.utime(ours, (1, 1))
+        with mock.patch.object(core_engine, "BACKUP_FOLDER", root):
+            scoped, _ = config_analyzer._find_freshest_backup(SWITCH["IP"], "sede-a")
+            unscoped, _ = config_analyzer._find_freshest_backup(SWITCH["IP"])
+        self.assertEqual(scoped, ours)
+        self.assertEqual(unscoped, other)   # il comportamento che il tenant evita
 
 
 class Probe(unittest.TestCase):
@@ -291,6 +368,23 @@ class TraceApi(unittest.TestCase):
     def test_an_address_that_is_not_an_address_is_refused(self):
         r = self._get(f"?device={FW_EDGE['IP']}&src={FW_EDGE['IP']}&dst=ciao")
         self.assertEqual(r.status_code, 400)
+
+    def test_an_ipv6_destination_is_refused(self):
+        # Le tabelle e i parser sono IPv4: accettarlo darebbe un "nessuna rotta"
+        # incomprensibile invece di un errore.
+        r = self._get(f"?device={FW_EDGE['IP']}&src={FW_EDGE['IP']}&dst=2001:db8::1")
+        self.assertEqual(r.status_code, 400)
+
+    def test_the_same_ip_in_two_tenants_stops_the_trace(self):
+        # Le tabelle qui si indicizzano per indirizzo: una selezione ambigua
+        # darebbe un percorso che mescola due reti senza dirlo.
+        twin = dict(SWITCH, Group="sede-b", Hostname="sw-altro")
+        with mock.patch("services.inventory_manager.get_all_devices",
+                        return_value=[SWITCH, twin]):
+            r = self._client().get(
+                f"/api/routes/trace?device={SWITCH['IP']}&src={SWITCH['IP']}&dst=10.30.0.7")
+        self.assertEqual(r.status_code, 409)
+        self.assertIn("sede-a", r.json()["detail"])
 
     def test_a_start_outside_the_selection_is_a_404(self):
         # La vista chiede di scegliere gli apparati: partire da uno non scelto

@@ -1279,17 +1279,30 @@ def convert_config(source_text, source_vendor, target_vendor):
 
 # --- I/O: backup reading + scoping ------------------------------------------
 
-def _find_freshest_backup(ip):
+def _find_freshest_backup(ip, tenant=None):
     """Finds the freshest backup file for the given IP. Returns
-    (path, tenant_folder) or (None, None)."""
-    from core import core_engine
+    (path, tenant_folder) or (None, None).
+
+    ``tenant`` restricts the search to that customer's subtree. Two customers
+    may each own 192.0.2.10 — the same premise ``assert_device_allowed`` is
+    written on — and the backups are stored per tenant precisely so the two do
+    not mix. Searching the whole tree by IP suffix hands whichever copy is
+    newer to whoever asks: the caller that knows the tenant must say so.
+    ``core.backup_store.remove_stale_backups`` scopes its own walk the same way.
+    """
+    from core import backup_store, core_engine
     best = None
     best_mtime = -1
     best_tenant = None
     folder = core_engine.BACKUP_FOLDER
     if not os.path.exists(folder):
         return None, None
-    for root, _dirs, files in os.walk(folder):
+    walk_root = folder
+    if tenant:
+        walk_root = os.path.join(folder, backup_store.sanitize_filename(tenant))
+        if not os.path.exists(walk_root):
+            return None, None
+    for root, _dirs, files in os.walk(walk_root):
         for f in files:
             if f.endswith(f"-{ip}.txt") or f.endswith(f"_{ip}.txt") or f == f"{ip}.txt":
                 path = os.path.join(root, f)
@@ -1305,10 +1318,14 @@ def _find_freshest_backup(ip):
     return best, best_tenant
 
 
-def analyze_device(ip):
+def analyze_device(ip, tenant=None):
     """Reads the freshest backup for the IP and returns analysis + meta.
-    Returns None if no backup exists."""
-    path, tenant_folder = _find_freshest_backup(ip)
+    Returns None if no backup exists.
+
+    ``tenant`` va passato da ogni chiamante che lo conosce: senza, il backup si
+    cerca per solo IP in tutto l'albero, e due clienti con lo stesso indirizzo
+    si vedrebbero la configurazione a vicenda."""
+    path, tenant_folder = _find_freshest_backup(ip, tenant)
     if not path:
         return None
     try:

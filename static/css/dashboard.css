@@ -2334,37 +2334,135 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   max-width: 80ch;
 }
 
+/* Prende forma e tipografia da .badge: e' l'indicatore di stato di questa
+   vista, non una pill sua. Il colore e' l'INCHIOSTRO della lampada, non la
+   lampada: sul fondo chiaro var(--success) come testo sta sotto 4.5:1. */
 .rt-verdict {
-  font-family: var(--font-code);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  padding: 4px 10px;
-  border: var(--seam) solid currentColor;
   display: none;
+  gap: 7px;
+  border-color: currentColor;
+  background-color: transparent;
 }
-.rt-verdict.on { display: inline-flex; align-items: center; gap: 7px; }
+.rt-verdict.on { display: inline-flex; align-items: center; }
 .rt-verdict::before {
   content: '';
   width: 6px;
   height: 6px;
   background: currentColor;
+  border-radius: 9999px;
   display: inline-block;
 }
-.rt-verdict.ok { color: var(--success); }
-.rt-verdict.warn { color: var(--warning); }
-.rt-verdict.bad { color: var(--danger); }
+.rt-verdict.ok { color: var(--lamp-up-ink); }
+.rt-verdict.warn { color: var(--lamp-warn-ink); }
+.rt-verdict.bad { color: var(--lamp-fault-ink); }
 .rt-verdict.muted { color: var(--text-muted); }
 
+/* --- La catena dei salti -----------------------------------------------
+   In HTML e non in SVG: ogni riquadro si dimensiona sul proprio contenuto, un
+   hostname lungo non finisce sopra il suo indirizzo, e su schermo stretto la
+   catena va a capo invece di rimpicciolire il testo. */
 .rt-rail {
   margin-top: 14px;
-  padding: 10px 4px 0;
+  padding: 16px 18px;
   background: var(--surface-2);
   border: var(--seam) solid var(--border);
   overflow-x: auto;
 }
-.rt-rail svg { display: block; width: 100%; height: auto; }
-.rt-rail text { font-family: var(--font-code); }
+.rt-chain {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: min-content;
+}
+.rt-hop { display: flex; align-items: stretch; opacity: .34; transition: opacity .35s ease; }
+.rt-hop.on { opacity: 1; }
+
+.rt-node {
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  min-width: 180px;
+  padding: 11px 16px;
+  background: var(--surface-3);
+  border: var(--seam) solid var(--border);
+  border-left: 2px solid var(--border-strong);
+}
+.rt-node-role {
+  font-family: var(--font-legend);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.rt-node-name { font-family: var(--font-code); font-size: 14px; font-weight: 700; }
+.rt-node-ip { font-family: var(--font-code); font-size: 11.5px; color: var(--text-muted); }
+.rt-node-flag { font-family: var(--font-code); font-size: 10px; color: var(--lamp-warn-ink); }
+
+/* L'esito e' l'unico riquadro colorato: qui il colore vuol dire stato. */
+.rt-node-end {
+  background: transparent;
+  border: var(--seam) dashed var(--rt-end, var(--border-strong));
+  border-left-width: 2px;
+  border-left-style: solid;
+}
+.rt-node-end .rt-node-name { color: var(--rt-end, var(--text)); }
+
+/* Il tratto: rete e next-hop sopra e sotto la linea, che cresce da sinistra
+   quando il salto si accende. */
+.rt-link {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  min-width: 168px;
+  padding: 0 16px;
+}
+.rt-link-net { font-family: var(--font-code); font-size: 12px; white-space: nowrap; }
+.rt-link-meta { font-family: var(--font-code); font-size: 10.5px; color: var(--text-muted); white-space: nowrap; }
+.rt-link-line {
+  position: relative;
+  height: 2px;
+  background: var(--border);
+}
+.rt-link-line::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 100%;
+  background: var(--text-soft);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform .5s ease;
+}
+.rt-hop.on .rt-link-line::before { transform: scaleX(1); }
+.rt-link-line::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-left: 6px solid var(--border);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+}
+
+@media (max-width: 900px) {
+  /* In verticale: sul tablet accanto al rack la catena si legge in colonna. */
+  .rt-chain { flex-direction: column; }
+  .rt-hop { flex-direction: column; }
+  .rt-link { min-width: 0; padding: 8px 0 8px 22px; }
+  .rt-link-line { height: 22px; width: 2px; margin-left: -14px; }
+  .rt-link-line::before { transform: scaleY(0); transform-origin: top center; }
+  .rt-hop.on .rt-link-line::before { transform: scaleY(1); }
+  .rt-link-line::after { right: auto; left: 50%; top: auto; bottom: -1px;
+    transform: translateX(-50%); border-left: 4px solid transparent;
+    border-right: 4px solid transparent; border-top: 6px solid var(--border);
+    border-bottom: 0; }
+}
 
 .rt-steps { margin-top: 14px; }
 .rt-step {
@@ -2395,7 +2493,7 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   font-weight: 700;
   color: var(--text-muted);
 }
-.rt-step.decided .rt-step-n { border-color: var(--success); color: var(--success); }
+.rt-step.decided .rt-step-n { border-color: var(--lamp-up-ink); color: var(--lamp-up-ink); }
 .rt-step-body { padding: 13px 14px 14px; min-width: 0; overflow-x: auto; }
 .rt-step-head {
   display: flex;
@@ -2406,16 +2504,37 @@ body:not(.role-admin) .requires-admin { display: none !important; }
 }
 .rt-step-dev { font-family: var(--font-code); font-size: 13.5px; font-weight: 700; }
 .rt-step-ip { font-family: var(--font-code); font-size: 11px; color: var(--text-muted); }
-.rt-step-say { font-size: 12.5px; color: var(--text-muted); margin-left: auto; }
+.rt-step-say {
+  margin: 0 0 11px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  max-width: 92ch;
+}
+.rt-badge-backup { color: var(--lamp-warn-ink); border-color: var(--lamp-warn-ink); }
+.rt-outcome {
+  font-family: var(--font-legend);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.rt-outcome.win { color: var(--lamp-up-ink); }
 
 .rt-cand { width: 100%; border-collapse: collapse; font-family: var(--font-code); font-size: 12px; }
+/* Stessa voce delle intestazioni di tabella del resto dell'app (Saira
+   Condensed, maiuscoletto spaziato): qui cambiano solo densita' e fondo,
+   perche' la tabella vive dentro un passo, non dentro un contenitore proprio. */
 .rt-cand th {
-  text-align: left;
-  font-weight: 400;
-  font-size: 9.5px;
+  font-family: var(--font-legend);
+  font-weight: 600;
+  font-size: 10px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-muted);
+  background-color: transparent;
+  backdrop-filter: none;
+  position: static;
   padding: 0 12px 6px 0;
   border-bottom: var(--seam) solid var(--border);
   white-space: nowrap;
@@ -2428,10 +2547,11 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   transition: color .35s ease, opacity .35s ease;
 }
 .rt-cand tr:last-child td { border-bottom: 0; }
-.rt-cand .rt-num { text-align: right; }
+.rt-cand .rt-num { text-align: right; width: 1%; white-space: nowrap; }
+.rt-cand td:first-child, .rt-cand th:first-child { width: 26%; }
 .rt-cand td.rt-lead { padding-left: 10px; border-left: 2px solid transparent; }
 .rt-cand tr.won td { color: var(--text); background: var(--lamp-up-wash); }
-.rt-cand tr.won td.rt-lead { border-left-color: var(--success); }
+.rt-cand tr.won td.rt-lead { border-left-color: var(--lamp-up-ink); }
 .rt-cand tr.lost td { opacity: .45; }
 
 .rt-rule { display: flex; align-items: center; flex-wrap: wrap; margin-top: 11px; font-family: var(--font-code); font-size: 11px; }
@@ -2443,19 +2563,32 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   transition: color .3s ease, border-color .3s ease;
 }
 .rt-rule-step:first-child { margin-left: 0; }
-.rt-rule-step.hit { color: var(--success); border-color: var(--success); }
+.rt-rule-step.hit { color: var(--lamp-up-ink); border-color: var(--lamp-up-ink); }
 /* I criteri dopo quello che ha deciso non vengono nemmeno guardati: barrarli
    dice esattamente questo. */
 .rt-rule-step.moot { text-decoration: line-through; }
 
+/* Inchiostro scuro fisso: il fondo del chip e' una lampada in entrambe le
+   rese, e var(--bg) in tema chiaro dava testo quasi bianco su ambra. */
 .rt-kind {
   font-family: var(--font-code);
   font-size: 9.5px;
   font-weight: 700;
-  color: var(--bg);
+  color: #0b111a;
   padding: 1px 5px;
   margin-right: 7px;
 }
+
+.rt-idle {
+  margin: 14px 0 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  max-width: 80ch;
+}
+.rt-step-empty { font-size: 12.5px; color: var(--text-muted); }
+.rt-ink-ok { color: var(--lamp-up-ink); }
+.rt-ink-warn { color: var(--lamp-warn-ink); }
+.rt-ink-bad { color: var(--lamp-fault-ink); }
 
 .rt-probe { margin-top: 16px; border: var(--seam) solid var(--border); border-left: 2px solid var(--warning); padding: 12px 14px; }
 .rt-probe-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-muted); }
@@ -2477,3 +2610,108 @@ body:not(.role-admin) .requires-admin { display: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .rt-step, .rt-cand td, .rt-rule-step { transition: none; }
 }
+
+
+/* --- Selettore multiplo (apparati, firewall) -------------------------------
+   Sostituisce la <select multiple> nativa, che non prendeva il tema, mostrava
+   quattro righe con la barra di scorrimento dentro la barra dei filtri e
+   chiedeva Ctrl/Cmd per fare la cosa piu' comune della vista. Il riepilogo dice
+   quanti sono scelti; l'elenco si filtra scrivendo. */
+.picker { position: relative; }
+.picker-label {
+  display: block;
+  font-family: var(--font-legend);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.picker-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  list-style: none;
+  cursor: pointer;
+  padding: 9px 12px;
+  background-color: var(--surface-2);
+  border: var(--seam) solid var(--border-strong);
+  color: var(--text);
+  font-family: var(--font-code);
+  font-size: 13px;
+  user-select: none;
+}
+.picker-summary::-webkit-details-marker { display: none; }
+.picker-summary:hover { border-color: var(--text-soft); }
+.picker-summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.picker[open] .picker-summary { border-color: var(--cta); }
+.picker-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-caret { font-size: 10px; color: var(--text-muted); transition: transform var(--transition); }
+.picker[open] .picker-caret { transform: rotate(180deg); }
+
+.picker-menu {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 100%;
+  max-width: 360px;
+  background-color: var(--surface);
+  border: var(--seam) solid var(--border-strong);
+  box-shadow: var(--shadow-lift);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+.picker-search {
+  width: 100%;
+  padding: 7px 10px;
+  background-color: var(--surface-2);
+  border: var(--seam) solid var(--border);
+  color: var(--text);
+  font-family: var(--font-code);
+  font-size: 12.5px;
+}
+.picker-bulk { display: flex; gap: 6px; }
+.picker-bulk-btn {
+  flex: 1;
+  padding: 5px 8px;
+  background: transparent;
+  border: var(--seam) solid var(--border);
+  color: var(--text-muted);
+  font-family: var(--font-legend);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.picker-bulk-btn:hover { color: var(--text); border-color: var(--text-soft); }
+
+.picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  display: grid;
+  gap: 1px;
+}
+.picker-item label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-family: var(--font-code);
+  font-size: 12.5px;
+  color: var(--text);
+}
+.picker-item label:hover { background-color: var(--surface-2); }
+.picker-item input { accent-color: var(--cta); margin: 0; }
+.picker-item-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* L'indirizzo e' il dato che distingue due apparati con nome simile: sta a
+   destra, in ink attenuato, e non compete col nome. */
+.picker-item-hint { margin-left: auto; color: var(--text-muted); font-size: 11px; }

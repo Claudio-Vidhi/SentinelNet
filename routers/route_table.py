@@ -105,9 +105,11 @@ def _valid_ip(value: str) -> str:
     """L'indirizzo, o 400. Confine di sistema: quello che arriva di qui finisce
     in una risoluzione e, per la prova sul campo, in un comando su un
     apparato."""
+    # IPv4 e basta: le tabelle raccolte e i parser sono IPv4, e un indirizzo v6
+    # accettato qui non darebbe un errore ma un "nessuna rotta" incomprensibile.
     try:
-        return str(ipaddress.ip_address((value or "").strip()))
-    except ValueError:
+        return str(ipaddress.IPv4Address((value or "").strip()))
+    except ipaddress.AddressValueError:
         raise HTTPException(status_code=400,
                             detail=f"'{value}' non e' un indirizzo IPv4 valido.")
 
@@ -121,6 +123,21 @@ async def _collect_selection(current_user, device: str):
     wanted = {p.strip() for p in device.split(",") if p.strip()}
     targets = [d for d in route_table.routable_devices(devices_in_scope(current_user))
                if d.get("IP") in wanted]
+
+    # Due clienti possono avere lo stesso IP. Qui le tabelle si indicizzano per
+    # indirizzo, quindi una selezione ambigua non darebbe un percorso sbagliato
+    # a meta': ne darebbe uno che mescola due reti senza dirlo. Meglio fermarsi.
+    seen: "dict[str, dict]" = {}
+    for dev in targets:
+        clash = seen.setdefault(str(dev.get("IP")), dev)
+        if clash is not dev:
+            tenants = ", ".join(sorted({clash.get("Group") or "Generale",
+                                        dev.get("Group") or "Generale"}))
+            raise HTTPException(
+                status_code=409,
+                detail=f"{dev.get('IP')} esiste in piu' tenant ({tenants}): "
+                       "restringere la selezione a uno solo.")
+
     sem = asyncio.Semaphore(MAX_CONCURRENT_DEVICES)
 
     async def one(dev):
