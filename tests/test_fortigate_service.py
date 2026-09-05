@@ -155,6 +155,85 @@ class ApiOrSshTest(unittest.TestCase):
         self.assertIn("interfaccia di ingresso", str(ctx.exception))
 
 
+class SessionsTest(unittest.TestCase):
+    """Le due meta' della diagnosi client che fallivano insieme su 7.6.7."""
+
+    def test_the_session_list_path_is_tried_first(self):
+        # `monitor/firewall/session` da solo torna 404 su 7.6.7: il body dice
+        # path=firewall name=session action="" — il path c'e', l'azione GET no.
+        fgs.set_api_token(DEVICE["IP"], "tok")
+        with mock.patch.object(fgs.requests, "request",
+                               return_value=_resp(200, {"results": []})) as m:
+            fgs.get_sessions(DEVICE, src_ip="10.0.1.3")
+        self.assertIn("monitor/firewall/session/select", m.call_args.args[1])
+
+    def test_the_older_path_is_the_second_attempt(self):
+        fgs.set_api_token(DEVICE["IP"], "tok")
+        calls = []
+
+        def answer(method, url, **kw):
+            calls.append(url)
+            if "session/select" in url:
+                return _resp(404, {"path": "firewall", "name": "session"})
+            return _resp(200, {"results": [{"policy_id": 1}]})
+
+        with mock.patch.object(fgs.requests, "request", side_effect=answer):
+            out = fgs.get_sessions(DEVICE, src_ip="10.0.1.3")
+        self.assertEqual(out["source"], "api")
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(calls[1].endswith("monitor/firewall/session"))
+
+    def test_a_multiline_cli_sequence_is_sent_one_line_at_a_time(self):
+        """netmiko aspetta il prompt DOPO il comando che gli si passa.
+
+        Passandogliene tre separati da newline aspettava un prompt che
+        conteneva tutte e tre le righe: "Pattern not detected", con l'intero
+        blocco riportato come pattern cercato. E' l'errore che la sezione
+        `sessions` della diagnosi client mostrava a schermo."""
+        sent = []
+
+        class FakeConn:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def send_command(self, command, read_timeout=None):
+                sent.append(command)
+                return f"out:{command}"
+
+        with mock.patch("core.net_ssh.ConnectHandler", return_value=FakeConn()),              mock.patch.object(fgs, "get_device_credentials", create=True,
+                               return_value=("u", "p", "")),              mock.patch("core.core_engine.get_device_credentials",
+                        return_value=("u", "p", "")),              mock.patch("core.core_engine.get_device_port", return_value=22):
+            out = fgs.ssh_command(DEVICE, "diagnose sys session filter clear\n"
+                                          "diagnose sys session filter src 10.0.1.3\n"
+                                          "diagnose sys session list")
+        self.assertEqual(sent, ["diagnose sys session filter clear",
+                                "diagnose sys session filter src 10.0.1.3",
+                                "diagnose sys session list"])
+        self.assertIn("out:diagnose sys session list", out)
+
+    def test_a_single_command_is_unchanged(self):
+        sent = []
+
+        class FakeConn:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def send_command(self, command, read_timeout=None):
+                sent.append(command)
+                return "ok"
+
+        with mock.patch("core.net_ssh.ConnectHandler", return_value=FakeConn()),              mock.patch("core.core_engine.get_device_credentials",
+                        return_value=("u", "p", "")),              mock.patch("core.core_engine.get_device_port", return_value=22):
+            self.assertEqual(fgs.ssh_command(DEVICE, "get system status"), "ok")
+        self.assertEqual(sent, ["get system status"])
+
+
 class PolicyAddressResolutionTest(unittest.TestCase):
     """Gli indirizzi di una policy sono nomi di oggetti: la tabella deve
     poterli mostrare come reti, senza aprire l'address book a parte."""

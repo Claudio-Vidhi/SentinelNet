@@ -49,6 +49,30 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Fixed
 
+- **Client diagnosis: the `sessions` section failed on both paths at once.**
+  REST asked `monitor/firewall/session`, which answers 404 on FortiOS 7.6.7 —
+  the body says `path=firewall name=session action=""`, i.e. the path exists
+  but no GET action matches it. The session list lives at
+  `monitor/firewall/session/select`, which takes exactly the
+  srcaddr/dstaddr/dstport/count this code already sent; the old path stays as a
+  second attempt for the versions that served it.
+
+  The SSH fallback then failed too, for an unrelated reason: `ssh_command`
+  handed netmiko three `diagnose sys session ...` commands joined by newlines.
+  `send_command` waits for the prompt that follows *the* command it is given,
+  so it waited for one containing all three lines, never saw it, and reported
+  "Pattern not detected" with the whole block quoted back as the pattern. It
+  sends one line at a time now, which fixes the same latent break in
+  `delete_sessions` and in the config pull.
+
+- **"By IP" said "no traffic" without saying why.** The banner that explains it
+  (observability off, no listener, no exporter) lives in the Panoramica pane,
+  so it is invisible from that pill. The empty state now carries the diagnosis
+  itself, including the distinction people actually trip on: the FortiGate
+  traffic logs arrive over REST and do not feed this view, which is fed by
+  NetFlow/IPFIX/sFlow reaching the collector.
+
+
 - **BGP routes were drawn in the fallback grey.** The route-type palette asked
   for `--accent`, which this theme does not define (the tokens are
   `--primary` / `--success` / `--warning` / `--danger` / `--info`): the bar fell

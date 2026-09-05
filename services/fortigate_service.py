@@ -279,8 +279,17 @@ def ssh_command(device: dict, command: str, timeout: int = 30) -> str:
               "conn_timeout": CONNECT_TIMEOUT}
     try:
         with ConnectHandler(**params) as conn:
-            res = conn.send_command(command, read_timeout=timeout)
-            return res if isinstance(res, str) else str(res or "")
+            # UNA RIGA ALLA VOLTA. send_command aspetta il prompt DOPO il
+            # comando che gli si passa: dandogliene tre separati da newline
+            # aspettava un prompt che conteneva tutte e tre le righe, non lo
+            # trovava mai e falliva con "Pattern not detected", portandosi
+            # dietro l'intero blocco come se fosse il pattern cercato. E'
+            # quello che succedeva alla sequenza `diagnose sys session
+            # filter ... / list` della diagnosi client.
+            lines = [x for x in command.split("\n") if x.strip()]
+            out = [conn.send_command(line, read_timeout=timeout) for line in lines]
+            return "\n".join(
+                x if isinstance(x, str) else str(x or "") for x in out)
     except Exception as e:
         raise FortiGateError(f"SSH {device.get('IP')}: {e}")
 
@@ -288,13 +297,23 @@ def ssh_command(device: dict, command: str, timeout: int = 30) -> str:
 # --- Helper API-first con fallback SSH ---------------------------------------
 
 def _api_or_ssh(device, api_path, api_params, ssh_cmd, parser=None):
+    """``api_path`` puo' essere un percorso o una sequenza di percorsi.
+
+    FortiOS sposta gli endpoint monitor fra le versioni: get_ha_status lo ha
+    gia' incontrato (ha-status non esiste, e' ha-peer). Provarne piu' d'uno in
+    ordine, dal piu' recente, costa una richiesta in piu' solo sulle versioni
+    vecchie ed evita che una minor release renda muta una vista."""
     ip = device["IP"]
     api_err = None
-    try:
-        data = api_get(ip, api_path, api_params)
-        return {"source": "api", "data": data.get("results", data)}
-    except FortiGateError as e:
-        api_err = str(e)
+    paths = [api_path] if isinstance(api_path, str) else list(api_path)
+    for path in paths:
+        try:
+            data = api_get(ip, path, api_params)
+            return {"source": "api", "data": data.get("results", data)}
+        except FortiGateError as e:
+            # Il primo errore e' quello che si riporta: dice cosa ha risposto
+            # il path che ci aspettavamo funzionasse.
+            api_err = api_err or str(e)
     try:
         out = ssh_command(device, ssh_cmd)
         return {"source": "ssh", "api_error": api_err,
@@ -759,7 +778,15 @@ def get_sessions(device, src_ip: Optional[str] = None, dst_ip: Optional[str] = N
         filt.append(f"diagnose sys session filter dport {dst_port}")
     ssh_cmd = "\n".join(["diagnose sys session filter clear", *filt,
                          "diagnose sys session list"])
-    return _api_or_ssh(device, "monitor/firewall/session", params, ssh_cmd)
+    # `monitor/firewall/session` da solo e' un 404 su 7.6.7: il body dice
+    # {"path":"firewall","name":"session","action":""} — il path esiste ma
+    # nessuna azione GET vi corrisponde. L'elenco delle sessioni sta su
+    # .../session/select, che accetta proprio srcaddr/dstaddr/dstport/count.
+    # Il path vecchio resta come secondo tentativo per le versioni che lo
+    # servivano.
+    return _api_or_ssh(device,
+                       ("monitor/firewall/session/select", "monitor/firewall/session"),
+                       params, ssh_cmd)
 
 
 def delete_sessions(device, src_ip: Optional[str] = None, dst_ip: Optional[str] = None,

@@ -288,14 +288,50 @@
         loadTrafHostSeries();
     }
 
+    // Perche' la tabella e' vuota. "Nessun traffico" da solo manda a cercare
+    // un bug in questa vista, mentre nove volte su dieci la risposta e' che
+    // nessun apparato sta esportando flussi. Il banner che lo spiega esiste
+    // gia' (checkObsStatusBanner) ma vive nel pane Panoramica: su questa pill
+    // non si vede, quindi la diagnosi va portata dentro lo stato vuoto.
+    let _trafFlowHealth = null;
+
+    async function trafEmptyReason() {
+        try {
+            const res = await apiFetch('/api/observability/health');
+            _trafFlowHealth = (res && res.ok) ? await res.json() : null;
+        } catch (e) {
+            _trafFlowHealth = null;
+        }
+        if (!_trafFlowHealth) return tr('trafHostsEmpty');
+        if (!_trafFlowHealth.enabled) return tr('trafEmptyObsDisabled');
+        const listeners = _trafFlowHealth.listeners || {};
+        if (!Object.values(listeners).some(l => l && l.active)) {
+            return tr('trafEmptyNoListener');
+        }
+        // Listener in ascolto e tabella vuota: il collector c'e', i flussi no.
+        // E' il caso che si confonde con i log di traffico del FortiGate, che
+        // arrivano in REST e non da qui.
+        return tr('trafEmptyNoExporter');
+    }
+
+    async function renderTrafHostsEmpty(tbody) {
+        tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center;
+            color:var(--text-muted);">${escapeHtml(tr('trafHostsEmpty'))}</td></tr>`;
+        const why = await trafEmptyReason();
+        tbody.innerHTML = `<tr><td colspan="6" style="padding:24px; text-align:center;
+            color:var(--text-muted); line-height:1.6;">
+              <div style="font-weight:600; margin-bottom:6px;">${escapeHtml(tr('trafHostsEmpty'))}</div>
+              <div style="font-size:12px; max-width:620px; margin:0 auto;">${escapeHtml(why)}</div>
+            </td></tr>`;
+    }
+
     function renderTrafHosts() {
         const tbody = document.getElementById('trafHostsBody');
         const count = document.getElementById('trafHostsCount');
         if (!tbody) return;
         if (count) count.textContent = tr('trafHostsCount', { n: _trafHosts.length });
         if (!_trafHosts.length) {
-            tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center;
-                color:var(--text-muted);">${escapeHtml(tr('trafHostsEmpty'))}</td></tr>`;
+            renderTrafHostsEmpty(tbody);
             return;
         }
         // Le barre sono in scala sul MASSIMO della vista, non sul totale: e'
