@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-09-05
+
 ### Added
 
 - **Analisi di percorso: dove finisce un indirizzo, e perché quella rotta.**
