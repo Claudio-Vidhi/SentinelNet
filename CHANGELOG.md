@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.30.1] - 2026-09-05
+
 ### Changed
 
 - **I due elenchi di apparati non sono piu' una `<select multiple>`.** Quella
@@ -73,7 +75,6 @@ happened — `git log --grep="chore(release)"` is the record for those.
   inchiostro (`--success` come testo su fondo bianco sta sotto 4.5:1) e la
   sigla del tipo di rotta prendeva `var(--bg)`, cioe' testo quasi bianco su
   ambra. Ora usa gli inchiostri dedicati (`--lamp-*-ink`).
-
 
 ## [0.30.0] - 2026-09-05
 
