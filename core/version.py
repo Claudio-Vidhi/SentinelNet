@@ -1,4 +1,4 @@
 # -*- coding: utf-8 -*-
 """SentinelNet single source of truth for software version."""
 
-__version__ = "0.29.0"
+__version__ = "0.30.0"

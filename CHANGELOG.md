@@ -10,6 +10,63 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Analisi di percorso: dove finisce un indirizzo, e perché quella rotta.**
+  Le tabelle raccolte rispondono anche alla domanda successiva —
+  `GET /api/routes/trace?device=<selezione>&src=<apparato>&dst=<indirizzo>`
+  ricostruisce i salti fra gli apparati **scelti** e, per ognuno, le rotte
+  candidate, quella che vince e il criterio che ha deciso (prefisso, distanza
+  amministrativa, metrica). Gli esiti restano distinti perché sono domande
+  diverse: consegna, fuori inventario, nessuna rotta, anello, biforcazione
+  ECMP, e "non interrogato" quando il percorso esce dalla selezione.
+
+  Per concatenare due salti serviva un dato che le rotte da sole non danno:
+  **l'indirizzo delle interfacce**, senza cui non si sa quale apparato possieda
+  un certo next-hop. Viene preso dove già esiste — `monitor/system/interface`
+  per i FortiGate, le rotte *local* (`L 10.0.0.1/32`) del `show ip route` per
+  gli switch — quindi nessun collector nuovo. Un next-hop viene attribuito solo
+  a chi ha quell'indirizzo esatto: per vicinanza di sottorete sarebbe topologia
+  inventata.
+
+- **Il pannello nel tab Rotte.** Sopra il grafico: si sceglie l'apparato di
+  partenza fra quelli selezionati, si scrive un indirizzo e la striscia disegna
+  i salti, uno alla volta, mentre sotto compaiono le decisioni — le rotte
+  candidate di ogni apparato, quella che vince e il criterio che ha deciso, con
+  i criteri successivi barrati perche' non vengono nemmeno guardati. Un salto
+  letto dal backup resta marcato dentro la catena. L'animazione e' la
+  spiegazione, non un effetto: `prefers-reduced-motion` mostra tutto subito, e
+  "Riproduci" la ripete quando serve.
+
+  Il pulsante della prova sul campo compare solo per operatori e admin: a un
+  viewer un'azione che manda pacchetti non viene nemmeno offerta.
+
+- **Prova sul campo, opzionale.** `POST /api/routes/trace/probe` lancia un
+  traceroute vero **dall'apparato** e confronta i salti visti con quelli
+  attesi. È l'unica parte della vista che manda pacchetti: endpoint separato,
+  riservato agli operatori, mai innescato dall'apertura di un pannello, con la
+  destinazione validata come indirizzo prima di finire in un comando su un
+  apparato di rete. Un next-hop atteso che non compare non è di per sé un
+  guasto — un apparato può non rispondere a ICMP — ed è presentato come punto
+  da guardare, non come verdetto.
+
+
+- **Routing tables fall back to the backup when a device does not answer.** An
+  unreachable device used to leave a line in the errors box and nothing else,
+  which is usually the moment its routes are wanted. The freshest configuration
+  backup already on disk is read instead — through the same analyzer the Config
+  Analysis tab uses, not a second parser beside it.
+
+  What comes out is the **configured static routes**, and the view says so
+  rather than passing them off as a routing table: nothing learned (OSPF, BGP,
+  RIP), nothing connected, and no way to tell whether a static was actually
+  active — its next-hop may have been unreachable for a month. Each such device
+  is badged "dal backup" in the table and named in the errors box with the
+  backup's date, next to the reason the device was not reached, which is not
+  dropped. Routes belonging to a VRF are left out: there is no column in which
+  to say which VRF they are from, so beside the others they would read as
+  global-table routes.
+
 ### Changed
 
 - **Routing tables and "By policy" ask before they query.** Both views used to
