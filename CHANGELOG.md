@@ -10,6 +10,71 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Changed
+
+- **I due elenchi di apparati non sono piu' una `<select multiple>`.** Quella
+  nativa non prende il tema (righe chiare dentro una console scura), tiene una
+  barra di scorrimento dentro la barra dei filtri, non dice quanti apparati
+  sono scelti e chiede Ctrl/Cmd per fare la cosa piu' comune della vista — con
+  l'istruzione stampata sotto, fuori allineamento da tutto il resto. Al suo
+  posto un selettore a caselle dentro un `<details>`, cioe' lo stesso dropdown
+  del resto della console: il riepilogo dice "3 di 12 selezionati", l'elenco si
+  filtra scrivendo, e "Tutti"/"Nessuno" agiscono su cio' che il filtro sta
+  mostrando. Vale per le Tabelle di Routing e per Traffico → Per policy, e le
+  funzioni stanno una volta sola in `core.js`.
+
+- **La catena dei salti passa da SVG a HTML.** Il disegno veniva scalato per
+  stare in larghezza, quindi con un hostname lungo il nome finiva sopra il
+  proprio indirizzo e su un pannello stretto il testo scendeva sotto i dieci
+  pixel. Ora ogni riquadro si dimensiona sul suo contenuto — ruolo, nome e IP
+  su tre righe — la catena scorre se serve, e sotto i 900px si dispone in
+  colonna, che e' come la si guarda da un tablet in piedi davanti al rack. Il
+  riquadro d'esito resta l'unico colorato: e' l'unico posto dove il colore
+  significa stato.
+- **Il motivo della scelta ha una riga sua** invece di stare schiacciato a
+  destra dell'intestazione; il richiamo al backup e' un contrassegno accanto al
+  nome, e le colonne numeriche della tabella candidate non galleggiano piu' in
+  mezzo alla riga. Via anche le frecce di ordinamento: li' l'ordine *e'*
+  l'informazione — prefisso, distanza, metrica — e riordinare la tabella la
+  renderebbe illeggibile.
+
+### Fixed
+
+- **Il ripiego sul backup poteva leggere il backup di un altro cliente.**
+  `analyze_device()` cercava il file per solo suffisso IP in tutto
+  `backup-config/`, e due clienti possono avere lo stesso indirizzo — e' la
+  premessa su cui e' scritto `assert_device_allowed`, ed e' il motivo per cui i
+  backup stanno in cartelle separate per tenant. Un apparato irraggiungibile del
+  cliente A restituiva quindi le statiche del cliente B, se la sua copia era
+  piu' recente. Ora la ricerca accetta il tenant e cammina solo nel suo albero,
+  come fa gia' `remove_stale_backups`; lo passano il ripiego delle rotte e
+  `/api/config-analyzer/{ip}`, che il gruppo lo hanno gia' in mano.
+- **Sedici salti non sono un anello.** Esaurire il limite senza mai rivedere un
+  apparato veniva riportato come "anello", mandando a cercare un giro che non
+  c'era: ora e' un esito suo, "limite salti".
+- **Indirizzi IPv6 rifiutati davvero.** `/api/routes/trace` diceva di volere
+  IPv4 ma accettava un v6, che poi attraversava una pipeline IPv4 e usciva come
+  un incomprensibile "nessuna rotta".
+- **Stesso IP in due tenant: la traccia si ferma.** Le tabelle si indicizzano
+  per indirizzo, quindi una selezione ambigua non avrebbe dato un percorso
+  sbagliato a meta' ma uno che mescola due reti senza dirlo. Ora e' un 409 che
+  nomina i tenant.
+- **Interfacce FortiOS lette anche come `ipv4_address`**, il nome che alcune
+  build usano — `fortigate_service` lo faceva gia'. Senza, l'apparato tornava
+  zero indirizzi in silenzio e ogni suo next-hop diventava "fuori inventario".
+- **Distanza e metrica accettate anche come stringhe numeriche**: scartare
+  `"110"` come se fosse assente faceva sembrare identiche due rotte diverse, e
+  nasceva una biforcazione ECMP inventata.
+- **L'ultimo tratto della striscia si accende.** L'animazione cercava il
+  riquadro successivo per indice, e il riquadro d'esito non ne aveva uno: su un
+  percorso di un salto solo — l'unico tratto esistente — la linea e la sua
+  etichetta non comparivano mai.
+- **Contrasto in tema chiaro.** Il pannello usava i colori delle lampade come
+  inchiostro (`--success` come testo su fondo bianco sta sotto 4.5:1) e la
+  sigla del tipo di rotta prendeva `var(--bg)`, cioe' testo quasi bianco su
+  ambra. Ora usa gli inchiostri dedicati (`--lamp-*-ink`).
+
+
 ## [0.30.0] - 2026-09-05
 
 ### Added

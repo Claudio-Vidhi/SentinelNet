@@ -89,7 +89,11 @@ def _fortigate_addresses(device) -> list:
     for entry in entries:
         if not isinstance(entry, dict):
             continue
-        ip = _addr(entry.get("ip"))
+        # Alcune build di FortiOS chiamano il campo ipv4_address: la stessa
+        # doppia lettura che fa gia' fortigate_service. Senza, l'apparato torna
+        # zero indirizzi in silenzio e ogni suo next-hop diventa "fuori
+        # inventario".
+        ip = _addr(entry.get("ip") or entry.get("ipv4_address"))
         if ip is None:
             continue
         try:
@@ -102,9 +106,21 @@ def _fortigate_addresses(device) -> list:
     return out
 
 
+def _num(value):
+    """Un numero, anche quando l'apparato lo manda come stringa. None se non
+    c'e' o non e' interpretabile: scartare "110" come se fosse assente fa
+    sembrare uguali due rotte che non lo sono, e nasce un ECMP inventato."""
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _ad(row) -> int:
-    d = row.get("distance")
-    if isinstance(d, int):
+    d = _num(row.get("distance"))
+    if d is not None:
         return d
     return DEFAULT_AD.get(row.get("type"), 255)
 
@@ -125,9 +141,9 @@ def candidates(rows, dst) -> list:
         net = _net(r.get("network"))
         if net is None or target not in net:
             continue
-        metric = r.get("metric")
+        metric = _num(r.get("metric"))
         out.append({**r, "prefixlen": net.prefixlen, "ad": _ad(r),
-                    "metric": metric if isinstance(metric, int) else 0})
+                    "metric": metric if metric is not None else 0})
     out.sort(key=lambda r: (-r["prefixlen"], r["ad"], r["metric"]))
     return out
 
@@ -248,7 +264,10 @@ def trace(dst, start_ip, rows_by_device, addresses, devices_by_ip) -> dict:
                     "exit_local": _on_own_lan(best.get("gateway"),
                                               addresses.get(current))}
         current = nxt
-    return {"hops": hops, "outcome": "anello"}
+    # Sedici salti senza mai rivedere un apparato: non e' un anello, e' un
+    # percorso piu' lungo di quanto questa vista segua. Chiamarlo anello
+    # manderebbe l'operatore a cercare un giro che non c'e'.
+    return {"hops": hops, "outcome": "limite salti"}
 
 
 # --- Prova sul campo ---------------------------------------------------------

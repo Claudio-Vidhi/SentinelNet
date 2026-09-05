@@ -480,10 +480,7 @@
     let _trafPolErrors = [];
 
     function trafPolSelectedDevices() {
-        const sel = /** @type {HTMLSelectElement|null} */ (
-            document.getElementById('trafPolDevice'));
-        if (!sel) return [];
-        return [...sel.selectedOptions].map(o => o.value);
+        return pickerValues('trafPolDevice');
     }
 
     function trafPolFilters() {
@@ -499,19 +496,14 @@
     // I firewall scegliibili arrivano dall'inventario, non dalle righe
     // tornate: la lista deve esistere PRIMA di interrogare qualcuno.
     async function loadTrafPolDeviceList() {
-        const sel = /** @type {HTMLSelectElement|null} */ (
-            document.getElementById('trafPolDevice'));
-        if (!sel) return;
         let devices = [];
         try {
             const res = await apiFetch('/api/firewall-traffic/devices');
             if (res && res.ok) devices = (await res.json()).devices || [];
         } catch (e) { devices = []; }
-        const chosen = new Set(trafPolSelectedDevices());
-        sel.innerHTML = devices
+        renderPickerItems('trafPolDevice', devices
             .sort((a, b) => (a.hostname || '').localeCompare(b.hostname || ''))
-            .map(d => `<option value="${escapeHtml(d.ip)}"${chosen.has(d.ip) ? ' selected' : ''}>${
-                escapeHtml(d.hostname)} (${escapeHtml(d.ip)})</option>`).join('');
+            .map(d => ({ value: d.ip, label: d.hostname || d.ip, hint: d.ip })));
     }
 
     // Aprire la vista popola la tendina e si ferma li'. Interrogare da soli

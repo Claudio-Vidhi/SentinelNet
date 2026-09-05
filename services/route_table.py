@@ -219,7 +219,10 @@ def routes_from_backup(device) -> "dict | None":
     usa la tab Analisi Configurazione, non un secondo parser che le puo'
     divergere accanto."""
     from ai import config_analyzer
-    analysis = config_analyzer.analyze_device(device.get("IP"))
+    # Il tenant fa parte della chiave: due clienti possono avere lo stesso IP, e
+    # i backup stanno in cartelle separate proprio per questo.
+    analysis = config_analyzer.analyze_device(device.get("IP"),
+                                              device.get("Group") or "Generale")
     if not analysis:
         return None
     entries = []

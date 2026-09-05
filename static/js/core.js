@@ -1327,6 +1327,118 @@ document.addEventListener('keydown', e => {
     }
 });
 
+
+// ===== Selettore multiplo (apparati, firewall) ==============================
+// Una <select multiple> nativa non prende il tema, non dice quanti elementi
+// sono scelti, obbliga a Ctrl/Cmd e alza il proprio riquadro fuori dalla barra
+// dei filtri. Qui e' un <details>, cioe' lo stesso dropdown del resto dell'app
+// (l'elevazione sopra il pannello e' gia' gestita piu' sotto), con dentro un
+// filtro, le caselle e il conteggio nel riepilogo.
+
+/** Gli identificativi scelti dentro il selettore ``rootId``. */
+function pickerValues(rootId) {
+    const root = document.getElementById(rootId);
+    if (!root) return [];
+    return [...root.querySelectorAll('input[type="checkbox"]:checked')]
+        .map(c => /** @type {HTMLInputElement} */ (c).value);
+}
+
+/** Le voci scelte, con la loro etichetta: serve a chi deve rimostrarle. */
+function pickerSelected(rootId) {
+    const root = document.getElementById(rootId);
+    if (!root) return [];
+    return [...root.querySelectorAll('input[type="checkbox"]:checked')].map(c => ({
+        value: /** @type {HTMLInputElement} */ (c).value,
+        label: (c.closest('.picker-item')?.querySelector('.picker-item-label')
+                || {}).textContent || '',
+    }));
+}
+
+/**
+ * Riempie il selettore. ``items`` sono ``{value, label, hint}``; la selezione
+ * corrente sopravvive al ridisegno, cosi' aggiornare l'elenco non la azzera.
+ */
+function renderPickerItems(rootId, items, keep) {
+    const root = document.getElementById(rootId);
+    if (!root) return;
+    const list = root.querySelector('.picker-list');
+    if (!list) return;
+    const chosen = new Set(keep !== undefined ? keep : pickerValues(rootId));
+    list.innerHTML = (items || []).map(it => `
+        <li class="picker-item">
+          <label>
+            <input type="checkbox" value="${escapeHtml(it.value)}"${
+                chosen.has(it.value) ? ' checked' : ''}>
+            <span class="picker-item-label">${escapeHtml(it.label)}</span>
+            ${it.hint ? `<span class="picker-item-hint">${escapeHtml(it.hint)}</span>` : ''}
+          </label>
+        </li>`).join('');
+    updatePickerSummary(root);
+}
+
+function updatePickerSummary(root) {
+    const out = root.querySelector('.picker-value');
+    if (!out) return;
+    const total = root.querySelectorAll('.picker-item input').length;
+    const chosen = root.querySelectorAll('.picker-item input:checked').length;
+    if (!total) { out.textContent = tr('pickerEmpty'); return; }
+    if (!chosen) { out.textContent = tr('pickerNone'); return; }
+    if (chosen === 1) {
+        const one = root.querySelector('.picker-item input:checked');
+        out.textContent = (one?.closest('.picker-item')
+            ?.querySelector('.picker-item-label')?.textContent || '').trim();
+        return;
+    }
+    out.textContent = tr('pickerCount', { n: chosen, total: total });
+}
+
+/** Notifica il modulo: il selettore ha cambiato scelta. */
+function pickerChanged(root) {
+    updatePickerSummary(root);
+    root.dispatchEvent(new CustomEvent('picker-change'));
+}
+
+document.addEventListener('input', (e) => {
+    const target = /** @type {HTMLElement} */ (e.target);
+    const root = target.closest?.('.picker');
+    if (!root) return;
+    if (target.classList.contains('picker-search')) {
+        // Filtro sulle voci, non una richiesta: con quaranta apparati scorrere
+        // un elenco e' peggio che scriverne tre lettere.
+        const needle = /** @type {HTMLInputElement} */ (target).value.trim().toLowerCase();
+        root.querySelectorAll('.picker-item').forEach(li => {
+            const text = (li.textContent || '').toLowerCase();
+            /** @type {HTMLElement} */ (li).hidden = !!needle && !text.includes(needle);
+        });
+        return;
+    }
+    if (target instanceof HTMLInputElement && target.type === 'checkbox') {
+        pickerChanged(root);
+    }
+});
+
+document.addEventListener('click', (e) => {
+    const btn = /** @type {HTMLElement} */ (e.target).closest?.('.picker [data-picker]');
+    if (!btn) return;
+    const root = btn.closest('.picker');
+    if (!root) return;
+    const wanted = btn.dataset.picker === 'all';
+    root.querySelectorAll('.picker-item').forEach(li => {
+        const box = /** @type {HTMLInputElement|null} */ (li.querySelector('input'));
+        // "Tutti" sceglie quello che si sta guardando: con un filtro attivo,
+        // selezionare anche le voci nascoste sarebbe una sorpresa.
+        if (box && !(/** @type {HTMLElement} */ (li).hidden)) box.checked = wanted;
+    });
+    pickerChanged(root);
+});
+
+// Esc chiude il selettore aperto, come ogni altro dropdown della console.
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const open = /** @type {HTMLElement} */ (e.target).closest?.('.picker[open]');
+    if (open) open.removeAttribute('open');
+});
+
 // --- DROPDOWN STACKING ELEVATION (Fix clipped dropdown menus across themes) ---
 document.addEventListener('toggle', function(e) {
     if (e.target && e.target.tagName === 'DETAILS') {

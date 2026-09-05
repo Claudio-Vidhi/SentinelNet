@@ -1854,9 +1854,23 @@
       </div>
       <div class="filterbar" style="align-items:flex-end; gap:14px; flex-wrap:wrap;">
         <div class="form-group" style="margin-bottom:0; min-width:240px;">
-          <label for="trafPolDevice" data-i18n="trafPolDevice">Firewall</label>
-          <select id="trafPolDevice" multiple size="4"></select>
-          <small style="color:var(--text-muted);" data-i18n="trafPolDeviceHint">Ctrl/Cmd per sceglierne piu' di uno</small>
+          <span class="picker-label" id="trafPolDeviceLabel" data-i18n="trafPolDevice">Firewall</span>
+          <details class="picker" id="trafPolDevice">
+            <summary class="picker-summary" aria-labelledby="trafPolDeviceLabel">
+              <span class="picker-value"></span>
+              <i class="fa-solid fa-chevron-down picker-caret" aria-hidden="true"></i>
+            </summary>
+            <div class="picker-menu">
+              <input type="search" class="picker-search" id="trafPolDeviceSearch"
+                     placeholder="Filtra" data-i18n-placeholder="pickerSearch"
+                     data-i18n-aria-label="pickerSearch" aria-label="Filtra">
+              <div class="picker-bulk">
+                <button type="button" class="picker-bulk-btn" data-picker="all" data-i18n="pickerAll">Tutti</button>
+                <button type="button" class="picker-bulk-btn" data-picker="none" data-i18n="pickerNoneBtn">Nessuno</button>
+              </div>
+              <ul class="picker-list"></ul>
+            </div>
+          </details>
         </div>
         <div class="form-group" style="margin-bottom:0; min-width:150px;">
           <label for="trafPolAction" data-i18n="trafPolAction">Azione</label>
@@ -4083,9 +4097,23 @@
     <div class="panel" style="margin-bottom:18px;">
       <div class="filterbar" style="align-items:flex-end; gap:14px; flex-wrap:wrap;">
         <div class="form-group" style="margin-bottom:0; min-width:240px;">
-          <label for="rtDeviceFilter" data-i18n="rtFilterDevice">Apparato</label>
-          <select id="rtDeviceFilter" multiple size="4"></select>
-          <small style="color:var(--text-muted);" data-i18n="rtDeviceHint">Ctrl/Cmd per sceglierne piu' di uno</small>
+          <span class="picker-label" id="rtDeviceFilterLabel" data-i18n="rtFilterDevice">Apparato</span>
+          <details class="picker" id="rtDeviceFilter">
+            <summary class="picker-summary" aria-labelledby="rtDeviceFilterLabel">
+              <span class="picker-value"></span>
+              <i class="fa-solid fa-chevron-down picker-caret" aria-hidden="true"></i>
+            </summary>
+            <div class="picker-menu">
+              <input type="search" class="picker-search" id="rtDeviceSearch"
+                     placeholder="Filtra" data-i18n-placeholder="pickerSearch"
+                     data-i18n-aria-label="pickerSearch" aria-label="Filtra">
+              <div class="picker-bulk">
+                <button type="button" class="picker-bulk-btn" data-picker="all" data-i18n="pickerAll">Tutti</button>
+                <button type="button" class="picker-bulk-btn" data-picker="none" data-i18n="pickerNoneBtn">Nessuno</button>
+              </div>
+              <ul class="picker-list"></ul>
+            </div>
+          </details>
         </div>
         <div class="form-group" style="margin-bottom:0; min-width:180px;">
           <label for="rtTypeFilter" data-i18n="rtFilterType">Tipo rotta</label>
@@ -4119,7 +4147,7 @@
         <h4 style="margin:0; font-size:14px; color:var(--text-muted);">
           <i class="fa-solid fa-route"></i> <span data-i18n="rtTraceTitle">Analisi di percorso</span>
         </h4>
-        <span id="rtTraceVerdict" class="rt-verdict"></span>
+        <span id="rtTraceVerdict" class="badge rt-verdict"></span>
       </div>
       <p class="rt-trace-desc" data-i18n="rtTraceDesc">Dove finisce un indirizzo partendo da un apparato, e quale rotta vince su ogni salto. Calcolato sulle tabelle gia' raccolte: nessun pacchetto viene inviato.</p>
 

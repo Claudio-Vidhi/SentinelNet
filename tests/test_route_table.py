@@ -505,6 +505,19 @@ class RoutesTabIsWiredEndToEnd(unittest.TestCase):
         self.assertIn("tabId === 'tab-routes'", self.core)
         self.assertIn("window.loadRoutesTab = routesTabShown", self.mod)
 
+    def test_the_device_picker_is_not_a_native_multiple_select(self):
+        # La <select multiple> nativa non prende il tema, non dice quanti
+        # apparati sono scelti e chiede Ctrl/Cmd per fare la cosa piu' comune
+        # della vista. Il selettore e' un <details> con caselle e filtro.
+        self.assertNotIn("multiple", self.html.split('id="tab-routes"')[1]
+                         .split("End #tab-routes")[0])
+        self.assertIn('<details class="picker" id="rtDeviceFilter">', self.html)
+        self.assertIn('id="rtDeviceSearch"', self.html)
+        # Le funzioni condivise vivono in core.js: il modulo le usa, non le
+        # riscrive.
+        self.assertIn("pickerValues('rtDeviceFilter')", self.mod)
+        self.assertIn("renderPickerItems('rtDeviceFilter'", self.mod)
+
     def test_every_bound_id_exists_in_the_template(self):
         for element_id in ("rtDeviceFilter", "rtTypeFilter", "rtSearch",
                            "btnRtRefresh", "rtTableBody", "rtChartCanvas",
