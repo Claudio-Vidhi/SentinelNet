@@ -18,16 +18,25 @@
     // I colori dei tipi sono gli stessi in tabella e nel grafico: una barra
     // gialla e una riga gialla devono voler dire la stessa cosa senza che
     // l'utente debba leggere due legende.
+    // Solo le quattro famiglie che si incontrano davvero hanno un colore
+    // proprio; il resto resta muto. --accent non esiste in questa palette (i
+    // token sono --primary/--success/--warning/--danger/--info): chiederlo
+    // tornava stringa vuota, quindi la barra BGP finiva sul grigio di ripiego
+    // e il badge su un var() non valido.
     const RT_TYPE_COLORS = {
         connected: '--success',
+        local: '--text-muted',
         static: '--primary',
         ospf: '--warning',
-        bgp: '--accent',
+        bgp: '--info',
+        eigrp: '--text-muted',
         rip: '--text-muted',
+        isis: '--text-muted',
         other: '--text-muted',
         unknown: '--text-muted',
     };
-    const RT_TYPE_ORDER = ['connected', 'static', 'ospf', 'bgp', 'rip', 'other', 'unknown'];
+    const RT_TYPE_ORDER = ['connected', 'local', 'static', 'ospf', 'bgp',
+                           'eigrp', 'rip', 'isis', 'other', 'unknown'];
 
     function rtTypeColor(type) {
         const varName = RT_TYPE_COLORS[type] || '--text-muted';

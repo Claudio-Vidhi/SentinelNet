@@ -12,6 +12,32 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Added
 
+- **Switches reach the Routing Tables tab: `show ip route` is parsed.** The tab
+  shipped with FortiGates only, because they are the one vendor that publishes
+  a routing table over REST. A switch publishes its RIB too, just as text, and
+  the letters in the first column are the classification the device already
+  makes of its own table — reading them is translating, not guessing.
+
+  Connected (C) and local (L) stay apart, so a switch does not appear to have
+  every SVI twice. A qualifier does not change the family: `O IA` is OSPF like
+  `O`. A route with two next-hops becomes two rows, because keeping one hides
+  half the path from the person looking for where traffic goes. An age
+  (`1d02h`) is not mistaken for an interface. Cisco only: the parser is written
+  on the IOS layout, and Aruba answers the same command differently — adding it
+  means writing its parser, not widening a list.
+
+  A device in an agent site is not dialled at all — the central has no route to
+  it and trying only adds a timeout per refresh — and a switch that answers
+  with no routes says so, so the absence does not read as a broken parser.
+
+### Fixed
+
+- **BGP routes were drawn in the fallback grey.** The route-type palette asked
+  for `--accent`, which this theme does not define (the tokens are
+  `--primary` / `--success` / `--warning` / `--danger` / `--info`): the bar fell
+  back to grey and the badge got an invalid `var()`. BGP is `--info` now.
+
+
 - **A Routing Tables tab: every device's RIB in one view.** The FortiGate tab
   has shown one firewall's routes since it shipped; the question engineers
   actually ask is the other one — "who has a route to this network, and do the
