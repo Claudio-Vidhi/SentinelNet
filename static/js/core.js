@@ -1503,6 +1503,18 @@ function populateGlobalTenantSelect() {
     if (sel.value !== 'all') applyGlobalTenant(sel.value);
 }
 
+// A panel's tenant select is repopulated when its panel loads, which is almost
+// always AFTER applyGlobalTenant ran: setting .value on a select that has no
+// options yet is a silent no-op, so the panel read back '' and fell back to
+// "all" — the global scope was dropped without a trace. Seed from the global
+// tenant whenever the select has no usable value of its own.
+function tenantSelectSeed(cur, groups, fallback) {
+    if (groups.includes(cur)) return cur;
+    const g = window.globalSelectedTenant;
+    return (g && g !== 'all' && groups.includes(g)) ? g : fallback;
+}
+window.tenantSelectSeed = tenantSelectSeed;
+
 // Propaga lo scope ai selettori che i pannelli leggono ancora.
 function applyGlobalTenant(val) {
     window.globalSelectedTenant = val;
@@ -1515,13 +1527,21 @@ function applyGlobalTenant(val) {
     // Sync remaining per-panel VIEW FILTERS: set value and fire change so the
     // panel's own handler reacts (re-fetches data, etc.).
     for (const sid of ['ptTenantSelect', 'driftTenantSelect', 'haTenantFilter',
-                       'wlcTenantSelect']) {
+                       'wlcTenantSelect', 'ifTenantFilter', 'categoriesGroupSelect',
+                       'configGroupSelect', 'interactiveGroupSelect',
+                       'bulkGroupFilter']) {
         const sel = document.getElementById(sid);
         if (sel instanceof HTMLSelectElement && val !== 'all') {
             sel.value = val;
             sel.dispatchEvent(new Event('change', { bubbles: true }));
         }
     }
+    // threatGroupSelect is a filter too, but its own change handler STARTS a
+    // scan: dispatching here would launch one every time the operator moves
+    // the global selector. Seed the value, let them press the button.
+    const threatSel = document.getElementById('threatGroupSelect');
+    if (threatSel instanceof HTMLSelectElement && val !== 'all') threatSel.value = val;
+
     // FORM FIELDS are not filters: they choose which tenant a config is
     // generated for, or an identity assigned to. Pre-filling an untouched one
     // is a convenience; overwriting a choice the user made themselves is data

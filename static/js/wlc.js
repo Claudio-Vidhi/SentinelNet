@@ -31,7 +31,7 @@ async function loadWlcTab() {
         const curTenant = tenantSel.value;
         tenantSel.innerHTML = `<option value="">${i18n[currentLang].wlcOptTenant}</option>` +
             tenants.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
-        tenantSel.value = tenants.includes(curTenant) ? curTenant : '';
+        tenantSel.value = tenantSelectSeed(curTenant, tenants, '');
         onWlcTenantChanged();
     } catch (e) {
         console.error('Errore caricamento lista WLC:', e);

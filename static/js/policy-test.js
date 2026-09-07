@@ -26,7 +26,7 @@
         const groups = Object.keys(globalGroups || {});
         sel.innerHTML = `<option value="">${escapeHtml(L.ptChooseTenant)}</option>` +
             groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
-        sel.value = groups.includes(cur) ? cur : '';
+        sel.value = tenantSelectSeed(cur, groups, '');
     }
 
     function policyTenant() {

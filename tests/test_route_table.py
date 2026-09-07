@@ -8,6 +8,8 @@ fatto che un apparato irraggiungibile non svuoti la tabella degli altri, e che
 un tipo di rotta sconosciuto non venga ribattezzato.
 """
 import os
+import shutil
+import subprocess
 import unittest
 from unittest import mock
 
@@ -543,6 +545,25 @@ class RoutesTabIsWiredEndToEnd(unittest.TestCase):
     def test_a_partial_answer_is_shown_and_not_swallowed(self):
         self.assertIn("rtPartial", self.mod)
         self.assertIn('id="rtErrors"', self.html)
+
+
+class TestRoutesTenantScope(unittest.TestCase):
+    """Il selettore di tenant in alto vale anche per questa tab.
+
+    Il backend limita gia' allo scope dell'utente, ma un operatore che ne vede
+    piu' di uno si trovava nel picker gli apparati di tutti: la vista si
+    chiamava "in scope" e mostrava tutta la flotta."""
+
+    _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    @unittest.skipUnless(shutil.which("node"), "node non disponibile")
+    def test_the_device_picker_follows_the_global_tenant(self):
+        harness = os.path.join(self._REPO_ROOT, "tests", "js",
+                               "test_routes_tenant_scope.mjs")
+        proc = subprocess.run([shutil.which("node"), harness],
+                              capture_output=True, text=True,
+                              cwd=self._REPO_ROOT)
+        self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
 
 
 if __name__ == "__main__":

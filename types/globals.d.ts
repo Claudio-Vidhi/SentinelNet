@@ -131,6 +131,7 @@ declare var _vwVendor: any;
 interface Window {
     loadAssetOnce: any;      // core.js
     globalSelectedTenant: any; // core.js
+    tenantSelectSeed: any;   // core.js, used by every panel tenant select
     globalDeviceContext: any; // core.js
     setGlobalDeviceContext: any; // core.js
     clearGlobalDeviceContext: any; // core.js

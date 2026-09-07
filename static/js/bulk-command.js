@@ -9,7 +9,7 @@ function openBulkCommandModal() {
     const gf = document.getElementById('bulkGroupFilter');
     gf.innerHTML = `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
         Object.keys(globalGroups).map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
-    gf.value = 'all';
+    gf.value = tenantSelectSeed('', Object.keys(globalGroups), 'all');
 
     document.getElementById('bulkSelectAll').checked = false;
     document.getElementById('bulkMode').value = 'exec';

@@ -23,7 +23,7 @@
             const groups = Object.keys(globalGroups || {});
             sel.innerHTML = `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
                 groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
-            sel.value = groups.includes(cur) ? cur : 'all';
+            sel.value = tenantSelectSeed(cur, groups, 'all');
         }
         fetchConfigAnalyzer();
     }

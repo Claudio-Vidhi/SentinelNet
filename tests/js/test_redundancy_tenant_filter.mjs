@@ -52,10 +52,20 @@ const apiFetch = async () => ({ ok: true, json: async () => ({ results: served }
 const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-const load = (0, eval)(`(function (document, apiFetch, escapeHtml, currentRole, window, Option) {
+// Same contract as core.js: when the select has no usable value of its own,
+// adopt the global tenant. The module is lazy-loaded, so at populate time the
+// select is often empty and this is the only thing carrying the global scope in.
+const windowStub = {};
+const tenantSelectSeed = (cur, groups, fallback) => {
+    if (groups.includes(cur)) return cur;
+    const g = windowStub.globalSelectedTenant;
+    return (g && g !== 'all' && groups.includes(g)) ? g : fallback;
+};
+
+const load = (0, eval)(`(function (document, apiFetch, escapeHtml, currentRole, window, Option, tenantSelectSeed) {
     ${src}
     return window.loadRedundancyTab;
-})`)(documentStub, apiFetch, escapeHtml, 'admin', {}, OptionStub);
+})`)(documentStub, apiFetch, escapeHtml, 'admin', windowStub, OptionStub, tenantSelectSeed);
 
 const fireChange = () => listeners.change.forEach(fn => fn({ target: select }));
 
@@ -137,5 +147,35 @@ served = [];
 await load();
 assert.ok(container.innerHTML.includes('Nessun gruppo di ridondanza registrato'),
     'a genuinely empty install keeps its onboarding empty state');
+
+// --- The global tenant selector reaches a panel that loads cold --------------
+//
+// The bug this pins: the tab is lazy, so applyGlobalTenant writes .value on a
+// select that has no options yet — a silent no-op. The panel then repopulated,
+// read back '', and fell back to "every tenant", showing the whole fleet while
+// the header said one tenant.
+
+windowStub.globalSelectedTenant = 'sede-a';
+select.opts.length = 1;            // cold: only the template's "all" option
+select.value = '';
+served = GROUPS;
+await load();
+assert.equal(select.value, 'sede-a',
+    'a panel loading cold must adopt the global tenant, not fall back to all');
+assert.ok(container.innerHTML.includes('sede-a'), 'sede-a is rendered');
+assert.ok(!container.innerHTML.includes('sede-b'),
+    'sede-b belongs to another tenant and must not be on screen');
+
+// An explicit choice still wins: the global tenant only seeds an empty select.
+select.value = 'sede-b';
+fireChange();
+assert.equal(select.value, 'sede-b', 'the operator overrides the global scope');
+
+// And a global tenant with no groups here must not invent a selection.
+windowStub.globalSelectedTenant = 'sede-che-non-esiste';
+select.opts.length = 1;
+select.value = '';
+await load();
+assert.equal(select.value, '', 'an unknown global tenant leaves the filter alone');
 
 console.log('ok');
