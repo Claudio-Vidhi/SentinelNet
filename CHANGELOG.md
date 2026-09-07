@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-09-07
+
 ### Added
 
 - **Installer Windows: aggiornare non mette piu' a rischio i dati.**
