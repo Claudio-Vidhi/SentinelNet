@@ -39,6 +39,18 @@ dev = [
     "pytest-xdist>=3.5.0",
 ]
 
+[tool.pytest.ini_options]
+# xdist di default e' --dist load: distribuisce i SINGOLI test, quindi i test di
+# moduli diversi si alternano sullo stesso worker. Ventuno moduli cancellano
+# observability.db nel proprio setUpClass, e con l'alternanza quella cancellazione
+# cade IN MEZZO ai test di un altro modulo, che si ritrova le proprie righe
+# sparite: un fallimento ogni tot run, su test diversi ogni volta e mai in
+# isolamento.
+#
+# loadfile tiene ogni file su un worker solo. Lo stato a livello di modulo resta
+# condiviso (conftest.py spiega perche' e' voluto), ma smette di intrecciarsi.
+addopts = "--dist loadfile"
+
 [tool.pyrefly]
 project-includes = [
     "**/*.py",

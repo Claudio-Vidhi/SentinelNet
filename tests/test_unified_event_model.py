@@ -5,17 +5,26 @@ feed normalizzato."""
 
 import json
 import os
-import tempfile
 import time
 import unittest
 
-_TMP_DATA_DIR = tempfile.mkdtemp(prefix="sentinelnet_test_uem_")
-os.environ["SENTINELNET_DATA_DIR"] = _TMP_DATA_DIR
-
+# Nessun SENTINELNET_DATA_DIR nostro. conftest.py ne sceglie UNO per l'intera
+# suite prima che qualunque modulo di test venga importato, ed e' quella scelta
+# a rendere deterministica la condivisione (vedi il suo docstring).
+#
+# Questo modulo faceva l'opposto: una propria mkdtemp piu' un
+# os.environ["SENTINELNET_DATA_DIR"] = ... all'import. Quell'assegnazione e'
+# di processo, non di modulo, quindi spostava la directory anche per ogni altro
+# modulo importato dopo di noi sullo stesso worker xdist — e l'ordine sotto
+# `-n 4` cambia da run a run. Da qui i fallimenti intermittenti, su test
+# diversi ogni volta e mai in isolamento.
+#
+# Il rattoppo precedente (data_config.DATA_DIR = _TMP_DATA_DIR in setUpClass e
+# setUp) non poteva funzionare: get_path() risolve
+# `os.getenv("SENTINELNET_DATA_DIR") or DATA_DIR`, quindi finche' la variabile
+# d'ambiente e' valorizzata — e conftest la valorizza sempre — l'attributo
+# DATA_DIR non viene mai letto.
 from fastapi.testclient import TestClient  # noqa: E402
-
-from core import data_config  # noqa: E402
-data_config.DATA_DIR = _TMP_DATA_DIR
 
 import app_server  # noqa: E402
 from core import db  # noqa: E402
@@ -31,7 +40,6 @@ FGT_MSG = ('action="blocked" srcip=10.1.0.5 dstip=203.0.113.7 dstport=443 '
 class _Base(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        data_config.DATA_DIR = _TMP_DATA_DIR
         db.stop_writer()
         for suffix in ("", "-wal", "-shm"):
             try:
@@ -41,7 +49,6 @@ class _Base(unittest.TestCase):
         db.migrate()
 
     def setUp(self):
-        data_config.DATA_DIR = _TMP_DATA_DIR
         conn = db.get_observability_connection()
         for table in ("events", "normalize_cursors", "syslog_events",
                       "flow_aggregates", "api_observations"):
