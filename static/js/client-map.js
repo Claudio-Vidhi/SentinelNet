@@ -25,33 +25,16 @@ const LOC_HEADINGS = {
     inventory:  ['titleEndpoints', 'descEndpoints'],
 };
 
-// One tenant for the whole group. Empty select means "every tenant in scope".
+// One tenant for the whole group, ed e' quello scelto in alto: queste tre viste
+// non hanno piu' un filtro proprio. Due controlli per lo stesso concetto sono
+// due posti dove leggere lo scope e uno dove sbagliarlo.
 function locTenant() {
-    const el = document.getElementById('locTenant');
-    return (el && el.value) || 'all';
-}
-
-// Same fill as the old per-pane tenant selects (fillGroupSel), but only once:
-// the panes share one tenant list, no reason to rebuild it per pane.
-let _locTenantFilled = false;
-function populateLocTenant() {
-    const sel = document.getElementById('locTenant');
-    if (!sel) return;
-    const cur = sel.value;
-    const groups = Object.keys(globalGroups || {});
-    const L = i18n[currentLang] || {};
-    sel.innerHTML = `<option value="all">${L.optFilterAll || 'Filtra per Tenant: Tutti'}</option>` +
-        groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
-    sel.value = tenantSelectSeed(cur, groups, 'all');
+    return window.globalSelectedTenant || 'all';
 }
 
 function locSwitchView(view) {
     if (!document.getElementById('locPane-' + view)) return;
     _locView = view;
-    if (!_locTenantFilled) {
-        _locTenantFilled = true;
-        populateLocTenant();
-    }
     for (const v of ['mac', 'diagnosi', 'inventory']) {
         const pane = document.getElementById('locPane-' + v);
         const pill = document.getElementById('locPill-' + v);
@@ -683,7 +666,6 @@ function locTenantChanged() {
     });
 
     // Static event listeners for MAC Tracker & Client Map tabs
-    document.getElementById('locTenant')?.addEventListener('change', locTenantChanged);
     document.getElementById('locPills')?.addEventListener('click', (e) => {
         const pill = e.target.closest('[data-loc-view]');
         if (pill && pill.dataset.locView) {
