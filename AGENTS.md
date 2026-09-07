@@ -162,14 +162,46 @@ a bug that shipped:
 
 ## graphify
 
-`graphify-out/` holds an AST-derived knowledge graph of the codebase.
+`graphify-out/` holds a knowledge graph of the codebase: AST-derived for code,
+plus a documentation layer over the ADRs, plans and docs.
+
+### Asking
 
 - For codebase questions run `graphify query "<question>"` first (graph.json
   exists). `graphify path "<A>" "<B>"` for relationships, `graphify explain
   "<concept>"` for focused concepts. These return a scoped subgraph, usually
   much smaller than GRAPH_REPORT.md or raw grep output.
-- `graphify-out/wiki/index.md`, when present, beats raw source browsing for
-  broad navigation.
+- **Before touching a shared symbol, `graphify affected "<symbol>()"`.** It
+  walks the callers, subclasses, importers and tests in reverse, which is the
+  question the ponytail rule "grep every caller before you edit" actually asks.
+  Cheaper and more complete than a grep that only finds the literal name.
+- `graphify-out/wiki/index.md` (536 articles) beats raw source browsing for
+  broad navigation. `GRAPH_TREE.html` and `SentinelNet-callflow.html` are for
+  humans, not for reading into context.
 - Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review, or
   when query/path/explain do not surface enough.
+- A query answer is a *lead*, not proof. Confirm at the file:line it names
+  before acting on it — see the confidence caveat below.
+
+### Updating
+
 - After modifying code, `graphify update .` (AST-only, no API cost).
+- **Never pass `--force` to get past "refusing to overwrite … fewer nodes"
+  without first checking what shrank.** An AST-only rebuild cannot regenerate
+  the ~850 document/concept nodes, so the guard is usually protecting the doc
+  layer rather than reporting a refactor. If the shrink really is deleted code,
+  force it; otherwise the doc layer is gone and only a full re-extraction
+  brings it back.
+- The tool is a declared dev dependency (`pyproject.toml`), so `uv sync`
+  governs the version. Do not `uv tool upgrade` alone and assume this repo
+  picked it up: `.venv/Scripts/graphify.exe` shadows the uv tool binary on
+  PATH. `graphify --version` warning about a skill/package mismatch means the
+  two have drifted — bump the pin and `uv sync`.
+
+### Reading confidence
+
+Links carry `EXTRACTED` (AST, trustworthy) or `INFERRED`. Among the INFERRED
+ones the doc→code `references` edges come from matching file paths mentioned in
+prose, and score 0.95 — *higher* than graphify's own `indirect_call` inference
+at 0.85. A doc→code `references` edge means "that document names this path",
+not "this document is implemented by that code".
