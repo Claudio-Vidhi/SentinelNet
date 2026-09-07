@@ -27,7 +27,7 @@ dependencies = [
 dev = [
     # Gate tooling from AGENTS.md / docs/development.md: declared here so a
     # plain `uv sync` no longer prunes them (they were env-only before).
-    "graphifyy>=0.9.51",
+    "graphifyy>=0.9.55",
     # fastapi.testclient (starlette) imports httpx at runtime: without it
     # the TestClient-based tests do not start after a `uv sync`. starlette 1.x
     # asks for httpx2 and warns on every run when it finds only httpx; both
