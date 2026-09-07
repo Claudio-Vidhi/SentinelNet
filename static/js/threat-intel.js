@@ -315,7 +315,7 @@
             const groups = Object.keys(globalGroups || {});
             sel.innerHTML = `<option value="all">${tr('uiAllTenants')}</option>` +
                 groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
-            sel.value = groups.includes(cur) ? cur : 'all';
+            sel.value = tenantSelectSeed(cur, groups, 'all');
         }
         startThreatScan();
     }

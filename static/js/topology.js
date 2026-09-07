@@ -2714,7 +2714,7 @@
             const groups = Object.keys(categoriesData.counts_by_group).sort();
             gsel.innerHTML = `<option value="all">${tr('topoFilterByTenantAll')}</option>` +
                 groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join("");
-            gsel.value = groups.includes(cur) ? cur : "all";
+            gsel.value = tenantSelectSeed(cur, groups, "all");
         }
         // Filtro categorie + datalist di creazione
         const csel = document.getElementById("categoriesCatFilter");

@@ -65,6 +65,10 @@
             const res = await apiFetch('/api/routes/devices');
             if (res && res.ok) devices = (await res.json()).devices || [];
         } catch (e) { devices = []; }
+        // Lo scope globale vale anche qui: senza filtro il picker elencava
+        // tutti gli apparati di tutti i tenant.
+        const tenant = window.globalSelectedTenant || 'all';
+        if (tenant !== 'all') devices = devices.filter(d => d.group === tenant);
         renderPickerItems('rtDeviceFilter', devices
             .sort((a, b) => (a.hostname || '').localeCompare(b.hostname || ''))
             .map(d => ({ value: d.ip, label: d.hostname || d.ip, hint: d.ip })));
@@ -624,6 +628,14 @@
     // Aggiorna. Ogni apparato in piu' e' una sessione in piu' aperta.
     document.getElementById('rtTypeFilter')?.addEventListener('change', loadRoutesTab);
     document.getElementById('btnRtRefresh')?.addEventListener('click', loadRoutesTab);
+
+    // Cambiare tenant svuota la selezione: gli apparati scelti prima possono
+    // non essere piu' in scope, e le righe gia' a schermo sarebbero di un
+    // altro cliente.
+    window.addEventListener('globalTenantChanged', () => {
+        _rtRows = []; _rtCounts = {}; _rtErrors = [];
+        routesTabShown();
+    });
 
     window.loadRoutesTab = routesTabShown;
 })();

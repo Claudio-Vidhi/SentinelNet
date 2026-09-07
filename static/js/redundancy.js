@@ -47,7 +47,7 @@
         tenants.forEach(t => sel.add(new Option(t, t)));
         // A refresh must not silently widen the view back to every tenant, but
         // a tenant whose last group just disappeared has no option left.
-        sel.value = tenants.includes(previous) ? previous : '';
+        sel.value = tenantSelectSeed(previous, tenants, '');
     }
 
     function applyRedundancyFilter() {

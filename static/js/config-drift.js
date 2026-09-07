@@ -29,7 +29,7 @@
             const L = i18n[currentLang];
             tenantSel.innerHTML = `<option value="">${escapeHtml(L.driftChooseTenant)}</option>` +
                 tenants.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
-            tenantSel.value = tenants.includes(cur) ? cur : '';
+            tenantSel.value = tenantSelectSeed(cur, tenants, '');
             onDriftTenantChanged();
         } catch (e) {
             console.error('Config Drift: failed to load devices', e);

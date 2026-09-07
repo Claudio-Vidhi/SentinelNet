@@ -74,7 +74,7 @@
 
         _tenantFilter = _fillSelect(
             /** @type {HTMLSelectElement|null} */ (document.getElementById('ifTenantFilter')),
-            tenants, _tenantFilter) || 'all';
+            tenants, tenantSelectSeed(_tenantFilter, tenants, 'all')) || 'all';
         _deviceFilter = _fillSelect(
             /** @type {HTMLSelectElement|null} */ (document.getElementById('ifDeviceFilter')),
             devices, _deviceFilter,

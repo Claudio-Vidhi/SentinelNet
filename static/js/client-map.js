@@ -42,7 +42,7 @@ function populateLocTenant() {
     const L = i18n[currentLang] || {};
     sel.innerHTML = `<option value="all">${L.optFilterAll || 'Filtra per Tenant: Tutti'}</option>` +
         groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
-    sel.value = groups.includes(cur) ? cur : 'all';
+    sel.value = tenantSelectSeed(cur, groups, 'all');
 }
 
 function locSwitchView(view) {
