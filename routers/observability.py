@@ -404,6 +404,8 @@ async def obs_syslog(
     return {"window": window, "events": [dict(r) for r in rows]}
 
 
+# Superficie pubblica deliberata: nessun chiamante in-tree (la UI legge le
+# tabelle specifiche), esiste per i consumatori esterni CLI/MCP/automazione.
 @router.get("/api/observability/events")
 async def obs_events(
     window: str = Query("15m"),

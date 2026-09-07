@@ -530,21 +530,29 @@ def assign_device_category(payload: DeviceCategorySchema, current_user = Depends
     )
     return {"status": "success"}
 
-@router.get("/api/models")
+# Le tre rotte qui sotto sono DEPRECATE: nessun client in-tree le chiama piu'.
+# Il catalogo modelli si aggiorna passando 'vendor' e 'model' a
+# POST /api/device-categories/assign, che chiama add_model() da se' -- e' la
+# via che usa la UI. Restano esposte per i client esterni; rimozione prevista
+# nella 0.32.0 (vedi CHANGELOG.md).
+@router.get("/api/models", deprecated=True)
 def list_models(current_user = Depends(get_current_user)):
+    """DEPRECATA: il catalogo modelli arriva con GET /api/device-classification."""
     return inventory_manager.get_models()
 
-@router.post("/api/models")
+@router.post("/api/models", deprecated=True)
 def create_model(payload: ModelSchema, current_user = Depends(require_operator)):
+    """DEPRECATA: usare POST /api/device-categories/assign con vendor + model."""
     if not inventory_manager.add_model(payload.vendor, payload.model):
         raise HTTPException(status_code=400, detail="Vendor e modello obbligatori.")
     log_audit(f"Modello '{payload.model}' (vendor: {payload.vendor}) aggiunto da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
-@router.post("/api/models/delete")
+@router.post("/api/models/delete", deprecated=True)
 def remove_model(payload: ModelSchema, current_user = Depends(require_operator)):
+    """DEPRECATA: nessun sostituto diretto, il modello si sgancia riassegnando
+    il dispositivo con POST /api/device-categories/assign."""
     if not inventory_manager.delete_model(payload.vendor, payload.model):
         raise HTTPException(status_code=404, detail="Modello non trovato.")
     log_audit(f"Modello '{payload.model}' (vendor: {payload.vendor}) eliminato da '{current_user.get('sub')}'.")
     return {"status": "success"}
-

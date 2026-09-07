@@ -77,17 +77,9 @@ else:
 
 
 def _atomic_write(path: str, data: bytes):
-    tmp = path + ".tmp"
-    with open(tmp, "wb") as f:
-        f.write(data)
-    # Restrict the temp file BEFORE it is renamed: it already holds the key,
-    # and between the write and the replace it carried whatever permissions
-    # the directory handed out. On POSIX os.replace keeps the source's mode,
-    # so this is also what the final file inherits.
-    data_config.restrict_permissions(tmp)
-    os.replace(tmp, path)
-    # ACL restrittive: solo l'utente corrente può leggere la chiave (DF-1).
-    data_config.restrict_permissions(path)
+    # restrict=True tightens the ACL on both the temp copy and the destination:
+    # only the current user may read the key (DF-1).
+    data_config.atomic_write(path, data, restrict=True)
 
 
 def _store(path: str, key: bytes):

@@ -11,7 +11,7 @@ from redundancy.models import (
     MemberRole,
     MemberState,
     classify_virtual_mac,
-    normalize_mac,
+    mac_hexdigits,
     normalize_serial,
 )
 from redundancy.parsers.fortios import parse_ha_status
@@ -28,8 +28,8 @@ class TestRedundancyModelsAndParser(unittest.TestCase):
     def test_normalize_helpers(self):
         self.assertEqual(normalize_serial(" fgt-60f 123 "), "FGT60F123")
         self.assertIsNone(normalize_serial(None))
-        self.assertEqual(normalize_mac("00:09:0F:09:00:01"), "00090f090001")
-        self.assertIsNone(normalize_mac(""))
+        self.assertEqual(mac_hexdigits("00:09:0F:09:00:01"), "00090f090001")
+        self.assertIsNone(mac_hexdigits(""))
 
     def test_classify_virtual_mac(self):
         self.assertEqual(classify_virtual_mac("00090f090001"), "fortigate_fgcp")

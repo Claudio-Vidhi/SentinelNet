@@ -78,23 +78,9 @@ def _load() -> dict:
 
 
 def _save(data: dict) -> None:
-    tmp = SITES_JSON + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-    # Holds the agent site token hashes: restrict the temp copy before the
-    # rename, same order as the key store and users.json.
-    data_config.restrict_permissions(tmp)
-    try:
-        os.replace(tmp, SITES_JSON)
-    except PermissionError:
-        with open(SITES_JSON, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-        if os.path.exists(tmp):
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
-    data_config.restrict_permissions(SITES_JSON)
+    # Holds the agent site token hashes: restrict=True tightens the temp copy
+    # before the rename, same order as the key store and users.json.
+    data_config.atomic_write(SITES_JSON, data, restrict=True)
 
 
 def _hash_token(token: str) -> str:

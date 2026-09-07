@@ -136,6 +136,16 @@ class TestRouterParity(unittest.TestCase):
         # test_export_customizable.TestColumnSelection
         # .test_no_columns_asked_keeps_the_historic_export.
         ("get", "/api/export/devices"),
+        # /api/models, /api/models/delete: marcate deprecated=True (0.31.x),
+        # rimozione prevista nella 0.32.0. Il catalogo modelli si aggiorna da
+        # POST /api/device-categories/assign, che chiama add_model() da se':
+        # nessun chiamante in-tree usava piu' queste tre. Cambiano SOLO il flag
+        # `deprecated` e la description (la docstring che indica il sostituto);
+        # percorsi, parametri e risposte restano identici, quindi un client
+        # esterno che le chiama ancora non vede differenza.
+        ("get", "/api/models"),
+        ("post", "/api/models"),
+        ("post", "/api/models/delete"),
     )
 
     ALLOWED_ADDED_OPERATIONS = (
@@ -342,6 +352,11 @@ class TestFullParity(unittest.TestCase):
         ("get", "/api/flow-siem/facets"),
         # Inventory export: see TestRouterParity.ALLOWED_CHANGED_OPERATIONS.
         ("get", "/api/export/devices"),
+        # /api/models*: deprecate-only, see TestRouterParity
+        # .ALLOWED_CHANGED_OPERATIONS.
+        ("get", "/api/models"),
+        ("post", "/api/models"),
+        ("post", "/api/models/delete"),
         # Added optional frm / to time range filtering.
         ("get", "/api/arp/client-map"),
         ("get", "/api/arp/search"),

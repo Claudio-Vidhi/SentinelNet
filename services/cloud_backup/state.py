@@ -7,7 +7,6 @@ cost one full re-upload, never a crash.
 
 import datetime as dt
 import json
-import os
 import threading
 
 from core import data_config
@@ -30,11 +29,8 @@ def read() -> dict:
 
 
 def write(data: dict) -> None:
-    tmp = _path() + ".tmp"
     with _lock:
-        with open(tmp, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, indent=2)
-        os.replace(tmp, _path())
+        data_config.atomic_write(_path(), data)
 
 
 def known_hashes() -> dict:

@@ -16,6 +16,10 @@ dependencies = [
     "paramiko>=3.4.0",
     "pydantic>=2.6.0",
     "pyjwt>=2.8.0",
+    # switch_provisioner drives the console port over pyserial: without it a
+    # `uv sync` environment imports the module and dies on the serial push,
+    # while the Docker image (requirements.txt) worked. Runtime, not dev.
+    "pyserial>=3.5",
     "pysnmp>=7.1.27",
     "python-docx>=1.2.0",
     "requests>=2.31.0",
@@ -34,6 +38,11 @@ dev = [
     # are declared so the warning goes away without losing the fallback.
     "httpx>=0.28.0",
     "httpx2>=2.12.0",
+    # scripts/build.ps1, CONTRIBUTING.md e il PR template dicono tutti
+    # `uv run pyinstaller SentinelNet.spec`, ma il pacchetto non era dichiarato:
+    # dopo un `uv sync` quel comando non esisteva. Stesso motivo di graphifyy
+    # e pyrefly qui sopra -- se un gate lo invoca, va dichiarato.
+    "pyinstaller>=6.0.0",
     "pyrefly>=1.2.0",
     "pytest>=8.0.0",
     "pytest-xdist>=3.5.0",

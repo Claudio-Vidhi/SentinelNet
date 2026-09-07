@@ -89,6 +89,8 @@ def arp_client_map(mac: Optional[str] = None, ip: Optional[str] = None,
         row["stable_identity"] = endpoints.is_stable_identity(row.get("mac"))
     return {"results": results}
 
+# Nessun chiamante in-tree: la UI mostra /api/mac/stats. Tenuta come
+# contatore ARP per i client esterni, coperta da test_router_smoke.
 @router.get("/api/arp/stats")
 def arp_stats_ep(current_user = Depends(get_current_user)):
     return mac_history.arp_stats(tenants=user_group_scope(current_user))

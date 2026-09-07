@@ -14,10 +14,12 @@ Pure and tolerant: ``analyze`` NEVER raises exceptions.
 import logging
 import re
 
+from fw_analyzers import _envelope
+
 logger = logging.getLogger(__name__)
 
 _SECRET_ATTRS = {'phash', 'passphrase', 'secret', 'pre-shared-key', 'password'}
-_MASK = '***REDACTED***'
+_MASK = _envelope.MASK
 
 _PANOS_TOKEN = re.compile(r'"[^"]*"|\S+')
 
@@ -100,35 +102,13 @@ def _first(entry, *path):
     return vals[0] if vals else ''
 
 
-def _col(key):
-    return {"key": key, "label_key": f"fw.col.{key}"}
 
 
-def _join(vals):
-    return ', '.join(vals) if isinstance(vals, (list, tuple)) else (vals or '')
 
-
-def _multi(vals):
-    """Multi-element value kept as a LIST up to the UI.
-
-    A policy can reference dozens of address objects: flattening them here into a
-    string forces the table into one huge cell, and the client no longer has a way
-    to expand it on demand because the structure is gone. Reassembling it
-    browser-side by splitting on ", " is not equivalent: an object name can
-    contain a comma.
-    """
-    if isinstance(vals, (list, tuple)):
-        return [str(v) for v in vals]
-    return [str(vals)] if vals else []
-
-
-def _section(sid, columns, rows):
-    return {
-        "id": sid,
-        "label_key": f"fw.sec.{sid}",
-        "columns": [_col(k) for k in columns],
-        "rows": rows,
-    }
+_col = _envelope.col
+_join = _envelope.join
+_multi = _envelope.multi
+_section = _envelope.section
 
 
 def analyze(text):

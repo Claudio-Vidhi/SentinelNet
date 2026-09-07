@@ -276,18 +276,12 @@ class SmtpTestSchema(BaseModel):
 
 @router.get("/api/settings/smtp")
 def get_smtp_settings(current_user = Depends(require_admin)):
-    """Configurazione SMTP. La password non esce mai: solo se c'e' o no."""
+    """Configurazione SMTP. La password non esce mai: solo se c'e' o no.
+
+    La redazione sta in mailer.redacted(), non qui: un campo nuovo e' cosi'
+    escluso per default invece di dipendere da un elenco da aggiornare."""
     from services import mailer
-    cfg = mailer.get_config()
-    return {
-        "enabled": cfg["enabled"],
-        "host": cfg["host"],
-        "port": cfg["port"],
-        "username": cfg["username"],
-        "has_password": bool(cfg["password_enc"]),
-        "from_email": cfg["from_email"],
-        "tls_mode": cfg["tls_mode"],
-    }
+    return mailer.redacted()
 
 
 @router.post("/api/settings/smtp")
@@ -350,20 +344,11 @@ class SsoSettingsSchema(BaseModel):
 
 @router.get("/api/settings/sso")
 def get_sso_settings(current_user = Depends(require_admin)):
+    """Configurazione SSO. Il client secret non esce mai: solo se c'e' o no.
+
+    Come per SMTP la redazione sta in sso.redacted()."""
     from security import sso
-    cfg = sso.get_config()
-    return {
-        "enabled": cfg["enabled"],
-        "provider_name": cfg["provider_name"],
-        "client_id": cfg["client_id"],
-        "has_client_secret": bool(cfg["client_secret_enc"]),
-        "issuer_url": cfg["issuer_url"],
-        "default_role": cfg["default_role"],
-        "admin_group": cfg["admin_group"],
-        "operator_group": cfg["operator_group"],
-        "auto_provision": cfg["auto_provision"],
-        "sync_roles": cfg["sync_roles"],
-    }
+    return sso.redacted()
 
 
 @router.post("/api/settings/sso")

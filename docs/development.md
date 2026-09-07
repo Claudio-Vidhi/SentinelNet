@@ -144,7 +144,8 @@ error.
 ## 5. Build
 
 ```powershell
-pwsh scripts/build.ps1          # pyinstaller + smoke test
+pwsh scripts/build.ps1            # pyinstaller + smoke test
+pwsh scripts/build_installer.ps1  # + installer Windows (Inno Setup)
 docker compose build
 ```
 

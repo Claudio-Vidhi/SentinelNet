@@ -7,7 +7,6 @@ SSH back inside a request, so the WLC tab writes what it saw and the export
 only ever reads this file.
 """
 import json
-import os
 import threading
 from datetime import datetime, timezone
 from typing import Optional
@@ -86,10 +85,7 @@ def record_aps(wlc_ip: str, tenant: str, aps: list) -> int:
                 store.setdefault(parts[-1], entry)
                 store.setdefault("-".join(parts[1:]), entry)
             written += 1
-        tmp = _path() + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(store, f, indent=2)
-        os.replace(tmp, _path())
+        data_config.atomic_write(_path(), store)
     return written
 
 
