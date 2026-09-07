@@ -58,9 +58,11 @@ _IOS_CODE_TYPES = {
 # qualificatore (O IA, O E2, D EX, i L1) che NON cambia la famiglia.
 _IOS_ROUTE = re.compile(
     r"^(?P<code>[A-Za-z])(?P<star>\*)?(?:\s+(?:IA|EX|E1|E2|N1|N2|L1|L2|su))?"
-    r"\s+(?P<net>\d{1,3}(?:\.\d{1,3}){3}(?:/\d{1,2})?)\s+(?P<rest>.*)$")
+    r"\s+(?P<net>\d{1,3}(?:\.\d{1,3}){3}(?:/\d{1,2})?)(?:\s+(?P<rest>.*))?$")
 
-# Next-hop aggiuntivo della rotta precedente: nessun codice, nessuna rete.
+# Riga di continuazione: nessun codice, nessuna rete. Sono due i casi, e non
+# uno: il next-hop aggiuntivo di una rotta ECMP, e il next-hop UNICO di una
+# rotta che IOS ha mandato a capo perche' il prefisso occupava la colonna.
 _IOS_EXTRA_HOP = re.compile(
     r"^\s+\[(?P<dist>\d+)/(?P<metric>\d+)\]\s+via\s+"
     r"(?P<gw>\d{1,3}(?:\.\d{1,3}){3})(?P<tail>.*)$")
@@ -96,6 +98,8 @@ def parse_ios_routes(output: str) -> list:
     gonfierebbe ogni conteggio di una riga per blocco.
     """
     rows: list = []
+    # La rete di una riga mandata a capo, in attesa del suo next-hop.
+    pending: "dict | None" = None
     for raw in (output or "").splitlines():
         line = raw.rstrip()
         if not line.strip():
@@ -106,14 +110,22 @@ def parse_ios_routes(output: str) -> list:
             continue
 
         extra = _IOS_EXTRA_HOP.match(line)
-        if extra and rows:
-            # Rotta a piu' next-hop: stessa rete, stesso tipo, altro gateway.
-            prev = rows[-1]
-            rows.append({**prev, "gateway": extra.group("gw"),
+        if extra and (pending or rows):
+            # Se una rete e' rimasta in sospeso la riga e' la sua, non un
+            # secondo next-hop della precedente: attribuirla all'ultima rotta
+            # scritta duplicherebbe QUELLA rete e farebbe sparire questa.
+            base = pending or rows[-1]
+            rows.append({**base, "gateway": extra.group("gw"),
                          "interface": _ios_interface(extra.group("tail")),
                          "distance": int(extra.group("dist")),
                          "metric": int(extra.group("metric"))})
             continue
+
+        if pending:
+            conn = _IOS_CONNECTED.search(line)
+            if conn:
+                rows.append({**pending, "interface": conn.group("intf")})
+                continue
 
         m = _IOS_ROUTE.match(line.strip())
         if not m:
@@ -121,7 +133,17 @@ def parse_ios_routes(output: str) -> list:
         route_type = _IOS_CODE_TYPES.get(m.group("code"))
         if route_type is None:
             continue
-        rest = m.group("rest")
+        rest = m.group("rest") or ""
+        pending = None
+
+        if not rest.strip():
+            # IOS manda a capo quando il prefisso riempie la colonna: la rete
+            # e' qui, il next-hop sulla riga dopo. Scartarla fa sparire dalla
+            # vista proprio le rotte apprese, che sono le piu' lunghe.
+            pending = {"network": m.group("net"), "gateway": "",
+                       "interface": "", "type": route_type,
+                       "distance": 0, "metric": 0}
+            continue
 
         conn = _IOS_CONNECTED.search(rest)
         if conn:

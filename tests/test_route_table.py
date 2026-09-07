@@ -57,6 +57,21 @@ S        172.16.0.0/12 [1/0] via 10.1.10.4
                        [1/0] via 10.1.10.5
 """
 
+# Stessa tabella, impaginata come la scrive IOS quando il prefisso riempie la
+# colonna: la rete da sola su una riga, il next-hop su quella dopo.
+WRAPPED_OUTPUT = """Gateway of last resort is 192.0.2.254 to network 0.0.0.0
+
+S*    0.0.0.0/0 [1/0] via 192.0.2.254
+      10.0.0.0/8 is variably subnetted, 6 subnets, 3 masks
+C        10.1.10.0/24 is directly connected, Vlan10
+O        10.20.30.0/24
+           [110/20] via 10.1.10.2, 1d02h, Vlan10
+B        10.40.0.0/16
+           [200/0] via 10.1.10.9, 3w4d
+B        203.0.113.0/24
+           [20/0] via 10.1.10.9, 3w4d
+"""
+
 ROUTES_B = [
     {"ip_mask": "172.16.0.0/12", "gateway": "198.51.100.1", "interface": "port5",
      "type": "ospf", "distance": 110, "metric": 20},
@@ -187,6 +202,37 @@ class IosRouteParsing(unittest.TestCase):
         # senza guardarlo scriverebbe '1d02h' nella colonna Interfaccia.
         by_net = {r["network"]: r for r in self.rows}
         self.assertEqual(by_net["192.168.0.0/16"]["interface"], "")
+
+    def test_a_prefix_wrapped_onto_its_own_line_keeps_its_route(self):
+        # IOS manda a capo quando il prefisso riempie la colonna: la rete su
+        # una riga, `[ad/metrica] via ...` su quella dopo. Leggere la seconda
+        # come next-hop aggiuntivo della rotta PRECEDENTE fa due danni insieme,
+        # ed e' come si presentano in pratica: la rotta appresa sparisce, e la
+        # rete di prima compare duplicata sotto il tipo sbagliato.
+        rows = route_table.parse_ios_routes(WRAPPED_OUTPUT)
+        by_net = {r["network"]: r for r in rows}
+        self.assertEqual(by_net["10.20.30.0/24"]["type"], "ospf")
+        self.assertEqual(by_net["10.20.30.0/24"]["gateway"], "10.1.10.2")
+        self.assertEqual(by_net["10.20.30.0/24"]["interface"], "Vlan10")
+        self.assertEqual(by_net["203.0.113.0/24"]["type"], "bgp")
+        self.assertEqual(by_net["203.0.113.0/24"]["gateway"], "10.1.10.9")
+        self.assertEqual(by_net["203.0.113.0/24"]["distance"], 20)
+        # La connessa di prima resta una riga sola e resta connessa.
+        conn = [r for r in rows if r["network"] == "10.1.10.0/24"]
+        self.assertEqual(len(conn), 1)
+        self.assertEqual(conn[0]["type"], "connected")
+        self.assertEqual(len(rows), 5)
+
+    def test_a_wrapped_prefix_keeps_its_ecmp_next_hops(self):
+        # Due next-hop sotto un prefisso mandato a capo restano due righe di
+        # QUELLA rete, non una che ne eredita un'altra.
+        rows = route_table.parse_ios_routes(
+            "B        203.0.113.0/24\n"
+            "           [20/0] via 10.1.10.9, 3w4d\n"
+            "           [20/0] via 10.1.10.10, 3w4d\n")
+        self.assertEqual([(r["network"], r["type"], r["gateway"]) for r in rows],
+                         [("203.0.113.0/24", "bgp", "10.1.10.9"),
+                          ("203.0.113.0/24", "bgp", "10.1.10.10")])
 
     def test_an_l2_switch_answers_with_no_routes(self):
         self.assertEqual(route_table.parse_ios_routes(
