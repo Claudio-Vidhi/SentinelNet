@@ -46,8 +46,12 @@ class TestEndpointShell(unittest.TestCase):
             self.assertIn(f'data-loc-view="{v}"', self.html)
         self.assertIn("function locSwitchView", self.js)
 
-    def test_one_tenant_select_in_the_header(self):
-        self.assertIn('id="locTenant"', self.html)
+    def test_no_tenant_select_of_its_own(self):
+        # The tab used to carry its own tenant filter next to the global one in
+        # the header: two controls for one concept, free to disagree. The scope
+        # now comes from the global selector alone.
+        self.assertNotIn('id="locTenant"', self.html)
+        self.assertIn("window.globalSelectedTenant", self.js)
 
     def test_the_nav_item_points_at_the_merged_tab(self):
         self.assertIn('data-tabs="tab-endpoint"', self.html)

@@ -1520,8 +1520,9 @@ function applyGlobalTenant(val) {
     window.globalSelectedTenant = val;
     const fSel = document.getElementById('filterGroupSelect');
     if (fSel instanceof HTMLSelectElement) { fSel.value = val; renderDeviceTable(); }
-    const locSel = document.getElementById('locTenant');
-    if (locSel instanceof HTMLSelectElement) { locSel.value = val; if (typeof locTenantChanged === 'function') locTenantChanged(); }
+    // Endpoint Location non ha piu' un select proprio: legge direttamente
+    // window.globalSelectedTenant, e qui basta dirgli di ridisegnare.
+    if (typeof locTenantChanged === 'function') locTenantChanged();
     const topSel = document.getElementById('topologyGroupSelect');
     if (topSel instanceof HTMLSelectElement && val !== 'all') { topSel.value = val; }
     // Sync remaining per-panel VIEW FILTERS: set value and fire change so the

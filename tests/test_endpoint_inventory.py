@@ -690,15 +690,14 @@ class TestTabFrontend(unittest.TestCase):
         self.assertIn("globalDevices", body)
         self.assertNotIn("_epRows.forEach", body)
 
-    def test_la_select_del_tenant_ricarica_da_sola(self):
-        """Senza onchange la select non era agganciata a niente: cambiare
-        tenant lasciava a schermo i dispositivi di quello precedente.
+    def test_il_cambio_di_tenant_ricarica_la_pane_aperta(self):
+        """Cambiare tenant deve ridisegnare, altrimenti restano a schermo i
+        dispositivi di quello precedente.
 
-        Task 3 (endpoint tab merge) ha spostato il tenant dal select
-        epFilterTenant dedicato al solo #locTenant condiviso dalle quattro
-        pane: cambiarlo chiama locTenantChanged(), che ricarica la pane
-        aperta (endpointsApplyFilters() per l'Inventario Endpoint)."""
-        self.assertIn('id="locTenant"', self.src)
+        Il filtro proprio della tab non esiste piu': lo scope e' quello del
+        selettore globale in alto, e applyGlobalTenant() chiama
+        locTenantChanged(), che ricarica la pane aperta
+        (endpointsApplyFilters() per l'Inventario Endpoint)."""
         self.assertIn("locTenantChanged", self.src)
         self.assertIn("inventory: () => loadEndpointsTab()", self.src)
 
@@ -750,17 +749,16 @@ class TestTabFrontend(unittest.TestCase):
     def test_le_porte_non_fisiche_sono_visibili_ma_marcate(self):
         self.assertIn("p.physical", self.src)
 
-    def test_il_filtro_tenant_viene_popolato_al_caricamento_della_tab(self):
-        """La select epFilterTenant restava vuota per sempre: nessuno la
-        popolava, quindi il parametro tenant non veniva mai spedito.
+    def test_il_tenant_arriva_dal_selettore_globale(self):
+        """Il filtro per tenant della tab e' stato tolto: ne restava uno per
+        pannello accanto a quello globale in alto, due controlli per lo stesso
+        concetto, e i due potevano dire cose diverse.
 
-        Task 3 (endpoint tab merge) ha spostato il popolamento sul solo
-        #locTenant condiviso dalle quattro pane (client-map.js), riempito
-        una volta sola al primo cambio di vista, non piu' per pane."""
-        self.assertIn("function populateLocTenant(", self.src)
-        self.assertIn("getElementById('locTenant')", self.src)
-        body = self._fn("function locSwitchView(view)")
-        self.assertIn("populateLocTenant()", body)
+        locTenant() ora legge direttamente window.globalSelectedTenant: se
+        qualcuno rimette una select locale, questo torna a fallire."""
+        self.assertNotIn("populateLocTenant", self.src)
+        self.assertNotIn("getElementById('locTenant')", self.src)
+        self.assertIn("window.globalSelectedTenant", self.src)
 
     def test_i_kpi_si_svuotano_in_modalita_porte(self):
         """Sei numeri validi per l'intero inventario non possono restare a

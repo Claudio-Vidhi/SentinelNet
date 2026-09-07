@@ -711,8 +711,9 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
     so both are covered here per the brief's ARP-target-selection preserve-IDs."""
 
     def test_preserve_ids_mac(self):
-        # macScanGroup was replaced by the single #locTenant select (Task 3,
-        # endpoint tab merge) shared across all four panes.
+        # macScanGroup was replaced by the shared #locTenant select (Task 3,
+        # endpoint tab merge), and that in turn by the global tenant selector
+        # in the header: the tab has no tenant control of its own any more.
         html = _html()
         for _id in ('macDeviceMenu', 'macDeviceSummary', 'macDeviceList',
                     'macScanTransport', 'btnMacScan', 'macRetentionDays',
