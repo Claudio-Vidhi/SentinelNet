@@ -930,7 +930,17 @@ function renderFgtTargetSelect() {
         sel.innerHTML = `<option value="">${escapeHtml(L.optFgtNoTargets || '-- nessun target configurato --')}</option>`;
         return;
     }
-    sel.innerHTML = fgtTargetsCache.map(t => {
+    // Lo scope globale vale anche qui. Un target senza tenant in inventario
+    // resta elencato: e' configurato, e toglierlo lo renderebbe irraggiungibile.
+    const tenant = window.globalSelectedTenant || 'all';
+    const targets = tenant === 'all'
+        ? fgtTargetsCache
+        : fgtTargetsCache.filter(t => !t.group || t.group === tenant);
+    if (!targets.length) {
+        sel.innerHTML = `<option value="">${escapeHtml(L.optFgtNoTargets || '-- nessun target configurato --')}</option>`;
+        return;
+    }
+    sel.innerHTML = targets.map(t => {
         const label = `${t.name || t.ip} (${t.ip})`;
         return `<option value="${escapeHtml(t.ip)}" ${t.active ? 'selected' : ''}>${escapeHtml(label)}</option>`;
     }).join('');
@@ -1305,6 +1315,15 @@ async function connectAndLoadFgt() {
 
 // Delegated and static event listeners
 document.getElementById('fgtTargetSelect')?.addEventListener('change', onFgtTargetSelectChange);
+
+// Cambiare tenant ridisegna la tendina. I dati gia' a schermo non sono un
+// problema: le viste confrontano fgtConnectedTarget con l'IP selezionato e,
+// se non coincidono, chiedono di premere Query invece di mostrare quelli
+// del firewall precedente.
+window.addEventListener('globalTenantChanged', () => {
+    fgtConnectedTarget = '';
+    renderFgtTargetSelect();
+});
 document.getElementById('btnFgtConnect')?.addEventListener('click', connectAndLoadFgt);
 document.getElementById('btnFgtManageTargets')?.addEventListener('click', openFgtManageModal);
 

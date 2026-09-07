@@ -13,6 +13,7 @@ from services import fortigate_service
 from security.security_manager import log_audit
 from routers.deps import (
     get_current_user, require_admin, require_operator, assert_device_allowed,
+    devices_in_scope,
 )
 
 router = APIRouter(tags=["FortiGate"])
@@ -116,11 +117,28 @@ def fgt_set_token(payload: FgtTokenSchema, current_user = Depends(require_admin)
     log_audit(f"Token API FortiGate {action} per '{payload.ip}' da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
+# Il `group` di ogni target arriva dall'inventario, non dallo store dei token:
+# quello e' indicizzato per IP e non ha mai saputo di che sede fosse un
+# apparato. Senza il campo la tendina in alto elencava i FortiGate di tutti i
+# clienti anche con un tenant scelto, perche' non aveva niente su cui filtrare.
+#
+# La spiegazione sta qui e non nella docstring perche' quella diventa la
+# `description` OpenAPI, che tests/test_router_parity.py confronta con lo
+# snapshot golden. Il contratto non cambia — la risposta non ha response_model,
+# e un campo in piu' su una lista non tipizzata e' additivo — ma il testo si'.
 @router.get("/api/fortigate/targets")
 def fgt_list_targets(current_user = Depends(require_admin)):
     """Elenco dei target FortiGate configurati (nome, porta, TLS, attivo);
     i token non vengono mai restituiti."""
-    return fortigate_service.list_targets()
+    by_ip = {d.get("IP"): d for d in devices_in_scope(current_user)}
+    targets = []
+    for t in fortigate_service.list_targets():
+        dev = by_ip.get(t["ip"])
+        # Un target senza corrispondenza in inventario resta visibile: e'
+        # configurato, e nasconderlo lo renderebbe solo irraggiungibile.
+        t["group"] = (dev.get("Group") or "Generale") if dev else ""
+        targets.append(t)
+    return targets
 
 @router.post("/api/fortigate/targets/active")
 def fgt_set_active_target(payload: FgtActiveTargetSchema, current_user = Depends(require_admin)):

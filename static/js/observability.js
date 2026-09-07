@@ -501,6 +501,10 @@
             const res = await apiFetch('/api/firewall-traffic/devices');
             if (res && res.ok) devices = (await res.json()).devices || [];
         } catch (e) { devices = []; }
+        // Lo scope globale vale anche qui: senza filtro il picker elencava i
+        // firewall di tutti i tenant.
+        const tenant = window.globalSelectedTenant || 'all';
+        if (tenant !== 'all') devices = devices.filter(d => d.group === tenant);
         renderPickerItems('trafPolDevice', devices
             .sort((a, b) => (a.hostname || '').localeCompare(b.hostname || ''))
             .map(d => ({ value: d.ip, label: d.hostname || d.ip, hint: d.ip })));
@@ -1904,6 +1908,7 @@
             _flowsSelectedTenants = new Set(Object.keys(globalGroups || {}));
         }
         trafRefresh();
+        loadTrafPolDeviceList();
     });
 
     // Listen for device context changes: filter flows by exporter IP.
