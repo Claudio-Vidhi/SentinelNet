@@ -69,6 +69,20 @@ def save_config(cfg: dict) -> None:
     save_app_settings({"sso": cfg})
 
 
+# Chiavi che NON devono mai uscire da un endpoint HTTP. redacted() e' la sola
+# via per servire questa configurazione: enumerare i campi sicuri nel router
+# funziona finche' qualcuno non aggiunge un campo e dimentica di aggiornarlo.
+# Stessa disciplina di services/cloud_backup/settings.py.
+_SECRETS = ("client_secret",)
+
+
+def redacted() -> dict:
+    """Config per l'API: nessun segreto, solo se e' configurato o no."""
+    cfg = get_config()
+    for name in _SECRETS:
+        cfg[f"has_{name}"] = bool(cfg.pop(f"{name}_enc", ""))
+    return cfg
+
 def _digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 

@@ -69,9 +69,15 @@ def promote_changelog(text: str, version: str, today: str) -> str:
     body = unreleased_body(text)
     if not body:
         raise ValueError("[Unreleased] e' vuota: non c'e' niente da rilasciare.")
+    new_section = f"## [Unreleased]\n\n## [{version}] - {today}\n\n{body}\n\n"
+    # La sostituzione passa per una lambda, non per la stringa: come stringa
+    # re.sub la interpreta come template, e ogni backslash del CHANGELOG
+    # diventa una sequenza di escape. Una voce che nomina un percorso Windows
+    # (r"C:\Program Files\SentinelNet") faceva fallire la release dentro
+    # parse_template, con la versione gia' scritta su tre file.
     return re.sub(
         r"^## \[Unreleased\]\n.*?(?=^## \[)",
-        f"## [Unreleased]\n\n## [{version}] - {today}\n\n{body}\n\n",
+        lambda _match: new_section,
         text, count=1, flags=re.MULTILINE | re.DOTALL)
 
 

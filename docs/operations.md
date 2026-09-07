@@ -243,6 +243,43 @@ verified in all three modes: source, exe, Docker. Bundled paths resolve via
 `sys._MEIPASS`. A `.sql` or `.json` that works from source and vanishes in the
 exe is always this.
 
+### The Windows installer
+
+```powershell
+pwsh scripts/build_installer.ps1            # exe + installer
+pwsh scripts/build_installer.ps1 -SkipExe   # riusa dist\SentinelNet.exe
+```
+
+Produce `dist\SentinelNet-Setup-<versione>.exe` (Inno Setup 6: `winget install
+--id JRSoftware.InnoSetup`). La versione arriva da `core/version.py`, non si
+passa a mano.
+
+**Perche' esiste.** `DATA_DIR` ripiega su `<cwd>/data`, quindi un exe lanciato
+da una cartella ci tiene accanto `secret.key`, i database e i backup di
+configurazione. Aggiornare sostituendo quella cartella cancella tutto, e senza
+`secret.key` ogni password di apparato salvata resta cifrata e illeggibile per
+sempre.
+
+L'installer separa le due cose:
+
+| | Dove | Su aggiornamento | Su disinstallazione |
+|---|---|---|---|
+| Programma | `C:\Program Files\SentinelNet` | sostituito | rimosso |
+| Dati | `C:\ProgramData\SentinelNet` | **intatti** | **conservati** |
+
+`SENTINELNET_DATA_DIR` viene scritta nell'ambiente di macchina (HKLM), cosi'
+l'app trova i dati comunque la si avvii — collegamento, riga di comando o
+servizio Windows sotto un altro account.
+
+Al primo avvio l'installer chiede se c'e' una cartella `data` di una copia
+precedente da importare; la copia e' in sola lettura sull'originale. La domanda
+non compare su un aggiornamento, dove i dati ci sono gia'.
+
+`AppId` in `installer/SentinelNet.iss` e' fisso: e' cio' che fa riconoscere a
+Windows l'esecuzione successiva come AGGIORNAMENTO invece che come seconda
+installazione. Non va cambiato.
+
+
 There is no CI: the build is local, deliberately.
 
 ---

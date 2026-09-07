@@ -11,6 +11,8 @@ si logga e si passa al successivo.
 import asyncio
 import json
 import logging
+
+from observability import ingesters
 import time
 
 logger = logging.getLogger("sentinelnet.obs.api_poller")
@@ -78,11 +80,4 @@ def poll_once() -> int:
 
 async def poll_loop(interval_s: int):
     """Loop asincrono avviato dal lifespan (cancellato allo shutdown)."""
-    while True:
-        try:
-            n = await asyncio.to_thread(poll_once)
-            if n:
-                logger.info("Poller API: %d snapshot accodati.", n)
-        except Exception as e:
-            logger.warning("Poller API: giro fallito (%s), riprovo al prossimo intervallo.", e)
-        await asyncio.sleep(interval_s)
+    await ingesters.run_poll_loop("API", lambda: asyncio.to_thread(poll_once), interval_s)

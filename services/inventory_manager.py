@@ -98,35 +98,13 @@ def _validate_transports(transports):
 _io_lock = threading.RLock()
 
 def safe_json_write(filepath: str, data: dict):
-    """Scrittura atomica con pattern temp-then-rename e fallback Windows."""
-    temp = filepath + ".tmp"
-    try:
-        with open(temp, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4)
-        try:
-            os.replace(temp, filepath)
-        except PermissionError:
-            # Fallback per sistemi Windows concorrentemente bloccati
-            try:
-                with open(filepath, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, indent=4)
-            except Exception as fallback_err:
-                raise RuntimeError(
-                    f"Scrittura fallita su '{filepath}': {fallback_err}"
-                ) from fallback_err
-            finally:
-                if os.path.exists(temp):
-                    try:
-                        os.remove(temp)
-                    except OSError:
-                        pass
-    except Exception as e:
-        if os.path.exists(temp):
-            try:
-                os.remove(temp)
-            except OSError:
-                pass
-        raise e
+    """Scrittura atomica: alias storico di data_config.atomic_write.
+
+    Il nome resta perche' lo usano una dozzina di chiamanti qui piu'
+    identity_manager e snmp_defaults; l'implementazione e' una sola.
+    indent=4 e' il formato con cui questi file sono sempre stati scritti.
+    """
+    data_config.atomic_write(filepath, data, indent=4)
 
 def get_all_groups():
     groups_json = get_groups_json()

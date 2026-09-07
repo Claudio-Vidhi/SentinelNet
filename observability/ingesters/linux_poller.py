@@ -30,6 +30,8 @@ a ``services/site_agent.py``.
 import asyncio
 import json
 import logging
+
+from observability import ingesters
 import re
 import time
 
@@ -239,12 +241,4 @@ async def poll_once() -> int:
 
 async def poll_loop(interval_s: int):
     """Loop asincrono avviato dal lifespan (cancellato allo shutdown)."""
-    while True:
-        try:
-            n = await poll_once()
-            if n:
-                logger.info("Poller Linux: %d snapshot accodati.", n)
-        except Exception as e:
-            logger.warning("Poller Linux: giro fallito (%s), riprovo al "
-                           "prossimo intervallo.", e)
-        await asyncio.sleep(interval_s)
+    await ingesters.run_poll_loop("Linux", poll_once, interval_s)

@@ -10,6 +10,72 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Installer Windows: aggiornare non mette piu' a rischio i dati.**
+  `pwsh scripts/build_installer.ps1` produce
+  `dist\SentinelNet-Setup-<versione>.exe`. Finora l'unico artefatto era l'exe
+  nudo, e `DATA_DIR` ripiega su `<cwd>/data`: chi lo lanciava da una cartella
+  ci teneva accanto `secret.key`, i database e i backup di configurazione, e
+  aggiornare sostituendo la cartella cancellava tutto. Senza `secret.key` ogni
+  password di apparato salvata resta cifrata e illeggibile per sempre.
+  Adesso il programma sta in `C:\Program Files\SentinelNet` e i dati in
+  `C:\ProgramData\SentinelNet`: l'aggiornamento sostituisce il primo e non
+  tocca il secondo, la disinstallazione conserva i dati e lo dice. Al primo
+  avvio l'installer offre di importare la cartella `data` di una copia
+  precedente, leggendola senza spostarla. Verificato installando, popolando i
+  dati, aggiornando e disinstallando: exe sostituito, dati intatti in
+  entrambi i passaggi.
+
+### Fixed
+
+- **`expandIface()` era dichiarata due volte in `core.js` e vinceva quella
+  vecchia.** In uno script classico l'ultima dichiarazione sovrascrive le
+  precedenti, quindi la versione ampliata — quella allineata a
+  `expand_iface()` di `mac_collector.py` — non e' mai entrata in funzione:
+  `TenGigE1/0/1`, `gi1/0/1` e `10Ge1/1` restavano non espansi nel browser
+  mentre i test lato Python passavano. `scripts/check_frontend.py` ora rifiuta
+  una funzione dichiarata due volte nello scope globale condiviso.
+- **Tre store JSON perdevano la scrittura su Windows.** `ap_store`,
+  `cloud_backup/state` e `secure_key_store` facevano `os.replace` senza il
+  ripiego su `PermissionError` che i moduli fratelli documentano: con un
+  handle aperto sul file di destinazione (antivirus, lettore concorrente) la
+  scrittura andava persa. Le sei implementazioni di temp-then-rename sono ora
+  una sola, `core.data_config.atomic_write`.
+- **`pyserial` non era dichiarato** in `pyproject.toml` pur essendo importato
+  da `services/switch_provisioner.py`: dopo un `uv sync` il push seriale
+  moriva all'import, mentre l'immagine Docker funzionava.
+  `tests/test_dependency_manifests.py` verifica che i due manifest dichiarino
+  gli stessi pacchetti.
+- **`pyinstaller` non era dichiarato** fra le dipendenze di sviluppo, benche'
+  `scripts/build.ps1`, `CONTRIBUTING.md` e il template di PR invochino tutti
+  `uv run pyinstaller`: dopo un `uv sync` quel comando non esisteva.
+
+### Changed
+
+- La redazione dei segreti di SMTP e SSO sta nei rispettivi moduli
+  (`redacted()`), non piu' in due elenchi di campi scritti a mano dentro
+  `routers/settings.py`: un campo nuovo e' escluso per default invece di
+  dipendere dal ricordarsi di aggiornare il router.
+- `normalize_mac()` di `redundancy/models.py` si chiama ora `mac_hexdigits()`:
+  ritorna i 12 esadecimali senza separatori, mentre le omonime in
+  `mac_history`, `wlc_service` ed `endpoints` ritornano la forma con i due
+  punti. Stesso nome e due formati era un confronto che falliva in silenzio.
+- I tre poller di osservabilita' condividono un solo `run_poll_loop()`.
+- `fw_analyzers/fortios.py` e `panos.py` condividono l'envelope della tabella
+  (`_envelope.py`) invece di averne due copie identiche al carattere.
+- `.clinerules` rimanda ad `AGENTS.md` invece di ripeterlo: la copia era
+  andata alla deriva e indicava ancora `python -m unittest discover`.
+
+### Deprecated
+
+- **`GET /api/models`, `POST /api/models`, `POST /api/models/delete` sono
+  deprecate; rimozione prevista nella 0.32.0.** Nessun chiamante in-tree le
+  usa piu': il catalogo modelli si aggiorna passando `vendor` e `model` a
+  `POST /api/device-categories/assign`, che chiama `add_model()` da se', ed e'
+  la via che usa la UI. Le rotte restano in piedi e col contratto identico per
+  i client esterni che le chiamassero ancora.
+
 ## [0.30.1] - 2026-09-05
 
 ### Changed

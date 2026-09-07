@@ -61,28 +61,12 @@ def _save_users(users: dict):
     """Atomic write: the store is only ever replaced whole.
 
     Truncating in place is how the corrupt store this module now refuses to
-    read gets created (crash or full disk mid-write). Same tmp + os.replace
-    pattern as every sibling JSON store (site_manager, ap_store, ...), with
-    the Windows PermissionError fallback they carry.
+    read gets created (crash or full disk mid-write). data_config.atomic_write
+    is the one temp-then-rename implementation every sibling JSON store shares;
+    restrict=True is not optional here, the file holds every password hash.
     """
     with _users_lock:
-        tmp = USERS_JSON + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(users, f, indent=4)
-        # This file holds every password hash. Tighten the temp copy BEFORE the
-        # rename -- it already holds them, and on POSIX os.replace carries the
-        # source's mode onto the destination.
-        data_config.restrict_permissions(tmp)
-        try:
-            os.replace(tmp, USERS_JSON)
-        except PermissionError:
-            with open(USERS_JSON, "w", encoding="utf-8") as f:
-                json.dump(users, f, indent=4)
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
-        data_config.restrict_permissions(USERS_JSON)
+        data_config.atomic_write(USERS_JSON, users, indent=4, restrict=True)
 
 def has_any_user() -> bool:
     try:

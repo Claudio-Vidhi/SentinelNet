@@ -1209,23 +1209,7 @@ function renderIdentitiesPanel() {
 
 // ===== Port Config Modal (promosso da static/js/topology.js: usato anche
 // dal tab MAC-tracker/ARP inline e da static/js/config-analyzer.js) =====
-// Espande le abbreviazioni comuni delle interfacce ('Gi1/0/5' -> 'GigabitEthernet1/0/5').
-// Speculare a expand_iface() di mac_collector.py: tenerli allineati.
-function expandIface(name) {
-    if (!name) return '';
-    name = String(name).trim();
-    /** @type {[RegExp, string][]} */
-    const abbr = [
-        [/^Gi(?=\d)/, 'GigabitEthernet'], [/^Te(?=\d)/, 'TenGigabitEthernet'],
-        [/^Fo(?=\d)/, 'FortyGigE'], [/^Twe(?=\d)/, 'TwentyFiveGigE'],
-        [/^Hu(?=\d)/, 'HundredGigE'], [/^Fa(?=\d)/, 'FastEthernet'],
-        [/^Eth(?=\d)/, 'Ethernet'], [/^Et(?=\d)/, 'Ethernet'], [/^Po(?=\d)/, 'Port-channel'],
-    ];
-    for (const [pat, full] of abbr) {
-        if (pat.test(name)) return name.replace(pat, full);
-    }
-    return name;
-}
+// expandIface() is declared once, further up in this same file.
 
 // Deep-link verso il Config Analyzer (impostati da showPortConfig, letti da renderCaResults).
 let caFocusIp = null;

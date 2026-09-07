@@ -27,6 +27,8 @@ management, e la nota è nella scheda del dispositivo.
 import asyncio
 import json
 import logging
+
+from observability import ingesters
 import time
 
 logger = logging.getLogger("sentinelnet.obs.snmp_poller")
@@ -325,12 +327,4 @@ async def poll_once() -> int:
 
 async def poll_loop(interval_s: int):
     """Loop asincrono avviato dal lifespan (cancellato allo shutdown)."""
-    while True:
-        try:
-            n = await poll_once()
-            if n:
-                logger.info("Poller SNMP: %d snapshot accodati.", n)
-        except Exception as e:
-            logger.warning("Poller SNMP: giro fallito (%s), riprovo al prossimo "
-                           "intervallo.", e)
-        await asyncio.sleep(interval_s)
+    await ingesters.run_poll_loop("SNMP", poll_once, interval_s)

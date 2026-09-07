@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import subprocess
@@ -43,6 +44,57 @@ def restrict_permissions(path: str):
             os.chmod(path, 0o600)
     except (OSError, subprocess.SubprocessError) as e:
         logging.warning("ACL non ristrette su %s: %s", path, e)
+
+
+def atomic_write(path: str, data, *, indent: int = 2, restrict: bool = False):
+    """Writes ``path`` whole: temp file, then rename over the destination.
+
+    Truncating in place is how a half-written store gets created (crash or full
+    disk mid-write); the rename is atomic, so a reader sees either the old file
+    or the new one. ``data`` is written verbatim when it is ``bytes``, and
+    JSON-encoded otherwise.
+
+    ``restrict`` tightens the permissions BEFORE the rename -- the temp file
+    already holds the secret, and on POSIX ``os.replace`` carries the source's
+    mode onto the destination -- then again after, because on Windows the
+    destination keeps its own ACL.
+
+    The ``PermissionError`` branch is Windows-only in practice: ``os.replace``
+    fails there while another handle is open on the destination (an antivirus
+    scan, a concurrent reader). Rewriting in place is not atomic and is exactly
+    what this function exists to avoid, so it is a last resort rather than the
+    normal path -- but losing the write entirely is worse.
+    """
+    tmp = path + ".tmp"
+    if isinstance(data, bytes):
+        with open(tmp, "wb") as f:
+            f.write(data)
+    else:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=indent)
+    if restrict:
+        restrict_permissions(tmp)
+    try:
+        os.replace(tmp, path)
+    except PermissionError:
+        try:
+            if isinstance(data, bytes):
+                with open(path, "wb") as f:
+                    f.write(data)
+            else:
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=indent)
+        except OSError as fallback_err:
+            raise RuntimeError(
+                f"Scrittura fallita su '{path}': {fallback_err}") from fallback_err
+        finally:
+            if os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+    if restrict:
+        restrict_permissions(path)
 
 
 def get_path(filename: str) -> str:

@@ -52,7 +52,15 @@ def normalize_serial(val: Optional[str]) -> Optional[str]:
     return cleaned if cleaned else None
 
 
-def normalize_mac(val: Optional[str]) -> Optional[str]:
+def mac_hexdigits(val: Optional[str]) -> Optional[str]:
+    """I 12 esadecimali di un MAC, SENZA separatori: 'aabbccddeeff'.
+
+    Il nome non e' piu' normalize_mac perche' altrove quel nome ritorna la
+    forma con i due punti (collectors.mac_history, services.wlc_service,
+    observability.endpoints): stesso nome e due formati diversi e' un confronto
+    che fallisce in silenzio invece di sollevare. Qui i separatori darebbero
+    fastidio, il chiamante fa prefix-matching sull'OUI (classify_virtual_mac).
+    """
     if not val:
         return None
     cleaned = re.sub(r"[^a-fA-F0-9]", "", str(val)).lower()
@@ -60,7 +68,7 @@ def normalize_mac(val: Optional[str]) -> Optional[str]:
 
 
 def classify_virtual_mac(mac: Optional[str]) -> Optional[str]:
-    norm = normalize_mac(mac)
+    norm = mac_hexdigits(mac)
     if not norm:
         return None
     if norm.startswith("00090f09"):

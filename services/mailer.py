@@ -49,6 +49,17 @@ def save_config(cfg: dict) -> None:
     save_app_settings({"smtp": cfg})
 
 
+# Vedi security/sso.py: la redazione sta qui, non nel router.
+_SECRETS = ("password",)
+
+
+def redacted() -> dict:
+    """Config per l'API: nessun segreto, solo se e' configurato o no."""
+    cfg = get_config()
+    for name in _SECRETS:
+        cfg[f"has_{name}"] = bool(cfg.pop(f"{name}_enc", ""))
+    return cfg
+
 def _authenticate(server, cfg: dict, password: str) -> None:
     """AUTH only over an encrypted channel: in the clear the password is
     readable by anyone on the path."""
