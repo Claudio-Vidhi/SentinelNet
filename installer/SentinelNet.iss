@@ -65,7 +65,10 @@ it.SvcInstalling=Registrazione del servizio Windows...
 it.SvcStarting=Avvio del servizio SentinelNet...
 
 [Files]
-Source: "..\dist\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+; onedir: PyInstaller emette dist\SentinelNet\ con l'exe piu' _internal\ e le
+; DLL. L'exe resta comunque in {app}, quindi collegamenti, icona di
+; disinstallazione e taskkill qui sotto non cambiano.
+Source: "..\dist\SentinelNet\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 ; WinSW wrapper: a PyInstaller exe is not a service (it never reports to

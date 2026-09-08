@@ -110,6 +110,9 @@ declare var loadRedundancyTab: any;
 declare var openCreateRedundancyModal: any;
 declare var submitCreateRedundancyGroup: any;
 
+// settings.js
+declare var refreshSiteIdentitySelects: any;
+
 // site-agent.js
 declare var closeAgentControlModal: any;
 declare var fetchAgentInventory: any;

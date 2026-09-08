@@ -3602,7 +3602,7 @@
         if (graphContainer) graphContainer.innerHTML = '';
 
         // 2. Ricarica inventario (aggiorna stati LED nella tabella)
-        await appInit();
+        await refreshInventory();
 
         // 3. Forza reload di ENTRAMBE le viste indipendentemente dalla tab attiva
         await loadTopology();

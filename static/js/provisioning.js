@@ -103,6 +103,7 @@ async function deleteIdentity(id) {
         return;
     }
     await refreshIdentityOptions(); renderIdentitiesPanel();
+    if (window.refreshSiteIdentitySelects) await window.refreshSiteIdentitySelects();
 }
 
 document.getElementById('btnNewIdentity').addEventListener('click', async () => {
@@ -153,6 +154,10 @@ document.getElementById('btnSaveIdentity').addEventListener('click', async () =>
         if (secretEl) secretEl.value = '';
         document.getElementById('identityForm').style.display = 'none';
         await refreshIdentityOptions(); renderIdentitiesPanel();
+        // settings.js caches the identity list for the site/bastion form and
+        // populates its selects once per page: without this the identity just
+        // created is invisible there until a reload.
+        if (window.refreshSiteIdentitySelects) await window.refreshSiteIdentitySelects();
     } else if (res) {
         const err = await res.json();
         alert(err.detail || 'Errore');

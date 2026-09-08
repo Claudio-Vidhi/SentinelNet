@@ -771,6 +771,90 @@ document.getElementById('btnLogout')?.addEventListener('click', (e) => {
 
 // --- INITIALIZATION ---
 
+// La meta' di appInit() che dipende da /api/local-devices: inventario,
+// gruppi, versioni rilevate e tutto cio' che si ridisegna con loro.
+//
+// Estratta perche' DIECI azioni sui dispositivi (salva, elimina, rinomina,
+// cambio sede, CRUD tenant, import CSV, aggiungi da scansione, fine triage)
+// chiamavano appInit() per ottenere questo, e con esso si ripagavano ogni
+// volta /api/auth/status, /api/auth/me, /api/version, /api/vendors,
+// /api/settings/snmp-defaults e una loadHome() che rifaceva
+// /api/local-devices appena caricato: sei round trip e un ridisegno
+// completo del cruscotto per cambiare il tenant di un apparato.
+//
+// Ritorna false se l'inventario non e' arrivato, cosi' il chiamante sa che
+// i globali NON sono stati aggiornati e non ridisegna su dati vecchi.
+async function refreshInventory() {
+    const res = await apiFetch('/api/local-devices');
+    if (!res || !res.ok) return false;
+    const data = await res.json();
+
+    globalDevices = data.devices;
+    globalGroups = data.groups;
+    globalVersions = data.detected_versions; // Cache globale delle versioni rilevate
+
+    // Popola tendine Vendor + tendina Gruppi del form di provisioning
+    // (estratto in populateProvisioningFormSelects: riusato anche da loadProvisioningTab).
+    populateProvisioningFormSelects();
+
+    // Memorizza la selezione corrente del filtro se esiste
+    const filterSelect = document.getElementById('filterGroupSelect');
+    const prevFilter = filterSelect ? filterSelect.value : 'all';
+
+    // Popola tendina Filtro Gruppi nella tabella dell'inventario
+    if (filterSelect) {
+        filterSelect.innerHTML = `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
+            Object.keys(globalGroups).map(g =>
+                `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+        filterSelect.value = prevFilter;
+        if (filterSelect.selectedIndex === -1) filterSelect.value = 'all';
+    }
+
+    // Popola tendina Filtro Gruppi in TAB 3
+    const topoSelect = document.getElementById('topologyGroupSelect');
+    if (topoSelect) {
+        // Default = nessuna scelta: il report Port-Channel resta vuoto
+        // finché l'utente non indica un Tenant.
+        const prevTopoFilter = topoSelect.value || '';
+        topoSelect.innerHTML = `<option value="">${i18n[currentLang].optSelectSite}</option>` +
+            `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
+            Object.keys(globalGroups).map(g =>
+                `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+        topoSelect.value = prevTopoFilter;
+        if (topoSelect.selectedIndex === -1) topoSelect.value = '';
+    }
+
+    // Popola tendina Filtro Gruppi in TAB 4
+    const interSelect = document.getElementById('interactiveGroupSelect');
+    if (interSelect) {
+        // Default = nessuna scelta: la mappa interattiva non disegna nulla
+        // finché l'utente non indica una Sede.
+        const prevInterFilter = interSelect.value || '';
+        interSelect.innerHTML = `<option value="">${i18n[currentLang].optSelectSite}</option>` +
+            `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
+            Object.keys(globalGroups).map(g =>
+                `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+        interSelect.value = prevInterFilter;
+        if (interSelect.selectedIndex === -1) interSelect.value = '';
+    }
+
+    // Popola la tendina globale dei Tenant nella barra superiore
+    populateGlobalTenantSelect();
+
+    // Popola Tabella Dispositivi tramite la nuova funzione autonoma filtrabile
+    renderDeviceTable();
+
+    // Popola Tabella Gestione Gruppi
+    renderGroupsTable();
+
+    // La Home rispecchia l'inventario, ma rifa' /api/local-devices per conto
+    // suo: si aggiorna solo se e' la tab davanti agli occhi. Al login lo e'
+    // (tab di default), quindi il primo caricamento non cambia.
+    if (document.querySelector('.tab-content.active')?.id === 'tab-home') loadHome();
+
+    return true;
+}
+
 async function appInit() {
     appLoading = true;
     initLanguageSelector();
@@ -812,79 +896,16 @@ async function appInit() {
     // nav come ogni altra voce.
 
     try {
-        // Indipendenti: partono insieme invece che in sequenza.
-        const [res, vRes] = await Promise.all([
-            apiFetch('/api/local-devices'),
-            apiFetch('/api/vendors'),
-        ]);
-        if (!res) {
+        // I vendor prima dell'inventario: le tendine costruite dentro
+        // refreshInventory() leggono globalVendors. E' un round trip in serie
+        // al login, contro i cinque risparmiati a OGNI azione sui dispositivi.
+        const vRes = await apiFetch('/api/vendors');
+        if (vRes && vRes.ok) globalVendors = await vRes.json();
+
+        if (!await refreshInventory()) {
             appLoading = false;
             return;
         }
-        const data = await res.json();
-
-        globalDevices = data.devices;
-        globalGroups = data.groups;
-        globalVersions = data.detected_versions; // Cache globale delle versioni rilevate
-
-        if (vRes && vRes.ok) globalVendors = await vRes.json();
-
-        // Popola tendine Vendor + tendina Gruppi del form di provisioning
-        // (estratto in populateProvisioningFormSelects: riusato anche da loadProvisioningTab).
-        populateProvisioningFormSelects();
-
-        // Memorizza la selezione corrente del filtro se esiste
-        const filterSelect = document.getElementById('filterGroupSelect');
-        const prevFilter = filterSelect ? filterSelect.value : 'all';
-
-        // Popola tendina Filtro Gruppi nella tabella dell'inventario
-        if (filterSelect) {
-            filterSelect.innerHTML = `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
-                Object.keys(globalGroups).map(g =>
-                    `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
-            filterSelect.value = prevFilter;
-            if (filterSelect.selectedIndex === -1) filterSelect.value = 'all';
-        }
-
-        // Popola tendina Filtro Gruppi in TAB 3
-        const topoSelect = document.getElementById('topologyGroupSelect');
-        if (topoSelect) {
-            // Default = nessuna scelta: il report Port-Channel resta vuoto
-            // finché l'utente non indica un Tenant.
-            const prevTopoFilter = topoSelect.value || '';
-            topoSelect.innerHTML = `<option value="">${i18n[currentLang].optSelectSite}</option>` +
-                `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
-                Object.keys(globalGroups).map(g =>
-                    `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
-            topoSelect.value = prevTopoFilter;
-            if (topoSelect.selectedIndex === -1) topoSelect.value = '';
-        }
-
-        // Popola tendina Filtro Gruppi in TAB 4
-        const interSelect = document.getElementById('interactiveGroupSelect');
-        if (interSelect) {
-            // Default = nessuna scelta: la mappa interattiva non disegna nulla
-            // finché l'utente non indica una Sede.
-            const prevInterFilter = interSelect.value || '';
-            interSelect.innerHTML = `<option value="">${i18n[currentLang].optSelectSite}</option>` +
-                `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
-                Object.keys(globalGroups).map(g =>
-                    `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
-            interSelect.value = prevInterFilter;
-            if (interSelect.selectedIndex === -1) interSelect.value = '';
-        }
-
-        // Popola la tendina globale dei Tenant nella barra superiore
-        populateGlobalTenantSelect();
-
-        // Popola Tabella Dispositivi tramite la nuova funzione autonoma filtrabile
-        renderDeviceTable();
-
-        // Popola la Home operativa (tab di default al login) coi globals appena caricati
-        loadHome();
-
-        // Popola Tabella Gestione Gruppi
-        renderGroupsTable();
 
         // Stato SNMP di tenant: solo i nomi, la community non arriva al browser
         loadSnmpDefaults();

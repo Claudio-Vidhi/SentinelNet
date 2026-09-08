@@ -504,7 +504,7 @@
         });
         if(res && res.ok) {
             resetDeviceForm();
-            appInit();
+            refreshInventory();
         } else if (res) {
             const err = await res.json();
             alert(`${i18n[currentLang].alertFirstSetupError}${err.detail || i18n[currentLang].alertSaveDeviceError}`);
@@ -625,7 +625,7 @@
                 body: JSON.stringify({ ip: ip }) 
             });
             if (res && res.ok) {
-                appInit();
+                refreshInventory();
             }
         }
     }
@@ -644,7 +644,7 @@
             body: JSON.stringify({ ip: ip, hostname: name.trim() })
         });
         if (res && res.ok) {
-            appInit();
+            refreshInventory();
         } else if (res) {
             alert(i18n[currentLang].alertRenameDeviceError);
         }
@@ -666,7 +666,10 @@
         if(res && res.ok) {
             document.getElementById('newGroupName').value = '';
             document.getElementById('inlineNewTenantRow').style.display = 'none';
-            await appInit();
+            await refreshInventory();
+            // Il CRUD dei tenant e' l'unico caso che tocca anche
+            // snmpDefaultTenants: refreshInventory() non lo rilegge.
+            loadSnmpDefaults();
             // Seleziona il tenant appena creato nella select del form di provisioning.
             const groupSelect = document.getElementById('devGroupSelect');
             if (groupSelect && Array.from(groupSelect.options).some(o => o.value === name)) {
@@ -687,7 +690,7 @@
                 body: JSON.stringify({ name: name })
             });
             if(res && res.ok) {
-                appInit();
+                refreshInventory().then(loadSnmpDefaults);
             } else if (res) {
                 alert(i18n[currentLang].alertGroupDeleteError);
             }
@@ -705,7 +708,7 @@
             body: JSON.stringify({ old_name: oldName, new_name: trimmed })
         });
         if (res && res.ok) {
-            appInit();
+            refreshInventory().then(loadSnmpDefaults);
         } else {
             const e = res ? await res.json().catch(()=>({})) : {};
             alert(e.detail || (tr('devRenameFailed')));
@@ -848,7 +851,7 @@
                 isTriagePolling = false;
                 if (wasTriageRunning) {
                     wasTriageRunning = false;
-                    appInit();
+                    refreshInventory();
                 }
             }
         } catch {
@@ -1459,7 +1462,7 @@
                 body: JSON.stringify(body),
             });
         }
-        appInit();
+        refreshInventory();
         closeSubnetScanModal();
     }
 
@@ -1805,7 +1808,7 @@
                     const result = await res.json();
                     renderCsvImportResult(result, null);
                     fileInput.value = "";
-                    appInit();
+                    refreshInventory();
                     // Non si cambia piu' tab automaticamente: l'elenco delle
                     // righe scartate e' proprio qui, e passare all'inventario
                     // lo faceva sparire prima che qualcuno lo leggesse.
@@ -1848,7 +1851,7 @@
                 // The site decides HOW the device is reached, so the row's
                 // reachability semantics change with it: a jump site has no
                 // ICMP. Re-fetch rather than guess the new state here.
-                appInit();
+                refreshInventory();
             } else {
                 selectEl.value = previous;
                 const e = res ? await res.json() : {};

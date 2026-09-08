@@ -17,7 +17,7 @@ if (-not $SkipSmoke) {
     # conflitti di porta con un'istanza reale in esecuzione).
     $env:SENTINELNET_HOST = "127.0.0.1"
     $env:SENTINELNET_OBS_ENABLE = "0"
-    $proc = Start-Process -FilePath "dist\SentinelNet.exe" -PassThru
+    $proc = Start-Process -FilePath "dist\SentinelNet\SentinelNet.exe" -PassThru
     try {
         $ok = $false
         foreach ($i in 1..60) {
@@ -43,7 +43,7 @@ if (-not $SkipSmoke) {
         # Rete di sicurezza: se il padre e' gia' uscito il figlio e' stato
         # reparentato e /T non lo raggiunge. Si chiude solo cio' che gira da
         # QUESTA dist, mai un'istanza avviata altrove dall'utente.
-        $distExe = (Resolve-Path "dist\SentinelNet.exe").Path
+        $distExe = (Resolve-Path "dist\SentinelNet\SentinelNet.exe").Path
         Get-Process -Name SentinelNet -ErrorAction SilentlyContinue |
             Where-Object { $_.Path -eq $distExe } |
             ForEach-Object {
@@ -52,4 +52,4 @@ if (-not $SkipSmoke) {
             }
     }
 }
-Write-Host "Build OK: dist\SentinelNet.exe"
+Write-Host "Build OK: dist\SentinelNet\SentinelNet.exe"

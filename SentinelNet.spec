@@ -39,19 +39,26 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
+# onedir, non onefile. Un onefile e' un bootloader che a OGNI avvio
+# decomprime ~34 MB in %TEMP%\_MEIxxxx prima che Python parta: misurato,
+# 8.2s contro 3.5s da sorgente sulla stessa macchina. Con onedir i file
+# stanno gia' su disco e quel tempo sparisce. Il prezzo e' una cartella
+# invece di un singolo file, che per un prodotto installato da un
+# installer non e' un prezzo: nessuno lancia l'exe da una chiavetta.
+#
+# upx=False per lo stesso motivo (ogni DLL va decompressa a ogni avvio) e
+# perche' l'exe compresso con UPX e' una firma euristica che gli antivirus
+# segnalano di routine.
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
+    exclude_binaries=True,
     name='SentinelNet',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
-    upx_exclude=['python3*.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'api-ms-win-*.dll'],
-    runtime_tmpdir=None,
+    upx=False,
     # console=True e' deliberato: l'exe ha modalita' CLI (--reset-admin,
     # --mcp) il cui output deve restare visibile; la finestra console e' il
     # prezzo, non un difetto.
@@ -61,4 +68,14 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name='SentinelNet',
 )
