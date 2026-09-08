@@ -469,6 +469,27 @@ def generate_self_signed_cert(payload: SelfSignedCertSchema,
         result = cert_manager.generate_self_signed(payload.host)
     except cert_manager.CertError as e:
         raise HTTPException(status_code=e.status, detail=str(e))
+
+    # Generare i file e lasciarli scollegati voleva dire che il pannello
+    # restava in HTTP finche' qualcuno non impostava a mano due variabili
+    # d'ambiente: il certificato c'era, non lo usava nessuno, e non lo diceva
+    # niente. Si registrano relativi, cosi' resolve_tls_config li risolve
+    # dentro DATA_DIR e valgono uguali da sorgente, da exe e da Docker.
+    #
+    # Le variabili d'ambiente restano piu' forti di queste impostazioni (le
+    # legge per prime resolve_tls_config): un deployment Docker o systemd che
+    # le imposta non si vede cambiare il certificato sotto i piedi.
+    applied = False
+    if not (os.environ.get("SENTINELNET_SSL_CERTFILE")
+            or os.environ.get("SENTINELNET_SSL_KEYFILE")):
+        save_app_settings({"app": {
+            "ssl_certfile": os.path.join("certs", "server.crt"),
+            "ssl_keyfile": os.path.join("certs", "server.key"),
+        }})
+        applied = True
+
     log_audit(f"Certificato self-signed generato per '{payload.host.strip()}' da "
-              f"'{current_user.get('sub')}'.")
-    return result
+              f"'{current_user.get('sub')}'"
+              + (" e impostato come certificato TLS." if applied
+                 else "; SENTINELNET_SSL_* dall'ambiente, impostazioni non toccate."))
+    return {**result, "applied": applied}

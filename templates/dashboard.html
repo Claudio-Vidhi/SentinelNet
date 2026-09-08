@@ -3229,7 +3229,7 @@
       <div class="panel requires-admin" style="margin-bottom:18px;">
         <h3 style="font-size:15px; margin-bottom:8px;"><i class="fa-solid fa-lock" style="color:var(--primary);"></i> <span data-i18n="titleSelfSignedCert">Certificato TLS self-signed</span></h3>
         <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descSelfSignedCert">
-          Genera certificato e chiave per questo host, con l'indirizzo nel subjectAltName. Vanno poi indicati in SENTINELNET_SSL_CERTFILE / SENTINELNET_SSL_KEYFILE, e l'applicazione va riavviata perche' abbiano effetto: il riavvio si fa dal pannello qui sopra.
+          Genera certificato e chiave per questo host, con l'indirizzo nel subjectAltName. Vengono impostati subito come certificato TLS dell'applicazione: basta riavviarla perche' il pannello passi a HTTPS. Se SENTINELNET_SSL_CERTFILE / SENTINELNET_SSL_KEYFILE arrivano dall'ambiente restano loro a decidere, e le impostazioni non vengono toccate.
         </p>
         <div style="display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap;">
           <div class="form-group" style="margin:0; max-width:260px;">
