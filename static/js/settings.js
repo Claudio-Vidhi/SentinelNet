@@ -972,6 +972,45 @@
         if (statusEl) statusEl.textContent = tr('msgRestartScheduled');
     }
 
+    // Disabilita in anticipo cio' che qui non puo' funzionare, invece di
+    // lasciar premere e rispondere 409. I due rifiuti erano gia' documentati
+    // lato server, ma l'utente li scopriva solo dopo il clic.
+    function applyUpdateCapabilities(d) {
+        const hint = document.getElementById('restartAppHint');
+        const btnUpd = document.getElementById('btnUpdateApp');
+        const btnRst = document.getElementById('btnRestartApp');
+        const notes = [];
+
+        if (btnRst) {
+            btnRst.disabled = !d.can_restart;
+            if (!d.can_restart) notes.push(tr('msgRestartNeedsSupervisor'));
+        }
+        if (btnUpd) {
+            btnUpd.disabled = !d.can_update;
+            if (!d.can_update) {
+                notes.push(d.install_kind === 'exe'
+                    ? tr('msgUpdateNeedsService')
+                    : tr('msgUpdateNeedsGit'));
+            }
+        }
+        if (hint) hint.textContent = notes.join(' ');
+
+        // Con l'installer si puo' dire QUALE versione c'e', non solo che si
+        // puo' aggiornare. Il controllo non scarica nulla.
+        if (d.install_kind === 'exe') checkForUpdate();
+    }
+
+    async function checkForUpdate() {
+        const el = document.getElementById('updateAvailable');
+        if (!el) return;
+        const res = await apiFetch('/api/settings/update/check');
+        if (!res || !res.ok) { el.textContent = ''; return; }
+        const d = await res.json();
+        el.textContent = d.status === 'available'
+            ? tr('msgUpdateAvailable', { version: d.latest })
+            : tr('msgUpdateUpToDate');
+    }
+
     // --- VERSIONI DELLA FLOTTA (solo admin) ---
 
     async function loadFleetVersions() {
@@ -981,6 +1020,7 @@
         const res = await apiFetch('/api/fleet/versions');
         if (!res || !res.ok) { body.innerHTML = ''; return; }
         const d = await res.json();
+        applyUpdateCapabilities(d);
         const dash = '—';
         const rows = [`<tr>
             <td><strong>${escapeHtml(tr('lblFleetCentral'))}</strong></td>

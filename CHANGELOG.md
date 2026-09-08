@@ -10,6 +10,35 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **"Aggiorna e riavvia" funziona anche sull'installazione da installer.**
+  Sapeva fare solo `git pull` e su un exe rispondeva che non c'era un
+  repository. Ora chiede a GitHub qual e' l'ultima release, scarica
+  l'installer, **ne verifica lo SHA-256 dichiarato dall'API prima di
+  eseguirlo** e lo lancia in silenzio: il resto lo faceva gia' l'installer —
+  ferma il servizio, sostituisce il programma, non tocca i dati, riparte.
+  Il repository e' una costante, mai un parametro di richiesta; solo HTTPS e
+  solo GitHub; un file la cui impronta non corrisponde viene cancellato e non
+  viene eseguito.
+  Nuova rotta `GET /api/settings/update/check`: dice se c'e' una versione piu'
+  recente **senza** scaricare o installare niente.
+- Il pannello dice ora in anticipo cosa questi due pulsanti possono fare.
+  `GET /api/fleet/versions` porta `supervisor`, `can_restart` e `can_update`,
+  e la UI disabilita cio' che non funzionerebbe spiegando il perche', invece
+  di lasciar premere e rispondere 409 dopo il clic. Con l'installer mostra
+  anche quale versione e' disponibile.
+
+### Fixed
+
+- **Un aggiornamento silenzioso poteva sovrascrivere l'eseguibile mentre il
+  servizio ripartiva.** L'installer faceva solo `taskkill`, e WinSW rimetteva
+  in piedi il processo (`onfailure restart`) proprio durante la sostituzione.
+  Ora ferma prima il servizio e lo riavvia alla fine; su un aggiornamento non
+  prova piu' a registrarlo una seconda volta, e lo riavvia anche quando il
+  task non e' selezionato — in modalita' silenziosa i task tornano ai valori
+  predefiniti, e un aggiornamento avrebbe lasciato il servizio giu'.
+
 ## [0.33.1] - 2026-09-08
 
 ### Fixed

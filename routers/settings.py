@@ -413,8 +413,37 @@ def get_fleet_versions(current_user = Depends(require_admin)):
             # serve un parser SemVer per dirlo.
             "behind": bool(v) and v != __version__,
         })
+    # Il pannello deve poter DISABILITARE i pulsanti che qui non funzionano,
+    # invece di lasciarli premere e rispondere 409. Erano gia' due rifiuti
+    # documentati, ma solo dopo il clic.
+    sup = self_update.supervisor()
     return {"central": {"version": __version__, "install_kind": kind},
-            "install_kind": kind, "agents": agents}
+            "install_kind": kind,
+            "supervisor": sup,
+            "can_restart": bool(sup),
+            # L'installer scrive in Program Files: senza servizio i privilegi
+            # non ci sono. Da git basta un supervisore qualsiasi.
+            "can_update": (kind == "exe" and sup == "windows-service")
+                          or (kind == "git" and bool(sup)),
+            "agents": agents}
+
+
+@router.get("/api/settings/update/check")
+def check_update(current_user = Depends(require_admin)):
+    """C'e' una versione piu' recente? Non scarica e non installa niente.
+
+    Separata da POST /api/settings/update di proposito: sapere se c'e'
+    un aggiornamento non deve costare l'aggiornamento."""
+    if self_update.install_kind() != "exe":
+        raise HTTPException(
+            status_code=409,
+            detail="Controllo disponibile solo per l'installazione da "
+                   "installer Windows.")
+    from services import exe_update
+    try:
+        return exe_update.check()
+    except exe_update.ExeUpdateError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
 @router.post("/api/settings/restart")
