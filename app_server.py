@@ -434,7 +434,17 @@ def main():
     # all'indirizzo, usciva, e Windows lo mostrava Arrestato pur restando
     # Automatico. Due processi per una porta sola non e' una gara che si vince
     # arbitrando meglio: qui non si scende in campo proprio.
-    if not os.environ.get("SENTINELNET_WINDOWS_SERVICE") and _windows_service_registered():
+    # SENTINELNET_PORT esclude la guardia: chi nomina la porta non sta
+    # contendendo quella del servizio. Il collegamento sul desktop non la
+    # passa mai, quindi resta protetto; a restare fuori sono lo smoke test di
+    # scripts/build.ps1 e chiunque provi una build su una macchina dove il
+    # servizio e' installato — casi in cui la guardia diceva "il servizio non
+    # risponde su 127.0.0.1:18443" e usciva con 1, e la build non poteva
+    # passare. Se la porta scelta e' comunque quella del servizio, il
+    # controllo di istanza singola qui sotto la vede occupata e non la ruba.
+    if (not os.environ.get("SENTINELNET_WINDOWS_SERVICE")
+            and not os.environ.get("SENTINELNET_PORT")
+            and _windows_service_registered()):
         if _port_in_use(host, port):
             print("SentinelNet e' gestito dal servizio Windows: apro l'interfaccia.")
             if not no_browser:

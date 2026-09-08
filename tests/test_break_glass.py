@@ -156,6 +156,10 @@ def test_without_the_service_a_busy_port_still_hands_over(monkeypatch):
 
 
 def _stub_launch(monkeypatch, app_server, port_busy):
+    # La porta la decide effective_port stubbato qui sotto: una
+    # SENTINELNET_PORT ereditata dall'ambiente disattiverebbe la guardia e
+    # renderebbe questi test dipendenti da chi lancia la suite.
+    monkeypatch.delenv("SENTINELNET_PORT", raising=False)
     monkeypatch.setenv("SENTINELNET_NO_BROWSER", "true")
     monkeypatch.setattr(app_server, "_port_in_use", lambda h, p: port_busy)
     monkeypatch.setattr(app_server, "resolve_bind_host", lambda: "192.0.2.10")
@@ -195,6 +199,36 @@ def test_with_the_service_registered_but_down_it_says_so_instead_of_binding(monk
     with pytest.raises(SystemExit) as exc:
         app_server.main()
     assert exc.value.code != 0
+
+
+def test_an_explicit_port_is_not_a_bid_for_the_services_port(monkeypatch):
+    """Con SENTINELNET_PORT la guardia non si applica.
+
+    Lo smoke test di scripts/build.ps1 avvia l'exe su 18443 proprio per NON
+    toccare l'istanza reale, ma su una macchina con il servizio installato la
+    guardia rispondeva "il servizio non risponde su 127.0.0.1:18443" e usciva
+    con 1: la build non poteva passare, e nessuno puo' provare una build dove
+    il prodotto e' installato. Chi nomina la porta non sta contendendo quella
+    del servizio.
+    """
+    import app_server
+
+    monkeypatch.delenv("SENTINELNET_WINDOWS_SERVICE", raising=False)
+    monkeypatch.setenv("SENTINELNET_PORT", "18443")
+    monkeypatch.setattr(app_server, "_windows_service_registered", lambda: True)
+    monkeypatch.setenv("SENTINELNET_NO_BROWSER", "true")
+    monkeypatch.setattr(app_server, "_port_in_use", lambda h, p: False)
+    monkeypatch.setattr(app_server, "resolve_bind_host", lambda: "192.0.2.10")
+    monkeypatch.setattr(app_server, "effective_port", lambda: 18443)
+    monkeypatch.setattr(app_server.data_config, "resolve_tls_config",
+                        lambda: (None, None))
+    monkeypatch.setattr(sys, "argv", ["SentinelNet.exe"])
+    started = {}
+    monkeypatch.setattr(app_server.uvicorn, "run",
+                        lambda *a, **k: started.update(k) or None)
+
+    app_server.main()
+    assert started.get("port") == 18443
 
 
 def test_without_a_service_the_desktop_app_binds_normally(monkeypatch):

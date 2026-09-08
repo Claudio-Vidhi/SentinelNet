@@ -10,6 +10,44 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- **L'identita' scelta nella finestra di scansione veniva buttata via, e il
+  dispositivo finiva per essere chiamato con `admin`/`admin`.** Sono due
+  difetti in fila. Il primo: "Aggiungi selezionati" scriveva l'identita' solo
+  se la riga era stata prima verificata, quindi chi sceglieva un'identita' e
+  premeva Aggiungi senza verificare si ritrovava il dispositivo con profilo
+  `default` — la scelta scartata, senza un avviso. E' la stessa lezione gia'
+  imparata per il vendor, un campo piu' in la': la scelta dell'utente non e'
+  un'ipotesi da scartare. Il secondo, piu' grave: il profilo `default` senza
+  un'identita' di sede ricadeva su un account globale che valeva
+  `admin`/`admin`, cioe' una credenziale pubblica spedita all'apparato del
+  cliente. Il triage ci riprovava in ciclo fino al blocco dell'account, e il
+  blocco si presentava poi come un "Error reading SSH protocol banner", che
+  manda a cercare un guasto di rete inesistente.
+  Ora l'identita' scelta viene sempre scritta, e quando nessuna credenziale e'
+  risolvibile la connessione fallisce dicendolo, invece di inventarne una. Il
+  terminale interattivo mostra il motivo al posto di chiudersi senza spiegazioni.
+- **Su una macchina con il servizio installato non si poteva piu' avviare
+  l'exe su un'altra porta, nemmeno per provarlo.** La guardia introdotta in
+  0.35.3 scattava su qualsiasi avvio interattivo: con il servizio registrato e
+  la porta richiesta libera stampava "il servizio e' installato ma non
+  risponde" e usciva con 1. Valeva anche per lo smoke test di
+  `scripts/build.ps1`, che parte apposta su una porta dedicata per non toccare
+  l'istanza reale — quindi la build falliva sulla macchina di chi ha il
+  prodotto installato. Ora `SENTINELNET_PORT` esclude la guardia: chi nomina
+  la porta non sta contendendo quella del servizio, e il collegamento sul
+  desktop (che non la passa mai) resta protetto come prima.
+
+### Changed
+
+- **`SENTINELNET_ADMIN_USER` / `_PASS` / `_SECRET` non valgono piu'
+  `admin` per default: sono vuoti.** Restano la via d'uscita per
+  l'installazione che ha davvero un unico account su tutti gli apparati, ma
+  ora vanno dichiarati. Un dispositivo con profilo `default`, senza identita'
+  propria ne' identita' di default sulla sede, rifiuta la connessione: gli va
+  assegnata un'identita' dalla scheda del dispositivo.
+
 ## [0.35.3] - 2026-09-08
 
 ### Fixed

@@ -359,7 +359,17 @@ async def ws_terminal(websocket: WebSocket, ip: str):
             await websocket.close(code=1008)
             return
 
-    username, password, _ = core_engine.get_device_credentials(device)
+    # No credential resolvable (no identity on the row, none on the site): say
+    # so and close. Letting it raise here would drop the socket with no reason
+    # on screen, and the old fallback would have dialled the device with the
+    # global admin account instead.
+    try:
+        username, password, _ = core_engine.get_device_credentials(device)
+    except (core_engine.CredentialResolveError,
+            core_engine.CredentialDecryptError) as e:
+        await websocket.send_text(f"\r\n[Errore Credenziali] {e}\r\n")
+        await websocket.close(code=1008)
+        return
 
     # Porta e trasporto dichiarati in inventario, dalla stessa funzione che usa
     # il triage: qui la porta era fissa a 22 (default di paramiko), quindi un

@@ -229,11 +229,14 @@ class TestScanWindowVendorIsHonoured(unittest.TestCase):
         # Il ramo che buttava via la scelta.
         self.assertNotIn("vendor: ''", body)
 
-    def test_identity_still_requires_a_successful_verify(self):
-        # Il vendor lo dice l'utente, l'identita' invece dev'essersi dimostrata:
-        # scriverla su un dispositivo su cui non ha fatto login sarebbe una
-        # credenziale dichiarata e mai provata.
-        self.assertIn("(verified && identityId)", self._add_fn())
+    def test_add_never_discards_the_selected_identity(self):
+        # Gating the identity on a successful verify protected nothing: it
+        # dropped the user's choice and let the device fall through to the
+        # global admin account — a wrong credential in place of an unproven
+        # one. Same lesson as the vendor above, one field later.
+        body = self._add_fn()
+        self.assertIn("profile: identityId ?", body)
+        self.assertNotIn("verified", body)
 
     def test_scan_vendor_select_can_say_not_set(self):
         self.assertIn("function buildScanVendorOptions", self.core)
