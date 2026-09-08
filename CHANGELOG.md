@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-09-08
+
 ### Added
 
 - **"Aggiorna e riavvia" funziona anche sull'installazione da installer.**
