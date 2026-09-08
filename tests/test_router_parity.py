@@ -63,10 +63,18 @@ class TestRouterParity(unittest.TestCase):
     #   dead code (audit 2026-08): nessun chiamante in static/js, nessun form
     #   nel template, nessun test. Il download avviene client-side dalla
     #   risposta dei rispettivi /generate. Restano generate e i push.
+    # /api/models, /api/models/delete:
+    #   deprecate nella 0.31.0 e rimosse nella 0.33.0, come annunciato nel
+    #   CHANGELOG. Nessun chiamante in-tree le usava: il catalogo modelli si
+    #   aggiorna da POST /api/device-categories/assign, che chiama add_model()
+    #   da se', ed e' la via che usa la UI. add_model/delete_model in
+    #   inventory_manager restano, hanno altri chiamanti.
     ALLOWED_REMOVED_PATHS = ("/api/provisioner/fgt/push-ssh",
                              "/api/provisioner/fgt/push-serial",
                              "/api/provisioner/download",
-                             "/api/provisioner/fgt/download")
+                             "/api/provisioner/fgt/download",
+                             "/api/models",
+                             "/api/models/delete")
 
     def test_all_golden_paths_still_exist(self):
         missing = [p for p in self.golden["paths"]
@@ -136,16 +144,6 @@ class TestRouterParity(unittest.TestCase):
         # test_export_customizable.TestColumnSelection
         # .test_no_columns_asked_keeps_the_historic_export.
         ("get", "/api/export/devices"),
-        # /api/models, /api/models/delete: marcate deprecated=True (0.31.x),
-        # rimozione prevista nella 0.32.0. Il catalogo modelli si aggiorna da
-        # POST /api/device-categories/assign, che chiama add_model() da se':
-        # nessun chiamante in-tree usava piu' queste tre. Cambiano SOLO il flag
-        # `deprecated` e la description (la docstring che indica il sostituto);
-        # percorsi, parametri e risposte restano identici, quindi un client
-        # esterno che le chiama ancora non vede differenza.
-        ("get", "/api/models"),
-        ("post", "/api/models"),
-        ("post", "/api/models/delete"),
     )
 
     ALLOWED_ADDED_OPERATIONS = (
@@ -155,6 +153,12 @@ class TestRouterParity(unittest.TestCase):
     def test_migrated_operations_identical(self):
         for path, ops in self.golden["paths"].items():
             if not path.startswith(MIGRATED_PREFIXES):
+                continue
+            # Una rimozione voluta la dichiara ALLOWED_REMOVED_PATHS, che
+            # test_all_golden_paths_still_exist gia' consulta: senza lo stesso
+            # salto qui, togliere una rotta migrata fallirebbe comunque, e
+            # l'unico modo di passare sarebbe riscrivere il golden.
+            if path in self.ALLOWED_REMOVED_PATHS:
                 continue
             self.assertIn(path, self.current["paths"])
             cur_ops = self.current["paths"][path]
@@ -352,11 +356,6 @@ class TestFullParity(unittest.TestCase):
         ("get", "/api/flow-siem/facets"),
         # Inventory export: see TestRouterParity.ALLOWED_CHANGED_OPERATIONS.
         ("get", "/api/export/devices"),
-        # /api/models*: deprecate-only, see TestRouterParity
-        # .ALLOWED_CHANGED_OPERATIONS.
-        ("get", "/api/models"),
-        ("post", "/api/models"),
-        ("post", "/api/models/delete"),
         # Added optional frm / to time range filtering.
         ("get", "/api/arp/client-map"),
         ("get", "/api/arp/search"),
@@ -404,7 +403,8 @@ class TestFullParity(unittest.TestCase):
     # Vedi TestRouterParity.ALLOWED_REMOVED_PATHS/_SCHEMAS: rimozioni volute,
     # non regressioni del destructuring.
     REMOVED_PATHS = TestRouterParity.ALLOWED_REMOVED_PATHS
-    REMOVED_SCHEMAS = ("FortiGateProvisionSSHSchema", "FortiGateProvisionSerialSchema")
+    REMOVED_SCHEMAS = ("FortiGateProvisionSSHSchema", "FortiGateProvisionSerialSchema",
+                       "ModelSchema")
 
     def test_path_set_identical(self):
         snap_paths = [p for p in self.snap["paths"]

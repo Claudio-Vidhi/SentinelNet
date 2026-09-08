@@ -469,18 +469,15 @@ class TestGroupsTabRestyle(unittest.TestCase):
         for endpoint in ('/api/groups', '/api/groups/rename', '/api/groups/delete',
                           '/api/vendors', '/api/vendors/delete'):
             self.assertIn(endpoint, html)
-        # /api/models + /api/models/delete: real server routes (app_server.py),
-        # but pre-existing state (before this restyle) has NO frontend wiring in
-        # #tab-groups (no models table/JS calls it) -- confirmed by tracing
-        # app_server.py's list_models/create_model/remove_model handlers, which
-        # have zero callers in templates/dashboard.html. Per shared per-tab
-        # rules ("restyle, not rewire" / don't fabricate wiring), relaxed to
-        # asserting the handler function names exist server-side instead of
-        # fabricating a UI table for them.
-        import app_server as _app_server  # noqa: F401 (deliberate side-effect import)
-        self.assertTrue(hasattr(routers.catalog, 'list_models'))
-        self.assertTrue(hasattr(routers.catalog, 'create_model'))
-        self.assertTrue(hasattr(routers.catalog, 'remove_model'))
+        # /api/models + /api/models/delete non esistono piu': deprecate nella
+        # 0.31.0, rimosse nella 0.33.0. Erano gia' senza alcun aggancio nel
+        # frontend -- e' proprio la constatazione che questo test faceva, e che
+        # ha portato a toglierle. Il catalogo modelli si aggiorna da
+        # POST /api/device-categories/assign. Qui resta la verifica che il
+        # frontend NON le chiami, cosi' il giorno che qualcuno le rimette
+        # nel template il test lo dice.
+        for gone in ('/api/models', '/api/models/delete'):
+            self.assertNotIn(gone, html)
 
     def test_groups_tab_uses_component_classes(self):
         html = _html()
