@@ -233,8 +233,15 @@
         const css = getComputedStyle(document.body);
         const typeColor = t => (css.getPropertyValue(
             RT_TYPE_COLORS[t] || '--text-muted') || '#888').trim();
+        // La chiave vuota e' la tabella globale (nessuna VRF): l'etichetta la
+        // mette qui la UI, tradotta, invece di arrivare gia' scritta dal
+        // server e restare in inglese.
+        const byVrf = {};
+        for (const [k, n] of Object.entries(b.by_vrf || {})) {
+            byVrf[k || tr('rtVrfGlobal')] = n;
+        }
         box.innerHTML = rtBars(tr('rtChartByType'), b.by_type, typeColor)
-                      + rtBars(tr('rtChartByVrf'), b.by_vrf, null);
+                      + rtBars(tr('rtChartByVrf'), byVrf, null);
     }
 
 

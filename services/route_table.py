@@ -367,8 +367,11 @@ def breakdown(rows) -> dict:
     by_vrf: dict = {}
     for r in rows:
         by_type[r["type"]] = by_type.get(r["type"], 0) + 1
-        label = r.get("vrf") or "global"
-        by_vrf[label] = by_vrf.get(label, 0) + 1
+        # Chiave VUOTA per la tabella globale, non la parola "global": questo
+        # e' un dato, e l'etichetta la mette la UI passando per tr(). Scritta
+        # qui restava in inglese anche col pannello in italiano, e il
+        # controllo i18n non la vedeva perche' nasce dal server.
+        by_vrf[r.get("vrf") or ""] = by_vrf.get(r.get("vrf") or "", 0) + 1
     return {"by_type": by_type, "by_vrf": by_vrf, "total": len(rows)}
 
 
