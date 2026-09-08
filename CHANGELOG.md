@@ -10,6 +10,22 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- **L'app installata non partiva: `PermissionError: [WinError 5]` su
+  `templates`.** `app_server.main()` faceva `os.makedirs("templates")` con un
+  percorso relativo, quindi risolto sulla CWD: avviata dal collegamento, la
+  CWD e' `C:\Program Files\SentinelNet`, dove un utente normale non scrive.
+  La cartella non serviva a nulla — le risorse impacchettate si risolvono via
+  `sys._MEIPASS` (`get_resource_path`) — ed e' stata tolta. I collegamenti
+  hanno ora `WorkingDir` sulla cartella dati, cosi' un eventuale percorso
+  relativo atterra dove si puo' scrivere invece di far morire l'avvio.
+  `tests/test_shared_paths_are_pinned.py` rifiuta ogni creazione di cartella
+  da un letterale relativo.
+- **Nessuna icona sul desktop.** L'installer creava solo le voci nel menu
+  Start. Ora c'e' la casella "Crea un'icona sul desktop", spuntata per
+  impostazione predefinita come da convenzione Windows.
+
 ## [0.31.0] - 2026-09-07
 
 ### Added

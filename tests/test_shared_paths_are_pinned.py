@@ -86,5 +86,55 @@ class TestSharedPathsArePinned(unittest.TestCase):
                         f"{value}")
 
 
+class TestNoRelativeWritesAtRuntime(unittest.TestCase):
+    """Nothing may create a directory from a bare relative literal.
+
+    Installed under C:\Program Files, the exe's CWD is its own folder and a
+    normal user cannot write there. app_server.main() did
+    ``os.makedirs("templates")`` and the app died with WinError 5 before the
+    server came up -- on a directory nothing ever read, because bundled
+    resources resolve through sys._MEIPASS (get_resource_path).
+
+    A path that must be written belongs to data_config.get_path(), which
+    answers with SENTINELNET_DATA_DIR.
+    """
+
+    # os.makedirs / os.mkdir / Path(...).mkdir with a literal that is not
+    # absolute and does not start with a variable.
+    _CREATORS = {"makedirs", "mkdir"}
+
+    def _offenders(self):
+        found = []
+        for path in sorted(ROOT.rglob("*.py")):
+            if set(path.relative_to(ROOT).parts) & SKIP_DIRS:
+                continue
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+            except SyntaxError:
+                continue
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                fn = node.func
+                if not isinstance(fn, ast.Attribute) or fn.attr not in self._CREATORS:
+                    continue
+                if not node.args:
+                    continue
+                arg = node.args[0]
+                if not isinstance(arg, ast.Constant) or not isinstance(arg.value, str):
+                    continue
+                if os.path.isabs(arg.value):
+                    continue
+                found.append(f"{path.relative_to(ROOT)}:{node.lineno}: "
+                             f"{fn.attr}({arg.value!r})")
+        return found
+
+    def test_no_directory_is_created_from_a_relative_literal(self):
+        self.assertEqual(
+            self._offenders(), [],
+            "these resolve against the CWD, which is read-only when the exe "
+            "is installed under Program Files; use data_config.get_path()")
+
+
 if __name__ == "__main__":
     unittest.main()

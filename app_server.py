@@ -374,9 +374,6 @@ def main():
     if args.reset_admin:
         sys.exit(reset_admin_cli(args.user))
 
-    if not os.path.exists("templates"): 
-        os.makedirs("templates")
-        
     host = resolve_bind_host()
     port = effective_port()
 
