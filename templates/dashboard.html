@@ -4182,11 +4182,9 @@
 
     <div class="panel" style="margin-bottom:18px;">
       <h4 style="margin:0 0 10px; font-size:14px; color:var(--text-muted);">
-        <i class="fa-solid fa-chart-simple"></i> <span data-i18n="rtChartTitle">Rotte per apparato e tipo</span>
+        <i class="fa-solid fa-chart-simple"></i> <span data-i18n="rtChartTitle">Composizione delle rotte</span>
       </h4>
-      <div style="position:relative; width:100%; height:220px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; overflow:hidden;">
-        <canvas id="rtChartCanvas" style="width:100%; height:100%; display:block;"></canvas>
-      </div>
+      <div id="rtBreakdown" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:18px;"></div>
       <p style="margin:8px 0 0; font-size:12px; color:var(--text-muted);" data-i18n="rtChartNote">Le barre contano le rotte visibili con i filtri correnti. Nessun apparato espone i pacchetti per singola rotta: una barra di traffico qui sarebbe un numero inventato.</p>
     </div>
 
@@ -4203,6 +4201,7 @@
             <tr>
               <th style="text-align:left; padding:6px 8px;" data-i18n="rtColNetwork">Rete</th>
               <th style="text-align:left; padding:6px 8px;" data-i18n="rtColNextHop">Next-hop / Interfaccia</th>
+              <th style="text-align:left; padding:6px 8px;" data-i18n="rtColVrf">VRF</th>
               <th style="text-align:left; padding:6px 8px;" data-i18n="rtColType">Tipo</th>
               <th style="text-align:right; padding:6px 8px;" data-i18n="rtColDistance">Distanza</th>
               <th style="text-align:right; padding:6px 8px;" data-i18n="rtColMetric">Metrica</th>

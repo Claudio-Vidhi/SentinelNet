@@ -95,7 +95,8 @@ async def list_routes(
     rows.sort(key=lambda r: (r["device"], r["type"], r["network"]))
     return {"total": len(rows), "rows": rows, "errors": errors,
             "devices_queried": len(targets),
-            "counts": route_table.group_counts(rows)}
+            "counts": route_table.group_counts(rows),
+            "breakdown": route_table.breakdown(rows)}
 
 
 # --- Analisi di percorso -----------------------------------------------------

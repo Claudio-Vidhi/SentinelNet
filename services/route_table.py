@@ -170,6 +170,10 @@ def _row(device, entry: dict) -> dict:
         "group": device.get("Group") or "Generale",
         "vendor": (device.get("Vendor") or "").lower(),
         "network": entry.get("ip_mask") or entry.get("network") or "",
+        # La VRF ha una colonna sua: senza, le rotte di una VRF si leggevano
+        # come rotte della tabella globale, ed e' per questo che venivano
+        # scartate del tutto. Vuoto = tabella globale.
+        "vrf": entry.get("vrf") or "",
         "source_kind": route_source(device),
         "gateway": entry.get("gateway") or "",
         "interface": entry.get("interface") or "",
@@ -249,11 +253,10 @@ def routes_from_backup(device) -> "dict | None":
         return None
     entries = []
     for r in (analysis.get("routing") or {}).get("static") or []:
-        # Le rotte di una VRF non hanno una colonna in cui dire di quale VRF
-        # sono: mostrarle accanto alle altre le farebbe leggere come rotte
-        # della tabella globale.
-        if r.get("vrf"):
-            continue
+        # Le rotte di una VRF NON si scartano piu'. Venivano buttate perche'
+        # non c'era una colonna in cui dire di quale VRF fossero: adesso c'e',
+        # e su un apparato con le VRF erano la maggior parte delle statiche --
+        # l'analizzatore le leggeva bene e questa vista le nascondeva.
         gateway, interface = _hop(r.get("next_hop") or "")
         distance = r.get("distance") or r.get("ad")
         entries.append({
@@ -261,6 +264,7 @@ def routes_from_backup(device) -> "dict | None":
             "gateway": gateway,
             "interface": interface or (r.get("device") or ""),
             "type": "static",
+            "vrf": r.get("vrf") or "",
             "distance": int(distance) if str(distance or "").isdigit() else None,
             "from_backup": True,
         })
@@ -279,13 +283,27 @@ def collect_for(device) -> dict:
     sue statiche arrivano lo stesso, marcate, con l'errore che resta accanto:
     dire perche' l'apparato non ha risposto conta quanto mostrare le righe."""
     answer = _collect_live(device)
-    if answer.get("rows"):
-        return answer
     fallback = routes_from_backup(device)
     if not fallback:
         return answer
-    fallback["error"] = answer.get("error") or ""
-    return fallback
+    if not answer.get("rows"):
+        fallback["error"] = answer.get("error") or ""
+        return fallback
+
+    # Le due sorgenti si SOMMANO, non si escludono. `show ip route` senza
+    # `vrf ...` stampa la sola tabella globale: su un apparato con le VRF
+    # rispondeva due righe e quelle due bastavano a non guardare piu' il
+    # backup, dove stavano tutte le altre. Le righe vive restano quelle buone;
+    # dal backup si aggiunge solo cio' che l'apparato non ha detto.
+    seen = {(r.get("vrf") or "", r.get("network") or "", r.get("gateway") or "")
+            for r in answer["rows"]}
+    for row in fallback["rows"]:
+        key = (row.get("vrf") or "", row.get("network") or "",
+               row.get("gateway") or "")
+        if key not in seen:
+            seen.add(key)
+            answer["rows"].append(row)
+    return answer
 
 
 def _collect_live(device) -> dict:
@@ -338,6 +356,20 @@ def _collect_ios(device) -> dict:
                          "oppure output in un formato non riconosciuto"}
     return {"device_ip": ip, "source": "ssh",
             "rows": [_row(device, e) for e in parsed]}
+
+
+def breakdown(rows) -> dict:
+    """Totali per tipo e per VRF: quello che il pannello disegna.
+
+    Il conteggio e non un volume di traffico: nessun apparato espone i
+    pacchetti per rotta, e una barra che dicesse pkt/s sarebbe inventata."""
+    by_type: dict = {}
+    by_vrf: dict = {}
+    for r in rows:
+        by_type[r["type"]] = by_type.get(r["type"], 0) + 1
+        label = r.get("vrf") or "global"
+        by_vrf[label] = by_vrf.get(label, 0) + 1
+    return {"by_type": by_type, "by_vrf": by_vrf, "total": len(rows)}
 
 
 def group_counts(rows) -> dict:
