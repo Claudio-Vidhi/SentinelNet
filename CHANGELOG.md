@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.35.2] - 2026-09-08
+
 ### Fixed
 
 - **Il servizio Windows si fermava da solo quando la porta era occupata.**
