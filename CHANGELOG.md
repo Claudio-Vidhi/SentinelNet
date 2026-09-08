@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.35.5] - 2026-09-08
+
 ### Fixed
 
 - **Gestire i dispositivi era lento perche' ogni azione riavviava
