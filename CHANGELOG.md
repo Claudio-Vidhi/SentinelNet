@@ -10,6 +10,19 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Changed
+
+- **Generare il certificato self-signed lo attiva anche.** I file venivano
+  scritti e lasciati scollegati: il pannello restava in HTTP finche' qualcuno
+  non impostava a mano `SENTINELNET_SSL_CERTFILE` e `SENTINELNET_SSL_KEYFILE`,
+  e niente lo diceva a schermo. Ora `POST /api/settings/tls/self-signed`
+  registra i due percorsi (relativi, quindi risolti dentro
+  `SENTINELNET_DATA_DIR` uguale da sorgente, exe e Docker) nelle impostazioni
+  app: basta riavviare. Le variabili d'ambiente, se presenti, restano piu'
+  forti e le impostazioni non vengono toccate — un deployment Docker o systemd
+  non si vede cambiare il certificato sotto i piedi. La risposta porta
+  `applied` per dire quale dei due casi e' successo.
+
 ## [0.31.1] - 2026-09-08
 
 ### Fixed
