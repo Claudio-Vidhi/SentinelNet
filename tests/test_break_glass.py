@@ -105,3 +105,51 @@ def test_port_in_use_detects_a_listener():
 
     # Socket closed: the port is free again.
     assert app_server._port_in_use("127.0.0.1", port) is False
+
+
+def test_a_busy_port_is_a_failure_for_the_service_not_a_clean_exit(monkeypatch):
+    """Sotto il servizio Windows la porta occupata deve far USCIRE MALE.
+
+    Uscire con 0 e' un'uscita pulita, e WinSW la legge come "il servizio ha
+    finito": stato Arrestato, nessun tentativo successivo, nessuna spiegazione.
+    Succedeva ogni volta che girava anche un'istanza avviata dal collegamento,
+    e durante un aggiornamento mentre la vecchia stava ancora chiudendo. Con
+    un codice != 0 interviene onfailure e riprova.
+    """
+    import app_server
+
+    monkeypatch.setenv("SENTINELNET_WINDOWS_SERVICE", "1")
+    monkeypatch.setenv("SENTINELNET_NO_BROWSER", "true")
+    monkeypatch.setattr(app_server, "_port_in_use", lambda h, p: True)
+    monkeypatch.setattr(app_server, "resolve_bind_host", lambda: "127.0.0.1")
+    monkeypatch.setattr(app_server, "effective_port", lambda: 8000)
+    monkeypatch.setattr(app_server.data_config, "resolve_tls_config",
+                        lambda: (None, None))
+    monkeypatch.setattr(sys, "argv", ["SentinelNet.exe"])
+    # Se ci arrivasse, il test fallirebbe con un errore piu' oscuro: meglio
+    # dire subito che non deve nemmeno provarci.
+    monkeypatch.setattr(app_server.uvicorn, "run",
+                        lambda *a, **k: pytest.fail("non deve avviare uvicorn"))
+
+    with pytest.raises(SystemExit) as exc:
+        app_server.main()
+    assert exc.value.code != 0, "0 = uscita pulita = servizio Arrestato"
+
+
+def test_without_the_service_a_busy_port_still_hands_over(monkeypatch):
+    """Fuori dal servizio la scorciatoia resta: doppio clic sul collegamento
+    apre l'interfaccia di quella gia' in esecuzione, senza uscire male."""
+    import app_server
+
+    monkeypatch.delenv("SENTINELNET_WINDOWS_SERVICE", raising=False)
+    monkeypatch.setenv("SENTINELNET_NO_BROWSER", "true")
+    monkeypatch.setattr(app_server, "_port_in_use", lambda h, p: True)
+    monkeypatch.setattr(app_server, "resolve_bind_host", lambda: "127.0.0.1")
+    monkeypatch.setattr(app_server, "effective_port", lambda: 8000)
+    monkeypatch.setattr(app_server.data_config, "resolve_tls_config",
+                        lambda: (None, None))
+    monkeypatch.setattr(sys, "argv", ["SentinelNet.exe"])
+    monkeypatch.setattr(app_server.uvicorn, "run",
+                        lambda *a, **k: pytest.fail("non deve avviare uvicorn"))
+
+    assert app_server.main() is None

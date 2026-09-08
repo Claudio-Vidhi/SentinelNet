@@ -411,6 +411,17 @@ def main():
     # l'interfaccia di quella gia' in esecuzione invece di morire sulla porta
     # occupata.
     if _port_in_use(host, port):
+        # Sotto il servizio Windows la scorciatoia non vale: uscire con 0
+        # perche' la porta e' occupata e' un'uscita PULITA, e WinSW la legge
+        # come "il servizio ha finito" -> stato Arrestato, senza riprovare e
+        # senza dire perche'. Succede ogni volta che c'e' anche un'istanza
+        # avviata dal collegamento, e durante un aggiornamento mentre la
+        # vecchia sta ancora chiudendo. Si esce con codice != 0: onfailure
+        # nell'XML riprova fra dieci secondi, quando la porta si e' liberata.
+        if os.environ.get("SENTINELNET_WINDOWS_SERVICE"):
+            print(f"Porta {host}:{port} occupata da un altro processo: "
+                  f"il servizio riprova fra poco.", file=sys.stderr)
+            sys.exit(1)
         print(f"SentinelNet e' gia' in esecuzione su {host}:{port}: apro l'interfaccia.")
         if not no_browser:
             webbrowser.open(browse_url(scheme, host, port))
