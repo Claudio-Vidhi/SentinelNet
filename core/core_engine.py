@@ -30,7 +30,7 @@ logging.basicConfig(filename=data_config.get_path('error_log.txt'), level=loggin
 # working unchanged.
 from core.device_credentials import (  # noqa: F401 (re-export)
     DEFAULT_USERNAME, DEFAULT_PASSWORD, DEFAULT_SECRET,
-    CredentialDecryptError, get_device_credentials,
+    CredentialDecryptError, CredentialResolveError, get_device_credentials,
 )
 # BACKUP_FOLDER is a re-exported VALUE, so this name and
 # core.backup_store.BACKUP_FOLDER are two bindings of the same string.

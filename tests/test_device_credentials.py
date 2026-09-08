@@ -40,12 +40,33 @@ def test_successful_decrypt_returns_the_stored_password():
     assert password == "vera-password"
 
 
-def test_row_without_credentials_still_uses_fallback():
+def test_row_without_credentials_and_no_global_account_raises():
+    # Questo caso era admin/admin: una riga senza credenziali proprie veniva
+    # composta con il default pubblico e spedita all'apparato del cliente.
     device = {"IP": "192.0.2.11", "Username": "", "Password": "", "Enable Secret": ""}
-    with mock.patch.object(device_credentials, "decrypt_password", return_value=""):
-        username, password, secret = core_engine.get_device_credentials(device)
-    assert (username, password, secret) == (
-        core_engine.DEFAULT_USERNAME,
-        core_engine.DEFAULT_PASSWORD,
-        core_engine.DEFAULT_SECRET,
-    )
+    with mock.patch.object(device_credentials, "decrypt_password", return_value=""), \
+         mock.patch.object(device_credentials, "DEFAULT_USERNAME", ""), \
+         mock.patch.object(device_credentials, "DEFAULT_PASSWORD", ""):
+        with pytest.raises(core_engine.CredentialResolveError) as exc:
+            core_engine.get_device_credentials(device)
+    assert "192.0.2.11" in str(exc.value)
+
+
+def test_row_without_credentials_uses_an_explicitly_configured_global_account():
+    # L'installazione che ha davvero un account unico lo dichiara con
+    # SENTINELNET_ADMIN_USER/PASS: allora, e solo allora, si usa.
+    device = {"IP": "192.0.2.11", "Username": "", "Password": "", "Enable Secret": ""}
+    with mock.patch.object(device_credentials, "decrypt_password", return_value=""), \
+         mock.patch.object(device_credentials, "DEFAULT_USERNAME", "globaluser"), \
+         mock.patch.object(device_credentials, "DEFAULT_PASSWORD", "globalpw"), \
+         mock.patch.object(device_credentials, "DEFAULT_SECRET", "globalsecret"):
+        creds = core_engine.get_device_credentials(device)
+    assert creds == ("globaluser", "globalpw", "globalsecret")
+
+
+def test_the_default_account_is_empty_unless_configured():
+    import os
+    if os.getenv("SENTINELNET_ADMIN_USER"):
+        pytest.skip("account globale sovrascritto dall'ambiente")
+    assert core_engine.DEFAULT_USERNAME == ""
+    assert core_engine.DEFAULT_PASSWORD == ""

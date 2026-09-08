@@ -106,25 +106,26 @@ class TestCoreEngineIdentityResolution(unittest.TestCase):
                 {"Profile": "identity:abc123"})
         self.assertEqual((u, p, s), ("iu", "ip", "is"))
 
-    def test_identity_missing_falls_back_to_default(self):
-        from core import core_engine
+    def test_identity_missing_and_no_global_account_raises(self):
+        from core import core_engine, device_credentials
         with mock.patch("security.identity_manager.get_identity_credentials",
-                        return_value=None):
-            u, p, s = core_engine.get_device_credentials(
-                {"Profile": "identity:gone"})
-        self.assertEqual(u, core_engine.DEFAULT_USERNAME)
+                        return_value=None), \
+             mock.patch.object(device_credentials, "DEFAULT_USERNAME", ""), \
+             mock.patch.object(device_credentials, "DEFAULT_PASSWORD", ""):
+            with self.assertRaises(core_engine.CredentialResolveError):
+                core_engine.get_device_credentials({"Profile": "identity:gone"})
 
-    def test_default_username_is_lowercase(self):
-        # Era 'Admin' con la maiuscola mentre password e secret erano
-        # minuscoli. Su un apparato che si aspetta 'admin' l'autenticazione
-        # falliva, e dopo tre tentativi il lockout la mascherava con un
-        # "Error reading SSH protocol banner" che manda a cercare un guasto
-        # di rete inesistente.
+    def test_there_is_no_guessable_default_account(self):
+        # Era 'admin'/'admin'. Un dispositivo senza identita' veniva chiamato
+        # con quella credenziale: sbagliata, pubblica, e ripetuta in loop dal
+        # triage fino al lockout, che poi si presentava come un
+        # "Error reading SSH protocol banner" e mandava a cercare un guasto
+        # di rete inesistente. Ora la risoluzione fallisce e lo dice.
         import os
         from core import core_engine
         if os.getenv("SENTINELNET_ADMIN_USER"):
-            self.skipTest("username di default sovrascritto dall'ambiente")
-        self.assertEqual(core_engine.DEFAULT_USERNAME, "admin")
+            self.skipTest("account globale sovrascritto dall'ambiente")
+        self.assertEqual(core_engine.DEFAULT_USERNAME, "")
 
 
 if __name__ == "__main__":

@@ -1168,13 +1168,18 @@ class DeviceCredentialFallback(unittest.TestCase):
                              "Profile": "identity:id-row"})
         self.assertEqual(creds, ("row-user", "row-pw", "row-secret"))
 
-    def test_a_site_without_a_default_identity_falls_back_to_the_globals(self):
-        from core import core_engine
-        creds = self._creds({"IP": "192.0.2.32", "Site": "customer-a", "Profile": "default"},
-                            site={"id": "customer-a", "mode": "jump", "device_identity": ""})
-        self.assertEqual(creds, (core_engine.DEFAULT_USERNAME,
-                                 core_engine.DEFAULT_PASSWORD,
-                                 core_engine.DEFAULT_SECRET))
+    def test_a_site_without_a_default_identity_refuses_to_invent_one(self):
+        # Era qui che si finiva su admin/admin: la sede del cliente non
+        # dichiara un'identita', quindi si spediva il default di questa
+        # installazione all'apparato di qualcun altro.
+        from core import core_engine, device_credentials
+        with mock.patch.object(device_credentials, "DEFAULT_USERNAME", ""), \
+             mock.patch.object(device_credentials, "DEFAULT_PASSWORD", ""):
+            with self.assertRaises(core_engine.CredentialResolveError):
+                self._creds({"IP": "192.0.2.32", "Site": "customer-a",
+                             "Profile": "default"},
+                            site={"id": "customer-a", "mode": "jump",
+                                  "device_identity": ""})
 
     def test_an_empty_username_on_a_custom_row_uses_the_site_identity(self):
         creds = self._creds({"IP": "192.0.2.33", "Site": "customer-a",

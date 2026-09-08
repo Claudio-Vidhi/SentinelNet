@@ -1437,18 +1437,20 @@
         const ips = selectedScanIps();
 
         for (const ip of ips) {
-            const row = _scanRows.find(r => r.ip === ip);
-            // Il vendor e' quello scelto nella finestra, verifica o no: sceglierlo
-            // e' l'utente che lo dice, non il programma che lo indovina. Vuoto
-            // resta vuoto — la select ha la voce apposta.
-            // L'identita' invece si scrive solo se ha davvero aperto la sessione:
-            // legarla a un dispositivo su cui non ha fatto login sarebbe una
-            // credenziale dichiarata e mai provata.
-            const verified = row && row.verify && row.verify.ok;
+            // Vendor and identity are both what the user picked in this modal:
+            // choosing them is the user talking, not the program guessing.
+            // Empty stays empty — each select has an entry for that.
+            // The identity used to be written only after a successful verify,
+            // on the theory that an untested credential should not be recorded.
+            // What that did in practice was drop the identity silently and let
+            // the device fall through to the global admin account: a wrong
+            // credential substituted for an unproven one. The explicit choice
+            // wins, and an unresolvable one now fails loudly (see
+            // core/device_credentials.py CredentialResolveError).
             const body = {
                 ip,
                 vendor: vendorSel,
-                profile: (verified && identityId) ? `identity:${identityId}` : 'default',
+                profile: identityId ? `identity:${identityId}` : 'default',
                 username: '', password: '', enable_secret: '', group,
             };
             await apiFetch('/api/add-device', {

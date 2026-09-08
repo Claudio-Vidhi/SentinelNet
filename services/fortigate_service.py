@@ -268,16 +268,21 @@ def ssh_command(device: dict, command: str, timeout: int = 30) -> str:
     """Esegue un comando CLI FortiOS via Netmiko e ritorna l'output testuale."""
     from core.net_ssh import ConnectHandler
     from core.core_engine import get_device_credentials, get_device_port
-    username, password, _secret = get_device_credentials(device)
-    params = {"device_type": "fortinet", "host": device["IP"],
-              "port": get_device_port(device),
-              "username": username, "password": password,
-              "timeout": timeout, "auth_timeout": 15, "banner_timeout": 15,
-              # Same reason as CONNECT_TIMEOUT above: the SSH fallback runs
-              # after REST already failed, so an unreachable device must not
-              # spend another full timeout on the TCP connect.
-              "conn_timeout": CONNECT_TIMEOUT}
+    # Credential resolution is INSIDE the try on purpose: a device with an API
+    # token but no SSH identity can no longer resolve one (it used to get
+    # admin/admin), and callers of the SSH fallback all handle FortiGateError.
+    # Left outside, that raise would take down the whole Policy view instead of
+    # leaving the address names unresolved, which _address_map is built for.
     try:
+        username, password, _secret = get_device_credentials(device)
+        params = {"device_type": "fortinet", "host": device["IP"],
+                  "port": get_device_port(device),
+                  "username": username, "password": password,
+                  "timeout": timeout, "auth_timeout": 15, "banner_timeout": 15,
+                  # Same reason as CONNECT_TIMEOUT above: the SSH fallback runs
+                  # after REST already failed, so an unreachable device must not
+                  # spend another full timeout on the TCP connect.
+                  "conn_timeout": CONNECT_TIMEOUT}
         with ConnectHandler(**params) as conn:
             # UNA RIGA ALLA VOLTA. send_command aspetta il prompt DOPO il
             # comando che gli si passa: dandogliene tre separati da newline
