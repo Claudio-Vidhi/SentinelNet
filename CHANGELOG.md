@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.35.1] - 2026-09-08
+
 ### Fixed
 
 - **"global" nel riepilogo per VRF era una parola inglese scritta nel
