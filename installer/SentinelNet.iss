@@ -170,6 +170,13 @@ end;
 // Registra e avvia il servizio guardando il codice di uscita di WinSW. Un
 // fallimento va detto adesso, con Setup ancora a schermo: e' l'unico momento
 // in cui l'utente sa ancora cosa ha appena fatto.
+// Il servizio risulta gia' registrato? Si guarda il registro dei servizi,
+// non la presenza del file: dopo un aggiornamento il file c'e' sempre.
+function AlreadyRegistered: Boolean;
+begin
+  Result := RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\SentinelNet');
+end;
+
 procedure InstallService;
 var
   Exe, LogDir: String;
@@ -177,6 +184,17 @@ var
 begin
   Exe := ExpandConstant('{app}\SentinelNet-service.exe');
   LogDir := DataDir + '\logs';
+  // Su un aggiornamento il servizio c'e' gia' e "install" fallirebbe: si
+  // reinstalla solo se manca, e in ogni caso si riparte alla fine.
+  if AlreadyRegistered then
+  begin
+    if not Exec(Exe, 'start', '', SW_HIDE, ewWaitUntilTerminated, Code) or (Code <> 0) then
+      MsgBox('The service did not start again after the update (exit code '
+        + IntToStr(Code) + ').' + #13#10 + #13#10
+        + 'Start it from services.msc, or look at the log:' + #13#10
+        + '  ' + LogDir, mbError, MB_OK);
+    Exit;
+  end;
   if not Exec(Exe, 'install', '', SW_HIDE, ewWaitUntilTerminated, Code) or (Code <> 0) then
   begin
     MsgBox('The Windows service could not be registered (exit code '
@@ -219,7 +237,18 @@ end;
 procedure StopRunningApp;
 var
   ResultCode: Integer;
+  Svc: String;
 begin
+  // Se c'e' il servizio va fermato PRIMA, e per bene: un taskkill secco lo
+  // farebbe ripartire da solo (onfailure restart nell'XML) proprio mentre si
+  // sostituisce l'eseguibile. Questo e' il percorso dell'aggiornamento
+  // silenzioso, dove non c'e' nessuno a guardare.
+  Svc := ExpandConstant('{app}\SentinelNet-service.exe');
+  if FileExists(Svc) then
+    Exec(Svc, 'stop', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  // E comunque il taskkill, per un'istanza avviata a mano dall'icona: l'exe
+  // e' un bootloader PyInstaller che genera un processo FIGLIO, e fermare
+  // solo il padre lascia il figlio a tenere il file bloccato.
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM {#AppExeName} /T /F', '',
        SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
@@ -286,7 +315,9 @@ begin
   if CurStep <> ssPostInstall then
     Exit;
 
-  if WizardIsTaskSelected('service') then
+  // Anche senza il task selezionato: un aggiornamento silenzioso deve
+  // rimettere in moto un servizio che esisteva gia'.
+  if WizardIsTaskSelected('service') or AlreadyRegistered then
     InstallService;
 
   if not WantsImport then

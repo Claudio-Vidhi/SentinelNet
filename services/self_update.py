@@ -125,11 +125,20 @@ def update() -> dict:
     la sequenza a mano via SSH, cioe' la shell che questa tab esiste per
     evitare."""
     kind = install_kind()
+    sup = supervisor()
+    if kind == "exe":
+        # Installazione da installer: non c'e' un repository, c'e' una release.
+        # La sequenza sta in services/exe_update.py.
+        from services import exe_update
+        try:
+            return exe_update.update(sup)
+        except exe_update.ExeUpdateError as e:
+            raise SelfUpdateError(str(e)) from e
     if kind != "git":
         raise SelfUpdateError(
-            f"Installazione '{kind}': non c'e' un repository git da cui "
-            "aggiornare. Sostituisci l'eseguibile, o reinstalla da sorgenti.")
-    sup = supervisor()
+            f"Installazione '{kind}': non c'e' ne' un repository git da cui "
+            "aggiornare ne' un installer da cui ripartire. Reinstalla da "
+            "sorgenti, oppure usa l'installer per Windows.")
     if not sup:
         # Scaricare il codice nuovo e non poterlo applicare lascia l'albero
         # avanti e il processo indietro: lo stato piu' confuso possibile.
