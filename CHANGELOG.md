@@ -10,6 +10,20 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Servizio Windows opzionale nell'installer.** Casella "Esegui SentinelNet
+  come servizio Windows", non spuntata: l'app parte all'avvio e — soprattutto
+  — il pulsante "Riavvia l'applicazione" del pannello smette di rispondere
+  409, perche' `supervisor()` trova finalmente qualcosa che rimetterebbe in
+  piedi il processo. Il wrapper e' WinSW (MIT), scaricato con SHA-256
+  verificato da `scripts/build_installer.ps1` e non versionato: un exe
+  PyInstaller non e' un servizio, non risponde all'SCM e Windows lo
+  ucciderebbe. Il servizio gira con la working directory sulla cartella DATI e
+  con `SENTINELNET_NO_BROWSER=true`, perche' in sessione 0 aprire un browser
+  lascia un processo invisibile che nessuno puo' chiudere. La disinstallazione
+  ferma e deregistra il servizio prima di togliere i file.
+
 ### Changed
 
 - **Generare il certificato self-signed lo attiva anche.** I file venivano

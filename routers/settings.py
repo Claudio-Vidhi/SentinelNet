@@ -482,10 +482,14 @@ def generate_self_signed_cert(payload: SelfSignedCertSchema,
     applied = False
     if not (os.environ.get("SENTINELNET_SSL_CERTFILE")
             or os.environ.get("SENTINELNET_SSL_KEYFILE")):
-        save_app_settings({"app": {
-            "ssl_certfile": os.path.join("certs", "server.crt"),
-            "ssl_keyfile": os.path.join("certs", "server.key"),
-        }})
+        # La sezione va RILETTA e aggiornata, non sostituita: save_app_settings
+        # fonde solo al primo livello, quindi passare {"app": {...}} con due
+        # chiavi cancellerebbe tutte le altre -- app_base_url, port, le
+        # retention. Stesso schema di set_app_advanced_settings qui sopra.
+        saved = dict(get_app_settings().get("app", {}) or {})
+        saved["ssl_certfile"] = os.path.join("certs", "server.crt")
+        saved["ssl_keyfile"] = os.path.join("certs", "server.key")
+        save_app_settings({"app": saved})
         applied = True
 
     log_audit(f"Certificato self-signed generato per '{payload.host.strip()}' da "

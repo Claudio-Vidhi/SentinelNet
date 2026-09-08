@@ -54,10 +54,29 @@ VersionInfoVersion={#AppVersion}
 Name: "en"; MessagesFile: "compiler:Default.isl"
 Name: "it"; MessagesFile: "compiler:Languages\Italian.isl"
 
+[CustomMessages]
+en.SvcGroup=Windows service:
+en.SvcTask=Run SentinelNet as a Windows service (starts at boot)
+en.SvcInstalling=Registering the Windows service...
+en.SvcStarting=Starting the SentinelNet service...
+it.SvcGroup=Servizio Windows:
+it.SvcTask=Esegui SentinelNet come servizio Windows (parte all'avvio)
+it.SvcInstalling=Registrazione del servizio Windows...
+it.SvcStarting=Avvio del servizio SentinelNet...
+
 [Files]
 Source: "..\dist\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+; WinSW wrapper: a PyInstaller exe is not a service (it never reports to
+; the SCM), so something has to stand between it and Windows. Downloaded
+; with a pinned hash by scripts/build_installer.ps1, not versioned.
+Source: "vendor\WinSW.exe"; DestDir: "{app}"; DestName: "SentinelNet-service.exe"; Flags: ignoreversion; Tasks: service
+Source: "{tmp}\SentinelNet-service-resolved.xml"; DestDir: "{app}"; DestName: "SentinelNet-service.xml"; Flags: ignoreversion external; Tasks: service
+; The template travels inside Setup and is never installed as-is: it is
+; extracted on demand, the paths are substituted, and the RESULT is what
+; the line above copies.
+Source: "SentinelNet-service.xml"; Flags: dontcopy
 
 [Dirs]
 ; Created if missing, left completely alone when it already exists. It is NOT
@@ -67,6 +86,11 @@ Name: "{commonappdata}\{#DataDirName}"; Flags: uninsneveruninstall
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+; Off by default: registering a service is a machine-wide change, and a
+; desktop install does not need one. Ticking it also makes the Restart
+; button in the panel work, because supervisor() then finds something
+; that would bring the process back.
+Name: "service"; Description: "{cm:SvcTask}"; GroupDescription: "{cm:SvcGroup}"; Flags: unchecked
 
 [Icons]
 ; WorkingDir is the DATA directory, never {app}. Launched from a shortcut the
@@ -85,7 +109,20 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: expandsz; ValueName: "SENTINELNET_DATA_DIR"; ValueData: "{commonappdata}\{#DataDirName}"; Flags: preservestringtype uninsdeletevalue
 
 [Run]
-Filename: "{app}\{#AppExeName}"; WorkingDir: "{commonappdata}\{#DataDirName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+; Install then start, both waited on: a failure here must surface while
+; Setup is still on screen, not later as an app that never comes up.
+Filename: "{app}\SentinelNet-service.exe"; Parameters: "install"; StatusMsg: "{cm:SvcInstalling}"; Flags: runhidden waituntilterminated; Tasks: service
+Filename: "{app}\SentinelNet-service.exe"; Parameters: "start"; StatusMsg: "{cm:SvcStarting}"; Flags: runhidden waituntilterminated; Tasks: service
+; Only offered when NOT running as a service: with the service up the
+; port is already taken, and a second copy would just open the browser.
+Filename: "{app}\{#AppExeName}"; WorkingDir: "{commonappdata}\{#DataDirName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent; Tasks: not service
+
+[UninstallRun]
+; Stop and deregister BEFORE the files go: uninstalling the exe out from
+; under a registered service leaves a broken entry in services.msc that
+; only a reboot clears. RunOnceId keeps each step to a single run.
+Filename: "{app}\SentinelNet-service.exe"; Parameters: "stop"; RunOnceId: "SvcStop"; Flags: runhidden waituntilterminated; Check: ServiceInstalled
+Filename: "{app}\SentinelNet-service.exe"; Parameters: "uninstall"; RunOnceId: "SvcUninstall"; Flags: runhidden waituntilterminated; Check: ServiceInstalled
 
 [Code]
 var
@@ -100,6 +137,39 @@ var
 function DataDir: String;
 begin
   Result := ExpandConstant('{commonappdata}\{#DataDirName}');
+end;
+
+// WinSW reads its configuration from a file next to itself; the one in the
+// repository is a template carrying {app} and {commonappdata}. Writing it here,
+// rather than shipping it literally, is what puts the real paths in it -- and
+// the file has to exist before [Files] copies it, hence PrepareToInstall.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  Xml: AnsiString;
+  Text: String;
+begin
+  Result := '';
+  if not WizardIsTaskSelected('service') then
+    Exit;
+  ExtractTemporaryFile('SentinelNet-service.xml');
+  if not LoadStringFromFile(ExpandConstant('{tmp}\SentinelNet-service.xml'), Xml) then
+  begin
+    Result := 'The service template could not be read.';
+    Exit;
+  end;
+  Text := String(Xml);
+  StringChangeEx(Text, '{app}', ExpandConstant('{app}'), True);
+  StringChangeEx(Text, '{commonappdata}', DataDir, True);
+  if not SaveStringToFile(ExpandConstant('{tmp}\SentinelNet-service-resolved.xml'), Text, False) then
+    Result := 'The service configuration could not be written.';
+end;
+
+// Only touch the service on uninstall if it is actually registered: calling
+// "stop" on a missing service returns an error and would make the uninstaller
+// look broken to someone who never ticked the box.
+function ServiceInstalled: Boolean;
+begin
+  Result := FileExists(ExpandConstant('{app}\SentinelNet-service.exe'));
 end;
 
 // An install is "fresh" when no key has ever been written. secret.key is the

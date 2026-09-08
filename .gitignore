@@ -114,3 +114,7 @@ cont.txt
 Thumbs.db
 *.tmp
 *.bak
+
+# WinSW: scaricato da scripts/build_installer.ps1 con hash verificato,
+# non versionato (binario di terze parti).
+installer/vendor/

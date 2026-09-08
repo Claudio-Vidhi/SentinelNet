@@ -36,7 +36,23 @@ SentinelNet includes or depends on open source software components. This documen
 
 ---
 
-## 2. Core Python Runtime Dependencies
+## 2. Windows Installer
+
+### WinSW (Windows Service Wrapper)
+
+- Version: 2.12.0 (`WinSW.NET461.exe`)
+- License: MIT
+- Source: https://github.com/winsw/winsw
+
+Shipped inside `SentinelNet-Setup-<version>.exe` as `SentinelNet-service.exe`,
+and only installed when the "run as a Windows service" task is selected. It is
+not committed to this repository: `scripts/build_installer.ps1` downloads the
+pinned version at build time and verifies its SHA-256 before packaging.
+
+A PyInstaller one-file executable is not a Windows service (it never reports to
+the Service Control Manager, which would kill it), so a wrapper is required.
+
+## 3. Core Python Runtime Dependencies
 
 | Package | License | Description |
 | --- | --- | --- |
@@ -54,6 +70,6 @@ SentinelNet includes or depends on open source software components. This documen
 
 ---
 
-## 3. Main License
+## 4. Main License
 
 SentinelNet source code is licensed under the [Apache License, Version 2.0](LICENSE).

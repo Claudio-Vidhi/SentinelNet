@@ -1,0 +1,54 @@
+<!--
+  WinSW service definition for SentinelNet.
+
+  WinSW finds this file by name: it must sit beside the wrapper and share its
+  basename (SentinelNet-service.exe / SentinelNet-service.xml). The installer
+  puts both in the application directory.
+
+  {app} and {commonappdata} below are substituted by the installer at install
+  time -- WinSW itself never sees a placeholder.
+-->
+<service>
+  <id>SentinelNet</id>
+  <name>SentinelNet</name>
+  <description>SentinelNet - network management, observability and backup automation.</description>
+
+  <executable>{app}\SentinelNet.exe</executable>
+
+  <!-- The DATA directory, not the program directory. Under Program Files the
+       service account cannot write, and anything resolving a relative path
+       there dies before the server is up. -->
+  <workingdirectory>{commonappdata}</workingdirectory>
+
+  <!-- This is what supervisor() in services/self_update.py looks for. Without
+       it the app believes nothing would bring it back and the Restart button
+       in the panel refuses with 409. -->
+  <env name="SENTINELNET_WINDOWS_SERVICE" value="1"/>
+  <env name="SENTINELNET_DATA_DIR" value="{commonappdata}"/>
+
+  <!-- A service runs in session 0, with no desktop: opening a browser there
+       starts an invisible process nobody can ever close. The panel is reached
+       from the desktop shortcut or a bookmark instead. -->
+  <env name="SENTINELNET_NO_BROWSER" value="true"/>
+
+  <startmode>Automatic</startmode>
+
+  <!-- Restart on failure, but give up rather than loop for ever: something
+       that crashes on every start would otherwise hammer the machine. -->
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="60 sec"/>
+  <onfailure action="none"/>
+  <resetfailure>1 hour</resetfailure>
+
+  <!-- The exe is a PyInstaller one-file bootloader that spawns a CHILD
+       process; killing the parent first would orphan the child and leave the
+       port held. Same lesson as scripts/build.ps1. -->
+  <stoptimeout>30 sec</stoptimeout>
+  <stopparentprocessfirst>false</stopparentprocessfirst>
+
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>4</keepFiles>
+  </log>
+  <logpath>{commonappdata}\logs</logpath>
+</service>
