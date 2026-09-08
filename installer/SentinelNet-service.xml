@@ -32,6 +32,12 @@
   <env name="SENTINELNET_NO_BROWSER" value="true"/>
 
   <startmode>Automatic</startmode>
+  <!-- Ritardato di proposito. Con un indirizzo di ascolto specifico
+       (non 0.0.0.0) legarsi FALLISCE finche' la scheda di rete non ha
+       quell'indirizzo: all'avvio il servizio partiva, non riusciva a
+       legarsi, usciva, e Windows lo mostrava Arrestato pur restando
+       Automatico. Partire a boot concluso evita la corsa. -->
+  <delayedAutoStart/>
 
   <!-- Restart on failure, but give up rather than loop for ever: something
        that crashes on every start would otherwise hammer the machine. -->

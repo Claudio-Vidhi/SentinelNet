@@ -10,6 +10,23 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Il collegamento sul desktop rubava la porta al servizio Windows, che da
+  quel momento non ripartiva piu'.** Erano lo stesso difetto visto da due
+  parti: il collegamento avviava un SECONDO server che si prendeva
+  `<indirizzo>:8000`; il servizio poi si avviava, non riusciva a legarsi,
+  usciva, e Windows lo mostrava **Arrestato** pur restando **Automatico**.
+  Ora, con un servizio SentinelNet registrato, un avvio interattivo non apre
+  mai un secondo server: se il servizio risponde apre soltanto l'interfaccia,
+  se non risponde lo dice e si ferma, invece di prendersi la porta che gli
+  impedirebbe di ripartire. Su Linux, in Docker e su un'installazione desktop
+  senza servizio non cambia nulla.
+- **Il servizio partiva prima che la rete fosse pronta.** Con un indirizzo di
+  ascolto specifico (non `0.0.0.0`) legarsi fallisce finche' la scheda non ha
+  quell'indirizzo: all'avvio il servizio partiva, falliva e si fermava. Ora e'
+  ad avvio **ritardato**, quindi parte a boot concluso.
+
 ## [0.35.2] - 2026-09-08
 
 ### Fixed
