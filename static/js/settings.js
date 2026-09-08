@@ -116,16 +116,40 @@
         const dev = document.getElementById('newSiteDeviceIdentity');
         if (!sel || sel.dataset.loaded) return;
         const identities = await getIdentities();
-        sel.innerHTML = identityOptions(identities, null);
+        // Current values are kept across a repopulate: this runs again when a
+        // new identity is created with the form already open, and resetting
+        // the two selects would silently undo what the user had picked.
+        const keepJump = sel.value;
+        const keepDev = dev ? dev.value : '';
+        sel.innerHTML = identityOptions(identities, keepJump);
         // The device default is optional: without it the devices behind the
-        // bastion fall back to the global admin credentials.
+        // bastion have no credential at all (core/device_credentials.py).
         if (dev) {
             const L = i18n[currentLang];
             dev.innerHTML = `<option value="">${escapeHtml(L.optNoDeviceIdentity)}</option>`
-                + identityOptions(identities, null);
+                + identityOptions(identities, keepDev);
         }
         sel.dataset.loaded = '1';
     }
+
+    // Called after an identity is created, edited or deleted (provisioning.js).
+    // Without it both guards above keep the stale list until a page reload:
+    // identitiesCache never expired, and dataset.loaded made the select
+    // repopulate exactly once per page. Going off to create the identity you
+    // forgot and coming back to the bastion form is the normal way to hit it.
+    window.refreshSiteIdentitySelects = async function () {
+        identitiesCache = null;
+        const sel = document.getElementById('newSiteJumpIdentity');
+        if (!sel) return;
+        delete sel.dataset.loaded;
+        // Repopulate NOW when the bastion fields are on screen: waiting for
+        // the next mode change would show the stale list to someone looking
+        // straight at it.
+        const fields = document.getElementById('jumpFields');
+        if (fields && fields.style.display !== 'none') {
+            await populateJumpIdentitySelect();
+        }
+    };
 
     async function createSite() {
         const name = document.getElementById('newSiteName').value.trim();

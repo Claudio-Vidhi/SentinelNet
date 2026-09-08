@@ -23,8 +23,8 @@ if (-not $SkipExe) {
     & pwsh scripts\build.ps1
     if ($LASTEXITCODE -ne 0) { Write-Error 'build.ps1 fallito'; exit 1 }
 }
-if (-not (Test-Path 'dist\SentinelNet.exe')) {
-    Write-Error 'dist\SentinelNet.exe assente: esegui senza -SkipExe.'; exit 1
+if (-not (Test-Path 'dist\SentinelNet\SentinelNet.exe')) {
+    Write-Error 'dist\SentinelNet\SentinelNet.exe assente: esegui senza -SkipExe.'; exit 1
 }
 
 # --- WinSW (wrapper del servizio Windows) ------------------------------------

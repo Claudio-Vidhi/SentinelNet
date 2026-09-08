@@ -10,6 +10,46 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Gestire i dispositivi era lento perche' ogni azione riavviava
+  l'applicazione.** Dieci azioni della scheda Dispositivi — salva, elimina,
+  rinomina, cambio sede, CRUD tenant, import CSV, aggiungi da scansione, fine
+  triage — chiamavano `appInit()`, cioe' l'avvio completo. Per cambiare il
+  tenant di UN apparato partivano `/api/auth/status`, `/api/auth/me`,
+  `/api/version`, `/api/vendors`, `/api/settings/snmp-defaults` e
+  `/api/local-devices` **due volte** (una in `appInit`, una in `loadHome` che
+  rifaceva la stessa richiesta appena conclusa), piu' il ridisegno di cinque
+  tendine, della tabella dispositivi, della tabella tenant e della Home —
+  anche quando la Home non era la scheda davanti agli occhi. Sei o sette round
+  trip per un'operazione che ne richiede uno.
+  Ora esiste `refreshInventory()`, la sola meta' che dipende
+  dall'inventario, e le azioni chiamano quella: **un round trip**. `appInit()`
+  resta l'avvio (login, boot, wizard). La Home si aggiorna solo se e' la
+  scheda visibile. Effetto collaterale corretto per strada:
+  `startTriageStatusPolling()` stava in fondo ad `appInit()` e ripartiva a
+  ogni azione, accumulando poller sovrapposti.
+- **L'identita' appena creata non compariva nel form della sede finche' non si
+  ricaricava la pagina.** Il caso normale e' proprio quello: si apre la
+  configurazione del bastione, ci si accorge di non avere ancora l'identita'
+  per i dispositivi, si va a crearla e si torna indietro. La lista era in
+  cache in `settings.js` e la tendina si popolava una volta sola per pagina;
+  nessuna delle due scadeva mai. Ora creare, modificare o eliminare
+  un'identita' le aggiorna subito, mantenendo la scelta gia' fatta.
+
+### Changed
+
+- **L'exe parte in meno della meta' del tempo: 8.2s → 3.8s** (misurato sulla
+  stessa macchina; da sorgente sono 3.5s, quindi il costo
+  dell'impacchettamento e' praticamente sparito). Era un bundle `onefile`, che
+  a OGNI avvio decomprime ~34 MB in `%TEMP%\_MEIxxxx` prima ancora che Python
+  parta, con `upx=True` che aggiungeva la decompressione di ogni DLL. Ora e'
+  `onedir` senza UPX: i file stanno gia' su disco. L'installer passa da 33.9
+  MB a 28.3 MB e installa una cartella invece di un singolo file — l'exe resta
+  in `{app}`, quindi collegamenti, servizio Windows e disinstallazione non
+  cambiano. In piu' un exe compresso con UPX e' una firma euristica che gli
+  antivirus segnalano di routine.
+
 ## [0.35.4] - 2026-09-08
 
 ### Fixed
