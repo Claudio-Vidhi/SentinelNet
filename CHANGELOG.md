@@ -10,6 +10,33 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tabelle di Routing mostrava meno rotte di Analisi Configurazione, sullo
+  stesso apparato.** Due difetti che si sommavano:
+  1. le statiche in VRF venivano **scartate** (`if r.get("vrf"): continue`)
+     perche' non c'era una colonna in cui dire di quale VRF fossero.
+     L'analizzatore le leggeva bene, questa vista le buttava. Su un apparato
+     con le VRF erano la maggior parte delle statiche;
+  2. il backup veniva letto **solo** se l'apparato non rispondeva niente.
+     `show ip route` senza `vrf ...` stampa la sola tabella globale: due righe
+     vive bastavano a non guardare piu' il backup, dove stavano tutte le
+     altre.
+  Ora le rotte in VRF hanno la loro colonna, e le due sorgenti si sommano
+  invece di escludersi: le righe vive restano quelle buone, dal backup si
+  aggiunge solo cio' che l'apparato non ha detto (dedup su VRF + rete +
+  next-hop).
+
+### Changed
+
+- **Il grafico delle rotte e' stato rifatto.** "Rotte per apparato e tipo"
+  impilava le rotte per apparato: con un apparato solo era una barra unica che
+  non diceva niente, e con venti diventavano colonne troppo strette. Al suo
+  posto "Composizione delle rotte": due elenchi di barre orizzontali, per tipo
+  e per VRF, ordinati per conteggio. Si leggono a qualsiasi larghezza, non
+  hanno bisogno di legenda e rispondono alle due domande vere. Novanta righe
+  di canvas disegnato a mano in meno.
+
 ## [0.34.1] - 2026-09-08
 
 ### Fixed

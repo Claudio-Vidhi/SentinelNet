@@ -12,6 +12,7 @@
 
     let _rtRows = [];
     let _rtCounts = {};
+    let _rtBreakdown = {};
     let _rtErrors = [];
 
     // I colori dei tipi sono gli stessi in tabella e nel grafico: una barra
@@ -88,7 +89,7 @@
         const f = rtFilters();
         if (!f.device) {
             // Nessun apparato scelto: nessuna sessione aperta.
-            _rtRows = []; _rtCounts = {}; _rtErrors = [];
+            _rtRows = []; _rtCounts = {}; _rtBreakdown = {}; _rtErrors = [];
             renderRtErrors();
             renderRtTable();
             renderRtChart();
@@ -107,10 +108,11 @@
             const data = await res.json();
             _rtRows = data.rows || [];
             _rtCounts = data.counts || {};
+            _rtBreakdown = data.breakdown || {};
             _rtErrors = data.errors || [];
         } catch (e) {
             _rtRows = [];
-            _rtCounts = {};
+            _rtCounts = {}; _rtBreakdown = {};
             _rtErrors = [{ device_ip: '', error: String(e) }];
         }
         renderRtErrors();
@@ -168,7 +170,7 @@
                     ? ` <span class="badge" style="border-color:var(--warning); color:var(--warning);">${
                           escapeHtml(tr('rtFromBackup'))}</span>` : '';
                 html.push(`<tr style="background:var(--surface-3);">
-                    <td colspan="5" style="padding:6px 8px; font-weight:700; font-size:12px;">
+                    <td colspan="6" style="padding:6px 8px; font-weight:700; font-size:12px;">
                       ${escapeHtml(r.device)} &middot; ${rtTypeBadge(r.type)}${fromBackup}
                       <span style="color:var(--text-muted); font-weight:400; font-family:var(--font-code);">
                         ${escapeHtml(r.device_ip || '')}</span>
@@ -179,6 +181,7 @@
             html.push(`<tr style="border-top:1px solid var(--border); font-size:12px;">
                 <td style="padding:6px 8px; font-family:var(--font-code);">${escapeHtml(r.network)}</td>
                 <td style="padding:6px 8px; font-family:var(--font-code);">${hop ? escapeHtml(hop) : dash}</td>
+                <td style="padding:6px 8px; font-family:var(--font-code);">${r.vrf ? escapeHtml(r.vrf) : dash}</td>
                 <td style="padding:6px 8px;">${rtTypeBadge(r.type)}</td>
                 <td style="padding:6px 8px; text-align:right; font-family:var(--font-code);">${
                     r.distance === null || r.distance === undefined ? dash : escapeHtml(String(r.distance))}</td>
@@ -189,85 +192,49 @@
         tbody.innerHTML = html.join('');
     }
 
+    // Barre orizzontali in HTML, non un canvas disegnato a mano.
+    // Il grafico precedente impilava le rotte per apparato: con un apparato
+    // solo era una barra unica che non diceva niente, e con venti diventavano
+    // colonne troppo strette da leggere. Le due domande vere sono "di che tipo
+    // sono le rotte" e "in quale VRF stanno": due elenchi ordinati per
+    // conteggio rispondono meglio, si leggono a qualsiasi larghezza e non
+    // hanno bisogno di una legenda.
+    function rtBars(title, counts, colorFor) {
+        const entries = Object.entries(counts || {})
+            .filter(([, n]) => n > 0)
+            .sort((a, b) => b[1] - a[1]);
+        if (!entries.length) return '';
+        const peak = Math.max(...entries.map(([, n]) => n), 1);
+        const rows = entries.map(([label, n]) => {
+            const pct = Math.max(2, Math.round((n / peak) * 100));
+            const color = colorFor ? colorFor(label) : 'var(--primary)';
+            return `<div style="display:grid; grid-template-columns:minmax(90px,auto) 1fr 42px; align-items:center; gap:8px; margin-bottom:6px;">
+                <span style="font-size:12px; font-family:var(--font-code); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
+                <span style="height:10px; background:var(--surface-3); display:block;">
+                  <span style="display:block; height:100%; width:${pct}%; background:${color};"></span>
+                </span>
+                <span style="font-size:12px; text-align:right; font-family:var(--font-code);">${n}</span>
+            </div>`;
+        }).join('');
+        return `<div>
+            <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">${escapeHtml(title)}</div>
+            ${rows}
+        </div>`;
+    }
+
     function renderRtChart() {
-        const canvas = /** @type {HTMLCanvasElement|null} */ (
-            document.getElementById('rtChartCanvas'));
-        if (!canvas) return;
-        const devices = Object.keys(_rtCounts).sort();
-        const ratio = window.devicePixelRatio || 1;
-        const width = canvas.clientWidth || 600;
-        const height = canvas.clientHeight || 220;
-        canvas.width = width * ratio;
-        canvas.height = height * ratio;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-        ctx.clearRect(0, 0, width, height);
-        if (!devices.length) return;
-
+        const box = document.getElementById('rtBreakdown');
+        if (!box) return;
+        const b = _rtBreakdown || {};
+        if (!b.total) {
+            box.innerHTML = `<div style="font-size:12px; color:var(--text-muted);">${escapeHtml(tr('rtChartEmpty'))}</div>`;
+            return;
+        }
         const css = getComputedStyle(document.body);
-        const textColor = css.getPropertyValue('--text-muted') || '#888';
-        const borderColor = css.getPropertyValue('--border') || '#444';
-        const colorOf = t => (css.getPropertyValue(
+        const typeColor = t => (css.getPropertyValue(
             RT_TYPE_COLORS[t] || '--text-muted') || '#888').trim();
-
-        const totals = devices.map(d => Object.values(_rtCounts[d])
-            .reduce((a, b) => a + b, 0));
-        const peak = Math.max(...totals, 1);
-        const pad = { top: 22, right: 12, bottom: 34, left: 44 };
-        const graphW = width - pad.left - pad.right;
-        const graphH = height - pad.top - pad.bottom;
-        const slot = graphW / devices.length;
-        const barW = Math.min(72, slot * 0.6);
-
-        ctx.font = '10px sans-serif';
-        ctx.lineWidth = 1;
-        [0, 0.5, 1].forEach(factor => {
-            const y = height - pad.bottom - factor * graphH;
-            ctx.strokeStyle = factor === 0 ? borderColor : 'rgba(128,128,128,0.18)';
-            ctx.beginPath();
-            ctx.moveTo(pad.left, y);
-            ctx.lineTo(width - pad.right, y);
-            ctx.stroke();
-            ctx.fillStyle = textColor;
-            ctx.textAlign = 'right';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(String(Math.round(peak * factor)), pad.left - 8, y);
-        });
-
-        devices.forEach((device, i) => {
-            const cx = pad.left + slot * i + slot / 2;
-            let bottom = height - pad.bottom;
-            // Impilate nell'ordine dichiarato e non in quello del dizionario:
-            // altrimenti la stessa flotta cambia disposizione a ogni refresh.
-            RT_TYPE_ORDER.forEach(type => {
-                const n = _rtCounts[device][type] || 0;
-                if (!n) return;
-                const h = (n / peak) * graphH;
-                ctx.fillStyle = colorOf(type);
-                ctx.fillRect(cx - barW / 2, bottom - h, barW, h);
-                bottom -= h;
-            });
-            ctx.fillStyle = textColor;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-            ctx.fillText(device.length > 14 ? device.slice(0, 13) + '…' : device,
-                         cx, height - pad.bottom + 6);
-        });
-
-        // Legenda: senza, le barre impilate sono colori senza nome.
-        let lx = pad.left;
-        const ly = 4;
-        RT_TYPE_ORDER.forEach(type => {
-            if (!devices.some(d => _rtCounts[d][type])) return;
-            ctx.fillStyle = colorOf(type);
-            ctx.fillRect(lx, ly, 9, 9);
-            ctx.fillStyle = textColor;
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'top';
-            ctx.fillText(type, lx + 13, ly);
-            lx += 22 + ctx.measureText(type).width;
-        });
+        box.innerHTML = rtBars(tr('rtChartByType'), b.by_type, typeColor)
+                      + rtBars(tr('rtChartByVrf'), b.by_vrf, null);
     }
 
 

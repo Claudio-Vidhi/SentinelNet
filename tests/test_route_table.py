@@ -335,7 +335,7 @@ end
             out = route_table.collect_for(SWITCH)
         self.assertEqual(out["source"], "backup")
         self.assertEqual({r["network"] for r in out["rows"]},
-                         {"0.0.0.0/0", "10.2.0.0/16"})
+                         {"0.0.0.0/0", "10.2.0.0/16", "10.9.0.0/16"})
         self.assertTrue(all(r["from_backup"] for r in out["rows"]))
         self.assertTrue(all(r["type"] == "static" for r in out["rows"]))
         # L'errore resta: perche' l'apparato non ha risposto conta quanto le
@@ -352,25 +352,47 @@ end
         self.assertEqual(row["gateway"], "")
         self.assertEqual(row["interface"], "GigabitEthernet0/1")
 
-    def test_a_vrf_route_is_left_out(self):
-        # Non c'e' una colonna in cui dire di quale VRF sia: accanto alle
-        # altre si leggerebbe come una rotta della tabella globale.
+    def test_a_vrf_route_is_kept_and_says_which_vrf(self):
+        # Prima venivano scartate perche' non c'era una colonna in cui dire
+        # di quale VRF fossero. Su un apparato con le VRF erano la maggior
+        # parte delle statiche: l'analizzatore le leggeva bene e questa
+        # vista le nascondeva, mostrando due rotte dove ce n'erano sei.
         with self._unreachable(), \
              mock.patch("ai.config_analyzer.analyze_device",
                         return_value=self._analysis(self.IOS_CONFIG)):
             out = route_table.collect_for(SWITCH)
-        self.assertNotIn("10.9.0.0/16", {r["network"] for r in out["rows"]})
+        vrf_rows = [r for r in out["rows"] if r["network"] == "10.9.0.0/16"]
+        self.assertEqual(len(vrf_rows), 1)
+        self.assertTrue(vrf_rows[0]["vrf"], "la riga deve dire di quale VRF e'")
+        globals_ = [r for r in out["rows"] if r["network"] == "10.2.0.0/16"]
+        self.assertEqual(globals_[0]["vrf"], "", "la globale resta senza VRF")
 
-    def test_a_device_that_answers_is_not_read_from_the_backup(self):
-        # Il ripiego e' un ripiego: se l'apparato risponde, il backup non
-        # viene nemmeno aperto.
-        with mock.patch.object(route_table, "_collect_live",
-                               return_value={"device_ip": SWITCH["IP"],
-                                             "rows": [{"network": "10.0.0.0/8"}]}), \
-             mock.patch("ai.config_analyzer.analyze_device") as analyze:
+    def test_a_live_answer_is_completed_by_the_backup_not_replaced(self):
+        # `show ip route` senza `vrf ...` stampa la SOLA tabella globale: due
+        # righe vive bastavano a non aprire piu' il backup, dove stavano tutte
+        # le statiche delle VRF. Ora le due sorgenti si sommano.
+        live = {"device_ip": SWITCH["IP"],
+                "rows": [{"network": "10.0.0.0/8", "vrf": "", "gateway": ""}]}
+        with mock.patch.object(route_table, "_collect_live", return_value=live),              mock.patch("ai.config_analyzer.analyze_device",
+                        return_value=self._analysis(self.IOS_CONFIG)):
             out = route_table.collect_for(SWITCH)
-        analyze.assert_not_called()
-        self.assertEqual(out["rows"][0]["network"], "10.0.0.0/8")
+        nets = {r["network"] for r in out["rows"]}
+        self.assertIn("10.0.0.0/8", nets, "la riga viva non si perde")
+        self.assertIn("10.9.0.0/16", nets, "la statica in VRF si aggiunge")
+
+    def test_the_same_route_from_both_sources_appears_once(self):
+        # Dedup su (vrf, rete, next-hop): altrimenti ogni statica gia' vista
+        # dall'apparato comparirebbe due volte.
+        live = {"device_ip": SWITCH["IP"],
+                "rows": [{"network": "10.2.0.0/16", "vrf": "",
+                          "gateway": "10.1.10.2"}]}
+        with mock.patch.object(route_table, "_collect_live", return_value=live),              mock.patch("ai.config_analyzer.analyze_device",
+                        return_value=self._analysis(self.IOS_CONFIG)):
+            out = route_table.collect_for(SWITCH)
+        same = [r for r in out["rows"] if r["network"] == "10.2.0.0/16"]
+        self.assertEqual(len(same), 1)
+        self.assertFalse(same[0].get("from_backup"),
+                         "vince la riga viva, non quella del backup")
 
     def test_without_a_backup_the_error_stays_the_answer(self):
         with self._unreachable(), \
@@ -568,7 +590,7 @@ class RoutesTabIsWiredEndToEnd(unittest.TestCase):
 
     def test_every_bound_id_exists_in_the_template(self):
         for element_id in ("rtDeviceFilter", "rtTypeFilter", "rtSearch",
-                           "btnRtRefresh", "rtTableBody", "rtChartCanvas",
+                           "btnRtRefresh", "rtTableBody", "rtBreakdown",
                            "rtErrors", "rtCount",
                            # Analisi di percorso: un id agganciato e assente
                            # dal template non solleva niente, lascia solo un
