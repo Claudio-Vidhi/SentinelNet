@@ -197,12 +197,16 @@ begin
   end;
   if not Exec(Exe, 'install', '', SW_HIDE, ewWaitUntilTerminated, Code) or (Code <> 0) then
   begin
+    // NON si indovina la causa. La prima versione di questo messaggio diceva
+    // "servono privilegi", e il problema era un XML malformato: ha mandato
+    // chi lo leggeva a cercare dalla parte sbagliata. Il comando qui sotto
+    // stampa l'errore vero.
     MsgBox('The Windows service could not be registered (exit code '
       + IntToStr(Code) + ').' + #13#10 + #13#10
       + 'SentinelNet is installed and works from the shortcut; only the '
       + 'service, and with it the Restart button in the panel, are missing.'
       + #13#10 + #13#10
-      + 'To retry, run this from an elevated prompt:' + #13#10
+      + 'Run this to see the actual error, then retry:' + #13#10
       + '  "' + Exe + '" install', mbError, MB_OK);
     Exit;
   end;

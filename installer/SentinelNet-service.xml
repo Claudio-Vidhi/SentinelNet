@@ -6,7 +6,7 @@
   puts both in the application directory.
 
   {app} and {commonappdata} below are substituted by the installer at install
-  time -- WinSW itself never sees a placeholder.
+  time; WinSW itself never sees a placeholder.
 -->
 <service>
   <id>SentinelNet</id>
