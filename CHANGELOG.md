@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-09-08
+
 ### Fixed
 
 - **Tabelle di Routing mostrava meno rotte di Analisi Configurazione, sullo
