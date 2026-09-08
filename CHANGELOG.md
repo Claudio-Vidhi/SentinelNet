@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.35.3] - 2026-09-08
+
 ### Fixed
 
 - **Il collegamento sul desktop rubava la porta al servizio Windows, che da
