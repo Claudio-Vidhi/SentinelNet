@@ -109,10 +109,10 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: expandsz; ValueName: "SENTINELNET_DATA_DIR"; ValueData: "{commonappdata}\{#DataDirName}"; Flags: preservestringtype uninsdeletevalue
 
 [Run]
-; Install then start, both waited on: a failure here must surface while
-; Setup is still on screen, not later as an app that never comes up.
-Filename: "{app}\SentinelNet-service.exe"; Parameters: "install"; StatusMsg: "{cm:SvcInstalling}"; Flags: runhidden waituntilterminated; Tasks: service
-Filename: "{app}\SentinelNet-service.exe"; Parameters: "start"; StatusMsg: "{cm:SvcStarting}"; Flags: runhidden waituntilterminated; Tasks: service
+; La registrazione del servizio NON sta qui: [Run] ignora il codice di uscita,
+; quindi un "install" fallito passerebbe in silenzio e l'utente scoprirebbe da
+; solo, piu' tardi, che il servizio non c'e'. La fa InstallService() in [Code],
+; che il codice lo guarda.
 ; Only offered when NOT running as a service: with the service up the
 ; port is already taken, and a second copy would just open the browser.
 Filename: "{app}\{#AppExeName}"; WorkingDir: "{commonappdata}\{#DataDirName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent; Tasks: not service
@@ -167,6 +167,34 @@ end;
 // Only touch the service on uninstall if it is actually registered: calling
 // "stop" on a missing service returns an error and would make the uninstaller
 // look broken to someone who never ticked the box.
+// Registra e avvia il servizio guardando il codice di uscita di WinSW. Un
+// fallimento va detto adesso, con Setup ancora a schermo: e' l'unico momento
+// in cui l'utente sa ancora cosa ha appena fatto.
+procedure InstallService;
+var
+  Exe, LogDir: String;
+  Code: Integer;
+begin
+  Exe := ExpandConstant('{app}\SentinelNet-service.exe');
+  LogDir := DataDir + '\logs';
+  if not Exec(Exe, 'install', '', SW_HIDE, ewWaitUntilTerminated, Code) or (Code <> 0) then
+  begin
+    MsgBox('The Windows service could not be registered (exit code '
+      + IntToStr(Code) + ').' + #13#10 + #13#10
+      + 'SentinelNet is installed and works from the shortcut; only the '
+      + 'service, and with it the Restart button in the panel, are missing.'
+      + #13#10 + #13#10
+      + 'To retry, run this from an elevated prompt:' + #13#10
+      + '  "' + Exe + '" install', mbError, MB_OK);
+    Exit;
+  end;
+  if not Exec(Exe, 'start', '', SW_HIDE, ewWaitUntilTerminated, Code) or (Code <> 0) then
+    MsgBox('The service is registered but did not start (exit code '
+      + IntToStr(Code) + ').' + #13#10 + #13#10
+      + 'Look at the log, then start it from services.msc:' + #13#10
+      + '  ' + LogDir, mbError, MB_OK);
+end;
+
 function ServiceInstalled: Boolean;
 begin
   Result := FileExists(ExpandConstant('{app}\SentinelNet-service.exe'));
@@ -257,6 +285,10 @@ begin
 
   if CurStep <> ssPostInstall then
     Exit;
+
+  if WizardIsTaskSelected('service') then
+    InstallService;
+
   if not WantsImport then
     Exit;
   Src := Trim(ImportPage.Values[0]);

@@ -10,6 +10,21 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Una registrazione del servizio Windows fallita passava in silenzio.** Le
+  righe `[Run]` di Inno ignorano il codice di uscita: se `WinSW install` non
+  riusciva — mancavano i privilegi, il .NET Framework, qualunque cosa — Setup
+  finiva dicendo che era andato tutto bene, e il servizio semplicemente non
+  c'era. Ora la registrazione la fa `InstallService()` in `[Code]`, che il
+  codice lo guarda e in caso di errore lo dice a schermo, con il comando da
+  rilanciare da prompt elevato e il percorso del log.
+- Due test in `test_password_reset.py` leggevano `app_base_url` dalle
+  impostazioni invece di neutralizzarlo: `resolve_base_url` lo consulta prima
+  dell'indirizzo di ascolto, e un altro modulo poteva lasciarlo nella propria
+  `SENTINELNET_DATA_DIR` temporanea. Fallivano un giro ogni tanto, mai in
+  isolamento.
+
 ## [0.33.0] - 2026-09-08
 
 ### Removed
