@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-09-08
+
 ### Added
 
 - **Servizio Windows opzionale nell'installer.** Casella "Esegui SentinelNet
