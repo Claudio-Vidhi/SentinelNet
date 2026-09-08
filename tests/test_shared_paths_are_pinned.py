@@ -87,7 +87,7 @@ class TestSharedPathsArePinned(unittest.TestCase):
 
 
 class TestNoRelativeWritesAtRuntime(unittest.TestCase):
-    """Nothing may create a directory from a bare relative literal.
+    r"""Nothing may create a directory from a bare relative literal.
 
     Installed under C:\Program Files, the exe's CWD is its own folder and a
     normal user cannot write there. app_server.main() did

@@ -10,6 +10,27 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Removed
+
+- **`GET /api/models`, `POST /api/models`, `POST /api/models/delete`**, e con
+  loro `ModelSchema`. Deprecate nella 0.31.0 con rimozione annunciata, nessun
+  chiamante in-tree: il catalogo modelli si aggiorna passando `vendor` e
+  `model` a `POST /api/device-categories/assign`, che chiama `add_model()` da
+  se', ed e' la via che usa la UI. `inventory_manager.add_model` e
+  `delete_model` restano, hanno altri chiamanti. Un client esterno che le
+  chiamasse ancora riceve 404.
+
+### Fixed
+
+- **Cambiato l'indirizzo di ascolto, il browser si apriva comunque su
+  localhost.** Legata a un indirizzo solo, l'applicazione ascolta su QUELLO:
+  127.0.0.1 non risponde affatto, e la pagina che si apriva non poteva
+  connettersi. L'URL segue ora l'indirizzo scelto, con la stessa sostituzione
+  che gia' faceva `_port_in_use` (0.0.0.0 non e' un indirizzo a cui
+  connettersi, quindi diventa 127.0.0.1). Nello stesso punto: `open_browser`
+  usava la costante `PORT` invece della porta effettiva, quindi cambiata la
+  porta dalle impostazioni apriva quella vecchia.
+
 ## [0.32.0] - 2026-09-08
 
 ### Added

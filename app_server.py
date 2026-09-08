@@ -284,9 +284,26 @@ from routers.ai import (  # noqa: F401
     _get_active_ai_profile,
 )
 
-def open_browser(scheme: str = "http"):
+def browse_url(scheme: str, host: str, port: int) -> str:
+    """L'URL a cui il pannello risponde davvero da questa macchina.
+
+    Non e' sempre localhost: legato a un indirizzo solo, il listener sta su
+    QUELLO, e 127.0.0.1 non risponde affatto -- il browser si apriva su una
+    pagina che non poteva connettersi. Stessa sostituzione di _port_in_use:
+    0.0.0.0 non e' un indirizzo a cui connettersi, per quello diventa
+    127.0.0.1.
+    """
+    target = "127.0.0.1" if host in ("0.0.0.0", "") else host
+    return f"{scheme}://{target}:{port}/"
+
+
+def open_browser(scheme: str = "http", host: str = "127.0.0.1",
+                 port: int | None = None):
     time.sleep(1.5)
-    webbrowser.open(f"{scheme}://localhost:{PORT}/")
+    # port esplicita e non la costante PORT: cambiata la porta dalle
+    # impostazioni, effective_port() e PORT non coincidono piu' e il browser si
+    # apriva su quella vecchia.
+    webbrowser.open(browse_url(scheme, host, port or effective_port()))
 
 
 def _port_in_use(host: str, port: int) -> bool:
@@ -396,11 +413,12 @@ def main():
     if _port_in_use(host, port):
         print(f"SentinelNet e' gia' in esecuzione su {host}:{port}: apro l'interfaccia.")
         if not no_browser:
-            webbrowser.open(f"{scheme}://localhost:{port}/")
+            webbrowser.open(browse_url(scheme, host, port))
         return
 
     if not no_browser:
-        threading.Thread(target=open_browser, args=(scheme,), daemon=True).start()
+        threading.Thread(target=open_browser, args=(scheme, host, port),
+                         daemon=True).start()
 
     uvicorn.run(app, host=host, port=port, log_level="info",
                 ssl_certfile=ssl_certfile, ssl_keyfile=ssl_keyfile)
