@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.35.4] - 2026-09-08
+
 ### Fixed
 
 - **L'identita' scelta nella finestra di scansione veniva buttata via, e il
