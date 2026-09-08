@@ -10,6 +10,16 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- **"global" nel riepilogo per VRF era una parola inglese scritta nel
+  backend.** Indica le rotte che non stanno in nessuna VRF — la tabella di
+  routing principale dell'apparato — ma non lo diceva a nessuno, e restava in
+  inglese anche col pannello in italiano perche' non passava da `tr()`.
+  `check_i18n_coverage` non poteva vederla: nasceva dal server. Ora il backend
+  emette una chiave VUOTA (un dato), e l'etichetta la mette la UI tradotta:
+  "Tabella globale" / "Global table".
+
 ## [0.35.0] - 2026-09-08
 
 ### Fixed

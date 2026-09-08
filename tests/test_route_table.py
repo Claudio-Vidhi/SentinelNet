@@ -290,6 +290,30 @@ class GroupCounts(unittest.TestCase):
                          {"fw-edge": {"static": 1, "connected": 1, "bgp": 1}})
 
 
+class Breakdown(unittest.TestCase):
+    """Il riepilogo che disegna le barre."""
+
+    def test_the_global_table_is_an_empty_key_not_a_word(self):
+        # "global" scritto nel backend restava in inglese col pannello in
+        # italiano, e check_i18n_coverage non lo vedeva perche' nasce dal
+        # server. La chiave e' un dato, l'etichetta la mette la UI con tr().
+        rows = [{"type": "connected", "vrf": ""},
+                {"type": "static", "vrf": "VRF-ADMIN"}]
+        by_vrf = route_table.breakdown(rows)["by_vrf"]
+        self.assertIn("", by_vrf)
+        self.assertNotIn("global", by_vrf)
+        self.assertEqual(by_vrf["VRF-ADMIN"], 1)
+
+    def test_totals_add_up(self):
+        rows = [{"type": "static", "vrf": "A"}, {"type": "static", "vrf": ""},
+                {"type": "local", "vrf": ""}]
+        b = route_table.breakdown(rows)
+        self.assertEqual(b["total"], 3)
+        self.assertEqual(sum(b["by_vrf"].values()), 3)
+        self.assertEqual(sum(b["by_type"].values()), 3)
+        self.assertEqual(b["by_type"]["static"], 2)
+
+
 class BackupFallback(unittest.TestCase):
     """Quando l'apparato non risponde, le statiche del backup.
 
