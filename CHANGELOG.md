@@ -10,6 +10,19 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Il servizio Windows si fermava da solo quando la porta era occupata.**
+  Con la porta gia' presa — un'istanza avviata dal collegamento, oppure la
+  vecchia che stava ancora chiudendo durante un aggiornamento — `main()`
+  apriva l'interfaccia di quella in esecuzione e usciva con codice 0. Sotto il
+  servizio quello e' un'uscita PULITA: WinSW la legge come "ha finito", mette
+  il servizio in stato Arrestato, non riprova e non spiega niente. Ora, quando
+  gira come servizio, la porta occupata e' un errore (uscita != 0): interviene
+  `onfailure` e il servizio riprova dopo dieci secondi, quando la porta si e'
+  liberata. Fuori dal servizio la scorciatoia resta invariata: un secondo
+  doppio clic apre l'interfaccia invece di morire sulla porta occupata.
+
 ## [0.35.1] - 2026-09-08
 
 ### Fixed
