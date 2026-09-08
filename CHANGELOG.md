@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.33.1] - 2026-09-08
+
 ### Fixed
 
 - **Una registrazione del servizio Windows fallita passava in silenzio.** Le
