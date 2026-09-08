@@ -11,6 +11,7 @@ than from a list, so it notices the nineteenth-plus one on its own.
 """
 
 import ast
+import xml.etree.ElementTree as ET
 import importlib
 import os
 import pathlib
@@ -134,6 +135,47 @@ class TestNoRelativeWritesAtRuntime(unittest.TestCase):
             self._offenders(), [],
             "these resolve against the CWD, which is read-only when the exe "
             "is installed under Program Files; use data_config.get_path()")
+
+
+class TestServiceXmlIsValid(unittest.TestCase):
+    r"""Il modello del servizio Windows deve essere XML valido.
+
+    E' arrivato in produzione rotto: i commenti contenevano ' -- ' come
+    trattino lungo, che in XML e' vietato dentro un commento. WinSW moriva
+    caricando la configurazione, l'installer riportava "exit code -1" e il
+    messaggio suggeriva un problema di privilegi che non c'era. Nessun test
+    guardava il file perche' non e' codice.
+    """
+
+    XML = ROOT / "installer" / "SentinelNet-service.xml"
+
+    def test_the_template_parses(self):
+        ET.parse(self.XML)
+
+    def test_it_parses_once_the_installer_has_substituted_the_paths(self):
+        # E' questa la forma che WinSW legge davvero. Un percorso Windows
+        # porta backslash e spazi: se rompessero il file, li' non se ne
+        # accorgerebbe nessuno.
+        text = self.XML.read_text(encoding="utf-8")
+        text = text.replace("{app}", r"C:\Program Files\SentinelNet")
+        text = text.replace("{commonappdata}", r"C:\ProgramData\SentinelNet")
+        root = ET.fromstring(text)
+        self.assertEqual(root.tag, "service")
+        self.assertNotIn("{", ET.tostring(root, encoding="unicode"),
+                         "un segnaposto non sostituito e' rimasto nel modello")
+
+    def test_it_carries_what_the_app_needs(self):
+        text = self.XML.read_text(encoding="utf-8")
+        root = ET.fromstring(text.replace("{app}", "A").replace("{commonappdata}", "D"))
+        env = {e.get("name"): e.get("value") for e in root.findall("env")}
+        # Senza questa supervisor() non riconosce il servizio e il pulsante
+        # Riavvia continua a rispondere 409.
+        self.assertEqual(env.get("SENTINELNET_WINDOWS_SERVICE"), "1")
+        # In sessione 0 un browser aperto e' un processo invisibile.
+        self.assertEqual(env.get("SENTINELNET_NO_BROWSER"), "true")
+        self.assertEqual(env.get("SENTINELNET_DATA_DIR"), "D")
+        # La working directory sui DATI, mai su Program Files.
+        self.assertEqual(root.findtext("workingdirectory"), "D")
 
 
 if __name__ == "__main__":

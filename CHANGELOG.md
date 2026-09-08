@@ -10,6 +10,22 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Il servizio Windows non si registrava: "exit code -1".** Non erano i
+  privilegi, come suggeriva il messaggio. `installer/SentinelNet-service.xml`
+  non era XML valido: i commenti usavano ` -- ` come trattino lungo, e in XML
+  due trattini dentro un commento sono vietati. WinSW moriva caricando la
+  configurazione, prima ancora di parlare col gestore servizi. Nessun test
+  guardava quel file perche' non e' codice; ora
+  `tests/test_shared_paths_are_pinned.py` lo valida sia come modello sia
+  nella forma sostituita dall'installer, e verifica che porti
+  `SENTINELNET_WINDOWS_SERVICE`, `SENTINELNET_NO_BROWSER` e la working
+  directory sui dati.
+- Il messaggio d'errore non indovina piu' la causa: diceva "esegui da prompt
+  elevato" mandando a cercare dalla parte sbagliata, e ora mostra il comando
+  che stampa l'errore vero.
+
 ## [0.34.0] - 2026-09-08
 
 ### Added
