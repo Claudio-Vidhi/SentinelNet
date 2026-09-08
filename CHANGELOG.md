@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-09-08
+
 ### Removed
 
 - **`GET /api/models`, `POST /api/models`, `POST /api/models/delete`**, e con
