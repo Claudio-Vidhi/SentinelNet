@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.31.1] - 2026-09-08
+
 ### Fixed
 
 - **L'app installata non partiva: `PermissionError: [WinError 5]` su
