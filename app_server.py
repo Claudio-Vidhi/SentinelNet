@@ -306,6 +306,24 @@ def open_browser(scheme: str = "http", host: str = "127.0.0.1",
     webbrowser.open(browse_url(scheme, host, port or effective_port()))
 
 
+def _windows_service_registered() -> bool:
+    """C'e' un servizio SentinelNet registrato su questa macchina?
+
+    Si legge il registro invece di lanciare `sc query`: nessun processo, e la
+    risposta serve prima ancora di aprire una porta. Assente = installazione
+    desktop, ed e' il caso normale su Linux e nei container.
+    """
+    if sys.platform != "win32":
+        return False
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                            r"SYSTEM\CurrentControlSet\Services\SentinelNet"):
+            return True
+    except OSError:
+        return False
+
+
 def _port_in_use(host: str, port: int) -> bool:
     """True when something already listens on host:port.
 
@@ -410,6 +428,24 @@ def main():
     # Istanza singola: un secondo avvio (doppio clic sul collegamento) apre
     # l'interfaccia di quella gia' in esecuzione invece di morire sulla porta
     # occupata.
+    # Con il servizio installato, la porta e' SUA. Il collegamento lanciava un
+    # secondo server che se la prendeva per primo, e da quel momento il
+    # servizio non riusciva piu' a partire: si avviava, non poteva legarsi
+    # all'indirizzo, usciva, e Windows lo mostrava Arrestato pur restando
+    # Automatico. Due processi per una porta sola non e' una gara che si vince
+    # arbitrando meglio: qui non si scende in campo proprio.
+    if not os.environ.get("SENTINELNET_WINDOWS_SERVICE") and _windows_service_registered():
+        if _port_in_use(host, port):
+            print("SentinelNet e' gestito dal servizio Windows: apro l'interfaccia.")
+            if not no_browser:
+                webbrowser.open(browse_url(scheme, host, port))
+            return
+        print(f"Il servizio Windows SentinelNet e' installato ma non risponde "
+              f"su {host}:{port}. Avvialo da services.msc, o riavvia la "
+              f"macchina: questo collegamento non ne apre un secondo, perche' "
+              f"toglierebbe la porta al servizio.", file=sys.stderr)
+        sys.exit(1)
+
     if _port_in_use(host, port):
         # Sotto il servizio Windows la scorciatoia non vale: uscire con 0
         # perche' la porta e' occupata e' un'uscita PULITA, e WinSW la legge

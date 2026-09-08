@@ -153,3 +153,65 @@ def test_without_the_service_a_busy_port_still_hands_over(monkeypatch):
                         lambda *a, **k: pytest.fail("non deve avviare uvicorn"))
 
     assert app_server.main() is None
+
+
+def _stub_launch(monkeypatch, app_server, port_busy):
+    monkeypatch.setenv("SENTINELNET_NO_BROWSER", "true")
+    monkeypatch.setattr(app_server, "_port_in_use", lambda h, p: port_busy)
+    monkeypatch.setattr(app_server, "resolve_bind_host", lambda: "192.0.2.10")
+    monkeypatch.setattr(app_server, "effective_port", lambda: 8000)
+    monkeypatch.setattr(app_server.data_config, "resolve_tls_config",
+                        lambda: (None, None))
+    monkeypatch.setattr(sys, "argv", ["SentinelNet.exe"])
+    monkeypatch.setattr(app_server.uvicorn, "run",
+                        lambda *a, **k: pytest.fail("non deve legarsi alla porta"))
+
+
+def test_the_shortcut_never_competes_with_the_installed_service(monkeypatch):
+    """Col servizio installato, un avvio interattivo NON apre un secondo server.
+
+    Era questo a rompere tutto: il collegamento si prendeva la porta per
+    primo, il servizio poi non riusciva a legarsi, usciva, e Windows lo
+    mostrava Arrestato pur restando Automatico. Due processi per una porta
+    sola: qui non si scende in campo proprio.
+    """
+    import app_server
+
+    monkeypatch.delenv("SENTINELNET_WINDOWS_SERVICE", raising=False)
+    monkeypatch.setattr(app_server, "_windows_service_registered", lambda: True)
+    _stub_launch(monkeypatch, app_server, port_busy=True)
+    # Il servizio risponde: si apre soltanto l'interfaccia.
+    assert app_server.main() is None
+
+
+def test_with_the_service_registered_but_down_it_says_so_instead_of_binding(monkeypatch):
+    # Prendersi la porta "tanto il servizio e' giu'" e' esattamente cio' che
+    # gli impediva di ripartire dopo.
+    import app_server
+
+    monkeypatch.delenv("SENTINELNET_WINDOWS_SERVICE", raising=False)
+    monkeypatch.setattr(app_server, "_windows_service_registered", lambda: True)
+    _stub_launch(monkeypatch, app_server, port_busy=False)
+    with pytest.raises(SystemExit) as exc:
+        app_server.main()
+    assert exc.value.code != 0
+
+
+def test_without_a_service_the_desktop_app_binds_normally(monkeypatch):
+    """Su Linux, in Docker e su un'installazione desktop nulla cambia."""
+    import app_server
+
+    monkeypatch.delenv("SENTINELNET_WINDOWS_SERVICE", raising=False)
+    monkeypatch.setattr(app_server, "_windows_service_registered", lambda: False)
+    monkeypatch.setenv("SENTINELNET_NO_BROWSER", "true")
+    monkeypatch.setattr(app_server, "_port_in_use", lambda h, p: False)
+    monkeypatch.setattr(app_server, "resolve_bind_host", lambda: "192.0.2.10")
+    monkeypatch.setattr(app_server, "effective_port", lambda: 8000)
+    monkeypatch.setattr(app_server.data_config, "resolve_tls_config",
+                        lambda: (None, None))
+    monkeypatch.setattr(sys, "argv", ["SentinelNet.exe"])
+    started = {}
+    monkeypatch.setattr(app_server.uvicorn, "run",
+                        lambda *a, **k: started.update(k) or None)
+    app_server.main()
+    assert started.get("port") == 8000, "senza servizio deve legarsi davvero"
