@@ -11,6 +11,7 @@ import shutil
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 _TMP_DATA_DIR = tempfile.mkdtemp(prefix="sentinelnet_test_reset_")
 os.environ["SENTINELNET_DATA_DIR"] = _TMP_DATA_DIR
@@ -193,17 +194,27 @@ class TestBaseUrl(unittest.TestCase):
         os.environ.pop("SENTINELNET_BASE_URL", None)
         os.environ["SENTINELNET_HOST"] = "0.0.0.0"
         try:
-            with self.assertRaises(app_settings.BaseUrlError):
-                app_settings.resolve_base_url()
+            # Stessa ragione dell'altro test: senza questo un app_base_url
+            # lasciato da un altro modulo verrebbe restituito e non
+            # solleverebbe niente.
+            with patch.object(app_settings, "_app_adv_setting", return_value=None):
+                with self.assertRaises(app_settings.BaseUrlError):
+                    app_settings.resolve_base_url()
         finally:
             os.environ.pop("SENTINELNET_HOST", None)
 
     def test_configured_host_builds_the_url(self):
+        # app_base_url va neutralizzato ESPLICITAMENTE, non lasciato al caso:
+        # resolve_base_url lo consulta PRIMA dell'indirizzo di ascolto, e un
+        # altro modulo della suite puo' averlo lasciato nell'app_settings.json
+        # della propria SENTINELNET_DATA_DIR temporanea. Cosi' il test misura
+        # il ripiego sull'host, che e' quello che dice di misurare.
         os.environ.pop("SENTINELNET_BASE_URL", None)
         os.environ["SENTINELNET_HOST"] = "192.0.2.10"
         try:
-            self.assertTrue(
-                app_settings.resolve_base_url().startswith("http://192.0.2.10:"))
+            with patch.object(app_settings, "_app_adv_setting", return_value=None):
+                self.assertTrue(
+                    app_settings.resolve_base_url().startswith("http://192.0.2.10:"))
         finally:
             os.environ.pop("SENTINELNET_HOST", None)
 
