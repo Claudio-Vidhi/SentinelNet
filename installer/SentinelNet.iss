@@ -65,10 +65,19 @@ Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 ; overwrite it. uninsneveruninstall keeps it after an uninstall too.
 Name: "{commonappdata}\{#DataDirName}"; Flags: uninsneveruninstall
 
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
+; WorkingDir is the DATA directory, never {app}. Launched from a shortcut the
+; process inherits the exe's folder as CWD, which under Program Files is not
+; writable by a normal user: anything resolving a relative path there dies with
+; WinError 5 before the server is up. Pointing it at the data directory means a
+; relative path lands somewhere writable instead of crashing.
+Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{commonappdata}\{#DataDirName}"
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 Name: "{group}\SentinelNet data folder"; Filename: "{commonappdata}\{#DataDirName}"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{commonappdata}\{#DataDirName}"; Tasks: desktopicon
 
 [Registry]
 ; Machine-wide so the app finds its data however it is launched -- shortcut,
@@ -76,7 +85,7 @@ Name: "{group}\SentinelNet data folder"; Filename: "{commonappdata}\{#DataDirNam
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: expandsz; ValueName: "SENTINELNET_DATA_DIR"; ValueData: "{commonappdata}\{#DataDirName}"; Flags: preservestringtype uninsdeletevalue
 
 [Run]
-Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#AppExeName}"; WorkingDir: "{commonappdata}\{#DataDirName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
 var
