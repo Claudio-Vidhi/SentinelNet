@@ -279,6 +279,32 @@ non compare su un aggiornamento, dove i dati ci sono gia'.
 Windows l'esecuzione successiva come AGGIORNAMENTO invece che come seconda
 installazione. Non va cambiato.
 
+#### Servizio Windows (opzionale)
+
+L'installer offre "Esegui SentinelNet come servizio Windows", **non spuntata**:
+registrare un servizio e' una modifica di macchina e un'installazione desktop
+non ne ha bisogno. Spuntandola l'app parte all'avvio **e** il pulsante
+"Riavvia l'applicazione" del pannello comincia a funzionare, perche'
+`supervisor()` trova finalmente qualcosa che rimetterebbe in piedi il processo.
+Senza servizio quel pulsante risponde 409, ed e' corretto: un riavvio senza
+supervisore sarebbe solo uno spegnimento.
+
+Il wrapper e' WinSW (MIT), scaricato con hash verificato da
+`scripts/build_installer.ps1` e non versionato. Serve perche' un exe
+PyInstaller non e' un servizio: non risponde all'SCM, che lo ucciderebbe con
+"il servizio non ha risposto in tempo".
+
+`installer/SentinelNet-service.xml` e' un modello: `{app}` e `{commonappdata}`
+vengono sostituiti a installazione. La `workingdirectory` e' la cartella DATI,
+mai `{app}`, e il servizio parte con `SENTINELNET_NO_BROWSER=true` — gira in
+sessione 0, dove aprire un browser significa lasciare un processo invisibile
+che nessuno puo' chiudere.
+
+Il servizio gira come LocalSystem. Se l'app viene poi avviata anche a mano
+dall'icona, trova la porta occupata e apre semplicemente l'interfaccia di
+quella gia' in esecuzione (`_port_in_use` in `app_server.main`).
+
+
 
 There is no CI: the build is local, deliberately.
 

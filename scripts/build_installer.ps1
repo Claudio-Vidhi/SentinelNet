@@ -27,6 +27,32 @@ if (-not (Test-Path 'dist\SentinelNet.exe')) {
     Write-Error 'dist\SentinelNet.exe assente: esegui senza -SkipExe.'; exit 1
 }
 
+# --- WinSW (wrapper del servizio Windows) ------------------------------------
+# Un exe PyInstaller non e' un servizio: non risponde mai all'SCM, quindi
+# Windows lo ucciderebbe con "il servizio non ha risposto in tempo". WinSW sta
+# in mezzo. Non e' versionato (binario di terze parti in un repo pubblico): si
+# scarica una volta e si verifica l'hash, perche' un wrapper che gira come
+# LocalSystem e' l'ultimo posto dove accettare un download non controllato.
+$winswVersion = 'v2.12.0'
+$winswSha256  = 'B5066B7BBDFBA1293E5D15CDA3CAAEA88FBEAB35BD5B38C41C913D492AADFC4F'
+$winswPath    = 'installer\vendor\WinSW.exe'
+
+if (-not (Test-Path $winswPath)) {
+    # NET461 e non il build self-contained da 18 MB: .NET Framework 4.6.1 c'e'
+    # gia' su Windows 10 1607 e successivi, e l'installer chiede comunque x64.
+    $url = "https://github.com/winsw/winsw/releases/download/$winswVersion/WinSW.NET461.exe"
+    Write-Host "Scarico WinSW $winswVersion..."
+    New-Item -ItemType Directory -Force -Path (Split-Path $winswPath) | Out-Null
+    Invoke-WebRequest -Uri $url -OutFile $winswPath -UseBasicParsing
+}
+$hash = (Get-FileHash $winswPath -Algorithm SHA256).Hash
+if ($hash -ne $winswSha256) {
+    Remove-Item $winswPath -Force -ErrorAction SilentlyContinue
+    Write-Error "WinSW: hash inatteso ($hash). File rimosso, rilancia la build."
+    exit 1
+}
+Write-Host "WinSW ${winswVersion}: hash verificato"
+
 # --- compilatore Inno --------------------------------------------------------
 # winget lo installa sotto LOCALAPPDATA (per-utente), l'installer manuale sotto
 # Program Files (x86). Si cercano entrambi prima di arrendersi.

@@ -121,6 +121,33 @@ class TestGeneratedCertIsApplied(unittest.TestCase):
         self.assertEqual(saved.get("app", {}).get("ssl_keyfile"),
                          os.path.join("certs", "server.key"))
 
+    def test_other_app_settings_survive(self):
+        """save_app_settings fonde solo al PRIMO livello.
+
+        Passare {"app": {due chiavi}} sostituisce l'intera sezione: la prima
+        stesura di questa rotta cancellava app_base_url, port e le retention
+        scrivendo il certificato. La sezione va riletta e aggiornata.
+        """
+        from routers import settings as settings_router
+        existing = {"app": {"app_base_url": "https://panel.example.com",
+                            "port": 8443, "audit_history_days": 365}}
+        saved = {}
+        with patch.object(settings_router.cert_manager, "generate_self_signed",
+                          return_value={"certfile": "c", "keyfile": "k",
+                                        "days": 825, "not_after": "x"}),              patch.object(settings_router, "get_app_settings", return_value=existing),              patch.object(settings_router, "save_app_settings",
+                          side_effect=lambda d: saved.update(d)),              patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("SENTINELNET_SSL_CERTFILE", None)
+            os.environ.pop("SENTINELNET_SSL_KEYFILE", None)
+            settings_router.generate_self_signed_cert(
+                settings_router.SelfSignedCertSchema(host="192.0.2.10"),
+                current_user={"sub": "admin"})
+
+        app = saved["app"]
+        self.assertEqual(app["app_base_url"], "https://panel.example.com")
+        self.assertEqual(app["port"], 8443)
+        self.assertEqual(app["audit_history_days"], 365)
+        self.assertEqual(app["ssl_certfile"], os.path.join("certs", "server.crt"))
+
     def test_environment_wins_and_settings_are_left_alone(self):
         saved = {}
         from routers import settings as settings_router
