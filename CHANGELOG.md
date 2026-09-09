@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.35.6] - 2026-09-09
+
 ### Security
 
 - **La chiave di cifratura era leggibile da qualsiasi utente locale, sulle
