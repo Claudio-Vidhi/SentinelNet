@@ -69,6 +69,22 @@ happened — `git log --grep="chore(release)"` is the record for those.
   ignorare — in Docker e sotto il servizio e' il modo legittimo di dichiarare
   la cartella — quindi ora un avvio da sorgente che finisce fuori dal
   repository lo dice, e suggerisce il comando per separarla.
+- **Lo smoke test della build usava la cartella dati di produzione.** Stessa
+  trappola, dentro `scripts/build.ps1`: impostava porta, host e listener ma
+  non `SENTINELNET_DATA_DIR`, quindi la build apriva inventario, database e
+  chiavi dell'installazione vera. Oltre a non doverli toccare, li' il test non
+  e' riproducibile: `secret.key` e' protetta con DPAPI **senza**
+  `CRYPTPROTECT_LOCAL_MACHINE`, quindi il blob e' per-utente, e appena a
+  scriverla e' il servizio (LocalSystem) l'exe avviato dall'utente interattivo
+  non la decifra piu' — la build falliva con "CryptUnprotectData ha restituito
+  un errore" per un motivo che con la build non c'entrava nulla. Le build
+  precedenti passavano solo finche' la chiave risultava protetta sotto
+  l'utente che lanciava il test. Ora lo smoke test riceve una cartella
+  usa-e-getta sotto `%TEMP%`, rimossa alla fine.
+  Nello stesso script, PyInstaller veniva invocato come `pyinstaller` nudo:
+  si trovava solo se chi lanciava la build aveva gia' il venv attivo, quindi
+  la build riusciva o falliva a seconda della shell di partenza. Ora passa da
+  `uv run`, come tutto il resto del repository.
 
 ## [0.35.5] - 2026-09-08
 

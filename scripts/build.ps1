@@ -4,7 +4,12 @@ param([switch]$SkipSmoke)
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
 
-pyinstaller --clean --noconfirm SentinelNet.spec
+# `uv run` e non `pyinstaller` nudo: quest'ultimo si trova solo se chi lancia
+# lo script ha il venv gia' attivo, quindi la build passava o falliva a
+# seconda della shell da cui partiva ("The term 'pyinstaller' is not
+# recognized as a name of a cmdlet"). uv risolve l'eseguibile dal progetto,
+# sempre.
+uv run pyinstaller --clean --noconfirm SentinelNet.spec
 if ($LASTEXITCODE -ne 0) { Write-Error "pyinstaller fallito"; exit 1 }
 
 if (-not $SkipSmoke) {
@@ -17,6 +22,16 @@ if (-not $SkipSmoke) {
     # conflitti di porta con un'istanza reale in esecuzione).
     $env:SENTINELNET_HOST = "127.0.0.1"
     $env:SENTINELNET_OBS_ENABLE = "0"
+    # Cartella dati USA-E-GETTA. Senza questa riga si eredita
+    # SENTINELNET_DATA_DIR, che l'installer registra in HKLM: lo smoke test
+    # apriva inventario, database e chiavi dell'installazione VERA. Oltre al
+    # non doverli toccare, li' il test e' irriproducibile — secret.key e'
+    # protetta con DPAPI per-utente, quindi quando a scriverla e' il servizio
+    # (LocalSystem) l'exe avviato dall'utente interattivo non la decifra piu'
+    # e la build fallisce per un motivo che con la build non c'entra nulla.
+    $smokeData = Join-Path ([System.IO.Path]::GetTempPath()) ("sentinelnet-smoke-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $smokeData -Force | Out-Null
+    $env:SENTINELNET_DATA_DIR = $smokeData
     $proc = Start-Process -FilePath "dist\SentinelNet\SentinelNet.exe" -PassThru
     try {
         $ok = $false
@@ -50,6 +65,9 @@ if (-not $SkipSmoke) {
                 Write-Host "Smoke test: chiudo processo residuo PID $($_.Id)"
                 Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
             }
+        # La cartella usa-e-getta va via con il test. Dopo i kill qui sopra,
+        # altrimenti i file dei database sono ancora aperti.
+        Remove-Item $smokeData -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 Write-Host "Build OK: dist\SentinelNet\SentinelNet.exe"
