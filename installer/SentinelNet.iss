@@ -64,6 +64,22 @@ it.SvcTask=Esegui SentinelNet come servizio Windows (parte all'avvio)
 it.SvcInstalling=Registrazione del servizio Windows...
 it.SvcStarting=Avvio del servizio SentinelNet...
 
+en.FwOpening=Opening the firewall for the ingest ports...
+it.FwOpening=Apertura del firewall per le porte di ingest...
+en.FwFailed=Could not create the firewall rules for these ports:%n%1%nSentinelNet will still listen on them, but Windows drops the incoming datagrams and no logs arrive. Create the inbound UDP rules by hand, or re-run Setup as administrator.
+it.FwFailed=Non e' stato possibile creare le regole firewall per queste porte:%n%1%nSentinelNet restera' comunque in ascolto, ma Windows scarta i datagrammi in ingresso e non arriva alcun log. Crea a mano le regole UDP in ingresso, oppure riesegui l'installazione come amministratore.
+
+en.UninstAskData=Do you also want to DELETE SentinelNet's data?%n%n  %1%n%nThat folder holds the device inventory, every configuration backup, the accounts and the encryption key protecting the stored credentials.%n%nChoose No to keep it. Keeping it is what an upgrade needs.
+it.UninstAskData=Vuoi ELIMINARE anche i dati di SentinelNet?%n%n  %1%n%nQuella cartella contiene l'inventario degli apparati, tutti i backup di configurazione, gli account e la chiave di cifratura che protegge le credenziali salvate.%n%nScegli No per conservarla. Conservarla e' cio' che serve a un aggiornamento.
+en.UninstConfirmData=Last confirmation.%n%nDeleting is IRREVERSIBLE: the configuration backups and the encryption key cannot be recovered, and without that key the saved credentials stay unreadable even from a copy.%n%nDelete %1 for good?
+it.UninstConfirmData=Ultima conferma.%n%nL'eliminazione e' IRREVERSIBILE: i backup di configurazione e la chiave di cifratura non sono recuperabili, e senza quella chiave le credenziali salvate restano illeggibili anche da una copia.%n%nEliminare definitivamente %1?
+en.UninstDataKept=SentinelNet has been removed.%n%nYour data has been KEPT:%n  %1%n%nIt holds the inventory, the config backups and the encryption key. Delete that folder by hand if you really want it gone.
+it.UninstDataKept=SentinelNet e' stato rimosso.%n%nI tuoi dati sono stati CONSERVATI:%n  %1%n%nContengono l'inventario, i backup di configurazione e la chiave di cifratura. Elimina la cartella a mano se vuoi davvero liberartene.
+en.UninstDataGone=SentinelNet and its data have been removed.
+it.UninstDataGone=SentinelNet e i suoi dati sono stati rimossi.
+en.UninstDataPartial=SentinelNet has been removed, but some files could not be deleted (something may still be holding them):%n  %1%n%nDelete the folder by hand once no process is using it.
+it.UninstDataPartial=SentinelNet e' stato rimosso, ma alcuni file non sono stati eliminati (qualcosa potrebbe tenerli aperti):%n  %1%n%nElimina la cartella a mano quando nessun processo la sta usando.
+
 [Files]
 ; onedir: PyInstaller emette dist\SentinelNet\ con l'exe piu' _internal\ e le
 ; DLL. L'exe resta comunque in {app}, quindi collegamenti, icona di
@@ -311,6 +327,90 @@ begin
       'Use it anyway?', mbConfirmation, MB_YESNO) = IDYES;
 end;
 
+// Le porte di ingest UDP e le rispettive regole firewall. Senza queste,
+// l'apparato manda i log, il socket risulta in ascolto e Windows scarta i
+// datagrammi in silenzio: dall'interno dell'applicazione e' indistinguibile da
+// un apparato che non sta mandando niente, ed e' il motivo per cui "syslog non
+// funziona" e' la prima cosa che si rompe dopo un'installazione.
+// Le regole valgono per PORTA e non per programma: l'eseguibile e' un
+// bootloader PyInstaller e la porta la tiene comunque un processo solo.
+procedure FirewallPorts(var Names: TArrayOfString; var Ports: TArrayOfInteger);
+begin
+  SetArrayLength(Names, 4);
+  SetArrayLength(Ports, 4);
+  Names[0] := 'syslog';  Ports[0] := 514;
+  Names[1] := 'NetFlow'; Ports[1] := 2055;
+  Names[2] := 'IPFIX';   Ports[2] := 4739;
+  Names[3] := 'sFlow';   Ports[3] := 6343;
+end;
+
+function FirewallRuleName(Name: String; Port: Integer): String;
+begin
+  Result := 'SentinelNet ' + Name + ' (UDP ' + IntToStr(Port) + ')';
+end;
+
+procedure AddFirewallRules;
+var
+  Names: TArrayOfString;
+  Ports: TArrayOfInteger;
+  I, ResultCode: Integer;
+  Failed: String;
+begin
+  FirewallPorts(Names, Ports);
+  for I := 0 to GetArrayLength(Ports) - 1 do
+  begin
+    // delete prima di add: rieseguire il setup non deve lasciare regole
+    // doppie con lo stesso nome.
+    Exec(ExpandConstant('{sys}\netsh.exe'),
+         'advfirewall firewall delete rule name="' + FirewallRuleName(Names[I], Ports[I]) + '"',
+         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    if not Exec(ExpandConstant('{sys}\netsh.exe'),
+         'advfirewall firewall add rule name="' + FirewallRuleName(Names[I], Ports[I]) + '"' +
+         ' dir=in action=allow protocol=UDP localport=' + IntToStr(Ports[I]) +
+         ' profile=any', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      ResultCode := -1;
+    if ResultCode <> 0 then
+      Failed := Failed + '  UDP ' + IntToStr(Ports[I]) + ' (' + Names[I] + ')' + #13#10;
+  end;
+  if Failed <> '' then
+    MsgBox(FmtMessage(CustomMessage('FwFailed'), [Failed]), mbError, MB_OK);
+end;
+
+procedure RemoveFirewallRules;
+var
+  Names: TArrayOfString;
+  Ports: TArrayOfInteger;
+  I, ResultCode: Integer;
+begin
+  FirewallPorts(Names, Ports);
+  for I := 0 to GetArrayLength(Ports) - 1 do
+    Exec(ExpandConstant('{sys}\netsh.exe'),
+         'advfirewall firewall delete rule name="' + FirewallRuleName(Names[I], Ports[I]) + '"',
+         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+// Rompe l'ereditarieta' sulla cartella dati. Sotto ProgramData l'ACL ereditata
+// concede BUILTIN\Users lettura, e li' dentro sta secret.key: la chiave con cui
+// si decifra ogni password di apparato. L'applicazione irrigidisce i singoli
+// file, ma partire da una cartella gia' chiusa significa che un file nuovo non
+// nasce mai leggibile, nemmeno per l'istante fra creazione e icacls.
+// SID noti e non nomi di gruppo: su Windows localizzato "Users" non si chiama
+// "Users".
+// SOLO in modalita' servizio: li' la cartella la usa LocalSystem e basta. In
+// installazione desktop l'applicazione gira come l'utente interattivo, che con
+// un token non elevato NON ha i diritti di Administrators e resterebbe fuori
+// dai propri dati.
+procedure HardenDataDir;
+var
+  ResultCode: Integer;
+begin
+  Exec(ExpandConstant('{sys}\icacls.exe'),
+       '"' + DataDir + '" /inheritance:r' +
+       ' /grant:r *S-1-5-18:(OI)(CI)F' +
+       ' /grant:r *S-1-5-32-544:(OI)(CI)F',
+       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Src: String;
@@ -322,10 +422,16 @@ begin
   if CurStep <> ssPostInstall then
     Exit;
 
+  WizardForm.StatusLabel.Caption := CustomMessage('FwOpening');
+  AddFirewallRules;
+
   // Anche senza il task selezionato: un aggiornamento silenzioso deve
   // rimettere in moto un servizio che esisteva gia'.
   if WizardIsTaskSelected('service') or AlreadyRegistered then
+  begin
+    HardenDataDir;
     InstallService;
+  end;
 
   if not WantsImport then
     Exit;
@@ -349,14 +455,43 @@ end;
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usUninstall then
+  begin
     StopRunningApp;
-  // Say plainly that the data is still there. An operator who wants it gone
-  // has to delete it deliberately: this folder holds the credentials for every
-  // device on the network, and a silent wipe is not a thing an uninstaller
-  // should do on its own.
-  if CurUninstallStep = usPostUninstall then
-    MsgBox('SentinelNet has been removed.' + #13#10 + #13#10 +
-      'Your data has been KEPT:' + #13#10 +
-      '  ' + DataDir + #13#10 + #13#10 +
-      'It holds the inventory, the config backups and the encryption key. Delete that folder by hand if you really want it gone.', mbInformation, MB_OK);
+    RemoveFirewallRules;
+  end;
+
+  if CurUninstallStep <> usPostUninstall then
+    Exit;
+
+  if not DirExists(DataDir) then
+    Exit;
+
+  // Si CHIEDE, non si decide. La cartella contiene le credenziali di ogni
+  // apparato della rete e i backup di configurazione: cancellarla in silenzio
+  // non e' cosa che un disinstallatore possa fare da solo, e conservarla e'
+  // anche cio' che serve a un aggiornamento.
+  // MB_DEFBUTTON2 mette il fuoco su No, e in disinstallazione /VERYSILENT la
+  // MsgBox non compare e vale la risposta predefinita: i dati restano.
+  if MsgBox(FmtMessage(CustomMessage('UninstAskData'), [DataDir]),
+            mbConfirmation, MB_YESNO or MB_DEFBUTTON2) <> IDYES then
+  begin
+    MsgBox(FmtMessage(CustomMessage('UninstDataKept'), [DataDir]), mbInformation, MB_OK);
+    Exit;
+  end;
+
+  // Seconda conferma, e non e' un eccesso di zelo: l'operazione non ha un
+  // annullamento. Persa la chiave, nemmeno una copia dei file serve piu' a
+  // niente, perche' le credenziali salvate restano cifrate per sempre.
+  if MsgBox(FmtMessage(CustomMessage('UninstConfirmData'), [DataDir]),
+            mbConfirmation, MB_YESNO or MB_DEFBUTTON2) <> IDYES then
+  begin
+    MsgBox(FmtMessage(CustomMessage('UninstDataKept'), [DataDir]), mbInformation, MB_OK);
+    Exit;
+  end;
+
+  DelTree(DataDir, True, True, True);
+  if DirExists(DataDir) then
+    MsgBox(FmtMessage(CustomMessage('UninstDataPartial'), [DataDir]), mbError, MB_OK)
+  else
+    MsgBox(CustomMessage('UninstDataGone'), mbInformation, MB_OK);
 end;

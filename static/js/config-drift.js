@@ -10,6 +10,9 @@
     let driftSelectedIp = '';
     let driftVersions = [];
     let driftSubtab = 'history';
+    // Le due versioni scelte sui marcatori della timeline. Restano
+    // allineate alle select: sono due modi di dire la stessa cosa.
+    let driftPicked = [];
 
     async function loadConfigDriftTab() {
         const tenantSel = document.getElementById('driftTenantSelect');
@@ -81,6 +84,9 @@
         if (btn) btn.disabled = true;
         const diff = document.getElementById('driftDiffContainer');
         if (diff) diff.textContent = '';
+        const timeline = document.getElementById('driftTimeline');
+        if (timeline) timeline.innerHTML = '';
+        driftPicked = [];
     }
 
     async function onDriftDeviceSelected(ip) {
@@ -126,10 +132,129 @@
             if (toSel) { toSel.innerHTML = opts; toSel.disabled = false; toSel.selectedIndex = 0; if (driftVersions.length > 1) fromSel.selectedIndex = 1; }
             const btn = document.getElementById('btnDriftShowDiff');
             if (btn) btn.disabled = driftVersions.length < 2;
+            renderDriftTimeline();
         } catch (e) {
             console.error('Config Drift: failed to load versions', e);
             clearDriftVersions();
         }
+    }
+
+    // --- TIMELINE GRAFICA DELLE VERSIONI ---
+
+    // seen_at arriva come "20260908T143012.123456Z", cioe' ISO 8601 nella
+    // forma BASIC. new Date() parsa solo quella ESTESA e su questa restituisce
+    // Invalid Date senza lamentarsi: va espansa prima.
+    function driftStampToDate(stamp) {
+        const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(?:\.(\d{1,6}))?Z?$/.exec(stamp || '');
+        if (!m) return null;
+        const ms = (m[7] || '0').padEnd(3, '0').slice(0, 3);
+        const d = new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}.${ms}Z`);
+        return isNaN(d.getTime()) ? null : d;
+    }
+
+    function driftStampLabel(stamp) {
+        const d = driftStampToDate(stamp);
+        return d ? d.toLocaleString() : stamp;
+    }
+
+    function renderDriftTimeline() {
+        const host = document.getElementById('driftTimeline');
+        if (!host) return;
+        host.innerHTML = '';
+        driftPicked = [];
+        if (driftVersions.length === 0) return;
+
+        // Piu' vecchia a sinistra: driftVersions arriva dal piu' recente.
+        const asc = driftVersions.slice().reverse();
+        const times = asc.map(v => {
+            const d = driftStampToDate(v.seen_at);
+            return d ? d.getTime() : null;
+        });
+        const known = times.filter(t => t !== null);
+        const first = known.length ? Math.min.apply(null, known) : 0;
+        const last = known.length ? Math.max.apply(null, known) : 0;
+        // Una sola versione, o tutte nello stesso istante: dividere per
+        // (last - first) darebbe 0/0 e ogni marcatore finirebbe a sinistra.
+        const span = last - first;
+
+        // L'altezza dice quanto e' cambiata la configurazione: differenza di
+        // dimensione rispetto alla versione precedente. E' un'approssimazione
+        // — una riga sostituita con una di pari lunghezza non si vede — ma non
+        // costringe a leggere ogni diff solo per disegnare la timeline.
+        const deltas = asc.map((v, i) => i === 0 ? 0 : Math.abs((v.size || 0) - (asc[i - 1].size || 0)));
+        const maxDelta = Math.max.apply(null, deltas.concat([1]));
+
+        const track = document.createElement('div');
+        track.className = 'drift-timeline-track';
+
+        asc.forEach((v, i) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'drift-timeline-mark';
+            btn.dataset.version = v.seen_at;
+            const pct = span > 0
+                ? ((times[i] - first) / span) * 100
+                : (asc.length === 1 ? 50 : (i / (asc.length - 1)) * 100);
+            btn.style.left = pct + '%';
+            // 6px minimi: un marcatore alto zero non e' cliccabile, e la prima
+            // versione ha delta 0 per definizione.
+            btn.style.height = (6 + Math.round((deltas[i] / maxDelta) * 30)) + 'px';
+            const when = driftStampLabel(v.seen_at);
+            const diff = i === 0 ? 0 : (v.size || 0) - (asc[i - 1].size || 0);
+            btn.setAttribute('aria-label', i === 0
+                ? tr('driftTimelineMarker', { when: when, size: String(v.size) })
+                : tr('driftTimelineMarkerDelta', {
+                    when: when, size: String(v.size),
+                    delta: (diff >= 0 ? '+' : '') + diff
+                }));
+            btn.title = btn.getAttribute('aria-label');
+            btn.addEventListener('click', () => onDriftMarkerClick(v.seen_at));
+            track.appendChild(btn);
+        });
+
+        const ends = document.createElement('div');
+        ends.className = 'drift-timeline-ends';
+        ends.innerHTML = `<span>${escapeHtml(driftStampLabel(asc[0].seen_at))}</span>`
+            + `<span>${escapeHtml(driftStampLabel(asc[asc.length - 1].seen_at))}</span>`;
+
+        const hint = document.createElement('div');
+        hint.className = 'drift-timeline-hint';
+        hint.textContent = asc.length < 2 ? tr('driftTimelineOnlyOne') : tr('driftTimelineHint');
+
+        host.appendChild(track);
+        host.appendChild(ends);
+        host.appendChild(hint);
+        paintDriftSelection();
+    }
+
+    // Due click = un intervallo. Il terzo ricomincia, invece di pretendere un
+    // pulsante "azzera" che nessuno troverebbe.
+    function onDriftMarkerClick(seenAt) {
+        if (driftPicked.length >= 2) driftPicked = [];
+        if (driftPicked.indexOf(seenAt) === -1) driftPicked.push(seenAt);
+        paintDriftSelection();
+        if (driftPicked.length !== 2) return;
+
+        // Le select restano la fonte per showDriftDiff: la timeline le pilota
+        // invece di duplicarne la logica. driftVersions e' dal piu' recente,
+        // quindi indice piu' ALTO = piu' vecchio = "da".
+        const order = driftVersions.map(v => v.seen_at);
+        const pair = driftPicked.slice().sort((a, b) => order.indexOf(b) - order.indexOf(a));
+        const fromSel = document.getElementById('driftFromVersionSelect');
+        const toSel = document.getElementById('driftToVersionSelect');
+        if (fromSel) fromSel.value = pair[0];
+        if (toSel) toSel.value = pair[1];
+        showDriftDiff();
+    }
+
+    function paintDriftSelection() {
+        const host = document.getElementById('driftTimeline');
+        if (!host) return;
+        host.querySelectorAll('.drift-timeline-mark').forEach(el => {
+            const picked = driftPicked.indexOf(el.dataset.version) !== -1;
+            el.classList.toggle('is-picked', picked);
+            el.setAttribute('aria-pressed', picked ? 'true' : 'false');
+        });
     }
 
     function renderColouredDiff(text) {

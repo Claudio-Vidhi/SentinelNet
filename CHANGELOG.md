@@ -10,6 +10,64 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Security
+
+- **La chiave di cifratura era leggibile da qualsiasi utente locale, sulle
+  installazioni con servizio Windows.** `secret.key`, `jwt_secret.key`,
+  `users.json` e `sites.json` restavano con l'ACL ereditata da
+  `C:\ProgramData`, che concede lettura a `BUILTIN\Users`: chiunque avesse un
+  account sulla macchina poteva leggere la chiave Fernet e decifrare **ogni**
+  password di apparato, identita' e token API salvati.
+  La causa: l'irrigidimento concedeva i permessi a `%USERNAME%`. Sotto il
+  servizio il processo gira come LocalSystem, dove quella variabile contiene
+  l'account MACCHINA (`HOST$`); `icacls` non riesce a mapparlo a un SID ed esce
+  con 1332, facendo fallire l'INTERO comando — `/inheritance:r` compreso. Il
+  log del servizio lo ripeteva a ogni scrittura, ma niente lo leggeva. Da
+  sorgente non si vedeva: li' `%USERNAME%` si risolve e le ACL si
+  restringevano davvero.
+  Ora si concede per SID noti (`S-1-5-18`, `S-1-5-32-544`) piu' il SID
+  dell'account corrente letto con `whoami /user`, che risponde anche per un
+  account macchina — e i SID noti valgono anche su Windows localizzato.
+  **Le installazioni gia' esistenti vengono sanate all'avvio**: `secret.key` si
+  scrive una volta sola e non sarebbe mai ripassata dal codice corretto.
+  Il programma di installazione, in modalita' servizio, rompe anche
+  l'ereditarieta' sulla cartella dati, cosi' un file nuovo non nasce leggibile
+  nemmeno per l'istante fra creazione e irrigidimento.
+
+### Added
+
+- **Timeline grafica delle versioni di configurazione**, nella scheda Config
+  Drift. L'asse orizzontale e' il tempo reale, non l'ordine progressivo: due
+  backup a un minuto di distanza stanno vicini, uno dopo tre settimane sta
+  lontano. L'altezza di ogni marcatore dice quanto e' cambiata la
+  configurazione. Due click scelgono l'intervallo e il diff compare sotto,
+  senza passare dalle tendine. I marcatori sono raggiungibili da tastiera e
+  annunciano data, dimensione e differenza.
+- **Il programma di installazione apre il firewall per le porte di ingest**
+  (UDP 514, 2055, 4739, 6343). Senza quelle regole l'apparato manda i log, il
+  socket risulta in ascolto e Windows scarta i datagrammi in silenzio: dentro
+  l'applicazione e' indistinguibile da un apparato che non sta mandando
+  niente, ed e' la prima cosa che sembra rotta dopo un'installazione. Se
+  `netsh` fallisce ora lo dice, invece di lasciarlo indovinare. Le regole
+  vengono rimosse alla disinstallazione.
+- **La disinstallazione chiede cosa fare dei dati.** Prima li conservava
+  sempre, dicendolo a cose fatte. Ora propone di eliminarli, con doppia
+  conferma e risposta predefinita **No** su entrambe: quella cartella contiene
+  i backup di configurazione e la chiave senza la quale le credenziali salvate
+  restano illeggibili anche da una copia. In disinstallazione silenziosa la
+  domanda non compare e vale il default, quindi i dati restano.
+
+### Fixed
+
+- **Avviare dal sorgente, su una macchina dove e' passato il programma di
+  installazione, usava i dati di produzione.** L'installer registra
+  `SENTINELNET_DATA_DIR` in HKLM, quindi la variabile vale per ogni processo:
+  `uv run python app_server.py` non usava piu' `./data` ma apriva inventario,
+  database e chiavi dell'installazione vera. La variabile non si puo'
+  ignorare — in Docker e sotto il servizio e' il modo legittimo di dichiarare
+  la cartella — quindi ora un avvio da sorgente che finisce fuori dal
+  repository lo dice, e suggerisce il comando per separarla.
+
 ## [0.35.5] - 2026-09-08
 
 ### Fixed

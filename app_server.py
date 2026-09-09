@@ -42,6 +42,14 @@ from core.app_settings import (  # noqa: F401
 
 @asynccontextmanager
 async def lifespan(app: "FastAPI"):
+    # Prima di tutto il resto: ripara le ACL dei file che contengono segreti.
+    # Sotto il servizio Windows l'irrigidimento falliva (icacls 1332, account
+    # macchina non risolvibile) e secret.key restava leggibile da qualunque
+    # utente locale -- cioe' la chiave con cui si decifra ogni password di
+    # apparato. Correggere il comando non basta: quel file si scrive una volta
+    # sola, quindi le installazioni gia' esistenti vanno sanate qui.
+    data_config.enforce_sensitive_permissions()
+
     try:
         db.start_writer()
     except db.SchemaTooNewError as e:
@@ -390,6 +398,35 @@ def reset_admin_cli(username=None) -> int:
     return 0
 
 
+def _warn_if_running_source_against_installed_data():
+    """Avvisa quando un avvio da sorgente sta per usare i dati di produzione.
+
+    L'installer scrive SENTINELNET_DATA_DIR in HKLM, quindi la variabile vale
+    per OGNI processo della macchina: su un PC dove l'installer e' passato,
+    `uv run python app_server.py` non usa ./data ma apre inventario, DB e
+    chiavi dell'installazione vera. Non si puo' ignorare la variabile (in
+    Docker e sotto il servizio e' esattamente il modo in cui la cartella si
+    dichiara), quindi la si dice: un avvio da sorgente che finisce fuori dal
+    repository e' quasi sempre un incidente.
+    """
+    if getattr(sys, "frozen", False):
+        return
+    configured = os.environ.get("SENTINELNET_DATA_DIR")
+    if not configured:
+        return
+    try:
+        if os.path.commonpath([os.path.abspath(configured), os.getcwd()]) == os.getcwd():
+            return          # dentro il repository (o /app in Docker): normale
+    except ValueError:
+        pass                # unita' diverse su Windows: fuori di sicuro
+    print(f"ATTENZIONE: avvio da sorgente, ma SENTINELNET_DATA_DIR punta a "
+          f"{configured}\n"
+          f"            Sono i dati di un'installazione, non ./data. Per "
+          f"lavorare su dati separati:\n"
+          f"            $env:SENTINELNET_DATA_DIR='{os.path.join(os.getcwd(), 'data')}'",
+          file=sys.stderr)
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="SentinelNet Server")
@@ -408,6 +445,8 @@ def main():
 
     if args.reset_admin:
         sys.exit(reset_admin_cli(args.user))
+
+    _warn_if_running_source_against_installed_data()
 
     host = resolve_bind_host()
     port = effective_port()

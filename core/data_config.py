@@ -24,17 +24,55 @@ _SENSITIVE_FILES = {"secret.key", "jwt_secret.key", "users.json",
                     "sites.json", "mac_history.db"}
 
 
+# Well-known SIDs, not account names. Granting by %USERNAME% worked from
+# source and failed under the Windows service: there the process runs as
+# LocalSystem, where USERNAME holds the MACHINE account (e.g. "HOST$"), icacls
+# cannot map it to a SID, and the whole invocation fails with 1332 --
+# /inheritance:r included. The files then kept the ACL inherited from
+# C:\ProgramData, which grants BUILTIN\Users read access, and secret.key is
+# the Fernet key that decrypts every stored device password. A well-known SID
+# also survives a localised Windows, where the group is not called "Users".
+_SID_SYSTEM = "*S-1-5-18"
+_SID_ADMINISTRATORS = "*S-1-5-32-544"
+
+
+def _current_user_sid():
+    """SID of the account running this process, or None.
+
+    ``whoami /user`` answers for ANY account, the machine account of a service
+    included -- precisely the one %USERNAME% could name but icacls could not
+    resolve.
+    """
+    try:
+        res = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"],
+                             capture_output=True, timeout=15)
+        if res.returncode != 0:
+            return None
+        # '"DOMAIN\\user","S-1-5-21-..."' -- the SID is the second CSV field.
+        fields = res.stdout.decode(errors="ignore").strip().split('","')
+        if len(fields) == 2:
+            return fields[1].strip('"\r\n ') or None
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return None
+
+
 def restrict_permissions(path: str):
-    """Restricts the file permissions to the current user only (best effort)."""
+    """Restricts the file to SYSTEM, the administrators and the account
+    running the process (best effort)."""
     try:
         if sys.platform == "win32":
+            grants = [_SID_SYSTEM, _SID_ADMINISTRATORS]
+            own = _current_user_sid()
+            if own and f"*{own}" not in grants:
+                grants.append(f"*{own}")
+            args = ["icacls", path, "/inheritance:r"]
+            for sid in grants:
+                args += ["/grant:r", f"{sid}:F"]
             # icacls non solleva su fallimento: senza guardare il returncode
             # l'irrigidimento delle ACL fallisce in silenzio e il file resta
             # coi permessi ereditati dalla cartella.
-            res = subprocess.run(
-                ["icacls", path, "/inheritance:r",
-                 "/grant:r", f"{os.environ.get('USERNAME', '')}:F"],
-                capture_output=True, timeout=15)
+            res = subprocess.run(args, capture_output=True, timeout=15)
             if res.returncode != 0:
                 logging.warning(
                     "ACL non ristrette su %s: icacls uscito con %s (%s)",
@@ -44,6 +82,21 @@ def restrict_permissions(path: str):
             os.chmod(path, 0o600)
     except (OSError, subprocess.SubprocessError) as e:
         logging.warning("ACL non ristrette su %s: %s", path, e)
+
+
+def enforce_sensitive_permissions():
+    """Re-applies the ACLs to the sensitive files already on disk.
+
+    secret.key and jwt_secret.key are written ONCE, at first start: they never
+    pass through atomic_write again, so an installation whose ACLs failed
+    stays readable for ever -- fixing the command alone repairs nothing that
+    already exists. Called from the lifespan: idempotent, and the only thing
+    that heals an install created before this fix.
+    """
+    for name in sorted(_SENSITIVE_FILES):
+        path = get_path(name)
+        if os.path.exists(path):
+            restrict_permissions(path)
 
 
 def atomic_write(path: str, data, *, indent: int = 2, restrict: bool = False):
