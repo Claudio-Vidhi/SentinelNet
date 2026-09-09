@@ -72,5 +72,93 @@ class TestSecretFilePermissions(unittest.TestCase):
             self.assertTrue(os.path.exists(target))
 
 
+class AclsAreGrantedBySid(unittest.TestCase):
+    """Il comando icacls deve nominare SID noti, non %USERNAME%.
+
+    Sotto il servizio Windows il processo gira come LocalSystem, dove USERNAME
+    vale l'account macchina ("HOST$"): icacls non lo risolve, esce 1332 e
+    fallisce l'INTERO comando, /inheritance:r compreso. I file restavano con
+    l'ACL ereditata da C:\\ProgramData, che concede lettura a BUILTIN\\Users --
+    e uno di quei file e' secret.key, la chiave con cui si decifra ogni
+    password di apparato. Da sorgente non si vedeva: li' USERNAME si risolve.
+    """
+
+    class _Res:
+        returncode = 0
+        stderr = b""
+
+    def _argv_for(self, sid):
+        calls = []
+
+        def fake_run(args, **kw):
+            calls.append(args)
+            return self._Res()
+
+        with patch.object(data_config.sys, "platform", "win32"), \
+             patch.object(data_config, "_current_user_sid", lambda: sid), \
+             patch.object(data_config.subprocess, "run", fake_run):
+            data_config.restrict_permissions(r"C:\fake\secret.key")
+        self.assertEqual(len(calls), 1)
+        return calls[0]
+
+    def test_command_names_well_known_sids_and_no_account_name(self):
+        argv = self._argv_for("S-1-5-18")
+        self.assertIn("/inheritance:r", argv)
+        self.assertIn("*S-1-5-18:F", argv)          # SYSTEM
+        self.assertIn("*S-1-5-32-544:F", argv)      # Administrators
+        # Un account macchina finisce sempre per '$': e' la forma che icacls
+        # non sapeva risolvere.
+        for arg in argv:
+            self.assertNotIn("$", arg, f"nome account non risolvibile: {arg!r}")
+
+    def test_system_is_not_granted_twice_when_running_as_system(self):
+        argv = self._argv_for("S-1-5-18")
+        self.assertEqual(argv.count("*S-1-5-18:F"), 1)
+
+    def test_the_running_account_is_added_by_sid(self):
+        argv = self._argv_for("S-1-5-21-1-2-3-1001")
+        self.assertIn("*S-1-5-21-1-2-3-1001:F", argv)
+
+    @unittest.skipUnless(os.name == "nt", "ACL di Windows")
+    def test_inheritance_is_really_broken_on_disk(self):
+        # Il test end-to-end: la riga (I) segna un permesso EREDITATO, e prima
+        # restava su ogni file perche' icacls non arrivava mai a rimuoverla.
+        import subprocess
+        with tempfile.TemporaryDirectory() as d:
+            target = os.path.join(d, "secret.key")
+            with open(target, "w", encoding="utf-8") as fh:
+                fh.write("x")
+            data_config.restrict_permissions(target)
+            out = subprocess.run(["icacls", target], capture_output=True,
+                                 timeout=15).stdout.decode(errors="ignore")
+        self.assertNotIn("(I)", out, f"permessi ancora ereditati:\n{out}")
+
+
+class ExistingFilesAreRepaired(unittest.TestCase):
+    """secret.key si scrive una volta sola: correggere il comando non ripara
+    da solo un'installazione nata con le ACL sbagliate."""
+
+    def test_every_sensitive_file_on_disk_is_restricted(self):
+        spy = _Spy()
+        with tempfile.TemporaryDirectory() as d:
+            present = sorted(data_config._SENSITIVE_FILES)[:3]
+            for name in present:
+                with open(os.path.join(d, name), "w", encoding="utf-8") as fh:
+                    fh.write("x")
+            with patch.dict(os.environ, {"SENTINELNET_DATA_DIR": d}), \
+                 patch.object(data_config, "restrict_permissions", spy):
+                data_config.enforce_sensitive_permissions()
+            self.assertEqual(sorted(os.path.basename(p) for p in spy.paths),
+                             present)
+
+    def test_missing_files_are_not_touched(self):
+        spy = _Spy()
+        with tempfile.TemporaryDirectory() as d:
+            with patch.dict(os.environ, {"SENTINELNET_DATA_DIR": d}), \
+                 patch.object(data_config, "restrict_permissions", spy):
+                data_config.enforce_sensitive_permissions()
+            self.assertEqual(spy.paths, [])
+
+
 if __name__ == "__main__":
     unittest.main()

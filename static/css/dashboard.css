@@ -2715,3 +2715,51 @@ body:not(.role-admin) .requires-admin { display: none !important; }
 /* L'indirizzo e' il dato che distingue due apparati con nome simile: sta a
    destra, in ink attenuato, e non compete col nome. */
 .picker-item-hint { margin-left: auto; color: var(--text-muted); font-size: 11px; }
+
+/* --- Timeline delle versioni di configurazione (Config Drift) --- */
+/* Marcatori posizionati in percentuale sul tempo: nessuna libreria, e la
+   traccia si adatta alla larghezza del pannello senza ricalcoli. */
+.drift-timeline-track {
+    position: relative;
+    height: 44px;
+    border-bottom: 2px solid var(--border);
+    margin: 0 6px;
+}
+
+.drift-timeline-mark {
+    position: absolute;
+    bottom: 0;
+    width: 10px;
+    margin-left: -5px;          /* centrato sul proprio istante */
+    padding: 0;
+    border: none;
+    border-radius: 2px 2px 0 0;
+    background: var(--primary);
+    opacity: .55;
+    cursor: pointer;
+    transition: opacity .15s, background .15s;
+}
+
+.drift-timeline-mark:hover,
+.drift-timeline-mark:focus-visible {
+    opacity: 1;
+}
+
+.drift-timeline-mark.is-picked {
+    background: var(--warning);
+    opacity: 1;
+}
+
+.drift-timeline-ends {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+.drift-timeline-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 6px;
+}
