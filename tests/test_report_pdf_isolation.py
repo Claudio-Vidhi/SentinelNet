@@ -47,6 +47,11 @@ class TestPrintArgv(unittest.TestCase):
         self.assertTrue(self.argv[-1].startswith("file://"))
         self.assertIn(f"--print-to-pdf={self.out}", self.argv)
 
+    def test_the_pdf_carries_bookmarks(self):
+        # Built from the headings; the CVE report's device sections are h3 for
+        # exactly this reason.
+        self.assertIn("--generate-pdf-document-outline", self.argv)
+
     def test_the_profile_is_disposable(self):
         # A shared profile would carry cookies into the rendered page.
         self.assertIn(f"--user-data-dir={self.profile}", self.argv)

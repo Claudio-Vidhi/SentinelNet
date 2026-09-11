@@ -116,7 +116,10 @@ class TestRouterParity(unittest.TestCase):
                     "/api/routes",
                     # Traffico per policy firewall, aggregato sugli apparati
                     # in scope (vista "Per policy" del tab Traffico).
-                    "/api/firewall-traffic")
+                    "/api/firewall-traffic",
+                    # Correlazione CVE: snapshot per apparato, vista
+                    # prioritizzata e resoconto per tenant.
+                    "/api/cve")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
@@ -259,7 +262,10 @@ class TestFullParity(unittest.TestCase):
                     # Aggiornamento del centrale dal pannello (pull, dipendenze, riavvio).
                     "/api/settings/update",
                     # Certificato self-signed generato dal pannello.
-                    "/api/settings/tls")
+                    "/api/settings/tls",
+                    # Correlazione CVE: snapshot per apparato, vista
+                    # prioritizzata e resoconto per tenant.
+                    "/api/cve")
     # Come NEW_PREFIXES, filtra entrambi i lati: copre anche FortigatePreviewSchema,
     # rimosso insieme al flag di preview /api/settings/fortigate-preview.
     NEW_SCHEMAS = ("DeviceSiteSchema", "GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "ReportPdfSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection", "AgentBackupSchema", "AgentStatusItemSchema", "AgentStatusSchema", "FortigatePreviewSchema",

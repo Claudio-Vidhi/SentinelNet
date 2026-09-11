@@ -10,6 +10,134 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Correlazione CVE: la lista delle vulnerabilita' ha finalmente un ordine, e
+  accanto all'ordine il motivo.** La scheda Threat Intel sapeva chiedere a NVD
+  quali CVE riguardassero un CPE, non quale guardare per primo. Con venti
+  apparati e qualche centinaio di CVE la lista era vera e inutile.
+  Ora ogni CVE porta un punteggio ispezionabile — un click lo apre nei suoi
+  fattori — costruito su tre segnali deterministici: la **confidenza del
+  match** (CPE esatto, CPE senza versione, parole chiave: prima valevano
+  uguale), lo **stato del servizio colpito** letto dalla configurazione gia'
+  archiviata in `.history` (nessuna sonda nuova, nessun traffico verso la
+  produzione) e l'**eta' della lettura di versione** su cui il verdetto poggia.
+  Lo snapshot per apparato e' persistito accanto al backup
+  (`<ip>-cve_snapshot.json`, scrittura atomica), quindi due esecuzioni danno lo
+  stesso risultato e la correlazione funziona anche offline; il poller API
+  esistente lo rinfresca oltre le 24 ore (`cve_max_age_h`).
+  Due nuove sotto-schede: **Priorita'** ("cosa sistemo lunedi' mattina", una
+  riga per CVE per apparato) e **Resoconto** ("come sta messo questo tenant",
+  una riga per tenant, esportabile).
+  Il vincolo che governa tutto: **il motore non dice mai "non impattato"**. I
+  segnali riordinano e non filtrano — nessun CVE sparisce dalla lista — e ogni
+  risposta porta con se' `not_evaluated`, l'elenco di cio' che NON e' stato
+  guardato (percorso di rete, ACL degli switch, VRF, accesso fisico, e lo stato
+  dei servizi quando il vendor non ha un estrattore). Un aggregato e' il posto
+  piu' facile in cui leggere un verdetto negativo: "0 CVE critiche" e "nessun
+  apparato con una versione leggibile" sono lo stesso numero, quindi ogni
+  conteggio viaggia con il suo denominatore di copertura e una riga esplicita
+  quando la copertura e' parziale.
+  Design: `docs/superpowers/specs/2026-09-09-cve-correlation-design.md`.
+  Restano fuori, con un design proprio: raggiungibilita' (F6/F7) e LLM
+  (F10/F11).
+  Il resoconto si consegna: filtro per tenant (il selettore in cima alla
+  pagina lo pilota), export CSV e **export PDF**, quest'ultimo attraverso la
+  stampa headless gia' usata dai report di audit — una seconda via di stampa
+  sarebbe una seconda impaginazione da tenere allineata. Il PDF porta con se'
+  la riga di copertura, il perimetro non valutato e la spiegazione di dove
+  vengono i numeri: un documento che gira senza chi l'ha prodotto deve
+  portarsi dietro il suo metodo.
+  La stessa spiegazione e' un pannello apribile sotto la tabella, colonna per
+  colonna — cosa conta ciascuna, da quale file arriva, e perche' un conteggio
+  di severita' senza il suo denominatore non si legge.
+  **La riga del tenant si apre.** Un click mostra da dove viene il totale,
+  apparato per apparato, con la confidenza del match accanto: e' quasi sempre
+  un apparato solo a dominare la riga, e senza il dettaglio quella e'
+  precisamente la cosa che l'aggregato nasconde. Il taglio e' per apparato e
+  non per vendor di proposito — raggruppare per vendor rimescolerebbe
+  l'apparato anomalo con i suoi simili, cioe' rifarebbe il danno che
+  l'espansione serve a disfare.
+  **Il rapporto dice anche QUALI, ed e' impaginato per apparato.** L'espansione
+  della scheda scende fino al singolo apparato e ne elenca le CVE; il PDF apre
+  una sezione per apparato — nome, IP, versione, confidenza del match, eta'
+  della lettura — e sotto stampa le sue CVE con CVSS, severita', servizio,
+  punteggio e descrizione. Un documento che dice "34 critiche" senza dire quali
+  obbliga chi lo riceve a ricominciare da capo; una tabella piatta lo obbligava
+  a ricomporre da solo quali CVE fossero di quale apparato. Le righe vengono da
+  `/api/cve/priority`, lo stesso ordinamento della scheda Priorita': il PDF e
+  la schermata non possono mettere in cima due CVE diverse. Anche la riga
+  "Non valutato" e' per apparato: lo stato dei servizi si sa per uno e non per
+  l'altro, e un perimetro solo aggregato costringerebbe a scrivere sotto
+  ognuno la voce piu' pessimista di tutti.
+    **La prima pagina del PDF dice qualcosa.** Era una tabella di sette righe
+  seguita da mezza pagina bianca. Ora apre con sei riquadri in cui ogni
+  conteggio sta accanto al suo denominatore (`8 / 8` con versione, non `8`),
+  una barra che mostra la forma della severita' prima dei numeri, le eventuali
+  righe di copertura parziale e di taglio, la data del dato piu' vecchio e
+  l'indice degli apparati che seguono &mdash; che in un rapporto impaginato per
+  apparato dice da quale cominciare e rende evidente quando uno solo domina il
+  totale. Palette da documento stampato: blu d'inchiostro per titoli e filetti,
+  severita' in rosso mattone / ambra / grigio, niente sfondi su cui la
+  leggibilita' dipenda. `print-color-adjust: exact` perche' Chrome headless
+  scarta gli sfondi in stampa, ma la gerarchia regge anche senza.
+  Un resoconto privo del dettaglio per apparato ora lo **dichiara** invece di
+  stampare una pagina bianca che si legge come "nessun apparato da segnalare".
+  **L'eta' della lettura ripiega sulla data del backup anche in LETTURA**, non
+  solo quando lo snapshot viene riscritto: gli snapshot gia' su disco non hanno
+  il campo, e aspettare che ognuno venga riscaricato voleva dire una colonna
+  che diceva "eta' ignota" per un giorno intero.
+  **Le descrizioni non si tagliano piu'.** Nel PDF sono intere: un rapporto si
+  legge una volta e non ha un clic, quindi una descrizione mozzata li' dentro
+  e' persa. Nella scheda il taglio e' diventato solo visivo (due righe via CSS)
+  e un clic sulla cella la apre: il testo completo sta comunque nel DOM, quindi
+  si copia e si trova con la ricerca del browser anche da chiusa — tagliarlo in
+  JavaScript impediva entrambe le cose. La cella si apre anche da tastiera.
+  **E il tetto non si tace piu'.** Uno snapshot tiene 200 CVE; un apparato
+  interrogato senza versione ne ha molti di piu', e finora il suo contributo
+  entrava nel totale come se fosse completo. Ora lo snapshot registra quanti
+  NVD ne conosce davvero, i conteggi tagliati si mostrano marcati `>=` e una
+  riga lo dice a parole — in tabella, nel CSV e nel PDF.
+  **Il PDF si consulta come un documento, e costa meno pagine.** La
+  descrizione di ogni CVE non sta piu' in una colonna larga mezza pagina
+  accanto a cinque valori corti: va sotto i dettagli, a tutta larghezza, e
+  ogni CVE resta intera sulla stessa pagina. Su un resoconto di prova le
+  pagine sono passate da 18 a 14, di piu' con le descrizioni lunghe di NVD.
+  L'indice degli apparati ora porta alla sezione di ciascuno con un clic, e il
+  PDF ha i segnalibri (tenant, indice, apparati, metodo) nel pannello laterale
+  del lettore: la stampa passa `--generate-pdf-document-outline` a Chrome/Edge,
+  che li costruisce dai titoli — ne beneficia anche il report di audit. Niente
+  numeri di pagina nell'indice: Chrome non supporta `target-counter()`, e link
+  piu' segnalibri rispondono alla stessa domanda senza una doppia stampa.
+
+### Fixed
+
+- **Il filtro per sede della scheda Threat Intel non aveva effetto fino a un
+  refresh della pagina.** Scelta "tutte le sedi", poi una sede specifica, e la
+  lista continuava a mostrare tutti gli apparati. Due cause con lo stesso
+  sintomo. La prima: a scansione in corso il guardiano `_threatScanBusy`
+  SCARTAVA la richiesta nuova — cioe' proprio quella che rifletteva la scelta
+  appena fatta — e a schermo restava il risultato del filtro precedente; ora la
+  richiesta viene ricordata e rieseguita quando il giro in corso finisce. La
+  seconda: il selettore TENANT globale seminava il valore nella tendina della
+  scheda senza mai ricaricarla, quindi la tendina diceva una sede e la lista
+  sotto ne mostrava un'altra; ora il pannello davvero a schermo si ricarica.
+  La visibilita' si misura con `offsetParent` e non con `style.display`, che
+  non sa nulla di una scheda non attiva.
+
+- **Il triage falliva sui WLC AireOS raggiungibili benissimo dal terminale
+  dell'applicazione.** netmiko riportava `Pattern not detected: '(<hostname>)
+  >' in output`, che manda a cercare un problema di prompt; il prompt era
+  giusto. netmiko stampa quella frase ogni volta che scade `read_timeout`
+  mentre aspetta la fine di un comando, e il triage passava `read_timeout=30`
+  a tutti i comandi accessori e **niente** al comando di backup — l'uscita di
+  gran lunga piu' grande della sessione, ferma al default di dieci secondi.
+  Su un AireOS, che scrive lentamente, `show run-config commands` non ci sta.
+  Ora il backup ha un tempo suo (`BACKUP_READ_TIMEOUT`, 120s) per ogni vendor,
+  non solo per i WLC: la stessa incoerenza avrebbe colpito qualunque apparato
+  con una configurazione grande. Anche `show sysinfo` del driver AireOS ha ora
+  un tempo proprio.
+
 ## [0.35.6] - 2026-09-09
 
 ### Security

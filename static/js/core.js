@@ -1542,11 +1542,31 @@ function applyGlobalTenant(val) {
             sel.dispatchEvent(new Event('change', { bubbles: true }));
         }
     }
-    // threatGroupSelect is a filter too, but its own change handler STARTS a
-    // scan: dispatching here would launch one every time the operator moves
-    // the global selector. Seed the value, let them press the button.
-    const threatSel = document.getElementById('threatGroupSelect');
-    if (threatSel instanceof HTMLSelectElement && val !== 'all') threatSel.value = val;
+    // I filtri delle tre viste Threat Intel. Il valore va seminato sempre — chi
+    // sceglie una sede in cima alla pagina si aspetta di trovarla anche qui —
+    // ma il ricarico costa (una scansione, o la lettura di ogni snapshot su
+    // disco) e pagarlo per un pannello che nessuno sta guardando e' spreco.
+    // Si ricarica quindi solo il pannello DAVVERO a schermo; gli altri leggono
+    // il valore aggiornato quando vengono aperti.
+    //
+    // Seminare senza ricaricare quello visibile era meta' del bug: la tendina
+    // mostrava la sede nuova e la lista sotto restava quella di prima, cioe'
+    // il filtro sembrava non avere effetto fino a un refresh della pagina.
+    //
+    // La visibilita' si misura con offsetParent e non con style.display: un
+    // pannello con display:block dentro una scheda non attiva e' comunque
+    // invisibile, e sul suo style.display non c'e' scritto niente.
+    for (const [selId, paneId] of [['threatGroupSelect', 'tiViewMatcher'],
+                                   ['cvePrioTenant', 'tiViewPriority'],
+                                   ['cveReportTenant', 'tiViewReport']]) {
+        const sel = document.getElementById(selId);
+        if (!(sel instanceof HTMLSelectElement) || val === 'all') continue;
+        sel.value = val;
+        const pane = document.getElementById(paneId);
+        if (pane instanceof HTMLElement && pane.offsetParent !== null) {
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    }
 
     // FORM FIELDS are not filters: they choose which tenant a config is
     // generated for, or an identity assigned to. Pre-filling an untouched one

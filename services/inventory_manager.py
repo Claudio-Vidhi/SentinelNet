@@ -911,7 +911,13 @@ def update_version_inventory(ip, vendor, version, status="online", model=None,
         entry = data.get(ip, {})
         if not isinstance(entry, dict):
             entry = {}
-        entry.update({"vendor": vendor, "version": version, "status": status})
+        # Quando la lettura e' avvenuta, non solo cosa ha detto: un CVE
+        # calcolato su una versione letta tre settimane fa e uno calcolato su
+        # una lettura di stamattina non si leggono uguali (correlazione CVE,
+        # F2). Stessa convenzione di timestamp del resto dell'archivio.
+        from services.config_drift.history import _now
+        entry.update({"vendor": vendor, "version": version, "status": status,
+                      "seen_at": _now()})
         if model and model != "Non Rilevato":
             entry["model"] = model
         elif "model" not in entry:

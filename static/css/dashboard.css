@@ -2763,3 +2763,20 @@ body:not(.role-admin) .requires-admin { display: none !important; }
     color: var(--text-muted);
     margin-top: 6px;
 }
+
+/* Descrizione di una CVE nel resoconto: il testo COMPLETO sta nel DOM e il
+   taglio e' solo visivo. Cosi' un clic lo apre senza ricaricare nulla, chi
+   copia la riga si porta via la descrizione intera anche da chiusa, e la
+   ricerca del browser la trova. Tagliarla in JS faceva il contrario di tutte
+   e tre le cose. */
+.cve-desc {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.cve-desc.cve-desc-open {
+    display: block;
+}

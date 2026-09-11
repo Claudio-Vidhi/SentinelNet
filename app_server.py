@@ -101,6 +101,7 @@ from routers import topology as _topology_router
 from routers import triage as _triage_router
 from routers import commands as _commands_router
 from routers import backup as _backup_router
+from routers import cve as _cve_router
 from routers import mac as _mac_router
 from routers import arp as _arp_router
 from routers import analyzer as _analyzer_router
@@ -133,6 +134,7 @@ app.include_router(_topology_router.router)
 app.include_router(_triage_router.router)
 app.include_router(_commands_router.router)
 app.include_router(_backup_router.router)
+app.include_router(_cve_router.router)
 app.include_router(_mac_router.router)
 app.include_router(_arp_router.router)
 app.include_router(_analyzer_router.router)
