@@ -176,6 +176,14 @@ def _fortigate_backup_and_triage(device):
             "file": file_path, "source": cfg["source"],
             "model": fg_model, "serial": fg_serial}
 
+# Quanto si aspetta la configurazione completa. Non e' un comando come gli
+# altri: e' l'intero file, su apparati che lo producono lentamente (AireOS lo
+# fa a righe, un WLC con qualche decina di AP ci mette molto piu' dei 10
+# secondi di default di netmiko). Aspettare un minuto in piu' costa un minuto;
+# non aspettarlo costa il backup.
+BACKUP_READ_TIMEOUT = 120
+
+
 def run_backup_and_triage(device):
     ip     = device['IP']
     vendor = device['Vendor'].lower()
@@ -251,7 +259,15 @@ def run_backup_and_triage(device):
             update_version_inventory(ip, vendor, version, "online", model=model,
                                      serial=serial)
 
-            raw_out = net_connect.send_command(backup_cmd)
+            # Il backup e' l'uscita piu' grande della sessione, ed era l'unico
+            # send_command del triage senza read_timeout: prendeva il default
+            # di netmiko, 10 secondi, mentre i comandi accessori qui sotto ne
+            # hanno 30. Su un WLC AireOS con qualche decina di AP
+            # 'show run-config commands' non ci sta dentro, e netmiko riporta
+            # "Pattern not detected: '(<hostname>) >' in output" — che si legge
+            # come un prompt sbagliato ed e' invece solo tempo scaduto.
+            raw_out = net_connect.send_command(backup_cmd,
+                                               read_timeout=BACKUP_READ_TIMEOUT)
             config_out = raw_out if isinstance(raw_out, str) else str(raw_out or "")
 
             config_out += "\n\n=== NEIGHBOR DISCOVERY ===\n"
