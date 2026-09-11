@@ -126,6 +126,7 @@ declare var triggerAgentSelfUpdate: any;
 
 // threat-intel.js
 declare var _threatScanBusy: any;
+declare var _threatScanAgain: any;  // una selezione arrivata mentre la scansione era in corso
 declare var _vwVendor: any;
 
 // Names that already exist as a top-level declaration in some module AND are

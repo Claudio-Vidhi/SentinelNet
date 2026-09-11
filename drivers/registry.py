@@ -87,6 +87,23 @@ def resolve_driver(vendor):
     return spec
 
 
+def driver_name_for(vendor):
+    """Nome del driver per un vendor, senza risolvere la classe.
+
+    Stesso ordine di resolve_driver (registro vendor, poi fallback), ma senza
+    sollevare: chi chiede quale estrattore usare accetta "nessuno".
+    """
+    from services import inventory_manager
+    key = inventory_manager.normalize_vendor(vendor or "")
+    try:
+        entry = inventory_manager.get_all_vendors().get(key)
+        if entry and entry.get("driver"):
+            return entry["driver"]
+    except Exception:
+        pass
+    return VENDOR_DRIVER_DEFAULTS.get(key) or (key if key in DRIVER_REGISTRY else "")
+
+
 # ARP command per driver (default 'show arp' if not listed). Vendor CLI
 # knowledge belongs to the drivers layer (plan item 15); the ARP collector
 # consumes this table instead of owning it.
@@ -244,3 +261,86 @@ def model_matches(model: str, cpe_hw_name: str) -> bool:
     if len(a) < 3 or len(b) < 3:
         return False
     return a.startswith(b) or b.startswith(a)
+
+
+# --- Servizi attivi letti dalla configurazione archiviata (F5) --------------
+#
+# La sfruttabilita' non richiede una nuova sonda: la configurazione completa e'
+# gia' su disco, e dice se SSH, SNMP o il server HTTP sono accesi. E' un dato
+# migliore di uno scan di porte — uno scan vede cio' che e' raggiungibile DA
+# DOVE STA LO SCANNER, la configurazione dice cio' che l'apparato FA — e non
+# aggiunge traffico verso apparati di produzione.
+#
+# La distinzione che conta: una chiave ASSENTE dal dizionario significa
+# IGNOTO, non "spento". Un vendor senza estrattore ritorna {} e il chiamante
+# lascia il CVE dov'e', aggiungendo 'service_state' a not_evaluated. Scrivere
+# False dove non si sa sarebbe un verdetto negativo travestito da dato.
+
+# `^\s*` e non `^`: le sub-command di 'line vty' sono indentate, e una regex
+# ancorata a colonna zero non vede mai il 'transport input ssh' che decide.
+_IOS_SERVICE_RULES = {
+    # (regex che accende, regex che spegne). Nessuna delle due -> ignoto.
+    "http":   (r"^\s*ip http server", r"^\s*no ip http server"),
+    "https":  (r"^\s*ip http secure-server", r"^\s*no ip http secure-server"),
+    "ssh":    (r"^\s*ip ssh |^\s*transport input (?:\S+ )*ssh", None),
+    "telnet": (r"^\s*transport input (?:\S+ )*(?:telnet|all)", None),
+    "snmp":   (r"^\s*snmp-server (?:community|host|user|group)", None),
+}
+
+
+def _services_ios(config_text: str) -> dict:
+    """Cisco IOS / IOS-XE.
+
+    Le righe 'transport input' e 'ip http' compaiono in negativo quando il
+    servizio e' spento, quindi il No dell'apparato si legge davvero. Dove non
+    c'e' forma negativa (ssh, telnet, snmp) l'assenza della riga positiva vale
+    come spento SOLO se la configurazione contiene la sezione che la
+    ospiterebbe: 'transport input' per le due prime, e per snmp il fatto che un
+    IOS senza alcuna riga 'snmp-server' non ha SNMP attivo.
+    """
+    out = {}
+    has_transport = bool(re.search(r"^\s*transport input ", config_text, re.M | re.I))
+    for name, (on_re, off_re) in _IOS_SERVICE_RULES.items():
+        if re.search(on_re, config_text, re.M | re.I):
+            out[name] = True
+        elif off_re and re.search(off_re, config_text, re.M | re.I):
+            out[name] = False
+        elif name == "snmp":
+            out[name] = False
+        elif name in ("ssh", "telnet") and has_transport:
+            out[name] = False
+    return out
+
+
+def _services_fortios(config_text: str) -> dict:
+    """FortiOS: l'unione degli 'set allowaccess' di tutte le interfacce.
+
+    E' l'elenco esplicito dei protocolli di management che il firewall accetta;
+    se non compare nemmeno una riga allowaccess la configurazione non e' quella
+    completa e la risposta e' {} — ignoto, non "tutto spento".
+    """
+    tokens = set()
+    for line in re.findall(r"^\s*set allowaccess (.+)$", config_text, re.M | re.I):
+        tokens.update(line.strip().lower().split())
+    if not tokens:
+        return {}
+    return {name: name in tokens
+            for name in ("ssh", "telnet", "snmp", "http", "https")}
+
+
+_SERVICE_EXTRACTORS = {
+    "cisco_ios": _services_ios,
+    "cisco_9800": _services_ios,
+    "fortinet": _services_fortios,
+}
+
+
+def services_enabled(driver_name: "str | None", config_text: str) -> dict:
+    """Quali servizi di management l'apparato ha accesi, secondo la sua config.
+
+    {} = nessun estrattore per questo vendor, oppure config non riconosciuta.
+    """
+    extractor = _SERVICE_EXTRACTORS.get(driver_name or "")
+    if not extractor or not config_text:
+        return {}
+    return extractor(config_text)

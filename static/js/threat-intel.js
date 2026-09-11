@@ -1,10 +1,16 @@
     // ===== Threat Intel: sub-tab switcher (Matcher interno vs Vendor Watch EUVD) =====
+    const TI_VIEWS = { matcher: 'tiTabMatcher', priority: 'tiTabPriority',
+                       report: 'tiTabReport', watch: 'tiTabWatch' };
+
     function tiSwitchView(v) {
-        document.getElementById('tiViewMatcher').style.display = v === 'matcher' ? 'block' : 'none';
-        document.getElementById('tiViewWatch').style.display = v === 'watch' ? 'block' : 'none';
-        document.getElementById('tiTabMatcher').classList.toggle('active', v === 'matcher');
-        document.getElementById('tiTabWatch').classList.toggle('active', v === 'watch');
+        for (const name in TI_VIEWS) {
+            const pane = document.getElementById('tiView' + name.charAt(0).toUpperCase() + name.slice(1));
+            if (pane) pane.style.display = name === v ? 'block' : 'none';
+            document.getElementById(TI_VIEWS[name])?.classList.toggle('active', name === v);
+        }
         if (v === 'watch' && !window._vwLoaded) { vwInit(); window._vwLoaded = true; }
+        if (v === 'priority') cvePriorityLoad();
+        if (v === 'report') cveReportLoad();
     }
 
     // ===== Vendor Watch (EUVD globale per vendor, indipendente dall'inventario) =====
@@ -323,7 +329,15 @@
     // Costruisce la lista di dispositivi da analizzare; le query EUVD reali partono
     // solo al clic del pulsante "Analizza" su ogni singolo dispositivo.
     async function startThreatScan() {
-        if (window._threatScanBusy) return;
+        if (window._threatScanBusy) {
+            // NON si scarta la richiesta piu' recente. E' quella che riflette
+            // cio' che l'operatore ha appena scelto: buttarla via lascia sullo
+            // schermo il risultato del filtro PRECEDENTE, che si legge come se
+            // il filtro nuovo non avesse effetto. Il giro in corso finisce, poi
+            // si rifa' con la selezione attuale.
+            window._threatScanAgain = true;
+            return;
+        }
         window._threatScanBusy = true;
         try {
         const container = document.getElementById("securityTriageContainer");
@@ -468,6 +482,13 @@
         });
         } finally {
             window._threatScanBusy = false;
+            // Una sola ripetizione, non una per ogni click arrivato nel
+            // frattempo: il flag e' un "c'e' qualcosa di piu' recente", e il
+            // giro che parte adesso legge comunque la selezione attuale.
+            if (window._threatScanAgain) {
+                window._threatScanAgain = false;
+                startThreatScan();
+            }
         }
     }
 
@@ -695,3 +716,754 @@
     document.getElementById('threatSeveritySelect')?.addEventListener('change', applyThreatSeverityFilter);
     document.getElementById('threatIncludeDiscovered')?.addEventListener('change', startThreatScan);
     document.getElementById('vwRefresh')?.addEventListener('click', vwFetch);
+
+    // ===== Correlazione CVE: F9 (priorita') e F9b (resoconto per tenant) =====
+    //
+    // Regola che governa entrambe le viste: nessuna uscita puo' essere letta
+    // come "non impattato". I punteggi riordinano e non nascondono, e il
+    // perimetro di cio' che NON e' stato valutato compare sotto ogni tabella —
+    // un punteggio senza perimetro viene letto come completo, e un ordinamento
+    // letto come completo diventa un verdetto negativo per gli ultimi in lista.
+
+    const cveState = { rows: [], tenants: [], tenant: 'all' };
+
+    // Le voci di not_evaluated arrivano dal backend come chiavi stabili:
+    // tradurle qui evita che il testo mostrato dipenda dalla lingua del server.
+    // Le chiavi si scrivono per esteso e non come 'cveNe_' + k: la
+    // concatenazione le rende invisibili a check_i18n_coverage.py e a
+    // tests/test_i18n_keys.py, che e' come una traduzione mancante arriva a
+    // produzione senza che nessun controllo se ne accorga.
+    function cveNeLabel(key) {
+        if (key === 'reachability') return tr('cveNe_reachability');
+        if (key === 'switch_acls') return tr('cveNe_switch_acls');
+        if (key === 'vrf') return tr('cveNe_vrf');
+        if (key === 'physical_access') return tr('cveNe_physical_access');
+        if (key === 'service_state') return tr('cveNe_service_state');
+        return key;
+    }
+
+    function cveConfLabel(v) {
+        if (v === 'exact') return tr('cveConf_exact');
+        if (v === 'product') return tr('cveConf_product');
+        return tr('cveConf_keyword');
+    }
+
+    function cveSvcLabel(v) {
+        if (v === 'enabled') return tr('cveSvc_enabled');
+        if (v === 'disabled') return tr('cveSvc_disabled');
+        return tr('cveSvc_unknown');
+    }
+
+    function cveNotEvaluatedText(list) {
+        if (!list || !list.length) return '';
+        return tr('cveNotEvaluated', { list: list.map(cveNeLabel).join(', ') });
+    }
+
+    // Eta' della lettura di versione, stessa formula del resto dell'app.
+    // Oltre una settimana passa a var(--warning): e' il punto in cui il dato
+    // smette di descrivere la rete di adesso.
+    function cveVersionAge(seenAt) {
+        const unknown = `<span style="color:var(--warning);">${escapeHtml(tr('cveAgeUnknown'))}</span>`;
+        const m = (seenAt || '').match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/);
+        if (!m) return unknown;
+        const ts = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) / 1000;
+        const h = (Date.now() / 1000 - ts) / 3600;
+        return `<span style="color:${h > 168 ? 'var(--warning)' : 'var(--text-muted)'};">${escapeHtml(relativeAge(h))}</span>`;
+    }
+
+    async function cvePriorityLoad() {
+        const body = document.getElementById('cvePrioBody');
+        const status = document.getElementById('cvePrioStatus');
+        if (!body || !status) return;
+
+        const sel = cveFillTenantSelect('cvePrioTenant');
+
+        status.textContent = tr('cveLoading');
+        body.innerHTML = '';
+        const res = await apiFetch('/api/cve/priority?tenant=' +
+            encodeURIComponent(sel ? sel.value : 'all'));
+        if (!res || !res.ok) { status.textContent = tr('cveLoadError'); return; }
+        const data = await res.json();
+        cveState.rows = data.rows || [];
+
+        const scope = document.getElementById('cvePrioScope');
+        if (scope) scope.textContent = cveNotEvaluatedText(data.not_evaluated);
+
+        if (!cveState.rows.length) {
+            status.textContent = tr('cveNoSnapshot');
+            return;
+        }
+        status.textContent = data.total > cveState.rows.length
+            ? tr('cveTruncated', { n: cveState.rows.length, total: data.total })
+            : tr('cveRowCount', { n: data.total });
+
+        body.innerHTML = cveState.rows.map((r, i) => {
+            const stale = r.stale
+                ? ` <span class="badge" style="background:color-mix(in srgb, var(--warning) 18%, transparent); color:var(--warning);">${escapeHtml(tr('cveStale'))}</span>`
+                : '';
+            const cvss = (r.cvss === null || r.cvss === undefined) ? '&mdash;' : escapeHtml(String(r.cvss));
+            return `<tr data-action="cve-factors" data-idx="${i}" style="cursor:pointer;">
+                <td>${escapeHtml(r.device || '')}<div style="font-size:11px; color:var(--text-muted);">${escapeHtml(r.tenant || '')}</div></td>
+                <td><code>${escapeHtml(r.id || '')}</code>${stale}</td>
+                <td>${cvss}</td>
+                <td>${escapeHtml(cveConfLabel(r.confidence))}</td>
+                <td>${escapeHtml(cveSvcLabel(r.service))}</td>
+                <td>${cveVersionAge(r.version_seen_at)}</td>
+                <td><b>${escapeHtml(String(r.score))}</b></td>
+            </tr>
+            <tr id="cveFactors-${i}" hidden><td colspan="7" style="background:var(--surface-2); font-size:12px; line-height:1.6;"></td></tr>`;
+        }).join('');
+    }
+
+    // Il punteggio non e' un numero magico: si apre nei suoi fattori. Se un
+    // operatore non puo' ricostruire perche' una riga sta sopra un'altra non
+    // si fidera' dell'ordine, e un ordine di cui non ci si fida non viene usato.
+    function cveToggleFactors(idx) {
+        const row = document.getElementById('cveFactors-' + idx);
+        const r = cveState.rows[idx];
+        if (!row || !r || !row.firstElementChild) return;
+        if (!row.hidden) { row.hidden = true; return; }
+        const f = r.factors || {};
+        const svcList = (r.services || []).join(', ') || tr('cveSvcNone');
+        row.firstElementChild.innerHTML =
+            `<div>${escapeHtml(tr('cveFactorFormula', { cvss: f.cvss, cf: f.confidence_factor, sf: f.service_factor, score: r.score }))}</div>`
+            + `<div style="color:var(--text-muted);">${escapeHtml(tr('cveFactorConfidence', { v: cveConfLabel(r.confidence) }))}`
+            + ` &middot; ${escapeHtml(tr('cveFactorService', { v: cveSvcLabel(r.service), list: svcList }))}`
+            + (f.stale ? ` &middot; ${escapeHtml(tr('cveFactorStale'))}` : '')
+            + `</div><div style="margin-top:6px;">${escapeHtml(r.summary || '')}</div>`;
+        row.hidden = false;
+    }
+
+    // Le due viste CVE hanno ognuna il proprio selettore, popolato alla prima
+    // apertura e seminato con il tenant globale: chi sceglie una sede in cima
+    // alla pagina si aspetta di vedere quella sede anche qui.
+    function cveFillTenantSelect(id) {
+        const sel = document.getElementById(id);
+        if (sel && sel.options.length <= 1) {
+            const groups = Object.keys(globalGroups || {});
+            sel.innerHTML = `<option value="all">${tr('uiAllTenants')}</option>` +
+                groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+            sel.value = tenantSelectSeed('', groups, 'all');
+        }
+        return sel;
+    }
+
+    async function cveReportLoad() {
+        const body = document.getElementById('cveReportBody');
+        const cov = document.getElementById('cveReportCoverage');
+        if (!body || !cov) return;
+        const sel = cveFillTenantSelect('cveReportTenant');
+        cveState.tenant = sel ? sel.value : 'all';
+        body.innerHTML = '';
+        cveRenderMethod();
+        const res = await apiFetch('/api/cve/summary?tenant=' +
+            encodeURIComponent(cveState.tenant));
+        if (!res || !res.ok) { cov.textContent = tr('cveLoadError'); return; }
+        cveState.tenants = (await res.json()).tenants || [];
+        cveReportRender();
+    }
+
+    // Da dove vengono i numeri. Lo stesso testo finisce nel PDF: un documento
+    // che gira senza chi l'ha prodotto deve portarsi dietro il suo metodo.
+    const CVE_METHOD_KEYS = ['cveMethDevices', 'cveMethWithVersion', 'cveMethExactCpe',
+                             'cveMethSeverity', 'cveMethCap', 'cveMethOldest',
+                             'cveMethNotEvaluated'];
+
+    function cveMethodParagraphs() {
+        return [tr('cveMethIntro')]
+            .concat(CVE_METHOD_KEYS.map(k => cveMethodText(k)))
+            .concat([tr('cveMethNever')]);
+    }
+
+    // Chiavi per esteso, non tr(k): la concatenazione le rende invisibili ai
+    // controlli sull'i18n.
+    function cveMethodText(key) {
+        if (key === 'cveMethDevices') return tr('cveMethDevices');
+        if (key === 'cveMethWithVersion') return tr('cveMethWithVersion');
+        if (key === 'cveMethExactCpe') return tr('cveMethExactCpe');
+        if (key === 'cveMethSeverity') return tr('cveMethSeverity');
+        if (key === 'cveMethCap') return tr('cveMethCap');
+        if (key === 'cveMethOldest') return tr('cveMethOldest');
+        return tr('cveMethNotEvaluated');
+    }
+
+    function cveRenderMethod() {
+        const box = document.getElementById('cveReportMethodBody');
+        if (!box) return;
+        box.innerHTML = cveMethodParagraphs()
+            .map(t => `<p style="margin:0 0 10px;">${t}</p>`).join('');
+    }
+
+    function cveReportRender() {
+        const body = document.getElementById('cveReportBody');
+        const cov = document.getElementById('cveReportCoverage');
+        const scope = document.getElementById('cveReportScope');
+        if (!body || !cov || !scope) return;
+        const rows = cveState.tenants;
+
+        // Le due frasi che l'aggregato non puo' tacere: quanti apparati non
+        // sono nei conteggi, e quali conteggi sono tagliati dal tetto. Frasi,
+        // non icone e non asterischi: sono esattamente le cose che verranno
+        // fraintese.
+        const notes = [];
+        const partial = rows.filter(t => t.with_version < t.devices);
+        if (partial.length) {
+            const missing = partial.reduce((a, t) => a + (t.devices - t.with_version), 0);
+            const total = partial.reduce((a, t) => a + t.devices, 0);
+            notes.push(tr('cveCoveragePartial', { n: missing, m: total }));
+        }
+        const capped = rows.filter(t => t.truncated);
+        if (capped.length) notes.push(tr('cveTruncatedNote', { n: capped.length }));
+        cov.innerHTML = notes
+            .map(t => `<div style="color:var(--warning); font-weight:700;">${escapeHtml(t)}</div>`)
+            .join('');
+
+        body.innerHTML = rows.map((t, i) => {
+            // Il '>=' dice che il numero e' un pavimento, non una misura.
+            const ge = t.truncated ? '&ge;&nbsp;' : '';
+            const caret = `<i class="fa-solid fa-chevron-right" id="cveCaret-${i}" style="font-size:10px; color:var(--text-muted); margin-right:6px; transition:transform .15s;"></i>`;
+            return `<tr data-action="cve-tenant" data-idx="${i}" style="cursor:pointer;">
+                <td>${caret}${escapeHtml(t.tenant || '')}</td>
+                <td>${t.devices}</td>
+                <td${t.with_version < t.devices ? ' style="color:var(--warning); font-weight:700;"' : ''}>${t.with_version}</td>
+                <td>${t.exact_cpe}</td>
+                <td>${ge}${t.counts.critical}</td>
+                <td>${ge}${t.counts.high}</td>
+                <td>${ge}${t.counts.medium}</td>
+                <td>${cveVersionAge(t.oldest_version_seen_at)}</td>
+            </tr>
+            <tr id="cveTenant-${i}" hidden><td colspan="8" style="background:var(--surface-2); padding:0;"></td></tr>`;
+        }).join('');
+
+        // Il perimetro del verdetto non puo' sparire quando si sale di livello,
+        // altrimenti l'aggregato sembra piu' sicuro del dettaglio da cui nasce.
+        const union = new Set();
+        rows.forEach(t => (t.not_evaluated || []).forEach(k => union.add(k)));
+        scope.textContent = cveNotEvaluatedText([...union].sort());
+    }
+
+    // Un totale di tenant e' quasi sempre un apparato solo che lo domina.
+    // Aprire la riga deve rispondere subito a "chi mi ha fatto questo numero":
+    // per questo il dettaglio e' per APPARATO e non per vendor — raggruppare
+    // per vendor rimescolerebbe l'apparato anomalo con i suoi simili, che e'
+    // proprio cio' che l'aggregato gia' faceva.
+    function cveToggleTenant(idx) {
+        const row = document.getElementById('cveTenant-' + idx);
+        const caret = document.getElementById('cveCaret-' + idx);
+        const t = cveState.tenants[idx];
+        if (!row || !t || !row.firstElementChild) return;
+        if (!row.hidden) {
+            row.hidden = true;
+            if (caret) caret.style.transform = '';
+            return;
+        }
+        const rowsHtml = (t.devices_detail || []).map((d, i) => {
+            const none = d.confidence === 'none';
+            const cap = d.truncated
+                ? ` <span title="${escapeHtml(tr('cveTruncatedHint', { total: d.total_available || '?' }))}" style="color:var(--warning); font-weight:700;">&ge;</span>`
+                : '';
+            const conf = none
+                ? `<span style="color:var(--text-muted);">${escapeHtml(tr('cveConf_none'))}</span>`
+                : escapeHtml(cveConfLabel(d.confidence));
+            const host = d.hostname
+                ? `<div style="font-size:11px; color:var(--text-muted);">${escapeHtml(d.hostname)}</div>`
+                : '';
+            const key = `${idx}-${i}`;
+            const dcaret = `<i class="fa-solid fa-chevron-right" id="cveDevCaret-${key}" style="font-size:9px; color:var(--text-muted); margin-right:6px; transition:transform .15s;"></i>`;
+            return `<tr data-action="cve-device" data-key="${key}" data-ip="${escapeHtml(d.ip || '')}" style="cursor:pointer;">
+                <td>${dcaret}${escapeHtml(d.ip || '')}${host}</td>
+                <td>${escapeHtml((d.vendor || '').toUpperCase())}</td>
+                <td><code style="font-size:11px;">${escapeHtml(d.version || '—')}</code></td>
+                <td>${conf}</td>
+                <td>${cap}${d.cves}</td>
+                <td>${d.counts.critical}</td>
+                <td>${d.counts.high}</td>
+                <td>${d.counts.medium}</td>
+                <td>${cveVersionAge(d.version_seen_at)}</td>
+            </tr>
+            <tr id="cveDev-${key}" hidden><td colspan="9" style="padding:0;"></td></tr>`;
+        }).join('');
+
+        row.firstElementChild.innerHTML = `
+            <div style="padding:12px 14px;">
+              <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">${escapeHtml(tr('cveBreakdownHint'))}</div>
+              <div class="table-wrap"><table style="font-size:12px;">
+                <thead><tr>
+                  <th>${escapeHtml(tr('cveThDevice'))}</th>
+                  <th>Vendor</th>
+                  <th>${escapeHtml(tr('cveThVersion'))}</th>
+                  <th>${escapeHtml(tr('cveThConfidence'))}</th>
+                  <th>${escapeHtml(tr('cveThCves'))}</th>
+                  <th>${escapeHtml(tr('cveThCritical'))}</th>
+                  <th>${escapeHtml(tr('cveThHigh'))}</th>
+                  <th>${escapeHtml(tr('cveThMedium'))}</th>
+                  <th>${escapeHtml(tr('cveThVersionAge'))}</th>
+                </tr></thead><tbody>${rowsHtml}</tbody></table></div>
+            </div>`;
+        row.hidden = false;
+        if (caret) caret.style.transform = 'rotate(90deg)';
+    }
+
+
+    // Terzo livello: quali CVE, non quante. Il conteggio dice che c'e' lavoro,
+    // l'elenco dice quale. Si legge da /api/cve/{ip}, che gia' esiste e gia'
+    // restituisce le righe con punteggio e fattori: una rotta nuova sarebbe un
+    // secondo ordinamento da tenere allineato a quello della scheda Priorita'.
+    const CVE_DEVICE_ROWS = 25;
+
+    async function cveToggleDevice(key, ip) {
+        const row = document.getElementById('cveDev-' + key);
+        const caret = document.getElementById('cveDevCaret-' + key);
+        if (!row || !row.firstElementChild) return;
+        if (!row.hidden) {
+            row.hidden = true;
+            if (caret) caret.style.transform = '';
+            return;
+        }
+        row.hidden = false;
+        if (caret) caret.style.transform = 'rotate(90deg)';
+        row.firstElementChild.innerHTML =
+            `<div style="padding:10px 14px; color:var(--text-muted);">${escapeHtml(tr('cveLoading'))}</div>`;
+
+        const res = await apiFetch('/api/cve/' + encodeURIComponent(ip));
+        if (!res || !res.ok) {
+            row.firstElementChild.innerHTML =
+                `<div style="padding:10px 14px; color:var(--danger);">${escapeHtml(tr('cveLoadError'))}</div>`;
+            return;
+        }
+        const data = await res.json();
+        const all = data.rows || [];
+        const shown = all.slice(0, CVE_DEVICE_ROWS);
+        const more = all.length - shown.length;
+
+        const body = shown.map(r => {
+            const stale = r.stale
+                ? ` <span style="color:var(--warning); font-size:10px;">${escapeHtml(tr('cveStale'))}</span>`
+                : '';
+            const cvss = (r.cvss === null || r.cvss === undefined) ? '&mdash;' : escapeHtml(String(r.cvss));
+            return `<tr>
+                <td><code style="font-size:11px;">${escapeHtml(r.id || '')}</code>${stale}</td>
+                <td>${cvss}</td>
+                <td>${escapeHtml(r.severity || '')}</td>
+                <td>${escapeHtml(cveSvcLabel(r.service))}</td>
+                <td><b>${escapeHtml(String(r.score))}</b></td>
+                <td class="cve-desc" data-action="cve-desc" role="button" tabindex="0"
+                    title="${escapeHtml(tr('cveDescToggle'))}"
+                    style="max-width:52ch; color:var(--text-muted);">${escapeHtml(r.summary || '')}</td>
+            </tr>`;
+        }).join('');
+
+        const moreLine = more > 0
+            ? `<div style="font-size:12px; color:var(--text-muted); margin-top:6px;">${escapeHtml(tr('cveMoreRows', { n: more }))}</div>`
+            : '';
+
+        row.firstElementChild.innerHTML = `
+            <div style="padding:10px 14px 14px 28px;">
+              <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">${escapeHtml(tr('cveDevCveHint'))}</div>
+              <div class="table-wrap"><table style="font-size:12px;">
+                <thead><tr>
+                  <th>CVE</th><th>CVSS</th><th>${escapeHtml(tr('cveThSeverity'))}</th>
+                  <th>${escapeHtml(tr('cveThService'))}</th><th>${escapeHtml(tr('cveThScore'))}</th>
+                  <th>${escapeHtml(tr('cveThSummary'))}</th>
+                </tr></thead><tbody>${body}</tbody></table></div>
+              ${moreLine}
+            </div>`;
+    }
+
+    // Export lato client come le altre tabelle. La riga di copertura entra nel
+    // file: senza, l'export afferma qualcosa che il prodotto non sa.
+    function cveReportExport() {
+        if (!cveState.tenants.length) return;
+        const cols = ['tenant', 'devices', 'with_version', 'exact_cpe',
+                      'critical', 'high', 'medium', 'oldest_version_seen_at',
+                      'truncated', 'not_evaluated'];
+        const lines = [cols.join(',')];
+        cveState.tenants.forEach(t => lines.push([
+            csvCell(t.tenant), csvCell(t.devices), csvCell(t.with_version),
+            csvCell(t.exact_cpe), csvCell(t.counts.critical), csvCell(t.counts.high),
+            csvCell(t.counts.medium), csvCell(t.oldest_version_seen_at),
+            csvCell(t.truncated ? 'yes' : 'no'),
+            csvCell((t.not_evaluated || []).join(' '))
+        ].join(',')));
+        const partial = cveState.tenants.filter(t => t.with_version < t.devices);
+        if (partial.length) {
+            const missing = partial.reduce((a, t) => a + (t.devices - t.with_version), 0);
+            const total = partial.reduce((a, t) => a + t.devices, 0);
+            lines.push('');
+            lines.push(csvCell(tr('cveCoveragePartial', { n: missing, m: total })));
+        }
+        // BOM: senza, Excel legge gli accenti come mojibake.
+        const blob = new Blob(['﻿' + lines.join('\r\n')],
+                              { type: 'text/csv;charset=utf-8;' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'sentinelnet-cve-tenant-' + new Date().toISOString().slice(0, 10) + '.csv';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    document.getElementById('tiTabPriority')?.addEventListener('click', () => tiSwitchView('priority'));
+    document.getElementById('tiTabReport')?.addEventListener('click', () => tiSwitchView('report'));
+    document.getElementById('cvePrioTenant')?.addEventListener('change', cvePriorityLoad);
+    document.getElementById('cvePrioRefresh')?.addEventListener('click', cvePriorityLoad);
+    document.getElementById('cveReportRefresh')?.addEventListener('click', cveReportLoad);
+    document.getElementById('cveReportExport')?.addEventListener('click', cveReportExport);
+    document.getElementById('cvePrioBody')?.addEventListener('click', (e) => {
+        const row = e.target.closest('[data-action="cve-factors"]');
+        if (row) cveToggleFactors(Number(row.dataset.idx));
+    });
+
+    // ===== Resoconto CVE in PDF =====
+    //
+    // Si riusa la stampa headless gia' in casa (`/api/netsec-audit/report/pdf`,
+    // che riceve HTML e lo stampa con il browser di sistema). Una seconda via
+    // di stampa vorrebbe dire due impaginazioni da mantenere allineate, e il
+    // giorno che divergono e' il PDF consegnato al cliente a sbagliare.
+    //
+    // Il documento e' autoconsistente: il printer risolve `MAP * ~NOTFOUND`,
+    // quindi ogni foglio di stile o font esterno sarebbe silenziosamente
+    // assente. Tutto lo stile sta qui dentro.
+    const CVE_PDF_CSS = `
+        /* Chrome headless scarta gli sfondi in stampa se non glielo si vieta.
+           Il documento regge comunque senza — filetti e peso del carattere
+           portano la gerarchia, il colore la rinforza e basta. */
+        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+               color:#1a1d23; margin:26mm 16mm 18mm; font-size:10.5pt; line-height:1.5; }
+
+        /* Testata: un filetto spesso nel blu d'inchiostro, non un banner. */
+        .cover { border-top:3px solid #1f4e79; padding-top:12px; margin-bottom:24px; }
+        .kicker { font-size:8pt; letter-spacing:.16em; text-transform:uppercase;
+                  color:#1f4e79; font-weight:700; margin:0 0 6px; }
+        h1 { font-size:21pt; margin:0 0 2px; letter-spacing:-.01em; }
+        .meta { color:#565d6b; font-size:9pt; margin:0; }
+
+        /* Sei riquadri: il conteggio e il suo denominatore nello stesso sguardo. */
+        .kpis { display:flex; flex-wrap:wrap; gap:0; border:1px solid #d4d8de;
+                margin:20px 0 6px; }
+        .kpi { flex:1 1 16%; padding:9px 11px; border-right:1px solid #d4d8de; }
+        .kpi:last-child { border-right:0; }
+        .kpi dt { font-size:7.5pt; letter-spacing:.09em; text-transform:uppercase;
+                  color:#565d6b; font-weight:700; margin:0; }
+        .kpi dd { margin:2px 0 0; font-size:17pt; font-weight:600;
+                  font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+        .kpi dd .of { font-size:9pt; font-weight:400; color:#565d6b; }
+        .kpi.crit dd { color:#9b1c1c; }
+        .kpi.high dd { color:#a55a00; }
+        .kpi.short dd { color:#a55a00; }
+
+        /* Una barra, tre segmenti: la forma della severita' prima dei numeri. */
+        .bar { display:flex; height:9px; margin:10px 0 4px; border:1px solid #d4d8de; }
+        .bar i { display:block; }
+        .barkey { font-size:8pt; color:#565d6b; margin:0 0 18px; }
+        .barkey b { font-weight:600; color:#1a1d23; }
+        .barkey .sq { display:inline-block; width:7px; height:7px; margin-right:4px; }
+
+        /* Avviso da manuale tecnico: filetti sopra e sotto, nessun fondino.
+           La barra colorata a sinistra su un riquadro pieno e' un modo di dire
+           da interfaccia web, non da documento stampato — e soprattutto poggia
+           su uno sfondo, cioe' proprio la cosa che la stampa puo' scartare.
+           Un avviso deve restare visibile esattamente in quel caso. */
+        .notice { border-top:1px solid #a55a00; border-bottom:1px solid #a55a00;
+                  padding:7px 0; margin:10px 0 8px; font-size:9pt;
+                  color:#7a4a00; font-weight:600; }
+        .notice b { font-weight:700; }
+
+        /* The index title is an h3 so that, in the PDF bookmarks built from
+           the headings, it sits beside the devices under the tenant instead
+           of swallowing them as its children. It still looks like an h2. */
+        h2, h3.idx { font-size:11pt; margin:26px 0 8px; padding-bottom:4px;
+             border-bottom:1.5px solid #1f4e79; letter-spacing:.02em; }
+        a.idx-link { color:#1f4e79; text-decoration:none; }
+
+        table { border-collapse:collapse; width:100%; margin:8px 0; font-size:9pt; }
+        th { text-align:left; font-size:7.5pt; letter-spacing:.07em;
+             text-transform:uppercase; color:#565d6b; font-weight:700;
+             padding:5px 7px; border-bottom:1px solid #1a1d23; }
+        td { padding:4px 7px; border-bottom:1px solid #e6e9ed; vertical-align:top; }
+        tbody tr:nth-child(even) td { background:#f5f6f8; }
+        td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+        .sev-c { color:#9b1c1c; font-weight:700; }
+        .sev-h { color:#a55a00; font-weight:600; }
+        .warn { color:#a55a00; font-weight:700; }
+        .scope { color:#6b727f; font-size:8pt; margin:7px 0 0; }
+
+        /* Le schede degli apparati: il corpo del documento. */
+        .dev { margin-top:16px; padding-top:11px; border-top:1px solid #e6e9ed;
+               page-break-inside:avoid; }
+        .dev-name { font-size:11pt; font-weight:700; margin:0; color:#1f4e79; }
+        .dev-name code { font-family:"Courier New",monospace; font-size:9.5pt;
+                         font-weight:400; color:#1a1d23; margin-left:7px; }
+        .dev-sub { font-size:8pt; color:#565d6b; margin:2px 0 7px; }
+        /* One CVE = one tbody: the details row, then the description across
+           the full width. In its own column the description took half the
+           page and left the short columns beside it empty. */
+        table.cves { font-size:8pt; page-break-inside:auto; }
+        table.cves th, table.cves td { padding:3px 6px; }
+        /* Five short values spread over the full width read as five islands:
+           keep them together on the left, the last column takes the rest. */
+        table.cves th:nth-child(1) { width:20%; }
+        table.cves th:nth-child(2) { width:7%; }
+        table.cves th:nth-child(3) { width:12%; }
+        table.cves th:nth-child(4) { width:14%; }
+        table.cves th:nth-child(5), table.cves tr.cve-head td:nth-child(5) { text-align:left; }
+        table.cves tbody { break-inside:avoid; page-break-inside:avoid; }
+        table.cves tbody tr td { background:none; }
+        table.cves tbody:nth-of-type(even) td { background:#f5f6f8; }
+        table.cves tr.cve-head td { border-bottom:0; padding-bottom:1px; }
+        table.cves tr.cve-desc td { padding-top:0; color:#3d434e; }
+
+        .method { margin-top:28px; page-break-inside:avoid; }
+        .method p { margin:0 0 8px; font-size:8.5pt; color:#3d434e; }
+        .pagebreak { page-break-after:always; }
+    `;
+
+    // Nel PDF la data si scrive per esteso: "3 g" ha senso davanti a chi sa
+    // quando ha aperto la pagina, un documento archiviato no.
+    function cvePdfDate(seenAt) {
+        const m = (seenAt || '').match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
+        if (!m) return tr('cveAgeUnknown');
+        return `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]} UTC`;
+    }
+
+    // La prima pagina deve rispondere da sola a "come sta messo questo tenant":
+    // i sei numeri con i loro denominatori, la forma della severita', cosa non
+    // e' stato guardato, e l'indice degli apparati che seguono. Una tabella di
+    // sette righe seguita da mezza pagina bianca non lo faceva.
+    function cvePdfTenantSection(t, ti) {
+        const partial = t.with_version < t.devices;
+        const ge = t.truncated ? '&ge;&nbsp;' : '';
+        const c = t.counts.critical, h = t.counts.high, m = t.counts.medium;
+        const tot = c + h + m;
+
+        const kpi = (cls, label, value, of) => `<div class="kpi ${cls}">
+            <dt>${escapeHtml(label)}</dt>
+            <dd>${value}${of ? ` <span class="of">${escapeHtml(of)}</span>` : ''}</dd>
+        </div>`;
+
+        const bar = tot ? `<div class="bar">
+              <i style="width:${(c / tot * 100).toFixed(1)}%; background:#9b1c1c"></i>
+              <i style="width:${(h / tot * 100).toFixed(1)}%; background:#c8862c"></i>
+              <i style="width:${(m / tot * 100).toFixed(1)}%; background:#9aa3ae"></i>
+            </div>
+            <p class="barkey">
+              <span class="sq" style="background:#9b1c1c"></span><b>${c}</b> ${escapeHtml(tr('cveThCritical'))} &nbsp;
+              <span class="sq" style="background:#c8862c"></span><b>${h}</b> ${escapeHtml(tr('cveThHigh'))} &nbsp;
+              <span class="sq" style="background:#9aa3ae"></span><b>${m}</b> ${escapeHtml(tr('cveThMedium'))}
+            </p>` : '';
+
+        const notices = [];
+        if (partial) {
+            notices.push(tr('cveCoveragePartial',
+                            { n: t.devices - t.with_version, m: t.devices }));
+        }
+        if (t.truncated) notices.push(tr('cveTruncatedNote', { n: 1 }));
+
+        return `<section>
+            <h2>${escapeHtml(t.tenant || '')}</h2>
+            <div class="kpis">
+              ${kpi('', tr('cveThDevices'), t.devices, '')}
+              ${kpi(partial ? 'short' : '', tr('cveThWithVersion'), t.with_version, '/ ' + t.devices)}
+              ${kpi('', tr('cveThExactCpe'), t.exact_cpe, '/ ' + t.devices)}
+              ${kpi('crit', tr('cveThCritical'), ge + c, '')}
+              ${kpi('high', tr('cveThHigh'), ge + h, '')}
+              ${kpi('', tr('cveThMedium'), ge + m, '')}
+            </div>
+            ${bar}
+            ${notices.map(n => `<p class="notice">${escapeHtml(n)}</p>`).join('')}
+            <p class="scope">${escapeHtml(tr('cveThOldest'))}:
+               ${escapeHtml(cvePdfDate(t.oldest_version_seen_at))} &nbsp;&middot;&nbsp;
+               ${escapeHtml(cveNotEvaluatedText(t.not_evaluated))}</p>
+            ${cvePdfIndex(t, ti)}
+        </section>`;
+    }
+
+    // Anchor shared by an index row and its device section. Positional, not
+    // the IP: an id must be a plain token, and the two lists iterate the same
+    // devices_detail in the same order.
+    function cvePdfAnchor(ti, di) {
+        return `dev-${ti}-${di}`;
+    }
+
+    // L'indice: in un rapporto impaginato per apparato dice subito da quale
+    // cominciare, e rende evidente quando un apparato solo domina il totale.
+    // Each name links to its section: Chrome keeps internal links in the PDF.
+    function cvePdfIndex(t, ti) {
+        const rows = t.devices_detail || [];
+        if (!rows.length) {
+            // Un documento che stampa il nulla in silenzio e' peggio di uno che
+            // manca: senza questa riga la mezza pagina bianca si legge come
+            // "nessun apparato da segnalare".
+            return `<p class="notice"><b>${escapeHtml(tr('cvePdfNoDetail'))}</b></p>`;
+        }
+        const body = rows.map((d, di) => `<tr>
+            <td><a class="idx-link" href="#${cvePdfAnchor(ti, di)}">${escapeHtml(d.hostname || d.ip || '')}</a></td>
+            <td>${escapeHtml(d.ip || '')}</td>
+            <td>${escapeHtml(d.version || '—')}</td>
+            <td>${escapeHtml(d.confidence === 'none' ? tr('cveConf_none') : cveConfLabel(d.confidence))}</td>
+            <td class="num">${d.truncated ? '<span class="warn">&ge;</span> ' : ''}${d.cves}</td>
+            <td class="num sev-c">${d.counts.critical || ''}</td>
+            <td class="num sev-h">${d.counts.high || ''}</td>
+            <td class="num">${d.counts.medium || ''}</td>
+        </tr>`).join('');
+        return `<h3 class="idx">${escapeHtml(tr('cvePdfIndexTitle'))}</h3>
+            <table>
+              <thead><tr>
+                <th>${escapeHtml(tr('cveThDevice'))}</th><th>IP</th>
+                <th>${escapeHtml(tr('cveThVersion'))}</th>
+                <th>${escapeHtml(tr('cveThConfidence'))}</th>
+                <th class="num">${escapeHtml(tr('cveThCves'))}</th>
+                <th class="num">${escapeHtml(tr('cveThCritical'))}</th>
+                <th class="num">${escapeHtml(tr('cveThHigh'))}</th>
+                <th class="num">${escapeHtml(tr('cveThMedium'))}</th>
+              </tr></thead><tbody>${body}</tbody></table>
+            <div class="pagebreak"></div>`;
+    }
+
+    // Quante CVE elencare per apparato. Un rapporto che si allega a una mail
+    // deve restare leggibile; oltre la soglia si dice quante ne restano invece
+    // di stampare pagine che nessuno legge.
+    const CVE_PDF_DEVICE_ROWS = 50;
+
+    // Il rapporto e' impaginato PER APPARATO: chi lo riceve lavora su un
+    // apparato alla volta, e una tabella piatta lo obbligava a ricomporre da
+    // solo quali CVE fossero sue. Le righe vengono da /api/cve/priority, cioe'
+    // dallo stesso ordinamento della scheda Priorita': il PDF e la schermata
+    // non possono mettere in cima due CVE diverse.
+    function cvePdfDeviceSection(d, rows, anchor) {
+        const shown = rows.slice(0, CVE_PDF_DEVICE_ROWS);
+        const more = rows.length - shown.length;
+
+        const facts = [];
+        if (d.version) facts.push(escapeHtml(d.version));
+        facts.push(escapeHtml(d.confidence === 'none'
+            ? tr('cveConf_none') : cveConfLabel(d.confidence)));
+        if (d.version_seen_at) {
+            facts.push(escapeHtml(tr('cvePdfVersionRead', { when: cvePdfDate(d.version_seen_at) })));
+        }
+        facts.push((d.truncated ? '&ge;&nbsp;' : '') +
+                   escapeHtml(tr('cvePdfDeviceCves', { n: d.cves })));
+
+        const body = shown.map(r => `<tbody><tr class="cve-head">
+            <td>${escapeHtml(r.id || '')}</td>
+            <td class="num">${r.cvss === null || r.cvss === undefined ? '&mdash;' : escapeHtml(String(r.cvss))}</td>
+            <td>${escapeHtml(r.severity || '')}</td>
+            <td>${escapeHtml(cveSvcLabel(r.service))}</td>
+            <td class="num">${escapeHtml(String(r.score))}</td>
+        </tr><tr class="cve-desc"><td colspan="5">${escapeHtml(r.summary || '')}</td></tr></tbody>`).join('');
+
+        const table = shown.length ? `<table class="cves">
+              <thead><tr>
+                <th>CVE</th><th class="num">CVSS</th><th>${escapeHtml(tr('cveThSeverity'))}</th>
+                <th>${escapeHtml(tr('cveThService'))}</th><th class="num">${escapeHtml(tr('cveThScore'))}</th>
+              </tr></thead>${body}</table>`
+            : `<p class="scope">${escapeHtml(tr(d.confidence === 'none' ? 'cvePdfNeverCorrelated' : 'cvePdfNoCve'))}</p>`;
+
+        const moreLine = more > 0
+            ? `<p class="scope">${escapeHtml(tr('cveMoreRows', { n: more }))}</p>` : '';
+
+        return `<div class="dev">
+            <h3 class="dev-name" id="${anchor}">${escapeHtml(d.hostname || d.ip || '')}
+              <code>${escapeHtml(d.ip || '')}</code></h3>
+            <p class="dev-sub">${facts.join(' &nbsp;|&nbsp; ')}</p>
+            ${table}${moreLine}
+            <p class="scope">${escapeHtml(cveNotEvaluatedText(d.not_evaluated))}</p>
+        </div>`;
+    }
+
+    function cvePdfDevices(t, byDevice, ti) {
+        return (t.devices_detail || [])
+            .map((d, di) => cvePdfDeviceSection(d, (byDevice || {})[d.ip] || [], cvePdfAnchor(ti, di)))
+            .join('');
+    }
+
+    function cvePdfHtml(byTenant) {
+        const scope = cveState.tenant && cveState.tenant !== 'all'
+            ? tr('cvePdfScopeOne', { tenant: cveState.tenant })
+            : tr('cvePdfScopeAll');
+        const title = tr('cvePdfTitle');
+        const sections = cveState.tenants.map((t, ti) =>
+            cvePdfTenantSection(t, ti) + cvePdfDevices(t, (byTenant || {})[t.tenant] || {}, ti)
+        ).join('');
+        return '<!doctype html>\n'
+            + `<html lang="${currentLang}"><head><meta charset="utf-8">`
+            + `<title>${escapeHtml(title)}</title><style>${CVE_PDF_CSS}</style></head><body>`
+            + `<div class="cover"><p class="kicker">${escapeHtml(tr('cvePdfKicker'))}</p>`
+            + `<h1>${escapeHtml(title)}</h1>`
+            + `<p class="meta">${escapeHtml(tr('cvePdfGeneratedAt', { when: new Date().toLocaleString() }))}`
+            + ` &middot; ${escapeHtml(scope)}</p></div>`
+            + sections
+            + `<div class="method"><h2>${escapeHtml(tr('cveMethTitle'))}</h2>`
+            + cveMethodParagraphs().map(t => `<p>${t}</p>`).join('')
+            + '</div></body></html>';
+    }
+
+    // Le CVE per il documento, raggruppate per tenant e poi per apparato: e'
+    // la forma in cui il rapporto le stampa. Una sola richiesta —
+    // /api/cve/priority applica gia' lo scope RBAC e l'ordinamento.
+    async function cvePdfRows() {
+        const res = await apiFetch('/api/cve/priority?limit=5000&tenant=' +
+            encodeURIComponent(cveState.tenant || 'all'));
+        if (!res || !res.ok) return {};
+        const grouped = {};
+        ((await res.json()).rows || []).forEach(r => {
+            const t = grouped[r.tenant] = grouped[r.tenant] || {};
+            (t[r.device] = t[r.device] || []).push(r);
+        });
+        return grouped;
+    }
+
+    async function cveReportPdf() {
+        const btn = document.getElementById('cveReportPdf');
+        if (!cveState.tenants.length) { showToast(tr('cvePdfNoData'), 'error'); return; }
+        const orig = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${escapeHtml(tr('cveGeneratingPdf'))}`;
+            btn.disabled = true;
+        }
+        try {
+            const res = await apiFetch('/api/netsec-audit/report/pdf', {
+                method: 'POST',
+                body: JSON.stringify({
+                    html: cvePdfHtml(await cvePdfRows()),
+                    filename: 'sentinelnet-cve-' +
+                        (cveState.tenant && cveState.tenant !== 'all' ? cveState.tenant : 'tenant') +
+                        '-' + new Date().toISOString().slice(0, 10)
+                })
+            });
+            if (!res || !res.ok) {
+                const detail = res ? ((await res.json().catch(() => ({}))).detail || res.status)
+                                   : 'network';
+                showToast(tr('cvePdfError', { detail: detail }), 'error');
+                return;
+            }
+            const blob = await res.blob();
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'sentinelnet-cve-tenant-' + new Date().toISOString().slice(0, 10) + '.pdf';
+            a.click();
+            URL.revokeObjectURL(a.href);
+        } finally {
+            if (btn) { btn.innerHTML = orig; btn.disabled = false; }
+        }
+    }
+
+    document.getElementById('cveReportBody')?.addEventListener('click', (e) => {
+        const desc = e.target.closest('[data-action="cve-desc"]');
+        if (desc) { desc.classList.toggle('cve-desc-open'); return; }
+        const dev = e.target.closest('[data-action="cve-device"]');
+        if (dev) { cveToggleDevice(dev.dataset.key, dev.dataset.ip); return; }
+        const row = e.target.closest('[data-action="cve-tenant"]');
+        if (row) cveToggleTenant(Number(row.dataset.idx));
+    });
+    // La cella e' un pulsante a tutti gli effetti: chi naviga da tastiera deve
+    // poterla aprire, altrimenti il testo oltre la seconda riga per lui non
+    // esiste.
+    document.getElementById('cveReportBody')?.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const desc = e.target.closest('[data-action="cve-desc"]');
+        if (desc) { e.preventDefault(); desc.classList.toggle('cve-desc-open'); }
+    });
+
+    document.getElementById('cveReportTenant')?.addEventListener('change', cveReportLoad);
+    document.getElementById('cveReportPdf')?.addEventListener('click', cveReportPdf);

@@ -50,8 +50,18 @@ def poll_once() -> int:
     """Sincrona: un giro di polling su tutti i FortiGate con token API.
     Ritorna il numero di snapshot accodati."""
     from core import db
+    from services import cve_intel
     from services import fortigate_service
     from services import inventory_manager
+
+    # Gli snapshot CVE si rinfrescano qui invece che in un task proprio: sono
+    # un giro di richieste periodiche verso una API, cioe' esattamente questo
+    # poller. Va prima dell'uscita anticipata qui sotto, che riguarda solo i
+    # FortiGate con token.
+    try:
+        cve_intel.refresh_due()
+    except Exception as e:
+        logger.debug("Refresh snapshot CVE fallito: %s", e)
 
     tokened = set(fortigate_service.token_status().keys())
     if not tokened:

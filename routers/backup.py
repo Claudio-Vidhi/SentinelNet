@@ -10,14 +10,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from core import core_engine, data_config
-from drivers.registry import model_matches
-from services import inventory_manager
+from services import inventory_manager, nvd
 from security.security_manager import log_audit
 from routers.deps import get_current_user, require_operator, assert_device_allowed, user_group_scope
 
 router = APIRouter(tags=["Backup"])
 
-NVD_BASE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+NVD_BASE_URL = nvd.BASE_URL
 
 log = logging.getLogger("sentinelnet.nvd")
 
@@ -39,26 +38,10 @@ def cpe_from_device(vendor: str, text: str) -> "str | None":
     return cpe_match_string(vendor, version, text or "")
 
 
-def _version_of(text: str) -> "str | None":
-    """Version to pin the CPE to.
-
-    A parenthesised train comes first: core_engine.extract_version strips
-    trailing punctuation, so NX-OS "9.3(5)" comes back as "9.3(5" and the
-    CPE built from it matched 11 CVEs instead of 20. That helper is used
-    across triage and inventory, so it is left alone and handled here.
-
-    Then extract_version, then a bare dotted release: a model in front of
-    the version ("WS-C2960X-24TS-L 15.2(4)E10") must not swallow it.
-    """
-    m = re.search(r"\b(\d+\.\d+\(\w[\w.]*\)[a-z0-9]*)",
-                  text, re.IGNORECASE)
-    if m:
-        return m.group(1)
-    found = core_engine.extract_version(text)
-    if found:
-        return found
-    m = re.search(r"\b(\d+\.\d+(?:\.\d+)*[a-z0-9]*)", text, re.IGNORECASE)
-    return m.group(1) if m else None
+# Ora vive in services/nvd.py: la usano sia questo proxy sia lo snapshot
+# CVE persistito, e due copie della stessa regressione sulla versione
+# sarebbero due risposte diverse alla stessa domanda.
+_version_of = nvd.version_of
 
 
 # --- ENDPOINTS ---
@@ -339,112 +322,11 @@ async def proxy_enisa_search(request: Request, current_user = Depends(get_curren
         cve_ids = []
         for elem in vulnerabilities:
             cve = elem.get("cve", {})
-            cid = cve.get("id", "CVE-Unknown")
-            cve_ids.append(cid)
-
-            descriptions = cve.get("descriptions", [])
-            desc_text = "Nessuna descrizione disponibile."
-            for d in descriptions:
-                if d.get("lang") == "en":
-                    desc_text = d.get("value", "")
-                    break
-            if not desc_text and descriptions:
-                desc_text = descriptions[0].get("value", "")
-
-            metrics = cve.get("metrics", {})
-            base_score = None
-            severity = "MEDIUM"
-
-            cvss_v31 = metrics.get("cvssMetricV31", [])
-            cvss_v30 = metrics.get("cvssMetricV30", [])
-            cvss_v40 = metrics.get("cvssMetricV40", [])
-            cvss_v2 = metrics.get("cvssMetricV2", [])
-
-            active_metric = cvss_v31 or cvss_v30 or cvss_v40 or cvss_v2
-            if active_metric and isinstance(active_metric, list) and len(active_metric) > 0:
-                primary = next((m for m in active_metric if isinstance(m, dict) and m.get("type") == "Primary"), None)
-                if primary:
-                    m_obj = primary
-                else:
-                    m_obj = max(active_metric, key=lambda m: (m.get("cvssData", {}).get("baseScore", 0) or 0) if isinstance(m, dict) else 0)
-
-                cvss_data = m_obj.get("cvssData", {}) if isinstance(m_obj, dict) else {}
-                base_score = cvss_data.get("baseScore")
-                severity = cvss_data.get("baseSeverity") or (m_obj.get("baseSeverity") if isinstance(m_obj, dict) else None) or "MEDIUM"
-
-            published = cve.get("published", "")
-            cisa_k = bool(cve.get("cisaExploitAdd"))
-
-            refs = [r.get("url") for r in cve.get("references", []) if r.get("url")]
-
-            extracted_prods = []
-            for aff in cve.get("affected", []):
-                for ad in aff.get("affectedData", []):
-                    p = ad.get("product")
-                    if p and p not in extracted_prods:
-                        extracted_prods.append(p)
-
-            for config in cve.get("configurations", []):
-                for node in config.get("nodes", []):
-                    for cpe_match in node.get("cpeMatch", []):
-                        crit = cpe_match.get("criteria", "")
-                        parts = crit.split(":")
-                        if len(parts) >= 5:
-                            p = parts[4].replace("_", " ").title()
-                            if p and p not in ("*", "-") and p not in extracted_prods:
-                                extracted_prods.append(p)
-
-            # Modelli hardware citati dal CVE: 'cpe:2.3:h:cisco:catalyst_9200'.
-            hw_models = []
-            for config in cve.get("configurations", []):
-                for node in config.get("nodes", []):
-                    for cpe_match in node.get("cpeMatch", []):
-                        crit = cpe_match.get("criteria", "")
-                        if crit.startswith("cpe:2.3:h:"):
-                            parts = crit.split(":")
-                            if len(parts) >= 5 and parts[4] not in ("*", "-"):
-                                hw_models.append(parts[4])
-
-            # 'generic'  il CVE non nomina hardware: vale per ogni piattaforma
-            # 'model'    nomina proprio questo apparato
-            # 'other'    nomina altri modelli sullo stesso sistema operativo
-            # Mai un filtro: l'elenco hardware di NVD e' incompleto, quindi
-            # 'other' scende in fondo con un'etichetta, non viene nascosto.
-            if not model_val or not hw_models:
-                model_scope = "generic"
-            elif any(model_matches(model_val, h) for h in hw_models):
-                model_scope = "model"
-            else:
-                model_scope = "other"
-
-            cwes = []
-            for w in cve.get("weaknesses", []):
-                for d in w.get("description", []):
-                    v = d.get("value", "")
-                    if v.startswith("CWE-") and v not in ("CWE-Other", "CWE-noinfo") and v not in cwes:
-                        cwes.append(v)
-            cwe_str = ", ".join(cwes[:2]) if cwes else ""
-
-            prod_display = ", ".join(extracted_prods[:3]) if extracted_prods else (text_val or "—")
-
-            items.append({
-                "id": cid,
-                "cve": cid,
-                "cveId": cid,
-                "cwe": cwe_str or "",
-                "vendor": resolved_vendor or vendor_val or "—",
-                "product": prod_display,
-                "description": desc_text,
-                "summary": desc_text,
-                "score": base_score,
-                "baseScore": base_score,
-                "severity": str(severity).upper(),
-                "published": published,
-                "date": published,
-                "exploited": cisa_k,
-                "modelScope": model_scope,
-                "references": refs
-            })
+            cve_ids.append(cve.get("id", "CVE-Unknown"))
+            items.append(nvd.normalize_item(
+                cve, model=model_val,
+                vendor_label=resolved_vendor or vendor_val,
+                text_label=text_val))
 
         if cve_ids:
             try:

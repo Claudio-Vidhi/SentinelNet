@@ -1279,6 +1279,8 @@
       <!-- Sub-tab: Vulnerability Matcher (dispositivi interni) vs Vendor Watch (EUVD globale) -->
       <div style="display:flex; gap:8px; margin-bottom:16px;">
         <button class="btn btn-secondary ti-subtab active" id="tiTabMatcher" data-i18n="tiTabMatcher"><i class="fa-solid fa-crosshairs"></i> Vulnerability Matcher</button>
+        <button class="btn btn-secondary ti-subtab" id="tiTabPriority" data-i18n="tiTabPriority"><i class="fa-solid fa-list-ol"></i> Priorit&agrave;</button>
+        <button class="btn btn-secondary ti-subtab" id="tiTabReport" data-i18n="tiTabReport"><i class="fa-solid fa-chart-pie"></i> Resoconto</button>
         <button class="btn btn-secondary ti-subtab" id="tiTabWatch" data-i18n="tiTabWatch"><i class="fa-solid fa-satellite-dish"></i> Vendor Watch</button>
       </div>
 
@@ -1337,6 +1339,75 @@
             <tbody id="vwBody"></tbody></table></div>
         </div>
         <div id="vwDrawer" style="display:none; position:fixed; top:0; right:0; bottom:0; width:min(480px, 90vw); background:var(--surface); border-left:1px solid var(--border); z-index:1000; padding:20px; overflow-y:auto;"></div>
+      </div>
+
+      <!-- F9 - "cosa sistemo lunedi' mattina": una riga per CVE per apparato,
+           ordinata per punteggio. Il punteggio e' ispezionabile: un click sulla
+           riga lo apre nei suoi fattori. Un ordine di cui non ci si fida non
+           viene usato. -->
+      <div id="tiViewPriority" style="display:none;">
+        <div class="panel" style="margin-bottom:14px;">
+          <div class="filterbar" style="margin-top:0; align-items:center; gap:12px; flex-wrap:wrap;">
+            <label for="cvePrioTenant" style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="cveLblTenant">Sede:</label><select id="cvePrioTenant" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:inherit; font-size:13px; cursor:pointer; outline:none;">
+              <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
+            </select>
+            <button class="btn btn-primary" id="cvePrioRefresh" style="width:auto; margin:0;" title="Aggiorna" data-i18n-title="titleBtnRefresh" aria-label="Aggiorna" data-i18n-aria-label="titleBtnRefresh"><i class="fa-solid fa-rotate"></i></button>
+          </div>
+        </div>
+        <div class="panel">
+          <div id="cvePrioStatus" style="font-size:13px; color:var(--text-muted); margin-bottom:10px;"></div>
+          <div class="table-wrap"><table>
+            <thead><tr>
+              <th data-i18n="cveThDevice">Apparato</th>
+              <th>CVE</th>
+              <th>CVSS</th>
+              <th data-i18n="cveThConfidence">Confidenza</th>
+              <th data-i18n="cveThService">Servizio</th>
+              <th data-i18n="cveThVersionAge">Et&agrave; versione</th>
+              <th data-i18n="cveThScore">Punteggio</th>
+            </tr></thead>
+            <tbody id="cvePrioBody"></tbody></table></div>
+          <div id="cvePrioScope" style="margin-top:12px; font-size:12px; color:var(--text-muted); line-height:1.5;"></div>
+        </div>
+      </div>
+
+      <!-- F9b - "come sta messo questo tenant": aggrega, non elenca. Ogni
+           conteggio viaggia con il suo denominatore di copertura, perche'
+           "0 CVE critiche" e "nessun apparato con una versione leggibile"
+           sono lo stesso numero e due situazioni opposte. -->
+      <div id="tiViewReport" style="display:none;">
+        <div class="panel" style="margin-bottom:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <label for="cveReportTenant" style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="cveLblTenant">Sede:</label><select id="cveReportTenant" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:inherit; font-size:13px; cursor:pointer; outline:none;">
+            <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
+          </select>
+          <button class="btn btn-primary" id="cveReportRefresh" style="width:auto; margin:0;" title="Aggiorna" data-i18n-title="titleBtnRefresh" aria-label="Aggiorna" data-i18n-aria-label="titleBtnRefresh"><i class="fa-solid fa-rotate"></i></button>
+          <button class="btn btn-secondary" id="cveReportExport" style="width:auto; margin:0;" data-i18n="btnExportCsv"><i class="fa-solid fa-file-csv"></i> Esporta CSV</button>
+          <button class="btn btn-secondary" id="cveReportPdf" style="width:auto; margin:0;" data-i18n="cveBtnExportPdf"><i class="fa-solid fa-file-pdf"></i> Esporta PDF</button>
+        </div>
+        <div class="panel">
+          <div id="cveReportCoverage" style="font-size:13px; margin-bottom:12px; line-height:1.5;"></div>
+          <div class="table-wrap"><table>
+            <thead><tr>
+              <th data-i18n="cveThTenant">Tenant</th>
+              <th data-i18n="cveThDevices">Apparati</th>
+              <th data-i18n="cveThWithVersion">Con versione</th>
+              <th data-i18n="cveThExactCpe">Con CPE esatto</th>
+              <th data-i18n="cveThCritical">Critiche</th>
+              <th data-i18n="cveThHigh">Alte</th>
+              <th data-i18n="cveThMedium">Medie</th>
+              <th data-i18n="cveThOldest">Dato pi&ugrave; vecchio</th>
+            </tr></thead>
+            <tbody id="cveReportBody"></tbody></table></div>
+          <div id="cveReportScope" style="margin-top:12px; font-size:12px; color:var(--text-muted); line-height:1.5;"></div>
+        </div>
+
+        <!-- Da dove vengono i numeri. Un aggregato senza il suo metodo si
+             legge come una misura, e una misura non si discute: aperto o
+             chiuso che sia, il testo deve stare nella stessa schermata. -->
+        <details class="panel" id="cveReportMethod" style="margin-top:14px;">
+          <summary style="cursor:pointer; font-weight:700; font-size:14px;" data-i18n="cveMethTitle">Come si leggono questi numeri</summary>
+          <div id="cveReportMethodBody" style="font-size:13px; line-height:1.6; margin-top:12px;"></div>
+        </details>
       </div>
     </div>
 

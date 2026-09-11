@@ -138,6 +138,10 @@ def _print_argv(exe: str, src: str, out: str, profile_dir: str) -> list:
         "--host-resolver-rules=MAP * ~NOTFOUND",
         # Le due varianti del flag: Chrome ignora quella che non conosce.
         "--no-pdf-header-footer", "--print-to-pdf-no-header-footer",
+        # PDF bookmarks built from h1-h6: a long report is navigated from the
+        # viewer's sidebar. An older browser ignores the flag and prints as
+        # before.
+        "--generate-pdf-document-outline",
         # Senza budget la stampa parte prima che i font siano pronti e
         # l'impaginazione misurata dallo script slitta.
         "--virtual-time-budget=5000",
