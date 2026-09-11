@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-09-11
+
 ### Added
 
 - **Correlazione CVE: la lista delle vulnerabilita' ha finalmente un ordine, e
