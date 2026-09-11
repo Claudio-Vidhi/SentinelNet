@@ -1,0 +1,3 @@
+# Third-party bundles: ~2k nodes of minified upstream code that pollute
+# queries, impact and ownership analysis. Not ours to trace.
+static/vendor/
