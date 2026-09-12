@@ -16,6 +16,18 @@
         return 'critical';
     }
 
+    // Lo scope arriva dal selettore in alto e da nessun altro posto. Prima
+    // questa scheda aveva una select propria, popolata con i soli tenant che
+    // POSSEDEVANO un gruppo HA: scegliere in alto un tenant senza gruppi
+    // scriveva su una option che non esisteva -- un no-op silenzioso -- e il
+    // pannello ripiegava su "tutti", mostrando i cluster di un altro cliente
+    // sotto un'intestazione che diceva il primo. Funzionava, cioe', solo per
+    // i tenant che avevano un gruppo.
+    const currentTenant = () => {
+        const g = window.globalSelectedTenant;
+        return (!g || g === 'all') ? '' : g;
+    };
+
     async function loadRedundancyTab() {
         const container = document.getElementById('redundancyGroupsContainer');
         if (!container) return;
@@ -29,30 +41,14 @@
             }
             const data = await res.json();
             allRedundancyGroups = data.results || [];
-            populateTenantFilter(allRedundancyGroups);
             applyRedundancyFilter();
         } catch (e) {
             container.innerHTML = `<div class="alert-box alert-danger">${escapeHtml(e.message)}</div>`;
         }
     }
 
-    function populateTenantFilter(groups) {
-        const sel = document.getElementById('haTenantFilter');
-        if (!sel) return;
-        const previous = sel.value;
-        const tenants = Array.from(new Set(groups.map(tenantOf))).sort();
-        // Option 0 ("all tenants") lives in the template and carries its
-        // data-i18n: rebuilding it here would drop its translation.
-        sel.length = 1;
-        tenants.forEach(t => sel.add(new Option(t, t)));
-        // A refresh must not silently widen the view back to every tenant, but
-        // a tenant whose last group just disappeared has no option left.
-        sel.value = tenantSelectSeed(previous, tenants, '');
-    }
-
     function applyRedundancyFilter() {
-        const sel = document.getElementById('haTenantFilter');
-        const tenant = sel ? sel.value : '';
+        const tenant = currentTenant();
         const groups = tenant
             ? allRedundancyGroups.filter(g => tenantOf(g) === tenant)
             : allRedundancyGroups;
@@ -358,11 +354,12 @@
         }
     });
 
-    document.addEventListener('change', (e) => {
-        if (e.target && e.target.id === 'haTenantFilter') applyRedundancyFilter();
-    });
 
     window.loadRedundancyTab = loadRedundancyTab;
+    // Il selettore globale chiama questa al cambio di scope: i dati sono gia'
+    // in memoria (l'API li ha gia' filtrati su cio' che l'utente puo' vedere),
+    // quindi si ridisegna senza tornare in rete.
+    window.redundancyTenantChanged = applyRedundancyFilter;
     window.openCreateRedundancyModal = openCreateRedundancyModal;
     window.closeCreateRedundancyModal = closeCreateRedundancyModal;
     window.submitCreateRedundancyGroup = submitCreateRedundancyGroup;

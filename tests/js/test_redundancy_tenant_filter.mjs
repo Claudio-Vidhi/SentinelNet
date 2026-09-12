@@ -1,8 +1,17 @@
-// static/js/redundancy.js: the HA tab groups its cards by tenant and filters
-// them with the tenant select. A source-text grep would not catch the two ways
-// this actually breaks — the KPI tiles staying on the whole fleet while the
-// list shows one tenant, and the "all tenants" option being rebuilt away when
-// the select is repopulated — so this runs the real module against a DOM stub.
+// static/js/redundancy.js: la scheda HA raggruppa i cluster per tenant e li
+// filtra con il selettore GLOBALE in alto. Non ne ha uno proprio.
+//
+// Il bug che questo file fissa, e che si vedeva a schermo: la select locale
+// era popolata con i soli tenant che POSSEDEVANO un gruppo HA. Scegliere in
+// alto un tenant senza gruppi scriveva su una option inesistente -- un no-op
+// silenzioso -- e il pannello ripiegava su "tutti i tenant", mostrando i
+// cluster di un altro cliente sotto un'intestazione che diceva il primo.
+// Funzionava solo per i tenant che avevano un gruppo.
+//
+// Un grep sul sorgente non prenderebbe nessuno dei due modi in cui questo si
+// rompe (i KPI che restano su tutta la flotta mentre la lista mostra un
+// tenant, e lo scope globale ignorato), quindi qui gira il modulo vero contro
+// un DOM finto.
 //
 //   node tests/js/test_redundancy_tenant_filter.mjs
 import assert from 'node:assert/strict';
@@ -13,38 +22,20 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const src = readFileSync(join(root, 'static/js/redundancy.js'), 'utf8');
 
-// --- DOM stub: only what the module actually touches ------------------------
-
-class OptionStub {
-    constructor(label, value) { this.text = label; this.value = value; }
-}
-
-class SelectStub {
-    constructor() {
-        this.id = 'haTenantFilter';   // the delegated handler dispatches on it
-        this.opts = [new OptionStub('Tutti i tenant', '')];
-        this.value = '';
-    }
-    get length() { return this.opts.length; }
-    set length(n) { this.opts.length = n; }
-    add(opt) { this.opts.push(opt); }
-    values() { return this.opts.map(o => o.value); }
-}
+// --- DOM stub: solo cio' che il modulo tocca davvero -----------------------
 
 const container = { innerHTML: '' };
-const select = new SelectStub();
 const kpi = {
     haKpiTotal: { textContent: '' },
     haKpiHealthy: { textContent: '' },
     haKpiDegraded: { textContent: '' },
     haKpiCritical: { textContent: '' },
 };
-const nodes = { redundancyGroupsContainer: container, haTenantFilter: select, ...kpi };
+const nodes = { redundancyGroupsContainer: container, ...kpi };
 
-const listeners = {};
 const documentStub = {
     getElementById: (id) => nodes[id] || null,
-    addEventListener: (type, fn) => { (listeners[type] ||= []).push(fn); },
+    addEventListener: () => {},
 };
 
 let served = [];
@@ -52,24 +43,22 @@ const apiFetch = async () => ({ ok: true, json: async () => ({ results: served }
 const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-// Same contract as core.js: when the select has no usable value of its own,
-// adopt the global tenant. The module is lazy-loaded, so at populate time the
-// select is often empty and this is the only thing carrying the global scope in.
 const windowStub = {};
-const tenantSelectSeed = (cur, groups, fallback) => {
-    if (groups.includes(cur)) return cur;
-    const g = windowStub.globalSelectedTenant;
-    return (g && g !== 'all' && groups.includes(g)) ? g : fallback;
-};
+const Option = function (label, value) { this.text = label; this.value = value; };
+// Se qualcuno rimette una select locale, questa esplode invece di passare.
+const tenantSelectSeed = () => { throw new Error('questa scheda non ha una select da seminare'); };
 
-const load = (0, eval)(`(function (document, apiFetch, escapeHtml, currentRole, window, Option, tenantSelectSeed) {
+(0, eval)(`(function (document, apiFetch, escapeHtml, currentRole, window, Option, tenantSelectSeed) {
     ${src}
-    return window.loadRedundancyTab;
-})`)(documentStub, apiFetch, escapeHtml, 'admin', windowStub, OptionStub, tenantSelectSeed);
+})`)(documentStub, apiFetch, escapeHtml, 'admin', windowStub, Option, tenantSelectSeed);
 
-const fireChange = () => listeners.change.forEach(fn => fn({ target: select }));
+const load = windowStub.loadRedundancyTab;
+const tenantChanged = windowStub.redundancyTenantChanged;
+assert.equal(typeof load, 'function');
+assert.equal(typeof tenantChanged, 'function',
+    'il selettore globale ha bisogno di un punto da chiamare al cambio di scope');
 
-// --- Fixtures ---------------------------------------------------------------
+// --- Fixture: sede-b ha un gruppo, sede-a due, sede-senza-ha nessuno -------
 
 const GROUPS = [
     { id: 1, group_name: 'sede-b', group_type: 'stack', name: 'stack-b',
@@ -80,102 +69,73 @@ const GROUPS = [
       health: 'ok', logical_device_ip: '192.0.2.10', members: [] },
 ];
 
-// --- Every tenant is its own section, in a stable order ---------------------
+// --- Senza scope: ogni tenant e' una sezione, in ordine stabile -----------
 
 served = GROUPS;
+windowStub.globalSelectedTenant = 'all';
 await load();
 
 const sections = container.innerHTML.match(/<section /g) || [];
-assert.equal(sections.length, 2, 'one section per tenant');
+assert.equal(sections.length, 2, 'una sezione per tenant');
 assert.ok(container.innerHTML.indexOf('sede-a') < container.innerHTML.indexOf('sede-b'),
-    'tenant sections are sorted, so the same customer is always in the same place');
-assert.ok(container.innerHTML.includes('2 cluster'), 'sede-a shows its cluster count');
+    'le sezioni sono ordinate, cosi\' lo stesso cliente sta sempre nello stesso posto');
+assert.ok(container.innerHTML.includes('2 cluster'), 'sede-a mostra il proprio conteggio');
 assert.ok(container.innerHTML.includes('1 da verificare'),
-    'a tenant with a degraded cluster says so in its header');
+    'un tenant con un cluster degradato lo dice nella propria intestazione');
 
-// The select keeps the template option 0 (it carries the data-i18n) and gains
-// one option per tenant.
-assert.deepEqual(select.values(), ['', 'sede-a', 'sede-b']);
-
-// Unfiltered KPIs describe the whole (already scoped) fleet.
+// I KPI senza filtro descrivono tutta la flotta (gia' filtrata dall'API).
 assert.equal(kpi.haKpiTotal.textContent, 3);
 assert.equal(kpi.haKpiHealthy.textContent, 2);
 assert.equal(kpi.haKpiDegraded.textContent, 1);
 
-// --- Filtering narrows both the cards AND the KPI tiles ---------------------
+// --- Lo scope globale restringe le card E i KPI ---------------------------
 
-select.value = 'sede-b';
-fireChange();
+windowStub.globalSelectedTenant = 'sede-b';
+tenantChanged();
 assert.ok(container.innerHTML.includes('sede-b'));
 assert.ok(!container.innerHTML.includes('sede-a'),
-    'the other tenant is gone from the list');
+    'l\'altro tenant e\' sparito dalla lista');
 assert.equal(kpi.haKpiTotal.textContent, 1,
-    'KPIs follow the filter: a degraded cluster must not be attributed to the wrong tenant');
+    'i KPI seguono il filtro: un cluster degradato non va attribuito al cliente sbagliato');
 assert.equal(kpi.haKpiDegraded.textContent, 0);
 
-// --- A refresh keeps the chosen tenant --------------------------------------
+// --- Un refresh non riapre la vista su tutti ------------------------------
 
 await load();
-assert.equal(select.value, 'sede-b', 'refresh must not silently widen the view');
-assert.deepEqual(select.values(), ['', 'sede-a', 'sede-b'],
-    'repopulating does not duplicate or drop the "all tenants" option');
-assert.equal(kpi.haKpiTotal.textContent, 1);
+assert.equal(kpi.haKpiTotal.textContent, 1, 'il refresh non allarga lo scope in silenzio');
+assert.ok(!container.innerHTML.includes('sede-a'));
 
-// --- A tenant that lost its last group falls back to "all" ------------------
+// --- IL BUG: un tenant SENZA gruppi HA -----------------------------------
+//
+// Prima il pannello ripiegava su "tutti", quindi qui si vedevano i cluster di
+// sede-a e sede-b sotto un'intestazione che diceva "sede-senza-ha".
 
-served = [GROUPS[1], GROUPS[2]];   // sede-b has no group any more
-await load();
-assert.equal(select.value, '', 'a tenant with no option left cannot stay selected');
-assert.equal(kpi.haKpiTotal.textContent, 2);
-
-// --- Empty states distinguish "no data" from "filtered out" -----------------
-
-served = [GROUPS[0]];              // only sede-b exists
-await load();
-select.value = 'sede-b';
-fireChange();
-served = [GROUPS[1]];              // sede-b is gone, but the operator re-picks it
-await load();
-select.value = 'sede-b';
-fireChange();
+windowStub.globalSelectedTenant = 'sede-senza-ha';
+tenantChanged();
+assert.ok(!container.innerHTML.includes('sede-a'),
+    'un tenant senza gruppi non deve mostrare i cluster di un altro cliente');
+assert.ok(!container.innerHTML.includes('sede-b'),
+    'nemmeno quelli del secondo');
+assert.equal(kpi.haKpiTotal.textContent, 0, 'e i KPI dicono zero, non tutta la flotta');
 assert.ok(container.innerHTML.includes('Nessun gruppo di ridondanza per il tenant'),
-    'an empty tenant says it is empty');
+    'lo dice invece di mostrare altro');
 assert.ok(!container.innerHTML.includes('Crea Gruppo HA'),
-    'a filtered-out view must not offer "create your first group": that reads as data loss');
+    'una vista filtrata non offre "crea il tuo primo gruppo": si legge come perdita di dati');
+
+// --- Un'installazione davvero vuota tiene il proprio onboarding -----------
 
 served = [];
+windowStub.globalSelectedTenant = 'all';
 await load();
 assert.ok(container.innerHTML.includes('Nessun gruppo di ridondanza registrato'),
-    'a genuinely empty install keeps its onboarding empty state');
+    'vuoto per davvero e vuoto per filtro sono due schermate diverse');
 
-// --- The global tenant selector reaches a panel that loads cold --------------
-//
-// The bug this pins: the tab is lazy, so applyGlobalTenant writes .value on a
-// select that has no options yet — a silent no-op. The panel then repopulated,
-// read back '', and fell back to "every tenant", showing the whole fleet while
-// the header said one tenant.
+// --- 'all' e assente sono la stessa cosa ---------------------------------
 
-windowStub.globalSelectedTenant = 'sede-a';
-select.opts.length = 1;            // cold: only the template's "all" option
-select.value = '';
 served = GROUPS;
+delete windowStub.globalSelectedTenant;
 await load();
-assert.equal(select.value, 'sede-a',
-    'a panel loading cold must adopt the global tenant, not fall back to all');
-assert.ok(container.innerHTML.includes('sede-a'), 'sede-a is rendered');
-assert.ok(!container.innerHTML.includes('sede-b'),
-    'sede-b belongs to another tenant and must not be on screen');
+assert.equal(kpi.haKpiTotal.textContent, 3,
+    'nessuno scope scelto significa tutta la flotta, non nessun cluster');
 
-// An explicit choice still wins: the global tenant only seeds an empty select.
-select.value = 'sede-b';
-fireChange();
-assert.equal(select.value, 'sede-b', 'the operator overrides the global scope');
-
-// And a global tenant with no groups here must not invent a selection.
-windowStub.globalSelectedTenant = 'sede-che-non-esiste';
-select.opts.length = 1;
-select.value = '';
-await load();
-assert.equal(select.value, '', 'an unknown global tenant leaves the filter alone');
-
-console.log('ok');
+console.log('ok - lo scope della scheda HA viene dal selettore globale, per ogni tenant');

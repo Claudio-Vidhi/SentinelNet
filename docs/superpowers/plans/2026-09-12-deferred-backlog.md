@@ -16,12 +16,17 @@ per caller, and unrelated fixes do not get merged to save a commit.
 ## Phase 0 — ANSWERED 2026-09-12
 
 1. **P1 — endpoint inventory KPIs: stay exact.** Closed; see the spec.
-2. **P3 — port bounce: test requested.** Procedure below, not yet run.
-3. **P4 — Windows over WinRM: still open** (the term was unfamiliar; explained
-   in the spec). No work started.
+2. **P3 — port bounce: TESTED ON REAL HARDWARE AND IT WORKS** (user,
+   2026-09-12). The last unverified write path in the product has now run
+   against a switch. The procedure below stays as the way to re-verify it
+   after a change to `services/port_action.py`, not as pending work.
+3. **P4 — Windows: over SSH, not WinRM** (user's call, 2026-09-12). See the
+   spec §P4: Windows ships an OpenSSH *server* since Windows 10 / Server 2019,
+   which means the existing netmiko transport reaches it with no new
+   dependency and no second remote-execution path to secure.
 4. **P2 — FortiGate HA: no cluster available.** Stays unverified, stated.
 
-### P3 — the port bounce field test, when there is a switch and a window
+### P3 — the port bounce field test (passed 2026-09-12; keep as the re-verification recipe)
 
 `services/port_action.py` has never run `send_config_set` against real
 hardware. What makes this test worth planning rather than just clicking the
@@ -47,8 +52,11 @@ and whether the second half ran is then unknowable.
 5. Only then repeat on a port with a device attached, to see that the device
    comes back — the two cases fail differently.
 
-Write the outcome into this section. A test whose result lives only in a chat
-is a test nobody can trust twice.
+**Outcome 2026-09-12: it works.** Run by the user on real hardware. The port
+came back up and the running-config was otherwise unchanged, which is the whole
+contract. Re-run this recipe after any change to the command tables in
+`services/port_action.py` — a vendor whose `shutdown`/`no shutdown` pair is
+wrong fails silently until someone looks at the port.
 
 ---
 
