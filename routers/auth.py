@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from services import inventory_manager
 from security import user_manager
 from security.security_manager import (
-    create_access_token, log_audit,
+    create_access_token, log_audit, revoke_token,
     is_locked_out, record_failed_attempt, reset_failed_attempts,
     clear_account_lockouts,
     ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -171,9 +171,11 @@ def change_password(payload: ChangePasswordSchema,
 
 @router.post("/api/auth/logout")
 def logout_ep(response: Response, current_user = Depends(get_current_user)):
-    """Chiude la sessione browser cancellando il cookie HttpOnly. Il JWT è
-    stateless: la scadenza resta quella del token (max 60 min)."""
+    """Chiude la sessione: cancella il cookie HttpOnly e revoca il token con
+    cui la richiesta è arrivata (S1). Cancellare il cookie non bastava: un
+    Bearer copiato prima del logout restava valido fino a un'ora."""
     response.delete_cookie(SESSION_COOKIE, path="/")
+    revoke_token(current_user)
     log_audit(f"Logout utente '{current_user.get('sub')}'.")
     return {"status": "success"}
 
