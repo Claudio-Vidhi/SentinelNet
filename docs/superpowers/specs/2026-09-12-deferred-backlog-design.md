@@ -113,9 +113,24 @@ These need none.
 | **V3** | **Blast radius — "is it just me?"** Needs a `dst:`/`policy:` entity key so evidence can aggregate across clients | the entity key is the whole design question |
 | **V4** | **Scheduled ARP/MAC collection.** Both are collected on demand, so the diagnosis answers from whatever happens to be in the DB | no scheduler for either; `core_engine.py:165` notes the absence |
 
-### F. Product decisions, not code
+### F. Product decisions — answered 2026-09-12
 
-Nothing should be built for these until the user answers.
+- **P1 — endpoint inventory KPIs: DECIDED, they stay exact.** The ~875 ms at
+  50k is accepted as the honest cost. Do not re-open this with an "approximate
+  and label it" proposal: a stated estimate in an inventory is a number
+  someone will quote as exact, and the read path is already outside the lock,
+  so the remaining cost buys correctness rather than paying for neglect.
+- **P2 — FortiGate HA: no cluster available.** `parse_ha_status()` stays
+  unverified against a real cluster and the FortiGate plan says so. Nothing to
+  build; a standalone unit answers with an empty member list by design.
+- **P3 — port bounce: a test was requested.** Procedure recorded in the plan
+  (Phase 0). Not run yet: it needs a switch and a window.
+- **P4 — Windows over WinRM: still open**, pending the user's call now that
+  WinRM has been explained (it is the Windows equivalent of the SSH transport
+  `drivers/linux.py` uses — HTTP(S)-based remote management, `pywinrm` as the
+  client). It remains a feature, not a debt.
+
+Kept for reference:
 
 - **P1 — endpoint inventory KPIs: exact or cheap?** The seven KPIs are not
   expressible in SQL: they depend on `reclassify_sightings()`, the
