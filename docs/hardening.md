@@ -255,7 +255,48 @@ With no systemd and no declared Windows service (a PyInstaller exe, or a
 process started by hand) the endpoint answers 409 instead of pretending: with
 nothing to bring the process back, "restart" would only mean "stop".
 
-## 7. Other recommendations
+## 7. MCP tools: least privilege
+
+The MCP bridge exposes 46 tools to whatever model the operator points at it.
+They all run **as the authenticated user**: `ai/mcp_server.py` calls the REST
+API with that user's token, so RBAC, tenant scoping and the redaction
+choke-point apply exactly as they do in the browser. An MCP client therefore
+cannot read a tenant its user cannot read.
+
+What it *can* do is act without a human reading the screen first, and that is
+the risk this section is about. Decide per tool, not per bridge.
+
+### Three tiers
+
+| Tier | Tools | Why |
+|---|---|---|
+| **Read-only, safe to enable** | `list_devices`, `get_network_map`, `get_port_channels`, `locate_mac`, `search_mac`, `mac_to_ip`, `client_map`, `endpoint_inventory`, `analyze_config`, `get_triage_status`, `list_sites`, every `fortigate_*` and `wlc_*` read, `diagnose_client`, `policy_trace`, `policy_findings` | They read what the panel already shows to that user. The worst case is a model summarising data the user could open in two clicks |
+| **Touches devices — enable deliberately** | `send_cli_command`, `arp_scan`, `generate_fortigate_config`, `generate_switch_config` | `send_cli_command` opens an SSH session and runs a string: the CLI blacklist still applies (admins bypass it, audited — see §M-1 in the code), but a model chooses the command. `arp_scan` interrogates gateways. The two generators produce configuration that someone may paste without reading |
+| **Disabled by default** | `get_top_talkers`, `get_anomalies`, `linux_health` | `routers/mcp.py:_MCP_DEFAULT_DISABLED`. They stay off until an admin saves an explicit MCP setting: absent settings mean off, not "all on" |
+
+### Rules that hold whatever you enable
+
+- **Give the bridge its own account**, at the lowest role that answers the
+  questions you want asked — `viewer` for a read-only assistant. A tool list
+  is not an authorisation boundary; the account is.
+- **Scope that account to the tenants the assistant is for.** An MCP user with
+  no tenant restriction reads the whole estate, by design
+  (`tests/test_rbac_scope.py` documents that empty means unrestricted).
+- **`send_cli_command` deserves its own decision.** If the assistant only ever
+  needs to read, leave it off: every vendor's `show` output is already
+  reachable through the read-only tools above.
+- **The audit log says who, and which client.** Calls carry
+  `X-SentinelNet-Client: mcp/<tool>`, which is a *claim* by the caller, not
+  proof — identity stays the token's. Read it as "which client says it made
+  this call", which is what tells an MCP run apart from the dashboard.
+- **A local model is still a third party** unless it runs on the same host:
+  outbound messages pass through `redaction.redact()` first (finding I-1), and
+  that choke-point is what keeps credentials and public addresses out of the
+  prompt — not the tool selection.
+
+---
+
+## 8. Other recommendations
 
 - Never publish port 8000 directly on the Internet.
 - Restrict panel access to a VPN or management network.

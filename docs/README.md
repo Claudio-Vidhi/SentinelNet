@@ -49,7 +49,8 @@ for user-facing strings, logs and comments, English for identifiers — see
 | [fedora-central-install.md](fedora-central-install.md) | Fedora Server: step-by-step Central server installation, systemd, SELinux, firewall |
 | [ubuntu-agent-install.md](ubuntu-agent-install.md) | Ubuntu Server 24.04 LTS: step-by-step Site Agent deployment, token auth, systemd |
 | [provisioning-tutorial.md](provisioning-tutorial.md) | Day-0 walkthrough: generate a switch/FortiGate config, push a switch config via SSH or console, and what to do when it fails |
-| [hardening.md](hardening.md) | TLS, reverse proxy, session cookie, listener exposure |
+| [hardening.md](hardening.md) | TLS, reverse proxy, session cookie, listener exposure, MCP least privilege |
+| [data-protection.md](data-protection.md) | What personal data is stored, where, for how long, and what the operator has to decide |
 
 ### Building
 
