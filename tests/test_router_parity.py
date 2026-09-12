@@ -130,6 +130,10 @@ class TestRouterParity(unittest.TestCase):
     # Operazioni la cui DESCRIZIONE è cambiata per estensioni volute, a
     # parametri e risposta invariati per i client esistenti.
     ALLOWED_CHANGED_OPERATIONS = (
+        # S1: il logout revoca il token, non solo il cookie. Cambia SOLO la
+        # descrizione (la docstring che lo dice), e va detta a chi chiama la
+        # rotta da un client programmatico: il Bearer smette di valere.
+        ("post", "/api/auth/logout"),
         ("delete", "/api/fortigate/{ip}/sessions"),
         # Il report Port-channel ora unisce due sorgenti (configurazione per i
         # membri, SNMP per lo stato) e aggiunge campi: nessun campo rimosso.
@@ -320,6 +324,10 @@ class TestFullParity(unittest.TestCase):
     # correlati. Parametri e forma della risposta restano quelli storici (li
     # consumano il tab Flussi e il tool MCP), è cambiata la descrizione.
     ALLOWED_CHANGED_OPERATIONS = (
+        # S1: il logout revoca il token, non solo il cookie. Cambia SOLO la
+        # descrizione (la docstring che lo dice), e va detta a chi chiama la
+        # rotta da un client programmatico: il Bearer smette di valere.
+        ("post", "/api/auth/logout"),
         ("delete", "/api/fortigate/{ip}/sessions"),
         # Rinomina/eliminazione tenant ora require_admin: cambia solo la
         # descrizione (docstring che motiva il vincolo), parametri e
