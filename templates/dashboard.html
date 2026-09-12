@@ -4675,6 +4675,79 @@
     </div>
   </div>
 
+  <!-- Arruolamento di una sede agent: il token si vede UNA VOLTA, e da solo
+       non dice cosa farne. Qui esce insieme al file di configurazione e ai
+       comandi che lo usano. -->
+  <div class="modal-overlay" id="siteEnrollModal">
+    <div class="modal" style="width: 720px; max-width: 96%;">
+      <div class="modal-header">
+        <h3 data-i18n="titleSiteEnroll"><i class="fa-solid fa-key" style="color: var(--warning);"></i> Arruolamento agente di sede</h3>
+        <i class="fa-solid fa-xmark modal-close" data-action="close-site-enroll"></i>
+      </div>
+      <p style="color: var(--warning); font-size: 12px; margin-bottom: 12px;" data-i18n="descSiteEnroll">
+        Il token è mostrato una sola volta: copialo adesso. Chiudendo questa finestra non è più recuperabile (si può solo rigenerare).
+      </p>
+      <h4 style="font-size:12px; margin:0 0 6px;"><code>agent.json</code></h4>
+      <pre id="siteEnrollConfig" style="background:var(--surface-3); border:1px solid var(--border); padding:10px; font-size:11px; overflow-x:auto; margin-bottom:12px;"></pre>
+      <h4 style="font-size:12px; margin:0 0 6px;" data-i18n="lblSiteEnrollCommands">Comandi di installazione</h4>
+      <pre id="siteEnrollCommands" style="background:var(--surface-3); border:1px solid var(--border); padding:10px; font-size:11px; overflow-x:auto; margin-bottom:12px;"></pre>
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-primary" data-action="copy-site-enroll" data-i18n="btnCopySiteEnroll" style="width:auto;">
+          <i class="fa-solid fa-copy"></i> Copia tutto
+        </button>
+        <button class="btn btn-secondary" data-action="close-site-enroll" data-i18n="btnClose" style="width:auto;">Chiudi</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modifica sede: nome, subnet, modalita' e, per una sede jump, il bastione.
+       update_site accettava tutto questo dal primo giorno; l'unico modo di
+       cambiarlo era una chiamata API a mano. -->
+  <div class="modal-overlay" id="editSiteModal">
+    <div class="modal" style="width: 560px; max-width: 95%;">
+      <div class="modal-header">
+        <h3 data-i18n="titleEditSite"><i class="fa-solid fa-pen" style="color: var(--primary);"></i> Modifica sede</h3>
+        <i class="fa-solid fa-xmark modal-close" id="btnCloseEditSite" data-action="close-edit-site"></i>
+      </div>
+      <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 14px;">
+        <span data-i18n="lblSiteId">ID sede</span>: <strong id="editSiteId">—</strong>
+      </p>
+      <div class="form-group">
+        <label for="editSiteName" data-i18n="lblSiteName">Nome</label>
+        <input id="editSiteName" type="text" style="padding-left:12px;">
+      </div>
+      <div class="form-group">
+        <label for="editSiteSubnets" data-i18n="lblSiteSubnets">Subnet (separate da virgola)</label>
+        <input id="editSiteSubnets" type="text" placeholder="es. 10.0.0.0/24, 10.0.1.0/24" data-i18n-placeholder="phNewSiteSubnets" style="padding-left:12px;">
+      </div>
+      <div class="form-group">
+        <label for="editSiteMode" data-i18n="lblSiteMode">Modalità</label>
+        <select id="editSiteMode" style="padding-left:12px;">
+          <option value="central">Central poll</option>
+          <option value="agent">Site agent</option>
+          <option value="jump" data-i18n="optSiteJump">Jump (bastion SSH)</option>
+        </select>
+      </div>
+      <div id="editSiteJumpFields" style="display:none;">
+        <div class="form-group">
+          <label for="editSiteJumpHost" data-i18n="lblJumpHost">Host bastione (IP/hostname)</label>
+          <input id="editSiteJumpHost" type="text" placeholder="es. 198.51.100.10" data-i18n-placeholder="phNewSiteJumpHost" style="padding-left:12px;">
+        </div>
+        <div class="form-group">
+          <label for="editSiteJumpPort" data-i18n="lblJumpPort">Porta SSH bastione</label>
+          <input id="editSiteJumpPort" type="number" min="1" max="65535" style="padding-left:12px;">
+        </div>
+      </div>
+      <p id="editSiteModeWarning" style="display:none; color: var(--warning); font-size: 12px; margin-bottom: 12px;"></p>
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-primary" id="btnSaveEditSite" data-action="save-edit-site" data-i18n="btnSaveSite" style="width:auto;">
+          <i class="fa-solid fa-floppy-disk"></i> Salva sede
+        </button>
+        <button class="btn btn-secondary" data-action="close-edit-site" data-i18n="uiCancel" style="width:auto;">Annulla</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="triageScopeModal">
     <div class="modal" style="width: 460px; max-width: 95%;">
       <div class="modal-header">

@@ -120,7 +120,20 @@ def update_site_ep(payload: SiteUpdateSchema, current_user = Depends(require_adm
         from core import net_ssh
         net_ssh.invalidate_site(payload.id)
     log_audit(f"Sede '{payload.id}' aggiornata da '{current_user.get('sub')}'.")
-    return {"status": "success"}
+    out: Dict[str, Any] = {"status": "success"}
+    # Passare a 'agent' senza token lascia una sede inservibile: update_site
+    # cambia la modalita' e non ne emette uno, quindi l'agente non ha con cosa
+    # autenticarsi e nessuna schermata lo dice. Il token si emette qui, dove
+    # il cambio di modalita' e' noto, e non nel browser: cosi' vale anche per
+    # chi chiama l'API direttamente.
+    updated = site_manager.get_site(payload.id)
+    if updated and updated.get("mode") == "agent" and not updated.get("has_token"):
+        token = site_manager.regenerate_token(payload.id)
+        if token:
+            out["token"] = token       # in chiaro UNA SOLA VOLTA, come alla creazione
+            log_audit(f"Token emesso per la sede '{payload.id}' passata in modalità "
+                      f"agent da '{current_user.get('sub')}'.")
+    return out
 
 @router.post("/api/sites/delete")
 def delete_site_ep(payload: SiteIdSchema, current_user = Depends(require_admin)):

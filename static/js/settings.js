@@ -67,10 +67,14 @@
                 actions += `<select data-action="set-site-device-identity" data-site-id="${escapeHtml(s.id)}" title="${escapeHtml(L.lblDeviceIdentity)}" style="margin-right:10px; padding:2px 6px; font-size:12px;"><option value="">${escapeHtml(L.optNoDeviceIdentity)}</option>${identityOptions(identities, s.device_identity || '')}</select>`;
                 actions += `<button data-action="test-bastion" data-site-id="${escapeHtml(s.id)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-plug-circle-check"></i> ${L.btnTestBastion}</button>`;
             }
+            const editBtn = `<button data-action="edit-site" data-site-id="${escapeHtml(s.id)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-pen"></i> ${L.btnEditSite}</button>`;
             if (!isCentral) {
                 actions += `<button data-action="delete-site" data-site-id="${escapeHtml(s.id)}" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${L.btnDeleteSite}</button>`;
+                actions = editBtn + actions;
             } else {
-                actions = `<span class="chip">${L.lblSiteDefault}</span>`;
+                // La sede predefinita non si elimina e non cambia modalita',
+                // ma nome e subnet sono suoi come di ogni altra.
+                actions = editBtn + `<span class="chip">${L.lblSiteDefault}</span>`;
             }
             return `<tr>
                 <td><strong>${escapeHtml(s.id)}</strong></td>
@@ -176,9 +180,7 @@
                 document.getElementById('newSiteJumpHost').value = '';
                 document.getElementById('newSiteJumpPort').value = '22';
             }
-            if (data.token) {
-                prompt(tr('setSiteTokenShownOnly'), data.token);
-            }
+            if (data.token) showSiteEnrollment(data.site.id, data.token);
             loadSites();
         } else if (res) {
             const e = await res.json(); alert((tr('uiError')) + (e.detail || ''));
@@ -193,7 +195,7 @@
         });
         if (res && res.ok) {
             const data = await res.json();
-            prompt(tr('setNewTokenShownOnly'), data.token);
+            showSiteEnrollment(id, data.token);
             loadSites();
         } else if (res) { const e = await res.json(); alert((tr('uiError')) + (e.detail || '')); }
     }
@@ -249,6 +251,134 @@
             alert((tr('uiError')) + (e.detail || ''));
         }
         loadSites();
+    }
+
+    // --- Arruolamento di una sede agent (G5) ---
+    // Il token si mostra una volta sola, e da solo non dice cosa farne: chi
+    // installa l'agente doveva ricavare agent.json e i comandi dalla
+    // documentazione e incollarci il token a mano. Escono insieme.
+    function enrollmentText(siteId, token) {
+        const cfg = JSON.stringify({
+            central_url: window.location.origin,
+            site_id: siteId,
+            token: token,
+            interval: 60,
+            verify_tls: window.location.protocol === 'https:',
+            data_dir: '/opt/SentinelNet/agent-data',
+        }, null, 2);
+        const cmds = [
+            'sudo install -d -m 700 /opt/SentinelNet',
+            "sudo tee /opt/SentinelNet/agent.json > /dev/null << 'EOF'",
+            cfg,
+            'EOF',
+            'sudo chmod 600 /opt/SentinelNet/agent.json',
+            'sudo systemctl restart sentinelnet-agent',
+        ].join('\n');
+        return { cfg, cmds };
+    }
+
+    function showSiteEnrollment(siteId, token) {
+        const { cfg, cmds } = enrollmentText(siteId, token);
+        // textContent, non innerHTML: il token e' un valore, non markup.
+        document.getElementById('siteEnrollConfig').textContent = cfg;
+        document.getElementById('siteEnrollCommands').textContent = cmds;
+        openModal('siteEnrollModal');
+    }
+
+    function copySiteEnrollment() {
+        const cfg = document.getElementById('siteEnrollConfig').textContent;
+        const cmds = document.getElementById('siteEnrollCommands').textContent;
+        navigator.clipboard.writeText(cfg + '\n\n' + cmds);
+    }
+
+    // --- Modifica di una sede esistente (nome, subnet, modalita', bastione) ---
+    // update_site accetta questi campi dal primo giorno e nessuna schermata li
+    // offriva: cambiare l'indirizzo di un bastione voleva dire una chiamata
+    // API fatta a mano.
+    let editingSite = null;
+
+    function onEditSiteModeChange() {
+        const mode = document.getElementById('editSiteMode').value;
+        const jump = document.getElementById('editSiteJumpFields');
+        if (jump) jump.style.display = mode === 'jump' ? 'block' : 'none';
+        const warn = document.getElementById('editSiteModeWarning');
+        if (!warn) return;
+        const wasMode = editingSite ? editingSite.mode : mode;
+        // Le conseguenze del cambio si dicono PRIMA del salvataggio: due delle
+        // tre toccano il token, cioe' la capacita' dell'agente di autenticarsi.
+        let key = '';
+        if (mode !== wasMode) {
+            if (mode === 'central') key = 'warnSiteModeToCentral';
+            else if (mode === 'agent') key = 'warnSiteModeToAgent';
+            else if (mode === 'jump') key = 'warnSiteModeToJump';
+        }
+        warn.textContent = key ? tr(key) : '';
+        warn.style.display = key ? 'block' : 'none';
+    }
+
+    async function openEditSiteModal(siteId) {
+        const res = await apiFetch('/api/sites');
+        if (!res || !res.ok) return;
+        const sites = (await res.json()).sites || [];
+        const site = sites.find(s => s.id === siteId);
+        if (!site) return;
+        editingSite = site;
+        document.getElementById('editSiteId').textContent = site.id;
+        document.getElementById('editSiteName').value = site.name || '';
+        document.getElementById('editSiteSubnets').value = (site.subnets || []).join(', ');
+        const modeSel = document.getElementById('editSiteMode');
+        modeSel.value = site.mode || 'central';
+        // La sede predefinita e' quella del centrale: cambiarle modalita'
+        // vorrebbe dire togliere al centrale la via diretta verso i propri
+        // apparati.
+        modeSel.disabled = site.id === 'central';
+        document.getElementById('editSiteJumpHost').value = site.jump_host || '';
+        document.getElementById('editSiteJumpPort').value = site.jump_port || 22;
+        onEditSiteModeChange();
+        openModal('editSiteModal', () => { editingSite = null; });
+    }
+
+    async function saveEditSite() {
+        if (!editingSite) return;
+        const id = editingSite.id;
+        const wasMode = editingSite.mode;
+        const mode = document.getElementById('editSiteMode').value;
+        const name = document.getElementById('editSiteName').value.trim();
+        if (!name) { alert(tr('setSiteNameRequired')); return; }
+        if (mode !== wasMode && !confirm(modeChangeWarning(mode))) return;
+        const body = {
+            id, name,
+            subnets: document.getElementById('editSiteSubnets').value
+                .split(',').map(x => x.trim()).filter(Boolean),
+        };
+        if (mode !== wasMode) body.mode = mode;
+        if (mode === 'jump') {
+            body.jump_host = document.getElementById('editSiteJumpHost').value.trim();
+            body.jump_port = parseInt(document.getElementById('editSiteJumpPort').value, 10) || 22;
+        }
+        const res = await apiFetch('/api/sites/update', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!res) return;
+        if (!res.ok) {
+            const e = await res.json().catch(() => ({}));
+            alert(tr('uiError') + (e.detail || ''));
+            return;
+        }
+        // Passando ad 'agent' il centrale emette il token nel salvataggio
+        // stesso (vedi routers/sites.py): lo mostra una volta sola, come alla
+        // creazione. Non lo si chiede con una seconda chiamata: la sede
+        // resterebbe senza token se quella fallisse.
+        const data = await res.json().catch(() => ({}));
+        closeModal('editSiteModal');
+        if (data.token) showSiteEnrollment(id, data.token);
+        loadSites();
+    }
+
+    function modeChangeWarning(mode) {
+        return tr(mode === 'central' ? 'warnSiteModeToCentral'
+            : mode === 'agent' ? 'warnSiteModeToAgent' : 'warnSiteModeToJump');
     }
 
     async function deleteSite(id) {
@@ -1193,9 +1323,21 @@
         const act = btn.dataset.action;
         const siteId = btn.dataset.siteId;
         if (act === 'open-agent-control' && typeof openAgentControlModal === 'function') openAgentControlModal(siteId);
+        else if (act === 'edit-site') openEditSiteModal(siteId);
         else if (act === 'regen-site-token') regenSiteToken(siteId);
         else if (act === 'delete-site') deleteSite(siteId);
         else if (act === 'test-bastion') testBastion(siteId);
+    });
+
+    // Il modale vive fuori da sitesTableBody: ha bisogno del proprio listener.
+    document.getElementById('editSiteModal')?.addEventListener('click', (e) => {
+        if (e.target.closest('[data-action="save-edit-site"]')) saveEditSite();
+        else if (e.target.closest('[data-action="close-edit-site"]')) closeModal('editSiteModal');
+    });
+    document.getElementById('editSiteMode')?.addEventListener('change', onEditSiteModeChange);
+    document.getElementById('siteEnrollModal')?.addEventListener('click', (e) => {
+        if (e.target.closest('[data-action="copy-site-enroll"]')) copySiteEnrollment();
+        else if (e.target.closest('[data-action="close-site-enroll"]')) closeModal('siteEnrollModal');
     });
 
     document.getElementById('sitesTableBody')?.addEventListener('change', (e) => {
