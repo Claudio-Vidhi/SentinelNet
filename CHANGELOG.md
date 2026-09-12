@@ -50,6 +50,15 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Fixed
 
+- **Il filtro per tenant della scheda Alta Affidabilita' funzionava per un
+  tenant solo.** La scheda aveva una select propria, popolata con i soli
+  tenant che POSSEDEVANO un gruppo HA: scegliere in alto un tenant senza
+  gruppi scriveva su una option inesistente — un no-op silenzioso — e il
+  pannello ripiegava su "tutti i tenant", **mostrando i cluster di un altro
+  cliente sotto un'intestazione che diceva il primo**. Ora lo scope viene dal
+  selettore in alto e da nessun altro posto, come per Endpoint Location: un
+  tenant senza gruppi vede uno stato vuoto che lo dice, e i KPI dicono zero
+  invece di descrivere tutta la flotta.
 - **Il logout revoca il token, non solo il cookie.** Un Bearer copiato prima
   del logout restava valido fino a un'ora dopo, e la docstring della rotta lo
   diceva. Gli account disabilitati o eliminati erano invece gia' coperti.

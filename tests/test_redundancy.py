@@ -267,21 +267,33 @@ class TestRedundancyTabTenantView(unittest.TestCase):
                               capture_output=True, text=True, cwd=str(self._REPO_ROOT))
         self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
 
-    def test_the_filter_control_exists_in_the_template(self):
-        # The module binds the select through a delegated listener: an id that
-        # does not exist in dashboard.html raises nothing and leaves the filter
-        # silently dead (see CLAUDE.md, Frontend).
+    def test_the_tab_has_no_tenant_filter_of_its_own(self):
+        """Un solo filtro per tenant, quello in alto.
+
+        La select locale era popolata con i soli tenant che POSSEDEVANO un
+        gruppo HA: scegliere in alto un tenant senza gruppi scriveva su una
+        option inesistente (no-op silenzioso) e il pannello ripiegava su
+        "tutti", mostrando i cluster di un altro cliente. Se qualcuno rimette
+        una select qui, questo test torna rosso."""
         with open(self._REPO_ROOT / "templates" / "dashboard.html",
                   encoding="utf-8") as f:
             html = f.read()
-        self.assertIn('id="haTenantFilter"', html)
-        self.assertIn('data-i18n="optHaAllTenants"', html)
+        self.assertNotIn('id="haTenantFilter"', html)
+        self.assertNotIn('optHaAllTenants', html)
 
-    def test_the_filter_labels_exist_in_both_languages(self):
-        from tests.test_helpers_frontend import frontend_source
-        src = frontend_source()
-        self.assertEqual(src.count("lblHaTenantFilter:"), 2)
-        self.assertEqual(src.count("optHaAllTenants:"), 2)
+    def test_the_scope_comes_from_the_global_selector(self):
+        with open(self._REPO_ROOT / "static" / "js" / "redundancy.js",
+                  encoding="utf-8") as f:
+            src = f.read()
+        self.assertIn("window.globalSelectedTenant", src)
+        self.assertIn("window.redundancyTenantChanged", src)
+        with open(self._REPO_ROOT / "static" / "js" / "core.js",
+                  encoding="utf-8") as f:
+            core = f.read()
+        # applyGlobalTenant deve chiamarla, altrimenti cambiare tenant in alto
+        # non ridisegna questa scheda.
+        self.assertIn("window.redundancyTenantChanged()", core)
+        self.assertNotIn("haTenantFilter", core)
 
 
 if __name__ == "__main__":

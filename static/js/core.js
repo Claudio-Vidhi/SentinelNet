@@ -1532,7 +1532,10 @@ function applyGlobalTenant(val) {
     if (topSel instanceof HTMLSelectElement && val !== 'all') { topSel.value = val; }
     // Sync remaining per-panel VIEW FILTERS: set value and fire change so the
     // panel's own handler reacts (re-fetches data, etc.).
-    for (const sid of ['ptTenantSelect', 'driftTenantSelect', 'haTenantFilter',
+    // La scheda HA non ha piu' una select propria: legge
+    // window.globalSelectedTenant e basta, come Endpoint Location.
+    if (typeof window.redundancyTenantChanged === 'function') window.redundancyTenantChanged();
+    for (const sid of ['ptTenantSelect', 'driftTenantSelect',
                        'wlcTenantSelect', 'ifTenantFilter', 'categoriesGroupSelect',
                        'configGroupSelect', 'interactiveGroupSelect',
                        'bulkGroupFilter']) {

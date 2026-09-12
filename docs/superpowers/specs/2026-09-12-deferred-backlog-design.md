@@ -123,12 +123,35 @@ These need none.
 - **P2 — FortiGate HA: no cluster available.** `parse_ha_status()` stays
   unverified against a real cluster and the FortiGate plan says so. Nothing to
   build; a standalone unit answers with an empty member list by design.
-- **P3 — port bounce: a test was requested.** Procedure recorded in the plan
-  (Phase 0). Not run yet: it needs a switch and a window.
-- **P4 — Windows over WinRM: still open**, pending the user's call now that
-  WinRM has been explained (it is the Windows equivalent of the SSH transport
-  `drivers/linux.py` uses — HTTP(S)-based remote management, `pywinrm` as the
-  client). It remains a feature, not a debt.
+- **P3 — port bounce: RUN ON REAL HARDWARE, AND IT WORKS** (user,
+  2026-09-12). The port came back up and the running-config was otherwise
+  unchanged. The last unverified write path in the product is now verified;
+  the recipe in the plan stays as the way to re-check it after a change to the
+  per-vendor command tables.
+- **P4 — Windows: over SSH, not WinRM** (user's call, 2026-09-12, and it is
+  the better one). WinRM is the Windows remote-management service — HTTP(S)
+  transport, `pywinrm` as the client. But **Windows has shipped an OpenSSH
+  server since Windows 10 / Server 2019**, so the netmiko transport this
+  product already uses for every other device reaches a Windows host with:
+  - **no new dependency** (`pywinrm` plus its auth stack: NTLM, Kerberos, or
+    CredSSP, which is the one that forwards credentials to the target);
+  - **no second remote-execution path to secure** — the CLI blacklist, the
+    audited admin bypass, the identity resolution in
+    `core_engine.get_device_credentials` and the jump-host transport all apply
+    unchanged;
+  - **one artefact format**, so the `--- <section> ---` markers and the
+    analyzer follow `drivers/linux.py` instead of being invented again.
+
+  The cost moves to the customer side: the OpenSSH feature has to be installed
+  and the service started on each Windows host, where WinRM is on by default
+  in a domain. That is a deployment note, not a code problem, and it buys back
+  a whole authentication surface. What remains genuinely Windows-specific is
+  the command set (`powershell -Command Get-...` instead of `cat /etc/...`)
+  and the default shell, which netmiko's `terminal_server` / generic driver
+  handles.
+
+  Still a **feature, not a debt**: nothing breaks without it. When it is built
+  it gets its own spec, shaped like the Linux one.
 
 Kept for reference:
 
