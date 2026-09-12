@@ -351,7 +351,12 @@ def _from_api_observations(conn, now: int) -> int:
         # Stato per interfaccia: rende interrogabile la singola porta, non solo
         # l'apparato. ``entity_type='interface'`` esisteva nello schema e non lo
         # emetteva nessuno.
+        measured = _measured(r["summary_json"])
         for iface, fields in _interfaces_of(r["summary_json"], r["kind"]).items():
+            # Le misure per porta arrivano prefissate col nome della porta
+            # (``Gi0/1.in_errors``): uno snapshot ne porta una per ogni
+            # interfaccia, e la regola a soglia deve vedere solo le proprie.
+            prefix = f"{iface}."
             _emit(conn,
                   ts=r["ts"], ingested_ts=now, tenant=r["tenant"],
                   source=_source_of(r["kind"]), source_id=r["id"],
@@ -359,6 +364,8 @@ def _from_api_observations(conn, now: int) -> int:
                   entity_id=f"{r['device_ip']}:{iface}",
                   device_ip=r["device_ip"], interface=iface,
                   attrs=fields,
+                  metrics={k[len(prefix):]: v for k, v in measured.items()
+                           if k.startswith(prefix)},
                   dedup_key=f"api-iface:{r['id']}:{iface}")
         last_id = max(last_id, r["id"])
     if rows:

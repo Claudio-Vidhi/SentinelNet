@@ -264,8 +264,19 @@ async def _poll_device(ip: str, community: str, port: int = 161) -> list:
     # stato. L'adapter li copia in ``events.metrics_json``, dove le regole a
     # soglia possono leggerli — nei ``results`` sarebbero solo testo da
     # confrontare, e finirebbero per generare un "cambiamento" a ogni giro.
+    # Gli stessi contatori di errore stanno nei ``results`` (dove servono alla
+    # diagnosi di un client) e sotto ``metrics``, prefissati per porta. Senza
+    # il secondo posto nessuna regola a soglia li vede: _stable_fields() li
+    # scarta per progetto (``error`` e' fra i campi volatili, altrimenti ogni
+    # giro di polling sembrerebbe un cambiamento di configurazione), quindi
+    # ``results`` non arriva a ``metrics_json``.
+    iface_metrics = {f"{iface}.{field}": values[field]
+                     for iface, values in interfaces.items()
+                     for field in ("in_errors", "out_errors")
+                     if isinstance(values.get(field), (int, float))}
     return [("snmp_system", dump({"results": system, "metrics": load})),
-            ("snmp_interfaces", dump({"results": interfaces}))]
+            ("snmp_interfaces", dump({"results": interfaces,
+                                      "metrics": iface_metrics}))]
 
 
 def _snmp_devices() -> list:

@@ -164,5 +164,103 @@ class TestIncidentsApi(unittest.TestCase):
         self.assertEqual(r.status_code, 404)
 
 
+
+class TestIncidentOwnership(unittest.TestCase):
+    # Ereditare da TestIncidentsApi rieseguirebbe anche i suoi test: qui
+    # servono solo il suo setup (migrate + utenti + seed) e il suo client.
+    setUpClass = TestIncidentsApi.setUpClass
+    setUp = TestIncidentsApi.setUp
+    _client = TestIncidentsApi._client
+
+    """N3 — chi ha preso in carico, quando, e perche'.
+
+    Lo stato diceva che qualcuno l'aveva fatto e non chi: il nome finiva solo
+    nel registro di audit, cioe' in un altro file e in un'altra schermata. Con
+    un motore di notifiche e' la differenza fra "ci sta lavorando Tizio" e una
+    seconda sveglia alle tre di notte."""
+
+    def _row(self, incident_id):
+        conn = db.get_observability_connection()
+        try:
+            return dict(conn.execute(
+                "SELECT * FROM incidents WHERE id = ?", (incident_id,)).fetchone())
+        finally:
+            conn.close()
+
+    def test_taking_it_on_records_who_when_and_why(self):
+        c = self._client("op_inc_a")
+        r = c.post(f"/api/incidents/{self.id_a}/status", headers=CSRF,
+                   json={"from_status": "new", "status": "ack",
+                         "note": "atteso, finestra di manutenzione"})
+        self.assertEqual(r.status_code, 200, r.text)
+        row = self._row(self.id_a)
+        self.assertEqual(row["acknowledged_by"], "op_inc_a")
+        self.assertEqual(row["ack_note"], "atteso, finestra di manutenzione")
+        self.assertGreater(row["acknowledged_ts"], 0)
+
+    def test_resolving_records_who_closed_it(self):
+        c = self._client("op_inc_a")
+        r = c.post(f"/api/incidents/{self.id_a}/status", headers=CSRF,
+                   json={"from_status": "new", "status": "resolved"})
+        self.assertEqual(r.status_code, 200, r.text)
+        row = self._row(self.id_a)
+        self.assertEqual(row["resolved_by"], "op_inc_a")
+        self.assertIsNone(row["acknowledged_by"])
+
+    def test_resolving_keeps_the_note_written_when_it_was_taken_on(self):
+        """Chiudere non cancella il perche': la nota della presa in carico e'
+        spesso l'unica spiegazione che resta."""
+        c = self._client("op_inc_a")
+        c.post(f"/api/incidents/{self.id_a}/status", headers=CSRF,
+               json={"from_status": "new", "status": "ack", "note": "atteso"})
+        c.post(f"/api/incidents/{self.id_a}/status", headers=CSRF,
+               json={"from_status": "ack", "status": "resolved"})
+        row = self._row(self.id_a)
+        self.assertEqual(row["ack_note"], "atteso")
+        self.assertEqual(row["acknowledged_by"], "op_inc_a")
+        self.assertEqual(row["resolved_by"], "op_inc_a")
+
+    def test_a_note_on_resolve_overwrites_nothing_when_empty(self):
+        c = self._client("op_inc_a")
+        c.post(f"/api/incidents/{self.id_a}/status", headers=CSRF,
+               json={"from_status": "new", "status": "ack", "note": "prima"})
+        c.post(f"/api/incidents/{self.id_a}/status", headers=CSRF,
+               json={"from_status": "ack", "status": "resolved", "note": "   "})
+        self.assertEqual(self._row(self.id_a)["ack_note"], "prima")
+
+    def test_a_refused_transition_records_nothing(self):
+        c = self._client("op_inc_a")
+        r = c.post(f"/api/incidents/{self.id_a}/status", headers=CSRF,
+                   json={"from_status": "resolved", "status": "ack",
+                         "note": "non deve restare"})
+        self.assertEqual(r.status_code, 409)
+        row = self._row(self.id_a)
+        self.assertIsNone(row["acknowledged_by"])
+        self.assertIsNone(row["ack_note"])
+
+    def test_an_out_of_scope_incident_records_nothing(self):
+        c = self._client("op_inc_a")
+        r = c.post(f"/api/incidents/{self.id_b}/status", headers=CSRF,
+                   json={"from_status": "new", "status": "ack", "note": "x"})
+        self.assertEqual(r.status_code, 404)
+        self.assertIsNone(self._row(self.id_b)["acknowledged_by"])
+
+    def test_the_note_is_bounded(self):
+        c = self._client("op_inc_a")
+        c.post(f"/api/incidents/{self.id_a}/status", headers=CSRF,
+               json={"from_status": "new", "status": "ack", "note": "x" * 900})
+        self.assertEqual(len(self._row(self.id_a)["ack_note"]), 500)
+
+    def test_the_detail_and_the_list_expose_the_owner(self):
+        c = self._client("op_inc_a")
+        c.post(f"/api/incidents/{self.id_a}/status", headers=CSRF,
+               json={"from_status": "new", "status": "ack", "note": "atteso"})
+        detail = c.get(f"/api/incidents/{self.id_a}").json()["incident"]
+        self.assertEqual(detail["acknowledged_by"], "op_inc_a")
+        self.assertEqual(detail["ack_note"], "atteso")
+        listed = c.get("/api/incidents?status=ack&window=24h").json()["incidents"]
+        self.assertEqual(listed[0]["acknowledged_by"], "op_inc_a")
+
+
 if __name__ == "__main__":
     unittest.main()

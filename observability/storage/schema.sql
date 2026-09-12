@@ -216,6 +216,14 @@ CREATE TABLE IF NOT EXISTS incidents (
     status         TEXT DEFAULT 'new' CHECK(status IN ('new','ack','resolved')),
     resolved_ts    INTEGER,            -- istante della transizione a resolved:
                                        -- ancora la retention (v10). NULL finché aperto.
+    -- v11: il "chi". Lo stato diceva che qualcuno aveva preso in carico e non
+    -- chi: il nome finiva solo nel registro di audit, che e' un altro file e
+    -- un'altra schermata. Con un motore di notifiche diventa la differenza fra
+    -- "ci sta lavorando Tizio" e una seconda sveglia alle tre di notte.
+    acknowledged_by TEXT,
+    acknowledged_ts INTEGER,
+    ack_note        TEXT,              -- perché: "atteso, finestra di manutenzione"
+    resolved_by     TEXT,
     cause_kind     TEXT,               -- regola deterministica che ha concluso
     confidence     INTEGER,            -- 0-100, deterministico
     reasoning_json TEXT,               -- {cause, rules_fired[], sources_used[], evidence_refs[]}

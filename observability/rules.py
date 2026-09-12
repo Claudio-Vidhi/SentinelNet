@@ -227,6 +227,15 @@ RULES_EN = {
             "min_transitions": "Link transition count in correlation window required to qualify as flapping (4 = two full cycles).",
         },
     },
+    "IFACE_ERRORS_001": {
+        "title": "Rising error counters on a port",
+        "description": "An interface error counter keeps rising within the window. A physical-layer fault that degrades without dropping the link, so it produces no transition to observe.",
+        "investigation": "Cable, transceiver optics, and duplex negotiation, in that order. Inbound-only errors point at the remote side or the medium; outbound errors point at congestion or a duplex mismatch. Compare with the port at the other end: only one side counting errors narrows it down immediately.",
+        "remediation": "Replace the cable or the transceiver. If the errors are outbound only and rise with traffic it is not a fault to replace: it is congestion, and it is fixed on link capacity.",
+        "parameters": {
+            "min_errors": "Errors accumulated within the window to qualify as a fault rather than the noise floor of a copper link. The delta between first and last sample is used: the counters are cumulative, so the absolute value of a switch up for two years says nothing.",
+        },
+    },
     "DEVICE_LOAD_001": {
         "title": "Device resource load over threshold",
         "description": "CPU, memory, or disk exceeded threshold. Indicates high resource strain, not root cause.",
@@ -485,6 +494,70 @@ def _interface_flapping(events: list, p: dict) -> list:
                     f"transizioni in {max(span // 60, 1)} minuti",
             attrs={"interface": interface, "transitions": len(recent),
                    "span_s": span}))
+    return out
+
+
+def _interface_errors(events: list, p: dict) -> list:
+    """Errori in CRESCITA su una porta.
+
+    ``in_errors``/``out_errors`` erano raccolti dal poller SNMP e li leggeva
+    solo la diagnosi di un client, su richiesta: nessuna regola li guardava,
+    quindi una porta che accumulava errori non diceva niente a nessuno finche'
+    qualcuno non andava a cercarla.
+
+    Si guarda la DIFFERENZA fra il primo e l'ultimo campione della finestra,
+    non il valore assoluto: sono contatori cumulativi, e uno switch acceso da
+    due anni ha errori diversi da zero senza che significhi nulla. Un solo
+    campione non e' quindi valutabile, e va lasciato cadere invece di essere
+    confrontato con la soglia.
+
+    Il riavvio dell'apparato azzera i contatori: la differenza diventa
+    negativa e resta sotto soglia da se', senza un caso speciale.
+
+    Ruolo ``trigger`` e non ``symptom``: come per il flapping, il guasto e'
+    fisico e la regola sa dire di che classe e'. Quale dei tre candidati sia
+    (cavo, ottica, negoziato di duplex) non lo sa, e lo dice
+    nell'investigazione invece di indovinarlo.
+    """
+    per_iface: dict = {}
+    for ev in events:
+        if ev["event_type"] != "interface.state" or not ev["interface"]:
+            continue
+        # metrics_json e non attrs_json: i contatori sono MISURE, e gli attrs
+        # di uno snapshot interfacce escludono per progetto tutto cio' che
+        # cambia a ogni lettura (vedi normalize._stable_fields).
+        measured = json.loads(ev["metrics_json"] or "{}")
+        total, seen_any = 0, False
+        for field in ("in_errors", "out_errors"):
+            value = measured.get(field)
+            # Assente non e' zero: una porta che non espone il contatore non
+            # deve sembrare pulita.
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                total += int(value)
+                seen_any = True
+        if seen_any:
+            per_iface.setdefault(
+                (ev["tenant"], ev["device_ip"], ev["interface"]), []).append((ev, total))
+
+    out = []
+    for (tenant, device_ip, interface), samples in per_iface.items():
+        if len(samples) < 2:
+            continue
+        delta = samples[-1][1] - samples[0][1]
+        if delta < p["min_errors"]:
+            continue
+        last_ev = samples[-1][0]
+        span = last_ev["ts"] - samples[0][0]["ts"]
+        out.append(Finding(
+            event_id=last_ev["id"], ts=last_ev["ts"], tenant=tenant,
+            role="trigger", entity_key=f"ip:{device_ip}", severity=4,
+            # Due porte con errori sullo stesso apparato sono due conclusioni,
+            # come per il flapping.
+            key=f"errors:{interface}", interface=interface,
+            summary=f"Interfaccia {interface}: {delta} errori in "
+                    f"{max(span // 60, 1)} minuti",
+            attrs={"interface": interface, "errors_delta": delta,
+                   "span_s": span, "threshold": p["min_errors"]}))
     return out
 
 
@@ -1027,6 +1100,37 @@ RULES = {
                        "membro instabile ricalcola il bundle a ogni "
                        "transizione.",
         "check": _interface_flapping,
+    },
+    "IFACE_ERRORS_001": {
+        "version": "1.0.0",
+        "title": "Errori in crescita su una porta",
+        "description": "I contatori di errore di un'interfaccia crescono "
+                       "nella finestra. E' un guasto del livello fisico che "
+                       "degrada senza far cadere il link, quindi non produce "
+                       "nessuna transizione da vedere.",
+        "inputs": ["interface.state"],
+        "outputs": ["trigger"],
+        "parameters": [
+            {"name": "min_errors", "default": 100, "min": 1, "max": 1000000,
+             "description": "Errori accumulati nella finestra perche' sia un "
+                            "guasto e non il fondo di rumore di un "
+                            "collegamento in rame. Si conta la differenza fra "
+                            "primo e ultimo campione: i contatori sono "
+                            "cumulativi, e il valore assoluto di uno switch "
+                            "acceso da due anni non dice niente."},
+        ],
+        "base_confidence": 60,
+        "investigation": "Cavo, ottica e negoziato di duplex, nell'ordine. "
+                         "Errori solo in ingresso indicano il lato remoto o il "
+                         "mezzo; errori in uscita indicano congestione o "
+                         "duplex disallineato. Confrontare con la porta "
+                         "all'altro capo: un solo lato che conta errori "
+                         "restringe subito il campo.",
+        "remediation": "Sostituire il collegamento o il transceiver. Se gli "
+                       "errori sono solo in uscita e crescono col traffico, "
+                       "non e' un guasto da sostituire: e' congestione, e si "
+                       "risolve sulla capacita' del collegamento.",
+        "check": _interface_errors,
     },
     "DEVICE_LOAD_001": {
         "version": "1.0.0",
