@@ -586,6 +586,65 @@ def _access_positions_for(macs, tenants=None) -> dict:
     return best
 
 
+def device_positions(ips, tenants=None) -> dict:
+    """{ip: {switch_ip, switch_name, switch_port, port_vlan, mac}} per gli IP
+    dati, risolvendo IP -> MAC dall'ARP del gateway e MAC -> porta di accesso
+    dalla MAC table.
+
+    Serve agli apparati e ai server dell'inventario, che finora non sapevano
+    dire su quale porta stanno: la posizione era ricavabile solo dalla Client
+    Map, che parte dall'ARP e quindi elenca i client, non la flotta gestita.
+    Nessun collettore nuovo: la giunzione esisteva, mancava chi la facesse.
+
+    Due query in tutto per l'intera flotta, non una per apparato: questa
+    funzione viene chiamata dalla rotta che disegna l'inventario.
+    """
+    init_db()
+    ip_list = [i for i in dict.fromkeys(ips) if i]
+    if not ip_list:
+        return {}
+    tenant_list = list(tenants) if tenants is not None else None
+    if tenant_list is not None and not tenant_list:
+        return {}
+    rows = []
+    CHUNK = 400                                   # < limite ~999 di SQLite
+    with _connect() as c:
+        for i in range(0, len(ip_list), CHUNK):
+            batch = ip_list[i:i + CHUNK]
+            sql = ("SELECT ip, mac, tenant, MAX(last_seen) AS last_seen "
+                   "FROM arp_entries WHERE ip IN (%s)" % ",".join("?" * len(batch)))
+            args = list(batch)
+            if tenant_list is not None:
+                sql += " AND tenant IN (%s)" % ",".join("?" * len(tenant_list))
+                args += tenant_list
+            sql += " GROUP BY ip, mac, tenant"
+            rows += [dict(r) for r in c.execute(sql, args)]
+
+    # Un IP con piu' binding (rinumerazioni, ARP stantio): vince il piu'
+    # recente, come fa client_map in modalita' live.
+    by_ip: dict = {}
+    for r in rows:
+        cur = by_ip.get(r["ip"])
+        if cur is None or (r.get("last_seen") or "") > (cur.get("last_seen") or ""):
+            by_ip[r["ip"]] = r
+
+    best = _access_positions_for((r["mac"] for r in by_ip.values()), tenants=tenants)
+    out = {}
+    for ip_addr, r in by_ip.items():
+        access = best.get((r["mac"], r.get("tenant") or ""))
+        if not access:
+            continue          # MAC noto ma mai visto su una porta di accesso
+        out[ip_addr] = {
+            "mac": r["mac"],
+            "switch_ip": access.get("switch_ip") or "",
+            "switch_name": access.get("switch_name") or "",
+            "switch_port": access.get("interface") or "",
+            "port_vlan": access.get("vlan") or "",
+            "port_last_seen": access.get("last_seen") or "",
+        }
+    return out
+
+
 def client_map(mac: Optional[str] = None, ip: Optional[str] = None, tenants=None,
                limit: int = 500, source_ip: Optional[str] = None,
                frm: Optional[str] = None, to: Optional[str] = None) -> list:
