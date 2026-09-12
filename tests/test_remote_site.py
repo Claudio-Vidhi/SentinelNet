@@ -719,6 +719,30 @@ class RemoteSiteE2E(unittest.TestCase):
                                    "serial": "", "config": "end\n"})
         self.assertEqual(r.status_code, 404, r.text)
 
+    def test_an_admin_relaying_a_blacklisted_command_carries_the_bypass(self):
+        """S4: the central authorises the bypass once, and the job records it.
+        Without this the agent re-derived the decision and refused, so the
+        same admin and the same command behaved differently at an agent site
+        than at the central."""
+        from services import site_manager
+        sid, _token = self._create_agent_site("Bypass-Relay-A")
+        r = self.client.post(f"/api/sites/{sid}/command",
+                             json={"ip": "10.9.0.63", "command": "reload"},
+                             headers=self.admin_h)
+        self.assertEqual(r.status_code, 200, r.text)
+        job = site_manager.get_job(r.json()["job_id"])
+        self.assertEqual(job["blacklist_bypass"], 1)
+
+    def test_a_harmless_relayed_command_carries_no_bypass(self):
+        from services import site_manager
+        sid, _token = self._create_agent_site("Bypass-Relay-B")
+        r = self.client.post(f"/api/sites/{sid}/command",
+                             json={"ip": "10.9.0.64", "command": "show version"},
+                             headers=self.admin_h)
+        self.assertEqual(r.status_code, 200, r.text)
+        job = site_manager.get_job(r.json()["job_id"])
+        self.assertEqual(job["blacklist_bypass"], 0)
+
     def test_the_job_queue_accepts_a_triage_kind(self):
         from services import site_manager
         sid, _token = self._create_agent_site("Triage-Kind")
@@ -1472,6 +1496,90 @@ class AgentLogTail(unittest.TestCase):
         self.assertEqual(out["status"], "done")
         self.assertLessEqual(len(out["result"].splitlines()), 200)
 
+
+
+class RelayCarriesTheBlacklistDecision(unittest.TestCase):
+    """S4. M-1 gave admins an audited bypass of the CLI blacklist, and the
+    relay dropped it: the job carried the command but not the decision, so
+    the agent re-derived it from scratch and refused. Same admin, same
+    command, two outcomes depending on where the device lives -- and the
+    refusal arrived as a job result, not as an error anyone was watching.
+
+    The flag widens the BLACKLIST only. The REST allowlist is re-verified by
+    the agent on purpose (ADR-0008: credentials survive a compromised
+    central), and no flag from the central may widen it.
+    """
+
+    def _agent(self):
+        from services import site_agent
+        agent = site_agent.Agent.__new__(site_agent.Agent)
+        agent.cfg = {"site_id": "milan", "interval": 60}
+        return agent
+
+    def test_the_queued_job_records_the_bypass_the_central_authorised(self):
+        from services import site_manager
+        job = site_manager.enqueue_job("milan", "10.9.0.60", "reload",
+                                       requested_by=ADMIN,
+                                       blacklist_bypass=True)
+        self.assertEqual(site_manager.get_job(job["id"])["blacklist_bypass"], 1)
+
+    def test_a_job_without_an_authorised_bypass_records_none(self):
+        from services import site_manager
+        job = site_manager.enqueue_job("milan", "10.9.0.61", "show version",
+                                       requested_by=ADMIN)
+        self.assertEqual(site_manager.get_job(job["id"])["blacklist_bypass"], 0)
+
+    def test_the_agent_honours_the_bypass_the_central_authorised(self):
+        from unittest import mock
+        from services import site_agent
+        agent = self._agent()
+        seen = {}
+
+        def spy(device, command, bypass_blacklist=False):
+            seen["bypass"] = bypass_blacklist
+            return {"status": "success", "output": "ok"}
+
+        with mock.patch.object(site_agent.core_engine, "send_custom_command", spy),              mock.patch.object(agent, "_get") as get,              mock.patch.object(agent, "_post") as post:
+            get.return_value = mock.MagicMock(
+                json=lambda: {"jobs": [{"id": "j1", "device_ip": "10.9.0.62",
+                                        "command": "reload", "kind": "cli",
+                                        "blacklist_bypass": 1}]})
+            agent.run_jobs([{"IP": "10.9.0.62", "Vendor": "cisco"}])
+            self.assertTrue(post.called)
+        self.assertIs(seen["bypass"], True)
+
+    def test_without_the_flag_the_agent_still_applies_the_blacklist(self):
+        from unittest import mock
+        from services import site_agent
+        agent = self._agent()
+        seen = {}
+
+        def spy(device, command, bypass_blacklist=False):
+            seen["bypass"] = bypass_blacklist
+            return {"status": "success", "output": "ok"}
+
+        with mock.patch.object(site_agent.core_engine, "send_custom_command", spy),              mock.patch.object(agent, "_get") as get,              mock.patch.object(agent, "_post"):
+            get.return_value = mock.MagicMock(
+                json=lambda: {"jobs": [{"id": "j2", "device_ip": "10.9.0.62",
+                                        "command": "reload", "kind": "cli"}]})
+            agent.run_jobs([{"IP": "10.9.0.62", "Vendor": "cisco"}])
+        self.assertIs(seen["bypass"], False)
+
+    def test_the_flag_does_not_widen_the_rest_allowlist(self):
+        import json as _json
+        from unittest import mock
+        from services import site_agent
+        agent = self._agent()
+        spec = _json.dumps({"path": "cmdb/system/admin", "params": {}})
+        with mock.patch.object(agent, "_get") as get,              mock.patch.object(agent, "_post") as post:
+            get.return_value = mock.MagicMock(
+                json=lambda: {"jobs": [{"id": "j3", "device_ip": "10.9.0.62",
+                                        "command": spec, "kind": "rest",
+                                        "blacklist_bypass": 1}]})
+            agent.run_jobs([{"IP": "10.9.0.62", "Vendor": "fortigate"}])
+            out = post.call_args[0][1]
+        self.assertEqual(out["status"], "error")
+        self.assertIn("non consentito", out["result"])
 
 if __name__ == "__main__":
     unittest.main()

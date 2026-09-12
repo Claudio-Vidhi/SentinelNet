@@ -393,16 +393,28 @@ def _init_jobs():
             cols = {r["name"] for r in c.execute("PRAGMA table_info(command_jobs)")}
             if "kind" not in cols:
                 c.execute("ALTER TABLE command_jobs ADD COLUMN kind TEXT NOT NULL DEFAULT 'cli'")
+            # La decisione di autorizzazione presa dal centrale viaggia col
+            # job: senza, l'agente la rideduce e nega un bypass che era stato
+            # concesso e messo in audit. Default 0 = nessun bypass, che e' il
+            # valore giusto per i job esistenti e per chi non lo passa.
+            if "blacklist_bypass" not in cols:
+                c.execute("ALTER TABLE command_jobs "
+                          "ADD COLUMN blacklist_bypass INTEGER NOT NULL DEFAULT 0")
         _jobs_init_done = True
 
 
 def enqueue_job(site_id: str, device_ip: str, command: str,
-                requested_by: str = "", kind: str = "cli") -> dict:
+                requested_by: str = "", kind: str = "cli",
+                blacklist_bypass: bool = False) -> dict:
     """Accoda un lavoro per l'agente della sede.
 
     ``kind='cli'``: ``command`` è il comando da eseguire in SSH.
     ``kind='rest'``: ``command`` è un JSON ``{"path": ..., "params": {...}}``
     e il percorso deve stare nell'allowlist.
+
+    ``blacklist_bypass``: la blacklist CLI è già stata valutata e bypassata
+    dal centrale (M-1, bypass in audit). Allarga SOLO la blacklist: l'agente
+    riverifica l'allowlist REST comunque, ed è il punto di ADR-0008.
     """
     if kind not in VALID_JOB_KINDS:
         raise ValueError(f"Tipo di job non valido: {kind}")
@@ -420,9 +432,11 @@ def enqueue_job(site_id: str, device_ip: str, command: str,
     now = time.time()
     with _jobs_lock, _connect() as c:
         c.execute("""INSERT INTO command_jobs
-                     (id, site_id, device_ip, command, kind, status, result, requested_by, created, updated)
-                     VALUES (?,?,?,?,?, 'pending', '', ?, ?, ?)""",
-                   (job_id, site_id, device_ip, command, kind, requested_by, now, now))
+                     (id, site_id, device_ip, command, kind, blacklist_bypass,
+                      status, result, requested_by, created, updated)
+                     VALUES (?,?,?,?,?,?, 'pending', '', ?, ?, ?)""",
+                   (job_id, site_id, device_ip, command, kind,
+                    1 if blacklist_bypass else 0, requested_by, now, now))
     res = get_job(job_id)
     return res if res is not None else {}
 

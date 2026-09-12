@@ -184,11 +184,13 @@ def site_command_ep(site_id: str, payload: SiteCommandSchema,
         log_audit(f"Relay comando bloccato (blacklist) '{payload.command}' su '{payload.ip}' "
                   f"sede '{site_id}' da '{current_user.get('sub')}'.")
         raise HTTPException(status_code=400, detail="Comando non consentito per motivi di sicurezza (in blacklist).")
-    if not is_command_safe(payload.command):
+    blacklist_bypass = not is_command_safe(payload.command)
+    if blacklist_bypass:
         log_audit(f"Relay comando in blacklist '{payload.command}' su '{payload.ip}' sede '{site_id}' "
                   f"consentito a '{current_user.get('sub')}' {_bypass_note(current_user)}.")
     job = site_manager.enqueue_job(site_id, payload.ip, payload.command,
-                                   requested_by=current_user.get("sub"))
+                                   requested_by=current_user.get("sub"),
+                                   blacklist_bypass=blacklist_bypass)
     log_audit(f"Comando CLI accodato per sede agent '{site_id}' su '{payload.ip}' "
               f"da '{current_user.get('sub')}' (job {job['id']}).")
     return {"status": "queued", "job_id": job["id"]}

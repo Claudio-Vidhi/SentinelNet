@@ -160,7 +160,8 @@ async def send_command(payload: CommandRequest, current_user = Depends(require_o
         if site and site.get('mode') == 'agent':
             job = await asyncio.to_thread(
                 site_manager.enqueue_job, site['id'], payload.ip, payload.command,
-                requested_by=current_user.get('sub'))
+                requested_by=current_user.get('sub'),
+                blacklist_bypass=blacklist_bypass)
             # L'attesa e' su asyncio, non su time.sleep: la rotta e' async, e
             # un'attesa sincrona qui terrebbe occupato per 90s uno dei ~40
             # thread condivisi da TUTTE le rotte sync dell'app.
