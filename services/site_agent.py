@@ -690,7 +690,12 @@ class Agent:
                 if not device:
                     out = {"status": "error", "result": f"Dispositivo {ip} non in inventario locale."}
                 else:
-                    res = core_engine.send_custom_command(device, cmd)
+                    # Il bypass della blacklist arriva dal centrale, che lo
+                    # ha autorizzato e messo in audit (M-1). L'allowlist REST
+                    # resta decisa qui, e nessun flag del centrale la allarga.
+                    res = core_engine.send_custom_command(
+                        device, cmd,
+                        bypass_blacklist=bool(job.get("blacklist_bypass")))
                     if res.get("status") == "success":
                         out = {"status": "done", "result": res.get("output", "")}
                     else:
