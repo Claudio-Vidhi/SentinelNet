@@ -89,6 +89,12 @@ def get_devices_and_versions(current_user = Depends(get_current_user)):
     # One store read for the whole fleet: the per-IP lookup re-reads every
     # redundancy group each time it is called.
     badges = redundancy_service.redundancy_badges_by_ip()
+    # Posizione fisica: due query per l'intera flotta, non una per apparato.
+    # Un server gestito non sapeva dire su quale porta stava, e la giunzione
+    # (IP -> MAC dall'ARP -> porta dalla MAC table) esisteva gia' tutta.
+    from collectors import mac_history
+    positions = mac_history.device_positions([d["IP"] for d in devices],
+                                             tenants=scope)
     devices_enriched = []
     for d in devices:
         dev_copy = dict(d)
@@ -99,6 +105,7 @@ def get_devices_and_versions(current_user = Depends(get_current_user)):
         dev_copy.pop("Password", None)
         dev_copy.pop("Enable Secret", None)
         dev_copy["redundancy"] = badges.get(d["IP"])
+        dev_copy["position"] = positions.get(d["IP"])
         # ICMP cannot cross the bastion tunnel of a jump site: the inventory
         # table's status cell must not paint one of its devices "offline" from
         # a ping it never actually ran (see services.site_manager.has_direct_path).

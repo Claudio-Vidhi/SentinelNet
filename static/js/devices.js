@@ -142,6 +142,20 @@
         }, 200);
     }
 
+    // Su quale porta sta questo apparato. Sotto l'indirizzo e non in una
+    // colonna nuova: l'informazione nasce dall'IP, e la tabella ha gia' nove
+    // colonne. Assente quando il MAC non e' mai stato visto su una porta di
+    // accesso -- che e' il caso normale per uno switch di distribuzione.
+    function _renderDevicePosition(d) {
+        const p = d.position;
+        if (!p || !p.switch_port) return '';
+        const where = p.switch_name || p.switch_ip;
+        return `<div style="font-size:11px; color:var(--text-muted); white-space:nowrap;"
+                     title="${escapeHtml(tr('devPositionHint'))}">
+                    <i class="fa-solid fa-ethernet"></i> ${escapeHtml(where)} · ${escapeHtml(p.switch_port)}
+                </div>`;
+    }
+
     function _renderDeviceChips(d) {
         const v = (d.Vendor || '').toLowerCase();
         const L = i18n[currentLang] || {};
@@ -265,7 +279,7 @@
                              color:var(--text-muted); padding:0;">
                       <i class="fa-solid fa-pen"></i></button>`}
                 </td>
-                <td><strong>${d.IP}</strong></td>
+                <td><strong>${d.IP}</strong>${_renderDevicePosition(d)}</td>
                 <td>${d.Vendor
                     ? escapeHtml(d.Vendor.toUpperCase())
                     : `<span style="color:var(--warning); font-style:italic;" title="${

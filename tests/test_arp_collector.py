@@ -185,5 +185,90 @@ class CollectTest(unittest.TestCase):
         rec.assert_called_once()
 
 
+
+class DevicePositionsTest(unittest.TestCase):
+    """V1 — la posizione fisica di un apparato dell'inventario.
+
+    La giunzione IP -> MAC (ARP del gateway) -> porta (MAC table) esisteva
+    tutta: la faceva solo ``client_map``, che parte dall'ARP e quindi elenca i
+    client, non la flotta gestita. Un server gestito non sapeva dire su quale
+    porta stava.
+    """
+
+    setUp = DbTest.setUp
+    tearDown = DbTest.tearDown
+
+    def _seed(self):
+        self.mh.record_arp_entries(
+            [{"mac": "aa:bb:cc:00:02:10", "ip": "10.0.10.10", "vlan": "10"}],
+            source_ip="10.0.0.254", source_type="firewall", tenant="Milano")
+        self.mh.record_sightings(
+            [{"mac": "aa:bb:cc:00:02:10", "vlan": "10",
+              "interface": "GigabitEthernet1/0/7"},
+             {"mac": "aa:bb:cc:00:02:10", "vlan": "10",
+              "interface": "TenGigabitEthernet1/1/1", "is_uplink": True}],
+            switch_ip="10.0.0.10", switch_name="acc-sw-01", tenant="Milano")
+
+    def test_it_finds_the_access_port_of_a_managed_ip(self):
+        self._seed()
+        pos = self.mh.device_positions(["10.0.10.10"])
+        self.assertEqual(pos["10.0.10.10"]["switch_ip"], "10.0.0.10")
+        self.assertEqual(pos["10.0.10.10"]["switch_name"], "acc-sw-01")
+        # L'uplink non e' una posizione: sarebbe un punto di transito.
+        self.assertEqual(pos["10.0.10.10"]["switch_port"], "GigabitEthernet1/0/7")
+
+    def test_an_ip_without_an_arp_binding_is_absent_not_empty(self):
+        # Assente e' diverso da "su nessuna porta": la seconda forma
+        # sembrerebbe una risposta.
+        self._seed()
+        self.assertNotIn("10.0.10.99", self.mh.device_positions(["10.0.10.99"]))
+
+    def test_a_mac_never_seen_on_an_access_port_is_absent(self):
+        """Il caso normale di uno switch di distribuzione: ha un binding ARP e
+        non sta su nessuna porta di accesso."""
+        self.mh.record_arp_entries(
+            [{"mac": "aa:bb:cc:00:02:11", "ip": "10.0.10.11"}],
+            source_ip="10.0.0.254", tenant="Milano")
+        self.assertNotIn("10.0.10.11", self.mh.device_positions(["10.0.10.11"]))
+
+    def test_the_tenant_scope_is_honoured(self):
+        self._seed()
+        self.assertIn("10.0.10.10", self.mh.device_positions(["10.0.10.10"],
+                                                             tenants=["Milano"]))
+        self.assertEqual(
+            self.mh.device_positions(["10.0.10.10"], tenants=["Roma"]), {})
+        # Nessun tenant consentito: niente, non tutto.
+        self.assertEqual(self.mh.device_positions(["10.0.10.10"], tenants=[]), {})
+
+    def test_no_ips_asks_nothing(self):
+        self.assertEqual(self.mh.device_positions([]), {})
+        self.assertEqual(self.mh.device_positions([None, ""]), {})
+
+    def test_the_whole_fleet_costs_two_queries_not_one_each(self):
+        """Questa funzione la chiama la rotta che disegna l'inventario: una
+        query per apparato la renderebbe inusabile su una flotta vera."""
+        self._seed()
+        real_connect = self.mh._connect
+        calls = []
+
+        def counting_connect():
+            calls.append(1)
+            return real_connect()
+
+        def count_for(ips):
+            calls.clear()
+            with mock.patch.object(self.mh, "_connect", counting_connect):
+                self.mh.device_positions(ips)
+            return len(calls)
+
+        # Il numero non deve DIPENDERE dagli IP chiesti: quanto sia in
+        # assoluto (init_db piu' le due letture) e' un dettaglio, che cresca
+        # con la flotta no.
+        one = count_for(["10.0.10.10"])
+        many = count_for([f"10.0.10.{i}" for i in range(2, 60)] + ["10.0.10.10"])
+        self.assertEqual(one, many, f"{one} connessioni con 1 IP, {many} con 59")
+
+
+
 if __name__ == "__main__":
     unittest.main()
