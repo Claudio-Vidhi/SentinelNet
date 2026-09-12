@@ -127,7 +127,10 @@ class TestEntryPoints(unittest.TestCase):
             self.assertNotIn("tabId === 'tab-mac'", src, name)
 
     def test_assignable_tabs_offers_the_merged_tab(self):
-        self.assertIn("{ id: 'tab-endpoint', key: 'tabEndpointLoc' }", self.settings)
+        # La lista non e' piu' scritta a mano: viene derivata dalla barra di
+        # navigazione (vedi tests/test_assignable_tabs.py), quindi la tab
+        # concedibile e' quella che il template dichiara.
+        self.assertIn('data-tab="tab-endpoint"', _read("templates", "dashboard.html"))
         self.assertNotIn("{ id: 'tab-mac'", self.settings)
 
     @unittest.skipUnless(shutil.which("node"), "node non disponibile")
