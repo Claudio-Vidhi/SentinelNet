@@ -322,7 +322,10 @@ class TestFrontendGates(_Base):
 
     def test_flows_tab_registered(self):
         self.assertIn('id="tab-flows"', self.HTML)
-        self.assertIn("{ id: 'tab-flows', key: 'tabFlows' }", self.HTML)
+        # Concedibile a un non-admin: la lista non e' piu' scritta a mano in
+        # settings.js, si deriva dal pulsante di navigazione (che non deve
+        # quindi essere requires-admin). Vedi tests/test_assignable_tabs.py.
+        self.assertIn('data-tab="tab-flows"', self.HTML)
         self.assertIn("visibilitychange", self.HTML)
 
 

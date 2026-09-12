@@ -331,23 +331,42 @@
 
     // --- GESTIONE UTENTI (solo admin) ---
 
-    // Tab assegnabili ai ruoli non-admin (le tab requires-admin restano sempre escluse).
-    const ASSIGNABLE_TABS = [
-        { id: 'tab-devices', key: 'tabInventory' },
-        { id: 'tab-groups', key: 'tabGroups' },
-        { id: 'tab-map', key: 'tabMap' },
-        { id: 'tab-map-interactive', key: 'tabInteractive' },
-        { id: 'tab-categories', key: 'tabCategories' },
-        { id: 'tab-security', key: 'tabSecurity' },
-        { id: 'tab-endpoint', key: 'tabEndpointLoc' },
-        { id: 'tab-flows', key: 'tabFlows' },
-        { id: 'tab-config', key: 'tabConfigAnalyzer' },
-        { id: 'tab-netsec-audit', key: 'tabNetSecAudit' },
-        { id: 'tab-ai', key: 'tabAiAssistant' },
-        { id: 'tab-provisioning', key: 'tabProvisioning' },
-        { id: 'tab-provisioner', key: 'tabProvisioner' },
-        { id: 'tab-import', key: 'tabImport' },
-    ];
+    // Tab assegnabili ai ruoli non-admin. DERIVATE dalla barra di
+    // navigazione, non elencate a mano: la lista scritta a mano aveva perso
+    // sei tab (wlc, interfacce, HA, policy-test, rotte, config-drift), che
+    // nessun admin poteva quindi concedere a nessuno, e ne portava una NON
+    // assegnabile (tab-groups e' requires-admin, quindi la spunta non
+    // rivelava niente). Ogni tab nuova la faceva sbagliare di nuovo.
+    //
+    // Un pulsante con 'data-tabs' governa piu' pannelli (Mappa + Mappa
+    // interattiva, Provisioning + Provisioner): ognuno e' una spunta
+    // distinta, com'era prima. Le etichette dei pannelli secondari non sono
+    // nel markup del pulsante, e sono le sole due cose ancora nominate qui.
+    const SECONDARY_TAB_LABELS = {
+        'tab-map-interactive': 'tabInteractive',
+        'tab-provisioner': 'tabProvisioner',
+    };
+
+    function assignableTabs() {
+        const out = [];
+        const seen = new Set();
+        document.querySelectorAll('.nav-item[data-tab]').forEach(btn => {
+            // requires-admin: il pulsante e' nascosto agli altri ruoli, quindi
+            // concedere quella tab non avrebbe effetto.
+            if (btn.classList.contains('requires-admin')) return;
+            const primary = btn.getAttribute('data-tab');
+            const ids = (btn.getAttribute('data-tabs') || primary || '').split(/\s+/);
+            const navLabel = btn.querySelector('[data-i18n]');
+            const navKey = navLabel ? navLabel.getAttribute('data-i18n') : null;
+            ids.forEach(id => {
+                // tab-home e' sempre visibile: non e' una concessione.
+                if (!id || id === 'tab-home' || seen.has(id)) return;
+                seen.add(id);
+                out.push({ id, key: SECONDARY_TAB_LABELS[id] || navKey });
+            });
+        });
+        return out;
+    }
 
     async function loadUsers() {
         if (currentRole !== 'admin') return;
@@ -403,12 +422,12 @@
                 const tabsSummary = allowed.length === 0
                     ? `<span style="color:var(--success);">${tr('setAllTabs')}</span>`
                     : `<span style="color:var(--primary);">${allowed.length} ${tr('setTabS')}</span>`;
-                const tabChecks = ASSIGNABLE_TABS.map(t =>
+                const tabChecks = assignableTabs().map(t =>
                     `<label style="display:flex; align-items:center; gap:6px; padding:3px 4px; font-size:12px; cursor:pointer;">
                        <input type="checkbox" class="tabs-box" value="${t.id}" ${allowed.includes(t.id) ? 'checked' : ''}
                               data-action="mark-tabs-dirty"
                               style="accent-color:var(--primary); cursor:pointer;">
-                       ${i18n[currentLang][t.key] || t.id}
+                       ${(t.key && i18n[currentLang][t.key]) || t.id}
                      </label>`).join('');
                 tabsCell = `<details data-u="${escapeHtml(u.username)}" data-orig='${JSON.stringify(allowed)}' style="position:relative;">
                     <summary style="cursor:pointer; list-style:none; font-size:12px; padding:2px 0;">
