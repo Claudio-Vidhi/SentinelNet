@@ -5,6 +5,18 @@ services:
     container_name: sentinelnet
     ports:
       - "8000:8000"
+      # Ascolto IPFIX/sFlow/syslog: SPENTO di default nell'applicazione
+      # (SENTINELNET_OBS_ENABLE), quindi queste porte restano commentate --
+      # pubblicarle senza accendere i listener aprirebbe porte su cui non
+      # risponde nessuno. L'ingest UDP non e' autenticato: va esposto solo su
+      # una rete di management (docs/hardening.md §4).
+      #
+      # La 514 non viene MAI usata in-process: il listener sta sulla 5514 e la
+      # porta standard si ottiene mappandola qui, che e' esattamente il motivo
+      # per cui questa riga esiste.
+      # - "4739:4739/udp"     # IPFIX / NetFlow
+      # - "6343:6343/udp"     # sFlow
+      # - "514:5514/udp"      # syslog (standard fuori, 5514 dentro)
     volumes:
       # Monta solo la cartella dei dati persistenti (db di autenticazione, credenziali degli apparati, chiavi crittografiche, backup)
       # Questo consente di distribuire ed eseguire l'applicazione come immagine standalone pre-compilata da Docker Hub
