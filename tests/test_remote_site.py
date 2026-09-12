@@ -1379,6 +1379,9 @@ class AgentReportsItsRealVersion(unittest.TestCase):
         from services import site_agent
         agent = site_agent.Agent.__new__(site_agent.Agent)
         agent.cfg = {"site_id": "milan", "interval": 60, "syslog_port": 5514}
+        # L'heartbeat riporta lo stato REALE del listener, quindi guarda il
+        # collector: un Agent costruito con __new__ deve darglielo.
+        agent.syslog_collector = None
         agent._start_ts = 0
         agent._post = mock.MagicMock()
         agent._post.return_value.json.return_value = {"ok": True}
