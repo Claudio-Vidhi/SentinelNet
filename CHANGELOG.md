@@ -10,6 +10,60 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Le sedi si modificano dopo la creazione, e il token esce con le
+  istruzioni.** Nome, subnet, modalita' e indirizzo del bastione erano
+  scrivibili solo nel form di creazione: cambiare l'indirizzo di un bastione
+  voleva dire una chiamata API a mano. Il cambio di modalita' dice prima cosa
+  comporta e chiede conferma, perche' due casi su tre toccano il token — e
+  passando a "site agent" il token viene emesso dal salvataggio stesso, che
+  prima non lo faceva e lasciava la sede inservibile. Il token non e' piu' una
+  stringa nuda in una finestrella: esce con l'`agent.json` completo e i comandi
+  che lo installano, nell'unico momento in cui esiste in chiaro.
+- **Il listener syslog dell'agente si spegne dal pannello**, e il pannello dice
+  anche in quale cartella l'agente scrive. La porta era configurabile da remoto
+  e il listener no: per spegnerlo serviva una sessione SSH nella sede. Lo stato
+  mostrato e' quello REALE del collector, non quello richiesto, quindi una
+  porta occupata si legge come "spento" invece di restare una bugia.
+- **Ogni apparato dell'inventario dice su quale porta sta** (switch e
+  interfaccia, sotto il suo indirizzo IP). La giunzione esisteva tutta — IP ->
+  MAC dall'ARP del gateway, MAC -> porta dalla MAC table — e la faceva solo la
+  Client Map, che elenca i client e non la flotta gestita: un server gestito
+  non sapeva dire dov'era attaccato.
+- **`IFACE_ERRORS_001`: una porta che accumula errori adesso lo dice.**
+  `ifInErrors`/`ifOutErrors` erano raccolti dal poller SNMP e li leggeva solo
+  la diagnosi di un client, su richiesta. Un guasto fisico che degrada senza
+  far cadere il link non produce transizioni, quindi nessuna regola lo vedeva.
+  Si valuta la differenza fra primo e ultimo campione della finestra: sono
+  contatori cumulativi, e il riavvio che li azzera resta sotto soglia da se'.
+- **Presa in carico completa sugli incidenti**: chi, quando, e il perche' in
+  una nota. Lo stato diceva che qualcuno l'aveva fatto e non chi — il nome
+  finiva solo nel registro di audit, cioe' in un'altra schermata.
+- **Il registro di audit si accorge se lo riscrivono.** Ogni riga porta un
+  HMAC della precedente: modificarne una senza ricalcolare le successive si
+  vede. Rileva la modifica, non il troncamento della coda, e il codice lo dice.
+- **Documentazione**: [privilegio minimo per gli strumenti MCP](docs/hardening.md)
+  (i 46 strumenti in tre livelli, con il motivo di ciascuno) e
+  [quali dati personali vengono memorizzati](docs/data-protection.md), dove,
+  per quanto, e cosa deve decidere chi installa.
+
+### Fixed
+
+- **Il logout revoca il token, non solo il cookie.** Un Bearer copiato prima
+  del logout restava valido fino a un'ora dopo, e la docstring della rotta lo
+  diceva. Gli account disabilitati o eliminati erano invece gia' coperti.
+- **Il bypass della blacklist CLI si fermava al centrale.** Un admin ha un
+  bypass audito dei comandi in blacklist; il job di relay portava il comando ma
+  non la decisione, quindi l'agente la rideduceva da zero e negava. Lo stesso
+  admin, lo stesso comando, due esiti diversi a seconda di dove stava
+  l'apparato — e il rifiuto arrivava come risultato di un job, non come errore
+  che qualcuno stesse guardando.
+- **Sei tab non erano concedibili a nessuno**: WLC, Interfacce, Alta
+  Affidabilita', Policy Test, Rotte e Config Drift non comparivano fra le
+  spunte dei permessi. La lista era mantenuta a mano e ogni tab nuova la faceva
+  sbagliare di nuovo: ora si deriva dalla barra di navigazione.
+
 ## [0.36.0] - 2026-09-11
 
 ### Added
