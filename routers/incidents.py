@@ -320,7 +320,7 @@ async def list_incidents(
     rows = await db.read(
         f"""SELECT id, tenant, entity_key, opened_ts, last_event_ts, closed_ts,
                    title, severity, event_count, status, cause_kind, confidence,
-                   ai_assisted
+                   ai_assisted, acknowledged_by
             FROM incidents
             WHERE last_event_ts >= ?{clause}{status_clause}
             ORDER BY last_event_ts DESC
@@ -336,7 +336,9 @@ async def _incident_in_scope(incident_id: int, current_user):
     rows = await db.read(
         """SELECT id, tenant, entity_key, opened_ts, last_event_ts, closed_ts,
                   title, severity, event_count, status, cause_kind, confidence,
-                  reasoning_json, ai_narrative, ai_narrative_ts, ai_assisted
+                  reasoning_json, ai_narrative, ai_narrative_ts, ai_assisted,
+                  acknowledged_by, acknowledged_ts, ack_note, resolved_by,
+                  resolved_ts
            FROM incidents WHERE id = ?""", (incident_id,))
     scope = user_group_scope(current_user)
     if not rows or (scope is not None and rows[0]["tenant"] not in scope):
@@ -394,6 +396,10 @@ async def set_incident_status(
     via ON DELETE CASCADE)."""
     new_status = (payload or {}).get("status")
     from_status = (payload or {}).get("from_status")
+    # La nota e' il perche' ("atteso, finestra di manutenzione"), l'unica parte
+    # che il prossimo che apre l'incidente non puo' ricostruire da solo.
+    note = ((payload or {}).get("note") or "").strip()[:500] or None
+    who = current_user.get("sub") or ""
     if (from_status, new_status) not in _ALLOWED_TRANSITIONS:
         raise HTTPException(
             status_code=409,
@@ -410,17 +416,25 @@ async def set_incident_status(
                 (incident_id,)).fetchone()
             if row is None or (scope is not None and row["tenant"] not in scope):
                 return "not_found"
+            now = int(time.time())
             if new_status == "resolved":
                 # resolved_ts ancora la retention (schema v10): un incidente
                 # chiuso ieri non decade per quanto e' stato aperto.
+                # resolved_by e' il "chi" (v11): prima stava solo nel registro
+                # di audit, cioe' in un altro file e in un'altra schermata.
+                # La nota si conserva anche chiudendo direttamente da 'new',
+                # dove non c'e' stata una presa in carico che la portasse.
                 cur = conn.execute(
-                    "UPDATE incidents SET status = ?, resolved_ts = ? "
+                    "UPDATE incidents SET status = ?, resolved_ts = ?, "
+                    "resolved_by = ?, ack_note = COALESCE(?, ack_note) "
                     "WHERE id = ? AND status = ?",
-                    (new_status, int(time.time()), incident_id, from_status))
+                    (new_status, now, who, note, incident_id, from_status))
             else:
                 cur = conn.execute(
-                    "UPDATE incidents SET status = ? WHERE id = ? AND status = ?",
-                    (new_status, incident_id, from_status))
+                    "UPDATE incidents SET status = ?, acknowledged_by = ?, "
+                    "acknowledged_ts = ?, ack_note = COALESCE(?, ack_note) "
+                    "WHERE id = ? AND status = ?",
+                    (new_status, who, now, note, incident_id, from_status))
             conn.commit()
             return "ok" if cur.rowcount == 1 else "stale"
         finally:

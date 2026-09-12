@@ -30,7 +30,7 @@ from core import data_config
 
 logger = logging.getLogger("sentinelnet.db")
 
-SCHEMA_VERSION = 10         # schema version supported by this code (v10: incidents.resolved_ts)
+SCHEMA_VERSION = 11         # schema version supported by this code (v11: incidents ack columns)
 QUEUE_MAX = 10_000          # max payloads in the write queue
 BATCH_SIZE = 500            # max payloads per single commit
 MAX_WRITER_RESTARTS = 5     # writer restarts allowed before fail-open
@@ -213,6 +213,15 @@ def migrate() -> None:
             "PRAGMA table_info(incidents)").fetchall()}
         if inc_cols and "resolved_ts" not in inc_cols:
             conn.execute("ALTER TABLE incidents ADD COLUMN resolved_ts INTEGER")
+        # v11: il "chi" della presa in carico e della chiusura. Righe
+        # esistenti restano NULL: non si inventa un nome per un'azione fatta
+        # quando la colonna non c'era.
+        for column, ddl in (("acknowledged_by", "TEXT"),
+                            ("acknowledged_ts", "INTEGER"),
+                            ("ack_note", "TEXT"),
+                            ("resolved_by", "TEXT")):
+            if inc_cols and column not in inc_cols:
+                conn.execute(f"ALTER TABLE incidents ADD COLUMN {column} {ddl}")
             conn.execute(
                 "UPDATE incidents SET resolved_ts = COALESCE(closed_ts, opened_ts) "
                 "WHERE status = 'resolved' AND resolved_ts IS NULL")

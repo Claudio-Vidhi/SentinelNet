@@ -598,6 +598,26 @@
                 <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">${hops}</div>${warn}`;
     }
 
+    // Chi ha preso in carico o chiuso, quando, e perche'. Lo stato diceva che
+    // qualcuno l'aveva fatto e non chi: il nome stava solo nel registro di
+    // audit, cioe' in un'altra schermata.
+    function renderOwnership(inc) {
+        const parts = [];
+        if (inc.acknowledged_by) {
+            parts.push(`${L('incAckedBy')} <strong>${escapeHtml(inc.acknowledged_by)}</strong>`
+                + (inc.acknowledged_ts ? ` · ${escapeHtml(fmtTime(inc.acknowledged_ts))}` : ''));
+        }
+        if (inc.resolved_by) {
+            parts.push(`${L('incResolvedBy')} <strong>${escapeHtml(inc.resolved_by)}</strong>`
+                + (inc.resolved_ts ? ` · ${escapeHtml(fmtTime(inc.resolved_ts))}` : ''));
+        }
+        if (!parts.length && !inc.ack_note) return '';
+        const note = inc.ack_note
+            ? `<div style="font-size:12px; margin-top:2px;">${escapeHtml(inc.ack_note)}</div>` : '';
+        return `<div style="font-size:12px; color:var(--text-muted); margin-top:4px;">
+                    ${parts.join(' · ')}</div>${note}`;
+    }
+
     function renderIncidentDetail(inc, entries, history, flowPath) {
         const box = document.getElementById('incidentDetail');
         if (!box) return;
@@ -615,6 +635,7 @@
                         ${escapeHtml(inc.entity_key)} · tenant ${escapeHtml(inc.tenant)} ·
                         ${L('incFromTo').replace('{a}', escapeHtml(fmtTime(inc.opened_ts))).replace('{b}', escapeHtml(fmtTime(inc.last_event_ts)))}
                     </div>
+                    ${renderOwnership(inc)}
                 </div>
                 <div style="display:flex; gap:8px;">${next}</div>
             </div>
@@ -628,10 +649,13 @@
 
     async function setIncidentStatus(id, from, to) {
         try {
+            // La nota e' opzionale: annullare il prompt non annulla la
+            // transizione, che e' l'azione che l'operatore ha chiesto.
+            const note = prompt(L(to === 'resolved' ? 'incNoteResolve' : 'incNoteAck')) || '';
             const res = await apiFetch(`/api/incidents/${Number(id)}/status`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ from_status: from, status: to })
+                body: JSON.stringify({ from_status: from, status: to, note })
             });
             if (!res) return;
             if (!res.ok) {
