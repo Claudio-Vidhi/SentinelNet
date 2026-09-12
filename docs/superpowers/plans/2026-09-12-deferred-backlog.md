@@ -13,17 +13,42 @@ per caller, and unrelated fixes do not get merged to save a commit.
 
 ---
 
-## Phase 0 — The four questions only the user can answer
+## Phase 0 — ANSWERED 2026-09-12
 
-No code. Ask, record the answer in the spec, move on.
+1. **P1 — endpoint inventory KPIs: stay exact.** Closed; see the spec.
+2. **P3 — port bounce: test requested.** Procedure below, not yet run.
+3. **P4 — Windows over WinRM: still open** (the term was unfamiliar; explained
+   in the spec). No work started.
+4. **P2 — FortiGate HA: no cluster available.** Stays unverified, stated.
 
-1. **P1 — endpoint inventory KPIs**: exact (and inherently ~875 ms at 50k) or
-   approximate-and-labelled? There is no third option.
-2. **P3 — port bounce on real hardware**: is there a switch and a window? The
-   code has never run against one.
-3. **P4 — Windows over WinRM**: build it, or leave it in the roadmap?
-4. **P2 — FortiGate HA**: is a real cluster reachable? Without one,
-   `parse_ha_status()` stays unverified and that is the honest state.
+### P3 — the port bounce field test, when there is a switch and a window
+
+`services/port_action.py` has never run `send_config_set` against real
+hardware. What makes this test worth planning rather than just clicking the
+button: the failure mode is a port left administratively down on someone's
+switch, and the recovery is the same command that failed.
+
+Pick the target first: an **access port with nothing plugged into it**, on a
+switch that is not the one carrying the management path to itself. Bouncing
+the uplink you are managing the switch through disconnects you mid-command,
+and whether the second half ran is then unknowable.
+
+1. Record the before state from the CLI, not from the panel:
+   `show running-config interface <if>` and `show interface <if> status`. The
+   panel reads a cache; the switch is the authority.
+2. Bounce it from the Client Map row action, and watch the job result rather
+   than the toast.
+3. Read the state again. Expected: `shutdown` then `no shutdown` applied, the
+   port back to its original admin state, and the running-config otherwise
+   byte-identical to step 1.
+4. If step 3 shows the port still down, that is the whole reason for the test:
+   re-enable it by hand (`interface <if>` / `no shutdown`) before debugging
+   anything, then report what the job result said versus what the switch did.
+5. Only then repeat on a port with a device attached, to see that the device
+   comes back — the two cases fail differently.
+
+Write the outcome into this section. A test whose result lives only in a chat
+is a test nobody can trust twice.
 
 ---
 
