@@ -205,6 +205,20 @@ class Agent:
             self.syslog_collector.start()
             self._start_syslog_worker()
 
+    def _stop_syslog_collector(self):
+        """Ferma il listener UDP e libera la porta. Il worker di inoltro resta
+        in piedi: senza collector si limita a non avere niente da spingere, e
+        riaccendere il listener non deve far nascere un secondo thread."""
+        col, self.syslog_collector = self.syslog_collector, None
+        if not col:
+            return
+        col.running = False
+        if col.sock:
+            try:
+                col.sock.close()
+            except Exception:
+                pass
+
     def _start_syslog_worker(self):
         """Worker thread in background che trasmette in tempo reale (ogni 2s)
         gli eventi syslog al centrale, stile Checkmk / streaming."""
@@ -244,7 +258,8 @@ class Agent:
             "version": __version__,
             **_git_identity(),
             "python_version": sys.version.split()[0],
-            "syslog_enabled": self.cfg.get("syslog_enabled", True),
+            "syslog_enabled": bool(self.syslog_collector),
+            "data_dir": os.path.abspath(self.cfg.get("data_dir") or "."),
             "syslog_port": int(self.cfg.get("syslog_port", 5514)),
             "interval": int(self.cfg.get("interval", 60)),
             "backup_interval": int(self.cfg.get("backup_interval") or 0),
@@ -603,16 +618,26 @@ class Agent:
                         json.dump(self.cfg, f, indent=2)
                     persisted = True
 
+                # Accensione/spegnimento del listener. La porta era
+                # configurabile e il listener no: l'unico modo di spegnerlo era
+                # riavviare l'agente con --no-syslog, cioe' una sessione SSH
+                # nella sede.
+                if "syslog_enabled" in new_cfg:
+                    if new_cfg["syslog_enabled"]:
+                        if not self.syslog_collector:
+                            self.syslog_collector = SyslogCollector(
+                                port=int(self.cfg.get("syslog_port", 5514)))
+                            self.syslog_collector.start()
+                            if not self.syslog_worker_running:
+                                self._start_syslog_worker()
+                    else:
+                        self._stop_syslog_collector()
+
                 # Rebind syslog listener if port changed
                 if "syslog_port" in new_cfg and self.syslog_collector:
                     new_port = int(new_cfg["syslog_port"])
                     if self.syslog_collector.port != new_port:
-                        self.syslog_collector.running = False
-                        if self.syslog_collector.sock:
-                            try:
-                                self.syslog_collector.sock.close()
-                            except Exception:
-                                pass
+                        self._stop_syslog_collector()
                         self.syslog_collector = SyslogCollector(port=new_port)
                         self.syslog_collector.start()
 

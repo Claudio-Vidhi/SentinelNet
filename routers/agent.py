@@ -129,6 +129,13 @@ def agent_heartbeat(request: Request, payload: Optional[dict] = None,
             updates["backup_interval"] = payload["backup_interval"]
         if "l2_interval" in payload:
             updates["l2_interval"] = payload["l2_interval"]
+        # Lo stato REALE del listener, non quello richiesto: l'agente lo
+        # riporta guardando il proprio collector, quindi una porta occupata si
+        # vede come listener spento invece di restare una bugia nel pannello.
+        if "syslog_enabled" in payload:
+            updates["syslog_enabled"] = bool(payload["syslog_enabled"])
+        if "data_dir" in payload:
+            updates["agent_data_dir"] = payload["data_dir"]
         # Identita' del codice che gira nella sede: senza questa, "l'update
         # e' passato?" restava una domanda a cui si rispondeva solo via SSH.
         for key in ("version", "commit", "branch", "dirty"):

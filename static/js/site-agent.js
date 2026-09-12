@@ -49,6 +49,13 @@
         // 0 e' un valore valido (ad ogni ciclo), quindi non si puo' usare
         // "|| 300": azzerarlo dal pannello tornerebbe sempre a 300.
         let curL2Interval = (site && site.l2_interval != null) ? site.l2_interval : 300;
+        // Anche questi due vengono dall'heartbeat: syslog_enabled e' lo stato
+        // REALE del listener (l'agente guarda il proprio collector), non quello
+        // richiesto, quindi una porta occupata si legge come spento invece di
+        // restare una bugia nel pannello. Un agente vecchio non li manda: il
+        // default e' "accesso", che era il comportamento fisso di prima.
+        const syslogOn = !site || site.syslog_enabled == null ? true : !!site.syslog_enabled;
+        const dataDir = (site && site.agent_data_dir) || tr('agentDataDirUnknown');
 
         // jobs arriva già ordinato dal più recente al più vecchio (site_manager.list_jobs
         // usa ORDER BY created DESC), quindi il primo match è già l'ultimo richiesto.
@@ -127,8 +134,9 @@
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:12px;">
                 <div><strong>Ultimo contatto:</strong> ${lastSeen}</div>
                 <div><strong>Modalità:</strong> Site Agent (Outbound HTTPS)</div>
-                <div><strong>Syslog UDP Listener:</strong> Attivo su porta ${curPort}</div>
+                <div><strong>Syslog UDP Listener:</strong> ${syslogOn ? `${tr('agentSyslogOn')} ${curPort}` : tr('agentSyslogOff')}</div>
                 <div><strong>Intervallo Sync:</strong> ${curInterval}s (Syslog streaming 2s)</div>
+                <div style="grid-column:1 / -1;"><strong>${tr('agentDataDir')}:</strong> <code>${escapeHtml(dataDir)}</code></div>
             </div>
         </div>
 
@@ -150,6 +158,10 @@
                 <div>
                     <label for="agentCfgL2Interval" style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;">${tr('agentL2Interval')}</label>
                     <input id="agentCfgL2Interval" type="number" value="${curL2Interval}" style="width:100%; padding:6px 10px; font-size:12px; border:1px solid var(--border); border-radius:0; background:var(--surface-3); color:var(--text);">
+                </div>
+                <div>
+                    <label for="agentCfgSyslogEnabled" style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;">${tr('agentSyslogEnabled')}</label>
+                    <input id="agentCfgSyslogEnabled" type="checkbox"${syslogOn ? ' checked' : ''} style="accent-color:var(--primary); cursor:pointer;">
                 </div>
                 <button class="btn btn-sm" data-action="save-config" data-site-id="${escapeHtml(siteId)}" style="padding:6px 14px; background:var(--cta); color:var(--cta-text);">
                     <i class="fa-solid fa-floppy-disk"></i> Salva Config
@@ -259,11 +271,13 @@
         // l'operatore chiede la raccolta ad ogni ciclo. isNaN e' il test giusto.
         const l2Raw = parseInt(document.getElementById('agentCfgL2Interval').value, 10);
         const l2Interval = isNaN(l2Raw) ? 300 : l2Raw;
+        const syslogEnabled = document.getElementById('agentCfgSyslogEnabled').checked;
         const res = await apiFetch(`/api/sites/${siteId}/agent/config`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ syslog_port: port, interval: interval,
-                                   backup_interval: backupInterval, l2_interval: l2Interval })
+                                   backup_interval: backupInterval, l2_interval: l2Interval,
+                                   syslog_enabled: syslogEnabled })
         });
         if (res && res.ok) {
             alert(tr('agtConfigQueued', {siteId: siteId, port: port, interval: interval}));
