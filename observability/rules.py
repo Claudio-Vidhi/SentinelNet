@@ -96,10 +96,47 @@ class Finding:
         self.attrs = attrs or {}
 
 
+# Roadmap §1, voce 3: "conferma prima di concludere". Ogni regola la dichiara
+# con UN parametro in piu', invece di una macchina a stati HARD/SOFT alla
+# Nagios -- il catalogo e' gia' il posto dove una regola dice come ragiona.
+#
+# Un'osservazione e' un EVENTO distinto, non un ciclo: il correlatore rivaluta
+# l'intera finestra a ogni giro, quindi lo stesso fatto ricompare a ogni ciclo
+# finche' resta nella finestra, e contarlo per cicli confermerebbe un singolo
+# datagramma a forza di rileggerlo.
+#
+# Default 1: e' il comportamento di prima, identico. Alzarlo e' una scelta
+# dell'amministratore, regola per regola, dal pannello soglie che esiste gia'.
+CONFIRMATION_PARAM = "min_observations"
+_CONFIRMATION_SPEC = {
+    "name": CONFIRMATION_PARAM, "default": 1, "min": 1, "max": 20,
+    "description": "Eventi distinti che la regola deve vedere nella finestra "
+                   "prima di produrre un'evidenza. 1 = conclude alla prima "
+                   "osservazione. Alzarlo evita di concludere su un fatto "
+                   "isolato: una conclusione notificata non si ritira.",
+}
+_CONFIRMATION_DESCRIPTION_EN = (
+    "Distinct events the rule must see within the window before producing "
+    "evidence. 1 = concludes on the first observation. Raising it avoids "
+    "concluding on an isolated fact: a notified conclusion cannot be taken back.")
+
+
 def parameter_specs(rule_id: str) -> list:
-    """Soglie dichiarate da una regola: [{name, default, min, max, description}]."""
-    specs = (RULES.get(rule_id) or {}).get("parameters")
-    return specs if isinstance(specs, list) else []
+    """Soglie dichiarate da una regola: [{name, default, min, max, description}].
+
+    Include sempre ``min_observations``, dichiarato una volta sola qui e non
+    ripetuto in ogni regola."""
+    declared = (RULES.get(rule_id) or {}).get("parameters")
+    specs = list(declared) if isinstance(declared, list) else []
+    if rule_id in RULES and not any(isinstance(p, dict)
+                                    and p.get("name") == CONFIRMATION_PARAM
+                                    for p in specs):
+        specs.append(dict(_CONFIRMATION_SPEC))
+    return specs
+
+
+def min_observations(rule_id: str) -> int:
+    return int(params_for(rule_id).get(CONFIRMATION_PARAM, 1))
 
 
 def defaults_for(rule_id: str) -> dict:
@@ -284,6 +321,8 @@ def catalog(lang: str = "it") -> list:
             spec = dict(p)
             if is_en and p["name"] in param_tr:
                 spec["description"] = param_tr[p["name"]]
+            elif is_en and p["name"] == CONFIRMATION_PARAM:
+                spec["description"] = _CONFIRMATION_DESCRIPTION_EN
             specs.append(spec)
 
         out.append({

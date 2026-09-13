@@ -161,8 +161,31 @@ def correlate_once(now: Optional[int] = None) -> int:
         # interessante (il fatto che smonta la conclusione arriva nella stessa
         # finestra) non funzionerebbe mai.
         suppressed = 0
+        # Conferma prima di concludere (roadmap §1, voce 3): una conclusione si
+        # produce solo quando la regola ha visto abbastanza EVENTI DISTINTI
+        # sulla stessa entita'. Distinti per event_id, non per ciclo: ogni
+        # ciclo rilegge l'intera finestra, e contare i cicli confermerebbe un
+        # fatto isolato a forza di rileggerlo.
+        #
+        # In UN posto, come la soppressione: una regola che si dimentica di
+        # contare non deve poter concludere su un fatto solo.
+        #
+        # Le ritrattazioni NON passano di qui: ritardarle lascerebbe in piedi
+        # piu' a lungo una conclusione gia' sbagliata.
+        observed: dict = {}
+        for rule_id, _version, _params, item in produced:
+            if isinstance(item, rules.Retraction):
+                continue
+            group = (rule_id, item.tenant, item.entity_key, item.key or "")
+            observed.setdefault(group, set()).add(item.event_id)
+        unconfirmed = 0
         for rule_id, version, params, item in produced:
             if isinstance(item, rules.Retraction):
+                continue
+            needed = int(params.get(rules.CONFIRMATION_PARAM, 1) or 1)
+            group = (rule_id, item.tenant, item.entity_key, item.key or "")
+            if len(observed[group]) < needed:
+                unconfirmed += 1
                 continue
             if not rules.declares_output(rule_id, item.role):
                 logger.warning(
@@ -193,6 +216,10 @@ def correlate_once(now: Optional[int] = None) -> int:
         conn.commit()
         metrics.set_gauge("last_correlation_ts", now)
         metrics.inc("evidence_emitted", emitted)
+        if unconfirmed:
+            # Contato come la soppressione: una soglia di conferma troppo alta
+            # spegne una regola senza che nessuno se ne accorga.
+            metrics.inc("findings_unconfirmed", unconfirmed)
         if suppressed:
             # Contato, non silenzioso: una soppressione sbagliata deve essere
             # visibile da qualche parte, altrimenti spegne il motore senza
