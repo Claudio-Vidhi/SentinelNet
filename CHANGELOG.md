@@ -12,6 +12,14 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Added
 
+- **Un apparato che smette di rispondere adesso lo dice**
+  (`DEVICE_UNREACHABLE_001`). Prima il silenzio non era un fatto: il poller
+  SNMP tornava una lista vuota e il giro passava oltre, nessun evento e
+  nessuna regola potevano vederlo. Ora un giro muto lascia una riga, proiettata
+  come `device.unreachable`. La regola conclude solo per un apparato che
+  **prima rispondeva** e ha saltato **tre giri consecutivi**: un apparato mai
+  raggiunto perche' una ACL non contempla il collector e' il caso piu' comune
+  su UDP e non e' "caduto", e un datagramma perso non deve svegliare nessuno.
 - **I server Windows diventano apparati gestiti, via SSH e non via WinRM.**
   Windows ha un server OpenSSH dal 10 / Server 2019, quindi il trasporto
   netmiko gia' usato per ogni altro apparato lo raggiunge: niente `pywinrm` e

@@ -300,6 +300,11 @@ def _snmp_devices() -> list:
     return out
 
 
+# Tipo di snapshot che registra un giro senza risposta. Lo legge
+# normalize (-> device.unreachable) e DEVICE_UNREACHABLE_001.
+SILENT_KIND = "snmp_silent"
+
+
 async def poll_once() -> int:
     """Un giro su tutti gli apparati con community. Ritorna gli snapshot scritti.
 
@@ -327,6 +332,22 @@ async def poll_once() -> int:
 
     for device, snapshots in zip(devices,
                                  await asyncio.gather(*(_uno(d) for d in devices))):
+        if not snapshots:
+            # Il silenzio diventa un fatto. Prima un apparato che smetteva di
+            # rispondere non produceva NIENTE: nessun evento, nessuna regola
+            # poteva vederlo, e l'unico segno era l'assenza di dati nuovi.
+            #
+            # Un solo giro muto non e' una conclusione -- su UDP il silenzio e'
+            # il caso comune, e un apparato mai raggiunto perche' una ACL non
+            # contempla il collector non e' "caduto". Distinguerli e' compito
+            # di DEVICE_UNREACHABLE_001, che pretende un apparato che PRIMA
+            # rispondeva e piu' giri muti di fila.
+            db.enqueue_write(
+                "INSERT INTO api_observations(ts, tenant, device_ip, kind, summary_json) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (ts, device["tenant"], device["ip"], SILENT_KIND, "{}"))
+            n += 1
+            continue
         for kind, summary in snapshots:
             db.enqueue_write(
                 "INSERT INTO api_observations(ts, tenant, device_ip, kind, summary_json) "

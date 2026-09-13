@@ -310,14 +310,25 @@ def _from_api_observations(conn, now: int) -> int:
         (cur["last_id"], MAX_ROWS_PER_SOURCE)).fetchall()
     last_id = cur["last_id"]
     for r in rows:
+        # Un giro di polling senza risposta e' un fatto diverso da uno stato:
+        # chiamarlo device.state direbbe "ecco lo stato" di un apparato che non
+        # ne ha riportato nessuno.
+        silent = r["kind"] == "snmp_silent"
         _emit(conn,
               ts=r["ts"], ingested_ts=now, tenant=r["tenant"],
               source=_source_of(r["kind"]), source_id=r["id"],
-              event_type="device.state", entity_type="device",
+              event_type="device.unreachable" if silent else "device.state",
+              entity_type="device",
               entity_id=r["device_ip"], device_ip=r["device_ip"],
               attrs={"kind": r["kind"]},
-              metrics=_measured(r["summary_json"]),
+              metrics={} if silent else _measured(r["summary_json"]),
               dedup_key=f"api:{r['id']}")
+        if silent:
+            # Il cursore avanza ANCHE qui: saltare la riga senza avanzarlo
+            # rileggerebbe gli stessi giri muti a ogni ciclo, e un lotto fatto
+            # solo di giri muti non lascerebbe mai passare le righe dopo.
+            last_id = max(last_id, r["id"])
+            continue          # niente da confrontare: non c'e' uno snapshot
 
         # Variazione di configurazione/stato: confronto con lo snapshot
         # precedente dello stesso apparato e della stessa natura.

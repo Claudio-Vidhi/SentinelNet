@@ -98,7 +98,7 @@ Ordered there already, and that order is still right. All three are debts that
 | # | Item | Evidence |
 |---|---|---|
 | **N1** | Confirm before concluding — one rule parameter declaring how many observations are required before evidence is produced | no `min_observations` in the rule catalog |
-| **N2** | `device.unreachable` — `_poll_device` returning nothing is silence, not a fact | no `device.unreachable` event kind |
+| **N2** | ~~`device.unreachable`~~ **DONE 2026-09-13.** A silent polling round now leaves an `api_observations` row (`snmp_silent`), projected as `device.unreachable`, and `DEVICE_UNREACHABLE_001` concludes only for a device that WAS answering and then missed `min_silent_rounds` (3) consecutive rounds — a device never reached because an ACL excludes the collector is the common case on UDP, and is not "down". That is N1's principle applied where it matters most. | shipped |
 | **N3** | Full acknowledgement — `acknowledged_by`, timestamp, note on the incident | `incidents` (`observability/storage/schema.sql:206`) has `status` and the transitions, but the "who" exists only in the audit log |
 
 ### E. Data already collected, no consumer
@@ -111,7 +111,7 @@ These need none.
 | **V1** | **MAC → server correlation.** A Linux host in inventory is not matched against `mac_history`, so the map cannot say which switch port it is on | a join; no collector. `docs/roadmap.md` §3 names it the suggested entry point |
 | **V2** | **`IFACE_ERRORS_001`.** `ifInErrors`/`ifOutErrors` are collected and *used in the diagnosis*, but no rule fires proactively on them | left undone deliberately on 2026-08-01 |
 | **V3** | **Blast radius — "is it just me?"** Needs a `dst:`/`policy:` entity key so evidence can aggregate across clients | the entity key is the whole design question |
-| **V4** | **Scheduled ARP/MAC collection.** Both are collected on demand, so the diagnosis answers from whatever happens to be in the DB | no scheduler for either; `core_engine.py:165` notes the absence |
+| **V4** | ~~**Scheduled ARP/MAC collection.**~~ **ALREADY EXISTED — this row was wrong.** `collectors/l2_scheduler.py` (WP9) gives ARP, MAC and the `mac_history` prune a clock, off by default (`l2_poll_s = 0`) because each cycle opens SSH sessions with device credentials. The `core_engine.py:165` comment I cited was about config drift, not L2. Fourth false entry of this kind in two triages. | closed, nothing to build |
 
 ### F. Product decisions — answered 2026-09-12
 
