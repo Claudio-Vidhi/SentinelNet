@@ -12,6 +12,7 @@ from services.inventory_manager import (
     parse_transports, CATEGORIES_FILE,
 )
 from drivers.linux import sanitize_session
+from drivers.windows import prepare_session as prepare_windows_session
 
 def maybe_enable(net_connect, netmiko_type: str, secret: str) -> None:
     """Entra in modalita' privilegiata dove la piattaforma ce l'ha.
@@ -258,6 +259,8 @@ def run_backup_and_triage(device):
         with ConnectHandler(**device_params) as net_connect:
             if netmiko_type == 'linux':
                 sanitize_session(net_connect)
+            elif netmiko_type == 'generic':   # windows
+                prepare_windows_session(net_connect)
             # Linux has no enable mode: netmiko translates enable() to `sudo -s`. It
             # only makes sense if the operator put the sudo password in Enable
             # Secret; otherwise the session stays non-privileged and non-root
@@ -523,10 +526,15 @@ def probe_device(device):
     }
     try:
         with ConnectHandler(**device_params) as net_connect:
-            if netmiko_type == 'linux':
+            if netmiko_type in ('linux', 'generic'):
                 # Senza questa, le sequenze di "shell integration" cambiano il
                 # prompt a ogni comando e ogni lettura va in timeout.
-                sanitize_session(net_connect)
+                # On Windows the prompt is a path, not a name; `hostname` is
+                # the same command on cmd.exe.
+                if netmiko_type == 'linux':
+                    sanitize_session(net_connect)
+                else:
+                    prepare_windows_session(net_connect)
                 out = net_connect.send_command("hostname", read_timeout=10)
                 hostname = (out if isinstance(out, str) else str(out or "")).strip()
             else:
@@ -569,6 +577,8 @@ def send_custom_command(device, command: str, bypass_blacklist: bool = False):
         with ConnectHandler(**device_params) as net_connect:
             if netmiko_type == 'linux':
                 sanitize_session(net_connect)
+            elif netmiko_type == 'generic':   # windows
+                prepare_windows_session(net_connect)
             maybe_enable(net_connect, netmiko_type, secret)
             output = net_connect.send_command(command)
             log_audit(f"Comando CLI '{command}' eseguito con successo sul dispositivo '{device['IP']}'.")
@@ -623,6 +633,8 @@ def run_bulk_command(device, commands, config_mode=False, save_after=False):
         with ConnectHandler(**device_params) as net_connect:
             if netmiko_type == 'linux':
                 sanitize_session(net_connect)
+            elif netmiko_type == 'generic':   # windows
+                prepare_windows_session(net_connect)
             maybe_enable(net_connect, netmiko_type, secret)
             if config_mode:
                 output = net_connect.send_config_set(commands)

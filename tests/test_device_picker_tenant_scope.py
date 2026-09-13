@@ -11,6 +11,8 @@ che sto guardando".
 """
 import os
 import re
+import shutil
+import subprocess
 import unittest
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -29,7 +31,16 @@ class TestPickersFollowTheGlobalTenant(unittest.TestCase):
         ("static/js/routes-view.js", "loadRtDeviceList"),
         ("static/js/observability.js", "loadTrafPolDeviceList"),
         ("static/js/fortigate-management.js", "renderFgtTargetSelect"),
+        ("static/js/netsec-audit.js", "populateAuditDeviceSelect"),
     ]
+
+    @unittest.skipUnless(shutil.which("node"), "node not available")
+    def test_netsec_audit_picker_runs_scoped(self):
+        harness = os.path.join(_REPO_ROOT, "tests", "js",
+                               "test_netsec_audit_tenant_scope.mjs")
+        proc = subprocess.run([shutil.which("node"), harness],
+                              capture_output=True, text=True, cwd=_REPO_ROOT)
+        self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
 
     def _body(self, src, name):
         i = src.index(name)

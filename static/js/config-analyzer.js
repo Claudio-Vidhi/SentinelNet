@@ -95,7 +95,7 @@
     }
 
     function caDeviceCount(dev) {
-        if (dev.config_type === 'linux') {
+        if (isServerDevice(dev)) {
             const secs = ((dev.server || {}).sections) || [];
             return secs.reduce((n, s) => n + ((s.rows || []).length), 0);
         }
@@ -139,8 +139,9 @@
 
     // Un host Linux non ha VLAN, ACL o interfacce in senso Cisco: sta solo nel
     // pill "Server", e viene escluso dalle viste che descrivono uno switch.
+    // Windows hosts carry the same {vendor, sections} envelope under dev.server.
     function isServerDevice(dev) {
-        return !!(dev && (dev.config_type || '').toLowerCase() === 'linux');
+        return !!(dev && ['linux', 'windows'].includes((dev.config_type || '').toLowerCase()));
     }
 
     function caRenderResultsInner() {

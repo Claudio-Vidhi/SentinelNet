@@ -64,9 +64,9 @@ def probe(ip: str, user: str, password: str, port: int, timeout: int):
     with ConnectHandler(**params) as conn:
         print(f"connesso in {time.time() - t0:.1f}s")
 
-        # Il punto di rottura piu' probabile: netmiko costruisce il modello di
-        # terminazione di ogni comando dal prompt, e quello di cmd.exe
-        # ('C:\\Users\\admin>') non e' quello di un apparato di rete.
+        # Same preparation as the triage: ConPTY escape codes and CR as Enter.
+        from drivers.windows import prepare_session
+        prepare_session(conn)
         prompt = conn.find_prompt()
         print(f"prompt letto: {prompt!r}")
 

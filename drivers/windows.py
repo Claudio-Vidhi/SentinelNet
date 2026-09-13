@@ -51,10 +51,12 @@ _PS = 'powershell -NoProfile -NonInteractive -Command'
 
 
 def ps(script: str) -> str:
-    """Wraps a PowerShell one-liner so it runs from either default shell.
+    """Wraps a PowerShell one-liner to run from cmd.exe, the OpenSSH default.
 
-    Windows OpenSSH gives cmd.exe by default and PowerShell when configured;
-    this form works from both, so the driver does not have to detect which.
+    It does NOT work with PowerShell configured as the SSH default shell: the
+    outer PowerShell expands ``$o`` inside the double quotes before the inner
+    one runs, and every command arrives broken (seen on a real host). See
+    prepare_session.
     """
     return f'{_PS} "{script}"'
 
@@ -196,6 +198,41 @@ TRIAGE_COMMANDS = (
         + _fields("_", "Name", "Path", "Description") + " }"),
      "--- SMB SHARES ---"),
 )
+
+
+_CURSOR_POSITION = re.compile(r"\x1b\[(?:\d+(?:;\d+)?)?H")
+_CURSOR_FORWARD = re.compile(r"\x1b\[(\d*)C")
+
+
+def prepare_session(net_connect):
+    """Makes a netmiko 'generic' session usable against cmd.exe behind ConPTY.
+
+    Seen on a real Windows 11 session (tests/test_windows_transport.py):
+
+    - ConPTY opens with mode switches, a screen clear and an OSC window title,
+      and repeats the title after every prompt. Netmiko 'generic' strips no
+      escape codes at all, so the last line never ends in '>' and the prompt
+      comes back empty. The Linux cleanup handles both CSI and OSC forms.
+    - A bare LF does not submit a line; CR does. With netmiko's default
+      RETURN of '\\n' every command sat unexecuted until the read timeout.
+
+    Requires cmd.exe as the SSH default shell. With PowerShell as default
+    shell the command line is re-expanded (``$o`` becomes empty) and PSReadLine
+    repaints the echo, and no amount of cleanup here fixes that.
+    """
+    from drivers.linux import sanitize_session
+    net_connect.RETURN = "\r\n"
+    net_connect.ansi_escape_codes = True
+    # ConPTY also replaces line breaks with cursor moves where it can: a
+    # skipped line becomes ESC[<row>;<col>H, a run of spaces ESC[<n>C. Deleted
+    # like any other escape, they glued an output line onto the prompt (and
+    # netmiko then stripped it as the prompt: HOSTNAME came back empty). They
+    # are turned back into what they stand for BEFORE the generic cleanup.
+    generic = net_connect.strip_ansi_escape_codes
+    net_connect.strip_ansi_escape_codes = lambda text: generic(
+        _CURSOR_FORWARD.sub(lambda m: " " * int(m.group(1) or 1),
+                            _CURSOR_POSITION.sub("\n", text)))
+    sanitize_session(net_connect)
 
 
 class WindowsDriver(BaseDriver):

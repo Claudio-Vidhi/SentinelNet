@@ -396,5 +396,19 @@ class TestAnalyzer(unittest.TestCase):
                     f"{key} non e' in entrambi i dizionari")
 
 
+class TestConfigAnalyzerShowsWindows(unittest.TestCase):
+    """The backend put the Windows envelope under dev.server, but the Server
+    pill only accepted config_type 'linux': a triaged Windows host showed
+    "No devices available"."""
+
+    def test_server_pill_accepts_windows(self):
+        with open(os.path.join(_REPO_ROOT, "static", "js", "config-analyzer.js"),
+                  encoding="utf-8") as f:
+            src = f.read()
+        body = src[src.index("function isServerDevice"):]
+        body = body[:body.index("}")]
+        self.assertIn("'windows'", body)
+
+
 if __name__ == "__main__":
     unittest.main()
