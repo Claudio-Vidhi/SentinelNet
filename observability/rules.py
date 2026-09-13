@@ -264,6 +264,15 @@ RULES_EN = {
             "min_transitions": "Link transition count in correlation window required to qualify as flapping (4 = two full cycles).",
         },
     },
+    "BLAST_RADIUS_001": {
+        "title": "Several clients blocked towards the same destination",
+        "description": "Traffic towards one service is being blocked for several distinct clients. It is not a client's problem: it is the destination, or the policy in front of it.",
+        "investigation": "Start from the destination, not from the first client who called: did the policy covering that service change recently? Is the service down and the firewall answering with a reset? Do the clients share something (same VLAN, same site) that sets them apart from those who do get through?",
+        "remediation": "Fix the policy or restore the service. The per-client conclusions of BLOCKED_TRAFFIC_001 close by themselves once traffic resumes.",
+        "parameters": {
+            "min_sources": "Distinct clients blocked towards the same destination and port for it to be a service problem rather than a client's. Two can be a coincidence; three is already a pattern.",
+        },
+    },
     "DEVICE_UNREACHABLE_001": {
         "title": "Device no longer reachable",
         "description": "A device that was answering the poller has stopped for several consecutive rounds. Before this, it produced nothing: silence was not a fact.",
@@ -542,6 +551,63 @@ def _interface_flapping(events: list, p: dict) -> list:
                     f"transizioni in {max(span // 60, 1)} minuti",
             attrs={"interface": interface, "transitions": len(recent),
                    "span_s": span}))
+    return out
+
+
+def _blast_radius(events: list, p: dict) -> list:
+    """"E' solo mio?" -- piu' client bloccati verso la STESSA destinazione.
+
+    Una conclusione per client (``BLOCKED_TRAFFIC_001``) risponde a "perche'
+    IO non arrivo?", non a "anche gli altri non arrivano?". Sono due guasti
+    diversi: il primo e' un client, il secondo e' un servizio o una policy, e
+    chi lo indaga partendo dal primo client perde tempo sul posto sbagliato.
+
+    La chiave e' la DESTINAZIONE (``dst:<ip>:<porta>``), scelta dell'utente: e'
+    la domanda come la fa chi chiama l'helpdesk, e funziona con qualunque
+    sorgente di flussi. La chiave per policy esisterebbe solo dove i log
+    portano un policyid, cioe' in pratica su FortiGate.
+
+    Si contano SOLO i blocchi che ``BLOCKED_TRAFFIC_001`` avrebbe gia'
+    accettato -- log di blocco CORROBORATO da un flusso -- chiamandone la
+    logica invece di duplicarla. Contare i log nudi darebbe al raggio d'azione
+    una precisione diversa da quella di ogni singola conclusione, e due regole
+    in disaccordo su cosa sia "bloccato" sarebbero due verita'.
+    """
+    by_id = {e["id"]: e for e in events}
+    blocked = _blocked_traffic(events, params_for("BLOCKED_TRAFFIC_001"))
+    groups: dict = {}
+    for f in blocked:
+        if f.role != "trigger" or not f.dst_ip or not f.src_ip:
+            continue
+        ev = by_id.get(f.event_id) or {}
+        attrs = json.loads(ev.get("attrs_json") or "{}")
+        port = attrs.get("dst_port") or attrs.get("dport") or ev.get("dst_port")
+        key = (f.tenant, f.dst_ip, str(port) if port not in (None, "") else "")
+        groups.setdefault(key, {"sources": set(), "last": f})
+        groups[key]["sources"].add(f.src_ip)
+        if f.ts >= groups[key]["last"].ts:
+            groups[key]["last"] = f
+
+    out = []
+    for (tenant, dst_ip, port), g in groups.items():
+        sources = g["sources"]
+        if len(sources) < p["min_sources"]:
+            continue
+        last = g["last"]
+        target = f"{dst_ip}:{port}" if port else dst_ip
+        out.append(Finding(
+            event_id=last.event_id, ts=last.ts, tenant=tenant,
+            role="trigger", entity_key=f"dst:{target}", severity=3,
+            dst_ip=dst_ip,
+            summary=f"{len(sources)} client bloccati verso "
+                    f"{endpoints.describe(dst_ip)}"
+                    + (f" porta {port}" if port else ""),
+            # Un campione limitato e ordinato: cento indirizzi in un'evidenza
+            # non si leggono, e l'ordine stabile rende confrontabili due cicli.
+            attrs={"sources": len(sources),
+                   "sample": sorted(sources)[:10],
+                   "dst_port": port or None,
+                   "threshold": p["min_sources"]}))
     return out
 
 
@@ -1203,6 +1269,33 @@ RULES = {
                        "membro instabile ricalcola il bundle a ogni "
                        "transizione.",
         "check": _interface_flapping,
+    },
+    "BLAST_RADIUS_001": {
+        "version": "1.0.0",
+        "title": "Piu' client bloccati verso la stessa destinazione",
+        "description": "Il traffico verso uno stesso servizio viene bloccato "
+                       "per piu' client distinti. Non e' un problema di un "
+                       "client: e' la destinazione, o la policy davanti.",
+        "inputs": ["log.security", "flow.aggregate"],
+        "outputs": ["trigger"],
+        "parameters": [
+            {"name": "min_sources", "default": 3, "min": 2, "max": 1000,
+             "description": "Client distinti bloccati verso la stessa "
+                            "destinazione e porta perche' sia un problema del "
+                            "servizio e non di un client. Due puo' essere una "
+                            "coincidenza; tre e' gia' un andamento."},
+        ],
+        "base_confidence": 70,
+        "investigation": "Partire dalla destinazione, non dal primo client "
+                         "che ha chiamato: la policy che copre quel servizio "
+                         "e' cambiata di recente? Il servizio e' giu' e il "
+                         "firewall risponde con un reset? I client hanno "
+                         "qualcosa in comune (stessa VLAN, stessa sede) che "
+                         "li distingue da chi invece arriva?",
+        "remediation": "Correggere la policy o ripristinare il servizio. Le "
+                       "conclusioni per singolo client di BLOCKED_TRAFFIC_001 "
+                       "si chiudono da sole quando il traffico riprende.",
+        "check": _blast_radius,
     },
     "DEVICE_UNREACHABLE_001": {
         "version": "1.0.0",

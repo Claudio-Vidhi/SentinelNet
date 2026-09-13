@@ -110,7 +110,7 @@ These need none.
 |---|---|---|
 | **V1** | **MAC → server correlation.** A Linux host in inventory is not matched against `mac_history`, so the map cannot say which switch port it is on | a join; no collector. `docs/roadmap.md` §3 names it the suggested entry point |
 | **V2** | **`IFACE_ERRORS_001`.** `ifInErrors`/`ifOutErrors` are collected and *used in the diagnosis*, but no rule fires proactively on them | left undone deliberately on 2026-08-01 |
-| **V3** | **Blast radius — "is it just me?"** Needs a `dst:`/`policy:` entity key so evidence can aggregate across clients | the entity key is the whole design question |
+| **V3** | ~~Blast radius~~ **DONE 2026-09-13**, keyed by DESTINATION (user's choice: `dst:<ip>:<port>`, the question as a caller asks it, and source-agnostic — `policy:` only exists where logs carry a policyid). `BLAST_RADIUS_001` counts distinct clients whose block `BLOCKED_TRAFFIC_001` would already accept — calling its logic rather than duplicating it, so the two rules cannot disagree on what "blocked" means. Default 3 sources. | shipped |
 | **V4** | ~~**Scheduled ARP/MAC collection.**~~ **ALREADY EXISTED — this row was wrong.** `collectors/l2_scheduler.py` (WP9) gives ARP, MAC and the `mac_history` prune a clock, off by default (`l2_poll_s = 0`) because each cycle opens SSH sessions with device credentials. The `core_engine.py:165` comment I cited was about config drift, not L2. Fourth false entry of this kind in two triages. | closed, nothing to build |
 
 ### F. Product decisions — answered 2026-09-12
@@ -170,7 +170,7 @@ Kept for reference:
 - **P4 — Windows over WinRM** (`docs/roadmap.md` §3): a driver, an artefact with
   the same `--- <section> ---` markers, an analyzer. Same shape as Linux, but it
   is a feature, not a debt — no `pywinrm` anywhere today.
-- **P5 — agent/device plane separation** (`docs/roadmap.md` §2): an
+- **P5 — agent/device plane separation: DEFERRED TO ITS TRIGGER** (user, 2026-09-13). The reasoning below stands. Original note: (`docs/roadmap.md` §2): an
   authenticated agent still receives every pending job for its site. The
   roadmap already states the trigger for un-deferring it — the allowlist growing
   to cover writes, or a second consumer of the relay. Neither has happened.

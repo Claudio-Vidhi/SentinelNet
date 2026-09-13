@@ -12,6 +12,15 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Added
 
+- **"E' solo mio?" ha una risposta** (`BLAST_RADIUS_001`). Quando piu' client
+  distinti vengono bloccati verso la stessa destinazione e porta, il motore lo
+  dice come un incidente sulla DESTINAZIONE, non come tanti incidenti uno per
+  client. Sono due guasti diversi: un client e' un client, tre client verso lo
+  stesso servizio sono il servizio o la policy davanti, e chi indaga partendo
+  dal primo che ha chiamato l'helpdesk perde tempo nel posto sbagliato.
+  Contano solo i blocchi corroborati da un flusso, con la stessa logica di
+  `BLOCKED_TRAFFIC_001`: le due regole non possono dissentire su cosa sia
+  "bloccato". Stesso client che riprova dieci volte = un client.
 - **Conferma prima di concludere, per ogni regola.** Ogni regola dichiara ora
   `min_observations` nel pannello soglie: quanti eventi distinti deve vedere
   prima di produrre un'evidenza. Il default e' 1, cioe' il comportamento di
