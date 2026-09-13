@@ -97,7 +97,7 @@ Ordered there already, and that order is still right. All three are debts that
 
 | # | Item | Evidence |
 |---|---|---|
-| **N1** | Confirm before concluding — one rule parameter declaring how many observations are required before evidence is produced | no `min_observations` in the rule catalog |
+| **N1** | ~~Confirm before concluding~~ **DONE 2026-09-13.** Every rule now declares `min_observations` (default 1 = unchanged behaviour), counted as DISTINCT events per (rule, tenant, entity, key) in one place in the correlator. Counting cycles would have been wrong: the correlator re-reads the whole window each cycle, so one datagram would confirm itself by being re-read. Retractions are exempt — delaying them keeps a wrong conclusion standing longer. | shipped |
 | **N2** | ~~`device.unreachable`~~ **DONE 2026-09-13.** A silent polling round now leaves an `api_observations` row (`snmp_silent`), projected as `device.unreachable`, and `DEVICE_UNREACHABLE_001` concludes only for a device that WAS answering and then missed `min_silent_rounds` (3) consecutive rounds — a device never reached because an ACL excludes the collector is the common case on UDP, and is not "down". That is N1's principle applied where it matters most. | shipped |
 | **N3** | Full acknowledgement — `acknowledged_by`, timestamp, note on the incident | `incidents` (`observability/storage/schema.sql:206`) has `status` and the transitions, but the "who" exists only in the audit log |
 

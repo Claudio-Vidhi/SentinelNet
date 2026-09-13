@@ -518,8 +518,12 @@ class TestBaselineRules(_Base):
         self.assertIn("flow.baseline", catalog["BASELINE_SPIKE_001"]["inputs"])
         self.assertIn("retraction",
                       catalog["BASELINE_NORMAL_RETRACT_001"]["outputs"])
+        # Le soglie PROPRIE della regola. ``min_observations`` e' dichiarato
+        # per tutte le regole in un punto solo (conferma prima di concludere),
+        # quindi non e' un parametro di questa.
         names = {p["name"] for p in catalog["BASELINE_SPIKE_001"]["parameters"]}
-        self.assertEqual(names, {"min_deviation_pct", "min_quality"})
+        self.assertEqual(names - {rules.CONFIRMATION_PARAM},
+                         {"min_deviation_pct", "min_quality"})
         # Ritrattare richiede più fiducia che concludere.
         def _min_quality(rule_id):
             return next(p["default"] for p in catalog[rule_id]["parameters"]

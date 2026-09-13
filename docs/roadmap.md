@@ -21,9 +21,9 @@ goal and worth keeping distinct.
 |---|---|---|---|
 | 1 | Flapping detection | **done** | `IFACE_FLAPPING_001` |
 | 2 | Windowed suppression (scheduled downtime) | **done** | [suppression.py](../observability/suppression.py), applied in the correlator |
-| 3 | Confirm before concluding | to do | The debt that explodes once notifications exist |
-| 4 | `device.unreachable` | to do | Silence must become a fact |
-| 5 | Full acknowledgement | to do | Three columns, not a feature |
+| 3 | Confirm before concluding | **done** | `min_observations` on every rule, counted as distinct events |
+| 4 | `device.unreachable` | **done** | `DEVICE_UNREACHABLE_001`: a device that was answering and stopped |
+| 5 | Full acknowledgement | **done** | who, when and why on the incident (schema v11) |
 | 6 | Notification engine → escalation | undecided | Out of the original plan's scope |
 
 ### 1.1 Why this order

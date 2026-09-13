@@ -12,6 +12,13 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Added
 
+- **Conferma prima di concludere, per ogni regola.** Ogni regola dichiara ora
+  `min_observations` nel pannello soglie: quanti eventi distinti deve vedere
+  prima di produrre un'evidenza. Il default e' 1, cioe' il comportamento di
+  prima, identico. Si contano EVENTI e non cicli: il correlatore rilegge
+  l'intera finestra a ogni giro, e contare i cicli farebbe confermare un
+  datagramma isolato a forza di rileggerlo. Le ritrattazioni sono escluse:
+  ritardarle lascerebbe in piedi piu' a lungo una conclusione gia' sbagliata.
 - **Un apparato che smette di rispondere adesso lo dice**
   (`DEVICE_UNREACHABLE_001`). Prima il silenzio non era un fatto: il poller
   SNMP tornava una lista vuota e il giro passava oltre, nessun evento e
