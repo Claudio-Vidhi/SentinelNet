@@ -11,11 +11,15 @@ come testo -- e ``detect_config_type``, che ripiegava su ``'ios'`` per ogni
 vendor sconosciuto e avrebbe dato un artefatto Windows in pasto al parser
 Cisco.
 
-NON VERIFICATO SU FERRO VERO: qui non c'e' un host Windows. I comandi sono
-verificati nella loro FORMA (nessuna virgoletta da far sopravvivere a tre
-livelli di shell) e l'analizzatore contro un artefatto realistico; che
-PowerShell risponda come previsto su una macchina vera resta da provare, come
-per il parsing dei membri HA di FortiGate.
+COSA E' VERIFICATO E COSA NO. I venti comandi sono stati eseguiti su un
+Windows 11 vero (2026-09-13) e rispondono tutti senza errori; l'artefatto che
+producono e' stato dato all'analizzatore, che lo divide in quindici sezioni
+senza perdere una riga. Quel giro ha trovato due difetti veri, entrambi
+corretti e fissati qui: il gruppo Administrators cercato per nome invece che
+per SID ben noto, e una frase italiana dentro una riga di dati.
+
+Resta da provare **il trasporto**: netmiko 'generic' contro il prompt di
+cmd.exe su una sessione SSH. I comandi in se' non sono piu' in dubbio.
 """
 
 import os
@@ -120,6 +124,26 @@ class TestTheCommandsSurviveThreeShells(unittest.TestCase):
             # Senza questo un prompt inatteso appende la sessione fino al
             # read timeout invece di fallire.
             self.assertIn("-NonInteractive", cmd, tag)
+
+    def test_the_administrators_group_is_looked_up_by_well_known_sid(self):
+        """Il gruppo predefinito puo' essere rinominato, e su alcune
+        installazioni localizzate lo e'. S-1-5-32-544 e' lo stesso su ogni
+        Windows mai spedito."""
+        cmd = next(c for c, t in TRIAGE_COMMANDS if t == "--- LOCAL ADMINS ---")
+        self.assertIn("-SID S-1-5-32-544", cmd)
+        self.assertNotIn("-Group Administrators", cmd)
+
+    def test_nothing_compares_a_localised_value(self):
+        """ObjectClass e' l'unica proprieta' che torna tradotta ('Utente' /
+        'Altro' su un host italiano, dove PrincipalSource resta 'AzureAD'):
+        e' di sola visualizzazione, e confrontarla in codice sarebbe il
+        difetto che tutto questo formato esiste per evitare."""
+        import inspect
+        from ai import windows_analyzer as wa
+        src = inspect.getsource(wa)
+        for localised in ("Utente", "Altro", "'User'", '"User"', "'Group'"):
+            self.assertNotIn(localised, src,
+                             f"l'analizzatore confronta {localised}")
 
     def test_the_sections_are_the_ones_the_analyzer_reads(self):
         tags = {tag for _cmd, tag in TRIAGE_COMMANDS}
@@ -321,7 +345,10 @@ class TestAnalyzer(unittest.TestCase):
 
     def test_an_account_whose_password_never_expires_says_so(self):
         rows = {r["name"]: r for r in self._rows("win_users")}
-        self.assertEqual("password non scade", rows["Administrator"]["setting"])
+        # Token e non prosa: una riga e' DATO, e una frase italiana
+        # comparirebbe in una dashboard in inglese accanto ai valori non
+        # tradotti della piattaforma ('Up', 'Running').
+        self.assertEqual("never", rows["Administrator"]["setting"])
         self.assertEqual("True", rows["Administrator"]["active"])
         self.assertEqual("False", rows["Guest"]["active"])
 

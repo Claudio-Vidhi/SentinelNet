@@ -15,8 +15,13 @@ WHY THE ARTEFACT IS PIPE-DELIMITED — Windows command output is LOCALISED.
 the system language, so a parser written against an English box reads nothing
 on an Italian one. Every command here therefore builds its own line from
 object PROPERTIES joined with '|': the enum names PowerShell returns ('Up',
-'Running', 'Automatic') are culture-independent, the header row is gone, and
-the parser has no table geometry to guess.
+'Running', 'Automatic', 'AzureAD') are culture-independent, the header row is
+gone, and the parser has no table geometry to guess.
+
+The one exception found on a real Italian host is ``ObjectClass`` on a group
+member, which comes back as 'Utente'/'Altro'. It is carried as a display
+value and nothing compares it; the rule to keep is that a value only gets
+compared in code once it has been seen to be an enum name.
 
 WHY EVERY SCRIPT USES SINGLE QUOTES INSIDE — the command travels as one
 double-quoted argument to ``powershell -Command`` over an SSH channel. A
@@ -141,8 +146,16 @@ TRIAGE_COMMANDS = (
      "--- LOCAL GROUPS ---"),
     # Who is a local administrator: the equivalent of sudoers, and the first
     # question anyone asks about a Windows server.
-    (ps("Get-LocalGroupMember -Group Administrators -ErrorAction "
-        "SilentlyContinue | ForEach-Object { "
+    #
+    # By WELL-KNOWN SID and not by the name 'Administrators': the built-in
+    # group can be renamed, and on some localised installations it is. The SID
+    # S-1-5-32-544 is the same on every Windows ever shipped.
+    #
+    # ObjectClass is the ONE property here that comes back localised ('Utente'
+    # / 'Altro' on an Italian host, where PrincipalSource stays 'AzureAD'):
+    # it is display-only, and nothing in the analyzer compares it.
+    (ps("Get-LocalGroupMember -SID S-1-5-32-544 -ErrorAction SilentlyContinue"
+        " | ForEach-Object { "
         + _fields("_", "Name", "ObjectClass", "PrincipalSource") + " }"),
      "--- LOCAL ADMINS ---"),
     (ps("Get-CimInstance Win32_DiskDrive | ForEach-Object { "
