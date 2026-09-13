@@ -297,6 +297,8 @@ def _source_of(kind: str) -> str:
         return "snmp"
     if str(kind).startswith("linux_"):
         return "linux"
+    if str(kind).startswith("windows_"):
+        return "windows"
     return "fortigate_api"
 
 

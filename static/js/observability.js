@@ -52,9 +52,9 @@
                 <small style="color:var(--text-muted); font-size:11px;" data-i18n="hintObsSnmpPoll">0 = spento. Interroga solo gli apparati che hanno una community configurata nella loro scheda.</small>
             </div>
             <div class="form-group" style="max-width:280px;">
-                <label data-i18n="lblObsLinuxPoll">Intervallo polling host Linux (s)</label>
+                <label data-i18n="lblObsLinuxPoll">Intervallo polling host Linux/Windows (s)</label>
                 <input id="obs_linux_poll_s" type="number" min="0" value="${d.linux_poll_s != null ? d.linux_poll_s : 0}" style="padding-left:12px;">
-                <small style="color:var(--text-muted); font-size:11px;" data-i18n="hintObsLinuxPoll">0 = spento. Apre una sessione SSH non privilegiata verso gli host con vendor «linux» e ne rileva CPU, memoria e disco.</small>
+                <small style="color:var(--text-muted); font-size:11px;" data-i18n="hintObsLinuxPoll">0 = spento. Apre una sessione SSH verso gli host con vendor «linux» o «windows» e ne rileva CPU, memoria e disco.</small>
             </div>
             <div style="margin-top:10px; margin-bottom:2px; font-size:12px; color:var(--text-muted); text-transform:uppercase; font-weight:700;" data-i18n="lblObsListeners">Listener</div>
             <div style="margin-bottom:8px; font-size:12px; color:var(--text-muted);">${L.hintObsListeners || "Attiva un protocollo e indica la porta UDP su cui SentinelNet resta in ascolto, poi configura l'export dei dispositivi verso questo host su quella porta. Le modifiche ai listener vengono applicate subito, senza riavviare l'applicazione."}</div>

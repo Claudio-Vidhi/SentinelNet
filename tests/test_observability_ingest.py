@@ -287,6 +287,40 @@ class TestAttribution(unittest.TestCase):
         conn.close()
         self.assertEqual(n, 0)
 
+    def test_server_syslog_lands_on_the_inventory_host(self):
+        # The lines docs/collectors.md §5.1 tells an operator to configure:
+        # rsyslog's RSYSLOG_SyslogProtocol23Format and NXLog's to_syslog_ietf().
+        linux, windows = "192.0.2.30", "192.0.2.31"
+        servers = [
+            {"IP": linux, "Hostname": "web-01", "Vendor": "linux", "Group": "sede-a"},
+            {"IP": windows, "Hostname": "srv-01", "Vendor": "windows", "Group": "sede-b"},
+        ]
+        rsyslog = (b"<86>1 2026-09-13T10:15:02.123456+02:00 web-01 sshd 1234 - -  "
+                   b"Failed password for invalid user admin from 192.0.2.50 port 51234 ssh2")
+        nxlog = (b'<108>1 2026-09-13T10:15:02.000000+02:00 srv-01 '
+                 b'Microsoft-Windows-Security-Auditing 624 - '
+                 b'[NXLOG@14506 EventReceivedTime="2026-09-13 10:15:02" '
+                 b'SourceModuleName="eventlog" SourceModuleType="im_msvistalog"] '
+                 b'An account failed to log on.')
+        from datetime import datetime, timezone
+        expected_ts = int(datetime(2026, 9, 13, 8, 15, 2, tzinfo=timezone.utc).timestamp())
+        with patch("services.inventory_manager.get_all_devices", return_value=servers):
+            inventory_manager.invalidate_device_ip_cache()
+            for msg, ip, severity in ((rsyslog, linux, 6), (nxlog, windows, 4)):
+                recs = syslog.parse(msg, ip)
+                self.assertEqual(recs[0]["ts"], expected_ts)
+                self.assertEqual(recs[0]["severity"], severity)
+                udp_server._handle_records(recs, "syslog", time.time())
+        self._drain()
+        conn = db.get_observability_connection()
+        rows = conn.execute("SELECT tenant, device_ip, message FROM syslog_events "
+                            "ORDER BY device_ip").fetchall()
+        conn.close()
+        self.assertEqual([(r["tenant"], r["device_ip"]) for r in rows],
+                         [("sede-a", linux), ("sede-b", windows)])
+        self.assertIn("Failed password", rows[0]["message"])
+        self.assertIn("An account failed to log on", rows[1]["message"])
+
 
 class TestUdpEndToEnd(unittest.TestCase):
     def setUp(self):

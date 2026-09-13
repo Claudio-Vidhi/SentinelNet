@@ -10,8 +10,40 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Il triage Windows via SSH falliva sempre.** ConPTY, il livello console
+  dietro sshd, circonda prompt e output di sequenze escape che netmiko
+  `generic` non toglie (prompt vuoto), e cmd.exe esegue una riga solo su CR,
+  mentre netmiko manda LF (ogni comando restava in attesa fino al timeout).
+  `drivers/windows.prepare_session` pulisce la sessione e usa `\r\n`; il test
+  riproduce la sessione catturata su un host reale. La shell predefinita di
+  OpenSSH deve restare cmd.exe (`docs/windows-collection.md` §6).
+  ConPTY scrive anche gli a-capo come spostamenti del cursore: cancellati,
+  incollavano l'uscita di HOSTNAME al prompt e la sezione restava vuota. Ora
+  diventano a-capo e spazi.
+- **Config Analyzer: gli host Windows non comparivano nella vista Server**,
+  che accettava solo `linux`.
+- **NetSec Audit: la tendina degli apparati ignorava il tenant scelto in
+  alto** e non si ricostruiva al cambio di tenant.
+
 ### Added
 
+- **CVE per gli host Windows.** NVD cataloga Windows per edizione e release
+  (`windows_server_2022`, `windows_10_22h2`, `windows_11_23h2`), mai come un
+  prodotto unico: `registry.windows_product()` ricava il prodotto da caption e
+  build del triage, e la query parte con confidenza `exact` quando la build e'
+  nota. Un'edizione non in tabella (Server 2012, una build Insider) non viene
+  indovinata: ricade sulla ricerca per parola chiave, marcata come tale.
+- **Carico live degli host Windows.** Lo stesso intervallo `linux_poll_s`
+  interroga ora anche gli host `windows` via SSH (un solo comando PowerShell,
+  solo interi sul filo perche' il separatore decimale e' localizzato): CPU,
+  memoria e disco di sistema arrivano in `api_observations` come
+  `windows_health`, e `DEVICE_LOAD_001` scatta anche per loro.
+- **Syslog dai server Linux e Windows, documentato.** `docs/collectors.md`
+  §5.1: configurazione rsyslog (RFC 5424, UDP) e NXLog, con il compromesso
+  dichiarato — Windows non parla syslog e serve un agente. Un test fissa le
+  due forme di riga dal parsing all'attribuzione.
 - **"E' solo mio?" ha una risposta** (`BLAST_RADIUS_001`). Quando piu' client
   distinti vengono bloccati verso la stessa destinazione e porta, il motore lo
   dice come un incidente sulla DESTINAZIONE, non come tanti incidenti uno per

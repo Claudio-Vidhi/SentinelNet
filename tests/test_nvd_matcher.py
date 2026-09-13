@@ -263,5 +263,47 @@ class TestCpeQuoting(unittest.TestCase):
         self.assertIsNone(cpe_match_string("", "1.0"))
 
 
+class TestWindowsProduct(unittest.TestCase):
+    """NVD names Windows by edition and release, so the product comes from the
+    triage caption and build, never from one fixed string."""
+
+    CASES = (
+        ("Microsoft Windows Server 2019 Standard", 17763, "windows_server_2019"),
+        ("Microsoft Windows Server 2022 Datacenter", 20348, "windows_server_2022"),
+        ("Microsoft Windows Server 2025 Standard", 26100, "windows_server_2025"),
+        ("Microsoft Windows 10 Pro", 19045, "windows_10_22h2"),
+        ("Microsoft Windows 10 Enterprise LTSC 2019", 17763, "windows_10_1809"),
+        ("Microsoft Windows 11 Pro", 22631, "windows_11_23h2"),
+        ("Microsoft Windows 11 Pro", 26100, "windows_11_24h2"),
+    )
+
+    def test_captions_map_to_their_products(self):
+        from drivers.registry import windows_product
+        for caption, build, product in self.CASES:
+            with self.subTest(caption=caption, build=build):
+                self.assertEqual(windows_product(caption, build), product)
+
+    def test_unrecognised_edition_is_none(self):
+        from drivers.registry import windows_product
+        self.assertIsNone(windows_product("Microsoft Windows Server 2012 R2 Standard", 9600))
+        self.assertIsNone(windows_product("Microsoft Windows 11 Pro Insider", 27700))
+        self.assertIsNone(windows_product("Microsoft Windows 11 Pro", None))
+
+    def test_match_string_from_the_driver_version(self):
+        from drivers.registry import cpe_match_string
+        text = "Windows Server 2022 Standard (10.0.20348, 64-bit)"
+        self.assertEqual(cpe_match_string("windows", "10.0.20348", text),
+                         "cpe:2.3:o:microsoft:windows_server_2022:10.0.20348")
+        self.assertIsNone(cpe_match_string("windows", "6.3.9600",
+                                           "Windows Server 2012 R2 (6.3.9600, 64-bit)"))
+
+    def test_query_for_is_exact_when_the_build_is_known(self):
+        from services import cve_intel
+        q = cve_intel.query_for({"IP": "192.0.2.20", "Vendor": "windows"},
+                                "Windows 11 Pro (10.0.22631, 64-bit)")
+        self.assertEqual(q, {"kind": "cpe", "confidence": "exact",
+                             "value": "cpe:2.3:o:microsoft:windows_11_23h2:10.0.22631"})
+
+
 if __name__ == "__main__":
     unittest.main()

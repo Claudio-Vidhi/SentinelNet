@@ -170,11 +170,15 @@ def parse_health(output: str) -> tuple:
 
 
 def _linux_devices() -> list:
-    """Host dell'inventario il cui vendor normalizza a ``linux``."""
+    """Host dell'inventario il cui vendor normalizza a ``linux``.
+
+    Windows hosts ride the same loop (``windows_poller``): one interval for
+    server health, not one setting per operating system.
+    """
     from services import inventory_manager
     out = []
     for device in inventory_manager.get_all_devices():
-        if inventory_manager.normalize_vendor(device.get("Vendor")) != "linux":
+        if inventory_manager.normalize_vendor(device.get("Vendor")) not in ("linux", "windows"):
             continue
         out.append({"ip": device.get("IP"),
                     "tenant": device.get("Group") or "Generale",
@@ -187,7 +191,11 @@ def _poll_device(device: dict) -> list:
     from core.net_ssh import ConnectHandler
     from core import core_engine
     from drivers.linux import sanitize_session
-    from services import site_manager
+    from services import inventory_manager, site_manager
+
+    if inventory_manager.normalize_vendor(device.get("Vendor")) == "windows":
+        from observability.ingesters import windows_poller
+        return windows_poller.poll_device(device)
 
     ip = str(device.get("IP") or "")
     cli_kind, port = core_engine.get_cli_transport(device)
