@@ -298,12 +298,21 @@ class TestConcorrenza(unittest.TestCase):
         devices = [{"ip": f"192.0.2.{i}", "tenant": "sede-a",
                     "community": "esempio-community"} for i in (1, 2, 3)]
 
+        scritture = []
         with patch.object(snmp_poller, "_snmp_devices", return_value=devices), \
              patch.object(snmp_poller, "_poll_device", side_effect=uno_esplode), \
-             patch("core.db.enqueue_write"):
+             patch("core.db.enqueue_write",
+                   side_effect=lambda sql, params: scritture.append(params)):
             scritti = asyncio.run(snmp_poller.poll_once())
 
-        self.assertEqual(scritti, 2, "gli altri due passano comunque")
+        # Gli altri due passano comunque. E l'apparato che ha sollevato non
+        # sparisce piu' nel nulla: lascia una riga di giro muto, cioe' un
+        # fatto che DEVICE_UNREACHABLE_001 puo' vedere (prima non ne lasciava).
+        risposte = [p for p in scritture if p[3] != snmp_poller.SILENT_KIND]
+        muti = [p for p in scritture if p[3] == snmp_poller.SILENT_KIND]
+        self.assertEqual(len(risposte), 2, "gli altri due passano comunque")
+        self.assertEqual([p[2] for p in muti], ["192.0.2.2"])
+        self.assertEqual(scritti, 3)
 
 
 if __name__ == "__main__":

@@ -227,6 +227,15 @@ RULES_EN = {
             "min_transitions": "Link transition count in correlation window required to qualify as flapping (4 = two full cycles).",
         },
     },
+    "DEVICE_UNREACHABLE_001": {
+        "title": "Device no longer reachable",
+        "description": "A device that was answering the poller has stopped for several consecutive rounds. Before this, it produced nothing: silence was not a fact.",
+        "investigation": "Path first, then the device: are other devices behind the same uplink silent in the same window? Then it is the link, not the node. If it is alone, check power and console. A recent change to the SNMP ACL produces the same silence with nothing actually down.",
+        "remediation": "Restore the link or the device. If the SNMP ACL was changed, re-admit the collector: otherwise the device will read as down on every round.",
+        "parameters": {
+            "min_silent_rounds": "Consecutive silent polling rounds, after the last answer, before concluding. One is not enough: on UDP a lost datagram is normal, and a notified conclusion cannot be taken back.",
+        },
+    },
     "IFACE_ERRORS_001": {
         "title": "Rising error counters on a port",
         "description": "An interface error counter keeps rising within the window. A physical-layer fault that degrades without dropping the link, so it produces no transition to observe.",
@@ -494,6 +503,61 @@ def _interface_flapping(events: list, p: dict) -> list:
                     f"transizioni in {max(span // 60, 1)} minuti",
             attrs={"interface": interface, "transitions": len(recent),
                    "span_s": span}))
+    return out
+
+
+def _device_unreachable(events: list, p: dict) -> list:
+    """Un apparato che rispondeva e ha smesso.
+
+    Prima il silenzio non era un fatto: ``_poll_device`` tornava una lista
+    vuota e il giro passava oltre. Nessun evento, nessuna regola poteva
+    vederlo, e l'unico segno di un apparato caduto era l'assenza di dati
+    nuovi -- che nessuna schermata mostra.
+
+    DUE condizioni, entrambe necessarie:
+
+    - **PRIMA rispondeva.** Serve un ``device.state`` nella finestra. Un
+      apparato mai raggiunto perche' una ACL non contempla il collector non
+      e' "caduto", e sarebbe il caso piu' comune: su UDP il silenzio e' la
+      norma, non l'eccezione. Senza questa condizione la regola aprirebbe un
+      incidente per ogni apparato con SNMP filtrato, per sempre.
+    - **Piu' giri muti DI FILA dopo l'ultima risposta.** E' "conferma prima di
+      concludere" (roadmap §1, voce 3) applicata dove conta di piu': un
+      datagramma perso non deve svegliare nessuno alle tre di notte, e una
+      conclusione non si ritira dopo averla notificata.
+
+    Si conta solo cio' che viene DOPO l'ultima risposta: un apparato che ha
+    saltato un giro e poi ha ripreso non ha giri muti pendenti, anche se nella
+    finestra ce ne sono stati.
+    """
+    per_device: dict = {}
+    for ev in events:
+        if ev["event_type"] not in ("device.state", "device.unreachable")                 or not ev["device_ip"]:
+            continue
+        per_device.setdefault((ev["tenant"], ev["device_ip"]), []).append(ev)
+
+    out = []
+    for (tenant, device_ip), seen in per_device.items():
+        seen.sort(key=lambda e: (e["ts"], e["id"]))
+        answered = [i for i, e in enumerate(seen)
+                    if e["event_type"] == "device.state"]
+        if not answered:
+            continue                      # mai risposto: non e' "caduto"
+        silent_after = [e for e in seen[answered[-1] + 1:]
+                        if e["event_type"] == "device.unreachable"]
+        if len(silent_after) < p["min_silent_rounds"]:
+            continue
+        last_ok = seen[answered[-1]]
+        last = silent_after[-1]
+        out.append(Finding(
+            event_id=last["id"], ts=last["ts"], tenant=tenant,
+            role="trigger", entity_key=f"ip:{device_ip}", severity=2,
+            key="unreachable",
+            summary=f"{device_ip} non risponde da {len(silent_after)} giri "
+                    f"di polling consecutivi",
+            attrs={"silent_rounds": len(silent_after),
+                   "last_answer_ts": last_ok["ts"],
+                   "threshold": p["min_silent_rounds"]}))
     return out
 
 
@@ -1100,6 +1164,33 @@ RULES = {
                        "membro instabile ricalcola il bundle a ogni "
                        "transizione.",
         "check": _interface_flapping,
+    },
+    "DEVICE_UNREACHABLE_001": {
+        "version": "1.0.0",
+        "title": "Apparato non piu' raggiungibile",
+        "description": "Un apparato che rispondeva al polling ha smesso di "
+                       "farlo per piu' giri consecutivi. Prima questo non "
+                       "produceva nulla: il silenzio non era un fatto.",
+        "inputs": ["device.state", "device.unreachable"],
+        "outputs": ["trigger"],
+        "parameters": [
+            {"name": "min_silent_rounds", "default": 3, "min": 1, "max": 100,
+             "description": "Giri di polling muti consecutivi, dopo l'ultima "
+                            "risposta, prima di concludere. Uno solo non "
+                            "basta: su UDP un datagramma perso e' la norma, e "
+                            "una conclusione notificata non si ritira."},
+        ],
+        "base_confidence": 75,
+        "investigation": "Prima il percorso, poi l'apparato: la stessa "
+                         "finestra ha altri apparati muti dietro lo stesso "
+                         "uplink? Allora e' il collegamento, non il nodo. Se "
+                         "e' solo, controllare alimentazione e console. Un "
+                         "cambio recente della ACL SNMP produce lo stesso "
+                         "silenzio senza che nulla sia caduto.",
+        "remediation": "Ripristinare il collegamento o l'apparato. Se e' "
+                       "stata cambiata la ACL SNMP, riammettere il collector: "
+                       "altrimenti l'apparato risultera' caduto a ogni giro.",
+        "check": _device_unreachable,
     },
     "IFACE_ERRORS_001": {
         "version": "1.0.0",

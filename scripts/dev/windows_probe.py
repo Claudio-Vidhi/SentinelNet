@@ -7,9 +7,9 @@ I comandi PowerShell del driver sono gia' stati provati su un Windows vero
 cosa che resta in dubbio: **il trasporto**, cioe' netmiko 'generic' contro il
 prompt di cmd.exe su una sessione SSH.
 
-Usa lo STESSO percorso del triage (``resolve_driver`` piu' ``ConnectHandler``
-con gli stessi parametri di ``core_engine``), non una copia: una sonda che
-apre la sessione a modo suo proverebbe se stessa.
+Usa lo STESSO percorso del triage (``resolve_driver`` piu' il
+``core.net_ssh.ConnectHandler`` con gli stessi parametri di ``core_engine``),
+non una copia: una sonda che apre la sessione a modo suo proverebbe se stessa.
 
     uv run python scripts/dev/windows_probe.py --ip 192.0.2.50 --user admin
 
@@ -40,7 +40,11 @@ from drivers.windows import TRIAGE_COMMANDS               # noqa: E402
 
 
 def probe(ip: str, user: str, password: str, port: int, timeout: int):
-    from netmiko import ConnectHandler
+    # Il ConnectHandler del PROGETTO, non quello di netmiko: e' lo stesso che
+    # usa core_engine, e passa dal bastione quando l'host sta dietro un sito
+    # jump. Importare netmiko direttamente proverebbe un trasporto diverso da
+    # quello del triage -- e tests/test_jump_site.py lo vieta per questo.
+    from core.net_ssh import ConnectHandler
 
     driver_cls, netmiko_type = core_engine.resolve_driver("windows")
     print(f"driver: {driver_cls.__name__} su netmiko '{netmiko_type}'")
