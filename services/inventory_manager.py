@@ -540,6 +540,14 @@ VENDOR_ALIASES = {
     "almalinux": "linux",
     "suse": "linux",
     "proxmox": "linux",
+    # Windows: si raggiunge via SSH (server OpenSSH, incluso da
+    # Windows 10 / Server 2019), quindi un solo driver per tutte le
+    # edizioni -- cambia il ruolo della macchina, non i comandi.
+    "win": "windows",
+    "windows server": "windows",
+    "windows_server": "windows",
+    "winsrv": "windows",
+    "microsoft": "windows",
 }
 
 def normalize_vendor(raw_vendor: "str | None") -> str:
@@ -564,6 +572,7 @@ def get_all_vendors() -> dict:
         "cisco_wlc":{"driver": "cisco_wlc"},
         "cisco_9800":{"driver": "cisco_9800"},
         "linux":   {"driver": "linux"},
+        "windows": {"driver": "windows"},
     }
     vendors_file = get_vendors_file()
     if not os.path.exists(vendors_file):

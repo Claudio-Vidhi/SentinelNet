@@ -12,6 +12,22 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Added
 
+- **I server Windows diventano apparati gestiti, via SSH e non via WinRM.**
+  Windows ha un server OpenSSH dal 10 / Server 2019, quindi il trasporto
+  netmiko gia' usato per ogni altro apparato lo raggiunge: niente `pywinrm` e
+  niente stack di autenticazione suo (NTLM/Kerberos/CredSSP), e soprattutto
+  **nessun secondo percorso di esecuzione remota da mettere in sicurezza** —
+  blacklist CLI, bypass admin audito, risoluzione delle identita' e trasporto
+  jump valgono tutti immutati. Backup, triage, Config Analyzer e ricerca
+  funzionano come su un host Linux.
+  L'artefatto e' a delimitatori perche' l'uscita testuale di Windows e'
+  LOCALIZZATA: ogni comando costruisce la propria riga dalle proprieta' degli
+  oggetti, quindi il parser non legge intestazioni che cambiano con la lingua
+  del sistema. Quindici sezioni, fra cui gli amministratori locali (il
+  corrispettivo di sudoers), lo stato di RDP e SMB (SMBv1 attivo e firma non
+  richiesta sono i due reperti classici) e i profili del firewall.
+  Il costo si sposta sul cliente: la feature OpenSSH va installata e il
+  servizio avviato. Vedi [windows-collection.md](docs/windows-collection.md).
 - **Le sedi si modificano dopo la creazione, e il token esce con le
   istruzioni.** Nome, subnet, modalita' e indirizzo del bastione erano
   scrivibili solo nel form di creazione: cambiare l'indirizzo di un bastione

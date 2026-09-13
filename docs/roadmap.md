@@ -137,9 +137,17 @@ credential ADR-0008 declined is the right answer.
    managed device — backup, triage, Config Analyzer, CIS audit, health poller.
    What it collects and which view each command feeds:
    [server-collection.md](server-collection.md).
-   **Windows over WinRM (`pywinrm`) is still open** and would follow the same
-   shape: a driver, an artefact with the same `--- <section> ---` markers, and
-   an analyzer that turns it into the existing envelope.
+   ~~**Windows over WinRM.**~~ **Windows: shipped, over SSH.** Windows has
+   carried an OpenSSH *server* since Windows 10 / Server 2019, so the netmiko
+   transport already used for every other device reaches it: no `pywinrm`, no
+   NTLM/Kerberos/CredSSP stack, and no second remote-execution path to secure
+   — the CLI blacklist, the audited admin bypass, the identity resolution and
+   the jump-host transport all apply unchanged. `drivers/windows.py` plus a
+   `windows` branch in the extra-command chain, and `ai/windows_analyzer.py`
+   turns the artefact into the existing envelope.
+   The deployment cost moved to the customer side: the OpenSSH feature has to
+   be installed and its service started, where WinRM is already on in a
+   domain. See [windows-collection.md](windows-collection.md).
 
 6. ~~**Config backup for servers.**~~ **Shipped for Linux** as part of item 1 —
    the artefact *is* the backup: a dump of critical `/etc` files plus command
@@ -164,7 +172,8 @@ credential ADR-0008 declined is the right answer.
 
 5. **Server vulnerabilities via NIST NVD.** The NVD lookup already exists for
    network vendors (`inventory_manager.resolve_euvd_term`); extending it to
-   server operating systems needs only the version from SSH/WinRM inventory.
+   server operating systems needs only the version the SSH inventory already
+   reads (Linux and Windows both report it).
 
 ### Larger efforts
 

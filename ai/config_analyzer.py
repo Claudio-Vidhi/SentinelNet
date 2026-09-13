@@ -570,10 +570,13 @@ _WLC_AIREOS_VENDORS = {'cisco_wlc'}
 _PANOS_VENDORS = {'palo_alto', 'paloalto', 'panos', 'pan-os', 'palo alto'}
 _LINUX_VENDORS = {'linux', 'ubuntu', 'debian', 'rhel', 'redhat', 'centos',
                   'rocky', 'almalinux', 'suse', 'proxmox'}
+_WINDOWS_VENDORS = {'windows', 'win', 'windows server', 'windows_server',
+                    'winsrv', 'microsoft'}
 
 
 def detect_config_type(content, device=None):
-    """Determines the configuration type: 'ios' | 'fortios' | 'wlc-aireos'.
+    """Determines the configuration type: 'ios' | 'fortios' | 'wlc-aireos'
+    | 'panos' | 'linux' | 'windows'.
     Uses the Vendor field from inventory if available, otherwise recognizes
     the format from the content (sniffing). Tolerant: default 'ios'."""
     try:
@@ -587,6 +590,8 @@ def detect_config_type(content, device=None):
                 return 'panos'
             if vendor in _LINUX_VENDORS:
                 return 'linux'
+            if vendor in _WINDOWS_VENDORS:
+                return 'windows'
             if vendor:
                 # cisco_9800 (IOS-XE) and others: IOS format
                 return 'ios'
@@ -612,6 +617,12 @@ def detect_config_type(content, device=None):
         if re.search(r'^--- /etc/(os-release|ssh/sshd_config|fstab) ---',
                      text, re.MULTILINE):
             return 'linux'
+        # Windows: same reasoning, the markers come from drivers/windows.py.
+        # 'OS INFO' alone would be too generic a phrase to sniff on, so the
+        # match is anchored to the marker form.
+        if re.search(r'^--- (OS INFO|NET ADAPTERS|LOCAL ADMINS) ---',
+                     text, re.MULTILINE):
+            return 'windows'
     except Exception:
         pass
     return 'ios'
@@ -1370,11 +1381,10 @@ def analyze_device(ip, tenant=None):
     elif config_type == 'wlc-aireos':
         result = dict(analyze_wlc_config(content))
         hostname = result.pop("hostname", "")
-    elif config_type == 'linux':
+    elif config_type in ('linux', 'windows'):
         # No VLANs, no ACLs, no interfaces in the Cisco sense: the "generic"
         # result stays empty on purpose and all the content lives in the
         # ``server`` envelope.
-        from ai import linux_analyzer
         result = {
             "vlans": [], "interfaces": [], "acls": [], "vpn": [],
             "routing": {"static": [], "protocols": [], "vrfs": []},
@@ -1382,7 +1392,14 @@ def analyze_device(ip, tenant=None):
                            "unused_vlans": [], "undefined_vlans": [],
                            "route_acl_refs": []},
         }
-        server = linux_analyzer.analyze(content)
+        if config_type == 'windows':
+            from ai import windows_analyzer
+            server = windows_analyzer.analyze(content)
+        else:
+            from ai import linux_analyzer
+            server = linux_analyzer.analyze(content)
+        # Both drivers write the hostname in the same `hostname <name>` form,
+        # for exactly this reason.
         m = re.search(r'^\s*hostname (\S+)', content, re.MULTILINE)
         hostname = m.group(1) if m else ""
     else:

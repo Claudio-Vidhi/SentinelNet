@@ -12,6 +12,23 @@ from services.inventory_manager import (
     parse_transports, CATEGORIES_FILE,
 )
 from drivers.linux import sanitize_session
+
+def maybe_enable(net_connect, netmiko_type: str, secret: str) -> None:
+    """Entra in modalita' privilegiata dove la piattaforma ce l'ha.
+
+    Su Linux netmiko traduce ``enable()`` in ``sudo -s``: ha senso solo se
+    l'operatore ha messo la password sudo in Enable Secret, altrimenti la
+    sessione resta non privilegiata e i comandi non-root bastano.
+
+    Su una shell Windows ('generic') non esiste niente di equivalente: una
+    sessione SSH e' elevata o non lo e', e il comando finirebbe nell'output
+    come testo. Nemmeno con un Enable Secret impostato, che su quel vendor non
+    significa nulla.
+    """
+    if netmiko_type == 'generic':
+        return
+    if netmiko_type != 'linux' or secret:
+        net_connect.enable()
 # Vendor → driver → netmiko mapping lives in the drivers layer (plan Phase 3
 # items 12/15); re-imported here because existing call sites import these
 # names from core_engine.
@@ -245,8 +262,7 @@ def run_backup_and_triage(device):
             # only makes sense if the operator put the sudo password in Enable
             # Secret; otherwise the session stays non-privileged and non-root
             # commands suffice.
-            if netmiko_type != 'linux' or secret:
-                net_connect.enable()
+            maybe_enable(net_connect, netmiko_type, secret)
             live_hostname = net_connect.find_prompt().strip().rstrip('#>').strip()
 
             driver = driver_cls(net_connect)
@@ -414,6 +430,23 @@ def run_backup_and_triage(device):
                         config_out += f"\n{tag}\n{out_str}"
                     except Exception:
                         pass
+            elif vendor == 'windows':
+                # La catena sta in drivers/windows.py: e' logica di vendor,
+                # e ogni comando formatta la propria uscita a delimitatori
+                # perche' quella testuale di Windows e' localizzata. Qui si
+                # cammina solo la lista.
+                #
+                # read_timeout piu' lungo che su Linux: il primo
+                # `powershell -Command` paga l'avvio del runtime .NET, e su
+                # un server sotto carico i 10s di default non bastano.
+                from drivers.windows import TRIAGE_COMMANDS as windows_cmds
+                for cmd, tag in windows_cmds:
+                    try:
+                        out = net_connect.send_command(cmd, read_timeout=45)
+                        out_str = out if isinstance(out, str) else str(out or "")
+                        config_out += f"\n{tag}\n{out_str}"
+                    except Exception:
+                        pass
 
             hostname_from_cfg = extract_hostname_from_config(config_out)
             sys_name = hostname_from_cfg or live_hostname or f"{vendor}_{ip}"
@@ -536,8 +569,7 @@ def send_custom_command(device, command: str, bypass_blacklist: bool = False):
         with ConnectHandler(**device_params) as net_connect:
             if netmiko_type == 'linux':
                 sanitize_session(net_connect)
-            if netmiko_type != 'linux' or secret:
-                net_connect.enable()
+            maybe_enable(net_connect, netmiko_type, secret)
             output = net_connect.send_command(command)
             log_audit(f"Comando CLI '{command}' eseguito con successo sul dispositivo '{device['IP']}'.")
             return {"status": "success", "output": output}
@@ -591,8 +623,7 @@ def run_bulk_command(device, commands, config_mode=False, save_after=False):
         with ConnectHandler(**device_params) as net_connect:
             if netmiko_type == 'linux':
                 sanitize_session(net_connect)
-            if netmiko_type != 'linux' or secret:
-                net_connect.enable()
+            maybe_enable(net_connect, netmiko_type, secret)
             if config_mode:
                 output = net_connect.send_config_set(commands)
                 if save_after:
