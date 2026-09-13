@@ -128,7 +128,7 @@ credential ADR-0008 declined is the right answer.
 
 ## 3. Server integrations (Linux / Windows)
 
-**Linux shipped**; Windows is still a proposal. Ordered by value-to-effort ratio.
+**Linux and Windows shipped** as managed devices. Ordered by value-to-effort ratio.
 
 ### Done
 
@@ -149,20 +149,21 @@ credential ADR-0008 declined is the right answer.
    be installed and its service started, where WinRM is already on in a
    domain. See [windows-collection.md](windows-collection.md).
 
+2. ~~**MAC → server correlation.**~~ **Shipped.**
+   `collectors/mac_history.device_positions()` joins the gateway ARP with the
+   MAC table, so an inventory host shows the switch port it sits on. No new
+   collector — just the join.
+
 6. ~~**Config backup for servers.**~~ **Shipped for Linux** as part of item 1 —
    the artefact *is* the backup: a dump of critical `/etc` files plus command
    output, in `backup-config/` like any switch.
 
 ### High value, low effort
 
-2. **MAC → server correlation.** Automatically match server MACs against
-   `mac_history`, so the map can say "this server is on SW-X Gi1/0/12". No new
-   collector — just a join.
-
 3. **Central syslog receiver.** Already shipped for network devices
-   ([collectors.md](collectors.md) §5); extending it to Linux (rsyslog) and
-   Windows (NXLog or native forwarding) is configuration on the sending side
-   plus UI work on this side.
+   ([collectors.md](collectors.md) §5). **Servers: documented** — the rsyslog
+   and NXLog configuration is in collectors.md §5.1, and a test pins both line
+   shapes through parsing and attribution. No server-specific UI yet.
 
 ### Medium value
 
@@ -170,10 +171,12 @@ credential ADR-0008 declined is the right answer.
    HTTP/S, database ports) against registered servers, with green/red state in
    the dashboard and on the map. Reuses `network_scanner`.
 
-5. **Server vulnerabilities via NIST NVD.** The NVD lookup already exists for
-   network vendors (`inventory_manager.resolve_euvd_term`); extending it to
-   server operating systems needs only the version the SSH inventory already
-   reads (Linux and Windows both report it).
+5. **Server vulnerabilities via NIST NVD.** **Linux: shipped** (`linux_kernel`
+   CPE in `drivers/registry.py`). **Windows: shipped** — NVD files Windows by
+   edition and release (`windows_server_2022`, `windows_10_22h2`), so the
+   triage caption and build go through `registry.windows_product()`; an
+   edition it does not recognise falls back to the keyword search, marked as
+   such.
 
 ### Larger efforts
 
@@ -188,11 +191,10 @@ credential ADR-0008 declined is the right answer.
    full IF-MIB per interface. What is genuinely absent is `sysContact`
    (one scalar OID) and the CPU/RAM/storage/sensor MIBs
    (HOST-RESOURCES, UCD-SNMP, ENTITY-SENSOR). For Linux the first three are
-   already covered over SSH by the health poller, so this only pays off for
-   Windows and for appliances where SSH is not an option.
+   covered over SSH by the health poller for both Linux and Windows, so this
+   only pays off for appliances where SSH is not an option.
 
-**Suggested entry point:** item 2. It reuses almost all existing code and makes
-the map immediately more useful. Then 3 and 4.
+**Suggested entry point:** item 3, then 4.
 
 ---
 

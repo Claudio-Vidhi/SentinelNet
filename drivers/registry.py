@@ -150,6 +150,9 @@ CPE_PRODUCTS = {
     'fortinet':       ('o', 'fortinet', 'fortios'),                       # 277
     'paloalto_panos': ('o', 'paloaltonetworks', 'pan-os'),                # 235
     'linux':          ('o', 'linux', 'linux_kernel'),                   # 19034
+    # Placeholder product: the real one depends on edition and release, see
+    # windows_product().
+    'windows':        ('o', 'microsoft', 'windows'),
 }
 
 # CPE 2.3 formatted strings escape punctuation with a backslash. Cisco's
@@ -205,6 +208,57 @@ def cisco_os(text: str, version: str = "") -> str:
     return "ios"
 
 
+# NVD files Windows by edition AND release, never as one product: a single
+# 'windows' string would match nothing. The build number decides the release
+# (it is unique per release within a family); the caption decides the family,
+# because build 26100 is both Windows 11 24H2 and Server 2025.
+# Counts are what the live API returned for the unversioned product.
+WINDOWS_SERVER_PRODUCTS = {
+    14393: "windows_server_2016",        # 5806
+    17763: "windows_server_2019",        # 5399
+    20348: "windows_server_2022",        # 3507
+    25398: "windows_server_2022_23h2",   # 1687
+    26100: "windows_server_2025",        # 2045
+}
+WINDOWS_CLIENT_PRODUCTS = {
+    10240: "windows_10_1507",   # 1285
+    10586: "windows_10_1511",   # 40
+    14393: "windows_10_1607",   # 2333
+    15063: "windows_10_1703",   # 48
+    16299: "windows_10_1709",   # 60
+    17134: "windows_10_1803",   # 67
+    17763: "windows_10_1809",   # 2697
+    18362: "windows_10_1903",   # 40
+    18363: "windows_10_1909",   # 61
+    19041: "windows_10_2004",   # 40
+    19042: "windows_10_20h2",   # 295
+    19043: "windows_10_21h1",   # 90
+    19044: "windows_10_21h2",   # 2653
+    19045: "windows_10_22h2",   # 2650
+    22000: "windows_11_21h2",   # 1033
+    22621: "windows_11_22h2",   # 1687
+    22631: "windows_11_23h2",   # 1976
+    26100: "windows_11_24h2",   # 2054
+    26200: "windows_11_25h2",   # 1316
+}
+
+
+def windows_product(caption: str, build: "str | int | None") -> "str | None":
+    """NVD product for a Windows caption and build, None when not recognised.
+
+    None is the honest answer for an edition not in the tables (Server 2012,
+    an Insider build): guessing a neighbouring release would show the wrong
+    CVE list as if it were the right one.
+    """
+    try:
+        number = int(build or 0)
+    except (TypeError, ValueError):
+        return None
+    table = (WINDOWS_SERVER_PRODUCTS if "server" in (caption or "").lower()
+             else WINDOWS_CLIENT_PRODUCTS)
+    return table.get(number)
+
+
 def cpe_match_string(vendor: "str | None", version: "str | None" = None,
                      text: str = "") -> "str | None":
     """CPE match string for a vendor (optionally pinned to a version).
@@ -223,6 +277,12 @@ def cpe_match_string(vendor: "str | None", version: "str | None" = None,
     part, cpe_vendor, product = spec
     if cpe_vendor == "cisco" and driver not in ("cisco_wlc",):
         product = CISCO_OS_PRODUCTS[cisco_os(text, version or "")]
+    elif driver == "windows":
+        # get_version() writes "Windows Server 2022 Standard (10.0.20348, 64-bit)".
+        m = re.search(r"\b10\.0\.(\d{5})\b", f"{version or ''} {text}")
+        product = windows_product(text, m.group(1) if m else None)
+        if not product:
+            return None
     base = f"cpe:2.3:{part}:{cpe_vendor}:{product}"
     return f"{base}:{cpe_quote(version)}" if version else base
 

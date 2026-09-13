@@ -21,6 +21,7 @@ No collector is enabled by default. Configuration and exposure:
 | FortiGate REST | outbound HTTPS | — | [ingesters/api_poller.py](../observability/ingesters/api_poller.py) | `api_observations` |
 | SNMP v2c | outbound UDP 161 | — | [ingesters/snmp_poller.py](../observability/ingesters/snmp_poller.py) | `api_observations` |
 | Linux health | outbound SSH | 22 | [ingesters/linux_poller.py](../observability/ingesters/linux_poller.py) | `api_observations` |
+| Windows health | outbound SSH | 22 | [ingesters/windows_poller.py](../observability/ingesters/windows_poller.py) | `api_observations` |
 | Site agent | inbound HTTPS | 8000 | [services/site_agent.py](../services/site_agent.py) | inventory, MAC, syslog |
 | ARP / MAC tables | SSH · NETCONF · RESTCONF | — | [collectors/](../collectors/) | `mac_history.db`, `arp_entries` |
 
@@ -159,6 +160,91 @@ Field extraction from the message body lives in exactly one place,
 [fieldmap.py](../observability/fieldmap.py): two parsers over the same messages
 would give two different results for the same event depending on who's looking.
 
+### 5.1 Linux and Windows servers
+
+Nothing server-specific runs on this side: the receiver parses the RFC 5424
+line a server sends like any other, and attributes it by **source IP** against
+inventory (§2.1). Two conditions, both on the sending side:
+
+1. **The server is in inventory**, with the IP its syslog packets leave from.
+   A server not in inventory — or one sending from a second interface — is
+   quarantined, not stored.
+2. **It sends UDP to the configured port** (default 5514). The listener is UDP
+   only: TCP or TLS syslog is not accepted. UDP loses messages under load and
+   travels in clear, so keep it on a management network; for a server at a
+   remote site use the site agent, not UDP over the VPN.
+
+Enable the listener first: Settings → Observability, syslog on.
+
+#### Linux (rsyslog)
+
+`/etc/rsyslog.d/60-sentinelnet.conf`, replacing the address with the
+SentinelNet host:
+
+```
+# Everything at notice and above, RFC 5424 with a full timestamp and offset.
+*.notice action(type="omfwd" target="192.0.2.5" port="5514" protocol="udp"
+                template="RSYSLOG_SyslogProtocol23Format")
+```
+
+Then `systemctl restart rsyslog`, and `logger -p auth.warning test-sentinelnet`
+on the server should show up in Flow SIEM.
+
+Why the template: rsyslog's default forwarding format is RFC 3164, whose
+timestamp carries neither year nor time zone, so the receiver has to assume
+both (§5). RFC 5424 carries them.
+
+Why `notice` and not `*.*`: `info` and `debug` on a busy server are thousands of
+lines a minute, all kept under the same retention as firewall verdicts. Widen
+it per facility (`auth,authpriv.*`) when a question needs it.
+
+#### Windows (NXLog)
+
+**Windows does not speak syslog.** The Event Log has no native forwarder to a
+syslog receiver — Windows Event Forwarding sends to another Windows collector,
+not here — so a Windows server needs an agent. NXLog Community Edition is free
+and the usual choice; the trade-off is one more service to install, update and
+monitor on every server.
+
+`C:\Program Files\nxlog\conf\nxlog.conf`, after the default header:
+
+```
+<Extension syslog>
+    Module  xm_syslog
+</Extension>
+
+<Input eventlog>
+    Module  im_msvistalog
+    # Errors and warnings from System and Application, plus Security.
+    <QueryXML>
+        <QueryList><Query Id="0">
+            <Select Path="System">*[System[(Level=1 or Level=2 or Level=3)]]</Select>
+            <Select Path="Application">*[System[(Level=1 or Level=2 or Level=3)]]</Select>
+            <Select Path="Security">*</Select>
+        </Query></QueryList>
+    </QueryXML>
+</Input>
+
+<Output sentinelnet>
+    Module  om_udp
+    Host    192.0.2.5
+    Port    5514
+    Exec    to_syslog_ietf();
+</Output>
+
+<Route r>
+    Path    eventlog => sentinelnet
+</Route>
+```
+
+Then `Restart-Service nxlog`. `to_syslog_ietf()` writes RFC 5424, same reason as
+the rsyslog template. The whole Security log is a lot of volume on a domain
+controller; narrow it to the event IDs that matter (4625 failed logon, 4740
+lockout, 4720 account created) once it works.
+
+The two line shapes above are fixed in
+`tests/test_observability_ingest.py::TestAttribution::test_server_syslog_lands_on_the_inventory_host`.
+
 ---
 
 ## 6. SNMP v2c
@@ -246,6 +332,23 @@ changes: `normalize._from_api_observations` already projects them into
   session never calls `enable()`. The privileged tier exists only in triage.
 - **Central sites only.** Hosts behind a site agent in `mode == 'agent'` are not
   polled; supporting them means adding the round to `services/site_agent.py`.
+
+### Windows hosts
+
+The same loop and the same `linux_poll_s` interval also poll hosts with vendor
+`windows`, through [`windows_poller`](../observability/ingesters/windows_poller.py):
+one PowerShell command over SSH, `kind` `windows_health`, event `source`
+`windows`. Only `cpu_pct` / `memory_pct` / `disk_pct` (system drive), enough for
+`DEVICE_LOAD_001`; `results` stays empty.
+
+- **SSH, not SNMP**: the SNMP service on Windows is a deprecated optional
+  feature, OpenSSH is already a prerequisite of the platform.
+- **Integers only on the wire**: the command prints `LoadPercentage`, kilobytes
+  and bytes joined with `|`, and the percentages are computed in Python. A
+  formatted number would carry the host's localised decimal separator.
+- **CPU is `LoadPercentage`**, which Windows already averages over roughly a
+  second; several sockets are averaged together. A hypervisor that leaves it
+  empty yields no `cpu_pct`, not zero.
 
 ---
 
