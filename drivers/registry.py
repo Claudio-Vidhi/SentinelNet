@@ -21,6 +21,7 @@ from drivers.fortinet import FortinetDriver
 from drivers.cisco_wlc import CiscoWlcDriver
 from drivers.paloalto_panos import PaloAltoDriver
 from drivers.linux import LinuxDriver
+from drivers.windows import WindowsDriver
 
 # Maps the driver-name (vendor registry 'driver' field) to the driver class
 # and the corresponding netmiko device_type.
@@ -35,6 +36,9 @@ DRIVER_REGISTRY = {
     'cisco_wlc':      (CiscoWlcDriver,   'cisco_wlc_ssh'),   # AireOS
     'cisco_9800':     (CiscoIosDriver,   'cisco_xe'),        # Catalyst 9800 (IOS-XE)
     'linux':          (LinuxDriver,      'linux'),
+    # 'generic': netmiko apre una sessione senza grammatica di vendor,
+    # che e' esattamente cio' che serve su una shell Windows.
+    'windows':        (WindowsDriver,    'generic'),
 }
 
 # Fallback vendor-name → driver-name, used when the vendor registry does not
@@ -51,6 +55,7 @@ VENDOR_DRIVER_DEFAULTS = {
     'cisco_wlc': 'cisco_wlc',
     'cisco_9800': 'cisco_9800',
     'linux':    'linux',
+    'windows':  'windows',
 }
 
 
