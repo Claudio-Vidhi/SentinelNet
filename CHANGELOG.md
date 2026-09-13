@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-09-13
+
 ### Fixed
 
 - **Il triage Windows via SSH falliva sempre.** ConPTY, il livello console
