@@ -41,6 +41,9 @@ Set-Service -Name sshd -StartupType Automatic
 Get-NetFirewallRule -Name *ssh*
 ```
 
+Leave the OpenSSH default shell as **cmd.exe**: with PowerShell as default shell
+the collection does not work (§6).
+
 In inventory the device is a normal row with `Vendor` = `windows` (the aliases
 `win`, `windows server`, `winsrv` and `microsoft` normalise to it). Port 22
 unless the SSH server was moved.
@@ -162,12 +165,42 @@ translation needs a resolver that is not always there, and a SID is still an
 identity), and `OSArchitecture` is localised ('64 bit'), which is why it is
 only ever displayed.
 
-**What is still unproven is the transport**: netmiko's `generic` driver against
-the cmd.exe prompt over an SSH session. The commands themselves are no longer
-in doubt.
+**The transport is verified too** (same host, 2026-09-13, over SSH with
+`scripts/dev/windows_probe.py`): `detect_config_type` answers `windows`, fifteen
+sections populate, the local administrators are listed and the hostname is
+extracted. The first attempt failed, and the capture of the raw session showed
+why — two defects, both fixed in `drivers/windows.prepare_session` and pinned by
+`tests/test_windows_transport.py`, which replays that capture:
 
-Do the first SSH run on a host whose session you can afford to lose: the worst
-case is a command that hangs until its read timeout, twenty times over.
+- **ConPTY escape codes.** The Windows console layer behind sshd opens with
+  mode switches, a screen clear and an OSC window title, and repeats the title
+  after every prompt. netmiko `generic` strips none of it, so the prompt came
+  back empty. The session now uses the Linux driver's CSI/OSC cleanup.
+- **Cursor moves stand for text.** ConPTY writes a skipped line as
+  `ESC[<row>;<col>H` and a run of spaces as `ESC[<n>C`. Deleted like the
+  other escapes, they glued an output line onto the prompt, and netmiko then
+  removed it together with the prompt: the HOSTNAME section came back empty
+  and the backup was named after the prompt. They are turned back into a line
+  break and spaces before the cleanup.
+- **LF is not Enter.** cmd.exe behind ConPTY submits a line on CR only. With
+  netmiko's default `\n` every command sat typed and unexecuted until the read
+  timeout (`Pattern not detected`). The session sends `\r\n`.
+
+**The SSH default shell must stay cmd.exe**, which is the OpenSSH default. With
+PowerShell set as `DefaultShell` nothing works and no session preparation can
+fix it: the outer PowerShell expands `$o` inside the quoted command before the
+inner one runs, PSReadLine treats LF as "new line in the same command" and
+repaints the echo with syntax colours. If a host was switched, revert it:
+
+```powershell
+Remove-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell
+Restart-Service sshd
+```
+
+The interactive side-effect that tempts people to switch — `[O` / `[I` typed
+into cmd.exe when an SSH client window loses or regains focus — comes from the
+client terminal's focus reporting, not from the host, and does not affect
+SentinelNet's sessions.
 
 ---
 

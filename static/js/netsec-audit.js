@@ -58,7 +58,10 @@
             const res = await apiFetch('/api/local-devices');
             if (!res || !res.ok) { sel.innerHTML = allOption; return; }
             const data = await res.json();
-            const devices = (data && data.devices) || [];
+            // The global tenant selector scopes this list like every other tab.
+            const tenant = window.globalSelectedTenant;
+            const devices = ((data && data.devices) || []).filter(d =>
+                !tenant || tenant === 'all' || (d.Group || 'Generale') === tenant);
 
             if (!devices.length) {
                 sel.innerHTML = allOption
@@ -1755,6 +1758,7 @@ ${pagesHtml}
     document.getElementById('auditCatFilter')?.addEventListener('change', renderAuditRulesTable);
     document.getElementById('auditStatusFilter')?.addEventListener('change', renderAuditRulesTable);
     document.getElementById('btnRefreshAuditHistory')?.addEventListener('click', loadAuditHistory);
+    window.addEventListener('globalTenantChanged', populateAuditDeviceSelect);
 
     document.getElementById('auditRulesTableBody')?.addEventListener('click', (e) => {
         const row = e.target.closest('tr[data-action="toggle-audit-detail"]');
