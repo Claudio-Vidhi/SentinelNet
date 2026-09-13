@@ -62,9 +62,11 @@ Get-NetAdapter | ForEach-Object {
   [string]$_.Name + '|' + [string]$_.Status + '|' + [string]$_.LinkSpeed }
 ```
 
-The enum names PowerShell returns (`Up`, `Running`, `Automatic`) are
-culture-independent, the header row is gone, and the parser has no table
-geometry to guess. `services/netsec_audit/linux_parser.parse_linux` — a generic
+The enum names PowerShell returns (`Up`, `Running`, `Automatic`, `AzureAD`)
+are culture-independent, the header row is gone, and the parser has no table
+geometry to guess. **One exception, found on a real Italian host:**
+`ObjectClass` on a group member comes back translated ('Utente' / 'Altro'), so
+it is carried as a display value and nothing compares it — see §6. `services/netsec_audit/linux_parser.parse_linux` — a generic
 `--- marker ---` splitter despite its name — does the section splitting, and
 `ai/windows_analyzer.py` only has to split on `|`.
 
@@ -111,7 +113,7 @@ shown empty**, so the card does not offer a pill that leads to an empty table.
 | `SERVICES DOWN` | automatic services not running | **Servizi non avviati** — the equivalent of `systemctl --failed`; an empty table is the normal condition |
 | `SERVICES AUTO` | every automatic service | **Servizi automatici** |
 | `LOCAL USERS`, `LOCAL GROUPS` | `Get-LocalUser`, `Get-LocalGroup` | **Utenti / Gruppi locali** |
-| `LOCAL ADMINS` | `Get-LocalGroupMember -Group Administrators` | **Amministratori locali** — the counterpart of sudoers, and the first question anyone asks about a Windows server |
+| `LOCAL ADMINS` | `Get-LocalGroupMember -SID S-1-5-32-544` | **Amministratori locali** — the counterpart of sudoers, and the first question anyone asks about a Windows server |
 | `DISKS`, `VOLUMES` | `Win32_DiskDrive`, `Win32_LogicalDisk` | **Dischi fisici**, **Volumi** |
 | `FIREWALL PROFILES` | `Get-NetFirewallProfile` | **Firewall host**. A disabled profile is the finding: the rules under it stop applying. *Needs administrator* |
 | `REMOTE ACCESS`, `SMB CONFIG` | Terminal Server registry keys, `Get-SmbServerConfiguration` | **Accesso remoto** — the counterpart of `sshd_config`: whether RDP is open, whether it demands NLA, and whether SMBv1 is still on and signing required. *SMB needs administrator* |
@@ -140,16 +142,31 @@ shown empty**, so the card does not offer a pill that leads to an empty table.
 
 ---
 
-## 6. What has not been verified
+## 6. What is verified, and what is not
 
-**No Windows host has run this.** The command *shapes* are tested (no nested
-quotes, `-NoProfile -NonInteractive` everywhere, the sections the analyzer
-reads), and the analyzer is tested against a realistic artefact. That
-PowerShell answers as expected on a real machine — and that netmiko's `generic`
-driver reads the cmd.exe prompt cleanly — is still to be proven on hardware,
-like the FortiGate HA member parsing.
+**The commands have run on a real Windows host** (Windows 11, Italian, 2026-09-13):
+all twenty answer without error, and the artefact they produce splits into
+fifteen populated sections. That run paid for itself immediately — it found two
+real defects, both fixed:
 
-Do the first real run on a host whose session you can afford to lose: the worst
+- the Administrators group was looked up **by name**, which a localised or
+  renamed installation can break. It is now the well-known SID `S-1-5-32-544`.
+- `ObjectClass` on a group member comes back **localised** ('Utente' / 'Altro'
+  on that host) while `PrincipalSource` stays `AzureAD`. So the "PowerShell
+  enums are culture-independent" rule has one exception, and the value is
+  display-only. A test asserts nothing in the analyzer compares it.
+
+Two behaviours worth knowing, seen on that host and not defects: a member that
+is an Azure AD principal comes back as a **raw SID** rather than a name (the
+translation needs a resolver that is not always there, and a SID is still an
+identity), and `OSArchitecture` is localised ('64 bit'), which is why it is
+only ever displayed.
+
+**What is still unproven is the transport**: netmiko's `generic` driver against
+the cmd.exe prompt over an SSH session. The commands themselves are no longer
+in doubt.
+
+Do the first SSH run on a host whose session you can afford to lose: the worst
 case is a command that hangs until its read timeout, twenty times over.
 
 ---

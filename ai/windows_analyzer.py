@@ -293,9 +293,12 @@ def _user_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
         rows.append({
             "name": u["name"],
             "active": _bool_word(u["enabled"]),
-            # An account whose password never expires is worth seeing next to
-            # the account, not only in an audit report.
-            "setting": u["expires"] or "password non scade",
+            # An account whose password never expires is worth seeing next
+            # to the account, not only in an audit report. The marker is the
+            # bare token and not a sentence, because a row is DATA: prose here
+            # would show Italian in an English dashboard, next to the
+            # platform's own untranslated values ('Up', 'Running').
+            "setting": u["expires"] or "never",
             "login": u["last_logon"],
             "description": u["description"],
         })
