@@ -292,6 +292,13 @@ function setRiskVerdict(key, state, value, summary, evidence) {
     }
 }
 
+// Only a 403 is about the role. Anything else (a server not restarted after an
+// update answers 404) must not be blamed on permissions.
+function riskFailureText(res) {
+    if (res && res.status === 403) return tr('homeVerdictNoAccess');
+    return tr('homeVerdictLoadFailed', { status: res ? res.status : '—' });
+}
+
 async function loadHomeRiskVerdicts() {
     const tenant = encodeURIComponent(window.globalSelectedTenant || 'all');
 
@@ -319,7 +326,7 @@ async function loadHomeRiskVerdicts() {
                 tr('homeCveCoverage', { critical, high, evaluated, devices }), evidence.slice(0, 10));
         }
     } else {
-        setRiskVerdict('Cve', 'na', '\u2014', tr('homeVerdictNoAccess'), []);
+        setRiskVerdict('Cve', 'na', '\u2014', riskFailureText(cveRes), []);
     }
 
     // Config drift: devices whose latest config breaks their tenant baseline.
@@ -334,7 +341,7 @@ async function loadHomeRiskVerdicts() {
                 d.deviating.slice(0, 10).map(x => `${x.hostname || x.ip} (${x.ip}) — ${tr('homeDriftDeviceCount', { n: x.deviations })}`));
         }
     } else {
-        setRiskVerdict('Drift', 'na', '\u2014', tr('homeVerdictNoAccess'), []);
+        setRiskVerdict('Drift', 'na', '\u2014', riskFailureText(driftRes), []);
     }
 }
 
