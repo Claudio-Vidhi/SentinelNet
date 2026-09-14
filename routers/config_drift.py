@@ -45,6 +45,44 @@ def _device_or_404(current_user, ip: str) -> dict:
     return device
 
 
+def drift_summary_for(devices: list) -> dict:
+    """Devices whose latest stored config breaks their tenant baseline.
+
+    `checked` is the denominator: a device counts only when its tenant has
+    rules AND a config has been collected. "0 deviating" out of 0 checked means
+    nothing was verified, not that everything complies.
+    """
+    rules_by_tenant: dict = {}
+    checked = 0
+    deviating = []
+    for device in devices:
+        tenant = device.get("Group") or ""
+        if tenant not in rules_by_tenant:
+            rules_by_tenant[tenant] = baseline.load(tenant)
+        rules = rules_by_tenant[tenant]
+        versions = history.list_versions(device)
+        if not rules or not versions:
+            continue
+        checked += 1
+        text = history.read_version(device, versions[0]["seen_at"])
+        problems = baseline.evaluate(device.get("Vendor") or "", text, rules)
+        if problems:
+            deviating.append({"ip": device.get("IP"), "hostname": device.get("Hostname"),
+                              "tenant": tenant, "deviations": len(problems)})
+    deviating.sort(key=lambda d: d["deviations"], reverse=True)
+    return {"devices": len(devices), "checked": checked, "deviating": deviating}
+
+
+# Before /api/drift/{ip}/...: a literal segment must not be read as an IP.
+@router.get("/api/drift/summary")
+def drift_summary(tenant: str = "", current_user=Depends(require_operator)):
+    scope = user_group_scope(current_user)
+    devices = [d for d in inventory_manager.get_all_devices()
+               if (scope is None or d.get("Group") in scope)
+               and (not tenant or tenant == "all" or d.get("Group") == tenant)]
+    return drift_summary_for(devices)
+
+
 @router.get("/api/drift/devices")
 def drift_devices(current_user=Depends(require_operator)):
     """Devices the caller may see, with when they last changed."""

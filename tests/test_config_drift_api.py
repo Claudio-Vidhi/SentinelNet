@@ -22,5 +22,42 @@ class ADiffNeverLeaksASecret(unittest.TestCase):
         self.assertEqual("", config_drift._unified("cisco", text, text, "a", "b"))
 
 
+class TheOverviewCountsRealDeviations(unittest.TestCase):
+    """The home 'Config drift' card: devices whose latest config breaks their
+    tenant baseline, out of the devices that could actually be checked."""
+
+    def setUp(self):
+        import os
+        import tempfile
+        from unittest import mock
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        p = mock.patch("core.backup_store.BACKUP_FOLDER", self._tmp.name)
+        p.start()
+        self.addCleanup(p.stop)
+        p = mock.patch("services.config_drift.baseline._store_path",
+                       lambda: os.path.join(self._tmp.name, "config_baselines.json"))
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_only_checkable_devices_count_and_deviations_are_named(self):
+        from services.config_drift import baseline, history
+        ok = {"IP": "192.0.2.10", "Group": "ACME", "Vendor": "cisco", "Hostname": "switch-01"}
+        bad = {"IP": "192.0.2.11", "Group": "ACME", "Vendor": "cisco", "Hostname": "switch-02"}
+        no_rules = {"IP": "192.0.2.12", "Group": "OTHER", "Vendor": "cisco", "Hostname": "switch-03"}
+        never_backed_up = {"IP": "192.0.2.13", "Group": "ACME", "Vendor": "cisco", "Hostname": "switch-04"}
+        baseline.save("ACME", "+ service password-encryption\n")
+        history.record_version(ok, "hostname switch-01\nservice password-encryption\n")
+        history.record_version(bad, "hostname switch-02\n")
+        history.record_version(no_rules, "hostname switch-03\n")
+
+        s = config_drift.drift_summary_for([ok, bad, no_rules, never_backed_up])
+
+        self.assertEqual(4, s["devices"])
+        self.assertEqual(2, s["checked"])
+        self.assertEqual(["192.0.2.11"], [d["ip"] for d in s["deviating"]])
+        self.assertEqual(1, s["deviating"][0]["deviations"])
+
+
 if __name__ == "__main__":
     unittest.main()
