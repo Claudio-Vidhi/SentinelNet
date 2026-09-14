@@ -524,6 +524,9 @@ main .tab-content, main .panel, main .hero { min-width: 0; }
 .tenant-switch select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 /* The select itself is transparent, so the open list would fall back to the OS
    white while inheriting the theme's text colour: light-on-white in dark mode. */
+/* A native option popup takes the select's background: a transparent select
+   (.inv-inline-select) opened a white list with the theme's light text on it. */
+select option { background-color: var(--surface); color: var(--text); }
 .tenant-switch select option { background-color: var(--surface); color: var(--text); font-weight: 400; }
 .tenant-switch select option:checked { font-weight: 600; }
 
@@ -1427,6 +1430,31 @@ div.vis-tooltip {
   border-bottom-color: var(--text) !important;
   background: transparent;
 }
+/* Config Analyzer's section switcher keeps its .ca-pill hook (the JS selects on
+   it) but takes the one sub-tab look every Assess tab shares. */
+:is(#caPills, #locPills, #trafPills).subtab-bar .ca-pill {
+  border: 0; border-bottom: 2px solid transparent; border-radius: 0;
+  background: transparent; box-shadow: none;
+  color: var(--text-soft);
+  padding: 8px 14px;
+}
+:is(#caPills, #locPills, #trafPills).subtab-bar .ca-pill:hover:not(.active) { background: var(--surface-2); color: var(--text); }
+:is(#caPills, #locPills, #trafPills).subtab-bar .ca-pill.active { color: var(--text); border-bottom-color: var(--text); background: transparent; box-shadow: none; }
+
+/* Investigate + Assess tabs: the page header is a title row, not a banner. The data under
+   it is what the operator opened the tab for. */
+:is(#tab-incidents, #tab-flows, #tab-endpoint, #tab-ai, #tab-security, #tab-config, #tab-netsec-audit, #tab-policy-test, #tab-routes, #tab-config-drift) .hero {
+  margin-bottom: 12px !important;
+}
+:is(#tab-incidents, #tab-flows, #tab-endpoint, #tab-ai, #tab-security, #tab-config, #tab-netsec-audit, #tab-policy-test, #tab-routes, #tab-config-drift) .hero-card {
+  padding: 12px 18px;
+}
+:is(#tab-incidents, #tab-flows, #tab-endpoint, #tab-ai, #tab-security, #tab-config, #tab-netsec-audit, #tab-policy-test, #tab-routes, #tab-config-drift) .hero-card > h2 {
+  font-size: 21px; margin: 0 0 2px;
+}
+:is(#tab-incidents, #tab-flows, #tab-endpoint, #tab-ai, #tab-security, #tab-config, #tab-netsec-audit, #tab-policy-test, #tab-routes, #tab-config-drift) .hero-card > p {
+  font-size: 13px; margin: 0; max-width: none;
+}
 
 .ca-pill, #tab-config .ca-pill, #tab-fortigate .ca-pill {
   padding: 5px 12px;
@@ -1485,7 +1513,7 @@ details.mac-switch > summary:hover,
 #tab-endpoint #arpDeviceList label:hover { background: var(--surface-3); }
 
 /* Chat assistente */
-#tab-ai .ai-chat-shell { display: grid; grid-template-columns: 248px 1fr; grid-template-rows: minmax(0, 1fr); height: min(calc(100vh - 240px), 760px); min-height: 520px; }
+#tab-ai .ai-chat-shell { display: grid; grid-template-columns: 248px 1fr; grid-template-rows: minmax(0, 1fr); height: min(calc(100vh - 300px), 760px); min-height: 480px; }
 #tab-ai .ai-conv-sidebar { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-right: var(--seam) solid var(--border); background: var(--surface-2); overflow: hidden; min-height: 0; }
 #tab-ai .ai-conv-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin: 0 -6px; padding: 0 6px; }
 #tab-ai .ai-conv-item { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: var(--seam) solid transparent; cursor: pointer; font-size: 12.5px; color: var(--text-muted); transition: background var(--transition), color var(--transition); }
@@ -3050,6 +3078,75 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
     margin-top: 6px;
 }
 
+/* --- Config Drift master-detail --- */
+.drift-layout {
+    display: grid;
+    grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+}
+@media (max-width: 900px) {
+    .drift-layout { grid-template-columns: minmax(0, 1fr); }
+}
+.drift-master {
+    position: sticky;
+    top: 12px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: calc(100vh - 24px);
+}
+.drift-master-head {
+    display: flex; align-items: center; justify-content: space-between;
+    font-family: var(--font-legend); font-size: 12px; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-soft);
+}
+.drift-device-list { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin: 0 -6px; }
+.drift-device-item {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; text-align: left;
+    padding: 8px 10px;
+    background: transparent; color: var(--text);
+    border: 0; border-left: 3px solid transparent;
+    cursor: pointer;
+}
+.drift-device-item:hover { background: var(--surface-2); }
+.drift-device-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.drift-device-item.is-active { background: var(--surface-2); border-left-color: var(--primary); }
+.drift-device-item.is-flagged { border-left-color: var(--warning); background: color-mix(in srgb, var(--warning) 10%, transparent); }
+.drift-device-item-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.drift-device-item-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drift-device-item-ip { font-family: var(--font-code); font-size: 11px; color: var(--text-muted); font-weight: 400; }
+.drift-device-item-state { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.drift-device-item-state.warn { color: var(--warning); }
+.drift-device-item-state.ok { color: var(--success); }
+.drift-list-empty { text-align: center; padding: 20px; color: var(--text-muted); }
+.drift-count {
+    display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px;
+    font-size: 11px; line-height: 16px; text-align: center;
+    background: var(--surface-2); color: var(--text-soft); border: 1px solid var(--border);
+}
+.drift-count:empty { display: none; }
+.drift-tenant-stats { display: flex; gap: 22px; }
+.drift-stat { display: flex; flex-direction: column; }
+.drift-stat-value { font-size: 21px; font-weight: 700; line-height: 1.1; }
+.drift-stat-label {
+    font-family: var(--font-legend); font-size: 11px; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--text-muted);
+}
+.drift-empty {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    padding: 48px 20px; color: var(--text-muted);
+}
+.drift-empty i { font-size: 21px; }
+.drift-device-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.drift-device-title { font-size: 17px; font-weight: 700; }
+.drift-device-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.drift-coverage { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.drift-coverage-bar { width: 90px; height: 6px; background: color-mix(in srgb, var(--warning) 35%, transparent); }
+.drift-coverage-bar > span { display: block; height: 100%; background: var(--success); }
+
 /* Descrizione di una CVE nel resoconto: il testo COMPLETO sta nel DOM e il
    taglio e' solo visivo. Cosi' un clic lo apre senza ricaricare nulla, chi
    copia la riga si porta via la descrizione intera anche da chiusa, e la
@@ -3065,4 +3162,64 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
 
 .cve-desc.cve-desc-open {
     display: block;
+}
+#driftDiffContainer:empty { display: none; }
+.drift-profile-rules { font-size: 11px; color: var(--text-muted); text-transform: none; letter-spacing: 0; }
+
+/* --- Threat Intel matcher: one ranked table instead of a card per device --- */
+.ti-matcher-table .ti-device-row { cursor: pointer; }
+.ti-device-name { font-weight: 600; }
+.ti-device-ip { font-family: var(--font-code); font-size: 11px; color: var(--text-muted); }
+.ti-counts { white-space: nowrap; }
+.ti-counts .severity-pill { min-width: 26px; text-align: center; }
+.ti-counts .severity-pill.ti-zero { opacity: 0.35; }
+.ti-muted { color: var(--text-muted); font-size: 12px; }
+.ti-status { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.ti-detail-row > td { background: var(--surface-2); padding: 12px 16px; }
+
+/* Incidents: the detail pane says what to do before anything is selected. */
+.inc-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 40px 20px; color: var(--text-muted); }
+.inc-empty i { font-size: 21px; }
+
+/* --- Traffic overview: stat cards, then "top N" cards side by side --- */
+.traf-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.traf-kpi { margin: 0; padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.traf-kpi-label { font-family: var(--font-legend); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+.traf-kpi-value { font-size: 21px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+.traf-kpi-value .kpi-top-path { font-size: 13px; }
+.traf-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; align-items: start; }
+.traf-grid > .panel { margin: 0; }
+.traf-card-title { margin: 0 0 10px; font-size: 15px; }
+.traf-rate { display: flex; align-items: center; gap: 10px; }
+.traf-rate-text { min-width: 78px; white-space: nowrap; }
+.traf-bar { flex: 1; max-width: 140px; height: 6px; background: var(--surface-3); }
+.traf-bar > span { display: block; height: 100%; background: var(--primary); }
+@media (max-width: 1000px) {
+  .traf-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .traf-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* --- Incidents: list items, then a header + timeline beside cause/context --- */
+.incident-list-item { cursor: pointer; padding: 10px; margin-bottom: 8px; border: 1px solid var(--border); background: var(--surface-2); }
+.incident-list-item:hover { border-color: var(--border-strong); }
+.incident-list-item.is-active { border-color: var(--primary); background: var(--surface-3); }
+.inc-li-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.inc-li-title { font-size: 13px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inc-sev-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.inc-li-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; }
+.inc-li-conf { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-muted); }
+.inc-li-conf > span { min-width: 64px; }
+.inc-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; font-size: 11px; border: 1px solid var(--border-strong); color: var(--text-soft); white-space: nowrap; }
+.inc-chip-status { color: var(--text); }
+.inc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
+.inc-title { margin: 0 0 6px; font-family: var(--font-display); font-size: 21px; }
+.inc-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.inc-sub { font-size: 12px; color: var(--text-muted); }
+.inc-actions { display: flex; gap: 8px; flex: none; }
+.inc-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 18px; align-items: start; }
+.inc-section-title { margin: 16px 0 10px; font-size: 14px; color: var(--primary); }
+.inc-main > .inc-section-title:first-child { margin-top: 0; }
+@media (max-width: 1200px) {
+  .inc-body { grid-template-columns: minmax(0, 1fr); }
+  .inc-side { order: -1; }
 }

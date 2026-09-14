@@ -53,7 +53,7 @@
         const previous = sel.value;
         // Segnaposto, non una funzionalita': la scansione multi-dispositivo non
         // esiste e il backend rifiuta 'all' con un messaggio esplicito.
-        const allOption = '<option value="all">— Seleziona un dispositivo —</option>';
+        const allOption = `<option value="all">${escapeHtml(tr('nsaSelectDevice'))}</option>`;
         try {
             const res = await apiFetch('/api/local-devices');
             if (!res || !res.ok) { sel.innerHTML = allOption; return; }

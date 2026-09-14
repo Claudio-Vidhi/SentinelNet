@@ -60,6 +60,19 @@ class TestBackupAgeExposed(unittest.TestCase):
         result = config_analyzer.analyze_device(self.ip)
         self.assertAlmostEqual(result["backup_ts"], int(old), delta=2)
 
+    def test_backup_times_feed_the_home_backup_card(self):
+        # The home card used to read a field nobody wrote: every device
+        # looked "never backed up" right after a successful triage.
+        from core import backup_store
+        hist = os.path.join(os.path.dirname(self.path), ".history")
+        os.makedirs(hist, exist_ok=True)
+        with open(os.path.join(hist, f"switch-01-{self.ip}.20200101T000000.000000Z.txt"),
+                  "w", encoding="utf-8") as fh:
+            fh.write(IOS_BACKUP)
+        times = backup_store.backup_times()
+        self.assertAlmostEqual(times[("tenant-a", self.ip)], int(time.time()), delta=120)
+        self.assertNotIn(("tenant-a", "20200101T000000.000000Z"), times)
+
     def test_no_backup_no_analysis(self):
         self.assertIsNone(config_analyzer.analyze_device("198.51.100.99"))
 

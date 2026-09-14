@@ -61,6 +61,24 @@ def evaluate(vendor: str, config_text: str, baseline_text: str) -> list:
     return problems
 
 
+# Every value detect_config_type can return: the only keys a baseline is
+# stored under.
+PROFILES = ("ios", "wlc-aireos", "fortios", "panos", "linux", "windows")
+
+
+def profile_for(device: dict) -> str:
+    """The config grammar a device speaks: 'ios', 'wlc-aireos', 'fortios',
+    'panos', 'linux', 'windows'.
+
+    A baseline is per tenant AND per profile: a switch rule ("aaa new-model")
+    can never appear in an AireOS or FortiOS config, so one tenant-wide list
+    turned every WLC and firewall into a wall of false deviations. Same
+    Vendor-driven mapping the Config Analyzer parses with.
+    """
+    from ai import config_analyzer
+    return config_analyzer.detect_config_type("", device)
+
+
 def _load_all() -> dict:
     try:
         with open(_store_path(), encoding="utf-8") as fh:
@@ -69,13 +87,23 @@ def _load_all() -> dict:
         return {}
 
 
-def load(tenant: str) -> str:
-    return _load_all().get(tenant, "")
+def _tenant_entry(store: dict, tenant: str) -> dict:
+    entry = store.get(tenant) or {}
+    # Stores written before profiles held one string per tenant. Every one of
+    # them was typed against IOS switches (the only seed prefixes that existed),
+    # so that is the profile it keeps meaning.
+    return {"ios": entry} if isinstance(entry, str) else entry
 
 
-def save(tenant: str, text: str) -> None:
+def load(tenant: str, profile: str) -> str:
+    return _tenant_entry(_load_all(), tenant).get(profile, "")
+
+
+def save(tenant: str, profile: str, text: str) -> None:
     store = _load_all()
-    store[tenant] = text or ""
+    entry = _tenant_entry(store, tenant)
+    entry[profile] = text or ""
+    store[tenant] = entry
     with open(_store_path(), "w", encoding="utf-8") as fh:
         json.dump(store, fh, indent=1)
 

@@ -48,6 +48,27 @@
         return 'var(--text-muted)';
     }
 
+    // Syslog severity (0 = emergency ... 7 = debug), bucketed the same way
+    // sevColor() colours it: the word and the colour must never disagree.
+    function sevLabel(sev) {
+        if (sev === null || sev === undefined) return '';
+        if (sev <= 2) return L('incSevCritical');
+        if (sev <= 3) return L('incSevHigh');
+        if (sev <= 5) return L('incSevMedium');
+        return L('incSevLow');
+    }
+
+    function statusLabel(st) {
+        return st === 'new' ? L('incOptNew') : st === 'ack' ? L('incOptAck') : st === 'resolved' ? L('incOptResolved') : (st || '');
+    }
+
+    function fmtDuration(from, to) {
+        const s = Math.max(0, (Number(to) || 0) - (Number(from) || 0));
+        if (s < 3600) return `${Math.max(1, Math.round(s / 60))} min`;
+        if (s < 172800) return `${Math.round(s / 3600)} h`;
+        return `${Math.round(s / 86400)} ${L('coreD')}`;
+    }
+
     function confidenceBar(value) {
         const pct = Math.max(0, Math.min(100, Number(value) || 0));
         const color = pct >= 70 ? 'var(--success)' : (pct >= 45 ? 'var(--warning)' : 'var(--text-muted)');
@@ -377,7 +398,7 @@
             if (_selectedId !== null && !_incidents.some(i => i.id === _selectedId)) {
                 _selectedId = null;
                 const detail = document.getElementById('incidentDetail');
-                if (detail) detail.innerHTML = `<div style="color:var(--text-muted); font-size:12px; padding:12px;">${L('incSelectOne')}</div>`;
+                if (detail) detail.innerHTML = `<div class="inc-empty"><i class="fa-solid fa-hand-pointer"></i><span>${escapeHtml(L('incSelectOne'))}</span></div>`;
             }
             renderIncidentsList();
         } catch (e) {
@@ -394,18 +415,18 @@
         }
         box.innerHTML = _incidents.map(inc => {
             const active = inc.id === _selectedId;
-            return `<div class="incident-list-item" data-id="${Number(inc.id)}" style="cursor:pointer; padding:10px; border-radius:0; margin-bottom:8px;
-                        border:1px solid ${active ? 'var(--primary)' : 'var(--border)'}; background:var(--surface-2);">
-                <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-                    <span style="width:8px; height:8px; border-radius:50%; background:${sevColor(inc.severity)};"></span>
-                    <strong style="font-size:13px;">${escapeHtml(inc.title || inc.entity_key)}</strong>
+            return `<div class="incident-list-item${active ? ' is-active' : ''}" data-id="${Number(inc.id)}">
+                <div class="inc-li-top">
+                    <span class="inc-sev-dot" style="background:${sevColor(inc.severity)};" aria-hidden="true"></span>
+                    <strong class="inc-li-title">${escapeHtml(inc.title || inc.entity_key)}</strong>
+                    <span class="inc-chip">${escapeHtml(statusLabel(inc.status))}</span>
                 </div>
-                <div style="font-size:11px; color:var(--text-muted); margin-bottom:6px;">
-                    ${escapeHtml(inc.event_count)} eventi · ${escapeHtml(inc.status)}
-                    ${inc.closed_ts ? '· chiuso' : '· aperto'} · ${escapeHtml(fmtTime(inc.last_event_ts))}
+                <div class="inc-li-meta">
+                    ${escapeHtml(L('incEventsN').replace('{n}', String(inc.event_count ?? 0)))} ·
+                    ${escapeHtml(inc.closed_ts ? L('incClosed') : L('incOpen'))} · ${escapeHtml(fmtTime(inc.last_event_ts))}
                 </div>
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <span style="font-size:11px; color:var(--text-muted); min-width:70px;">${escapeHtml(inc.confidence ?? '--')}% conf.</span>
+                <div class="inc-li-conf">
+                    <span>${escapeHtml(L('incConfShort').replace('{n}', String(inc.confidence ?? '--')))}</span>
                     <div style="flex:1;">${confidenceBar(inc.confidence)}</div>
                 </div>
             </div>`;
@@ -451,7 +472,7 @@
                     <div style="font-size:17px; font-family:var(--font-display);">${escapeHtml(inc.cause_kind || '--')}</div>
                 </div>
                 <div style="min-width:160px;">
-                    <div style="font-size:11px; color:var(--text-muted); text-align:right;">Confidenza ${escapeHtml(inc.confidence ?? '--')}%</div>
+                    <div style="font-size:11px; color:var(--text-muted); text-align:right;">${escapeHtml(L('incConfidenceN').replace('{n}', String(inc.confidence ?? '--')))}</div>
                     ${confidenceBar(inc.confidence)}
                 </div>
             </div>
@@ -462,7 +483,7 @@
                 ${L('incConfBasis').replace('{b}', escapeHtml(r.base_confidence ?? '--')).replace('{s}', escapeHtml(r.confidence_step ?? '--'))}
                 ${L('incRuleRef')} ${escapeHtml(r.rule_id || '--')} v${escapeHtml(r.rule_version || '--')}
                 ${r.rule_params && Object.keys(r.rule_params).length
-                    ? '· soglie ' + escapeHtml(JSON.stringify(r.rule_params)) : ''}
+                    ? '· ' + escapeHtml(L('incThresholds')) + ' ' + escapeHtml(JSON.stringify(r.rule_params)) : ''}
             </div>
             ${renderGuidance(r.rule_id)}
         </div>`;
@@ -539,7 +560,7 @@
     function renderAiBlock(inc) {
         const body = inc.ai_narrative
             ? `<div style="font-size:13px; white-space:pre-wrap;">${escapeHtml(inc.ai_narrative)}</div>
-               <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">Generato il ${escapeHtml(fmtTime(inc.ai_narrative_ts))}</div>`
+               <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">${escapeHtml(L('incGeneratedAt').replace('{t}', fmtTime(inc.ai_narrative_ts)))}</div>`
             : `<div style="font-size:12px; color:var(--text-muted);">${L('incNoNarrative')}</div>`;
         return `<div style="margin-top:18px; padding:12px; border-radius:0; border:1px dashed var(--primary); background:color-mix(in srgb, var(--primary) 6%, transparent);">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px;">
@@ -558,7 +579,7 @@
         if (!history.length) return '';
         return `<div style="margin-top:12px; padding:10px; border-radius:0; background:var(--surface-3);">
             <div style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--text-muted); margin-bottom:6px;">
-                <i class="fa-solid fa-clock-rotate-left"></i> Conclusioni precedenti (superate)
+                <i class="fa-solid fa-clock-rotate-left"></i> ${escapeHtml(L('incPrevConclusions'))}
             </div>
             ${history.map(h => `<div style="font-size:12px; color:var(--text-muted); text-decoration:line-through;">
                 ${escapeHtml(fmtTime(h.concluded_ts))} — ${escapeHtml(h.cause_kind)}
@@ -627,24 +648,37 @@
             : (inc.status === 'ack'
                 ? `<button class="btn btn-secondary btn-small" style="width:auto;" data-action="set-incident-status" data-id="${Number(inc.id)}" data-from="ack" data-to="resolved">${L('incBtnResolve')}</button>`
                 : '');
+        const sev = sevLabel(inc.severity);
         box.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:14px;">
-                <div>
-                    <h3 style="margin:0; font-family:var(--font-display); font-size:21px;">${escapeHtml(inc.title || inc.entity_key)}</h3>
-                    <div style="font-size:12px; color:var(--text-muted);">
-                        ${escapeHtml(inc.entity_key)} · tenant ${escapeHtml(inc.tenant)} ·
+            <div class="inc-head">
+                <div style="min-width:0;">
+                    <h3 class="inc-title">${escapeHtml(inc.title || inc.entity_key)}</h3>
+                    <div class="inc-chips">
+                        <span class="inc-chip inc-chip-status">${escapeHtml(statusLabel(inc.status))}</span>
+                        ${sev ? `<span class="inc-chip" style="color:${sevColor(inc.severity)}; border-color:${sevColor(inc.severity)};">${escapeHtml(sev)}</span>` : ''}
+                        <span class="inc-chip"><i class="fa-regular fa-clock"></i> ${escapeHtml(fmtDuration(inc.opened_ts, inc.closed_ts || inc.last_event_ts))}</span>
+                        <span class="inc-chip">${escapeHtml(L('incEventsN').replace('{n}', String(inc.event_count ?? entries.length)))}</span>
+                    </div>
+                    <div class="inc-sub">
+                        ${escapeHtml(inc.entity_key)} · ${escapeHtml(L('cveThTenant'))} ${escapeHtml(inc.tenant)} ·
                         ${L('incFromTo').replace('{a}', escapeHtml(fmtTime(inc.opened_ts))).replace('{b}', escapeHtml(fmtTime(inc.last_event_ts)))}
                     </div>
                     ${renderOwnership(inc)}
                 </div>
-                <div style="display:flex; gap:8px;">${next}</div>
+                <div class="inc-actions">${next}</div>
             </div>
-            ${renderReasoning(inc)}
-            ${renderConclusionHistory(history || [])}
-            ${renderFlowPath(flowPath)}
-            <h4 style="margin:12px 0 10px; font-size:14px; color:var(--primary);"><i class="fa-solid fa-timeline"></i> ${L('incTimeline')}</h4>
-            ${renderTimeline(entries)}
-            ${renderAiBlock(inc)}`;
+            <div class="inc-body">
+                <div class="inc-main">
+                    ${renderFlowPath(flowPath)}
+                    <h4 class="inc-section-title"><i class="fa-solid fa-timeline"></i> ${L('incTimeline')}</h4>
+                    ${renderTimeline(entries)}
+                    ${renderAiBlock(inc)}
+                </div>
+                <div class="inc-side">
+                    ${renderReasoning(inc)}
+                    ${renderConclusionHistory(history || [])}
+                </div>
+            </div>`;
     }
 
     async function setIncidentStatus(id, from, to) {
@@ -684,7 +718,7 @@
             const data = await res.json();
             if (body) {
                 body.innerHTML = `<div style="font-size:13px; white-space:pre-wrap;">${escapeHtml(data.ai_narrative)}</div>
-                                  <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">Generato il ${escapeHtml(fmtTime(data.ai_narrative_ts))}</div>`;
+                                  <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">${escapeHtml(L('incGeneratedAt').replace('{t}', fmtTime(data.ai_narrative_ts)))}</div>`;
             }
         } catch (e) {
             if (body) body.innerHTML = `<div style="color:var(--danger); font-size:12px;">${L('incErrGeneration')}</div>`;
