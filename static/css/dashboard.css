@@ -946,7 +946,7 @@ details[open] > div[id*="Menu"],
 .panel > h3:first-child {
   margin: -18px -20px 16px;
   padding: 10px 20px;
-  background-color: var(--surface-3);
+  background-color: var(--surface-2);
   border-bottom: var(--seam) solid var(--border);
   border-top-left-radius: var(--radius-lg);
   border-top-right-radius: var(--radius-lg);
@@ -1083,7 +1083,7 @@ th {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-muted);
-  background-color: var(--surface-3);
+  background-color: var(--surface-2);
   padding: 10px 14px;
   border-bottom: var(--seam) solid var(--border);
   position: sticky;
@@ -1795,6 +1795,8 @@ body:not(.role-admin) .requires-admin { display: none !important; }
 
 @media (max-width: 1200px) {
   .hero { grid-template-columns: 1fr; }
+  #homeVerdicts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .home-split { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 1100px) {
@@ -2147,27 +2149,66 @@ body:not(.role-admin) .requires-admin { display: none !important; }
 .topbar {
   transition: background var(--transition), border-color var(--transition);
 }
+/* Page header: title, one sentence, the page's commands. No card around it. */
+.page-head {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.page-head-text { min-width: 0; }
+.page-head h2 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: 0.01em; line-height: 1.15; }
+.page-head p { margin: 6px 0 0; font-size: 14px; line-height: 1.55; color: var(--text-muted); max-width: 90ch; }
+.page-head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.page-head-actions .btn { width: auto; }
+
+/* Panel header with a trailing action, same plate as `.panel > h3:first-child`. */
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin: -18px -20px 0;
+  padding: 7px 16px 7px 20px;
+  background-color: var(--surface-2);
+  border-bottom: var(--seam) solid var(--border);
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+}
+.panel-head h3 {
+  margin: 0;
+  font-family: var(--font-legend); font-size: 12px; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-muted);
+}
+.panel-head .btn { margin: 0; }
+
+#homeVerdicts {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px;
+  margin-bottom: 14px;
+}
 .verdict-card {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
+  margin-bottom: 0;
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 8px;
+  transition: border-color var(--transition);
 }
-.verdict-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--cta);
-  box-shadow: var(--shadow-card);
+.verdict-card:hover { border-color: var(--border-strong); }
+/* The state is carried by the status pill inside the card; the 1px left edge only confirms it. */
+.verdict-card.state-ok { border-left-color: var(--success); }
+.verdict-card.state-warn { border-left-color: var(--warning); }
+.verdict-card.state-crit { border-left-color: var(--danger); }
+.verdict-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.verdict-title {
+  font-family: var(--font-legend); font-size: 12px; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted);
 }
-/* The state is carried by the status pill inside the card. This is the 1px
-   accent DESIGN.md allows ("Borders are uniformly 1px"), not the 4px slab that
-   was here: the card already says what it says, twice over. */
-.verdict-card.state-ok {
-  border-left-color: var(--success);
+.verdict-value { display: flex; align-items: baseline; gap: 6px; }
+.verdict-value > span:first-child {
+  font-family: var(--font-data); font-size: 30px; font-weight: 500; line-height: 1;
+  letter-spacing: -0.02em; color: var(--text); font-variant-numeric: tabular-nums;
 }
-.verdict-card.state-warn {
-  border-left-color: var(--warning);
-}
-.verdict-card.state-crit {
-  border-left-color: var(--danger);
+.verdict-of { font-family: var(--font-data); font-size: 14px; color: var(--text-soft); }
+.verdict-summary { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-muted); }
+.verdict-evidence { font-size: 12px; color: var(--text-muted); }
+.verdict-evidence summary { cursor: pointer; font-weight: 600; color: var(--primary); }
+.verdict-evidence > div {
+  margin-top: 6px; padding: 6px 8px;
+  background: var(--surface-2); border: var(--seam) solid var(--border); border-radius: var(--radius);
 }
 
 .status-badge {
@@ -2175,27 +2216,26 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
+  border-radius: 9999px;
+  font-family: var(--font-legend);
   font-size: 11px;
-  font-weight: 700;
-  border-radius: 0;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
 }
-.status-badge.ok {
-  background: color-mix(in srgb, var(--success) 15%, transparent);
-  border: 1px solid var(--success);
-  color: var(--success);
+.status-badge.ok { background: var(--lamp-up-wash); border: 1px solid var(--lamp-up); color: var(--lamp-up-ink); }
+.status-badge.warn { background: var(--lamp-warn-wash); border: 1px solid var(--lamp-warn); color: var(--lamp-warn-ink); }
+.status-badge.crit { background: var(--lamp-fault-wash); border: 1px solid var(--lamp-fault); color: var(--lamp-fault-ink); }
+
+/* Attention queue (wide) beside the event log (narrow). */
+.home-split {
+  display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); gap: 12px;
+  align-items: stretch;
 }
-.status-badge.warn {
-  background: color-mix(in srgb, var(--warning) 15%, transparent);
-  border: 1px solid var(--warning);
-  color: var(--warning);
-}
-.status-badge.crit {
-  background: color-mix(in srgb, var(--danger) 15%, transparent);
-  border: 1px solid var(--danger);
-  color: var(--danger);
-}
+.home-split > .panel { margin-bottom: 0; }
+.home-split .table-container { margin: 0 -20px -18px; width: calc(100% + 40px); max-width: none; border: 0; box-shadow: none; border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+.home-split .eventstrip-text { white-space: nowrap; }
 
 .cmd-item {
   display: flex;

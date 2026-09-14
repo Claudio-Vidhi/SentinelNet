@@ -392,6 +392,14 @@ class TestHomeTab(unittest.TestCase):
         self.assertNotIn('Open design language', html)
         self.assertNotIn('Customize view', html)
 
+    def test_every_verdict_card_gets_its_big_number(self):
+        html = _html()
+        js = frontend_source()
+        for key in ('Reachability', 'Backup', 'Cve', 'Drift'):
+            self.assertIn(f'id="value{key}"', html)
+            self.assertIn(f'id="of{key}"', html)
+            self.assertIn(f"setVerdictValue('{key}'", js, f"{key} card never gets a value")
+
     def test_home_tab_i18n_keys_both_langs(self):
         html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
         # tabHome defined in both maps (label appears twice: it + en)
