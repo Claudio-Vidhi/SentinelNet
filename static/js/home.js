@@ -97,7 +97,9 @@ async function loadHome() {
             }
         }
     } catch (_) { /* monitor endpoint optional */ }
-    const devs = globalDevices || [];
+    // The sidebar tenant scopes the whole overview: counts, verdicts, bays, queue.
+    const scopeTenant = window.globalSelectedTenant;
+    const devs = (globalDevices || []).filter(d => !scopeTenant || scopeTenant === 'all' || d.Group === scopeTenant);
 
     let online = 0;
     let notMeasurable = 0;

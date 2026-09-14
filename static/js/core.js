@@ -1627,6 +1627,8 @@ function applyGlobalTenant(val) {
     // Endpoint Location non ha piu' un select proprio: legge direttamente
     // window.globalSelectedTenant, e qui basta dirgli di ridisegnare.
     if (typeof locTenantChanged === 'function') locTenantChanged();
+    // The overview was computed once for the whole fleet and never redrawn.
+    if (document.getElementById('tab-home')?.classList.contains('active')) loadHome();
     const topSel = document.getElementById('topologyGroupSelect');
     if (topSel instanceof HTMLSelectElement && val !== 'all') { topSel.value = val; }
     // Sync remaining per-panel VIEW FILTERS: set value and fire change so the
