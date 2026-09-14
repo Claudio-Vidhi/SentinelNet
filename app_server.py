@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+import re
 import sys
 import asyncio
 import socket
@@ -7,7 +8,7 @@ import threading
 import time
 import webbrowser
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -282,6 +283,20 @@ app.mount("/static", StaticFiles(directory=get_resource_path("static")), name="s
 @app.get("/")
 def read_index():
     return FileResponse(get_resource_path(os.path.join("templates", "dashboard.html")))
+
+
+# Each tab has its own address (/devices, /settings, ...): a reload or a shared
+# link reopens that tab. Only real tab names are served; the rest stays a 404.
+# Registered after every router, so it never shadows an API or docs path.
+with open(get_resource_path(os.path.join("templates", "dashboard.html")), encoding="utf-8") as _f:
+    TAB_SLUGS = frozenset(re.findall(r'<div id="tab-([a-z0-9-]+)" class="tab-content', _f.read()))
+
+
+@app.get("/{slug}", include_in_schema=False)
+def read_tab(slug: str):
+    if slug not in TAB_SLUGS:
+        raise HTTPException(status_code=404)
+    return read_index()
 
 # Reimport contract kept ONLY for names tests actually consume through the
 # app_server namespace (the AI-profile helpers and the crypto_vault patch

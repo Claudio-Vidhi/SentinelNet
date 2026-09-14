@@ -966,8 +966,23 @@ async function appInit() {
         // Stato SNMP di tenant: solo i nomi, la community non arriva al browser
         loadSnmpDefaults();
 
-        // Forza il reload delle mappe se le tab sono attive
-        const activeTabId = document.querySelector('.tab-content.active')?.id;
+        // Reopen the tab the address names. A tab this role cannot open (its nav
+        // item is hidden by RBAC or allowed_tabs) falls back to the overview.
+        const addressTab = tabFromAddress();
+        if (addressTab && addressTab !== 'tab-home') {
+            const navBtn = document.querySelector(`.nav-item[data-tab="${addressTab}"]`)
+                || document.querySelector(`.nav-item[data-tabs~="${addressTab}"]`);
+            const allowed = navBtn && getComputedStyle(navBtn).display !== 'none';
+            if (allowed) await switchTab(addressTab, undefined, { fromHistory: true });
+            else syncAddressToTab('tab-home', false);
+        } else if (!addressTab) {
+            syncAddressToTab('tab-home', false);
+        }
+
+        // Forza il reload delle mappe se le tab sono attive (switchTab above already
+        // loaded the tab it opened, so this only covers a tab left active in the DOM)
+        const activeTabId = addressTab && addressTab !== 'tab-home' ? null
+            : document.querySelector('.tab-content.active')?.id;
         if (activeTabId === 'tab-map') {
             await loadTopology();
         } else if (activeTabId === 'tab-map-interactive') {
@@ -1098,7 +1113,30 @@ document.addEventListener('keydown', e => {
     items[next].focus();
 });
 
-async function switchTab(tabId, clickedBtn) {
+// --- Tab addresses: /devices, /settings, ... (served by read_tab in app_server.py) ---
+// The address is the tab, so a reload or a shared link reopens it. The query
+// string (?tenant=...) rides along untouched.
+function tabFromAddress() {
+    const slug = window.location.pathname.replace(/^\/+|\/+$/g, '');
+    if (!slug) return 'tab-home';
+    return document.getElementById('tab-' + slug)?.classList.contains('tab-content') ? 'tab-' + slug : null;
+}
+
+function syncAddressToTab(tabId, push) {
+    const path = tabId === 'tab-home' ? '/' : '/' + tabId.replace(/^tab-/, '');
+    if (path === window.location.pathname) return;
+    const url = path + window.location.search;
+    if (push) window.history.pushState({ tabId }, '', url);
+    else window.history.replaceState({ tabId }, '', url);
+}
+
+// Back/forward: follow the address without writing a new history entry.
+window.addEventListener('popstate', () => {
+    const tabId = tabFromAddress();
+    if (tabId) switchTab(tabId, undefined, { fromHistory: true });
+});
+
+async function switchTab(tabId, clickedBtn, opts = {}) {
     // Swap the visible panel FIRST, then await the module. Awaiting up here
     // meant a cold tab looked frozen for the whole download of its script
     // (vis-network, the html2pdf bundle): no active class, no panel change.
@@ -1122,6 +1160,7 @@ async function switchTab(tabId, clickedBtn) {
     }
     syncTablistState(btn);
     syncTopbarCrumb();
+    if (!opts.fromHistory) syncAddressToTab(tabId, true);
 
     await ensureTabScripts(tabId);
     if (tabEl) tabEl.classList.remove('tab-loading');
