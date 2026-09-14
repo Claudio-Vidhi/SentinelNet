@@ -4,6 +4,7 @@ parametri e risposte identici al monolite."""
 
 import logging
 import threading
+import time
 from typing import Optional, List, Dict
 from concurrent.futures import ThreadPoolExecutor
 
@@ -68,12 +69,30 @@ def run_triage_background(devices):
             triage_job["results"].append({"ip": ip, "result": res})
             triage_job["progress"] += 1
 
-    # Avvia ThreadPoolExecutor per gestire fino a 10 triage simultanei in parallelo
+    # Up to 10 workers queue here, but only core_engine.TRIAGE_MAX_CONCURRENT
+    # log in at once: the others wait for a free slot instead of failing.
     max_workers = min(10, len(devices)) if devices else 1
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Esegue la mappatura concorrente sui dispositivi
         list(executor.map(triage_worker, devices))
-        
+
+    # An auth failure in a burst is often the AAA throttle, not the credential:
+    # retry each one once, alone, after the batch. A real wrong password fails again.
+    by_ip = {d['IP']: d for d in devices}
+    with triage_lock:
+        retry = [r for r in triage_job["results"]
+                 if (r["result"] or {}).get("inventory_status") == "auth_failed"]
+    for entry in retry:
+        with triage_lock:
+            triage_job["current_device"] = entry["ip"]
+        time.sleep(5)
+        try:
+            res = core_engine.run_backup_and_triage(by_ip[entry["ip"]])
+        except Exception as e:
+            res = {"status": "error", "message": str(e)}
+        with triage_lock:
+            entry["result"] = res
+
+
     with triage_lock:
         triage_job["status"] = "complete"
         triage_job["current_device"] = ""
