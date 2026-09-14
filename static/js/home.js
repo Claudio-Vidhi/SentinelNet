@@ -232,8 +232,7 @@ function renderHomeVerdicts(devs) {
     const backupEvidences = [];
     const nowSec = Date.now() / 1000;
     devs.forEach(d => {
-        const scan = globalVersions[d.IP] || {};
-        const bTs = scan.backup_timestamp || scan.last_backup;
+        const bTs = d.backup_ts;
         if (!bTs) {
             noBackup++;
             backupEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${tr('homeNeverBackedUp')}`);
@@ -335,7 +334,10 @@ async function loadHomeRiskVerdicts() {
     const driftRes = await apiFetch(`/api/drift/summary?tenant=${tenant}`);
     if (driftRes && driftRes.ok) {
         const d = await driftRes.json();
-        if (!d.checked) {
+        if (!d.checked && d.no_baseline && d.no_baseline.length) {
+            setRiskVerdict('Drift', 'na', '\u2014',
+                tr('homeDriftNoBaseline', { tenants: d.no_baseline.join(', ') }), []);
+        } else if (!d.checked) {
             setRiskVerdict('Drift', 'na', '\u2014', tr('homeDriftNotChecked'), []);
         } else {
             setRiskVerdict('Drift', d.deviating.length ? 'warn' : 'ok', d.deviating.length,

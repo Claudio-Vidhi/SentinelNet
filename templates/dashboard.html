@@ -1283,15 +1283,15 @@
     <div id="tab-security" class="tab-content" role="tabpanel" tabindex="0">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleThreatIntel">Vulnerability Matcher (NIST NVD)</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descThreatIntel">
+          <h2 data-i18n="titleThreatIntel">Vulnerability Matcher (NIST NVD)</h2>
+          <p data-i18n="descThreatIntel">
             Controlla in tempo reale le vulnerabilità del firmware rilevate sugli apparati attivi confrontandole con il National Vulnerability Database (NVD NIST).
           </p>
         </div>
       </div>
 
       <!-- Sub-tab: Vulnerability Matcher (dispositivi interni) vs Vendor Watch (EUVD globale) -->
-      <div style="display:flex; gap:8px; margin-bottom:16px;">
+      <div class="subtab-bar">
         <button class="btn btn-secondary ti-subtab active" id="tiTabMatcher" data-i18n="tiTabMatcher"><i class="fa-solid fa-crosshairs"></i> Vulnerability Matcher</button>
         <button class="btn btn-secondary ti-subtab" id="tiTabPriority" data-i18n="tiTabPriority"><i class="fa-solid fa-list-ol"></i> Priorit&agrave;</button>
         <button class="btn btn-secondary ti-subtab" id="tiTabReport" data-i18n="tiTabReport"><i class="fa-solid fa-chart-pie"></i> Resoconto</button>
@@ -1316,6 +1316,9 @@
               <input type="checkbox" id="threatIncludeDiscovered" style="accent-color:var(--primary);">
               <span data-i18n="lblThreatDiscovered">Includi vicini scoperti</span>
             </label>
+            <button type="button" id="btnThreatAnalyzeAll" class="btn btn-primary" style="width:auto; margin:0 0 0 auto;">
+              <i class="fa-solid fa-magnifying-glass-chart"></i> <span data-i18n="tiBtnAnalyzeAll">Analizza tutti</span>
+            </button>
           </div>
         </div>
 
@@ -1429,12 +1432,12 @@
     <div id="tab-endpoint" class="tab-content" role="tabpanel" tabindex="0">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <h2 id="locTitle" style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleMacTracker">MAC Address Tracker</h2>
-          <p id="locDesc" style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descMacTracker"></p>
+          <h2 id="locTitle" data-i18n="titleMacTracker">MAC Address Tracker</h2>
+          <p id="locDesc" data-i18n="descMacTracker"></p>
         </div>
       </div>
 
-      <div id="locPills" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+      <div id="locPills" class="subtab-bar">
         <button type="button" class="ca-pill active" id="locPill-mac" data-loc-view="mac" data-i18n="tabMacTracker">Tracker MAC</button>
         <button type="button" class="ca-pill" id="locPill-diagnosi" data-loc-view="diagnosi" data-i18n="tabDiagnosi">Diagnosi Client</button>
         <button type="button" class="ca-pill" id="locPill-inventory" data-loc-view="inventory" data-i18n="tabEndpoints">Endpoint Inventory</button>
@@ -1776,8 +1779,8 @@
     <div id="tab-flows" class="tab-content" role="tabpanel" tabindex="0">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleFlows">Traffic</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descFlows">
+          <h2 data-i18n="titleFlows">Traffic</h2>
+          <p data-i18n="descFlows">
             Aggregated network flows (IPFIX/NetFlow/sFlow) per site: overview, flow detail, event search and correlated anomalies. The window and tenant apply to all four views. Listeners are configured in Settings → Observability.
           </p>
         </div>
@@ -1798,22 +1801,22 @@
           <option value="packets" data-i18n="optByPackets">Per pacchetti</option>
         </select>
         <button id="btnTrafRefresh" class="btn" style="width:auto; margin:0;"><i class="fa-solid fa-rotate"></i> <span data-i18n="btnRefresh">Aggiorna</span></button>
-        <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer;">
+        <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer;" title="Auto-aggiornamento (30s, in pausa se la scheda non è visibile)" data-i18n-title="lblFlowsAutoRefresh">
           <input type="checkbox" id="trafAutoRefresh" checked style="accent-color:var(--primary);">
-          <span data-i18n="lblFlowsAutoRefresh">Auto-aggiornamento (30s, in pausa se la scheda non è visibile)</span>
+          <span data-i18n="lblFlowsAutoRefreshShort">Auto-aggiornamento 30s</span>
         </label>
-        <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer;">
+        <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer;" title="Escludi traffico di telemetria (NetFlow/IPFIX/sFlow/Syslog/SNMP)" data-i18n-title="lblFlowsHideTelemetry">
           <input type="checkbox" id="trafHideTelemetry" style="accent-color:var(--primary);">
-          <span data-i18n="lblFlowsHideTelemetry">Escludi traffico di telemetria (NetFlow/IPFIX/sFlow/Syslog/SNMP)</span>
+          <span data-i18n="lblFlowsHideTelemetryShort">Escludi telemetria</span>
         </label>
         <span id="trafLastUpdate" style="font-size:12px; color:var(--text-muted);"></span>
-        <button id="btnAnalyzeFlowsAi" class="btn requires-write" style="width:auto; margin:0;" data-i18n-title="titleAnalyzeFlowsAi" title="Invia un riassunto aggregato dei flussi all'assistente AI">
+        <button id="btnAnalyzeFlowsAi" class="btn requires-write" style="width:auto; margin:0 0 0 auto;" data-i18n-title="titleAnalyzeFlowsAi" title="Invia un riassunto aggregato dei flussi all'assistente AI">
           <i class="fa-solid fa-robot"></i> <span data-i18n="btnAnalyzeAi">Analizza con AI</span>
         </button>
       </div>
 
       <div id="flowsAiNote" style="display:none; font-size:12px; color:var(--warning, var(--lamp-warn)); margin-bottom:12px;"></div>
-      <div id="trafPills" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+      <div id="trafPills" class="subtab-bar">
         <button type="button" class="ca-pill active" id="trafPill-overview" data-traf-view="overview" data-i18n="trafPillOverview">Panoramica</button>
         <button type="button" class="ca-pill" id="trafPill-flows" data-traf-view="flows" data-i18n="trafPillFlows">Flussi</button>
         <button type="button" class="ca-pill" id="trafPill-search" data-traf-view="search" data-i18n="trafPillSearch">Ricerca</button>
@@ -1825,16 +1828,18 @@
       <div id="flowsObsBanner" style="display:none; padding:10px 14px; margin-bottom:12px; border:1px solid var(--warning, var(--lamp-warn)); border-radius:0; color:var(--warning, var(--lamp-warn)); font-size:13px;"></div>
 
       <!-- KPI strip -->
-      <div class="oneline-foot" id="fgKpiStrip" style="margin-bottom:14px;">
-        <span><span data-i18n="kpiThroughput">Throughput</span> <b id="fgKpiThroughput">&mdash;</b></span>
-        <span><span data-i18n="kpiTopPath">Top path</span> <b id="fgKpiTopPath">&mdash;</b></span>
-        <span><span data-i18n="kpiTalkers">Active talkers</span> <b id="fgKpiTalkers">&mdash;</b></span>
-        <span><span data-i18n="kpiSpikes">Spikes</span> <b id="fgKpiSpikes">&mdash;</b></span>
+      <div id="fgKpiStrip" class="traf-kpis">
+        <div class="panel traf-kpi"><span class="traf-kpi-label" data-i18n="kpiThroughput">Throughput</span><b class="traf-kpi-value" id="fgKpiThroughput">&mdash;</b></div>
+        <div class="panel traf-kpi"><span class="traf-kpi-label" data-i18n="kpiTopPath">Top path</span><b class="traf-kpi-value" id="fgKpiTopPath">&mdash;</b></div>
+        <div class="panel traf-kpi"><span class="traf-kpi-label" data-i18n="kpiTalkers">Active talkers</span><b class="traf-kpi-value" id="fgKpiTalkers">&mdash;</b></div>
+        <div class="panel traf-kpi"><span class="traf-kpi-label" data-i18n="kpiSpikes">Spikes</span><b class="traf-kpi-value" id="fgKpiSpikes">&mdash;</b></div>
       </div>
 
-      <div class="panel" style="margin-bottom:18px;">
-        <h3 style="margin:0 0 10px; font-size:17px;"><i class="fa-solid fa-ranking-star"></i> <span data-i18n="titleTopTalkersTable">Top talker</span></h3>
-        <div class="table-wrap" style="max-height:260px;">
+      <!-- "Top N" cards side by side: who talks, over what. -->
+      <div class="traf-grid">
+      <div class="panel">
+        <h3 class="traf-card-title"><i class="fa-solid fa-ranking-star"></i> <span data-i18n="titleTopTalkersTable">Top talker</span></h3>
+        <div class="table-wrap" style="max-height:320px;">
           <table style="width:100%; border-collapse:collapse; font-size:12px;">
             <thead><tr>
               <th style="text-align:left; padding:6px 8px;" data-i18n="thFgSource">Sorgente</th>
@@ -1848,9 +1853,25 @@
           </table>
         </div>
       </div>
+      <div class="panel">
+        <h3 class="traf-card-title"><i class="fa-solid fa-network-wired"></i> <span data-i18n="titleTopProtocols">Protocolli e porte</span></h3>
+        <div class="table-wrap" style="max-height:320px;">
+          <table style="width:100%; border-collapse:collapse; font-size:12px;">
+            <thead><tr><th style="text-align:left; padding:4px 6px;" data-i18n="thFgProtocol">Protocollo</th><th style="text-align:left;" data-i18n="thFgPort">Porta</th><th style="text-align:left;" data-i18n="thFgRate">Rate</th></tr></thead>
+            <tbody id="fgProtoTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+      </div>
+
+      <div class="traf-grid">
+      <div class="panel">
+        <h3 class="traf-card-title"><i class="fa-solid fa-building"></i> <span data-i18n="titleTrafTenant">Tenant</span></h3>
+        <div id="fgTenantSummary" style="font-size:13px; line-height:1.8;">—</div>
+      </div>
 
       <!-- Panel: Ingest Protocol Distribution Graph (3 Graph Types: Donut, Bar, Trend) -->
-      <div class="panel" style="margin-bottom:18px;" id="obsProtocolCard">
+      <div class="panel" id="obsProtocolCard">
         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:12px;">
           <div>
             <h3 style="margin:0; font-size:17px; display:flex; align-items:center; gap:8px;">
@@ -1867,7 +1888,7 @@
               <button id="btnChartTypeTrend" class="btn btn-sm" data-chart-type="trend" style="padding:5px 10px; border:none; background:transparent; color:var(--text); font-size:12px;" title="Grafico Trend Temporale (Trend)" data-i18n-title="titleChartTrend"><i class="fa-solid fa-chart-line"></i> <span data-i18n="lblChartTrend">Trend</span></button>
             </div>
             <!-- La finestra e' quella del tab: la card non ne ha piu' una sua. -->
-            <button id="btnObsInspectModal" class="btn btn-sm btn-secondary" style="padding:5px 10px; font-size:12px; white-space:nowrap;" title="Ispeziona Dettagli Telemetria" data-i18n-title="titleObsInspect"><i class="fa-solid fa-magnifying-glass-chart"></i> Dettagli</button>
+            <button id="btnObsInspectModal" class="btn btn-sm btn-secondary" style="padding:5px 10px; font-size:12px; white-space:nowrap;" title="Ispeziona Dettagli Telemetria" data-i18n-title="titleObsInspect"><i class="fa-solid fa-magnifying-glass-chart"></i> <span data-i18n="lblObsInspect">Dettagli</span></button>
           </div>
         </div>
         <div style="position:relative; width:100%; height:280px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:12px; overflow:hidden;">
@@ -1876,18 +1897,6 @@
         </div>
       </div>
 
-      <div class="hero" style="grid-template-columns:repeat(2, 1fr); margin-bottom:18px;">
-        <div class="hero-card">
-          <div id="fgTenantSummary" style="margin-top:8px; font-size:13px; line-height:1.8;">—</div>
-        </div>
-        <div class="hero-card">
-          <div class="table-wrap" style="max-height:180px; margin-top:8px;">
-            <table style="width:100%; border-collapse:collapse; font-size:12px;">
-              <thead><tr><th style="text-align:left; padding:4px 6px;" data-i18n="thFgProtocol">Protocollo</th><th style="text-align:left;" data-i18n="thFgPort">Porta</th><th style="text-align:left;" data-i18n="thFgRate">Rate</th></tr></thead>
-              <tbody id="fgProtoTableBody"></tbody>
-            </table>
-          </div>
-        </div>
       </div>
 
       </div>
@@ -2113,17 +2122,15 @@
     <div id="tab-config" class="tab-content" role="tabpanel" tabindex="0">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleConfigAnalyzer">Config Analyzer</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descConfigAnalyzer">
+          <h2 data-i18n="titleConfigAnalyzer">Config Analyzer</h2>
+          <p data-i18n="descConfigAnalyzer">
             Analisi strutturata delle configurazioni: VLAN, routing, ACL e interfacce per apparato, con controlli incrociati di validazione.
           </p>
         </div>
       </div>
 
 
-      <div class="panel" style="margin-bottom:18px;">
-        <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
-          <div id="caPills" style="display:flex; gap:8px; flex-wrap:wrap;">
+      <div id="caPills" class="subtab-bar">
             <button class="ca-pill active" data-view="home" data-i18n="pillCaHome">Home</button>
             <button class="ca-pill" data-view="vlan" data-i18n="pillVlans">VLAN</button>
             <button class="ca-pill" data-view="routing" data-i18n="pillRouting">Routing</button>
@@ -2133,7 +2140,9 @@
             <button class="ca-pill" data-view="firewall" data-i18n="pillCaFirewall">Firewall</button>
             <button class="ca-pill" data-view="server" data-i18n="pillCaServer">Server</button>
             <button class="ca-pill" data-view="convert" data-i18n="pillCaConvert">Converti</button>
-          </div>
+      </div>
+      <div class="panel" style="margin-bottom:18px;">
+        <div class="filterbar" style="justify-content:flex-end; align-items:center; margin-top:0;">
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
             <input id="caSearch" type="text"
                    data-i18n-placeholder="phCaSearch" placeholder="Cerca..."
@@ -2157,8 +2166,8 @@
     <div id="tab-ai" class="tab-content" role="tabpanel" tabindex="0">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleAiAssistant">AI Assistant</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descAiAssistant">
+          <h2 data-i18n="titleAiAssistant">AI Assistant</h2>
+          <p data-i18n="descAiAssistant">
             Chat con un assistente AI (Anthropic Claude, OpenAI ChatGPT, Google Gemini o un LLM locale via Ollama). Puoi allegare l'inventario o la configurazione di un dispositivo come contesto.
           </p>
         </div>
@@ -3659,8 +3668,8 @@
     <div id="tab-incidents" class="tab-content" role="tabpanel" tabindex="0">
       <div class="hero" style="margin-bottom:18px;">
         <div class="hero-card" style="flex:1;">
-          <h2 style="margin:4px 0 8px; font-family:var(--font-display); font-size:25px;" data-i18n="incTitle">Timeline e Ragionamento</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:13px; max-width:640px;" data-i18n="incDesc">Gli eventi correlati che condividono un'entità e una finestra temporale diventano un incidente unico, con causa e confidenza calcolate in modo deterministico e la sequenza di ciò che è successo.</p>
+          <h2 data-i18n="incTitle">Timeline e Ragionamento</h2>
+          <p data-i18n="incDesc">Gli eventi correlati che condividono un'entità e una finestra temporale diventano un incidente unico, con causa e confidenza calcolate in modo deterministico e la sequenza di ciò che è successo.</p>
         </div>
       </div>
 
@@ -3689,7 +3698,7 @@
           <div id="incidentsList"></div>
         </div>
         <div class="panel" style="padding:16px;">
-          <div id="incidentDetail"></div>
+          <div id="incidentDetail"><div class="inc-empty"><i class="fa-solid fa-hand-pointer"></i><span data-i18n="incSelectOne">Seleziona un incidente dalla lista.</span></div></div>
         </div>
       </div>
 
@@ -3845,11 +3854,11 @@
     <!-- TAB: NetSec Audit -->
     <div id="tab-netsec-audit" class="tab-content" role="tabpanel" tabindex="0">
       <!-- Sub-tab switcher per NetSec Audit -->
-      <div id="netsecSubtabNav" style="display:flex; gap:8px; margin-bottom:18px; border-bottom:1px solid var(--border); padding-bottom:10px;">
-        <button id="subtabBtnAuditScan" class="btn btn-secondary active" data-subtab="scan" style="width:auto; margin:0; padding:6px 14px; font-size:13px; font-weight:600;">
+      <div id="netsecSubtabNav" class="subtab-bar">
+        <button id="subtabBtnAuditScan" class="btn btn-secondary active" data-subtab="scan">
           <i class="fa-solid fa-shield-cat"></i> <span data-i18n="nsaSubtabScan">Scansione &amp; Compliance Automatica</span>
         </button>
-        <button id="subtabBtnChecklist" class="btn btn-secondary" data-subtab="checklist" style="width:auto; margin:0; padding:6px 14px; font-size:13px; font-weight:600;">
+        <button id="subtabBtnChecklist" class="btn btn-secondary" data-subtab="checklist">
           <i class="fa-solid fa-clipboard-check"></i> <span data-i18n="nsaSubtabChecklist">Checklist Audit Firewall</span>
         </button>
       </div>
@@ -3858,8 +3867,8 @@
       <div id="netsecSubtabScan">
       <div class="hero" style="margin-bottom:18px;">
         <div class="hero-card" style="flex:1;">
-          <h2 style="margin:4px 0 8px; font-family:var(--font-display); font-size:25px;" data-i18n="nsaTitle">Auditing Configurazione Firewall, Router e Switch</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:13px; max-width:600px;" data-i18n="nsaDesc">Valutazione automatizzata delle policy di sicurezza, regole di accesso, cifrari e hardening degli apparati di rete gestiti.</p>
+          <h2 data-i18n="nsaTitle">Auditing Configurazione Firewall, Router e Switch</h2>
+          <p data-i18n="nsaDesc">Valutazione automatizzata delle policy di sicurezza, regole di accesso, cifrari e hardening degli apparati di rete gestiti.</p>
         </div>
         <div class="hero-card" style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:16px 24px;">
           <span style="font-size:11px; text-transform:uppercase; color:var(--text-muted); font-weight:700;" data-i18n="nsaScoreLabel">Score Compliance Security</span>
@@ -4003,7 +4012,7 @@
       <div id="auditHistoryPanel" class="panel" style="margin-top:16px; padding:16px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
           <h4 style="margin:0; font-size:15px; color:var(--primary);" data-i18n="auditHistoryTitle"><i class="fa-solid fa-clock-rotate-left"></i> Storico Esecuzioni Audit</h4>
-          <button id="btnRefreshAuditHistory" class="btn btn-secondary" style="width:auto; margin:0; padding:4px 10px; font-size:12px;"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
+          <button id="btnRefreshAuditHistory" class="btn btn-secondary" style="width:auto; margin:0; padding:4px 10px; font-size:12px;"><i class="fa-solid fa-rotate"></i> <span data-i18n="btnRefresh">Aggiorna</span></button>
         </div>
         <div class="table-container">
           <table>
@@ -4343,10 +4352,10 @@
           <h3><i class="fa-solid fa-sliders"></i> <span data-i18n="ptFormTitle">Parametri del Flusso</span></h3>
           <div>
             <div class="form-group">
-              <label for="ptSrcIp" data-i18n="ptSrcIpLabel">IP Sorgente *</label><input id="ptSrcIp" type="text" placeholder="es. 192.0.2.50">
+              <label for="ptSrcIp" data-i18n="ptSrcIpLabel">IP Sorgente *</label><input id="ptSrcIp" type="text" placeholder="es. 192.0.2.50" data-i18n-placeholder="ptSrcIpPh">
             </div>
             <div class="form-group">
-              <label for="ptDstIp" data-i18n="ptDstIpLabel">IP Destinazione *</label><input id="ptDstIp" type="text" placeholder="es. 198.51.100.10">
+              <label for="ptDstIp" data-i18n="ptDstIpLabel">IP Destinazione *</label><input id="ptDstIp" type="text" placeholder="es. 198.51.100.10" data-i18n-placeholder="ptDstIpPh">
             </div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
               <div class="form-group">
@@ -4372,7 +4381,7 @@
             </div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
               <div class="form-group">
-                <label for="ptSport" data-i18n="ptSportLabel">Porta Sorg.</label><input id="ptSport" type="number" placeholder="opzionale" min="1" max="65535">
+                <label for="ptSport" data-i18n="ptSportLabel">Porta Sorg.</label><input id="ptSport" type="number" placeholder="opzionale" data-i18n-placeholder="ptOptionalPh" min="1" max="65535">
               </div>
               <div class="form-group">
                 <label for="ptIngressIntf" data-i18n="ptIngressLabel">Ingress Intf</label><input id="ptIngressIntf" type="text" placeholder="auto-derived">
@@ -4389,7 +4398,7 @@
           </div>
         </div>
         <div class="panel">
-          <h3><i class="fa-solid fa-diagram-project"></i> Path Trace &amp; Risultato</h3>
+          <h3><i class="fa-solid fa-diagram-project"></i> <span data-i18n="ptTraceResultTitle">Path Trace &amp; Risultato</span></h3>
           <div id="ptTraceResultsContainer">
             <div style="text-align:center; padding:40px 20px; color:var(--text-muted);">
               <i class="fa-solid fa-route fa-2x" style="margin-bottom:12px; opacity:0.4;"></i>
@@ -4434,33 +4443,59 @@
         <label for="driftTenantSelect" data-i18n="driftTenantLabel">Tenant</label>
         <select id="driftTenantSelect"></select>
       </div>
-    </div>
-
-    <div id="driftSubtabNav" class="subtab-bar">
-      <button id="driftSubtabBtnHistory" class="btn btn-secondary active" data-subtab="history">
-        <i class="fa-solid fa-clock-rotate-left"></i> <span data-i18n="driftSubHistory">Cronologia</span>
-      </button>
-      <button id="driftSubtabBtnBaseline" class="btn btn-secondary" data-subtab="baseline">
-        <i class="fa-solid fa-list-check"></i> <span data-i18n="driftSubBaseline">Baseline</span>
+      <div id="driftTenantStats" class="drift-tenant-stats"></div>
+      <button id="btnDriftOpenBaseline" class="btn btn-secondary" style="width:auto; margin-left:auto;" disabled>
+        <i class="fa-solid fa-list-check"></i> <span data-i18n="driftBtnTenantBaseline">Baseline del tenant</span>
+        <span id="driftRuleCount" class="drift-count"></span>
       </button>
     </div>
 
-    <div id="driftSubtabHistory">
-      <div class="panel">
-        <h3><i class="fa-solid fa-server"></i> <span data-i18n="driftSubHistory">Cronologia</span></h3>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th data-i18n="thDriftDevice">Dispositivo</th>
-                <th data-i18n="thDriftLastChange">Ultima modifica</th>
-                <th data-i18n="thDriftLastSeen">Ultimo rilevamento</th>
-              </tr>
-            </thead>
-            <tbody id="driftDeviceList"></tbody>
-          </table>
+    <!-- Master-detail: the device list never leaves the screen, so the pane on
+         the right always says which device (or the tenant baseline) it shows. -->
+    <div class="drift-layout">
+      <div class="panel drift-master">
+        <div class="drift-master-head">
+          <span data-i18n="thDriftDevice">Dispositivo</span>
+          <span id="driftDeviceCount" class="drift-count"></span>
         </div>
+        <div class="form-group search-wrap" style="margin:0; flex:none;">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="search" id="driftDeviceFilter" autocomplete="off" placeholder="Filtra..." aria-label="Filtra dispositivi" data-i18n-placeholder="driftFilterPlaceholder" data-i18n-aria-label="ariaDriftFilter">
+        </div>
+        <div id="driftDeviceList" class="drift-device-list" role="list"></div>
       </div>
+
+      <section class="drift-detail">
+        <div id="driftEmptyState" class="panel drift-empty">
+          <i class="fa-solid fa-hand-pointer"></i>
+          <span data-i18n="driftChooseDeviceFirst">Seleziona un dispositivo dall'elenco.</span>
+        </div>
+
+        <div id="driftDeviceView" style="display:none;">
+          <div class="panel drift-device-header">
+            <div>
+              <div id="driftDeviceTitle" class="drift-device-title"></div>
+              <div id="driftDeviceMeta" class="drift-device-meta"></div>
+            </div>
+            <div id="driftDeviceBadge"></div>
+          </div>
+
+          <div id="driftSubtabNav" class="subtab-bar">
+            <button id="driftSubtabBtnDeviations" class="btn btn-secondary active" data-subtab="deviations">
+              <i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="driftSubDeviations">Deviazioni</span>
+              <span id="driftDeviationsCount" class="drift-count"></span>
+            </button>
+            <button id="driftSubtabBtnHistory" class="btn btn-secondary" data-subtab="history">
+              <i class="fa-solid fa-clock-rotate-left"></i> <span data-i18n="driftSubHistory">Cronologia</span>
+              <span id="driftVersionsCount" class="drift-count"></span>
+            </button>
+          </div>
+
+          <div id="driftSubtabDeviations" class="panel">
+            <div id="driftDeviationsContainer"></div>
+          </div>
+
+    <div id="driftSubtabHistory" style="display:none;">
       <div class="panel">
         <h3><i class="fa-solid fa-code-compare"></i> <span data-i18n="driftVersionsTitle">Versioni archiviate</span></h3>
         <div id="driftTimeline" style="margin-bottom:16px;"></div>
@@ -4484,25 +4519,45 @@
       </div>
     </div>
 
-    <div id="driftSubtabBaseline" style="display:none;">
-      <div class="panel">
-        <p style="color:var(--text-muted); font-size:13px;" data-i18n="driftBaselineHint">Regole di riferimento del tenant: righe che devono essere presenti o assenti dalla configurazione. Non è un audit e non assegna un punteggio.</p>
-        <textarea id="driftBaselineText" rows="12" style="width:100%; font-family:var(--font-code); font-size:12px;" aria-label="Testo della baseline di confronto" data-i18n-aria-label="ariaDriftBaseline"></textarea>
-        <div style="display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap;">
-          <button id="btnDriftSaveBaseline" class="btn btn-primary requires-admin" style="width:auto;">
-            <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="driftBtnSave">Salva</span>
-          </button>
-          <button id="btnDriftSeedBaseline" class="btn btn-secondary requires-admin" style="width:auto;">
-            <i class="fa-solid fa-wand-magic-sparkles"></i> <span data-i18n="driftBtnSeed">Genera dal dispositivo selezionato</span>
-          </button>
+        </div> <!-- End #driftDeviceView -->
+
+        <!-- Tenant view: the baseline applies to every device in the list, so
+             its editor sits next to the per-rule coverage across that list. -->
+        <div id="driftBaselineView" style="display:none;">
+          <div class="panel drift-device-header">
+            <div>
+              <div id="driftBaselineTitle" class="drift-device-title"></div>
+              <div id="driftBaselineMeta" class="drift-device-meta"></div>
+            </div>
+            <button id="btnDriftCloseBaseline" class="btn btn-secondary" style="width:auto;">
+              <i class="fa-solid fa-arrow-left"></i> <span data-i18n="driftBtnBackToDevice">Torna al dispositivo</span>
+            </button>
+          </div>
+          <!-- One baseline per config grammar: switch, WLC, firewall and server
+               rules never apply to each other. -->
+          <div id="driftProfileNav" class="subtab-bar"></div>
+          <div class="panel">
+            <h3><i class="fa-solid fa-chart-simple"></i> <span data-i18n="driftCoverageTitle">Copertura delle regole salvate</span></h3>
+            <div id="driftCoverageContainer"></div>
+          </div>
+          <div class="panel">
+            <p style="color:var(--text-muted); font-size:13px;" data-i18n="driftBaselineHint">Regole di riferimento del tenant: righe che devono essere presenti o assenti dalla configurazione. Non è un audit e non assegna un punteggio.</p>
+            <textarea id="driftBaselineText" rows="12" style="width:100%; font-family:var(--font-code); font-size:12px;" aria-label="Testo della baseline di confronto" data-i18n-aria-label="ariaDriftBaseline"></textarea>
+            <div style="display:flex; align-items:flex-end; gap:10px; margin-top:10px; flex-wrap:wrap;">
+              <button id="btnDriftSaveBaseline" class="btn btn-primary requires-admin" style="width:auto;">
+                <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="driftBtnSave">Salva</span>
+              </button>
+              <div class="form-group requires-admin" style="margin:0 0 0 auto; min-width:220px;">
+                <label for="driftSeedDeviceSelect" data-i18n="driftSeedFromLabel">Proponi regole dal dispositivo</label>
+                <select id="driftSeedDeviceSelect"></select>
+              </div>
+              <button id="btnDriftSeedBaseline" class="btn btn-secondary requires-admin" style="width:auto;">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> <span data-i18n="driftBtnSeed">Genera</span>
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-      <div class="panel">
-        <h3><i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="driftDeviationsTitle">Deviazioni dal dispositivo selezionato</span></h3>
-        <div id="driftDeviationsContainer">
-          <div style="text-align:center; padding:20px; color:var(--text-muted);" data-i18n="driftChooseDeviceFirst">Seleziona un dispositivo nella scheda Cronologia.</div>
-        </div>
-      </div>
+      </section>
     </div>
   </div> <!-- End #tab-config-drift -->
   </main>

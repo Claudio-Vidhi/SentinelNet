@@ -46,7 +46,7 @@ class TheOverviewCountsRealDeviations(unittest.TestCase):
         bad = {"IP": "192.0.2.11", "Group": "ACME", "Vendor": "cisco", "Hostname": "switch-02"}
         no_rules = {"IP": "192.0.2.12", "Group": "OTHER", "Vendor": "cisco", "Hostname": "switch-03"}
         never_backed_up = {"IP": "192.0.2.13", "Group": "ACME", "Vendor": "cisco", "Hostname": "switch-04"}
-        baseline.save("ACME", "+ service password-encryption\n")
+        baseline.save("ACME", "ios", "+ service password-encryption\n")
         history.record_version(ok, "hostname switch-01\nservice password-encryption\n")
         history.record_version(bad, "hostname switch-02\n")
         history.record_version(no_rules, "hostname switch-03\n")
@@ -57,6 +57,47 @@ class TheOverviewCountsRealDeviations(unittest.TestCase):
         self.assertEqual(2, s["checked"])
         self.assertEqual(["192.0.2.11"], [d["ip"] for d in s["deviating"]])
         self.assertEqual(1, s["deviating"][0]["deviations"])
+        # OTHER has a collected config and no rules: that is what the card names.
+        self.assertEqual(["OTHER"], s["no_baseline"])
+
+        # The tab's device list carries the same verdict per device, and an
+        # uncheckable device is None, never an empty (= compliant) list.
+        from unittest import mock
+        with mock.patch.object(config_drift.inventory_manager, "get_all_devices",
+                               return_value=[ok, bad, no_rules, never_backed_up]), \
+             mock.patch.object(config_drift, "user_group_scope", return_value=None):
+            rows = {r["ip"]: r["deviations"] for r in config_drift.drift_devices({})["devices"]}
+        self.assertEqual([], rows["192.0.2.10"])
+        self.assertEqual(1, len(rows["192.0.2.11"]))
+        self.assertIsNone(rows["192.0.2.12"])
+        self.assertIsNone(rows["192.0.2.13"])
+
+    def test_a_switch_baseline_never_judges_a_wlc_or_a_firewall(self):
+        from services.config_drift import baseline, history
+        switch = {"IP": "192.0.2.20", "Group": "ACME", "Vendor": "cisco", "Hostname": "switch-01"}
+        wlc = {"IP": "192.0.2.21", "Group": "ACME", "Vendor": "cisco_wlc", "Hostname": "wlc-01"}
+        fw = {"IP": "192.0.2.22", "Group": "ACME", "Vendor": "fortinet", "Hostname": "fw-01"}
+        baseline.save("ACME", "ios", "+ aaa new-model\n")
+        baseline.save("ACME", "fortios", "+ set admin-lockout-threshold 3\n")
+        history.record_version(switch, "hostname switch-01\naaa new-model\n")
+        history.record_version(wlc, "config sysname wlc-01\n")
+        history.record_version(fw, "config system global\n    set hostname fw-01\nend\n")
+
+        s = config_drift.drift_summary_for([switch, wlc, fw])
+
+        # The WLC has no AireOS baseline: unchecked, not "missing aaa new-model".
+        self.assertEqual(2, s["checked"])
+        self.assertEqual(["192.0.2.22"], [d["ip"] for d in s["deviating"]])
+
+    def test_a_pre_profile_store_keeps_meaning_ios(self):
+        import json
+        from services.config_drift import baseline
+        with open(baseline._store_path(), "w", encoding="utf-8") as fh:
+            json.dump({"ACME": "+ aaa new-model\n"}, fh)
+        self.assertEqual("+ aaa new-model\n", baseline.load("ACME", "ios"))
+        self.assertEqual("", baseline.load("ACME", "wlc-aireos"))
+        baseline.save("ACME", "wlc-aireos", "+ config network telnet disable\n")
+        self.assertEqual("+ aaa new-model\n", baseline.load("ACME", "ios"))
 
 
 if __name__ == "__main__":

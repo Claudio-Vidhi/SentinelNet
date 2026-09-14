@@ -1254,11 +1254,12 @@
             tbody.innerHTML = `<tr><td colspan="3" style="padding:10px; text-align:center; color:var(--text-muted);">—</td></tr>`;
             return;
         }
+        const max = Math.max(...rows.map(p => p.rate_bps || 0), 1);
         tbody.innerHTML = rows.map(p => `
             <tr style="border-top:1px solid var(--border);">
                 <td style="padding:4px 6px;">${escapeHtml(String(p.proto).toUpperCase())}</td>
                 <td>${escapeHtml(p.port == null ? '—' : String(p.port))}</td>
-                <td>${escapeHtml(fmtRate(p.rate_bps))}</td>
+                <td>${trafRateCell(p.rate_bps, max)}</td>
             </tr>`).join('');
     }
 
@@ -1271,13 +1272,22 @@
             tbody.innerHTML = `<tr><td colspan="4" style="padding:16px; text-align:center; color:var(--text-muted);">${escapeHtml(L.msgNoFlowGraphData || 'No data.')}</td></tr>`;
             return;
         }
+        const max = Math.max(...edges.map(e => e.rate_bps || 0), 1);
         tbody.innerHTML = edges.map(e => `
             <tr style="border-top:1px solid var(--border);">
                 <td style="padding:6px 8px;">${escapeHtml(e.src)}</td>
                 <td>${escapeHtml(e.dst)}</td>
                 <td>${e.vlan_real === false ? '—' : escapeHtml(String(e.vlan))}</td>
-                <td>${escapeHtml(fmtRate(e.rate_bps))}</td>
+                <td>${trafRateCell(e.rate_bps, max)}</td>
             </tr>`).join('');
+    }
+
+    // Rate text plus a bar scaled to the largest row: the ranking reads at a
+    // glance, and the number stays for anyone who needs it exact.
+    function trafRateCell(bps, max) {
+        const pct = Math.max(2, Math.round(((bps || 0) / max) * 100));
+        return `<div class="traf-rate"><span class="traf-rate-text">${escapeHtml(fmtRate(bps))}</span>`
+            + `<span class="traf-bar" aria-hidden="true"><span style="width:${pct}%;"></span></span></div>`;
     }
 
     // --- PROTOCOL DISTRIBUTION CHART (DONUT, BAR, TREND) ---
@@ -1422,7 +1432,7 @@
                 ctx.fillStyle = '#888';
                 ctx.font = '13px sans-serif';
                 ctx.textAlign = 'center';
-                ctx.fillText('Nessun dato di telemetria nel periodo', width / 2, height / 2);
+                ctx.fillText(tr('obsNoTelemetryInPeriod'), width / 2, height / 2);
                 return;
             }
 
@@ -1733,11 +1743,11 @@
         }
 
         if (title) {
-            title.innerHTML = `<i class="fa-solid fa-magnifying-glass-chart" style="color:var(--primary);"></i> Ispezione Dettagliata Telemetria — ${protoKey === 'all' ? 'Tutti i Protocolli' : (OBS_PROTO_LABELS[protoKey] || protoKey)}`;
+            title.innerHTML = `<i class="fa-solid fa-magnifying-glass-chart" style="color:var(--primary);"></i> ${escapeHtml(tr('titleObsInspect'))} — ${escapeHtml(protoKey === 'all' ? tr('obsAllProtocols') : (OBS_PROTO_LABELS[protoKey] || protoKey))}`;
         }
 
         const html = buildFlowTelemetryDetailHtml(protoKey);
-        body.innerHTML = html || '<div style="padding:20px; text-align:center; color:var(--text-muted);">Nessun dettaglio disponibile per la finestra selezionata.</div>';
+        body.innerHTML = html || `<div style="padding:20px; text-align:center; color:var(--text-muted);">${escapeHtml(tr('obsNoDetailInWindow'))}</div>`;
         openModal(modal);
     }
 

@@ -3,79 +3,216 @@
 // Not an audit: no score, no grade, no severity. The netsec audit already
 // owns that question; this tab only shows what changed and what deviates
 // from the tenant's own baseline text.
+//
+// Layout is master-detail: the device list stays on screen and the right pane
+// shows either ONE device (deviations / history) or the tenant baseline. The
+// old sub-tabs hid which device "Generate" and "Deviations" referred to.
 
 (function () {
     let driftDevices = [];
     let driftTenant = '';
     let driftSelectedIp = '';
     let driftVersions = [];
-    let driftSubtab = 'history';
+    // 'device' | 'baseline': what the right pane is showing.
+    let driftView = 'device';
+    // Saved baseline text per config profile of the current tenant: the
+    // coverage is computed on it, not on the unsaved textarea, because the
+    // server evaluated that one. A switch, a WLC and a firewall speak different
+    // config grammars, so each profile has its own rules.
+    let driftSavedBaselines = {};
+    // Profile shown in the baseline view.
+    let driftProfile = '';
+    // Rule highlighted from the coverage table: marks the failing devices in
+    // the list pane.
+    let driftFocusRule = null;
     // Le due versioni scelte sui marcatori della timeline. Restano
     // allineate alle select: sono due modi di dire la stessa cosa.
     let driftPicked = [];
 
     async function loadConfigDriftTab() {
         const tenantSel = document.getElementById('driftTenantSelect');
-        const tbody = document.getElementById('driftDeviceList');
+        const list = document.getElementById('driftDeviceList');
         if (!tenantSel) return;
         try {
             const res = await apiFetch('/api/drift/devices');
             if (!res || !res.ok) {
-                if (tbody) tbody.innerHTML = `<tr><td colspan="3"><div class="alert-box alert-danger">${escapeHtml(i18n[currentLang].driftLoadError)}</div></td></tr>`;
+                if (list) list.innerHTML = `<div class="alert-box alert-danger">${escapeHtml(tr('driftLoadError'))}</div>`;
                 return;
             }
             const data = await res.json();
             driftDevices = data.devices || [];
 
             const tenants = [...new Set(driftDevices.map(d => d.tenant))].sort();
-            const cur = tenantSel.value;
-            const L = i18n[currentLang];
-            tenantSel.innerHTML = `<option value="">${escapeHtml(L.driftChooseTenant)}</option>` +
+            const cur = tenantSel.value || driftTenant;
+            tenantSel.innerHTML = `<option value="">${escapeHtml(tr('driftChooseTenant'))}</option>` +
                 tenants.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
             tenantSel.value = tenantSelectSeed(cur, tenants, '');
-            onDriftTenantChanged();
+            await onDriftTenantChanged(true);
         } catch (e) {
             console.error('Config Drift: failed to load devices', e);
-            if (tbody) tbody.innerHTML = `<tr><td colspan="3"><div class="alert-box alert-danger">${escapeHtml(i18n[currentLang].driftLoadError)}</div></td></tr>`;
+            if (list) list.innerHTML = `<div class="alert-box alert-danger">${escapeHtml(tr('driftLoadError'))}</div>`;
         }
     }
 
-    function onDriftTenantChanged() {
+    // keepSelection: a reload (after saving the baseline) must not throw the
+    // operator out of the device they were looking at.
+    async function onDriftTenantChanged(keepSelection) {
         const tenantSel = document.getElementById('driftTenantSelect');
-        driftTenant = tenantSel ? tenantSel.value : '';
-        driftSelectedIp = '';
+        const next = tenantSel ? tenantSel.value : '';
+        const sameTenant = next === driftTenant;
+        driftTenant = next;
+        if (!(keepSelection && sameTenant && driftTenantDevices().some(d => d.ip === driftSelectedIp))) {
+            driftSelectedIp = '';
+            driftFocusRule = null;
+            clearDriftVersions();
+        }
+        const btn = document.getElementById('btnDriftOpenBaseline');
+        if (btn) btn.disabled = !driftTenant;
+        await loadDriftSavedBaseline();
+        renderDriftTenantStats();
         renderDriftDeviceList();
-        clearDriftVersions();
-        if (driftSubtab === 'baseline') loadDriftBaselineTab();
+        renderDriftPane();
+    }
+
+    // Proper names of config grammars: identical in every language.
+    const DRIFT_PROFILE_LABELS = {
+        'ios': 'Cisco IOS / IOS-XE', 'wlc-aireos': 'Cisco WLC (AireOS)', 'fortios': 'FortiOS',
+        'panos': 'PAN-OS', 'linux': 'Linux', 'windows': 'Windows',
+    };
+
+    function driftProfileLabel(p) {
+        return DRIFT_PROFILE_LABELS[p] || p;
+    }
+
+    // Profiles present in the tenant, in the order they first appear.
+    function driftTenantProfiles() {
+        return [...new Set(driftTenantDevices().map(d => d.profile).filter(Boolean))];
     }
 
     function driftTenantDevices() {
         return driftTenant ? driftDevices.filter(d => d.tenant === driftTenant) : [];
     }
 
-    function renderDriftDeviceList() {
-        const tbody = document.getElementById('driftDeviceList');
-        if (!tbody) return;
+    function driftSelectedDevice() {
+        return driftTenantDevices().find(d => d.ip === driftSelectedIp) || null;
+    }
+
+    // Same grammar as services/config_drift/baseline.parse: only '+'/'-'
+    // lines count, '/x/' is a regex and is reported with the slashes stripped.
+    function driftParseRules(text) {
+        const rules = [];
+        (text || '').split('\n').forEach(raw => {
+            const line = raw.trim();
+            if (!line || (line[0] !== '+' && line[0] !== '-')) return;
+            let pattern = line.slice(1).trim();
+            if (!pattern) return;
+            if (pattern.length > 1 && pattern.startsWith('/') && pattern.endsWith('/')) pattern = pattern.slice(1, -1);
+            rules.push({ rule: line[0], pattern: pattern });
+        });
+        return rules;
+    }
+
+    function driftDeviceState(d) {
+        if (!d.versions) return { cls: 'idle', led: 'led-discovered', label: tr('driftStateNoBackup') };
+        if (!Array.isArray(d.deviations)) return { cls: 'idle', led: 'led-discovered', label: tr('driftStateNotChecked') };
+        if (d.deviations.length === 0) return { cls: 'ok', led: 'led-success', label: tr('driftStateCompliant') };
+        return { cls: 'warn', led: 'led-warning', label: tr('driftStateDeviations', { n: d.deviations.length }) };
+    }
+
+    function renderDriftTenantStats() {
+        const host = document.getElementById('driftTenantStats');
+        const ruleCount = document.getElementById('driftRuleCount');
         const devs = driftTenantDevices();
-        const L = i18n[currentLang];
-        if (devs.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:var(--text-muted);">${escapeHtml(L.driftNoDevices)}</td></tr>`;
+        if (ruleCount) ruleCount.textContent = driftTenant
+            ? String(Object.values(driftSavedBaselines).reduce((n, t) => n + driftParseRules(t).length, 0)) : '';
+        if (!host) return;
+        if (!driftTenant) { host.innerHTML = ''; return; }
+        const checked = devs.filter(d => Array.isArray(d.deviations));
+        const deviating = checked.filter(d => d.deviations.length);
+        host.innerHTML = [
+            [tr('driftStatDevices'), devs.length],
+            [tr('driftStatChecked'), checked.length],
+            [tr('driftStatDeviating'), deviating.length],
+        ].map(([k, v]) => `<div class="drift-stat"><span class="drift-stat-value">${escapeHtml(String(v))}</span><span class="drift-stat-label">${escapeHtml(k)}</span></div>`).join('');
+    }
+
+    function driftDeviceFails(d, rule) {
+        return d.profile === rule.profile && Array.isArray(d.deviations)
+            && d.deviations.some(x => x.rule === rule.rule && x.pattern === rule.pattern);
+    }
+
+    function renderDriftDeviceList() {
+        const list = document.getElementById('driftDeviceList');
+        const count = document.getElementById('driftDeviceCount');
+        if (!list) return;
+        const all = driftTenantDevices();
+        const filterEl = document.getElementById('driftDeviceFilter');
+        const q = (filterEl ? filterEl.value : '').trim().toLowerCase();
+        const devs = q ? all.filter(d => `${d.hostname || ''} ${d.ip}`.toLowerCase().includes(q)) : all;
+        if (count) count.textContent = driftTenant ? String(all.length) : '';
+        if (!driftTenant) {
+            list.innerHTML = `<div class="drift-list-empty">${escapeHtml(tr('driftChooseTenant'))}</div>`;
             return;
         }
-        tbody.innerHTML = devs.map(d => `
-            <tr data-action="drift-select-device" data-ip="${escapeHtml(d.ip)}" style="cursor:pointer;" class="${d.ip === driftSelectedIp ? 'active' : ''}">
-                <td style="font-weight:700;">${escapeHtml(d.hostname || d.ip)} <span style="color:var(--text-muted); font-weight:400;">(${escapeHtml(d.ip)})</span></td>
-                <td>${escapeHtml(d.last_change || '-')}</td>
-                <td>${escapeHtml(d.last_seen || '-')}</td>
-            </tr>
-        `).join('');
+        if (devs.length === 0) {
+            list.innerHTML = `<div class="drift-list-empty">${escapeHtml(tr('driftNoDevices'))}</div>`;
+            return;
+        }
+        list.innerHTML = devs.map(d => {
+            const st = driftDeviceState(d);
+            const active = d.ip === driftSelectedIp && driftView === 'device';
+            const flagged = driftFocusRule && driftDeviceFails(d, driftFocusRule);
+            return `
+            <button type="button" role="listitem" class="drift-device-item${active ? ' is-active' : ''}${flagged ? ' is-flagged' : ''}"
+                data-action="drift-select-device" data-ip="${escapeHtml(d.ip)}" aria-current="${active ? 'true' : 'false'}">
+                <span class="led ${st.led}" aria-hidden="true"></span>
+                <span class="drift-device-item-main">
+                    <span class="drift-device-item-name">${escapeHtml(d.hostname || d.ip)}</span>
+                    <span class="drift-device-item-ip">${escapeHtml(d.ip)}</span>
+                </span>
+                <span class="drift-device-item-state ${st.cls}">${escapeHtml(st.label)}</span>
+            </button>`;
+        }).join('');
+    }
+
+    // One place decides which of the three right-pane blocks is visible.
+    function renderDriftPane() {
+        const empty = document.getElementById('driftEmptyState');
+        const deviceView = document.getElementById('driftDeviceView');
+        const baselineView = document.getElementById('driftBaselineView');
+        const showBaseline = driftView === 'baseline' && !!driftTenant;
+        const device = driftSelectedDevice();
+        if (empty) empty.style.display = (!showBaseline && !device) ? '' : 'none';
+        if (deviceView) deviceView.style.display = (!showBaseline && device) ? '' : 'none';
+        if (baselineView) baselineView.style.display = showBaseline ? '' : 'none';
+        if (showBaseline) renderDriftBaselineView();
+        else if (device) renderDriftDeviceHeader(device);
+    }
+
+    function renderDriftDeviceHeader(d) {
+        const title = document.getElementById('driftDeviceTitle');
+        const meta = document.getElementById('driftDeviceMeta');
+        const badge = document.getElementById('driftDeviceBadge');
+        const st = driftDeviceState(d);
+        if (title) title.innerHTML = `${escapeHtml(d.hostname || d.ip)} <span class="drift-device-item-ip">${escapeHtml(d.ip)}</span>`;
+        if (meta) {
+            const parts = [d.tenant, driftProfileLabel(d.profile),
+                tr('driftMetaLastChange', { when: d.last_change ? driftStampLabel(d.last_change) : '—' }),
+                tr('driftMetaLastSeen', { when: d.last_seen ? driftStampLabel(d.last_seen) : '—' })];
+            meta.textContent = parts.filter(Boolean).join(' · ');
+        }
+        if (badge) badge.innerHTML = `<span class="status-badge ${st.cls === 'idle' ? 'warn' : st.cls}">${escapeHtml(st.label)}</span>`;
+        const devCount = document.getElementById('driftDeviationsCount');
+        if (devCount) devCount.textContent = Array.isArray(d.deviations) ? String(d.deviations.length) : '';
+        const verCount = document.getElementById('driftVersionsCount');
+        if (verCount) verCount.textContent = String(d.versions || 0);
+        renderDriftDeviations(d);
     }
 
     function clearDriftVersions() {
         driftVersions = [];
         const container = document.getElementById('driftVersionsContainer');
-        const L = i18n[currentLang];
-        if (container) container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted);">${escapeHtml(L.driftNoVersions)}</div>`;
+        if (container) container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted);">${escapeHtml(tr('driftNoVersions'))}</div>`;
         ['driftFromVersionSelect', 'driftToVersionSelect'].forEach(id => {
             const sel = document.getElementById(id);
             if (sel) { sel.innerHTML = ''; sel.disabled = true; }
@@ -91,18 +228,22 @@
 
     async function onDriftDeviceSelected(ip) {
         driftSelectedIp = ip;
+        driftView = 'device';
+        driftFocusRule = null;
+        clearDriftVersions();
         renderDriftDeviceList();
+        renderDriftPane();
         await loadDriftVersions(ip);
-        if (driftSubtab === 'baseline') loadDriftDeviations(ip);
     }
 
     async function loadDriftVersions(ip) {
         const container = document.getElementById('driftVersionsContainer');
-        const L = i18n[currentLang];
         try {
             const res = await apiFetch(`/api/drift/${encodeURIComponent(ip)}/versions`);
             if (!res || !res.ok) { clearDriftVersions(); return; }
             const data = await res.json();
+            // The operator may have clicked another device while this loaded.
+            if (ip !== driftSelectedIp) return;
             driftVersions = data.versions || [];
             if (driftVersions.length === 0) {
                 clearDriftVersions();
@@ -115,9 +256,9 @@
                             <tbody>
                                 ${driftVersions.map(v => `
                                     <tr>
-                                        <td style="font-family:var(--font-code); font-size:11px;">${escapeHtml(v.seen_at)}</td>
+                                        <td>${escapeHtml(driftStampLabel(v.seen_at))}</td>
                                         <td>${escapeHtml(String(v.size))} B</td>
-                                        <td style="color:var(--text-muted); font-size:11px;">${escapeHtml(v.hash || '')}</td>
+                                        <td style="color:var(--text-muted); font-size:11px; font-family:var(--font-code);">${escapeHtml((v.hash || '').slice(0, 19))}</td>
                                     </tr>
                                 `).join('')}
                             </tbody>
@@ -125,11 +266,11 @@
                     </div>
                 `;
             }
-            const opts = driftVersions.map(v => `<option value="${escapeHtml(v.seen_at)}">${escapeHtml(v.seen_at)}</option>`).join('');
+            const opts = driftVersions.map(v => `<option value="${escapeHtml(v.seen_at)}">${escapeHtml(driftStampLabel(v.seen_at))}</option>`).join('');
             const fromSel = document.getElementById('driftFromVersionSelect');
             const toSel = document.getElementById('driftToVersionSelect');
             if (fromSel) { fromSel.innerHTML = opts; fromSel.disabled = false; }
-            if (toSel) { toSel.innerHTML = opts; toSel.disabled = false; toSel.selectedIndex = 0; if (driftVersions.length > 1) fromSel.selectedIndex = 1; }
+            if (toSel) { toSel.innerHTML = opts; toSel.disabled = false; toSel.selectedIndex = 0; if (fromSel && driftVersions.length > 1) fromSel.selectedIndex = 1; }
             const btn = document.getElementById('btnDriftShowDiff');
             if (btn) btn.disabled = driftVersions.length < 2;
             renderDriftTimeline();
@@ -284,7 +425,7 @@
         try {
             const res = await apiFetch(`/api/drift/${encodeURIComponent(driftSelectedIp)}/diff?from_version=${encodeURIComponent(from)}&to_version=${encodeURIComponent(to)}`);
             if (!res || !res.ok) {
-                showToast(i18n[currentLang].driftDiffLoadError, 'error');
+                showToast(tr('driftDiffLoadError'), 'error');
                 return;
             }
             const data = await res.json();
@@ -293,127 +434,236 @@
             diffBox.innerHTML = renderColouredDiff(data.diff || '');
         } catch (e) {
             console.error('Config Drift: failed to load diff', e);
-            showToast(i18n[currentLang].driftDiffLoadError + ': ' + e.message, 'error');
+            showToast(tr('driftDiffLoadError') + ': ' + e.message, 'error');
         }
     }
 
     function switchDriftSubtab(subtab) {
-        driftSubtab = subtab;
         document.querySelectorAll('#driftSubtabNav button').forEach(b => {
             b.classList.toggle('active', b.dataset.subtab === subtab);
         });
         const historyEl = document.getElementById('driftSubtabHistory');
-        const baselineEl = document.getElementById('driftSubtabBaseline');
+        const deviationsEl = document.getElementById('driftSubtabDeviations');
         if (historyEl) historyEl.style.display = (subtab === 'history') ? '' : 'none';
-        if (baselineEl) baselineEl.style.display = (subtab === 'baseline') ? '' : 'none';
+        if (deviationsEl) deviationsEl.style.display = (subtab === 'deviations') ? '' : 'none';
+    }
 
-        if (subtab === 'baseline') {
-            loadDriftBaselineTab();
-            if (driftSelectedIp) loadDriftDeviations(driftSelectedIp);
+    // Deviations come with /api/drift/devices: no second request per click.
+    function renderDriftDeviations(d) {
+        const container = document.getElementById('driftDeviationsContainer');
+        if (!container) return;
+        const muted = msg => `<div class="drift-list-empty">${escapeHtml(msg)}</div>`;
+        if (!d.versions) { container.innerHTML = muted(tr('driftNoVersions')); return; }
+        if (!Array.isArray(d.deviations)) {
+            container.innerHTML = muted(tr('driftBaselineNotSet'))
+                + `<div style="text-align:center;"><button type="button" class="btn btn-secondary" style="width:auto;" data-action="drift-open-baseline"><i class="fa-solid fa-list-check"></i> ${escapeHtml(tr('driftBtnTenantBaseline'))}</button></div>`;
+            return;
+        }
+        if (d.deviations.length === 0) { container.innerHTML = muted(tr('driftDeviationsNone')); return; }
+        container.innerHTML = `
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>${escapeHtml(tr('thDriftRule'))}</th>
+                            <th>${escapeHtml(tr('thDriftPattern'))}</th>
+                            <th>${escapeHtml(tr('thDriftProblem'))}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${d.deviations.map(dv => `
+                            <tr>
+                                <td>${escapeHtml(dv.rule === '+' ? tr('driftRuleRequired') : tr('driftRuleForbidden'))}</td>
+                                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(dv.pattern || '')}</td>
+                                <td><span class="status-badge warn">${escapeHtml(dv.problem === 'missing' ? tr('driftProblemMissing') : tr('driftProblemPresent'))}</span></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    async function loadDriftSavedBaseline() {
+        driftSavedBaselines = {};
+        if (!driftTenant) return;
+        const tenant = driftTenant;
+        const loaded = {};
+        try {
+            for (const profile of driftTenantProfiles()) {
+                const res = await apiFetch(`/api/drift/baseline/${encodeURIComponent(tenant)}?profile=${encodeURIComponent(profile)}`);
+                if (!res || !res.ok) {
+                    showToast(tr('driftBaselineLoadError'), 'error');
+                    return;
+                }
+                loaded[profile] = (await res.json()).text || '';
+            }
+            if (tenant === driftTenant) driftSavedBaselines = loaded;
+        } catch (e) {
+            console.error('Config Drift: failed to load baseline', e);
+            showToast(tr('driftBaselineLoadError') + ': ' + e.message, 'error');
         }
     }
 
-    async function loadDriftBaselineTab() {
+    function driftBaselineDirty() {
         const textEl = document.getElementById('driftBaselineText');
-        if (!textEl) return;
-        if (!driftTenant) { textEl.value = ''; return; }
-        try {
-            const res = await apiFetch(`/api/drift/baseline/${encodeURIComponent(driftTenant)}`);
-            if (!res || !res.ok) {
-                textEl.value = '';
-                showToast(i18n[currentLang].driftBaselineLoadError, 'error');
-                return;
-            }
-            const data = await res.json();
-            textEl.value = data.text || '';
-        } catch (e) {
-            console.error('Config Drift: failed to load baseline', e);
-            showToast(i18n[currentLang].driftBaselineLoadError + ': ' + e.message, 'error');
+        return !!textEl && driftView === 'baseline' && textEl.value !== (driftSavedBaselines[driftProfile] || '');
+    }
+
+    function openDriftBaseline() {
+        if (!driftTenant) return;
+        driftView = 'baseline';
+        const profiles = driftTenantProfiles();
+        const current = driftSelectedDevice();
+        selectDriftProfile(current && current.profile ? current.profile : (profiles[0] || 'ios'));
+    }
+
+    // Loads one profile into the editor: text, seed devices, coverage.
+    function selectDriftProfile(profile) {
+        driftProfile = profile;
+        driftFocusRule = null;
+        const textEl = document.getElementById('driftBaselineText');
+        if (textEl) textEl.value = driftSavedBaselines[profile] || '';
+        // The seed source is explicit: default to the device the operator was
+        // on, otherwise the first one of this profile with a collected config.
+        const seedSel = document.getElementById('driftSeedDeviceSelect');
+        if (seedSel) {
+            const withConfig = driftTenantDevices().filter(d => d.versions && d.profile === profile);
+            seedSel.innerHTML = withConfig.map(d => `<option value="${escapeHtml(d.ip)}">${escapeHtml(d.hostname || d.ip)} (${escapeHtml(d.ip)})</option>`).join('');
+            if (withConfig.some(d => d.ip === driftSelectedIp)) seedSel.value = driftSelectedIp;
+            seedSel.disabled = withConfig.length === 0;
         }
+        renderDriftDeviceList();
+        renderDriftPane();
+    }
+
+    function closeDriftBaseline() {
+        driftView = 'device';
+        driftFocusRule = null;
+        renderDriftDeviceList();
+        renderDriftPane();
+    }
+
+    function renderDriftBaselineView() {
+        const devs = driftTenantDevices().filter(d => d.profile === driftProfile);
+        const checked = devs.filter(d => Array.isArray(d.deviations));
+        const title = document.getElementById('driftBaselineTitle');
+        const meta = document.getElementById('driftBaselineMeta');
+        if (title) title.textContent = tr('driftBaselineViewTitle', { tenant: driftTenant, profile: driftProfileLabel(driftProfile) });
+        if (meta) meta.textContent = tr('driftBaselineViewMeta', { devices: devs.length, checked: checked.length });
+
+        const nav = document.getElementById('driftProfileNav');
+        if (nav) {
+            nav.innerHTML = driftTenantProfiles().map(p => {
+                const n = driftTenantDevices().filter(d => d.profile === p).length;
+                const rules = driftParseRules(driftSavedBaselines[p]).length;
+                return `<button type="button" class="btn btn-secondary${p === driftProfile ? ' active' : ''}" data-action="drift-select-profile" data-profile="${escapeHtml(p)}" aria-pressed="${p === driftProfile ? 'true' : 'false'}">`
+                    + `${escapeHtml(driftProfileLabel(p))} <span class="drift-count">${n}</span>`
+                    + ` <span class="drift-profile-rules">${escapeHtml(tr('driftProfileRules', { n: rules }))}</span></button>`;
+            }).join('');
+        }
+        const back = document.getElementById('btnDriftCloseBaseline');
+        if (back) back.style.display = driftSelectedDevice() ? '' : 'none';
+
+        const host = document.getElementById('driftCoverageContainer');
+        if (!host) return;
+        const rules = driftParseRules(driftSavedBaselines[driftProfile]).map(r => Object.assign(r, { profile: driftProfile }));
+        if (rules.length === 0) {
+            host.innerHTML = `<div class="drift-list-empty">${escapeHtml(tr('driftBaselineNotSet'))}</div>`;
+            return;
+        }
+        if (checked.length === 0) {
+            host.innerHTML = `<div class="drift-list-empty">${escapeHtml(tr('driftCoverageNoConfigs'))}</div>`;
+            return;
+        }
+        host.innerHTML = `
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>${escapeHtml(tr('thDriftRule'))}</th>
+                            <th>${escapeHtml(tr('thDriftPattern'))}</th>
+                            <th>${escapeHtml(tr('thDriftCoverage'))}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rules.map((r, i) => {
+                            const failing = checked.filter(d => driftDeviceFails(d, r));
+                            const pct = Math.round(((checked.length - failing.length) / checked.length) * 100);
+                            const focused = !!driftFocusRule && driftFocusRule.rule === r.rule && driftFocusRule.pattern === r.pattern;
+                            return `
+                            <tr class="${focused ? 'active' : ''}">
+                                <td>${escapeHtml(r.rule === '+' ? tr('driftRuleRequired') : tr('driftRuleForbidden'))}</td>
+                                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(r.pattern)}</td>
+                                <td>
+                                    <div class="drift-coverage">
+                                        <div class="drift-coverage-bar" aria-hidden="true"><span style="width:${pct}%;"></span></div>
+                                        ${failing.length
+                                            ? `<button type="button" class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-action="drift-focus-rule" data-rule-index="${i}" aria-pressed="${focused ? 'true' : 'false'}">${escapeHtml(tr('driftCoverageFailing', { n: failing.length, total: checked.length }))}</button>`
+                                            : `<span class="status-badge ok">${escapeHtml(tr('driftCoverageAll', { total: checked.length }))}</span>`}
+                                    </div>
+                                </td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    function focusDriftRule(index) {
+        const r = driftParseRules(driftSavedBaselines[driftProfile])[index];
+        if (!r) return;
+        r.profile = driftProfile;
+        const same = driftFocusRule && driftFocusRule.rule === r.rule && driftFocusRule.pattern === r.pattern;
+        driftFocusRule = same ? null : r;
+        renderDriftDeviceList();
+        renderDriftBaselineView();
     }
 
     async function saveDriftBaseline() {
         const textEl = document.getElementById('driftBaselineText');
         if (!textEl || !driftTenant) return;
         try {
-            const res = await apiFetch(`/api/drift/baseline/${encodeURIComponent(driftTenant)}`, {
+            const res = await apiFetch(`/api/drift/baseline/${encodeURIComponent(driftTenant)}?profile=${encodeURIComponent(driftProfile)}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text: textEl.value })
             });
             if (!res || !res.ok) {
-                showToast(i18n[currentLang].driftSaveError, 'error');
+                showToast(tr('driftSaveError'), 'error');
                 return;
             }
-            showToast(i18n[currentLang].driftSaveOk, 'ok');
-            if (driftSelectedIp) loadDriftDeviations(driftSelectedIp);
+            showToast(tr('driftSaveOk'), 'ok');
+            // Deviations are computed server-side on the saved text: reload
+            // the list so badges and coverage reflect the new rules.
+            await loadConfigDriftTab();
+            selectDriftProfile(driftProfile);
         } catch (e) {
-            showToast(i18n[currentLang].driftSaveError + ': ' + e.message, 'error');
+            showToast(tr('driftSaveError') + ': ' + e.message, 'error');
         }
     }
 
     async function seedDriftBaseline() {
         const textEl = document.getElementById('driftBaselineText');
+        const seedSel = document.getElementById('driftSeedDeviceSelect');
+        const ip = seedSel ? seedSel.value : '';
         if (!textEl || !driftTenant) return;
-        if (!driftSelectedIp) {
-            showToast(i18n[currentLang].driftChooseDeviceFirst, 'warning');
+        if (!ip) {
+            showToast(tr('driftNoVersions'), 'warning');
             return;
         }
         try {
-            const res = await apiFetch(`/api/drift/baseline/${encodeURIComponent(driftTenant)}/seed?ip=${encodeURIComponent(driftSelectedIp)}`, { method: 'POST' });
+            const res = await apiFetch(`/api/drift/baseline/${encodeURIComponent(driftTenant)}/seed?ip=${encodeURIComponent(ip)}`, { method: 'POST' });
             if (!res || !res.ok) {
-                showToast(i18n[currentLang].driftSaveError, 'error');
+                showToast(tr('driftSaveError'), 'error');
                 return;
             }
             const data = await res.json();
             const candidate = data.text || '';
             textEl.value = textEl.value ? (textEl.value.replace(/\n+$/, '') + '\n' + candidate) : candidate;
         } catch (e) {
-            showToast(i18n[currentLang].driftSaveError + ': ' + e.message, 'error');
-        }
-    }
-
-    async function loadDriftDeviations(ip) {
-        const container = document.getElementById('driftDeviationsContainer');
-        if (!container) return;
-        const L = i18n[currentLang];
-        try {
-            const res = await apiFetch(`/api/drift/${encodeURIComponent(ip)}/baseline`);
-            if (!res || !res.ok) return;
-            const data = await res.json();
-            if (!data.checked) {
-                container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted);">${escapeHtml(L.driftBaselineNotSet)}</div>`;
-                return;
-            }
-            const deviations = data.deviations || [];
-            if (deviations.length === 0) {
-                container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted);">${escapeHtml(L.driftDeviationsNone)}</div>`;
-                return;
-            }
-            container.innerHTML = `
-                <div class="table-wrap">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th data-i18n="thDriftRule">${escapeHtml(L.thDriftRule)}</th>
-                                <th data-i18n="thDriftPattern">${escapeHtml(L.thDriftPattern)}</th>
-                                <th data-i18n="thDriftProblem">${escapeHtml(L.thDriftProblem)}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${deviations.map(dv => `
-                                <tr>
-                                    <td>${escapeHtml(dv.rule || '')}</td>
-                                    <td style="font-family:var(--font-code); font-size:11px;">${escapeHtml(dv.pattern || '')}</td>
-                                    <td>${escapeHtml(dv.problem === 'missing' ? L.driftProblemMissing : L.driftProblemPresent)}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            `;
-        } catch (e) {
-            console.error('Config Drift: failed to load deviations', e);
+            showToast(tr('driftSaveError') + ': ' + e.message, 'error');
         }
     }
 
@@ -424,13 +674,29 @@
         const subtabBtn = e.target.closest('#driftSubtabNav button[data-subtab]');
         if (subtabBtn) { switchDriftSubtab(subtabBtn.dataset.subtab); return; }
 
+        const profileBtn = e.target.closest('[data-action="drift-select-profile"]');
+        if (profileBtn) {
+            if (profileBtn.dataset.profile !== driftProfile && driftBaselineDirty() && !confirm(tr('driftDiscardEdits'))) return;
+            selectDriftProfile(profileBtn.dataset.profile);
+            return;
+        }
+
+        const focusBtn = e.target.closest('[data-action="drift-focus-rule"]');
+        if (focusBtn) { focusDriftRule(Number(focusBtn.dataset.ruleIndex)); return; }
+
+        if (e.target.closest('#btnDriftOpenBaseline, [data-action="drift-open-baseline"]')) { openDriftBaseline(); return; }
+        if (e.target.closest('#btnDriftCloseBaseline')) { closeDriftBaseline(); return; }
         if (e.target.closest('#btnDriftShowDiff')) { showDriftDiff(); return; }
         if (e.target.closest('#btnDriftSaveBaseline')) { saveDriftBaseline(); return; }
         if (e.target.closest('#btnDriftSeedBaseline')) { seedDriftBaseline(); return; }
     });
 
     document.addEventListener('change', e => {
-        if (e.target && e.target.id === 'driftTenantSelect') onDriftTenantChanged();
+        if (e.target && e.target.id === 'driftTenantSelect') onDriftTenantChanged(false);
+    });
+
+    document.addEventListener('input', e => {
+        if (e.target && e.target.id === 'driftDeviceFilter') renderDriftDeviceList();
     });
 
     // switchTab (core.js) calls this after the lazy script has loaded — see

@@ -45,22 +45,33 @@ def _device_or_404(current_user, ip: str) -> dict:
     return device
 
 
+def _rules_for(cache: dict, device: dict) -> tuple:
+    """(profile, baseline text) for one device, memoised per tenant+profile."""
+    key = (device.get("Group") or "", baseline.profile_for(device))
+    if key not in cache:
+        cache[key] = baseline.load(*key)
+    return key[1], cache[key]
+
+
 def drift_summary_for(devices: list) -> dict:
     """Devices whose latest stored config breaks their tenant baseline.
 
     `checked` is the denominator: a device counts only when its tenant has
-    rules AND a config has been collected. "0 deviating" out of 0 checked means
-    nothing was verified, not that everything complies.
+    rules for its profile AND a config has been collected. "0 deviating" out
+    of 0 checked means nothing was verified, not that everything complies.
     """
-    rules_by_tenant: dict = {}
+    rules_cache: dict = {}
     checked = 0
     deviating = []
+    # Tenants with collected configs but no baseline: the usual reason
+    # nothing was checked, and the one the operator can act on.
+    no_baseline = set()
     for device in devices:
         tenant = device.get("Group") or ""
-        if tenant not in rules_by_tenant:
-            rules_by_tenant[tenant] = baseline.load(tenant)
-        rules = rules_by_tenant[tenant]
+        _profile, rules = _rules_for(rules_cache, device)
         versions = history.list_versions(device)
+        if versions and not rules:
+            no_baseline.add(tenant)
         if not rules or not versions:
             continue
         checked += 1
@@ -70,7 +81,8 @@ def drift_summary_for(devices: list) -> dict:
             deviating.append({"ip": device.get("IP"), "hostname": device.get("Hostname"),
                               "tenant": tenant, "deviations": len(problems)})
     deviating.sort(key=lambda d: d["deviations"], reverse=True)
-    return {"devices": len(devices), "checked": checked, "deviating": deviating}
+    return {"devices": len(devices), "checked": checked, "deviating": deviating,
+            "no_baseline": sorted(no_baseline)}
 
 
 # Before /api/drift/{ip}/...: a literal segment must not be read as an IP.
@@ -85,14 +97,27 @@ def drift_summary(tenant: str = "", current_user=Depends(require_operator)):
 
 @router.get("/api/drift/devices")
 def drift_devices(current_user=Depends(require_operator)):
-    """Devices the caller may see, with when they last changed."""
+    """Devices the caller may see, with when they last changed.
+
+    `deviations` is None when the device could not be checked (no baseline for
+    its tenant, or no collected config): the list pane must not paint that as
+    compliant.
+    """
     scope = user_group_scope(current_user)
+    rules_cache: dict = {}
     out = []
     for device in inventory_manager.get_all_devices():
         if scope is not None and device.get("Group") not in scope:
             continue
         versions = history.list_versions(device)
+        profile, rules = _rules_for(rules_cache, device)
+        deviations = None
+        if rules and versions:
+            text = history.read_version(device, versions[0]["seen_at"])
+            deviations = baseline.evaluate(device.get("Vendor") or "", text, rules)
         out.append({
+            "deviations": deviations,
+            "profile": profile,
             "ip": device.get("IP"),
             "hostname": device.get("Hostname"),
             "tenant": device.get("Group"),
@@ -123,18 +148,21 @@ def drift_diff(ip: str, from_version: str = "", to_version: str = "",
 
 
 @router.get("/api/drift/baseline/{tenant}")
-def drift_baseline_get(tenant: str, current_user=Depends(require_operator)):
+def drift_baseline_get(tenant: str, profile: str = "ios",
+                       current_user=Depends(require_operator)):
     scope = user_group_scope(current_user)
     if scope is not None and tenant not in scope:
         raise HTTPException(status_code=403, detail="Tenant non consentito.")
-    return {"tenant": tenant, "text": baseline.load(tenant)}
+    return {"tenant": tenant, "profile": profile, "text": baseline.load(tenant, profile)}
 
 
 @router.put("/api/drift/baseline/{tenant}")
-def drift_baseline_put(tenant: str, payload: BaselineSchema,
+def drift_baseline_put(tenant: str, payload: BaselineSchema, profile: str = "ios",
                        current_user=Depends(require_admin)):
-    baseline.save(tenant, payload.text)
-    log_audit(f"Baseline config del tenant '{tenant}' aggiornata da "
+    if profile not in baseline.PROFILES:
+        raise HTTPException(status_code=422, detail=f"Profilo '{profile}' sconosciuto.")
+    baseline.save(tenant, profile, payload.text)
+    log_audit(f"Baseline config del tenant '{tenant}' (profilo {profile}) aggiornata da "
               f"'{current_user.get('sub')}'.")
     return {"status": "success"}
 
@@ -160,6 +188,6 @@ def drift_device_baseline(ip: str, current_user=Depends(require_operator)):
     if not versions:
         return {"deviations": [], "checked": False}
     text = history.read_version(device, versions[0]["seen_at"])
-    rules = baseline.load(device.get("Group") or "")
+    _profile, rules = _rules_for({}, device)
     return {"deviations": baseline.evaluate(device.get("Vendor") or "", text, rules),
             "checked": bool(rules)}

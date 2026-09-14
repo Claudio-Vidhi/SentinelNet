@@ -351,6 +351,14 @@
         const res = await apiFetch('/api/local-devices');
         if (!res) return;
         const data = await res.json();
+        // Stored correlation counts: the table ranks devices by what is already
+        // known, so the operator sees where the risk is before any live query.
+        const stored = {};
+        const sumRes = await apiFetch('/api/cve/summary?tenant=' + encodeURIComponent(selGroup));
+        if (sumRes && sumRes.ok) {
+            ((await sumRes.json()).tenants || []).forEach(t =>
+                (t.devices_detail || []).forEach(dd => { stored[dd.ip] = dd; }));
+        }
 
         let onlineDevices = data.devices.filter(d => {
             const scan = data.detected_versions[d.IP];
@@ -366,39 +374,68 @@
                 ${i18n[currentLang].noDevicesText}
             </div>`;
         } else {
-            // Card SELEZIONABILI: la query EUVD parte SOLO quando l'utente sceglie
-            // un singolo dispositivo (pulsante Analizza), non su tutti insieme.
-            onlineDevices.forEach(d => {
+            // One table row per device, ranked by the stored critical/high
+            // counts. The live NVD query still runs only on request (row button
+            // or "Analyze all"), and its result opens in a detail row under the
+            // device instead of growing a card.
+            const storedRank = ip => {
+                const c = (stored[ip] || {}).counts || {};
+                return [c.critical || 0, c.high || 0, c.medium || 0];
+            };
+            onlineDevices.sort((a, b) => {
+                const ra = storedRank(a.IP), rb = storedRank(b.IP);
+                return (rb[0] - ra[0]) || (rb[1] - ra[1]) || (rb[2] - ra[2]);
+            });
+            const sevCols = [
+                ['CRITICAL', 'critical', tr('cveThCritical')],
+                ['HIGH', 'high', tr('cveThHigh')],
+                ['MEDIUM', 'medium', tr('cveThMedium')],
+            ];
+            const rows = onlineDevices.map(d => {
                 const scan = data.detected_versions[d.IP] || {};
                 const safeIpId = d.IP.replace(/\./g, '-');
                 const model = d.Model || scan.model || 'Non Rilevato';
-                const modelLabel = model !== 'Non Rilevato' ? `<span style="color:var(--text-muted); margin-left: 10px; font-size:13px;">Modello: <code>${escapeHtml(model)}</code></span>` : '';
-
-                const devCard = document.createElement("div");
-                devCard.className = "vuln-card";
-                devCard.style.marginBottom = "12px";
-                devCard.innerHTML = `
-                    <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
-                        <div>
-                            <span style="font-size:17px; font-weight:700;"><i class="fa-solid fa-server" style="color:var(--primary);"></i> ${d.IP}</span>
-                            <span class="badge" style="margin-left: 10px;">${escapeHtml(d.Vendor.toUpperCase())}</span>
-                            ${modelLabel}
-                            <span style="color:var(--text-muted); margin-left: 10px; font-size:13px;">Firmware: <code>${escapeHtml(scan.version || 'Non Rilevata')}</code></span>
-                        </div>
-                        <div style="display:flex; align-items:center; gap:12px;">
-                            <div id="status-${safeIpId}" style="font-size:13px; font-weight:700; color: var(--text-muted);"></div>
-                            <button id="btn-mgd-${safeIpId}"
-                                data-action="run-managed-vuln-check"
-                                data-ip="${escapeHtml(d.IP)}" data-vendor="${escapeHtml(d.Vendor)}" data-version="${escapeHtml(scan.version || '')}" data-model="${escapeHtml(model)}"
-                                style="padding:8px 14px; border-radius:0; border:none; background:var(--cta); color:var(--cta-text); font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap;">
-                                ${i18n[currentLang].btnAnalyzeVuln}
-                            </button>
-                        </div>
-                    </div>
-                    <div id="results-${safeIpId}" style="display:flex; flex-direction:column; gap:10px; margin-top:10px;"></div>
-                `;
-                container.appendChild(devCard);
-            });
+                const snap = stored[d.IP];
+                const counts = (snap && snap.confidence !== 'none') ? snap.counts : null;
+                const countCell = counts
+                    ? sevCols.map(([sev, key, label]) => {
+                        const n = counts[key] || 0;
+                        return `<span class="severity-pill severity-${sev}${n ? '' : ' ti-zero'}" title="${escapeHtml(label)}">${n}</span>`;
+                    }).join(' ')
+                    : `<span class="ti-muted">${escapeHtml(tr('cveConf_none'))}</span>`;
+                return `
+                <tr class="ti-device-row" data-action="ti-toggle-row" data-target="ti-detail-${safeIpId}">
+                    <td><div class="ti-device-name">${escapeHtml(d.Hostname || d.IP)}</div><div class="ti-device-ip">${escapeHtml(d.IP)}</div></td>
+                    <td><span class="badge">${escapeHtml((d.Vendor || '').toUpperCase())}</span></td>
+                    <td><code>${escapeHtml(model !== 'Non Rilevato' ? model : '—')}</code></td>
+                    <td><code>${escapeHtml(scan.version || '—')}</code></td>
+                    <td class="ti-counts">${countCell}</td>
+                    <td><div id="status-${safeIpId}" class="ti-status"></div></td>
+                    <td style="text-align:right;">
+                        <button type="button" id="btn-mgd-${safeIpId}" class="btn btn-secondary btn-small" style="width:auto; margin:0; white-space:nowrap;"
+                            data-action="run-managed-vuln-check"
+                            data-ip="${escapeHtml(d.IP)}" data-vendor="${escapeHtml(d.Vendor)}" data-version="${escapeHtml(scan.version || '')}" data-model="${escapeHtml(model)}">
+                            ${i18n[currentLang].btnAnalyzeVuln}
+                        </button>
+                    </td>
+                </tr>
+                <tr id="ti-detail-${safeIpId}" class="ti-detail-row" hidden>
+                    <td colspan="7"><div id="results-${safeIpId}" style="display:flex; flex-direction:column; gap:10px;"></div></td>
+                </tr>`;
+            }).join('');
+            container.innerHTML = `
+                <div class="table-wrap"><table class="ti-matcher-table">
+                    <thead><tr>
+                        <th>${escapeHtml(tr('cveThDevice'))}</th>
+                        <th>Vendor</th>
+                        <th>${escapeHtml(tr('tiModelLabel'))}</th>
+                        <th>${escapeHtml(tr('cveThVersion'))}</th>
+                        <th>${escapeHtml(tr('tiThStoredCves'))}</th>
+                        <th>${escapeHtml(tr('tiThLiveCheck'))}</th>
+                        <th></th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table></div>`;
         }
 
         // ── SEZIONE 2: Vicini Scoperti (CDP/LLDP) – solo se richiesto ──────────
@@ -551,6 +588,9 @@
     // Analisi vulnerabilità di UN singolo dispositivo gestito (scelto dall'utente).
     async function runManagedVulnCheck(ip, vendor, version, btnEl, model) {
         const safeIpId = ip.replace(/\./g, '-');
+        // The result lands in the device's detail row: open it.
+        const detail = document.getElementById(`ti-detail-${safeIpId}`);
+        if (detail) detail.hidden = false;
         btnEl.disabled = true;
         btnEl.innerHTML = i18n[currentLang].scanningEuvd;
         const validModel = (model && model !== 'Non Rilevato') ? model : '';
@@ -687,10 +727,32 @@
         }
     }
 
+    // Sequential on purpose: NVD rate-limits anonymous clients, and a burst of
+    // parallel queries turns most of the fleet into "error" rows.
+    async function analyzeAllThreats() {
+        const btn = document.getElementById('btnThreatAnalyzeAll');
+        if (btn) btn.disabled = true;
+        try {
+            for (const b of document.querySelectorAll('#securityTriageContainer [data-action="run-managed-vuln-check"]')) {
+                await runManagedVulnCheck(b.dataset.ip, b.dataset.vendor, b.dataset.version, b, b.dataset.model);
+            }
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
     document.getElementById('securityTriageContainer')?.addEventListener('click', (e) => {
         const mgdBtn = e.target.closest('[data-action="run-managed-vuln-check"]');
         if (mgdBtn) {
             runManagedVulnCheck(mgdBtn.dataset.ip, mgdBtn.dataset.vendor, mgdBtn.dataset.version, mgdBtn, mgdBtn.dataset.model);
+            return;
+        }
+        const row = e.target.closest('[data-action="ti-toggle-row"]');
+        if (row && row.dataset.target) {
+            const detail = document.getElementById(row.dataset.target);
+            const results = detail ? detail.querySelector('[id^="results-"]') : null;
+            // Nothing to show until the device has been analysed.
+            if (detail && results && results.childElementCount) detail.hidden = !detail.hidden;
             return;
         }
         const discBtn = e.target.closest('[data-action="run-discovered-vuln-check"]');
@@ -715,6 +777,7 @@
     document.getElementById('threatGroupSelect')?.addEventListener('change', startThreatScan);
     document.getElementById('threatSeveritySelect')?.addEventListener('change', applyThreatSeverityFilter);
     document.getElementById('threatIncludeDiscovered')?.addEventListener('change', startThreatScan);
+    document.getElementById('btnThreatAnalyzeAll')?.addEventListener('click', analyzeAllThreats);
     document.getElementById('vwRefresh')?.addEventListener('click', vwFetch);
 
     // ===== Correlazione CVE: F9 (priorita') e F9b (resoconto per tenant) =====

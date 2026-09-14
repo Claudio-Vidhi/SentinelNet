@@ -48,6 +48,34 @@ def save_backup(device, sys_name: str, config_out: str) -> str:
     return file_path
 
 
+def backup_times() -> dict:
+    """{(tenant_folder, ip): mtime} of every current backup, in one walk.
+
+    Keyed by tenant folder too: two tenants may each own the same IP.
+    Archived versions under '.history' are not current backups.
+    """
+    out = {}
+    for root, dirs, files in os.walk(BACKUP_FOLDER):
+        dirs[:] = [d for d in dirs if d != ".history"]
+        rel = os.path.relpath(root, BACKUP_FOLDER)
+        if rel == ".":
+            continue
+        tenant = rel.split(os.sep)[0]
+        for f in files:
+            if not f.endswith(".txt"):
+                continue
+            stem = f[:-4]
+            ip = stem[max(stem.rfind("-"), stem.rfind("_")) + 1:]
+            try:
+                mt = int(os.path.getmtime(os.path.join(root, f)))
+            except OSError:
+                continue
+            key = (tenant, ip)
+            if mt > out.get(key, 0):
+                out[key] = mt
+    return out
+
+
 def remove_stale_backups(ip: str, new_dir: Optional[str] = None, keep: Optional[str] = None, tenant: Optional[str] = None):
     """Move a device's backup and its history when it changes vendor or hostname.
 

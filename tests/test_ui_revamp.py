@@ -1861,8 +1861,11 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         # Ricerca, la tabella per host col suo andamento e quella per policy.
         # Il pannello "Dettaglio Flussi" inline non c'e' piu': era la terza
         # copia della stessa ripartizione per protocollo.
-        self.assertEqual(tab.count('<div class="panel"'), 10)
-        self.assertEqual(tab.count('<div class="panel" style="margin-bottom:18px;"'), 6)
+        # The overview's protocol table and tenant summary moved out of two
+        # untitled hero-cards into titled panels of the "top N" grid (+2), and
+        # the grid spaces its cells, so two panels dropped their own margin.
+        self.assertEqual(tab.count('<div class="panel"'), 12)
+        self.assertEqual(tab.count('<div class="panel" style="margin-bottom:18px;"'), 4)
         # All tables wrapped: flows, syslog-in-all-sources, protocol breakdown,
         # top talkers. The anomalies table left with its pane.
         self.assertEqual(tab.count('class="table-wrap"'), 4)
