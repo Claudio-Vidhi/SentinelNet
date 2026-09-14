@@ -392,6 +392,15 @@ class TestHomeTab(unittest.TestCase):
         self.assertNotIn('Open design language', html)
         self.assertNotIn('Customize view', html)
 
+    def test_the_overview_follows_the_sidebar_tenant(self):
+        js = frontend_source()
+        start = js.index('async function loadHome(')
+        body = js[start:js.index('renderHomeVerdicts(devs);', start)]
+        self.assertIn('window.globalSelectedTenant', body, "loadHome ignores the selected tenant")
+        start = js.index('function applyGlobalTenant(')
+        body = js[start:js.index('\n}', start)]
+        self.assertIn('loadHome()', body, "changing tenant never redraws the overview")
+
     def test_every_verdict_card_gets_its_big_number(self):
         html = _html()
         js = frontend_source()
