@@ -97,6 +97,10 @@ class TestRouterParity(unittest.TestCase):
                           "/api/users/email",
                           # Inviti utente via email: emissione e accettazione.
                           "/api/users/invite", "/api/auth/accept-invite",
+                          # Account lifecycle: approval of invited accounts,
+                          # admin-sent reset link, own profile, sign out everywhere.
+                          "/api/users/approve", "/api/users/send-reset",
+                          "/api/profile", "/api/auth/verify-email", "/api/auth/logout-all",
                           # Single Sign-On OIDC: configurazione, avvio del login e
                           # ritorno dall'identity provider.
                           "/api/settings/sso", "/api/auth/sso",
@@ -252,6 +256,10 @@ class TestFullParity(unittest.TestCase):
                     "/api/users/email",
                     # Inviti utente via email: emissione e accettazione.
                     "/api/users/invite", "/api/auth/accept-invite",
+                          # Account lifecycle: approval of invited accounts,
+                          # admin-sent reset link, own profile, sign out everywhere.
+                          "/api/users/approve", "/api/users/send-reset",
+                          "/api/profile", "/api/auth/verify-email", "/api/auth/logout-all",
                     # Single Sign-On OIDC: configurazione, avvio del login e
                     # ritorno dall'identity provider.
                     "/api/settings/sso", "/api/auth/sso",
@@ -318,6 +326,8 @@ class TestFullParity(unittest.TestCase):
                     "ForgotPasswordSchema", "ResetPasswordSchema", "UserEmailSchema",
                     # Corpi degli inviti utente (rotte gia' in NEW_PREFIXES).
                     "InviteUserSchema", "AcceptInviteSchema",
+                    # Account lifecycle (routes already in NEW_PREFIXES).
+                    "UserNameSchema", "ProfileEmailSchema", "VerifyEmailSchema",
                     # Configurazione SSO (rotta gia' in NEW_PREFIXES).
                     "SsoSettingsSchema")
     # v7: /anomalies ora restituisce INCIDENTI invece di singoli eventi
