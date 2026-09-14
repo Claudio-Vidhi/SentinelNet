@@ -4,6 +4,7 @@ import copy
 import time
 import logging
 import socket
+import threading
 from typing import Optional, Any, Dict, List, Tuple
 from core.net_ssh import ConnectHandler
 from services.inventory_manager import (
@@ -141,7 +142,7 @@ def _fortigate_backup_and_triage(device):
         st = _failure_status(e)
         update_version_inventory(ip, vendor, "Non Rilevata", st)
         log_audit(f"Triage fallito per FortiGate '{ip}': {str(e)}.")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": str(e), "inventory_status": st}
 
     config_out = cfg["data"] if isinstance(cfg["data"], str) else json.dumps(cfg["data"], ensure_ascii=False)
 
@@ -202,7 +203,22 @@ def _fortigate_backup_and_triage(device):
 BACKUP_READ_TIMEOUT = 120
 
 
+# Login slots shared by EVERY triage path (group run, row button, bulk
+# selection, agent). Past 4-5 simultaneous SSH logins, AAA servers and device
+# login throttles (login block-for, TACACS/RADIUS rate limits) start refusing
+# valid credentials, which surfaced as a wall of 'auth failed'. The rest wait.
+# ponytail: one global limit; per-site or per-AAA-server slots if a large fleet
+# spread across independent sites needs more throughput.
+TRIAGE_MAX_CONCURRENT = 3
+_TRIAGE_SLOTS = threading.BoundedSemaphore(TRIAGE_MAX_CONCURRENT)
+
+
 def run_backup_and_triage(device):
+    with _TRIAGE_SLOTS:
+        return _run_backup_and_triage(device)
+
+
+def _run_backup_and_triage(device):
     ip     = device['IP']
     vendor = device['Vendor'].lower()
 
@@ -490,7 +506,7 @@ def run_backup_and_triage(device):
         st = _failure_status(e)
         update_version_inventory(ip, vendor, "Non Rilevata", st)
         log_audit(f"Triage fallito per dispositivo '{ip}': errore di connessione/autenticazione ({str(e)}).")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": str(e), "inventory_status": st}
 
 
 def probe_device(device):
