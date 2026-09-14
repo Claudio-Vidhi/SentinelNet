@@ -497,7 +497,7 @@ main .tab-content, main .panel, main .hero { min-width: 0; }
 .brand-name { font-family: var(--font-legend); font-size: 17px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text); }
 .brand-sub { font-family: var(--font-data); font-size: 8.5px; font-weight: 500; letter-spacing: 0.5em; text-transform: uppercase; color: var(--primary); }
 .login-brand { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 18px; color: var(--text); }
-.login-brand .brand-name { font-size: 26px; }
+.login-brand .brand-name { font-size: 25px; }
 .login-brand .brand-sub { font-size: 12px; }
 
 /* Tenant context: a select dressed as a switcher card. */
