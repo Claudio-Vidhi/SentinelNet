@@ -314,7 +314,7 @@ aside, main, .table-container, .table-wrap, .template-box {
 html { scrollbar-color: var(--border) transparent; }
 /* Reserve the scrollbar gutter: without it the page narrows by ~15px the
    moment loaded content makes it scroll, shifting every panel sideways. */
-html { scrollbar-gutter: stable; }
+html { scrollbar-gutter: stable; background: var(--bg); }
 
 body {
   font-family: var(--font-prose);
@@ -323,10 +323,10 @@ body {
   color: var(--text);
   min-height: 100vh;
   display: grid;
-  --sidebar-w: 318px;
+  --sidebar-w: 248px;
   grid-template-columns: var(--sidebar-w) 1fr;
-  gap: 14px;
-  padding: 14px;
+  gap: 0;
+  padding: 0;
   overflow-x: hidden;
   transition: grid-template-columns 220ms cubic-bezier(0.22, 1, 0.36, 1);
   -webkit-font-smoothing: antialiased;
@@ -407,21 +407,26 @@ h4 { font-size: 15px; line-height: 1.2; }
    --------------------------------------------------------------- */
 aside, main {
   background-color: var(--surface);
-  border: var(--seam) solid var(--border-strong);
+  border: 0;
   border-radius: 0;
+  box-shadow: none;
+  background-image: none;
   padding: 0;
   display: flex;
   flex-direction: column;
 }
 
+/* Full-bleed shell: the sidebar is a column, not a floating card. */
 aside {
   gap: 0;
   position: sticky;
-  top: 14px;
-  height: calc(100vh - 28px);
+  top: 0;
+  height: 100vh;
+  border-right: var(--seam) solid var(--border);
   overflow-y: auto;
   scrollbar-width: thin;
 }
+main { background-color: transparent; }
 
 /* Il pollice della sidebar resta invisibile a riposo, così il bordo del quadro
    resta pulito, e compare solo al passaggio del mouse (scorrere con la rotella
@@ -442,13 +447,13 @@ aside:hover, aside:focus-within { scrollbar-color: var(--border) transparent; }
    quello che sporgeva a destra e l'unico modo di leggerlo era rimpicciolire la
    pagina. Azzerando il minimo, la cella si stringe e sono i contenitori
    `.table-wrap` a scorrere, come previsto. */
-main { padding: 18px 20px 24px; gap: 0; min-width: 0; }
+main { padding: 0; gap: 0; min-width: 0; }
+main > .tab-content { padding: 22px 24px 28px; }
 main .tab-content, main .panel, main .hero { min-width: 0; }
 
 .aside-header {
-  border-bottom: var(--seam) solid var(--border-strong);
-  background-color: var(--surface-3);
-  padding: 14px 16px;
+  background-color: var(--surface);
+  padding: 14px 10px 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -457,7 +462,7 @@ main .tab-content, main .panel, main .hero { min-width: 0; }
   z-index: 5;
 }
 
-.brand-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; }
+.brand-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding-left: 8px; }
 .aside-actions { display: flex; align-items: center; gap: 6px; flex: none; }
 
 .aside-header h2 {
@@ -483,60 +488,132 @@ main .tab-content, main .panel, main .hero { min-width: 0; }
   text-transform: uppercase;
 }
 
-.aside-tagline { font-size: 12px; color: var(--text-soft); line-height: 1.45; }
+.aside-tagline { font-family: var(--font-legend); font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-soft); line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+/* Tenant context: a select dressed as a switcher card. */
+.tenant-switch {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px;
+  border: var(--seam) solid var(--border);
+  border-radius: var(--radius);
+  background-color: var(--surface-2);
+  color: var(--text-soft);
+}
+.tenant-switch-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.tenant-switch label {
+  margin: 0;
+  font-family: var(--font-legend); font-size: 10px; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-soft);
+}
+.tenant-switch select {
+  width: 100%; padding: 0; margin: 0;
+  border: 0; background: transparent; box-shadow: none;
+  font-family: var(--font-prose); font-size: 13px; font-weight: 600; color: var(--text);
+  cursor: pointer;
+}
+.tenant-switch select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.sidebar-search {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; height: 32px; padding: 0 8px 0 10px;
+  border: var(--seam) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-soft);
+  font-family: var(--font-prose); font-size: 13px; text-align: left;
+  cursor: pointer;
+  transition: border-color var(--transition), color var(--transition);
+}
+.sidebar-search:hover { border-color: var(--text-soft); color: var(--text-muted); }
+.sidebar-search:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.sidebar-search i { font-size: 12px; }
+.sidebar-search-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-search kbd {
+  font-family: var(--font-data); font-size: 10px; color: var(--text-muted);
+  padding: 1px 5px; border: var(--seam) solid var(--border); border-radius: 3px; background: var(--surface-2);
+}
+
+/* Sidebar foot: product line, version, signed-in user. Stays pinned while the nav scrolls. */
+.aside-foot {
+  position: sticky; bottom: 0;
+  margin-top: auto;
+  background-color: var(--surface);
+  border-top: var(--seam) solid var(--border);
+}
+.aside-meta {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 18px;
+  border-bottom: var(--seam) solid var(--border);
+}
+#appVersionBadge { font-family: var(--font-data); font-size: 10px; color: var(--text-soft); flex-shrink: 0; }
 
 .user-badge {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  background-color: var(--surface-2);
-  border: var(--seam) solid var(--border);
-  border-radius: 0;
-  padding: 8px 12px;
-  margin: 12px 16px 0;
-  font-family: var(--font-data);
-  font-size: 11px;
-  letter-spacing: 0.02em;
+  gap: 4px;
+  padding: 10px 10px 12px 14px;
+  font-size: 13px;
   color: var(--text-muted);
 }
-/* Profile sits apart from logout: a seam and room, so a click aimed at one
-   does not land on the other. */
-.user-badge #btnOpenProfile {
-  margin-left: auto;
-  margin-right: 6px;
-  padding: 2px 14px 2px 0;
-  border-right: var(--seam) solid var(--border);
+.user-badge #userBadgeLabel { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.user-avatar {
+  width: 30px; height: 30px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: var(--surface-3); color: var(--text);
+  font-family: var(--font-legend); font-size: 12px; font-weight: 600; letter-spacing: 0.06em;
 }
+.user-meta { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.user-name { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.user-name i { display: none; }
+/* Profile and logout are icon buttons; the label stays as the accessible name. */
+.user-badge a {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; flex: none;
+  border-radius: var(--radius);
+  font-size: 0; text-decoration: none;
+  color: var(--text-muted);
+}
+.user-badge a i { font-size: 14px; }
+.user-badge a:hover { background: var(--surface-2); color: var(--text); }
+.user-badge #btnLogout:hover { color: var(--lamp-fault-ink); }
 
 /* ---------------------------------------------------------------
    7. INDICE DI BAY — navigazione
    --------------------------------------------------------------- */
-.sidenav { display: flex; flex-direction: column; gap: 0; padding: 12px 0 18px; }
+.sidenav { display: flex; flex-direction: column; gap: 0; padding: 6px 0 12px; flex: 1 0 auto; }
+.nav-home { padding-bottom: 2px; }
 
 .nav-group { display: flex; flex-direction: column; }
-.nav-group > h3 {
-  margin: 16px 16px 6px;
+.nav-group > h3 { margin: 8px 0 0; font-size: inherit; }
+.nav-group-toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; height: 28px; padding: 0 16px 0 18px;
+  border: 0; background: transparent; cursor: pointer;
   font-family: var(--font-legend);
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--text-soft);
-  padding-bottom: 5px;
-  border-bottom: var(--seam) solid var(--border);
 }
+.nav-group-toggle:hover { color: var(--text-muted); }
+.nav-group-toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.nav-group-toggle i { font-size: 9px; transition: transform var(--transition); }
+.nav-group.collapsed .nav-group-toggle i { transform: rotate(-90deg); }
+.nav-group-items { display: flex; flex-direction: column; }
+.nav-group.collapsed .nav-group-items { display: none; }
 
 .nav-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  width: 100%;
-  padding: 9px 16px 9px 15px;
+  width: calc(100% - 8px);
+  min-height: 30px;
+  padding: 4px 10px 4px 18px;
   border: 0;
-  border-left: 1px solid transparent;
-  border-radius: 0;
+  border-radius: 0 var(--radius) var(--radius) 0;
   background: transparent;
   color: var(--text-muted);
   text-align: left;
@@ -551,17 +628,47 @@ main .tab-content, main .panel, main .hero { min-width: 0; }
 .nav-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
 .nav-item.active {
-  /* Selezione = incasso, non colore: la bay attiva è premuta nel laminato e
-     porta la costa a 3px, l'unico segnale che sopravvive alla rail collassata
-     (dove le etichette vanno a font-size:0). */
+  /* The 3px edge is the one cue that survives the collapsed rail, where labels go to font-size:0. */
   color: var(--text);
-  background-color: var(--surface-3);
-  box-shadow: inset 3px 0 0 var(--primary), inset 0 -1px 0 var(--engrave-hi);
+  font-weight: 600;
+  background-color: color-mix(in srgb, var(--primary) 10%, var(--surface));
+  box-shadow: inset 3px 0 0 var(--primary);
 }
 
 .nav-item .nav-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .nav-item .nav-left i { width:16px; text-align: center; color: var(--text-soft); font-size: 13px; }
-.nav-item.active .nav-left i { color: var(--text); }
+.nav-item.active .nav-left i { color: var(--primary); }
+
+/* ---------------------------------------------------------------
+   TOPBAR: breadcrumb, device context, global actions
+   --------------------------------------------------------------- */
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  min-height: 52px; padding: 8px 20px 8px 24px;
+  background-color: var(--surface);
+  border-bottom: var(--seam) solid var(--border);
+  flex-wrap: wrap;
+}
+.topbar-left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; min-width: 0; }
+.topbar-crumb { display: flex; align-items: center; gap: 8px; font-size: 13px; min-width: 0; }
+#topbarCrumbGroup { color: var(--text-soft); }
+#topbarCrumbPage { color: var(--text); font-weight: 600; }
+.topbar-crumb-sep { font-size: 9px; color: var(--border-strong); }
+.topbar-crumb.no-group #topbarCrumbGroup,
+.topbar-crumb.no-group .topbar-crumb-sep { display: none; }
+.topbar-actions { display: flex; align-items: center; gap: 6px; }
+.topbar-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 0;
+  border: 0; border-radius: var(--radius);
+  background: transparent; color: var(--text-muted);
+  cursor: pointer;
+}
+.topbar-icon:hover { background: var(--surface-2); color: var(--text); }
+.topbar-icon:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.topbar #langSelect { height: 30px; border-radius: var(--radius) !important; }
+#globalDeviceChip { border-radius: 9999px !important; }
 
 /* ---------------------------------------------------------------
    8. COMANDI DI QUADRO
@@ -644,10 +751,10 @@ main .tab-content, main .panel, main .hero { min-width: 0; }
 
 .sidebar-toggle {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; flex: none; padding: 0;
+  width: 30px; height: 30px; flex: none; padding: 0;
   border-radius: var(--edge);
-  border: var(--seam) solid var(--border);
-  background-color: var(--surface-2);
+  border: var(--seam) solid transparent;
+  background-color: transparent;
   color: var(--text-muted);
   cursor: pointer;
   transition: color var(--transition), border-color var(--transition);
@@ -659,10 +766,10 @@ body.sidebar-collapsed .sidebar-toggle i { transform: rotate(180deg); }
 /* Selettore di resa */
 .theme-toggle {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; flex: none; padding: 0;
+  width: 32px; height: 32px; flex: none; padding: 0;
   border-radius: var(--edge);
-  border: var(--seam) solid var(--border);
-  background-color: var(--surface-2);
+  border: var(--seam) solid transparent;
+  background-color: transparent;
   color: var(--text-muted);
   cursor: pointer;
   transition: color var(--transition), border-color var(--transition);
@@ -1698,32 +1805,37 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   body.sidebar-collapsed { --sidebar-w: 62px }
   body.sidebar-collapsed aside { align-items: stretch; }
   body.sidebar-collapsed .aside-header { padding: 12px 8px; align-items: center; }
-  body.sidebar-collapsed .brand-row { flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+  body.sidebar-collapsed .brand-row { flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding-left: 0; }
   body.sidebar-collapsed .aside-actions { flex-direction: column; align-items: center; gap: 6px; }
   body.sidebar-collapsed .aside-header h2 { font-size: 0; gap: 0; }
   body.sidebar-collapsed .aside-header h2 i { font-size: 17px; }
   body.sidebar-collapsed .brand-chip,
   body.sidebar-collapsed .aside-tagline,
-  body.sidebar-collapsed #langSelect,
+  body.sidebar-collapsed .tenant-switch,
+  body.sidebar-collapsed .aside-meta,
+  body.sidebar-collapsed .sidebar-search kbd,
   body.sidebar-collapsed .nav-group > h3,
   body.sidebar-collapsed .preview-badge,
   body.sidebar-collapsed .count-badge { display: none; }
-  body.sidebar-collapsed .user-badge { flex-direction: column; gap: 12px; padding: 10px 0; font-size: 0; margin: 10px 0 0; width: 100%; align-items: center; justify-content: center; }
-  body.sidebar-collapsed .user-badge #userBadgeLabel,
-  body.sidebar-collapsed .user-badge a { display: flex; align-items: center; justify-content: center; width: 100%; font-size: 0; margin: 0; text-align: center; }
-  body.sidebar-collapsed .user-badge i { font-size: 14px; margin: 0; }
+  body.sidebar-collapsed .sidebar-search { width: 36px; height: 36px; justify-content: center; padding: 0; font-size: 0; }
+  body.sidebar-collapsed .sidebar-search i { font-size: 14px; }
+  /* Group collapse is a label-mode affordance: the rail shows every icon. */
+  body.sidebar-collapsed .nav-group.collapsed .nav-group-items { display: flex; }
+  body.sidebar-collapsed .user-badge { flex-direction: column; gap: 8px; padding: 10px 0; font-size: 0; width: 100%; align-items: center; justify-content: center; }
+  body.sidebar-collapsed .user-badge #userBadgeLabel { justify-content: center; flex: none; font-size: 0; }
+  body.sidebar-collapsed .user-badge .user-meta { display: none; }
   body.sidebar-collapsed .user-badge .role-pill { display: none; }
-  body.sidebar-collapsed .user-badge #btnOpenProfile { margin: 0; padding: 0; border-right: 0; }
   body.sidebar-collapsed .sidenav { width: 100%; }
-  body.sidebar-collapsed .nav-item { justify-content: center; padding: 10px 0; }
+  body.sidebar-collapsed .nav-item { justify-content: center; padding: 10px 0; width: 100%; border-radius: 0; }
   body.sidebar-collapsed .nav-item .nav-left { font-size: 0; gap: 0; }
   body.sidebar-collapsed .nav-item .nav-left i { font-size: 15px; }
 }
 
 @media (max-width: 1000px) {
-  body { grid-template-columns: 1fr; padding: 10px; gap: 10px; }
-  aside { position: static; height: auto; max-height: none; }
-  main { padding: 14px; }
+  body { grid-template-columns: 1fr; padding: 0; gap: 0; }
+  aside { position: static; height: auto; max-height: none; border-right: 0; border-bottom: var(--seam) solid var(--border); }
+  .aside-foot { position: static; }
+  main > .tab-content { padding: 16px 14px 22px; }
   .sidebar-toggle { display: none; }
   .oneline-body { min-width: 0; }
   .oneline-bays { flex-wrap: wrap; gap: 10px 0; }

@@ -2352,7 +2352,7 @@ class TestSidebarRail(unittest.TestCase):
         self.assertNotIn('318px', gtc.group(1))
         expanded = re.search(r'--sidebar-w:\s*(\d+)px', body)
         self.assertIsNotNone(expanded, "body must define the expanded --sidebar-w")
-        self.assertEqual(int(expanded.group(1)), 318)
+        self.assertEqual(int(expanded.group(1)), 248)
         # The collapse must be animated, but scoped to the column only.
         # --transition is "all 0.25s", so using the bare token here would also
         # animate body's background/color/padding on every theme/state change.
@@ -2412,7 +2412,8 @@ class TestSidebarRail(unittest.TestCase):
     def test_labels_and_chrome_hide_in_the_rail(self):
         flat = self.flat
         # group headers / badges / wordmark / lang select are display:none'd
-        for target in ('.brand-chip', '.aside-tagline', '#langSelect',
+        # #langSelect lives in the topbar now: hiding it with the rail would blank it.
+        for target in ('.brand-chip', '.aside-tagline', '.tenant-switch',
                        '.nav-group>h3', '.preview-badge', '.count-badge'):
             self.assertIn('body.sidebar-collapsed' + target, flat,
                           f"{target} is not addressed by the collapsed rules")
@@ -2580,6 +2581,45 @@ class TestSidebarRail(unittest.TestCase):
         self.assertIsNotNone(thumb)
         if thumb:
             self.assertNotIn('background: transparent', thumb)
+
+
+class TestShellChrome(unittest.TestCase):
+    """Full-bleed shell: collapsible nav groups, topbar breadcrumb, global
+    controls moved out of the old floating header."""
+
+    def test_every_nav_group_is_collapsible_and_the_active_one_reopens(self):
+        html = _html()
+        groups = re.findall(r'<div class="nav-group" data-nav-group="(\w+)">', html)
+        self.assertEqual(len(groups), 6)
+        for g in groups:
+            self.assertIn(f'aria-controls="navItems-{g}"', html)
+            self.assertIn(f'<div class="nav-group-items" id="navItems-{g}">', html)
+        src = frontend_source()
+        # a tab opened from the palette or a deep link must not land inside a closed group
+        start = src.index('async function switchTab(')
+        body = src[start:src.index('await ensureTabScripts', start)]
+        self.assertIn("btn.closest('.nav-group.collapsed')", body)
+        self.assertIn('setNavGroupCollapsed(group, false)', body)
+        self.assertIn('syncTopbarCrumb()', body)
+
+    def test_group_collapse_hides_the_wrapper_never_the_nav_item(self):
+        # .nav-item visibility belongs to the RBAC gate alone (see TestSidebarRail)
+        flat = re.sub(r'\s+', '', open(os.path.join("static", "css", "dashboard.css"),
+                                       encoding="utf-8").read()).replace(';}', '}')
+        self.assertIn('.nav-group.collapsed.nav-group-items{display:none}', flat)
+        self.assertNotRegex(flat, r'\.nav-group\.collapsed[^{]*\.nav-item\{')
+
+    def test_global_controls_live_where_the_js_looks_for_them(self):
+        html = _html()
+        aside = html[html.index('<aside id="appSidebar"'):html.index('</aside>')]
+        topbar = html[html.index('<header id="appTopBar"'):html.index('</header>')]
+        for el_id in ('globalTenantSelect', 'btnOpenCommandPalette', 'appVersionBadge', 'btnLogout'):
+            self.assertIn(f'id="{el_id}"', aside)
+        for el_id in ('themeToggle', 'btnOpenShortcuts', 'globalDeviceChip',
+                      'topbarCrumbGroup', 'topbarCrumbPage'):
+            self.assertIn(f'id="{el_id}"', topbar)
+        self.assertIn('class="topbar-actions"', topbar)
+        self.assertIn("document.querySelector('.topbar .topbar-actions')", frontend_source())
 
 
 class TestCaSearch(unittest.TestCase):
