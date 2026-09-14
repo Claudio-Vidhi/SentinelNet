@@ -127,10 +127,10 @@
              non rivela se l'account esiste. -->
         <div id="forgotPwBox" style="display:none; margin-top:14px; text-align:left; border-top:1px solid var(--border); padding-top:14px;">
           <div class="form-group" style="text-align:left;">
-            <label data-i18n="lblForgotUser">Username dell'account</label>
+            <label data-i18n="lblForgotUser">Username o email dell'account</label>
             <div class="input-wrapper">
               <i class="fa-solid fa-envelope"></i>
-              <input id="forgotPwUser" type="text" placeholder="Username" data-i18n-placeholder="loginUserPl" aria-label="Username" data-i18n-aria-label="loginUserPl">
+              <input id="forgotPwUser" type="text" placeholder="Username o email" data-i18n-placeholder="fpUserPl" aria-label="Username o email" data-i18n-aria-label="fpUserPl">
             </div>
           </div>
           <button class="btn btn-secondary" id="btnSendForgotPw" data-i18n="btnSendForgotPw">
@@ -256,6 +256,7 @@
 
     <div class="user-badge">
       <span id="userBadgeLabel"><i class="fa-solid fa-user-shield"></i> Amministratore</span>
+      <a href="#" id="btnOpenProfile" style="color: var(--text-muted); text-decoration: none;" title="Il mio profilo" aria-label="Il mio profilo" data-i18n-title="btnOpenProfile" data-i18n-aria-label="btnOpenProfile"><i class="fa-solid fa-user-gear"></i></a>
       <a href="#" id="btnLogout" style="color: var(--danger); text-decoration: none; font-weight: 700;" data-i18n="btnExit"><i class="fa-solid fa-power-off"></i> Esci</a>
     </div>
 
@@ -2652,6 +2653,7 @@
                 <th data-i18n="thUserRole">Ruolo / Privilegio</th>
                 <th data-i18n="thUserGroups">Sedi visibili / gestibili</th>
                 <th data-i18n="thUserTabs">Tab dashboard visibili</th>
+                <th data-i18n="thUserLastLogin">Ultimo accesso</th>
                 <th data-i18n="thUserActions">Azioni</th>
               </tr>
             </thead>
@@ -2670,7 +2672,7 @@
             <label for="newUserEmail" data-i18n="lblNewUserEmail">Email (opzionale)</label><input id="newUserEmail" type="text" placeholder="mario.rossi@example.com" style="padding-left:12px;">
           </div>
           <div class="form-group" style="margin-bottom:0;">
-            <label for="newUserPass" data-i18n="lblNewUserPass">Password</label><input id="newUserPass" type="password" placeholder="••••••••" style="padding-left:12px;">
+            <label for="newUserPass" data-i18n="lblNewUserPass">Password (vuota = link via email)</label><input id="newUserPass" type="password" placeholder="••••••••" style="padding-left:12px;">
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label for="newUserRole" data-i18n="lblNewUserRole">Ruolo</label><select id="newUserRole" style="padding-left:12px;">
@@ -2688,7 +2690,7 @@
       <div class="panel" style="margin-top:18px;">
         <h3 style="font-size: 15px; margin-bottom: 6px;" data-i18n="titleInviteUser"><i class="fa-solid fa-envelope-open-text" style="color:var(--primary);"></i> Invita per email</h3>
         <p style="margin:0 0 12px; color:var(--text-muted); font-size:13px; max-width:78ch;" data-i18n="descInviteUser">
-          L'invitato sceglie la propria password da un link valido 24 ore: nessuna password iniziale da comunicare. L'account nasce solo quando l'invito viene accettato, con l'indirizzo come username. Richiede il server di posta configurato.
+          L'invitato sceglie la propria password da un link valido 24 ore: nessuna password iniziale da comunicare. L'account nasce quando l'invito viene accettato, con l'indirizzo come username, e resta in attesa finche' un amministratore non lo approva. Richiede il server di posta configurato.
         </p>
         <div style="display:grid; grid-template-columns: 2fr 1fr auto; gap:10px; align-items:end;">
           <div class="form-group" style="margin-bottom:0;">
@@ -4744,6 +4746,64 @@
     </div>
   </div>
 
+  <!-- Il mio profilo: dati del proprio account, password, email di recupero
+       verificata, chiusura di tutte le sessioni. Aperto da #btnOpenProfile. -->
+  <div class="modal-overlay" id="profileModal">
+    <div class="modal" style="width: 560px; max-width: 95%;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-user-gear" style="color: var(--primary);"></i> <span data-i18n="profTitle">Il mio profilo</span></h3>
+        <button type="button" id="btnCloseProfile" class="modal-close" style="background:none; border:none; cursor:pointer; color:var(--text-muted);" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div style="display:grid; grid-template-columns:auto 1fr; gap:6px 14px; font-size:13px; margin-bottom:16px;">
+        <span style="color:var(--text-muted);">Username</span><strong id="profUsername">—</strong>
+        <span style="color:var(--text-muted);" data-i18n="profRole">Ruolo</span><span id="profRole">—</span>
+        <span style="color:var(--text-muted);" data-i18n="profTenants">Tenant visibili</span><span id="profTenants">—</span>
+        <span style="color:var(--text-muted);" data-i18n="profTabs">Tab visibili</span><span id="profTabs">—</span>
+        <span style="color:var(--text-muted);" data-i18n="profLastLogin">Ultimo accesso</span><span id="profLastLogin">—</span>
+      </div>
+
+      <h4 style="font-size:14px; margin:0 0 8px;" data-i18n="profPwTitle">Cambia password</h4>
+      <div class="form-group">
+        <label for="profCurPass" data-i18n="lblCurrentPass">Password attuale</label>
+        <input id="profCurPass" type="password" autocomplete="current-password" style="padding-left:12px;">
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="form-group">
+          <label for="profNewPass" data-i18n="lblNewPass">Nuova Password</label>
+          <input id="profNewPass" type="password" autocomplete="new-password" style="padding-left:12px;">
+        </div>
+        <div class="form-group">
+          <label for="profConfirmPass" data-i18n="lblConfirmPass">Conferma Password</label>
+          <input id="profConfirmPass" type="password" autocomplete="new-password" style="padding-left:12px;">
+        </div>
+      </div>
+      <button type="button" class="btn btn-secondary btn-small" id="btnProfChangePw" style="width:auto; margin:0 0 18px;" data-i18n="btnProfChangePw">Aggiorna password</button>
+
+      <h4 style="font-size:14px; margin:0 0 4px;" data-i18n="profEmailTitle">Email di recupero</h4>
+      <p style="font-size:12px; color:var(--text-muted); margin:0 0 8px;">
+        <span data-i18n="profEmailCurrent">Indirizzo attuale</span>: <strong id="profEmailValue">—</strong>
+      </p>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="form-group">
+          <label for="profNewEmail" data-i18n="lblProfNewEmail">Nuovo indirizzo (vuoto per rimuoverlo)</label>
+          <input id="profNewEmail" type="email" placeholder="mario.rossi@example.com" style="padding-left:12px;">
+        </div>
+        <div class="form-group">
+          <label for="profEmailPass" data-i18n="lblCurrentPass">Password attuale</label>
+          <input id="profEmailPass" type="password" autocomplete="current-password" style="padding-left:12px;">
+        </div>
+      </div>
+      <button type="button" class="btn btn-secondary btn-small" id="btnProfEmail" style="width:auto; margin:0 0 18px;" data-i18n="btnProfEmail">Salva indirizzo</button>
+
+      <h4 style="font-size:14px; margin:0 0 4px;" data-i18n="profSessionsTitle">Sessioni</h4>
+      <p style="font-size:12px; color:var(--text-muted); margin:0 0 8px;" data-i18n="profSessionsDesc">Chiude la sessione su tutti i browser e i client (script, MCP), compreso questo.</p>
+      <button type="button" class="btn btn-secondary btn-small" id="btnProfLogoutAll" style="width:auto; margin:0; color:var(--danger);" data-i18n="btnProfLogoutAll">Esci da tutte le sessioni</button>
+
+      <div id="profileMsg" role="status" style="display:none; font-size:12.5px; margin-top:14px;"></div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="triageScopeModal">
     <div class="modal" style="width: 460px; max-width: 95%;">
       <div class="modal-header">
@@ -5151,6 +5211,7 @@
   <script src="/static/js/i18n.js"></script>
   <script src="/static/js/ui-modal.js"></script>
   <script src="/static/js/core.js"></script>
+  <script src="/static/js/profile.js"></script>
   <script src="/static/js/threat-intel.js"></script>
   <script src="/static/js/provisioning.js"></script>
   <script src="/static/js/devices.js"></script>

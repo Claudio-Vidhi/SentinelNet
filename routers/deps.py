@@ -64,6 +64,11 @@ def get_current_user(request: Request,
     # Lockout immediato degli account disabilitati anche con token ancora valido
     if user_manager.is_disabled(sub):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled.")
+    if user_manager.is_pending(sub):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account awaiting approval.")
+    # "Sign out everywhere" bumps the epoch: every token issued before it dies.
+    if int(payload.get("sep", 0)) != user_manager.session_epoch(sub):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session ended.")
     # Allinea sempre il ruolo allo stato corrente su disco.
     payload["role"] = role
     return payload

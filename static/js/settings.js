@@ -590,8 +590,20 @@
                     style="color:${toggleColor}; background:none; border:none; cursor:pointer; margin-right:10px;">
                     <i class="fa-solid ${toggleIcon}"></i> ${toggleText}</button>`;
 
+            // Invited accounts cannot sign in until approved; rejecting one is deleting it.
+            const pending = !!u.pending_approval;
+            const pendingBadge = pending
+                ? ` <span class="role-pill" style="background:color-mix(in srgb, var(--warning) 15%, transparent); color:var(--warning); border:1px solid color-mix(in srgb, var(--warning) 35%, transparent);">${tr('setPendingApproval')}</span>`
+                : '';
+            const approveBtn = pending
+                ? `<button data-action="approve-user" data-username="${escapeHtml(u.username)}" style="color:var(--success); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-user-check"></i> ${tr('setApprove')}</button>`
+                : '';
+            const resetBtn = (u.email && !pending && !disabled)
+                ? `<button data-action="send-user-reset" data-username="${escapeHtml(u.username)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-key"></i> ${tr('setSendReset')}</button>`
+                : '';
+
             return `<tr style="${disabled ? 'opacity:0.55;' : ''}">
-                <td><strong>${escapeHtml(u.username)}</strong>${isSelf ? ` <span style="color:var(--text-muted); font-size:11px;">(${tr('setYou')})</span>` : ''}${disabledBadge}</td>
+                <td><strong>${escapeHtml(u.username)}</strong>${isSelf ? ` <span style="color:var(--text-muted); font-size:11px;">(${tr('setYou')})</span>` : ''}${disabledBadge}${pendingBadge}</td>
                 <td><input type="text" value="${escapeHtml(u.email || '')}" placeholder="${tr('setNone')}"
                        data-action="save-user-email" data-username="${escapeHtml(u.username)}"
                        style="font-size:12px; padding:4px 8px; width:190px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); outline:none;"></td>
@@ -601,7 +613,8 @@
                   </select></td>
                 <td>${scopeCell}</td>
                 <td>${tabsCell}</td>
-                <td style="white-space:nowrap;">${toggleBtn}<button data-action="delete-user" data-username="${escapeHtml(u.username)}" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${delText}</button></td>
+                <td style="white-space:nowrap; font-size:12px; color:var(--text-muted);">${escapeHtml(formatLastLogin(u.last_login))}</td>
+                <td style="white-space:nowrap;">${approveBtn}${resetBtn}${toggleBtn}<button data-action="delete-user" data-username="${escapeHtml(u.username)}" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${delText}</button></td>
             </tr>`;
         }).join('');
     }
@@ -694,7 +707,8 @@
         const password = document.getElementById('newUserPass').value;
         const role     = document.getElementById('newUserRole').value;
         const email    = document.getElementById('newUserEmail').value.trim();
-        if (!username || !password) {
+        // No password is fine with an email: the user sets one from a mailed link.
+        if (!username || (!password && !email)) {
             alert(tr('setUsernameAndPasswordAre'));
             return;
         }
@@ -703,6 +717,8 @@
             body: JSON.stringify({ username, password, role, email })
         });
         if (res && res.ok) {
+            const d = await res.json().catch(() => ({}));
+            if (d.setup_link_sent) showToast(tr('setSetupLinkSent', {email: email}), 'success');
             document.getElementById('newUserName').value = '';
             document.getElementById('newUserPass').value = '';
             document.getElementById('newUserEmail').value = '';
@@ -727,6 +743,34 @@
         // invece di lasciare che sia la prima chiamata a fallire con un 401.
         if (res && res.ok) { if (isSelf) logout(); else loadUsers(); }
         else if (res) { const e = await res.json(); alert((tr('uiError')) + (e.detail || '')); }
+    }
+
+    async function approveUser(username) {
+        const res = await apiFetch('/api/users/approve', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username })
+        });
+        if (res && res.ok) {
+            showToast(tr('setUserApproved', {username: username}), 'success');
+            loadUsers();
+        } else if (res) {
+            const e = await res.json().catch(() => ({}));
+            showToast(e.detail || tr('setUpdateFailed'), 'error');
+        }
+    }
+
+    // The link goes to the address on file: the admin never learns a password.
+    async function sendUserReset(username) {
+        const res = await apiFetch('/api/users/send-reset', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username })
+        });
+        if (res && res.ok) {
+            showToast(tr('setResetSentTo', {username: username}), 'success');
+        } else if (res) {
+            const e = await res.json().catch(() => ({}));
+            showToast(e.detail || tr('setUpdateFailed'), 'error');
+        }
     }
 
     async function toggleUserDisabled(username, currentlyDisabled) {
@@ -1386,6 +1430,16 @@
         const delUser = e.target.closest('[data-action="delete-user"]');
         if (delUser && delUser.dataset.username) {
             deleteUser(delUser.dataset.username);
+            return;
+        }
+        const approveBtn = e.target.closest('[data-action="approve-user"]');
+        if (approveBtn && approveBtn.dataset.username) {
+            approveUser(approveBtn.dataset.username);
+            return;
+        }
+        const resetBtn = e.target.closest('[data-action="send-user-reset"]');
+        if (resetBtn && resetBtn.dataset.username) {
+            sendUserReset(resetBtn.dataset.username);
             return;
         }
     });

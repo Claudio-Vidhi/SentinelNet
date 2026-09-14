@@ -1,6 +1,8 @@
 import json
 import os
 import threading
+from datetime import datetime, timezone
+
 import bcrypt
 from core import data_config
 
@@ -95,7 +97,8 @@ def get_role(username: str):
     return user.get("role", "admin")
 
 def create_user(username: str, password: str, role: str = "viewer", groups=None,
-                must_change_password: bool = False, email: str = "") -> bool:
+                must_change_password: bool = False, email: str = "",
+                pending_approval: bool = False) -> bool:
     if role not in VALID_ROLES:
         role = "viewer"
     with _users_lock:
@@ -119,6 +122,10 @@ def create_user(username: str, password: str, role: str = "viewer", groups=None,
             # True per gli account creati da un amministratore: al primo login
             # l'utente è obbligato a impostare una nuova password personale.
             "must_change_password": bool(must_change_password),
+            # Accounts born from an invitation: they cannot sign in until an
+            # administrator approves them, so an invite mailed to the wrong
+            # address does not open the dashboard on its own.
+            "pending_approval": bool(pending_approval),
         }
         _save_users(users)
     return True
@@ -164,6 +171,8 @@ def list_users() -> list:
             "allowed_tabs": d.get("allowed_tabs", []),
             "disabled": d.get("disabled", False),
             "must_change_password": d.get("must_change_password", False),
+            "pending_approval": d.get("pending_approval", False),
+            "last_login": d.get("last_login", ""),
         }
         for u, d in get_users().items()
     ]
@@ -171,6 +180,66 @@ def list_users() -> list:
 def is_disabled(username: str) -> bool:
     user = get_users().get(username)
     return bool(user and user.get("disabled", False))
+
+def is_pending(username: str) -> bool:
+    user = get_users().get(username)
+    return bool(user and user.get("pending_approval", False))
+
+def _update(username: str, **fields) -> bool:
+    with _users_lock:
+        users = get_users()
+        if username not in users:
+            return False
+        users[username].update(fields)
+        _save_users(users)
+    return True
+
+def approve(username: str) -> bool:
+    return _update(username, pending_approval=False)
+
+def mark_awaiting_password(username: str) -> bool:
+    """Account created with no usable password: its first one comes from a
+    setup link, chosen by the user, so it is not forced to change again."""
+    return _update(username, awaiting_password=True)
+
+def awaiting_password(username: str) -> bool:
+    return bool((get_users().get(username) or {}).get("awaiting_password", False))
+
+def password_chosen_by_user(username: str) -> bool:
+    """Closes the setup: the password in place is personal."""
+    return _update(username, awaiting_password=False, must_change_password=False)
+
+def record_login(username: str) -> None:
+    _update(username, last_login=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+
+def get_profile(username: str) -> dict:
+    """The user's own view of the account: no hash, nothing about others."""
+    d = get_users().get(username) or {}
+    return {
+        "username": username,
+        "role": d.get("role", "admin"),
+        "email": d.get("email", ""),
+        "groups": d.get("groups", []),
+        "allowed_tabs": d.get("allowed_tabs", []),
+        "last_login": d.get("last_login", ""),
+    }
+
+def session_epoch(username: str) -> int:
+    """Tokens carry the epoch they were issued in; bumping it invalidates
+    every session of the user at once ("sign out everywhere")."""
+    return int((get_users().get(username) or {}).get("session_epoch", 0))
+
+def bump_session_epoch(username: str) -> bool:
+    with _users_lock:
+        return _update(username, session_epoch=session_epoch(username) + 1)
+
+def find_by_login(identifier: str) -> list:
+    """Accounts named by a username or by their recovery address (case
+    insensitive). An address can belong to more than one account."""
+    ident = (identifier or "").strip()
+    folded = ident.casefold()
+    return [u for u, d in get_users().items()
+            if u == ident or (folded and (d.get("email") or "").strip().casefold() == folded)]
 
 def set_disabled(username: str, disabled: bool) -> bool:
     with _users_lock:
@@ -184,7 +253,8 @@ def set_disabled(username: str, disabled: bool) -> bool:
 def count_active_admins() -> int:
     """Amministratori attivi (ruolo admin e non disabilitati)."""
     return sum(1 for d in get_users().values()
-               if d.get("role", "admin") == "admin" and not d.get("disabled", False))
+               if d.get("role", "admin") == "admin" and not d.get("disabled", False)
+               and not d.get("pending_approval", False))
 
 def is_last_active_admin(username: str) -> bool:
     """True se togliere a questo utente il ruolo, l'accesso o l'account intero
@@ -197,7 +267,8 @@ def is_last_active_admin(username: str) -> bool:
     rimuoverlo non toglie niente a chi può ancora entrare.
     """
     user = get_users().get(username)
-    if not user or user.get("role", "admin") != "admin" or user.get("disabled", False):
+    if (not user or user.get("role", "admin") != "admin" or user.get("disabled", False)
+            or user.get("pending_approval", False)):
         return False
     return count_active_admins() <= 1
 

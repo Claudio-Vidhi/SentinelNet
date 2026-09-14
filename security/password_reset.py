@@ -20,6 +20,9 @@ import time
 _tokens: dict[str, tuple[str, float]] = {}
 
 TTL_SECONDS = 15 * 60
+# A link that lets a brand-new account choose its first password: the person
+# may not read mail within fifteen minutes, and nobody else knows a password.
+SETUP_TTL_SECONDS = 24 * 60 * 60
 
 
 def _digest(token: str) -> str:
@@ -31,13 +34,13 @@ def _purge(now: float) -> None:
         del _tokens[key]
 
 
-def issue(username: str) -> str:
+def issue(username: str, ttl: int = TTL_SECONDS) -> str:
     """Creates a token for the user and returns it. The caller mails it and
     must not log it: it is a bearer credential until used or expired."""
     now = time.time()
     _purge(now)
     token = secrets.token_urlsafe(32)
-    _tokens[_digest(token)] = (username, now + TTL_SECONDS)
+    _tokens[_digest(token)] = (username, now + ttl)
     return token
 
 

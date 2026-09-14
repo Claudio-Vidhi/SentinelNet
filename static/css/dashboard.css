@@ -500,6 +500,14 @@ main .tab-content, main .panel, main .hero { min-width: 0; }
   letter-spacing: 0.02em;
   color: var(--text-muted);
 }
+/* Profile sits apart from logout: a seam and room, so a click aimed at one
+   does not land on the other. */
+.user-badge #btnOpenProfile {
+  margin-left: auto;
+  margin-right: 6px;
+  padding: 2px 14px 2px 0;
+  border-right: var(--seam) solid var(--border);
+}
 
 /* ---------------------------------------------------------------
    7. INDICE DI BAY — navigazione
@@ -1705,6 +1713,7 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   body.sidebar-collapsed .user-badge a { display: flex; align-items: center; justify-content: center; width: 100%; font-size: 0; margin: 0; text-align: center; }
   body.sidebar-collapsed .user-badge i { font-size: 14px; margin: 0; }
   body.sidebar-collapsed .user-badge .role-pill { display: none; }
+  body.sidebar-collapsed .user-badge #btnOpenProfile { margin: 0; padding: 0; border-right: 0; }
   body.sidebar-collapsed .sidenav { width: 100%; }
   body.sidebar-collapsed .nav-item { justify-content: center; padding: 10px 0; }
   body.sidebar-collapsed .nav-item .nav-left { font-size: 0; gap: 0; }

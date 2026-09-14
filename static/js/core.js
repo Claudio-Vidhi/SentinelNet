@@ -367,6 +367,8 @@ async function checkAuthRequirements() {
     // Arrivo da un link ricevuto via email: si sceglie la password prima di
     // qualunque altra schermata, senza interrogare lo stato del setup.
     const emailParams = new URLSearchParams(window.location.search);
+    const verifyToken = emailParams.get('verify_email_token');
+    if (verifyToken) confirmEmailFromLink(verifyToken);
     const landing = emailParams.get('reset_token') ? resetPw
                   : emailParams.get('invite_token') ? acceptInvite
                   : null;
@@ -610,22 +612,25 @@ document.getElementById('btnSubmitAcceptInvite')?.addEventListener('click', asyn
     }
     // Via il token dalla barra degli indirizzi: resta nella cronologia.
     window.history.replaceState({}, document.title, window.location.pathname);
-    const login = await fetch('/api/auth/login', {
+    // No automatic sign-in: the account waits for an administrator's approval.
+    document.getElementById('acceptInviteSection').style.display = 'none';
+    document.getElementById('loginSection').style.display = 'block';
+    errDiv.innerText = tr(d.pending_approval ? 'aiPending' : 'aiDone');
+    errDiv.style.color = 'var(--success)';
+    errDiv.style.display = 'block';
+});
+
+// Link mailed to a new recovery address (?verify_email_token=...). Confirming
+// needs no session: the token itself proves access to the mailbox.
+async function confirmEmailFromLink(token) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+    const res = await fetch('/api/auth/verify-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: d.username, password: np }),
-    });
-    document.getElementById('acceptInviteSection').style.display = 'none';
-    if (login.ok) {
-        document.getElementById('authOverlay').style.display = 'none';
-        appInit();
-    } else {
-        document.getElementById('loginSection').style.display = 'block';
-        errDiv.innerText = i18n[currentLang].aiDone;
-        errDiv.style.color = 'var(--success)';
-        errDiv.style.display = 'block';
-    }
-});
+        body: JSON.stringify({ token }),
+    }).catch(() => null);
+    showToast(tr(res && res.ok ? 'veDone' : 'veFailed'), res && res.ok ? 'success' : 'error');
+}
 
 // Cambio password obbligatorio al primo accesso
 document.getElementById('btnChangePass').addEventListener('click', async () => {
