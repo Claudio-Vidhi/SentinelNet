@@ -512,6 +512,10 @@ main .tab-content, main .panel, main .hero { min-width: 0; }
   cursor: pointer;
 }
 .tenant-switch select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* The select itself is transparent, so the open list would fall back to the OS
+   white while inheriting the theme's text colour: light-on-white in dark mode. */
+.tenant-switch select option { background-color: var(--surface); color: var(--text); font-weight: 400; }
+.tenant-switch select option:checked { font-weight: 600; }
 
 .sidebar-search {
   display: flex; align-items: center; gap: 8px;

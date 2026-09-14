@@ -1598,7 +1598,8 @@ function populateGlobalTenantSelect() {
     const cur = tenantFromUrl() || window.globalSelectedTenant || sel.value || 'all';
     const groups = Object.keys(globalGroups || {});
     const L = i18n[currentLang] || {};
-    sel.innerHTML = `<option value="all">${L.optFilterAll || 'Tutti'}</option>` +
+    // The card already says "Tenant": the first option only needs "All".
+    sel.innerHTML = `<option value="all">${L.invTabAll || 'Tutti'}</option>` +
         groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
     sel.value = groups.includes(cur) ? cur : 'all';
     window.globalSelectedTenant = sel.value;
