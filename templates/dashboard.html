@@ -424,68 +424,65 @@
     <div id="tab-home" class="tab-content active" role="tabpanel" tabindex="0">
       <!-- Cartiglio: come su un disegno tecnico, l'intestazione dice cosa si sta
            guardando e porta il comando primario. -->
-      <div class="hero-card" style="display:flex; align-items:flex-end; justify-content:space-between; gap:18px; flex-wrap:wrap; margin-bottom:14px;">
-        <div style="min-width:0;">
+      <div class="page-head">
+        <div class="page-head-text">
           <h2 data-i18n="homeTitle">Situazione operativa</h2>
           <p data-i18n="homeSubtitle">Verdetti di postura e stato in tempo reale della flotta di rete. Da qui apri l'inventario o avvia un triage globale.</p>
         </div>
-        <div class="split-footer" style="margin-top:0;">
-          <button class="btn btn-primary" style="width:auto;" data-switch-tab="tab-devices" data-i18n="homeOpenInventory"><i class="fa-solid fa-list-check"></i> Apri inventario</button>
-          <button class="btn btn-secondary requires-write" id="btnHomeRunTriage" style="width:auto;" data-i18n="homeRunTriage"><i class="fa-solid fa-bolt-lightning"></i> Avvia triage globale</button>
+        <div class="page-head-actions">
+          <button class="btn btn-secondary" data-switch-tab="tab-devices" data-i18n="homeOpenInventory"><i class="fa-solid fa-list-check"></i> Apri inventario</button>
+          <button class="btn btn-primary requires-write" id="btnHomeRunTriage" data-i18n="homeRunTriage"><i class="fa-solid fa-bolt-lightning"></i> Avvia triage globale</button>
         </div>
       </div>
 
-      <!-- 4 Structured Verdicts: Raggiungibilità, Backup, CVE, Config Drift -->
-      <div id="homeVerdicts" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:12px; margin-bottom:14px;">
-        <!-- Verdict 1: Raggiungibilità -->
-        <div class="panel verdict-card" id="verdictReachability" style="margin-bottom:0; padding:14px;">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
-            <span style="font-size:12px; font-weight:700; text-transform:uppercase; color:var(--text-muted);" data-i18n="verdictReachTitle">Connettività & Raggiungibilità</span>
+      <!-- 4 verdicts: reachability, backup, CVE, config drift. Big number first, sentence second. -->
+      <div id="homeVerdicts">
+        <div class="panel verdict-card" id="verdictReachability">
+          <div class="verdict-head">
+            <span class="verdict-title" data-i18n="verdictReachTitle">Connettività &amp; Raggiungibilità</span>
             <span class="status-badge ok" id="badgeReachability">OK</span>
           </div>
-          <p id="summaryReachability" style="font-size:13px; font-weight:600; margin:0 0 6px;">Caricamento...</p>
-          <details id="evidenceReachability" style="display:none; margin-top:8px; font-size:12px; color:var(--text-muted);">
-            <summary style="cursor:pointer; font-weight:600;" data-i18n="verdictEvidence">Mostra evidenze</summary>
-            <div id="evidenceReachBody" style="margin-top:6px; padding:6px; background:var(--surface-2); border:1px solid var(--border);"></div>
+          <div class="verdict-value"><span id="valueReachability">&mdash;</span><span class="verdict-of" id="ofReachability"></span></div>
+          <p class="verdict-summary" id="summaryReachability">Caricamento...</p>
+          <details id="evidenceReachability" class="verdict-evidence" style="display:none;">
+            <summary data-i18n="verdictEvidence">Mostra evidenze</summary>
+            <div id="evidenceReachBody"></div>
           </details>
         </div>
-
-        <!-- Verdict 2: Backup -->
-        <div class="panel verdict-card" id="verdictBackup" style="margin-bottom:0; padding:14px;">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
-            <span style="font-size:12px; font-weight:700; text-transform:uppercase; color:var(--text-muted);" data-i18n="verdictBackupTitle">Stato Backup</span>
+        <div class="panel verdict-card" id="verdictBackup">
+          <div class="verdict-head">
+            <span class="verdict-title" data-i18n="verdictBackupTitle">Stato Backup</span>
             <span class="status-badge ok" id="badgeBackup">OK</span>
           </div>
-          <p id="summaryBackup" style="font-size:13px; font-weight:600; margin:0 0 6px;">Caricamento...</p>
-          <details id="evidenceBackup" style="display:none; margin-top:8px; font-size:12px; color:var(--text-muted);">
-            <summary style="cursor:pointer; font-weight:600;" data-i18n="verdictEvidence">Mostra evidenze</summary>
-            <div id="evidenceBackupBody" style="margin-top:6px; padding:6px; background:var(--surface-2); border:1px solid var(--border);"></div>
+          <div class="verdict-value"><span id="valueBackup">&mdash;</span><span class="verdict-of" id="ofBackup"></span></div>
+          <p class="verdict-summary" id="summaryBackup">Caricamento...</p>
+          <details id="evidenceBackup" class="verdict-evidence" style="display:none;">
+            <summary data-i18n="verdictEvidence">Mostra evidenze</summary>
+            <div id="evidenceBackupBody"></div>
           </details>
         </div>
-
-        <!-- Verdict 3: CVE Vulnerabilità -->
-        <div class="panel verdict-card" id="verdictCve" style="margin-bottom:0; padding:14px;">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
-            <span style="font-size:12px; font-weight:700; text-transform:uppercase; color:var(--text-muted);" data-i18n="verdictCveTitle">Vulnerabilità CVE</span>
+        <div class="panel verdict-card" id="verdictCve">
+          <div class="verdict-head">
+            <span class="verdict-title" data-i18n="verdictCveTitle">Vulnerabilità CVE</span>
             <span class="status-badge ok" id="badgeCve">OK</span>
           </div>
-          <p id="summaryCve" style="font-size:13px; font-weight:600; margin:0 0 6px;">Caricamento...</p>
-          <details id="evidenceCve" style="display:none; margin-top:8px; font-size:12px; color:var(--text-muted);">
-            <summary style="cursor:pointer; font-weight:600;" data-i18n="verdictEvidence">Mostra evidenze</summary>
-            <div id="evidenceCveBody" style="margin-top:6px; padding:6px; background:var(--surface-2); border:1px solid var(--border);"></div>
+          <div class="verdict-value"><span id="valueCve">&mdash;</span><span class="verdict-of" id="ofCve"></span></div>
+          <p class="verdict-summary" id="summaryCve">Caricamento...</p>
+          <details id="evidenceCve" class="verdict-evidence" style="display:none;">
+            <summary data-i18n="verdictEvidence">Mostra evidenze</summary>
+            <div id="evidenceCveBody"></div>
           </details>
         </div>
-
-        <!-- Verdict 4: Config Drift -->
-        <div class="panel verdict-card" id="verdictDrift" style="margin-bottom:0; padding:14px;">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
-            <span style="font-size:12px; font-weight:700; text-transform:uppercase; color:var(--text-muted);" data-i18n="verdictDriftTitle">Config Drift</span>
+        <div class="panel verdict-card" id="verdictDrift">
+          <div class="verdict-head">
+            <span class="verdict-title" data-i18n="verdictDriftTitle">Config Drift</span>
             <span class="status-badge ok" id="badgeDrift">OK</span>
           </div>
-          <p id="summaryDrift" style="font-size:13px; font-weight:600; margin:0 0 6px;">Caricamento...</p>
-          <details id="evidenceDrift" style="display:none; margin-top:8px; font-size:12px; color:var(--text-muted);">
-            <summary style="cursor:pointer; font-weight:600;" data-i18n="verdictEvidence">Mostra evidenze</summary>
-            <div id="evidenceDriftBody" style="margin-top:6px; padding:6px; background:var(--surface-2); border:1px solid var(--border);"></div>
+          <div class="verdict-value"><span id="valueDrift">&mdash;</span><span class="verdict-of" id="ofDrift"></span></div>
+          <p class="verdict-summary" id="summaryDrift">Caricamento...</p>
+          <details id="evidenceDrift" class="verdict-evidence" style="display:none;">
+            <summary data-i18n="verdictEvidence">Mostra evidenze</summary>
+            <div id="evidenceDriftBody"></div>
           </details>
         </div>
       </div>
@@ -521,34 +518,23 @@
         </div>
       </div>
 
-      <!-- Striscia eventi: la stampante di sala controllo. Cronologica, una riga
-           per evento, la piu' recente in alto. -->
-      <div class="panel">
-        <h3 data-i18n="homeEventStrip">Registro eventi</h3>
-        <div class="eventstrip" id="homeEventStrip">
-          <div class="eventstrip-row" aria-hidden="true"><span class="sk" style="width:44px"></span><span class="sk" style="width:78%"></span><span class="sk" style="width:18px"></span></div>
-          <div class="eventstrip-row" aria-hidden="true"><span class="sk" style="width:44px"></span><span class="sk" style="width:64%"></span><span class="sk" style="width:18px"></span></div>
-          <div class="eventstrip-row" aria-hidden="true"><span class="sk" style="width:44px"></span><span class="sk" style="width:71%"></span><span class="sk" style="width:18px"></span></div>
-          <div class="eventstrip-row" aria-hidden="true"><span class="sk" style="width:44px"></span><span class="sk" style="width:58%"></span><span class="sk" style="width:18px"></span></div>
-          <div class="eventstrip-row" aria-hidden="true"><span class="sk" style="width:44px"></span><span class="sk" style="width:67%"></span><span class="sk" style="width:18px"></span></div>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:6px;">
-          <h3 style="margin:0; font-size:17px;" data-i18n="homeAttentionQueue"><i class="fa-solid fa-triangle-exclamation"></i> Coda attenzione flotta</h3>
-          <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-switch-tab="tab-devices" data-i18n="homeViewAll">Vedi tutti</button>
-        </div>
-        <div class="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th data-i18n="homeColHost">Hostname</th>
-                <th data-i18n="homeColIp">Indirizzo IP</th>
-                <th data-i18n="homeColGroup">Tenant</th>
-                <th data-i18n="homeColStatus">Stato</th>
-              </tr>
-            </thead>
+      <!-- Attention queue beside the event log: what to act on, and what just happened. -->
+      <div class="home-split">
+        <div class="panel">
+          <div class="panel-head">
+            <h3 data-i18n="homeAttentionQueue">Coda attenzione flotta</h3>
+            <button class="btn btn-secondary btn-small" data-switch-tab="tab-devices" data-i18n="homeViewAll">Vedi tutti</button>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th data-i18n="homeColStatus">Stato</th>
+                  <th data-i18n="homeColHost">Hostname</th>
+                  <th data-i18n="homeColIp">Indirizzo IP</th>
+                  <th data-i18n="homeColGroup">Tenant</th>
+                </tr>
+              </thead>
             <tbody id="homeAttentionBody">
               <tr class="sk-row" aria-hidden="true"><td><span class="sk" style="width:62%"></span></td><td><span class="sk" style="width:48%"></span></td><td><span class="sk" style="width:40%"></span></td><td><span class="sk" style="width:34%"></span></td></tr>
               <tr class="sk-row" aria-hidden="true"><td><span class="sk" style="width:62%"></span></td><td><span class="sk" style="width:48%"></span></td><td><span class="sk" style="width:40%"></span></td><td><span class="sk" style="width:34%"></span></td></tr>
@@ -559,7 +545,20 @@
               <tr class="sk-row" aria-hidden="true"><td><span class="sk" style="width:62%"></span></td><td><span class="sk" style="width:48%"></span></td><td><span class="sk" style="width:40%"></span></td><td><span class="sk" style="width:34%"></span></td></tr>
               <tr class="sk-row" aria-hidden="true"><td><span class="sk" style="width:62%"></span></td><td><span class="sk" style="width:48%"></span></td><td><span class="sk" style="width:40%"></span></td><td><span class="sk" style="width:34%"></span></td></tr>
             </tbody>
-          </table>
+            </table>
+          </div>
+        </div>
+
+        <!-- Event strip: the control-room printer. One row per event, newest on top. -->
+        <div class="panel">
+          <h3 data-i18n="homeEventStrip">Registro eventi</h3>
+        <div class="eventstrip" id="homeEventStrip">
+          <div class="eventstrip-row" aria-hidden="true"><span class="sk" style="width:44px"></span><span class="sk" style="width:78%"></span><span class="sk" style="width:18px"></span></div>
+          <div class="eventstrip-row" aria-hidden="true"><span class="sk" style="width:44px"></span><span class="sk" style="width:64%"></span><span class="sk" style="width:18px"></span></div>
+          <div class="eventstrip-row" aria-hidden="true"><span class="sk" style="width:44px"></span><span class="sk" style="width:71%"></span><span class="sk" style="width:18px"></span></div>
+          <div class="eventstrip-row" aria-hidden="true"><span class="sk" style="width:44px"></span><span class="sk" style="width:58%"></span><span class="sk" style="width:18px"></span></div>
+          <div class="eventstrip-row" aria-hidden="true"><span class="sk" style="width:44px"></span><span class="sk" style="width:67%"></span><span class="sk" style="width:18px"></span></div>
+        </div>
         </div>
       </div>
 

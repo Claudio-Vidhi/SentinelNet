@@ -157,10 +157,10 @@ async function loadHome() {
                 const label = i18n[currentLang][info.key] || scan.status || 'offline';
                 const host  = d.Hostname ? escapeHtml(d.Hostname) : '<span style="color:var(--text-muted)">&mdash;</span>';
                 return `<tr>
+                    <td><span class="status ${info.cls}"><span class="led ${info.led}"></span>${escapeHtml(label)}</span></td>
                     <td>${host}</td>
                     <td><code>${escapeHtml(d.IP || '')}</code></td>
                     <td><span class="badge" style="cursor:pointer;" data-action="open-inventory-tenant" data-tenant="${escapeHtml(d.Group || '')}" title="${escapeHtml(d.Group || '')}">${escapeHtml(d.Group || '')}</span></td>
-                    <td><span class="status ${info.cls}"><span class="led ${info.led}"></span>${escapeHtml(label)}</span></td>
                 </tr>`;
             }).join('');
         }
@@ -173,6 +173,13 @@ async function loadHome() {
 }
 
 function renderHomeVerdicts(devs) {
+    // The big number of each verdict card; `of` adds the "/ total" denominator.
+    const setVerdictValue = (key, value, of) => {
+        const v = document.getElementById('value' + key);
+        const o = document.getElementById('of' + key);
+        if (v) v.textContent = String(value);
+        if (o) o.textContent = of ? `/ ${of}` : '';
+    };
 
     // 1. Raggiungibilità
     let online = 0, offline = 0, authFailed = 0;
@@ -192,6 +199,9 @@ function renderHomeVerdicts(devs) {
             reachEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${tr('homeUnreachable')}`);
         }
     });
+
+    const measurable = online + offline + authFailed;
+    setVerdictValue('Reachability', measurable ? online : '—', measurable);
 
     const vReach = document.getElementById('verdictReachability');
     const bReach = document.getElementById('badgeReachability');
@@ -230,6 +240,8 @@ function renderHomeVerdicts(devs) {
         }
     });
 
+    setVerdictValue('Backup', devs.length ? devs.length - noBackup - staleBackup : '—', devs.length);
+
     const vBackup = document.getElementById('verdictBackup');
     const bBackup = document.getElementById('badgeBackup');
     const sBackup = document.getElementById('summaryBackup');
@@ -267,6 +279,8 @@ function renderHomeVerdicts(devs) {
         }
     });
 
+    setVerdictValue('Cve', critCves);
+
     const vCve = document.getElementById('verdictCve');
     const bCve = document.getElementById('badgeCve');
     const sCve = document.getElementById('summaryCve');
@@ -299,6 +313,8 @@ function renderHomeVerdicts(devs) {
             driftEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${tr('homeConfigDriftDetected')}`);
         }
     });
+
+    setVerdictValue('Drift', driftCount);
 
     const vDrift = document.getElementById('verdictDrift');
     const bDrift = document.getElementById('badgeDrift');
