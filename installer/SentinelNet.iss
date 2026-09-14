@@ -39,6 +39,7 @@ OutputBaseFilename=SentinelNet-Setup-{#AppVersion}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=..\assets\sentinelnet.ico
 ; Per-machine install: the data directory is shared, and a service or another
 ; operator account must be able to read it.
 PrivilegesRequired=admin

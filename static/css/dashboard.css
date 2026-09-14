@@ -490,6 +490,16 @@ main .tab-content, main .panel, main .hero { min-width: 0; }
 
 .aside-tagline { font-family: var(--font-legend); font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-soft); line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 
+/* Brand: the Route S mark and the stacked SENTINEL / NETWORK wordmark. */
+.brand { display: flex; align-items: center; gap: 10px; color: var(--text); }
+.brand-mark { flex: none; display: block; }
+.brand-word { display: flex; flex-direction: column; line-height: 0.95; }
+.brand-name { font-family: var(--font-legend); font-size: 17px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text); }
+.brand-sub { font-family: var(--font-data); font-size: 8.5px; font-weight: 500; letter-spacing: 0.5em; text-transform: uppercase; color: var(--primary); }
+.login-brand { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 18px; color: var(--text); }
+.login-brand .brand-name { font-size: 26px; }
+.login-brand .brand-sub { font-size: 12px; }
+
 /* Tenant context: a select dressed as a switcher card. */
 .tenant-switch {
   display: flex; align-items: center; gap: 10px;
@@ -1816,6 +1826,7 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   body.sidebar-collapsed .aside-header h2 { font-size: 0; gap: 0; }
   body.sidebar-collapsed .aside-header h2 i { font-size: 17px; }
   body.sidebar-collapsed .brand-chip,
+  body.sidebar-collapsed .brand-word,
   body.sidebar-collapsed .aside-tagline,
   body.sidebar-collapsed .tenant-switch,
   body.sidebar-collapsed .aside-meta,

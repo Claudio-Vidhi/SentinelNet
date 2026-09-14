@@ -55,6 +55,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name='SentinelNet',
+    icon='assets/sentinelnet.ico',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
