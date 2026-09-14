@@ -232,13 +232,6 @@
         <h2><i class="fa-solid fa-shield-halved"></i> Sentinel<span class="brand-chip">Net</span></h2>
         <div class="aside-actions">
           <!-- #langSelect viene iniettato qui da initLanguageSelector() -->
-          <button type="button" id="themeToggle" class="theme-toggle"
-                  aria-label="Alterna resa chiara e scura"
-                  title="Alterna resa chiara e scura"
-                  data-i18n-title="titleThemeToggle" data-i18n-aria-label="titleThemeToggle">
-            <i class="fa-solid fa-circle-half-stroke icon-light"></i>
-            <i class="fa-solid fa-circle-half-stroke icon-dark"></i>
-          </button>
           <button type="button" id="sidebarToggle" class="sidebar-toggle"
                   aria-expanded="true" aria-controls="appSidebar"
                   aria-label="Comprimi o espandi la barra laterale"
@@ -248,25 +241,32 @@
           </button>
         </div>
       </div>
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
-        <span class="aside-tagline" style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Network Intelligence Platform</span>
-        <span id="appVersionBadge" style="font-family:var(--font-code); font-size:10px; color:var(--text-muted); font-weight:600; flex-shrink:0;">v0.2.0</span>
+      <!-- Tenant context: scopes every tab, so it sits above the navigation. -->
+      <div class="tenant-switch">
+        <i class="fa-solid fa-building-user" aria-hidden="true"></i>
+        <div class="tenant-switch-body">
+          <label for="globalTenantSelect" data-i18n="lblGlobalTenant">Tenant:</label>
+          <select id="globalTenantSelect">
+            <option value="all" data-i18n="optFilterAll">Tutti</option>
+          </select>
+        </div>
       </div>
-    </div>
-
-    <div class="user-badge">
-      <span id="userBadgeLabel"><i class="fa-solid fa-user-shield"></i> Amministratore</span>
-      <a href="#" id="btnOpenProfile" style="color: var(--text-muted); text-decoration: none;" title="Il mio profilo" aria-label="Il mio profilo" data-i18n-title="btnOpenProfile" data-i18n-aria-label="btnOpenProfile"><i class="fa-solid fa-user-gear"></i></a>
-      <a href="#" id="btnLogout" style="color: var(--danger); text-decoration: none; font-weight: 700;" data-i18n="btnExit"><i class="fa-solid fa-power-off"></i> Esci</a>
+      <button type="button" id="btnOpenCommandPalette" class="sidebar-search">
+        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+        <span class="sidebar-search-label" data-i18n="btnSearchPalette">Cerca comandi o apparati...</span>
+        <kbd>Ctrl+K</kbd>
+      </button>
     </div>
 
     <nav class="sidenav" role="tablist" aria-orientation="vertical">
-      <div style="padding: 0 0 10px 0; margin-bottom: 8px; border-bottom: 1px solid var(--border);">
-        <button class="nav-item active" data-tab="tab-home" style="font-weight: 700; font-size: 13.5px;" role="tab" aria-controls="tab-home" aria-selected="true">
-          <span class="nav-left" data-i18n="tabHome"><i class="fa-solid fa-gauge-high" style="color:var(--primary);"></i> Situazione</span>
+      <div class="nav-home">
+        <button class="nav-item active" data-tab="tab-home" role="tab" aria-controls="tab-home" aria-selected="true">
+          <span class="nav-left" data-i18n="tabHome"><i class="fa-solid fa-gauge-high"></i> Situazione</span>
         </button>
       </div>
-      <div class="nav-group"><h3 data-i18n="navInvestigate">Indaga</h3>
+      <div class="nav-group" data-nav-group="investigate">
+        <h3><button type="button" class="nav-group-toggle" aria-expanded="true" aria-controls="navItems-investigate"><span class="nav-group-label" data-i18n="navInvestigate">Indaga</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button></h3>
+        <div class="nav-group-items" id="navItems-investigate">
         <button id="navIncidents" class="nav-item requires-admin" data-tab="tab-incidents" role="tab" aria-controls="tab-incidents" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabIncidents"><i class="fa-solid fa-timeline"></i> Incidenti</span>
           <span class="preview-badge">preview</span>
@@ -280,8 +280,11 @@
         <button class="nav-item" data-tab="tab-ai" role="tab" aria-controls="tab-ai" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabAiAssistant"><i class="fa-solid fa-robot"></i> AI Assistant</span>
         </button>
+        </div>
       </div>
-      <div class="nav-group"><h3 data-i18n="navInventory">Inventario</h3>
+      <div class="nav-group" data-nav-group="inventory">
+        <h3><button type="button" class="nav-group-toggle" aria-expanded="true" aria-controls="navItems-inventory"><span class="nav-group-label" data-i18n="navInventory">Inventario</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button></h3>
+        <div class="nav-group-items" id="navItems-inventory">
         <button class="nav-item" data-tab="tab-devices" role="tab" aria-controls="tab-devices" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabInventory"><i class="fa-solid fa-list-check"></i> Network Inventory</span>
         </button>
@@ -291,8 +294,11 @@
         <button class="nav-item" data-tab="tab-categories" role="tab" aria-controls="tab-categories" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabCategories"><i class="fa-solid fa-shapes"></i> Dispositivi &amp; Categorie</span>
         </button>
+        </div>
       </div>
-      <div class="nav-group"><h3 data-i18n="navDeviceTools">Strumenti Apparati</h3>
+      <div class="nav-group" data-nav-group="tools">
+        <h3><button type="button" class="nav-group-toggle" aria-expanded="true" aria-controls="navItems-tools"><span class="nav-group-label" data-i18n="navDeviceTools">Strumenti Apparati</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button></h3>
+        <div class="nav-group-items" id="navItems-tools">
         <button id="navFortigate" class="nav-item requires-admin" data-tab="tab-fortigate" role="tab" aria-controls="tab-fortigate" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabFgtManagement"><i class="fa-solid fa-shield-halved"></i> Fortigate Management</span>
         </button>
@@ -305,8 +311,11 @@
         <button id="navRedundancy" class="nav-item" data-tab="tab-redundancy" role="tab" aria-controls="tab-redundancy" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabRedundancy"><i class="fa-solid fa-layer-group"></i> Alta Affidabilità (HA)</span>
         </button>
+        </div>
       </div>
-      <div class="nav-group"><h3 data-i18n="navAssess">Valuta</h3>
+      <div class="nav-group" data-nav-group="assess">
+        <h3><button type="button" class="nav-group-toggle" aria-expanded="true" aria-controls="navItems-assess"><span class="nav-group-label" data-i18n="navAssess">Valuta</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button></h3>
+        <div class="nav-group-items" id="navItems-assess">
         <button class="nav-item" data-tab="tab-security" role="tab" aria-controls="tab-security" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabSecurity"><i class="fa-solid fa-shield-virus"></i> Threat Intel (NVD NIST)</span>
         </button>
@@ -325,16 +334,22 @@
         <button id="navConfigDrift" class="nav-item" data-tab="tab-config-drift" role="tab" aria-controls="tab-config-drift" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabConfigDrift"><i class="fa-solid fa-code-compare"></i> Config Drift</span>
         </button>
+        </div>
       </div>
-      <div class="nav-group"><h3 data-i18n="navChange">Modifica</h3>
+      <div class="nav-group" data-nav-group="change">
+        <h3><button type="button" class="nav-group-toggle" aria-expanded="true" aria-controls="navItems-change"><span class="nav-group-label" data-i18n="navChange">Modifica</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button></h3>
+        <div class="nav-group-items" id="navItems-change">
         <button class="nav-item requires-write" data-tabs="tab-provisioning tab-provisioner" data-tab="tab-provisioning" role="tab" aria-controls="tab-provisioning" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabProvGroup"><i class="fa-solid fa-circle-plus"></i> Provisioning</span>
         </button>
         <button class="nav-item requires-write" data-tab="tab-import" role="tab" aria-controls="tab-import" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabImport"><i class="fa-solid fa-file-csv"></i> Importazione CSV</span>
         </button>
+        </div>
       </div>
-      <div class="nav-group"><h3 data-i18n="navAdminister">Amministra</h3>
+      <div class="nav-group" data-nav-group="admin">
+        <h3><button type="button" class="nav-group-toggle" aria-expanded="true" aria-controls="navItems-admin"><span class="nav-group-label" data-i18n="navAdminister">Amministra</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button></h3>
+        <div class="nav-group-items" id="navItems-admin">
         <button class="nav-item requires-admin" data-tab="tab-users" role="tab" aria-controls="tab-users" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabUsers"><i class="fa-solid fa-users-gear"></i> Utenti</span>
         </button>
@@ -351,22 +366,33 @@
         <button class="nav-item requires-admin" data-tab="tab-settings" role="tab" aria-controls="tab-settings" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabSettings"><i class="fa-solid fa-gear"></i> Impostazioni</span>
         </button>
+        </div>
       </div>
     </nav>
+
+    <div class="aside-foot">
+      <div class="aside-meta">
+        <span class="aside-tagline">Network Intelligence Platform</span>
+        <span id="appVersionBadge">v0.2.0</span>
+      </div>
+      <div class="user-badge">
+        <span id="userBadgeLabel"><i class="fa-solid fa-user-shield"></i> Amministratore</span>
+        <a href="#" id="btnOpenProfile" title="Il mio profilo" aria-label="Il mio profilo" data-i18n-title="btnOpenProfile" data-i18n-aria-label="btnOpenProfile"><i class="fa-solid fa-user-gear"></i></a>
+        <a href="#" id="btnLogout" data-i18n="btnExit"><i class="fa-solid fa-power-off"></i> Esci</a>
+      </div>
+    </div>
   </aside>
 
   <!-- Area Centrale Principale -->
   <main>
     <!-- Top Chrome Bar -->
-    <header id="appTopBar" class="topbar" style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; padding:8px 14px; background:var(--surface); border:1px solid var(--border); border-radius:0; flex-wrap:wrap;">
-      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-        <!-- Global Tenant Selector -->
-        <div style="display:inline-flex; align-items:center; gap:6px;">
-          <i class="fa-solid fa-building-user" style="color:var(--text-muted); font-size:12px;"></i>
-          <label for="globalTenantSelect" style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:0;" data-i18n="lblGlobalTenant">Tenant:</label>
-          <select id="globalTenantSelect" style="padding:4px 8px; font-size:12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); cursor:pointer;">
-            <option value="all" data-i18n="optFilterAll">Tutti</option>
-          </select>
+    <header id="appTopBar" class="topbar">
+      <div class="topbar-left">
+        <!-- Where am I: nav group and page, refreshed by syncTopbarCrumb() -->
+        <div class="topbar-crumb">
+          <span id="topbarCrumbGroup"></span>
+          <i class="fa-solid fa-chevron-right topbar-crumb-sep" aria-hidden="true"></i>
+          <span id="topbarCrumbPage"></span>
         </div>
 
         <!-- Global Device Context Chip -->
@@ -379,17 +405,17 @@
         </div>
       </div>
 
-      <div style="display:flex; align-items:center; gap:10px;">
-        <!-- Command Palette Trigger Button -->
-        <button type="button" id="btnOpenCommandPalette" class="btn btn-secondary btn-small" style="width:auto; margin:0; padding:4px 10px; font-size:12px; display:inline-flex; align-items:center; gap:8px; border-color:var(--border-strong);">
-          <i class="fa-solid fa-magnifying-glass" style="font-size:11px; color:var(--text-muted);"></i>
-          <span data-i18n="btnSearchPalette">Cerca comandi o apparati...</span>
-          <kbd style="font-family:var(--font-code); font-size:10px; padding:1px 5px; background:var(--surface-2); border:1px solid var(--border); border-radius:2px; color:var(--text-muted);">Ctrl+K</kbd>
-        </button>
-
-        <!-- Shortcuts trigger -->
-        <button type="button" id="btnOpenShortcuts" class="btn btn-secondary btn-small" style="width:auto; margin:0; padding:4px 8px; font-size:12px;" title="Scorciatoie da tastiera (?)" data-i18n-title="titleShortcuts">
+      <div class="topbar-actions">
+        <!-- #langSelect is injected here by initLanguageSelector() -->
+        <button type="button" id="btnOpenShortcuts" class="topbar-icon" title="Scorciatoie da tastiera (?)" data-i18n-title="titleShortcuts">
           <i class="fa-solid fa-keyboard"></i>
+        </button>
+        <button type="button" id="themeToggle" class="theme-toggle"
+                aria-label="Alterna resa chiara e scura"
+                title="Alterna resa chiara e scura"
+                data-i18n-title="titleThemeToggle" data-i18n-aria-label="titleThemeToggle">
+          <i class="fa-solid fa-circle-half-stroke icon-light"></i>
+          <i class="fa-solid fa-circle-half-stroke icon-dark"></i>
         </button>
       </div>
     </header>

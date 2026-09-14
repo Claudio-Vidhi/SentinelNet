@@ -38,6 +38,55 @@ function toggleSidebar() {
     applySidebarCollapsed(collapsed);
 }
 
+// --- NAV GROUPS (collapsible) ---
+// Rarely used groups start closed so the everyday ones fit without scrolling.
+// Only the user's choice is stored; the group holding the open tab is always
+// opened by switchTab, otherwise the active item would be hidden.
+const NAV_GROUPS_KEY = 'navGroupsCollapsed';
+const NAV_GROUPS_DEFAULT = ['tools', 'change', 'admin'];
+
+function setNavGroupCollapsed(group, collapsed) {
+    group.classList.toggle('collapsed', collapsed);
+    group.querySelector('.nav-group-toggle')?.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+}
+
+function saveNavGroups() {
+    const closed = Array.from(document.querySelectorAll('.nav-group.collapsed'))
+        .map(g => g.getAttribute('data-nav-group'));
+    try { localStorage.setItem(NAV_GROUPS_KEY, JSON.stringify(closed)); } catch (e) { }
+}
+
+(function restoreNavGroups() {
+    let closed = NAV_GROUPS_DEFAULT;
+    try {
+        const saved = JSON.parse(localStorage.getItem(NAV_GROUPS_KEY) || 'null');
+        if (Array.isArray(saved)) closed = saved;
+    } catch (e) { }
+    document.querySelectorAll('.nav-group[data-nav-group]').forEach(g => {
+        setNavGroupCollapsed(g, closed.includes(g.getAttribute('data-nav-group')));
+    });
+})();
+
+document.addEventListener('click', e => {
+    const toggle = e.target.closest('.nav-group-toggle');
+    const group = toggle?.closest('.nav-group');
+    if (!group) return;
+    setNavGroupCollapsed(group, !group.classList.contains('collapsed'));
+    saveNavGroups();
+});
+
+// Topbar breadcrumb: nav group › page, read from the translated nav labels so
+// there is no second copy of the strings. Called on tab switch and language change.
+function syncTopbarCrumb() {
+    const btn = document.querySelector('.sidenav .nav-item.active');
+    const page = document.getElementById('topbarCrumbPage');
+    const group = document.getElementById('topbarCrumbGroup');
+    if (!btn || !page || !group) return;
+    page.textContent = btn.querySelector('.nav-left')?.textContent.trim() || '';
+    group.textContent = btn.closest('.nav-group')?.querySelector('.nav-group-label')?.textContent.trim() || '';
+    group.parentElement?.classList.toggle('no-group', !group.textContent);
+}
+
 // --- RESA CHIARA / SCURA ---
 // Il quadro esiste in due rese reali: targa incisa e schermo SCADA. Senza
 // preferenza salvata si segue il sistema operativo, quindi il primo click
@@ -737,8 +786,10 @@ function applyRoleUI(username, role, allowedTabs) {
     if (badge) {
         const icon = currentRole === 'admin' ? 'fa-user-shield'
             : currentRole === 'operator' ? 'fa-user-gear' : 'fa-user';
-        badge.innerHTML = `<i class="fa-solid ${icon}"></i> ${escapeHtml(currentUsername)} · ` +
-            `<span class="role-pill role-pill-${currentRole}">${roleLabel(currentRole)}</span>`;
+        const initials = String(currentUsername || '?').slice(0, 2).toUpperCase();
+        badge.innerHTML = `<span class="user-avatar" aria-hidden="true">${escapeHtml(initials)}</span>` +
+            `<span class="user-meta"><span class="user-name"><i class="fa-solid ${icon}"></i> ${escapeHtml(currentUsername)}</span>` +
+            `<span class="role-pill role-pill-${currentRole}">${roleLabel(currentRole)}</span></span>`;
     }
     // ponytail: restrizione solo lato frontend (nasconde i pulsanti); vuoto = tutte le tab.
     const allowed = normalizeAllowedTabs(allowedTabs);
@@ -1066,8 +1117,11 @@ async function switchTab(tabId, clickedBtn) {
         || document.querySelector(`.nav-item[data-tabs~="${tabId}"]`);
     if (btn) {
         btn.classList.add('active');
+        const group = btn.closest('.nav-group.collapsed');
+        if (group) setNavGroupCollapsed(group, false);
     }
     syncTablistState(btn);
+    syncTopbarCrumb();
 
     await ensureTabScripts(tabId);
     if (tabEl) tabEl.classList.remove('tab-loading');

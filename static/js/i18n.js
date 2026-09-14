@@ -5916,6 +5916,7 @@ function changeLanguage(lang) {
 
     // I tooltip della rail derivano dai label tradotti: vanno rigenerati qui.
     syncNavTooltips();
+    syncTopbarCrumb();
 
     // Aggiorna il badge utente (ruolo localizzato)
     if (currentUsername) applyRoleUI(currentUsername, currentRole);
@@ -5956,9 +5957,8 @@ function changeLanguage(lang) {
 }
 
 function initLanguageSelector() {
-    // Il selettore viene iniettato nello slot .aside-actions, prima del
-    // pulsante di collasso (che è già nel markup).
-    const actions = document.querySelector('.aside-header .aside-actions');
+    // The selector is injected at the start of the topbar actions slot.
+    const actions = document.querySelector('.topbar .topbar-actions');
     if (actions && !document.getElementById("langSelect")) {
         const select = document.createElement('select');
         select.id = "langSelect";
