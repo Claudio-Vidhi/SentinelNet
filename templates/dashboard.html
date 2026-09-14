@@ -5,9 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SentinelNet</title>
 
-  <!-- Favicon: sbarra, due discese e un sezionatore — lo schema unifilare
-       del quadro, in miniatura (SVG inline, nessun file esterno). -->
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23d4d7cf'/%3E%3Cpath d='M4 10h24M11 10v8M21 10v8' stroke='%2316191c' stroke-width='2.5' fill='none'/%3E%3Crect x='8' y='18' width='6' height='6' fill='%232f8f4e'/%3E%3Crect x='18' y='18' width='6' height='6' fill='none' stroke='%2316191c' stroke-width='2'/%3E%3C/svg%3E">
+  <!-- Favicon: the Route S mark, an S drawn as a network path between two nodes (inline SVG). -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230f172a'/%3E%3Cpath d='M46 14H24a9 9 0 0 0 0 18h16a9 9 0 0 1 0 18H18' fill='none' stroke='%23f1f5f9' stroke-width='6' stroke-linecap='round'/%3E%3Ccircle cx='48' cy='14' r='6' fill='%233b82f6'/%3E%3Ccircle cx='16' cy='50' r='5' fill='%230f172a' stroke='%23f1f5f9' stroke-width='3.5'/%3E%3C/svg%3E">
 
   <!-- Saira Condensed (legenda incisa) + Azeret Mono (dati e misure): serviti
        da static/fonts/, non da un CDN — vedi @font-face in dashboard.css.
@@ -52,8 +51,8 @@
   <!-- Overlay Login Glassmorphic / Setup Wizard -->
   <div id="authOverlay">
     <div class="login-card">
-      <div style="font-size: 30px; color: var(--primary); margin-bottom: 15px; text-align: center;">
-        <i class="fa-solid fa-shield-halved" id="overlayIcon"></i>
+      <div class="login-brand" id="overlayIcon">
+        <svg class="brand-mark" viewBox="0 0 64 64" width="44" height="44" aria-hidden="true" focusable="false"><path d="M46 14H24a9 9 0 0 0 0 18h16a9 9 0 0 1 0 18H18" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><circle cx="48" cy="14" r="6" style="fill: var(--primary)"/><circle cx="16" cy="50" r="5" stroke="currentColor" stroke-width="3.5" style="fill: var(--surface)"/></svg><span class="brand-word"><span class="brand-name">Sentinel</span><span class="brand-sub">network</span></span>
       </div>
       
       <!-- Sezione Registrazione Primo Account -->
@@ -229,7 +228,7 @@
   <aside id="appSidebar">
     <div class="aside-header">
       <div class="brand-row">
-        <h2><i class="fa-solid fa-shield-halved"></i> Sentinel<span class="brand-chip">Net</span></h2>
+        <h2 class="brand"><svg class="brand-mark" viewBox="0 0 64 64" width="26" height="26" aria-hidden="true" focusable="false"><path d="M46 14H24a9 9 0 0 0 0 18h16a9 9 0 0 1 0 18H18" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><circle cx="48" cy="14" r="6" style="fill: var(--primary)"/><circle cx="16" cy="50" r="5" stroke="currentColor" stroke-width="3.5" style="fill: var(--surface)"/></svg><span class="brand-word"><span class="brand-name">Sentinel</span><span class="brand-sub">network</span></span></h2>
         <div class="aside-actions">
           <!-- #langSelect viene iniettato qui da initLanguageSelector() -->
           <button type="button" id="sidebarToggle" class="sidebar-toggle"
