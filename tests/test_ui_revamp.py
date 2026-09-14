@@ -398,7 +398,15 @@ class TestHomeTab(unittest.TestCase):
         for key in ('Reachability', 'Backup', 'Cve', 'Drift'):
             self.assertIn(f'id="value{key}"', html)
             self.assertIn(f'id="of{key}"', html)
+        for key in ('Reachability', 'Backup'):
             self.assertIn(f"setVerdictValue('{key}'", js, f"{key} card never gets a value")
+        # CVE and drift come from their own stores, never from detected_versions,
+        # which does not carry them: reading it there showed a permanent 0 / OK.
+        for key, endpoint in (('Cve', '/api/cve/summary'), ('Drift', '/api/drift/summary')):
+            self.assertIn(f"setRiskVerdict('{key}'", js)
+            self.assertIn(endpoint, js)
+        self.assertNotIn('scan.cve_count', js)
+        self.assertNotIn('scan.has_drift', js)
 
     def test_home_tab_i18n_keys_both_langs(self):
         html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js

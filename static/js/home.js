@@ -143,6 +143,7 @@ async function loadHome() {
     setText('homeOnelineRev', new Date().toLocaleString(tr('homeEnGb')));
 
     renderHomeVerdicts(devs);
+    loadHomeRiskVerdicts();
     renderFleetOneline(devs);
 
     const body = document.getElementById('homeAttentionBody');
@@ -264,78 +265,76 @@ function renderHomeVerdicts(devs) {
         }
     }
 
-    // 3. CVE Vulnerabilità
-    let critCves = 0;
-    const cveEvidences = [];
-    devs.forEach(d => {
-        const scan = globalVersions[d.IP] || {};
-        const cves = scan.cves || scan.cve_count || 0;
-        if (typeof cves === 'number' && cves > 0) {
-            critCves += cves;
-            cveEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${cves} CVE`);
-        } else if (Array.isArray(cves) && cves.length > 0) {
-            critCves += cves.length;
-            cveEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${cves.length} CVE`);
-        }
-    });
+    // 3-4. CVE and config drift live in their own stores, not in detected_versions:
+    // loadHomeRiskVerdicts() fetches them after the cheap verdicts are painted.
+}
 
-    setVerdictValue('Cve', critCves);
+// Paint one risk card. state: 'ok' | 'warn' | 'crit' | 'na' (nothing to judge).
+function setRiskVerdict(key, state, value, summary, evidence) {
+    const card = document.getElementById('verdict' + key);
+    const badge = document.getElementById('badge' + key);
+    const text = document.getElementById('summary' + key);
+    const details = document.getElementById('evidence' + key);
+    const body = document.getElementById(key === 'Cve' ? 'evidenceCveBody' : 'evidenceDriftBody');
+    if (!card || !badge || !text) return;
+    const cls = state === 'na' ? 'warn' : state;
+    card.className = 'panel verdict-card state-' + cls;
+    badge.className = 'status-badge ' + cls;
+    badge.textContent = { ok: 'OK', warn: 'WARN', crit: 'CRIT', na: 'N/A' }[state];
+    const v = document.getElementById('value' + key);
+    const o = document.getElementById('of' + key);
+    if (v) v.textContent = String(value);
+    if (o) o.textContent = '';
+    text.textContent = summary;
+    if (details && body) {
+        details.style.display = evidence.length ? '' : 'none';
+        body.innerHTML = evidence.map(e => `<div>• ${escapeHtml(e)}</div>`).join('');
+    }
+}
 
-    const vCve = document.getElementById('verdictCve');
-    const bCve = document.getElementById('badgeCve');
-    const sCve = document.getElementById('summaryCve');
-    const eCve = document.getElementById('evidenceCve');
-    const ebCve = document.getElementById('evidenceCveBody');
-    if (vCve && bCve && sCve) {
-        const hasCve = critCves > 0;
-        vCve.className = 'panel verdict-card ' + (hasCve ? 'state-warn' : 'state-ok');
-        bCve.className = 'status-badge ' + (hasCve ? 'warn' : 'ok');
-        bCve.textContent = hasCve ? 'WARN' : 'OK';
-        if (hasCve) {
-            sCve.textContent = tr('homeKnownCveVulnerabilitiesDetected', {critCves: critCves});
-            if (eCve && ebCve) {
-                eCve.style.display = '';
-                ebCve.innerHTML = cveEvidences.slice(0, 10).map(e => `<div>• ${escapeHtml(e)}</div>`).join('');
-            }
+async function loadHomeRiskVerdicts() {
+    const tenant = encodeURIComponent(window.globalSelectedTenant || 'all');
+
+    // CVE: the same per-tenant summary the Threat Intel report uses.
+    const cveRes = await apiFetch(`/api/cve/summary?tenant=${tenant}`);
+    if (cveRes && cveRes.ok) {
+        const rows = (await cveRes.json()).tenants || [];
+        let critical = 0, high = 0, devices = 0, evaluated = 0;
+        const evidence = [];
+        rows.forEach(r => {
+            critical += r.counts.critical;
+            high += r.counts.high;
+            devices += r.devices;
+            (r.devices_detail || []).forEach(d => {
+                if (d.confidence !== 'none') evaluated++;
+                if (d.counts.critical || d.counts.high) {
+                    evidence.push(`${d.hostname || d.ip} (${d.ip}) — ${tr('homeCveDeviceCounts', { critical: d.counts.critical, high: d.counts.high })}`);
+                }
+            });
+        });
+        if (!evaluated) {
+            setRiskVerdict('Cve', 'na', '\u2014', tr('homeCveNotEvaluated'), []);
         } else {
-            sCve.textContent = tr('homeNoUnmitigatedCriticalCve');
-            if (eCve) eCve.style.display = 'none';
+            setRiskVerdict('Cve', critical ? 'crit' : (high ? 'warn' : 'ok'), critical,
+                tr('homeCveCoverage', { critical, high, evaluated, devices }), evidence.slice(0, 10));
         }
+    } else {
+        setRiskVerdict('Cve', 'na', '\u2014', tr('homeVerdictNoAccess'), []);
     }
 
-    // 4. Config Drift
-    let driftCount = 0;
-    const driftEvidences = [];
-    devs.forEach(d => {
-        const scan = globalVersions[d.IP] || {};
-        if (scan.drift || scan.has_drift) {
-            driftCount++;
-            driftEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${tr('homeConfigDriftDetected')}`);
-        }
-    });
-
-    setVerdictValue('Drift', driftCount);
-
-    const vDrift = document.getElementById('verdictDrift');
-    const bDrift = document.getElementById('badgeDrift');
-    const sDrift = document.getElementById('summaryDrift');
-    const eDrift = document.getElementById('evidenceDrift');
-    const ebDrift = document.getElementById('evidenceDriftBody');
-    if (vDrift && bDrift && sDrift) {
-        const hasDrift = driftCount > 0;
-        vDrift.className = 'panel verdict-card ' + (hasDrift ? 'state-warn' : 'state-ok');
-        bDrift.className = 'status-badge ' + (hasDrift ? 'warn' : 'ok');
-        bDrift.textContent = hasDrift ? 'WARN' : 'OK';
-        if (hasDrift) {
-            sDrift.textContent = tr('homeDeviceSHaveConfiguration', {driftCount: driftCount});
-            if (eDrift && ebDrift) {
-                eDrift.style.display = '';
-                ebDrift.innerHTML = driftEvidences.slice(0, 10).map(e => `<div>• ${escapeHtml(e)}</div>`).join('');
-            }
+    // Config drift: devices whose latest config breaks their tenant baseline.
+    const driftRes = await apiFetch(`/api/drift/summary?tenant=${tenant}`);
+    if (driftRes && driftRes.ok) {
+        const d = await driftRes.json();
+        if (!d.checked) {
+            setRiskVerdict('Drift', 'na', '\u2014', tr('homeDriftNotChecked'), []);
         } else {
-            sDrift.textContent = tr('homeAllRunningConfigurationsMatch');
-            if (eDrift) eDrift.style.display = 'none';
+            setRiskVerdict('Drift', d.deviating.length ? 'warn' : 'ok', d.deviating.length,
+                tr('homeDriftCoverage', { deviating: d.deviating.length, checked: d.checked }),
+                d.deviating.slice(0, 10).map(x => `${x.hostname || x.ip} (${x.ip}) — ${tr('homeDriftDeviceCount', { n: x.deviations })}`));
         }
+    } else {
+        setRiskVerdict('Drift', 'na', '\u2014', tr('homeVerdictNoAccess'), []);
     }
 }
 
