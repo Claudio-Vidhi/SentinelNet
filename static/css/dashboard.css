@@ -534,7 +534,7 @@ main .tab-content, main .panel, main .hero { min-width: 0; }
 .sidebar-search-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-search kbd {
   font-family: var(--font-data); font-size: 10px; color: var(--text-muted);
-  padding: 1px 5px; border: var(--seam) solid var(--border); border-radius: 3px; background: var(--surface-2);
+  padding: 1px 5px; border: var(--seam) solid var(--border); border-radius: 2px; background: var(--surface-2);
 }
 
 /* Sidebar foot: product line, version, signed-in user. Stays pinned while the nav scrolls. */
@@ -2159,7 +2159,7 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   margin-bottom: 18px;
 }
 .page-head-text { min-width: 0; }
-.page-head h2 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: 0.01em; line-height: 1.15; }
+.page-head h2 { margin: 0; font-size: 25px; font-weight: 600; letter-spacing: 0.01em; line-height: 1.15; }
 .page-head p { margin: 6px 0 0; font-size: 14px; line-height: 1.55; color: var(--text-muted); max-width: 90ch; }
 .page-head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .page-head-actions .btn { width: auto; }
