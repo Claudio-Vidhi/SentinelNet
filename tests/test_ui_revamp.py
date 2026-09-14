@@ -443,10 +443,23 @@ class TestDevicesTabRestyle(unittest.TestCase):
         tab_end = html.index('<!-- TAB 2:')
         tab_html = html[tab_start:tab_end]
         # La striscia KPI ora e' un cartiglio oneline-foot, non card .kpi-grid
-        for cls in ('class="hero"', 'class="hero-card"', 'class="oneline-foot"',
+        for cls in ('class="page-head"', 'class="inv-tabs"', 'id="invSelectionBar"',
                     'class="filterbar"', 'class="search-wrap"',
                     'class="table-wrap"'):
             self.assertIn(cls, tab_html)
+
+    def test_bulk_selection_is_wired_to_selection_scoped_actions(self):
+        html = _html()
+        for _id in ('invSelectAll', 'btnSelTriage', 'btnSelPing', 'btnSelCommands', 'btnSelClear', 'invKpiAll'):
+            self.assertIn(f'id="{_id}"', html)
+        with open(os.path.join("static", "js", "devices.js"), encoding="utf-8") as f:
+            devices = f.read()
+        self.assertIn("startGroupTriage('all', [...selectedDeviceIps])", devices)
+        self.assertIn("runPingCheck([...selectedDeviceIps])", devices)
+        self.assertIn("openBulkCommandModal([...selectedDeviceIps])", devices)
+        # rows are re-rendered from state: patching cells by index broke every
+        # time a column moved, and this redesign moved all of them
+        self.assertNotIn("cells[", devices)
 
     def test_kpi_ids_and_i18n_both_langs(self):
         html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js

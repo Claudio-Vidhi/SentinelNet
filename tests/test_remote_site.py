@@ -812,6 +812,35 @@ class RemoteSiteE2E(unittest.TestCase):
             inventory_manager.get_detected_versions()["10.9.0.81"]["status"], "online")
 
 
+    def test_run_triage_with_ips_touches_only_the_selected_devices(self):
+        # The inventory's bulk selection sends the chosen IPs: the rest of the
+        # group must not be triaged along with them.
+        from services import site_manager
+        sid, token = self._create_agent_site("Triage-Selection")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={
+            "devices": [{"ip": "10.9.0.72", "vendor": "cisco", "hostname": "switch-01", "group": "Generale"},
+                        {"ip": "10.9.0.73", "vendor": "cisco", "hostname": "switch-02", "group": "Generale"}]})
+
+        r = self.client.post("/api/run-triage", headers=self.admin_h,
+                             json={"group": "all", "ips": ["10.9.0.72"]})
+        self.assertEqual(r.status_code, 200, r.text)
+
+        queued = {j["device_ip"] for j in site_manager.list_jobs(sid) if j["kind"] == "triage"}
+        self.assertEqual(queued, {"10.9.0.72"})
+
+    def test_ping_check_with_ips_reports_only_the_selected_devices(self):
+        sid, token = self._create_agent_site("Ping-Selection")
+        ah = self._agent_headers(sid, token)
+        self.client.post("/api/agent/inventory", headers=ah, json={
+            "devices": [{"ip": "10.9.0.82", "vendor": "cisco", "hostname": "switch-01", "group": "Generale"},
+                        {"ip": "10.9.0.83", "vendor": "cisco", "hostname": "switch-02", "group": "Generale"}]})
+
+        r = self.client.post("/api/ping-check", headers=self.admin_h,
+                             json={"group": "all", "ips": ["10.9.0.82"]})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(set(r.json()["results"]), {"10.9.0.82"})
+
     def test_run_triage_does_not_pile_up_duplicate_jobs(self):
         # With the agent offline the queue must not grow without bound: a
         # second run-triage while a triage job is still pending/running for
