@@ -4,12 +4,14 @@
 
 let _bulkJobInterval = null;
 
-function openBulkCommandModal() {
+// preselect: IPs to tick on open (the inventory's bulk selection).
+function openBulkCommandModal(preselect = []) {
     // Popola il filtro gruppo
     const gf = document.getElementById('bulkGroupFilter');
     gf.innerHTML = `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
         Object.keys(globalGroups).map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
-    gf.value = tenantSelectSeed('', Object.keys(globalGroups), 'all');
+    // A preselection can span tenants: show them all so none is hidden and lost.
+    gf.value = preselect.length ? 'all' : tenantSelectSeed('', Object.keys(globalGroups), 'all');
 
     document.getElementById('bulkSelectAll').checked = false;
     document.getElementById('bulkMode').value = 'exec';
@@ -23,6 +25,11 @@ function openBulkCommandModal() {
     btn.innerHTML = i18n[currentLang].btnBulkRun;
 
     renderBulkTargets();
+    if (preselect.length) {
+        const wanted = new Set(preselect);
+        document.querySelectorAll('#bulkTargetList .bulk-target').forEach(cb => { cb.checked = wanted.has(cb.value); });
+        syncBulkSelectAll();
+    }
     openModal('bulkCommandModal');
 }
 

@@ -29,9 +29,12 @@ triage_job = {
 
 class TriageRunRequest(BaseModel):
     group: str = "all"
+    # The inventory's bulk selection: None = the whole group.
+    ips: Optional[List[str]] = None
 
 class PingCheckRequest(BaseModel):
     group: str = "all"
+    ips: Optional[List[str]] = None
 
 
 # --- ROTTE ---
@@ -106,6 +109,9 @@ def run_triage(payload: TriageRunRequest = TriageRunRequest(),
     devices = inventory_manager.get_all_devices()
     if target_groups is not None:
         devices = [d for d in devices if d.get('Group') in target_groups]
+    if payload.ips is not None:
+        wanted = set(payload.ips)
+        devices = [d for d in devices if d['IP'] in wanted]
     direct_devices = []
     queued = 0
     for d in devices:
@@ -171,6 +177,9 @@ def ping_check(payload: PingCheckRequest, current_user = Depends(require_operato
         devices = [d for d in devices if d.get('Group') == payload.group]
     elif scope is not None:
         devices = [d for d in devices if d.get('Group') in scope]
+    if payload.ips is not None:
+        wanted = set(payload.ips)
+        devices = [d for d in devices if d['IP'] in wanted]
 
     # None = not measurable (jump site: ICMP cannot cross the bastion tunnel),
     # same tri-state vocabulary as services.ping_monitor / has_direct_path.

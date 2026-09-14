@@ -102,25 +102,46 @@
         return !st || st === 'unknown';
     }
 
+    // One bucket per device, shared by the tab counts, the tab filter and the row pill.
+    function inventoryStatusBucket(d) {
+        // Jump site: same "not measurable" bucket as the row's pill (icmp_reachable is
+        // set per-device by /api/local-devices). Without this a jump-site device never
+        // triaged falls into offline and the "Offline: N" tab contradicts the row.
+        if (jumpStatusIsUnmeasurable(d)) return 'unknown';
+        const st = (globalVersions[d.IP] || {}).status;
+        return st === 'online' || st === 'auth_failed' ? st : 'offline';
+    }
+
     function updateInventoryKpis() {
-        let online = 0, offline = 0, authFailed = 0, unknown = 0;
-        (globalDevices || []).forEach(d => {
-            // Jump site: same "not measurable" bucket as the row's em dash
-            // (icmp_reachable is set per-device by /api/local-devices, Task 4's
-            // has_direct_path). Without this branch a jump-site device
-            // that has never been triaged falls into `else offline++` and the
-            // "Offline: N" tile contradicts the row directly below it.
-            if (jumpStatusIsUnmeasurable(d)) { unknown++; return; }
-            const scan = globalVersions[d.IP] || {};
-            if (scan.status === 'online') online++;
-            else if (scan.status === 'auth_failed') authFailed++;
-            else offline++;
-        });
+        const counts = { online: 0, offline: 0, auth_failed: 0, unknown: 0 };
+        (globalDevices || []).forEach(d => { counts[inventoryStatusBucket(d)]++; });
         const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-        setText('invKpiOnline', online);
-        setText('invKpiOffline', offline);
-        setText('invKpiAuthFailed', authFailed);
-        setText('invKpiUnknown', unknown);
+        setText('invKpiAll', (globalDevices || []).length);
+        setText('invKpiOnline', counts.online);
+        setText('invKpiOffline', counts.offline);
+        setText('invKpiAuthFailed', counts.auth_failed);
+        setText('invKpiUnknown', counts.unknown);
+    }
+
+    // Status tab filter and bulk selection. Both survive re-renders; the
+    // selection is pruned to devices that still exist.
+    let invStatusFilter = 'all';
+    const selectedDeviceIps = new Set();
+
+    function syncInventorySelection() {
+        const known = new Set((globalDevices || []).map(d => d.IP));
+        selectedDeviceIps.forEach(ip => { if (!known.has(ip)) selectedDeviceIps.delete(ip); });
+        const bar = document.getElementById('invSelectionBar');
+        if (bar) bar.hidden = selectedDeviceIps.size === 0;
+        const count = document.getElementById('invSelectionCount');
+        if (count) count.textContent = tr('invSelectedCount', { n: selectedDeviceIps.size });
+        const all = /** @type {HTMLInputElement|null} */ (document.getElementById('invSelectAll'));
+        const boxes = Array.from(document.querySelectorAll('#deviceTableBody input[data-action="select-device"]'));
+        if (all) {
+            const on = boxes.filter(b => /** @type {HTMLInputElement} */ (b).checked).length;
+            all.checked = boxes.length > 0 && on === boxes.length;
+            all.indeterminate = on > 0 && on < boxes.length;
+        }
     }
 
     function openDeviceFacet(facet, ip) {
@@ -192,6 +213,8 @@
         devBody.innerHTML = '';
         globalDevices.forEach(d => {
             if (selectedGroup !== 'all' && d.Group !== selectedGroup) return;
+            const bucket = inventoryStatusBucket(d);
+            if (invStatusFilter !== 'all' && bucket !== invStatusFilter) return;
 
             const scan = globalVersions[d.IP] || { version: tr('devNotScanned'), status: "unknown" };
 
@@ -202,16 +225,12 @@
                 if (!haystack.includes(term)) return;
             }
 
-            let ledClass = "led-offline";
-            if (scan.status === "online")           ledClass = "led-online";
-            else if (scan.status === "auth_failed") ledClass = "led-auth_failed";
-
-            // Jump site: ICMP cannot cross the bastion tunnel, so any "offline"
-            // here would be a ping that never ran, not a real down (Task 4's
-            // has_direct_path, surfaced per-device as icmp_reachable by
-            // /api/local-devices). Show the same "not measurable" em dash used
-            // elsewhere instead of a misleading led.
-            const isJumpUnmeasurable = jumpStatusIsUnmeasurable(d);
+            // Jump site: ICMP cannot cross the bastion tunnel, so "offline" there would
+            // be a ping that never ran, not a real down: the bucket says "not measurable".
+            const info = homeStatusInfo(bucket);
+            const statusLabel = tr(info.key);
+            const selected = selectedDeviceIps.has(d.IP);
+            const ipAttr = escapeHtml(d.IP);
 
             const siteOptions = (current) => (_sitesCache || []).map(st => {
                 const mode = st.mode === 'jump' ? ' [bastion]' : (st.mode === 'agent' ? ' [agent]' : '');
@@ -230,104 +249,52 @@
                 if (versionText === 'Non Rilevata') versionText = 'Not Detected';
             }
 
-            const deleteText = tr('uiDelete');
+            // Tenant and site sit under the hostname: plain text for a viewer,
+            // inline selects for whoever may move the device.
+            const where = isViewer
+                ? `<span id="badge_${safeIp}">${escapeHtml(d.Group)}</span><span aria-hidden="true">·</span><span>${escapeHtml(d.Site || 'central')}</span>`
+                : `<select id="grpsel_${safeIp}" class="inv-inline-select" data-action="reassign-device" data-ip="${ipAttr}"
+                      title="${tr('devMoveToAnotherTenant')}" aria-label="${tr('devMoveToAnotherTenant')}">${groupOptions}</select>
+                   <span aria-hidden="true">·</span>
+                   <select class="inv-inline-select" data-action="reassign-device-site" data-ip="${ipAttr}"
+                      title="${tr('devMoveToAnotherSite')}" aria-label="${tr('devMoveToAnotherSite')}">${siteOptions(d.Site || 'central')}</select>`;
 
-            devBody.innerHTML += `<tr>
-                <td>
-                  ${isJumpUnmeasurable
-                    ? `<span class="led-container" title="${escapeHtml(i18n[currentLang].jumpLimitsPing)}">—</span>`
-                    : `<span class="led-container">
-                    <span class="led ${ledClass}"></span>
-                    ${scan.status.toUpperCase()}
-                  </span>`}
+            const iconBtn = (action, icon, title, extra = '') =>
+                `<button type="button" class="inv-icon-btn${extra}" data-action="${action}" data-ip="${ipAttr}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}"><i class="fa-solid ${icon}"></i></button>`;
+
+            devBody.innerHTML += `<tr class="${selected ? 'is-selected' : ''}">
+                ${isViewer ? '' : `<td class="inv-check"><input type="checkbox" data-action="select-device" data-ip="${ipAttr}" ${selected ? 'checked' : ''}
+                    aria-label="${escapeHtml(tr('ariaSelectDevice', { ip: d.IP }))}"></td>`}
+                <td data-sort-value="${bucket}">
+                  <span class="status ${info.cls}"${bucket === 'unknown' ? ` title="${escapeHtml(tr('jumpLimitsPing'))}"` : ''}><span class="led ${info.led}"></span>${escapeHtml(statusLabel)}</span>
                 </td>
-                <td>
-                  <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                    ${/* Il badge duplicava la select: chi puo' cambiare tenant lo
-                          legge gia' dalla select, al viewer resta il solo badge. */''}
-                    ${isViewer ? `<span class="badge" id="badge_${safeIp}">${escapeHtml(d.Group)}</span>` : ''}
-                    ${isViewer ? '' : `<select
-                      id="grpsel_${safeIp}"
-                      data-action="reassign-device"
-                      data-ip="${escapeHtml(d.IP)}"
-                      title="${tr('devMoveToAnotherTenant')}"
-                      style="font-size:11px; padding:3px 6px; border-radius:0;
-                             border:1px solid var(--border); background:var(--surface-3);
-                             color:var(--text-muted); cursor:pointer; outline:none;
-                             max-width:120px; transition:var(--transition);">
-                      ${groupOptions}
-                    </select>`}
+                <td data-sort-value="${escapeHtml(d.Hostname || '')}">
+                  <div class="inv-host">
+                    <span class="inv-host-name">${d.Hostname ? escapeHtml(d.Hostname) : '<span class="inv-muted">—</span>'}${isViewer ? '' : `
+                      <button type="button" class="inv-rename" data-action="rename-device" data-ip="${ipAttr}" title="${tr('uiRenameDevice')}" aria-label="${tr('uiRenameDevice')}"><i class="fa-solid fa-pen"></i></button>`}</span>
+                    <span class="inv-host-where">${where}</span>
                   </div>
                 </td>
-                <td>${isViewer
-                  ? `<span class="badge" style="background:var(--surface-3); color:var(--text-muted);">${escapeHtml(d.Site || 'central')}</span>`
-                  : `<select
-                      data-action="reassign-device-site"
-                      data-ip="${escapeHtml(d.IP)}"
-                      title="${tr('devMoveToAnotherSite')}"
-                      style="font-size:11px; padding:3px 6px; border-radius:0;
-                             border:1px solid var(--border); background:var(--surface-3);
-                             color:var(--text-muted); cursor:pointer; outline:none;
-                             max-width:130px; transition:var(--transition);">
-                      ${siteOptions(d.Site || 'central')}
-                    </select>`}</td>
-                <td style="font-family:monospace; font-size:12px; white-space:nowrap;">
-                  ${d.Hostname ? escapeHtml(d.Hostname) : '<span style="color:var(--text-muted)">—</span>'}
-                  ${isViewer ? '' : `<button data-action="rename-device" data-ip="${escapeHtml(d.IP)}"
-                      title="${tr('uiRenameDevice')}"
-                      style="margin-left:6px; font-size:11px; cursor:pointer; border:none; background:none;
-                             color:var(--text-muted); padding:0;">
-                      <i class="fa-solid fa-pen"></i></button>`}
+                <td data-sort-value="${ipAttr}"><strong>${ipAttr}</strong>${_renderDevicePosition(d)}</td>
+                <td>
+                  <div class="inv-vendor">
+                    ${d.Vendor
+                        ? `<span>${escapeHtml(d.Vendor.toUpperCase())}</span>`
+                        : `<span class="inv-vendor-missing" title="${escapeHtml(tr('devNoVendorSetBackup'))}">${escapeHtml(tr('devNotSet2'))}</span>`}
+                    <code>${escapeHtml(versionText)}</code>
+                  </div>
                 </td>
-                <td><strong>${d.IP}</strong>${_renderDevicePosition(d)}</td>
-                <td>${d.Vendor
-                    ? escapeHtml(d.Vendor.toUpperCase())
-                    : `<span style="color:var(--warning); font-style:italic;" title="${
-                        escapeHtml(tr('devNoVendorSetBackup'))
-                      }">${escapeHtml(tr('devNotSet2'))}</span>`}</td>
-                <td style="white-space:nowrap;"><code>${escapeHtml(versionText)}</code></td>
                 <td style="white-space:nowrap;">${_renderDeviceChips(d)}</td>
-                <td class="actions-cell">
-                    ${isViewer ? '<span style="color:var(--text-muted)">—</span>' : `
-                    <button class="btn btn-secondary btn-small"
-                        style="margin:0; padding:4px 8px;"
-                        data-action="ping-device"
-                        data-ip="${escapeHtml(d.IP)}"
-                        title="${tr('devPingDevice')}">
-                      <i class="fa-solid fa-wifi"></i>
-                    </button>
-                    <button class="btn btn-secondary btn-small"
-                        style="margin:0; padding:4px 8px; color:var(--warning);"
-                        data-action="triage-device"
-                        data-ip="${escapeHtml(d.IP)}"
-                        title="${tr('devTriageDevice')}">
-                      <i class="fa-solid fa-bolt-lightning"></i>
-                    </button>
-                    <button class="btn btn-secondary btn-small" style="margin:0; padding:4px 8px;"
-                        data-action="open-cli"
-                        data-ip="${escapeHtml(d.IP)}">
-                        <i class="fa-solid fa-terminal"></i> CLI
-                    </button>
-                    <button class="btn btn-secondary btn-small" style="margin:0; padding:4px 8px;"
-                        data-action="edit-device"
-                        data-ip="${escapeHtml(d.IP)}"
-                        title="${tr('devEditDevice')}">
-                        <i class="fa-solid fa-pen"></i> ${tr('uiEdit')}
-                    </button>
-                    <button class="btn btn-primary btn-small"
-                        style="margin:0; width:auto; background:var(--cta); color:var(--cta-text); padding:4px 8px;"
-                        data-action="download-backup"
-                        data-ip="${escapeHtml(d.IP)}">
-                        <i class="fa-solid fa-download"></i>
-                    </button>
-                    <button class="btn btn-danger btn-small"
-                        style="margin:0; padding:4px 8px; background:none; border:none;
-                               color:var(--danger); cursor:pointer;"
-                        data-action="delete-device"
-                        data-ip="${escapeHtml(d.IP)}">
-                        <i class="fa-solid fa-trash-can"></i> ${deleteText}
-                    </button>`}
-                </td>
+                <td><div class="inv-row-actions">
+                    ${isViewer ? '<span class="inv-muted">—</span>' : [
+                        iconBtn('ping-device', 'fa-wifi', tr('devPingDevice')),
+                        iconBtn('triage-device', 'fa-bolt-lightning', tr('devTriageDevice')),
+                        iconBtn('open-cli', 'fa-terminal', 'CLI'),
+                        iconBtn('edit-device', 'fa-pen', tr('devEditDevice')),
+                        iconBtn('download-backup', 'fa-download', tr('devDownloadBackup')),
+                        iconBtn('delete-device', 'fa-trash-can', tr('uiDelete'), ' danger'),
+                    ].join('')}
+                </div></td>
             </tr>`;
         });
 
@@ -336,10 +303,11 @@
             const msg = globalDevices.length === 0
                 ? i18n[currentLang].emptyInventory
                 : i18n[currentLang].emptyInventoryFiltered;
-            devBody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:32px; color:var(--text-muted); font-size:13px;">
+            devBody.innerHTML = `<tr><td colspan="${isViewer ? 6 : 7}" style="text-align:center; padding:32px; color:var(--text-muted); font-size:13px;">
                 <i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${msg}
             </td></tr>`;
         }
+        syncInventorySelection();
     }
 
     document.getElementById('deviceTableBody')?.addEventListener('click', (e) => {
@@ -815,11 +783,12 @@
         closeModal('triageScopeModal');
     }
 
-    async function startGroupTriage(group) {
+    // ips: the bulk selection; omitted = every device of the group.
+    async function startGroupTriage(group, ips) {
         const res = await apiFetch("/api/run-triage", {
             method: "POST",
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ group })
+            body: JSON.stringify(Array.isArray(ips) ? { group, ips } : { group })
         });
         if (res && res.ok) {
             closeTriageScopeModal();
@@ -1929,147 +1898,60 @@
 
     let pingInProgress = false;
 
-    async function pingSingleDevice(ip, btnEl) {
-        const row = btnEl?.closest("tr");
-        const led = row?.cells[0]?.querySelector(".led");
-        const ledContainer = row?.cells[0]?.querySelector(".led-container");
+    function setDeviceStatus(ip, status) {
+        if (!globalVersions[ip]) globalVersions[ip] = { version: tr('devNotScanned'), vendor: "cisco" };
+        globalVersions[ip].status = status;
+        setMapNodeStatus(ip, status);
+    }
 
+    async function pingSingleDevice(ip, btnEl) {
         btnEl.disabled = true;
         btnEl.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
-        if (led) { led.className = "led led-auth_failed"; }
-
         try {
             const res = await apiFetch(`/api/ping/${ip}`);
             if (res && res.ok) {
                 const data = await res.json();
-                // null = not measurable (jump site: ICMP cannot cross the
-                // bastion tunnel, see routers/triage.py's ping_single). Show
-                // the same em dash the row already uses on load, not a false
-                // "OFFLINE" from a ping that never ran.
-                if (data.reachable === null) {
-                    if (led) led.className = "led";
-                    if (ledContainer) {
-                        ledContainer.title = i18n[currentLang].jumpLimitsPing;
-                        Array.from(ledContainer.childNodes)
-                            .filter(n => n.nodeType === Node.TEXT_NODE)
-                            .forEach(n => n.remove());
-                        ledContainer.appendChild(document.createTextNode('—'));
-                    }
-                    if (globalVersions[ip]) globalVersions[ip].status = "unknown";
-                    setMapNodeStatus(ip, "unknown");
-                } else {
-                    const statusTxt = data.reachable ? "ONLINE" : "OFFLINE";
-                    if (led) {
-                        led.className = data.reachable ? "led led-online" : "led led-offline";
-                    }
-                    if (ledContainer) {
-                        Array.from(ledContainer.childNodes)
-                            .filter(n => n.nodeType === Node.TEXT_NODE)
-                            .forEach(n => n.remove());
-                        ledContainer.appendChild(document.createTextNode(` ${statusTxt}`));
-                    }
-
-                    // Update globalVersions cache
-                    if (!globalVersions[ip]) {
-                        globalVersions[ip] = {
-                            version: tr('devNotScanned'),
-                            vendor: "cisco"
-                        };
-                    }
-                    globalVersions[ip].status = data.reachable ? "online" : "offline";
-
-                    // Update map node status
-                    setMapNodeStatus(ip, data.reachable ? "online" : "offline");
-                }
+                // null = not measurable (jump site: ICMP cannot cross the bastion
+                // tunnel, see routers/triage.py's ping_single), never a false OFFLINE.
+                setDeviceStatus(ip, data.reachable === null ? "unknown" : (data.reachable ? "online" : "offline"));
             }
-        } catch(e) {}
-
-        btnEl.disabled = false;
-        btnEl.innerHTML = '<i class="fa-solid fa-wifi"></i>';
+        } catch (e) { }
+        renderDeviceTable();
     }
 
     async function triageSingleDevice(ip, btnEl) {
-        const row = btnEl?.closest("tr");
-        const led          = row?.cells[0]?.querySelector(".led");
-        const ledContainer = row?.cells[0]?.querySelector(".led-container");
-        const hostnameCell = row?.cells[3];                    // Hostname column (was cells[2])
-        const verCell      = row?.cells[6]?.querySelector("code"); // Firmware column (was cells[5] — off by one after Hostname added)
-
         btnEl.disabled = true;
         btnEl.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
-        if (led) led.className = "led led-auth_failed";
-
+        let failure = null;
         try {
             const res = await apiFetch(`/api/triage/${ip}`, { method: "POST" });
             if (res && res.ok) {
                 const data = await res.json();
                 if (data.status === "success") {
-                    if (led) led.className = "led led-online";
-                    if (ledContainer) {
-                        Array.from(ledContainer.childNodes)
-                            .filter(n => n.nodeType === Node.TEXT_NODE)
-                            .forEach(n => n.remove());
-                        ledContainer.appendChild(document.createTextNode(" ONLINE"));
-                    }
-
-                    if (verCell && data.version) verCell.textContent = data.version;
-
-                    if (hostnameCell && data.hostname) {
-                        hostnameCell.style.fontFamily = "monospace";
-                        hostnameCell.style.fontSize   = "12px";
-                        hostnameCell.textContent      = data.hostname;
-                    }
-
-                    if (globalVersions[ip]) {
-                        globalVersions[ip].version = data.version || globalVersions[ip].version;
-                        globalVersions[ip].status  = "online";
-                    }
+                    setDeviceStatus(ip, "online");
+                    if (data.version) globalVersions[ip].version = data.version;
                     const dev = globalDevices.find(d => d.IP === ip);
                     if (dev && data.hostname) dev.Hostname = data.hostname;
-
-                    setMapNodeStatus(ip, "online");
-
                 } else {
-                    if (led) led.className = "led led-offline";
-                    if (ledContainer) {
-                        Array.from(ledContainer.childNodes)
-                            .filter(n => n.nodeType === Node.TEXT_NODE)
-                            .forEach(n => n.remove());
-                        ledContainer.appendChild(document.createTextNode(" OFFLINE"));
-                    }
-                    if (globalVersions[ip]) {
-                        globalVersions[ip].status = "offline";
-                    }
-                    setMapNodeStatus(ip, "offline");
-                    const msgDetail = data.message || (tr('devUnknownError'));
-                    alert(`${i18n[currentLang].alertTriageFailed}${msgDetail}`);
+                    setDeviceStatus(ip, "offline");
+                    failure = data.message || tr('devUnknownError');
                 }
             }
-        } catch(e) {
-            if (led) led.className = "led led-offline";
-            if (ledContainer) {
-                Array.from(ledContainer.childNodes)
-                    .filter(n => n.nodeType === Node.TEXT_NODE)
-                    .forEach(n => n.remove());
-                ledContainer.appendChild(document.createTextNode(" OFFLINE"));
-            }
-            if (globalVersions[ip]) {
-                globalVersions[ip].status = "offline";
-            }
-            setMapNodeStatus(ip, "offline");
-        } finally {
-            btnEl.disabled = false;
-            btnEl.innerHTML = '<i class="fa-solid fa-bolt-lightning"></i>';
+        } catch (e) {
+            setDeviceStatus(ip, "offline");
         }
+        renderDeviceTable();
+        if (failure) alert(`${i18n[currentLang].alertTriageFailed}${failure}`);
     }
 
-    async function runPingCheck() {
+    // ips: the bulk selection; omitted = every device of the tenant in the filter.
+    async function runPingCheck(ips) {
         if (pingInProgress) return;
         pingInProgress = true;
 
         const btn = document.getElementById("btnPingCheck");
         const filterSelect = document.getElementById("filterGroupSelect");
-        const group = filterSelect ? filterSelect.value : "all";
+        const group = Array.isArray(ips) ? "all" : (filterSelect ? filterSelect.value : "all");
         const groupLabel = group === "all" ? i18n[currentLang].allSites : group;
 
         btn.disabled = true;
@@ -2079,7 +1961,7 @@
             const res = await apiFetch("/api/ping-check", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ group })
+                body: JSON.stringify(Array.isArray(ips) ? { group, ips } : { group })
             });
             if (res && res.ok) {
                 const data = await res.json();
@@ -2097,54 +1979,12 @@
     }
 
     function applyPingResultsToTable(results) {
-        const rows = document.querySelectorAll("#deviceTableBody tr");
-        rows.forEach(row => {
-            const ip = row.querySelector("strong")?.textContent?.trim();
-            if (!ip || !(ip in results)) return;
-
-            const ledContainer = row.cells[0].querySelector(".led-container");
-            if (!ledContainer) return;
-
-            const alive = results[ip];
-            const led = ledContainer.querySelector(".led");
-
-            // null = not measurable (jump site: ICMP cannot cross the bastion
-            // tunnel, see routers/triage.py's ping_check) — same em dash the
-            // row already uses on load, not a false "OFFLINE".
-            if (alive === null) {
-                if (led) led.className = "led";
-                ledContainer.title = i18n[currentLang].jumpLimitsPing;
-                Array.from(ledContainer.childNodes)
-                    .filter(n => n.nodeType === Node.TEXT_NODE)
-                    .forEach(n => n.remove());
-                ledContainer.appendChild(document.createTextNode('—'));
-                if (globalVersions[ip]) globalVersions[ip].status = "unknown";
-                setMapNodeStatus(ip, "unknown");
-                return;
-            }
-
-            const ledClass  = alive ? "led-online" : "led-offline";
-            const statusTxt = alive ? "ONLINE" : "OFFLINE";
-
-            if (led) led.className = `led ${ledClass}`;
-
-            Array.from(ledContainer.childNodes)
-                .filter(n => n.nodeType === Node.TEXT_NODE)
-                .forEach(n => n.remove());
-            ledContainer.appendChild(document.createTextNode(` ${statusTxt}`));
-
-            // Update globalVersions cache
-            if (!globalVersions[ip]) {
-                globalVersions[ip] = {
-                    version: tr('devNotScanned'),
-                    vendor: "cisco"
-                };
-            }
-            globalVersions[ip].status = alive ? "online" : "offline";
-
-            // Update map node status
-            setMapNodeStatus(ip, alive ? "online" : "offline");
+        // null = not measurable (jump site: ICMP cannot cross the bastion tunnel,
+        // see routers/triage.py's ping_check), never a false OFFLINE.
+        Object.entries(results || {}).forEach(([ip, alive]) => {
+            setDeviceStatus(ip, alive === null ? "unknown" : (alive ? "online" : "offline"));
         });
+        renderDeviceTable();
     }
 
     async function loadRedundancyGroups() {
@@ -2162,12 +2002,57 @@
     document.getElementById('filterGroupSelect')?.addEventListener('change', renderDeviceTable);
     document.getElementById('deviceSearch')?.addEventListener('input', renderDeviceTable);
     document.getElementById('btnTriageSite')?.addEventListener('click', triageCurrentSite);
-    document.getElementById('btnPingCheck')?.addEventListener('click', runPingCheck);
+    document.getElementById('btnPingCheck')?.addEventListener('click', () => runPingCheck());
     document.getElementById('btnSubnetScan')?.addEventListener('click', openSubnetScanModal);
     document.getElementById('btnBulkCommand')?.addEventListener('click', () => {
         if (typeof openBulkCommandModal === 'function') openBulkCommandModal();
     });
     document.getElementById('btnExportDevices')?.addEventListener('click', openDeviceExportModal);
+
+    // A menu item ran: close the tenant-actions menu so it does not linger over the table.
+    document.querySelector('#tab-devices .inv-actions-menu')?.addEventListener('click', (e) => {
+        if (e.target.closest('button')) e.target.closest('details')?.removeAttribute('open');
+    });
+
+    document.querySelector('#tab-devices .inv-tabs')?.addEventListener('click', (e) => {
+        const tab = e.target.closest('[data-inv-status]');
+        if (!tab) return;
+        invStatusFilter = tab.dataset.invStatus;
+        document.querySelectorAll('#tab-devices .inv-tab').forEach(t => {
+            const on = t === tab;
+            t.classList.toggle('active', on);
+            t.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        renderDeviceTable();
+    });
+
+    document.getElementById('deviceTableBody')?.addEventListener('change', (e) => {
+        const box = e.target.closest('input[data-action="select-device"]');
+        if (!box) return;
+        if (box.checked) selectedDeviceIps.add(box.dataset.ip);
+        else selectedDeviceIps.delete(box.dataset.ip);
+        box.closest('tr')?.classList.toggle('is-selected', box.checked);
+        syncInventorySelection();
+    });
+
+    document.getElementById('invSelectAll')?.addEventListener('change', (e) => {
+        const on = e.target.checked;
+        document.querySelectorAll('#deviceTableBody input[data-action="select-device"]').forEach(box => {
+            box.checked = on;
+            if (on) selectedDeviceIps.add(box.dataset.ip);
+            else selectedDeviceIps.delete(box.dataset.ip);
+            box.closest('tr')?.classList.toggle('is-selected', on);
+        });
+        syncInventorySelection();
+    });
+
+    document.getElementById('btnSelTriage')?.addEventListener('click', () => startGroupTriage('all', [...selectedDeviceIps]));
+    document.getElementById('btnSelPing')?.addEventListener('click', () => runPingCheck([...selectedDeviceIps]));
+    document.getElementById('btnSelCommands')?.addEventListener('click', () => openBulkCommandModal([...selectedDeviceIps]));
+    document.getElementById('btnSelClear')?.addEventListener('click', () => {
+        selectedDeviceIps.clear();
+        renderDeviceTable();
+    });
     document.getElementById('btnRunDeviceExport')?.addEventListener('click', exportDeviceCsv);
     document.getElementById('exportColumnList')?.addEventListener('change', () => {
         updateMemberHint();

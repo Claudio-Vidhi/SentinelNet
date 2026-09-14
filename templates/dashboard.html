@@ -600,77 +600,70 @@
 
     <!-- TAB 1: Network Inventory (Dispositivi) -->
     <div id="tab-devices" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="hero" style="grid-template-columns:1fr;">
-        <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="invHeroTitle">Inventario Dispositivi di Rete</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="invHeroSubtitle">Elenco completo degli apparati monitorati: stato in tempo reale, filtri per tenant e azioni rapide di triage, ping e scansione.</p>
-          <div class="split-footer">
-            <button class="btn btn-primary btn-small requires-write" id="btnRunTriage" style="background: var(--cta); color: var(--cta-text); width: auto; margin: 0;" data-i18n="btnRunTriage">
-              <i class="fa-solid fa-bolt-lightning"></i> Avvia Triage Globale
-            </button>
-          </div>
+      <div class="page-head">
+        <div class="page-head-text">
+          <h2 data-i18n="invHeroTitle">Inventario Dispositivi di Rete</h2>
+          <p data-i18n="invHeroSubtitle">Elenco completo degli apparati monitorati: stato in tempo reale, filtri per tenant e azioni rapide di triage, ping e scansione.</p>
+        </div>
+        <div class="page-head-actions">
+          <button class="btn btn-secondary" id="btnExportDevices" data-i18n="btnExportCsv"><i class="fa-solid fa-file-csv"></i> Esporta CSV</button>
+          <button class="btn btn-secondary requires-write" data-switch-tab="tab-provisioning" data-i18n="invAddDevice"><i class="fa-solid fa-plus"></i> Aggiungi apparato</button>
+          <button class="btn btn-primary requires-write" id="btnRunTriage" data-i18n="btnRunTriage"><i class="fa-solid fa-bolt-lightning"></i> Avvia Triage Globale</button>
         </div>
       </div>
 
-      <div class="oneline-foot" style="margin-top:18px;">
-        <span><span data-i18n="invKpiOnlineLabel">Dispositivi Online</span> <b id="invKpiOnline">&mdash;</b></span>
-        <span><span data-i18n="invKpiOfflineLabel">Dispositivi Offline</span> <b id="invKpiOffline">&mdash;</b></span>
-        <span><span data-i18n="invKpiAuthFailedLabel">Autenticazione Fallita</span> <b id="invKpiAuthFailed">&mdash;</b></span>
-        <span><span data-i18n="invKpiUnknownLabel">Non misurabile</span> <b id="invKpiUnknown">&mdash;</b></span>
-      </div>
+      <div class="panel inv-panel">
+        <!-- Status tabs: whole-fleet counts (updateInventoryKpis), and a filter on the table below. -->
+        <div class="inv-tabs">
+          <button type="button" class="inv-tab active" data-inv-status="all" aria-pressed="true"><span data-i18n="invTabAll">Tutti</span><span class="inv-tab-count" id="invKpiAll">&mdash;</span></button>
+          <button type="button" class="inv-tab" data-inv-status="online" aria-pressed="false"><span class="led led-online"></span><span data-i18n="homeStOnline">Online</span><span class="inv-tab-count" id="invKpiOnline">&mdash;</span></button>
+          <button type="button" class="inv-tab" data-inv-status="offline" aria-pressed="false"><span class="led led-offline"></span><span data-i18n="homeStOffline">Offline</span><span class="inv-tab-count" id="invKpiOffline">&mdash;</span></button>
+          <button type="button" class="inv-tab" data-inv-status="auth_failed" aria-pressed="false"><span class="led led-auth_failed"></span><span data-i18n="homeStAuth">Autenticazione fallita</span><span class="inv-tab-count" id="invKpiAuthFailed">&mdash;</span></button>
+          <button type="button" class="inv-tab" data-inv-status="unknown" aria-pressed="false"><span class="led led-discovered"></span><span data-i18n="homeStUnknown">Non misurabile</span><span class="inv-tab-count" id="invKpiUnknown">&mdash;</span></button>
+        </div>
 
-      <div class="panel" style="margin-top:18px;">
-        <h3 style="margin:0 0 6px; font-size:17px;" data-i18n="titleInventoryTable">Dispositivi di Rete Sotto Monitoraggio</h3>
         <div class="filterbar">
-          <select id="filterGroupSelect" style="padding: 6px 12px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none; transition: var(--transition);" aria-label="Filtra per tenant" data-i18n-aria-label="ariaFilterTenant">
+          <select id="filterGroupSelect" aria-label="Filtra per tenant" data-i18n-aria-label="ariaFilterTenant">
             <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
           </select>
           <div class="search-wrap">
             <i class="fa-solid fa-magnifying-glass"></i>
             <input id="deviceSearch" type="search" autocomplete="off"
               placeholder="Cerca IP, hostname, vendor, gruppo..." data-i18n-placeholder="searchInventoryPl"
-              style="padding:6px 10px 6px 30px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:inherit; font-size:13px; outline:none; width:100%; transition:var(--transition);" aria-label="Cerca IP, hostname, vendor, gruppo..." data-i18n-aria-label="searchInventoryPl">
+              aria-label="Cerca IP, hostname, vendor, gruppo..." data-i18n-aria-label="searchInventoryPl">
           </div>
-          <button class="btn btn-secondary btn-small requires-write" id="btnTriageSite"
-              style="width:auto; margin:0; border-color: var(--warning); color: var(--warning);"
-              data-i18n="btnTriageSite">
-            <i class="fa-solid fa-bolt"></i> Triage Sede
-          </button>
-          <button class="btn btn-secondary btn-small requires-write" id="btnPingCheck"
-              style="width:auto; margin:0; border-color: var(--primary); color: var(--primary);"
-              data-i18n="btnPingCheck">
-            <i class="fa-solid fa-wifi"></i> Ping Sede
-          </button>
-          <button class="btn btn-secondary btn-small requires-write" id="btnSubnetScan"
-              style="width:auto; margin:0; border-color: var(--primary); color: var(--primary);"
-              data-i18n="btnSubnetScan">
-            <i class="fa-solid fa-magnifying-glass-location"></i> Scansione Subnet
-          </button>
-          <button class="btn btn-secondary btn-small requires-write" id="btnBulkCommand"
-              style="width:auto; margin:0; border-color: var(--warning); color: var(--warning);"
-              data-i18n="btnBulkCommand">
-            <i class="fa-solid fa-terminal"></i> Invio Comandi
-          </button>
-          <button class="btn btn-secondary btn-small" id="btnExportDevices"
-              style="width:auto; margin:0;"
-              data-i18n="btnExportCsv">
-            <i class="fa-solid fa-file-csv"></i> Esporta CSV
-          </button>
+          <!-- Tenant-wide actions, grouped: they act on the tenant in the filter, not on the selection. -->
+          <details class="inv-actions requires-write">
+            <summary class="btn btn-secondary"><i class="fa-solid fa-bolt"></i> <span data-i18n="invSiteActions">Azioni tenant</span> <i class="fa-solid fa-chevron-down inv-actions-caret"></i></summary>
+            <div class="inv-actions-menu">
+              <button type="button" class="inv-menu-item" id="btnTriageSite" data-i18n="btnTriageSite"><i class="fa-solid fa-bolt"></i> Triage Tenant</button>
+              <button type="button" class="inv-menu-item" id="btnPingCheck" data-i18n="btnPingCheck"><i class="fa-solid fa-wifi"></i> Ping Tenant</button>
+              <button type="button" class="inv-menu-item" id="btnSubnetScan" data-i18n="btnSubnetScan"><i class="fa-solid fa-magnifying-glass-location"></i> Scansione Subnet</button>
+              <button type="button" class="inv-menu-item" id="btnBulkCommand" data-i18n="btnBulkCommand"><i class="fa-solid fa-terminal"></i> Invio Comandi</button>
+            </div>
+          </details>
+        </div>
+
+        <!-- Bulk selection: acts only on the ticked rows. -->
+        <div class="inv-selection requires-write" id="invSelectionBar" hidden>
+          <span class="inv-selection-count" id="invSelectionCount"></span>
+          <button type="button" class="btn btn-secondary btn-small" id="btnSelTriage" data-i18n="invSelTriage"><i class="fa-solid fa-bolt-lightning"></i> Triage</button>
+          <button type="button" class="btn btn-secondary btn-small" id="btnSelPing" data-i18n="invSelPing"><i class="fa-solid fa-wifi"></i> Ping</button>
+          <button type="button" class="btn btn-secondary btn-small" id="btnSelCommands" data-i18n="invSelCommands"><i class="fa-solid fa-terminal"></i> Invia comandi</button>
+          <button type="button" class="inv-link" id="btnSelClear" data-i18n="invClearSelection">Deseleziona</button>
         </div>
 
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
+                <th class="inv-check requires-write" data-no-sort="1"><input type="checkbox" id="invSelectAll" aria-label="Seleziona tutti i dispositivi visibili" data-i18n-aria-label="ariaSelectAllDevices"></th>
                 <th data-i18n="thStatus">Stato</th>
-                <th data-i18n="thGroup">Gruppo</th>
-                <th data-i18n="thSite">Sede</th>
                 <th data-i18n="thHostname">Hostname</th>
                 <th data-i18n="thIp">Indirizzo IP</th>
-                <th data-i18n="thVendor">Vendor</th>
-                <th data-i18n="thFirmware">Firmware</th>
+                <th data-i18n="thVendorFw">Vendor · firmware</th>
                 <th data-i18n="thTools">Strumenti</th>
-                <th data-i18n="thActions">Azioni / Utility</th>
+                <th data-i18n="thActions" data-no-sort="1">Azioni / Utility</th>
               </tr>
             </thead>
             <tbody id="deviceTableBody"></tbody>
