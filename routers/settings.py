@@ -10,7 +10,9 @@ from pydantic import BaseModel, Field
 from core.app_settings import get_app_settings, save_app_settings, effective_port, list_local_ips, PORT
 from core import core_engine
 from security import crypto_vault
-from security.security_manager import log_audit
+from security.security_manager import (
+    log_audit, session_settings, SESSION_IDLE_LIMITS, SESSION_MAX_HOURS_LIMIT,
+)
 from routers.deps import require_admin, get_current_user, user_group_scope
 from core import data_config
 from services import cert_manager, self_update
@@ -161,6 +163,33 @@ def set_app_advanced_settings(payload: dict, current_user = Depends(require_admi
     log_audit(f"Impostazioni applicazione aggiornate da '{current_user.get('sub')}' "
               f"(riavvio richiesto): {clean}.")
     return {"status": "success", "restart_required": True, "settings": saved}
+
+
+class SessionSettingsSchema(BaseModel):
+    idle_minutes: int = Field(ge=SESSION_IDLE_LIMITS[0], le=SESSION_IDLE_LIMITS[1])
+    max_hours: int = Field(ge=1, le=SESSION_MAX_HOURS_LIMIT)
+
+
+@router.get("/api/settings/session")
+def get_session_settings(current_user = Depends(require_admin)):
+    """How long a browser session lasts without input, and in total."""
+    return {**session_settings(), "idle_limits": list(SESSION_IDLE_LIMITS),
+            "max_hours_limit": SESSION_MAX_HOURS_LIMIT}
+
+
+@router.post("/api/settings/session")
+def set_session_settings(payload: SessionSettingsSchema,
+                         current_user = Depends(require_admin)):
+    """Applied from the next token issued or renewed, without restart. Sessions
+    already open keep the expiry their token carries."""
+    if payload.idle_minutes > payload.max_hours * 60:
+        raise HTTPException(status_code=400,
+                            detail="The idle timeout cannot exceed the maximum session length.")
+    save_app_settings({"session": {"idle_minutes": payload.idle_minutes,
+                                   "max_hours": payload.max_hours}})
+    log_audit(f"Durata sessioni impostata da '{current_user.get('sub')}': "
+              f"inattivita' {payload.idle_minutes} min, massimo {payload.max_hours} h.")
+    return {"status": "success", **session_settings()}
 
 
 class PingMonitorSchema(BaseModel):

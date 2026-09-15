@@ -809,6 +809,7 @@
         renderAppSettings(d);
         loadCliBlacklistSetting();
         loadPingMonitorSettings();
+        loadSessionSettings();
         loadFleetVersions();
         if (typeof loadObsSettings === 'function') {
             loadObsSettings();
@@ -1274,6 +1275,32 @@
 
     // --- MONITOR PING CONTINUO (solo admin) ---
 
+    async function loadSessionSettings() {
+        if (currentRole !== 'admin') return;
+        const res = await apiFetch('/api/settings/session');
+        if (!res || !res.ok) return;
+        const cfg = await res.json();
+        document.getElementById('sessionIdleMinutes').value = cfg.idle_minutes;
+        document.getElementById('sessionMaxHours').value = cfg.max_hours;
+    }
+
+    async function saveSessionSettings() {
+        const statusEl = document.getElementById('sessionSettingsStatus');
+        const idle = parseInt(document.getElementById('sessionIdleMinutes').value, 10);
+        const maxHours = parseInt(document.getElementById('sessionMaxHours').value, 10);
+        const res = await apiFetch('/api/settings/session', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idle_minutes: idle, max_hours: maxHours })
+        });
+        if (res && res.ok) {
+            statusEl.textContent = tr('msgSessionSettingsSaved');
+            return;
+        }
+        const e = res ? await res.json().catch(() => ({})) : {};
+        // A 422 from the range check carries a list; the cap check a sentence.
+        statusEl.textContent = typeof e.detail === 'string' ? tr('uiError') + e.detail : tr('msgSessionSettingsInvalid');
+    }
+
     async function loadPingMonitorSettings() {
         if (currentRole !== 'admin') return;
         const toggle = document.getElementById('pingMonitorToggle');
@@ -1350,29 +1377,55 @@
         }
     });
 
-    // Settings index: a click scrolls to the section, and the entry for the
-    // section nearest the top of the viewport stays marked while scrolling.
+    // Settings index: a click scrolls to the section and marks it. While
+    // scrolling, the marked entry is the last section whose top has passed the
+    // top of the viewport. The last few sections are too short to ever reach
+    // the top (the page ends first), so at the bottom of the page the entry the
+    // user clicked stays marked, or else the last section on screen.
     const settingsNav = document.getElementById('settingsNav');
-    settingsNav?.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-settings-jump]');
-        if (btn) document.getElementById(btn.dataset.settingsJump)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-    if (settingsNav && 'IntersectionObserver' in window) {
-        const markActive = (id) => settingsNav.querySelectorAll('[data-settings-jump]').forEach(b => {
-            const on = b.dataset.settingsJump === id;
-            b.classList.toggle('active', on);
-            if (on) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current');
+    if (settingsNav) {
+        let pinned = null;
+        const markActive = (id) => settingsNav.querySelectorAll('[data-settings-jump]').forEach(btn => {
+            const on = btn.dataset.settingsJump === id;
+            btn.classList.toggle('active', on);
+            if (on) btn.setAttribute('aria-current', 'true'); else btn.removeAttribute('aria-current');
         });
-        const seen = new IntersectionObserver((entries) => {
-            const top = entries.filter(en => en.isIntersecting)
-                .sort((x, y) => x.boundingClientRect.top - y.boundingClientRect.top)[0];
-            if (top) markActive(top.target.id);
-        }, { rootMargin: '0px 0px -70% 0px' });
-        document.querySelectorAll('#tab-settings .set-section').forEach(sec => seen.observe(sec));
+        const syncActive = () => {
+            const tab = document.getElementById('tab-settings');
+            if (!tab || !tab.classList.contains('active')) return;
+            if (pinned) { markActive(pinned); return; }
+            const sections = [...tab.querySelectorAll('.set-section')].filter(sec => sec.offsetParent !== null);
+            if (!sections.length) return;
+            const scroller = document.scrollingElement;
+            const lastSec = sections[sections.length - 1].getBoundingClientRect();
+            const atBottom = lastSec.bottom <= window.innerHeight + 2
+                || scroller.scrollTop + window.innerHeight >= scroller.scrollHeight - 2;
+            let current = sections[0];
+            for (const sec of sections) {
+                const top = sec.getBoundingClientRect().top;
+                if (top <= 140 || (atBottom && top < window.innerHeight)) current = sec;
+            }
+            markActive(current.id);
+        };
+        settingsNav.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-settings-jump]');
+            if (!btn) return;
+            pinned = btn.dataset.settingsJump;
+            markActive(pinned);
+            document.getElementById(pinned)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+        // Only the user's own scrolling releases the clicked entry; the smooth
+        // scroll started by the click must not.
+        ['wheel', 'touchmove', 'keydown'].forEach(ev =>
+            window.addEventListener(ev, () => { pinned = null; }, { passive: true }));
+        // Capture: the page may scroll on <main> rather than on the document.
+        document.addEventListener('scroll', syncActive, { capture: true, passive: true });
+        syncActive();
     }
 
     document.getElementById('cliBlacklistToggle')?.addEventListener('change', saveCliBlacklistSetting);
     document.getElementById('btnSavePingMonitor')?.addEventListener('click', savePingMonitorSettings);
+    document.getElementById('btnSaveSessionSettings')?.addEventListener('click', saveSessionSettings);
     document.getElementById('btnRestartApp')?.addEventListener('click', restartApplication);
     document.getElementById('btnUpdateApp')?.addEventListener('click', updateApplication);
     document.getElementById('btnGenerateSelfSigned')?.addEventListener('click', generateSelfSignedCert);

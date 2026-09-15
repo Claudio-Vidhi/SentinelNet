@@ -3242,7 +3242,7 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
 
 /* Settings: index on the left, one section per concern on the right. */
 .settings-layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 20px; align-items: start; }
-.settings-nav { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 1px; }
+.settings-nav { position: sticky; top: 68px; display: flex; flex-direction: column; gap: 1px; }
 .settings-nav-group {
   margin: 14px 0 4px; padding: 0 10px;
   font-family: var(--font-legend); font-size: 11px; font-weight: 600;
@@ -3259,7 +3259,7 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
 .settings-nav button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .settings-nav button.active { color: var(--text); font-weight: 600; border-left-color: var(--primary); background: var(--surface-2); }
 .settings-sections { min-width: 0; }
-.set-section { scroll-margin-top: 12px; }
+.set-section { scroll-margin-top: 68px; }
 .set-section .panel-head { margin-bottom: 14px; }
 .set-desc { margin: 0 0 14px; font-size: 13px; line-height: 1.55; color: var(--text-muted); max-width: 80ch; }
 .set-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 0 14px; }
@@ -3324,7 +3324,7 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
 .import-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); gap: 16px; align-items: start; }
 .import-steps > .panel { margin-bottom: 16px; }
 .import-steps .panel-head, .import-aside .panel-head { margin-bottom: 14px; }
-.import-aside { position: sticky; top: 12px; }
+.import-aside { position: sticky; top: 68px; }
 .import-aside-text { font-size: 12.5px; line-height: 1.6; color: var(--text-muted); }
 .import-aside-sep { margin-top: 12px; padding-top: 12px; border-top: var(--seam) solid var(--border); }
 .dropzone { padding: 28px 22px; text-align: center; cursor: pointer; background-color: var(--surface-2); border: 2px dashed var(--border); transition: border-color var(--transition); }
