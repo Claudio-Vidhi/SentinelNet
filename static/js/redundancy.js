@@ -31,12 +31,12 @@
     async function loadRedundancyTab() {
         const container = document.getElementById('redundancyGroupsContainer');
         if (!container) return;
-        container.innerHTML = `<div style="text-align:center; padding:30px;"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><p style="margin-top:10px; color:var(--text-muted); font-size:13px;">Caricamento gruppi di ridondanza e cluster HA...</p></div>`;
+        container.innerHTML = `<div style="text-align:center; padding:30px;"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><p style="margin-top:10px; color:var(--text-muted); font-size:13px;">${escapeHtml(tr('haLoading'))}</p></div>`;
 
         try {
             const res = await apiFetch('/api/redundancy/groups');
             if (!res || !res.ok) {
-                container.innerHTML = `<div class="alert-box alert-danger">Impossibile caricare i gruppi di ridondanza.</div>`;
+                container.innerHTML = `<div class="alert-box alert-danger">${escapeHtml(tr('haLoadFailed'))}</div>`;
                 return;
             }
             const data = await res.json();
@@ -84,21 +84,21 @@
             container.innerHTML = activeTenant ? `
                 <div class="panel" style="text-align:center; padding:40px;">
                     <i class="fa-solid fa-filter-circle-xmark" style="font-size:var(--font-size-4xl); color:var(--text-muted); margin-bottom:12px;"></i>
-                    <h3 style="margin-bottom:8px; font-size:var(--font-size-lg);">Nessun gruppo di ridondanza per il tenant «${escapeHtml(activeTenant)}»</h3>
+                    <h3 style="margin-bottom:8px; font-size:var(--font-size-lg);">${escapeHtml(tr('haEmptyTenantTitle', {tenant: activeTenant}))}</h3>
                     <p style="color:var(--text-muted); font-size:13px; max-width:500px; margin:0 auto;">
-                        Scegli «Tutti i tenant» per vedere gli altri cluster.
+                        ${escapeHtml(tr('haEmptyTenantHint'))}
                     </p>
                 </div>
             ` : `
                 <div class="panel" style="text-align:center; padding:40px;">
                     <i class="fa-solid fa-layer-group" style="font-size:var(--font-size-4xl); color:var(--text-muted); margin-bottom:12px;"></i>
-                    <h3 style="margin-bottom:8px; font-size:var(--font-size-lg);">Nessun gruppo di ridondanza registrato</h3>
+                    <h3 style="margin-bottom:8px; font-size:var(--font-size-lg);">${escapeHtml(tr('haEmptyTitle'))}</h3>
                     <p style="color:var(--text-muted); font-size:13px; max-width:500px; margin:0 auto 16px;">
-                        Crea un gruppo per monitorare cluster HSRP, VRRP, FortiGate HA (FGCP), Cisco StackWise o coppie VPC/MLAG.
+                        ${escapeHtml(tr('haEmptyHint'))}
                     </p>
                     ${typeof currentRole !== 'undefined' && currentRole === 'admin' ? `
                     <button class="btn btn-primary" data-action="open-create-redundancy" style="width:auto; margin:0 auto;">
-                        <i class="fa-solid fa-plus"></i> Crea Gruppo HA
+                        <i class="fa-solid fa-plus"></i> ${escapeHtml(tr('haBtnCreate'))}
                     </button>` : ''}
                 </div>
             `;
@@ -120,7 +120,7 @@
         const unhealthy = groups.filter(g => healthBucket(g) !== 'healthy').length;
         const alertChip = unhealthy ? `
             <span class="chip" style="font-size:10px; color:var(--warning); border-color:var(--warning);">
-                <i class="fa-solid fa-triangle-exclamation" style="margin-right:4px;"></i>${unhealthy} da verificare
+                <i class="fa-solid fa-triangle-exclamation" style="margin-right:4px;"></i>${escapeHtml(tr('haToCheck', {n: unhealthy}))}
             </span>` : '';
 
         return `
@@ -154,7 +154,7 @@
 
         const members = (g.members || []).map((m, idx) => {
             const isMaster = (m.role || '').toLowerCase().includes('master') || (m.role || '').toLowerCase().includes('active') || (m.state || '').toLowerCase().includes('active') || (m.role || '').toLowerCase().includes('primary');
-            const roleIcon = isMaster ? '<i class="fa-solid fa-crown" style="color:var(--warning); margin-right:5px;" title="Master / Active"></i>' : '<i class="fa-solid fa-shield" style="color:var(--text-muted); margin-right:5px;" title="Member / Standby"></i>';
+            const roleIcon = isMaster ? '<i class="fa-solid fa-crown" style="color:var(--warning); margin-right:5px;" title="' + escapeHtml(tr('haRoleMaster')) + '"></i>' : '<i class="fa-solid fa-shield" style="color:var(--text-muted); margin-right:5px;" title="' + escapeHtml(tr('haRoleMember')) + '"></i>';
 
             let memberLabel = '';
             if (isStack || (m.member_index !== null && m.member_index !== undefined)) {
@@ -164,7 +164,7 @@
                     memberLabel += ` (${m.device_ip})`;
                 }
             } else {
-                memberLabel = m.device_ip || m.mgmt_ip || `Membro #${idx + 1}`;
+                memberLabel = m.device_ip || m.mgmt_ip || tr('haMemberN', {n: idx + 1});
             }
 
             const modelBadge = m.model ? `<span style="color:var(--text-muted); font-size:11px; font-weight:normal; margin-left:4px;">${escapeHtml(m.model)}</span>` : '';
@@ -178,7 +178,7 @@
             ` : (isStack ? `
                 <div style="display:inline-flex; align-items:center; gap:4px; font-size:11px; margin-top:2px; color:var(--text-muted);">
                     <span style="font-size:10px; text-transform:uppercase; letter-spacing:.03em;"><i class="fa-solid fa-barcode" style="margin-right:2px; font-size:10px; opacity:0.6;"></i>S/N:</span>
-                    <span style="font-size:10px; font-style:italic;">Non rilevato</span>
+                    <span style="font-size:10px; font-style:italic;">${escapeHtml(tr('haNotDetected'))}</span>
                 </div>
             ` : '');
 
@@ -197,14 +197,14 @@
                     ${m.state && m.state !== 'ready' && m.state !== 'active' ? `<span class="chip" style="font-size:10px; font-family:var(--font-code); color:var(--danger); border-color:var(--danger);">${escapeHtml(m.state)}</span>` : ''}
                 </div>
             </div>`;
-        }).join('') || `<div style="color:var(--text-muted); font-size:12px; padding:6px 0;">Nessun membro associato.</div>`;
+        }).join('') || `<div style="color:var(--text-muted); font-size:12px; padding:6px 0;">${escapeHtml(tr('haNoMembers'))}</div>`;
 
         return `
             <div class="panel" style="display:flex; flex-direction:column; justify-content:space-between;">
                 <div>
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
                         <div>
-                            <h4 style="margin:0 0 4px; font-size:15px; color:var(--text);">${escapeHtml(g.name || g.group_name || 'Gruppo HA')}</h4>
+                            <h4 style="margin:0 0 4px; font-size:15px; color:var(--text);">${escapeHtml(g.name || g.group_name || tr('haGroupFallback'))}</h4>
                             <span style="font-size:11px; color:var(--text-muted);">${escapeHtml(protoLabel)} | Tenant: <strong>${escapeHtml(g.group_name || 'default')}</strong></span>
                         </div>
                         ${healthBadge}
@@ -217,19 +217,19 @@
 
                     ${g.logical_device_ip ? `
                     <div style="background:var(--surface-2); border:1px solid var(--border); padding:6px 10px; margin-bottom:12px; font-size:12px;">
-                        <span style="color:var(--text-muted);">IP Switch / Stack:</span> <code style="color:var(--primary); font-weight:700; font-family:var(--font-code);">${escapeHtml(g.logical_device_ip)}</code>
+                        <span style="color:var(--text-muted);">${escapeHtml(tr('haStackIp'))}</span> <code style="color:var(--primary); font-weight:700; font-family:var(--font-code);">${escapeHtml(g.logical_device_ip)}</code>
                     </div>` : ''}
 
                     <div style="margin-bottom:14px;">
-                        <h5 style="margin:0 0 6px; font-size:11px; text-transform:uppercase; color:var(--text-muted); letter-spacing:.05em;">Membri del Cluster</h5>
+                        <h5 style="margin:0 0 6px; font-size:11px; text-transform:uppercase; color:var(--text-muted); letter-spacing:.05em;">${escapeHtml(tr('haClusterMembers'))}</h5>
                         ${members}
                     </div>
                 </div>
 
                 <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--border); padding-top:10px; margin-top:8px;">
-                    <span style="font-size:10px; color:var(--text-muted);">${g.detection_source ? `Fonte: ${escapeHtml(g.detection_source)}` : ''}</span>
+                    <span style="font-size:10px; color:var(--text-muted);">${g.detection_source ? escapeHtml(tr('haSource', {src: g.detection_source})) : ''}</span>
                     ${typeof currentRole !== 'undefined' && currentRole === 'admin' ? `
-                    <button class="btn btn-secondary btn-small" data-action="delete-redundancy" data-group-id="${g.id}" style="color:var(--danger); width:auto;" title="Elimina gruppo">
+                    <button class="btn btn-secondary btn-small" data-action="delete-redundancy" data-group-id="${g.id}" style="color:var(--danger); width:auto;" title="${escapeHtml(tr('haDeleteGroup'))}" aria-label="${escapeHtml(tr('haDeleteGroup'))}">
                         <i class="fa-solid fa-trash"></i>
                     </button>` : ''}
                 </div>
@@ -259,7 +259,7 @@
         const tenant = tenantEl ? tenantEl.value.trim() || 'default' : 'default';
 
         if (!name) {
-            showToast('Inserisci un nome per il gruppo di ridondanza', 'warning');
+            showToast(tr('haNameRequired'), 'warning');
             return;
         }
 
@@ -281,32 +281,32 @@
             });
             if (!res || !res.ok) {
                 const errData = res ? await res.json().catch(() => ({})) : {};
-                showToast(errData.detail || 'Errore durante la creazione del gruppo HA', 'error');
+                showToast(errData.detail || tr('haCreateFailed'), 'error');
                 return;
             }
-            showToast('Gruppo HA creato con successo!', 'ok');
+            showToast(tr('haCreated'), 'ok');
             if (nameEl) nameEl.value = '';
             if (vipEl) vipEl.value = '';
             closeCreateRedundancyModal();
             loadRedundancyTab();
         } catch (e) {
-            showToast('Errore: ' + e.message, 'error');
+            showToast(tr('haError', {msg: e.message}), 'error');
         }
     }
 
     async function deleteRedundancyGroup(id) {
-        if (!confirm(`Sei sicuro di voler eliminare il gruppo di ridondanza #${id}?`)) return;
+        if (!confirm(tr('haConfirmDelete', {id: id}))) return;
 
         try {
             const res = await apiFetch(`/api/redundancy/groups/${id}`, { method: 'DELETE' });
             if (!res || !res.ok) {
-                showToast('Impossibile eliminare il gruppo HA', 'error');
+                showToast(tr('haDeleteFailed'), 'error');
                 return;
             }
-            showToast('Gruppo HA eliminato con successo.', 'ok');
+            showToast(tr('haDeleted'), 'ok');
             loadRedundancyTab();
         } catch (e) {
-            showToast('Errore: ' + e.message, 'error');
+            showToast(tr('haError', {msg: e.message}), 'error');
         }
     }
 

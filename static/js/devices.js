@@ -725,6 +725,7 @@
         if (res && res.ok) {
             document.getElementById('newVendorName').value = '';
             document.getElementById('newVendorDriver').value = '';
+            closeModal('addVendorModal');
             await loadVendors();
         }
     }
