@@ -673,15 +673,15 @@
 
     <!-- TAB 1b: Provisioning Apparato (estratto da Network Inventory) -->
     <div id="tab-provisioning" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+      <div class="page-head">
+        <div class="page-head-text">
+          <h2 data-i18n="provisioningHeroTitle">Provisioning Apparato</h2>
+          <p data-i18n="provisioningHeroSubtitle">Aggiungi o modifica un dispositivo esistente nell'inventario, assegnalo a un tenant e configura protocolli di connessione e credenziali. Crea qui anche nuovi tenant.</p>
+        </div>
+      </div>
+      <div class="subtab-bar">
         <button class="btn btn-secondary ti-subtab active" data-switch-tab="tab-provisioning" data-i18n="tabProvisioning"></button>
         <button class="btn btn-secondary ti-subtab" data-switch-tab="tab-provisioner" data-i18n="tabProvisioner"></button>
-      </div>
-      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
-        <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="provisioningHeroTitle">Provisioning Apparato</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="provisioningHeroSubtitle">Aggiungi o modifica un dispositivo esistente nell'inventario, assegnalo a un tenant e configura protocolli di connessione e credenziali. Crea qui anche nuovi tenant.</p>
-        </div>
       </div>
 
       <div style="display:grid; grid-template-columns: minmax(380px, 1fr) minmax(320px, 420px); gap:18px; align-items:start;" class="prov-grid">
@@ -887,16 +887,14 @@
 
     <!-- TAB 2: Gestione Tenant -->
     <div id="tab-groups" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="hero" style="grid-template-columns:1fr;">
-        <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleGroupsRegistry">Anagrafica Tenant e Clienti</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descGroupsRegistry">
-            I Tenant organizzano logicamente la topologia dei tuoi asset. L'eliminazione di un Tenant sposta i dispositivi associati nel Tenant Generale.
-          </p>
+      <div class="page-head">
+        <div class="page-head-text">
+          <h2 data-i18n="titleGroupsRegistry">Anagrafica Tenant e Clienti</h2>
+          <p data-i18n="descGroupsRegistry">I Tenant organizzano logicamente la topologia dei tuoi asset. L'eliminazione di un Tenant sposta i dispositivi associati nel Tenant Generale.</p>
         </div>
       </div>
 
-      <div class="panel" style="margin-top:18px;">
+      <div class="panel panel-flush">
         <div class="table-wrap">
           <table>
             <thead>
@@ -913,12 +911,15 @@
       </div>
 
       <!-- Gestione Vendor -->
-      <div class="panel" style="margin-top: 18px;">
-        <h3 style="margin-bottom: 8px; font-size: 17px;" data-i18n="titleVendorRegistry"><i class="fa-solid fa-boxes-stacked" style="color:var(--primary);"></i> Gestione Vendor</h3>
-        <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 15px;" data-i18n="descVendorRegistry">
-          Registro dei vendor supportati e dei relativi driver di connessione SSH.
-        </p>
-        <div class="table-wrap" style="margin-bottom: 20px;">
+      <section class="panel panel-flush">
+        <div class="panel-head">
+          <div>
+            <h3 data-i18n="titleVendorRegistry">Gestione Vendor</h3>
+            <p class="panel-head-desc" data-i18n="descVendorRegistry">Registro dei vendor supportati e dei relativi driver di connessione SSH.</p>
+          </div>
+          <button type="button" class="btn btn-secondary btn-small requires-write" data-open-modal="addVendorModal" style="width:auto;"><i class="fa-solid fa-plus"></i> <span data-i18n="btnOpenAddVendor">Aggiungi vendor</span></button>
+        </div>
+        <div class="table-wrap">
           <table>
             <thead>
               <tr>
@@ -930,34 +931,21 @@
             <tbody id="vendorTableBody"></tbody>
           </table>
         </div>
-        <div class="requires-write" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end;">
-          <div class="form-group" style="margin-bottom: 0;">
-            <label for="newVendorName" data-i18n="lblVendorName">Nome Vendor</label><input id="newVendorName" type="text" placeholder="es. mikrotik" data-i18n-placeholder="placeholderVendorName" style="padding-left:12px;">
-          </div>
-          <div class="form-group" style="margin-bottom: 0;">
-            <label for="newVendorDriver" data-i18n="lblVendorDriver">Driver Netmiko (opzionale)</label><input id="newVendorDriver" type="text" placeholder="es. mikrotik_routeros" data-i18n-placeholder="placeholderVendorDriver" style="padding-left:12px;">
-          </div>
-          <button class="btn btn-primary btn-small" id="btnAddVendor" style="margin:0; white-space:nowrap;" data-i18n="btnAdd">
-            <i class="fa-solid fa-plus"></i> Aggiungi
-          </button>
-        </div>
-      </div>
+      </section>
     </div>
 
     <!-- TAB 3: Port-Channel & Link (la lista adjacency testuale è stata rimossa:
          la topologia si consulta nella mappa interattiva) -->
     <div id="tab-map" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+      <div class="page-head">
+        <div class="page-head-text">
+          <h2 data-i18n="titlePortchannels">Port-Channel & Interfacce per Switch</h2>
+          <p data-i18n="descPortchannels">Elenco dei Port-Channel configurati su ogni switch con le interfacce membro.</p>
+        </div>
+      </div>
+      <div class="subtab-bar">
         <button class="btn btn-secondary ti-subtab active" data-switch-tab="tab-map" data-i18n="tabMap"></button>
         <button class="btn btn-secondary ti-subtab" data-switch-tab="tab-map-interactive" data-i18n="tabInteractive"></button>
-      </div>
-      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
-        <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titlePortchannels">Port-Channel & Interfacce per Switch</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descPortchannels">
-            Elenco dei Port-Channel configurati su ogni switch con le interfacce membro.
-          </p>
-        </div>
       </div>
 
       <div class="panel">
@@ -977,14 +965,14 @@
 
     <!-- TAB 4: Mappa Topologia 2D (Premium Vis.js) -->
     <div id="tab-map-interactive" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+      <div class="page-head">
+        <div class="page-head-text">
+          <h2 data-i18n="title2DMap">Topologia Dinamica 2D Interactive</h2>
+        </div>
+      </div>
+      <div class="subtab-bar">
         <button class="btn btn-secondary ti-subtab" data-switch-tab="tab-map" data-i18n="tabMap"></button>
         <button class="btn btn-secondary ti-subtab active" data-switch-tab="tab-map-interactive" data-i18n="tabInteractive"></button>
-      </div>
-      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
-        <div class="hero-card">
-          <h2 style="margin:0; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="title2DMap">Topologia Dinamica 2D Interactive</h2>
-        </div>
       </div>
 
       <div class="panel" style="margin-bottom:15px;">
@@ -1162,12 +1150,10 @@
 
     <!-- TAB: Dispositivi & Categorie -->
     <div id="tab-categories" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
-        <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleCategories">Dispositivi Scoperti &amp; Classificazione</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descCategories">
-            Conteggio per categoria dei dispositivi inventariati e scoperti via CDP/LLDP. Operatori e amministratori possono riclassificare manualmente i dispositivi e creare nuove categorie/sottocategorie.
-          </p>
+      <div class="page-head">
+        <div class="page-head-text">
+          <h2 data-i18n="titleCategories">Dispositivi Scoperti &amp; Classificazione</h2>
+          <p data-i18n="descCategories">Conteggio per categoria dei dispositivi inventariati e scoperti via CDP/LLDP. Operatori e amministratori possono riclassificare manualmente i dispositivi e creare nuove categorie/sottocategorie.</p>
         </div>
       </div>
 
@@ -1235,32 +1221,20 @@
 
     <!-- TAB: Alta Affidabilità & Gruppi di Ridondanza -->
     <div id="tab-redundancy" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
-        <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleRedundancyHeader">Alta Affidabilità (HA) &amp; Gruppi di Ridondanza</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:74ch;" data-i18n="descRedundancy">
-            Monitoraggio in tempo reale della salute dei cluster e protocolli di failover: HSRP, VRRP, FortiGate HA (FGCP), Cisco StackWise e coppie VPC/MLAG per prevenire scenari di split-brain.
-          </p>
+      <div class="page-head">
+        <div class="page-head-text">
+          <h2 data-i18n="titleRedundancyHeader">Alta Affidabilità (HA) &amp; Gruppi di Ridondanza</h2>
+          <p data-i18n="descRedundancy">Monitoraggio in tempo reale della salute dei cluster e protocolli di failover: HSRP, VRRP, FortiGate HA (FGCP), Cisco StackWise e coppie VPC/MLAG per prevenire scenari di split-brain.</p>
         </div>
       </div>
 
-      <div class="kpi-grid" style="grid-template-columns:repeat(4,minmax(0,1fr)); margin-bottom:18px;">
-        <div class="kpi">
-          <h4 style="font-size:11px; text-transform:uppercase;" data-i18n="lblClusterTotal">Cluster Totali</h4>
-          <strong id="haKpiTotal" style="font-size:var(--font-size-2xl);">0</strong>
-        </div>
-        <div class="kpi">
-          <h4 style="font-size:11px; text-transform:uppercase; color:var(--success);" data-i18n="lblClusterHealthy">In Salute (Healthy)</h4>
-          <strong id="haKpiHealthy" style="font-size:var(--font-size-2xl); color:var(--success);">0</strong>
-        </div>
-        <div class="kpi">
-          <h4 style="font-size:11px; text-transform:uppercase; color:var(--warning);" data-i18n="lblClusterDegraded">Degradati</h4>
-          <strong id="haKpiDegraded" style="font-size:var(--font-size-2xl); color:var(--warning);">0</strong>
-        </div>
-        <div class="kpi">
-          <h4 style="font-size:11px; text-transform:uppercase; color:var(--danger);" data-i18n="lblClusterCritical">Critici / Split-Brain</h4>
-          <strong id="haKpiCritical" style="font-size:var(--font-size-2xl); color:var(--danger);">0</strong>
-        </div>
+      <!-- Cluster counts as stat cards; the state is carried by the lamp beside
+           the label, not by tinting the number. -->
+      <div class="traf-kpis">
+        <div class="panel traf-kpi"><span class="traf-kpi-label" data-i18n="lblClusterTotal">Cluster Totali</span><b class="traf-kpi-value" id="haKpiTotal">0</b></div>
+        <div class="panel traf-kpi"><span class="traf-kpi-label"><span class="led led-success"></span> <span data-i18n="lblClusterHealthy">In Salute (Healthy)</span></span><b class="traf-kpi-value" id="haKpiHealthy">0</b></div>
+        <div class="panel traf-kpi"><span class="traf-kpi-label"><span class="led led-warning"></span> <span data-i18n="lblClusterDegraded">Degradati</span></span><b class="traf-kpi-value" id="haKpiDegraded">0</b></div>
+        <div class="panel traf-kpi"><span class="traf-kpi-label"><span class="led led-danger"></span> <span data-i18n="lblClusterCritical">Critici / Split-Brain</span></span><b class="traf-kpi-value" id="haKpiCritical">0</b></div>
       </div>
 
       <div class="panel">
@@ -1664,21 +1638,21 @@
 
     <!-- TAB: Cisco WLC Live Observability -->
     <div id="tab-wlc" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="hero-card" style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:16px;">
-        <div>
-          <h2 style="margin:0 0 6px; font-family:var(--font-display); font-size:25px;"><i class="fa-solid fa-wifi" style="color:var(--primary); margin-right:8px;"></i>Cisco WLC Live Observability</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:13px;" data-i18n="wlcDesc">Monitoraggio in tempo reale di Access Point Cisco, client wireless associati, WLAN/SSID e rilevamento Rogue AP.</p>
+      <div class="page-head">
+        <div class="page-head-text">
+          <h2 data-i18n="wlcPageTitle">Cisco WLC Live Observability</h2>
+          <p data-i18n="wlcDesc">Monitoraggio in tempo reale di Access Point Cisco, client wireless associati, WLAN/SSID e rilevamento Rogue AP.</p>
         </div>
-        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <div class="page-head-actions">
           <!-- Tenant first, controller second: the second select lists only the
                WLCs of the chosen tenant (vendor cisco_wlc / cisco_9800). -->
-          <select id="wlcTenantSelect" style="padding:8px 12px; border-radius:var(--radius); border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; font-weight:700;" aria-label="Tenant del WLC" data-i18n-aria-label="ariaWlcTenant">
+          <select id="wlcTenantSelect" class="head-select" aria-label="Tenant del WLC" data-i18n-aria-label="ariaWlcTenant">
             <option value="" data-i18n="wlcOptTenant">-- Seleziona tenant --</option>
           </select>
-          <select id="wlcTargetSelect" disabled style="padding:8px 12px; border-radius:var(--radius); border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; font-weight:700;" aria-label="Controller WLC di destinazione" data-i18n-aria-label="ariaWlcTarget">
+          <select id="wlcTargetSelect" class="head-select" disabled aria-label="Controller WLC di destinazione" data-i18n-aria-label="ariaWlcTarget">
             <option value="" data-i18n="wlcOptTargetFirst">-- Scegli prima un tenant --</option>
           </select>
-          <button id="btnRefreshWlcData" class="btn btn-primary" style="width:auto; margin:0;" data-i18n="btnConnectWlc"><i class="fa-solid fa-bolt"></i> Interroga WLC</button>
+          <button id="btnRefreshWlcData" class="btn btn-primary" data-i18n="btnConnectWlc"><i class="fa-solid fa-bolt"></i> Interroga WLC</button>
         </div>
       </div>
 
@@ -2330,17 +2304,15 @@
 
     <!-- TAB: Switch da Zero (Provisioner) -->
     <div id="tab-provisioner" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+      <div class="page-head">
+        <div class="page-head-text">
+          <h2 data-i18n="titleProvisioner">Zero-Touch Provisioning (Switch Cisco / Firewall FortiGate)</h2>
+          <p data-i18n="descProvisioner">Genera una configurazione day-0 completa e sicura — IOS/IOS-XE per switch Cisco o FortiOS per firewall FortiGate — seguendo le linee guida di hardening del vendor, poi scegli come consegnarla: testo, SSH o console/seriale.</p>
+        </div>
+      </div>
+      <div class="subtab-bar">
         <button class="btn btn-secondary ti-subtab" data-switch-tab="tab-provisioning" data-i18n="tabProvisioning"></button>
         <button class="btn btn-secondary ti-subtab active" data-switch-tab="tab-provisioner" data-i18n="tabProvisioner"></button>
-      </div>
-      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
-        <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleProvisioner">Zero-Touch Provisioning (Switch Cisco / Firewall FortiGate)</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:78ch;" data-i18n="descProvisioner">
-            Genera una configurazione day-0 completa e sicura — IOS/IOS-XE per switch Cisco o FortiOS per firewall FortiGate — seguendo le linee guida di hardening del vendor, poi scegli come consegnarla: testo, SSH o console/seriale.
-          </p>
-        </div>
       </div>
 
       <!-- Panel: generazione config per un NUOVO switch (template o parametri comuni tenant) -->
@@ -2583,30 +2555,65 @@
 
     <!-- TAB 6: Importazione CSV -->
     <div id="tab-import" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
-        <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleImportCsv">Importazione Massiva da CSV</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:78ch;" data-i18n="descImportCsv">
-            Il file CSV deve contenere tassativamente l'intestazione specificata di seguito.
-          </p>
+      <div class="page-head">
+        <div class="page-head-text">
+          <h2 data-i18n="titleImportCsv">Importazione Massiva da CSV</h2>
+          <p data-i18n="descImportCsv">Il file CSV deve contenere tassativamente l'intestazione specificata di seguito.</p>
         </div>
       </div>
 
-      <div class="panel" style="margin-bottom:18px;">
-        <h3 style="font-size:15px; margin:0 0 14px;"><i class="fa-solid fa-upload" style="color:var(--primary); margin-right:8px;"></i><span data-i18n="importPanelUpload">Carica file CSV</span></h3>
-        <div class="template-box">IP,Username,Password,Enable Secret,Hostname,Group,Site,Vendor
+      <!-- Two numbered steps beside the reference the operator checks while
+           filling the file: prepare it from the template, then drop it in. -->
+      <div class="import-layout">
+        <div class="import-steps">
+          <section class="panel">
+            <div class="panel-head">
+              <h3 data-i18n="importStepPrepare">1 · Prepara il file</h3>
+              <button class="btn btn-secondary btn-small" id="btnDownloadCsvTemplate" style="width:auto;" data-i18n="btnDownloadCsvTemplate">
+                <i class="fa-solid fa-download"></i> Scarica modello CSV
+              </button>
+            </div>
+            <div class="template-box">IP,Username,Password,Enable Secret,Hostname,Group,Site,Vendor
 192.0.2.1,admin,Mypass123!,enablepass,switch-01,Tenant_Milano,central,cisco
 198.51.100.1,manager,Pwd456!,secret,switch-02,Tenant_Roma,sede-roma,hpe</div>
-        <p style="margin:10px 0 0; font-size:12px; color:var(--text-muted); line-height:1.55;" data-i18n="importFlexNote">
+            <p class="set-desc" style="margin:10px 0 0;" data-i18n="importFlexNote">
           Solo la colonna <code>IP</code> è obbligatoria. Maiuscole, underscore e nomi in italiano
           (<code>indirizzo</code>, <code>utente</code>, <code>gruppo</code>) sono riconosciuti, così come
           il punto e virgola come separatore e i file salvati da Excel.
         </p>
-        <div style="margin-top:12px; padding:12px 14px; background:var(--surface-2); border:1px solid var(--border); border-radius:0;">
-          <div style="font-size:12px; font-weight:600; margin-bottom:8px;">
-            <i class="fa-solid fa-circle-info" style="color:var(--primary); margin-right:6px;"></i><span data-i18n="importTenantVsSiteTitle">Group e Site sono due cose diverse</span>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3><span data-i18n="importPanelUpload">Carica file CSV</span></h3>
+            </div>
+            <!-- Trascinamento oltre al selettore: il file arriva quasi sempre da
+                 una cartella già aperta, e obbligare a passare dal dialogo di
+                 sistema è il passaggio in più che rende l'operazione noiosa. -->
+            <div id="csvDropZone" class="dropzone">
+              <input type="file" id="csvFileInput" accept=".csv,.txt" style="display:none;" aria-label="File CSV da importare" data-i18n-aria-label="ariaCsvFile">
+              <div id="csvDropText" class="dropzone-text">
+                <i class="fa-solid fa-file-csv fa-2x"></i><br>
+                <span data-i18n="importDropText">Trascina qui il file CSV o clicca per selezionarlo</span>
+              </div>
+            </div>
+            <div class="set-actions" style="justify-content:flex-end; margin-top:14px;">
+              <button class="btn btn-primary" id="btnUploadCsv" style="width:auto;" data-i18n="btnUploadCsv">
+                <i class="fa-solid fa-cloud-arrow-up"></i> Elabora e Importa
+              </button>
+            </div>
+            <!-- Esito in pagina invece che in un alert(): l'elenco delle righe
+                 scartate va letto riga per riga, e un alert lo rende illeggibile
+                 e non copiabile. -->
+            <div id="csvImportResult" style="display:none; margin-top:16px;"></div>
+          </section>
+        </div>
+
+        <div class="panel import-aside">
+          <div class="panel-head">
+            <h3><span data-i18n="importTenantVsSiteTitle">Group e Site sono due cose diverse</span></h3>
           </div>
-          <div style="font-size:12px; color:var(--text-muted); line-height:1.6;" data-i18n="importTenantVsSiteBody">
+          <div class="import-aside-text" data-i18n="importTenantVsSiteBody">
             <b>Group</b> è il <b>tenant</b>: il confine di visibilità. Decide chi vede l'apparato
             e filtra ogni scheda, ed è il valore che accompagna ogni riga di osservabilità.
             Alias riconosciuti: <code>group</code>, <code>gruppo</code>, <code>tenant</code>.<br>
@@ -2619,7 +2626,7 @@
           </div>
           <!-- The device form has a Site selector; in the CSV the same value is
                free text, so the id has to be copied exactly. -->
-          <div style="font-size:12px; color:var(--text-muted); line-height:1.6; margin-top:10px; padding-top:10px; border-top:1px solid var(--border);" data-i18n="importSiteIdsNote">
+          <div class="import-aside-text import-aside-sep" data-i18n="importSiteIdsNote">
             La sede si assegna dal modulo di provisioning con la tendina <b>Sede fisica</b>,
             oppure qui con la colonna <code>Site</code>. Nel CSV il valore deve corrispondere
             <b>esattamente</b> all'id della sede (non al nome), altrimenti la riga viene
@@ -2631,45 +2638,26 @@
             <span id="importSiteIdsList"></span>
           </div>
         </div>
-        <div style="margin-top:14px;">
-          <button class="btn btn-secondary" id="btnDownloadCsvTemplate" style="width:auto; margin:0;" data-i18n="btnDownloadCsvTemplate">
-            <i class="fa-solid fa-download"></i> Scarica modello CSV
-          </button>
-        </div>
-
-        <!-- Trascinamento oltre al selettore: il file arriva quasi sempre da
-             una cartella già aperta, e obbligare a passare dal dialogo di
-             sistema è il passaggio in più che rende l'operazione noiosa. -->
-        <div id="csvDropZone" style="margin-top:18px; border:2px dashed var(--border); border-radius:0; padding:22px; text-align:center; cursor:pointer; background:var(--surface-2);">
-          <input type="file" id="csvFileInput" accept=".csv,.txt" style="display:none;" aria-label="File CSV da importare" data-i18n-aria-label="ariaCsvFile">
-          <div id="csvDropText" style="font-size:13px; color:var(--text-muted);">
-            <i class="fa-solid fa-file-csv fa-2x" style="color:var(--primary); margin-bottom:8px;"></i><br>
-            <span data-i18n="importDropText">Trascina qui il file CSV o clicca per selezionarlo</span>
-          </div>
-        </div>
-
-        <button class="btn btn-primary" id="btnUploadCsv" style="margin-top:16px;" data-i18n="btnUploadCsv">
-          <i class="fa-solid fa-cloud-arrow-up"></i> Elabora e Importa
-        </button>
-        <!-- Esito in pagina invece che in un alert(): l'elenco delle righe
-             scartate va letto riga per riga, e un alert lo rende illeggibile
-             e non copiabile. -->
-        <div id="csvImportResult" style="display:none; margin-top:16px;"></div>
       </div>
     </div>
 
     <!-- TAB 7: Gestione Utenti (solo admin) -->
+    <!-- Members first, the way team pages read: who has access, with which
+         role. Creating and inviting are commands in the header, each in its own
+         dialog, instead of two forms parked permanently under the table. -->
     <div id="tab-users" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
-        <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleUsers">Gestione Utenti e Privilegi</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:78ch;" data-i18n="descUsers">
-            Crea account con privilegi differenziati. <strong>Admin</strong>: controllo totale e gestione utenti. <strong>Operator</strong>: tutte le operazioni di rete (triage, comandi, inventario). <strong>Viewer</strong>: sola lettura.
-          </p>
+      <div class="page-head">
+        <div class="page-head-text">
+          <h2 data-i18n="titleUsers">Gestione Utenti e Privilegi</h2>
+          <p data-i18n="descUsers">Crea account con privilegi differenziati. <strong>Admin</strong>: controllo totale e gestione utenti. <strong>Operator</strong>: tutte le operazioni di rete (triage, comandi, inventario). <strong>Viewer</strong>: sola lettura.</p>
+        </div>
+        <div class="page-head-actions">
+          <button type="button" class="btn btn-secondary" data-open-modal="inviteUserModal"><i class="fa-solid fa-envelope-open-text"></i> <span data-i18n="btnOpenInviteUser">Invita per email</span></button>
+          <button type="button" class="btn btn-primary" data-open-modal="createUserModal"><i class="fa-solid fa-user-plus"></i> <span data-i18n="btnNewUser">Nuovo utente</span></button>
         </div>
       </div>
 
-      <div class="panel" style="margin-bottom:18px;">
+      <div class="panel panel-flush">
         <div class="table-wrap">
           <table>
             <thead>
@@ -2687,66 +2675,20 @@
           </table>
         </div>
       </div>
-
-      <div class="panel">
-        <h3 style="font-size: 15px; margin-bottom: 12px;" data-i18n="titleAddUser"><i class="fa-solid fa-user-plus" style="color:var(--primary);"></i> Nuovo Utente</h3>
-        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap:10px; align-items:end;">
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="newUserName" data-i18n="lblNewUserName">Username</label><input id="newUserName" type="text" placeholder="es. mario.rossi" data-i18n-placeholder="phNewUserName" style="padding-left:12px;">
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="newUserEmail" data-i18n="lblNewUserEmail">Email (opzionale)</label><input id="newUserEmail" type="text" placeholder="mario.rossi@example.com" style="padding-left:12px;">
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="newUserPass" data-i18n="lblNewUserPass">Password (vuota = link via email)</label><input id="newUserPass" type="password" placeholder="••••••••" style="padding-left:12px;">
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="newUserRole" data-i18n="lblNewUserRole">Ruolo</label><select id="newUserRole" style="padding-left:12px;">
-              <option value="viewer" data-i18n="roleViewer">Viewer (sola lettura)</option>
-              <option value="operator" data-i18n="roleOperator">Operator (operazioni)</option>
-              <option value="admin" data-i18n="roleAdmin">Admin (totale)</option>
-            </select>
-          </div>
-          <button class="btn btn-primary btn-small" id="btnCreateUser" style="margin:0; white-space:nowrap;" data-i18n="btnAddUser">
-            <i class="fa-solid fa-plus"></i> Crea Utente
-          </button>
-        </div>
-      </div>
-
-      <div class="panel" style="margin-top:18px;">
-        <h3 style="font-size: 15px; margin-bottom: 6px;" data-i18n="titleInviteUser"><i class="fa-solid fa-envelope-open-text" style="color:var(--primary);"></i> Invita per email</h3>
-        <p style="margin:0 0 12px; color:var(--text-muted); font-size:13px; max-width:78ch;" data-i18n="descInviteUser">
-          L'invitato sceglie la propria password da un link valido 24 ore: nessuna password iniziale da comunicare. L'account nasce quando l'invito viene accettato, con l'indirizzo come username, e resta in attesa finche' un amministratore non lo approva. Richiede il server di posta configurato.
-        </p>
-        <div style="display:grid; grid-template-columns: 2fr 1fr auto; gap:10px; align-items:end;">
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="inviteEmail" data-i18n="lblInviteEmail">Email</label><input id="inviteEmail" type="text" placeholder="mario.rossi@example.com" style="padding-left:12px;">
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="inviteRole" data-i18n="lblNewUserRole">Ruolo</label><select id="inviteRole" style="padding-left:12px;">
-              <option value="viewer" data-i18n="roleViewer">Viewer (sola lettura)</option>
-              <option value="operator" data-i18n="roleOperator">Operator (operazioni)</option>
-              <option value="admin" data-i18n="roleAdmin">Admin (totale)</option>
-            </select>
-          </div>
-          <button class="btn btn-secondary btn-small" id="btnInviteUser" style="margin:0; white-space:nowrap;" data-i18n="btnInviteUser">
-            <i class="fa-solid fa-paper-plane"></i> Invia invito
-          </button>
-        </div>
-      </div>
     </div>
 
     <div id="tab-sites" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
-        <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleSites">Sedi multi-sito</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:78ch;" data-i18n="descSites">
-            Gestisci le sedi remote su VPN. <strong>Central poll</strong>: il centrale raggiunge i dispositivi direttamente tramite il routing VPN. <strong>Site agent</strong>: un agente remoto si connette in uscita al centrale e vi spinge inventario/MAC; i comandi CLI sono inoltrati tramite coda.
-          </p>
+      <div class="page-head">
+        <div class="page-head-text">
+          <h2 data-i18n="titleSites">Sedi multi-sito</h2>
+          <p data-i18n="descSites">Gestisci le sedi remote su VPN. <strong>Central poll</strong>: il centrale raggiunge i dispositivi direttamente tramite il routing VPN. <strong>Site agent</strong>: un agente remoto si connette in uscita al centrale e vi spinge inventario/MAC; i comandi CLI sono inoltrati tramite coda.</p>
+        </div>
+        <div class="page-head-actions">
+          <button type="button" class="btn btn-primary" data-open-modal="createSiteModal"><i class="fa-solid fa-plus"></i> <span data-i18n="titleNewSite">Nuova sede</span></button>
         </div>
       </div>
 
-      <div class="panel" style="margin-bottom:18px;">
+      <div class="panel panel-flush">
         <div class="table-wrap">
           <table>
             <thead>
@@ -2758,133 +2700,74 @@
           </table>
         </div>
       </div>
-
-      <div class="panel">
-        <h3 style="font-size: 15px; margin-bottom: 12px;"><i class="fa-solid fa-plus" style="color:var(--primary);"></i> <span data-i18n="titleNewSite">Nuova sede</span></h3>
-        <div style="display:grid; grid-template-columns: 1fr 1fr 2fr auto; gap:10px; align-items:end;">
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="newSiteName" data-i18n="lblSiteName">Nome</label><input id="newSiteName" type="text" placeholder="es. Milano" data-i18n-placeholder="phNewSiteName" style="padding-left:12px;">
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="newSiteMode" data-i18n="lblSiteMode">Modalità</label><select id="newSiteMode" style="padding-left:12px;">
-              <option value="central">Central poll</option>
-              <option value="agent">Site agent</option>
-              <option value="jump" data-i18n="optSiteJump">Jump (bastion SSH)</option>
-            </select>
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="newSiteSubnets" data-i18n="lblSiteSubnets">Subnet (separate da virgola)</label><input id="newSiteSubnets" type="text" placeholder="es. 10.0.0.0/24, 10.0.1.0/24" data-i18n-placeholder="phNewSiteSubnets" style="padding-left:12px;">
-          </div>
-          <button class="btn btn-primary btn-small" id="btnCreateSite" style="margin:0; white-space:nowrap;">
-            <i class="fa-solid fa-plus"></i> <span data-i18n="btnCreateSite">Crea sede</span>
-          </button>
-        </div>
-
-        <div id="jumpFields" style="display:none; grid-template-columns: 1fr 1fr 2fr 2fr; gap:10px; align-items:end; margin-top:10px;">
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="newSiteJumpHost" data-i18n="lblJumpHost">Host bastione (IP/hostname)</label><input id="newSiteJumpHost" type="text" placeholder="es. 198.51.100.10" data-i18n-placeholder="phNewSiteJumpHost" style="padding-left:12px;">
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="newSiteJumpPort" data-i18n="lblJumpPort">Porta SSH bastione</label><input id="newSiteJumpPort" type="number" value="22" min="1" max="65535" style="padding-left:12px;">
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="newSiteJumpIdentity" data-i18n="lblJumpIdentity">Identità (credenziali) bastione</label><select id="newSiteJumpIdentity" style="padding-left:12px;"></select>
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="newSiteDeviceIdentity" data-i18n="lblDeviceIdentity">Identità di default dei dispositivi</label><select id="newSiteDeviceIdentity" style="padding-left:12px;"></select>
-          </div>
-        </div>
-
-        <div class="panel" id="jumpLimits" style="display:none; border-left:2px solid var(--warning); padding-left:10px;">
-          <h4 data-i18n="jumpLimitsTitle">Cosa non funziona su un sito jump</h4>
-          <ul>
-            <li data-i18n="jumpLimitsPing">Nessun ping ICMP: lo stato online/offline resta "non misurabile".</li>
-            <li data-i18n="jumpLimitsScan">Nessuna scansione di subnet ne' discovery dal centrale.</li>
-            <li data-i18n="jumpLimitsUdp">Nessun syslog, flow o SNMP in ingresso.</li>
-            <li data-i18n="jumpLimitsRest">Nessuna API REST vendor (FortiGate): solo CLI.</li>
-            <li data-i18n="jumpLimitsWorks">Funzionano: inventario, backup config, MAC/ARP, comandi CLI, audit.</li>
-            <li data-i18n="jumpLimitsIdentity">L'identità del bastione e quella dei dispositivi sono distinte: la seconda vale per i dispositivi il cui profilo è "default".</li>
-          </ul>
-        </div>
-      </div>
     </div>
 
     <div id="tab-mcp" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
-        <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleMcp">MCP Server — client LLM esterni</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:70ch;" data-i18n="descMcp">
-            SentinelNet è utilizzabile da client LLM esterni (Claude Desktop, LM Studio, Cline…) tramite il protocollo
-            <strong>MCP</strong> (Model Context Protocol): il ponte <code>mcp_server.py</code> gira sulla macchina del client,
-            si autentica con un account SentinelNet e inoltra le richieste all'API REST. Ruoli, tenant e blacklist comandi
-            restano applicati lato server. Consiglio: crea un account dedicato (<em>viewer</em> per sola lettura,
-            <em>operator</em> se servono i comandi CLI).
+      <div class="page-head">
+        <div class="page-head-text">
+          <h2 data-i18n="titleMcp">MCP Server — client LLM esterni</h2>
+          <p data-i18n="descMcp">SentinelNet è utilizzabile da client LLM esterni (Claude Desktop, LM Studio, Cline…) tramite il protocollo <strong>MCP</strong> (Model Context Protocol): il ponte <code>mcp_server.py</code> gira sulla macchina del client, si autentica con un account SentinelNet e inoltra le richieste all'API REST. Ruoli, tenant e blacklist comandi restano applicati lato server. Consiglio: crea un account dedicato (<em>viewer</em> per sola lettura, <em>operator</em> se servono i comandi CLI).</p>
+        </div>
+      </div>
+
+      <!-- What the client needs (read and copy) beside what it may call
+           (toggles and one Save). -->
+      <div class="mcp-layout">
+        <section class="panel">
+          <div class="panel-head">
+            <h3 data-i18n="titleMcpClientConfig">Configurazione client</h3>
+            <button class="btn btn-secondary btn-small" id="btnCopyMcpConfig" style="width:auto;">
+              <i class="fa-solid fa-copy"></i> <span data-i18n="btnCopyJson">Copia JSON</span>
+            </button>
+          </div>
+          <p class="set-desc" data-i18n="descMcpClientConfig">
+            Snippet per <code>claude_desktop_config.json</code> (o equivalente del tuo client). Sostituisci utente e password
+            con l'account dedicato; il percorso deve puntare alla copia locale di <code>mcp_server.py</code>.
           </p>
-        </div>
+          <pre id="mcpConfigSnippet" class="code-block"></pre>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h3 data-i18n="titleMcpTools">Tool esposti</h3>
+          </div>
+          <p class="set-desc" data-i18n="descMcpTools">
+            Scegli quali tool i client MCP possono usare. I tool disattivati spariscono dall'elenco del client e ogni
+            chiamata viene rifiutata. La modifica vale per tutti i client collegati (ricaricano l'elenco entro ~1 minuto).
+          </p>
+          <div id="mcpToolList" class="mcp-tool-list"></div>
+          <div class="set-actions">
+            <button class="btn btn-primary btn-small" id="btnSaveMcpSettings" style="width:auto;">
+              <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btnSave">Salva</span>
+            </button>
+            <span id="mcpSettingsStatus" class="set-status"></span>
+          </div>
+        </section>
       </div>
-
-      <div class="panel" style="margin-bottom:18px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px;">
-          <h3 style="font-size:15px; margin:0;"><i class="fa-solid fa-file-code" style="color:var(--primary);"></i> <span data-i18n="titleMcpClientConfig">Configurazione client</span></h3>
-          <button class="btn btn-secondary btn-small" id="btnCopyMcpConfig" style="width:auto; margin:0;">
-            <i class="fa-solid fa-copy"></i> <span data-i18n="btnCopyJson">Copia JSON</span>
-          </button>
-        </div>
-        <p style="color:var(--text-muted); font-size:12px; margin-bottom:8px;" data-i18n="descMcpClientConfig">
-          Snippet per <code>claude_desktop_config.json</code> (o equivalente del tuo client). Sostituisci utente e password
-          con l'account dedicato; il percorso deve puntare alla copia locale di <code>mcp_server.py</code>.
-        </p>
-        <pre id="mcpConfigSnippet" style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:12px; font-family:var(--font-code); font-size:12px; overflow-x:auto; white-space:pre;"></pre>
-      </div>
-
-      <div class="panel">
-        <h3 style="font-size:15px; margin-bottom:6px;"><i class="fa-solid fa-toggle-on" style="color:var(--primary);"></i> <span data-i18n="titleMcpTools">Tool esposti</span></h3>
-        <p style="color:var(--text-muted); font-size:12px; margin-bottom:12px;" data-i18n="descMcpTools">
-          Scegli quali tool i client MCP possono usare. I tool disattivati spariscono dall'elenco del client e ogni
-          chiamata viene rifiutata. La modifica vale per tutti i client collegati (ricaricano l'elenco entro ~1 minuto).
-        </p>
-        <div id="mcpToolList" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:8px;"></div>
-        <div style="display:flex; gap:10px; align-items:center; margin-top:14px;">
-          <button class="btn btn-primary btn-small" id="btnSaveMcpSettings" style="width:auto; margin:0;">
-            <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btnSave">Salva</span>
-          </button>
-          <span id="mcpSettingsStatus" style="font-size:12px; color:var(--text-muted);"></span>
-        </div>
-      </div>
-
-
     </div>
 
     <div id="tab-fortigate" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
-        <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleFgtTab">Fortigate Management</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:70ch;" data-i18n="descFgtTab">
-            Stato, rete, policy, traffico e WiFi dei FortiGate in tempo reale. Sola lettura: nessuna modifica viene scritta sul firewall, e i token non vengono mai restituiti al browser.
-          </p>
+      <div class="page-head">
+        <div class="page-head-text">
+          <h2 data-i18n="titleFgtTab">Fortigate Management</h2>
+          <p data-i18n="descFgtTab">Stato, rete, policy, traffico e WiFi dei FortiGate in tempo reale. Sola lettura: nessuna modifica viene scritta sul firewall, e i token non vengono mai restituiti al browser.</p>
         </div>
-      </div>
-
-      <!-- Selettore target FortiGate attivo + gestione multi-target -->
-      <div class="panel requires-admin" style="margin-bottom:18px;">
-        <div style="display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap;">
-          <div class="form-group" style="margin-bottom:0; min-width:260px;">
-            <label for="fgtTargetSelect" data-i18n="lblFgtTargetSelect">Target FortiGate attivo</label>
-            <select id="fgtTargetSelect" style="padding:6px 12px; border-radius:var(--radius); border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
-              <option value="" data-i18n="optFgtNoTargets">-- nessun target configurato --</option>
-            </select>
-          </div>
-          <button type="button" id="btnFgtConnect" class="btn btn-primary" style="width:auto; margin:0;" data-i18n="btnFgtConnect">
-            <i class="fa-solid fa-bolt"></i> Interroga FortiGate (API)
-          </button>
-          <button type="button" id="btnFgtManageTargets" class="btn btn-secondary" style="width:auto; margin:0;" data-i18n="btnFgtManageTargets">
+        <!-- Target picker in the header: which firewall the views below read. -->
+        <div class="page-head-actions requires-admin">
+          <select id="fgtTargetSelect" class="head-select" aria-label="Target FortiGate attivo" data-i18n-aria-label="lblFgtTargetSelect">
+            <option value="" data-i18n="optFgtNoTargets">-- nessun target configurato --</option>
+          </select>
+          <button type="button" id="btnFgtManageTargets" class="btn btn-secondary" data-i18n="btnFgtManageTargets">
             <i class="fa-solid fa-gears"></i> Gestisci FortiGate
+          </button>
+          <button type="button" id="btnFgtConnect" class="btn btn-primary" data-i18n="btnFgtConnect">
+            <i class="fa-solid fa-bolt"></i> Interroga FortiGate (API)
           </button>
         </div>
       </div>
 
       <!-- Sotto-tab Fortigate Management -->
-      <div class="subtab-bar" id="fgtSubtabBar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+      <div class="subtab-bar" id="fgtSubtabBar">
         <button class="btn btn-secondary ti-subtab active" id="fgtSub-overview" data-fgt-view="overview" data-i18n="fgtSubOverview">Panoramica</button>
         <button class="btn btn-secondary ti-subtab" id="fgtSub-network" data-fgt-view="network" data-i18n="fgtSubNetwork">Rete</button>
         <button class="btn btn-secondary ti-subtab" id="fgtSub-firewall" data-fgt-view="firewall" data-i18n="fgtSubFirewall">Firewall</button>
@@ -3244,32 +3127,51 @@
 
 
     <div id="tab-settings" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
-        <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleSettings">Impostazioni</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:70ch;" data-i18n="descSettingsHero">
-            Configurazione dell'istanza, raggruppata per ambito: esposizione in rete, sicurezza dei comandi, telemetria e parametri applicativi. Le impostazioni contrassegnate richiedono il riavvio dell'applicazione; le variabili d'ambiente, se impostate, hanno sempre la precedenza.
-          </p>
+      <div class="page-head">
+        <div class="page-head-text">
+          <h2 data-i18n="titleSettings">Impostazioni</h2>
+          <p data-i18n="descSettingsHero">Configurazione dell'istanza, raggruppata per ambito: esposizione in rete, sicurezza dei comandi, telemetria e parametri applicativi. Le impostazioni contrassegnate richiedono il riavvio dell'applicazione; le variabili d'ambiente, se impostate, hanno sempre la precedenza.</p>
         </div>
       </div>
 
+      <!-- Settings index beside the sections, the way product settings pages
+           read: twelve concerns stop being one long scroll of equal cards. The
+           index only scrolls; every section stays on the page. -->
+      <div class="settings-layout">
+        <nav class="settings-nav" id="settingsNav" aria-label="Sezioni delle impostazioni" data-i18n-aria-label="ariaSettingsNav">
+          <span class="settings-nav-group" data-i18n="setNavInterface">Interfaccia</span>
+          <button type="button" data-settings-jump="setSecUi"><span data-i18n="setNavUi">Aspetto</span></button>
+          <span class="settings-nav-group" data-i18n="setNavAccess">Rete e accesso</span>
+          <button type="button" data-settings-jump="setSecNet"><span data-i18n="setNavNet">Esposizione in rete</span></button>
+          <button type="button" data-settings-jump="setSecTls"><span data-i18n="setNavTls">Certificato TLS</span></button>
+          <button type="button" data-settings-jump="ssoPanel"><span data-i18n="setNavSso">Single Sign-On</span></button>
+          <button type="button" data-settings-jump="smtpPanel"><span data-i18n="setNavSmtp">Server di posta</span></button>
+          <button type="button" data-settings-jump="setSecCli"><span data-i18n="setNavCli">Blacklist comandi</span></button>
+          <span class="settings-nav-group" data-i18n="setNavMonitoring">Monitoraggio</span>
+          <button type="button" data-settings-jump="setSecPing"><span data-i18n="setNavPing">Monitor ping</span></button>
+          <button type="button" data-settings-jump="setSecObs"><span data-i18n="setNavObs">Telemetria</span></button>
+          <span class="settings-nav-group" data-i18n="setNavSystem">Sistema</span>
+          <button type="button" data-settings-jump="setSecApp"><span data-i18n="setNavApp">Applicazione</span></button>
+          <button type="button" data-settings-jump="cloudBackupPanel"><span data-i18n="setNavBackup">Copia offsite</span></button>
+          <button type="button" data-settings-jump="setSecRestart"><span data-i18n="setNavRestart">Riavvio</span></button>
+          <button type="button" data-settings-jump="setSecFleet"><span data-i18n="setNavFleet">Versioni</span></button>
+        </nav>
+
+        <div class="settings-sections">
+
       <!-- Ambito: Variante UI / Design Interfaccia -->
-      <div class="panel" style="margin-bottom:18px;">
-        <h3 style="font-size:15px; margin-bottom:8px;"><i class="fa-solid fa-palette" style="color:var(--primary);"></i> <span data-i18n="titleUiVariant">Design Interfaccia (UI Variant)</span></h3>
-        <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descUiVariant">
+      <section class="panel set-section" id="setSecUi">
+        <div class="panel-head"><h3><span data-i18n="titleUiVariant">Design Interfaccia (UI Variant)</span></h3></div>
+        <p class="set-desc" data-i18n="descUiVariant">
           Scegli la variante grafica dell'interfaccia utente. Le modifiche vengono applicate all'istante e salvate per il tuo profilo.
         </p>
-
-        <!-- Dropdown Selector -->
-        <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:16px;">
-          <div class="form-group" style="margin:0; max-width:340px;">
-            <label for="uiVariantSelect" style="font-size:12px;" data-i18n="lblUiVariantSelect">Seleziona Layout / Design</label><select id="uiVariantSelect" style="padding-left:12px;">
-              <option value="default" data-i18n="optUiVariantDefault">Standard (SentinelNet SCADA Mimic)</option>
-              <option value="design-1" data-i18n="optUiVariantDesign1">Design 1 (Impeccable Modern Blue)</option>
-              <option value="design-2" data-i18n="optUiVariantDesign2">Design 2 (Impeccable Cyber Violet)</option>
-              <option value="design-3" data-i18n="optUiVariantDesign3">Design 3 (Impeccable Titanium Frost)</option>
-            </select>
-          </div>
+        <div class="form-group" style="max-width:340px;">
+          <label for="uiVariantSelect" data-i18n="lblUiVariantSelect">Seleziona Layout / Design</label><select id="uiVariantSelect" style="padding-left:12px;">
+            <option value="default" data-i18n="optUiVariantDefault">Standard (SentinelNet SCADA Mimic)</option>
+            <option value="design-1" data-i18n="optUiVariantDesign1">Design 1 (Impeccable Modern Blue)</option>
+            <option value="design-2" data-i18n="optUiVariantDesign2">Design 2 (Impeccable Cyber Violet)</option>
+            <option value="design-3" data-i18n="optUiVariantDesign3">Design 3 (Impeccable Titanium Frost)</option>
+          </select>
         </div>
 
         <!-- Interactive Visual Cards Grid. I colori letterali qui sotto sono
@@ -3294,67 +3196,318 @@
             <div style="font-size:11px; color:#cbd5e1;">Titanium Frost Slate</div> <!-- impeccable-disable-line design-system-color -- swatch of the design-3 palette it advertises -->
           </div>
         </div>
-      </div>
+      </section>
 
       <!-- Ambito: esposizione in rete -->
-      <div class="panel" style="margin-bottom:18px;">
-        <h3 style="font-size:15px; margin-bottom:8px;"><i class="fa-solid fa-network-wired" style="color:var(--primary);"></i> <span data-i18n="titleNetExpose">Esposizione in rete</span></h3>
-        <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descNetExpose">
+      <section class="panel set-section" id="setSecNet">
+        <div class="panel-head"><h3><span data-i18n="titleNetExpose">Esposizione in rete</span></h3></div>
+        <p class="set-desc" data-i18n="descNetExpose">
           Scegli su quale indirizzo SentinelNet resta in ascolto. 0.0.0.0 espone l'app su tutte le interfacce (raggiungibile dalla LAN); 127.0.0.1 la limita a questo PC.
         </p>
         <div id="netSettingsBody">
-          <div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
+          <div class="set-loading"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
         </div>
-      </div>
-
-      <!-- Ambito: sicurezza dei comandi -->
-      <div class="panel" style="margin-bottom:18px;">
-        <h3 style="font-size:15px; margin-bottom:8px;"><i class="fa-solid fa-shield-halved" style="color:var(--primary);"></i> <span data-i18n="titleCliBlacklist">Blacklist comandi CLI</span></h3>
-        <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descCliBlacklist">
-          Gli amministratori bypassano sempre la blacklist dei comandi distruttivi (i comandi restano tracciati nell'audit log). Qui decidi se applicarla agli operatori.
-        </p>
-        <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
-          <input type="checkbox" id="cliBlacklistToggle">
-          <span style="font-size:13px;" data-i18n="lblCliBlacklistOperators">Applica blacklist comandi CLI agli operatori</span>
-        </label>
-        <div id="cliBlacklistStatus" style="margin-top:10px; font-size:12px; color:var(--text-muted);"></div>
-      </div>
+      </section>
 
       <!-- Ambito: certificato TLS self-signed -->
-      <div class="panel requires-admin" style="margin-bottom:18px;">
-        <h3 style="font-size:15px; margin-bottom:8px;"><i class="fa-solid fa-lock" style="color:var(--primary);"></i> <span data-i18n="titleSelfSignedCert">Certificato TLS self-signed</span></h3>
-        <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descSelfSignedCert">
+      <section class="panel requires-admin set-section" id="setSecTls">
+        <div class="panel-head"><h3><span data-i18n="titleSelfSignedCert">Certificato TLS self-signed</span></h3></div>
+        <p class="set-desc" data-i18n="descSelfSignedCert">
           Genera certificato e chiave per questo host, con l'indirizzo nel subjectAltName. Vengono impostati subito come certificato TLS dell'applicazione: basta riavviarla perche' il pannello passi a HTTPS. Se SENTINELNET_SSL_CERTFILE / SENTINELNET_SSL_KEYFILE arrivano dall'ambiente restano loro a decidere, e le impostazioni non vengono toccate.
         </p>
-        <div style="display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap;">
-          <div class="form-group" style="margin:0; max-width:260px;">
-            <label for="selfSignedHost" style="font-size:12px;" data-i18n="lblSelfSignedHost">Indirizzo IP o nome DNS</label><input type="text" id="selfSignedHost" placeholder="192.0.2.10" style="padding-left:12px;">
+        <div class="set-inline">
+          <div class="form-group">
+            <label for="selfSignedHost" data-i18n="lblSelfSignedHost">Indirizzo IP o nome DNS</label><input type="text" id="selfSignedHost" placeholder="192.0.2.10" style="padding-left:12px;">
           </div>
-          <button id="btnGenerateSelfSigned" class="btn btn-primary btn-small" style="width:auto; margin:0;" data-i18n="btnSelfSignedGenerate">Genera certificato</button>
+          <button id="btnGenerateSelfSigned" class="btn btn-primary btn-small" style="width:auto;" data-i18n="btnSelfSignedGenerate">Genera certificato</button>
         </div>
-        <div id="selfSignedStatus" style="margin-top:10px; font-size:12px; color:var(--text-muted);"></div>
-      </div>
+        <div id="selfSignedStatus" class="set-status"></div>
+      </section>
+
+      <!-- Ambito: autenticazione aziendale (OpenID Connect) -->
+      <article class="panel requires-admin set-section" id="ssoPanel">
+        <div class="panel-head">
+          <h3><span data-i18n="ssoTitle">Single Sign-On (OpenID Connect)</span></h3>
+          <label class="set-switch">
+            <input type="checkbox" id="ssoEnabled">
+            <span data-i18n="ssoLblEnabled">Attivo</span>
+          </label>
+        </div>
+        <p class="set-desc" data-i18n="ssoDesc">
+          Autenticazione tramite l'identity provider aziendale. Gli account locali restano validi: il Single Sign-On si aggiunge, non sostituisce.
+        </p>
+
+        <div class="set-grid">
+          <div class="form-group">
+            <label for="ssoIssuerUrl" data-i18n="ssoLblIssuer">Issuer URL</label><input type="text" id="ssoIssuerUrl" placeholder="https://idp.example.com">
+          </div>
+          <div class="form-group">
+            <label for="ssoProviderName" data-i18n="ssoLblProviderName">Nome mostrato</label><input type="text" id="ssoProviderName" placeholder="Corporate SSO">
+          </div>
+          <div class="form-group">
+            <label for="ssoClientId" data-i18n="ssoLblClientId">Client ID</label><input type="text" id="ssoClientId" placeholder="sentinelnet">
+          </div>
+          <div class="form-group">
+            <label for="ssoClientSecret" data-i18n="ssoLblClientSecret">Client secret</label><input type="password" id="ssoClientSecret" autocomplete="new-password" placeholder="••••••••">
+          </div>
+          <div class="form-group">
+            <label for="ssoAdminGroup" data-i18n="ssoLblAdminGroup">Gruppo -> admin</label><input type="text" id="ssoAdminGroup" placeholder="net-admins">
+          </div>
+          <div class="form-group">
+            <label for="ssoOperatorGroup" data-i18n="ssoLblOperatorGroup">Gruppo -> operator</label><input type="text" id="ssoOperatorGroup" placeholder="net-operators">
+          </div>
+          <div class="form-group">
+            <label for="ssoDefaultRole" data-i18n="ssoLblDefaultRole">Ruolo predefinito</label><select id="ssoDefaultRole">
+              <option value="viewer" data-i18n="roleViewer">Viewer (sola lettura)</option>
+              <option value="operator" data-i18n="roleOperator">Operator (operazioni)</option>
+              <option value="admin" data-i18n="roleAdmin">Admin (totale)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="set-options">
+          <label class="set-option">
+            <input type="checkbox" id="ssoAutoProvision">
+            <span>
+              <span class="set-option-title" data-i18n="ssoLblAutoProvision">Crea l'account al primo accesso</span>
+              <span class="set-option-help warn" data-i18n="ssoAutoProvisionWarning">
+                Con questa opzione chiunque l'identity provider sappia autenticare ottiene un account: su una directory aziendale e' l'intera rubrica. Lasciala spenta e invita le persone che devono entrare.
+              </span>
+            </span>
+          </label>
+          <label class="set-option">
+            <input type="checkbox" id="ssoSyncRoles">
+            <span>
+              <span class="set-option-title" data-i18n="ssoLblSyncRoles">Allinea il ruolo ad ogni accesso</span>
+              <span class="set-option-help" data-i18n="ssoSyncRolesDesc">
+                I gruppi dell'IdP diventano la fonte di verita': un ruolo cambiato qui viene riscritto al login successivo.
+              </span>
+            </span>
+          </label>
+        </div>
+
+        <div class="set-actions">
+          <button type="button" id="ssoBtnSave" class="btn btn-primary" style="width:auto;"><i class="fa-solid fa-floppy-disk"></i> <span data-i18n="ssoBtnSave">Salva</span></button>
+        </div>
+        <div id="ssoStatusBox" class="set-statusbox">—</div>
+      </article>
+
+      <!-- Ambito: server di posta (recupero password, inviti, notifiche) -->
+      <article class="panel requires-admin set-section" id="smtpPanel">
+        <div class="panel-head">
+          <h3><span data-i18n="smtpTitle">Server di posta (SMTP)</span></h3>
+          <label class="set-switch">
+            <input type="checkbox" id="smtpEnabled">
+            <span data-i18n="smtpLblEnabled">Attivo</span>
+          </label>
+        </div>
+        <p class="set-desc" data-i18n="smtpDesc">
+          Usato per il recupero password e gli inviti utente. Senza SMTP il recupero resta possibile solo dalla riga di comando dell'host.
+        </p>
+
+        <div class="set-grid">
+          <div class="form-group">
+            <label for="smtpHost" data-i18n="smtpLblHost">Host</label><input type="text" id="smtpHost" placeholder="smtp.example.com">
+          </div>
+          <div class="form-group">
+            <label for="smtpPort" data-i18n="smtpLblPort">Porta</label><input type="number" id="smtpPort" value="587">
+          </div>
+          <div class="form-group">
+            <label for="smtpTlsMode" data-i18n="smtpLblTlsMode">Cifratura</label><select id="smtpTlsMode">
+              <option value="starttls" data-i18n="smtpTlsStarttls">STARTTLS (587)</option>
+              <option value="ssl" data-i18n="smtpTlsSsl">TLS implicito (465)</option>
+              <option value="none" data-i18n="smtpTlsNone">Nessuna (relay interno)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="smtpUsername" data-i18n="smtpLblUsername">Utente</label><input type="text" id="smtpUsername" placeholder="sentinelnet@example.com">
+          </div>
+          <div class="form-group">
+            <label for="smtpPassword" data-i18n="smtpLblPassword">Password</label><input type="password" id="smtpPassword" autocomplete="new-password" placeholder="••••••••">
+          </div>
+          <div class="form-group">
+            <label for="smtpFromEmail" data-i18n="smtpLblFrom">Mittente</label><input type="text" id="smtpFromEmail" placeholder="sentinelnet@example.com">
+          </div>
+        </div>
+
+        <div class="set-note">
+          <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+          <span data-i18n="smtpTlsHelp">Con STARTTLS un server che non lo annuncia viene rifiutato invece di proseguire in chiaro. "Nessuna" e' ammessa solo per un relay interno senza utente: con le credenziali impostate l'invio si ferma.</span>
+        </div>
+
+        <div class="set-actions">
+          <button type="button" id="smtpBtnSave" class="btn btn-primary" style="width:auto;"><i class="fa-solid fa-floppy-disk"></i> <span data-i18n="smtpBtnSave">Salva</span></button>
+          <span class="set-actions-sep"></span>
+          <input type="text" id="smtpTestTo" class="set-inline-input" placeholder="verifica@example.com" aria-label="Destinatario del messaggio di prova" data-i18n-aria-label="ariaSmtpTestTo">
+          <button type="button" id="smtpBtnTest" class="btn btn-secondary" style="width:auto;"><i class="fa-solid fa-paper-plane"></i> <span data-i18n="smtpBtnTest">Invia email di prova</span></button>
+        </div>
+        <div id="smtpStatusBox" class="set-statusbox">—</div>
+      </article>
+
+      <!-- Ambito: sicurezza dei comandi -->
+      <section class="panel set-section" id="setSecCli">
+        <div class="panel-head"><h3><span data-i18n="titleCliBlacklist">Blacklist comandi CLI</span></h3></div>
+        <p class="set-desc" data-i18n="descCliBlacklist">
+          Gli amministratori bypassano sempre la blacklist dei comandi distruttivi (i comandi restano tracciati nell'audit log). Qui decidi se applicarla agli operatori.
+        </p>
+        <label class="set-option">
+          <input type="checkbox" id="cliBlacklistToggle">
+          <span class="set-option-title" data-i18n="lblCliBlacklistOperators">Applica blacklist comandi CLI agli operatori</span>
+        </label>
+        <div id="cliBlacklistStatus" class="set-status"></div>
+      </section>
+
+      <!-- Ambito: monitor ping continuo -->
+      <section class="panel requires-admin set-section" id="setSecPing">
+        <div class="panel-head"><h3><span data-i18n="titlePingMonitor">Monitor Ping Continuo</span></h3></div>
+        <p class="set-desc" data-i18n="descPingMonitor">
+          Invia ping ICMP a tutti i dispositivi dell'inventario a un intervallo configurabile e traccia lo stato up/down. Le modifiche sono applicate subito, senza riavvio.
+        </p>
+        <div class="set-inline">
+          <label class="set-option">
+            <input type="checkbox" id="pingMonitorToggle">
+            <span class="set-option-title" data-i18n="lblPingMonitorEnabled">Attiva monitor ping</span>
+          </label>
+          <div class="form-group" style="max-width:180px;">
+            <label for="pingMonitorInterval" data-i18n="lblPingMonitorInterval">Intervallo (secondi)</label><input type="number" id="pingMonitorInterval" min="5" max="86400" value="60" style="padding-left:12px;">
+          </div>
+          <button id="btnSavePingMonitor" class="btn btn-primary btn-small" style="width:auto;">
+            <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btnSave">Salva</span>
+          </button>
+        </div>
+        <div id="pingMonitorStatus" class="set-status"></div>
+        <div id="pingMonitorSummary" style="margin-top:10px; display:flex; gap:12px; flex-wrap:wrap;"></div>
+      </section>
+
+      <!-- Ambito: observability (telemetria) -->
+      <section class="panel requires-admin set-section" id="setSecObs">
+        <div class="panel-head"><h3><span data-i18n="titleObsSettings">Observability (IPFIX/sFlow/syslog/NetFlow)</span></h3></div>
+        <p class="set-desc" data-i18n="descObsSettings">
+          Configura i listener di telemetria di rete. Le modifiche richiedono il riavvio dell'applicazione per avere effetto.
+        </p>
+        <div id="obsRestartBanner" class="set-banner" style="display:none;">
+          <i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="msgObsRestartRequired">Riavvio richiesto per applicare le modifiche.</span>
+        </div>
+        <div id="obsSettingsBody">
+          <div class="set-loading"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
+        </div>
+      </section>
+
+      <!-- Ambito: parametri applicativi (card generale: server/TLS, CORS, retention, avvio) -->
+      <section class="panel requires-admin set-section" id="setSecApp">
+        <div class="panel-head"><h3><span data-i18n="titleAppAdvanced">Applicazione (avanzate)</span></h3></div>
+        <p class="set-desc" data-i18n="descAppAdvanced">
+          Porta HTTP, TLS, CORS, retention dei dati observability e apertura automatica del browser. Le variabili d'ambiente, se impostate, hanno la precedenza. Le modifiche richiedono il riavvio dell'applicazione.
+        </p>
+        <div id="appAdvRestartBanner" class="set-banner" style="display:none;">
+          <i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="msgObsRestartRequired">Riavvio richiesto per applicare le modifiche.</span>
+        </div>
+        <div id="appAdvBody">
+          <div class="set-loading"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
+        </div>
+      </section>
+
+      <!-- Ambito: copia offsite dei backup (mirror SFTP) -->
+      <article class="panel requires-admin set-section" id="cloudBackupPanel">
+        <div class="panel-head">
+          <h3><span data-i18n="cbTitle">Copia offsite dei backup</span></h3>
+          <label class="set-switch">
+            <input type="checkbox" id="cbEnabled">
+            <span data-i18n="cbLblEnabled">Attivo</span>
+          </label>
+        </div>
+        <p class="set-desc" data-i18n="cbDesc">
+          Copia i backup di configurazione su un host SFTP. L'archivio locale resta la fonte di verita': da qui si scrive soltanto.
+        </p>
+
+        <div class="set-grid">
+          <div class="form-group">
+            <label for="cbHost" data-i18n="cbLblHost">Host</label><input type="text" id="cbHost" placeholder="backup.example.net">
+          </div>
+          <div class="form-group">
+            <label for="cbPort" data-i18n="cbLblPort">Porta</label><input type="number" id="cbPort" value="22">
+          </div>
+          <div class="form-group">
+            <label for="cbUsername" data-i18n="cbLblUsername">Utente</label><input type="text" id="cbUsername" placeholder="sentinelnet">
+          </div>
+          <div class="form-group">
+            <label for="cbAuth" data-i18n="cbLblAuth">Autenticazione</label><select id="cbAuth">
+              <option value="key" data-i18n="cbAuthKey">Chiave SSH</option>
+              <option value="password" data-i18n="cbAuthPassword">Password</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="cbKeyPath" data-i18n="cbLblKeyPath">Percorso chiave</label><input type="text" id="cbKeyPath" placeholder="C:\keys\id_ed25519">
+          </div>
+          <div class="form-group">
+            <label for="cbSecret" data-i18n="cbLblPassphrase">Passphrase / password</label><input type="password" id="cbSecret" autocomplete="new-password" placeholder="••••••••">
+          </div>
+          <div class="form-group">
+            <label for="cbRemoteRoot" data-i18n="cbLblRemoteRoot">Cartella remota</label><input type="text" id="cbRemoteRoot" placeholder="/srv/backups/sentinelnet">
+          </div>
+          <div class="form-group set-grid-wide">
+            <label for="cbFingerprint" data-i18n="cbLblFingerprint">Host key (SHA256)</label><input type="text" id="cbFingerprint" placeholder="SHA256:...">
+          </div>
+        </div>
+
+        <div class="set-note">
+          <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+          <span data-i18n="cbFingerprintHelp">Finche' il campo resta vuoto si accetta qualunque host key al primo collegamento. Esegui "Prova connessione", verifica l'impronta mostrata e salvala qui: da quel momento un host diverso viene rifiutato prima di inviare le credenziali.</span>
+        </div>
+
+        <div class="set-options">
+          <label class="set-option">
+            <input type="checkbox" id="cbEncrypt">
+            <span>
+              <span class="set-option-title" data-i18n="cbLblEncrypt">Cifra i file prima di inviarli</span>
+              <span class="set-option-help warn" data-i18n="cbEncryptWarning">
+                Senza cifratura le configurazioni arrivano in chiaro sull'host remoto. Con la cifratura la copia e' illeggibile senza la chiave di questo server: salvala altrove, offline.
+              </span>
+            </span>
+          </label>
+          <label class="set-option">
+            <input type="checkbox" id="cbRunAfterBackup">
+            <span>
+              <span class="set-option-title" data-i18n="cbLblRunAfterBackup">Esegui dopo ogni ciclo di backup</span>
+              <span class="set-option-help" data-i18n="cbRunAfterBackupDesc">
+                Avvia automaticamente la sincronizzazione incrementale subito dopo il completamento della raccolta backup.
+              </span>
+            </span>
+          </label>
+        </div>
+
+        <div class="set-actions">
+          <button type="button" id="cbBtnSave" class="btn btn-primary" style="width:auto;"><i class="fa-solid fa-floppy-disk"></i> <span data-i18n="cbBtnSave">Salva</span></button>
+          <button type="button" id="cbBtnTest" class="btn btn-secondary" style="width:auto;"><i class="fa-solid fa-plug-circle-check"></i> <span data-i18n="cbBtnTest">Prova connessione</span></button>
+          <button type="button" id="cbBtnRun" class="btn btn-secondary" style="width:auto;"><i class="fa-solid fa-cloud-arrow-up"></i> <span data-i18n="cbBtnRun">Copia adesso</span></button>
+        </div>
+        <div id="cbStatusBox" class="set-statusbox">—</div>
+      </article>
 
       <!-- Ambito: riavvio dell'applicazione -->
-      <div class="panel requires-admin" style="margin-bottom:18px;">
-        <h3 style="font-size:15px; margin-bottom:8px;"><i class="fa-solid fa-power-off" style="color:var(--warning);"></i> <span data-i18n="titleRestartApp">Riavvio dell'applicazione</span></h3>
-        <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descRestartApp">
+      <section class="panel requires-admin set-section" id="setSecRestart">
+        <div class="panel-head"><h3><span data-i18n="titleRestartApp">Riavvio dell'applicazione</span></h3></div>
+        <p class="set-desc" data-i18n="descRestartApp">
           Applica le impostazioni che richiedono un riavvio senza aprire una shell. Il riavvio e' eseguito da una unit systemd dedicata: se fallisce, il processo attuale resta in piedi.
         </p>
-        <button id="btnUpdateApp" class="btn btn-primary btn-small" style="width:auto; margin:0 10px 0 0;" data-i18n="btnUpdateApp">Aggiorna e riavvia</button>
-        <button id="btnRestartApp" class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-i18n="btnRestartApp">Riavvia l'applicazione</button>
-        <div id="updateAvailable" style="margin-top:10px; font-size:12px; color:var(--text-muted);"></div>
-        <div id="restartAppHint" style="margin-top:6px; font-size:12px; color:var(--text-muted);"></div>
-        <div id="restartAppStatus" style="margin-top:10px; font-size:12px; color:var(--text-muted);"></div>
-      </div>
+        <div class="set-actions">
+          <button id="btnUpdateApp" class="btn btn-primary btn-small" style="width:auto;" data-i18n="btnUpdateApp">Aggiorna e riavvia</button>
+          <button id="btnRestartApp" class="btn btn-secondary btn-small" style="width:auto;" data-i18n="btnRestartApp">Riavvia l'applicazione</button>
+        </div>
+        <div id="updateAvailable" class="set-status"></div>
+        <div id="restartAppHint" class="set-status"></div>
+        <div id="restartAppStatus" class="set-status"></div>
+      </section>
 
       <!-- Ambito: versioni della flotta (centrale + agenti) -->
-      <div class="panel requires-admin" style="margin-bottom:18px;">
-        <h3 style="font-size:15px; margin-bottom:8px;"><i class="fa-solid fa-code-branch" style="color:var(--primary);"></i> <span data-i18n="titleFleetVersions">Versioni della flotta</span></h3>
-        <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descFleetVersions">
-          Cosa sta girando in ogni pezzo: il centrale e ogni sede con agente. Serve a rispondere "l'aggiornamento e' arrivato ovunque?" senza aprire una shell.
-        </p>
-        <div style="overflow-x:auto;">
+      <section class="panel requires-admin set-section panel-flush" id="setSecFleet">
+        <div class="panel-head">
+          <div>
+            <h3><span data-i18n="titleFleetVersions">Versioni della flotta</span></h3>
+            <p class="panel-head-desc" data-i18n="descFleetVersions">Cosa sta girando in ogni pezzo: il centrale e ogni sede con agente. Serve a rispondere "l'aggiornamento e' arrivato ovunque?" senza aprire una shell.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
           <table>
             <thead>
               <tr>
@@ -3369,298 +3522,10 @@
             <tbody id="fleetVersionsBody"></tbody>
           </table>
         </div>
-      </div>
+      </section>
 
-      <!-- Ambito: monitor ping continuo -->
-      <div class="panel requires-admin" style="margin-bottom:18px;">
-        <h3 style="font-size:15px; margin-bottom:8px;"><i class="fa-solid fa-signal" style="color:var(--primary);"></i> <span data-i18n="titlePingMonitor">Monitor Ping Continuo</span></h3>
-        <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descPingMonitor">
-          Invia ping ICMP a tutti i dispositivi dell'inventario a un intervallo configurabile e traccia lo stato up/down. Le modifiche sono applicate subito, senza riavvio.
-        </p>
-        <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:12px;">
-          <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
-            <input type="checkbox" id="pingMonitorToggle">
-            <span style="font-size:13px;" data-i18n="lblPingMonitorEnabled">Attiva monitor ping</span>
-          </label>
-          <div class="form-group" style="margin:0; max-width:180px;">
-            <label for="pingMonitorInterval" style="font-size:12px;" data-i18n="lblPingMonitorInterval">Intervallo (secondi)</label><input type="number" id="pingMonitorInterval" min="5" max="86400" value="60" style="padding-left:12px;">
-          </div>
-          <button id="btnSavePingMonitor" class="btn btn-primary btn-small" style="width:auto; margin:0;">
-            <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btnSave">Salva</span>
-          </button>
-        </div>
-        <div id="pingMonitorStatus" style="font-size:12px; color:var(--text-muted);"></div>
-        <div id="pingMonitorSummary" style="margin-top:10px; display:flex; gap:12px; flex-wrap:wrap;"></div>
-      </div>
-
-      <!-- Ambito: observability (telemetria) -->
-      <div class="panel requires-admin" style="margin-bottom:18px;">
-        <h3 style="font-size:15px; margin-bottom:8px;"><i class="fa-solid fa-satellite-dish" style="color:var(--primary);"></i> <span data-i18n="titleObsSettings">Observability (IPFIX/sFlow/syslog/NetFlow)</span></h3>
-        <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descObsSettings">
-          Configura i listener di telemetria di rete. Le modifiche richiedono il riavvio dell'applicazione per avere effetto.
-        </p>
-        <div id="obsRestartBanner" style="display:none; margin-bottom:14px; padding:10px 14px; border:1px solid var(--warning); border-radius:0; background:var(--lamp-warn-wash); color:var(--warning); font-size:13px; font-weight:600;">
-          <i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="msgObsRestartRequired">Riavvio richiesto per applicare le modifiche.</span>
-        </div>
-        <div id="obsSettingsBody">
-          <div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
         </div>
       </div>
-
-      <!-- Ambito: parametri applicativi (card generale: server/TLS, CORS, retention, avvio) -->
-      <div class="panel requires-admin">
-        <h3 style="font-size:15px; margin-bottom:8px;"><i class="fa-solid fa-sliders" style="color:var(--primary);"></i> <span data-i18n="titleAppAdvanced">Applicazione (avanzate)</span></h3>
-        <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descAppAdvanced">
-          Porta HTTP, TLS, CORS, retention dei dati observability e apertura automatica del browser. Le variabili d'ambiente, se impostate, hanno la precedenza. Le modifiche richiedono il riavvio dell'applicazione.
-        </p>
-        <div id="appAdvRestartBanner" style="display:none; margin-bottom:14px; padding:10px 14px; border:1px solid var(--warning); border-radius:0; background:var(--lamp-warn-wash); color:var(--warning); font-size:13px; font-weight:600;">
-          <i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="msgObsRestartRequired">Riavvio richiesto per applicare le modifiche.</span>
-        </div>
-        <div id="appAdvBody">
-          <div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
-        </div>
-      </div>
-
-      <!-- Ambito: copia offsite dei backup (mirror SFTP) -->
-      <article class="panel requires-admin" id="cloudBackupPanel" style="margin-top:18px;">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
-          <div>
-            <h3 style="font-size:15px; margin-bottom:6px;"><i class="fa-solid fa-cloud-arrow-up" style="color:var(--primary);"></i> <span data-i18n="cbTitle">Copia offsite dei backup</span></h3>
-            <p style="margin:0; color:var(--text-muted); font-size:13px; max-width:68ch;" data-i18n="cbDesc">
-              Copia i backup di configurazione su un host SFTP. L'archivio locale resta la fonte di verita': da qui si scrive soltanto.
-            </p>
-          </div>
-          <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer; background:var(--surface-2); border:1px solid var(--border); padding:6px 12px; border-radius:0;">
-            <input type="checkbox" id="cbEnabled" style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
-            <span style="font-size:12.5px; font-weight:600;" data-i18n="cbLblEnabled">Attivo</span>
-          </label>
-        </div>
-
-        <!-- Parametri server & credenziali -->
-        <div style="background:var(--surface-2); border:1px solid var(--border); padding:14px; margin-bottom:14px;">
-          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-bottom:12px;">
-            <div>
-              <label for="cbHost" style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="cbLblHost">Host</label><input type="text" id="cbHost" placeholder="backup.example.net" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
-            </div>
-            <div>
-              <label for="cbPort" style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="cbLblPort">Porta</label><input type="number" id="cbPort" value="22" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
-            </div>
-            <div>
-              <label for="cbUsername" style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="cbLblUsername">Utente</label><input type="text" id="cbUsername" placeholder="sentinelnet" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
-            </div>
-          </div>
-
-          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-bottom:12px;">
-            <div>
-              <label for="cbAuth" style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="cbLblAuth">Autenticazione</label><select id="cbAuth" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
-                <option value="key" data-i18n="cbAuthKey">Chiave SSH</option>
-                <option value="password" data-i18n="cbAuthPassword">Password</option>
-              </select>
-            </div>
-            <div>
-              <label for="cbKeyPath" style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="cbLblKeyPath">Percorso chiave</label><input type="text" id="cbKeyPath" placeholder="C:\keys\id_ed25519" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
-            </div>
-            <div>
-              <label for="cbSecret" style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="cbLblPassphrase">Passphrase / password</label><input type="password" id="cbSecret" autocomplete="new-password" placeholder="••••••••" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
-            </div>
-          </div>
-
-          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:12px; margin-bottom:10px;">
-            <div>
-              <label for="cbRemoteRoot" style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="cbLblRemoteRoot">Cartella remota</label><input type="text" id="cbRemoteRoot" placeholder="/srv/backups/sentinelnet" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
-            </div>
-            <div>
-              <label for="cbFingerprint" style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="cbLblFingerprint">Host key (SHA256)</label><input type="text" id="cbFingerprint" placeholder="SHA256:..." style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px; font-family:var(--font-mono, monospace);">
-            </div>
-          </div>
-
-          <div style="display:flex; align-items:flex-start; gap:8px; padding:8px 12px; background:var(--surface); border:1px solid var(--border); font-size:11.5px; color:var(--text-muted); line-height:1.45;">
-            <i class="fa-solid fa-shield-halved" style="color:var(--text-soft); margin-top:2px;"></i>
-            <span data-i18n="cbFingerprintHelp">Finche' il campo resta vuoto si accetta qualunque host key al primo collegamento. Esegui "Prova connessione", verifica l'impronta mostrata e salvala qui: da quel momento un host diverso viene rifiutato prima di inviare le credenziali.</span>
-          </div>
-        </div>
-
-        <!-- Opzioni sicurezza & ciclo -->
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:12px; margin-bottom:16px;">
-          <div style="background:var(--surface-2); border:1px solid var(--border); padding:12px 14px;">
-            <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer;">
-              <input type="checkbox" id="cbEncrypt" style="margin-top:2px; width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
-              <div>
-                <span style="font-size:13px; font-weight:600; color:var(--text);" data-i18n="cbLblEncrypt">Cifra i file prima di inviarli</span>
-                <div style="margin-top:4px; font-size:11.5px; line-height:1.4; color:var(--lamp-warn-ink);" data-i18n="cbEncryptWarning">
-                  Senza cifratura le configurazioni arrivano in chiaro sull'host remoto. Con la cifratura la copia e' illeggibile senza la chiave di questo server: salvala altrove, offline.
-                </div>
-              </div>
-            </label>
-          </div>
-
-          <div style="background:var(--surface-2); border:1px solid var(--border); padding:12px 14px;">
-            <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer;">
-              <input type="checkbox" id="cbRunAfterBackup" style="margin-top:2px; width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
-              <div>
-                <span style="font-size:13px; font-weight:600; color:var(--text);" data-i18n="cbLblRunAfterBackup">Esegui dopo ogni ciclo di backup</span>
-                <div style="margin-top:4px; font-size:11.5px; line-height:1.4; color:var(--text-muted);" data-i18n="cbRunAfterBackupDesc">
-                  Avvia automaticamente la sincronizzazione incrementale subito dopo il completamento della raccolta backup.
-                </div>
-              </div>
-            </label>
-          </div>
-        </div>
-
-        <!-- Pulsanti azione -->
-        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px;">
-          <button type="button" id="cbBtnSave" class="btn btn-primary" style="width:auto; margin:0;"><i class="fa-solid fa-floppy-disk"></i> <span data-i18n="cbBtnSave">Salva</span></button>
-          <button type="button" id="cbBtnTest" class="btn btn-secondary" style="width:auto; margin:0;"><i class="fa-solid fa-plug-circle-check"></i> <span data-i18n="cbBtnTest">Prova connessione</span></button>
-          <button type="button" id="cbBtnRun" class="btn btn-secondary" style="width:auto; margin:0;"><i class="fa-solid fa-cloud-arrow-up"></i> <span data-i18n="cbBtnRun">Copia adesso</span></button>
-        </div>
-
-        <!-- Telemetria stato -->
-        <div id="cbStatusBox" style="background:var(--surface-2); border:1px solid var(--border); padding:10px 14px;">—</div>
-      </article>
-
-      <!-- Ambito: server di posta (recupero password, inviti, notifiche) -->
-      <article class="panel requires-admin" id="smtpPanel" style="margin-top:18px;">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
-          <div>
-            <h3 style="font-size:15px; margin-bottom:6px;"><i class="fa-solid fa-envelope" style="color:var(--primary);"></i> <span data-i18n="smtpTitle">Server di posta (SMTP)</span></h3>
-            <p style="margin:0; color:var(--text-muted); font-size:13px; max-width:68ch;" data-i18n="smtpDesc">
-              Usato per il recupero password e gli inviti utente. Senza SMTP il recupero resta possibile solo dalla riga di comando dell'host.
-            </p>
-          </div>
-          <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer; background:var(--surface-2); border:1px solid var(--border); padding:6px 12px; border-radius:0;">
-            <input type="checkbox" id="smtpEnabled" style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
-            <span style="font-size:12.5px; font-weight:600;" data-i18n="smtpLblEnabled">Attivo</span>
-          </label>
-        </div>
-
-        <div style="background:var(--surface-2); border:1px solid var(--border); padding:14px; margin-bottom:14px;">
-          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-bottom:12px;">
-            <div>
-              <label for="smtpHost" style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="smtpLblHost">Host</label><input type="text" id="smtpHost" placeholder="smtp.example.com" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
-            </div>
-            <div>
-              <label for="smtpPort" style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="smtpLblPort">Porta</label><input type="number" id="smtpPort" value="587" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
-            </div>
-            <div>
-              <label for="smtpTlsMode" style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="smtpLblTlsMode">Cifratura</label><select id="smtpTlsMode" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
-                <option value="starttls" data-i18n="smtpTlsStarttls">STARTTLS (587)</option>
-                <option value="ssl" data-i18n="smtpTlsSsl">TLS implicito (465)</option>
-                <option value="none" data-i18n="smtpTlsNone">Nessuna (relay interno)</option>
-              </select>
-            </div>
-          </div>
-
-          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-bottom:12px;">
-            <div>
-              <label for="smtpUsername" style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="smtpLblUsername">Utente</label><input type="text" id="smtpUsername" placeholder="sentinelnet@example.com" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
-            </div>
-            <div>
-              <label for="smtpPassword" style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="smtpLblPassword">Password</label><input type="password" id="smtpPassword" autocomplete="new-password" placeholder="••••••••" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
-            </div>
-            <div>
-              <label for="smtpFromEmail" style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="smtpLblFrom">Mittente</label><input type="text" id="smtpFromEmail" placeholder="sentinelnet@example.com" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
-            </div>
-          </div>
-
-          <div style="display:flex; align-items:flex-start; gap:8px; padding:8px 12px; background:var(--surface); border:1px solid var(--border); font-size:11.5px; color:var(--text-muted); line-height:1.45;">
-            <i class="fa-solid fa-shield-halved" style="color:var(--text-soft); margin-top:2px;"></i>
-            <span data-i18n="smtpTlsHelp">Con STARTTLS un server che non lo annuncia viene rifiutato invece di proseguire in chiaro. "Nessuna" e' ammessa solo per un relay interno senza utente: con le credenziali impostate l'invio si ferma.</span>
-          </div>
-        </div>
-
-        <!-- Pulsanti azione -->
-        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px;">
-          <button type="button" id="smtpBtnSave" class="btn btn-primary" style="width:auto; margin:0;"><i class="fa-solid fa-floppy-disk"></i> <span data-i18n="smtpBtnSave">Salva</span></button>
-          <input type="text" id="smtpTestTo" placeholder="verifica@example.com" style="width:220px; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;" aria-label="Destinatario del messaggio di prova" data-i18n-aria-label="ariaSmtpTestTo">
-          <button type="button" id="smtpBtnTest" class="btn btn-secondary" style="width:auto; margin:0;"><i class="fa-solid fa-paper-plane"></i> <span data-i18n="smtpBtnTest">Invia email di prova</span></button>
-        </div>
-
-        <div id="smtpStatusBox" style="background:var(--surface-2); border:1px solid var(--border); padding:10px 14px;">—</div>
-      </article>
-
-      <!-- Ambito: autenticazione aziendale (OpenID Connect) -->
-      <article class="panel requires-admin" id="ssoPanel" style="margin-top:18px;">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
-          <div>
-            <h3 style="font-size:15px; margin-bottom:6px;"><i class="fa-solid fa-id-badge" style="color:var(--primary);"></i> <span data-i18n="ssoTitle">Single Sign-On (OpenID Connect)</span></h3>
-            <p style="margin:0; color:var(--text-muted); font-size:13px; max-width:68ch;" data-i18n="ssoDesc">
-              Autenticazione tramite l'identity provider aziendale. Gli account locali restano validi: il Single Sign-On si aggiunge, non sostituisce.
-            </p>
-          </div>
-          <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer; background:var(--surface-2); border:1px solid var(--border); padding:6px 12px; border-radius:0;">
-            <input type="checkbox" id="ssoEnabled" style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
-            <span style="font-size:12.5px; font-weight:600;" data-i18n="ssoLblEnabled">Attivo</span>
-          </label>
-        </div>
-
-        <div style="background:var(--surface-2); border:1px solid var(--border); padding:14px; margin-bottom:14px;">
-          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-bottom:12px;">
-            <div>
-              <label for="ssoIssuerUrl" style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="ssoLblIssuer">Issuer URL</label><input type="text" id="ssoIssuerUrl" placeholder="https://idp.example.com" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
-            </div>
-            <div>
-              <label for="ssoProviderName" style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="ssoLblProviderName">Nome mostrato</label><input type="text" id="ssoProviderName" placeholder="Corporate SSO" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
-            </div>
-          </div>
-
-          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-bottom:12px;">
-            <div>
-              <label for="ssoClientId" style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="ssoLblClientId">Client ID</label><input type="text" id="ssoClientId" placeholder="sentinelnet" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
-            </div>
-            <div>
-              <label for="ssoClientSecret" style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="ssoLblClientSecret">Client secret</label><input type="password" id="ssoClientSecret" autocomplete="new-password" placeholder="••••••••" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
-            </div>
-          </div>
-
-          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px;">
-            <div>
-              <label for="ssoAdminGroup" style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="ssoLblAdminGroup">Gruppo -> admin</label><input type="text" id="ssoAdminGroup" placeholder="net-admins" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
-            </div>
-            <div>
-              <label for="ssoOperatorGroup" style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="ssoLblOperatorGroup">Gruppo -> operator</label><input type="text" id="ssoOperatorGroup" placeholder="net-operators" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
-            </div>
-            <div>
-              <label for="ssoDefaultRole" style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="ssoLblDefaultRole">Ruolo predefinito</label><select id="ssoDefaultRole" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
-                <option value="viewer" data-i18n="roleViewer">Viewer (sola lettura)</option>
-                <option value="operator" data-i18n="roleOperator">Operator (operazioni)</option>
-                <option value="admin" data-i18n="roleAdmin">Admin (totale)</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:12px; margin-bottom:16px;">
-          <div style="background:var(--surface-2); border:1px solid var(--border); padding:12px 14px;">
-            <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer;">
-              <input type="checkbox" id="ssoAutoProvision" style="margin-top:2px; width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
-              <div>
-                <span style="font-size:13px; font-weight:600; color:var(--text);" data-i18n="ssoLblAutoProvision">Crea l'account al primo accesso</span>
-                <div style="margin-top:4px; font-size:11.5px; line-height:1.4; color:var(--lamp-warn-ink);" data-i18n="ssoAutoProvisionWarning">
-                  Con questa opzione chiunque l'identity provider sappia autenticare ottiene un account: su una directory aziendale e' l'intera rubrica. Lasciala spenta e invita le persone che devono entrare.
-                </div>
-              </div>
-            </label>
-          </div>
-
-          <div style="background:var(--surface-2); border:1px solid var(--border); padding:12px 14px;">
-            <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer;">
-              <input type="checkbox" id="ssoSyncRoles" style="margin-top:2px; width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
-              <div>
-                <span style="font-size:13px; font-weight:600; color:var(--text);" data-i18n="ssoLblSyncRoles">Allinea il ruolo ad ogni accesso</span>
-                <div style="margin-top:4px; font-size:11.5px; line-height:1.4; color:var(--text-muted);" data-i18n="ssoSyncRolesDesc">
-                  I gruppi dell'IdP diventano la fonte di verita': un ruolo cambiato qui viene riscritto al login successivo.
-                </div>
-              </div>
-            </label>
-          </div>
-        </div>
-
-        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px;">
-          <button type="button" id="ssoBtnSave" class="btn btn-primary" style="width:auto; margin:0;"><i class="fa-solid fa-floppy-disk"></i> <span data-i18n="ssoBtnSave">Salva</span></button>
-        </div>
-
-        <div id="ssoStatusBox" style="background:var(--surface-2); border:1px solid var(--border); padding:10px 14px;">—</div>
-      </article>
     </div>
 
     <!-- TAB: Flow SIEM Analytics (preview) -->
@@ -3729,20 +3594,15 @@
 
     <!-- TAB: Interfaces & Expected State (Monitoraggio Interfacce) -->
     <div id="tab-interfaces" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="panel-header" style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
-        <div>
-          <h2 style="margin:0 0 4px 0;">
-            <i class="fa-solid fa-network-wired" style="color:var(--primary); margin-right:8px;"></i>
-            <span data-i18n="ifTabTitle">Monitoraggio Interfacce &amp; Stato Atteso</span>
-          </h2>
-          <p style="font-size:12px; color:var(--text-muted); margin:0;" data-i18n="ifTabSubtitle">
-            Visione consolidata dello stato dei collegamenti, anomalie di flapping e finestre di manutenzione.
-          </p>
+      <div class="page-head">
+        <div class="page-head-text">
+          <h2 data-i18n="ifTabTitle">Monitoraggio Interfacce &amp; Stato Atteso</h2>
+          <p data-i18n="ifTabSubtitle">Visione consolidata dello stato dei collegamenti, anomalie di flapping e finestre di manutenzione.</p>
         </div>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <span id="ifTabStatus" style="font-size:12px; color:var(--primary); font-weight:600;"></span>
+        <div class="page-head-actions">
+          <span id="ifTabStatus" class="head-status"></span>
           <span id="ifUpdatedAt" class="if-updated"></span>
-          <button id="ifBtnRefresh" class="btn btn-secondary btn-sm" style="margin:0;">
+          <button id="ifBtnRefresh" class="btn btn-secondary">
             <i class="fa-solid fa-rotate"></i> <span data-i18n="ifBtnRefresh">Aggiorna</span>
           </button>
         </div>
@@ -4773,6 +4633,140 @@
   <!-- Modifica sede: nome, subnet, modalita' e, per una sede jump, il bastione.
        update_site accettava tutto questo dal primo giorno; l'unico modo di
        cambiarlo era una chiamata API a mano. -->
+  <!-- Users tab: create an account. Same ids the form had inside the tab. -->
+  <div class="modal-overlay" id="createUserModal">
+    <div class="modal" style="width: 520px; max-width: 95%;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-user-plus"></i> <span data-i18n="btnNewUser">Nuovo utente</span></h3>
+        <button type="button" class="modal-close" data-close-modal="createUserModal" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="form-group">
+        <label for="newUserName" data-i18n="lblNewUserName">Username</label><input id="newUserName" type="text" placeholder="es. mario.rossi" data-i18n-placeholder="phNewUserName" style="padding-left:12px;">
+      </div>
+      <div class="form-group">
+        <label for="newUserEmail" data-i18n="lblNewUserEmail">Email (opzionale)</label><input id="newUserEmail" type="text" placeholder="mario.rossi@example.com" style="padding-left:12px;">
+      </div>
+      <div class="form-group">
+        <label for="newUserPass" data-i18n="lblNewUserPass">Password (vuota = link via email)</label><input id="newUserPass" type="password" placeholder="••••••••" style="padding-left:12px;">
+      </div>
+      <div class="form-group">
+        <label for="newUserRole" data-i18n="lblNewUserRole">Ruolo</label><select id="newUserRole" style="padding-left:12px;">
+          <option value="viewer" data-i18n="roleViewer">Viewer (sola lettura)</option>
+          <option value="operator" data-i18n="roleOperator">Operator (operazioni)</option>
+          <option value="admin" data-i18n="roleAdmin">Admin (totale)</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal="createUserModal" data-i18n="uiCancel">Annulla</button>
+        <button class="btn btn-primary" id="btnCreateUser" data-i18n="btnAddUser"><i class="fa-solid fa-plus"></i> Crea Utente</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="inviteUserModal">
+    <div class="modal" style="width: 520px; max-width: 95%;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-envelope-open-text"></i> <span data-i18n="btnOpenInviteUser">Invita per email</span></h3>
+        <button type="button" class="modal-close" data-close-modal="inviteUserModal" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <p class="set-desc" data-i18n="descInviteUser">
+        L'invitato sceglie la propria password da un link valido 24 ore: nessuna password iniziale da comunicare. L'account nasce quando l'invito viene accettato, con l'indirizzo come username, e resta in attesa finche' un amministratore non lo approva. Richiede il server di posta configurato.
+      </p>
+      <div class="form-group">
+        <label for="inviteEmail" data-i18n="lblInviteEmail">Email</label><input id="inviteEmail" type="text" placeholder="mario.rossi@example.com" style="padding-left:12px;">
+      </div>
+      <div class="form-group">
+        <label for="inviteRole" data-i18n="lblNewUserRole">Ruolo</label><select id="inviteRole" style="padding-left:12px;">
+          <option value="viewer" data-i18n="roleViewer">Viewer (sola lettura)</option>
+          <option value="operator" data-i18n="roleOperator">Operator (operazioni)</option>
+          <option value="admin" data-i18n="roleAdmin">Admin (totale)</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal="inviteUserModal" data-i18n="uiCancel">Annulla</button>
+        <button class="btn btn-primary" id="btnInviteUser" data-i18n="btnInviteUser"><i class="fa-solid fa-paper-plane"></i> Invia invito</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sites tab: create a site. The jump fields and their limits stay in the
+       same dialog, shown by the mode select as before. -->
+  <div class="modal-overlay" id="createSiteModal">
+    <div class="modal" style="width: 640px; max-width: 95%;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-plus"></i> <span data-i18n="titleNewSite">Nuova sede</span></h3>
+        <button type="button" class="modal-close" data-close-modal="createSiteModal" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-grid">
+        <div class="form-group">
+          <label for="newSiteName" data-i18n="lblSiteName">Nome</label><input id="newSiteName" type="text" placeholder="es. Milano" data-i18n-placeholder="phNewSiteName" style="padding-left:12px;">
+        </div>
+        <div class="form-group">
+          <label for="newSiteMode" data-i18n="lblSiteMode">Modalità</label><select id="newSiteMode" style="padding-left:12px;">
+            <option value="central">Central poll</option>
+            <option value="agent">Site agent</option>
+            <option value="jump" data-i18n="optSiteJump">Jump (bastion SSH)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="newSiteSubnets" data-i18n="lblSiteSubnets">Subnet (separate da virgola)</label><input id="newSiteSubnets" type="text" placeholder="es. 10.0.0.0/24, 10.0.1.0/24" data-i18n-placeholder="phNewSiteSubnets" style="padding-left:12px;">
+      </div>
+
+      <div id="jumpFields" class="modal-grid" style="display:none;">
+        <div class="form-group">
+          <label for="newSiteJumpHost" data-i18n="lblJumpHost">Host bastione (IP/hostname)</label><input id="newSiteJumpHost" type="text" placeholder="es. 198.51.100.10" data-i18n-placeholder="phNewSiteJumpHost" style="padding-left:12px;">
+        </div>
+        <div class="form-group">
+          <label for="newSiteJumpPort" data-i18n="lblJumpPort">Porta SSH bastione</label><input id="newSiteJumpPort" type="number" value="22" min="1" max="65535" style="padding-left:12px;">
+        </div>
+        <div class="form-group">
+          <label for="newSiteJumpIdentity" data-i18n="lblJumpIdentity">Identità (credenziali) bastione</label><select id="newSiteJumpIdentity" style="padding-left:12px;"></select>
+        </div>
+        <div class="form-group">
+          <label for="newSiteDeviceIdentity" data-i18n="lblDeviceIdentity">Identità di default dei dispositivi</label><select id="newSiteDeviceIdentity" style="padding-left:12px;"></select>
+        </div>
+      </div>
+
+      <div class="callout" id="jumpLimits" style="display:none;">
+        <h4 data-i18n="jumpLimitsTitle">Cosa non funziona su un sito jump</h4>
+        <ul>
+          <li data-i18n="jumpLimitsPing">Nessun ping ICMP: lo stato online/offline resta "non misurabile".</li>
+          <li data-i18n="jumpLimitsScan">Nessuna scansione di subnet ne' discovery dal centrale.</li>
+          <li data-i18n="jumpLimitsUdp">Nessun syslog, flow o SNMP in ingresso.</li>
+          <li data-i18n="jumpLimitsRest">Nessuna API REST vendor (FortiGate): solo CLI.</li>
+          <li data-i18n="jumpLimitsWorks">Funzionano: inventario, backup config, MAC/ARP, comandi CLI, audit.</li>
+          <li data-i18n="jumpLimitsIdentity">L'identità del bastione e quella dei dispositivi sono distinte: la seconda vale per i dispositivi il cui profilo è "default".</li>
+        </ul>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal="createSiteModal" data-i18n="uiCancel">Annulla</button>
+        <button class="btn btn-primary" id="btnCreateSite"><i class="fa-solid fa-plus"></i> <span data-i18n="btnCreateSite">Crea sede</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tenants tab: register a vendor driver. -->
+  <div class="modal-overlay" id="addVendorModal">
+    <div class="modal" style="width: 480px; max-width: 95%;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-boxes-stacked"></i> <span data-i18n="btnOpenAddVendor">Aggiungi vendor</span></h3>
+        <button type="button" class="modal-close" data-close-modal="addVendorModal" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="form-group">
+        <label for="newVendorName" data-i18n="lblVendorName">Nome Vendor</label><input id="newVendorName" type="text" placeholder="es. mikrotik" data-i18n-placeholder="placeholderVendorName" style="padding-left:12px;">
+      </div>
+      <div class="form-group">
+        <label for="newVendorDriver" data-i18n="lblVendorDriver">Driver Netmiko (opzionale)</label><input id="newVendorDriver" type="text" placeholder="es. mikrotik_routeros" data-i18n-placeholder="placeholderVendorDriver" style="padding-left:12px;">
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal="addVendorModal" data-i18n="uiCancel">Annulla</button>
+        <button class="btn btn-primary" id="btnAddVendor" data-i18n="btnAdd"><i class="fa-solid fa-plus"></i> Aggiungi</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="editSiteModal">
     <div class="modal" style="width: 560px; max-width: 95%;">
       <div class="modal-header">

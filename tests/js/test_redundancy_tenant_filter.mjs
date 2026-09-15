@@ -43,14 +43,16 @@ const apiFetch = async () => ({ ok: true, json: async () => ({ results: served }
 const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// i18n.js is a global in the page; key plus interpolated values is enough to assert on.
+const tr = (key, vars) => vars ? `${key}:${Object.values(vars).join(',')}` : key;
 const windowStub = {};
 const Option = function (label, value) { this.text = label; this.value = value; };
 // Se qualcuno rimette una select locale, questa esplode invece di passare.
 const tenantSelectSeed = () => { throw new Error('questa scheda non ha una select da seminare'); };
 
-(0, eval)(`(function (document, apiFetch, escapeHtml, currentRole, window, Option, tenantSelectSeed) {
+(0, eval)(`(function (document, apiFetch, escapeHtml, tr, currentRole, window, Option, tenantSelectSeed) {
     ${src}
-})`)(documentStub, apiFetch, escapeHtml, 'admin', windowStub, Option, tenantSelectSeed);
+})`)(documentStub, apiFetch, escapeHtml, tr, 'admin', windowStub, Option, tenantSelectSeed);
 
 const load = windowStub.loadRedundancyTab;
 const tenantChanged = windowStub.redundancyTenantChanged;
@@ -80,7 +82,7 @@ assert.equal(sections.length, 2, 'una sezione per tenant');
 assert.ok(container.innerHTML.indexOf('sede-a') < container.innerHTML.indexOf('sede-b'),
     'le sezioni sono ordinate, cosi\' lo stesso cliente sta sempre nello stesso posto');
 assert.ok(container.innerHTML.includes('2 cluster'), 'sede-a mostra il proprio conteggio');
-assert.ok(container.innerHTML.includes('1 da verificare'),
+assert.ok(container.innerHTML.includes('haToCheck:1'),
     'un tenant con un cluster degradato lo dice nella propria intestazione');
 
 // I KPI senza filtro descrivono tutta la flotta (gia' filtrata dall'API).
@@ -117,7 +119,7 @@ assert.ok(!container.innerHTML.includes('sede-a'),
 assert.ok(!container.innerHTML.includes('sede-b'),
     'nemmeno quelli del secondo');
 assert.equal(kpi.haKpiTotal.textContent, 0, 'e i KPI dicono zero, non tutta la flotta');
-assert.ok(container.innerHTML.includes('Nessun gruppo di ridondanza per il tenant'),
+assert.ok(container.innerHTML.includes('haEmptyTenantTitle:'),
     'lo dice invece di mostrare altro');
 assert.ok(!container.innerHTML.includes('Crea Gruppo HA'),
     'una vista filtrata non offre "crea il tuo primo gruppo": si legge come perdita di dati');
@@ -127,7 +129,7 @@ assert.ok(!container.innerHTML.includes('Crea Gruppo HA'),
 served = [];
 windowStub.globalSelectedTenant = 'all';
 await load();
-assert.ok(container.innerHTML.includes('Nessun gruppo di ridondanza registrato'),
+assert.ok(container.innerHTML.includes('haEmptyTitle'),
     'vuoto per davvero e vuoto per filtro sono due schermate diverse');
 
 // --- 'all' e assente sono la stessa cosa ---------------------------------

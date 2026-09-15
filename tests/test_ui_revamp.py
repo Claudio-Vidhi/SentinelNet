@@ -522,9 +522,11 @@ class TestGroupsTabRestyle(unittest.TestCase):
         tab_start = html.index('<div id="tab-groups"')
         tab_end = html.index('<!-- TAB 3:')
         tab_html = html[tab_start:tab_end]
-        for cls in ('class="hero"', 'class="hero-card"'):
-            self.assertIn(cls, tab_html)
-        self.assertEqual(tab_html.count('class="panel"'), 2)
+        self.assertIn('class="page-head"', tab_html)
+        # tenants table + vendor registry, both flush tables; adding a vendor
+        # is a dialog opened from the registry header.
+        self.assertEqual(tab_html.count('class="panel panel-flush"'), 2)
+        self.assertIn('data-open-modal="addVendorModal"', tab_html)
         self.assertGreaterEqual(tab_html.count('class="table-wrap"'), 2)
         self.assertNotIn('table-container', tab_html)
 
@@ -569,8 +571,7 @@ class TestMapTabRestyle(unittest.TestCase):
         tab_start = html.index('<!-- TAB 3:')
         tab_end = html.index('<!-- TAB: Dispositivi & Categorie -->')
         tab_html = html[tab_start:tab_end]
-        for cls in ('class="hero"', 'class="hero-card"'):
-            self.assertGreaterEqual(tab_html.count(cls), 2, f"{cls} expected once per tab (tab-map + tab-map-interactive)")
+        self.assertGreaterEqual(tab_html.count('class="page-head"'), 2, "page-head expected once per tab (tab-map + tab-map-interactive)")
         self.assertGreaterEqual(tab_html.count('class="panel"'), 2)
         # view-toggle buttons carry the .chip class alongside their existing marker class
         self.assertIn('class="map-view-btn chip"', tab_html)
@@ -683,7 +684,7 @@ class TestCategoriesTabRestyle(unittest.TestCase):
         tab_start = html.index('<div id="tab-categories"')
         tab_end = html.index('<!-- TAB 5: Threat Intel')
         tab_html = html[tab_start:tab_end]
-        for cls in ('class="hero"', 'class="hero-card"', 'class="filterbar"'):
+        for cls in ('class="page-head"', 'class="filterbar"'):
             self.assertIn(cls, tab_html)
         self.assertGreaterEqual(tab_html.count('class="panel'), 4)
 
@@ -1230,8 +1231,7 @@ class TestProvisionerTabRestyle(unittest.TestCase):
         tab = self._tab(html)
         # table-wrap left with the removed inline token/objects section -- that
         # UI now lives solely in #tab-fortigate (Fortigate Management tab).
-        for cls in ('class="hero"', 'class="hero-card"'):
-            self.assertIn(cls, tab)
+        self.assertIn('class="page-head"', tab)
         # device/params card + generate/deliver card.
         self.assertGreaterEqual(tab.count('class="panel'), 2)
         # Device type chips reuse the existing .chip component.
@@ -1303,10 +1303,10 @@ class TestImportTabRestyle(unittest.TestCase):
     def test_tab_uses_component_classes(self):
         html = _html()
         tab = self._tab(html)
-        for cls in ('class="hero"', 'class="hero-card"'):
-            self.assertIn(cls, tab)
-        # the upload-form panel
-        self.assertGreaterEqual(tab.count('class="panel"'), 1)
+        self.assertIn('class="page-head"', tab)
+        # prepare-the-file step + upload step, beside the Group/Site reference.
+        self.assertEqual(tab.count('<section class="panel">'), 2)
+        self.assertIn('class="panel import-aside"', tab)
 
     def test_i18n_keys_both_langs(self):
         html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
@@ -1382,11 +1382,13 @@ class TestUsersTabRestyle(unittest.TestCase):
     def test_tab_uses_component_classes(self):
         html = _html()
         tab = self._tab(html)
-        for cls in ('class="hero"', 'class="hero-card"',
-                    'class="table-wrap"'):
+        for cls in ('class="page-head"', 'class="table-wrap"'):
             self.assertIn(cls, tab)
-        # users-table panel + create-user-form panel + invite-by-email panel
-        self.assertEqual(tab.count('class="panel"'), 3)
+        # Only the members table stays in the tab: creating and inviting are
+        # dialogs opened from the header.
+        self.assertEqual(tab.count('class="panel'), 1)
+        self.assertIn('data-open-modal="createUserModal"', tab)
+        self.assertIn('data-open-modal="inviteUserModal"', tab)
         self.assertNotIn('table-container', tab)
 
     def test_i18n_keys_both_langs(self):
@@ -1469,12 +1471,13 @@ class TestSitesTabRestyle(unittest.TestCase):
     def test_tab_uses_component_classes(self):
         html = _html()
         tab = self._tab(html)
-        for cls in ('class="hero"', 'class="hero-card"',
-                    'class="table-wrap"'):
+        for cls in ('class="page-head"', 'class="table-wrap"'):
             self.assertIn(cls, tab)
-        # sites-table panel + create-site-form panel + jump-site limitations
-        # panel (jump-host-sites Task 5, nested inside the create-site panel).
-        self.assertEqual(tab.count('class="panel"'), 3)
+        # sites table only; the create form (with the jump-site fields and
+        # limitations) is the createSiteModal dialog.
+        self.assertEqual(tab.count('class="panel'), 1)
+        self.assertIn('data-open-modal="createSiteModal"', tab)
+        self.assertIn('id="jumpLimits"', html)
         self.assertNotIn('table-container', tab)
 
     def test_i18n_keys_both_langs(self):
@@ -1574,8 +1577,7 @@ class TestMcpTabRestyle(unittest.TestCase):
     def test_tab_uses_component_classes(self):
         html = _html()
         tab = self._tab(html)
-        for cls in ('class="hero"', 'class="hero-card"',
-                    'class="panel"'):
+        for cls in ('class="page-head"', 'class="panel"'):
             self.assertIn(cls, tab)
         # client-config panel + tool-list panel. La Checklist Audit Firewall,
         # Fortigate Management e MCP Client non sono piu' in preview: i loro
@@ -1698,20 +1700,22 @@ class TestSettingsTabRestyle(unittest.TestCase):
         # observability, application, cloud-backup, SMTP and SSO panels stay
         # admin-gated in-body (9 gates: one per admin-only concern).
         self.assertEqual(self._tab(html).count("requires-admin"), 9)
-        self.assertIn('class="panel requires-admin"', self._tab(html))
+        self.assertIn('class="panel requires-admin set-section"', self._tab(html))
         # Every loader is also role-gated server-side of the render.
         self.assertIn("if (currentRole !== 'admin') return;", html)
 
     def test_tab_uses_component_classes(self):
         html = _html()
         tab = self._tab(html)
-        for cls in ('class="hero"', 'class="hero-card"'):
-            self.assertIn(cls, tab)
-        # Twelve one-concern cards: ui variant, network exposure, command
+        self.assertIn('class="page-head"', tab)
+        # Twelve one-concern sections: ui variant, network exposure, command
         # safety, self-signed certificate, application restart, fleet versions,
         # ping monitor, observability, application (general), cloud backup,
-        # SMTP, single sign-on.
-        self.assertEqual(tab.count("class=\"panel"), 12)
+        # SMTP, single sign-on -- each with an entry in the settings index.
+        self.assertEqual(tab.count('class="panel '), 12)
+        self.assertEqual(tab.count('data-settings-jump='), 12)
+        for sec in re.findall(r'data-settings-jump="([^"]+)"', tab):
+            self.assertIn(f'id="{sec}"', tab)
 
     def test_i18n_icon_not_clobbered_by_innerhtml(self):
         # applyI18n does `el.innerHTML = i18n[lang][key]`, so a data-i18n key

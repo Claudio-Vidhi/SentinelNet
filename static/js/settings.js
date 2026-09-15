@@ -180,6 +180,7 @@
                 document.getElementById('newSiteJumpHost').value = '';
                 document.getElementById('newSiteJumpPort').value = '22';
             }
+            closeModal('createSiteModal');
             if (data.token) showSiteEnrollment(data.site.id, data.token);
             loadSites();
         } else if (res) {
@@ -648,6 +649,7 @@
         });
         if (res && res.ok) {
             document.getElementById('inviteEmail').value = '';
+            closeModal('inviteUserModal');
             showToast(tr('setInvitationSentTo', {email: email}), 'success');
         } else if (res) {
             const e = await res.json().catch(() => ({}));
@@ -722,6 +724,7 @@
             document.getElementById('newUserName').value = '';
             document.getElementById('newUserPass').value = '';
             document.getElementById('newUserEmail').value = '';
+            closeModal('createUserModal');
             loadUsers();
         } else if (res) {
             const e = await res.json();
@@ -1346,6 +1349,27 @@
             applyUiVariant(card.dataset.variant, true);
         }
     });
+
+    // Settings index: a click scrolls to the section, and the entry for the
+    // section nearest the top of the viewport stays marked while scrolling.
+    const settingsNav = document.getElementById('settingsNav');
+    settingsNav?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-settings-jump]');
+        if (btn) document.getElementById(btn.dataset.settingsJump)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    if (settingsNav && 'IntersectionObserver' in window) {
+        const markActive = (id) => settingsNav.querySelectorAll('[data-settings-jump]').forEach(b => {
+            const on = b.dataset.settingsJump === id;
+            b.classList.toggle('active', on);
+            if (on) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current');
+        });
+        const seen = new IntersectionObserver((entries) => {
+            const top = entries.filter(en => en.isIntersecting)
+                .sort((x, y) => x.boundingClientRect.top - y.boundingClientRect.top)[0];
+            if (top) markActive(top.target.id);
+        }, { rootMargin: '0px 0px -70% 0px' });
+        document.querySelectorAll('#tab-settings .set-section').forEach(sec => seen.observe(sec));
+    }
 
     document.getElementById('cliBlacklistToggle')?.addEventListener('change', saveCliBlacklistSetting);
     document.getElementById('btnSavePingMonitor')?.addEventListener('click', savePingMonitorSettings);

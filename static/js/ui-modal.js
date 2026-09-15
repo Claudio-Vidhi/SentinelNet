@@ -119,3 +119,12 @@ document.addEventListener('mousedown', (e) => {
     const top = _modalStack[_modalStack.length - 1];
     if (top && e.target === top.el) _dismiss(top);
 });
+
+// Declarative open/close for dialogs that need nothing but showing and hiding:
+// `data-open-modal="id"` on the command, `data-close-modal="id"` on Cancel/X.
+document.addEventListener('click', (e) => {
+    const opener = e.target.closest('[data-open-modal]');
+    if (opener) { openModal(opener.dataset.openModal); return; }
+    const closer = e.target.closest('[data-close-modal]');
+    if (closer) closeModal(closer.dataset.closeModal);
+});
