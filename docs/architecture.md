@@ -364,6 +364,15 @@ questions per tenant, deliberately kept apart:
 - **History** — did this device change since we last saw it, and what changed?
 - **Baseline** — does this device match the standard this tenant expects?
 
+A baseline is stored per tenant **and per configuration profile** — the
+grammar a device's config is written in (`ios`, `wlc-aireos`, `fortios`,
+`panos`, `linux`, `windows`), resolved by the same vendor mapping the Config
+Analyzer parses with (`baseline.profile_for`). One tenant-wide rule list turned
+every WLC and firewall into a wall of false deviations, because a switch rule
+like `aaa new-model` can never appear in an AireOS or FortiOS config. Stores
+written before profiles existed held one string per tenant; they are read as
+the `ios` profile, which is what every one of them was typed against.
+
 Both read from the archive `history.py` builds; neither scores anything — the
 existing NetSec Audit engine (§9, `services/netsec_audit/`) owns compliance
 scoring, benchmarks and export. The baseline answers one question per rule,
@@ -395,9 +404,12 @@ feature that quietly isn't running is worse than one that's off.
 
 Seven tenant-scoped routes in `routers/config_drift.py`, all going through
 `user_group_scope` (list routes) or `assert_device_allowed` (device routes) —
-the same isolation rule as every other device route. A new tab
-`#tab-config-drift` (`static/js/config-drift.js`) follows the WLC tab's
-tenant-first pattern: choose a tenant, then its devices appear.
+the same isolation rule as every other device route. The tab
+`#tab-config-drift` (`static/js/config-drift.js`) is master-detail: the
+tenant's device list stays visible, and the detail pane shows either one
+device (deviations, version history) or the tenant's baseline for one profile
+with a per-rule coverage table that marks the devices failing each rule. The Situation page's drift verdict names any tenant
+that has no baseline yet.
 
 ---
 

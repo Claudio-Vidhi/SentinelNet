@@ -189,6 +189,15 @@ Only migrations and tests should show up. See
 Fatal on purpose: better not to start than to write to an unknown schema. Fix:
 put the newer build back, or start from a fresh `observability.db`.
 
+### "Triage reports `auth failed` on devices whose credentials are right"
+
+Too many simultaneous SSH logins trip AAA rate limits (TACACS/RADIUS) or the
+device's own login throttle, which then refuse valid credentials. Every triage
+path — group run, row button, bulk selection, agent — shares at most
+`TRIAGE_MAX_CONCURRENT` (3, `core/core_engine.py`) logins; the rest queue. An
+`auth_failed` in a group run is retried once, alone, after the batch. A device
+still failing after that retry has a real credential or AAA problem.
+
 ### "A CLI command stays `queued` forever"
 
 Agent-mode site with the agent stopped, or an IP missing from the agent's

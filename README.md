@@ -27,15 +27,26 @@ populated demo.
 
 ## Key features
 
+- **One browser console** — full-page shell with collapsible navigation groups,
+  Ctrl+K search and a tenant selector that scopes every view. Each tab has its
+  own address (`/devices`, `/settings`, ...) that survives a reload and the
+  Back button. The landing page is the operational posture: reachability,
+  backup, CVE and drift verdicts with their counts and evidence.
 - **Automatic backup** — saves device running-configs to local text files,
   organized by group and vendor.
 - **Multi-vendor architecture** — pluggable drivers driven by a vendor registry:
   Cisco IOS, HPE ProCurve, Juniper Junos, Aruba OS, Fortinet FortiOS and Palo
   Alto PAN-OS. The vendor → driver → netmiko `device_type` mapping is
   centralized and easy to extend.
+- **Config drift** — every changed running-config is archived as a new
+  version, and each device is checked against a per-tenant baseline written
+  for its configuration profile (IOS, AireOS WLC, FortiOS, PAN-OS, Linux,
+  Windows), so switch rules never judge a firewall.
 - **Firmware and vulnerability triage** — detects the installed firmware version
   and checks it against NIST NVD, with CVSS severity classification
-  (CRITICAL / HIGH / MEDIUM / LOW).
+  (CRITICAL / HIGH / MEDIUM / LOW). Run it on a whole group or only on the
+  devices ticked in the inventory; at most three SSH logins run at once, so
+  AAA servers do not start refusing valid credentials.
 - **Network observability** — passive collectors for IPFIX, NetFlow, sFlow and
   syslog, plus active FortiGate REST and SNMP polling, feeding a deterministic
   correlation engine that produces evidence-backed incidents.
@@ -163,9 +174,14 @@ the systemd unit and SELinux setup guide in [docs/operations.md](docs/operations
 ### Password recovery by email
 
 Optional, and off until an SMTP server is configured under **Settings → Mail
-server**. Each account can carry a recovery address, set from the Users tab;
-an account without one simply cannot use this path — the link is never sent to
-a fallback address such as the SMTP sender.
+server**. Each account can carry a recovery address, set by an administrator
+from the Users tab or by the user from **My profile**; an account without one
+simply cannot use this path — the link is never sent to a fallback address
+such as the SMTP sender. A user changing their own address must type their
+current password, and the new address counts only once the confirmation link
+mailed to it (valid one hour) is opened: a stolen session cannot point
+recovery at someone else's mailbox. An administrator can also mail a reset
+link to a user from the Users tab without ever knowing the password.
 
 The link is built from the configured public base URL (`SENTINELNET_BASE_URL`,
 or *Public base URL* in the advanced settings), never from the request's `Host`
@@ -187,6 +203,27 @@ that is never accepted expires and leaves nothing behind. Username and role
 come from the invitation, not from the request that redeems it: the address
 invited becomes the username, and a redeemer cannot claim a role they were not
 offered.
+
+An accepted invitation does not open the console on its own: the account
+waits for an administrator to approve it in the Users tab (rejecting it means
+deleting it), so an invitation mailed to the wrong address grants nothing.
+
+An administrator creating an account directly can also leave the password
+empty and give an email: the user receives a link, valid 24 hours, to choose
+their own password, and nobody else ever knows one.
+
+### Account and session lifecycle
+
+- **My profile** (the user badge at the foot of the sidebar) shows the account's role, tenant scope and last
+  sign-in, and lets the user change their password, set a recovery address
+  and **sign out everywhere** — which ends every session of that account at
+  once, browsers, scripts and MCP clients alike.
+- The Users table shows each account's last sign-in and whether it is waiting
+  for approval.
+- **Session lifetime** is set under **Settings → Sessions**: idle timeout
+  (5-1440 minutes) and maximum duration (1-720 hours), applied without a
+  restart. The session renews while the operator works, never on background
+  polling alone. Details: [docs/hardening.md](docs/hardening.md) §3.
 
 ### Single Sign-On (OpenID Connect)
 
