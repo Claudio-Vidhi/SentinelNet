@@ -21,6 +21,11 @@ In-product roles: `admin`, `operator`, `viewer`. A user belongs to *multiple*
 groups (`user_group_scope`) — scope is a set, never a scalar, and it is an
 authorization boundary, not a filter.
 
+Accounts have a lifecycle the UI must show, not just roles: an accepted
+invitation waits for administrator approval before it can sign in, users manage
+their own password, verified recovery address and sessions from *My profile*,
+and session lifetime is an administrator setting.
+
 UI languages: Italian (default) and English, switchable at runtime and persisted
 per browser.
 
@@ -85,8 +90,8 @@ the cost of the others:
 4. **NOC wall / always-on display.** Read from a distance, rarely interacted
    with.
 
-Deployment: PyInstaller executable and Docker image, both built from the same
-tree; the app opens a browser at `localhost:8000`. First start is a setup wizard
+Deployment: PyInstaller executable (with a Windows setup) and Docker image,
+both built from the same tree; the app opens a browser at `localhost:8000`. First start is a setup wizard
 that creates the local administrator. Devices are reached over SSH, vendor REST
 and SNMP from the management LAN; remote sites via site agents.
 
@@ -95,6 +100,9 @@ and SNMP from the management LAN; remote sites via site agents.
 - **No build step.** The UI is a single Jinja template plus vanilla JS modules
   in `static/js`, served by FastAPI. No framework, no bundler, no npm. Adding
   one is a product decision, not a design one.
+- **Every tab is addressable.** `/devices`, `/settings`, ... survive a reload
+  and the Back button, so a link to a view is something an engineer can paste
+  into a ticket. A tab the role cannot open falls back to the Situation page.
 - **Browser internet access varies by customer.** Some deployments sit on an
   isolated management LAN, so the console loads nothing from the network.
   Resolved 2026-08-05: every third-party asset is vendored — fonts in
@@ -121,8 +129,10 @@ and SNMP from the management LAN; remote sites via site agents.
 
 ## Brand Commitments
 
-- Name: **SentinelNet**. Favicon is an inline SVG shield with connected network
-  nodes — no external asset.
+- Name: **SentinelNet**. Logo "Route S" (since 0.38.0): an S traced as a
+  network path between two nodes. Favicon, sidebar and login use it as inline
+  SVG — no external asset; `assets/sentinelnet.ico` carries it into the
+  executable and the setup.
 - An incumbent visual system exists and is fully implemented: the mimic-panel
   design language authored via the impeccable plugin — `DESIGN.md` at the
   repo root is the authority, implemented by `static/css/dashboard.css`.

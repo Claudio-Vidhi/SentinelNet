@@ -48,7 +48,8 @@ reason, and the shipped configuration does not receive syslog at all (see §2).
 
 | Data | Where | Notes |
 |---|---|---|
-| Usernames, bcrypt password hashes, role, tenant scope, email | `users.json` | Owner-only file permissions; the email is used for password recovery |
+| Usernames, bcrypt password hashes, role, tenant scope, email, last sign-in time, approval state | `users.json` | Owner-only file permissions; the email is used for password recovery; the last sign-in is overwritten at each login, not a history |
+| Pending recovery-address confirmations | Process memory only | One-hour single-use tokens; lost on restart |
 | Login attempts, per source and account | `login_attempts.json` | Lockout state, pruned after the lockout window |
 | Audit trail: who did what, when, from which declared client | `audit.log` | 10 MB × 9 rotated files. HMAC-chained, so a rewritten line is detectable |
 | Revoked session identifiers | `revoked_tokens.json` | Each entry lives only until the token it names would have expired |
