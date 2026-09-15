@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-09-15
+
 ### Added
 
 - **Nuova interfaccia della console.** Shell a tutta pagina con sidebar
