@@ -10,6 +10,54 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Nuova interfaccia della console.** Shell a tutta pagina con sidebar
+  compatta e gruppi di navigazione richiudibili, topbar con il percorso
+  gruppo > pagina, ricerca Ctrl+K e selettore tenant in cima alla sidebar.
+  Ogni tab ha il proprio indirizzo (`/devices`, `/settings`, ...) che
+  sopravvive al ricaricamento e al tasto Indietro.
+- **Situazione operativa:** quattro verdetti con il numero (raggiungibilita',
+  backup, CVE, drift) e le evidenze, coda attenzione accanto al registro eventi.
+- **Inventario:** schede per stato con i conteggi, "Azioni tenant" in un solo
+  menu, selezione multipla per triage, ping e invio comandi sui soli apparati
+  spuntati (`/api/run-triage` e `/api/ping-check` accettano `ips`).
+- **Config Drift master-detail**, con baseline per profilo di configurazione
+  (ios, wlc-aireos, fortios, ...): le regole di uno switch non giudicano piu'
+  WLC e firewall.
+- **Tutte le altre tab ridisegnate** con la stessa intestazione di pagina:
+  utenti, sedi e vendor si creano da una finestra aperta dall'intestazione;
+  Impostazioni ha un indice delle sezioni; l'importazione CSV e' in due
+  passi numerati accanto al riepilogo delle colonne; FortiGate e WLC hanno
+  il selettore del target nell'intestazione.
+- **Ciclo di vita degli account:** gli inviti accettati attendono
+  l'approvazione di un amministratore; "Il mio profilo" con cambio password,
+  indirizzo di recupero verificato ed "esci ovunque"; reset avviato
+  dall'amministratore.
+- **Durata delle sessioni decisa dall'amministratore** (Impostazioni >
+  Sessioni): inattivita' 5-1440 minuti e durata massima 1-720 ore, applicate
+  senza riavvio (`/api/settings/session`).
+- **Nuovo logo** per favicon, sidebar, login, eseguibile e setup.
+
+### Fixed
+
+- **Uscita dalla sessione senza preavviso.** Il token durava 60 minuti fissi
+  dall'accesso e non veniva mai rinnovato: a un'ora dal login la console
+  tornava alla schermata di accesso anche nel mezzo del lavoro. La sessione
+  ora si rinnova mentre l'operatore usa la pagina (mai per il solo polling in
+  background) e la schermata di accesso dice che la sessione e' scaduta.
+- **Triage: "auth failed" oltre 4-5 apparati.** Al massimo 3 accessi SSH
+  contemporanei su tutti i percorsi di triage; un auth_failed di gruppo viene
+  ritentato una volta dopo il lotto.
+- **Situazione:** i verdetti CVE e Drift leggevano campi inesistenti (sempre
+  0 e OK); la card Backup leggeva un campo mai scritto; la panoramica ignorava
+  il tenant scelto; un verdetto non caricato non si attribuisce piu' al ruolo.
+- **Impostazioni:** l'indice non evidenziava le ultime sezioni (Riavvio,
+  Versioni).
+- **Alta Affidabilita':** testi della scheda cablati in italiano, ora nel
+  dizionario in entrambe le lingue.
+- Opzioni dei `<select>` illeggibili nel tema scuro.
+
 ## [0.37.0] - 2026-09-13
 
 ### Fixed
