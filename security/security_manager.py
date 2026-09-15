@@ -44,6 +44,29 @@ JWT_ALGORITHM = "HS256"
 _chain_lock = threading.RLock()
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
+# Session lifetime, set by the administrator (Settings > Sessions) and read at
+# every token issue, so a change applies to the next request without restart.
+# idle_minutes: how long a browser session survives without user input (it is
+# also the lifetime of every token). max_hours: no session is renewed past this
+# many hours from its sign-in.
+SESSION_IDLE_DEFAULT = ACCESS_TOKEN_EXPIRE_MINUTES
+SESSION_MAX_HOURS_DEFAULT = 12
+SESSION_IDLE_LIMITS = (5, 1440)
+SESSION_MAX_HOURS_LIMIT = 720
+
+
+def session_settings() -> dict:
+    from core.app_settings import get_app_settings
+    raw = get_app_settings().get("session") or {}
+
+    def _int(key, default, lo, hi):
+        try:
+            return min(max(int(raw[key]), lo), hi)
+        except (KeyError, TypeError, ValueError):
+            return default
+    return {"idle_minutes": _int("idle_minutes", SESSION_IDLE_DEFAULT, *SESSION_IDLE_LIMITS),
+            "max_hours": _int("max_hours", SESSION_MAX_HOURS_DEFAULT, 1, SESSION_MAX_HOURS_LIMIT)}
+
 # Configurazione logger di Audit protetto
 AUDIT_LOG_FILE = data_config.get_path("audit.log")
 audit_logger = logging.getLogger("audit")
@@ -297,10 +320,13 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=session_settings()["idle_minutes"])
     to_encode.update({"exp": expire})
     # jti: identifica QUESTO token, cosi' il logout puo' revocare solo lui.
     to_encode.setdefault("jti", uuid.uuid4().hex)
+    # auth_time: when the user actually signed in. A renewed token copies it,
+    # so the session's absolute cap counts from the sign-in, not the renewal.
+    to_encode.setdefault("auth_time", int(time.time()))
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
     return encoded_jwt
 

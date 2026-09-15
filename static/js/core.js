@@ -360,10 +360,30 @@ function expandIface(name) {
     return name;
 }
 
+// Last keyboard/pointer input. Requests made within ACTIVE_WINDOW_MS of it tell
+// the server the operator is working, and the server slides the session, so it
+// ends after the administrator's idle timeout counted from the last input.
+// Background polling on an unattended tab carries no such claim.
+let _lastUserActivity = Date.now();
+let _lastApiCall = 0;
+const ACTIVE_WINDOW_MS = 2 * 60 * 1000;
+['pointerdown', 'keydown', 'wheel'].forEach(ev =>
+    document.addEventListener(ev, () => { _lastUserActivity = Date.now(); }, { capture: true, passive: true }));
+// A tab that shows static content sends no request while the operator reads
+// and scrolls it: without this the session would lapse under an active user.
+setInterval(() => {
+    const now = Date.now();
+    if (_sessionConfirmed && now - _lastUserActivity < ACTIVE_WINDOW_MS && now - _lastApiCall > 50 * 1000) {
+        apiFetch('/api/auth/me');
+    }
+}, 60 * 1000);
+
 function getAuthHeaders() {
     // Autenticazione via cookie HttpOnly (impostato dal server al login).
     // L'header custom è la prova anti-CSRF sulle richieste che modificano stato.
-    return { "X-Requested-With": "SentinelNet" };
+    const headers = { "X-Requested-With": "SentinelNet" };
+    if (Date.now() - _lastUserActivity < ACTIVE_WINDOW_MS) headers["X-SentinelNet-Active"] = "1";
+    return headers;
 }
 
 // Sessione confermata dal server (auth/me ok). Distingue "non ancora
@@ -385,11 +405,17 @@ async function apiFetch(url, options = {}) {
     }
 
     try {
+        _lastApiCall = Date.now();
         const res = await fetch(url, options);
         if (res.status === 401) {
             if (_sessionConfirmed) {
                 console.warn("[AUTH] Sessione scaduta o non valida (401). Forzatura Logout.");
-                logout();
+                // Say why the login screen came back instead of dropping the
+                // operator there with no explanation.
+                logout().then(() => {
+                    const errDiv = document.getElementById('loginError');
+                    if (errDiv) { errDiv.textContent = tr('sessionExpiredNotice'); errDiv.style.display = 'block'; }
+                });
             }
             return null;
         }

@@ -116,6 +116,8 @@ class TestRouterParity(unittest.TestCase):
                     "/api/settings/update",
                     # Certificato self-signed generato dal pannello.
                     "/api/settings/tls",
+                    # Durata delle sessioni decisa dall'amministratore.
+                    "/api/settings/session",
                     # Tabelle di routing di piu' apparati in una vista sola.
                     "/api/routes",
                     # Traffico per policy firewall, aggregato sugli apparati
@@ -275,6 +277,8 @@ class TestFullParity(unittest.TestCase):
                     "/api/settings/update",
                     # Certificato self-signed generato dal pannello.
                     "/api/settings/tls",
+                    # Durata delle sessioni decisa dall'amministratore.
+                    "/api/settings/session",
                     # Correlazione CVE: snapshot per apparato, vista
                     # prioritizzata e resoconto per tenant.
                     "/api/cve")
@@ -299,7 +303,7 @@ class TestFullParity(unittest.TestCase):
                     # Monitor ping continuo: schema della configurazione
                     # (enabled + interval_seconds) per POST
                     # /api/settings/ping-monitor (già in NEW_PREFIXES).
-                    "PingMonitorSchema", "UiVariantSchema", "PortControlSchema", "ShunIpSchema", "PruneLogsSchema",
+                    "PingMonitorSchema", "SessionSettingsSchema", "UiVariantSchema", "PortControlSchema", "ShunIpSchema", "PruneLogsSchema",
                     # Rilevamento del gateway via traceroute: schema del corpo
                     # di POST /api/diagnose/traceroute-gateway (rotta sotto
                     # /api/diagnose, gia' in NEW_PREFIXES).

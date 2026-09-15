@@ -3,6 +3,8 @@
 app_server.py (fase 6.6): percorsi, metodi, parametri e risposte identici al
 monolite."""
 
+import time
+from datetime import timedelta
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -13,8 +15,7 @@ from security import user_manager
 from security.security_manager import (
     create_access_token, log_audit, revoke_token,
     is_locked_out, record_failed_attempt, reset_failed_attempts,
-    clear_account_lockouts,
-    ACCESS_TOKEN_EXPIRE_MINUTES,
+    clear_account_lockouts, session_settings,
 )
 from routers.deps import SESSION_COOKIE, get_current_user, require_admin
 
@@ -92,7 +93,7 @@ def setup_admin(payload: UserSchema):
         return {"status": "success", "message": "Primo account amministratore creato correttamente."}
     raise HTTPException(status_code=400, detail="Impossibile creare l'account.")
 
-def _set_session_cookie(request: Request, response: Response, token: str):
+def _set_session_cookie(request: Request, response: Response, token: str, max_age: int = 0):
     """Imposta il cookie di sessione HttpOnly (L-1). ``Secure`` è attivo quando
     la richiesta è arrivata su HTTPS (TLS nativo o reverse proxy con
     X-Forwarded-Proto)."""
@@ -100,9 +101,42 @@ def _set_session_cookie(request: Request, response: Response, token: str):
               or request.headers.get("x-forwarded-proto", "").lower() == "https")
     response.set_cookie(
         SESSION_COOKIE, token,
-        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        max_age=max_age or session_settings()["idle_minutes"] * 60,
         httponly=True, secure=secure, samesite="strict", path="/",
     )
+
+
+# Sliding browser session. Every token lives `idle_minutes` (set by the
+# administrator). A request made while the operator is actually using the page
+# (the dashboard sends ACTIVITY_HEADER only shortly after real input, never for
+# background polling) gets a fresh cookie, at most once a minute, so the session
+# ends `idle_minutes` after the last input. No renewal reaches past `max_hours`
+# from the sign-in.
+ACTIVITY_HEADER = "X-SentinelNet-Active"
+
+
+def renew_session_cookie(request: Request, response: Response) -> None:
+    if not request.headers.get(ACTIVITY_HEADER) or not request.cookies.get(SESSION_COOKIE):
+        return
+    try:
+        # Same checks as every authenticated route: revoked, ended ("sign out
+        # everywhere"), deleted or disabled sessions are never renewed.
+        payload = get_current_user(request, None)
+    except HTTPException:
+        return
+    cfg = session_settings()
+    idle_s = cfg["idle_minutes"] * 60
+    now = time.time()
+    if payload.get("exp", 0) - now > idle_s - 60:
+        return
+    auth_time = int(payload.get("auth_time") or payload["exp"] - idle_s)
+    lifetime = min(idle_s, auth_time + cfg["max_hours"] * 3600 - now)
+    if lifetime <= 60:
+        return
+    token = create_access_token(data={"sub": payload["sub"], "role": payload.get("role"),
+                                      "sep": payload.get("sep", 0), "auth_time": auth_time},
+                                expires_delta=timedelta(seconds=lifetime))
+    _set_session_cookie(request, response, token, max_age=int(lifetime))
 
 
 def _issue_token(username: str, role: str) -> str:

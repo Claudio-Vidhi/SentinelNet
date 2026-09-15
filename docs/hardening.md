@@ -133,8 +133,16 @@ The browser session does not use `sessionStorage`:
 - **Programmatic clients** (MCP server, scripts, agents) keep using
   `Authorization: Bearer <token>`: an explicit bearer token cannot be forged
   cross-site and needs no anti-CSRF header.
-- Logout (`POST /api/auth/logout`) clears the cookie; the JWT is stateless and
-  expires within 60 minutes regardless.
+- Logout (`POST /api/auth/logout`) clears the cookie and revokes the token.
+- **Session lifetime** is set by an administrator in *Settings → Sessions*:
+  an idle timeout (5–1440 minutes, default 60) and a maximum length (1–720
+  hours, default 12). Every token lives the idle timeout. While the operator
+  is using the page, the dashboard marks its requests with
+  `X-SentinelNet-Active` (only within 2 minutes of real keyboard/pointer input,
+  never for background polling) and the server re-issues the cookie at most
+  once a minute, so a session ends one idle timeout after the last input. No
+  renewal reaches past the maximum length from the sign-in. Changes apply from
+  the next token issued, without restart.
 
 ---
 

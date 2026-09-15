@@ -208,6 +208,15 @@ async def client_tag_middleware(request: Request, call_next):
 
 
 @app.middleware("http")
+async def session_renewal_middleware(request: Request, call_next):
+    response = await call_next(request)
+    if response.status_code < 400 and request.url.path.startswith("/api/"):
+        from routers.auth import renew_session_cookie
+        renew_session_cookie(request, response)
+    return response
+
+
+@app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"

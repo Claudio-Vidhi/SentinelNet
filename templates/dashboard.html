@@ -3144,6 +3144,7 @@
           <span class="settings-nav-group" data-i18n="setNavAccess">Rete e accesso</span>
           <button type="button" data-settings-jump="setSecNet"><span data-i18n="setNavNet">Esposizione in rete</span></button>
           <button type="button" data-settings-jump="setSecTls"><span data-i18n="setNavTls">Certificato TLS</span></button>
+          <button type="button" data-settings-jump="setSecSession"><span data-i18n="setNavSession">Sessioni</span></button>
           <button type="button" data-settings-jump="ssoPanel"><span data-i18n="setNavSso">Single Sign-On</span></button>
           <button type="button" data-settings-jump="smtpPanel"><span data-i18n="setNavSmtp">Server di posta</span></button>
           <button type="button" data-settings-jump="setSecCli"><span data-i18n="setNavCli">Blacklist comandi</span></button>
@@ -3222,6 +3223,26 @@
           <button id="btnGenerateSelfSigned" class="btn btn-primary btn-small" style="width:auto;" data-i18n="btnSelfSignedGenerate">Genera certificato</button>
         </div>
         <div id="selfSignedStatus" class="set-status"></div>
+      </section>
+
+      <!-- Session lifetime: applied from the next token issued, no restart. -->
+      <section class="panel requires-admin set-section" id="setSecSession">
+        <div class="panel-head"><h3><span data-i18n="titleSessionSettings">Durata delle sessioni</span></h3></div>
+        <p class="set-desc" data-i18n="descSessionSettings">
+          Dopo quanto tempo senza tastiera o mouse la console chiede di accedere di nuovo, e per quanto al massimo una sessione resta aperta anche se usata. Vale dal prossimo accesso o rinnovo, senza riavvio; i client MCP e gli script rifanno l'accesso da soli.
+        </p>
+        <div class="set-inline">
+          <div class="form-group" style="max-width:220px;">
+            <label for="sessionIdleMinutes" data-i18n="lblSessionIdle">Inattività (minuti)</label><input type="number" id="sessionIdleMinutes" min="5" max="1440" value="60" style="padding-left:12px;">
+          </div>
+          <div class="form-group" style="max-width:220px;">
+            <label for="sessionMaxHours" data-i18n="lblSessionMax">Durata massima (ore)</label><input type="number" id="sessionMaxHours" min="1" max="720" value="12" style="padding-left:12px;">
+          </div>
+          <button id="btnSaveSessionSettings" class="btn btn-primary btn-small" style="width:auto;">
+            <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btnSave">Salva</span>
+          </button>
+        </div>
+        <div id="sessionSettingsStatus" class="set-status"></div>
       </section>
 
       <!-- Ambito: autenticazione aziendale (OpenID Connect) -->
