@@ -46,7 +46,7 @@ class TestAdminQuorum(unittest.TestCase):
         # Ogni test riparte da un solo amministratore attivo.
         for u in user_manager.list_users():
             user_manager.delete_user(u["username"])
-        user_manager.create_user("alice", "alicepass123", role="admin")
+        user_manager.create_user("alice", "alicepass123", role="super_admin")
         self.client = TestClient(app_server.app)
         r = self.client.post("/api/auth/login",
                              json={"username": "alice", "password": "alicepass123"})
@@ -54,10 +54,10 @@ class TestAdminQuorum(unittest.TestCase):
 
     def _usable_admins(self):
         return sorted(u["username"] for u in user_manager.list_users()
-                      if u["role"] == "admin" and not u["disabled"])
+                      if u["role"] == "super_admin" and not u["disabled"])
 
     def _add_admin(self, name, disabled=False):
-        user_manager.create_user(name, "adminpass1234", role="admin")
+        user_manager.create_user(name, "adminpass1234", role="super_admin")
         if disabled:
             user_manager.set_disabled(name, True)
 
@@ -79,19 +79,19 @@ class TestAdminQuorum(unittest.TestCase):
         # DELETE metteva codice irraggiungibile e lasciava scoperto il cambio
         # ruolo. La regola si fissa quindi qui, dove vive.
         self._add_admin("carol", disabled=True)
-        self.assertTrue(user_manager.is_last_active_admin("alice"),
+        self.assertTrue(user_manager.is_last_active_super_admin("alice"),
                         "un admin disabilitato non tiene su il quorum")
-        self.assertFalse(user_manager.is_last_active_admin("carol"),
+        self.assertFalse(user_manager.is_last_active_super_admin("carol"),
                          "un admin gia' disabilitato non e' mai l'ultimo")
 
         self._add_admin("dave")
-        self.assertFalse(user_manager.is_last_active_admin("alice"),
+        self.assertFalse(user_manager.is_last_active_super_admin("alice"),
                          "con due admin attivi nessuno dei due e' l'ultimo")
 
         user_manager.set_role("dave", "viewer")
-        self.assertFalse(user_manager.is_last_active_admin("dave"),
+        self.assertFalse(user_manager.is_last_active_super_admin("dave"),
                          "chi non e' amministratore non e' mai l'ultimo")
-        self.assertFalse(user_manager.is_last_active_admin("nessuno"),
+        self.assertFalse(user_manager.is_last_active_super_admin("nessuno"),
                          "un utente inesistente non e' mai l'ultimo")
 
     def test_disable_blocked_for_the_last_active_admin(self):

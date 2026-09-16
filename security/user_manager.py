@@ -26,10 +26,33 @@ class UsersStoreError(RuntimeError):
     """
 
 # Ruoli supportati, dal più al meno privilegiato:
+#   super_admin → everything, including managing other admin-level accounts
 #   admin    → controllo totale, incluso la gestione utenti
 #   operator → tutte le operazioni di rete (triage, comandi, CRUD apparati) ma non utenti
 #   viewer   → sola lettura (inventario, mappe, threat intel)
-VALID_ROLES = ("admin", "operator", "viewer")
+VALID_ROLES = ("super_admin", "admin", "operator", "viewer")
+ROLE_RANK = {"viewer": 0, "operator": 1, "admin": 2, "super_admin": 3}
+ADMIN_ROLES = ("super_admin", "admin")
+# Accounts predating roles are single-user installs: their owner.
+LEGACY_ROLE = "super_admin"
+
+
+def is_admin(role) -> bool:
+    return role in ADMIN_ROLES
+
+
+def can_manage(actor_role: str, target_role: str) -> bool:
+    """FortiGate model: only a super_admin touches its peers; everyone else
+    manages strictly lower ranks."""
+    if actor_role == "super_admin":
+        return True
+    return ROLE_RANK.get(target_role, 0) < ROLE_RANK.get(actor_role, 0)
+
+
+def can_assign(actor_role: str, new_role: str) -> bool:
+    if new_role not in ROLE_RANK:
+        return False
+    return actor_role == "super_admin" or ROLE_RANK[new_role] < ROLE_RANK.get(actor_role, 0)
 
 # Policy password minima applicata LATO SERVER (unica fonte di verità: il
 # controllo lato browser è solo un aiuto UX, aggirabile con una chiamata diretta).
@@ -92,11 +115,11 @@ def store_integrity_error():
 
 def get_role(username: str):
     """Ruolo dell'utente, o None se non esiste. Gli account legacy senza campo
-    'role' (installazioni mono-utente preesistenti) sono trattati come admin."""
+    'role' (installazioni mono-utente preesistenti) sono trattati come super_admin."""
     user = get_users().get(username)
     if not user:
         return None
-    return user.get("role", "admin")
+    return user.get("role", LEGACY_ROLE)
 
 def create_user(username: str, password: str, role: str = "viewer", groups=None,
                 must_change_password: bool = False, email: str = "",
@@ -167,7 +190,7 @@ def list_users() -> list:
     return [
         {
             "username": u,
-            "role": d.get("role", "admin"),
+            "role": d.get("role", LEGACY_ROLE),
             "email": d.get("email", ""),
             "groups": d.get("groups", []),
             "allowed_tabs": d.get("allowed_tabs", []),
@@ -219,7 +242,7 @@ def get_profile(username: str) -> dict:
     d = get_users().get(username) or {}
     return {
         "username": username,
-        "role": d.get("role", "admin"),
+        "role": d.get("role", LEGACY_ROLE),
         "email": d.get("email", ""),
         "groups": d.get("groups", []),
         "allowed_tabs": d.get("allowed_tabs", []),
@@ -252,27 +275,26 @@ def set_disabled(username: str, disabled: bool) -> bool:
         _save_users(users)
     return True
 
-def count_active_admins() -> int:
-    """Amministratori attivi (ruolo admin e non disabilitati)."""
+def count_active_super_admins() -> int:
+    """Active super administrators (not disabled, not awaiting approval)."""
     return sum(1 for d in get_users().values()
-               if d.get("role", "admin") == "admin" and not d.get("disabled", False)
+               if d.get("role", LEGACY_ROLE) == "super_admin" and not d.get("disabled", False)
                and not d.get("pending_approval", False))
 
-def is_last_active_admin(username: str) -> bool:
-    """True se togliere a questo utente il ruolo, l'accesso o l'account intero
-    lascerebbe l'installazione senza un amministratore UTILIZZABILE.
+def is_last_active_super_admin(username: str) -> bool:
+    """True if removing this account's role, access or existence would leave
+    the install without a USABLE super administrator.
 
-    Il conteggio è sugli amministratori ATTIVI, non su tutti: uno disabilitato
-    non supera ``get_current_user``, quindi tenerlo nel quorum equivale a non
-    avere nessuno e l'applicazione si riapre solo modificando users.json a mano.
-    Per lo stesso motivo un amministratore già disabilitato non è mai "l'ultimo":
-    rimuoverlo non toglie niente a chi può ancora entrare.
+    Only active accounts count: a disabled one cannot pass get_current_user,
+    so counting it is the same as having none, and the app reopens only by
+    editing users.json by hand. For the same reason an already disabled
+    super_admin is never "the last".
     """
     user = get_users().get(username)
-    if (not user or user.get("role", "admin") != "admin" or user.get("disabled", False)
+    if (not user or user.get("role", LEGACY_ROLE) != "super_admin" or user.get("disabled", False)
             or user.get("pending_approval", False)):
         return False
-    return count_active_admins() <= 1
+    return count_active_super_admins() <= 1
 
 def get_user_groups(username: str):
     """Sedi/gruppi assegnati all'utente. Lista vuota o assente = nessuna
@@ -330,11 +352,13 @@ def set_role(username: str, role: str) -> bool:
 
 
 def first_admin_username():
-    """First admin account in alphabetical order, or None if there is none.
-    Used by the break-glass CLI when no username is given."""
-    admins = sorted(u for u, d in get_users().items()
-                    if d.get("role", "admin") == "admin")
-    return admins[0] if admins else None
+    """Highest-ranked admin account, alphabetical within a rank, or None.
+    Used by the break-glass CLI when no username is given. Plain admins are
+    the fallback for a CLI run before the role migration ever executed."""
+    admins = sorted((-ROLE_RANK[d.get("role", LEGACY_ROLE)], u)
+                    for u, d in get_users().items()
+                    if is_admin(d.get("role", LEGACY_ROLE)))
+    return admins[0][1] if admins else None
 
 def reset_password_break_glass(username: str, new_password: str) -> bool:
     """Reimposta la password senza conoscere quella attuale (recupero da CLI).
@@ -370,3 +394,25 @@ def set_email(username: str, email: str) -> bool:
         users[username]["email"] = (email or "").strip()
         _save_users(users)
     return True
+
+
+ROLES_SCHEMA_VERSION = 2
+
+def migrate_admins_to_super_admin() -> list:
+    """One-shot upgrade to the super_admin ladder: every existing admin is
+    promoted, so nobody loses power on upgrade. The marker in app_settings
+    keeps admins created afterwards from ever being promoted."""
+    from core import app_settings
+    if int(app_settings.get_app_settings().get("user_roles_version", 1)) >= ROLES_SCHEMA_VERSION:
+        return []
+    promoted = []
+    with _users_lock:
+        users = get_users()
+        for name, d in users.items():
+            if d.get("role") == "admin":
+                d["role"] = "super_admin"
+                promoted.append(name)
+        if promoted:
+            _save_users(users)
+    app_settings.save_app_settings({"user_roles_version": ROLES_SCHEMA_VERSION})
+    return sorted(promoted)
