@@ -311,6 +311,48 @@ class TestScopedAdminUserPerimeter(_PrivateUsers):
         self.assertEqual({u["username"] for u in r.json()},
                          {"root", "adm", "op", "sadm", "op-a", "op-b", "op-all"})
 
+    def test_create_copies_actor_tabs_when_tab_restricted(self):
+        user_manager.set_allowed_tabs("sadm", ["tab-devices", "tab-users"])
+        r = self._as("sadm").post("/api/users", headers=H, json={
+            "username": "new-a", "password": PW, "role": "operator", "groups": ["tenant-a"]})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(set(user_manager.get_allowed_tabs("new-a")), {"tab-devices", "tab-users"})
+
+    def test_set_tabs_refuses_empty_or_home_only_for_tab_restricted_actor(self):
+        user_manager.set_allowed_tabs("sadm", ["tab-devices", "tab-users"])
+        sadm = self._as("sadm")
+        r = sadm.post("/api/users/tabs", headers=H,
+                     json={"username": "op-a", "allowed_tabs": []})
+        self.assertEqual(r.status_code, 403, r.text)
+        r = sadm.post("/api/users/tabs", headers=H,
+                     json={"username": "op-a", "allowed_tabs": ["tab-home"]})
+        self.assertEqual(r.status_code, 403, r.text)
+
+    def test_tab_restricted_but_group_unscoped_admin(self):
+        # 'adm' has no group restriction (sees every tenant) but is tab-restricted:
+        # the tab rule still applies, the group rule does not. tab-users stays
+        # granted, or adm could not reach these routes at all.
+        user_manager.set_allowed_tabs("adm", ["tab-devices", "tab-users"])
+        admc = self._as("adm")
+        r = admc.post("/api/users/groups", headers=H,
+                     json={"username": "op-b", "groups": ["tenant-a", "tenant-b"]})
+        self.assertEqual(r.status_code, 200, r.text)
+        r = admc.post("/api/users/tabs", headers=H,
+                     json={"username": "op-b", "allowed_tabs": ["tab-settings"]})
+        self.assertEqual(r.status_code, 403, r.text)
+
+    def test_delete_out_of_perimeter_is_404(self):
+        r = self._as("sadm").post("/api/users/delete", headers=H, json={"username": "op-b"})
+        self.assertEqual(r.status_code, 404, r.text)
+
+    def test_approve_invite_created_pending_account_is_404(self):
+        # Invited accounts start with empty groups (unrestricted), same as
+        # op-all: out of a scoped admin's perimeter even while pending.
+        user_manager.create_user("pending-invitee", PW, role="viewer", pending_approval=True)
+        r = self._as("sadm").post("/api/users/approve", headers=H,
+                                  json={"username": "pending-invitee"})
+        self.assertEqual(r.status_code, 404, r.text)
+
 
 if __name__ == "__main__":
     unittest.main()
