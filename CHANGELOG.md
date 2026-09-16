@@ -10,6 +10,24 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Ruolo super_admin.** Sopra `admin` c'e' ora `super_admin`: solo un
+  super_admin crea, modifica, disabilita o elimina account di livello admin.
+  Un admin gestisce soltanto operator e viewer e non puo' assegnare ne'
+  `admin` ne' `super_admin`. Stesso modello del profilo `super_admin` di
+  FortiGate.
+
+### Changed
+
+- **Aggiornamento automatico dei ruoli.** Al primo avvio della nuova versione
+  ogni admin esistente diventa `super_admin` (una sola volta, registrato
+  nell'audit log): nessuno perde poteri. Riportare ad `admin` chi non deve
+  gestire altri amministratori.
+- **Quorum.** Deve restare almeno un **super_admin** attivo (prima: un admin).
+- **SSO.** I gruppi dell'IdP assegnano al massimo `admin`; `super_admin` si
+  assegna solo localmente e la sincronizzazione dei ruoli non lo tocca.
+
 ## [0.39.0] - 2026-09-16
 
 ### Changed
