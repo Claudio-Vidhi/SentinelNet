@@ -347,6 +347,10 @@ SUBTAB_GRANTS = {
     "tab-provisioning": ("tab-provisioner",),
 }
 
+# Tabs every restricted user holds anyway: home is the fallback panel for
+# everyone and the frontend never offers it as a grant.
+ALWAYS_GRANTED_TABS = ("tab-home",)
+
 
 def effective_tabs(username: str):
     """Tabs the server enforces for this user, or None if unrestricted.
@@ -362,6 +366,7 @@ def effective_tabs(username: str):
     tabs = {TAB_ALIASES.get(t, t) for t in raw}
     for t in list(tabs):
         tabs.update(SUBTAB_GRANTS.get(t, ()))
+    tabs.update(ALWAYS_GRANTED_TABS)
     return tabs
 
 def delete_user(username: str) -> bool:

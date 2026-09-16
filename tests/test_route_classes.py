@@ -52,3 +52,16 @@ def test_tab_ids_exist_in_dashboard():
         tabs = rc.route_tabs(route)
         if tabs:
             assert tabs <= known, f"{method} {path}: {sorted(tabs - known)}"
+
+
+def test_at_most_one_tab_gate_per_route():
+    # route_tabs() unions stacked gates, but each require_tab enforces on its
+    # own: two of them would demand all-of instead of any-of.
+    def count(dependant):
+        n = 0
+        for sub in dependant.dependencies:
+            n += getattr(sub.call, "tabs", None) is not None
+            n += count(sub)
+        return n
+    stacked = [f"{m} {p}" for m, p, r in _api_routes() if count(r.dependant) > 1]
+    assert not stacked, stacked
