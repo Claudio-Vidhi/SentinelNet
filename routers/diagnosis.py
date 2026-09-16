@@ -11,6 +11,7 @@ import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from routers.deps import require_tab
 from pydantic import BaseModel
 
 from routers.deps import (get_current_user, require_admin, user_group_scope,
@@ -18,7 +19,7 @@ from routers.deps import (get_current_user, require_admin, user_group_scope,
 from security.security_manager import log_audit
 from services import client_diagnosis
 
-router = APIRouter(tags=["Diagnosis"])
+router = APIRouter(dependencies=[Depends(require_tab("tab-endpoint"))], tags=["Diagnosis"])
 
 
 class ClientDiagnosisSchema(BaseModel):

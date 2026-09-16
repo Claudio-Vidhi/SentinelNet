@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Annotated, Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from routers.deps import require_tab
 from pydantic import BaseModel, Field
 
 from security.security_manager import log_audit
@@ -20,7 +21,7 @@ from core import core_engine
 from security import crypto_vault, identity_manager
 from services import site_manager
 
-router = APIRouter(tags=["Scan"])
+router = APIRouter(dependencies=[Depends(require_tab("tab-devices"))], tags=["Scan"])
 
 class SubnetScanRequest(BaseModel):
     network: str

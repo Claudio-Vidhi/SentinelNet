@@ -9,6 +9,7 @@ Tenant-scoped via assert_device_allowed.
 
 from typing import Any, Dict, List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException
+from routers.deps import require_tab
 from pydantic import BaseModel, Field
 
 from ai import config_analyzer
@@ -20,7 +21,7 @@ from services.policy_test.fortios import parse_fortios_config
 from services.policy_test.ios import parse_ios_config
 from services.policy_test.model import Flow
 
-router = APIRouter(tags=["PolicyTest"])
+router = APIRouter(dependencies=[Depends(require_tab("tab-policy-test"))], tags=["PolicyTest"])
 
 
 class FlowRequest(BaseModel):

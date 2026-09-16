@@ -19,6 +19,7 @@ import json
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from routers.deps import require_tab
 
 from core import db
 from observability import flowpath, rules, suppression, timeline
@@ -41,7 +42,7 @@ def _parse_json(raw):
         return {}
 
 
-@router.get("/rules")
+@router.get("/rules", dependencies=[Depends(require_tab("tab-incidents"))])
 def list_rules(lang: str = Query("it", description="Language: 'it' or 'en'"),
                current_user = Depends(get_current_user)):
     """Catalogo delle regole di correlazione: il motore descrive se stesso.
@@ -52,7 +53,7 @@ def list_rules(lang: str = Query("it", description="Language: 'it' or 'en'"),
     return {"rules": rules.catalog(lang=lang)}
 
 
-@router.post("/rules/{rule_id}/parameters")
+@router.post("/rules/{rule_id}/parameters", dependencies=[Depends(require_tab("tab-incidents"))])
 def set_rule_parameters(rule_id: str, payload: dict,
                         current_user = Depends(require_admin)):
     """Ritocca le soglie di UNA regola. La logica resta nel codice: qui si
@@ -122,7 +123,7 @@ def _iface_state(item: dict, min_flaps: int) -> str:
     return "unknown"
 
 
-@router.get("/interfaces")
+@router.get("/interfaces", dependencies=[Depends(require_tab("tab-incidents", "tab-interfaces"))])
 async def list_interfaces(current_user = Depends(get_current_user)):
     """Interfacce viste dal motore: ultimo stato, instabilità recente e la
     soppressione che le copre.
@@ -264,7 +265,7 @@ def _mutate_suppression(saved: dict, payload: dict, current_user) -> dict:
     return {"status": "success", "key": key, "suppressed": key in saved}
 
 
-@router.post("/interfaces/expected")
+@router.post("/interfaces/expected", dependencies=[Depends(require_tab("tab-incidents", "tab-interfaces"))])
 async def set_suppression(payload: dict,
                           current_user = Depends(require_operator)):
     """Dichiara che qualcosa è atteso, con o senza scadenza.
@@ -305,7 +306,7 @@ def _optional_ts(payload: dict, name: str):
         raise HTTPException(status_code=400, detail=f"'{name}' non valido.")
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(require_tab("tab-incidents"))])
 async def list_incidents(
     status: str = Query("new", pattern="^(new|ack|resolved|all)$"),
     window: str = Query("24h"),
@@ -348,7 +349,7 @@ async def _incident_in_scope(incident_id: int, current_user):
     return dict(rows[0])
 
 
-@router.get("/{incident_id}")
+@router.get("/{incident_id}", dependencies=[Depends(require_tab("tab-incidents"))])
 async def get_incident(incident_id: int, current_user = Depends(get_current_user)):
     """Dettaglio: conclusione corrente, storico delle conclusioni superate e
     timeline multi-fonte.
@@ -386,7 +387,7 @@ async def _flow_path(incident_id: int, tenant: str) -> dict:
                                    rows[0]["dst_ip"], tenant)
 
 
-@router.post("/{incident_id}/status")
+@router.post("/{incident_id}/status", dependencies=[Depends(require_tab("tab-incidents"))])
 async def set_incident_status(
     incident_id: int,
     payload: dict,
@@ -482,7 +483,7 @@ def _narrative_prompt(incident: dict, entries: list) -> str:
     return "\n".join(lines)
 
 
-@router.post("/{incident_id}/explain")
+@router.post("/{incident_id}/explain", dependencies=[Depends(require_tab("tab-incidents"))])
 async def explain_incident(
     incident_id: int,
     current_user = Depends(require_operator),

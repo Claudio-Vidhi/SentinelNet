@@ -14,11 +14,12 @@ due moduli omonimi con scopi diversi si confondono alla prima lettura.
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from routers.deps import require_tab
 
 from collectors import mac_history
 from routers.deps import assert_device_allowed, get_current_user, user_group_scope
 
-router = APIRouter(tags=["Endpoint Inventory"])
+router = APIRouter(dependencies=[Depends(require_tab("tab-endpoint"))], tags=["Endpoint Inventory"])
 
 
 def _scope(current_user, tenant: Optional[str]):

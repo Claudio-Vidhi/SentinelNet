@@ -7,6 +7,7 @@ import re
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from routers.deps import require_tab
 from pydantic import BaseModel
 
 from security import user_manager
@@ -65,7 +66,7 @@ class SiteCommandSchema(BaseModel):
     ip: str
     command: str
 
-@router.get("/api/sites")
+@router.get("/api/sites", dependencies=[Depends(require_tab("tab-devices", "tab-import", "tab-provisioning", "tab-provisioner", "tab-sites"))])
 def list_sites_ep(current_user = Depends(require_operator)):
     # Operators read this to fill the site selectors, so it is not admin-only.
     # They get the three fields those selectors need. The bastion address of a
@@ -78,7 +79,7 @@ def list_sites_ep(current_user = Depends(require_operator)):
         sites = [{"id": s["id"], "name": s["name"], "mode": s["mode"]} for s in sites]
     return {"sites": sites}
 
-@router.post("/api/sites")
+@router.post("/api/sites", dependencies=[Depends(require_tab("tab-sites"))])
 def create_site_ep(payload: SiteSchema, current_user = Depends(require_admin)):
     try:
         site, token = site_manager.create_site(
@@ -92,7 +93,7 @@ def create_site_ep(payload: SiteSchema, current_user = Depends(require_admin)):
     # Il token in chiaro è restituito UNA SOLA VOLTA (poi solo hash su disco).
     return {"status": "success", "site": site, "token": token}
 
-@router.post("/api/sites/update")
+@router.post("/api/sites/update", dependencies=[Depends(require_tab("tab-sites"))])
 def update_site_ep(payload: SiteUpdateSchema, current_user = Depends(require_admin)):
     # Only forward jump fields the caller actually supplied: update_site merges
     # kwargs over the stored site before re-validating a jump site (see its
@@ -138,14 +139,14 @@ def update_site_ep(payload: SiteUpdateSchema, current_user = Depends(require_adm
                       f"agent da '{current_user.get('sub')}'.")
     return out
 
-@router.post("/api/sites/delete")
+@router.post("/api/sites/delete", dependencies=[Depends(require_tab("tab-sites"))])
 def delete_site_ep(payload: SiteIdSchema, current_user = Depends(require_admin)):
     if not site_manager.delete_site(payload.id):
         raise HTTPException(status_code=400, detail="Sede non eliminabile o inesistente.")
     log_audit(f"Sede '{payload.id}' eliminata da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
-@router.post("/api/sites/test-bastion")
+@router.post("/api/sites/test-bastion", dependencies=[Depends(require_tab("tab-sites"))])
 async def test_bastion_ep(payload: SiteIdSchema, current_user = Depends(require_admin)):
     # Answers the question the device errors cannot: is it the BASTION login
     # that is wrong? A refused bastion and a refused device both surface as
@@ -170,7 +171,7 @@ async def test_bastion_ep(payload: SiteIdSchema, current_user = Depends(require_
     log_audit(f"Test bastione sede '{payload.id}' da '{current_user.get('sub')}': OK.")
     return {"status": "success"}
 
-@router.post("/api/sites/regenerate-token")
+@router.post("/api/sites/regenerate-token", dependencies=[Depends(require_tab("tab-sites"))])
 def regenerate_site_token_ep(payload: SiteIdSchema, current_user = Depends(require_admin)):
     token = site_manager.regenerate_token(payload.id)
     if token is None:
@@ -178,7 +179,7 @@ def regenerate_site_token_ep(payload: SiteIdSchema, current_user = Depends(requi
     log_audit(f"Token della sede '{payload.id}' rigenerato da '{current_user.get('sub')}'.")
     return {"status": "success", "token": token}
 
-@router.post("/api/sites/{site_id}/command")
+@router.post("/api/sites/{site_id}/command", dependencies=[Depends(require_tab("tab-sites"))])
 def site_command_ep(site_id: str, payload: SiteCommandSchema,
                     current_user = Depends(require_operator)):
     """Accoda un comando CLI per un dispositivo di una sede agent. L'agente lo
@@ -211,7 +212,7 @@ def site_command_ep(site_id: str, payload: SiteCommandSchema,
               f"da '{current_user.get('sub')}' (job {job['id']}).")
     return {"status": "queued", "job_id": job["id"]}
 
-@router.get("/api/command-jobs/{job_id}")
+@router.get("/api/command-jobs/{job_id}", dependencies=[Depends(require_tab("tab-sites"))])
 def get_command_job_ep(job_id: str, current_user = Depends(require_operator)):
     job = site_manager.get_job(job_id)
     if not job:
@@ -222,7 +223,7 @@ def get_command_job_ep(job_id: str, current_user = Depends(require_operator)):
         raise HTTPException(status_code=404, detail="Job non trovato.")
     return job
 
-@router.get("/api/sites/{site_id}/command-jobs")
+@router.get("/api/sites/{site_id}/command-jobs", dependencies=[Depends(require_tab("tab-sites"))])
 def list_site_command_jobs_ep(site_id: str, current_user = Depends(require_operator)):
     jobs = site_manager.list_jobs(site_id)
     scope = user_group_scope(current_user)
@@ -243,7 +244,7 @@ class AgentConfigUpdateSchema(BaseModel):
     syslog_enabled: Optional[bool] = None
 
 
-@router.post("/api/sites/{site_id}/agent/update")
+@router.post("/api/sites/{site_id}/agent/update", dependencies=[Depends(require_tab("tab-sites"))])
 def agent_self_update_ep(site_id: str, current_user = Depends(require_admin)):
     """Accoda un comando RPC di self-update (git pull) per l'agente remoto."""
     site = site_manager.get_site(site_id)
@@ -256,7 +257,7 @@ def agent_self_update_ep(site_id: str, current_user = Depends(require_admin)):
     return {"status": "queued", "job_id": job["id"]}
 
 
-@router.post("/api/sites/{site_id}/agent/restart")
+@router.post("/api/sites/{site_id}/agent/restart", dependencies=[Depends(require_tab("tab-sites"))])
 def agent_restart_ep(site_id: str, current_user = Depends(require_admin)):
     """Accoda un comando RPC di restart per l'agente remoto (systemctl auto-restart)."""
     site = site_manager.get_site(site_id)
@@ -269,7 +270,7 @@ def agent_restart_ep(site_id: str, current_user = Depends(require_admin)):
     return {"status": "queued", "job_id": job["id"]}
 
 
-@router.post("/api/sites/{site_id}/agent/logs")
+@router.post("/api/sites/{site_id}/agent/logs", dependencies=[Depends(require_tab("tab-sites"))])
 def agent_logs_ep(site_id: str, current_user = Depends(require_admin)):
     """Accoda un comando RPC che riporta le ultime righe di journal dell'agente."""
     site = site_manager.get_site(site_id)
@@ -282,7 +283,7 @@ def agent_logs_ep(site_id: str, current_user = Depends(require_admin)):
     return {"status": "queued", "job_id": job["id"]}
 
 
-@router.post("/api/sites/{site_id}/agent/config")
+@router.post("/api/sites/{site_id}/agent/config", dependencies=[Depends(require_tab("tab-sites"))])
 def agent_config_update_ep(site_id: str, payload: AgentConfigUpdateSchema, current_user = Depends(require_admin)):
     """Accoda un comando RPC per aggiornare i parametri di configurazione dell'agente remoto."""
     site = site_manager.get_site(site_id)
@@ -301,7 +302,7 @@ class AgentInventorySaveSchema(BaseModel):
     content: str
 
 
-@router.post("/api/sites/{site_id}/agent/inventory/get")
+@router.post("/api/sites/{site_id}/agent/inventory/get", dependencies=[Depends(require_tab("tab-sites"))])
 def agent_get_inventory_ep(site_id: str, current_user = Depends(require_admin)):
     """Accoda un comando RPC per leggere l'inventario locale network_hosts.csv dell'agente."""
     site = site_manager.get_site(site_id)
@@ -314,7 +315,7 @@ def agent_get_inventory_ep(site_id: str, current_user = Depends(require_admin)):
     return {"status": "queued", "job_id": job["id"]}
 
 
-@router.post("/api/sites/{site_id}/agent/inventory/save")
+@router.post("/api/sites/{site_id}/agent/inventory/save", dependencies=[Depends(require_tab("tab-sites"))])
 def agent_save_inventory_ep(site_id: str, payload: AgentInventorySaveSchema, current_user = Depends(require_admin)):
     """Accoda un comando RPC per salvare l'inventario locale network_hosts.csv dell'agente."""
     site = site_manager.get_site(site_id)
@@ -339,7 +340,7 @@ class FlowControlSchema(BaseModel):
     active: bool
 
 
-@router.post("/api/sites/{site_id}/agent/flow-control")
+@router.post("/api/sites/{site_id}/agent/flow-control", dependencies=[Depends(require_tab("tab-sites"))])
 def agent_flow_control_ep(site_id: str, payload: FlowControlSchema, current_user = Depends(require_admin)):
     """Mette in pausa o riprende l'ingestione / streaming dati per la sede agent."""
     site = site_manager.get_site(site_id)

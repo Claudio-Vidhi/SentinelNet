@@ -11,6 +11,7 @@ from typing import Optional, List, Dict
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from routers.deps import require_tab
 from pydantic import BaseModel, Field
 
 from services import inventory_manager, site_manager
@@ -101,7 +102,7 @@ def run_triage_background(devices):
 
     core_engine.maybe_mirror_offsite()
 
-@router.post("/api/run-triage")
+@router.post("/api/run-triage", dependencies=[Depends(require_tab("tab-devices", "tab-home"))])
 def run_triage(payload: TriageRunRequest = TriageRunRequest(),
                current_user = Depends(require_operator)):
     global triage_job
@@ -160,7 +161,7 @@ def run_triage(payload: TriageRunRequest = TriageRunRequest(),
     return {"status": "running", "message": "Scansione avviata in background",
             "queued": queued}
 
-@router.post("/api/triage/{ip}")
+@router.post("/api/triage/{ip}", dependencies=[Depends(require_tab("tab-devices", "tab-config"))])
 async def triage_single_device(ip: str, current_user = Depends(require_operator)):
     import re
     if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
@@ -181,7 +182,7 @@ def get_triage_status(current_user = Depends(get_current_user)):
     with triage_lock:
         return dict(triage_job)
 
-@router.post("/api/ping-check")
+@router.post("/api/ping-check", dependencies=[Depends(require_tab("tab-devices"))])
 def ping_check(payload: PingCheckRequest, current_user = Depends(require_operator)):
     """
     Verifica la raggiungibilità SSH (porta 22) di tutti i dispositivi
@@ -245,7 +246,7 @@ def ping_check(payload: PingCheckRequest, current_user = Depends(require_operato
     )
     return {"results": results, "group": payload.group, "total": len(devices)}
 
-@router.get("/api/ping/{ip}")
+@router.get("/api/ping/{ip}", dependencies=[Depends(require_tab("tab-devices"))])
 def ping_single(ip: str, current_user = Depends(require_operator)):
     import re
     if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):

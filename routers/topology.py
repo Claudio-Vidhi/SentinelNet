@@ -11,6 +11,7 @@ import os
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from routers.deps import require_tab
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
@@ -54,7 +55,7 @@ class VisioExportSchema(BaseModel):
 
 # --- ROTTE ---
 
-@router.get("/api/topology")
+@router.get("/api/topology", dependencies=[Depends(require_tab("tab-map", "tab-map-interactive"))])
 def get_topology_adjacency(group: str = "all", current_user = Depends(get_current_user)):
     """Restituisce la lista di adiacenza fisica per il triage testuale."""
     data = core_engine.generate_network_map(group_filter=group)
@@ -102,13 +103,13 @@ def enrich_map_nodes(data: dict) -> dict:
     return data
 
 
-@router.get("/api/network-map")
+@router.get("/api/network-map", dependencies=[Depends(require_tab("tab-map", "tab-map-interactive", "tab-security"))])
 def get_network_map(group: str = "all", current_user = Depends(get_current_user)):
     """Restituisce il grafo topologico strutturato per Vis.js."""
     data = core_engine.generate_network_map(group_filter=group)
     return enrich_map_nodes(filter_map_to_scope(data, user_group_scope(current_user)))
 
-@router.post("/api/map/export/vsdx")
+@router.post("/api/map/export/vsdx", dependencies=[Depends(require_tab("tab-map", "tab-map-interactive"))])
 def export_map_vsdx(payload: VisioExportSchema, current_user = Depends(get_current_user)):
     """Esporta la mappa di rete corrente (posizioni già calcolate dal frontend) come .vsdx nativo."""
     data = visio_export.build_vsdx(
@@ -124,7 +125,7 @@ def export_map_vsdx(payload: VisioExportSchema, current_user = Depends(get_curre
         headers={"Content-Disposition": "attachment; filename=sentinelnet-map.vsdx"}
     )
 
-@router.get("/api/portchannels")
+@router.get("/api/portchannels", dependencies=[Depends(require_tab("tab-map", "tab-map-interactive"))])
 async def get_portchannels(group: str = "all",
                            current_user = Depends(get_current_user)):
     """Report Port-channel per apparato (per il tab Adjacency List).
@@ -198,7 +199,7 @@ async def _attach_live_state(report: list) -> None:
                 po["live_total"] = len(states)
         device["live_state"] = seen
 
-@router.post("/api/topology/reset")
+@router.post("/api/topology/reset", dependencies=[Depends(require_tab("tab-map", "tab-map-interactive"))])
 def reset_topology(current_user = Depends(require_operator)):
     backup_dir = "backup-config"
     deleted_count = 0

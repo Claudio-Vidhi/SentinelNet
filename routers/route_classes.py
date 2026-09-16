@@ -10,15 +10,64 @@ Every /api/* route (HTTP and WebSocket) belongs to exactly one class:
 - PUBLIC: reachable without authentication (login, health checks, ...).
 - MACHINE: agent/site-to-site or other non-interactive callers.
 
-Task 2 fills BASE_ROUTES, PUBLIC_ROUTES and MACHINE_ROUTES; TAB routes need
+BASE_ROUTES, PUBLIC_ROUTES and MACHINE_ROUTES are explicit; TAB routes need
 no explicit list here, they are discovered via route_tabs().
 """
 
 # (method, path) pairs, method upper-case, path exactly as it appears in
 # app.routes, WebSocket method is "WS".
-BASE_ROUTES: frozenset[tuple[str, str]] = frozenset()
-PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset()
-MACHINE_ROUTES: frozenset[tuple[str, str]] = frozenset()
+# BASE: session/self routes, data the dashboard loads at boot for every tab
+# (appInit, core.js), the terminal (governed by role, opened from device rows
+# in many tabs) and the MCP server's own configuration read.
+BASE_ROUTES: frozenset[tuple[str, str]] = frozenset({
+    ("GET", "/api/auth/me"),
+    ("POST", "/api/auth/change-password"),
+    ("POST", "/api/auth/logout"),
+    ("POST", "/api/auth/logout-all"),
+    ("GET", "/api/profile"),
+    ("POST", "/api/profile/email"),
+    ("GET", "/api/local-devices"),
+    ("GET", "/api/vendors"),
+    ("GET", "/api/settings/snmp-defaults"),
+    ("GET", "/api/settings/ui-variant"),
+    ("POST", "/api/settings/ui-variant"),
+    ("GET", "/api/triage-status"),
+    ("POST", "/api/send-command"),
+    ("POST", "/api/ws-token"),
+    ("WS", "/api/ws-terminal/{ip}"),
+    # Read by ai/mcp_server.py with the caller's own account: gating it by a
+    # tab would disable every MCP tool for any user with a tab list.
+    ("GET", "/api/mcp/tool-config"),
+})
+
+# PUBLIC: reachable before a session exists (first run, login screen,
+# emailed token links, IdP redirects).
+PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset({
+    ("GET", "/api/version"),
+    ("GET", "/api/auth/status"),
+    ("POST", "/api/auth/register"),
+    ("POST", "/api/auth/login"),
+    ("POST", "/api/auth/verify-email"),
+    ("POST", "/api/auth/forgot-password"),
+    ("POST", "/api/auth/reset-password"),
+    ("POST", "/api/auth/accept-invite"),
+    ("GET", "/api/auth/sso/config"),
+    ("GET", "/api/auth/sso/login"),
+    ("GET", "/api/auth/sso/callback"),
+})
+
+# MACHINE: site agents, authenticated by X-Site-Token.
+MACHINE_ROUTES: frozenset[tuple[str, str]] = frozenset({
+    ("POST", "/api/agent/heartbeat"),
+    ("POST", "/api/agent/inventory"),
+    ("POST", "/api/agent/mac"),
+    ("POST", "/api/agent/arp"),
+    ("POST", "/api/agent/status"),
+    ("POST", "/api/agent/backup"),
+    ("GET", "/api/agent/jobs"),
+    ("POST", "/api/agent/jobs/{job_id}/result"),
+    ("POST", "/api/agent/syslog"),
+})
 
 
 def route_tabs(route):

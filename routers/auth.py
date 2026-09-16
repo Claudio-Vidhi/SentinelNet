@@ -10,6 +10,7 @@ from datetime import timedelta
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from routers.deps import require_tab
 from pydantic import BaseModel
 
 from services import inventory_manager
@@ -320,11 +321,11 @@ def whoami(current_user = Depends(get_current_user)):
 
 # --- GESTIONE UTENTI (solo amministratori) ---
 
-@router.get("/api/users")
+@router.get("/api/users", dependencies=[Depends(require_tab("tab-users"))])
 def list_users_ep(current_user = Depends(require_admin)):
     return user_manager.list_users()
 
-@router.post("/api/users")
+@router.post("/api/users", dependencies=[Depends(require_tab("tab-users"))])
 def create_user_ep(payload: UserCreateSchema, current_user = Depends(require_admin)):
     if payload.role not in user_manager.VALID_ROLES:
         raise HTTPException(status_code=400, detail="Ruolo non valido.")
@@ -435,7 +436,7 @@ def _mail_welcome(username: str, role: str) -> None:
         "al primo accesso.\n",
     )
 
-@router.post("/api/users/delete")
+@router.post("/api/users/delete", dependencies=[Depends(require_tab("tab-users"))])
 def delete_user_ep(payload: UserDeleteSchema, current_user = Depends(get_current_user)):
     # Chiunque può cancellare il PROPRIO account; per quello di un altro serve
     # il ruolo di amministratore. Niente docstring: FastAPI la pubblicherebbe
@@ -458,7 +459,7 @@ def delete_user_ep(payload: UserDeleteSchema, current_user = Depends(get_current
     log_audit(f"Utente '{payload.username}' eliminato da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
-@router.post("/api/users/role")
+@router.post("/api/users/role", dependencies=[Depends(require_tab("tab-users"))])
 def set_user_role_ep(payload: UserRoleSchema, current_user = Depends(require_admin)):
     if payload.role not in user_manager.VALID_ROLES:
         raise HTTPException(status_code=400, detail="Ruolo non valido.")
@@ -470,7 +471,7 @@ def set_user_role_ep(payload: UserRoleSchema, current_user = Depends(require_adm
     log_audit(f"Ruolo di '{payload.username}' impostato a '{payload.role}' da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
-@router.post("/api/users/disable")
+@router.post("/api/users/disable", dependencies=[Depends(require_tab("tab-users"))])
 def disable_user_ep(payload: UserDisableSchema, current_user = Depends(require_admin)):
     """Abilita/disabilita un utente. Un utente disabilitato non può autenticarsi."""
     if payload.disabled and payload.username == current_user.get("sub"):
@@ -486,7 +487,7 @@ def disable_user_ep(payload: UserDisableSchema, current_user = Depends(require_a
     )
     return {"status": "success"}
 
-@router.post("/api/users/groups")
+@router.post("/api/users/groups", dependencies=[Depends(require_tab("tab-users"))])
 def set_user_groups_ep(payload: UserGroupsSchema, current_user = Depends(require_admin)):
     """Assegna le sedi/gruppi visibili e gestibili da un utente (vuoto = tutte)."""
     assert_can_manage(current_user, payload.username)
@@ -500,7 +501,7 @@ def set_user_groups_ep(payload: UserGroupsSchema, current_user = Depends(require
     )
     return {"status": "success"}
 
-@router.post("/api/users/tabs")
+@router.post("/api/users/tabs", dependencies=[Depends(require_tab("tab-users"))])
 def set_user_tabs_ep(payload: UserTabsSchema, current_user = Depends(require_admin)):
     """Assegna le tab della dashboard visibili a un utente (vuoto = tutte).
     # ponytail: enforcement solo lato frontend (nasconde i pulsanti tab). Le API
@@ -609,7 +610,7 @@ class UserNameSchema(BaseModel):
     username: str
 
 
-@router.post("/api/users/send-reset")
+@router.post("/api/users/send-reset", dependencies=[Depends(require_tab("tab-users"))])
 def admin_send_reset(payload: UserNameSchema, current_user = Depends(require_admin)):
     """Mails a reset link to the user's registered address, so the administrator
     never has to know or hand over a password. Failures are reported: unlike the
@@ -634,7 +635,7 @@ def admin_send_reset(payload: UserNameSchema, current_user = Depends(require_adm
     return {"status": "success"}
 
 
-@router.post("/api/users/approve")
+@router.post("/api/users/approve", dependencies=[Depends(require_tab("tab-users"))])
 def approve_user(payload: UserNameSchema, current_user = Depends(require_admin)):
     """Opens an account created from an invitation. Rejecting it is deleting it."""
     assert_can_manage(current_user, payload.username)
@@ -671,7 +672,7 @@ def reset_password(payload: ResetPasswordSchema):
     return {"status": "success"}
 
 
-@router.post("/api/users/email")
+@router.post("/api/users/email", dependencies=[Depends(require_tab("tab-users"))])
 def set_user_email(payload: UserEmailSchema, current_user = Depends(require_admin)):
     """Imposta o rimuove ("" rimuove) l'indirizzo di recupero di un utente."""
     assert_can_manage(current_user, payload.username, allow_self=True)
@@ -696,7 +697,7 @@ class AcceptInviteSchema(BaseModel):
     password: str
 
 
-@router.post("/api/users/invite")
+@router.post("/api/users/invite", dependencies=[Depends(require_tab("tab-users"))])
 def invite_user(payload: InviteUserSchema, current_user = Depends(require_admin)):
     """Invia un invito: l'account viene creato solo quando l'invitato lo accetta.
 

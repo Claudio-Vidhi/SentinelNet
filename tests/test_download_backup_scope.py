@@ -52,10 +52,13 @@ class TestDownloadBackupScope(unittest.TestCase):
     def _get(self, name, groups=("sede-a",)):
         from fastapi.testclient import TestClient
         import app_server
-        from routers.deps import require_operator
+        from routers.deps import get_current_user, require_operator
 
-        app_server.app.dependency_overrides[require_operator] = \
-            lambda: {"sub": "tester", "role": "operator"}
+        def user():
+            return {"sub": "tester", "role": "operator"}
+        app_server.app.dependency_overrides[require_operator] = user
+        # The route's tab gate authenticates on its own.
+        app_server.app.dependency_overrides[get_current_user] = user
         try:
             with patch("services.inventory_manager.get_all_devices",
                        return_value=INVENTORY), \
@@ -65,6 +68,7 @@ class TestDownloadBackupScope(unittest.TestCase):
                 return TestClient(app_server.app).get(f"/api/download-backup/{name}")
         finally:
             app_server.app.dependency_overrides.pop(require_operator, None)
+            app_server.app.dependency_overrides.pop(get_current_user, None)
 
     def test_own_backup_is_served(self):
         r = self._get(MINE)

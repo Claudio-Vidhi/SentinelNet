@@ -14,6 +14,7 @@ import logging
 import posixpath
 
 from fastapi import APIRouter, Depends, HTTPException
+from routers.deps import require_tab
 from pydantic import BaseModel
 
 from core import core_engine
@@ -26,7 +27,7 @@ from services.cloud_backup import sftp as cb_sftp
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["Cloud Backup"])
+router = APIRouter(dependencies=[Depends(require_tab("tab-settings"))], tags=["Cloud Backup"])
 
 
 class CloudBackupSettingsSchema(BaseModel):

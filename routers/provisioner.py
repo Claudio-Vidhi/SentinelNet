@@ -9,6 +9,7 @@ import os
 from typing import Optional, List, Dict, Any, Literal, Union
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from routers.deps import require_tab
 from fastapi.responses import Response
 from pydantic import BaseModel, Field, model_validator
 
@@ -210,7 +211,7 @@ def _provision_cfg(payload_dict: dict, materialized: bool, current_user, vendor:
     )
     return payload_dict
 
-@router.post("/api/provisioner/generate")
+@router.post("/api/provisioner/generate", dependencies=[Depends(require_tab("tab-provisioning", "tab-provisioner"))])
 def provisioner_generate(payload: SwitchProvisionSchema, materialized: bool = False,
                          current_user = Depends(require_operator)):
     """Genera la running-config e la restituisce come testo (view/copy nella UI).
@@ -220,7 +221,7 @@ def provisioner_generate(payload: SwitchProvisionSchema, materialized: bool = Fa
     config_text = _with_placeholder_warning(switch_provisioner.build_config(cfg), "switch")
     return {"status": "success", "config": config_text, "materialized": materialized}
 
-@router.post("/api/provisioner/push-ssh")
+@router.post("/api/provisioner/push-ssh", dependencies=[Depends(require_tab("tab-provisioning", "tab-provisioner"))])
 def provisioner_push_ssh(payload: SwitchProvisionSSHSchema, current_user = Depends(require_admin)):
     """Genera la config e la applica via SSH (Netmiko) su un apparato raggiungibile."""
     _assert_day_zero(payload.ssh_host)
@@ -244,7 +245,7 @@ def provisioner_push_ssh(payload: SwitchProvisionSSHSchema, current_user = Depen
     result["config"] = switch_provisioner.build_config(provisioning_secrets.mask_secrets(payload.dict()))
     return result
 
-@router.post("/api/provisioner/push-serial")
+@router.post("/api/provisioner/push-serial", dependencies=[Depends(require_tab("tab-provisioning", "tab-provisioner"))])
 def provisioner_push_serial(payload: SwitchProvisionSerialSchema, current_user = Depends(require_admin)):
     """Genera la config e la applica via console/seriale (pyserial) per il
     provisioning day-0 senza connettivita' di rete."""
@@ -261,12 +262,12 @@ def provisioner_push_serial(payload: SwitchProvisionSerialSchema, current_user =
     result["config"] = switch_provisioner.build_config(provisioning_secrets.mask_secrets(payload.dict()))
     return result
 
-@router.get("/api/provisioner/serial-ports")
+@router.get("/api/provisioner/serial-ports", dependencies=[Depends(require_tab("tab-provisioning", "tab-provisioner"))])
 def provisioner_serial_ports(current_user = Depends(require_operator)):
     """Elenca le porte COM/seriali disponibili sull'host del server."""
     return {"ports": switch_provisioner.list_serial_ports()}
 
-@router.post("/api/provisioner/fgt/generate")
+@router.post("/api/provisioner/fgt/generate", dependencies=[Depends(require_tab("tab-provisioning", "tab-provisioner"))])
 def fgt_provisioner_generate(payload: FortiGateProvisionSchema, materialized: bool = False,
                              current_user = Depends(require_operator)):
     """Genera la configurazione FortiOS day-0 e la restituisce come testo."""
@@ -286,12 +287,12 @@ class IdentitySchema(BaseModel):
     password: str = ""
     enable_secret: str = ""
 
-@router.get("/api/identities")
+@router.get("/api/identities", dependencies=[Depends(require_tab("tab-devices", "tab-provisioning", "tab-provisioner", "tab-sites"))])
 def identities_list(tenant: Optional[str] = None, current_user = Depends(require_operator)):
     """Lista identita' (senza segreti), opzionalmente filtrate per tenant."""
     return {"identities": identity_manager.get_identities(tenant=tenant)}
 
-@router.post("/api/identities")
+@router.post("/api/identities", dependencies=[Depends(require_tab("tab-provisioning", "tab-provisioner"))])
 def identities_create(payload: IdentitySchema, current_user = Depends(require_operator)):
     if not payload.name.strip() or not payload.username or not payload.password:
         raise HTTPException(status_code=400, detail="Nome, username e password sono obbligatori per nuove identita'.")
@@ -301,7 +302,7 @@ def identities_create(payload: IdentitySchema, current_user = Depends(require_op
     log_audit(f"Identita' '{payload.name}' (tenant '{payload.tenant}') creata da '{current_user.get('sub')}'.")
     return {"status": "success", "id": ident["id"]}
 
-@router.put("/api/identities/{identity_id}")
+@router.put("/api/identities/{identity_id}", dependencies=[Depends(require_tab("tab-provisioning", "tab-provisioner"))])
 def identities_update(identity_id: str, payload: IdentitySchema,
                       current_user = Depends(require_operator)):
     if not payload.name.strip() or not payload.username:
@@ -313,7 +314,7 @@ def identities_update(identity_id: str, payload: IdentitySchema,
     log_audit(f"Identita' '{payload.name}' aggiornata da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
-@router.delete("/api/identities/{identity_id}")
+@router.delete("/api/identities/{identity_id}", dependencies=[Depends(require_tab("tab-provisioning", "tab-provisioner"))])
 def identities_delete(identity_id: str, current_user = Depends(require_operator)):
     ok, devices = identity_manager.delete_identity(identity_id)
     if not ok:
@@ -330,7 +331,7 @@ class BulkAssignIdentitySchema(BaseModel):
     ips: List[str] = Field(min_length=1)
 
 
-@router.post("/api/identities/{identity_id}/assign")
+@router.post("/api/identities/{identity_id}/assign", dependencies=[Depends(require_tab("tab-provisioning", "tab-provisioner"))])
 def identities_bulk_assign(identity_id: str, payload: BulkAssignIdentitySchema,
                            current_user = Depends(require_operator)):
     """Assegna l'identita' a più dispositivi in una sola operazione. Il campo

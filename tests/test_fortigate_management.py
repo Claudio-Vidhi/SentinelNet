@@ -21,7 +21,9 @@ from tests.routes import iter_routes  # noqa: E402
 def _dependency_names(path: str, method: str = "get"):
     for route in iter_routes(app_server.app):
         if getattr(route, "path", None) == path and method.upper() in getattr(route, "methods", ()):
-            return {d.call.__name__ for d in route.dependant.dependencies if d.call}
+            # require_tab's callable is also named _dep, like require_role's: skip it.
+            return {d.call.__name__ for d in route.dependant.dependencies
+                    if d.call and not hasattr(d.call, "tabs")}
     raise AssertionError(f"rotta non trovata: {method.upper()} {path}")
 
 

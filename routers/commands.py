@@ -15,6 +15,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks, status
+from routers.deps import require_tab
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
@@ -185,7 +186,7 @@ async def send_command(payload: CommandRequest, current_user = Depends(require_o
         return res
     raise HTTPException(status_code=404, detail="Dispositivo non presente in inventario")
 
-@router.post("/api/bulk-command")
+@router.post("/api/bulk-command", dependencies=[Depends(require_tab("tab-devices", "tab-ai"))])
 def start_bulk_command(payload: BulkCommandRequest, current_user = Depends(require_operator)):
     """Avvia l'invio degli stessi comandi a più dispositivi (in background)."""
     commands = [c for c in (line.strip() for line in payload.commands.splitlines()) if c]
@@ -242,7 +243,7 @@ def start_bulk_command(payload: BulkCommandRequest, current_user = Depends(requi
     )
     return {"job_id": job_id, "status": "started", "total": len(payload.ips)}
 
-@router.get("/api/bulk-command/{job_id}")
+@router.get("/api/bulk-command/{job_id}", dependencies=[Depends(require_tab("tab-devices", "tab-ai"))])
 def get_bulk_command_status(job_id: str, current_user = Depends(get_current_user)):
     with _bulk_jobs_lock:
         # Elimina solo i job conclusi e vecchi (oltre 10 minuti).

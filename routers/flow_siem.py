@@ -24,13 +24,14 @@ import time
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from routers.deps import require_tab
 from pydantic import BaseModel
 
 from core import db
 from observability import fieldmap
 from routers.deps import get_current_user, user_group_scope
 
-router = APIRouter(prefix="/api/flow-siem", tags=["Flow SIEM"])
+router = APIRouter(dependencies=[Depends(require_tab("tab-flows"))], prefix="/api/flow-siem", tags=["Flow SIEM"])
 
 MAX_LIMIT = 500
 

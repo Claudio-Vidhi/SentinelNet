@@ -11,6 +11,7 @@ import ipaddress
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from routers.deps import require_tab
 from pydantic import BaseModel
 
 from core.ssh_pool import run_ssh
@@ -19,7 +20,7 @@ from routers.deps import (assert_device_allowed, devices_in_scope,
 from security.security_manager import log_audit
 from services import path_trace, route_table
 
-router = APIRouter(tags=["Routes"])
+router = APIRouter(dependencies=[Depends(require_tab("tab-routes"))], tags=["Routes"])
 
 # Quanti apparati interrogare insieme. Un giro su tutta la flotta apre
 # altrettante sessioni REST: il tetto tiene il tab reattivo e non trasforma
