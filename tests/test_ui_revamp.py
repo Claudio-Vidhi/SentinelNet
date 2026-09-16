@@ -1366,7 +1366,7 @@ class TestUsersTabRestyle(unittest.TestCase):
         html = frontend_source()
         # loadUsers() and all mutating handlers must survive byte-for-byte.
         self.assertIn("async function loadUsers()", html)
-        self.assertIn("if (currentRole !== 'admin') return;", html)
+        self.assertIn("if (!isAdminRole(currentRole)) return;", html)
         for hook in ('createUser()', 'deleteUser(', 'toggleUserDisabled(',
                       'changeUserRole(', 'saveUserGroups(', 'saveUserTabs(', 'markTabsDirty('):
             self.assertIn(hook, html)
@@ -1456,7 +1456,7 @@ class TestSitesTabRestyle(unittest.TestCase):
         html = frontend_source()
         # loadSites() and all mutating handlers must survive byte-for-byte.
         self.assertIn("async function loadSites()", html)
-        self.assertIn("if (currentRole !== 'admin') return;", html)
+        self.assertIn("if (!isAdminRole(currentRole)) return;", html)
         for hook in ('createSite()', 'regenSiteToken(', 'deleteSite('):
             self.assertIn(hook, html)
 
@@ -1704,7 +1704,7 @@ class TestSettingsTabRestyle(unittest.TestCase):
         self.assertEqual(self._tab(html).count("requires-admin"), 10)
         self.assertIn('class="panel requires-admin set-section"', self._tab(html))
         # Every loader is also role-gated server-side of the render.
-        self.assertIn("if (currentRole !== 'admin') return;", html)
+        self.assertIn("if (!isAdminRole(currentRole)) return;", html)
 
     def test_tab_uses_component_classes(self):
         html = _html()

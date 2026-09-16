@@ -4,7 +4,7 @@
 
     // --- SEDI MULTI-SITO (admin) ---
     async function loadSites() {
-        if (currentRole !== 'admin') return;
+        if (!isAdminRole(currentRole)) return;
         const res = await apiFetch('/api/sites');
         if (!res || !res.ok) return;
         const data = await res.json();
@@ -502,7 +502,7 @@
     }
 
     async function loadUsers() {
-        if (currentRole !== 'admin') return;
+        if (!isAdminRole(currentRole)) return;
         const res = await apiFetch('/api/users');
         if (!res || !res.ok) return;
         renderUsersTable(await res.json());
@@ -514,15 +514,19 @@
         const delText = tr('uiDelete');
         const allGroups = Object.keys(globalGroups);
         body.innerHTML = users.map(u => {
-            const roleOptions = ['viewer', 'operator', 'admin'].map(r =>
-                `<option value="${r}" ${r === u.role ? 'selected' : ''}>${roleLabel(r)}</option>`).join('');
             const isSelf = u.username === currentUsername;
+            const manageable = !isSelf && canManageRole(currentRole, u.role);
+            const roleOptions = ['viewer', 'operator', 'admin', 'super_admin']
+                .filter(r => r === u.role || canAssignRole(currentRole, r))
+                .map(r => `<option value="${r}" ${r === u.role ? 'selected' : ''}>${roleLabel(r)}</option>`).join('');
             const scope = Array.isArray(u.groups) ? u.groups : [];
 
             // Editor sedi: gli admin vedono tutto; per gli altri checkbox per sede (nessuna = tutte)
             let scopeCell;
-            if (u.role === 'admin') {
-                scopeCell = `<span style="color:var(--text-muted); font-size:12px;">${tr('setAllTenantsAdmin')}</span>`;
+            if (isAdminRole(u.role) || !manageable) {
+                scopeCell = isAdminRole(u.role)
+                    ? `<span style="color:var(--text-muted); font-size:12px;">${tr('setAllTenantsAdmin')}</span>`
+                    : `<span style="color:var(--text-muted); font-size:12px;">${scope.length ? scope.map(escapeHtml).join(', ') : tr('uiAllTenants')}</span>`;
             } else {
                 const summary = scope.length === 0
                     ? `<span style="color:var(--success);">${tr('uiAllTenants')}</span>`
@@ -548,8 +552,8 @@
             // Editor tab: gli admin vedono sempre tutto; per gli altri checkbox per tab
             // (nessuna spuntata = tutte), con salvataggio esplicito (staged, no auto-save).
             let tabsCell;
-            if (u.role === 'admin') {
-                tabsCell = `<span style="color:var(--text-muted); font-size:12px;">${tr('setAllTabsAdmin')}</span>`;
+            if (isAdminRole(u.role) || !manageable) {
+                tabsCell = `<span style="color:var(--text-muted); font-size:12px;">${isAdminRole(u.role) ? tr('setAllTabsAdmin') : tr('setAllTabs')}</span>`;
             } else {
                 const allowed = normalizeAllowedTabs(u.allowed_tabs);
                 const tabsSummary = allowed.length === 0
@@ -588,7 +592,7 @@
                 : (tr('setDisable'));
             const toggleIcon = disabled ? 'fa-circle-check' : 'fa-ban';
             const toggleColor = disabled ? 'var(--success)' : 'var(--warning)';
-            const toggleBtn = isSelf ? '' :
+            const toggleBtn = !manageable ? '' :
                 `<button data-action="toggle-user-disabled" data-username="${escapeHtml(u.username)}" data-disabled="${disabled ? '1' : '0'}"
                     style="color:${toggleColor}; background:none; border:none; cursor:pointer; margin-right:10px;">
                     <i class="fa-solid ${toggleIcon}"></i> ${toggleText}</button>`;
@@ -598,26 +602,28 @@
             const pendingBadge = pending
                 ? ` <span class="role-pill" style="background:color-mix(in srgb, var(--warning) 15%, transparent); color:var(--warning); border:1px solid color-mix(in srgb, var(--warning) 35%, transparent);">${tr('setPendingApproval')}</span>`
                 : '';
-            const approveBtn = pending
+            const approveBtn = (pending && manageable)
                 ? `<button data-action="approve-user" data-username="${escapeHtml(u.username)}" style="color:var(--success); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-user-check"></i> ${tr('setApprove')}</button>`
                 : '';
-            const resetBtn = (u.email && !pending && !disabled)
+            const resetBtn = (u.email && !pending && !disabled && manageable)
                 ? `<button data-action="send-user-reset" data-username="${escapeHtml(u.username)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-key"></i> ${tr('setSendReset')}</button>`
                 : '';
 
             return `<tr style="${disabled ? 'opacity:0.55;' : ''}">
                 <td><strong>${escapeHtml(u.username)}</strong>${isSelf ? ` <span style="color:var(--text-muted); font-size:11px;">(${tr('setYou')})</span>` : ''}${disabledBadge}${pendingBadge}</td>
                 <td><input type="text" value="${escapeHtml(u.email || '')}" placeholder="${tr('setNone')}"
-                       data-action="save-user-email" data-username="${escapeHtml(u.username)}"
+                       data-action="save-user-email" data-username="${escapeHtml(u.username)}" ${(manageable || isSelf) ? '' : 'disabled'}
                        style="font-size:12px; padding:4px 8px; width:190px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); outline:none;"></td>
-                <td><select data-action="change-user-role" data-username="${escapeHtml(u.username)}"
+                <td>${manageable
+                    ? `<select data-action="change-user-role" data-username="${escapeHtml(u.username)}" aria-label="${tr('lblNewUserRole')}"
                        style="font-size:12px; padding:4px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); cursor:pointer; outline:none;">
                     ${roleOptions}
-                  </select></td>
+                  </select>`
+                    : `<span class="role-pill role-pill-${escapeHtml(u.role)}">${roleLabel(u.role)}</span>`}</td>
                 <td>${scopeCell}</td>
                 <td>${tabsCell}</td>
                 <td style="white-space:nowrap; font-size:12px; color:var(--text-muted);">${escapeHtml(formatLastLogin(u.last_login))}</td>
-                <td style="white-space:nowrap;">${approveBtn}${resetBtn}${toggleBtn}<button data-action="delete-user" data-username="${escapeHtml(u.username)}" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${delText}</button></td>
+                <td style="white-space:nowrap;">${approveBtn}${resetBtn}${toggleBtn}${(manageable || isSelf) ? `<button data-action="delete-user" data-username="${escapeHtml(u.username)}" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${delText}</button>` : ''}</td>
             </tr>`;
         }).join('');
     }
@@ -802,7 +808,7 @@
     // --- IMPOSTAZIONI: esposizione in rete (solo admin) ---
 
     async function loadAppSettings() {
-        if (currentRole !== 'admin') return;
+        if (!isAdminRole(currentRole)) return;
         const box = document.getElementById('netSettingsBody');
         if (!box) return;
         const res = await apiFetch('/api/settings/network');
@@ -842,7 +848,7 @@
     }
 
     async function loadSsoSettings() {
-        if (currentRole !== 'admin') return;
+        if (!isAdminRole(currentRole)) return;
         const res = await apiFetch('/api/settings/sso');
         if (!res || !res.ok) return;
         const cfg = await res.json();
@@ -914,7 +920,7 @@
     }
 
     async function loadSmtpSettings() {
-        if (currentRole !== 'admin') return;
+        if (!isAdminRole(currentRole)) return;
         const res = await apiFetch('/api/settings/smtp');
         if (!res || !res.ok) return;
         const cfg = await res.json();
@@ -998,7 +1004,7 @@
     ];
 
     async function loadAppAdvSettings() {
-        if (currentRole !== 'admin') return;
+        if (!isAdminRole(currentRole)) return;
         const box = document.getElementById('appAdvBody');
         if (!box) return;
         const res = await apiFetch('/api/settings/app');
@@ -1237,7 +1243,7 @@
     // --- VERSIONI DELLA FLOTTA (solo admin) ---
 
     async function loadFleetVersions() {
-        if (currentRole !== 'admin') return;
+        if (!isAdminRole(currentRole)) return;
         const body = document.getElementById('fleetVersionsBody');
         if (!body) return;
         const res = await apiFetch('/api/fleet/versions');
@@ -1278,7 +1284,7 @@
     // --- MONITOR PING CONTINUO (solo admin) ---
 
     async function loadSessionSettings() {
-        if (currentRole !== 'admin') return;
+        if (!isAdminRole(currentRole)) return;
         const res = await apiFetch('/api/settings/session');
         if (!res || !res.ok) return;
         const cfg = await res.json();
@@ -1304,7 +1310,7 @@
     }
 
     async function loadPingMonitorSettings() {
-        if (currentRole !== 'admin') return;
+        if (!isAdminRole(currentRole)) return;
         const toggle = document.getElementById('pingMonitorToggle');
         const intervalEl = document.getElementById('pingMonitorInterval');
         if (!toggle || !intervalEl) return;

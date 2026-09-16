@@ -2804,9 +2804,9 @@
 
     function renderCategoriesPanel() {
         const cats = categoriesData.categories;
-        const canWrite = (currentRole === 'admin' || currentRole === 'operator');
+        const canWrite = (isAdminRole(currentRole) || currentRole === 'operator');
         // Le API /api/redundancy/groups sono admin-only: la gestione stack segue.
-        const canAdmin = (currentRole === 'admin');
+        const canAdmin = isAdminRole(currentRole);
         const cols = CAT_COLUMNS.filter(c => isColVisible(c.key));
 
         // Conteggi per categoria RELATIVI alla sede selezionata (non al totale).
