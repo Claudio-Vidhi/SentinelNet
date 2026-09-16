@@ -356,9 +356,9 @@ async def ws_terminal(websocket: WebSocket, ip: str):
         return
 
     # Scoping: l'utente del token OTP deve poter gestire la sede del dispositivo
-    if not user_manager.is_admin(_role):
-        _allowed = user_manager.get_user_groups(username_from_otp)
-        if _allowed and device.get('Group', 'Generale') not in set(_allowed):
+    _scope = user_group_scope({"sub": username_from_otp, "role": _role})
+    if _scope is not None:
+        if device.get('Group', 'Generale') not in _scope:
             await websocket.send_text("[Accesso Negato] Sede non consentita per il tuo profilo.\r\n")
             await websocket.close(code=1008)
             return

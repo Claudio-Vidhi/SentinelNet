@@ -17,7 +17,7 @@ from core.ssh_pool import run_ssh
 from collectors import mac_collector
 from collectors import mac_history
 from security.security_manager import log_audit
-from routers.deps import get_current_user, require_operator, require_admin, user_group_scope, assert_group_allowed, assert_device_allowed
+from routers.deps import get_current_user, require_operator, require_admin, require_unscoped_admin, user_group_scope, assert_group_allowed, assert_device_allowed
 
 router = APIRouter(dependencies=[Depends(require_tab("tab-endpoint"))], tags=["MAC"])
 
@@ -210,7 +210,7 @@ def mac_stats(tenant: Optional[str] = None, current_user = Depends(get_current_u
     return mac_history.stats(tenants=tenants)
 
 @router.post("/api/mac/settings")
-def mac_set_settings(payload: MacRetentionSchema, current_user = Depends(require_admin)):
+def mac_set_settings(payload: MacRetentionSchema, current_user = Depends(require_unscoped_admin)):
     days = mac_history.set_retention_days(payload.days)
     log_audit(f"MAC retention impostata a {days} giorni da '{current_user.get('sub')}'.")
     return {"retention_days": days}

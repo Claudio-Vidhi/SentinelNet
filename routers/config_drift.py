@@ -162,6 +162,9 @@ def drift_baseline_get(tenant: str, profile: str = "ios",
 @router.put("/api/drift/baseline/{tenant}", dependencies=[Depends(require_tab("tab-config-drift"))])
 def drift_baseline_put(tenant: str, payload: BaselineSchema, profile: str = "ios",
                        current_user=Depends(require_admin)):
+    scope = user_group_scope(current_user)
+    if scope is not None and tenant not in scope:
+        raise HTTPException(status_code=403, detail="Tenant non consentito.")
     if profile not in baseline.PROFILES:
         raise HTTPException(status_code=422, detail=f"Profilo '{profile}' sconosciuto.")
     baseline.save(tenant, profile, payload.text)

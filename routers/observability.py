@@ -20,7 +20,7 @@ from core import data_config
 from core.app_settings import get_app_settings, save_app_settings
 from observability import metrics
 from observability.ingesters import ipfix
-from routers.deps import (get_current_user, require_admin, require_operator,
+from routers.deps import (get_current_user, require_unscoped_admin, require_operator,
                           user_group_scope)
 
 router = APIRouter(tags=["Observability"])
@@ -676,14 +676,14 @@ async def obs_flowgraph(
 
 
 @router.get("/api/observability/config", dependencies=[Depends(require_tab("tab-settings"))])
-def obs_get_config(current_user = Depends(require_admin)):
+def obs_get_config(current_user = Depends(require_unscoped_admin)):
     """Config effettiva dei listener (settings + eventuali override da env).
     Le modifiche via POST vengono applicate a caldo, senza riavvio."""
     return data_config.obs_config()
 
 
 @router.post("/api/observability/config", dependencies=[Depends(require_tab("tab-settings"))])
-async def obs_set_config(payload: dict, current_user = Depends(require_admin)):
+async def obs_set_config(payload: dict, current_user = Depends(require_unscoped_admin)):
     """Salva la sezione 'observability' in app_settings.json (§9.5) e applica
     subito la nuova config ai listener UDP e ai task di background (nessun
     riavvio del processo necessario).
@@ -750,7 +750,7 @@ async def obs_api_poll_now(current_user = Depends(require_operator)):
 
 
 @router.get("/api/observability/health", dependencies=[Depends(require_tab("tab-flows", "tab-settings"))])
-def obs_health(current_user = Depends(require_admin)):
+def obs_health(current_user = Depends(require_unscoped_admin)):
     """Stato pipeline: listener attivi, metriche, dimensione DB, versione
     schema. Diagnostica operativa primaria dell'intero modulo (solo admin)."""
     db_path = db.get_db_path()
@@ -781,7 +781,7 @@ class PruneLogsSchema(BaseModel):
 
 
 @router.post("/api/observability/prune-logs", dependencies=[Depends(require_tab("tab-settings"))])
-async def obs_prune_logs(payload: PruneLogsSchema, current_user = Depends(require_admin)):
+async def obs_prune_logs(payload: PruneLogsSchema, current_user = Depends(require_unscoped_admin)):
     """Elimina i log di osservabilità più vecchi del limite in giorni."""
     cutoff = int(time.time()) - (payload.days * 86400)
     db.enqueue_write("DELETE FROM syslog_events WHERE ts < ?", (cutoff,))

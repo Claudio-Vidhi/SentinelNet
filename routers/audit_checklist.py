@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from routers.deps import require_tab
 from pydantic import BaseModel
 
-from routers.deps import get_current_user, require_admin, require_operator
+from routers.deps import get_current_user, require_unscoped_admin, require_operator
 from services import audit_checklist
 
 router = APIRouter(dependencies=[Depends(require_tab("tab-netsec-audit"))], prefix="/api/audit-checklist", tags=["Audit Checklist"])
@@ -82,7 +82,7 @@ class TemplateItemRequest(BaseModel):
 
 @router.post("/templates/{template_id}/items", status_code=201)
 def create_template_item(
-    template_id: int, req: TemplateItemRequest, current_user=Depends(require_admin)
+    template_id: int, req: TemplateItemRequest, current_user=Depends(require_unscoped_admin)
 ) -> Dict[str, Any]:
     """Aggiunge una domanda al template di audit (solo amministratori)."""
     fields = req.model_dump(exclude_none=True)
@@ -95,7 +95,7 @@ def create_template_item(
 
 @router.put("/templates/{template_id}/items/{ref}")
 def update_template_item(
-    template_id: int, ref: str, req: TemplateItemRequest, current_user=Depends(require_admin)
+    template_id: int, ref: str, req: TemplateItemRequest, current_user=Depends(require_unscoped_admin)
 ) -> Dict[str, Any]:
     """Modifica una domanda del template di audit (solo amministratori)."""
     fields = req.model_dump(exclude_none=True)
@@ -108,7 +108,7 @@ def update_template_item(
 
 @router.delete("/templates/{template_id}/items/{ref}")
 def delete_template_item(
-    template_id: int, ref: str, current_user=Depends(require_admin)
+    template_id: int, ref: str, current_user=Depends(require_unscoped_admin)
 ) -> Dict[str, Any]:
     """Elimina una domanda del template, se non e' gia' stata valutata."""
     try:
