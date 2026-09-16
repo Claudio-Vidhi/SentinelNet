@@ -6,8 +6,14 @@
     // on a route gated by require_unscoped_admin (global settings, sites,
     // fleet, ...): these loaders used to swallow that response and leave the
     // panel blank with no explanation.
+    // A Settings open fires ~8 of these loaders in quick succession; without
+    // this window a scoped admin got a toast per loader instead of one.
+    let lastForbiddenToastAt = 0;
     async function toastOnForbidden(res) {
         if (!res || res.status !== 403) return;
+        const now = Date.now();
+        if (now - lastForbiddenToastAt < 2000) return;
+        lastForbiddenToastAt = now;
         const e = await res.json().catch(() => ({}));
         showToast(e.detail || tr('setSettingsNotLoadedYet'), 'error');
     }

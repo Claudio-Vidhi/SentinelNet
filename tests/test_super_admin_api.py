@@ -353,6 +353,40 @@ class TestScopedAdminUserPerimeter(_PrivateUsers):
                                   json={"username": "pending-invitee"})
         self.assertEqual(r.status_code, 404, r.text)
 
+    def test_approve_inherits_actor_tab_limits_via_invite(self):
+        # 'adm' is unscoped (groups=[]) but tab-restricted: invite + accept +
+        # approve is a second account-creation path and must not let it mint
+        # an unrestricted account, same rule as create_user's tab copy.
+        user_manager.set_allowed_tabs("adm", ["tab-users"])
+        sent = []
+        mailer.send_email = lambda to, subject, body: sent.append(body)
+        r = self._as("adm").post("/api/users/invite", headers=H,
+                                 json={"email": "invitee@example.com", "role": "operator"})
+        self.assertEqual(r.status_code, 200, r.text)
+        token = sent[0].split("invite_token=")[1].split()[0]
+        r = TestClient(app_server.app).post(
+            "/api/auth/accept-invite", json={"token": token, "password": PW})
+        self.assertEqual(r.status_code, 200, r.text)
+        r = self._as("adm").post("/api/users/approve", headers=H,
+                                 json={"username": "invitee@example.com"})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(user_manager.effective_tabs("invitee@example.com"),
+                         {"tab-users", "tab-home"})
+
+    def test_approve_by_super_admin_leaves_target_unrestricted(self):
+        user_manager.create_user("pending-unrestricted", PW, role="viewer",
+                                 pending_approval=True)
+        r = self._as("root").post("/api/users/approve", headers=H,
+                                  json={"username": "pending-unrestricted"})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertIsNone(user_manager.effective_tabs("pending-unrestricted"))
+
+    def test_me_groups_empty_for_super_admin(self):
+        user_manager.set_groups("root", ["tenant-a"])
+        r = self._as("root").get("/api/auth/me")
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["groups"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

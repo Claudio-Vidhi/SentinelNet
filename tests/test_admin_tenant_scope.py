@@ -159,8 +159,9 @@ class TestScopedAdminOnTenantData(_PrivateUsers):
         for name, full in (("sadm", False), ("adm", True)):
             with self.subTest(user=name):
                 sites = self._as(name).get("/api/sites").json()["sites"]
-                self.assertTrue(sites)
-                self.assertEqual("subnets" in sites[0], full)
+                created = next((s for s in sites if s["id"] == site["id"]), None)
+                self.assertIsNotNone(created)
+                self.assertEqual("subnets" in created, full)
 
 
 class TestGlobalRoutesNeedUnscopedAdmin(_PrivateUsers):

@@ -40,6 +40,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 - **Chi ha "Tab visibili" impostate non raggiunge piu' le API delle tab
   nascoste.** Prima il campo era solo un suggerimento per l'interfaccia; ora
   e' applicato anche lato server.
+- Tenant e tab gia' salvati su un account admin ora hanno effetto: prima
+  venivano ignorati per gli admin.
 - **Impostazioni globali riservate a un admin senza limiti di tenant.** SMTP,
   SSO, URL applicazione, certificati, aggiornamenti, tenant, sedi, backup
   cloud e MCP richiedono ora un admin senza restrizione di tenant (o un
