@@ -49,7 +49,7 @@ def _login(username, password):
 class TestUserLifecycle(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        user_manager.create_user(ADMIN, PASS, role="admin")
+        user_manager.create_user(ADMIN, PASS, role="super_admin")
         cls.admin, r = _login(ADMIN, PASS)
         assert r.status_code == 200, r.text
 
@@ -113,10 +113,10 @@ class TestUserLifecycle(unittest.TestCase):
         self.assertTrue(user_manager.is_pending(INVITED))
 
     def test_pending_admin_is_not_an_active_admin(self):
-        before = user_manager.count_active_admins()
-        self._accept_invite(role="admin")
-        self.assertEqual(user_manager.count_active_admins(), before)
-        self.assertFalse(user_manager.is_last_active_admin(INVITED))
+        before = user_manager.count_active_super_admins()
+        self._accept_invite(role="super_admin")
+        self.assertEqual(user_manager.count_active_super_admins(), before)
+        self.assertFalse(user_manager.is_last_active_super_admin(INVITED))
 
     # --- recovery by address ---
 
