@@ -115,3 +115,17 @@ assert.deepStrictEqual(restrictedIds.sort(), ['tab-devices', 'tab-users'],
 global.currentAllowedTabs = [];
 
 console.log('ok - assignableTabs(rowRole) rispetta il ruolo della riga e le tab dell\'attore');
+
+// --- hint "richiede anche un amministratore senza limiti di tenant": solo
+// per le tab i cui endpoint sono davvero gated da require_unscoped_admin
+// (spec D5). /api/users* NON lo richiede (solo /api/users/invite, gestito
+// nascondendo il pulsante invito) quindi tab-users non porta l'hint anche se
+// e' fra le ADMIN_GROUP_TABS assegnabili su una riga admin.
+const adminRowTabs = assignableTabs('admin');
+const hinted = new Set(adminRowTabs.filter((t) => t.needsUnscopedAdmin).map((t) => t.id));
+assert.deepStrictEqual([...hinted].sort(),
+    ['tab-groups', 'tab-mcp', 'tab-settings', 'tab-sites'],
+    'hint "richiede admin senza limiti di tenant" su tab sbagliate');
+assert.ok(!hinted.has('tab-users'), 'tab-users porta per errore l\'hint di admin non scoped');
+
+console.log('ok - needsUnscopedAdmin coincide con le tab davvero gated da require_unscoped_admin');

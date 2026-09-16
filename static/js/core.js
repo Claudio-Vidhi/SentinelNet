@@ -1084,7 +1084,9 @@ function applyRoleUI(username, role, allowedTabs, groups) {
     if (allowed.length > 0) {
         document.querySelectorAll('.nav-item').forEach(btn => {
             const tabId = btn.getAttribute('data-tab');
-            if (tabId && !allowed.includes(tabId)) btn.style.display = 'none';
+            // tab-home is never in a stored/assignable list (mirrors the
+            // server's ALWAYS_GRANTED_TABS): a restricted list must not hide it.
+            if (tabId && tabId !== 'tab-home' && !allowed.includes(tabId)) btn.style.display = 'none';
         });
     }
     // A tenant-scoped admin's invite would 403 server-side (invite is an
