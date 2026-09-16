@@ -13,6 +13,7 @@ import shutil
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 _TMP_DATA_DIR = tempfile.mkdtemp(prefix="sentinelnet_test_invite_")
 os.environ["SENTINELNET_DATA_DIR"] = _TMP_DATA_DIR
@@ -39,6 +40,12 @@ class TestUserInvite(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         user_manager.create_user(ADMIN, ADMIN_PASS, role="admin")
+        # `with TestClient(...)` below (test_non_admin_cannot_invite) runs the
+        # lifespan and thus the role migration; patch it out so role state
+        # never depends on test order.
+        cls._migrate_patch = patch.object(
+            user_manager, "migrate_admins_to_super_admin", return_value=[])
+        cls._migrate_patch.start()
         cls.client = TestClient(app_server.app)
         r = cls.client.post("/api/auth/login",
                             json={"username": ADMIN, "password": ADMIN_PASS})
@@ -47,6 +54,7 @@ class TestUserInvite(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        cls._migrate_patch.stop()
         shutil.rmtree(_TMP_DATA_DIR, ignore_errors=True)
 
     def setUp(self):

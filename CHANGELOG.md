@@ -21,9 +21,11 @@ happened — `git log --grep="chore(release)"` is the record for those.
 ### Changed
 
 - **Aggiornamento automatico dei ruoli.** Al primo avvio della nuova versione
-  ogni admin esistente diventa `super_admin` (una sola volta, registrato
-  nell'audit log): nessuno perde poteri. Riportare ad `admin` chi non deve
-  gestire altri amministratori.
+  ogni admin esistente diventa `super_admin` (solo se non esiste gia' un
+  super_admin attivo, registrato nell'audit log): nessuno perde poteri.
+  Riportare ad `admin` chi non deve gestire altri amministratori. Con SSO e
+  sincronizzazione dei ruoli attiva, gli admin promossi non seguono piu' i
+  gruppi dell'IdP: riportarli ad admin se devono restare gestiti dall'IdP.
 - **Quorum.** Deve restare almeno un **super_admin** attivo (prima: un admin).
 - **SSO.** I gruppi dell'IdP assegnano al massimo `admin`; `super_admin` si
   assegna solo localmente e la sincronizzazione dei ruoli non lo tocca.

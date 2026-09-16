@@ -9,6 +9,7 @@ OpenAPI introspection never runs a handler body."""
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -190,6 +191,35 @@ class TestSsoNeverMintsSuperAdmin(_PrivateUsers):
         body["default_role"] = "super_admin"
         r = c.post("/api/settings/sso", json=body, headers=H)
         self.assertEqual(r.status_code, 400, r.text)
+
+
+class TestSsoUpgradeWarning(_PrivateUsers):
+    """When the migration promotes accounts while SSO role sync is on, the
+    lifespan must log an extra warning: promoted accounts stop following the
+    IdP's groups, and nothing else demotes them back."""
+
+    def test_migration_warns_when_sso_syncs_roles(self):
+        user_manager.create_user("adm-legacy", PW, role="admin")
+        from security import sso
+        with patch.object(sso, "get_config",
+                          return_value={"enabled": True, "sync_roles": True}), \
+             patch("security.security_manager.log_audit") as mock_audit:
+            with TestClient(app_server.app):
+                pass
+        messages = [c.args[0] for c in mock_audit.call_args_list]
+        self.assertTrue(
+            any("non seguono piu'" in m for m in messages), messages)
+
+    def test_no_warning_when_sso_role_sync_off(self):
+        user_manager.create_user("adm-legacy2", PW, role="admin")
+        from security import sso
+        with patch.object(sso, "get_config",
+                          return_value={"enabled": False, "sync_roles": False}), \
+             patch("security.security_manager.log_audit") as mock_audit:
+            with TestClient(app_server.app):
+                pass
+        messages = [c.args[0] for c in mock_audit.call_args_list]
+        self.assertFalse(any("non seguono piu'" in m for m in messages), messages)
 
 
 if __name__ == "__main__":

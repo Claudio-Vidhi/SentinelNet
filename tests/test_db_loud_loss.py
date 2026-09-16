@@ -110,6 +110,7 @@ _TMP_DATA_DIR = tempfile.mkdtemp(prefix="sentinelnet_test_loudloss_")
 os.environ["SENTINELNET_DATA_DIR"] = _TMP_DATA_DIR
 
 from fastapi.testclient import TestClient  # noqa: E402
+from unittest.mock import patch  # noqa: E402
 
 import app_server  # noqa: E402
 from security import user_manager  # noqa: E402
@@ -120,8 +121,12 @@ def admin_client():
     orig = user_manager.USERS_JSON
     user_manager.USERS_JSON = os.path.join(_TMP_DATA_DIR, "users.json")
     user_manager.create_user("healthadmin", "PasswordSicura1!", role="admin")
-    with TestClient(app_server.app) as client:
-        yield client
+    # The lifespan below runs the role migration; patch it out so it never
+    # touches the suite-wide users.json regardless of which store is bound
+    # at the time.
+    with patch.object(user_manager, "migrate_admins_to_super_admin", return_value=[]):
+        with TestClient(app_server.app) as client:
+            yield client
     user_manager.USERS_JSON = orig
     shutil.rmtree(_TMP_DATA_DIR, ignore_errors=True)
 

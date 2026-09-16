@@ -62,8 +62,17 @@ async def lifespan(app: "FastAPI"):
     # One-shot role ladder upgrade: pre-existing admins become super_admin.
     from security import user_manager
     from security.security_manager import log_audit
-    for promoted in user_manager.migrate_admins_to_super_admin():
+    promoted_users = user_manager.migrate_admins_to_super_admin()
+    for promoted in promoted_users:
         log_audit(f"Ruolo di '{promoted}' promosso a 'super_admin' dalla migrazione dei ruoli.")
+    if promoted_users:
+        from security import sso
+        sso_cfg = sso.get_config()
+        if sso_cfg["enabled"] and sso_cfg["sync_roles"]:
+            log_audit(
+                "Migrazione ruoli: SSO con sincronizzazione ruoli attiva. Gli account "
+                "promossi a 'super_admin' non seguono piu' i gruppi dell'IdP: riportare "
+                "ad 'admin' chi deve restare gestito dall'IdP.")
 
     from observability import listener_manager
     cfg = data_config.obs_config()
