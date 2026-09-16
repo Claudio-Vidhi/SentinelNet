@@ -19,7 +19,8 @@ from security.security_manager import (
     is_locked_out, record_failed_attempt, reset_failed_attempts,
     clear_account_lockouts, session_settings,
 )
-from routers.deps import SESSION_COOKIE, get_current_user, require_admin
+from routers.deps import (SESSION_COOKIE, assert_can_assign, assert_can_manage,
+                          get_current_user, require_admin)
 
 router = APIRouter(tags=["Auth"])
 
@@ -89,7 +90,7 @@ def setup_admin(payload: UserSchema):
         raise HTTPException(status_code=400, detail=pw_err)
     if not payload.username.strip():
         raise HTTPException(status_code=400, detail="Lo username è obbligatorio.")
-    success = user_manager.create_user(payload.username, payload.password, role="admin")
+    success = user_manager.create_user(payload.username, payload.password, role="super_admin")
     if success:
         log_audit(f"Nuovo utente amministratore '{payload.username}' registrato con successo via Setup Wizard.")
         return {"status": "success", "message": "Primo account amministratore creato correttamente."}
@@ -314,7 +315,7 @@ def whoami(current_user = Depends(get_current_user)):
     username = current_user.get("sub")
     role = current_user.get("role", "viewer")
     # Gli admin non sono mai ristretti: niente tab da nascondere lato frontend.
-    allowed_tabs = [] if role == "admin" else user_manager.get_allowed_tabs(username)
+    allowed_tabs = [] if user_manager.is_admin(role) else user_manager.get_allowed_tabs(username)
     return {"username": username, "role": role, "allowed_tabs": allowed_tabs}
 
 # --- GESTIONE UTENTI (solo amministratori) ---
@@ -327,6 +328,7 @@ def list_users_ep(current_user = Depends(require_admin)):
 def create_user_ep(payload: UserCreateSchema, current_user = Depends(require_admin)):
     if payload.role not in user_manager.VALID_ROLES:
         raise HTTPException(status_code=400, detail="Ruolo non valido.")
+    assert_can_assign(current_user, payload.role)
     from core.app_settings import BaseUrlError, resolve_base_url
     from services import mailer
 
@@ -405,13 +407,14 @@ def delete_user_ep(payload: UserDeleteSchema, current_user = Depends(get_current
     # cancellare un altro amministratore presuppone di esserlo a propria volta,
     # quindi ce ne sono sempre almeno due. È la cancellazione del proprio
     # account che può davvero togliere l'ultimo amministratore utilizzabile.
-    if payload.username != current_user.get("sub") and current_user.get("role") != "admin":
+    if payload.username != current_user.get("sub") and not user_manager.is_admin(current_user.get("role")):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient privileges for this operation."
         )
-    if user_manager.is_last_active_admin(payload.username):
-        raise HTTPException(status_code=400, detail="Deve restare almeno un amministratore attivo.")
+    assert_can_manage(current_user, payload.username, allow_self=True)
+    if user_manager.is_last_active_super_admin(payload.username):
+        raise HTTPException(status_code=400, detail="Deve restare almeno un super amministratore attivo.")
     if not user_manager.delete_user(payload.username):
         raise HTTPException(status_code=404, detail="Utente non trovato.")
     log_audit(f"Utente '{payload.username}' eliminato da '{current_user.get('sub')}'.")
@@ -421,8 +424,9 @@ def delete_user_ep(payload: UserDeleteSchema, current_user = Depends(get_current
 def set_user_role_ep(payload: UserRoleSchema, current_user = Depends(require_admin)):
     if payload.role not in user_manager.VALID_ROLES:
         raise HTTPException(status_code=400, detail="Ruolo non valido.")
-    if payload.role != "admin" and user_manager.is_last_active_admin(payload.username):
-        raise HTTPException(status_code=400, detail="Deve restare almeno un amministratore attivo.")
+    assert_can_manage(current_user, payload.username, new_role=payload.role)
+    if payload.role != "super_admin" and user_manager.is_last_active_super_admin(payload.username):
+        raise HTTPException(status_code=400, detail="Deve restare almeno un super amministratore attivo.")
     if not user_manager.set_role(payload.username, payload.role):
         raise HTTPException(status_code=404, detail="Utente non trovato.")
     log_audit(f"Ruolo di '{payload.username}' impostato a '{payload.role}' da '{current_user.get('sub')}'.")
@@ -433,8 +437,9 @@ def disable_user_ep(payload: UserDisableSchema, current_user = Depends(require_a
     """Abilita/disabilita un utente. Un utente disabilitato non può autenticarsi."""
     if payload.disabled and payload.username == current_user.get("sub"):
         raise HTTPException(status_code=400, detail="Non puoi disabilitare il tuo stesso account.")
-    if payload.disabled and user_manager.is_last_active_admin(payload.username):
-        raise HTTPException(status_code=400, detail="Deve restare almeno un amministratore attivo.")
+    assert_can_manage(current_user, payload.username)
+    if payload.disabled and user_manager.is_last_active_super_admin(payload.username):
+        raise HTTPException(status_code=400, detail="Deve restare almeno un super amministratore attivo.")
     if not user_manager.set_disabled(payload.username, payload.disabled):
         raise HTTPException(status_code=404, detail="Utente non trovato.")
     log_audit(
@@ -446,6 +451,7 @@ def disable_user_ep(payload: UserDisableSchema, current_user = Depends(require_a
 @router.post("/api/users/groups")
 def set_user_groups_ep(payload: UserGroupsSchema, current_user = Depends(require_admin)):
     """Assegna le sedi/gruppi visibili e gestibili da un utente (vuoto = tutte)."""
+    assert_can_manage(current_user, payload.username)
     valid_groups = set(inventory_manager.get_all_groups().keys())
     groups = [g for g in payload.groups if g in valid_groups]
     if not user_manager.set_groups(payload.username, groups):
@@ -461,6 +467,7 @@ def set_user_tabs_ep(payload: UserTabsSchema, current_user = Depends(require_adm
     """Assegna le tab della dashboard visibili a un utente (vuoto = tutte).
     # ponytail: enforcement solo lato frontend (nasconde i pulsanti tab). Le API
     # sensibili sono già protette da ruolo/gruppo indipendentemente da questo campo."""
+    assert_can_manage(current_user, payload.username)
     if not user_manager.set_allowed_tabs(payload.username, payload.allowed_tabs):
         raise HTTPException(status_code=404, detail="Utente non trovato.")
     log_audit(
@@ -569,6 +576,7 @@ def admin_send_reset(payload: UserNameSchema, current_user = Depends(require_adm
     """Mails a reset link to the user's registered address, so the administrator
     never has to know or hand over a password. Failures are reported: unlike the
     public endpoint, the caller is trusted and needs to know."""
+    assert_can_manage(current_user, payload.username)
     from core.app_settings import BaseUrlError, resolve_base_url
     from services import mailer
 
@@ -591,6 +599,7 @@ def admin_send_reset(payload: UserNameSchema, current_user = Depends(require_adm
 @router.post("/api/users/approve")
 def approve_user(payload: UserNameSchema, current_user = Depends(require_admin)):
     """Opens an account created from an invitation. Rejecting it is deleting it."""
+    assert_can_manage(current_user, payload.username)
     if not user_manager.approve(payload.username):
         raise HTTPException(status_code=404, detail="Utente non trovato.")
     log_audit(f"Account '{payload.username}' approvato da '{current_user.get('sub')}'.")
@@ -627,6 +636,7 @@ def reset_password(payload: ResetPasswordSchema):
 @router.post("/api/users/email")
 def set_user_email(payload: UserEmailSchema, current_user = Depends(require_admin)):
     """Imposta o rimuove ("" rimuove) l'indirizzo di recupero di un utente."""
+    assert_can_manage(current_user, payload.username, allow_self=True)
     email = payload.email.strip()
     if email and "@" not in email:
         raise HTTPException(status_code=400, detail="Indirizzo email non valido.")
@@ -664,6 +674,7 @@ def invite_user(payload: InviteUserSchema, current_user = Depends(require_admin)
         raise HTTPException(status_code=400, detail="Indirizzo email non valido.")
     if payload.role not in user_manager.VALID_ROLES:
         raise HTTPException(status_code=400, detail="Ruolo non valido.")
+    assert_can_assign(current_user, payload.role)
     # Lo username dell'account sarà l'indirizzo invitato: se esiste già, è
     # l'amministratore a doverlo sapere subito, non l'invitato al momento
     # dell'accettazione.

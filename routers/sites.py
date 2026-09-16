@@ -9,6 +9,7 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 
+from security import user_manager
 from security.security_manager import log_audit
 from routers.deps import require_admin, require_operator, user_group_scope
 from routers.commands import command_allowed, is_command_safe, _bypass_note
@@ -73,7 +74,7 @@ def list_sites_ep(current_user = Depends(require_operator)):
     # (Comment, not a docstring: a docstring here becomes the endpoint's
     # OpenAPI description and changes the contract snapshot.)
     sites = site_manager.list_sites()
-    if current_user.get("role") != "admin":
+    if not user_manager.is_admin(current_user.get("role")):
         sites = [{"id": s["id"], "name": s["name"], "mode": s["mode"]} for s in sites]
     return {"sites": sites}
 

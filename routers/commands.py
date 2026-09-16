@@ -89,7 +89,7 @@ def command_allowed(command: str, current_user) -> bool:
     """Applica la blacklist CLI in base al ruolo (audit M-1): gli admin la
     bypassano sempre; gli operatori vi sono soggetti solo se l'impostazione
     'cli_blacklist_operators' è attiva (default: attiva)."""
-    if current_user.get("role") == "admin":
+    if user_manager.is_admin(current_user.get("role")):
         return True
     if not get_app_settings().get("cli_blacklist_operators", True):
         return True
@@ -100,7 +100,7 @@ def is_bulk_command_allowed(command: str) -> bool:
 
 def _bypass_note(current_user) -> str:
     """Nota per l'audit log quando un comando in blacklist viene comunque consentito."""
-    return ("(blacklist bypassata: admin)" if current_user.get("role") == "admin"
+    return ("(blacklist bypassata: admin)" if user_manager.is_admin(current_user.get("role"))
             else "(blacklist disattivata per gli operatori)")
 
 def _run_bulk_job(job_id: str, req: BulkCommandRequest):
@@ -355,7 +355,7 @@ async def ws_terminal(websocket: WebSocket, ip: str):
         return
 
     # Scoping: l'utente del token OTP deve poter gestire la sede del dispositivo
-    if _role != "admin":
+    if not user_manager.is_admin(_role):
         _allowed = user_manager.get_user_groups(username_from_otp)
         if _allowed and device.get('Group', 'Generale') not in set(_allowed):
             await websocket.send_text("[Accesso Negato] Sede non consentita per il tuo profilo.\r\n")
