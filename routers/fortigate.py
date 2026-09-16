@@ -12,10 +12,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from routers.deps import require_tab
 from pydantic import BaseModel
 
-from services import fortigate_service
+from services import fortigate_service, inventory_manager
 from security.security_manager import log_audit
 from routers.deps import (
-    get_current_user, require_admin, require_operator, assert_device_allowed,
+    get_current_user, require_admin, require_unscoped_admin, require_operator, assert_device_allowed,
     devices_in_scope, user_group_scope,
 )
 
@@ -97,6 +97,22 @@ def _fgt_device(ip: str, current_user) -> dict:
     return device
 
 
+def _shared_with_other_tenant(ip: str, current_user) -> bool:
+    """Tokens are keyed by IP alone: for a scoped caller, an IP that also
+    belongs to a device outside its scope is another tenant's token too."""
+    scope = user_group_scope(current_user)
+    return scope is not None and any(
+        d.get("IP") == ip and (d.get("Group") or "Generale") not in scope
+        for d in inventory_manager.get_all_devices())
+
+
+def _assert_not_shared(ip: str, current_user) -> None:
+    if _shared_with_other_tenant(ip, current_user):
+        raise HTTPException(status_code=403,
+                            detail="Indirizzo condiviso con un altro tenant: operazione "
+                                   "riservata ad amministratori senza limiti di tenant.")
+
+
 def _fgt_call(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
@@ -111,12 +127,14 @@ def fgt_token_status(current_user = Depends(require_admin)):
     if user_group_scope(current_user) is None:
         return tokens
     ips = {d.get("IP") for d in devices_in_scope(current_user)}
-    return {ip: v for ip, v in tokens.items() if ip in ips}
+    return {ip: v for ip, v in tokens.items()
+            if ip in ips and not _shared_with_other_tenant(ip, current_user)}
 
 @router.post("/api/fortigate/token")
 def fgt_set_token(payload: FgtTokenSchema, current_user = Depends(require_admin)):
     """Salva (cifrato) il token REST API di un FortiGate; token vuoto lo rimuove."""
     _fgt_device(payload.ip, current_user)
+    _assert_not_shared(payload.ip, current_user)
     fortigate_service.set_api_token(payload.ip, payload.token,
                                     port=payload.port, verify_tls=payload.verify_tls,
                                     name=payload.name)
@@ -143,7 +161,7 @@ def fgt_list_targets(current_user = Depends(require_admin)):
     for t in fortigate_service.list_targets():
         dev = by_ip.get(t["ip"])
         # A tenant-scoped caller sees only targets of its own tenants.
-        if dev is None and scoped:
+        if scoped and (dev is None or _shared_with_other_tenant(t["ip"], current_user)):
             continue
         # Un target senza corrispondenza in inventario resta visibile: e'
         # configurato, e nasconderlo lo renderebbe solo irraggiungibile.
@@ -152,7 +170,7 @@ def fgt_list_targets(current_user = Depends(require_admin)):
     return targets
 
 @router.post("/api/fortigate/targets/active")
-def fgt_set_active_target(payload: FgtActiveTargetSchema, current_user = Depends(require_admin)):
+def fgt_set_active_target(payload: FgtActiveTargetSchema, current_user = Depends(require_unscoped_admin)):
     """Imposta il target FortiGate attivo per la tab LIVE."""
     _fgt_device(payload.ip, current_user)
     fortigate_service.set_active_target(payload.ip)
@@ -163,6 +181,7 @@ def fgt_set_active_target(payload: FgtActiveTargetSchema, current_user = Depends
 def fgt_test_target(ip: str, current_user = Depends(require_admin)):
     """Testa la connessione REST API verso un target FortiGate (timeout breve)."""
     _fgt_device(ip, current_user)
+    _assert_not_shared(ip, current_user)
     return fortigate_service.test_connection(ip)
 
 @router.put("/api/fortigate/targets/{ip}")
@@ -171,6 +190,7 @@ def fgt_update_target(ip: str, payload: FgtTargetUpdateSchema,
     """Aggiornamento parziale di un target FortiGate esistente (nome, porta,
     verifica TLS, token). Token omesso/vuoto = resta quello già salvato."""
     _fgt_device(ip, current_user)
+    _assert_not_shared(ip, current_user)
     try:
         fortigate_service.update_target(ip, name=payload.name, port=payload.port,
                                         verify_tls=payload.verify_tls,

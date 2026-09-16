@@ -14,7 +14,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field, model_validator
 
 from security.security_manager import log_audit
-from routers.deps import require_operator, require_admin
+from routers.deps import require_operator, require_unscoped_admin
 from services import switch_provisioner
 from services import fortigate_provisioner
 from security import provisioning_secrets
@@ -222,7 +222,7 @@ def provisioner_generate(payload: SwitchProvisionSchema, materialized: bool = Fa
     return {"status": "success", "config": config_text, "materialized": materialized}
 
 @router.post("/api/provisioner/push-ssh", dependencies=[Depends(require_tab("tab-provisioning", "tab-provisioner"))])
-def provisioner_push_ssh(payload: SwitchProvisionSSHSchema, current_user = Depends(require_admin)):
+def provisioner_push_ssh(payload: SwitchProvisionSSHSchema, current_user = Depends(require_unscoped_admin)):
     """Genera la config e la applica via SSH (Netmiko) su un apparato raggiungibile."""
     _assert_day_zero(payload.ssh_host)
     config_text = switch_provisioner.build_config(payload.dict())
@@ -246,7 +246,7 @@ def provisioner_push_ssh(payload: SwitchProvisionSSHSchema, current_user = Depen
     return result
 
 @router.post("/api/provisioner/push-serial", dependencies=[Depends(require_tab("tab-provisioning", "tab-provisioner"))])
-def provisioner_push_serial(payload: SwitchProvisionSerialSchema, current_user = Depends(require_admin)):
+def provisioner_push_serial(payload: SwitchProvisionSerialSchema, current_user = Depends(require_unscoped_admin)):
     """Genera la config e la applica via console/seriale (pyserial) per il
     provisioning day-0 senza connettivita' di rete."""
     config_text = switch_provisioner.build_config(payload.dict())

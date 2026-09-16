@@ -125,7 +125,12 @@ class TestProvisionerPushIsAdminOnly(unittest.TestCase):
             route = next((r for r in iter_routes(app_server.app)
                           if getattr(r, "path", None) == path), None)
             self.assertIsNotNone(route, f"rotta {path} non trovata")
-            calls = {d.call for d in route.dependant.dependencies}
+            # Walk nested dependencies: require_unscoped_admin (stricter) builds on require_admin.
+            calls, stack = set(), list(route.dependant.dependencies)
+            while stack:
+                d = stack.pop()
+                calls.add(d.call)
+                stack.extend(d.dependencies)
             self.assertIn(require_admin, calls,
                           f"{path} deve dipendere da require_admin")
 

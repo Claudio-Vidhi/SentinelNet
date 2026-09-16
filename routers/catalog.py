@@ -72,6 +72,7 @@ def list_groups(current_user = Depends(get_current_user)):
         groups = {g: v for g, v in groups.items() if g in scope}
     return groups
 
+# Open to scoped users on purpose: creating a tenant touches no other tenant's data (rename/delete are guarded).
 @router.post("/api/groups", dependencies=[Depends(require_tab("tab-groups", "tab-provisioning"))])
 def create_group(group: GroupSchema, current_user = Depends(require_operator)):
     name = group.name
