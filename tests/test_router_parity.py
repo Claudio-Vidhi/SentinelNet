@@ -395,6 +395,18 @@ class TestFullParity(unittest.TestCase):
         # additiva — il default e' 'it', quindi omettendolo la risposta e'
         # quella storica — ma i parametri dell'operazione cambiano.
         ("get", "/api/incidents/rules"),
+        # Audit checklist: 9 rotte erano raggiungibili senza autenticazione.
+        # Cambia SOLO il requisito di sicurezza (Depends get_current_user /
+        # require_operator), parametri e risposta invariati.
+        ("get", "/api/audit-checklist/templates"),
+        ("get", "/api/audit-checklist/templates/{template_id}"),
+        ("get", "/api/audit-checklist/engagements"),
+        ("post", "/api/audit-checklist/engagements"),
+        ("get", "/api/audit-checklist/engagements/{engagement_id}"),
+        ("patch", "/api/audit-checklist/engagements/{engagement_id}"),
+        ("put", "/api/audit-checklist/engagements/{engagement_id}/items/{item_ref}"),
+        ("post", "/api/audit-checklist/engagements/{engagement_id}/evidence"),
+        ("get", "/api/audit-checklist/engagements/{engagement_id}/report"),
     )
 
     ALLOWED_ADDED_OPERATIONS = (

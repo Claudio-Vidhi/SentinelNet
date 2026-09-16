@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
 
-from routers.deps import require_admin
+from routers.deps import get_current_user, require_admin, require_operator
 from services import audit_checklist
 
 router = APIRouter(prefix="/api/audit-checklist", tags=["Audit Checklist"])
@@ -50,13 +50,13 @@ class AddEvidenceRequest(BaseModel):
 
 
 @router.get("/templates")
-def list_templates() -> List[Dict[str, Any]]:
+def list_templates(current_user=Depends(get_current_user)) -> List[Dict[str, Any]]:
     """Elenca tutti i template di audit disponibili."""
     return audit_checklist.list_templates()
 
 
 @router.get("/templates/{template_id}")
-def get_template(template_id: int) -> Dict[str, Any]:
+def get_template(template_id: int, current_user=Depends(get_current_user)) -> Dict[str, Any]:
     """Ritorna un template di audit con i relativi item."""
     tpl = audit_checklist.get_template(template_id)
     if not tpl:
@@ -120,14 +120,15 @@ def delete_template_item(
 
 @router.get("/engagements")
 def list_engagements(
-    status: Optional[str] = Query(None), tenant: Optional[str] = Query(None)
+    status: Optional[str] = Query(None), tenant: Optional[str] = Query(None),
+    current_user=Depends(get_current_user)
 ) -> List[Dict[str, Any]]:
     """Elenca gli engagement di audit registrati."""
     return audit_checklist.list_engagements(status=status, tenant=tenant)
 
 
 @router.post("/engagements", status_code=201)
-def create_engagement(req: CreateEngagementRequest) -> Dict[str, Any]:
+def create_engagement(req: CreateEngagementRequest, current_user=Depends(require_operator)) -> Dict[str, Any]:
     """Crea un nuovo audit engagement."""
     try:
         return audit_checklist.create_engagement(
@@ -145,7 +146,7 @@ def create_engagement(req: CreateEngagementRequest) -> Dict[str, Any]:
 
 
 @router.get("/engagements/{engagement_id}")
-def get_engagement(engagement_id: int) -> Dict[str, Any]:
+def get_engagement(engagement_id: int, current_user=Depends(get_current_user)) -> Dict[str, Any]:
     """Ottiene l'engagement completo con tutti gli item e lo stato avanzamento."""
     eng = audit_checklist.get_engagement(engagement_id)
     if not eng:
@@ -155,7 +156,8 @@ def get_engagement(engagement_id: int) -> Dict[str, Any]:
 
 @router.patch("/engagements/{engagement_id}")
 def update_engagement_metadata(
-    engagement_id: int, req: UpdateEngagementMetadataRequest
+    engagement_id: int, req: UpdateEngagementMetadataRequest,
+    current_user=Depends(require_operator)
 ) -> Dict[str, Any]:
     """Aggiorna le informazioni generali o lo stato dell'engagement."""
     try:
@@ -173,7 +175,8 @@ def update_engagement_metadata(
 
 @router.put("/engagements/{engagement_id}/items/{item_ref}")
 def update_item_assessment(
-    engagement_id: int, item_ref: str, req: UpdateItemAssessmentRequest
+    engagement_id: int, item_ref: str, req: UpdateItemAssessmentRequest,
+    current_user=Depends(require_operator)
 ) -> Dict[str, Any]:
     """Salva la valutazione di un singolo item di audit."""
     try:
@@ -191,7 +194,7 @@ def update_item_assessment(
 
 
 @router.post("/engagements/{engagement_id}/evidence", status_code=201)
-def add_evidence(engagement_id: int, req: AddEvidenceRequest) -> Dict[str, Any]:
+def add_evidence(engagement_id: int, req: AddEvidenceRequest, current_user=Depends(require_operator)) -> Dict[str, Any]:
     """Allega un'evidenza o un riferimento ad un item di audit."""
     try:
         return audit_checklist.add_evidence(
@@ -208,7 +211,7 @@ def add_evidence(engagement_id: int, req: AddEvidenceRequest) -> Dict[str, Any]:
 
 
 @router.get("/engagements/{engagement_id}/report")
-def get_audit_report(engagement_id: int) -> Response:
+def get_audit_report(engagement_id: int, current_user=Depends(get_current_user)) -> Response:
     """Genera e restituisce la relazione di audit in formato HTML."""
     try:
         html_content = audit_checklist.generate_audit_relazione(engagement_id)
