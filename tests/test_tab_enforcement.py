@@ -32,7 +32,7 @@ def test_effective_tabs(um):
     assert um.effective_tabs("root") is None
     assert um.effective_tabs("free") is None
     assert um.effective_tabs("lim") == {
-        "tab-endpoint", "tab-map", "tab-map-interactive",
+        "tab-home", "tab-endpoint", "tab-map", "tab-map-interactive",
         "tab-provisioning", "tab-provisioner"}
 
 
@@ -152,15 +152,39 @@ class TestTabGateOnRoutes(unittest.TestCase):
 
     def test_routes_gated_by_their_tab(self):
         from security import user_manager
-        lim, free, root = self._as("lim"), self._as("free"), self._as("root")
+        lim, root = self._as("lim"), self._as("root")
         for path, tab in TAB_GET_ROUTES:
             with self.subTest(path=path, tab=tab):
                 user_manager.set_allowed_tabs("lim", ["tab-home"])
                 self.assertTrue(self._tab_denied(lim.get(path)), path)
                 user_manager.set_allowed_tabs("lim", [tab])
                 self.assertFalse(self._tab_denied(lim.get(path)), path)
-                self.assertFalse(self._tab_denied(free.get(path)), path)
+                user_manager.set_allowed_tabs("lim", [])
+                self.assertFalse(self._tab_denied(lim.get(path)), path)
                 self.assertFalse(self._tab_denied(root.get(path)), path)
+
+    def test_home_tab_always_granted(self):
+        # The frontend never offers tab-home as a grant, yet home loads for
+        # everyone: a restricted list must not 403 its boot calls.
+        from security import user_manager
+        lim = self._as("lim")
+        user_manager.set_allowed_tabs("lim", ["tab-devices"])
+        self.assertFalse(self._tab_denied(lim.get("/api/drift/summary")))
+
+    def test_alias_and_subtab_grants_through_routes(self):
+        from security import user_manager
+        lim = self._as("lim")
+        with self.subTest("legacy alias tab-mac -> tab-endpoint"):
+            user_manager.set_allowed_tabs("lim", ["tab-mac"])
+            self.assertFalse(self._tab_denied(lim.get("/api/mac/stats")))
+        # No route is gated by tab-map-interactive without tab-map (the map
+        # routes carry both), so the tab-map sub-grant cannot be observed
+        # through a route; tab-provisioning -> tab-provisioner can.
+        with self.subTest("sub-tab tab-provisioning -> tab-provisioner"):
+            user_manager.set_allowed_tabs("lim", ["tab-home"])
+            self.assertTrue(self._tab_denied(lim.get("/api/ai/profiles")))
+            user_manager.set_allowed_tabs("lim", ["tab-provisioning"])
+            self.assertFalse(self._tab_denied(lim.get("/api/ai/profiles")))
 
     def test_ws_terminal_still_authenticates_by_otp(self):
         from fastapi.testclient import TestClient

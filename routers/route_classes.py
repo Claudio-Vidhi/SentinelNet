@@ -19,6 +19,7 @@ no explicit list here, they are discovered via route_tabs().
 # BASE: session/self routes, data the dashboard loads at boot for every tab
 # (appInit, core.js), the terminal (governed by role, opened from device rows
 # in many tabs) and the MCP server's own configuration read.
+# GET /api/groups is TAB (provisioning/groups), not BASE: every other tab gets groups via BASE /api/local-devices.
 BASE_ROUTES: frozenset[tuple[str, str]] = frozenset({
     ("GET", "/api/auth/me"),
     ("POST", "/api/auth/change-password"),
