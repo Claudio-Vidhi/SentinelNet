@@ -4679,10 +4679,11 @@
         <label for="newUserPass" data-i18n="lblNewUserPass">Password (vuota = link via email)</label><input id="newUserPass" type="password" placeholder="••••••••" style="padding-left:12px;">
       </div>
       <div class="form-group">
-        <label for="newUserRole" data-i18n="lblNewUserRole">Ruolo</label><select id="newUserRole" style="padding-left:12px;">
+        <label for="newUserRole" data-i18n="lblNewUserRole">Ruolo</label><select id="newUserRole" data-role-select style="padding-left:12px;">
           <option value="viewer" data-i18n="roleViewer">Viewer (sola lettura)</option>
           <option value="operator" data-i18n="roleOperator">Operator (operazioni)</option>
           <option value="admin" data-i18n="roleAdmin">Admin (totale)</option>
+          <option value="super_admin" data-i18n="roleSuperAdmin">Super admin (gestisce gli admin)</option>
         </select>
       </div>
       <div class="modal-actions">
@@ -4705,10 +4706,11 @@
         <label for="inviteEmail" data-i18n="lblInviteEmail">Email</label><input id="inviteEmail" type="text" placeholder="mario.rossi@example.com" style="padding-left:12px;">
       </div>
       <div class="form-group">
-        <label for="inviteRole" data-i18n="lblNewUserRole">Ruolo</label><select id="inviteRole" style="padding-left:12px;">
+        <label for="inviteRole" data-i18n="lblNewUserRole">Ruolo</label><select id="inviteRole" data-role-select style="padding-left:12px;">
           <option value="viewer" data-i18n="roleViewer">Viewer (sola lettura)</option>
           <option value="operator" data-i18n="roleOperator">Operator (operazioni)</option>
           <option value="admin" data-i18n="roleAdmin">Admin (totale)</option>
+          <option value="super_admin" data-i18n="roleSuperAdmin">Super admin (gestisce gli admin)</option>
         </select>
       </div>
       <div class="modal-actions">

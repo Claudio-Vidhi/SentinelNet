@@ -1530,6 +1530,7 @@ const i18n = {
         roleViewer: "Viewer (sola lettura)",
         roleOperator: "Operator (operazioni)",
         roleAdmin: "Admin (totale)",
+        roleSuperAdmin: "Super admin (gestisce gli admin)",
         btnAddUser: '<i class="fa-solid fa-plus"></i> Crea Utente',
 
         // JS Alerts / Confirm Dialogs / Additional Strings
@@ -2275,6 +2276,7 @@ const i18n = {
         cmapSelected: "selezionati",
         cmapTransit: "transito",
         coreAdministrator: "Amministratore",
+        coreSuperAdministrator: "Super amministratore",
         coreClose: "Chiudi",
         coreNoMatchingCommandsOr: "Nessun comando o apparato trovato.",
         coreOperator: "Operatore",
@@ -4581,6 +4583,7 @@ const i18n = {
         roleViewer: "Viewer (read-only)",
         roleOperator: "Operator (operations)",
         roleAdmin: "Admin (full)",
+        roleSuperAdmin: "Super admin (manages admins)",
         btnAddUser: '<i class="fa-solid fa-plus"></i> Create User',
 
         // JS Alerts / Confirm Dialogs / Additional Strings
@@ -5324,6 +5327,7 @@ const i18n = {
         cmapSelected: "selected",
         cmapTransit: "transit",
         coreAdministrator: "Administrator",
+        coreSuperAdministrator: "Super administrator",
         coreClose: "Close",
         coreNoMatchingCommandsOr: "No matching commands or devices found.",
         coreOperator: "Operator",

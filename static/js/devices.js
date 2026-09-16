@@ -65,7 +65,7 @@
                 <span style="font-size:11px; color:${hasSnmp ? 'var(--success)' : 'var(--text-muted)'}; border:1px solid ${hasSnmp ? 'var(--success)' : 'var(--border)'}; border-radius:0; padding:1px 6px;">
                     ${hasSnmp ? (tr('devConfigured'))
                               : (tr('devNotSet'))}</span>
-                ${currentRole === 'admin'
+                ${isAdminRole(currentRole)
                     ? `<button data-action="set-tenant-snmp" data-g="${escapeHtml(g)}" style="margin-left:8px; color:var(--primary); background:none; border:none; cursor:pointer;">${i18n[currentLang].btnSetTenantSnmp}</button>`
                     : ''}</td>`;
 

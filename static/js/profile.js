@@ -37,7 +37,7 @@ async function openProfile() {
     const p = await res.json();
     const all = tr('profAll');
     const tabs = normalizeAllowedTabs(p.allowed_tabs);
-    const unrestricted = p.role === 'admin';
+    const unrestricted = isAdminRole(p.role);
     const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
     set('profUsername', p.username);
     set('profRole', roleLabel(p.role));

@@ -98,7 +98,7 @@
                     <p style="color:var(--text-muted); font-size:13px; max-width:500px; margin:0 auto 16px;">
                         ${escapeHtml(tr('haEmptyHint'))}
                     </p>
-                    ${typeof currentRole !== 'undefined' && currentRole === 'admin' ? `
+                    ${typeof currentRole !== 'undefined' && isAdminRole(currentRole) ? `
                     <button class="btn btn-primary" data-action="open-create-redundancy" style="width:auto; margin:0 auto;">
                         <i class="fa-solid fa-plus"></i> ${escapeHtml(tr('haBtnCreate'))}
                     </button>` : ''}
@@ -230,7 +230,7 @@
 
                 <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--border); padding-top:10px; margin-top:8px;">
                     <span style="font-size:10px; color:var(--text-muted);">${g.detection_source ? escapeHtml(tr('haSource', {src: g.detection_source})) : ''}</span>
-                    ${typeof currentRole !== 'undefined' && currentRole === 'admin' ? `
+                    ${typeof currentRole !== 'undefined' && isAdminRole(currentRole) ? `
                     <button class="btn btn-secondary btn-small" data-action="delete-redundancy" data-group-id="${g.id}" style="color:var(--danger); width:auto;" title="${escapeHtml(tr('haDeleteGroup'))}" aria-label="${escapeHtml(tr('haDeleteGroup'))}">
                         <i class="fa-solid fa-trash"></i>
                     </button>` : ''}

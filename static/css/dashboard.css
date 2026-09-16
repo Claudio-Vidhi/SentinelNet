@@ -1226,7 +1226,9 @@ tr.row-dirty td:first-child { border-left: 2px solid var(--lamp-warn); }
 }
 
 .role-pill { font-size: 9px; padding: 1px 6px; border: var(--seam) solid; }
-.role-pill-admin    { background: var(--lamp-fault-wash); color: var(--lamp-fault-ink); border-color: var(--lamp-fault); }
+.role-pill-admin,
+.role-pill-super_admin { background: var(--lamp-fault-wash); color: var(--lamp-fault-ink); border-color: var(--lamp-fault); }
+.role-pill-super_admin { font-weight: 700; }
 .role-pill-operator { background: var(--surface-3);       color: var(--text-muted);     border-color: var(--border-strong); }
 .role-pill-viewer   { background: transparent;            color: var(--text-soft);      border-color: var(--border); }
 

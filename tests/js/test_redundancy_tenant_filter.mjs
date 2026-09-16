@@ -50,9 +50,11 @@ const Option = function (label, value) { this.text = label; this.value = value; 
 // Se qualcuno rimette una select locale, questa esplode invece di passare.
 const tenantSelectSeed = () => { throw new Error('questa scheda non ha una select da seminare'); };
 
-(0, eval)(`(function (document, apiFetch, escapeHtml, tr, currentRole, window, Option, tenantSelectSeed) {
+const isAdminRole = (role) => role === 'super_admin' || role === 'admin';
+
+(0, eval)(`(function (document, apiFetch, escapeHtml, tr, currentRole, window, Option, tenantSelectSeed, isAdminRole) {
     ${src}
-})`)(documentStub, apiFetch, escapeHtml, tr, 'admin', windowStub, Option, tenantSelectSeed);
+})`)(documentStub, apiFetch, escapeHtml, tr, 'admin', windowStub, Option, tenantSelectSeed, isAdminRole);
 
 const load = windowStub.loadRedundancyTab;
 const tenantChanged = windowStub.redundancyTenantChanged;

@@ -6,7 +6,7 @@
     const OBS_DEFAULT_PORTS = { ipfix: 4739, sflow: 6343, syslog: 5514, netflow: 2055 };
 
     async function loadObsSettings() {
-        if (currentRole !== 'admin') return;
+        if (!isAdminRole(currentRole)) return;
         const box = document.getElementById('obsSettingsBody');
         if (!box) return;
         const res = await apiFetch('/api/observability/config');

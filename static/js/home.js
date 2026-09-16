@@ -173,7 +173,7 @@ async function loadHome() {
 
     renderBastionPanel(viaBastion);
 
-    if (currentRole === 'admin') loadHomeAnomalies();
+    if (isAdminRole(currentRole)) loadHomeAnomalies();
     else renderEventStripDenied();
 }
 

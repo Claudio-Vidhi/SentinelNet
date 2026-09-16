@@ -787,7 +787,26 @@ function backupAgeLabel(ts) {
 
 // --- RUOLI / PRIVILEGI ---
 
+// Mirrors security/user_manager.py ROLE_RANK. Hiding a control is a
+// convenience only: the API enforces the same ladder.
+const ROLE_RANK = { viewer: 0, operator: 1, admin: 2, super_admin: 3 };
+
+function isAdminRole(role) {
+    return role === 'super_admin' || role === 'admin';
+}
+
+function canManageRole(actorRole, targetRole) {
+    if (actorRole === 'super_admin') return true;
+    return (ROLE_RANK[targetRole] ?? 0) < (ROLE_RANK[actorRole] ?? 0);
+}
+
+function canAssignRole(actorRole, newRole) {
+    if (!(newRole in ROLE_RANK)) return false;
+    return actorRole === 'super_admin' || ROLE_RANK[newRole] < (ROLE_RANK[actorRole] ?? 0);
+}
+
 function roleLabel(role) {
+    if (role === 'super_admin') return tr('coreSuperAdministrator');
     if (role === 'admin') return tr('coreAdministrator');
     if (role === 'operator') return tr('coreOperator');
     return tr('coreViewer');
@@ -808,11 +827,22 @@ function applyRoleUI(username, role, allowedTabs) {
     if (username !== undefined && username !== null) currentUsername = username;
     if (role !== undefined && role !== null) currentRole = role;
     if (!currentRole) currentRole = 'viewer';
-    document.body.classList.remove('role-admin', 'role-operator', 'role-viewer');
+    document.body.classList.remove('role-super_admin', 'role-admin', 'role-operator', 'role-viewer');
     document.body.classList.add('role-' + currentRole);
+    // requires-admin controls (dashboard.css) stay visible to a super_admin.
+    if (currentRole === 'super_admin') document.body.classList.add('role-admin');
+    // Role selects offer only what this account may assign.
+    document.querySelectorAll('select[data-role-select]').forEach(sel => {
+        sel.querySelectorAll('option').forEach(opt => {
+            const ok = canAssignRole(currentRole, opt.value);
+            opt.hidden = !ok;
+            opt.disabled = !ok;
+        });
+        if (sel.selectedOptions[0]?.disabled) sel.value = 'viewer';
+    });
     const badge = document.getElementById('userBadgeLabel');
     if (badge) {
-        const icon = currentRole === 'admin' ? 'fa-user-shield'
+        const icon = isAdminRole(currentRole) ? 'fa-user-shield'
             : currentRole === 'operator' ? 'fa-user-gear' : 'fa-user';
         const initials = String(currentUsername || '?').slice(0, 2).toUpperCase();
         badge.innerHTML = `<span class="user-avatar" aria-hidden="true">${escapeHtml(initials)}</span>` +
