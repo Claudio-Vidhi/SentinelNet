@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test del parser e delle regole Cisco IOS XE del motore di audit.
 
 Il parser IOS ha due comportamenti che nessuna regola puo' compensare se

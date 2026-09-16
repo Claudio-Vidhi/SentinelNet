@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test per config_analyzer.convert_config (Config Converter deterministico,
 solo vendor firewall: FortiOS <-> PAN-OS). Esecuzione: python test_convert_config.py"""
 

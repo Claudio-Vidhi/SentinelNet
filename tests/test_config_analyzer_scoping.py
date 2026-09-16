@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Scoping of GET /api/config-analyzer/{ip}.
 
 Three routes serve the SAME artifact — the stored backup, addressed by IP — and

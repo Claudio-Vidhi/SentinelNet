@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Cisco IOS / IOS-XE ACE parser, route table builder and policy environment.
 
 Parses ACLs, object-groups, interface bindings, connected and static routes,

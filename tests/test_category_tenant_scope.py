@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Le assegnazioni manuali di categoria sono per (sede, nodo), non per nodo.
 
 Indicizzate per solo indirizzo, due clienti sullo stesso indirizzo privato si

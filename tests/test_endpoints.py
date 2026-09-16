@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test dell'Endpoint Knowledge Base.
 
 Arricchimento puramente descrittivo: dice cosa È un indirizzo, mai cosa

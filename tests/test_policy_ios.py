@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Unit tests for services.policy_test.ios (Cisco IOS parser and environment)."""
 
 import unittest

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Config Analyzer su un host Linux.
 
 Il test che conta più di tutti è il primo: prima di questa piattaforma

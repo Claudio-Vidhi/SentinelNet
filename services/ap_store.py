@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Last-known AP inventory, written by the WLC tab and read by the export.
 
 CDP/LLDP makes an access point visible but advertises no serial number; only

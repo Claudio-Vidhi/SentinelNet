@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Decoder sFlow v5 → record di flusso normalizzati (fase 3.4).
 
 SEMANTICA DI STIMA (vincolante): sFlow campiona 1 pacchetto ogni

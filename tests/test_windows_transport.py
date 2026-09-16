@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Windows SSH transport: netmiko 'generic' against cmd.exe behind ConPTY.
 
 The fake shell below replays what a real Windows 11 OpenSSH session sent

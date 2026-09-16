@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Un'azione sui dispositivi ricarica l'inventario, non l'applicazione.
 
 Dieci azioni della scheda Dispositivi (salva, elimina, rinomina, cambio sede,

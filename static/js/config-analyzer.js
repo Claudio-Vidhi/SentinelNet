@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
     // ===== Config Analyzer =====
     // Dati cache lato client: un solo fetch per tenant selezionato, i pill di
     // vista ri-renderizzano senza richiamare l'API (come richiesto).

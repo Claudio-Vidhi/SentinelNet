@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Persistence for saved NetSec Audit runs.
 
 Only the scan route writes here, and only with the result it just computed:

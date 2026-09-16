@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 import os, re, tempfile
 _TMP = tempfile.mkdtemp(prefix="sentinelnet_uirevamp_")
 os.environ["SENTINELNET_DATA_DIR"] = _TMP

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test del router Flow SIEM.
 
 Copre i difetti della versione precedente, che costruiva gli eventi da

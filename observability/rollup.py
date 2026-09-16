@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Job periodico di retention/pruning (fase 3.7) — misura tecnica GDPR
 (piano §6.7): elimina le righe STRETTAMENTE più vecchie della finestra
 configurata, per tabella. Gli eventi correlati non risolti (status new/ack)

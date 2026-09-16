@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Endpoint Knowledge Base: cosa È un indirizzo (IP o MAC), non cosa significa.
 
 Arricchimento puramente descrittivo. Non cambia la semantica di nessun evento e

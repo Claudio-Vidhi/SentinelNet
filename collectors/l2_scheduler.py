@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """L2 discovery scheduler (WP9, docs/app-review-fix-plan.md).
 
 ARP/MAC collection was on-demand only: the endpoint knowledge base aged

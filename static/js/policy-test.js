@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // -*- coding: utf-8 -*-
 // ===== Policy & Route Validation =====
 // Pure evaluation and offline reachability tracing against device backups.

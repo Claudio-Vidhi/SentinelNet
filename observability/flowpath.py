@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Flow Path: per dove passa il traffico di un incidente.
 
 Il documento elenca il percorso fra le evidenze che un incidente deve mostrare.

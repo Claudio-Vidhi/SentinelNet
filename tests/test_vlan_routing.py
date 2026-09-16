@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Chi instrada questa VLAN: la risposta si deduce dai backup, e quando non si
 puo' dedurre lo si dice invece di indovinare.
 

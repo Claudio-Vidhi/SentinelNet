@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Harness RBAC multi-gruppo (fase 2.5), riusabile per ogni router estratto:
 - utente multi-gruppo: accede ai device di TUTTI i suoi gruppi, negato altrove;
 - utente singolo gruppo: accede solo al suo;

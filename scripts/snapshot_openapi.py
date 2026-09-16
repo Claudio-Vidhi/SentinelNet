@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Cattura lo schema OpenAPI corrente in tests_data/openapi_pre_destructure.json.
 
 Snapshot di riferimento per il destructuring di app_server.py (fase 6.6):

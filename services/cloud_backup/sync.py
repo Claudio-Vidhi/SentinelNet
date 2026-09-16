@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Walk backup-config/, send what changed, prove it arrived.
 
 The mirror is write-only: nothing here ever reads the remote as a source of

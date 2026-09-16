@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Per-device config history, stored beside the current backup.
 
 The current backup file keeps its exact path and name: the policy test loader,

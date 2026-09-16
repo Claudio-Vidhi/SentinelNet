@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """AP serials live in a small store, not in an SSH call during an export.
 
 CDP announces an access point but carries no serial. The controller has it,

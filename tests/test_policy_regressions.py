@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Regression tests for the Policy & Route Validation defects found in review.
 
 Every test here failed before its fix and none was caught by the original

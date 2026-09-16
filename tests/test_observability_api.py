@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test fase 4: endpoint /top e /anomalies (scope multi-tenant, parametri
 ostili, performance su dataset seedato), motore di correlazione (precisione,
 dedup, cross-tenant, arricchimento switch/porta) e default-off dei tool MCP

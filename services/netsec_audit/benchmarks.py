@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Definizioni dei benchmark: metadati che legano una citazione a una regola.
 
 Regole condivise fra benchmark (es. la versione TLS vale sia per CIS sia per

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test §9.1 (porta SSH per-device) e §9.4 (toggle redazione per LLM locali)."""
 
 import os

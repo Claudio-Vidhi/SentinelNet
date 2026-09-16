@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Vendor registry no longer carries the obsolete euvd_term field.
 
 The vulnerability scanner uses NVD NIST directly and resolves vendor search

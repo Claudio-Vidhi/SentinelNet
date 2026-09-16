@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Riavvio dell'applicazione e generazione del certificato self-signed dalla GUI.
 
 Isola SENTINELNET_DATA_DIR in una dir temporanea PRIMA degli import, come

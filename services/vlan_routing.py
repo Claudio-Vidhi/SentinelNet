@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Chi instrada una VLAN, dedotto dai backup di configurazione.
 
 La catena dei trunk della diagnosi si percorre solo se si sa dove finisce, e il

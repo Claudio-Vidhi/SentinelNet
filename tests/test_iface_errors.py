@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """IFACE_ERRORS_001: errori in crescita su una porta.
 
 ``in_errors``/``out_errors`` erano raccolti dal poller SNMP e li leggeva solo

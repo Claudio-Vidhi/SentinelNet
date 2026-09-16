@@ -15,7 +15,11 @@ a = Analysis(
     # importlib), li importa staticamente drivers/registry.py via
     # core_engine, quindi PyInstaller li include gia' compilati.
     datas=[('templates', 'templates'), ('static', 'static'),
-           ('observability/storage/schema.sql', 'observability/storage')],
+           ('observability/storage/schema.sql', 'observability/storage'),
+           # Apache 2.0 4(a)/4(d): l'exe e' una redistribuzione, licenza e
+           # NOTICE devono viaggiare con lui.
+           ('LICENSE', '.'), ('NOTICE', '.'),
+           ('THIRD_PARTY_LICENSES.md', '.'), ('LICENSES', 'LICENSES')],
     # pysnmp risolve i moduli di protocollo per nome a runtime: senza questi
     # l'exe importa la libreria ma fallisce al primo GET.
     hiddenimports=[

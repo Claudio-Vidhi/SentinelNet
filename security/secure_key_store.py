@@ -1,3 +1,5 @@
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Archiviazione a riposo delle chiavi segrete locali (secret.key, jwt_secret.key).
 
 Su Windows le chiavi vengono cifrate con DPAPI (CryptProtectData, ambito utente):

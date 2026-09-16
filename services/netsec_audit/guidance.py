@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Motivazione, impatto e valore di default di ogni controllo di audit.
 
 Il verdetto di una regola (``messages.py``) dice COSA e' stato trovato. Qui c'e'

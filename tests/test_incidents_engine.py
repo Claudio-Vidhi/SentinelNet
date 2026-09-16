@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test dell'Incident Engine: l'incidente come vista derivata dalle EVIDENZE.
 
 Copre raggruppamento per entità + gap, chiusura per quiete, ragionamento

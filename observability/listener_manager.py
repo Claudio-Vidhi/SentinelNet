@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Gestore centrale dei listener/task di observability (fase 3.9): applica
 una config desiderata (da ``data_config.obs_config()``) allo stato live
 dell'app, sia all'avvio (lifespan) sia a runtime (POST /api/observability/config),

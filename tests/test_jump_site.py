@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Unit tests for the 'jump' site mode (data model, Task 1 of the
 jump-host-sites plan). No tunnel here: only the bastion fields on the site
 dict.

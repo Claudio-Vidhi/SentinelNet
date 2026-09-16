@@ -1,3 +1,5 @@
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Unit test per il multi-site: ciclo di vita della coda job e auth agente.
 
 Esegue in una data dir temporanea isolata (SENTINELNET_DATA_DIR) così da non

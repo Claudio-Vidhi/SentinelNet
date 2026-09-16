@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Security regressions in the day-0 provisioning wizard.
 
 Each test here stands for a way the wizard could hand a real device to an

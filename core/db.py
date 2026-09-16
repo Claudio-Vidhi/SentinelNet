@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Async-safe access layer to observability.db (SQLite, WAL).
 
 Rules (see CONTRIBUTING.md §3 and docs/adr/0004-single-process-sqlite-writer.md):

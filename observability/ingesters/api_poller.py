@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Poller REST (§9.2): interroga periodicamente i FortiGate con token API
 configurato e accoda snapshot compatti in api_observations, così GUI e AI
 leggono dal DB invece di colpire i dispositivi a ogni vista.

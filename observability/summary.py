@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Riassunti dei dati di flusso per contesti LLM (fase 5.4).
 
 NOTA sul DB: queste funzioni usano una connessione sincrona breve e sono

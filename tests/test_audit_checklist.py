@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test di unita' e di integrazione per la Checklist Audit Manutenzione Firewall."""
 
 import os

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Application settings and host/port resolution.
 
 Moved here from app_server.py (phase 6.6) to be used by modular routers

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Una tabella di routing sola, dagli apparati che gia' la pubblicano.
 
 Non c'e' raccolta nuova: la vista chiama lo stesso get_routes della tab

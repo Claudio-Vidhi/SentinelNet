@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Stati, evidenze e calcolo del punteggio del motore di audit.
 
 LINGUA — le regole non producono prose ma CHIAVI di catalogo. Un audit e' un

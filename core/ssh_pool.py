@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Dedicated bounded executor for blocking device SSH work (WP11,
 docs/app-review-fix-plan.md).
 

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Per-rule example traffic generator.
 
 Synthesizes representative matching flows and near-miss flows for each rule in

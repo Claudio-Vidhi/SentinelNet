@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Per-vendor firewall analyzers.
 
 Each vendor module exposes ``analyze(text)`` which returns the generic envelope

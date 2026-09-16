@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Valutazioni di audit su configurazione Cisco IOS / IOS-XE parsata.
 
 Distillate dal *CIS Cisco IOS XE 17.x Benchmark v2.2.1*. Il numero della

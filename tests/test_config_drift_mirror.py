@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """The git mirror is redundancy: a second copy, never a second source.
 
 A redundancy feature that silently is not running is worse than one that is

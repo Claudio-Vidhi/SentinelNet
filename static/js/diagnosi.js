@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // static/js/diagnosi.js
 // Referto di diagnosi client (L2+L3). Viveva in una modale di client-map.js:
 // spostato qui perche' la tab ha lo spazio per cronologia e catena trunk, e

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Le tab concedibili a un utente non-admin.
 
 La lista in settings.js era mantenuta a mano ed era divergente: sei tab

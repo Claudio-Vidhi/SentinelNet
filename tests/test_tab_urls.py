@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Every tab has its own address (/devices, /settings, ...), so a reload or a
 shared link lands on the same tab instead of the overview."""
 import os

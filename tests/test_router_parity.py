@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Parity test del refactor router (fase 2.6): lo schema OpenAPI post-refactor
 deve coincidere con lo snapshot golden pre-refactor (tests_data/
 openapi_golden.json) per percorsi, metodi, parametri, request/response.

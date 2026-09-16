@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
     // ===== Threat Intel: sub-tab switcher (Matcher interno vs Vendor Watch EUVD) =====
     const TI_VIEWS = { matcher: 'tiTabMatcher', priority: 'tiTabPriority',
                        report: 'tiTabReport', watch: 'tiTabWatch' };

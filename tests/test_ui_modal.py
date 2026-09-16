@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Gestore unico delle modali (static/js/ui-modal.js).
 
 Gli script sono classici e senza bundler: un id sbagliato o una modale

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Diagnosi end-to-end di UN client: L2 e L3 nello stesso referto.
 
 Le due metà esistevano già ma non si erano mai incontrate nel codice:

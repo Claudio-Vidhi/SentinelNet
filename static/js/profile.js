@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // "My profile": the signed-in user's own account. Summary of what they can
 // see, password change, verified recovery address and "sign out everywhere".
 // Only /api/profile and /api/auth/* are called: nothing here needs admin.

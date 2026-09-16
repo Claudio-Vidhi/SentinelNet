@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // static/js/netsec-audit.js
 // ===== NetSec Audit (PREVIEW) — Firewall & Router Security Compliance Audit =====
 

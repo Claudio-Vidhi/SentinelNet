@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // Tabelle di routing di piu' apparati in una vista sola.
 //
 // La tab FortiGate mostra da sempre la RIB di UN firewall alla volta. La

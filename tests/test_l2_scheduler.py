@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Scheduler L2: ARP/MAC/prune schedulati, default spento, fasi isolate,
 task che segue la config a runtime (WP9, docs/app-review-fix-plan.md)."""
 

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """La CSP non deve permettere origini che non usiamo piu'.
 
 Font, FontAwesome, vis.js e xterm.js sono ospitati in ``static/``: una LAN di

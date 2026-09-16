@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // --- TERMINAL CLI INTERACTIVE (WebSockets + Xterm.js) ---
 // Estratto dal blocco inline di templates/dashboard.html (CSP senza
 // 'unsafe-inline'). xterm viene iniettato lazy da loadAssetOnce (core.js).

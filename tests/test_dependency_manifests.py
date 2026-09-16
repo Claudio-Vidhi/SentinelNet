@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """requirements.txt and pyproject.toml must declare the same runtime packages.
 
 Two manifests exist on purpose: the Docker image pip-installs

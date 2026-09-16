@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Il tab WLC Live chiedeva la lista dispositivi a /api/devices, che non e' mai
 esistito in questo repo: la fetch tornava 404, il codice usciva sul !res.ok e la
 select restava vuota. Nessun controller e' mai comparso nel menu a tendina, non

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Valutazioni di audit su configurazione FortiOS parsata.
 
 Ogni regola e' una funzione pura ``ParsedConfig -> RuleOutcome``. Le regole

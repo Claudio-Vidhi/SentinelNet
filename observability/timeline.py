@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Timeline di un incidente: fonde in ordine cronologico le fonti già
 raccolte dalla piattaforma, così che l'ingegnere veda la SEQUENZA di ciò che è
 successo invece di una tabella di eventi.

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test del ciclo di vita delle evidenze e del catalogo regole.
 
 Il ciclo di vita è deliberatamente minimo: ``active`` → ``retracted``, nient'altro.

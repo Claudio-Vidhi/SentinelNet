@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Isolamento dei dati per l'intera suite: nessun test tocca mai ``data/`` reale.
 
 I moduli dell'app legano i propri percorsi a import time

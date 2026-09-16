@@ -1,3 +1,5 @@
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 class BaseDriver:
     def __init__(self, connection):
         self.connection = connection

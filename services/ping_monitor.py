@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Continuous ICMP monitor for inventory devices.
 
 Enabled from Settings: a background thread pings every inventory device at a

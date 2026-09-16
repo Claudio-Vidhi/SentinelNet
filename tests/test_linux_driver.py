@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Driver Linux: versione, artefatto di backup, hostname e guardia su enable().
 
 Un host Linux deve diventare un device come gli altri senza toccare la UI: qui

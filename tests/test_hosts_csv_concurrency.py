@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """hosts.csv is read and written concurrently, and on Windows that raced.
 
 A triage runs up to 10 devices in parallel and each one writes the inventory

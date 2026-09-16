@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """The browser session slides while the operator is working, and the
 administrator decides how long an idle session and a session in total last.
 

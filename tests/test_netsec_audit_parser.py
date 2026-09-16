@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test del parser FortiOS con tracciamento di riga usato dal motore di audit."""
 
 import unittest

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """A tenant baseline: which lines must be there, which must not.
 
 Deliberately not an audit — no score, no grade, no severity. One answer per

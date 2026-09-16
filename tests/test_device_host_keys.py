@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Chiavi host dei dispositivi: verifica sul known_hosts condiviso e pin al
 primo uso (review P0-6: le sessioni netmiko erano l'anello TOFU non
 persistente)."""

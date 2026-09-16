@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Attribuzione del client nelle righe di audit (review item 4): una chiamata
 partita da uno strumento MCP deve essere riconoscibile nel registro."""
 

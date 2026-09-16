@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """NVD access shared by the live proxy and the persisted CVE snapshot.
 
 The per-CVE normalisation used to live inside the /api/search handler. The

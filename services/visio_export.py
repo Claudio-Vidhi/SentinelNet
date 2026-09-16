@@ -1,3 +1,5 @@
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 # ponytail: costruzione minimale di un .vsdx (Visio) usando solo la stdlib.
 # Un .vsdx e' semplicemente uno zip OPC (le stesse regole dei .docx/.xlsx) con
 # parti XML. Non usiamo librerie esterne: zipfile + xml.sax.saxutils.escape

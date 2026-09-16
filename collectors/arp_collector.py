@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Collect ARP tables from L3 gateways for MAC <-> IP matching.
 
 In the real world the gateway of a VLAN can be an L3 switch (SVI), a

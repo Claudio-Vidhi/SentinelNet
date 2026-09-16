@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Windows backup artifact -> section envelope for the Config Analyzer.
 
 Same shape as the Linux and firewall envelopes: ``sections`` with

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Sezione UI del mirror offsite: id presenti e agganciati, stringhe in
 entrambe le lingue, nessun handler inline, modulo caricato sul suo tab."""
 import os

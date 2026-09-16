@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test unitari di fortigate_service (REST primario + fallback SSH, mockati)."""
 import json
 import os

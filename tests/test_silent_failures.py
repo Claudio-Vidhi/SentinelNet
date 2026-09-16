@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Fallimenti silenziosi: se lo stato non viene persistito, deve restare
 una traccia.
 

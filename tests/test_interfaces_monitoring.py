@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test dedicated interfaces monitoring endpoint, metrics counts, and batch expected state."""
 import json
 import time

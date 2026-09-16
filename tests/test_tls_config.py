@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test per data_config.resolve_tls_config (finding H-1): entrambe le
 variabili → percorsi risolti; nessuna → HTTP invariato; parziale o file
 mancante → fail-closed con TlsConfigError."""

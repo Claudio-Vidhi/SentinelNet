@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test Task 3: endpoint /api/observability/flowgraph — nodi/archi aggregati,
 KPI, riepilogo tenant e breakdown protocolli per la vista Live Flows."""
 

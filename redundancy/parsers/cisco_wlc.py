@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Cisco wireless controller HA (SSO) from the CLI backup.
 
 Two platforms, two different outputs:

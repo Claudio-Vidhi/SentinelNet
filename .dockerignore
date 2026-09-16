@@ -10,6 +10,9 @@
 # pyproject.toml dichiara readme = "README.md": senza questa eccezione un
 # 'pip install .' dentro l'immagine fallirebbe per file mancante.
 !README.md
+# Le licenze dei componenti di terze parti devono viaggiare con il binario che
+# li incorpora: e' quello che le loro licenze richiedono, non un extra.
+!THIRD_PARTY_LICENSES.md
 
 # --- Ambienti virtuali Python ---
 .venv/

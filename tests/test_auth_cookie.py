@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test di integrazione per l'autenticazione a cookie HttpOnly (finding L-1):
 login imposta il cookie, cookie + header anti-CSRF autenticano le scritture,
 cookie senza header anti-CSRF -> 403, Bearer resta valido per i client

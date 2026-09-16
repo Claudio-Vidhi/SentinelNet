@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """A tab whose controls are bound by a lazily-loaded module must load it.
 
 static/js/core.js injects a module the first time its tab is opened. If the

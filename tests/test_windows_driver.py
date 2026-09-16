@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Windows via SSH: driver, artefatto e analizzatore.
 
 Perche' SSH e non WinRM: Windows ha un server OpenSSH dal 10 / Server 2019,

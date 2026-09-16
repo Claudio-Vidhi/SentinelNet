@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """The key file must never exist, even briefly, with inherited permissions.
 
 _atomic_write writes the key to "<path>.tmp" and renames it. The ACLs were

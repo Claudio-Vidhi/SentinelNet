@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Routes of the offsite mirror: RBAC, redaction, failure reporting."""
 import json
 import unittest

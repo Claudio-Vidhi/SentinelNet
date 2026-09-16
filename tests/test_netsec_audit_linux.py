@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test del parser e delle regole Linux del motore di audit.
 
 Due comportamenti valgono piu' di ogni singola regola, quindi vengono per

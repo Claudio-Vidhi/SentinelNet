@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Shape of the analyzer result the UI consumes, shared by every vendor.
 
 These were duplicated character for character in fortios.py and panos.py,

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Data models and matching primitives for Policy & Route Validation.
 
 Pure model with zero I/O. Represents IP fields as ternary cubes (value, mask),

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Estrazione campi dai messaggi syslog grezzi — UNICO punto di verità.
 
 Prima esisteva in due copie divergenti: ``correlator._extract_endpoints``

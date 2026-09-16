@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """i18n coverage report for static/js (plan Phase 3 item 13).
 
 Bilingual copy is mandatory (CONTRIBUTING §1), but three mechanisms coexist:

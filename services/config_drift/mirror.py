@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Optional git mirror of the config archive — redundancy, not a backend.
 
 The '.history' archive is the source of truth and the only thing the drift

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test unitari per la gestione multi-target FortiGate (nome, target attivo,
 test connessione). Segue lo stesso pattern di test_fortigate_service.py:
 file token temporaneo per isolare ogni test."""

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Config history: a version per real change, and nothing on a no-op run.
 
 RFC 5737 addresses and placeholder hostnames only.

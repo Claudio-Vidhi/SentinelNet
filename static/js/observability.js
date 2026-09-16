@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
     // --- OBSERVABILITY SETTINGS (§11.5a) ---
 
     const OBS_LISTENERS = ['ipfix', 'sflow', 'syslog', 'netflow'];

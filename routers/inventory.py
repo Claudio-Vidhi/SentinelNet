@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Router Inventario: CRUD dispositivi (aggiunta, rinomina, eliminazione,
 import/export CSV, promozione da scoperta, riassegnazione sede). Estratto da
 app_server.py (fase 6.6): percorsi, metodi, parametri e risposte identici al

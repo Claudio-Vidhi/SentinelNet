@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Single source of truth for the dangerous-CLI-command policy (WP5,
 docs/app-review-fix-plan.md).
 

@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // --- OPERATIONS HOME (landing) ---
 // Estratto dal blocco inline di templates/dashboard.html (CSP senza
 // 'unsafe-inline'). Dipende dai globali di i18n.js/core.js/devices.js,

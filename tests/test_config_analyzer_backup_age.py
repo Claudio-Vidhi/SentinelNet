@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Il Config Analyzer dichiara l'eta' del dato che sta mostrando.
 
 Mostra config PARSATA DA UN BACKUP, non dall'apparato: senza il timestamp una

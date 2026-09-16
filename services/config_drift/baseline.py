@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Per-tenant config baseline: required and forbidden lines.
 
 A whole-file diff against a golden config produces noise, not signal: every

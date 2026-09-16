@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """The files holding secrets must not be readable by whoever the directory is.
 
 users.json carries every password hash and sites.json every agent site-token

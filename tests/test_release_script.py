@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Le due funzioni pure di scripts/dev/release.py.
 
 Il resto dello script sono comandi git, che si verificano eseguendolo. Queste

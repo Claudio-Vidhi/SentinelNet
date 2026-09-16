@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Deve sempre restare un amministratore UTILIZZABILE.
 
 Un amministratore disabilitato non puo' autenticarsi (``routers/deps.py``

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Poller di salute Linux: parsing, selezione degli host, e la pipeline intera.
 
 Il punto non è leggere ``/proc``: è che uno snapshot Linux entri nella STESSA

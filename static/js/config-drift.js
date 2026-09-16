@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // static/js/config-drift.js
 // ===== Config Drift: per-tenant version history and baseline rules =====
 // Not an audit: no score, no grade, no severity. The netsec audit already

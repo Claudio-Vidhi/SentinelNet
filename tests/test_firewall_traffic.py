@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Traffico per policy firewall, aggregato sugli apparati in scope.
 
 A differenza della vista "Per IP", questi numeri NON vengono da

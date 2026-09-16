@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Switch Provisioner — genera una running-config Cisco IOS/IOS-XE "da zero"
 per uno switch appena installato, seguendo le linee guida di hardening Cisco,
 e la consegna in tre modalita' selezionabili dall'utente:

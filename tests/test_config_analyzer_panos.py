@@ -1,3 +1,5 @@
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Unit tests for fw_analyzers.panos.analyze (generic sections envelope).
 

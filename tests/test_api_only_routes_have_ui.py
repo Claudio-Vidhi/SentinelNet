@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Rotte che esistevano senza un modo per raggiungerle dall'interfaccia.
 
 Una rotta senza un pulsante non e' una funzione a meta': e' una funzione che

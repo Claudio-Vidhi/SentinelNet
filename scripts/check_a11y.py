@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Accessibility coverage report for templates/dashboard.html (plan item 14).
 
 Checks the two things that were structurally missing and that a human review

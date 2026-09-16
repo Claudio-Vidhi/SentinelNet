@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """The two language dictionaries must stay the same shape.
 
 Every other i18n test in this tree pins a hardcoded list of keys for one

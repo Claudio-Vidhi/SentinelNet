@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Tracked Python parses on the floor declared in pyproject.toml.
 
 Development happens on 3.14 (uv.lock) while the shipped artifacts run on the

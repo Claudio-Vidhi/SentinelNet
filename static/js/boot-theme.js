@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // Resa (chiara/scura) PRIMA del primo paint, come per la sidebar: applicarla
 // dopo farebbe lampeggiare il quadro nella polarità sbagliata. Nessun valore
 // salvato = si segue il sistema operativo (prefers-color-scheme).

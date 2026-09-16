@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test dell'endpoint /api/netsec-audit/scan.
 
 Copre il caso in cui non c'e' nulla da analizzare. Il motore, ricevendo una

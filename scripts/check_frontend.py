@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Type check static/js with tsc, filtering out the structural noise, and
 refuse a function declared twice in the shared global scope.
 

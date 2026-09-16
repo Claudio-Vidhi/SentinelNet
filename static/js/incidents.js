@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // static/js/incidents.js
 // ===== Incidenti (PREVIEW) — timeline multi-fonte e ragionamento deterministico =====
 // La conclusione mostrata in testa e' SEMPRE quella deterministica del backend

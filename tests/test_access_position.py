@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Accesso o transito: la posizione del client non e' dove il MAC si vede.
 
 La marcatura fatta in raccolta non riconosce i Port-channel — CDP/LLDP

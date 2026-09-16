@@ -1,0 +1,54 @@
+SentinelNet
+Copyright (C) 2026 Claudio Vidhi
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License, version 3, as published by
+the Free Software Foundation.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
+The full text is in the file LICENSE and at <https://www.gnu.org/licenses/>.
+
+Source: https://github.com/Claudio-Vidhi/SentinelNet
+
+--------------------------------------------------------------------------------
+ADDITIONAL TERMS UNDER SECTION 7
+--------------------------------------------------------------------------------
+
+Pursuant to section 7(e) of the License, permission is NOT granted to use the
+trade name "SentinelNet", nor the project logo, to identify a modified version
+or to state or imply endorsement by or affiliation with this project. Factual
+references to the origin of the code ("derived from SentinelNet") remain
+permitted, as required by section 7 itself.
+
+Pursuant to sections 7(b) and 7(c), the copyright notices carried by each
+source file, and the attribution in this file, must be preserved in
+redistributions and in modified versions.
+
+These are the only additional terms. Any other restriction may be removed by a
+recipient, as the License provides.
+
+--------------------------------------------------------------------------------
+COMMERCIAL LICENSING
+--------------------------------------------------------------------------------
+
+SentinelNet is available under a commercial license for parties that cannot or
+do not wish to comply with the AGPL-3.0 — in particular with section 13, which
+requires that users interacting with a modified version over a network be
+offered its complete corresponding source.
+
+Contact: claudiovidhi7@gmail.com
+
+--------------------------------------------------------------------------------
+THIRD-PARTY COMPONENTS
+--------------------------------------------------------------------------------
+
+This program incorporates third-party components under their own licenses,
+listed in THIRD_PARTY_LICENSES.md. Components under the Apache License 2.0
+require that a copy of that license travel with them: it is in
+LICENSES/Apache-2.0.txt.
+
+Versions of SentinelNet up to and including 0.38.0 were released under the
+Apache License 2.0. That grant is irrevocable and continues to apply to those
+versions; it does not extend to later ones.

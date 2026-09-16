@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Device credentials: row decryption and the fallback chain (extracted from
 core_engine.py — plan Phase 3 item 12; core_engine keeps re-exporting the
 public names so call sites and test patch points are unchanged)."""

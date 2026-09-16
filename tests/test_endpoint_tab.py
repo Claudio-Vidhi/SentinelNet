@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """The endpoint group is one tab with four pills, not four twin tabs.
 
 Structure is asserted here, not appearance: that the pills and panes exist,

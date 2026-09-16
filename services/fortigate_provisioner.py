@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """FortiGate Provisioner — genera una configurazione FortiOS "day-0" per un
 firewall FortiGate appena installato (zero-touch), seguendo le linee guida di
 hardening Fortinet.

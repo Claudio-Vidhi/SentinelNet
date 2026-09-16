@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """WLC Service — osservabilità wireless per controller Cisco: AireOS
 (2504/3504/5508/8540, vWLC) e Catalyst 9800 (IOS-XE).
 

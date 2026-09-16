@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """S2 — evidenza di manomissione del registro di audit.
 
 Il registro era un file di testo in append senza niente che legasse la riga

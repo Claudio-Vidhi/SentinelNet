@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Router FortiGate LIVE: osservabilità in tempo reale (REST API + fallback
 SSH). Estratto da app_server.py (fase 2.2): percorsi, metodi, parametri e
 risposte identici al monolite. La logica di business resta in

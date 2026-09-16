@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Vendor → driver → netmiko registry (plan Phase 3 items 12/15).
 
 The mapping lived inside core/core_engine.py; the vendor logic it carries

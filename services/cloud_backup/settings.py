@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Configuration of the offsite mirror, stored in app_settings.json.
 
 Secrets go through the same Fernet vault the device credentials use: they are

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Every route of the app, however deeply the installed FastAPI nests them.
 
 Eight suites iterate ``app.routes`` to assert what is registered and with

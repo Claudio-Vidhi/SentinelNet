@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Analisi di percorso: dove finisce un indirizzo, e perche' quella rotta.
 
 Il calcolo non manda pacchetti, quindi non c'e' una rete che possa smentirlo a

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Catalogo dei messaggi di verdetto del motore di audit, italiano e inglese.
 
 Le regole dichiarano una chiave e i parametri; qui c'e' la frase. Motivo in

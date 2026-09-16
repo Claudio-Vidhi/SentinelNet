@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Windows health poller: parsing, host selection, and DEVICE_LOAD_001 firing
 on a Windows snapshot through the same pipeline as Linux."""
 

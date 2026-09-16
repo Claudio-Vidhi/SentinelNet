@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Valutazioni di audit sull'artefatto di backup di un host Linux.
 
 Distillate dal *CIS Ubuntu Linux 24.04 LTS Benchmark v2.0.0*. Il numero della

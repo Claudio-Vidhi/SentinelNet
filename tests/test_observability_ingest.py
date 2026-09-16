@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test della pipeline di ingest (fase 3): decoder NetFlow v5/v9/IPFIX con
 fixture sintetiche, sFlow con scaling del sampling rate, syslog multivendor,
 attribuzione tenant + quarantena, listener UDP end-to-end, retention,

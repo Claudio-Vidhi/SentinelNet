@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Principale contributore: l'evidenza che risponde a "perché?".
 
 Terza forma statistica accanto a scostamento ed emergenza, e fenomeno distinto

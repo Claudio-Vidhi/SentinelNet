@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test per redaction.py (finding I-1): mascheramento segreti multivendor,
 idempotenza, sopravvivenza dei dati non sensibili e verifica che i choke-point
 LLM (ai_assistant.chat) applichino la redazione."""

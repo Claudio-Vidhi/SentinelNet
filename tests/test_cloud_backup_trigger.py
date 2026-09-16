@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Il mirror parte dopo un ciclo di backup solo se richiesto, e un suo
 fallimento non deve mai far fallire il backup."""
 import unittest

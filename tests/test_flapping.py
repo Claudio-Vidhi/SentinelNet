@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Flapping: il pattern è il segnale, la singola caduta è rumore.
 
 Finché ogni caduta resta un sintomo isolato l'ingegnere vede dieci incidenti e

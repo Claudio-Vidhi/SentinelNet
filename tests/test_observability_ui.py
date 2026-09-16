@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test fase 5: transizioni di stato delle anomalie (ruoli, scope, CSRF,
 concorrenza ottimistica, audit), contesto AI attach_top_flows (riassunto
 server-side + redazione) e gate frontend (niente sessionStorage/Bearer nel

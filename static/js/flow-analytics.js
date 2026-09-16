@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // static/js/flow-analytics.js
 // ===== Flow SIEM Analytics (PREVIEW) — Wazuh & Splunk inspired Network Traffic Analytics =====
 

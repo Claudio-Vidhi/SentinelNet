@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Registro metriche in-process della pipeline di osservabilità (fase 3.8).
 
 Contatori e gauge semplici, thread-safe, senza dipendenze esterne (export

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Adapter di normalizzazione: dalle tabelle grezze al modello eventi unico.
 
 Ogni sorgente conserva il proprio formato di ingestione (i listener UDP, il

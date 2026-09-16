@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Soppressioni: ciò che l'operatore si aspetta, con o senza scadenza.
 
 Un'unica domanda con due forme che altrove sono due funzionalità separate:

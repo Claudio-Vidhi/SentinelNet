@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """G4 — il listener syslog dell'agente si accende e si spegne dal pannello, e
 il pannello dice dove l'agente scrive.
 

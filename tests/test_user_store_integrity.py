@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Integrità dell'archivio utenti (WP1, docs/app-review-fix-plan.md).
 
 Un users.json corrotto o vuoto non deve mai essere letto come "nessun

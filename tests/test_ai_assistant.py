@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Unit test per il dispatch multi-provider di ai_assistant.chat, con le
 chiamate HTTP (requests.post) mockate: nessuna rete reale coinvolta."""
 

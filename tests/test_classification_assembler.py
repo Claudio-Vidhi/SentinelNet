@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """The tab and the export read the same assembler, so they cannot drift."""
 import unittest
 from unittest import mock

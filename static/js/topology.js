@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // static/js/topology.js
 // Estratto da templates/dashboard.html: tab-map (Topologia, report Port-Channel),
 // tab-map-interactive (mappa vis.js classica + mappa minimalista stile Visio,

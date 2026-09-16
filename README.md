@@ -395,5 +395,22 @@ verify these files are excluded:
 
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE). Licenses of bundled
-third-party components: [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+Copyright (C) 2026 Claudio Vidhi. Licensed under the
+[GNU Affero General Public License v3.0 only](LICENSE), with the additional
+terms in [NOTICE](NOTICE). Licenses of bundled third-party components:
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+
+What this means in practice: you can run, study, modify and redistribute
+SentinelNet freely, including inside a company. If you distribute a modified
+version — or let anyone use one **over a network** (AGPL section 13) — you must
+release its complete corresponding source under the same license.
+
+Versions up to and including 0.38.0 were released under the Apache License 2.0
+and remain available under it. That grant cannot be revoked; it does not extend
+to later versions.
+
+**Commercial license**: if AGPL section 13 is incompatible with your product,
+a commercial license is available. Contact claudiovidhi7@gmail.com.
+
+"SentinelNet" is an unregistered trademark. The license covers the code, not
+the name: a fork needs written permission to use it.

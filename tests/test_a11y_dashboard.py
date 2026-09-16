@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Cancello di accessibilita' sul template (plan item 14).
 
 Il report e' a zero: da qui in avanti un controllo senza nome accessibile, o
