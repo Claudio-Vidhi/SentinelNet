@@ -564,6 +564,10 @@ select option { background-color: var(--surface); color: var(--text); }
 }
 #appVersionBadge { font-family: var(--font-data); font-size: 10px; color: var(--text-soft); flex-shrink: 0; }
 
+.aside-license { padding: 6px 18px; border-bottom: var(--seam) solid var(--border); }
+.aside-license a { font-family: var(--font-data); font-size: 10px; color: var(--text-soft); text-decoration: none; }
+.aside-license a:hover, .aside-license a:focus-visible { color: var(--primary); text-decoration: underline; }
+
 .user-badge {
   display: flex;
   align-items: center;
@@ -1858,6 +1862,7 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   body.sidebar-collapsed .aside-tagline,
   body.sidebar-collapsed .tenant-switch,
   body.sidebar-collapsed .aside-meta,
+  body.sidebar-collapsed .aside-license,
   body.sidebar-collapsed .sidebar-search kbd,
   body.sidebar-collapsed .nav-group > h3,
   body.sidebar-collapsed .preview-badge,

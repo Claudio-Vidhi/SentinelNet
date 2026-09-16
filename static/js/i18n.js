@@ -33,6 +33,7 @@ const i18n = {
         // Sidebar
         badgeAdmin: '<i class="fa-solid fa-user-shield"></i> Amministratore',
         btnExit: '<i class="fa-solid fa-power-off"></i> Esci',
+        linkSourceCode: 'AGPL-3.0 &middot; Codice sorgente',
         titleProvisioning: '<i class="fa-solid fa-circle-plus"></i> Provisioning Apparato',
         lblGroup: "Assegna a Tenant",
         lblDeviceSite: "Sede fisica",
@@ -3083,6 +3084,7 @@ const i18n = {
         // Sidebar
         badgeAdmin: '<i class="fa-solid fa-user-shield"></i> Administrator',
         btnExit: '<i class="fa-solid fa-power-off"></i> Logout',
+        linkSourceCode: 'AGPL-3.0 &middot; Source code',
         titleProvisioning: '<i class="fa-solid fa-circle-plus"></i> Device Provisioning',
         lblGroup: "Assign to Tenant",
         lblDeviceSite: "Physical site",

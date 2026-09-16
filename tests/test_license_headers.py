@@ -101,5 +101,31 @@ class NoticeIsShipped(unittest.TestCase):
         self.assertIn("!THIRD_PARTY_LICENSES.md", dockerignore)
 
 
+class TheUiOffersTheSource(unittest.TestCase):
+    """AGPL 13: l'offerta del sorgente deve raggiungere chi usa via rete.
+
+    Vincola chi modifica SentinelNet, non la release originale, ma il link e'
+    cio' che gli rende possibile rispettarla senza rifare la UI. Se sparisce,
+    un fork che lo espone in rete e' fuori licenza senza accorgersene.
+    """
+
+    def setUp(self):
+        self.html = (ROOT / "templates" / "dashboard.html").read_text(encoding="utf-8")
+
+    def test_the_sidebar_links_to_the_source(self):
+        self.assertIn('id="linkSourceCode"', self.html)
+        self.assertIn("https://github.com/Claudio-Vidhi/SentinelNet", self.html)
+
+    def test_the_link_is_translated_in_both_languages(self):
+        # Niente stringa inline: la regola i18n vale anche per un link legale.
+        self.assertIn('data-i18n="linkSourceCode"', self.html)
+        i18n = (ROOT / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
+        self.assertEqual(i18n.count("linkSourceCode:"), 2, "serve in it e in en")
+
+    def test_the_external_link_is_opener_safe(self):
+        anchor = self.html[self.html.index('id="linkSourceCode"'):][:400]
+        self.assertIn('rel="noopener noreferrer"', anchor)
+
+
 if __name__ == "__main__":
     unittest.main()
