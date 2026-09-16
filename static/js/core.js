@@ -179,6 +179,8 @@ let globalVendors = {};
 let globalVersions = {}; // Cache globale per lo stato delle scansioni (ottimizzazione UI)
 let currentRole = 'viewer';   // ruolo dell'utente loggato (admin/operator/viewer)
 let currentUsername = '';
+let currentUserGroups = [];   // tenant dell'utente loggato (vuoto = tutti); da /api/auth/me
+let currentAllowedTabs = [];  // tab concesse all'utente loggato (vuoto = tutte), normalizzate
 let appLoading = false;
 
 // --- AUTENTICAZIONE E UTILITY ---
@@ -1049,10 +1051,11 @@ function normalizeAllowedTabs(tabs) {
     return [...new Set(tabs.map(t => LEGACY[t] || t))];
 }
 
-function applyRoleUI(username, role, allowedTabs) {
+function applyRoleUI(username, role, allowedTabs, groups) {
     if (username !== undefined && username !== null) currentUsername = username;
     if (role !== undefined && role !== null) currentRole = role;
     if (!currentRole) currentRole = 'viewer';
+    if (groups !== undefined && groups !== null) currentUserGroups = groups;
     document.body.classList.remove('role-super_admin', 'role-admin', 'role-operator', 'role-viewer');
     document.body.classList.add('role-' + currentRole);
     // requires-admin controls (dashboard.css) stay visible to a super_admin.
@@ -1077,12 +1080,19 @@ function applyRoleUI(username, role, allowedTabs) {
     }
     // ponytail: restrizione solo lato frontend (nasconde i pulsanti); vuoto = tutte le tab.
     const allowed = normalizeAllowedTabs(allowedTabs);
+    currentAllowedTabs = allowed;
     if (allowed.length > 0) {
         document.querySelectorAll('.nav-item').forEach(btn => {
             const tabId = btn.getAttribute('data-tab');
             if (tabId && !allowed.includes(tabId)) btn.style.display = 'none';
         });
     }
+    // A tenant-scoped admin's invite would 403 server-side (invite is an
+    // unscoped-admin route): hide the entry point instead of a dead button.
+    const isUnscopedAdmin = currentRole === 'super_admin'
+        || (currentRole === 'admin' && currentUserGroups.length === 0);
+    const inviteBtn = document.querySelector('[data-open-modal="inviteUserModal"]');
+    if (inviteBtn) inviteBtn.style.display = isUnscopedAdmin ? '' : 'none';
 }
 
 // Invio rapido con tasto Enter su login, setup wizard e creazione gruppo
@@ -1215,7 +1225,7 @@ async function appInit() {
         }
         if (me) {
             currentRole = me.role || 'viewer';
-            applyRoleUI(me.username, currentRole, me.allowed_tabs || []);
+            applyRoleUI(me.username, currentRole, me.allowed_tabs || [], me.groups || []);
         }
     } catch (e) { /* non bloccante */ }
 

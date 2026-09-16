@@ -317,9 +317,15 @@ def verify_email(payload: VerifyEmailSchema):
 def whoami(current_user = Depends(get_current_user)):
     username = current_user.get("sub")
     role = current_user.get("role", "viewer")
-    # Gli admin non sono mai ristretti: niente tab da nascondere lato frontend.
-    allowed_tabs = [] if user_manager.is_admin(role) else user_manager.get_allowed_tabs(username)
-    return {"username": username, "role": role, "allowed_tabs": allowed_tabs}
+    # super_admin is the only role effective_tabs() never restricts (see
+    # routers/deps.require_tab); a regular admin CAN be tab-restricted, and
+    # the frontend needs its real grant to know which tabs it may itself hand
+    # to another user (see assignableTabs() in settings.js).
+    allowed_tabs = [] if role == "super_admin" else user_manager.get_allowed_tabs(username)
+    # groups: the actor's own tenant scope, so the frontend can limit the
+    # tenant/tab editors it offers to a scoped admin without a second round-trip.
+    groups = user_manager.get_user_groups(username)
+    return {"username": username, "role": role, "allowed_tabs": allowed_tabs, "groups": groups}
 
 # --- GESTIONE UTENTI (solo amministratori) ---
 

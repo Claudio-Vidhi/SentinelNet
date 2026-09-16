@@ -2,11 +2,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
     // ===== Settings tab (Users, Sites, MCP Server, App/Network/CLI Settings) =====
 
+    // A tenant-scoped admin passes isAdminRole() locally but 403s server-side
+    // on a route gated by require_unscoped_admin (global settings, sites,
+    // fleet, ...): these loaders used to swallow that response and leave the
+    // panel blank with no explanation.
+    async function toastOnForbidden(res) {
+        if (!res || res.status !== 403) return;
+        const e = await res.json().catch(() => ({}));
+        showToast(e.detail || tr('setSettingsNotLoadedYet'), 'error');
+    }
+
     // --- SEDI MULTI-SITO (admin) ---
     async function loadSites() {
         if (!isAdminRole(currentRole)) return;
         const res = await apiFetch('/api/sites');
-        if (!res || !res.ok) return;
+        if (!res || !res.ok) { await toastOnForbidden(res); return; }
         const data = await res.json();
         await renderSitesTable(data.sites || []);
     }
@@ -480,14 +490,23 @@
         'tab-provisioner': 'tabProvisioner',
     };
 
-    function assignableTabs() {
+    // The five requires-admin tabs that ARE a concession on an admin-level
+    // row (they gate the admin panels themselves). tab-incidents and
+    // tab-fortigate are also requires-admin but are ordinary operational
+    // tabs, not part of the admin-management group, so they stay excluded.
+    const ADMIN_GROUP_TABS = ['tab-users', 'tab-groups', 'tab-sites', 'tab-mcp', 'tab-settings'];
+
+    // rowRole: role of the account being edited. Admin-level rows also offer
+    // the ADMIN_GROUP_TABS; other rows never do (granting one would have no
+    // effect, the button stays hidden by the requires-admin CSS gate).
+    function assignableTabs(rowRole) {
+        const rowIsAdmin = rowRole === 'admin' || rowRole === 'super_admin';
         const out = [];
         const seen = new Set();
         document.querySelectorAll('.nav-item[data-tab]').forEach(btn => {
-            // requires-admin: il pulsante e' nascosto agli altri ruoli, quindi
-            // concedere quella tab non avrebbe effetto.
-            if (btn.classList.contains('requires-admin')) return;
             const primary = btn.getAttribute('data-tab');
+            const isAdminGroupBtn = btn.classList.contains('requires-admin');
+            if (isAdminGroupBtn && !(rowIsAdmin && ADMIN_GROUP_TABS.includes(primary))) return;
             const ids = (btn.getAttribute('data-tabs') || primary || '').split(/\s+/);
             const navLabel = btn.querySelector('[data-i18n]');
             const navKey = navLabel ? navLabel.getAttribute('data-i18n') : null;
@@ -495,9 +514,14 @@
                 // tab-home e' sempre visibile: non e' una concessione.
                 if (!id || id === 'tab-home' || seen.has(id)) return;
                 seen.add(id);
-                out.push({ id, key: SECONDARY_TAB_LABELS[id] || navKey });
+                out.push({ id, key: SECONDARY_TAB_LABELS[id] || navKey, admin: isAdminGroupBtn });
             });
         });
+        // A tab-restricted actor can grant only what it holds itself
+        // (mirrors assert_tabs_within_grant server-side).
+        if (currentAllowedTabs.length > 0) {
+            return out.filter(t => currentAllowedTabs.includes(t.id));
+        }
         return out;
     }
 
@@ -512,7 +536,9 @@
         const body = document.getElementById('usersTableBody');
         if (!body) return;
         const delText = tr('uiDelete');
-        const allGroups = Object.keys(globalGroups);
+        // A scoped actor may grant only its own tenants (assert_groups_within_scope
+        // server-side); an unscoped actor still offers every tenant.
+        const allGroups = currentUserGroups.length > 0 ? currentUserGroups : Object.keys(globalGroups);
         body.innerHTML = users.map(u => {
             const isSelf = u.username === currentUsername;
             const manageable = !isSelf && canManageRole(currentRole, u.role);
@@ -521,9 +547,10 @@
                 .map(r => `<option value="${r}" ${r === u.role ? 'selected' : ''}>${roleLabel(r)}</option>`).join('');
             const scope = Array.isArray(u.groups) ? u.groups : [];
 
-            // Editor sedi: gli admin vedono tutto; per gli altri checkbox per sede (nessuna = tutte)
+            // Editor sedi: manageable (incluse le righe admin, in pratica solo
+            // per il super_admin) mostra i checkbox; altrimenti un riepilogo.
             let scopeCell;
-            if (isAdminRole(u.role) || !manageable) {
+            if (!manageable) {
                 scopeCell = isAdminRole(u.role)
                     ? `<span style="color:var(--text-muted); font-size:12px;">${tr('setAllTenantsAdmin')}</span>`
                     : `<span style="color:var(--text-muted); font-size:12px;">${scope.length ? scope.map(escapeHtml).join(', ') : tr('uiAllTenants')}</span>`;
@@ -549,22 +576,23 @@
                   </details>`;
             }
 
-            // Editor tab: gli admin vedono sempre tutto; per gli altri checkbox per tab
-            // (nessuna spuntata = tutte), con salvataggio esplicito (staged, no auto-save).
+            // Editor tab: manageable (incluse le righe admin) mostra i checkbox,
+            // con salvataggio esplicito (staged, no auto-save); altrimenti un riepilogo.
             let tabsCell;
-            if (isAdminRole(u.role) || !manageable) {
+            if (!manageable) {
                 tabsCell = `<span style="color:var(--text-muted); font-size:12px;">${isAdminRole(u.role) ? tr('setAllTabsAdmin') : tr('setAllTabs')}</span>`;
             } else {
                 const allowed = normalizeAllowedTabs(u.allowed_tabs);
                 const tabsSummary = allowed.length === 0
                     ? `<span style="color:var(--success);">${tr('setAllTabs')}</span>`
                     : `<span style="color:var(--primary);">${allowed.length} ${tr('setTabS')}</span>`;
-                const tabChecks = assignableTabs().map(t =>
+                const tabChecks = assignableTabs(u.role).map(t =>
                     `<label style="display:flex; align-items:center; gap:6px; padding:3px 4px; font-size:12px; cursor:pointer;">
                        <input type="checkbox" class="tabs-box" value="${t.id}" ${allowed.includes(t.id) ? 'checked' : ''}
                               data-action="mark-tabs-dirty"
                               style="accent-color:var(--primary); cursor:pointer;">
                        ${(t.key && i18n[currentLang][t.key]) || t.id}
+                       ${t.admin ? `<span style="color:var(--text-muted); font-size:10px;">(${tr('setTabNeedsUnscopedAdmin')})</span>` : ''}
                      </label>`).join('');
                 tabsCell = `<details data-u="${escapeHtml(u.username)}" data-orig='${JSON.stringify(allowed)}' style="position:relative;">
                     <summary style="cursor:pointer; list-style:none; font-size:12px; padding:2px 0;">
@@ -852,7 +880,7 @@
     async function loadSsoSettings() {
         if (!isAdminRole(currentRole)) return;
         const res = await apiFetch('/api/settings/sso');
-        if (!res || !res.ok) return;
+        if (!res || !res.ok) { await toastOnForbidden(res); return; }
         const cfg = await res.json();
         document.getElementById('ssoEnabled').checked = !!cfg.enabled;
         document.getElementById('ssoIssuerUrl').value = cfg.issuer_url || '';
@@ -924,7 +952,7 @@
     async function loadSmtpSettings() {
         if (!isAdminRole(currentRole)) return;
         const res = await apiFetch('/api/settings/smtp');
-        if (!res || !res.ok) return;
+        if (!res || !res.ok) { await toastOnForbidden(res); return; }
         const cfg = await res.json();
         document.getElementById('smtpEnabled').checked = !!cfg.enabled;
         document.getElementById('smtpHost').value = cfg.host || '';
@@ -1010,7 +1038,7 @@
         const box = document.getElementById('appAdvBody');
         if (!box) return;
         const res = await apiFetch('/api/settings/app');
-        if (!res || !res.ok) { box.innerHTML = ''; return; }
+        if (!res || !res.ok) { box.innerHTML = ''; await toastOnForbidden(res); return; }
         renderAppAdvSettings(await res.json());
     }
 
@@ -1082,7 +1110,7 @@
         const cb = document.getElementById('cliBlacklistToggle');
         if (!cb) return;
         const res = await apiFetch('/api/settings/cli-blacklist');
-        if (!res || !res.ok) return;
+        if (!res || !res.ok) { await toastOnForbidden(res); return; }
         const d = await res.json();
         cb.checked = !!d.cli_blacklist_operators;
     }
@@ -1249,7 +1277,7 @@
         const body = document.getElementById('fleetVersionsBody');
         if (!body) return;
         const res = await apiFetch('/api/fleet/versions');
-        if (!res || !res.ok) { body.innerHTML = ''; return; }
+        if (!res || !res.ok) { body.innerHTML = ''; await toastOnForbidden(res); return; }
         const d = await res.json();
         applyUpdateCapabilities(d);
         const dash = '—';
@@ -1288,7 +1316,7 @@
     async function loadSessionSettings() {
         if (!isAdminRole(currentRole)) return;
         const res = await apiFetch('/api/settings/session');
-        if (!res || !res.ok) return;
+        if (!res || !res.ok) { await toastOnForbidden(res); return; }
         const cfg = await res.json();
         document.getElementById('sessionIdleMinutes').value = cfg.idle_minutes;
         document.getElementById('sessionMaxHours').value = cfg.max_hours;
@@ -1317,7 +1345,7 @@
         const intervalEl = document.getElementById('pingMonitorInterval');
         if (!toggle || !intervalEl) return;
         const res = await apiFetch('/api/settings/ping-monitor');
-        if (!res || !res.ok) return;
+        if (!res || !res.ok) { await toastOnForbidden(res); return; }
         const cfg = await res.json();
         toggle.checked = !!cfg.enabled;
         intervalEl.value = cfg.interval_seconds || 60;

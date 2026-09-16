@@ -31,11 +31,11 @@ class TestAssignableTabsAreDerived(unittest.TestCase):
     def test_the_list_is_not_hand_maintained_any_more(self):
         src = _read("static", "js", "settings.js")
         self.assertNotIn("const ASSIGNABLE_TABS = [", src)
-        self.assertIn("function assignableTabs()", src)
+        self.assertIn("function assignableTabs(rowRole)", src)
 
     def test_the_editor_uses_the_derivation(self):
         src = _read("static", "js", "settings.js")
-        self.assertIn("assignableTabs().map(", src)
+        self.assertIn("assignableTabs(u.role).map(", src)
 
     def test_every_non_admin_nav_tab_is_reachable(self):
         """Le due meta': ogni pannello non-admin del template e' concedibile, e
