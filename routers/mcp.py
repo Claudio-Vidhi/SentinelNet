@@ -7,6 +7,7 @@ import json
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from routers.deps import require_tab
 from pydantic import BaseModel
 from security.security_manager import log_audit
 
@@ -28,7 +29,7 @@ def _mcp_disabled_tools() -> list:
         return sorted(t for t in _MCP_DEFAULT_DISABLED if t in mcp_server.TOOLS)
     return [t for t in (mcp.get("disabled_tools") or []) if t in mcp_server.TOOLS]
 
-@router.get("/api/mcp/settings")
+@router.get("/api/mcp/settings", dependencies=[Depends(require_tab("tab-mcp"))])
 def get_mcp_settings(current_user = Depends(require_admin)):
     """Catalogo dei tool MCP con descrizione + elenco dei tool disabilitati."""
     return {
@@ -37,7 +38,7 @@ def get_mcp_settings(current_user = Depends(require_admin)):
         "disabled_tools": _mcp_disabled_tools(),
     }
 
-@router.post("/api/mcp/settings")
+@router.post("/api/mcp/settings", dependencies=[Depends(require_tab("tab-mcp"))])
 def set_mcp_settings(payload: McpSettingsSchema, current_user = Depends(require_admin)):
     unknown = [t for t in payload.disabled_tools if t not in mcp_server.TOOLS]
     if unknown:

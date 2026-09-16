@@ -9,6 +9,7 @@ fortigate_service.py; qui solo routing, auth e scoping per sede."""
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from routers.deps import require_tab
 from pydantic import BaseModel
 
 from services import fortigate_service
@@ -18,7 +19,7 @@ from routers.deps import (
     devices_in_scope,
 )
 
-router = APIRouter(tags=["FortiGate"])
+router = APIRouter(dependencies=[Depends(require_tab("tab-fortigate"))], tags=["FortiGate"])
 
 
 # --- Schemi (usati solo da questi endpoint) ---

@@ -8,6 +8,7 @@ import uuid
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from routers.deps import require_tab
 from pydantic import BaseModel
 
 from core import db
@@ -229,14 +230,14 @@ def _assert_unredacted_allowed(allow_unredacted: bool, provider: str, base_url: 
                "(provider 'ollama' o endpoint OpenAI-compatible su host locale/privato)."
     )
 
-@router.get("/api/ai/profiles")
+@router.get("/api/ai/profiles", dependencies=[Depends(require_tab("tab-ai", "tab-flows", "tab-provisioner"))])
 def list_ai_profiles(current_user = Depends(require_admin)):
     """Elenca i profili di connessione AI salvati (chiavi API mascherate) e
     l'id del profilo attualmente attivo (usato da /api/ai/chat)."""
     profiles, active = _get_ai_profiles_raw()
     return {"profiles": [_mask_ai_profile(p) for p in profiles], "active_profile": active}
 
-@router.post("/api/ai/profiles")
+@router.post("/api/ai/profiles", dependencies=[Depends(require_tab("tab-ai"))])
 def create_ai_profile(payload: AiProfileSchema, current_user = Depends(require_admin)):
     provider = payload.provider.strip().lower()
     if provider not in _AI_PROVIDERS:
@@ -263,7 +264,7 @@ def create_ai_profile(payload: AiProfileSchema, current_user = Depends(require_a
     log_audit(f"Profilo AI '{new_profile['name']}' creato (provider='{provider}') dall'utente '{current_user.get('sub')}'.")
     return _mask_ai_profile(new_profile)
 
-@router.put("/api/ai/profiles/{profile_id}")
+@router.put("/api/ai/profiles/{profile_id}", dependencies=[Depends(require_tab("tab-ai"))])
 def update_ai_profile(profile_id: str, payload: AiProfileUpdateSchema, current_user = Depends(require_admin)):
     profiles, active = _get_ai_profiles_raw()
     profile = _find_ai_profile(profiles, profile_id)
@@ -299,7 +300,7 @@ def update_ai_profile(profile_id: str, payload: AiProfileUpdateSchema, current_u
     log_audit(f"Profilo AI '{profile['name']}' aggiornato dall'utente '{current_user.get('sub')}'.")
     return _mask_ai_profile(profile)
 
-@router.delete("/api/ai/profiles/{profile_id}")
+@router.delete("/api/ai/profiles/{profile_id}", dependencies=[Depends(require_tab("tab-ai"))])
 def delete_ai_profile(profile_id: str, current_user = Depends(require_admin)):
     profiles, active = _get_ai_profiles_raw()
     profile = _find_ai_profile(profiles, profile_id)
@@ -312,7 +313,7 @@ def delete_ai_profile(profile_id: str, current_user = Depends(require_admin)):
     log_audit(f"Profilo AI '{profile['name']}' eliminato dall'utente '{current_user.get('sub')}'.")
     return {"status": "success"}
 
-@router.post("/api/ai/profiles/{profile_id}/activate")
+@router.post("/api/ai/profiles/{profile_id}/activate", dependencies=[Depends(require_tab("tab-ai"))])
 def activate_ai_profile(profile_id: str, current_user = Depends(require_admin)):
     profiles, _active = _get_ai_profiles_raw()
     profile = _find_ai_profile(profiles, profile_id)
@@ -362,7 +363,7 @@ def _conversation_title(title: str, messages) -> str:
     return " ".join((first.content if first else "").split())[:60]
 
 
-@router.get("/api/ai/conversations")
+@router.get("/api/ai/conversations", dependencies=[Depends(require_tab("tab-ai"))])
 async def list_ai_conversations(current_user = Depends(get_current_user)):
     """Elenco delle conversazioni dell'utente, più recenti prima. Senza i
     messaggi: la sidebar mostra solo i titoli."""
@@ -375,7 +376,7 @@ async def list_ai_conversations(current_user = Depends(get_current_user)):
     return {"conversations": [dict(r) for r in rows]}
 
 
-@router.get("/api/ai/conversations/{conversation_id}")
+@router.get("/api/ai/conversations/{conversation_id}", dependencies=[Depends(require_tab("tab-ai"))])
 async def get_ai_conversation(conversation_id: int, current_user = Depends(get_current_user)):
     rows = await db.read(
         "SELECT id, title, messages_json, created_ts, updated_ts "
@@ -388,7 +389,7 @@ async def get_ai_conversation(conversation_id: int, current_user = Depends(get_c
     return row
 
 
-@router.post("/api/ai/conversations")
+@router.post("/api/ai/conversations", dependencies=[Depends(require_tab("tab-ai"))])
 async def create_ai_conversation(payload: AiConversationSchema,
                                  current_user = Depends(get_current_user)):
     import asyncio
@@ -419,7 +420,7 @@ async def create_ai_conversation(payload: AiConversationSchema,
     return {"id": new_id, "title": title, "created_ts": now, "updated_ts": now}
 
 
-@router.put("/api/ai/conversations/{conversation_id}")
+@router.put("/api/ai/conversations/{conversation_id}", dependencies=[Depends(require_tab("tab-ai"))])
 async def update_ai_conversation(conversation_id: int,
                                  payload: AiConversationUpdateSchema,
                                  current_user = Depends(get_current_user)):
@@ -455,7 +456,7 @@ async def update_ai_conversation(conversation_id: int,
     return {"status": "success", "id": conversation_id, "updated_ts": now}
 
 
-@router.delete("/api/ai/conversations/{conversation_id}")
+@router.delete("/api/ai/conversations/{conversation_id}", dependencies=[Depends(require_tab("tab-ai"))])
 async def delete_ai_conversation(conversation_id: int,
                                  current_user = Depends(get_current_user)):
     import asyncio
@@ -477,7 +478,7 @@ async def delete_ai_conversation(conversation_id: int,
     return {"status": "success", "id": conversation_id}
 
 
-@router.get("/api/ai/models")
+@router.get("/api/ai/models", dependencies=[Depends(require_tab("tab-ai"))])
 def list_ai_models(provider: Optional[str] = None, profile_id: Optional[str] = None,
                     current_user = Depends(require_admin)):
     """Elenca i modelli disponibili che supportano la chat per un provider,
@@ -508,7 +509,7 @@ def list_ai_models(provider: Optional[str] = None, profile_id: Optional[str] = N
         raise HTTPException(status_code=502, detail=str(e))
     return {"provider": prov, "models": models, "default_model": ai_assistant.get_default_model(prov)}
 
-@router.post("/api/ai/chat")
+@router.post("/api/ai/chat", dependencies=[Depends(require_tab("tab-ai"))])
 def ai_chat(payload: AiChatSchema, current_user = Depends(get_current_user)):
     profile = _get_active_ai_profile()
     if profile is None:
@@ -676,7 +677,7 @@ def _tenant_common_parameters(tenant: str, current_user) -> str:
         out.extend(f"  {l}" for l in common[:120])
     return "\n".join(out)
 
-@router.post("/api/ai/generate-config")
+@router.post("/api/ai/generate-config", dependencies=[Depends(require_tab("tab-ai", "tab-provisioner"))])
 def ai_generate_config(payload: AiGenerateConfigSchema, current_user = Depends(get_current_user)):
     """Genera con l'AI la configurazione proposta per un NUOVO switch del
     tenant: da un dispositivo template (running-config) oppure dai parametri

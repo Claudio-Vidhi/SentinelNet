@@ -5,12 +5,13 @@
 
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from routers.deps import require_tab
 from pydantic import BaseModel
 
 from routers.deps import get_current_user, require_admin, require_operator
 from services import audit_checklist
 
-router = APIRouter(prefix="/api/audit-checklist", tags=["Audit Checklist"])
+router = APIRouter(dependencies=[Depends(require_tab("tab-netsec-audit"))], prefix="/api/audit-checklist", tags=["Audit Checklist"])
 
 
 class CreateEngagementRequest(BaseModel):

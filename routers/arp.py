@@ -6,6 +6,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from routers.deps import require_tab
 
 from collectors import arp_collector
 from services import inventory_manager
@@ -21,7 +22,7 @@ router = APIRouter(tags=["ARP"])
 
 # --- ENDPOINTS ---
 
-@router.post("/api/arp/scan")
+@router.post("/api/arp/scan", dependencies=[Depends(require_tab("tab-endpoint"))])
 async def arp_scan(payload: MacScanSchema, current_user = Depends(require_operator)):
     """Raccoglie le tabelle ARP dagli apparati selezionati (scoped per tenant)
     e storicizza i binding MAC<->IP. Nel mondo reale il gateway di una VLAN
@@ -54,7 +55,7 @@ async def arp_scan(payload: MacScanSchema, current_user = Depends(require_operat
               f"(nuovi: {summary['total_new']}, aggiornati: {summary['total_updated']}).")
     return summary
 
-@router.get("/api/arp/search")
+@router.get("/api/arp/search", dependencies=[Depends(require_tab("tab-endpoint"))])
 def arp_search(mac: Optional[str] = None, ip: Optional[str] = None,
                source_ip: Optional[str] = None, limit: int = 500,
                frm: Optional[str] = None, to: Optional[str] = None,
@@ -65,7 +66,7 @@ def arp_search(mac: Optional[str] = None, ip: Optional[str] = None,
                                               tenants=tenants, frm=frm or None, to=to or None,
                                               limit=limit)}
 
-@router.get("/api/arp/client-map")
+@router.get("/api/arp/client-map", dependencies=[Depends(require_tab("tab-endpoint", "tab-flows"))])
 def arp_client_map(mac: Optional[str] = None, ip: Optional[str] = None,
                    tenant: Optional[str] = None, source_ip: Optional[str] = None,
                    limit: int = 500,
@@ -93,7 +94,7 @@ def arp_client_map(mac: Optional[str] = None, ip: Optional[str] = None,
 
 # Nessun chiamante in-tree: la UI mostra /api/mac/stats. Tenuta come
 # contatore ARP per i client esterni, coperta da test_router_smoke.
-@router.get("/api/arp/stats")
+@router.get("/api/arp/stats", dependencies=[Depends(require_tab("tab-endpoint"))])
 def arp_stats_ep(current_user = Depends(get_current_user)):
     return mac_history.arp_stats(tenants=user_group_scope(current_user))
 

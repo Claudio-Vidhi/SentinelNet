@@ -12,6 +12,7 @@ togliere un CVE dalla lista.
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+from routers.deps import require_tab
 
 from routers.deps import (require_operator, assert_device_allowed,
                           devices_in_scope)
@@ -59,13 +60,13 @@ def _scoped_devices(current_user, tenant: str) -> list:
 
 # /summary e /priority stanno PRIMA di /{ip}: altrimenti il path param se le
 # mangia e "summary" viene cercato in inventario come se fosse un IP.
-@router.get("/api/cve/summary")
+@router.get("/api/cve/summary", dependencies=[Depends(require_tab("tab-home", "tab-security"))])
 def cve_summary(tenant: str = "", current_user=Depends(require_operator)):
     """Una riga per tenant. Ogni conteggio con il suo denominatore."""
     return {"tenants": cve_intel.summary(_scoped_devices(current_user, tenant))}
 
 
-@router.get("/api/cve/priority")
+@router.get("/api/cve/priority", dependencies=[Depends(require_tab("tab-security"))])
 def cve_priority(tenant: str = "", limit: int = 200,
                  current_user=Depends(require_operator)):
     """Cosa sistemare per primo: i CVE degli apparati in scope, per punteggio."""
@@ -91,12 +92,12 @@ def cve_priority(tenant: str = "", limit: int = 200,
             "not_evaluated": sorted(not_evaluated)}
 
 
-@router.get("/api/cve/{ip}")
+@router.get("/api/cve/{ip}", dependencies=[Depends(require_tab("tab-security"))])
 def cve_device(ip: str, current_user=Depends(require_operator)):
     return _device_view(_device_or_404(current_user, ip))
 
 
-@router.post("/api/cve/{ip}/refresh")
+@router.post("/api/cve/{ip}/refresh", dependencies=[Depends(require_tab("tab-security"))])
 def cve_refresh(ip: str, current_user=Depends(require_operator)):
     device = _device_or_404(current_user, ip)
     log_audit(f"Snapshot CVE di {ip} riscaricato dall'utente "

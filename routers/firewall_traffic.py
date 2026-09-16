@@ -9,12 +9,13 @@ normalizzazione stanno in services/firewall_traffic.py.
 import asyncio
 
 from fastapi import APIRouter, Depends, Query
+from routers.deps import require_tab
 
 from core.ssh_pool import run_ssh
 from routers.deps import devices_in_scope, get_current_user
 from services import firewall_traffic
 
-router = APIRouter(tags=["Firewall Traffic"])
+router = APIRouter(dependencies=[Depends(require_tab("tab-flows"))], tags=["Firewall Traffic"])
 
 # Come per /api/routes: un giro sulla flotta apre altrettante sessioni REST.
 MAX_CONCURRENT_DEVICES = 8

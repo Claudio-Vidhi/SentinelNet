@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from routers.deps import require_tab
 from pydantic import BaseModel
 
 from core import db
@@ -51,12 +52,12 @@ def _load_backup_text(ip: str, current_user) -> str:
 
 # --- ENDPOINTS ---
 
-@router.get("/api/config-analyzer")
+@router.get("/api/config-analyzer", dependencies=[Depends(require_tab("tab-config"))])
 def config_analyzer_all(group: str = "all", current_user = Depends(get_current_user)):
     scope = user_group_scope(current_user)
     return config_analyzer.analyze_all(group_filter=group, allowed_groups=scope)
 
-@router.get("/api/config-analyzer/{ip}")
+@router.get("/api/config-analyzer/{ip}", dependencies=[Depends(require_tab("tab-config", "tab-endpoint", "tab-map", "tab-map-interactive"))])
 def config_analyzer_device(ip: str, current_user = Depends(get_current_user)):
     scope = user_group_scope(current_user)
     device = next((d for d in inventory_manager.get_all_devices() if d.get('IP') == ip), None)
@@ -78,7 +79,7 @@ def config_analyzer_device(ip: str, current_user = Depends(get_current_user)):
     return result
 
 
-@router.post("/api/config-analyzer/convert")
+@router.post("/api/config-analyzer/convert", dependencies=[Depends(require_tab("tab-config"))])
 def config_analyzer_convert(payload: ConvertSchema, current_user = Depends(get_current_user)):
     """Conversione deterministica (preview) FortiOS <-> PAN-OS. Accetta testo
     esplicito oppure {ip} -> backup piu' recente del dispositivo (scoped)."""
@@ -151,7 +152,7 @@ def _print_argv(exe: str, src: str, out: str, profile_dir: str) -> list:
     ]
 
 
-@router.post("/api/netsec-audit/report/pdf")
+@router.post("/api/netsec-audit/report/pdf", dependencies=[Depends(require_tab("tab-netsec-audit", "tab-security"))])
 def netsec_audit_report_pdf(payload: ReportPdfSchema,
                             current_user = Depends(get_current_user)):
     """Stampa in PDF l'HTML dell'anteprima, con il browser di sistema."""
@@ -202,7 +203,7 @@ class NetSecAuditSchema(BaseModel):
     run_name: Optional[str] = None
 
 
-@router.get("/api/netsec-audit/benchmarks")
+@router.get("/api/netsec-audit/benchmarks", dependencies=[Depends(require_tab("tab-netsec-audit"))])
 def netsec_audit_benchmarks(lang: str = "it",
                             current_user = Depends(get_current_user)):
     """Requisiti verificati da ciascun benchmark, senza eseguire alcuna scansione."""
@@ -242,7 +243,7 @@ def netsec_audit_benchmarks(lang: str = "it",
     }
 
 
-@router.post("/api/netsec-audit/scan")
+@router.post("/api/netsec-audit/scan", dependencies=[Depends(require_tab("tab-netsec-audit"))])
 def netsec_audit_scan(payload: NetSecAuditSchema, current_user = Depends(get_current_user)):
     """Valutazione di compliance di sicurezza (CIS, NIST, PCI-DSS) su testo o dispositivo."""
     from services import netsec_audit
@@ -294,7 +295,7 @@ def netsec_audit_scan(payload: NetSecAuditSchema, current_user = Depends(get_cur
     return result
 
 
-@router.post("/api/netsec-audit/export/docx")
+@router.post("/api/netsec-audit/export/docx", dependencies=[Depends(require_tab("tab-netsec-audit"))])
 def netsec_audit_export_docx(payload: Dict[str, Any], current_user = Depends(get_current_user)):
     """Esporta un report di compliance NetSec Audit in formato Microsoft Word (.docx)."""
     from services.netsec_audit.docx_export import generate_audit_docx
@@ -311,7 +312,7 @@ def netsec_audit_export_docx(payload: Dict[str, Any], current_user = Depends(get
     )
 
 
-@router.get("/api/netsec-audit/history")
+@router.get("/api/netsec-audit/history", dependencies=[Depends(require_tab("tab-netsec-audit"))])
 async def netsec_audit_history(tenant: Optional[str] = None,
                                device_ip: Optional[str] = None,
                                benchmark: Optional[str] = None,
@@ -358,7 +359,7 @@ async def netsec_audit_history(tenant: Optional[str] = None,
     return {"runs": out, "count": len(out)}
 
 
-@router.get("/api/netsec-audit/history/{run_id}")
+@router.get("/api/netsec-audit/history/{run_id}", dependencies=[Depends(require_tab("tab-netsec-audit"))])
 async def netsec_audit_history_detail(run_id: int,
                                       current_user = Depends(get_current_user)):
     """Single audit run detail. Returns full result document.
@@ -377,7 +378,7 @@ async def netsec_audit_history_detail(run_id: int,
         raise HTTPException(status_code=500, detail="Impossibile leggere il risultato memorizzato.")
 
 
-@router.delete("/api/netsec-audit/history/{run_id}")
+@router.delete("/api/netsec-audit/history/{run_id}", dependencies=[Depends(require_tab("tab-netsec-audit"))])
 async def netsec_audit_history_delete(run_id: int,
                                       current_user = Depends(require_admin)):
     """Delete a saved audit run. Admin only.

@@ -66,3 +66,106 @@ class TestTabAliasParityWithCoreJS(unittest.TestCase):
             [node, harness, json.dumps(user_manager.TAB_ALIASES)],
             capture_output=True, text=True, cwd=_REPO_ROOT)
         self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
+
+
+# One GET TAB route per router file, with the tab that owns it. Handlers may
+# answer 404/422/400 once past the gate: only the tab 403 matters here.
+TAB_GET_ROUTES = [
+    ("/api/ai/conversations", "tab-ai"),
+    ("/api/netsec-audit/benchmarks", "tab-netsec-audit"),
+    ("/api/arp/stats", "tab-endpoint"),
+    ("/api/audit-checklist/templates", "tab-netsec-audit"),
+    ("/api/users", "tab-users"),
+    ("/api/search", "tab-security"),
+    ("/api/groups", "tab-groups"),
+    ("/api/cloud-backup/status", "tab-settings"),
+    ("/api/bulk-command/no-such-job", "tab-devices"),
+    ("/api/drift/devices", "tab-config-drift"),
+    ("/api/cve/priority", "tab-security"),
+    ("/api/diagnose/gateway-candidates", "tab-endpoint"),
+    ("/api/endpoints/list", "tab-endpoint"),
+    ("/api/firewall-traffic/devices", "tab-flows"),
+    ("/api/flow-siem/facets", "tab-flows"),
+    ("/api/fortigate/tokens", "tab-fortigate"),
+    ("/api/incidents/rules", "tab-incidents"),
+    ("/api/export/devices/columns", "tab-devices"),
+    ("/api/mac/stats", "tab-endpoint"),
+    ("/api/mcp/settings", "tab-mcp"),
+    ("/api/observability/config", "tab-settings"),
+    ("/api/policy-test/192.0.2.254/findings", "tab-policy-test"),
+    ("/api/identities", "tab-sites"),
+    ("/api/routes/devices", "tab-routes"),
+    ("/api/scan-subnet/no-such-job", "tab-devices"),
+    ("/api/settings/app", "tab-settings"),
+    ("/api/sites", "tab-sites"),
+    ("/api/portchannels", "tab-map"),
+    ("/api/ping/not-an-ip", "tab-devices"),
+    ("/api/wlc/192.0.2.254/status", "tab-wlc"),
+    ("/api/redundancy/groups", "tab-redundancy"),
+]
+
+TAB_DENIED = "Funzionalita' non abilitata per questo utente."
+
+
+class TestTabGateOnRoutes(unittest.TestCase):
+    """Private users store, same pattern as tests/test_super_admin_api.py."""
+
+    PW = "PasswordSicura1!"
+
+    @classmethod
+    def setUpClass(cls):
+        import tempfile
+        from security import user_manager
+        cls._orig = user_manager.USERS_JSON
+        user_manager.USERS_JSON = os.path.join(
+            tempfile.mkdtemp(prefix="tabgate_users_"), "users.json")
+
+    @classmethod
+    def tearDownClass(cls):
+        from security import user_manager
+        user_manager.USERS_JSON = cls._orig
+
+    def setUp(self):
+        from security import security_manager, user_manager
+        for u in user_manager.list_users():
+            user_manager.delete_user(u["username"])
+        security_manager._failed_attempts.clear()
+        user_manager.create_user("lim", self.PW, role="admin")
+        user_manager.create_user("free", self.PW, role="admin")
+        user_manager.create_user("root", self.PW, role="super_admin")
+        user_manager.set_allowed_tabs("lim", ["tab-home"])
+        user_manager.set_allowed_tabs("root", ["tab-home"])
+
+    def _as(self, name):
+        from fastapi.testclient import TestClient
+        import app_server
+        # A handler past the gate may fail on the schema-less test DB: a 500
+        # still proves the tab dependency let the request through.
+        c = TestClient(app_server.app, raise_server_exceptions=False)
+        r = c.post("/api/auth/login", json={"username": name, "password": self.PW})
+        self.assertEqual(r.status_code, 200, r.text)
+        return c
+
+    @staticmethod
+    def _tab_denied(resp):
+        return resp.status_code == 403 and resp.json().get("detail") == TAB_DENIED
+
+    def test_routes_gated_by_their_tab(self):
+        from security import user_manager
+        lim, free, root = self._as("lim"), self._as("free"), self._as("root")
+        for path, tab in TAB_GET_ROUTES:
+            with self.subTest(path=path, tab=tab):
+                user_manager.set_allowed_tabs("lim", ["tab-home"])
+                self.assertTrue(self._tab_denied(lim.get(path)), path)
+                user_manager.set_allowed_tabs("lim", [tab])
+                self.assertFalse(self._tab_denied(lim.get(path)), path)
+                self.assertFalse(self._tab_denied(free.get(path)), path)
+                self.assertFalse(self._tab_denied(root.get(path)), path)
+
+    def test_ws_terminal_still_authenticates_by_otp(self):
+        from fastapi.testclient import TestClient
+        import app_server
+        c = TestClient(app_server.app)
+        with c.websocket_connect("/api/ws-terminal/192.0.2.1") as ws:
+            ws.send_text("bogus-otp")
+            self.assertIn("Token OTP non valido", ws.receive_text())

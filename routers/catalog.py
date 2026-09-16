@@ -7,6 +7,7 @@ parametri e risposte identici al monolite."""
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from routers.deps import require_tab
 from pydantic import BaseModel, Field
 
 from services import inventory_manager
@@ -63,7 +64,7 @@ class DeviceCategorySchema(BaseModel):
 
 # --- ROTTE ---
 
-@router.get("/api/groups")
+@router.get("/api/groups", dependencies=[Depends(require_tab("tab-groups", "tab-provisioning"))])
 def list_groups(current_user = Depends(get_current_user)):
     groups = inventory_manager.get_all_groups()
     scope = user_group_scope(current_user)
@@ -71,7 +72,7 @@ def list_groups(current_user = Depends(get_current_user)):
         groups = {g: v for g, v in groups.items() if g in scope}
     return groups
 
-@router.post("/api/groups")
+@router.post("/api/groups", dependencies=[Depends(require_tab("tab-groups", "tab-provisioning"))])
 def create_group(group: GroupSchema, current_user = Depends(require_operator)):
     name = group.name
     if not name:
@@ -82,7 +83,7 @@ def create_group(group: GroupSchema, current_user = Depends(require_operator)):
     log_audit(f"Gruppo '{name}' (descrizione: '{group.description}') creato dall'utente '{current_user.get('sub')}'.")
     return {"status": "success", "message": "Gruppo creato"}
 
-@router.post("/api/groups/rename")
+@router.post("/api/groups/rename", dependencies=[Depends(require_tab("tab-groups"))])
 def rename_group(payload: GroupRenameSchema, current_user = Depends(require_admin)):
     """Rinomina un tenant e riassegna i relativi apparati. 'Generale' non è
     rinominabile.
@@ -107,7 +108,7 @@ def rename_group(payload: GroupRenameSchema, current_user = Depends(require_admi
     log_audit(f"Gruppo '{old}' rinominato in '{new}' dall'utente '{current_user.get('sub')}'.")
     return {"status": "success"}
 
-@router.post("/api/groups/delete")
+@router.post("/api/groups/delete", dependencies=[Depends(require_tab("tab-groups"))])
 def remove_group(payload: GroupDeleteSchema, current_user = Depends(require_admin)):
     """Elimina un tenant. Solo admin: e' distruttivo e tocca lo scope RBAC."""
     group_name = payload.name
@@ -123,7 +124,7 @@ def remove_group(payload: GroupDeleteSchema, current_user = Depends(require_admi
 def list_vendors(current_user = Depends(get_current_user)):
     return inventory_manager.get_all_vendors()
 
-@router.post("/api/vendors")
+@router.post("/api/vendors", dependencies=[Depends(require_tab("tab-groups"))])
 def create_vendor(v: VendorSchema, current_user = Depends(require_operator)):
     vendors = inventory_manager.get_all_vendors()
     vendors[v.name.lower().strip()] = {"driver": v.driver}
@@ -131,7 +132,7 @@ def create_vendor(v: VendorSchema, current_user = Depends(require_operator)):
     log_audit(f"Vendor '{v.name}' aggiunto/aggiornato da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
-@router.post("/api/vendors/delete")
+@router.post("/api/vendors/delete", dependencies=[Depends(require_tab("tab-groups"))])
 def delete_vendor(v: VendorDeleteSchema, current_user = Depends(require_operator)):
     vendors = inventory_manager.get_all_vendors()
     if v.name.lower() in ("cisco", "hpe"):
@@ -200,7 +201,7 @@ def assemble_classification(scope):
         "total": len(nodes),
     }
 
-@router.get("/api/device-classification")
+@router.get("/api/device-classification", dependencies=[Depends(require_tab("tab-categories"))])
 def device_classification(current_user = Depends(get_current_user)):
     """Elenco completo dei dispositivi (inventariati + scoperti via CDP/LLDP) con
     categoria, sede e conteggi per categoria. Usato dal pannello Dispositivi."""
@@ -306,7 +307,7 @@ def _neighbours_of(node_id: str, links: list, label_of: dict,
     return out
 
 
-@router.get("/api/export/classification/columns")
+@router.get("/api/export/classification/columns", dependencies=[Depends(require_tab("tab-categories"))])
 def export_classification_columns(current_user = Depends(get_current_user)):
     """Available columns and defaults, so the UI does not duplicate the
     registry."""
@@ -411,7 +412,7 @@ def assemble_classification_rows(
     return headers, all_rows
 
 
-@router.get("/api/export/classification")
+@router.get("/api/export/classification", dependencies=[Depends(require_tab("tab-categories"))])
 def export_classification_csv(
     columns: str = "",
     groups: str = "",
@@ -451,7 +452,7 @@ def export_classification_csv(
     )
 
 
-@router.get("/api/export/classification/preview")
+@router.get("/api/export/classification/preview", dependencies=[Depends(require_tab("tab-categories"))])
 def preview_classification_export(
     columns: str = "",
     groups: str = "",
@@ -478,7 +479,7 @@ def preview_classification_export(
         "total_rows": len(rows),
     }
 
-@router.post("/api/device-categories")
+@router.post("/api/device-categories", dependencies=[Depends(require_tab("tab-categories"))])
 def create_device_category(payload: CategoryCreateSchema, current_user = Depends(require_operator)):
     """Crea una categoria custom o aggiunge una sottocategoria (admin/operator)."""
     if not inventory_manager.add_category(payload.key, payload.label, payload.subcategory):
@@ -489,21 +490,21 @@ def create_device_category(payload: CategoryCreateSchema, current_user = Depends
     )
     return {"status": "success"}
 
-@router.post("/api/device-categories/delete")
+@router.post("/api/device-categories/delete", dependencies=[Depends(require_tab("tab-categories"))])
 def delete_device_category(payload: CategoryDeleteSchema, current_user = Depends(require_operator)):
     if not inventory_manager.delete_category(payload.key):
         raise HTTPException(status_code=400, detail="Categoria di sistema o inesistente.")
     log_audit(f"Categoria '{payload.key}' eliminata da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
-@router.post("/api/device-categories/delete-subcategory")
+@router.post("/api/device-categories/delete-subcategory", dependencies=[Depends(require_tab("tab-categories"))])
 def delete_subcategory_ep(payload: SubcategoryDeleteSchema, current_user = Depends(require_operator)):
     if not inventory_manager.delete_subcategory(payload.key, payload.subcategory):
         raise HTTPException(status_code=404, detail="Sottocategoria non trovata.")
     log_audit(f"Sottocategoria '{payload.subcategory}' di '{payload.key}' eliminata da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
-@router.post("/api/device-categories/assign")
+@router.post("/api/device-categories/assign", dependencies=[Depends(require_tab("tab-categories"))])
 def assign_device_category(payload: DeviceCategorySchema, current_user = Depends(require_operator)):
     """Aggiorna gli attributi manuali di un dispositivo: categoria, sottocategoria,
     vendor e/o modello (admin/operator). I campi non forniti restano invariati."""

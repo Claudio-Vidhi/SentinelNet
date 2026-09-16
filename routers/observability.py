@@ -13,6 +13,7 @@ import os
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from routers.deps import require_tab
 
 from core import db
 from core import data_config
@@ -77,7 +78,7 @@ def _telemetry_filter(exclude: bool):
             tuple(ports))
 
 
-@router.get("/api/observability/top")
+@router.get("/api/observability/top", dependencies=[Depends(require_tab("tab-flows"))])
 async def obs_top_talkers(
     window: str = Query("15m"),
     limit: int = Query(50, ge=1, le=MAX_LIMIT),
@@ -126,7 +127,7 @@ def _bucket_seconds(window_s: int) -> int:
     return max(60, window_s // _SERIES_BUCKETS)
 
 
-@router.get("/api/observability/hosts")
+@router.get("/api/observability/hosts", dependencies=[Depends(require_tab("tab-flows"))])
 async def obs_hosts(
     window: str = Query("1h"),
     limit: int = Query(50, ge=1, le=MAX_LIMIT),
@@ -182,7 +183,7 @@ async def obs_hosts(
             "hosts": [dict(r) for r in rows]}
 
 
-@router.get("/api/observability/host-series")
+@router.get("/api/observability/host-series", dependencies=[Depends(require_tab("tab-flows"))])
 async def obs_host_series(
     ip: str = Query(..., min_length=1, max_length=45),
     window: str = Query("1h"),
@@ -226,7 +227,7 @@ async def obs_host_series(
             "points": points}
 
 
-@router.get("/api/observability/protocol-distribution")
+@router.get("/api/observability/protocol-distribution", dependencies=[Depends(require_tab("tab-flows"))])
 async def obs_protocol_distribution(
     window: str = Query("15m"),
     exclude_telemetry: bool = Query(False),
@@ -385,7 +386,7 @@ async def obs_protocol_distribution(
     }
 
 
-@router.get("/api/observability/syslog")
+@router.get("/api/observability/syslog", dependencies=[Depends(require_tab("tab-flows"))])
 async def obs_syslog(
     window: str = Query("15m"),
     limit: int = Query(100, ge=1, le=MAX_LIMIT),
@@ -408,7 +409,7 @@ async def obs_syslog(
 
 # Superficie pubblica deliberata: nessun chiamante in-tree (la UI legge le
 # tabelle specifiche), esiste per i consumatori esterni CLI/MCP/automazione.
-@router.get("/api/observability/events")
+@router.get("/api/observability/events", dependencies=[Depends(require_tab("tab-flows"))])
 async def obs_events(
     window: str = Query("15m"),
     event_type: str = Query("all"),
@@ -453,7 +454,7 @@ async def obs_events(
             "events": events}
 
 
-@router.get("/api/observability/anomalies")
+@router.get("/api/observability/anomalies", dependencies=[Depends(require_tab("tab-home", "tab-flows"))])
 async def obs_anomalies(
     status: str = Query("new", pattern="^(new|ack|resolved|all)$"),
     window: str = Query("24h"),
@@ -495,7 +496,7 @@ async def obs_anomalies(
             "anomalies": [dict(r) for r in rows]}
 
 
-@router.post("/api/observability/anomalies/{event_id}/status", deprecated=True)
+@router.post("/api/observability/anomalies/{event_id}/status", deprecated=True, dependencies=[Depends(require_tab("tab-flows"))])
 async def obs_anomaly_status(
     event_id: int,
     payload: dict,
@@ -525,7 +526,7 @@ def _synthetic_vlan(tenant: str) -> int:
     return 100 + (int.from_bytes(digest[:2], "big") % 900)
 
 
-@router.get("/api/observability/flowgraph")
+@router.get("/api/observability/flowgraph", dependencies=[Depends(require_tab("tab-flows"))])
 async def obs_flowgraph(
     window: str = Query("5m"),
     exclude_telemetry: bool = Query(False),
@@ -674,14 +675,14 @@ async def obs_flowgraph(
             "tenant": tenant_summary, "protocols": protocols}
 
 
-@router.get("/api/observability/config")
+@router.get("/api/observability/config", dependencies=[Depends(require_tab("tab-settings"))])
 def obs_get_config(current_user = Depends(require_admin)):
     """Config effettiva dei listener (settings + eventuali override da env).
     Le modifiche via POST vengono applicate a caldo, senza riavvio."""
     return data_config.obs_config()
 
 
-@router.post("/api/observability/config")
+@router.post("/api/observability/config", dependencies=[Depends(require_tab("tab-settings"))])
 async def obs_set_config(payload: dict, current_user = Depends(require_admin)):
     """Salva la sezione 'observability' in app_settings.json (§9.5) e applica
     subito la nuova config ai listener UDP e ai task di background (nessun
@@ -719,7 +720,7 @@ async def obs_set_config(payload: dict, current_user = Depends(require_admin)):
             "effective": effective, "listeners": listener_status}
 
 
-@router.get("/api/observability/api-context")
+@router.get("/api/observability/api-context", dependencies=[Depends(require_tab("tab-flows"))])
 async def obs_api_context(
     device_ip: str = Query(...),
     current_user = Depends(get_current_user),
@@ -738,7 +739,7 @@ async def obs_api_context(
     return {"device_ip": device_ip, "observations": [dict(r) for r in rows]}
 
 
-@router.post("/api/observability/api-poll")
+@router.post("/api/observability/api-poll", dependencies=[Depends(require_tab("tab-flows"))])
 async def obs_api_poll_now(current_user = Depends(require_operator)):
     """Polling REST one-shot ("Aggiorna ora"): esegue subito un giro del
     poller API su tutti i FortiGate con token configurato."""
@@ -748,7 +749,7 @@ async def obs_api_poll_now(current_user = Depends(require_operator)):
     return {"status": "success", "snapshots": n}
 
 
-@router.get("/api/observability/health")
+@router.get("/api/observability/health", dependencies=[Depends(require_tab("tab-flows", "tab-settings"))])
 def obs_health(current_user = Depends(require_admin)):
     """Stato pipeline: listener attivi, metriche, dimensione DB, versione
     schema. Diagnostica operativa primaria dell'intero modulo (solo admin)."""
@@ -779,7 +780,7 @@ class PruneLogsSchema(BaseModel):
     days: int = 30
 
 
-@router.post("/api/observability/prune-logs")
+@router.post("/api/observability/prune-logs", dependencies=[Depends(require_tab("tab-settings"))])
 async def obs_prune_logs(payload: PruneLogsSchema, current_user = Depends(require_admin)):
     """Elimina i log di osservabilità più vecchi del limite in giorni."""
     cutoff = int(time.time()) - (payload.days * 86400)

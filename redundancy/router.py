@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
+from routers.deps import require_tab
 from pydantic import BaseModel
 
 from redundancy import service
@@ -38,13 +39,13 @@ class GroupWrite(BaseModel):
     members: list[MemberWrite] = []
 
 
-@router.get("/api/redundancy/groups")
+@router.get("/api/redundancy/groups", dependencies=[Depends(require_tab("tab-redundancy", "tab-devices", "tab-map", "tab-map-interactive", "tab-categories"))])
 def list_redundancy_groups(current_user=Depends(get_current_user)):
     scope = user_group_scope(current_user)
     return {"results": service.list_groups(scope)}
 
 
-@router.get("/api/redundancy/groups/{group_id}")
+@router.get("/api/redundancy/groups/{group_id}", dependencies=[Depends(require_tab("tab-redundancy"))])
 def get_redundancy_group(group_id: int, current_user=Depends(get_current_user)):
     g = service.get_group(group_id)
     if not g:
@@ -55,7 +56,7 @@ def get_redundancy_group(group_id: int, current_user=Depends(get_current_user)):
     return g
 
 
-@router.post("/api/redundancy/groups", status_code=status.HTTP_201_CREATED)
+@router.post("/api/redundancy/groups", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_tab("tab-redundancy", "tab-map", "tab-map-interactive", "tab-categories"))])
 def create_redundancy_group(payload: GroupWrite, current_user=Depends(require_admin)):
     assert_group_allowed(current_user, payload.group_name)
     try:
@@ -66,7 +67,7 @@ def create_redundancy_group(payload: GroupWrite, current_user=Depends(require_ad
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
-@router.put("/api/redundancy/groups/{group_id}")
+@router.put("/api/redundancy/groups/{group_id}", dependencies=[Depends(require_tab("tab-redundancy", "tab-map", "tab-map-interactive", "tab-categories"))])
 def update_redundancy_group(group_id: int, payload: GroupWrite, current_user=Depends(require_admin)):
     g = service.get_group(group_id)
     if not g:
@@ -83,7 +84,7 @@ def update_redundancy_group(group_id: int, payload: GroupWrite, current_user=Dep
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
-@router.delete("/api/redundancy/groups/{group_id}")
+@router.delete("/api/redundancy/groups/{group_id}", dependencies=[Depends(require_tab("tab-redundancy", "tab-map", "tab-map-interactive", "tab-categories"))])
 def delete_redundancy_group(group_id: int, current_user=Depends(require_admin)):
     g = service.get_group(group_id)
     if not g:

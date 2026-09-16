@@ -7,6 +7,7 @@ parametri e risposte identici al monolite."""
 import os
 
 from fastapi import APIRouter, Depends, HTTPException
+from routers.deps import require_tab
 from pydantic import BaseModel, Field
 
 from core.app_settings import get_app_settings, save_app_settings, effective_port, list_local_ips, PORT
@@ -54,7 +55,7 @@ class UiVariantSchema(BaseModel):
 
 # --- ROTTE ---
 
-@router.get("/api/settings/network")
+@router.get("/api/settings/network", dependencies=[Depends(require_tab("tab-settings"))])
 def get_network_settings(current_user = Depends(require_admin)):
     """Stato attuale del bind IP: host configurato, host effettivo, eventuale
     override via env, porta e IP locali selezionabili."""
@@ -69,7 +70,7 @@ def get_network_settings(current_user = Depends(require_admin)):
         "local_ips": list_local_ips(),
     }
 
-@router.post("/api/settings/network")
+@router.post("/api/settings/network", dependencies=[Depends(require_tab("tab-settings"))])
 def set_network_settings(payload: NetworkSettingsSchema, current_user = Depends(require_admin)):
     """Imposta l'IP di bind (applicato al prossimo riavvio). Valida che l'host
     sia tra gli IP locali enumerati (o 0.0.0.0/127.0.0.1)."""
@@ -81,12 +82,12 @@ def set_network_settings(payload: NetworkSettingsSchema, current_user = Depends(
     log_audit(f"IP di bind impostato a '{host}' dall'utente '{current_user.get('sub')}' (applicato al riavvio).")
     return {"status": "success", "restart_required": True, "host": host}
 
-@router.get("/api/settings/cli-blacklist")
+@router.get("/api/settings/cli-blacklist", dependencies=[Depends(require_tab("tab-settings"))])
 def get_cli_blacklist_settings(current_user = Depends(require_admin)):
     """Stato dell'applicazione della blacklist CLI agli operatori (default: attiva)."""
     return {"cli_blacklist_operators": bool(get_app_settings().get("cli_blacklist_operators", True))}
 
-@router.post("/api/settings/cli-blacklist")
+@router.post("/api/settings/cli-blacklist", dependencies=[Depends(require_tab("tab-settings"))])
 def set_cli_blacklist_settings(payload: CliBlacklistSchema, current_user = Depends(require_admin)):
     save_app_settings({"cli_blacklist_operators": payload.cli_blacklist_operators})
     log_audit(f"Blacklist comandi CLI per gli operatori "
@@ -118,7 +119,7 @@ def set_ui_variant_settings(payload: UiVariantSchema, current_user = Depends(get
 # ignorate: nessuna migrazione necessaria.
 
 
-@router.get("/api/settings/app")
+@router.get("/api/settings/app", dependencies=[Depends(require_tab("tab-settings"))])
 def get_app_advanced_settings(current_user = Depends(require_admin)):
     saved = get_app_settings().get("app", {}) or {}
     return {
@@ -128,7 +129,7 @@ def get_app_advanced_settings(current_user = Depends(require_admin)):
         "data_dir": data_config.DATA_DIR,
     }
 
-@router.post("/api/settings/app")
+@router.post("/api/settings/app", dependencies=[Depends(require_tab("tab-settings"))])
 def set_app_advanced_settings(payload: dict, current_user = Depends(require_admin)):
     clean = {}
     for k, v in (payload or {}).items():
@@ -172,14 +173,14 @@ class SessionSettingsSchema(BaseModel):
     max_hours: int = Field(ge=1, le=SESSION_MAX_HOURS_LIMIT)
 
 
-@router.get("/api/settings/session")
+@router.get("/api/settings/session", dependencies=[Depends(require_tab("tab-settings"))])
 def get_session_settings(current_user = Depends(require_admin)):
     """How long a browser session lasts without input, and in total."""
     return {**session_settings(), "idle_limits": list(SESSION_IDLE_LIMITS),
             "max_hours_limit": SESSION_MAX_HOURS_LIMIT}
 
 
-@router.post("/api/settings/session")
+@router.post("/api/settings/session", dependencies=[Depends(require_tab("tab-settings"))])
 def set_session_settings(payload: SessionSettingsSchema,
                          current_user = Depends(require_admin)):
     """Applied from the next token issued or renewed, without restart. Sessions
@@ -199,14 +200,14 @@ class PingMonitorSchema(BaseModel):
     interval_seconds: int = Field(default=60, ge=5, le=86400)
 
 
-@router.get("/api/settings/ping-monitor")
+@router.get("/api/settings/ping-monitor", dependencies=[Depends(require_tab("tab-settings"))])
 def get_ping_monitor_settings(current_user = Depends(require_admin)):
     """Configurazione corrente del monitor ping continuo."""
     from services import ping_monitor
     return ping_monitor.get_config()
 
 
-@router.post("/api/settings/ping-monitor")
+@router.post("/api/settings/ping-monitor", dependencies=[Depends(require_tab("tab-settings"))])
 def set_ping_monitor_settings(payload: PingMonitorSchema,
                               current_user = Depends(require_admin)):
     """Attiva/disattiva il monitor ping continuo e ne imposta l'intervallo.
@@ -217,7 +218,7 @@ def set_ping_monitor_settings(payload: PingMonitorSchema,
     return {"status": "success", **cfg}
 
 
-@router.get("/api/ping-monitor/status")
+@router.get("/api/ping-monitor/status", dependencies=[Depends(require_tab("tab-home", "tab-map", "tab-map-interactive", "tab-settings"))])
 def ping_monitor_status(current_user = Depends(get_current_user)):
     """Stato up/down di tutti i dispositivi monitorati, con scoping per tenant."""
     from services import ping_monitor, inventory_manager
@@ -265,7 +266,7 @@ def snmp_defaults_get(current_user = Depends(get_current_user)):
     return {"tenants": sorted(names)}
 
 
-@router.post("/api/settings/snmp-defaults")
+@router.post("/api/settings/snmp-defaults", dependencies=[Depends(require_tab("tab-groups"))])
 def snmp_defaults_set(payload: SnmpDefaultSchema,
                       current_user = Depends(require_admin)):
     """Imposta o rimuove ("" rimuove) la community predefinita di un tenant.
@@ -305,7 +306,7 @@ class SmtpTestSchema(BaseModel):
     to: str
 
 
-@router.get("/api/settings/smtp")
+@router.get("/api/settings/smtp", dependencies=[Depends(require_tab("tab-settings"))])
 def get_smtp_settings(current_user = Depends(require_admin)):
     """Configurazione SMTP. La password non esce mai: solo se c'e' o no.
 
@@ -315,7 +316,7 @@ def get_smtp_settings(current_user = Depends(require_admin)):
     return mailer.redacted()
 
 
-@router.post("/api/settings/smtp")
+@router.post("/api/settings/smtp", dependencies=[Depends(require_tab("tab-settings"))])
 def set_smtp_settings(payload: SmtpSettingsSchema,
                       current_user = Depends(require_admin)):
     from services import mailer
@@ -344,7 +345,7 @@ def set_smtp_settings(payload: SmtpSettingsSchema,
     return {"status": "success"}
 
 
-@router.post("/api/settings/smtp/test")
+@router.post("/api/settings/smtp/test", dependencies=[Depends(require_tab("tab-settings"))])
 def test_smtp_settings(payload: SmtpTestSchema,
                        current_user = Depends(require_admin)):
     """Invia un messaggio di prova con la configurazione SALVATA: prima si
@@ -373,7 +374,7 @@ class SsoSettingsSchema(BaseModel):
     sync_roles: bool = False
 
 
-@router.get("/api/settings/sso")
+@router.get("/api/settings/sso", dependencies=[Depends(require_tab("tab-settings"))])
 def get_sso_settings(current_user = Depends(require_admin)):
     """Configurazione SSO. Il client secret non esce mai: solo se c'e' o no.
 
@@ -382,7 +383,7 @@ def get_sso_settings(current_user = Depends(require_admin)):
     return sso.redacted()
 
 
-@router.post("/api/settings/sso")
+@router.post("/api/settings/sso", dependencies=[Depends(require_tab("tab-settings"))])
 def set_sso_settings(payload: SsoSettingsSchema, current_user = Depends(require_admin)):
     from security import sso, user_manager
     if payload.default_role not in user_manager.VALID_ROLES or payload.default_role == "super_admin":
@@ -420,7 +421,7 @@ def set_sso_settings(payload: SsoSettingsSchema, current_user = Depends(require_
     return {"status": "success"}
 
 
-@router.get("/api/fleet/versions")
+@router.get("/api/fleet/versions", dependencies=[Depends(require_tab("tab-settings"))])
 def get_fleet_versions(current_user = Depends(require_admin)):
     """Cosa sta girando in ogni pezzo della flotta: il centrale e ogni agente.
 
@@ -459,7 +460,7 @@ def get_fleet_versions(current_user = Depends(require_admin)):
             "agents": agents}
 
 
-@router.get("/api/settings/update/check")
+@router.get("/api/settings/update/check", dependencies=[Depends(require_tab("tab-settings"))])
 def check_update(current_user = Depends(require_admin)):
     """C'e' una versione piu' recente? Non scarica e non installa niente.
 
@@ -477,7 +478,7 @@ def check_update(current_user = Depends(require_admin)):
         raise HTTPException(status_code=409, detail=str(e))
 
 
-@router.post("/api/settings/restart")
+@router.post("/api/settings/restart", dependencies=[Depends(require_tab("tab-settings"))])
 def restart_application(current_user = Depends(require_admin)):
     """Riavvia l'applicazione delegando a un processo separato.
 
@@ -494,7 +495,7 @@ def restart_application(current_user = Depends(require_admin)):
     return {"status": "scheduled", "supervisor": kind}
 
 
-@router.post("/api/settings/update")
+@router.post("/api/settings/update", dependencies=[Depends(require_tab("tab-settings"))])
 def update_application(current_user = Depends(require_admin)):
     """Aggiorna il centrale: git pull, dipendenze, riavvio. In quest'ordine.
 
@@ -518,7 +519,7 @@ class SelfSignedCertSchema(BaseModel):
     host: str
 
 
-@router.post("/api/settings/tls/self-signed")
+@router.post("/api/settings/tls/self-signed", dependencies=[Depends(require_tab("tab-settings"))])
 def generate_self_signed_cert(payload: SelfSignedCertSchema,
                               current_user = Depends(require_admin)):
     """Genera certificato e chiave self-signed per questo host.

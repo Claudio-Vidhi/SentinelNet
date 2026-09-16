@@ -6,6 +6,7 @@
 import difflib
 
 from fastapi import APIRouter, Depends, HTTPException
+from routers.deps import require_tab
 from pydantic import BaseModel
 
 from routers.deps import (require_operator, require_admin, user_group_scope,
@@ -88,7 +89,7 @@ def drift_summary_for(devices: list) -> dict:
 
 
 # Before /api/drift/{ip}/...: a literal segment must not be read as an IP.
-@router.get("/api/drift/summary")
+@router.get("/api/drift/summary", dependencies=[Depends(require_tab("tab-home", "tab-config-drift"))])
 def drift_summary(tenant: str = "", current_user=Depends(require_operator)):
     scope = user_group_scope(current_user)
     devices = [d for d in inventory_manager.get_all_devices()
@@ -97,7 +98,7 @@ def drift_summary(tenant: str = "", current_user=Depends(require_operator)):
     return drift_summary_for(devices)
 
 
-@router.get("/api/drift/devices")
+@router.get("/api/drift/devices", dependencies=[Depends(require_tab("tab-config-drift"))])
 def drift_devices(current_user=Depends(require_operator)):
     """Devices the caller may see, with when they last changed.
 
@@ -131,12 +132,12 @@ def drift_devices(current_user=Depends(require_operator)):
     return {"devices": out}
 
 
-@router.get("/api/drift/{ip}/versions")
+@router.get("/api/drift/{ip}/versions", dependencies=[Depends(require_tab("tab-config-drift"))])
 def drift_versions(ip: str, current_user=Depends(require_operator)):
     return {"versions": history.list_versions(_device_or_404(current_user, ip))}
 
 
-@router.get("/api/drift/{ip}/diff")
+@router.get("/api/drift/{ip}/diff", dependencies=[Depends(require_tab("tab-config-drift"))])
 def drift_diff(ip: str, from_version: str = "", to_version: str = "",
                current_user=Depends(require_operator)):
     """Redacted diff between two archived versions of one device."""
@@ -149,7 +150,7 @@ def drift_diff(ip: str, from_version: str = "", to_version: str = "",
                              from_version, to_version)}
 
 
-@router.get("/api/drift/baseline/{tenant}")
+@router.get("/api/drift/baseline/{tenant}", dependencies=[Depends(require_tab("tab-config-drift"))])
 def drift_baseline_get(tenant: str, profile: str = "ios",
                        current_user=Depends(require_operator)):
     scope = user_group_scope(current_user)
@@ -158,7 +159,7 @@ def drift_baseline_get(tenant: str, profile: str = "ios",
     return {"tenant": tenant, "profile": profile, "text": baseline.load(tenant, profile)}
 
 
-@router.put("/api/drift/baseline/{tenant}")
+@router.put("/api/drift/baseline/{tenant}", dependencies=[Depends(require_tab("tab-config-drift"))])
 def drift_baseline_put(tenant: str, payload: BaselineSchema, profile: str = "ios",
                        current_user=Depends(require_admin)):
     if profile not in baseline.PROFILES:
@@ -169,7 +170,7 @@ def drift_baseline_put(tenant: str, payload: BaselineSchema, profile: str = "ios
     return {"status": "success"}
 
 
-@router.post("/api/drift/baseline/{tenant}/seed")
+@router.post("/api/drift/baseline/{tenant}/seed", dependencies=[Depends(require_tab("tab-config-drift"))])
 def drift_baseline_seed(tenant: str, ip: str, current_user=Depends(require_admin)):
     """Candidate rules from one device, for the operator to prune. Saves nothing."""
     device = _device_or_404(current_user, ip)
@@ -183,7 +184,7 @@ def drift_baseline_seed(tenant: str, ip: str, current_user=Depends(require_admin
     return {"text": baseline.seed_from_config(device.get("Vendor") or "", text)}
 
 
-@router.get("/api/drift/{ip}/baseline")
+@router.get("/api/drift/{ip}/baseline", dependencies=[Depends(require_tab("tab-config-drift"))])
 def drift_device_baseline(ip: str, current_user=Depends(require_operator)):
     device = _device_or_404(current_user, ip)
     versions = history.list_versions(device)

@@ -9,6 +9,7 @@ monolite."""
 from typing import Optional, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
+from routers.deps import require_tab
 from pydantic import BaseModel, Field
 
 from services import inventory_manager, site_manager
@@ -187,7 +188,7 @@ def _csv_filter(raw: str) -> Optional[set]:
     return values or None
 
 
-@router.get("/api/export/devices/columns")
+@router.get("/api/export/devices/columns", dependencies=[Depends(require_tab("tab-devices"))])
 def export_devices_columns(current_user = Depends(get_current_user)):
     """Available columns and defaults, so the UI does not duplicate the
     registry and drift from it."""
@@ -258,7 +259,7 @@ def assemble_device_export_rows(
     return headers, all_rows
 
 
-@router.get("/api/export/devices")
+@router.get("/api/export/devices", dependencies=[Depends(require_tab("tab-devices"))])
 def export_devices_csv(
     groups: str = "",
     sites: str = "",
@@ -295,7 +296,7 @@ def export_devices_csv(
     )
 
 
-@router.get("/api/export/devices/preview")
+@router.get("/api/export/devices/preview", dependencies=[Depends(require_tab("tab-devices"))])
 def preview_devices_export(
     groups: str = "",
     sites: str = "",
@@ -320,7 +321,7 @@ def preview_devices_export(
         "total_rows": len(rows),
     }
 
-@router.post("/api/add-device")
+@router.post("/api/add-device", dependencies=[Depends(require_tab("tab-devices", "tab-provisioning"))])
 def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
     assert_group_allowed(current_user, device.group)
     # Impedisce di modificare un dispositivo esistente in una sede non consentita
@@ -350,14 +351,14 @@ def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
         log_audit(f"ATTENZIONE: Telnet (trasmissione in chiaro) abilitato per il dispositivo '{device.ip}' dall'utente '{current_user.get('sub')}'.")
     return {"status": "success", "message": "Dispositivo salvato"}
 
-@router.post("/api/delete-device")
+@router.post("/api/delete-device", dependencies=[Depends(require_tab("tab-devices"))])
 def delete_device(payload: DeviceDelete, current_user = Depends(require_operator)):
     assert_device_allowed(current_user, payload.ip)
     inventory_manager.delete_device(payload.ip)
     log_audit(f"Dispositivo '{payload.ip}' eliminato dall'inventario dall'utente '{current_user.get('sub')}'.")
     return {"status": "success"}
 
-@router.post("/api/rename-device")
+@router.post("/api/rename-device", dependencies=[Depends(require_tab("tab-devices"))])
 def rename_device(payload: DeviceRenameSchema, current_user = Depends(require_operator)):
     """Rinomina un dispositivo gestito impostandone manualmente l'hostname (il
     nome mostrato in inventario e sulla mappa). admin/operator, con scoping."""
@@ -376,7 +377,7 @@ _canonical_header = inventory_manager._canonical_header
 _read_inventory_csv = inventory_manager._read_inventory_csv
 
 
-@router.post("/api/import-csv")
+@router.post("/api/import-csv", dependencies=[Depends(require_tab("tab-import"))])
 def import_csv(payload: CSVImportRequest, current_user = Depends(require_operator)):
     try:
         parsed = _read_inventory_csv(payload.csv_data)
@@ -443,7 +444,7 @@ def import_csv(payload: CSVImportRequest, current_user = Depends(require_operato
     log_audit(f"Importazione massiva da CSV completata dall'utente '{current_user.get('sub')}'. Importati: {len(results['imported'])}, Falliti: {len(results['failed'])}.")
     return results
 
-@router.post("/api/promote-device")
+@router.post("/api/promote-device", dependencies=[Depends(require_tab("tab-map", "tab-map-interactive", "tab-categories"))])
 def promote_device(payload: PromoteDeviceSchema, current_user = Depends(require_operator)):
     """Promuove un dispositivo scoperto (CDP/LLDP) a dispositivo gestito,
     aggiungendolo all'inventario così da poter essere sottoposto a triage.
@@ -488,7 +489,7 @@ def promote_device(payload: PromoteDeviceSchema, current_user = Depends(require_
     )
     return {"status": "success"}
 
-@router.post("/api/reassign-device")
+@router.post("/api/reassign-device", dependencies=[Depends(require_tab("tab-devices"))])
 def reassign_device(payload: DeviceReassignSchema, current_user = Depends(require_operator)):
     """Sposta un dispositivo in un gruppo diverso aggiornando solo il campo Group nel CSV."""
     devices = inventory_manager.get_all_devices()
@@ -517,7 +518,7 @@ def reassign_device(payload: DeviceReassignSchema, current_user = Depends(requir
     )
     return {"status": "success", "message": f"Dispositivo spostato in '{payload.new_group}'"}
 
-@router.post("/api/reassign-device-site")
+@router.post("/api/reassign-device-site", dependencies=[Depends(require_tab("tab-devices"))])
 def reassign_device_site(payload: DeviceSiteSchema, current_user = Depends(require_operator)):
     """Sposta un dispositivo in un'altra sede aggiornando solo il campo Site.
 

@@ -9,6 +9,7 @@ import os
 import requests
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from routers.deps import require_tab
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from core import core_engine, data_config
@@ -48,7 +49,7 @@ _version_of = nvd.version_of
 
 # --- ENDPOINTS ---
 
-@router.get("/api/download-backup/{ip_or_filename}")
+@router.get("/api/download-backup/{ip_or_filename}", dependencies=[Depends(require_tab("tab-devices"))])
 def download_backup(ip_or_filename: str, current_user = Depends(require_operator)):
     log_audit(f"Download del file di backup '{ip_or_filename}' richiesto dall'utente '{current_user.get('sub')}'.")
 
@@ -103,7 +104,7 @@ def download_backup(ip_or_filename: str, current_user = Depends(require_operator
     raise HTTPException(status_code=404, detail="File di backup non trovato per questo dispositivo.")
 
 
-@router.get("/api/search")
+@router.get("/api/search", dependencies=[Depends(require_tab("tab-security"))])
 async def proxy_enisa_search(request: Request, current_user = Depends(get_current_user)):
     from urllib.parse import parse_qs, urlencode
     import datetime
