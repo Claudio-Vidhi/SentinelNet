@@ -284,7 +284,211 @@ function makeTableSortable(table) {
     });
 }
 function enhanceAllTables(root) {
-    (root || document).querySelectorAll('table').forEach(makeTableSortable);
+    (root || document).querySelectorAll('table').forEach(t => {
+        makeTableReorderable(t);
+        makeTableSortable(t);
+    });
+}
+
+// ===== Riordino colonne (drag & drop + tastiera) per TUTTE le tabelle =====
+// Stesso meccanismo dell'ordinamento sopra: header e celle si spostano insieme,
+// cosi' sortTableByColumn (che indicizza per posizione fisica) resta corretto
+// senza bisogno di aggiustamenti.
+
+// Permutazione pura: sposta l'elemento in posizione `from` alla posizione `to`.
+function arrayMoveItem(arr, from, to) {
+    const a = arr.slice();
+    const [item] = a.splice(from, 1);
+    a.splice(to, 0, item);
+    return a;
+}
+
+// Un ordine salvato e' valido solo se e' una permutazione completa delle
+// colonne attuali: lunghezza diversa o un valore fuori range/duplicato indica
+// che la tabella e' cambiata da quando l'ordine e' stato salvato.
+function isValidColumnOrder(order, colCount) {
+    if (!Array.isArray(order) || order.length !== colCount) return false;
+    const seen = new Set();
+    for (const v of order) {
+        if (!Number.isInteger(v) || v < 0 || v >= colCount || seen.has(v)) return false;
+        seen.add(v);
+    }
+    return true;
+}
+
+// Eligibilita': layout con thead multi-riga, celle di intestazione unite o
+// righe di corpo con un numero di celle diverso da quello dell'header (righe
+// con rowspan/colspan) non si prestano a spostare "la colonna all'indice N" in
+// modo sicuro. Le righe di dettaglio (cella singola a tutta larghezza) sono
+// l'eccezione gia' nota dal codice di ordinamento sopra.
+function isTableReorderEligible(table) {
+    if (!table || table.hasAttribute('data-no-reorder')) return false;
+    if (!table.tHead || table.tHead.rows.length !== 1) return false;
+    const headCells = Array.from(table.tHead.rows[0].cells);
+    if (headCells.length < 2 || headCells.some(th => th.colSpan > 1)) return false;
+    const headCount = headCells.length;
+    const bodies = table.tBodies ? Array.from(table.tBodies) : [];
+    for (const tbody of bodies) {
+        for (const row of Array.from(tbody.rows)) {
+            const cells = Array.from(row.cells);
+            if (cells.length === 1 && cells[0].colSpan > 1) continue; // riga di dettaglio
+            if (cells.length !== headCount) return false;
+        }
+    }
+    return true;
+}
+
+// Chiave di storage: identita' della tabella (il proprio id, altrimenti quello
+// dell'antenato piu' vicino con un id, piu' l'indice fra le tabelle al suo
+// interno) + numero di colonne, cosi' un layout cambiato invalida da solo la
+// chiave. Nessun antenato con id -> non persistibile (ritorna null), la
+// tabella resta comunque riordinabile per la sessione corrente.
+function columnOrderStorageKey(table) {
+    let id = table.id;
+    if (!id) {
+        const ancestor = table.closest ? table.closest('[id]') : null;
+        if (!ancestor || !ancestor.id) return null;
+        const siblings = Array.from(ancestor.querySelectorAll('table'));
+        id = ancestor.id + '.' + siblings.indexOf(table);
+    }
+    const colCount = table.tHead && table.tHead.rows.length ? table.tHead.rows[0].cells.length : 0;
+    return 'sn.colorder.' + id + '.' + colCount;
+}
+
+// Ordine visivo corrente come sequenza di indici ORIGINALI (data-col-orig),
+// uno per ogni th nella posizione in cui si trova adesso.
+function currentColumnOrder(table) {
+    return Array.from(table.tHead.rows[0].cells).map(th => Number(th.getAttribute('data-col-orig')));
+}
+
+// Riposiziona th e celle di ogni riga (skip righe di dettaglio) secondo
+// `order` (sequenza di indici originali). Il trucco e' lo stesso di
+// _applySort: appendChild in sequenza sposta ogni nodo alla fine, quindi
+// ripetuto nell'ordine desiderato produce l'ordine finale corretto a
+// prescindere dalla posizione di partenza.
+function applyColumnOrder(table, order) {
+    const headRow = table.tHead.rows[0];
+    const headCells = Array.from(headRow.cells); // snapshot: posizioni PRIMA dello spostamento
+    const headByOrig = {};
+    headCells.forEach(th => { headByOrig[th.getAttribute('data-col-orig')] = th; });
+    order.forEach(origIdx => headRow.appendChild(headByOrig[String(origIdx)]));
+
+    const orderKey = order.join(',');
+    const rows = [];
+    (table.tBodies ? Array.from(table.tBodies) : []).forEach(tb => rows.push(...Array.from(tb.rows)));
+    if (table.tFoot) rows.push(...Array.from(table.tFoot.rows));
+    rows.forEach(row => {
+        const cells = Array.from(row.cells);
+        if (cells.length === 1 && cells[0].colSpan > 1) return; // riga di dettaglio: intoccata
+        if (cells.length !== headCells.length) return;
+        const rowByOrig = {};
+        headCells.forEach((th, pos) => { rowByOrig[th.getAttribute('data-col-orig')] = cells[pos]; });
+        order.forEach(origIdx => row.appendChild(rowByOrig[String(origIdx)]));
+        row.dataset.colOrdered = orderKey;
+    });
+}
+
+function saveColumnOrder(table, order) {
+    const key = columnOrderStorageKey(table);
+    if (!key) return;
+    try { localStorage.setItem(key, JSON.stringify(order)); } catch (e) { }
+}
+
+function applySavedColumnOrder(table) {
+    const key = columnOrderStorageKey(table);
+    if (!key) return;
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(key)); } catch (e) { saved = null; }
+    const headCount = table.tHead.rows[0].cells.length;
+    if (!isValidColumnOrder(saved, headCount)) return;
+    applyColumnOrder(table, saved);
+}
+
+function resetColumnOrder(table) {
+    const headCount = table.tHead.rows[0].cells.length;
+    applyColumnOrder(table, Array.from({ length: headCount }, (_, i) => i));
+    const key = columnOrderStorageKey(table);
+    if (key) { try { localStorage.removeItem(key); } catch (e) { } }
+}
+
+function moveTableColumn(table, fromIdx, toIdx) {
+    if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0) return;
+    const order = arrayMoveItem(currentColumnOrder(table), fromIdx, toIdx);
+    applyColumnOrder(table, order);
+    saveColumnOrder(table, order);
+}
+
+// Passata del MutationObserver: le tabelle gia' riordinate mantengono thead
+// invariato ma riscrivono tbody.innerHTML (stesso motivo di reapplySort). Le
+// righe nuove nascono nell'ordine ORIGINALE delle colonne (il render delle
+// singole tabelle non viene toccato), quindi vanno riportate all'ordine
+// visivo corrente. data-col-ordered marca le righe gia' a posto: il controllo
+// e' O(righe) ed evita di riscrivere (e quindi ri-schedulare l'observer)
+// righe che sono gia' nell'ordine giusto.
+function reapplyColumnOrder(table) {
+    if (!table.tHead || !table.tHead.rows.length) return;
+    const headCells = Array.from(table.tHead.rows[0].cells);
+    const order = headCells.map(th => th.getAttribute('data-col-orig'));
+    if (order.some(v => v === null)) return;
+    if (order.every((v, i) => Number(v) === i)) return; // ordine originale: righe fresche gia' a posto
+    const orderKey = order.join(',');
+    const rows = [];
+    (table.tBodies ? Array.from(table.tBodies) : []).forEach(tb => rows.push(...Array.from(tb.rows)));
+    rows.forEach(row => {
+        const cells = Array.from(row.cells);
+        if (cells.length === 1 && cells[0].colSpan > 1) return; // riga di dettaglio
+        if (row.dataset.colOrdered === orderKey) return;
+        if (cells.length !== headCells.length) return;
+        order.forEach(origIdx => row.appendChild(cells[Number(origIdx)]));
+        row.dataset.colOrdered = orderKey;
+    });
+}
+
+let _colDragFromTh = null;
+
+function makeTableReorderable(table) {
+    if (!table || table.dataset.reorderable === '1') return;
+    if (!isTableReorderEligible(table)) return;
+    table.dataset.reorderable = '1';
+    const hint = tr('tableColumnReorderHint');
+    Array.from(table.tHead.rows[0].cells).forEach((th, idx) => {
+        th.setAttribute('data-col-orig', String(idx));
+        th.draggable = true;
+        if (!th.hasAttribute('tabindex')) th.tabIndex = 0;
+        th.setAttribute('aria-description', hint);
+        // Il drag nativo HTML5 non genera un click al drop (nessuna coppia
+        // mousedown/mouseup senza spostamento sullo stesso elemento): il
+        // click di ordinamento non parte da solo, senza bisogno di guardie.
+        th.addEventListener('dragstart', e => {
+            _colDragFromTh = th;
+            if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', ''); }
+        });
+        th.addEventListener('dragover', e => {
+            e.preventDefault();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        });
+        th.addEventListener('drop', e => {
+            e.preventDefault();
+            const fromTh = _colDragFromTh;
+            _colDragFromTh = null;
+            if (!fromTh || fromTh === th) return;
+            const cells = Array.from(table.tHead.rows[0].cells);
+            moveTableColumn(table, cells.indexOf(fromTh), cells.indexOf(th));
+        });
+        th.addEventListener('dragend', () => { _colDragFromTh = null; });
+        th.addEventListener('dblclick', () => resetColumnOrder(table));
+        th.addEventListener('keydown', e => {
+            if (!e.altKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+            e.preventDefault();
+            const cells = Array.from(table.tHead.rows[0].cells);
+            const fromIdx = cells.indexOf(th);
+            const toIdx = fromIdx + (e.key === 'ArrowLeft' ? -1 : 1);
+            if (toIdx < 0 || toIdx >= cells.length) return;
+            moveTableColumn(table, fromIdx, toIdx);
+            th.focus();
+        });
+    });
+    applySavedColumnOrder(table);
 }
 
 // ===== Tastiera sugli elementi cliccabili non nativi =====
@@ -327,6 +531,9 @@ function initSortableTables() {
             scheduled = false;
             enhanceAllTables(document);
             makeClickablesFocusable(document);
+            // Il riordino colonne va riapplicato PRIMA dell'ordinamento nella
+            // stessa passata: entrambi operano per indice di colonna fisico.
+            document.querySelectorAll('table[data-reorderable="1"]').forEach(reapplyColumnOrder);
             document.querySelectorAll('table[data-sortable="1"]').forEach(reapplySort);
         });
     });

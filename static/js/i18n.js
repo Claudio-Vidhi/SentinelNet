@@ -3055,6 +3055,7 @@ const i18n = {
         tiVersionUnknown: "Versione non catalogata da NVD",
         tiVersionUnknownHint: "NVD conosce il prodotto ma non questa versione: il risultato non e' \"nessuna vulnerabilita\", e' \"nessun dato\". Query usata:",
         tiOtherModel: "altro modello",
+        tableColumnReorderHint: "Trascina o usa Alt+freccia per spostare la colonna. Doppio clic per ripristinare l'ordine.",
     },
     en: {
         wizTitle: "First Access Detected",
@@ -6106,6 +6107,7 @@ const i18n = {
         tiVersionUnknown: "Version not catalogued by NVD",
         tiVersionUnknownHint: "NVD knows the product but not this version: the result is not \"no vulnerabilities\", it is \"no data\". Query used:",
         tiOtherModel: "other model",
+        tableColumnReorderHint: "Drag or use Alt+arrow to move the column. Double-click to restore the order.",
     }
 };
 
