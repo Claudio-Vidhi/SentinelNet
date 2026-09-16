@@ -88,6 +88,21 @@ def require_role(*allowed):
     return _dep
 
 
+def require_tab(*tab_ids: str):
+    """Server-side counterpart of the 'visible tabs' setting: a route owned
+    by a tab answers only users who hold that tab."""
+    wanted = frozenset(tab_ids)
+
+    def _dep(current_user=Depends(get_current_user)):
+        tabs = user_manager.effective_tabs(current_user.get("sub"))
+        if tabs is not None and not (tabs & wanted):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="Funzionalita' non abilitata per questo utente.")
+        return current_user
+    _dep.tabs = wanted  # type: ignore[attr-defined]
+    return _dep
+
+
 require_super_admin = require_role("super_admin")
 require_admin = require_role("super_admin", "admin")              # solo amministratori
 require_operator = require_role("super_admin", "admin", "operator")  # scritture/operazioni di rete

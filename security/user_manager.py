@@ -330,6 +330,40 @@ def set_allowed_tabs(username: str, tabs) -> bool:
         _save_users(users)
     return True
 
+# Legacy tab ids merged into one during the endpoint-inventory consolidation
+# (four panels became one tab). A saved legacy id must keep resolving, same as
+# the JS-side normalizeAllowedTabs() alias map in static/js/core.js — kept in
+# parity by tests/js/test_tab_alias_parity.mjs.
+TAB_ALIASES = {
+    "tab-mac": "tab-endpoint",
+    "tab-clientmap": "tab-endpoint",
+    "tab-diagnosi": "tab-endpoint",
+    "tab-endpoints": "tab-endpoint",
+}
+
+# A tab that implicitly grants a sub-tab living inside the same panel.
+SUBTAB_GRANTS = {
+    "tab-map": ("tab-map-interactive",),
+    "tab-provisioning": ("tab-provisioner",),
+}
+
+
+def effective_tabs(username: str):
+    """Tabs the server enforces for this user, or None if unrestricted.
+
+    Server-side counterpart of get_allowed_tabs: normalizes legacy aliases,
+    adds implied sub-tab grants. None means "no gate" (super_admin, or an
+    empty allowed_tabs list, same as the client-side convention)."""
+    if get_role(username) == "super_admin":
+        return None
+    raw = get_allowed_tabs(username)
+    if not raw:
+        return None
+    tabs = {TAB_ALIASES.get(t, t) for t in raw}
+    for t in list(tabs):
+        tabs.update(SUBTAB_GRANTS.get(t, ()))
+    return tabs
+
 def delete_user(username: str) -> bool:
     with _users_lock:
         users = get_users()
