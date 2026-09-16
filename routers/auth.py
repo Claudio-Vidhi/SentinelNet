@@ -21,7 +21,9 @@ from security.security_manager import (
     clear_account_lockouts, session_settings,
 )
 from routers.deps import (SESSION_COOKIE, assert_can_assign, assert_can_manage,
-                          get_current_user, require_admin)
+                          assert_groups_within_scope, assert_tabs_within_grant,
+                          get_current_user, require_admin, require_unscoped_admin,
+                          user_group_scope, user_visible_to)
 
 router = APIRouter(tags=["Auth"])
 
@@ -323,7 +325,10 @@ def whoami(current_user = Depends(get_current_user)):
 
 @router.get("/api/users", dependencies=[Depends(require_tab("tab-users"))])
 def list_users_ep(current_user = Depends(require_admin)):
-    return user_manager.list_users()
+    users = user_manager.list_users()
+    if user_group_scope(current_user) is None:
+        return users
+    return [u for u in users if user_visible_to(current_user, u["username"])]
 
 @router.post("/api/users", dependencies=[Depends(require_tab("tab-users"))])
 def create_user_ep(payload: UserCreateSchema, current_user = Depends(require_admin)):
@@ -358,6 +363,7 @@ def create_user_ep(payload: UserCreateSchema, current_user = Depends(require_adm
 
     valid_groups = set(inventory_manager.get_all_groups().keys())
     groups = [g for g in payload.groups if g in valid_groups]
+    assert_groups_within_scope(current_user, groups)
     # Con una password iniziale nota all'amministratore l'utente deve cambiarla
     # al primo accesso. Senza, l'account ha una password casuale mai rivelata.
     import secrets as _secrets
@@ -365,6 +371,12 @@ def create_user_ep(payload: UserCreateSchema, current_user = Depends(require_adm
     if not user_manager.create_user(username, password, payload.role, groups,
                                     must_change_password=not setup_link, email=email):
         raise HTTPException(status_code=400, detail="Utente già esistente.")
+    # The create payload carries no tabs field: a tab-restricted actor would
+    # otherwise leave the new account unrestricted (empty allowed_tabs = all),
+    # widening its own grant. Copy the actor's own tabs onto the new account.
+    actor_tabs = user_manager.effective_tabs(current_user.get("sub"))
+    if actor_tabs is not None:
+        user_manager.set_allowed_tabs(username, sorted(actor_tabs - {"tab-home"}))
 
     welcome_mail_sent = False
     welcome_mail_error = None
@@ -493,6 +505,7 @@ def set_user_groups_ep(payload: UserGroupsSchema, current_user = Depends(require
     assert_can_manage(current_user, payload.username)
     valid_groups = set(inventory_manager.get_all_groups().keys())
     groups = [g for g in payload.groups if g in valid_groups]
+    assert_groups_within_scope(current_user, groups)
     if not user_manager.set_groups(payload.username, groups):
         raise HTTPException(status_code=404, detail="Utente non trovato.")
     log_audit(
@@ -507,6 +520,7 @@ def set_user_tabs_ep(payload: UserTabsSchema, current_user = Depends(require_adm
     # ponytail: enforcement solo lato frontend (nasconde i pulsanti tab). Le API
     # sensibili sono già protette da ruolo/gruppo indipendentemente da questo campo."""
     assert_can_manage(current_user, payload.username)
+    assert_tabs_within_grant(current_user, payload.allowed_tabs)
     if not user_manager.set_allowed_tabs(payload.username, payload.allowed_tabs):
         raise HTTPException(status_code=404, detail="Utente non trovato.")
     log_audit(
@@ -698,7 +712,7 @@ class AcceptInviteSchema(BaseModel):
 
 
 @router.post("/api/users/invite", dependencies=[Depends(require_tab("tab-users"))])
-def invite_user(payload: InviteUserSchema, current_user = Depends(require_admin)):
+def invite_user(payload: InviteUserSchema, current_user = Depends(require_unscoped_admin)):
     """Invia un invito: l'account viene creato solo quando l'invitato lo accetta.
 
     Nessun utente a metà nel frattempo: un invito mai accettato scade e non

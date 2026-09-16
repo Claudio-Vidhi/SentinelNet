@@ -222,5 +222,95 @@ class TestSsoUpgradeWarning(_PrivateUsers):
         self.assertFalse(any("non seguono piu'" in m for m in messages), messages)
 
 
+class TestScopedAdminUserPerimeter(_PrivateUsers):
+    """A tenant-scoped admin (groups != []) must not see or touch accounts
+    outside its own groups, nor grant a group/tab it does not itself hold."""
+
+    def setUp(self):
+        super().setUp()
+        g = patch("routers.auth.inventory_manager.get_all_groups",
+                  return_value={"tenant-a": {}, "tenant-b": {}})
+        g.start()
+        self.addCleanup(g.stop)
+        user_manager.create_user("root", PW, role="super_admin", email="root@example.com")
+        user_manager.create_user("adm", PW, role="admin", email="adm@example.com")
+        user_manager.create_user("op", PW, role="operator", email="op@example.com")
+        user_manager.create_user("sadm", PW, role="admin", groups=["tenant-a"])
+        user_manager.create_user("op-a", PW, role="operator", groups=["tenant-a"])
+        user_manager.create_user("op-b", PW, role="operator", groups=["tenant-b"])
+        user_manager.create_user("op-all", PW, role="operator")
+
+    def test_list_users_only_own_tenant(self):
+        r = self._as("sadm").get("/api/users")
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual({u["username"] for u in r.json()}, {"sadm", "op-a"})
+
+    def test_out_of_scope_targets_are_404(self):
+        sadm = self._as("sadm")
+        calls = [
+            ("/api/users/role", {"username": "op-b", "role": "viewer"}),
+            ("/api/users/disable", {"username": "op-b", "disabled": True}),
+            ("/api/users/groups", {"username": "op-b", "groups": ["tenant-b"]}),
+            ("/api/users/tabs", {"username": "op-b", "allowed_tabs": []}),
+            ("/api/users/email", {"username": "op-b", "email": "x@example.com"}),
+            ("/api/users/send-reset", {"username": "op-b"}),
+            ("/api/users/approve", {"username": "op-b"}),
+        ]
+        for path, body in calls:
+            with self.subTest(path=path, target="op-b"):
+                r = sadm.post(path, json=body, headers=H)
+                self.assertEqual(r.status_code, 404, f"{path}: {r.text}")
+        for path, body in calls:
+            body2 = dict(body, username="op-all")
+            with self.subTest(path=path, target="op-all"):
+                r = sadm.post(path, json=body2, headers=H)
+                self.assertEqual(r.status_code, 404, f"{path}: {r.text}")
+
+    def test_in_scope_target_stays_reachable(self):
+        r = self._as("sadm").post("/api/users/disable", headers=H,
+                                  json={"username": "op-a", "disabled": True})
+        self.assertEqual(r.status_code, 200, r.text)
+
+    def test_create_user_groups_must_stay_in_scope(self):
+        sadm = self._as("sadm")
+        r = sadm.post("/api/users", headers=H,
+                      json={"username": "new-empty", "password": PW, "role": "operator", "groups": []})
+        self.assertEqual(r.status_code, 403, r.text)
+        r = sadm.post("/api/users", headers=H,
+                      json={"username": "new-b", "password": PW, "role": "operator",
+                            "groups": ["tenant-b"]})
+        self.assertEqual(r.status_code, 403, r.text)
+        r = sadm.post("/api/users", headers=H,
+                      json={"username": "new-a", "password": PW, "role": "operator",
+                            "groups": ["tenant-a"]})
+        self.assertEqual(r.status_code, 200, r.text)
+
+    def test_set_groups_must_stay_in_scope(self):
+        r = self._as("sadm").post("/api/users/groups", headers=H,
+                                  json={"username": "op-a", "groups": ["tenant-a", "tenant-b"]})
+        self.assertEqual(r.status_code, 403, r.text)
+
+    def test_set_tabs_must_stay_within_actors_grant(self):
+        user_manager.set_allowed_tabs("sadm", ["tab-devices", "tab-users"])
+        sadm = self._as("sadm")
+        r = sadm.post("/api/users/tabs", headers=H,
+                     json={"username": "op-a", "allowed_tabs": ["tab-settings"]})
+        self.assertEqual(r.status_code, 403, r.text)
+        r = sadm.post("/api/users/tabs", headers=H,
+                     json={"username": "op-a", "allowed_tabs": ["tab-devices"]})
+        self.assertEqual(r.status_code, 200, r.text)
+
+    def test_invite_forbidden_for_scoped_admin(self):
+        r = self._as("sadm").post("/api/users/invite", headers=H,
+                                  json={"email": "invitee@example.com", "role": "viewer"})
+        self.assertEqual(r.status_code, 403, r.text)
+
+    def test_unscoped_admin_still_lists_everyone(self):
+        r = self._as("adm").get("/api/users")
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual({u["username"] for u in r.json()},
+                         {"root", "adm", "op", "sadm", "op-a", "op-b", "op-all"})
+
+
 if __name__ == "__main__":
     unittest.main()

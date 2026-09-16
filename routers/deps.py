@@ -203,6 +203,23 @@ def assert_device_allowed(current_user, ip, tenant=None):
     return all_matches[0]
 
 
+def user_visible_to(current_user, target_username: str) -> bool:
+    """Whether a scoped actor may see/manage this target account.
+
+    An unscoped actor (super_admin, or an admin with no group restriction)
+    sees everyone. A scoped actor sees only itself and accounts whose groups
+    are non-empty and entirely inside its own scope: an unrestricted target
+    (empty groups) is invisible to it, same as a target in another tenant.
+    """
+    scope = user_group_scope(current_user)
+    if scope is None:
+        return True
+    if target_username == current_user.get("sub"):
+        return True
+    target_groups = set(user_manager.get_user_groups(target_username))
+    return bool(target_groups) and target_groups <= scope
+
+
 def assert_can_manage(current_user, target_username: str, new_role=None,
                       allow_self: bool = False) -> None:
     """The single gate for acting on another account (FortiGate model: only a
@@ -210,7 +227,9 @@ def assert_can_manage(current_user, target_username: str, new_role=None,
     routes (own email, own deletion) open to every role; it never lets anyone
     raise their own role, because new_role is still checked."""
     target_role = user_manager.get_role(target_username)
-    if target_role is None:
+    if target_role is None or not user_visible_to(current_user, target_username):
+        # A target outside the actor's scope answers exactly like a missing
+        # one, so existence outside the tenant is never leaked.
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utente non trovato.")
     actor_role = current_user.get("role")
     is_self = target_username == current_user.get("sub")
@@ -224,6 +243,31 @@ def assert_can_manage(current_user, target_username: str, new_role=None,
 def assert_can_assign(current_user, new_role: str) -> None:
     """For routes that create an account or change a role."""
     if not user_manager.can_assign(current_user.get("role"), new_role):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Insufficient privileges for this operation.")
+
+
+def assert_groups_within_scope(current_user, groups: list) -> None:
+    """For routes assigning tenant groups to a target account: a scoped actor
+    may grant only groups inside its own scope, and never the unrestricted
+    grant (empty list), which would hand the target every tenant."""
+    scope = user_group_scope(current_user)
+    if scope is None:
+        return
+    if not groups or not set(groups) <= scope:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Insufficient privileges for this operation.")
+
+
+def assert_tabs_within_grant(current_user, tabs: list) -> None:
+    """For routes assigning dashboard tabs to a target account: a tab-restricted
+    actor may grant only tabs it holds itself, and never the unrestricted grant
+    (empty list). Applies to any tab-restricted actor, not only scoped admins."""
+    actor_tabs = user_manager.effective_tabs(current_user.get("sub"))
+    if actor_tabs is None:
+        return
+    normalized = {user_manager.TAB_ALIASES.get(t, t) for t in tabs if t != "tab-home"}
+    if not normalized or not normalized <= actor_tabs:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                             detail="Insufficient privileges for this operation.")
 
