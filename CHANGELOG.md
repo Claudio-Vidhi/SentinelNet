@@ -10,6 +10,12 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Security
+
+- Le API della checklist di audit richiedono ora l'autenticazione (lettura) e
+  il ruolo operator (scrittura): prima nove endpoint erano raggiungibili
+  senza login.
+
 ### Added
 
 - **Colonne delle tabelle spostabili.** Trascinamento o Alt+freccia per

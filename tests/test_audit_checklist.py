@@ -10,9 +10,11 @@ from fastapi.testclient import TestClient
 
 from app_server import app
 from core import db
+from security import user_manager
 from services import audit_checklist
 
 CSRF = {"X-Requested-With": "SentinelNet"}
+PW = "PasswordSicura1!"
 
 
 class TestAuditChecklist(unittest.TestCase):
@@ -86,7 +88,14 @@ class TestAuditChecklist(unittest.TestCase):
 
     def test_03_api_endpoints_smoke(self):
         """Smoke test degli endpoint FastAPI dell'audit checklist."""
+        try:
+            user_manager.create_user("op_audit_checklist", PW, role="operator")
+        except Exception:
+            pass
         client = TestClient(app)
+        r = client.post("/api/auth/login", json={"username": "op_audit_checklist", "password": PW})
+        self.assertEqual(r.status_code, 200, r.text)
+        client.headers.update({"Authorization": f"Bearer {r.json()['access_token']}"})
 
         # GET /api/audit-checklist/templates
         res = client.get("/api/audit-checklist/templates")
