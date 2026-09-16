@@ -16,7 +16,7 @@ from services import fortigate_service
 from security.security_manager import log_audit
 from routers.deps import (
     get_current_user, require_admin, require_operator, assert_device_allowed,
-    devices_in_scope,
+    devices_in_scope, user_group_scope,
 )
 
 router = APIRouter(dependencies=[Depends(require_tab("tab-fortigate"))], tags=["FortiGate"])
@@ -107,7 +107,11 @@ def _fgt_call(fn, *args, **kwargs):
 @router.get("/api/fortigate/tokens")
 def fgt_token_status(current_user = Depends(require_admin)):
     """IP con token API configurato (i token non vengono mai restituiti)."""
-    return fortigate_service.token_status()
+    tokens = fortigate_service.token_status()
+    if user_group_scope(current_user) is None:
+        return tokens
+    ips = {d.get("IP") for d in devices_in_scope(current_user)}
+    return {ip: v for ip, v in tokens.items() if ip in ips}
 
 @router.post("/api/fortigate/token")
 def fgt_set_token(payload: FgtTokenSchema, current_user = Depends(require_admin)):
@@ -134,9 +138,13 @@ def fgt_list_targets(current_user = Depends(require_admin)):
     """Elenco dei target FortiGate configurati (nome, porta, TLS, attivo);
     i token non vengono mai restituiti."""
     by_ip = {d.get("IP"): d for d in devices_in_scope(current_user)}
+    scoped = user_group_scope(current_user) is not None
     targets = []
     for t in fortigate_service.list_targets():
         dev = by_ip.get(t["ip"])
+        # A tenant-scoped caller sees only targets of its own tenants.
+        if dev is None and scoped:
+            continue
         # Un target senza corrispondenza in inventario resta visibile: e'
         # configurato, e nasconderlo lo renderebbe solo irraggiungibile.
         t["group"] = (dev.get("Group") or "Generale") if dev else ""

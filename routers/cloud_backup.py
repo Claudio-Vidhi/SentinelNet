@@ -18,8 +18,8 @@ from routers.deps import require_tab
 from pydantic import BaseModel
 
 from core import core_engine
-from routers.deps import get_current_user, require_admin, user_group_scope
-from security import user_manager
+from routers.deps import (get_current_user, is_unscoped_admin, require_unscoped_admin,
+                          user_group_scope)
 from security.security_manager import log_audit
 from services import cloud_backup
 from services.cloud_backup import settings as cb_settings
@@ -53,13 +53,13 @@ class CloudBackupSettingsSchema(BaseModel):
 
 
 @router.get("/api/cloud-backup/settings")
-def get_cloud_backup_settings(current_user=Depends(require_admin)):
+def get_cloud_backup_settings(current_user=Depends(require_unscoped_admin)):
     return cb_settings.redacted()
 
 
 @router.put("/api/cloud-backup/settings")
 def put_cloud_backup_settings(payload: CloudBackupSettingsSchema,
-                              current_user=Depends(require_admin)):
+                              current_user=Depends(require_unscoped_admin)):
     # Merge onto the currently stored config: settings.save() replaces the
     # whole section with exactly the keys it receives, so a partial payload
     # would silently drop fields the client did not resend. exclude_unset
@@ -79,7 +79,7 @@ def put_cloud_backup_settings(payload: CloudBackupSettingsSchema,
 
 
 @router.post("/api/cloud-backup/test")
-async def test_cloud_backup(current_user=Depends(require_admin)):
+async def test_cloud_backup(current_user=Depends(require_unscoped_admin)):
     cfg = cb_settings.read()
 
     def _probe():
@@ -102,7 +102,7 @@ async def test_cloud_backup(current_user=Depends(require_admin)):
 
 
 @router.post("/api/cloud-backup/run")
-async def run_cloud_backup(current_user=Depends(require_admin)):
+async def run_cloud_backup(current_user=Depends(require_unscoped_admin)):
     result = await asyncio.to_thread(cloud_backup.run_mirror)
     log_audit(f"Mirror offsite avviato da '{current_user.get('sub')}': "
               f"{result.get('uploaded', 0)} caricati, {result.get('failed', 0)} falliti.")
@@ -118,7 +118,7 @@ def get_cloud_backup_status(current_user=Depends(get_current_user)):
     # rest get a generic marker. Nothing is lost: the detail stays in the
     # state file.
     last_run = dict(data.get("last_run") or {})
-    if not user_manager.is_admin(current_user.get("role")) and last_run.get("error"):
+    if not is_unscoped_admin(current_user) and last_run.get("error"):
         last_run["error"] = "errore nell'ultimo ciclo"
     data["last_run"] = last_run
     return data
@@ -152,7 +152,7 @@ async def list_cloud_backup_remote(current_user=Depends(get_current_user)):
         # for a host key mismatch; this route is open to any authenticated role.
         logger.warning("cloud-backup remote listing failed: %s", exc)
         detail = "Remoto non leggibile"
-        if user_manager.is_admin(current_user.get("role")):
+        if is_unscoped_admin(current_user):
             detail = f"{detail}: {exc}"
         raise HTTPException(status_code=502, detail=detail)
     files = manifest.get("files") or {}

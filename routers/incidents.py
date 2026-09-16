@@ -23,7 +23,7 @@ from routers.deps import require_tab
 
 from core import db
 from observability import flowpath, rules, suppression, timeline
-from routers.deps import (get_current_user, require_admin, require_operator,
+from routers.deps import (get_current_user, require_unscoped_admin, require_operator,
                           user_group_scope)
 from routers.observability import MAX_LIMIT, _parse_window, _tenant_filter
 from security.security_manager import log_audit
@@ -55,7 +55,7 @@ def list_rules(lang: str = Query("it", description="Language: 'it' or 'en'"),
 
 @router.post("/rules/{rule_id}/parameters", dependencies=[Depends(require_tab("tab-incidents"))])
 def set_rule_parameters(rule_id: str, payload: dict,
-                        current_user = Depends(require_admin)):
+                        current_user = Depends(require_unscoped_admin)):
     """Ritocca le soglie di UNA regola. La logica resta nel codice: qui si
     accettano solo i parametri dichiarati dal catalogo, solo numerici e solo
     dentro l'intervallo min/max — la UI non può iniettare nulla nel motore."""

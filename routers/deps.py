@@ -114,10 +114,27 @@ require_operator = require_role("super_admin", "admin", "operator")  # scritture
 
 def user_group_scope(current_user):
     """Set dei gruppi consentiti, oppure None se l'utente vede/gestisce tutto."""
-    if user_manager.is_admin(current_user.get("role")):
+    # Only super_admin is exempt: an admin limited to tenants is scoped too.
+    if current_user.get("role") == "super_admin":
         return None
     groups = user_manager.get_user_groups(current_user.get("sub"))
     return set(groups) if groups else None
+
+
+def is_unscoped_admin(current_user) -> bool:
+    """super_admin, or an admin with no tenant restriction."""
+    role = current_user.get("role")
+    return role == "super_admin" or (
+        role == "admin" and not user_manager.get_user_groups(current_user.get("sub")))
+
+
+def require_unscoped_admin(current_user=Depends(require_admin)):
+    """Global admin routes (settings, sites, tenants, ...): their effect crosses
+    tenants, so a tenant-scoped admin must not reach them."""
+    if not is_unscoped_admin(current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Operazione riservata ad amministratori senza limiti di tenant.")
+    return current_user
 
 
 def devices_in_scope(current_user) -> list:

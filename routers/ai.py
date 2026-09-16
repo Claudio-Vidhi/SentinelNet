@@ -15,7 +15,7 @@ from core import db
 from core.app_settings import get_app_settings, save_app_settings
 from security import crypto_vault
 from security.security_manager import log_audit
-from routers.deps import get_current_user, require_admin, user_group_scope, assert_device_allowed, assert_group_allowed
+from routers.deps import get_current_user, require_unscoped_admin, user_group_scope, assert_device_allowed, assert_group_allowed
 from routers.fortigate import _fgt_device
 from services import inventory_manager
 from core import core_engine
@@ -231,14 +231,14 @@ def _assert_unredacted_allowed(allow_unredacted: bool, provider: str, base_url: 
     )
 
 @router.get("/api/ai/profiles", dependencies=[Depends(require_tab("tab-ai", "tab-flows", "tab-provisioner"))])
-def list_ai_profiles(current_user = Depends(require_admin)):
+def list_ai_profiles(current_user = Depends(require_unscoped_admin)):
     """Elenca i profili di connessione AI salvati (chiavi API mascherate) e
     l'id del profilo attualmente attivo (usato da /api/ai/chat)."""
     profiles, active = _get_ai_profiles_raw()
     return {"profiles": [_mask_ai_profile(p) for p in profiles], "active_profile": active}
 
 @router.post("/api/ai/profiles", dependencies=[Depends(require_tab("tab-ai"))])
-def create_ai_profile(payload: AiProfileSchema, current_user = Depends(require_admin)):
+def create_ai_profile(payload: AiProfileSchema, current_user = Depends(require_unscoped_admin)):
     provider = payload.provider.strip().lower()
     if provider not in _AI_PROVIDERS:
         raise HTTPException(status_code=400, detail=f"Provider non supportato: '{provider}'.")
@@ -265,7 +265,7 @@ def create_ai_profile(payload: AiProfileSchema, current_user = Depends(require_a
     return _mask_ai_profile(new_profile)
 
 @router.put("/api/ai/profiles/{profile_id}", dependencies=[Depends(require_tab("tab-ai"))])
-def update_ai_profile(profile_id: str, payload: AiProfileUpdateSchema, current_user = Depends(require_admin)):
+def update_ai_profile(profile_id: str, payload: AiProfileUpdateSchema, current_user = Depends(require_unscoped_admin)):
     profiles, active = _get_ai_profiles_raw()
     profile = _find_ai_profile(profiles, profile_id)
     if profile is None:
@@ -301,7 +301,7 @@ def update_ai_profile(profile_id: str, payload: AiProfileUpdateSchema, current_u
     return _mask_ai_profile(profile)
 
 @router.delete("/api/ai/profiles/{profile_id}", dependencies=[Depends(require_tab("tab-ai"))])
-def delete_ai_profile(profile_id: str, current_user = Depends(require_admin)):
+def delete_ai_profile(profile_id: str, current_user = Depends(require_unscoped_admin)):
     profiles, active = _get_ai_profiles_raw()
     profile = _find_ai_profile(profiles, profile_id)
     if profile is None:
@@ -314,7 +314,7 @@ def delete_ai_profile(profile_id: str, current_user = Depends(require_admin)):
     return {"status": "success"}
 
 @router.post("/api/ai/profiles/{profile_id}/activate", dependencies=[Depends(require_tab("tab-ai"))])
-def activate_ai_profile(profile_id: str, current_user = Depends(require_admin)):
+def activate_ai_profile(profile_id: str, current_user = Depends(require_unscoped_admin)):
     profiles, _active = _get_ai_profiles_raw()
     profile = _find_ai_profile(profiles, profile_id)
     if profile is None:
@@ -480,7 +480,7 @@ async def delete_ai_conversation(conversation_id: int,
 
 @router.get("/api/ai/models", dependencies=[Depends(require_tab("tab-ai"))])
 def list_ai_models(provider: Optional[str] = None, profile_id: Optional[str] = None,
-                    current_user = Depends(require_admin)):
+                    current_user = Depends(require_unscoped_admin)):
     """Elenca i modelli disponibili che supportano la chat per un provider,
     cosi' l'admin puo' sceglierne uno valido invece di indovinare il nome a
     mano. Usa la API key/base_url del profilo indicato (``profile_id``) o di

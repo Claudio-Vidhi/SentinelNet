@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from security.security_manager import log_audit
 
 from core.app_settings import get_app_settings, save_app_settings
-from routers.deps import get_current_user, require_admin
+from routers.deps import get_current_user, require_unscoped_admin
 from ai import mcp_server
 
 _MCP_DEFAULT_DISABLED = {"get_top_talkers", "get_anomalies", "linux_health"}
@@ -30,7 +30,7 @@ def _mcp_disabled_tools() -> list:
     return [t for t in (mcp.get("disabled_tools") or []) if t in mcp_server.TOOLS]
 
 @router.get("/api/mcp/settings", dependencies=[Depends(require_tab("tab-mcp"))])
-def get_mcp_settings(current_user = Depends(require_admin)):
+def get_mcp_settings(current_user = Depends(require_unscoped_admin)):
     """Catalogo dei tool MCP con descrizione + elenco dei tool disabilitati."""
     return {
         "tools": [{"name": name, "description": desc}
@@ -39,7 +39,7 @@ def get_mcp_settings(current_user = Depends(require_admin)):
     }
 
 @router.post("/api/mcp/settings", dependencies=[Depends(require_tab("tab-mcp"))])
-def set_mcp_settings(payload: McpSettingsSchema, current_user = Depends(require_admin)):
+def set_mcp_settings(payload: McpSettingsSchema, current_user = Depends(require_unscoped_admin)):
     unknown = [t for t in payload.disabled_tools if t not in mcp_server.TOOLS]
     if unknown:
         raise HTTPException(status_code=400, detail=f"Tool sconosciuti: {', '.join(unknown)}")
