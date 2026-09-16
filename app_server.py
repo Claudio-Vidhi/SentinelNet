@@ -59,6 +59,12 @@ async def lifespan(app: "FastAPI"):
         print(f"ERRORE: {e}", file=sys.stderr)
         raise
 
+    # One-shot role ladder upgrade: pre-existing admins become super_admin.
+    from security import user_manager
+    from security.security_manager import log_audit
+    for promoted in user_manager.migrate_admins_to_super_admin():
+        log_audit(f"Ruolo di '{promoted}' promosso a 'super_admin' dalla migrazione dei ruoli.")
+
     from observability import listener_manager
     cfg = data_config.obs_config()
     await listener_manager.apply_obs_config(cfg)

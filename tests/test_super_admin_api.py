@@ -158,5 +158,39 @@ class TestRegisterCreatesSuperAdmin(_PrivateUsers):
         self.assertEqual(user_manager.get_role("first"), "super_admin")
 
 
+class TestSsoNeverMintsSuperAdmin(_PrivateUsers):
+    @staticmethod
+    def _cfg(**over):
+        cfg = {"admin_group": "net-admins", "operator_group": "net-ops",
+               "default_role": "viewer"}
+        cfg.update(over)
+        return cfg
+
+    def test_admin_group_maps_to_admin(self):
+        from security import sso
+        self.assertEqual(sso.resolve_role(self._cfg(), {"groups": ["net-admins"]}), "admin")
+
+    def test_default_role_super_admin_is_clamped(self):
+        from security import sso
+        self.assertEqual(
+            sso.resolve_role(self._cfg(default_role="super_admin"), {"groups": []}), "viewer")
+
+    def test_synced_role_keeps_super_admin(self):
+        from routers.auth import _sso_synced_role
+        self.assertEqual(_sso_synced_role("super_admin", "viewer", sync=True), "super_admin")
+        self.assertEqual(_sso_synced_role("admin", "viewer", sync=True), "viewer")
+        self.assertEqual(_sso_synced_role("admin", "viewer", sync=False), "admin")
+
+    def test_settings_refuse_super_admin_default_role(self):
+        user_manager.create_user("sso-root", PW, role="super_admin")
+        c = self._as("sso-root")
+        current = c.get("/api/settings/sso")
+        self.assertEqual(current.status_code, 200, current.text)
+        body = {k: v for k, v in current.json().items() if not k.startswith("has_")}
+        body["default_role"] = "super_admin"
+        r = c.post("/api/settings/sso", json=body, headers=H)
+        self.assertEqual(r.status_code, 400, r.text)
+
+
 if __name__ == "__main__":
     unittest.main()
