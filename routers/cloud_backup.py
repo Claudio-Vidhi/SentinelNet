@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from core import core_engine
 from routers.deps import get_current_user, require_admin, user_group_scope
+from security import user_manager
 from security.security_manager import log_audit
 from services import cloud_backup
 from services.cloud_backup import settings as cb_settings
@@ -116,7 +117,7 @@ def get_cloud_backup_status(current_user=Depends(get_current_user)):
     # rest get a generic marker. Nothing is lost: the detail stays in the
     # state file.
     last_run = dict(data.get("last_run") or {})
-    if current_user.get("role") != "admin" and last_run.get("error"):
+    if not user_manager.is_admin(current_user.get("role")) and last_run.get("error"):
         last_run["error"] = "errore nell'ultimo ciclo"
     data["last_run"] = last_run
     return data
@@ -150,7 +151,7 @@ async def list_cloud_backup_remote(current_user=Depends(get_current_user)):
         # for a host key mismatch; this route is open to any authenticated role.
         logger.warning("cloud-backup remote listing failed: %s", exc)
         detail = "Remoto non leggibile"
-        if current_user.get("role") == "admin":
+        if user_manager.is_admin(current_user.get("role")):
             detail = f"{detail}: {exc}"
         raise HTTPException(status_code=502, detail=detail)
     files = manifest.get("files") or {}

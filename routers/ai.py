@@ -552,7 +552,7 @@ def ai_chat(payload: AiChatSchema, current_user = Depends(get_current_user)):
             keys = [k.model_dump() for k in payload.attach_flow_keys]
         context_blocks.append(top_flows_context(user_group_scope(current_user), keys=keys))
     instruction_blocks = []
-    if payload.attach_device_ips and current_user.get("role") in ("admin", "operator"):
+    if payload.attach_device_ips and current_user.get("role") in ("super_admin", "admin", "operator"):
         # Contratto di proposta config (§10.2): il modello PROPONE, non esegue.
         # Il browser mostra la proposta e, solo dopo conferma esplicita
         # dell'utente, chiama /api/bulk-command (blacklist/RBAC/audit invariati).

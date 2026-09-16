@@ -99,7 +99,7 @@ class TestUserStoreIntegrity(unittest.TestCase):
         r = self.client.post("/api/auth/register",
                              json={"username": "primoadmin", "password": "PasswordSicura1!"})
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(user_manager.get_role("primoadmin"), "admin")
+        self.assertEqual(user_manager.get_role("primoadmin"), "super_admin")
 
     def test_register_refused_when_users_exist(self):
         self.assertTrue(user_manager.create_user("esistente", "passwordsicura1", role="admin"))

@@ -88,8 +88,9 @@ def require_role(*allowed):
     return _dep
 
 
-require_admin = require_role("admin")              # solo amministratori
-require_operator = require_role("admin", "operator")  # scritture/operazioni di rete
+require_super_admin = require_role("super_admin")
+require_admin = require_role("super_admin", "admin")              # solo amministratori
+require_operator = require_role("super_admin", "admin", "operator")  # scritture/operazioni di rete
 
 # --- SCOPING PER SEDE/GRUPPO ---
 # Un utente operator/viewer può essere limitato dall'admin a un sottoinsieme di
@@ -98,7 +99,7 @@ require_operator = require_role("admin", "operator")  # scritture/operazioni di 
 
 def user_group_scope(current_user):
     """Set dei gruppi consentiti, oppure None se l'utente vede/gestisce tutto."""
-    if current_user.get("role") == "admin":
+    if user_manager.is_admin(current_user.get("role")):
         return None
     groups = user_manager.get_user_groups(current_user.get("sub"))
     return set(groups) if groups else None
@@ -168,6 +169,31 @@ def assert_device_allowed(current_user, ip, tenant=None):
             detail=f"{ip} esiste in piu' tenant ({tenants}). Specificare il tenant."
         )
     return all_matches[0]
+
+
+def assert_can_manage(current_user, target_username: str, new_role=None,
+                      allow_self: bool = False) -> None:
+    """The single gate for acting on another account (FortiGate model: only a
+    super_admin touches admin-level accounts). allow_self keeps self-service
+    routes (own email, own deletion) open to every role; it never lets anyone
+    raise their own role, because new_role is still checked."""
+    target_role = user_manager.get_role(target_username)
+    if target_role is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utente non trovato.")
+    actor_role = current_user.get("role")
+    is_self = target_username == current_user.get("sub")
+    if not (is_self and allow_self) and not user_manager.can_manage(actor_role, target_role):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Insufficient privileges for this operation.")
+    if new_role is not None:
+        assert_can_assign(current_user, new_role)
+
+
+def assert_can_assign(current_user, new_role: str) -> None:
+    """For routes that create an account or change a role."""
+    if not user_manager.can_assign(current_user.get("role"), new_role):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Insufficient privileges for this operation.")
 
 
 def filter_map_to_scope(data, scope):
