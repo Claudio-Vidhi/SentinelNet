@@ -46,7 +46,12 @@ MUST_BE_GLOBAL = {
     ("PUT", "/api/cloud-backup/settings"),
     ("POST", "/api/mcp/settings"),
     ("POST", "/api/incidents/rules/{rule_id}/parameters"),
+    ("POST", "/api/provisioner/push-ssh"),
+    ("POST", "/api/provisioner/push-serial"),
+    ("POST", "/api/fortigate/targets/active"),
 }
+SHARED_DENIED = ("Indirizzo condiviso con un altro tenant: operazione riservata "
+                 "ad amministratori senza limiti di tenant.")
 
 
 def _uses(dependant, fn) -> bool:
@@ -149,7 +154,8 @@ class TestScopedAdminOnTenantData(_PrivateUsers):
 
     def test_site_details_only_for_unscoped_admin(self):
         from services import site_manager
-        site_manager.create_site("scope-site", "central", ["192.0.2.0/24"])
+        site = site_manager.create_site("scope-site", "central", ["192.0.2.0/24"])[0]
+        self.addCleanup(site_manager.delete_site, site["id"])
         for name, full in (("sadm", False), ("adm", True)):
             with self.subTest(user=name):
                 sites = self._as(name).get("/api/sites").json()["sites"]
@@ -178,9 +184,76 @@ class TestGlobalRoutesNeedUnscopedAdmin(_PrivateUsers):
         for name in ("adm", "root"):
             with self.subTest(user=name):
                 r = self._as(name).get("/api/settings/smtp")
-                self.assertNotEqual(r.json().get("detail") if r.status_code == 403 else None,
-                                    GLOBAL_DENIED)
                 self.assertEqual(r.status_code, 200, r.text)
+
+    def test_unscoped_admin_passes_every_guarded_get(self):
+        # GETs only: nothing they do is destructive. No AI profile, so
+        # /api/ai/models answers 400 instead of calling a provider.
+        adm = self._as("adm")
+        gets = sorted(p for m, p in guarded_routes() if m == "GET")
+        self.assertTrue(gets)
+        with patch("routers.ai._get_ai_profiles_raw", return_value=([], None)):
+            for path in gets:
+                with self.subTest(path=path):
+                    r = adm.get(re.sub(r"\{[^}]+\}", "1", path))
+                    self.assertFalse(r.status_code == 403
+                                     and r.json().get("detail") == GLOBAL_DENIED, path)
+
+    def test_scoped_admin_reads_masked_ai_profiles(self):
+        with patch("routers.ai._get_ai_profiles_raw", return_value=([], None)):
+            self.assertEqual(self._as("sadm").get("/api/ai/profiles").status_code, 200)
+
+
+class TestSharedFortiGateIp(_PrivateUsers):
+    """Tokens are keyed by IP alone: an IP present in two tenants must not let
+    a scoped admin read or overwrite the other tenant's token."""
+
+    SHARED = [
+        {"IP": "192.0.2.10", "Hostname": "fw-a", "Vendor": "fortinet", "Group": "tenant-a"},
+        {"IP": "192.0.2.10", "Hostname": "fw-b", "Vendor": "fortinet", "Group": "tenant-b"},
+        {"IP": "192.0.2.20", "Hostname": "fw-a2", "Vendor": "fortinet", "Group": "tenant-a"},
+    ]
+
+    def setUp(self):
+        super().setUp()
+        for target, kw in (("routers.deps.inventory_manager.get_all_devices",
+                            {"return_value": self.SHARED}),
+                           ("routers.fortigate.fortigate_service.set_api_token", {}),
+                           ("routers.fortigate.fortigate_service.test_connection",
+                            {"return_value": {"ok": True}}),
+                           ("routers.fortigate.fortigate_service.update_target", {}),
+                           ("routers.fortigate.fortigate_service.token_status",
+                            {"return_value": {"192.0.2.10": {}, "192.0.2.20": {}}}),
+                           ("routers.fortigate.fortigate_service.list_targets",
+                            {"side_effect": lambda: [{"ip": "192.0.2.10"}, {"ip": "192.0.2.20"}]})):
+            p = patch(target, **kw)
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_scoped_admin_cannot_touch_shared_ip(self):
+        sadm = self._as("sadm")
+        calls = [("POST", "/api/fortigate/token", {"ip": "192.0.2.10", "token": ""}),
+                 ("POST", "/api/fortigate/targets/192.0.2.10/test", None),
+                 ("PUT", "/api/fortigate/targets/192.0.2.10", {"name": "x"})]
+        for method, url, body in calls:
+            with self.subTest(url=url):
+                r = sadm.request(method, url, json=body)
+                self.assertEqual(r.status_code, 403, r.text)
+                self.assertEqual(r.json().get("detail"), SHARED_DENIED)
+        ok = sadm.post("/api/fortigate/targets/192.0.2.20/test")
+        self.assertEqual(ok.status_code, 200, ok.text)
+
+    def test_shared_ip_hidden_from_scoped_listings(self):
+        sadm = self._as("sadm")
+        self.assertEqual(list(sadm.get("/api/fortigate/tokens").json()), ["192.0.2.20"])
+        self.assertEqual([t["ip"] for t in sadm.get("/api/fortigate/targets").json()],
+                         ["192.0.2.20"])
+
+    def test_unscoped_admin_unaffected(self):
+        adm = self._as("adm")
+        r = adm.request("PUT", "/api/fortigate/targets/192.0.2.10?tenant=tenant-a", json={"name": "x"})
+        self.assertNotEqual(r.json().get("detail"), SHARED_DENIED)
+        self.assertEqual(len(adm.get("/api/fortigate/tokens").json()), 2)
 
 
 if __name__ == "__main__":

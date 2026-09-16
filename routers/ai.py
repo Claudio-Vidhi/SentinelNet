@@ -15,7 +15,7 @@ from core import db
 from core.app_settings import get_app_settings, save_app_settings
 from security import crypto_vault
 from security.security_manager import log_audit
-from routers.deps import get_current_user, require_unscoped_admin, user_group_scope, assert_device_allowed, assert_group_allowed
+from routers.deps import get_current_user, require_admin, require_unscoped_admin, user_group_scope, assert_device_allowed, assert_group_allowed
 from routers.fortigate import _fgt_device
 from services import inventory_manager
 from core import core_engine
@@ -231,7 +231,7 @@ def _assert_unredacted_allowed(allow_unredacted: bool, provider: str, base_url: 
     )
 
 @router.get("/api/ai/profiles", dependencies=[Depends(require_tab("tab-ai", "tab-flows", "tab-provisioner"))])
-def list_ai_profiles(current_user = Depends(require_unscoped_admin)):
+def list_ai_profiles(current_user = Depends(require_admin)):
     """Elenca i profili di connessione AI salvati (chiavi API mascherate) e
     l'id del profilo attualmente attivo (usato da /api/ai/chat)."""
     profiles, active = _get_ai_profiles_raw()
