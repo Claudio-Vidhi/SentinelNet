@@ -496,6 +496,13 @@
     // tabs, not part of the admin-management group, so they stay excluded.
     const ADMIN_GROUP_TABS = ['tab-users', 'tab-groups', 'tab-sites', 'tab-mcp', 'tab-settings'];
 
+    // Of ADMIN_GROUP_TABS, only these route to endpoints gated by
+    // require_unscoped_admin (spec D5): tab-users' own routes (create,
+    // role, disable, ...) only need require_admin + the scope/grant asserts,
+    // not an unscoped admin — only /api/users/invite does, and that's
+    // handled by hiding the invite button (applyRoleUI), not by this hint.
+    const UNSCOPED_ADMIN_HINT_TABS = ['tab-settings', 'tab-sites', 'tab-groups', 'tab-mcp'];
+
     // rowRole: role of the account being edited. Admin-level rows also offer
     // the ADMIN_GROUP_TABS; other rows never do (granting one would have no
     // effect, the button stays hidden by the requires-admin CSS gate).
@@ -514,7 +521,8 @@
                 // tab-home e' sempre visibile: non e' una concessione.
                 if (!id || id === 'tab-home' || seen.has(id)) return;
                 seen.add(id);
-                out.push({ id, key: SECONDARY_TAB_LABELS[id] || navKey, admin: isAdminGroupBtn });
+                out.push({ id, key: SECONDARY_TAB_LABELS[id] || navKey,
+                          needsUnscopedAdmin: UNSCOPED_ADMIN_HINT_TABS.includes(id) });
             });
         });
         // A tab-restricted actor can grant only what it holds itself
@@ -592,7 +600,7 @@
                               data-action="mark-tabs-dirty"
                               style="accent-color:var(--primary); cursor:pointer;">
                        ${(t.key && i18n[currentLang][t.key]) || t.id}
-                       ${t.admin ? `<span style="color:var(--text-muted); font-size:10px;">(${tr('setTabNeedsUnscopedAdmin')})</span>` : ''}
+                       ${t.needsUnscopedAdmin ? `<span style="color:var(--text-muted); font-size:10px;">(${tr('setTabNeedsUnscopedAdmin')})</span>` : ''}
                      </label>`).join('');
                 tabsCell = `<details data-u="${escapeHtml(u.username)}" data-orig='${JSON.stringify(allowed)}' style="position:relative;">
                     <summary style="cursor:pointer; list-style:none; font-size:12px; padding:2px 0;">

@@ -68,6 +68,22 @@ class TestTabAliasParityWithCoreJS(unittest.TestCase):
         self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
 
 
+class TestHomeTabAlwaysVisible(unittest.TestCase):
+    """core.js's applyRoleUI() must never hide tab-home: a restricted
+    allowed_tabs list never contains it (mirrors user_manager's
+    ALWAYS_GRANTED_TABS), so treating "not in the list" as "hide" hid Home
+    for every tab-restricted user once /api/auth/me started returning the
+    actor's real list instead of masking admins to unrestricted."""
+
+    def test_home_stays_visible_for_a_restricted_user(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node non disponibile")
+        harness = os.path.join(_REPO_ROOT, "tests", "js", "test_home_tab_visible.mjs")
+        proc = subprocess.run([node, harness], capture_output=True, text=True, cwd=_REPO_ROOT)
+        self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
+
+
 # One GET TAB route per router file, with the tab that owns it. Handlers may
 # answer 404/422/400 once past the gate: only the tab 403 matters here.
 TAB_GET_ROUTES = [
