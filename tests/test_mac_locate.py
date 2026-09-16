@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Origine MAC: l'ambiguita' si calcola DENTRO un tenant, non fra tenant.
 
 Un tenant e' una rete a se'. Lo stesso MAC in due sedi ha due posizioni

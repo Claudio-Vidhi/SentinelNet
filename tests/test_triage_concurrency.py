@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Triaging many devices at once must not trip authentication throttles.
 
 Field report: past 4-5 devices at once, the rest came back 'auth failed'. The

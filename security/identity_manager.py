@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Identita' (profili credenziali) legate a un tenant.
 
 Ogni identita' e' un set nominato di credenziali SSH (username, password,

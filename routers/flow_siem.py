@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Router Flow SIEM — registro degli eventi di sicurezza di rete.
 
 La fonte e' ``syslog_events``: e' l'unica tabella che contiene VERDETTI reali

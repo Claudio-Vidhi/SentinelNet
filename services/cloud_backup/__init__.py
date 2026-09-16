@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Offsite mirror of backup-config/ to an SFTP host.
 
 The local archive stays the source of truth: nothing in the app ever reads

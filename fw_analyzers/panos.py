@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """PAN-OS (Palo Alto) firewall analyzer in ``set`` CLI format.
 
 Exposes ``analyze(text)`` which returns the generic envelope

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Politica comandi pericolosi in UN solo modulo (WP5,
 docs/app-review-fix-plan.md): i tre tier vivono in security/command_policy,
 i vecchi call site delegano, le semantiche di bypass restano esplicite."""

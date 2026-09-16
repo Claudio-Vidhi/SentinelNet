@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Gestione segreti nel provisioning day-0 (finding I-2).
 
 Le config generate per visualizzazione/download NON devono contenere segreti

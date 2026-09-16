@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """The Config Drift tab must be wired, translated and lazily loaded."""
 import pathlib
 import re

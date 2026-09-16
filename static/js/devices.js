@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // static/js/devices.js
 // Estratto da templates/dashboard.html: tab-devices (Inventario dispositivi),
 // tab-groups (Gruppi/Tenant), Vendor CRUD, triage on-demand/di gruppo, subnet

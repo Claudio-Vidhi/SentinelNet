@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Incident Engine: l'incidente come VISTA DERIVATA dalle evidenze.
 
 Il correlatore produce evidenze (``observability/rules.py`` →

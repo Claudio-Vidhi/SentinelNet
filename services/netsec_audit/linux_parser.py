@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Parser dell'artefatto di backup Linux, con tracciamento di riga.
 
 L'artefatto non e' una configurazione unica come su IOS o FortiOS: e' la

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test unitari di config_analyzer multi-vendor (FortiOS / Cisco WLC AireOS).
 Eseguibile direttamente: python test_config_analyzer_multivendor.py"""
 import unittest

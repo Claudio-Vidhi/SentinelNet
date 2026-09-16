@@ -1,3 +1,5 @@
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 import unittest
 from fastapi.testclient import TestClient
 from app_server import app

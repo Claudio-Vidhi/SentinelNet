@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // Ripristina lo stato della sidebar PRIMA del primo paint: applicare la classe
 // più tardi (a DOMContentLoaded) farebbe vedere la sidebar espansa che si
 // richiude. Qui il valore iniziale è già 72px, quindi la transizione non parte.

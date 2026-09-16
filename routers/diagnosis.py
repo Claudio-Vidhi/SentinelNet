@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Router diagnosi client: un referto solo per L2 e L3.
 
 Sottile per scelta, come gli altri: qui stanno routing, auth e scoping per

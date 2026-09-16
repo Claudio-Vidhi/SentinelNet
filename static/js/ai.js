@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
     // ===== AI Assistant =====
     let aiHistory = [];  // {role, content} inviato al backend (senza system: aggiunto server-side)
     let aiProfilesCache = [];   // ultima lista di profili (mascherati) caricata dal server

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Percorso di un indirizzo attraverso gli apparati, letto dalle loro tabelle.
 
 La vista Rotte mostra le tabelle; questa risponde alla domanda successiva:

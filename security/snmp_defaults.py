@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Community SNMP predefinita per tenant, con override per apparato.
 
 PERCHE' UN FILE A PARTE E NON ``groups.json``: ``routers/inventory.py``

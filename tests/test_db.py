@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test per db.py (fasi 1.2/1.3/1.4): migrazione idempotente + guardia di
 versione, UPSERT di aggregazione al minuto, regola del time-source con skew,
 coda bounded, drain in chiusura e letture async fuori dal loop."""

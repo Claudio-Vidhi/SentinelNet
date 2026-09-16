@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Router Policy Test: reachability tracing, rule example generator, and static findings.
 
 Endpoints for offline policy and route validation against stored device backups.

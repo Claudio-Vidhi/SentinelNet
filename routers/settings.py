@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Router Settings. Estratto da app_server.py (fase 6.6): percorsi, metodi,
 parametri e risposte identici al monolite."""
 

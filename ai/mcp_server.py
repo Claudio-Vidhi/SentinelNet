@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """SentinelNet MCP Server — exposes SentinelNet as an MCP (Model Context
 Protocol) server over stdio, so any external LLM client (Claude Desktop, LM
 Studio, Cline, etc.) can query inventory, network map, MAC tracker,

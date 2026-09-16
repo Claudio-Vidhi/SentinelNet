@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """FortiOS (FortiGate) policy, address, service, interface and route resolution.
 
 Extracts firewall policies, custom and factory address objects, address groups,

@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // static/js/cloud-backup.js
 // Offsite backup mirror: settings form, connection test, manual run, status.
 // Classic script, one shared global scope (see AGENTS.md).

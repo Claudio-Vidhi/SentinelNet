@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """The PDF print renders client-supplied HTML in a real browser, on the server.
 
 Without --host-resolver-rules the browser fetches whatever subresource the HTML

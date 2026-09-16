@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Optional client-side encryption of what is uploaded.
 
 Off by default. When on, the offsite copy is unreadable without this install's

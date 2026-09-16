@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Listener UDP asincroni per l'ingest IPFIX/sFlow/syslog (fasi 3.1 + 3.5).
 
 Architettura loop-safe (corregge il difetto #1 della guida originale):

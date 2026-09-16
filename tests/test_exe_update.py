@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Aggiornamento da release GitHub: qui si scarica ed ESEGUE un binario.
 
 I test che contano sono quelli che dicono quando NON si esegue: impronta

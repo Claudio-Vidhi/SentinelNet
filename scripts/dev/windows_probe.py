@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Sonda di trasporto per un host Windows raggiunto via SSH.
 
 I comandi PowerShell del driver sono gia' stati provati su un Windows vero

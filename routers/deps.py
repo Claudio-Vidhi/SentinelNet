@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Dipendenze FastAPI condivise: autenticazione (cookie HttpOnly O Bearer,
 con prova anti-CSRF sul cookie) e scoping multi-gruppo per sede.
 

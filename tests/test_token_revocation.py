@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """S1 — revoca dei token JWT.
 
 Il buco: ``logout`` cancellava solo il cookie. Un Bearer copiato prima del

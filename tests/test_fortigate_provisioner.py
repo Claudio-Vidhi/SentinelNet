@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Unit test minimale per fortigate_provisioner.build_config: verifica le
 sezioni AAA (RADIUS/TACACS+) aggiunte in T3, oltre al caso di default
 (nessun AAA remoto) che deve restare invariato."""

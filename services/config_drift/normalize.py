@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Strip the parts of a config that change on their own.
 
 A device rewrites byte counts, timestamps and clock drift without anyone

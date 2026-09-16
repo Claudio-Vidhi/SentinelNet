@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """AI Assistant — single chat interface towards pluggable LLM providers.
 
 Exposes a single function ``chat(messages, provider, model, ...)`` that

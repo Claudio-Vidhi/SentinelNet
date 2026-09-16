@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """SFTP transport. The only module here that imports paramiko.
 
 Two rules carry the security of the whole feature:

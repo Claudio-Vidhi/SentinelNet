@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // Escape di una stringa dentro un literal JavaScript, per la convenzione di
 // casa escapeHtml(jsStr(x)). Viveva in mcp-client.js, che era caricato con un
 // <script> fisso: alla rimozione di quella tab sarebbe sparito da sotto ai

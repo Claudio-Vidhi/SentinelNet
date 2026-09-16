@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Metriche di saturazione per normalizzatore e correlatore (WP8,
 docs/app-review-fix-plan.md): una sorgente che legge sempre il suo tetto
 per ciclo lo dichiara, invece di accumulare ritardo in silenzio."""

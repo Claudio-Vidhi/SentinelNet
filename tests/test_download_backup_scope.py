@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """``download_backup`` must scope on the SAME IP it resolves the file with.
 
 It derived the IP twice from the caller-supplied name, two different ways: the

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Routes of the offsite backup mirror.
 
 Admin-only, except status: a triage needs to see whether the copy is current

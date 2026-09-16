@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // ===== Fortigate Management tab — token API + oggetti firewall live =====
 // La tab e' admin-only (nav-item requires-admin), non piu' dietro un flag di
 // preview. Questa è l'unica proprietaria della UI token/oggetti FortiGate:

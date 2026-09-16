@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """L'albero tracciato non contiene dati di un cliente reale.
 
 Questo test esiste perche' `master` e `Dev` hanno lo stesso contenuto: non c'e'

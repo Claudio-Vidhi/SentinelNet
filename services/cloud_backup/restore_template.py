@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """The standalone restore script uploaded next to the manifest.
 
 Kept as a string, not a module: it is data to be shipped, and it must not

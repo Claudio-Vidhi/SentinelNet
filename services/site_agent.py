@@ -1,3 +1,5 @@
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """SentinelNet - Agente di sede (Mode B).
 
 LINUX SOLTANTO. Un agente Windows non e' in roadmap: la sua gestione remota

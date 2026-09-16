@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Perdite della pipeline dichiarate, mai silenziose (WP7,
 docs/app-review-fix-plan.md): lo scarto per coda piena viene contato E
 loggato (rate-limited), la morte definitiva del writer diventa uno stato

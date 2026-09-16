@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Single-use user invitation tokens.
 
 Same shape and same trade-off as password_reset: process-local, hashed, single

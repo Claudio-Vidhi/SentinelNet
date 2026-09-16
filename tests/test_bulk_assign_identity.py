@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test per assegnazione massiva identità a più dispositivi.
 
 Copre: bulk_assign_profile (service), endpoint POST /api/identities/{id}/assign

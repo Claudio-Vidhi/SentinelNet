@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Router inventario endpoint: elenco dei client scoperti, e occupazione porte.
 
 Sottile per scelta, come gli altri: qui stanno routing e scoping per tenant;

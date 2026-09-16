@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Vulnerability Matcher (NVD): la query che parte davvero.
 
 Prima della correzione ogni ricerca finiva su keywordSearch, che in NVD e' un

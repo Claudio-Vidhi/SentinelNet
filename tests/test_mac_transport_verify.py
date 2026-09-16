@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Verifica TLS/host-key dei trasporti MAC a comando dell'operatore (WP10,
 docs/app-review-fix-plan.md): default spento per compatibilita' con i
 certificati self-signed, attivabile dall'impostazione avanzata."""

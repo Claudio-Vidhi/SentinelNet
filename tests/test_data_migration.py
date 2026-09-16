@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Migrazione dei file di stato da CWD a DATA_DIR.
 
 Se 'secret.key' non arriva a destinazione, secure_key_store la legge come

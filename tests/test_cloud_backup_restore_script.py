@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """The uploaded restore.py must rebuild the archive with no import from this
 repo: whoever finds that folder in three years has only Python."""
 import hashlib

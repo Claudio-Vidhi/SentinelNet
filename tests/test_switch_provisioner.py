@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Unit test minimale per switch_provisioner.build_config: verifica che la
 config generata contenga le sezioni chiave attese per un input di esempio."""
 

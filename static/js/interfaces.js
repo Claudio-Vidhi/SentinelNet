@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // -*- coding: utf-8 -*-
 /**
  * SentinelNet - Monitoraggio Interfacce & Stato Atteso

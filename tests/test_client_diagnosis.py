@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Diagnosi client: L2 e L3 nello stesso referto.
 
 Il punto non e' che tutte le sezioni riescano — e' che una sezione che non sa

@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
     // ===== Settings tab (Users, Sites, MCP Server, App/Network/CLI Settings) =====
 
     // --- SEDI MULTI-SITO (admin) ---

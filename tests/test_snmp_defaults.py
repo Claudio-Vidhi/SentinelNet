@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Community SNMP gerarchica: default di tenant, override per apparato.
 
 La regola in una riga: l'apparato vince sul tenant, e il flag di esclusione

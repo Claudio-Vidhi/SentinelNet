@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Traffico per policy firewall, letto dai contatori che gli apparati tengono.
 
 La vista "Per IP" del tab Traffico nasce da flow_aggregates: telemetria di rete,

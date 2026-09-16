@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // --- Estratto da templates/dashboard.html: gestione multilingua (i18n) ---
 // --- GESTIONE MULTILINGUA (i18n) ---
 const i18n = {

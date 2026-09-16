@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Self-signed certificate for the panel's own HTTPS listener.
 
 Lifted out of routers/settings.py: building an X.509 certificate is not an

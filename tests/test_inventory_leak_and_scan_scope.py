@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Due buchi trovati dalla review FastAPI.
 
 1. GET /api/local-devices restituiva l'intera riga di inventario, comprese

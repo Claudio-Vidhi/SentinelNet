@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """SentinelNet - VM Agent Test Helper
 
 Script di supporto per testare e configurare l'agente di sede (site_agent.py)

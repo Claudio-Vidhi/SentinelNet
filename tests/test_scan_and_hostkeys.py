@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Due regressioni viste dall'utente: terminale SSH che non connette piu'
 e scansione subnet che sembra bloccata."""
 

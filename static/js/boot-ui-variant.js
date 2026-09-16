@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // Variante UI prima del primo paint (blocco head). Estratto dal blocco
 // inline di dashboard.html per la CSP senza 'unsafe-inline'.
 (function() {

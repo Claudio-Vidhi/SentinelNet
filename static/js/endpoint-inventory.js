@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // Inventario endpoint: elenco dei client scoperti, filtrabile ed esportabile.
 // Ogni valore che arriva dagli apparati passa da escapeHtml(x).
 //

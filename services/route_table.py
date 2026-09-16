@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """One routing table out of the devices that already publish theirs.
 
 The FortiGate tab has shown a per-device route list since it shipped: pick a

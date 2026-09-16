@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Baseline Engine: adapter che misura quanto il presente si discosta dal
 comportamento abituale, e scrive la misura come FATTO nel modello unificato.
 

@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // static/js/site-agent.js
 // Remote Site Agent Control Plane & RPC Management (Checkmk Style)
 

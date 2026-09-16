@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """G1-G3 — una sede si modifica dopo la creazione.
 
 ``update_site`` accettava nome, subnet, modalita' e campi del bastione dal

@@ -72,4 +72,15 @@ the Service Control Manager, which would kill it), so a wrapper is required.
 
 ## 4. Main License
 
-SentinelNet source code is licensed under the [Apache License, Version 2.0](LICENSE).
+SentinelNet source code is licensed under the
+[GNU Affero General Public License v3.0 only](LICENSE) from version 0.39.0 on;
+versions up to 0.38.0 were released under the Apache License 2.0.
+
+Every component listed above is under a license that permits inclusion in an
+AGPL-3.0 work: MIT, BSD-2-Clause, BSD-3-Clause and Apache-2.0 are one-way
+compatible with it, and Paramiko's LGPL-2.1-or-later converts to GPL-3.0, which
+AGPL-3.0 section 13 accepts. The fonts under OFL-1.1 and the icons under
+CC BY 4.0 are separate works bundled with the program, not linked into it.
+
+A copy of the Apache License 2.0, required to travel with the components
+released under it, is in [LICENSES/Apache-2.0.txt](LICENSES/Apache-2.0.txt).

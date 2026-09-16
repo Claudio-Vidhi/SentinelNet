@@ -1,3 +1,5 @@
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Gestione delle SEDI (siti) multi-sede su VPN.
 
 Ogni sito ha una modalità:

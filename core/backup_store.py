@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Config-backup storage: paths, save, stale-file handling, offsite mirror
 (extracted from core_engine.py — plan Phase 3 item 12; core_engine keeps
 re-exporting the public names so call sites are unchanged)."""

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Restart and self-update of the central: which supervisor owns the process,
 and the git pull -> dependencies -> restart sequence.
 

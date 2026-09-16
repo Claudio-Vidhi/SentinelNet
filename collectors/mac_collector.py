@@ -1,3 +1,5 @@
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Collection of the MAC address-table from devices, pluggable transport.
 
 Order of preference (best-effort, with automatic fallback):

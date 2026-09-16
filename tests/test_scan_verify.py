@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Subnet scan is discovery-only; the login step is a separate, explicit
 endpoint gated on an identity the caller is allowed to use."""
 

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Tre difetti trovati sul campo: modello dai vicini, sidebar compressa, unifilare.
 
 1. Il modello di un apparato non puo' arrivare dai suoi vicini. Un backup Cisco

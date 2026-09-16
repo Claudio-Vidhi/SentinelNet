@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Azioni sulla porta di accesso trovata dalla diagnosi. Per ora: il bounce.
 
 Perché una rotta dedicata e non ``send-command``: un bounce richiede la modalità

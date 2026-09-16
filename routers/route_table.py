@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Router Routes: una tabella di routing sola, per gli apparati in scope.
 
 HTTP soltanto — scope, filtri e forma della risposta. La raccolta e la

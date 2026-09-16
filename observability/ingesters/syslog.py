@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Parser syslog → evento normalizzato (fase 3.4).
 
 Formati: RFC 3164 (BSD) e RFC 5424; normalizzazione vendor per FortiGate

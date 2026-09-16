@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Poller SNMP: sorgente di stato per gli apparati senza API REST.
 
 Il documento chiede correlazione multi-sorgente: oggi lo stato per apparato

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test per provisioning_secrets (finding I-2): la config day-0 generata di
 default non contiene segreti in chiaro, i placeholder sono presenti e i campi
 non sensibili sopravvivono."""

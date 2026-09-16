@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Port bounce: l'unica scrittura della diagnosi.
 
 I cancelli non sono formalita'. La porta arriva da una MAC table scansionata a

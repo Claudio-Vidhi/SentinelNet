@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // static/js/provisioning.js
 // Estratto da templates/dashboard.html: tab-provisioning (form di provisioning
 // apparato + pannello Identità, parte tab-owned) e tab-provisioner (wizard ZTP

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Carico dell'apparato: la prima regola che legge uno STATO.
 
 Tutte le altre aspettano una transizione, quindi sanno dire "è cambiato" ma non

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test del Baseline Engine.
 
 Il baseline è un ADAPTER: misura e scrive un fatto (``flow.baseline``), non

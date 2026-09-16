@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Credenziali dispositivo: un token salvato che non si decifra deve fallire
 in modo esplicito, mai scivolare sul fallback admin (WP2,
 docs/app-review-fix-plan.md)."""

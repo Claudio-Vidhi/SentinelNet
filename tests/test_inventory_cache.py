@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """get_all_devices() caches parsed rows without ever serving stale ones.
 
 The cache exists because 64 call sites re-read and re-parsed the same CSV,

@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // static/js/client-map.js
 // Estratto da templates/dashboard.html: tab-mac (MAC Address Tracker) e
 // tab-clientmap (Client Map MAC <-> IP dalle ARP dei gateway L3). Le due

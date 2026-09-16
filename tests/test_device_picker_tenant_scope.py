@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Anche le tendine di APPARATI seguono il tenant scelto in alto.
 
 test_global_tenant_sync.py sorveglia i select di tenant. Questi sono un'altra

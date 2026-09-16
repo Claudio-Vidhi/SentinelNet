@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Report Port-channel: due sorgenti, ciascuna per ciò che sa davvero.
 
 La configurazione (backup) dice chi è MEMBRO e chi è spento da comando; lo

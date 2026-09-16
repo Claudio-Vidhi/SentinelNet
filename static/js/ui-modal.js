@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // Gestore unico delle finestre modali.
 //
 // Prima ogni tab apriva la sua con `style.display = 'flex'` e la chiudeva con

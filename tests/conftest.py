@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Pin the shared-at-import paths before any test module can claim them.
 
 Nineteen module-level constants resolve `data_config.get_path(...)` at import

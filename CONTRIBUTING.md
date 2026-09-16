@@ -155,3 +155,66 @@ Every new module ships its own `test_<module>.py`. Tests use a temporary
 A change that invalidates a line in `docs/` is not finished until that line is
 corrected. A decision that changes an invariant gets an
 [ADR](docs/adr/README.md).
+
+## 9. Licensing and provenance of contributions
+
+SentinelNet is licensed **AGPL-3.0-only** from version 0.39.0 on. Versions up to
+0.38.0 were Apache-2.0 and stay that way: that grant cannot be revoked.
+
+Every source file carries a two-line header. New files must ship it, editors
+must not strip it:
+
+```python
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
+```
+
+This is not decoration. AGPL-3.0 §5(a) and the §7(b)/§7(c) additional terms in
+`NOTICE` oblige anyone redistributing or modifying the code to keep those
+notices. A file with no notice in it gives a downstream redistributor nothing to
+preserve — which is exactly how attribution disappears.
+
+`NOTICE` carries the §7 additional terms (trademark, attribution) and the
+commercial-licence contact. Keep it short: it is a legal instrument, not a
+credits roll.
+
+### The network clause
+
+AGPL §13 is the point of this licence: whoever **modifies** SentinelNet and lets
+anyone use it over a network must offer those users the complete corresponding
+source of their modified version. A change that would make that offer harder to
+honour — bundling an opaque blob, moving logic behind a service the user cannot
+rebuild — needs an [ADR](docs/adr/README.md) before it lands.
+
+### Sign-off
+
+Every commit is signed off, certifying the
+[Developer Certificate of Origin](https://developercertificate.org/) 1.1 — that
+you wrote the change, or have the right to submit it under this licence:
+
+```sh
+git commit -s -m "..."
+```
+
+### Contributor licence
+
+By submitting a contribution you grant Claudio Vidhi a perpetual, worldwide,
+irrevocable, royalty-free licence to use, reproduce, modify, distribute and
+sublicense it, **including the right to release it under a different licence**,
+present or future. You keep the copyright on what you wrote; this grant is what
+makes the dual licence possible — commercial licences are sold on the whole
+work, which is only lawful if one party can license all of it.
+
+### Dependencies
+
+A new dependency must be under a licence that can be combined into an AGPL-3.0
+work (MIT, BSD, Apache-2.0, LGPL, GPL-3.0, AGPL-3.0). **Apache-2.0 is one-way**:
+it flows into AGPL-3.0, never back out. GPL-2.0-only is incompatible and cannot
+be added. Record every new component in `THIRD_PARTY_LICENSES.md`, with its
+licence text under `LICENSES/` when that licence requires a copy to travel with
+the binary.
+
+### Name and logo
+
+"SentinelNet" is an unregistered trademark, reserved under AGPL §7(e) in
+`NOTICE`. A fork may use the code, not the name.

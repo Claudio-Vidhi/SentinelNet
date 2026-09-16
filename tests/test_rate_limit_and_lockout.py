@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Lockout persistente con chiave sorgente+account e rate limit sulle rotte
 costose (WP6, docs/app-review-fix-plan.md)."""
 

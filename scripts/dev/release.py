@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Prepara una release: versione, CHANGELOG, commit, tag. NON pubblica.
 
 Ogni release finora ha ripetuto a mano gli stessi sei passi, e ne bastava uno

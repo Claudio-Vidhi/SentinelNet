@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Tool MCP ``diagnose_client``: deve poter restringere a un tenant.
 
 Un indirizzo presente in più sedi fa tornare 'status': 'ambiguous' dalla rotta

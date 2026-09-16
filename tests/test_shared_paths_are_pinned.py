@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Every path resolved at import must be pinned by conftest, not by luck.
 
 `conftest.py` binds the module-level `data_config.get_path(...)` constants to

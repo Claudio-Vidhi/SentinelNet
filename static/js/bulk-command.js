@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // --- INVIO COMANDI MASSIVO (BULK) ---
 // Estratto dal blocco inline di templates/dashboard.html (CSP senza
 // 'unsafe-inline').

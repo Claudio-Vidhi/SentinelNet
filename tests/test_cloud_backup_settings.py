@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """cloud_backup.settings: secrets never leave the vault in clear."""
 import unittest
 from unittest import mock

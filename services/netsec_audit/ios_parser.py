@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Parser Cisco IOS / IOS-XE con tracciamento di riga per il motore di audit.
 
 IOS non e' key/value come FortiOS: una riga di configurazione E' il comando.

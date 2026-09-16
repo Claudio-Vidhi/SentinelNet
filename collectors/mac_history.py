@@ -1,3 +1,5 @@
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Historization and search of MAC address sightings (SQLite, WAL).
 
 Data model: for each (mac, switch, interface, vlan) ONE row is kept with

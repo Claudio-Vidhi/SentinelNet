@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Che cosa e' uscito di nuovo per le dipendenze, ogni tot giorni.
 
 `uv lock --upgrade --dry-run` sa gia' dire quali versioni esistono senza

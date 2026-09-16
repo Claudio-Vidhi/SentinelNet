@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Conferma prima di concludere (roadmap §1, voce 3).
 
 Il punto su cui la roadmap non e' d'accordo con Nagios: la ritrattazione

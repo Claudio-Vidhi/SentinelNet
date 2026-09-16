@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test unitari di wlc_service (AireOS / Catalyst 9800, SSH mockato).
 
 Copre anche il motivo per cui il tab Live restava vuoto: il servizio tornava

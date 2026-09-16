@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test del catalogo messaggi e della guida del motore di audit.
 
 Il motore produce CHIAVI, non frasi: la traduzione avviene al confine. Questo

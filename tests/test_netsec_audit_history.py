@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Storico degli audit: un punteggio senza i rilievi che lo hanno prodotto non
 si puo' usare mesi dopo, quindi si conserva il documento intero.
 

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """"E' solo mio?" -- BLAST_RADIUS_001.
 
 Una conclusione per client risponde a "perche' IO non arrivo?", non a "anche

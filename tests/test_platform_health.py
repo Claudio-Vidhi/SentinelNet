@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Salute della piattaforma: gli exporter fuori inventario diventano evidenza.
 
 I record di un exporter non censito vengono scartati di proposito (attribuirli

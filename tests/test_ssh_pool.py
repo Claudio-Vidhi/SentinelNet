@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Pool SSH dedicato per il lavoro bloccante verso i dispositivi (WP11,
 docs/app-review-fix-plan.md): le sessioni lunghe non occupano piu' il
 threadpool condiviso delle rotte sync."""

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test del modello eventi unificato: adapter di normalizzazione, cursori,
 idempotenza, rilevamento variazioni sugli snapshot REST e scoping tenant del
 feed normalizzato."""

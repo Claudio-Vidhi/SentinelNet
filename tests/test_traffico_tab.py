@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Il tab Traffico e' una pill bar su quattro viste, non due tab gemelli.
 
 Prima della fusione la stessa finestra temporale esisteva tre volte

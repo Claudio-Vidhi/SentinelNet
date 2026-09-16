@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Decoder IPFIX (RFC 7011) + NetFlow v9 + NetFlow v5 → record di flusso
 normalizzati (fase 3.3).
 

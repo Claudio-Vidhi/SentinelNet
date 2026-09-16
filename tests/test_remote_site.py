@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test end-to-end che SIMULA una sede remota (Mode B / agent) contro il
 centrale reale, via FastAPI TestClient (nessun processo o rete esterni).
 

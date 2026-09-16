@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test per identity_manager: CRUD, cifratura, blocco delete-in-uso,
 risoluzione credenziali 'identity:<id>' in core_engine."""
 import os

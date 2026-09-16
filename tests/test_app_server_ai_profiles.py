@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Unit test per la gestione dei profili di connessione AI in app_server.py
 (storage in app_settings.json, migrazione dal vecchio formato a profilo
 singolo, mascheramento della API key). Uso una data dir temporanea dedicata

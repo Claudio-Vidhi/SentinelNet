@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Live CPU, memory and disk for managed Windows hosts, over SSH.
 
 The sibling of ``linux_poller``, and driven by its loop: the same

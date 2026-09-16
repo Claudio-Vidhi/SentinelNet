@@ -10,6 +10,45 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-09-16
+
+### Changed
+
+- **Licenza: da Apache-2.0 a AGPL-3.0-only.** Vale da questa versione in poi.
+  Le versioni fino alla 0.38.0 restano disponibili sotto Apache-2.0: quella
+  concessione non e' revocabile e non si estende alle successive.
+
+  Cosa cambia per chi usa SentinelNet: eseguirlo, studiarlo, modificarlo e
+  redistribuirlo resta libero, anche dentro un'azienda. Chi pero' distribuisce
+  una versione modificata, o la mette a disposizione di qualcuno **attraverso
+  una rete**, deve pubblicarne il sorgente completo con la stessa licenza
+  (AGPL sezione 13). Per chi non puo' rispettare quella condizione e'
+  disponibile una licenza commerciale: il contatto e' in `NOTICE`.
+
+  Le dipendenze sono state verificate una per una: MIT, BSD e Apache-2.0
+  confluiscono nell'AGPL-3.0 a senso unico, la LGPL-2.1-or-later di Paramiko
+  si converte in GPL-3.0. Nessun componente incompatibile.
+
+### Added
+
+- **`NOTICE`**, con i termini aggiuntivi previsti dalla sezione 7: il nome
+  "SentinelNet" e il logo non sono concessi (7(e)), le note di copyright nei
+  file vanno conservate (7(b), 7(c)).
+- **Header di copyright e SPDX in testa a ogni sorgente tracciato** (423 file).
+  Senza una nota nel file, chi lo redistribuisce non ha niente da conservare.
+  `tests/test_license_headers.py` fallisce se un file nuovo arriva senza.
+- **`LICENSES/Apache-2.0.txt`**: diversi componenti inclusi sono Apache-2.0 e la
+  loro 4(a) vuole che una copia della licenza viaggi con il binario, che la
+  LICENSE di root non e' piu'.
+
+### Fixed
+
+- L'exe non imbarcava ne' `LICENSE` ne' `NOTICE`: e' una redistribuzione, devono
+  esserci. Aggiunti ai `datas` di `SentinelNet.spec` insieme a `LICENSES/`.
+- `.dockerignore` escludeva `THIRD_PARTY_LICENSES.md` con il resto dei `*.md`:
+  le licenze dei componenti inclusi non raggiungevano l'immagine che li
+  incorpora.
+
 ## [0.38.0] - 2026-09-15
 
 ### Added

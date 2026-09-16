@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // static/js/audit_checklist.js
 // Frontend logic for Audit Checklist Tab (Firewall Maintenance Audit)
 

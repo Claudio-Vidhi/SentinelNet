@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Router WLC LIVE: osservabilità wireless Cisco AireOS / Catalyst 9800 (SSH).
 Estratto da app_server.py (fase 2.3): percorsi e risposte identici al
 monolite. La logica resta in wlc_service.py."""

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Ogni tr('chiave') usata dai moduli deve esistere in ENTRAMBE le lingue.
 
 La migrazione dalle ternarie inline ha spostato ~700 stringhe nel dizionario:

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Every route that takes a device IP must reach ``assert_device_allowed``.
 
 AGENTS.md: filtering *data* by tenant is not authorizing the *device*. This

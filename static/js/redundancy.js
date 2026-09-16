@@ -1,3 +1,5 @@
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // static/js/redundancy.js
 // ===== High Availability & Redundancy Groups (HA) =====
 

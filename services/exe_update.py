@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Aggiornamento dell'installazione Windows: release GitHub -> installer.
 
 Il pulsante "Aggiorna e riavvia" sapeva fare una cosa sola, `git pull`, e su

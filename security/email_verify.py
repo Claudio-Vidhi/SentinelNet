@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Single-use tokens proving a user controls a new recovery address.
 
 Same shape as password_reset and user_invite: process-local, hashed, single

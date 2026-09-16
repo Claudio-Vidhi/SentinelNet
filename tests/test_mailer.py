@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """SMTP delivery (services/mailer).
 
 The point of these tests is the fail-closed behaviour: a server that does not

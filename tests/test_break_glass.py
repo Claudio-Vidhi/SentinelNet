@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Break-glass CLI admin password reset (app_server --reset-admin).
 
 The recovery path must work when every admin is locked out, so the tests cover

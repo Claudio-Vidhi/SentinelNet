@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Router incidenti: lista, dettaglio con timeline multi-fonte, transizioni di
 stato e narrativa AI opzionale.
 

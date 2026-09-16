@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Volatile lines must not read as configuration changes.
 
 Every one of these appears in a real backup and changes without anyone

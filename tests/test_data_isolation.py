@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """La suite non deve MAI scrivere nella cartella ``data/`` del repository.
 
 Questo test e' la rete che mancava quando ``test_remote_site`` ha sovrascritto

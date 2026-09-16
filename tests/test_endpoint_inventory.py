@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Inventario endpoint: una riga per (MAC, tenant), derivata e mai memorizzata.
 
 Parte da mac_sightings — la verita' L2 — e aggancia l'ARP a sinistra. Il

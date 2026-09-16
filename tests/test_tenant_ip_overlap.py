@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Two tenants may own the same IP.
 
 Overlapping RFC 1918 space across customers is the normal state of the world,

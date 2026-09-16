@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """The shadowed-rule check must reach every surface that shows rules.
 
 One engine, several readers. These tests pin the wiring, not the matching

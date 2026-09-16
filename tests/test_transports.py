@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Test §11.6 — trasporti multi-protocollo per-device.
 
 Copre: sintesi ssh-only per righe legacy, round-trip dell'upsert, uso della

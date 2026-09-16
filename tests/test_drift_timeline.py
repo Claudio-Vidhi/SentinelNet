@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Timeline grafica delle versioni di configurazione (scheda Config Drift).
 
 Si appoggia all'archivio .history, non al mirror git: quello e' ridondanza in
