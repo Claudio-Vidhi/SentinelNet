@@ -385,7 +385,7 @@ def get_sso_settings(current_user = Depends(require_admin)):
 @router.post("/api/settings/sso")
 def set_sso_settings(payload: SsoSettingsSchema, current_user = Depends(require_admin)):
     from security import sso, user_manager
-    if payload.default_role not in user_manager.VALID_ROLES:
+    if payload.default_role not in user_manager.VALID_ROLES or payload.default_role == "super_admin":
         raise HTTPException(status_code=400, detail="Ruolo predefinito non valido.")
     issuer = payload.issuer_url.strip().rstrip("/")
     # Il discovery e le chiavi di firma arrivano da questo URL: su HTTP

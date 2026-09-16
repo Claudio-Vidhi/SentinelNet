@@ -235,7 +235,10 @@ def resolve_role(cfg: dict, claims: dict) -> str:
         return "admin"
     if cfg["operator_group"] and cfg["operator_group"].lower() in lowered:
         return "operator"
-    return cfg["default_role"]
+    # An IdP must never mint the top role: a misconfigured default would
+    # hand super_admin to every federated login.
+    default = cfg["default_role"]
+    return "viewer" if default == "super_admin" else default
 
 
 def clear() -> None:

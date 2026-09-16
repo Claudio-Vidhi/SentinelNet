@@ -769,6 +769,14 @@ def sso_login():
     return RedirectResponse(auth_url, status_code=302)
 
 
+def _sso_synced_role(existing_role: str, mapped_role: str, sync: bool) -> str:
+    """Role after an SSO login. A super_admin is managed locally only: the
+    IdP can neither grant nor revoke it."""
+    if not sync or existing_role == "super_admin":
+        return existing_role
+    return mapped_role
+
+
 @router.get("/api/auth/sso/callback")
 def sso_callback(request: Request, code: str = "", state: str = "", error: str = ""):
     """Ritorno dall'IdP: verifica, risoluzione dell'utente, sessione locale."""
@@ -828,10 +836,10 @@ def sso_callback(request: Request, code: str = "", state: str = "", error: str =
         if user_manager.is_pending(username):
             log_audit(f"Login SSO rifiutato per l'account in attesa di approvazione '{username}'.")
             raise HTTPException(status_code=403, detail="Account in attesa di approvazione.")
-        role = mapped_role if cfg["sync_roles"] else existing_role
-        if cfg["sync_roles"] and mapped_role != existing_role:
-            user_manager.set_role(username, mapped_role)
-            log_audit(f"Ruolo di '{username}' allineato a '{mapped_role}' dai gruppi dell'IdP.")
+        role = _sso_synced_role(existing_role, mapped_role, cfg["sync_roles"])
+        if role != existing_role:
+            user_manager.set_role(username, role)
+            log_audit(f"Ruolo di '{username}' allineato a '{role}' dai gruppi dell'IdP.")
 
     access_token = _issue_token(username, role)
     clear_account_lockouts(username)
