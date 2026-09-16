@@ -324,7 +324,8 @@ def whoami(current_user = Depends(get_current_user)):
     allowed_tabs = [] if role == "super_admin" else user_manager.get_allowed_tabs(username)
     # groups: the actor's own tenant scope, so the frontend can limit the
     # tenant/tab editors it offers to a scoped admin without a second round-trip.
-    groups = user_manager.get_user_groups(username)
+    # super_admin is never group-restricted, same reasoning as allowed_tabs above.
+    groups = [] if role == "super_admin" else user_manager.get_user_groups(username)
     return {"username": username, "role": role, "allowed_tabs": allowed_tabs, "groups": groups}
 
 # --- GESTIONE UTENTI (solo amministratori) ---
@@ -661,6 +662,12 @@ def approve_user(payload: UserNameSchema, current_user = Depends(require_admin))
     assert_can_manage(current_user, payload.username)
     if not user_manager.approve(payload.username):
         raise HTTPException(status_code=404, detail="Utente non trovato.")
+    # Invite + approve is a second account-creation path: without this, a
+    # tab-restricted actor could invite an address and approve it into an
+    # unrestricted account, same widening bug as create_user (see line ~383).
+    actor_tabs = user_manager.effective_tabs(current_user.get("sub"))
+    if actor_tabs is not None and user_manager.effective_tabs(payload.username) is None:
+        user_manager.set_allowed_tabs(payload.username, sorted(actor_tabs - {"tab-home"}))
     log_audit(f"Account '{payload.username}' approvato da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
