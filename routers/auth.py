@@ -365,6 +365,8 @@ def create_user_ep(payload: UserCreateSchema, current_user = Depends(require_adm
                                     must_change_password=not setup_link, email=email):
         raise HTTPException(status_code=400, detail="Utente già esistente.")
 
+    welcome_mail_sent = False
+    welcome_mail_error = None
     if setup_link:
         user_manager.mark_awaiting_password(username)
         try:
@@ -374,12 +376,28 @@ def create_user_ep(payload: UserCreateSchema, current_user = Depends(require_adm
             # non lasciarlo, cosi' l'amministratore riprova da capo.
             user_manager.delete_user(username)
             raise HTTPException(status_code=400, detail=str(e)) from e
+    elif email:
+        try:
+            _mail_welcome(username, payload.role)
+            welcome_mail_sent = True
+        except mailer.MailerError as e:
+            # A differenza del link di setup, qui l'account e' gia' utilizzabile
+            # con la password comunicata dall'amministratore: resta creato.
+            welcome_mail_error = str(e)
     log_audit(
         f"Utente '{username}' (ruolo: {payload.role}, sedi: "
         f"{groups or 'tutte'}) creato da '{current_user.get('sub')}'"
-        f"{', link per la password inviato via email' if setup_link else ''}."
+        f"{', link per la password inviato via email' if setup_link else ''}"
+        f"{', email di benvenuto inviata' if welcome_mail_sent else ''}."
     )
-    return {"status": "success", "setup_link_sent": setup_link}
+    if welcome_mail_error:
+        log_audit(f"Email di benvenuto per '{username}' non inviata: {welcome_mail_error}")
+    result = {"status": "success", "setup_link_sent": setup_link}
+    if not setup_link and email:
+        result["welcome_mail_sent"] = welcome_mail_sent
+        if welcome_mail_error:
+            result["welcome_mail_error"] = welcome_mail_error
+    return result
 
 
 def _mail_setup_link(username: str, base_url: str) -> None:
@@ -395,6 +413,26 @@ def _mail_setup_link(username: str, base_url: str) -> None:
         f"(valido {password_reset.SETUP_TTL_SECONDS // 3600} ore):\n"
         f"{base_url}/?reset_token={token}\n\n"
         "Se il link scade, usa 'Password dimenticata?' nella pagina di accesso.\n",
+    )
+
+
+def _mail_welcome(username: str, role: str) -> None:
+    from core.app_settings import BaseUrlError, resolve_base_url
+    from services import mailer
+
+    url_line = ""
+    try:
+        url_line = f"Indirizzo di accesso: {resolve_base_url()}\n"
+    except BaseUrlError:
+        pass
+    mailer.send_email(
+        user_manager.get_email(username),
+        "SentinelNet - Account creato",
+        f"E' stato creato per te un account SentinelNet con username '{username}' "
+        f"e ruolo '{role}'.\n\n"
+        f"{url_line}"
+        "La password ti viene comunicata dall'amministratore e va cambiata "
+        "al primo accesso.\n",
     )
 
 @router.post("/api/users/delete")

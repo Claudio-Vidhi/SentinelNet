@@ -210,13 +210,52 @@ class TestUserLifecycle(unittest.TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertIsNone(user_manager.get_role("life-new"))
 
-    def test_new_user_with_password_gets_no_mail(self):
+    def test_new_user_with_password_and_no_email_gets_no_mail(self):
         try:
-            r = self._create(password=PASS)
+            r = self._create(password=PASS, email="")
             self.assertEqual(r.status_code, 200)
             self.assertFalse(r.json()["setup_link_sent"])
             self.assertEqual(self.sent, [])
             self.assertTrue(user_manager.must_change_password("life-new"))
+        finally:
+            user_manager.delete_user("life-new")
+
+    # --- new user with a password: welcome mail ---
+
+    def test_new_user_with_password_and_email_gets_a_welcome_mail(self):
+        try:
+            r = self._create(password=PASS)
+            self.assertEqual(r.status_code, 200, r.text)
+            self.assertTrue(r.json()["welcome_mail_sent"])
+            self.assertEqual(len(self.sent), 1)
+            mail = self.sent[0]
+            self.assertEqual(mail["to"], "new.hire@example.com")
+            self.assertEqual(mail["subject"], "SentinelNet - Account creato")
+            self.assertIn("life-new", mail["body"])
+            self.assertNotIn(PASS, mail["body"])
+        finally:
+            user_manager.delete_user("life-new")
+
+    def test_welcome_mail_failure_still_keeps_the_account(self):
+        def boom(*_a, **_kw):
+            raise mailer.MailerError("boom")
+        mailer.send_email = boom
+        try:
+            r = self._create(password=PASS)
+            self.assertEqual(r.status_code, 200, r.text)
+            self.assertFalse(r.json()["setup_link_sent"])
+            self.assertIn("boom", r.json()["welcome_mail_error"])
+            self.assertIsNotNone(user_manager.get_role("life-new"))
+        finally:
+            user_manager.delete_user("life-new")
+
+    def test_setup_link_path_sends_no_welcome_mail(self):
+        try:
+            r = self._create()
+            self.assertEqual(r.status_code, 200, r.text)
+            self.assertTrue(r.json()["setup_link_sent"])
+            self.assertEqual(len(self.sent), 1)
+            self.assertNotIn("welcome_mail_sent", r.json())
         finally:
             user_manager.delete_user("life-new")
 
