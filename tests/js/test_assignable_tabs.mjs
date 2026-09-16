@@ -34,6 +34,9 @@ const buttons = [...html.matchAll(/<button([^>]*\bnav-item\b[^>]*)>/g)]
 assert.ok(buttons.length > 20, `pulsanti di navigazione trovati: ${buttons.length}`);
 
 global.document = { querySelectorAll: () => buttons };
+// currentAllowedTabs: la restrizione tab dell'attore che chiama la funzione
+// (core.js). Vuoto = nessuna restrizione, come nel comportamento storico.
+global.currentAllowedTabs = [];
 
 // --- la funzione vera, estratta dal sorgente ---
 const start = settingsSrc.indexOf('const SECONDARY_TAB_LABELS');
@@ -79,3 +82,36 @@ assert.deepStrictEqual([...navTabs].sort(), [...ids].sort(),
     'la derivazione e la barra di navigazione non concordano');
 
 console.log(`ok - ${ids.length} tab concedibili derivate dalla navigazione`);
+
+// --- rowRole: le 5 tab del gruppo di gestione (utenti/gruppi/sedi/mcp/
+// impostazioni) sono una concessione SOLO su una riga admin-level. ---
+const ADMIN_GROUP_TABS = ['tab-users', 'tab-groups', 'tab-sites', 'tab-mcp', 'tab-settings'];
+
+for (const rowRole of ['admin', 'super_admin']) {
+    const adminIds = assignableTabs(rowRole).map((t) => t.id);
+    for (const id of ADMIN_GROUP_TABS) {
+        assert.ok(adminIds.includes(id), `riga ${rowRole}: tab di gestione mancante: ${id}`);
+    }
+    // Le tab requires-admin che NON sono di gestione (incidents, fortigate)
+    // restano fuori: sono tab operative, non concessioni del pannello utenti.
+    for (const id of ['tab-incidents', 'tab-fortigate']) {
+        assert.ok(!adminIds.includes(id), `riga ${rowRole}: tab operativa admin offerta: ${id}`);
+    }
+}
+
+for (const rowRole of ['operator', 'viewer', undefined]) {
+    const nonAdminIds = assignableTabs(rowRole).map((t) => t.id);
+    for (const id of ADMIN_GROUP_TABS) {
+        assert.ok(!nonAdminIds.includes(id), `riga ${rowRole}: tab di gestione offerta a riga non-admin: ${id}`);
+    }
+}
+
+// --- attore con tab ristrette: offre solo quelle che detiene, qualunque
+// sia il ruolo della riga in modifica. ---
+global.currentAllowedTabs = ['tab-devices', 'tab-users'];
+const restrictedIds = assignableTabs('admin').map((t) => t.id);
+assert.deepStrictEqual(restrictedIds.sort(), ['tab-devices', 'tab-users'],
+    'attore ristretto: offerta oltre il proprio possesso');
+global.currentAllowedTabs = [];
+
+console.log('ok - assignableTabs(rowRole) rispetta il ruolo della riga e le tab dell\'attore');

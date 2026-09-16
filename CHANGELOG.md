@@ -29,9 +29,21 @@ happened — `git log --grep="chore(release)"` is the record for those.
   Un admin gestisce soltanto operator e viewer e non puo' assegnare ne'
   `admin` ne' `super_admin`. Stesso modello del profilo `super_admin` di
   FortiGate.
+- **Permessi per tab applicati dal server.** Le "Tab visibili" non sono piu'
+  solo un'etichetta lato frontend: ogni route `/api/*` risponde solo a chi
+  detiene la tab proprietaria. Il tenant (sede/gruppo) resta assegnabile
+  anche agli admin, non piu' solo a operator/viewer: entrambi i limiti li
+  decide il super_admin.
 
 ### Changed
 
+- **Chi ha "Tab visibili" impostate non raggiunge piu' le API delle tab
+  nascoste.** Prima il campo era solo un suggerimento per l'interfaccia; ora
+  e' applicato anche lato server.
+- **Impostazioni globali riservate a un admin senza limiti di tenant.** SMTP,
+  SSO, URL applicazione, certificati, aggiornamenti, tenant, sedi, backup
+  cloud e MCP richiedono ora un admin senza restrizione di tenant (o un
+  super_admin): un admin limitato a una sede non le raggiunge piu'.
 - **Aggiornamento automatico dei ruoli.** Al primo avvio della nuova versione
   ogni admin esistente diventa `super_admin` (solo se non esiste gia' un
   super_admin attivo, registrato nell'audit log): nessuno perde poteri.
