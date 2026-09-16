@@ -758,7 +758,7 @@ async function logout() {
     } catch (e) { /* sessione già scaduta: ignora */ }
     currentRole = 'viewer';
     currentUsername = '';
-    document.body.classList.remove('role-admin', 'role-operator', 'role-viewer');
+    document.body.classList.remove('role-super_admin', 'role-admin', 'role-operator', 'role-viewer');
     checkAuthRequirements();
 }
 

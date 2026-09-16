@@ -10,6 +10,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 
 _TMP_DATA_DIR = tempfile.mkdtemp(prefix="sentinelnet_test_auth_")
 os.environ["SENTINELNET_DATA_DIR"] = _TMP_DATA_DIR
@@ -27,9 +28,16 @@ class TestCookieAuth(unittest.TestCase):
     def setUpClass(cls):
         user_manager.create_user(USER, PASS, role="admin")
         cls.client = TestClient(app_server.app)
+        # The lifespan (run by `with TestClient(...)` below) would otherwise
+        # migrate the suite-wide users.json, making role state depend on test
+        # order. See tests/test_role_ladder.py for the migration itself.
+        cls._migrate_patch = patch.object(
+            user_manager, "migrate_admins_to_super_admin", return_value=[])
+        cls._migrate_patch.start()
 
     @classmethod
     def tearDownClass(cls):
+        cls._migrate_patch.stop()
         shutil.rmtree(_TMP_DATA_DIR, ignore_errors=True)
 
     def _login(self, client):

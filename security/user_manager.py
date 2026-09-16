@@ -396,14 +396,16 @@ def set_email(username: str, email: str) -> bool:
     return True
 
 
-ROLES_SCHEMA_VERSION = 2
-
 def migrate_admins_to_super_admin() -> list:
-    """One-shot upgrade to the super_admin ladder: every existing admin is
-    promoted, so nobody loses power on upgrade. The marker in app_settings
-    keeps admins created afterwards from ever being promoted."""
-    from core import app_settings
-    if int(app_settings.get_app_settings().get("user_roles_version", 1)) >= ROLES_SCHEMA_VERSION:
+    """Upgrade to the super_admin ladder: every existing admin is promoted,
+    so nobody loses power on upgrade.
+
+    Idempotence is keyed off users.json itself (count_active_super_admins),
+    not an app_settings marker: a restored or corrupt settings file must
+    neither re-promote admins created after the upgrade nor lock the install
+    out with zero super_admins and no way to create one.
+    """
+    if count_active_super_admins() > 0:
         return []
     promoted = []
     with _users_lock:
@@ -414,5 +416,4 @@ def migrate_admins_to_super_admin() -> list:
                 promoted.append(name)
         if promoted:
             _save_users(users)
-    app_settings.save_app_settings({"user_roles_version": ROLES_SCHEMA_VERSION})
     return sorted(promoted)

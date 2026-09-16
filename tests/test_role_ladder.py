@@ -16,16 +16,6 @@ def um(tmp_path, monkeypatch):
     return user_manager
 
 
-@pytest.fixture
-def settings(monkeypatch):
-    """app_settings replaced by an in-memory dict."""
-    from core import app_settings
-    store = {}
-    monkeypatch.setattr(app_settings, "get_app_settings", lambda: dict(store))
-    monkeypatch.setattr(app_settings, "save_app_settings", lambda s: store.update(s))
-    return store
-
-
 def test_is_admin(um):
     assert um.is_admin("super_admin") and um.is_admin("admin")
     assert not um.is_admin("operator") and not um.is_admin("viewer")
@@ -88,19 +78,37 @@ def test_first_admin_prefers_super_admin(um):
     assert um.first_admin_username() == "zzz-root"
 
 
-def test_migration_promotes_admins_once(um, settings):
+def test_migration_promotes_admins_once(um):
     um.create_user("adm-1", "password-1234", role="admin")
     um.create_user("op-1", "password-1234", role="operator")
     assert um.migrate_admins_to_super_admin() == ["adm-1"]
     assert um.get_role("adm-1") == "super_admin"
     assert um.get_role("op-1") == "operator"
-    assert settings["user_roles_version"] == 2
-    # An admin created after the migration is never promoted.
+    # An admin created after the migration is never promoted, because an
+    # active super_admin now exists.
     um.create_user("adm-2", "password-1234", role="admin")
     assert um.migrate_admins_to_super_admin() == []
     assert um.get_role("adm-2") == "admin"
 
 
-def test_migration_on_empty_store_sets_marker(um, settings):
+def test_migration_on_empty_store_is_noop(um):
     assert um.migrate_admins_to_super_admin() == []
-    assert settings["user_roles_version"] == 2
+
+
+def test_migration_recovers_store_without_active_super_admin(um):
+    um.create_user("root-disabled", "password-1234", role="super_admin")
+    um.set_disabled("root-disabled", True)
+    um.create_user("adm-1", "password-1234", role="admin")
+    assert um.migrate_admins_to_super_admin() == ["adm-1"]
+    assert um.get_role("adm-1") == "super_admin"
+
+
+def test_migration_ignores_app_settings(um, monkeypatch):
+    from core import app_settings
+
+    def boom():
+        raise AssertionError("migration must not touch app_settings")
+
+    monkeypatch.setattr(app_settings, "get_app_settings", boom)
+    um.create_user("adm-1", "password-1234", role="admin")
+    assert um.migrate_admins_to_super_admin() == ["adm-1"]
