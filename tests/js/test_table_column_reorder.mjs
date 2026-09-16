@@ -13,9 +13,13 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const src = readFileSync(join(root, 'static/js/core.js'), 'utf8');
-const start = src.indexOf('function arrayMoveItem');
+// Include anche il codice di ordinamento (_cellSortValue.._applySort..
+// sortTableByColumn..makeTableSortable): due dei bug che questo file copre
+// sono nell'INTERAZIONE fra riordino e ordinamento (indice catturato allo
+// static bind vs letto al click), quindi vanno eseguiti insieme, non isolati.
+const start = src.indexOf('function _cellSortValue');
 const end = src.indexOf('// ===== Tastiera sugli elementi cliccabili non nativi');
-assert.ok(start > 0 && end > start, 'funzioni di riordino colonne non trovate in core.js');
+assert.ok(start > 0 && end > start, 'funzioni di ordinamento/riordino non trovate in core.js');
 
 const localStorageStub = (() => {
     let store = {};
@@ -34,22 +38,47 @@ const trStub = key => key;
 
 const { arrayMoveItem, isValidColumnOrder, isTableReorderEligible, columnOrderStorageKey,
     currentColumnOrder, applyColumnOrder, saveColumnOrder, applySavedColumnOrder,
-    resetColumnOrder, moveTableColumn, reapplyColumnOrder, makeTableReorderable } = (0, eval)(
+    resetColumnOrder, moveTableColumn, reapplyColumnOrder, makeTableReorderable,
+    makeTableSortable, sortTableByColumn } = (0, eval)(
     `(function (localStorage, tr) { ${src.slice(start, end)};
       return { arrayMoveItem, isValidColumnOrder, isTableReorderEligible, columnOrderStorageKey,
         currentColumnOrder, applyColumnOrder, saveColumnOrder, applySavedColumnOrder,
-        resetColumnOrder, moveTableColumn, reapplyColumnOrder, makeTableReorderable }; })`
+        resetColumnOrder, moveTableColumn, reapplyColumnOrder, makeTableReorderable,
+        makeTableSortable, sortTableByColumn }; })`
 )(localStorageStub, trStub);
 
-// --- DOM stub: th/td con appendChild "sequenziale" come i td/tr veri --------
+// --- DOM stub: th/td con appendChild "sequenziale" come i td/tr veri, e
+// addEventListener/dispatch reali (necessari per il bug dell'indice
+// catturato al bind e per la guardia drag-non-e'-click). ------------------
 
 function cell(text, { colSpan = 1 } = {}) {
     const c = {
         colSpan, textContent: text, attrs: {}, dataset: {}, tabIndex: -1, draggable: false,
+        style: {}, parentNode: null, _listeners: {},
         getAttribute(n) { return Object.prototype.hasOwnProperty.call(this.attrs, n) ? this.attrs[n] : null; },
         setAttribute(n, v) { this.attrs[n] = String(v); },
+        removeAttribute(n) { delete this.attrs[n]; },
         hasAttribute(n) { return Object.prototype.hasOwnProperty.call(this.attrs, n); },
-        addEventListener() { },
+        querySelector: () => null, // _cellSortValue: niente input/select editabile nello stub
+        addEventListener(type, fn) { (this._listeners[type] = this._listeners[type] || []).push(fn); },
+        // Non e' dispatchEvent(): invoca direttamente i listener registrati,
+        // nello stesso ordine di registrazione, rispettando
+        // stopImmediatePropagation() come farebbe il DOM vero sullo stesso
+        // elemento.
+        dispatch(type, evtProps = {}) {
+            let stopped = false;
+            let defaultPrevented = false;
+            const e = Object.assign({
+                preventDefault() { defaultPrevented = true; },
+                stopImmediatePropagation() { stopped = true; },
+            }, evtProps);
+            for (const fn of (this._listeners[type] || [])) {
+                if (stopped) break;
+                fn(e);
+            }
+            e.defaultPrevented = defaultPrevented;
+            return e;
+        },
         focus() { },
     };
     return c;
@@ -57,11 +86,13 @@ function cell(text, { colSpan = 1 } = {}) {
 
 function row(cells) {
     const r = { cells, dataset: {} };
+    cells.forEach(c => { c.parentNode = r; });
     r.appendChild = function (node) {
         // Come il DOM vero: rimuove il nodo da dov'era e lo mette in fondo.
         const i = this.cells.indexOf(node);
         if (i >= 0) this.cells.splice(i, 1);
         this.cells.push(node);
+        node.parentNode = this;
         return node;
     };
     return r;
@@ -72,7 +103,17 @@ function table({ id = null, headTexts, bodyRows = [], noReorder = false, extraTh
     const theadRows = [row(headCells)];
     if (extraTheadRow) theadRows.push(row([cell('x')]));
     const tBodyRows = bodyRows.map(row);
-    const tb = { rows: tBodyRows };
+    const tb = {
+        rows: tBodyRows,
+        appendChild(r) {
+            // Necessario per sortTableByColumn/_applySort, che riordina il
+            // tbody con lo stesso trucco (appendChild in sequenza).
+            const i = this.rows.indexOf(r);
+            if (i >= 0) this.rows.splice(i, 1);
+            this.rows.push(r);
+            return r;
+        },
+    };
     const attrs = {};
     if (noReorder) attrs['data-no-reorder'] = '';
     const t = {
@@ -254,6 +295,79 @@ function table({ id = null, headTexts, bodyRows = [], noReorder = false, extraTh
     assert.doesNotThrow(() => moveTableColumn(t.table, 0, 1));
     assert.doesNotThrow(() => resetColumnOrder(t.table));
     localStorageStub._setThrowing(false);
+}
+
+// --- 12. Il click di ordinamento dopo un riordino ordina la colonna VISTA,
+//     non quella catturata al bind. Regressione: makeTableSortable legava
+//     `idx` una volta sola nel forEach; dopo uno spostamento il th cliccato
+//     non e' piu' alla posizione con cui era stato legato, e il click
+//     ordinava la colonna sbagliata (quella che ora occupa il vecchio indice).
+{
+    localStorageStub._reset();
+    // ID e Nome NON sono in accordo: ID gia' ascendente, Nome no. Se il
+    // click ordina ancora per il vecchio indice (ID, dopo lo spostamento),
+    // l'ordine delle righe non cambia; solo ordinando per Nome (la colonna
+    // vista) le righe si scambiano.
+    const t = table({
+        id: 'sortafterreorder', headTexts: ['ID', 'Nome', 'Stato'],
+        bodyRows: [[cell('1'), cell('z'), cell('ok')], [cell('2'), cell('a'), cell('ok')]],
+    });
+    makeTableReorderable(t.table);
+    makeTableSortable(t.table);
+
+    // Sposta "Nome" (indice 1) in prima posizione: l'header che il click
+    // colpira' e' lo stesso nodo, ma ora e' all'indice 0.
+    moveTableColumn(t.table, 1, 0);
+    assert.deepEqual(t.table.tHead.rows[0].cells.map(c => c.textContent), ['Nome', 'ID', 'Stato']);
+
+    const nomeHeader = t.table.tHead.rows[0].cells[0];
+    nomeHeader.dispatch('click');
+
+    assert.deepEqual(t.tb.rows.map(r => r.cells[0].textContent), ['a', 'z'],
+        'il click deve ordinare per la colonna Nome mostrata ora in prima posizione, non per il vecchio indice');
+}
+
+// --- 13. Un drag non deve far scattare l'ordinamento -----------------------
+{
+    localStorageStub._reset();
+    const t = table({ id: 'dragnoclick', headTexts: ['A', 'B'], bodyRows: [[cell('1'), cell('2')]] });
+    makeTableReorderable(t.table);
+    makeTableSortable(t.table);
+    const th = t.table.tHead.rows[0].cells[0];
+
+    th.dispatch('dragstart', { dataTransfer: null });
+    th.dispatch('click');
+    assert.equal(th.getAttribute('data-sort-asc'), null,
+        'il click che segue un drag non deve avviare l\'ordinamento');
+
+    // Un click genuino, senza drag precedente, deve invece funzionare.
+    th.dispatch('click');
+    assert.equal(th.getAttribute('data-sort-asc'), 'true', 'un click vero ordina normalmente');
+}
+
+// --- 14. Alt+freccia al primo/ultimo header: nessuno spostamento possibile,
+//     quindi preventDefault() non va chiamato (altrimenti Alt+freccia
+//     blocca in silenzio indietro/avanti del browser senza fare nulla).
+{
+    localStorageStub._reset();
+    const t = table({ id: 'boundary', headTexts: ['A', 'B', 'C'], bodyRows: [] });
+    makeTableReorderable(t.table);
+    const first = t.table.tHead.rows[0].cells[0];
+    const last = t.table.tHead.rows[0].cells[2];
+
+    const eLeft = first.dispatch('keydown', { altKey: true, key: 'ArrowLeft' });
+    assert.equal(eLeft.defaultPrevented, false, 'nessuno spostamento a sinistra del primo header');
+    assert.deepEqual(t.table.tHead.rows[0].cells.map(c => c.textContent), ['A', 'B', 'C']);
+
+    const eRight = last.dispatch('keydown', { altKey: true, key: 'ArrowRight' });
+    assert.equal(eRight.defaultPrevented, false, 'nessuno spostamento a destra dell\'ultimo header');
+    assert.deepEqual(t.table.tHead.rows[0].cells.map(c => c.textContent), ['A', 'B', 'C']);
+
+    // Nel mezzo invece si muove, e li' preventDefault() e' atteso.
+    const middle = t.table.tHead.rows[0].cells[1];
+    const eMid = middle.dispatch('keydown', { altKey: true, key: 'ArrowRight' });
+    assert.equal(eMid.defaultPrevented, true, 'uno spostamento valido chiama preventDefault');
+    assert.deepEqual(t.table.tHead.rows[0].cells.map(c => c.textContent), ['A', 'C', 'B']);
 }
 
 console.log('table_column_reorder: ok');

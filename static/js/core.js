@@ -271,7 +271,7 @@ function makeTableSortable(table) {
     if (!table || table.dataset.sortable === '1') return;
     if (!table.tHead || !table.tHead.rows.length) return;
     table.dataset.sortable = '1';
-    Array.from(table.tHead.rows[0].cells).forEach((th, idx) => {
+    Array.from(table.tHead.rows[0].cells).forEach(th => {
         if (th.dataset.noSort === '1') return;
         th.setAttribute('data-sortable', '1');
         th.style.cursor = 'pointer';
@@ -280,7 +280,14 @@ function makeTableSortable(table) {
         // vada a capo da solo; il margine sinistro del pseudo-elemento non
         // inserisce spazi nel content e quindi non crea punti di rottura.
         th.style.whiteSpace = 'nowrap';
-        th.addEventListener('click', () => sortTableByColumn(table, idx, th));
+        // L'indice va letto al click, non catturato qui: il riordino colonne
+        // sposta il th senza ricreare il listener, e un idx catturato una
+        // volta sola sarebbe rimasto quello di prima dello spostamento,
+        // ordinando la colonna sbagliata dopo un drag o un Alt+freccia.
+        th.addEventListener('click', () => {
+            const liveIdx = Array.from(th.parentNode.cells).indexOf(th);
+            sortTableByColumn(table, liveIdx, th);
+        });
     });
 }
 function enhanceAllTables(root) {
@@ -456,11 +463,15 @@ function makeTableReorderable(table) {
         th.draggable = true;
         if (!th.hasAttribute('tabindex')) th.tabIndex = 0;
         th.setAttribute('aria-description', hint);
-        // Il drag nativo HTML5 non genera un click al drop (nessuna coppia
-        // mousedown/mouseup senza spostamento sullo stesso elemento): il
-        // click di ordinamento non parte da solo, senza bisogno di guardie.
+        // Il drag nativo HTML5 non genera di norma un click al drop (nessuna
+        // coppia mousedown/mouseup senza spostamento sullo stesso elemento),
+        // ma il flag sotto e' una rete di sicurezza esplicita: e' registrato
+        // PRIMA del click di ordinamento (makeTableSortable gira dopo, vedi
+        // enhanceAllTables), quindi sullo stesso elemento viene invocato
+        // prima e puo' bloccarlo con stopImmediatePropagation().
         th.addEventListener('dragstart', e => {
             _colDragFromTh = th;
+            th.dataset.colDragging = '1';
             if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', ''); }
         });
         th.addEventListener('dragover', e => {
@@ -475,15 +486,23 @@ function makeTableReorderable(table) {
             const cells = Array.from(table.tHead.rows[0].cells);
             moveTableColumn(table, cells.indexOf(fromTh), cells.indexOf(th));
         });
-        th.addEventListener('dragend', () => { _colDragFromTh = null; });
+        th.addEventListener('dragend', () => { _colDragFromTh = null; delete th.dataset.colDragging; });
+        th.addEventListener('click', e => {
+            if (th.dataset.colDragging !== '1') return;
+            delete th.dataset.colDragging;
+            e.stopImmediatePropagation();
+        });
         th.addEventListener('dblclick', () => resetColumnOrder(table));
         th.addEventListener('keydown', e => {
             if (!e.altKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
-            e.preventDefault();
             const cells = Array.from(table.tHead.rows[0].cells);
             const fromIdx = cells.indexOf(th);
             const toIdx = fromIdx + (e.key === 'ArrowLeft' ? -1 : 1);
+            // Fuori range: nessuno spostamento, quindi nessun preventDefault -
+            // altrimenti Alt+freccia al primo/ultimo header blocca in
+            // silenzio indietro/avanti del browser senza fare nulla.
             if (toIdx < 0 || toIdx >= cells.length) return;
+            e.preventDefault();
             moveTableColumn(table, fromIdx, toIdx);
             th.focus();
         });
