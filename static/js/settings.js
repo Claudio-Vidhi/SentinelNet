@@ -729,6 +729,8 @@
         if (res && res.ok) {
             const d = await res.json().catch(() => ({}));
             if (d.setup_link_sent) showToast(tr('setSetupLinkSent', {email: email}), 'success');
+            else if (d.welcome_mail_sent) showToast(tr('setWelcomeMailSent'), 'success');
+            if (d.welcome_mail_error) showToast(tr('setWelcomeMailFailed', {error: d.welcome_mail_error}), 'warning');
             document.getElementById('newUserName').value = '';
             document.getElementById('newUserPass').value = '';
             document.getElementById('newUserEmail').value = '';
