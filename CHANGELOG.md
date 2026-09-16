@@ -37,6 +37,10 @@ happened — `git log --grep="chore(release)"` is the record for those.
 - **Header di copyright e SPDX in testa a ogni sorgente tracciato** (423 file).
   Senza una nota nel file, chi lo redistribuisce non ha niente da conservare.
   `tests/test_license_headers.py` fallisce se un file nuovo arriva senza.
+- **Link al sorgente nella console**, sotto il numero di versione nella
+  sidebar. E' l'offerta richiesta dalla sezione 13: vincola chi modifica
+  SentinelNet e lo espone in rete, e il link e' cio' che gli permette di
+  rispettarla senza rifare la UI.
 - **`LICENSES/Apache-2.0.txt`**: diversi componenti inclusi sono Apache-2.0 e la
   loro 4(a) vuole che una copia della licenza viaggi con il binario, che la
   LICENSE di root non e' piu'.
