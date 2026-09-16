@@ -1417,7 +1417,7 @@
             <td class="num">${escapeHtml(String(r.score))}</td>
         </tr><tr class="cve-desc"><td colspan="5">${escapeHtml(r.summary || '')}</td></tr></tbody>`).join('');
 
-        const table = shown.length ? `<table class="cves">
+        const table = shown.length ? `<table class="cves" data-no-reorder>
               <thead><tr>
                 <th>CVE</th><th class="num">CVSS</th><th>${escapeHtml(tr('cveThSeverity'))}</th>
                 <th>${escapeHtml(tr('cveThService'))}</th><th class="num">${escapeHtml(tr('cveThScore'))}</th>

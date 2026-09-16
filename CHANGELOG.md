@@ -12,6 +12,9 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Added
 
+- **Colonne delle tabelle spostabili.** Trascinamento o Alt+freccia per
+  riordinare le colonne di qualunque tabella; l'ordine scelto viene ricordato
+  nel browser. Doppio clic su un'intestazione ripristina l'ordine originale.
 - **Ruolo super_admin.** Sopra `admin` c'e' ora `super_admin`: solo un
   super_admin crea, modifica, disabilita o elimina account di livello admin.
   Un admin gestisce soltanto operator e viewer e non puo' assegnare ne'
