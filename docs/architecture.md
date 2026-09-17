@@ -318,7 +318,7 @@ and audit log unchanged.
 | [observability/](../observability/) | The whole §2 pipeline, plus `ingesters/` |
 | [collectors/](../collectors/) | ARP, MAC tables, MAC history, subnet scanner, `l2_scheduler.py` (scheduled L2 discovery, opt-in) |
 | [routers/](../routers/) | ~31 FastAPI routers, one per area |
-| [services/](../services/) | FortiGate, WLC, inventory, provisioners, sites, agent, Visio export, `netsec_audit/` (compliance engine & `netsec_audit_runs` history), `config_drift/` (§10: per-tenant history & baseline) |
+| [services/](../services/) | FortiGate, WLC, inventory, provisioners, sites, agent, Visio export, `netsec_audit/` (compliance engine & `netsec_audit_runs` history), `config_drift/` (§10: per-tenant history & baseline), `notifications.py` (email engine: preferences, admin rules, outbox, digest), `triage_scheduler.py` (scheduled triage), `tenant_telemetry.py` (per-tenant on/off for ping, SNMP, REST, triage) |
 | [security/](../security/) | JWT/RBAC/audit, credential encryption, keystore, identities, redaction, `command_policy.py` (the one dangerous-command policy) |
 | [ai/](../ai/) | Multi-provider assistant, config analyzer, MCP server and client |
 | [drivers/](../drivers/) | One driver per vendor, `BaseDriver` as the contract, `registry.py` (vendor → driver → netmiko mapping) |
@@ -339,7 +339,8 @@ and drain the write queue.
 
 Periodic tasks: retention (1h), correlation (5 min), REST poller, SNMP poller
 and Linux health poller (configurable interval), scheduled L2 discovery
-(opt-in, `l2_poll_s`). They start on the first activation of the master switch
+(opt-in, `l2_poll_s`). The notification loop and the triage scheduler tick
+every 60 seconds. The pollers start on the first activation of the master switch
 and stay up — they're no-ops when there's nothing to do.
 
 ### Where vendor knowledge lives
@@ -426,6 +427,7 @@ Stated, not forgotten:
   severities: a precision-over-recall policy, worth knowing when investigating
   "why didn't this show up". See
   [live-flows-and-siem.md](live-flows-and-siem.md) §4.5.
-- **It does not confirm before concluding**: there's no per-rule "how many
-  observations are required". That's the debt that becomes serious once
-  notifications exist ([roadmap.md](roadmap.md) §3).
+- **It does not escalate.** Email notifications (`services/notifications.py`)
+  send once per event to whoever subscribed, with a 30-minute flood window;
+  there is no on-call rotation, acknowledgement by reply, or re-notification
+  of an incident nobody handled ([roadmap.md](roadmap.md) §1).

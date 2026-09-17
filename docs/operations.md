@@ -104,9 +104,14 @@ Hourly job, DELETEs batched at 5000 rows to avoid holding long locks.
 |---|---|---|
 | `flow_aggregates` | 30 days | `SENTINELNET_OBS_RETENTION_FLOWS_DAYS` |
 | `events` | 30 days | Same — the projection must not outlive its origin |
+| `api_observations` (raw REST/SNMP snapshots) | 30 days | `SENTINELNET_OBS_RETENTION_FLOWS_DAYS` |
+| `iface_counter_reads` (on-demand error reads) | 30 days | Same |
 | `syslog_events` | 7 days | `SENTINELNET_OBS_RETENTION_SYSLOG_DAYS` |
 | `evidence` (orphans) | 90 days | `SENTINELNET_OBS_RETENTION_EVENTS_DAYS` |
 | `incidents` (`resolved` only) | 90 days | Same |
+
+The notification send history (`notify_log`) is pruned separately by the
+notification loop, after 30 days.
 
 Unresolved incidents are never deleted automatically. Evidence attached to an
 incident follows it via `ON DELETE CASCADE`; the job only prunes orphans.
@@ -197,6 +202,24 @@ path — group run, row button, bulk selection, agent — shares at most
 `TRIAGE_MAX_CONCURRENT` (3, `core/core_engine.py`) logins; the rest queue. An
 `auth_failed` in a group run is retried once, alone, after the batch. A device
 still failing after that retry has a real credential or AAA problem.
+
+### "Email notifications don't arrive"
+
+1. **Settings → Mail server** configured? Without SMTP nothing is sent.
+2. **Notifications → History**: `failed` carries the SMTP error; after three
+   failed attempts an item is dropped. `suppressed` means the same event was
+   already sent to that recipient in the last 30 minutes.
+3. The user's preferences: event type, minimum severity, tenant filter, quiet
+   hours (critical events pass through quiet hours only if that box is
+   ticked), digest mode (sent every N minutes, not immediately).
+4. `device.down` needs two consecutive failed ping cycles, and ping can be
+   switched off per tenant under **Settings → Per-Tenant / Site Telemetry**.
+
+### "A scheduled triage never runs on some devices"
+
+Scheduled triage skips devices whose tenant has triage switched off in the
+per-tenant telemetry settings; devices with no group follow the "Generale"
+tenant. The schedule's history shows totals, successes and errors per run.
 
 ### "A CLI command stays `queued` forever"
 

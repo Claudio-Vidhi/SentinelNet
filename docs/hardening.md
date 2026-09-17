@@ -304,7 +304,38 @@ the risk this section is about. Decide per tool, not per bridge.
 
 ---
 
-## 8. Other recommendations
+## 8. Roles, tenants and tabs
+
+Four roles, ranked `viewer` < `operator` < `admin` < `super_admin`
+(`security/user_manager.py`), checked server-side by the dependencies in
+`routers/deps.py`:
+
+- **`super_admin`** is the only role that creates, changes, disables or
+  deletes admin-level accounts, and it is never limited by tenant or tab. At
+  least one must stay active; the break-glass reset (README) exists for when
+  none is.
+- **`admin`** manages operators and viewers. An admin can be limited to some
+  tenants, and then manages only users inside them. Global settings — SMTP,
+  SSO, public URL, certificates, updates, tenants, sites, cloud backup, MCP —
+  need an admin with no tenant limit (`is_unscoped_admin`).
+- **Tenant scope** (`user_group_scope`) filters every list and
+  `assert_device_allowed` guards every device route: a device outside the
+  caller's tenants answers the same as one that does not exist.
+- **Tab permissions** (`require_tab`) are not a UI hint. Every `/api/*` route
+  belongs to a tab and returns 403 to a user who does not hold it, so hiding a
+  tab also closes its API.
+- **SSO** maps IdP groups to at most `admin`. `super_admin` is assigned only
+  locally, and role synchronisation never touches it.
+
+Upgrading from a release before 0.40.0 promotes every existing admin to
+`super_admin` (only if no super_admin exists yet, recorded in the audit log)
+so nobody loses access. Demote the accounts that should not manage other
+admins; with SSO role sync on, demote the ones that must keep following the
+IdP.
+
+---
+
+## 9. Other recommendations
 
 - Never publish port 8000 directly on the Internet.
 - Restrict panel access to a VPN or management network.

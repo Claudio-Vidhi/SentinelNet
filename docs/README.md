@@ -36,7 +36,7 @@ for user-facing strings, logs and comments, English for identifiers — see
 
 | Document | Contents |
 |---|---|
-| [collectors.md](collectors.md) | Sources: IPFIX, NetFlow, sFlow, syslog, FortiGate REST, SNMP, Linux health, site agents |
+| [collectors.md](collectors.md) | Sources: IPFIX, NetFlow, sFlow, syslog, FortiGate REST, SNMP (with interface error counters), Linux health, site agents |
 | [server-collection.md](server-collection.md) | Linux hosts: what the backup collects, which view each command feeds, what needs sudo |
 | [windows-collection.md](windows-collection.md) | Windows hosts over SSH: why not WinRM, why the artefact is pipe-delimited, what each section feeds |
 | [live-flows-and-siem.md](live-flows-and-siem.md) | The two flow tabs in depth: ingest, endpoints, frontend, past mistakes |
@@ -46,11 +46,11 @@ for user-facing strings, logs and comments, English for identifiers — see
 
 | Document | Contents |
 |---|---|
-| [operations.md](operations.md) | Runbook: paths, logs, metrics, retention, symptoms and causes, backup |
+| [operations.md](operations.md) | Runbook: paths, logs, metrics, retention, symptoms and causes (incl. notifications, scheduled triage), backup |
 | [fedora-central-install.md](fedora-central-install.md) | Fedora Server: step-by-step Central server installation, systemd, SELinux, firewall |
 | [ubuntu-agent-install.md](ubuntu-agent-install.md) | Ubuntu Server 24.04 LTS: step-by-step Site Agent deployment, token auth, systemd |
 | [provisioning-tutorial.md](provisioning-tutorial.md) | Day-0 walkthrough: generate a switch/FortiGate config, push a switch config via SSH or console, and what to do when it fails |
-| [hardening.md](hardening.md) | TLS, reverse proxy, session cookie, listener exposure, MCP least privilege |
+| [hardening.md](hardening.md) | TLS, reverse proxy, session cookie, listener exposure, MCP least privilege, roles/tenants/tab permissions |
 | [data-protection.md](data-protection.md) | What personal data is stored, where, for how long, and what the operator has to decide |
 
 ### Building

@@ -24,7 +24,7 @@ goal and worth keeping distinct.
 | 3 | Confirm before concluding | **done** | `min_observations` on every rule, counted as distinct events |
 | 4 | `device.unreachable` | **done** | `DEVICE_UNREACHABLE_001`: a device that was answering and stopped |
 | 5 | Full acknowledgement | **done** | who, when and why on the incident (schema v11) |
-| 6 | Notification engine → escalation | undecided | Out of the original plan's scope |
+| 6 | Notification engine → escalation | **phase 1 done** | Email: per-user preferences, admin distribution rules, digest, quiet hours, 30-minute flood window ([notifications.py](../services/notifications.py), schema v12). Escalation still undecided |
 
 ### 1.1 Why this order
 
