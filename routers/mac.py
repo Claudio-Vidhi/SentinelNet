@@ -226,7 +226,14 @@ def mac_set_settings(payload: MacRetentionSchema, current_user = Depends(require
 
 @router.get("/api/mac/overrides")
 def mac_list_overrides(current_user = Depends(get_current_user)):
-    return {"overrides": mac_history.list_overrides()}
+    overrides = mac_history.list_overrides()
+    scope = user_group_scope(current_user)
+    if scope is not None:
+        # Filter, not 403: same view as the other scoped lists.
+        allowed = {d["IP"] for d in inventory_manager.get_all_devices()
+                   if (d.get("Group") or "Generale") in scope}
+        overrides = [o for o in overrides if o["switch_ip"] in allowed]
+    return {"overrides": overrides}
 
 @router.post("/api/mac/overrides")
 def mac_set_override(payload: MacOverrideSchema, current_user = Depends(require_operator)):

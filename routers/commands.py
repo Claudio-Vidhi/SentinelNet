@@ -29,7 +29,7 @@ from core import net_ssh
 from security import crypto_vault
 from security.security_manager import log_audit
 from core.app_settings import get_app_settings
-from routers.deps import get_current_user, require_operator, assert_device_allowed, assert_group_allowed, user_group_scope
+from routers.deps import require_operator, assert_device_allowed, assert_group_allowed, user_group_scope
 
 router = APIRouter(tags=["Commands"])
 
@@ -231,6 +231,7 @@ def start_bulk_command(payload: BulkCommandRequest, current_user = Depends(requi
             "progress":   0,
             "total":      len(payload.ips),
             "started_at": time.time(),
+            "owner":      current_user.get("sub"),
         }
 
     thread = threading.Thread(target=_run_bulk_job, args=(job_id, payload), daemon=True)
@@ -244,7 +245,7 @@ def start_bulk_command(payload: BulkCommandRequest, current_user = Depends(requi
     return {"job_id": job_id, "status": "started", "total": len(payload.ips)}
 
 @router.get("/api/bulk-command/{job_id}", dependencies=[Depends(require_tab("tab-devices", "tab-ai"))])
-def get_bulk_command_status(job_id: str, current_user = Depends(get_current_user)):
+def get_bulk_command_status(job_id: str, current_user = Depends(require_operator)):
     with _bulk_jobs_lock:
         # Elimina solo i job conclusi e vecchi (oltre 10 minuti).
         stale = [k for k, v in _bulk_jobs.items()
@@ -253,7 +254,10 @@ def get_bulk_command_status(job_id: str, current_user = Depends(get_current_user
             del _bulk_jobs[k]
         job = _bulk_jobs.get(job_id)
 
-    if not job:
+    # Another user's job answers exactly like a missing one: CLI output from
+    # devices outside the caller's reach must not leak through a job_id.
+    if not job or (job.get("owner") != current_user.get("sub")
+                   and current_user.get("role") != "super_admin"):
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' non trovato.")
     return {
         "status":   job["status"],

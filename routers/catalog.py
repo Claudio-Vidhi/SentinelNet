@@ -15,7 +15,7 @@ from core import core_engine
 from security.security_manager import log_audit
 from routers.deps import (
     get_current_user, require_unscoped_admin, require_operator, user_group_scope,
-    filter_map_to_scope, assert_group_allowed
+    filter_map_to_scope, assert_group_allowed, assert_device_allowed
 )
 
 router = APIRouter(tags=["Catalog"])
@@ -518,7 +518,13 @@ def assign_device_category(payload: DeviceCategorySchema, current_user = Depends
         "name": payload.name,
         "ver": payload.version,
     }.items() if v is not None}
-    if not inventory_manager.set_device_meta(payload.node_id, **fields):
+    # Scope before writing: the assignment key carries the tenant, so resolve it
+    # from the device the caller may see. A node outside inventory lives in
+    # 'Generale', and the caller needs that group.
+    device = assert_device_allowed(current_user, payload.node_id)
+    tenant = (device.get("Group") or "Generale") if device else "Generale"
+    assert_group_allowed(current_user, tenant)
+    if not inventory_manager.set_device_meta(payload.node_id, tenant=tenant, **fields):
         raise HTTPException(status_code=400, detail="Aggiornamento non valido.")
     # Se è stato indicato un nuovo modello con un vendor, lo si registra anche nel
     # catalogo modelli del vendor, così diventa riutilizzabile.
