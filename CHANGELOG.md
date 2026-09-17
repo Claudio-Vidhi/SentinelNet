@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.40.1] - 2026-09-17
+
 ### Security
 
 - L'assegnazione di categoria/attributi a un dispositivo verifica ora il
