@@ -10,6 +10,17 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Security
+
+- L'assegnazione di categoria/attributi a un dispositivo verifica ora il
+  perimetro del chiamante: un operator limitato a un tenant non puo' piu'
+  modificare dispositivi di altri tenant.
+- Lo stato di un invio comandi massivo e' visibile solo a chi lo ha avviato
+  (e al super_admin); prima qualunque utente autenticato con il `job_id`
+  leggeva l'output CLI.
+- L'elenco degli override MAC e' filtrato sul perimetro dell'utente.
+- starlette aggiornato a 1.6.0 (PYSEC-2026-248, PYSEC-2026-249).
+
 ## [0.40.0] - 2026-09-17
 
 ### Security
