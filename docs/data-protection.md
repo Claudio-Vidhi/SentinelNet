@@ -54,6 +54,9 @@ reason, and the shipped configuration does not receive syslog at all (see §2).
 | Audit trail: who did what, when, from which declared client | `audit.log` | 10 MB × 9 rotated files. HMAC-chained, so a rewritten line is detectable |
 | Revoked session identifiers | `revoked_tokens.json` | Each entry lives only until the token it names would have expired |
 | AI conversations | `observability.db` → `ai_conversations` | Kept per user until deleted from the panel. **No automatic retention** |
+| Notification preferences and admin rules (recipient addresses, tenants, quiet hours) | `observability.db` → `notify_prefs`, `notify_rules` | Kept until changed or deleted |
+| Notification send history: recipient, event title, status, error | `observability.db` → `notify_log` | 30 days. Non-admins see only their own rows |
+| Pending notifications | `observability.db` → `notify_outbox` | Deleted once sent, or after three failed attempts |
 
 Device credentials (`network_hosts.csv`, `identities.json`) are encrypted with
 the Fernet key in `secret.key`. They are secrets rather than personal data, but
@@ -72,6 +75,7 @@ be inferred from the code:
   its own switch and binds to loopback unless told otherwise
   ([hardening.md](hardening.md) §4).
 - **The SNMP, Linux and L2 pollers are off** (`*_poll_s` default 0).
+- **No email is sent** until an SMTP server is configured.
 - **Two MCP tools plus `linux_health` are disabled by default**, so an AI
   assistant does not reach flow data or host health until an admin enables them
   ([hardening.md](hardening.md) §7).

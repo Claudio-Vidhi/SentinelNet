@@ -46,7 +46,21 @@ populated demo.
   and checks it against NIST NVD, with CVSS severity classification
   (CRITICAL / HIGH / MEDIUM / LOW). Run it on a whole group or only on the
   devices ticked in the inventory; at most three SSH logins run at once, so
-  AAA servers do not start refusing valid credentials.
+  AAA servers do not start refusing valid credentials. Triage can also run on
+  a schedule (every 15 minutes to every 7 days) per tenant or per device
+  list, with a history of each run.
+- **Interface error counters** — the SNMP poller collects the Ethernet error
+  set (errors, discards, CRC, alignment, symbol, late/excessive collisions,
+  carrier, giants, MAC errors) and reports the *growth* over a 1h/24h/7d
+  window, never the lifetime total. Shown in Interfaces, in the endpoint
+  detail, in port occupancy and in a fleet-wide *Port errors* view with each
+  port's configuration one click away. *Read errors now* takes two readings
+  ten seconds apart over SNMP, or over SSH when SNMP does not answer (Cisco
+  IOS/IOS-XE/NX-OS, Junos, ProCurve/ArubaOS-Switch, AOS-CX, FortiOS, PAN-OS).
+- **Email notifications** — each user picks event types (device down/up,
+  new CVE, incident, SIEM alert), minimum severity, tenants, immediate or
+  digest delivery and quiet hours; admins add rules for distribution lists.
+  Repeats of the same event are held back for 30 minutes.
 - **Network observability** — passive collectors for IPFIX, NetFlow, sFlow and
   syslog, plus active FortiGate REST and SNMP polling, feeding a deterministic
   correlation engine that produces evidence-backed incidents.
@@ -70,6 +84,15 @@ populated demo.
   with drag-and-drop reassignment and per-group filtering across every view.
 - **CSV import** — bulk inventory upload with per-row validation and a detailed
   error report.
+- **Per-tenant telemetry** — ICMP ping, SNMP polling, REST polling and
+  scheduled triage can each be switched off for a single tenant or site.
+- **Tables you can arrange** — drag or Alt+arrow to reorder columns, drag the
+  header edge to resize, and choose which columns to show; the layout is
+  remembered in the browser.
+- **Roles, tenants and tabs** — four roles (`super_admin`, `admin`,
+  `operator`, `viewer`); every account below `super_admin`, admins included,
+  can be limited to some tenants and some tabs, and both limits are enforced
+  by the server, not just hidden in the page.
 - **Built-in security** — JWT authentication (fail-closed on the secret), Fernet
   encryption of credentials at rest, rotating audit log, rate limiting with
   brute-force lockout, and a dangerous-CLI-command blacklist enforced on both the
@@ -87,7 +110,7 @@ Full index: [docs/README.md](docs/README.md).
 | Architecture, data pipeline, event/evidence/incident model | [docs/architecture.md](docs/architecture.md) |
 | Data sources (NetFlow, IPFIX, sFlow, syslog, SNMP, REST) | [docs/collectors.md](docs/collectors.md) |
 | Operations runbook (logs, diagnostics, retention, backup) | [docs/operations.md](docs/operations.md) |
-| Secure exposure (TLS, reverse proxy) | [docs/hardening.md](docs/hardening.md) |
+| Secure exposure (TLS, reverse proxy), roles and permissions | [docs/hardening.md](docs/hardening.md) |
 | Multi-site deployment | [docs/remote-sites.md](docs/remote-sites.md) |
 | Layout, tests, build | [docs/development.md](docs/development.md) |
 | Architecture decisions and their rationale | [docs/adr/](docs/adr/) |
@@ -106,7 +129,7 @@ multi-group scope): [CONTRIBUTING.md](CONTRIBUTING.md).
 | `observability/` | Ingest → events → rules → evidence → incidents pipeline |
 | `collectors/` | ARP, MAC tables, MAC history, subnet scanner |
 | `routers/` | One FastAPI router per functional area |
-| `services/` | FortiGate, WLC, inventory, provisioners, sites, site agent |
+| `services/` | FortiGate, WLC, inventory, provisioners, sites, site agent, notifications, scheduled triage |
 | `security/` | JWT/RBAC/audit, credential encryption, keystore, redaction |
 | `ai/` | LLM assistant, config analyzer, MCP server and client |
 | `drivers/` | One driver per vendor, `BaseDriver` as the contract |
@@ -210,7 +233,22 @@ deleting it), so an invitation mailed to the wrong address grants nothing.
 
 An administrator creating an account directly can also leave the password
 empty and give an email: the user receives a link, valid 24 hours, to choose
-their own password, and nobody else ever knows one.
+their own password, and nobody else ever knows one. An account created with
+both a password and an email gets a welcome message with the username, role
+and sign-in address — never the password.
+
+### Roles and permissions
+
+| Role | Can |
+|---|---|
+| `super_admin` | Everything, including creating and managing admin accounts. The first account, and every admin that existed before 0.40.0, is a super_admin; at least one must stay active |
+| `admin` | Manage operators and viewers — only inside its own tenants when it is limited to some. Global settings (SMTP, SSO, certificates, updates, tenants, sites, cloud backup, MCP) need an admin with no tenant limit |
+| `operator` | Network operations: backup, triage, CLI commands, scans |
+| `viewer` | Read only |
+
+Each account below `super_admin` can be limited to some tenants and some
+tabs; a `super_admin` is never limited. Every `/api/*` route belongs to a tab and refuses users who do not hold
+it. SSO groups map at most to `admin`; `super_admin` is only assigned locally.
 
 ### Account and session lifecycle
 
@@ -389,7 +427,7 @@ verify these files are excluded:
 - `detected_versions.json` — triage state cache
 - `groups.json` — configured groups and sites
 - `secret.key` / `jwt_secret.key` — local cryptographic keys
-- `users.json` — local administrator accounts
+- `users.json` — local user accounts, roles and permissions
 
 ---
 

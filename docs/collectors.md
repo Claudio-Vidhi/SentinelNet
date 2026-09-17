@@ -280,6 +280,47 @@ Snapshots land in the **same** `api_observations` as the REST poller, with
 `{"results": {"<ifName>": {field: value}}}` shape. That's not clever reuse: it's
 that nothing downstream should change. The transport changes, the fact doesn't.
 
+### 6.1 Interface error counters
+
+Each `snmp_interfaces` snapshot also carries the Ethernet error set:
+`ifInErrors`/`ifOutErrors`, `ifInDiscards`/`ifOutDiscards` and the
+EtherLike-MIB `dot3StatsTable` (FCS/CRC, alignment, symbol, late and
+excessive collisions, carrier sense, frame too long, internal MAC
+receive/transmit errors). The vocabulary and the verdict live in one place,
+[observability/iface_errors.py](../observability/iface_errors.py), whatever
+transport brought the numbers in:
+
+- **Growth, not totals.** Counters are cumulative since boot or the last
+  clear, so a switch up for two years carries errors that stopped long ago.
+  Only the increment inside the window (1h / 24h / 7d) counts, and a counter
+  that goes down — a reboot, a `clear counters` — restarts from there instead
+  of producing a negative or an invented jump.
+- **Garbage is dropped, not believed.** Some agents return nonsense for the
+  detailed counters (billions of CRC errors on a port whose `ifInErrors` is
+  0): a detail counter larger than its total is discarded. Plain collisions
+  are not counted — normal on half duplex, unreliable on several agents —
+  while late and excessive collisions stay, because they are the
+  duplex-mismatch signal.
+- **Absent is not zero.** A counter the device does not expose stays absent
+  ("unknown"); zero means "clean".
+
+Each port gets one verdict — physical (cable/optic), duplex, hardware, generic
+errors, or discards only — used identically by the Interfaces tab, the
+endpoint detail, port occupancy, the *Port errors* view and client diagnosis
+(`/api/interface-errors`, tenant-scoped like every device route).
+
+**On demand.** *Read errors now* (`POST /api/interface-errors/read`,
+operator) takes two readings ten seconds apart: over SNMP when the device has
+a community, otherwise over SSH with one command per driver
+([collectors/iface_counters_cli.py](../collectors/iface_counters_cli.py)) —
+`show interfaces` on Cisco IOS/IOS-XE/NX-OS and ProCurve,
+`show interfaces extensive` on Junos, `show interface` on AOS-CX,
+`diagnose netlink interface list` on FortiOS, `show counter interface all` on
+PAN-OS. Parsers read label/value pairs rather than fixed columns, and an output
+they do not recognise yields nothing, never zeros. Cisco CBS prints error
+counters one port at a time and is left to SNMP. Results are stored in
+`iface_counter_reads`, pruned with the poller snapshots.
+
 ---
 
 ## 7. FortiGate REST
