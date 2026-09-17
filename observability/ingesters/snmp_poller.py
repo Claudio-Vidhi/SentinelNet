@@ -62,10 +62,42 @@ _IF_COLUMNS = {
     "1.3.6.1.2.1.2.2.1.8": "link",           # ifOperStatus
     "1.3.6.1.2.1.31.1.1.1.6": "in_octets",   # ifHCInOctets
     "1.3.6.1.2.1.31.1.1.1.10": "out_octets",  # ifHCOutOctets
-    "1.3.6.1.2.1.2.2.1.14": "in_errors",     # ifInErrors
-    "1.3.6.1.2.1.2.2.1.20": "out_errors",    # ifOutErrors
     "1.3.6.1.2.1.31.1.1.1.15": "speed_mbps",  # ifHighSpeed
 }
+
+# Error counters (vocabulary: observability/iface_errors.FIELDS). They are
+# MEASURES, so they travel only under ``metrics``: in ``results`` they were
+# dropped by normalize anyway and only made the snapshot bigger.
+# dot3StatsTable (EtherLike-MIB) is indexed by dot3StatsIndex, which the RFC
+# defines as the ifIndex of the same interface: no translation needed. A
+# device without it (a router's non-Ethernet ports, a firewall) simply does
+# not answer, and those counters stay absent rather than zero.
+# Several OIDs may feed one field: summed.
+# Single/multiple collision frames are NOT polled: they are not errors (no
+# total contains them, so iface_errors cannot tell a real count from agent
+# garbage) and on full duplex they are always 0. Late and excessive
+# collisions, the duplex-mismatch signal, are.
+_ERROR_COLUMNS = {
+    "1.3.6.1.2.1.2.2.1.14": "in_errors",            # ifInErrors
+    "1.3.6.1.2.1.2.2.1.20": "out_errors",           # ifOutErrors
+    "1.3.6.1.2.1.2.2.1.13": "in_discards",          # ifInDiscards
+    "1.3.6.1.2.1.2.2.1.19": "out_discards",         # ifOutDiscards
+    "1.3.6.1.2.1.10.7.2.1.2": "alignment",          # dot3StatsAlignmentErrors
+    "1.3.6.1.2.1.10.7.2.1.3": "crc",                # dot3StatsFCSErrors
+    "1.3.6.1.2.1.10.7.2.1.8": "late_collisions",    # dot3StatsLateCollisions
+    "1.3.6.1.2.1.10.7.2.1.9": "excessive_collisions",  # dot3StatsExcessiveCollisions
+    "1.3.6.1.2.1.10.7.2.1.10": "mac_tx_errors",     # dot3StatsInternalMacTransmitErrors
+    "1.3.6.1.2.1.10.7.2.1.11": "carrier_sense",     # dot3StatsCarrierSenseErrors
+    "1.3.6.1.2.1.10.7.2.1.13": "giants",            # dot3StatsFrameTooLongs
+    "1.3.6.1.2.1.10.7.2.1.16": "mac_rx_errors",     # dot3StatsInternalMacReceiveErrors
+    "1.3.6.1.2.1.10.7.2.1.18": "symbol",            # dot3StatsSymbolErrors
+}
+# Runts have no standard OID: only the CLI read reports them.
+
+# An interface snapshot now carries up to ~14 counters per port under
+# ``metrics``: the generic cap would cut a big chassis mid-JSON, and a cut
+# JSON is not a smaller snapshot, it is no snapshot at all.
+_MAX_IFACE_SUMMARY = 1_000_000
 
 # VLAN di accesso della porta. NON esiste in IF-MIB, ed è il motivo per cui
 # cambiare VLAN a una porta di accesso non produceva alcun evento: lo snapshot
@@ -219,6 +251,38 @@ def _interfaces(columns: dict) -> dict:
     return interfaces
 
 
+async def _error_counters(engine, auth, target, context) -> dict:
+    """{ifIndex: {counter: int}} for the columns in _ERROR_COLUMNS."""
+    out: dict = {}
+    for oid, field in _ERROR_COLUMNS.items():
+        for if_index, value in (await _walk_column(engine, auth, target, context, oid)).items():
+            if isinstance(value, int):
+                port = out.setdefault(if_index, {})
+                port[field] = port.get(field, 0) + value
+    return out
+
+
+async def read_error_counters(ip: str, community: str, port: int = 161) -> dict:
+    """{ifName: {counter: int}} — just names and error counters, for an
+    on-demand read. {} if the device does not answer."""
+    from pysnmp.hlapi.v3arch.asyncio import (CommunityData, ContextData,
+                                             SnmpEngine, UdpTransportTarget)
+    engine = SnmpEngine()
+    auth = CommunityData(community, mpModel=1)
+    context = ContextData()
+    try:
+        target = await UdpTransportTarget.create((ip, port), timeout=TIMEOUT_S,
+                                                 retries=RETRIES)
+        names = await _walk_column(engine, auth, target, context, "1.3.6.1.2.1.31.1.1.1.1")
+        counters = await _error_counters(engine, auth, target, context)
+    except Exception as e:
+        logger.debug("SNMP %s: error counters not readable (%s)", ip, e)
+        return {}
+    finally:
+        engine.close_dispatcher()
+    return {str(names[i]): c for i, c in counters.items() if names.get(i)}
+
+
 async def _poll_device(ip: str, community: str, port: int = 161) -> list:
     """[(kind, summary_json)] per un apparato. Lista vuota se non risponde."""
     from pysnmp.hlapi.v3arch.asyncio import (CommunityData, ContextData,
@@ -250,6 +314,7 @@ async def _poll_device(ip: str, community: str, port: int = 161) -> list:
         for oid, field in _IF_COLUMNS.items():
             columns[field] = await _walk_column(engine, auth, target, context, oid)
         columns["port_vlan"] = await _port_vlans(engine, auth, target, context)
+        errors = await _error_counters(engine, auth, target, context)
 
         interfaces = _interfaces(columns)
     except Exception as e:
@@ -258,27 +323,28 @@ async def _poll_device(ip: str, community: str, port: int = 161) -> list:
     finally:
         engine.close_dispatcher()
 
-    def dump(payload):
+    def dump(payload, cap=_MAX_SUMMARY):
         text = json.dumps(payload, ensure_ascii=False, default=str)
-        return text[:_MAX_SUMMARY]
+        return text[:cap]
 
     # ``metrics`` accanto a ``results``: valori MISURATI, separati dai campi di
     # stato. L'adapter li copia in ``events.metrics_json``, dove le regole a
     # soglia possono leggerli — nei ``results`` sarebbero solo testo da
     # confrontare, e finirebbero per generare un "cambiamento" a ogni giro.
-    # Gli stessi contatori di errore stanno nei ``results`` (dove servono alla
-    # diagnosi di un client) e sotto ``metrics``, prefissati per porta. Senza
-    # il secondo posto nessuna regola a soglia li vede: _stable_fields() li
-    # scarta per progetto (``error`` e' fra i campi volatili, altrimenti ogni
-    # giro di polling sembrerebbe un cambiamento di configurazione), quindi
-    # ``results`` non arriva a ``metrics_json``.
-    iface_metrics = {f"{iface}.{field}": values[field]
-                     for iface, values in interfaces.items()
-                     for field in ("in_errors", "out_errors")
-                     if isinstance(values.get(field), (int, float))}
+    # Error counters travel only under ``metrics``, prefixed per port: that is
+    # the only place they reach the events table, for the threshold rule, the
+    # client diagnosis and the interface-errors view alike. _stable_fields()
+    # drops them from ``results`` by design (``error`` is a volatile hint,
+    # otherwise every poll would look like a configuration change).
+    names = {fields["ifindex"]: name for name, fields in interfaces.items()}
+    iface_metrics = {f"{names[int(if_index)]}.{field}": value
+                     for if_index, counters in errors.items()
+                     if int(if_index) in names
+                     for field, value in counters.items()}
     return [("snmp_system", dump({"results": system, "metrics": load})),
             ("snmp_interfaces", dump({"results": interfaces,
-                                      "metrics": iface_metrics}))]
+                                      "metrics": iface_metrics},
+                                     _MAX_IFACE_SUMMARY))]
 
 
 def _snmp_devices() -> list:
@@ -291,13 +357,17 @@ def _snmp_devices() -> list:
     """
     from security.snmp_defaults import resolve_snmp_community
     from services import inventory_manager
+    from services.tenant_telemetry import is_telemetry_enabled
     out = []
     for device in inventory_manager.get_all_devices():
+        tenant = device.get("Group") or "Generale"
+        if not is_telemetry_enabled(tenant, "snmp"):
+            continue
         community = resolve_snmp_community(device)
         if not community:
             continue
         out.append({"ip": device.get("IP"),
-                    "tenant": device.get("Group") or "Generale",
+                    "tenant": tenant,
                     "community": community})
     return out
 

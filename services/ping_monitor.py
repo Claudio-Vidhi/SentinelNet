@@ -69,11 +69,15 @@ def _run_cycle() -> None:
     """One ping round over the full inventory."""
     global _last_run
     from services import inventory_manager, site_manager
+    from services.tenant_telemetry import is_telemetry_enabled
     devices = inventory_manager.get_all_devices()
     # Map IP -> Site so a jump-site device can be excluded from ICMP without
     # losing its identity (a plain set of IPs would drop the Site column).
     ip_site = {}
     for d in devices:
+        tenant = d.get("Group") or d.get("tenant") or "Generale"
+        if not is_telemetry_enabled(tenant, "ping"):
+            continue
         ip = (d.get("IP") or "").strip()
         if ip:
             ip_site[ip] = d.get("Site") or "central"
@@ -99,24 +103,37 @@ def _run_cycle() -> None:
                 results[ip] = up
 
     now = time.time()
+    events_to_emit = []
     with _lock:
         for ip, up in results.items():
+            new_status = "up" if up else "down"
             prev = _state.get(ip)
             if prev is None:
                 _state[ip] = {
-                    "up": up, "status": "up" if up else "down",
+                    "up": up, "status": new_status,
                     "last_check": now, "last_change": now,
                     "checks": 1, "fails": 0 if up else 1,
+                    "consecutive_count": 1,
+                    "reported_status": new_status,
                 }
             else:
                 if prev["up"] != up:
                     prev["last_change"] = now
+                    prev["consecutive_count"] = 1
+                else:
+                    prev["consecutive_count"] = prev.get("consecutive_count", 1) + 1
+
                 prev["up"] = up
-                prev["status"] = "up" if up else "down"
+                prev["status"] = new_status
                 prev["last_check"] = now
                 prev["checks"] += 1
                 if not up:
                     prev["fails"] += 1
+
+                # Conferma dopo 2 cicli consecutivi con lo stesso esito (anti-flapping)
+                if prev["consecutive_count"] == 2 and prev.get("reported_status") != new_status:
+                    prev["reported_status"] = new_status
+                    events_to_emit.append((ip, new_status))
         for ip in unknown_ips:
             # No history to carry forward: a jump-site device has nothing to
             # transition from/to, it is simply not measurable.
@@ -130,6 +147,30 @@ def _run_cycle() -> None:
             if ip not in ip_site:
                 del _state[ip]
         _last_run = now
+
+    for ip, stat in events_to_emit:
+        try:
+            from services import notifications
+            if stat == "down":
+                notifications.emit(
+                    kind="device.down",
+                    device_ip=ip,
+                    severity="high",
+                    title=f"Dispositivo non raggiungibile: {ip}",
+                    ctx={"ip": ip, "status": "down"},
+                    dedup_key=f"ping:{ip}:down",
+                )
+            else:
+                notifications.emit(
+                    kind="device.up",
+                    device_ip=ip,
+                    severity="low",
+                    title=f"Dispositivo tornato online: {ip}",
+                    ctx={"ip": ip, "status": "up"},
+                    dedup_key=f"ping:{ip}:up",
+                )
+        except Exception:
+            pass
 
 
 def _worker() -> None:

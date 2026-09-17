@@ -181,6 +181,15 @@ def mac_locate(mac: str, tenant: Optional[str] = None,
     sightings = mac_history.search(mac=mac, tenants=scope, limit=500)
     if not sightings:
         return {"status": "not_found", "origin": [], "transit": [], "results": []}
+    # Only what each switch's LAST scan saw. History kept an old port as a
+    # second "access position" (ambiguous) and old uplinks as transit, dated
+    # by a scan that no longer describes the network.
+    latest = mac_history.latest_scan_by_switch(s["switch_ip"] for s in sightings)
+    current = [s for s in sightings if s.get("last_seen") == latest.get(s["switch_ip"])]
+    if not current:
+        return {"status": "not_found", "origin": [], "transit": [], "results": [],
+                "last_seen": max(s.get("last_seen") or "" for s in sightings)}
+    sightings = current
     _reclassify_sightings(sightings)
     results = _mac_group(sightings)
     if len(results) == 1:

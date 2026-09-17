@@ -333,6 +333,9 @@
         <button id="navConfigDrift" class="nav-item" data-tab="tab-config-drift" role="tab" aria-controls="tab-config-drift" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabConfigDrift"><i class="fa-solid fa-code-compare"></i> Config Drift</span>
         </button>
+        <button id="navNotifications" class="nav-item" data-tab="tab-notifications" role="tab" aria-controls="tab-notifications" aria-selected="false" tabindex="-1">
+          <span class="nav-left"><i class="fa-solid fa-bell"></i> <span data-i18n="tabNotifications">Notifiche</span></span>
+        </button>
         </div>
       </div>
       <div class="nav-group" data-nav-group="change">
@@ -647,6 +650,7 @@
               <button type="button" class="inv-menu-item" id="btnPingCheck" data-i18n="btnPingCheck"><i class="fa-solid fa-wifi"></i> Ping Tenant</button>
               <button type="button" class="inv-menu-item" id="btnSubnetScan" data-i18n="btnSubnetScan"><i class="fa-solid fa-magnifying-glass-location"></i> Scansione Subnet</button>
               <button type="button" class="inv-menu-item" id="btnBulkCommand" data-i18n="btnBulkCommand"><i class="fa-solid fa-terminal"></i> Invio Comandi</button>
+              <button type="button" class="inv-menu-item" id="btnScheduledTriage" data-i18n="btnScheduledTriage"><i class="fa-solid fa-clock"></i> Pianificazione Triage</button>
             </div>
           </details>
         </div>
@@ -720,7 +724,7 @@
               <label data-i18n="lblDeviceSite">Sede fisica</label>
               <div class="input-wrapper">
                 <i class="fa-solid fa-location-dot"></i>
-                <select id="devSiteSelect" style="padding-left:36px;" aria-label="Sede fisica del dispositivo" data-i18n-aria-label="ariaDevSite"></select>
+                <select id="devSiteSelect" aria-label="Sede fisica del dispositivo" data-i18n-aria-label="ariaDevSite"></select>
               </div>
             </div>
 
@@ -740,7 +744,7 @@
               <label data-i18n="lblVendor">Vendor Engine</label>
               <div class="input-wrapper">
                 <i class="fa-solid fa-gears"></i>
-                <select id="devVendor" style="padding-left:36px;" aria-label="Vendor del dispositivo" data-i18n-aria-label="ariaDevVendor"></select>
+                <select id="devVendor" aria-label="Vendor del dispositivo" data-i18n-aria-label="ariaDevVendor"></select>
               </div>
             </div>
 
@@ -803,7 +807,7 @@
               <label data-i18n="lblProfile">Profilo Credenziali</label>
               <div class="input-wrapper">
                 <i class="fa-solid fa-key"></i>
-                <select id="devProfile" style="padding-left:36px;" aria-label="Profilo credenziali" data-i18n-aria-label="ariaDevProfile">
+                <select id="devProfile" aria-label="Profilo credenziali" data-i18n-aria-label="ariaDevProfile">
                   <option value="default" data-i18n="optProfileDefault">Profilo Rete Standard</option>
                   <option value="custom" data-i18n="optProfileCustom">Credenziali dedicate...</option>
                 </select>
@@ -876,7 +880,7 @@
                 </label>
               </div>
               <div id="identTenantSingleWrap">
-                <select id="identTenant" style="padding-left:12px;" aria-label="Tenant riservato all identita" data-i18n-aria-label="ariaIdentityTenant"></select>
+                <select id="identTenant" aria-label="Tenant riservato all identita" data-i18n-aria-label="ariaIdentityTenant"></select>
               </div>
               <div id="identTenantMultiWrap" style="display:none; border:1px solid var(--border); padding:8px; max-height:140px; overflow-y:auto; background:var(--surface-2);">
                 <div id="identTenantCheckboxes" style="display:flex; flex-direction:column; gap:4px;"></div>
@@ -959,7 +963,7 @@
       <div class="panel">
         <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
           <!-- Nessun Tenant preselezionato: il report si carica su scelta esplicita -->
-          <select id="topologyGroupSelect" style="padding: 6px 12px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none; transition: var(--transition);" aria-label="Tenant della topologia" data-i18n-aria-label="ariaTopologyTenant">
+          <select id="topologyGroupSelect" aria-label="Tenant della topologia" data-i18n-aria-label="ariaTopologyTenant">
             <option value="" data-i18n="optSelectSite">Scegli un Tenant…</option>
             <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
           </select>
@@ -987,7 +991,7 @@
       <div style="display:flex; justify-content:space-between; align-items:center; gap: 15px; flex-wrap: wrap;">
         <div style="display:flex; align-items:center; gap: 15px; flex-wrap: wrap;">
           <!-- Nessuna Sede preselezionata: la mappa si disegna solo su scelta esplicita -->
-          <select id="interactiveGroupSelect" style="padding: 6px 12px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none; transition: var(--transition);" aria-label="Tenant della mappa interattiva" data-i18n-aria-label="ariaInteractiveTenant">
+          <select id="interactiveGroupSelect" aria-label="Tenant della mappa interattiva" data-i18n-aria-label="ariaInteractiveTenant">
             <option value="" data-i18n="optSelectSite">Scegli un Tenant…</option>
             <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
           </select>
@@ -1037,7 +1041,7 @@
             <span style="font-size:12px; color:var(--text-muted);" data-i18n="lblLayeredHint">Trascina in verticale per cambiare piano · click su un gruppo per aprirlo · apri un apparato per segnarlo come core</span>
             <!-- Il core dedotto (confine o nodo piu' connesso) puo' non essere
                  quello vero: qui l'utente lo indica e i piani si rifanno da li'. -->
-            <select id="layeredCoreSelect" title="Core" style="padding:4px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:inherit; font-size:12px; font-weight:700;" aria-label="Nodo core della mappa a livelli" data-i18n-aria-label="ariaLayeredCore"><option value="">Core: automatico</option></select>
+            <select id="layeredCoreSelect" title="Core" style="font-weight:700;" aria-label="Nodo core della mappa a livelli" data-i18n-aria-label="ariaLayeredCore"><option value="">Core: automatico</option></select>
             <button id="layeredCollapseBtn" class="chip" style="width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnLayeredCollapse">Comprimi gruppi</button>
             <button id="layeredResetBtn" class="chip" style="width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnLayeredReset">Azzera piani</button>
           </span>
@@ -1168,10 +1172,10 @@
       <div class="panel" style="margin-bottom:18px;">
         <div class="filterbar" style="display:flex; justify-content:space-between; align-items:center; margin-top:0; flex-wrap:wrap; gap:12px;">
           <div style="display:flex; align-items:center; gap: 12px; flex-wrap:wrap;">
-            <select id="categoriesGroupSelect" style="padding: 7px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;" aria-label="Tenant delle categorie" data-i18n-aria-label="ariaCategoriesTenant">
+            <select id="categoriesGroupSelect" aria-label="Tenant delle categorie" data-i18n-aria-label="ariaCategoriesTenant">
               <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
             </select>
-            <select id="categoriesCatFilter" style="padding: 7px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;" aria-label="Filtra per categoria" data-i18n-aria-label="ariaCategoriesFilter">
+            <select id="categoriesCatFilter" aria-label="Filtra per categoria" data-i18n-aria-label="ariaCategoriesFilter">
               <option value="all" data-i18n="optCatAll">Tutte le categorie</option>
             </select>
           </div>
@@ -1284,10 +1288,10 @@
         <!-- Controlli: scelta sede + avvio manuale della scansione -->
         <div class="panel" style="margin-bottom:18px;">
           <div class="filterbar" style="margin-top:0; align-items:center; gap:12px; flex-wrap:wrap;">
-            <label for="threatGroupSelect" style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="lblThreatGroup">Sede da analizzare:</label><select id="threatGroupSelect" style="padding: 6px 12px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
+            <label for="threatGroupSelect" style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="lblThreatGroup">Sede da analizzare:</label><select id="threatGroupSelect">
               <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
             </select>
-            <label for="threatSeveritySelect" style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="lblThreatSeverity">Severità:</label><select id="threatSeveritySelect" style="padding: 6px 12px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
+            <label for="threatSeveritySelect" style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="lblThreatSeverity">Severità:</label><select id="threatSeveritySelect">
               <option value="all" data-i18n="optSevAll">Tutte le severità</option>
               <option value="CRITICAL" data-i18n="optSevCritical">Solo Critica (CRITICAL)</option>
               <option value="HIGH" data-i18n="optSevHigh">Alta e superiore (HIGH+)</option>
@@ -1315,7 +1319,7 @@
         <div class="panel" style="margin-bottom:14px;">
           <div id="vwVendorBtns" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;"></div>
           <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:end;">
-            <div class="form-group" style="margin:0;"><label for="vwSeverity" data-i18n="vwLblSeverity">Severità</label><select id="vwSeverity" style="padding:6px 10px;">
+            <div class="form-group" style="margin:0;"><label for="vwSeverity" data-i18n="vwLblSeverity">Severità</label><select id="vwSeverity">
                 <option value="" data-i18n="optSevAll">Tutte</option>
                 <option value="CRITICAL">CRITICAL</option>
                 <option value="HIGH">HIGH+</option>
@@ -1347,7 +1351,7 @@
       <div id="tiViewPriority" style="display:none;">
         <div class="panel" style="margin-bottom:14px;">
           <div class="filterbar" style="margin-top:0; align-items:center; gap:12px; flex-wrap:wrap;">
-            <label for="cvePrioTenant" style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="cveLblTenant">Sede:</label><select id="cvePrioTenant" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:inherit; font-size:13px; cursor:pointer; outline:none;">
+            <label for="cvePrioTenant" style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="cveLblTenant">Sede:</label><select id="cvePrioTenant">
               <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
             </select>
             <button class="btn btn-primary" id="cvePrioRefresh" style="width:auto; margin:0;" title="Aggiorna" data-i18n-title="titleBtnRefresh" aria-label="Aggiorna" data-i18n-aria-label="titleBtnRefresh"><i class="fa-solid fa-rotate"></i></button>
@@ -1376,7 +1380,7 @@
            sono lo stesso numero e due situazioni opposte. -->
       <div id="tiViewReport" style="display:none;">
         <div class="panel" style="margin-bottom:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-          <label for="cveReportTenant" style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="cveLblTenant">Sede:</label><select id="cveReportTenant" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:inherit; font-size:13px; cursor:pointer; outline:none;">
+          <label for="cveReportTenant" style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="cveLblTenant">Sede:</label><select id="cveReportTenant">
             <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
           </select>
           <button class="btn btn-primary" id="cveReportRefresh" style="width:auto; margin:0;" title="Aggiorna" data-i18n-title="titleBtnRefresh" aria-label="Aggiorna" data-i18n-aria-label="titleBtnRefresh"><i class="fa-solid fa-rotate"></i></button>
@@ -1423,6 +1427,7 @@
         <button type="button" class="ca-pill active" id="locPill-mac" data-loc-view="mac" data-i18n="tabMacTracker">Tracker MAC</button>
         <button type="button" class="ca-pill" id="locPill-diagnosi" data-loc-view="diagnosi" data-i18n="tabDiagnosi">Diagnosi Client</button>
         <button type="button" class="ca-pill" id="locPill-inventory" data-loc-view="inventory" data-i18n="tabEndpoints">Endpoint Inventory</button>
+        <button type="button" class="ca-pill" id="locPill-porterrors" data-loc-view="porterrors" data-i18n="tabPortErrors">Errori porte</button>
       </div>
 
       <div id="locPane-mac" class="loc-pane">
@@ -1448,7 +1453,7 @@
               </summary>
               <div id="macDeviceList" style="position:absolute; top:110%; left:0; z-index:60; min-width:250px; max-height:300px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:8px; box-shadow:var(--shadow-float);"></div>
             </details>
-            <select id="macScanTransport" title="" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;" aria-label="Trasporto per la raccolta MAC" data-i18n-aria-label="ariaMacTransport">
+            <select id="macScanTransport" title="" aria-label="Trasporto per la raccolta MAC" data-i18n-aria-label="ariaMacTransport">
               <option value="" data-i18n="optMacTransportAuto">Trasporto: Auto</option>
               <option value="netconf">NETCONF</option>
               <option value="restconf">RESTCONF</option>
@@ -1571,7 +1576,7 @@
               </button>
             </div>
             <div style="display:flex; gap:6px;">
-              <select id="diagGatewaySelect" style="flex:1; padding:6px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;" aria-label="Gateway per la diagnosi" data-i18n-aria-label="ariaDiagGateway">
+              <select id="diagGatewaySelect" style="flex:1;" aria-label="Gateway per la diagnosi" data-i18n-aria-label="ariaDiagGateway">
                 <option value="">Auto (ARP / Subnet)</option>
               </select>
               <input id="diagGatewayInput" type="text" placeholder="Es. 192.168.1.1" style="flex:1; padding-left:8px; font-size:12px;">
@@ -1579,7 +1584,7 @@
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label for="diagProtoInput" data-i18n="lblFgtProto"></label>
-            <select id="diagProtoInput" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+            <select id="diagProtoInput">
               <option value="TCP">TCP</option>
               <option value="UDP">UDP</option>
               <option value="ICMP">ICMP</option>
@@ -1596,13 +1601,46 @@
       </div>
       <div id="diagResult"></div>
       </div>
+      <div id="locPane-porterrors" class="loc-pane" style="display:none;">
+        <div class="panel" style="margin-bottom:12px;">
+          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; align-items:end;">
+            <div>
+              <label for="peDevice" style="font-size:12px; color:var(--text-muted);" data-i18n="peDevice">Apparato</label>
+              <select id="peDevice"><option value="" data-i18n="peDeviceAll">Tutti gli apparati</option></select>
+            </div>
+            <div>
+              <label for="peWindow" style="font-size:12px; color:var(--text-muted);" data-i18n="ifErrWindow">Finestra errori</label>
+              <select id="peWindow">
+                <option value="1h" data-i18n="ifErrWin1h">Ultima ora</option>
+                <option value="24h" selected data-i18n="ifErrWin24h">Ultime 24 ore</option>
+                <option value="7d" data-i18n="ifErrWin7d">Ultimi 7 giorni</option>
+              </select>
+            </div>
+            <div>
+              <label for="peShow" style="font-size:12px; color:var(--text-muted);" data-i18n="peShow">Mostra</label>
+              <select id="peShow">
+                <option value="bad" selected data-i18n="peShowBad">Porte con errori o scarti</option>
+                <option value="all" data-i18n="peShowAll">Tutte le porte con contatori</option>
+              </select>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button type="button" id="peRefresh" class="btn btn-secondary btn-small" style="width:auto; margin:0;">
+                <i class="fa-solid fa-rotate"></i> <span data-i18n="ifBtnRefresh">Aggiorna</span></button>
+              <button type="button" id="peReadNow" class="btn btn-secondary btn-small requires-write" style="width:auto; margin:0;" title="Seleziona un apparato e leggi ora i contatori di errore (SNMP, altrimenti SSH)" data-i18n-title="ifBtnReadErrorsTitle">
+                <i class="fa-solid fa-stethoscope"></i> <span data-i18n="ifBtnReadErrors">Leggi errori ora</span></button>
+            </div>
+          </div>
+        </div>
+        <div id="peResults"></div>
+      </div>
+
       <div id="locPane-inventory" class="loc-pane" style="display:none;">
       <div style="display:flex; gap:8px; margin-bottom:12px; align-items:center; flex-wrap:wrap;">
         <button id="epModeListBtn" class="btn btn-secondary btn-small" style="width:auto; margin:0; border-color:var(--primary); color:var(--primary);"
                 data-ep-mode="list" data-i18n="epModeList"></button>
         <button id="epModePortsBtn" class="btn btn-secondary btn-small" style="width:auto; margin:0;"
                 data-ep-mode="ports" data-i18n="epModePorts"></button>
-        <select id="epPortsSwitch" style="display:none; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;" aria-label="Switch di cui elencare le porte" data-i18n-aria-label="ariaEpSwitch"></select>
+        <select id="epPortsSwitch" style="display:none;" aria-label="Switch di cui elencare le porte" data-i18n-aria-label="ariaEpSwitch"></select>
       </div>
       <div id="epKpis" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:16px;"></div>
       <div class="panel" style="margin-bottom:16px;">
@@ -1772,13 +1810,13 @@
            per tutte e quattro le viste. Prima la stessa finestra esisteva tre
            volte e nessuna parlava con le altre. -->
       <div class="filterbar" style="align-items:center; margin:0 0 12px;">
-        <select id="trafWindow" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);" aria-label="Finestra temporale del traffico" data-i18n-aria-label="ariaTrafWindow">
+        <select id="trafWindow" aria-label="Finestra temporale del traffico" data-i18n-aria-label="ariaTrafWindow">
           <option value="15m" data-i18n="optWin15m">Ultimi 15 minuti</option>
           <option value="1h" selected data-i18n="optWin1h">Ultima ora</option>
           <option value="24h" data-i18n="optWin24h">Ultime 24 ore</option>
           <option value="7d" data-i18n="optWin7d">Ultimi 7 giorni</option>
         </select>
-        <select id="trafMetric" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);" aria-label="Metrica del traffico" data-i18n-aria-label="ariaTrafMetric">
+        <select id="trafMetric" aria-label="Metrica del traffico" data-i18n-aria-label="ariaTrafMetric">
           <option value="bytes" data-i18n="optByBytes">Per byte</option>
           <option value="packets" data-i18n="optByPackets">Per pacchetti</option>
         </select>
@@ -2129,7 +2167,7 @@
             <input id="caSearch" type="text"
                    data-i18n-placeholder="phCaSearch" placeholder="Cerca..."
                    style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; outline:none; width:180px;" aria-label="phCaSearch" data-i18n-aria-label="phCaSearch">
-            <select id="configGroupSelect" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;" aria-label="Tenant delle configurazioni" data-i18n-aria-label="ariaConfigTenant">
+            <select id="configGroupSelect" aria-label="Tenant delle configurazioni" data-i18n-aria-label="ariaConfigTenant">
               <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
             </select>
             <button id="btnCaRefresh" class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-i18n="btnCaRefresh">
@@ -2191,7 +2229,7 @@
           </div>
           <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
             <div class="form-group" style="min-width:150px;">
-              <label for="aiProvider" data-i18n="lblAiProvider">Provider</label><select id="aiProvider" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text);">
+              <label for="aiProvider" data-i18n="lblAiProvider">Provider</label><select id="aiProvider">
                 <option value="" data-i18n="optAiNoProvider">-- seleziona provider --</option>
                 <option value="anthropic">Anthropic (Claude)</option>
                 <option value="openai">OpenAI (ChatGPT)</option>
@@ -2202,7 +2240,7 @@
             <div class="form-group" style="min-width:200px;">
               <label data-i18n="lblAiModel">Modello</label>
               <div style="display:flex; gap:4px;">
-                <select id="aiModelSelect" style="flex:1; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text);" aria-label="Modello AI" data-i18n-aria-label="ariaAiModel">
+                <select id="aiModelSelect" style="flex:1;" aria-label="Modello AI" data-i18n-aria-label="ariaAiModel">
                   <option value="" data-i18n="optAiModelCustom">-- modello personalizzato --</option>
                 </select>
                 <button type="button" class="btn btn-secondary btn-small" id="btnAiRefreshModels" style="width:auto; margin:0;" title="Aggiorna elenco modelli" data-i18n-title="btnAiRefreshModelsTitle">
@@ -2279,7 +2317,7 @@
             <label style="font-size:13px; display:flex; align-items:center; gap:6px;">
               <input type="checkbox" id="aiAttachInventory"> <span data-i18n="lblAiAttachInventory">Allega riepilogo inventario</span>
             </label>
-            <select id="aiAttachTenant" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;" aria-label="Tenant dell inventario allegato" data-i18n-aria-label="ariaAiAttachTenant">
+            <select id="aiAttachTenant" aria-label="Tenant dell inventario allegato" data-i18n-aria-label="ariaAiAttachTenant">
               <option value="" data-i18n="optAiNoTenant">Nessun tenant allegato</option>
             </select>
             <div style="position:relative; display:inline-block;">
@@ -2336,15 +2374,15 @@
         </p>
         <div class="filterbar" style="margin-top:0; align-items:flex-end; flex-wrap:wrap; gap:10px;">
           <div class="form-group" style="min-width:180px; margin:0;">
-            <label for="genCfgProfileSelect" data-i18n="lblGenCfgProfile">Profilo AI</label><select id="genCfgProfileSelect" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
+            <label for="genCfgProfileSelect" data-i18n="lblGenCfgProfile">Profilo AI</label><select id="genCfgProfileSelect">
               <option value="" data-i18n="optGenCfgActiveProfile">-- usa profilo AI attivo --</option>
             </select>
           </div>
           <div class="form-group" style="min-width:170px; margin:0;">
-            <label for="genCfgTenant" data-i18n="lblGenCfgTenant">Tenant</label><select id="genCfgTenant" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;"></select>
+            <label for="genCfgTenant" data-i18n="lblGenCfgTenant">Tenant</label><select id="genCfgTenant"></select>
           </div>
           <div class="form-group" style="min-width:220px; margin:0;">
-            <label for="genCfgTemplate" data-i18n="lblGenCfgTemplate">Switch template (opzionale)</label><select id="genCfgTemplate" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
+            <label for="genCfgTemplate" data-i18n="lblGenCfgTemplate">Switch template (opzionale)</label><select id="genCfgTemplate">
               <option value="" data-i18n="optGenCfgNoTemplate">-- usa parametri comuni del tenant --</option>
             </select>
           </div>
@@ -2415,7 +2453,7 @@
           <div class="form-group"><label for="fgtMgmtIp">IP MGMT</label><input id="fgtMgmtIp" type="text" placeholder="10.0.0.254" style="padding-left:12px;"></div>
           <div class="form-group"><label for="fgtMgmtMask">Mask MGMT</label><input id="fgtMgmtMask" type="text" placeholder="255.255.255.0" style="padding-left:12px;"></div>
           <div class="form-group"><label for="fgtWanIf" data-i18n="lblProvWanIf">Interfaccia WAN</label><input id="fgtWanIf" type="text" placeholder="wan1" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtWanMode" data-i18n="lblProvWanMode">Modalità WAN</label><select id="fgtWanMode" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+          <div class="form-group"><label for="fgtWanMode" data-i18n="lblProvWanMode">Modalità WAN</label><select id="fgtWanMode">
               <option value="dhcp">DHCP</option>
               <option value="static" data-i18n="optProvStatic">Statica</option>
             </select>
@@ -2436,7 +2474,7 @@
           <div class="form-group"><label for="fgtSnmpAuth">SNMPv3 auth pass</label><input id="fgtSnmpAuth" type="password" style="padding-left:12px;"></div>
           <div class="form-group"><label for="fgtSnmpPriv">SNMPv3 priv pass</label><input id="fgtSnmpPriv" type="password" style="padding-left:12px;"></div>
           <div class="form-group"><label for="fgtBanner">Banner post-login</label><input id="fgtBanner" type="text" placeholder="Accesso riservato - uso autorizzato" data-i18n-placeholder="phProvBanner" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtAaaProtocol" data-i18n="lblAaaProtocol">Protocollo AAA</label><select id="fgtAaaProtocol" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+          <div class="form-group"><label for="fgtAaaProtocol" data-i18n="lblAaaProtocol">Protocollo AAA</label><select id="fgtAaaProtocol">
               <option value="none" data-i18n="optAaaNone">Nessuno</option>
               <option value="radius">RADIUS</option>
               <option value="tacacs">TACACS+</option>
@@ -2458,7 +2496,7 @@
       <div id="provCiscoSection">
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:14px;">
         <div class="form-group"><label for="provHostname">Hostname</label><input id="provHostname" type="text" value="SW-NEW-01" style="padding-left:12px;"></div>
-        <div class="form-group"><label for="provRole" data-i18n="lblProvRole">Ruolo</label><select id="provRole" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+        <div class="form-group"><label for="provRole" data-i18n="lblProvRole">Ruolo</label><select id="provRole">
             <option value="access">Access</option>
             <option value="distribution">Distribution/Core (L3)</option>
           </select>
@@ -2486,7 +2524,7 @@
         <div class="form-group"><label for="provUplinkPc" data-i18n="lblProvUplinkPc">Uplink Port-Channel ID (LACP)</label><input id="provUplinkPc" type="number" placeholder="1 (vuoto = nessun EtherChannel)" data-i18n-placeholder="phProvUplinkPc" style="padding-left:12px;"></div>
         <div class="form-group" id="provSvisGroup" style="display:none;"><label for="provSvis">SVI distribution (vlan:ip:mask, comma)</label><input id="provSvis" type="text" placeholder="10:10.1.10.1:255.255.255.0" style="padding-left:12px;"></div>
         <div class="form-group" id="provDefRouteGroup" style="display:none;"><label for="provDefRouteGw">Default route gateway</label><input id="provDefRouteGw" type="text" placeholder="10.1.0.1" style="padding-left:12px;"></div>
-        <div class="form-group"><label for="provAaaProtocol" data-i18n="lblAaaProtocol">Protocollo AAA</label><select id="provAaaProtocol" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+        <div class="form-group"><label for="provAaaProtocol" data-i18n="lblAaaProtocol">Protocollo AAA</label><select id="provAaaProtocol">
             <option value="none" data-i18n="optAaaNone">Nessuno</option>
             <option value="radius">RADIUS</option>
             <option value="tacacs">TACACS+</option>
@@ -2517,7 +2555,7 @@
       <div style="margin-top:0; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
         <button class="btn btn-primary" id="btnProvGenerate"><i class="fa-solid fa-file-code"></i> Genera Config</button>
         <button class="btn" id="btnProvDownload"><i class="fa-solid fa-download"></i> Scarica .txt</button>
-        <select id="provDeliveryMode" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);" aria-label="Modo di consegna della configurazione" data-i18n-aria-label="ariaProvDelivery">
+        <select id="provDeliveryMode" aria-label="Modo di consegna della configurazione" data-i18n-aria-label="ariaProvDelivery">
           <option value="view">Solo visualizzazione</option>
           <option value="ssh">Push via SSH</option>
           <option value="serial">Push via Console/Seriale</option>
@@ -2530,7 +2568,7 @@
         <div class="form-group"><label for="provSshUser">Username</label><input id="provSshUser" type="text" placeholder="admin" style="padding-left:12px;"></div>
         <div class="form-group"><label for="provSshPass">Password</label><input id="provSshPass" type="password" style="padding-left:12px;"></div>
         <div class="form-group"><label for="provSshSecret">Enable secret</label><input id="provSshSecret" type="password" style="padding-left:12px;"></div>
-        <div class="form-group"><label for="provSshSite" data-i18n="lblProvSshSite">Sede del target</label><select id="provSshSite" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+        <div class="form-group"><label for="provSshSite" data-i18n="lblProvSshSite">Sede del target</label><select id="provSshSite">
             <option value="" data-i18n="optProvSshSiteAuto">Automatica (da inventario)</option>
           </select>
         </div>
@@ -2544,7 +2582,7 @@
             <button class="btn" id="btnProvRefreshPorts" title="Aggiorna elenco porte" data-i18n-title="titleBtnRefreshPorts"><i class="fa-solid fa-rotate"></i></button>
           </div>
         </div>
-        <div class="form-group"><label for="provBaudrate">Baud rate</label><select id="provBaudrate" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+        <div class="form-group"><label for="provBaudrate">Baud rate</label><select id="provBaudrate">
             <option value="9600" selected>9600</option>
             <option value="19200">19200</option>
             <option value="38400">38400</option>
@@ -2858,7 +2896,7 @@
               </div>
               <div class="form-group" style="margin-bottom:0;">
                 <label for="fgtLookupProto" data-i18n="lblFgtProto">Protocollo</label>
-                <select id="fgtLookupProto" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <select id="fgtLookupProto">
                   <option value="TCP">TCP</option>
                   <option value="UDP">UDP</option>
                   <option value="ICMP">ICMP</option>
@@ -2940,14 +2978,14 @@
               </div>
               <div class="form-group" style="margin-bottom:0;">
                 <label for="fgtLogDevice" data-i18n="lblFgtLogDevice">Dispositivo log</label>
-                <select id="fgtLogDevice" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <select id="fgtLogDevice">
                   <option value="disk">disk</option>
                   <option value="memory">memory</option>
                 </select>
               </div>
               <div class="form-group" style="margin-bottom:0;">
                 <label for="fgtLogType" data-i18n="lblFgtLogType">Tipo log</label>
-                <select id="fgtLogType" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <select id="fgtLogType">
                   <option value="traffic">traffic</option>
                   <option value="event">event</option>
                   <option value="utm">utm</option>
@@ -2955,7 +2993,7 @@
               </div>
               <div class="form-group" style="margin-bottom:0;">
                 <label for="fgtLogSubtype" data-i18n="lblFgtLogSubtype">Sottotipo log</label>
-                <select id="fgtLogSubtype" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <select id="fgtLogSubtype">
                   <option value="forward">forward</option>
                   <option value="local">local</option>
                   <option value="virus">virus</option>
@@ -2995,7 +3033,7 @@
               </div>
               <div class="form-group" style="margin-bottom:0;">
                 <label for="fgtDiagProto" data-i18n="lblFgtProto">Protocollo</label>
-                <select id="fgtDiagProto" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <select id="fgtDiagProto">
                   <option value="TCP">TCP</option>
                   <option value="UDP">UDP</option>
                   <option value="ICMP">ICMP</option>
@@ -3083,7 +3121,7 @@
             <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; margin-bottom:12px;">
               <div class="form-group" style="margin-bottom:0;">
                 <label for="fgtPrevTokenDevice" data-i18n="lblFgtTokenDevice">Dispositivo FortiGate</label>
-                <select id="fgtPrevTokenDevice" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <select id="fgtPrevTokenDevice">
                   <option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>
                 </select>
               </div>
@@ -3134,6 +3172,261 @@
 
 
 
+    <!-- TAB: Notifiche Email -->
+    <div id="tab-notifications" class="tab-content" role="tabpanel" tabindex="0">
+      <div class="page-head">
+        <div class="page-head-text">
+          <h2 data-i18n="titleNotifications">Notifiche Email</h2>
+          <p data-i18n="descNotifications">Configura le preferenze personali di notifica, le regole di invio per gli amministratori e consulta lo storico di consegna.</p>
+        </div>
+      </div>
+
+      <div id="notifySmtpDisabledBanner" class="panel" style="display:none; padding:12px 16px; margin-bottom:14px; background:color-mix(in srgb, var(--warning) 12%, transparent); border:1px solid color-mix(in srgb, var(--warning) 35%, transparent); color:var(--warning); font-size:13px;">
+        <i class="fa-solid fa-triangle-exclamation" style="margin-right:8px;"></i>
+        <span data-i18n="notifySmtpDisabled">Il servizio SMTP è disabilitato. Le notifiche email non verranno inviate.</span>
+        <button type="button" data-action="notify-goto-smtp" class="btn btn-secondary btn-small" style="margin-left:12px; width:auto; display:inline-block;" data-i18n="notifyGoToSmtpSettings">Configura SMTP in Impostazioni</button>
+      </div>
+
+      <div class="subtabs" style="display:flex; gap:8px; margin-bottom:16px; border-bottom:1px solid var(--border); padding-bottom:8px;">
+        <button type="button" id="btnNotifyTabPrefs" class="btn btn-small btn-primary" style="width:auto; margin:0;" data-i18n="notifyTabPrefs">Le mie preferenze</button>
+        <button type="button" id="btnNotifyTabRules" class="btn btn-small btn-secondary requires-admin" style="width:auto; margin:0;" data-i18n="notifyTabRules">Regole</button>
+        <button type="button" id="btnNotifyTabLog" class="btn btn-small btn-secondary" style="width:auto; margin:0;" data-i18n="notifyTabLog">Storico</button>
+      </div>
+
+      <!-- SOTTO-TAB 1: Le mie preferenze -->
+      <div id="notifySubtabPrefs">
+        <!-- Master Header Card (Linear pattern) -->
+        <div class="panel" style="padding:16px 20px; margin-bottom:16px; border-left:3px solid var(--primary); background:var(--surface-1); box-shadow:var(--shadow-card);">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+            <div style="display:flex; align-items:center; gap:14px;">
+              <div style="width:40px; height:40px; border-radius:8px; background:color-mix(in srgb, var(--primary) 14%, transparent); color:var(--primary); display:flex; align-items:center; justify-content:center; font-size:18px;">
+                <i class="fa-solid fa-paper-plane"></i>
+              </div>
+              <div>
+                <h3 style="margin:0; font-size:15px; font-weight:600; color:var(--text);" data-i18n="notifyMasterCardTitle">Canale di recapito email</h3>
+                <p style="margin:2px 0 0 0; font-size:12px; color:var(--text-muted);" data-i18n="notifyMasterCardDesc">Configura come SentinelNet ti invia gli avvisi di rete.</p>
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+              <div id="notifyUserEmailBadge" style="font-size:13px;"></div>
+              <div style="height:24px; width:1px; background:var(--border);"></div>
+              <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; cursor:pointer; margin:0;">
+                <input type="checkbox" id="notifyPrefEnabled" aria-label="Abilita notifiche email personali" data-i18n-aria-label="notifyEnabled">
+                <span data-i18n="notifyEnabled">Abilita notifiche email</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:16px; margin-bottom:16px;">
+          <!-- Card 1: Sottoscrizioni Eventi (Vanta / Linear pattern) -->
+          <div class="panel" style="padding:18px; display:flex; flex-direction:column; justify-content:space-between;">
+            <div>
+              <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; border-bottom:1px solid var(--border); padding-bottom:10px;">
+                <i class="fa-solid fa-bell" style="color:var(--primary); font-size:16px;"></i>
+                <div>
+                  <h4 style="margin:0; font-size:14px; font-weight:600;" data-i18n="notifyCardEventsTitle">Tipi di evento monitorati</h4>
+                  <span style="font-size:11px; color:var(--text-muted);" data-i18n="notifyCardEventsDesc">Seleziona gli eventi che devono generare un avviso per il tuo account.</span>
+                </div>
+              </div>
+
+              <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;">
+                <label style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-radius:4px; border:1px solid var(--border); background:var(--surface-2); cursor:pointer;">
+                  <div style="display:flex; align-items:center; gap:10px;">
+                    <i class="fa-solid fa-triangle-exclamation" style="color:var(--warning); font-size:14px; width:16px; text-align:center;"></i>
+                    <span style="font-size:13px; font-weight:500;" data-i18n="notifyKindIncidents">Incidenti aperti (Correlation Engine)</span>
+                  </div>
+                  <input type="checkbox" class="notify-pref-kind" value="incident.opened" aria-label="Incidenti aperti">
+                </label>
+                <label style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-radius:4px; border:1px solid var(--border); background:var(--surface-2); cursor:pointer;">
+                  <div style="display:flex; align-items:center; gap:10px;">
+                    <i class="fa-solid fa-shield-halved" style="color:var(--danger); font-size:14px; width:16px; text-align:center;"></i>
+                    <span style="font-size:13px; font-weight:500;" data-i18n="notifyKindSiem">Allerte SIEM e sicurezza</span>
+                  </div>
+                  <input type="checkbox" class="notify-pref-kind" value="siem.alert" aria-label="Allerte SIEM e sicurezza">
+                </label>
+                <label style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-radius:4px; border:1px solid var(--border); background:var(--surface-2); cursor:pointer;">
+                  <div style="display:flex; align-items:center; gap:10px;">
+                    <i class="fa-solid fa-circle-xmark" style="color:var(--danger); font-size:14px; width:16px; text-align:center;"></i>
+                    <span style="font-size:13px; font-weight:500;" data-i18n="notifyKindDeviceDown">Dispositivo non raggiungibile (Device down)</span>
+                  </div>
+                  <input type="checkbox" class="notify-pref-kind" value="device.down" aria-label="Dispositivo non raggiungibile">
+                </label>
+                <label style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-radius:4px; border:1px solid var(--border); background:var(--surface-2); cursor:pointer;">
+                  <div style="display:flex; align-items:center; gap:10px;">
+                    <i class="fa-solid fa-circle-check" style="color:var(--success); font-size:14px; width:16px; text-align:center;"></i>
+                    <span style="font-size:13px; font-weight:500;" data-i18n="notifyKindDeviceUp">Dispositivo tornato online (Device up)</span>
+                  </div>
+                  <input type="checkbox" class="notify-pref-kind" value="device.up" aria-label="Dispositivo tornato online">
+                </label>
+                <label style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-radius:4px; border:1px solid var(--border); background:var(--surface-2); cursor:pointer;">
+                  <div style="display:flex; align-items:center; gap:10px;">
+                    <i class="fa-solid fa-bug" style="color:var(--cond-d, #8b5cf6); font-size:14px; width:16px; text-align:center;"></i>
+                    <span style="font-size:13px; font-weight:500;" data-i18n="notifyKindCve">Nuove vulnerabilità CVE rilevate</span>
+                  </div>
+                  <input type="checkbox" class="notify-pref-kind" value="cve.new" aria-label="Nuove vulnerabilità CVE">
+                </label>
+              </div>
+            </div>
+
+            <div style="border-top:1px solid var(--border); padding-top:12px;">
+              <label for="notifyPrefMinSeverity" style="display:block; font-size:12px; font-weight:600; margin-bottom:6px;" data-i18n="notifyMinSeverity">Severità minima:</label>
+              <select id="notifyPrefMinSeverity" class="form-control" style="width:100%;" aria-label="Severità minima">
+                <option value="low">Low (Tutti gli eventi)</option>
+                <option value="medium">Medium (Attenzione e superiori)</option>
+                <option value="high">High (Solo eventi gravi)</option>
+                <option value="critical">Critical (Solo emergenze critiche)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Card 2: Frequenza e Orari Silenziosi (Linear / Klaviyo pattern) -->
+          <div class="panel" style="padding:18px; display:flex; flex-direction:column; justify-content:space-between;">
+            <div>
+              <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; border-bottom:1px solid var(--border); padding-bottom:10px;">
+                <i class="fa-solid fa-clock" style="color:var(--primary); font-size:16px;"></i>
+                <div>
+                  <h4 style="margin:0; font-size:14px; font-weight:600;" data-i18n="notifyCardDeliveryTitle">Frequenza e orari di recapito</h4>
+                  <span style="font-size:11px; color:var(--text-muted);" data-i18n="notifyCardDeliveryDesc">Scegli se ricevere le email istantaneamente o raggruppate in un digest periodico.</span>
+                </div>
+              </div>
+
+              <!-- Segmented Radio Cards -->
+              <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;">
+                <label style="display:flex; align-items:flex-start; gap:10px; padding:10px 12px; border-radius:4px; border:1px solid var(--border); background:var(--surface-2); cursor:pointer;">
+                  <input type="radio" name="notifyPrefMode" value="immediate" checked aria-label="Invio immediato" style="margin-top:2px;">
+                  <div>
+                    <div style="font-size:13px; font-weight:600; display:flex; align-items:center; gap:6px;">
+                      <i class="fa-solid fa-bolt" style="color:var(--warning); font-size:12px;"></i>
+                      <span data-i18n="notifyModeImmediate">Immediato (invio istantaneo)</span>
+                    </div>
+                    <div style="font-size:11px; color:var(--text-muted); margin-top:2px;" data-i18n="notifyModeImmediateDesc">Invia una notifica per ciascun evento non appena rilevato.</div>
+                  </div>
+                </label>
+
+                <label style="display:flex; align-items:flex-start; gap:10px; padding:10px 12px; border-radius:4px; border:1px solid var(--border); background:var(--surface-2); cursor:pointer;">
+                  <input type="radio" name="notifyPrefMode" value="digest" aria-label="Digest periodico" style="margin-top:2px;">
+                  <div style="flex:1;">
+                    <div style="font-size:13px; font-weight:600; display:flex; align-items:center; gap:6px;">
+                      <i class="fa-solid fa-inbox" style="color:var(--primary); font-size:12px;"></i>
+                      <span data-i18n="notifyModeDigest">Digest periodico (raggruppato)</span>
+                    </div>
+                    <div style="font-size:11px; color:var(--text-muted); margin-top:2px;" data-i18n="notifyModeDigestDesc">Raggruppa le notifiche in un unico messaggio riassuntivo.</div>
+                    <div id="notifyPrefDigestOptions" style="margin-top:8px; display:none;">
+                      <label for="notifyPrefDigestInterval" style="font-size:11px; font-weight:600; color:var(--text-muted);" data-i18n="notifyDigestInterval">Intervallo:</label>
+                      <select id="notifyPrefDigestInterval" class="form-control" style="width:auto; display:inline-block; margin-left:6px;" aria-label="Intervallo digest">
+                        <option value="15">15 minuti</option>
+                        <option value="60" selected>1 ora</option>
+                        <option value="240">4 ore</option>
+                        <option value="1440">24 ore (giornaliero)</option>
+                      </select>
+                    </div>
+                  </div>
+                </label>
+              </div>
+
+              <!-- Quiet hours callout box -->
+              <div style="padding:10px 12px; border-radius:4px; border:1px solid var(--border); background:var(--surface-3);">
+                <div style="font-size:12px; font-weight:600; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+                  <i class="fa-solid fa-moon" style="color:var(--text-muted);"></i>
+                  <span data-i18n="notifyQuietHours">Orari silenziosi</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; font-size:12px;">
+                  <span data-i18n="notifyQuietFrom">Dalle:</span>
+                  <input type="time" id="notifyPrefQuietStart" class="form-control" style="width:auto; padding:2px 6px; font-size:12px;" aria-label="Inizio orari silenziosi">
+                  <span data-i18n="notifyQuietTo">Alle:</span>
+                  <input type="time" id="notifyPrefQuietEnd" class="form-control" style="width:auto; padding:2px 6px; font-size:12px;" aria-label="Fine orari silenziosi">
+                </div>
+                <label style="display:flex; align-items:center; gap:6px; font-size:11px; cursor:pointer; margin:0;">
+                  <input type="checkbox" id="notifyPrefQuietBypass" checked aria-label="Invia critici in orario silenzioso">
+                  <span data-i18n="notifyQuietBypassCritical" style="color:var(--text);">Invia comunque eventi critici durante gli orari silenziosi</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Scope Tenant -->
+            <div style="border-top:1px solid var(--border); padding-top:12px; margin-top:14px;">
+              <h4 style="font-size:12px; font-weight:600; margin-bottom:6px;" data-i18n="notifyGroupsScope">Ambito / Tenant</h4>
+              <div id="notifyPrefGroupsContainer" style="display:flex; flex-direction:column; gap:4px; max-height:100px; overflow-y:auto; border:1px solid var(--border); padding:6px 8px; background:var(--surface-2); border-radius:4px;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sticky Action Bar -->
+        <div class="panel" style="padding:12px 20px; display:flex; justify-content:flex-end; align-items:center; gap:12px; background:var(--surface-2);">
+          <button type="button" id="btnTestNotifyPrefs" class="btn btn-secondary" style="width:auto; margin:0; display:flex; align-items:center; gap:6px;">
+            <i class="fa-solid fa-paper-plane"></i>
+            <span data-i18n="notifyTestPrefs">Invia email di prova</span>
+          </button>
+          <button type="button" id="btnSaveNotifyPrefs" class="btn btn-primary" style="width:auto; margin:0; display:flex; align-items:center; gap:6px;">
+            <i class="fa-solid fa-floppy-disk"></i>
+            <span data-i18n="notifySavePrefs">Salva preferenze</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- SOTTO-TAB 2: Regole admin -->
+      <div id="notifySubtabRules" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+          <h3 style="font-size:15px; margin:0;" data-i18n="notifyTabRules">Regole di notifica</h3>
+          <button type="button" id="btnNewNotifyRule" class="btn btn-primary btn-small" style="width:auto; margin:0;" data-i18n="notifyBtnNewRule">+ Nuova Regola</button>
+        </div>
+        <div class="panel" style="padding:0;">
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th data-i18n="notifyColName">Nome</th>
+                  <th data-i18n="notifyEventKinds">Eventi</th>
+                  <th data-i18n="notifyMinSeverity">Severità</th>
+                  <th data-i18n="notifyGroupsScope">Tenant</th>
+                  <th data-i18n="notifyRuleRecipients">Destinatari</th>
+                  <th data-i18n="notifyDeliveryMode">Modalità</th>
+                  <th data-i18n="notifyColStatus">Stato</th>
+                  <th data-i18n="notifyColActions">Azioni</th>
+                </tr>
+              </thead>
+              <tbody id="notifyRulesTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- SOTTO-TAB 3: Storico invii -->
+      <div id="notifySubtabLog" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <label for="notifyLogStatusFilter" style="font-size:13px;" data-i18n="notifyLogStatus">Stato:</label>
+            <select id="notifyLogStatusFilter" class="form-control" style="width:auto;" aria-label="Filtro stato invio">
+              <option value="" data-i18n="notifyLogAll">Tutti gli stati</option>
+              <option value="sent" data-i18n="notifyLogSent">Inviato</option>
+              <option value="failed" data-i18n="notifyLogFailed">Fallito</option>
+              <option value="suppressed" data-i18n="notifyLogSuppressed">Soppresso (anti-flood)</option>
+            </select>
+          </div>
+          <button type="button" id="btnRefreshNotifyLog" class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-i18n="notifyLogRefresh">Aggiorna storico</button>
+        </div>
+        <div class="panel" style="padding:0;">
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th data-i18n="notifyColTimestamp">Data/Ora</th>
+                  <th>Target</th>
+                  <th data-i18n="notifyColRecipient">Destinatario</th>
+                  <th data-i18n="notifyColType">Tipo</th>
+                  <th data-i18n="notifyColTitle">Titolo / Oggetto</th>
+                  <th data-i18n="notifyColStatus">Stato</th>
+                  <th data-i18n="notifyColDetails">Dettagli / Errore</th>
+                </tr>
+              </thead>
+              <tbody id="notifyLogTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="tab-settings" class="tab-content" role="tabpanel" tabindex="0">
       <div class="page-head">
         <div class="page-head-text">
@@ -3159,6 +3452,7 @@
           <span class="settings-nav-group" data-i18n="setNavMonitoring">Monitoraggio</span>
           <button type="button" data-settings-jump="setSecPing"><span data-i18n="setNavPing">Monitor ping</span></button>
           <button type="button" data-settings-jump="setSecObs"><span data-i18n="setNavObs">Telemetria</span></button>
+          <button type="button" data-settings-jump="setSecTenantTelemetry"><span data-i18n="setNavTenantTelemetry">Telemetria per tenant</span></button>
           <span class="settings-nav-group" data-i18n="setNavSystem">Sistema</span>
           <button type="button" data-settings-jump="setSecApp"><span data-i18n="setNavApp">Applicazione</span></button>
           <button type="button" data-settings-jump="cloudBackupPanel"><span data-i18n="setNavBackup">Copia offsite</span></button>
@@ -3175,7 +3469,7 @@
           Scegli la variante grafica dell'interfaccia utente. Le modifiche vengono applicate all'istante e salvate per il tuo profilo.
         </p>
         <div class="form-group" style="max-width:340px;">
-          <label for="uiVariantSelect" data-i18n="lblUiVariantSelect">Seleziona Layout / Design</label><select id="uiVariantSelect" style="padding-left:12px;">
+          <label for="uiVariantSelect" data-i18n="lblUiVariantSelect">Seleziona Layout / Design</label><select id="uiVariantSelect">
             <option value="default" data-i18n="optUiVariantDefault">Standard (SentinelNet SCADA Mimic)</option>
             <option value="design-1" data-i18n="optUiVariantDesign1">Design 1 (Impeccable Modern Blue)</option>
             <option value="design-2" data-i18n="optUiVariantDesign2">Design 2 (Impeccable Cyber Violet)</option>
@@ -3408,6 +3702,17 @@
         <div id="pingMonitorSummary" style="margin-top:10px; display:flex; gap:12px; flex-wrap:wrap;"></div>
       </section>
 
+      <!-- Ambito: telemetria per tenant -->
+      <section class="panel requires-admin set-section" id="setSecTenantTelemetry">
+        <div class="panel-head"><h3><i class="fa-solid fa-sliders" style="color:var(--primary); margin-right:6px;"></i><span data-i18n="titleTenantTelemetry">Granularità Telemetria per Tenant / Sede</span></h3></div>
+        <p class="set-desc" data-i18n="descTenantTelemetry">
+          Configura in modo granulare i servizi di telemetria (Ping ICMP, polling SNMP, polling API REST e Triage CLI programmato) per ciascun tenant / sede.
+        </p>
+        <div id="tenantTelemetryContainer" style="display:flex; flex-direction:column; gap:12px;">
+          <div class="set-loading"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
+        </div>
+      </section>
+
       <!-- Ambito: observability (telemetria) -->
       <section class="panel requires-admin set-section" id="setSecObs">
         <div class="panel-head"><h3><span data-i18n="titleObsSettings">Observability (IPFIX/sFlow/syslog/NetFlow)</span></h3></div>
@@ -3569,7 +3874,7 @@
 
       <div class="panel" style="padding:12px 16px; margin-bottom:18px; display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
         <div>
-          <label for="incStatusFilter" style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="incFilterStatus">Stato</label><select id="incStatusFilter" style="padding:8px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+          <label for="incStatusFilter" style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="incFilterStatus">Stato</label><select id="incStatusFilter">
             <option value="new" data-i18n="incOptNew">Nuovi</option>
             <option value="ack" data-i18n="incOptAck">Presi in carico</option>
             <option value="resolved" data-i18n="incOptResolved">Risolti</option>
@@ -3577,7 +3882,7 @@
           </select>
         </div>
         <div>
-          <label for="incWindowFilter" style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="incFilterWindow">Finestra</label><select id="incWindowFilter" style="padding:8px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+          <label for="incWindowFilter" style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="incFilterWindow">Finestra</label><select id="incWindowFilter">
             <option value="24h" data-i18n="optWin24h">24 ore</option>
             <option value="6h" data-i18n="optWin6h">6 ore</option>
             <option value="7d" data-i18n="optWin7d">7 giorni</option>
@@ -3631,6 +3936,9 @@
         <div class="page-head-actions">
           <span id="ifTabStatus" class="head-status"></span>
           <span id="ifUpdatedAt" class="if-updated"></span>
+          <button id="ifBtnReadErrors" class="btn btn-secondary requires-write" title="Seleziona un apparato e leggi ora i contatori di errore" data-i18n-title="ifBtnReadErrorsTitle">
+            <i class="fa-solid fa-stethoscope"></i> <span data-i18n="ifBtnReadErrors">Leggi errori ora</span>
+          </button>
           <button id="ifBtnRefresh" class="btn btn-secondary">
             <i class="fa-solid fa-rotate"></i> <span data-i18n="ifBtnRefresh">Aggiorna</span>
           </button>
@@ -3656,6 +3964,10 @@
         <button type="button" class="if-stat state-flap" data-if-filter="flapping" aria-pressed="false">
           <span class="if-stat-label" data-i18n="ifCardFlap">Instabili (Flapping)</span>
           <span class="if-stat-value" id="ifCardFlap">0</span>
+        </button>
+        <button type="button" class="if-stat state-errors" data-if-filter="errors" aria-pressed="false">
+          <span class="if-stat-label" data-i18n="ifCardErrors">Con Errori</span>
+          <span class="if-stat-value" id="ifCardErrors">0</span>
         </button>
         <button type="button" class="if-stat state-maint" data-if-filter="maint" aria-pressed="false">
           <span class="if-stat-label" data-i18n="ifCardMaint">In Manutenzione</span>
@@ -3686,6 +3998,14 @@
             <label class="if-field-label" for="ifDeviceFilter" data-i18n="ifScopeDevice">Apparato</label>
             <select id="ifDeviceFilter" class="if-select">
               <option value="all" data-i18n="ifScopeAll">Tutti</option>
+            </select>
+          </div>
+          <div class="if-field">
+            <label class="if-field-label" for="ifErrWindow" data-i18n="ifErrWindow">Finestra errori</label>
+            <select id="ifErrWindow" class="if-select">
+              <option value="1h" selected data-i18n="ifErrWin1h">Ultima ora</option>
+              <option value="24h" data-i18n="ifErrWin24h">Ultime 24 ore</option>
+              <option value="7d" data-i18n="ifErrWin7d">Ultimi 7 giorni</option>
             </select>
           </div>
           <div class="if-field if-field-grow">
@@ -3722,6 +4042,9 @@
           </div>
         </div>
       </div>
+
+      <!-- Esito dell'ultima lettura on demand dei contatori di errore -->
+      <div id="ifErrReadBox" class="panel iferr-read" hidden></div>
 
       <!-- Main Interface Table Box -->
       <div class="panel" style="padding:0; overflow-x:auto;">
@@ -3782,14 +4105,14 @@
           <h4 style="margin:0 0 12px; font-size:14px; color:var(--primary);" data-i18n="nsaScanParams"><i class="fa-solid fa-sliders"></i> Parametri di Scansione Audit</h4>
           <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
             <div>
-              <label for="auditDeviceSelect" style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="nsaTargetLabel">Apparato Target dall'Inventario</label><select id="auditDeviceSelect" style="width:100%; padding:8px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+              <label for="auditDeviceSelect" style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="nsaTargetLabel">Apparato Target dall'Inventario</label><select id="auditDeviceSelect" style="width:100%;">
                 <!-- La scansione multi-dispositivo non e' implementata: questa
                      voce e' un segnaposto, non una promessa di funzionalita'. -->
                 <option value="all" data-i18n="nsaSelectDevice">— Seleziona un dispositivo —</option>
               </select>
             </div>
             <div>
-              <label for="auditBenchmarkSelect" style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="nsaBenchmarkLabel">Benchmark / Standard di Security</label><select id="auditBenchmarkSelect" style="width:100%; padding:8px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+              <label for="auditBenchmarkSelect" style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="nsaBenchmarkLabel">Benchmark / Standard di Security</label><select id="auditBenchmarkSelect" style="width:100%;">
                 <option value="cis" data-i18n="nsaBenchCis">CIS Benchmark (FortiGate 7.4.x / Cisco IOS XE 17.x / Ubuntu 24.04 LTS)</option>
                 <option value="nist" data-i18n="nsaBenchNist">NIST SP 800-53 Rev. 5</option>
                 <option value="pci" data-i18n="nsaBenchPci">PCI-DSS v4.0 Network Requirement</option>
@@ -3819,7 +4142,7 @@
                    e il destinatario puo' non leggere la lingua di chi lo esegue.
                    Default sulla lingua della UI, sovrascrivibile. -->
               <label for="auditReportLang" style="font-size:12px; color:var(--text-muted);" data-i18n="nsaReportLangLabel">Lingua report</label>
-              <select id="auditReportLang" style="padding:6px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+              <select id="auditReportLang">
                 <option value="it">Italiano</option>
                 <option value="en">English</option>
               </select>
@@ -3848,7 +4171,7 @@
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
           <h4 style="margin:0; font-size:15px;" data-i18n="nsaResultsTitle"><i class="fa-solid fa-list-check"></i> Matrice Risultati Audit Policy</h4>
           <div style="display:flex; gap:8px;">
-            <select id="auditSevFilter" style="padding:4px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;" aria-label="Filtra per gravita" data-i18n-aria-label="ariaAuditSeverity">
+            <select id="auditSevFilter" aria-label="Filtra per gravita" data-i18n-aria-label="ariaAuditSeverity">
               <option value="all" data-i18n="nsaFilterSevAll">Filtra Severità: Tutte</option>
               <option value="critical">Critical</option>
               <option value="high">High</option>
@@ -3858,7 +4181,7 @@
             <!-- Le categorie corrispondono al campo 'category' delle regole in
                  services/netsec_audit/benchmarks.py: aggiungerne una li' senza
                  aggiungerla qui la rende non filtrabile. -->
-            <select id="auditCatFilter" style="padding:4px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;" aria-label="Filtra per categoria" data-i18n-aria-label="ariaAuditCategory">
+            <select id="auditCatFilter" aria-label="Filtra per categoria" data-i18n-aria-label="ariaAuditCategory">
               <option value="all" data-i18n="nsaFilterCatAll">Filtra Categoria: Tutte</option>
               <option value="hardening">Hardening</option>
               <option value="access rules">Access Rules</option>
@@ -3871,7 +4194,7 @@
             </select>
             <!-- Gli stati sono le costanti di services/netsec_audit/model.py;
                  UNKNOWN qui si legge "N/D", come nel badge della tabella. -->
-            <select id="auditStatusFilter" style="padding:4px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;" aria-label="Filtra per stato" data-i18n-aria-label="ariaAuditStatus">
+            <select id="auditStatusFilter" aria-label="Filtra per stato" data-i18n-aria-label="ariaAuditStatus">
               <option value="all" data-i18n="nsaFilterStatusAll">Filtra Stato: Tutti</option>
               <option value="PASS">Pass</option>
               <option value="FAIL">Fail</option>
@@ -3982,7 +4305,7 @@
               <label for="auditCustomerName" style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;" data-i18n="lblAuditCustomerName">Nome Cliente / Azienda *</label><input id="auditCustomerName" type="text" required style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;" placeholder="Es. ACME Corp S.p.A." data-i18n-placeholder="phAuditCustomerName">
             </div>
             <div class="form-group" style="margin-bottom:12px;">
-              <label for="auditModality" style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;" data-i18n="lblAuditModality">Modalita' Audit</label><select id="auditModality" style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+              <label for="auditModality" style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;" data-i18n="lblAuditModality">Modalita' Audit</label><select id="auditModality" style="width:100%;">
                 <option value="onsite" data-i18n="optAuditOnsite">On-Site (Presenza presso sede cliente)</option>
                 <option value="remote" data-i18n="optAuditRemote">Remoto (Interview / Config Review)</option>
               </select>
@@ -4032,7 +4355,7 @@
             </div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
               <div>
-                <label for="tplItemSeverity" style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;" data-i18n="lblTplItemSeverity">Gravita' di default</label><select id="tplItemSeverity" style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <label for="tplItemSeverity" style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;" data-i18n="lblTplItemSeverity">Gravita' di default</label><select id="tplItemSeverity" style="width:100%;">
                   <option value="critica" data-i18n="optTplSevCritica">Critica</option>
                   <option value="alta" data-i18n="optTplSevAlta">Alta</option>
                   <option value="media" selected data-i18n="optTplSevMedia">Media</option>
@@ -4041,7 +4364,7 @@
                 </select>
               </div>
               <div>
-                <label for="tplItemCheckKind" style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;" data-i18n="lblTplItemCheckKind">Tipo di verifica</label><select id="tplItemCheckKind" style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <label for="tplItemCheckKind" style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;" data-i18n="lblTplItemCheckKind">Tipo di verifica</label><select id="tplItemCheckKind" style="width:100%;">
                   <option value="manual" data-i18n="optTplCheckManual">Manuale</option>
                   <option value="semi" data-i18n="optTplCheckSemi">Semi-automatica</option>
                   <option value="auto" data-i18n="optTplCheckAuto">Automatica</option>
@@ -4592,7 +4915,7 @@
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label for="fgtMgrIp" data-i18n="lblFgtMgrIp">IP dispositivo</label>
-            <select id="fgtMgrIp" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+            <select id="fgtMgrIp">
               <option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>
             </select>
           </div>
@@ -4679,7 +5002,7 @@
         <label for="newUserPass" data-i18n="lblNewUserPass">Password (vuota = link via email)</label><input id="newUserPass" type="password" placeholder="••••••••" style="padding-left:12px;">
       </div>
       <div class="form-group">
-        <label for="newUserRole" data-i18n="lblNewUserRole">Ruolo</label><select id="newUserRole" data-role-select style="padding-left:12px;">
+        <label for="newUserRole" data-i18n="lblNewUserRole">Ruolo</label><select id="newUserRole" data-role-select>
           <option value="viewer" data-i18n="roleViewer">Viewer (sola lettura)</option>
           <option value="operator" data-i18n="roleOperator">Operator (operazioni)</option>
           <option value="admin" data-i18n="roleAdmin">Admin (totale)</option>
@@ -4706,7 +5029,7 @@
         <label for="inviteEmail" data-i18n="lblInviteEmail">Email</label><input id="inviteEmail" type="text" placeholder="mario.rossi@example.com" style="padding-left:12px;">
       </div>
       <div class="form-group">
-        <label for="inviteRole" data-i18n="lblNewUserRole">Ruolo</label><select id="inviteRole" data-role-select style="padding-left:12px;">
+        <label for="inviteRole" data-i18n="lblNewUserRole">Ruolo</label><select id="inviteRole" data-role-select>
           <option value="viewer" data-i18n="roleViewer">Viewer (sola lettura)</option>
           <option value="operator" data-i18n="roleOperator">Operator (operazioni)</option>
           <option value="admin" data-i18n="roleAdmin">Admin (totale)</option>
@@ -4733,7 +5056,7 @@
           <label for="newSiteName" data-i18n="lblSiteName">Nome</label><input id="newSiteName" type="text" placeholder="es. Milano" data-i18n-placeholder="phNewSiteName" style="padding-left:12px;">
         </div>
         <div class="form-group">
-          <label for="newSiteMode" data-i18n="lblSiteMode">Modalità</label><select id="newSiteMode" style="padding-left:12px;">
+          <label for="newSiteMode" data-i18n="lblSiteMode">Modalità</label><select id="newSiteMode">
             <option value="central">Central poll</option>
             <option value="agent">Site agent</option>
             <option value="jump" data-i18n="optSiteJump">Jump (bastion SSH)</option>
@@ -4752,10 +5075,10 @@
           <label for="newSiteJumpPort" data-i18n="lblJumpPort">Porta SSH bastione</label><input id="newSiteJumpPort" type="number" value="22" min="1" max="65535" style="padding-left:12px;">
         </div>
         <div class="form-group">
-          <label for="newSiteJumpIdentity" data-i18n="lblJumpIdentity">Identità (credenziali) bastione</label><select id="newSiteJumpIdentity" style="padding-left:12px;"></select>
+          <label for="newSiteJumpIdentity" data-i18n="lblJumpIdentity">Identità (credenziali) bastione</label><select id="newSiteJumpIdentity"></select>
         </div>
         <div class="form-group">
-          <label for="newSiteDeviceIdentity" data-i18n="lblDeviceIdentity">Identità di default dei dispositivi</label><select id="newSiteDeviceIdentity" style="padding-left:12px;"></select>
+          <label for="newSiteDeviceIdentity" data-i18n="lblDeviceIdentity">Identità di default dei dispositivi</label><select id="newSiteDeviceIdentity"></select>
         </div>
       </div>
 
@@ -4817,7 +5140,7 @@
       </div>
       <div class="form-group">
         <label for="editSiteMode" data-i18n="lblSiteMode">Modalità</label>
-        <select id="editSiteMode" style="padding-left:12px;">
+        <select id="editSiteMode">
           <option value="central">Central poll</option>
           <option value="agent">Site agent</option>
           <option value="jump" data-i18n="optSiteJump">Jump (bastion SSH)</option>
@@ -4918,6 +5241,122 @@
     </div>
   </div>
 
+  <!-- Modal Pianificazione Triage Automatico -->
+  <div class="modal-overlay" id="modalScheduledTriage">
+    <div class="modal" style="width: 780px; max-width: 96%; max-height: 88vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <h3 data-i18n="titleScheduledTriage"><i class="fa-solid fa-clock" style="color: var(--warning);"></i> Pianificazioni Triage Automatico</h3>
+        <i class="fa-solid fa-xmark modal-close" id="btnCloseScheduledTriage"></i>
+      </div>
+
+      <div style="display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+        <p style="color: var(--text-muted); font-size: 13px; margin: 0;" data-i18n="descScheduledTriage">
+          Pianifica scansioni automatiche periodiche per tenant o apparati specifici nel tuo perimetro.
+        </p>
+        <button type="button" class="btn btn-primary btn-small requires-write" id="btnOpenNewScheduleForm" data-i18n="btnNewSchedule">
+          <i class="fa-solid fa-plus"></i> Nuova Pianificazione
+        </button>
+      </div>
+
+      <!-- Card Form Creazione / Modifica (inizialmente nascosta) -->
+      <div id="scheduledTriageFormCard" class="panel" style="display: none; margin-bottom: 16px; padding: 14px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px;">
+        <h4 id="schedFormTitle" style="font-size: 14px; font-weight: 600; margin: 0 0 12px;" data-i18n="titleNewSchedule">Nuova Pianificazione</h4>
+        <input type="hidden" id="schedEditId" value="">
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div>
+            <label for="schedNameInput" style="display:block; font-size:12px; font-weight:500; margin-bottom:4px;" data-i18n="lblSchedName">Nome Pianificazione</label>
+            <input type="text" id="schedNameInput" class="input-control" placeholder="Es. Triage Notturno Sede 1" style="width: 100%;" required>
+          </div>
+          <div>
+            <label for="schedTenantSelect" style="display:block; font-size:12px; font-weight:500; margin-bottom:4px;" data-i18n="lblSchedTenant">Tenant / Sede</label>
+            <select id="schedTenantSelect" class="input-control" style="width:100%;">
+              <!-- popolato dinamicamente con i tenant abilitati -->
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div>
+            <label for="schedIntervalSelect" style="display:block; font-size:12px; font-weight:500; margin-bottom:4px;" data-i18n="lblSchedInterval">Frequenza Intervallo</label>
+            <select id="schedIntervalSelect" class="input-control" style="width:100%;">
+              <option value="15" data-i18n="optInterval15m">Ogni 15 minuti</option>
+              <option value="30" data-i18n="optInterval30m">Ogni 30 minuti</option>
+              <option value="60" data-i18n="optInterval1h">Ogni ora (60 min)</option>
+              <option value="120" data-i18n="optInterval2h">Ogni 2 ore</option>
+              <option value="360" selected data-i18n="optInterval6h">Ogni 6 ore</option>
+              <option value="720" data-i18n="optInterval12h">Ogni 12 ore</option>
+              <option value="1440" data-i18n="optInterval24h">Ogni 24 ore (1 giorno)</option>
+              <option value="2880" data-i18n="optInterval48h">Ogni 48 ore (2 giorni)</option>
+              <option value="10080" data-i18n="optInterval7d">Ogni 7 giorni (settimanale)</option>
+            </select>
+          </div>
+          <div>
+            <span style="display:block; font-size:12px; font-weight:500; margin-bottom:4px;" data-i18n="lblSchedDeviceScope">Ambito Apparati</span>
+            <div style="display:flex; gap:12px; margin-top:6px;">
+              <label for="schedScopeAll" style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+                <input type="radio" name="schedDeviceScope" id="schedScopeAll" value="all" checked>
+                <span data-i18n="optSchedScopeAll">Tutti gli apparati</span>
+              </label>
+              <label for="schedScopeCustom" style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+                <input type="radio" name="schedDeviceScope" id="schedScopeCustom" value="custom">
+                <span data-i18n="optSchedScopeCustom">Seleziona apparati specifici</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Selettore apparati specifici (mostrato solo se schedScopeCustom selezionato) -->
+        <div id="schedDevicePickerBox" style="display:none; margin-bottom: 12px; border: 1px solid var(--border-color); border-radius: 6px; padding: 8px; background: var(--bg-surface);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <input type="search" id="schedDeviceSearch" class="input-control" placeholder="Filtra apparati..." style="font-size:11.5px; padding:4px 8px; width:220px;" aria-label="Filtra apparati per pianificazione" data-i18n-aria-label="ariaSchedFilterDevs">
+            <div style="font-size:11.5px; color:var(--text-muted);">
+              <span id="schedSelectedDevCount">0</span> <span data-i18n="lblSchedSelectedDevs">apparati selezionati</span>
+            </div>
+          </div>
+          <div id="schedDeviceList" style="max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;">
+            <!-- popolato dinamicamente con checkbox per gli apparati del tenant selezionato -->
+          </div>
+        </div>
+
+        <div style="display:flex; gap:16px; align-items:center; margin-bottom: 14px;">
+          <label for="schedRunImmediately" style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+            <input type="checkbox" id="schedRunImmediately">
+            <span data-i18n="lblSchedRunImmediately">Esegui subito il primo triage al salvataggio</span>
+          </label>
+          <label for="schedEnabled" style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+            <input type="checkbox" id="schedEnabled" checked>
+            <span data-i18n="lblSchedEnabled">Pianificazione attiva</span>
+          </label>
+        </div>
+
+        <div style="display:flex; gap:8px; justify-content:flex-end;">
+          <button type="button" class="btn btn-secondary btn-small" id="btnCancelScheduleForm" data-i18n="btnCancel">Annulla</button>
+          <button type="button" class="btn btn-primary btn-small" id="btnSaveSchedule" data-i18n="btnSave">Salva</button>
+        </div>
+      </div>
+
+      <!-- Elenco Pianificazioni Esistenti -->
+      <div id="scheduledTriageListWrap" style="flex: 1; overflow-y: auto; min-height: 180px;">
+        <div id="scheduledTriageList" style="display: flex; flex-direction: column; gap: 8px;">
+          <!-- Schede pianificazioni popolate via JS -->
+        </div>
+      </div>
+
+      <!-- Pannello Storico Esecuzioni (aperto on demand) -->
+      <div id="scheduledTriageHistoryPanel" style="display: none; flex: 1; overflow-y: auto;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <h4 id="schedHistoryTitle" style="font-size: 13.5px; font-weight: 600; margin:0;"><i class="fa-solid fa-clock-rotate-left"></i> <span data-i18n="titleSchedHistory">Storico Esecuzioni</span></h4>
+          <button type="button" class="btn btn-secondary btn-small" id="btnCloseSchedHistory" data-i18n="btnBack">Indietro</button>
+        </div>
+        <div id="schedHistoryTableWrap">
+          <!-- tabella o lista esiti -->
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- Invio Comandi Massivo (Bulk) -->
   <div class="modal-overlay" id="bulkCommandModal">
     <div class="modal" style="width: 720px; max-width: 96%;">
@@ -4930,7 +5369,7 @@
         <!-- Colonna sinistra: selezione dispositivi -->
         <div>
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-            <label for="bulkGroupFilter" style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.5px;" data-i18n="lblBulkTargets">Dispositivi target</label><select id="bulkGroupFilter" style="font-size:11px; padding:3px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); cursor:pointer; outline:none;"></select>
+            <label for="bulkGroupFilter" style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.5px;" data-i18n="lblBulkTargets">Dispositivi target</label><select id="bulkGroupFilter"></select>
           </div>
           <label style="display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:var(--primary); cursor:pointer; padding:6px 0;">
             <input type="checkbox" id="bulkSelectAll" style="width:15px; height:15px; accent-color:var(--primary); cursor:pointer;">
@@ -4942,7 +5381,7 @@
         <!-- Colonna destra: modalità e comandi -->
         <div>
           <div class="form-group" style="margin-bottom:12px;">
-            <label for="bulkMode" data-i18n="lblBulkMode">Modalità</label><select id="bulkMode" style="padding-left:12px;">
+            <label for="bulkMode" data-i18n="lblBulkMode">Modalità</label><select id="bulkMode">
               <option value="exec" data-i18n="bulkModeExec">Operativo (show / exec)</option>
               <option value="config" data-i18n="bulkModeConfig">Configurazione (config mode)</option>
             </select>
@@ -5147,7 +5586,10 @@
     <div class="modal" style="width: 800px; max-width: 95%;">
       <div class="modal-header">
         <h3 data-i18n="titleInteractiveTerminal"><i class="fa-solid fa-terminal" style="color: var(--primary);"></i> Terminale SSH Interattivo</h3>
-        <i class="fa-solid fa-xmark modal-close" id="btnCloseCliModal"></i>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button type="button" id="btnMinimizeCliModal" class="cli-minimize" title="Riduci: la sessione resta attiva" data-i18n-title="cliMinimize" aria-label="Riduci: la sessione resta attiva" data-i18n-aria-label="cliMinimize"><i class="fa-solid fa-window-minimize"></i></button>
+          <i class="fa-solid fa-xmark modal-close" id="btnCloseCliModal"></i>
+        </div>
       </div>
       <div style="margin-bottom: 12px; font-size: 14px;">
         <span data-i18n="lblTargetDevice">Dispositivo target:</span> <strong id="cliTargetIp">10.0.0.1</strong>
@@ -5155,6 +5597,14 @@
       
       <div id="terminal-container" style="background:var(--surface-2); border-radius: 0; padding: 10px; height: 400px; border: 1px solid var(--border); overflow: hidden;"></div>
     </div>
+  </div>
+
+  <!-- Terminale SSH ridotto: la sessione resta aperta finche' non si chiude qui -->
+  <div id="cliDock" class="cli-dock" hidden>
+    <button type="button" id="btnRestoreCliModal" class="cli-dock-restore" title="Riapri il terminale" data-i18n-title="cliRestore" aria-label="Riapri il terminale" data-i18n-aria-label="cliRestore">
+      <i class="fa-solid fa-terminal"></i> <span id="cliDockIp"></span>
+    </button>
+    <button type="button" id="btnDockCloseCli" class="cli-dock-close" title="Chiudi la sessione SSH" data-i18n-title="cliCloseSession" aria-label="Chiudi la sessione SSH" data-i18n-aria-label="cliCloseSession"><i class="fa-solid fa-xmark"></i></button>
   </div>
 
   <!-- Modal: Gestione Remota Agente (Checkmk Style Control Plane) -->
@@ -5196,6 +5646,79 @@
   </div>
 
 
+  <!-- Modal: Nuova / Modifica Regola di Notifica -->
+  <div id="modalNotifyRule" class="modal-backdrop" style="display:none; position:fixed; inset:0; background:color-mix(in srgb, var(--bg) 82%, transparent); z-index:10050; align-items:center; justify-content:center;">
+    <div style="background:var(--surface-1); border:1px solid var(--border); border-radius:0; width:92%; max-width:640px; max-height:88vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:var(--shadow-float);">
+      <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
+        <h3 id="modalNotifyRuleTitle" style="margin:0; font-size:17px; display:flex; align-items:center; gap:8px;">
+          <i class="fa-solid fa-bell" style="color:var(--primary);"></i>
+          <span data-i18n="notifyBtnNewRule">Regola di Notifica</span>
+        </h3>
+        <button type="button" data-action="close-modal-notify-rule" style="border:none; background:transparent; color:var(--text-muted); font-size:17px; cursor:pointer;" aria-label="Chiudi"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="formNotifyRule" style="padding:20px; overflow-y:auto; font-size:13px; display:flex; flex-direction:column; gap:14px; margin:0;">
+        <input type="hidden" id="notifyRuleEditId" value="">
+        <div>
+          <label for="notifyRuleName" style="display:block; font-weight:600; margin-bottom:4px;" data-i18n="notifyRuleName">Nome regola:</label>
+          <input type="text" id="notifyRuleName" class="form-control" required style="width:100%;" aria-label="Nome della regola" placeholder="Es. Alert Security SOC">
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" id="notifyRuleEnabled" checked aria-label="Abilita regola">
+          <label for="notifyRuleEnabled" style="font-weight:600; cursor:pointer;" data-i18n="notifyRuleActive">Regola attiva</label>
+        </div>
+        <div>
+          <label for="notifyRuleRecipients" style="display:block; font-weight:600; margin-bottom:4px;" data-i18n="notifyRuleRecipients">Destinatari (separati da virgola):</label>
+          <input type="text" id="notifyRuleRecipients" class="form-control" required style="width:100%;" aria-label="Destinatari email" placeholder="soc@example.com, oncall@example.com">
+        </div>
+        <div>
+          <span style="display:block; font-weight:600; margin-bottom:6px;" data-i18n="notifyEventKinds">Tipi di evento:</span>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" class="notify-rule-kind" value="incident.opened" checked aria-label="Incidenti aperti"><span data-i18n="notifyKindIncidents">Incidenti</span></label>
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" class="notify-rule-kind" value="siem.alert" checked aria-label="Allerte SIEM"><span data-i18n="notifyKindSiem">SIEM</span></label>
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" class="notify-rule-kind" value="device.down" checked aria-label="Device down"><span data-i18n="notifyKindDeviceDown">Device down</span></label>
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" class="notify-rule-kind" value="device.up" checked aria-label="Device up"><span data-i18n="notifyKindDeviceUp">Device up</span></label>
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" class="notify-rule-kind" value="cve.new" checked aria-label="Nuove CVE"><span data-i18n="notifyKindCve">Nuove CVE</span></label>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div>
+            <label for="notifyRuleMinSeverity" style="display:block; font-weight:600; margin-bottom:4px;" data-i18n="notifyMinSeverity">Severità minima:</label>
+            <select id="notifyRuleMinSeverity" class="form-control" style="width:100%;" aria-label="Severità minima regola">
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
+          </div>
+          <div>
+            <label for="notifyRuleMode" style="display:block; font-weight:600; margin-bottom:4px;" data-i18n="notifyDeliveryMode">Modalità:</label>
+            <select id="notifyRuleMode" class="form-control" style="width:100%;" aria-label="Modalità di recapito regola">
+              <option value="immediate">Immediato</option>
+              <option value="digest">Digest (raggruppato)</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:4px;" data-i18n="notifyQuietHours">Orari silenziosi:</label>
+          <div style="display:flex; align-items:center; gap:8px; font-size:12px;">
+            <span data-i18n="notifyQuietFrom">Dalle:</span>
+            <input type="time" id="notifyRuleQuietStart" class="form-control" style="width:auto;" aria-label="Inizio orari silenziosi regola">
+            <span data-i18n="notifyQuietTo">Alle:</span>
+            <input type="time" id="notifyRuleQuietEnd" class="form-control" style="width:auto;" aria-label="Fine orari silenziosi regola">
+            <label style="display:flex; align-items:center; gap:6px; margin-left:10px; cursor:pointer;">
+              <input type="checkbox" id="notifyRuleQuietBypass" checked aria-label="Bypass critici in orari silenziosi regola">
+              <span data-i18n="notifyQuietBypassCritical">Bypass critici</span>
+            </label>
+          </div>
+        </div>
+      </form>
+      <div style="padding:12px 20px; border-top:1px solid var(--border); background:var(--surface-2); display:flex; justify-content:flex-end; gap:10px;">
+        <button type="button" class="btn btn-secondary btn-small" data-action="close-modal-notify-rule" style="width:auto; margin:0;" data-i18n="btnCancel">Annulla</button>
+        <button type="button" id="btnSubmitNotifyRule" class="btn btn-primary btn-small" style="width:auto; margin:0;" data-i18n="btnSave">Salva</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Floating background subnet scan progress indicator -->
   <div id="floatingScanWidget" class="floating-scan-widget" style="display:none; position:fixed; bottom:24px; right:24px; z-index:9990; background:var(--surface-3); border:1px solid var(--primary); padding:10px 14px; box-shadow:var(--shadow-float); font-size:12px; color:var(--text); align-items:center; gap:10px; cursor:pointer; user-select:none;">
     <i class="fa-solid fa-satellite-dish fa-spin" style="color:var(--primary); font-size:14px;"></i>
@@ -5221,7 +5744,7 @@
           <label for="haGroupName" data-i18n="lblHaGroupName">Nome Gruppo</label><input type="text" id="haGroupName" placeholder="es. Core-HSRP-VLAN10" data-i18n-placeholder="phHaGroupName" style="padding-left:12px;">
         </div>
         <div class="form-group" style="margin:0;">
-          <label for="haProtocol" data-i18n="lblHaProtocolType">Protocollo / Tipo HA</label><select id="haProtocol" style="padding-left:12px;">
+          <label for="haProtocol" data-i18n="lblHaProtocolType">Protocollo / Tipo HA</label><select id="haProtocol">
             <option value="HSRP">Cisco HSRP</option>
             <option value="VRRP">VRRP v2/v3</option>
             <option value="FortiGate-FGCP">FortiGate HA (FGCP)</option>

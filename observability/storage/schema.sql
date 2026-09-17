@@ -367,3 +367,120 @@ CREATE TABLE IF NOT EXISTS netsec_audit_runs (
 CREATE INDEX IF NOT EXISTS idx_netsec_audit_runs_tenant_ts
     ON netsec_audit_runs (tenant, ts DESC);
 
+
+-- 14. NOTIFICHE EMAIL (v12)
+CREATE TABLE IF NOT EXISTS notify_prefs (
+    username               TEXT PRIMARY KEY,
+    enabled                INTEGER NOT NULL DEFAULT 1,
+    kinds_json             TEXT NOT NULL DEFAULT '["incident.opened","siem.alert","device.down","device.up","cve.new"]',
+    min_severity           TEXT NOT NULL DEFAULT 'low',
+    groups_json            TEXT NOT NULL DEFAULT '[]',
+    mode                   TEXT NOT NULL DEFAULT 'immediate',
+    digest_every_min       INTEGER NOT NULL DEFAULT 60,
+    quiet_start            TEXT,
+    quiet_end              TEXT,
+    quiet_bypass_critical  INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS notify_rules (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    name                   TEXT NOT NULL,
+    enabled                INTEGER NOT NULL DEFAULT 1,
+    recipients_json        TEXT NOT NULL,
+    kinds_json             TEXT NOT NULL,
+    min_severity           TEXT NOT NULL DEFAULT 'low',
+    groups_json            TEXT NOT NULL DEFAULT '[]',
+    mode                   TEXT NOT NULL DEFAULT 'immediate',
+    digest_every_min       INTEGER NOT NULL DEFAULT 60,
+    quiet_start            TEXT,
+    quiet_end              TEXT,
+    quiet_bypass_critical  INTEGER NOT NULL DEFAULT 1,
+    created_by             TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS notify_outbox (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    target      TEXT NOT NULL,
+    kind        TEXT NOT NULL,
+    severity    TEXT NOT NULL,
+    device_ip   TEXT,
+    grp         TEXT,
+    title       TEXT NOT NULL,
+    ctx_json    TEXT NOT NULL DEFAULT '{}',
+    dedup_key   TEXT,
+    created_ts  INTEGER NOT NULL,
+    due_ts      INTEGER NOT NULL,
+    attempts    INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_notify_outbox_due ON notify_outbox(due_ts, target);
+
+CREATE TABLE IF NOT EXISTS notify_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts          INTEGER NOT NULL,
+    target      TEXT NOT NULL,
+    recipient   TEXT NOT NULL,
+    kind        TEXT NOT NULL,
+    title       TEXT NOT NULL,
+    status      TEXT NOT NULL CHECK(status IN ('sent', 'failed', 'suppressed')),
+    error       TEXT,
+    item_count  INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_notify_log_ts ON notify_log(ts DESC);
+CREATE INDEX IF NOT EXISTS idx_notify_log_target ON notify_log(target, ts DESC);
+
+CREATE TABLE IF NOT EXISTS notify_cursors (
+    source   TEXT PRIMARY KEY,
+    last_id  INTEGER NOT NULL DEFAULT 0
+);
+
+-- 15. TRIAGE PROGRAMMATO (v13): pianificazione periodica automatica del triage
+-- apparati per tenant e lista dispositivi in base ai permessi utente.
+CREATE TABLE IF NOT EXISTS scheduled_triage (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    name             TEXT NOT NULL,
+    enabled          INTEGER NOT NULL DEFAULT 1,
+    tenant           TEXT NOT NULL,
+    devices_json     TEXT,
+    interval_minutes INTEGER NOT NULL DEFAULT 360,
+    created_by       TEXT NOT NULL,
+    created_ts       REAL NOT NULL,
+    last_run_ts      REAL,
+    next_run_ts      REAL NOT NULL,
+    last_status      TEXT,
+    last_summary     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_scheduled_triage_due ON scheduled_triage(enabled, next_run_ts);
+
+CREATE TABLE IF NOT EXISTS scheduled_triage_log (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    schedule_id   INTEGER NOT NULL,
+    ts            REAL NOT NULL,
+    tenant        TEXT NOT NULL,
+    device_count  INTEGER NOT NULL,
+    success_count INTEGER NOT NULL,
+    error_count   INTEGER NOT NULL,
+    status        TEXT NOT NULL,
+    summary       TEXT,
+    FOREIGN KEY(schedule_id) REFERENCES scheduled_triage(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_scheduled_triage_log_sched ON scheduled_triage_log(schedule_id, ts DESC);
+
+
+
+-- 16. LETTURE ON DEMAND DEI CONTATORI DI ERRORE (v14): due letture a pochi
+-- secondi di distanza (SNMP se l'apparato ha una community, altrimenti SSH).
+-- Una riga per lettura, col risultato gia' calcolato per porta:
+-- {"<interfaccia>": {"counters": {...}, "delta": {...}, "status": "..."}}.
+-- Le letture periodiche restano negli eventi interface.state (metrics_json).
+CREATE TABLE IF NOT EXISTS iface_counter_reads (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts            INTEGER NOT NULL,
+    tenant        TEXT NOT NULL,
+    device_ip     TEXT NOT NULL,
+    source        TEXT NOT NULL,            -- snmp | cli
+    interval_s    INTEGER NOT NULL,
+    requested_by  TEXT,
+    result_json   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_iface_counter_reads_dev
+    ON iface_counter_reads(tenant, device_ip, ts);

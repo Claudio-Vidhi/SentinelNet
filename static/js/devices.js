@@ -2115,3 +2115,458 @@
     document.getElementById('btnCloseTriageScope')?.addEventListener('click', closeTriageScopeModal);
     document.getElementById('btnStartGroupTriageAll')?.addEventListener('click', () => startGroupTriage('all'));
 
+    // --- SCHEDULED TRIAGE (v13) ---
+    let _schedulesCache = [];
+
+    function openScheduledTriageModal() {
+        hideScheduleForm();
+        hideScheduleHistory();
+        loadAndRenderSchedules();
+        openModal('modalScheduledTriage');
+    }
+
+    function closeScheduledTriageModal() {
+        closeModal('modalScheduledTriage');
+    }
+
+    function showScheduleForm(isEdit, sched) {
+        const card = document.getElementById('scheduledTriageFormCard');
+        if (!card) return;
+        card.style.display = 'block';
+        const titleEl = document.getElementById('schedFormTitle');
+        if (titleEl) titleEl.textContent = isEdit ? tr('titleEditSchedule') : tr('titleNewSchedule');
+        const editIdEl = document.getElementById('schedEditId');
+        if (editIdEl) editIdEl.value = isEdit && sched ? String(sched.id) : '';
+        const nameEl = document.getElementById('schedNameInput');
+        if (nameEl) nameEl.value = isEdit && sched ? sched.name : '';
+        const intervalEl = document.getElementById('schedIntervalSelect');
+        if (intervalEl) intervalEl.value = isEdit && sched ? String(sched.interval_minutes) : '360';
+        const runImmEl = document.getElementById('schedRunImmediately');
+        if (runImmEl) runImmEl.checked = false;
+        const enEl = document.getElementById('schedEnabled');
+        if (enEl) enEl.checked = isEdit && sched ? Boolean(sched.enabled) : true;
+
+        // Populate tenant select
+        const tenantSelect = document.getElementById('schedTenantSelect');
+        if (tenantSelect) {
+            tenantSelect.innerHTML = '';
+            const isAdm = currentRole === 'admin' || currentRole === 'super_admin';
+            if (isAdm) {
+                const optAll = document.createElement('option');
+                optAll.value = 'all';
+                optAll.textContent = tr('optFilterAll');
+                tenantSelect.appendChild(optAll);
+            }
+            Object.keys(globalGroups).forEach(g => {
+                const opt = document.createElement('option');
+                opt.value = g;
+                opt.textContent = g;
+                tenantSelect.appendChild(opt);
+            });
+            if (isEdit && sched) {
+                tenantSelect.value = sched.tenant;
+            }
+        }
+
+        const hasSpecificDevices = isEdit && sched && Array.isArray(sched.devices) && sched.devices.length > 0;
+        const scopeAllRadio = document.getElementById('schedScopeAll');
+        const scopeCustomRadio = document.getElementById('schedScopeCustom');
+        if (hasSpecificDevices && scopeCustomRadio) {
+            scopeCustomRadio.checked = true;
+        } else if (scopeAllRadio) {
+            scopeAllRadio.checked = true;
+        }
+        updateDevicePickerVisibility();
+        renderSchedDevicePicker(hasSpecificDevices ? sched.devices : []);
+    }
+
+    function hideScheduleForm() {
+        const card = document.getElementById('scheduledTriageFormCard');
+        if (card) card.style.display = 'none';
+    }
+
+    function updateDevicePickerVisibility() {
+        const box = document.getElementById('schedDevicePickerBox');
+        const isCustom = document.getElementById('schedScopeCustom')?.checked;
+        if (box) box.style.display = isCustom ? 'block' : 'none';
+    }
+
+    function renderSchedDevicePicker(selectedIps) {
+        const list = document.getElementById('schedDeviceList');
+        if (!list) return;
+        const tenant = document.getElementById('schedTenantSelect')?.value || 'all';
+        const term = (document.getElementById('schedDeviceSearch')?.value || '').trim().toLowerCase();
+
+        let devs = globalDevices || [];
+        if (tenant !== 'all') {
+            devs = devs.filter(d => d.Group === tenant);
+        }
+
+        const selectedSet = new Set(selectedIps || []);
+        list.querySelectorAll('input[data-sched-dev-ip]:checked').forEach(cb => {
+            selectedSet.add(cb.value);
+        });
+
+        list.innerHTML = '';
+        devs.forEach(d => {
+            const label = `${d.Hostname || 'Apparato'} (${d.IP}) ${d.Vendor || ''}`;
+            if (term && !label.toLowerCase().includes(term)) return;
+            const isChecked = selectedSet.has(d.IP);
+            const row = document.createElement('label');
+            row.style.cssText = 'display:flex; align-items:center; gap:8px; font-size:12px; padding:3px 6px; border-radius:4px; cursor:pointer; background:var(--bg-card);';
+            row.innerHTML = `
+                <input type="checkbox" value="${escapeHtml(d.IP)}" ${isChecked ? 'checked' : ''} data-sched-dev-ip="1">
+                <span><strong>${escapeHtml(d.IP)}</strong> &mdash; ${escapeHtml(d.Hostname || '')} <small style="color:var(--text-muted);">(${escapeHtml(d.Group || '')})</small></span>
+            `;
+            list.appendChild(row);
+        });
+
+        updateSelectedDevCount();
+    }
+
+    function updateSelectedDevCount() {
+        const list = document.getElementById('schedDeviceList');
+        const cntEl = document.getElementById('schedSelectedDevCount');
+        if (!list || !cntEl) return;
+        const checked = list.querySelectorAll('input[data-sched-dev-ip]:checked').length;
+        cntEl.textContent = String(checked);
+    }
+
+    async function loadAndRenderSchedules() {
+        const listWrap = document.getElementById('scheduledTriageList');
+        if (!listWrap) return;
+        listWrap.innerHTML = '<div style="padding:16px; text-align:center; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i></div>';
+        try {
+            const res = await apiFetch('/api/triage/schedules');
+            if (!res || !res.ok) {
+                listWrap.innerHTML = `<div style="padding:16px; color:var(--danger); text-align:center;">${escapeHtml(tr('devUnknownError'))}</div>`;
+                return;
+            }
+            _schedulesCache = await res.json();
+            renderSchedulesList();
+        } catch {
+            listWrap.innerHTML = `<div style="padding:16px; color:var(--danger); text-align:center;">${escapeHtml(tr('devUnknownError'))}</div>`;
+        }
+    }
+
+    function renderSchedulesList() {
+        const listWrap = document.getElementById('scheduledTriageList');
+        if (!listWrap) return;
+        listWrap.innerHTML = '';
+        if (!_schedulesCache || _schedulesCache.length === 0) {
+            listWrap.innerHTML = `
+                <div style="padding: 24px; text-align: center; color: var(--text-muted); border: 1px dashed var(--border-color); border-radius: 8px;">
+                    <i class="fa-solid fa-calendar-xmark" style="font-size: 28px; margin-bottom: 8px; opacity: 0.6;"></i>
+                    <p style="margin: 0; font-size: 13px;">${escapeHtml(tr('schedNoSchedules'))}</p>
+                </div>
+            `;
+            return;
+        }
+
+        _schedulesCache.forEach(s => {
+            const card = document.createElement('div');
+            card.className = 'panel';
+            card.style.cssText = 'padding: 12px 14px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; display: flex; flex-direction: column; gap: 8px;';
+
+            const nextDate = s.next_run_ts ? new Date(s.next_run_ts * 1000).toLocaleString() : tr('schedNeverRun');
+            const lastDate = s.last_run_ts ? new Date(s.last_run_ts * 1000).toLocaleString() : tr('schedNeverRun');
+
+            let statusBadge = '';
+            if (s.last_status === 'success') {
+                statusBadge = `<span class="badge" style="background:rgba(34,197,94,0.15); color:var(--success);"><i class="fa-solid fa-check"></i> ${escapeHtml(tr('schedStatusSuccess'))}</span>`;
+            } else if (s.last_status === 'failed') {
+                statusBadge = `<span class="badge" style="background:rgba(239,68,68,0.15); color:var(--danger);"><i class="fa-solid fa-xmark"></i> ${escapeHtml(tr('schedStatusFailed'))}</span>`;
+            } else if (s.last_status === 'partial_failure') {
+                statusBadge = `<span class="badge" style="background:rgba(234,179,8,0.15); color:var(--warning);"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(tr('schedStatusPartial'))}</span>`;
+            } else if (s.last_status === 'running') {
+                statusBadge = `<span class="badge" style="background:rgba(59,130,246,0.15); color:var(--primary);"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml(tr('schedStatusRunning'))}</span>`;
+            } else {
+                statusBadge = `<span class="badge" style="background:var(--bg-surface); color:var(--text-muted);">${escapeHtml(tr('schedStatusIdle'))}</span>`;
+            }
+
+            const deviceScopeLabel = (s.devices && s.devices.length > 0)
+                ? tr('schedDevicesCount', { count: s.devices.length })
+                : tr('schedAllDevices', { count: s.tenant === 'all' ? (globalDevices || []).length : (globalDevices || []).filter(d => d.Group === s.tenant).length });
+
+            const isWrite = currentRole !== 'viewer';
+
+            card.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap;">
+                            <strong style="font-size: 13.5px;">${escapeHtml(s.name)}</strong>
+                            <span class="badge" style="background: var(--bg-surface); color: var(--text-color);"><i class="fa-solid fa-location-dot" style="color:var(--primary);"></i> ${escapeHtml(s.tenant === 'all' ? tr('optFilterAll') : s.tenant)}</span>
+                            <span class="badge" style="background: var(--bg-surface); color: var(--text-muted);"><i class="fa-solid fa-clock"></i> ${escapeHtml(tr('schedEveryInterval', { m: s.interval_minutes }))}</span>
+                            <span class="badge" style="background: var(--bg-surface); color: var(--text-muted);"><i class="fa-solid fa-network-wired"></i> ${escapeHtml(deviceScopeLabel)}</span>
+                        </div>
+                        <div style="font-size: 11.5px; color: var(--text-muted); display: flex; gap: 14px; flex-wrap: wrap;">
+                            <span>${escapeHtml(tr('schedNextRun', { time: nextDate }))}</span>
+                            <span>${escapeHtml(tr('schedLastRun', { time: lastDate }))}</span>
+                            ${s.last_summary ? `<span>&bull; ${escapeHtml(s.last_summary)}</span>` : ''}
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        ${statusBadge}
+                        <label class="switch" style="transform: scale(0.8); margin:0;" title="${escapeHtml(tr('lblSchedEnabled'))}">
+                            <input type="checkbox" ${s.enabled ? 'checked' : ''} ${!isWrite ? 'disabled' : ''} data-action="toggle-sched" data-id="${s.id}">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 6px; padding-top: 6px; border-top: 1px solid var(--border-color); margin-top: 2px;">
+                    ${isWrite ? `
+                    <button type="button" class="btn btn-secondary btn-small" data-action="run-sched" data-id="${s.id}" title="${escapeHtml(tr('schedRunNow'))}">
+                        <i class="fa-solid fa-play" style="color:var(--success);"></i> ${escapeHtml(tr('schedRunNow'))}
+                    </button>
+                    ` : ''}
+                    <button type="button" class="btn btn-secondary btn-small" data-action="history-sched" data-id="${s.id}" title="${escapeHtml(tr('schedHistory'))}">
+                        <i class="fa-solid fa-clock-rotate-left"></i> ${escapeHtml(tr('schedHistory'))}
+                    </button>
+                    ${isWrite ? `
+                    <button type="button" class="btn btn-secondary btn-small" data-action="edit-sched" data-id="${s.id}" title="${escapeHtml(tr('schedEdit'))}">
+                        <i class="fa-solid fa-pen"></i> ${escapeHtml(tr('schedEdit'))}
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-small" style="color:var(--danger);" data-action="delete-sched" data-id="${s.id}" title="${escapeHtml(tr('schedDelete'))}">
+                        <i class="fa-solid fa-trash"></i> ${escapeHtml(tr('schedDelete'))}
+                    </button>
+                    ` : ''}
+                </div>
+            `;
+            listWrap.appendChild(card);
+        });
+    }
+
+    async function saveScheduleForm() {
+        const name = (document.getElementById('schedNameInput')?.value || '').trim();
+        if (!name) {
+            alert(tr('lblSchedName'));
+            return;
+        }
+        const tenant = document.getElementById('schedTenantSelect')?.value;
+        const interval_minutes = Number(document.getElementById('schedIntervalSelect')?.value || 360);
+        const enabled = document.getElementById('schedEnabled')?.checked ?? true;
+        const run_immediately = document.getElementById('schedRunImmediately')?.checked ?? false;
+
+        let devices = null;
+        if (document.getElementById('schedScopeCustom')?.checked) {
+            const checkedBoxes = document.querySelectorAll('#schedDeviceList input[data-sched-dev-ip]:checked');
+            devices = Array.from(checkedBoxes).map(cb => cb.value);
+        }
+
+        const payload = {
+            name,
+            tenant,
+            devices,
+            interval_minutes,
+            enabled,
+            run_immediately,
+        };
+
+        const editId = document.getElementById('schedEditId')?.value;
+        const url = editId ? `/api/triage/schedules/${editId}` : '/api/triage/schedules';
+        const method = editId ? 'PUT' : 'POST';
+
+        try {
+            const res = await apiFetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (res && res.ok) {
+                showToast(editId ? tr('schedUpdatedSuccess') : tr('schedCreatedSuccess'), 'success');
+                hideScheduleForm();
+                await loadAndRenderSchedules();
+                if (run_immediately) {
+                    startTriageStatusPolling();
+                }
+            } else {
+                const err = await res.json().catch(() => ({}));
+                alert(err.detail || tr('devUnknownError'));
+            }
+        } catch {
+            alert(tr('devUnknownError'));
+        }
+    }
+
+    async function toggleScheduleEnabled(id, enabled) {
+        const sched = _schedulesCache.find(s => s.id === id);
+        if (!sched) return;
+        const payload = {
+            name: sched.name,
+            tenant: sched.tenant,
+            devices: sched.devices,
+            interval_minutes: sched.interval_minutes,
+            enabled: enabled,
+            run_immediately: false,
+        };
+        try {
+            const res = await apiFetch(`/api/triage/schedules/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (res && res.ok) {
+                sched.enabled = enabled;
+            }
+        } catch { }
+    }
+
+    async function runScheduleNow(id) {
+        try {
+            const res = await apiFetch(`/api/triage/schedules/${id}/run`, { method: 'POST' });
+            if (res && res.ok) {
+                const data = await res.json();
+                showToast(data.message || tr('schedRunTriggered'), 'info');
+                startTriageStatusPolling();
+                await loadAndRenderSchedules();
+            } else {
+                const err = await res.json().catch(() => ({}));
+                alert(err.detail || tr('devUnknownError'));
+            }
+        } catch {
+            alert(tr('devUnknownError'));
+        }
+    }
+
+    async function deleteScheduleItem(id) {
+        const sched = _schedulesCache.find(s => s.id === id);
+        const name = sched ? sched.name : String(id);
+        if (!confirm(tr('schedConfirmDelete', { name }))) return;
+
+        try {
+            const res = await apiFetch(`/api/triage/schedules/${id}`, { method: 'DELETE' });
+            if (res && res.ok) {
+                showToast(tr('schedDeletedSuccess'), 'success');
+                await loadAndRenderSchedules();
+            } else {
+                const err = await res.json().catch(() => ({}));
+                alert(err.detail || tr('devUnknownError'));
+            }
+        } catch {
+            alert(tr('devUnknownError'));
+        }
+    }
+
+    async function openScheduleHistory(id) {
+        const listWrap = document.getElementById('scheduledTriageListWrap');
+        const historyPanel = document.getElementById('scheduledTriageHistoryPanel');
+        const tableWrap = document.getElementById('schedHistoryTableWrap');
+        if (!listWrap || !historyPanel || !tableWrap) return;
+
+        listWrap.style.display = 'none';
+        hideScheduleForm();
+        historyPanel.style.display = 'block';
+        tableWrap.innerHTML = '<div style="padding:16px; text-align:center; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i></div>';
+
+        try {
+            const res = await apiFetch(`/api/triage/schedules/${id}/history`);
+            if (!res || !res.ok) {
+                tableWrap.innerHTML = `<div style="padding:16px; color:var(--danger);">${escapeHtml(tr('devUnknownError'))}</div>`;
+                return;
+            }
+            const logs = await res.json();
+            if (!logs || logs.length === 0) {
+                tableWrap.innerHTML = `<div style="padding:20px; text-align:center; color:var(--text-muted);">${escapeHtml(tr('schedNoHistory'))}</div>`;
+                return;
+            }
+            let html = `
+                <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                    <thead>
+                        <tr style="border-bottom:1px solid var(--border-color); text-align:left;">
+                            <th style="padding:6px 8px;">${escapeHtml(tr('schedColTime'))}</th>
+                            <th style="padding:6px 8px;">${escapeHtml(tr('schedColTenant'))}</th>
+                            <th style="padding:6px 8px;">${escapeHtml(tr('schedColDevices'))}</th>
+                            <th style="padding:6px 8px;">${escapeHtml(tr('schedColStatus'))}</th>
+                            <th style="padding:6px 8px;">${escapeHtml(tr('schedColSummary'))}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            logs.forEach(l => {
+                const dStr = new Date(l.ts * 1000).toLocaleString();
+                let stBadge = l.status;
+                if (l.status === 'success') {
+                    stBadge = `<span class="badge" style="background:rgba(34,197,94,0.15); color:var(--success);">${escapeHtml(tr('schedStatusSuccess'))}</span>`;
+                } else if (l.status === 'failed') {
+                    stBadge = `<span class="badge" style="background:rgba(239,68,68,0.15); color:var(--danger);">${escapeHtml(tr('schedStatusFailed'))}</span>`;
+                } else if (l.status === 'partial_failure') {
+                    stBadge = `<span class="badge" style="background:rgba(234,179,8,0.15); color:var(--warning);">${escapeHtml(tr('schedStatusPartial'))}</span>`;
+                }
+                html += `
+                    <tr style="border-bottom:1px solid var(--border-color);">
+                        <td style="padding:6px 8px; white-space:nowrap;">${escapeHtml(dStr)}</td>
+                        <td style="padding:6px 8px;">${escapeHtml(l.tenant)}</td>
+                        <td style="padding:6px 8px;">${l.device_count}</td>
+                        <td style="padding:6px 8px;">${stBadge}</td>
+                        <td style="padding:6px 8px; color:var(--text-muted);">${escapeHtml(l.summary || '')}</td>
+                    </tr>
+                `;
+            });
+            html += '</tbody></table>';
+            tableWrap.innerHTML = html;
+        } catch {
+            tableWrap.innerHTML = `<div style="padding:16px; color:var(--danger);">${escapeHtml(tr('devUnknownError'))}</div>`;
+        }
+    }
+
+    function hideScheduleHistory() {
+        const listWrap = document.getElementById('scheduledTriageListWrap');
+        const historyPanel = document.getElementById('scheduledTriageHistoryPanel');
+        if (listWrap) listWrap.style.display = 'block';
+        if (historyPanel) historyPanel.style.display = 'none';
+    }
+
+    // Scheduled Triage event listeners
+    document.getElementById('btnScheduledTriage')?.addEventListener('click', openScheduledTriageModal);
+    document.getElementById('btnCloseScheduledTriage')?.addEventListener('click', closeScheduledTriageModal);
+    document.getElementById('btnOpenNewScheduleForm')?.addEventListener('click', () => showScheduleForm(false));
+    document.getElementById('btnCancelScheduleForm')?.addEventListener('click', hideScheduleForm);
+    document.getElementById('btnSaveSchedule')?.addEventListener('click', saveScheduleForm);
+    document.getElementById('btnCloseSchedHistory')?.addEventListener('click', hideScheduleHistory);
+
+    document.getElementById('schedTenantSelect')?.addEventListener('change', () => {
+        renderSchedDevicePicker([]);
+    });
+
+    document.querySelectorAll('input[name="schedDeviceScope"]').forEach(radio => {
+        radio.addEventListener('change', updateDevicePickerVisibility);
+    });
+
+    document.getElementById('schedDeviceSearch')?.addEventListener('input', () => {
+        renderSchedDevicePicker();
+    });
+
+    document.getElementById('schedDeviceList')?.addEventListener('change', (e) => {
+        if (e.target.matches('input[data-sched-dev-ip]')) {
+            updateSelectedDevCount();
+        }
+    });
+
+    document.getElementById('scheduledTriageList')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const action = btn.dataset.action;
+        const id = Number(btn.dataset.id);
+        if (!id) return;
+
+        if (action === 'run-sched') {
+            runScheduleNow(id);
+        } else if (action === 'history-sched') {
+            openScheduleHistory(id);
+        } else if (action === 'edit-sched') {
+            const sched = _schedulesCache.find(s => s.id === id);
+            if (sched) showScheduleForm(true, sched);
+        } else if (action === 'delete-sched') {
+            deleteScheduleItem(id);
+        }
+    });
+
+    document.getElementById('scheduledTriageList')?.addEventListener('change', (e) => {
+        if (e.target.matches('input[data-action="toggle-sched"]')) {
+            const id = Number(e.target.dataset.id);
+            if (id) {
+                toggleScheduleEnabled(id, e.target.checked);
+            }
+        }
+    });
+

@@ -14,10 +14,11 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from routers.deps import require_tab
 from pydantic import BaseModel, Field
 
-from services import inventory_manager, site_manager
+from services import inventory_manager, site_manager, triage_scheduler
 from core import core_engine
 from core.ssh_pool import run_ssh
 from security.security_manager import log_audit
+from security.user_manager import is_admin
 from routers.deps import get_current_user, require_operator, user_group_scope, assert_device_allowed, assert_group_allowed
 
 router = APIRouter(tags=["Triage"])
@@ -40,10 +41,18 @@ class PingCheckRequest(BaseModel):
     group: str = "all"
     ips: Optional[List[str]] = None
 
+class ScheduledTriageRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    tenant: str = Field(..., min_length=1)
+    devices: Optional[List[str]] = None
+    interval_minutes: int = Field(360, ge=5, le=10080)
+    enabled: bool = True
+    run_immediately: bool = False
+
 
 # --- ROTTE ---
 
-def run_triage_background(devices):
+def run_triage_background(devices, on_complete=None):
     global triage_job
     with triage_lock:
         triage_job["status"] = "running"
@@ -101,6 +110,19 @@ def run_triage_background(devices):
         triage_job["current_device"] = ""
 
     core_engine.maybe_mirror_offsite()
+
+    if callable(on_complete):
+        try:
+            with triage_lock:
+                snapshot = {
+                    "status": triage_job["status"],
+                    "total": triage_job["total"],
+                    "progress": triage_job["progress"],
+                    "results": list(triage_job["results"]),
+                }
+            on_complete(snapshot)
+        except Exception as e:
+            logging.warning("triage on_complete callback failed: %s", e)
 
 @router.post("/api/run-triage", dependencies=[Depends(require_tab("tab-devices", "tab-home"))])
 def run_triage(payload: TriageRunRequest = TriageRunRequest(),
@@ -160,6 +182,77 @@ def run_triage(payload: TriageRunRequest = TriageRunRequest(),
     thread.start()
     return {"status": "running", "message": "Scansione avviata in background",
             "queued": queued}
+
+
+# --- PIANIFICAZIONI TRIAGE (v13) ---
+
+@router.get("/api/triage/schedules", dependencies=[Depends(require_tab("tab-devices"))])
+def get_triage_schedules(current_user = Depends(require_operator)):
+    return triage_scheduler.get_schedules(current_user)
+
+
+@router.post("/api/triage/schedules", dependencies=[Depends(require_tab("tab-devices"))])
+def create_triage_schedule(payload: ScheduledTriageRequest, current_user = Depends(require_operator)):
+    try:
+        return triage_scheduler.create_schedule(payload.model_dump(), current_user)
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.put("/api/triage/schedules/{schedule_id}", dependencies=[Depends(require_tab("tab-devices"))])
+def update_triage_schedule(schedule_id: int, payload: ScheduledTriageRequest, current_user = Depends(require_operator)):
+    try:
+        updated = triage_scheduler.update_schedule(schedule_id, payload.model_dump(), current_user)
+        if not updated:
+            raise HTTPException(status_code=404, detail="Pianificazione non trovata.")
+        return updated
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/api/triage/schedules/{schedule_id}", dependencies=[Depends(require_tab("tab-devices"))])
+def delete_triage_schedule(schedule_id: int, current_user = Depends(require_operator)):
+    try:
+        ok = triage_scheduler.delete_schedule(schedule_id, current_user)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Pianificazione non trovata.")
+        return {"status": "success", "message": "Pianificazione eliminata."}
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+
+@router.post("/api/triage/schedules/{schedule_id}/run", dependencies=[Depends(require_tab("tab-devices"))])
+def run_triage_schedule_now(schedule_id: int, current_user = Depends(require_operator)):
+    sched = triage_scheduler.get_schedule(schedule_id)
+    if not sched:
+        raise HTTPException(status_code=404, detail="Pianificazione non trovata.")
+    if sched["tenant"] != "all":
+        assert_group_allowed(current_user, sched["tenant"])
+    elif not is_admin(current_user.get("role")):
+        scope = user_group_scope(current_user)
+        if scope is not None:
+            raise HTTPException(status_code=403, detail="Non hai i permessi per eseguire triage su tutti i tenant.")
+    result = triage_scheduler.execute_schedule_job(schedule_id, requested_by=current_user.get("sub"))
+    return result
+
+
+@router.get("/api/triage/schedules/{schedule_id}/history", dependencies=[Depends(require_tab("tab-devices"))])
+def get_triage_schedule_history(schedule_id: int, current_user = Depends(require_operator)):
+    sched = triage_scheduler.get_schedule(schedule_id)
+    if not sched:
+        raise HTTPException(status_code=404, detail="Pianificazione non trovata.")
+    is_adm = is_admin(current_user.get("role"))
+    scope = user_group_scope(current_user)
+    username = current_user.get("username") or current_user.get("sub", "")
+    if not is_adm and sched["created_by"] != username:
+        if scope is not None and sched["tenant"] not in scope:
+            raise HTTPException(status_code=403, detail="Non hai i permessi per visualizzare lo storico di questa pianificazione.")
+    return triage_scheduler.get_schedule_history(schedule_id)
+
 
 @router.post("/api/triage/{ip}", dependencies=[Depends(require_tab("tab-devices", "tab-config"))])
 async def triage_single_device(ip: str, current_user = Depends(require_operator)):
@@ -288,4 +381,5 @@ def ping_single(ip: str, current_user = Depends(require_operator)):
     alive_txt = "non misurabile (sito jump)" if alive is None else ("raggiungibile" if alive else "non raggiungibile")
     log_audit(f"Ping singolo verso '{ip}' eseguito dall'utente '{current_user.get('sub')}': {alive_txt}.")
     return {"ip": ip, "reachable": alive}
+
 

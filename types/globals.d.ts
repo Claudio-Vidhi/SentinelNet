@@ -94,6 +94,9 @@ declare var toggleAuditSaveNameInput: any;
 declare var loadConfigDriftTab: any;
 declare var loadRoutesTab: any;
 
+// notifications.js
+declare function loadNotificationsTab(): Promise<void>;
+
 // policy-test.js
 declare var loadPolicyTestTab: any;
 declare var runPolicyTrace: any;

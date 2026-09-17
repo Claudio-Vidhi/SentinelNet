@@ -318,7 +318,30 @@ def refresh(device: dict, version_text: str = "", version_seen_at: str = "") -> 
         "total_available": total_available,
         "cves": cves,
     }
+    old_snapshot = load(device)
+    old_cve_ids = {c["id"] for c in (old_snapshot.get("cves") or []) if isinstance(c, dict) and "id" in c}
+    new_cve_ids = {c["id"] for c in cves if "id" in c}
+    added_ids = new_cve_ids - old_cve_ids
+
     _save(device, snapshot)
+
+    if old_cve_ids and added_ids:
+        for c in cves:
+            if c.get("id") in added_ids:
+                try:
+                    from services import notifications
+                    sev = str(c.get("cvss") or c.get("severity") or "medium")
+                    notifications.emit(
+                        kind="cve.new",
+                        device_ip=device.get("IP"),
+                        severity=sev,
+                        title=f"Nuova CVE {c.get('id')} per {device.get('IP')}: {c.get('summary', '')[:100]}",
+                        ctx={"cve_id": c.get("id"), "device_ip": device.get("IP"), "cvss": c.get("cvss")},
+                        dedup_key=f"cve:{device.get('IP')}:{c.get('id')}",
+                    )
+                except Exception:
+                    pass
+
     return snapshot
 
 

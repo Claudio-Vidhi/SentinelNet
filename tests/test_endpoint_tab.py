@@ -20,7 +20,7 @@ os.environ.setdefault("SENTINELNET_DATA_DIR",
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-VIEWS = ("mac", "diagnosi", "inventory")
+VIEWS = ("mac", "diagnosi", "inventory", "porterrors")
 
 
 def _read(*parts):

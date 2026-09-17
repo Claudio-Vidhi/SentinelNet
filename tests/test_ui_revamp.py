@@ -1699,9 +1699,9 @@ class TestSettingsTabRestyle(unittest.TestCase):
             "class=\"nav-item requires-admin\" data-tab=\"tab-settings\"",
             html)
         # The self-signed certificate, restart, fleet-versions, ping-monitor,
-        # observability, application, cloud-backup, SMTP and SSO panels stay
+        # observability, tenant telemetry, application, cloud-backup, SMTP and SSO panels stay
         # admin-gated in-body (9 gates: one per admin-only concern).
-        self.assertEqual(self._tab(html).count("requires-admin"), 10)
+        self.assertEqual(self._tab(html).count("requires-admin"), 11)
         self.assertIn('class="panel requires-admin set-section"', self._tab(html))
         # Every loader is also role-gated server-side of the render.
         self.assertIn("if (!isAdminRole(currentRole)) return;", html)
@@ -1712,11 +1712,11 @@ class TestSettingsTabRestyle(unittest.TestCase):
         self.assertIn('class="page-head"', tab)
         # Twelve one-concern sections: ui variant, network exposure, command
         # safety, self-signed certificate, application restart, fleet versions,
-        # ping monitor, observability, application (general), cloud backup,
+        # ping monitor, observability, tenant telemetry, application (general), cloud backup,
         # SMTP, single sign-on, session lifetime -- each with an entry in the
         # settings index.
-        self.assertEqual(tab.count('class="panel '), 13)
-        self.assertEqual(tab.count('data-settings-jump='), 13)
+        self.assertEqual(tab.count('class="panel '), 14)
+        self.assertEqual(tab.count('data-settings-jump='), 14)
         for sec in re.findall(r'data-settings-jump="([^"]+)"', tab):
             self.assertIn(f'id="{sec}"', tab)
 

@@ -33,6 +33,10 @@ _TABLES = {
     # Il modello unificato è una proiezione: senza pruning crescerebbe per
     # sempre anche dopo che le righe d'origine sono state eliminate.
     "events": ("ts", ""),
+    # Raw poller snapshots were never pruned: each SNMP/REST round added a row
+    # per device forever. Same window as the events they are projected into.
+    "api_observations": ("ts", ""),
+    "iface_counter_reads": ("ts", ""),
     # Le evidenze di un incidente seguono via ON DELETE CASCADE; qui si potano
     # quelle rimaste orfane (regola scattata, incidente mai formato).
     "evidence": ("ts", " AND incident_id IS NULL"),

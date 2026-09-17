@@ -295,6 +295,8 @@ function makeTableSortable(table) {
 function enhanceAllTables(root) {
     (root || document).querySelectorAll('table').forEach(t => {
         makeTableReorderable(t);
+        makeTableResizable(t);
+        makeTableColumnPicker(t);
         makeTableSortable(t);
     });
 }
@@ -496,7 +498,8 @@ function makeTableReorderable(table) {
         });
         th.addEventListener('dblclick', () => resetColumnOrder(table));
         th.addEventListener('keydown', e => {
-            if (!e.altKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+            // Alt+Shift+arrow belongs to column resizing.
+            if (!e.altKey || e.shiftKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
             const cells = Array.from(table.tHead.rows[0].cells);
             const fromIdx = cells.indexOf(th);
             const toIdx = fromIdx + (e.key === 'ArrowLeft' ? -1 : 1);
@@ -512,6 +515,280 @@ function makeTableReorderable(table) {
     applySavedColumnOrder(table);
 }
 
+// ===== Column widths (drag the header's right edge) for EVERY table =====
+// No handle element: many <th> carry data-i18n, and applyI18n rewrites their
+// innerHTML on language switch, which would wipe an injected child. The edge
+// is detected from the pointer position instead. The first resize freezes
+// every column to its measured width and switches the table to
+// table-layout: fixed, so one column can shrink without the browser
+// redistributing the space. Widths are stored by ORIGINAL column index
+// (data-col-orig), so they follow a column that was moved.
+const COL_RESIZE_EDGE_PX = 6;
+const COL_MIN_WIDTH_PX = 40;
+const COL_RESIZE_KEY_STEP_PX = 20;
+
+// Pure: widths with column `idx` changed by `delta`, never below the minimum.
+function resizedColumnWidths(widths, idx, delta) {
+    const out = widths.slice();
+    out[idx] = Math.max(COL_MIN_WIDTH_PX, Math.round(widths[idx] + delta));
+    return out;
+}
+
+function isValidColumnWidths(widths, colCount) {
+    return Array.isArray(widths) && widths.length === colCount
+        && widths.every(w => Number.isFinite(w) && w >= COL_MIN_WIDTH_PX);
+}
+
+function columnWidthStorageKey(table) {
+    const key = columnOrderStorageKey(table);
+    return key ? key.replace('sn.colorder.', 'sn.colwidth.') : null;
+}
+
+// widths[orig] for every column, as rendered now.
+function currentColumnWidths(table) {
+    const widths = [];
+    Array.from(table.tHead.rows[0].cells).forEach(th => {
+        widths[Number(th.getAttribute('data-col-orig'))] = Math.round(th.getBoundingClientRect().width);
+    });
+    return widths;
+}
+
+function applyColumnWidths(table, widths) {
+    Array.from(table.tHead.rows[0].cells).forEach(th => {
+        th.style.width = widths[Number(th.getAttribute('data-col-orig'))] + 'px';
+    });
+    table.style.tableLayout = 'fixed';
+    table.style.width = widths.reduce((a, b) => a + b, 0) + 'px';
+    table.dataset.colResized = '1';
+}
+
+function resetColumnWidths(table) {
+    Array.from(table.tHead.rows[0].cells).forEach(th => { th.style.width = ''; });
+    table.style.tableLayout = '';
+    table.style.width = '';
+    delete table.dataset.colResized;
+    const key = columnWidthStorageKey(table);
+    if (key) { try { localStorage.removeItem(key); } catch (e) { } }
+}
+
+function saveColumnWidths(table, widths) {
+    const key = columnWidthStorageKey(table);
+    if (!key) return;
+    try { localStorage.setItem(key, JSON.stringify(widths)); } catch (e) { }
+}
+
+function applySavedColumnWidths(table) {
+    const key = columnWidthStorageKey(table);
+    if (!key) return;
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(key)); } catch (e) { saved = null; }
+    if (isValidColumnWidths(saved, table.tHead.rows[0].cells.length)) applyColumnWidths(table, saved);
+}
+
+function isNearRightEdge(th, clientX) {
+    return th.getBoundingClientRect().right - clientX <= COL_RESIZE_EDGE_PX;
+}
+
+function makeTableResizable(table) {
+    if (!table || table.dataset.resizable === '1') return;
+    if (table.hasAttribute('data-no-resize')) return;
+    if (!table.tHead || table.tHead.rows.length !== 1) return;
+    const headCells = Array.from(table.tHead.rows[0].cells);
+    if (headCells.length < 2 || headCells.some(th => th.colSpan > 1)) return;
+    table.dataset.resizable = '1';
+    headCells.forEach((th, pos) => {
+        // Reorderable tables already set it; for the others position == original.
+        if (!th.hasAttribute('data-col-orig')) th.setAttribute('data-col-orig', String(pos));
+        /** @type {{startX: number, widths: number[], draggable: boolean} | null} */
+        let drag = null;
+        th.addEventListener('pointermove', e => {
+            if (drag) {
+                const orig = Number(th.getAttribute('data-col-orig'));
+                applyColumnWidths(table, resizedColumnWidths(drag.widths, orig, e.clientX - drag.startX));
+                return;
+            }
+            th.classList.toggle('col-resize-edge', isNearRightEdge(th, e.clientX));
+        });
+        th.addEventListener('pointerleave', () => { if (!drag) th.classList.remove('col-resize-edge'); });
+        th.addEventListener('pointerdown', e => {
+            if (e.button !== 0 || !isNearRightEdge(th, e.clientX)) return;
+            e.preventDefault();
+            drag = { startX: e.clientX, widths: currentColumnWidths(table), draggable: th.draggable };
+            // Otherwise moving the pointer starts the column-reorder drag.
+            th.draggable = false;
+            th.setPointerCapture(e.pointerId);
+        });
+        const endDrag = () => {
+            if (!drag) return;
+            th.draggable = drag.draggable;
+            drag = null;
+            th.dataset.colResizing = '1';
+            saveColumnWidths(table, currentColumnWidths(table));
+        };
+        th.addEventListener('pointerup', endDrag);
+        th.addEventListener('pointercancel', endDrag);
+        // Capture phase: runs before the sort click and the reorder dblclick.
+        th.addEventListener('click', e => {
+            if (th.dataset.colResizing !== '1') return;
+            delete th.dataset.colResizing;
+            e.stopImmediatePropagation();
+        }, true);
+        th.addEventListener('dblclick', e => {
+            if (!isNearRightEdge(th, e.clientX)) return;
+            e.stopImmediatePropagation();
+            resetColumnWidths(table);
+        }, true);
+        th.addEventListener('keydown', e => {
+            if (!e.altKey || !e.shiftKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+            e.preventDefault();
+            const orig = Number(th.getAttribute('data-col-orig'));
+            const delta = e.key === 'ArrowLeft' ? -COL_RESIZE_KEY_STEP_PX : COL_RESIZE_KEY_STEP_PX;
+            const widths = resizedColumnWidths(currentColumnWidths(table), orig, delta);
+            applyColumnWidths(table, widths);
+            saveColumnWidths(table, widths);
+        });
+    });
+    applySavedColumnWidths(table);
+}
+
+// ===== Column picker (show / hide columns) for EVERY table =====
+// A small "Columns" button in the table's <caption>: not inside a <th>, whose
+// innerHTML applyI18n rewrites. Hidden columns are stored by ORIGINAL index
+// (data-col-orig), like order and width, so they survive a reorder. A header
+// marked data-col-default-hidden starts hidden until the user chooses.
+
+function columnVisibilityStorageKey(table) {
+    const key = columnOrderStorageKey(table);
+    return key ? key.replace('sn.colorder.', 'sn.colhide.') : null;
+}
+
+// Pure: which original columns are hidden. The saved choice wins when it is
+// still valid for this table; never every column, or the table disappears.
+function hiddenColumns(saved, defaults, colCount) {
+    const valid = Array.isArray(saved)
+        && saved.every(v => Number.isInteger(v) && v >= 0 && v < colCount);
+    const hidden = valid ? saved : defaults;
+    return hidden.length >= colCount ? [] : hidden;
+}
+
+function applyColumnVisibility(table) {
+    if (!table.tHead || !table.tHead.rows.length) return;
+    const hidden = new Set(JSON.parse(table.dataset.colHidden || '[]'));
+    const head = Array.from(table.tHead.rows[0].cells);
+    const positions = [];
+    head.forEach((th, pos) => {
+        const off = hidden.has(Number(th.getAttribute('data-col-orig')));
+        th.style.display = off ? 'none' : '';
+        if (off) positions.push(pos);
+    });
+    const key = positions.join(',');
+    const rows = [];
+    (table.tBodies ? Array.from(table.tBodies) : []).forEach(tb => rows.push(...Array.from(tb.rows)));
+    if (table.tFoot) rows.push(...Array.from(table.tFoot.rows));
+    rows.forEach(row => {
+        const cells = Array.from(row.cells);
+        if (cells.length !== head.length) return;          // detail rows: untouched
+        if (row.dataset.colHiddenKey === key) return;
+        cells.forEach((c, pos) => { c.style.display = positions.includes(pos) ? 'none' : ''; });
+        row.dataset.colHiddenKey = key;
+    });
+}
+
+function makeTableColumnPicker(table) {
+    if (!table || table.dataset.colPicker === '1' || table.hasAttribute('data-no-colpicker')) return;
+    if (!table.tHead || table.tHead.rows.length !== 1) return;
+    const head = Array.from(table.tHead.rows[0].cells);
+    if (head.length < 2 || head.some(th => th.colSpan > 1)) return;
+    // Nothing to choose from when fewer than two columns have a name.
+    if (head.filter(th => (th.textContent || '').trim()).length < 2) return;
+    table.dataset.colPicker = '1';
+    head.forEach((th, pos) => {
+        if (!th.hasAttribute('data-col-orig')) th.setAttribute('data-col-orig', String(pos));
+    });
+    const defaults = head.filter(th => th.hasAttribute('data-col-default-hidden'))
+        .map(th => Number(th.getAttribute('data-col-orig')));
+    const storageKey = columnVisibilityStorageKey(table);
+    let saved = null;
+    if (storageKey) { try { saved = JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch (e) { saved = null; } }
+    table.dataset.colHidden = JSON.stringify(hiddenColumns(saved, defaults, head.length));
+
+    const cap = table.createCaption();
+    cap.classList.add('col-picker-cap');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'col-picker-btn';
+    btn.innerHTML = '<i class="fa-solid fa-table-columns"></i>';
+    btn.title = tr('tableColumnsBtn');
+    btn.setAttribute('aria-label', tr('tableColumnsBtn'));
+    btn.setAttribute('aria-haspopup', 'true');
+    btn.setAttribute('aria-expanded', 'false');
+    const menu = document.createElement('div');
+    menu.className = 'col-picker-menu';
+    menu.hidden = true;
+    cap.append(btn, menu);
+
+    const save = (hidden) => {
+        table.dataset.colHidden = JSON.stringify(hidden);
+        if (storageKey) { try { localStorage.setItem(storageKey, JSON.stringify(hidden)); } catch (e) { } }
+        applyColumnVisibility(table);
+    };
+    const open = () => {
+        const hidden = new Set(JSON.parse(table.dataset.colHidden || '[]'));
+        const cells = Array.from(table.tHead.rows[0].cells);
+        menu.textContent = '';
+        cells.forEach(th => {
+            const label = (th.textContent || '').trim();
+            if (!label) return;
+            const orig = Number(th.getAttribute('data-col-orig'));
+            const row = document.createElement('label');
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = !hidden.has(orig);
+            cb.addEventListener('change', () => {
+                const now = new Set(JSON.parse(table.dataset.colHidden || '[]'));
+                if (cb.checked) now.delete(orig); else now.add(orig);
+                if (now.size >= cells.length) { cb.checked = true; return; }
+                save([...now]);
+            });
+            row.append(cb, document.createTextNode(' ' + label));
+            menu.append(row);
+        });
+        const reset = document.createElement('button');
+        reset.type = 'button';
+        reset.className = 'col-picker-reset';
+        reset.textContent = tr('tableColumnsReset');
+        reset.addEventListener('click', () => {
+            if (storageKey) { try { localStorage.removeItem(storageKey); } catch (e) { } }
+            table.dataset.colHidden = JSON.stringify(defaults);
+            applyColumnVisibility(table);
+            open();
+        });
+        menu.append(reset);
+        // Fixed, not absolute: .table-container scrolls (overflow-x:auto), so an
+        // absolute menu was clipped inside short tables and covered the header.
+        const r = btn.getBoundingClientRect();
+        menu.style.top = r.bottom + 'px';
+        menu.style.right = (window.innerWidth - r.right) + 'px';
+        menu.hidden = false;
+        btn.setAttribute('aria-expanded', 'true');
+    };
+    btn.addEventListener('click', e => {
+        e.stopPropagation();
+        if (menu.hidden) open();
+        else { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); }
+    });
+    applyColumnVisibility(table);
+}
+
+// A click outside or Esc closes open menus (listeners: initSortableTables).
+function closeColumnPickers(except) {
+    document.querySelectorAll('.col-picker-menu:not([hidden])').forEach(m => {
+        const menu = /** @type {HTMLElement} */ (m);
+        if (except && menu.parentElement && menu.parentElement.contains(except)) return;
+        menu.hidden = true;
+        menu.parentElement?.querySelector('.col-picker-btn')?.setAttribute('aria-expanded', 'false');
+    });
+}
 // ===== Tastiera sugli elementi cliccabili non nativi =====
 // Un onclick su <tr>/<div>/<span> non e' raggiungibile da tastiera: la matrice
 // audit, le righe della topologia e la client map si aprivano solo col mouse
@@ -539,6 +816,12 @@ document.addEventListener('keydown', e => {
 });
 
 function initSortableTables() {
+    document.addEventListener('click', e => closeColumnPickers(/** @type {Node|null} */ (e.target)));
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeColumnPickers(null); });
+    // A fixed menu would drift away from its button on scroll: close it instead.
+    document.addEventListener('scroll', e => {
+        if (!(e.target instanceof Element && e.target.closest('.col-picker-menu'))) closeColumnPickers(null);
+    }, true);
     enhanceAllTables(document);
     makeClickablesFocusable(document);
     // Una passata per frame invece di una per nodo inserito: il render di una
@@ -555,6 +838,8 @@ function initSortableTables() {
             // Il riordino colonne va riapplicato PRIMA dell'ordinamento nella
             // stessa passata: entrambi operano per indice di colonna fisico.
             document.querySelectorAll('table[data-reorderable="1"]').forEach(reapplyColumnOrder);
+            // Rows re-rendered through tbody.innerHTML come back visible.
+            document.querySelectorAll('table[data-col-picker="1"]').forEach(applyColumnVisibility);
             document.querySelectorAll('table[data-sortable="1"]').forEach(reapplySort);
         });
     });
@@ -588,6 +873,63 @@ function expandIface(name) {
         if (pat.test(name)) return name.replace(pat, full);
     }
     return name;
+}
+
+// ===== Interface error counters (/api/interface-errors) =====
+// Shared by the Interfaces tab, the endpoint detail and the port occupancy
+// column, so the three say the same thing about the same port.
+// `row` is a port as the API returns it: {status, worst_class, errors,
+// discards, window, last_read}.
+// Static key maps instead of keys built by concatenation: the i18n checks
+// resolve keys from the source, and a concatenated key is invisible to them.
+const IFERR_FIELD_KEYS = {
+    in_errors: 'ifErrField_in_errors', out_errors: 'ifErrField_out_errors',
+    crc: 'ifErrField_crc', alignment: 'ifErrField_alignment', symbol: 'ifErrField_symbol',
+    runts: 'ifErrField_runts', giants: 'ifErrField_giants',
+    late_collisions: 'ifErrField_late_collisions', excessive_collisions: 'ifErrField_excessive_collisions',
+    carrier_sense: 'ifErrField_carrier_sense', mac_rx_errors: 'ifErrField_mac_rx_errors',
+    mac_tx_errors: 'ifErrField_mac_tx_errors', in_discards: 'ifErrField_in_discards',
+    out_discards: 'ifErrField_out_discards',
+};
+const IFERR_CLASS_KEYS = {
+    physical: 'ifErrClass_physical', duplex: 'ifErrClass_duplex', hardware: 'ifErrClass_hardware',
+    errors: 'ifErrClass_errors', discards: 'ifErrClass_discards',
+};
+
+function ifaceErrorsTitle(row) {
+    const parts = [];
+    const describe = (label, item) => {
+        if (!item || !item.delta) return;
+        const grown = Object.entries(item.delta).filter(([, v]) => v)
+            .map(([f, v]) => `${IFERR_FIELD_KEYS[f] ? tr(IFERR_FIELD_KEYS[f]) : f} +${v}`);
+        parts.push(`${label}: ${grown.length ? grown.join(', ') : tr('ifErrNoGrowth')}`);
+    };
+    const w = row && row.window;
+    if (w) describe(tr('ifErrWindowLabel', { h: String(Math.max(1, Math.round((w.span_s || 0) / 3600))) }), w);
+    const r = row && row.last_read;
+    if (r) {
+        describe(tr('ifErrReadLabel', {
+            src: String(r.source || '').toUpperCase(), s: String(r.interval_s || ''),
+            t: new Date((r.ts || 0) * 1000).toLocaleString(),
+        }), r);
+    }
+    if (w && w.reset) parts.push(tr('ifErrReset'));
+    return parts.join('\n');
+}
+
+function ifaceErrorsBadge(row) {
+    if (!row) return `<span class="iferr iferr-na">—</span>`;
+    const title = escapeHtml(ifaceErrorsTitle(row));
+    switch (row.status) {
+        case 'erroring':
+            return `<span class="iferr iferr-bad" title="${title}"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(String(row.errors))} · ${escapeHtml(IFERR_CLASS_KEYS[row.worst_class] ? tr(IFERR_CLASS_KEYS[row.worst_class]) : '')}</span>`;
+        case 'discards':
+            return `<span class="iferr iferr-warn" title="${title}">${escapeHtml(tr('ifErrDiscardsN', { n: String(row.discards) }))}</span>`;
+        case 'clean':
+            return `<span class="iferr iferr-ok" title="${title}"><i class="fa-solid fa-check"></i> 0</span>`;
+        default:
+            return `<span class="iferr iferr-na" title="${escapeHtml(tr('ifErrSingleSample'))}">…</span>`;
+    }
 }
 
 // Last keyboard/pointer input. Requests made within ACTIVE_WINDOW_MS of it tell
@@ -1328,6 +1670,7 @@ const LAZY_TAB_SCRIPTS = {
     'tab-policy-test': ['/static/js/policy-test.js'],
     'tab-config-drift': ['/static/js/config-drift.js'],
     'tab-routes': ['/static/js/routes-view.js'],
+    'tab-notifications': ['/static/js/notifications.js'],
 };
 
 const _lazyLoaded = new Set();
@@ -1501,6 +1844,7 @@ async function switchTab(tabId, clickedBtn, opts = {}) {
     else if (tabId === 'tab-policy-test') loadPolicyTestTab();
     else if (tabId === 'tab-config-drift') loadConfigDriftTab();
     else if (tabId === 'tab-routes') loadRoutesTab();
+    else if (tabId === 'tab-notifications' && typeof loadNotificationsTab === 'function') loadNotificationsTab();
 }
 
 // --- FLUSSI LIVE (fase 5): top talker + anomalie correlate -------------

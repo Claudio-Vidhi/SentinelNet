@@ -23,6 +23,13 @@ class TestTableColumnReorder(unittest.TestCase):
                                capture_output=True, text=True, cwd=_REPO_ROOT)
         self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
 
+    @unittest.skipUnless(shutil.which("node"), "node non disponibile")
+    def test_resize_logic_runs_against_a_stub_dom(self):
+        harness = os.path.join(_REPO_ROOT, "tests", "js", "test_table_column_resize.mjs")
+        proc = subprocess.run([shutil.which("node"), harness],
+                               capture_output=True, text=True, cwd=_REPO_ROOT)
+        self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
