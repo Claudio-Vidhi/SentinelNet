@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.40.0] - 2026-09-17
+
 ### Security
 
 - Le API della checklist di audit richiedono ora l'autenticazione (lettura) e
