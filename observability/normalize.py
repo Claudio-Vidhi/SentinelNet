@@ -325,7 +325,11 @@ def _from_api_observations(conn, now: int) -> int:
               entity_type="device",
               entity_id=r["device_ip"], device_ip=r["device_ip"],
               attrs={"kind": r["kind"]},
-              metrics={} if silent else _measured(r["summary_json"]),
+              # An interface snapshot's metrics are per port and land on the
+              # interface.state events below: copying them here too put every
+              # counter of every port on the device event of each poll.
+              metrics={} if silent or r["kind"] in _IFACE_KINDS
+              else _measured(r["summary_json"]),
               dedup_key=f"api:{r['id']}")
         if silent:
             # Il cursore avanza ANCHE qui: saltare la riga senza avanzarlo

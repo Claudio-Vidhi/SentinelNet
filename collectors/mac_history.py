@@ -302,6 +302,25 @@ def record_sightings(rows, switch_ip: str, switch_name: str = "", tenant: str = 
     return {"new": n_new, "updated": n_upd, "skipped": n_skip}
 
 
+def latest_scan_by_switch(switch_ips) -> dict:
+    """switch_ip -> timestamp of that switch's most recent MAC-table scan.
+
+    record_sightings writes every row of one switch with the same ``now``, so
+    MAX(last_seen) per switch is its last scan, and a row whose last_seen is
+    older is a position that scan no longer found.
+    """
+    ips = sorted({ip for ip in switch_ips if ip})
+    if not ips:
+        return {}
+    init_db()
+    with _connect() as c:
+        rows = c.execute(
+            "SELECT switch_ip, MAX(last_seen) AS ts FROM mac_sightings "
+            "WHERE switch_ip IN (%s) GROUP BY switch_ip" % ",".join("?" * len(ips)),
+            ips).fetchall()
+    return {r["switch_ip"]: r["ts"] for r in rows}
+
+
 # --- MACs of the switches' own interfaces (infrastructure) ---
 
 def record_switch_if_macs(rows, switch_ip: str, switch_name: str = "") -> dict:

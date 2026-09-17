@@ -82,19 +82,20 @@ class _Base(unittest.TestCase):
     def _iface_sample(self, ts, in_errors, out_errors, link="up",
                       interface="Gi1/0/5", device_ip="192.0.2.20",
                       port_vlan=None):
-        attrs = {"link": link, "admin_status": "up",
-                 "in_errors": in_errors, "out_errors": out_errors}
+        # Same split as normalize: state in attrs, counters in metrics.
+        attrs = {"link": link, "admin_status": "up"}
+        metrics = {"in_errors": in_errors, "out_errors": out_errors}
         if port_vlan is not None:
             attrs["port_vlan"] = port_vlan
         conn = db.get_observability_connection()
         conn.execute(
             """INSERT INTO events (ts, ingested_ts, tenant, source, event_type,
                                    entity_type, entity_id, device_ip, interface,
-                                   attrs_json, dedup_key)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                                   attrs_json, metrics_json, dedup_key)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
             (ts, ts, "sede-a", "snmp", "interface.state", "interface",
              f"{device_ip}:{interface}", device_ip, interface,
-             json.dumps(attrs), f"t:{device_ip}:{interface}:{ts}"))
+             json.dumps(attrs), json.dumps(metrics), f"t:{device_ip}:{interface}:{ts}"))
         conn.commit()
         conn.close()
 

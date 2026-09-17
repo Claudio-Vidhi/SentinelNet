@@ -373,7 +373,7 @@ def _interface_health(switch_ip: str, port: str) -> dict:
     conn = db.get_observability_connection()
     try:
         rows = [dict(r) for r in conn.execute(
-            """SELECT ts, interface, attrs_json FROM events
+            """SELECT ts, interface, attrs_json, metrics_json FROM events
                WHERE event_type = 'interface.state' AND device_ip = ?
                  AND ts >= ? ORDER BY ts DESC LIMIT 400""",
             (switch_ip, int(time.time()) - _IFACE_LOOKBACK_S)).fetchall()]
@@ -394,7 +394,11 @@ def _interface_health(switch_ip: str, port: str) -> dict:
     parsed = []
     for r in samples[:_IFACE_SAMPLES]:
         try:
-            parsed.append((r["ts"], json.loads(r["attrs_json"] or "{}")))
+            # Error counters are volatile, so normalize keeps them out of
+            # attrs_json: they only exist in metrics_json. Reading attrs alone
+            # never found them and no port was ever reported as erroring.
+            parsed.append((r["ts"], {**json.loads(r["attrs_json"] or "{}"),
+                                     **json.loads(r["metrics_json"] or "{}")}))
         except ValueError:
             continue
     if not parsed:

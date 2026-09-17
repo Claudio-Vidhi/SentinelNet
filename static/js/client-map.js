@@ -12,12 +12,13 @@
 // The endpoint group is one tab with three panes: Tracker MAC, Diagnosi, and Inventory.
 // Each pane loads on its first activation, not when the tab opens.
 let _locView = 'mac';
-const _locLoaded = { mac: false, diagnosi: false, inventory: false };
+const _locLoaded = { mac: false, diagnosi: false, inventory: false, porterrors: false };
 
 const LOC_LOADERS = {
     mac: () => loadMacTracker(),
     diagnosi: () => diagnosiTabShown(),
     inventory: () => loadEndpointsTab(),
+    porterrors: () => loadPortErrorsPane(),
 };
 
 // Title and description belong to the pane, not to four separate heroes.
@@ -25,6 +26,7 @@ const LOC_HEADINGS = {
     mac:        ['titleMacTracker', 'descMacTracker'],
     diagnosi:   ['titleDiagnosi', 'descDiagnosi'],
     inventory:  ['titleEndpoints', 'descEndpoints'],
+    porterrors: ['titlePortErrors', 'descPortErrors'],
 };
 
 // One tenant for the whole group, ed e' quello scelto in alto: queste tre viste
@@ -37,7 +39,7 @@ function locTenant() {
 function locSwitchView(view) {
     if (!document.getElementById('locPane-' + view)) return;
     _locView = view;
-    for (const v of ['mac', 'diagnosi', 'inventory']) {
+    for (const v of ['mac', 'diagnosi', 'inventory', 'porterrors']) {
         const pane = document.getElementById('locPane-' + v);
         const pill = document.getElementById('locPill-' + v);
         if (pane) pane.style.display = (v === view) ? '' : 'none';
@@ -509,14 +511,10 @@ function locTenantChanged() {
         const entrySection = (g) => {
             const status = g.status || 'resolved';
             const origin = g.origin || [];
-            const transit = g.transit || [];
 
             const originHtml = origin.length
                 ? origin.map((s, i) => sightRow(s, 'var(--success)', (status==='ambiguous' && i===0) ? mostRecent : '')).join('')
                 : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${tr('cmapNoAccessPortFound')}</div>`;
-            const transitHtml = transit.length
-                ? transit.map(s => sightRow(s, 'var(--warning)')).join('')
-                : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${tr('cmapNotSeenInTransit')}</div>`;
 
             // Banner di stato: chiarisce all'utente quanto è affidabile l'origine.
             let banner = '';
@@ -538,6 +536,13 @@ function locTenantChanged() {
                 banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:${tint('--warning',12)}; border:1px solid ${tint('--warning',35)}; color:var(--warning); font-size:12px; margin-bottom:14px;">
                     <i class="fa-solid fa-circle-info" style="margin-top:2px;"></i>
                     <span>${tr('cmapOnlySeenInTransit')}</span></div>`;
+            } else if (status === 'not_found') {
+                // The server only answers with the switches' latest scans: an
+                // older sighting is history, not a position.
+                const last = g.last_seen ? ' ' + tr('cmapLastSeenAt', {when: fmtMacTime(g.last_seen)}) : '';
+                banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:${tint('--warning',12)}; border:1px solid ${tint('--warning',35)}; color:var(--warning); font-size:12px; margin-bottom:14px;">
+                    <i class="fa-solid fa-clock-rotate-left" style="margin-top:2px;"></i>
+                    <span>${escapeHtml(tr('cmapNotInLatestScan') + last)}</span></div>`;
             } else if (status === 'resolved' && origin.length) {
                 banner = `<div style="display:flex; gap:8px; align-items:center; padding:10px 12px; border-radius:0; background:${tint('--success',12)}; border:1px solid ${tint('--success',35)}; color:var(--success); font-size:12px; margin-bottom:14px;">
                     <i class="fa-solid fa-circle-check"></i>
@@ -553,9 +558,7 @@ function locTenantChanged() {
 
             return `${head}${banner}
                 <h4 style="font-size:13px; margin-bottom:8px; color:var(--success);"><i class="fa-solid fa-location-crosshairs"></i> ${tr('cmapAccessLocationOrigin')}</h4>
-                ${originHtml}
-                <h4 style="font-size:13px; margin:16px 0 8px; color:var(--warning);"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${tr('cmapSeenInTransitUplinks')}</h4>
-                ${transitHtml}`;
+                ${originHtml}`;
         };
 
         // Più sedi: si dice che il MAC esiste in più reti. NON si consiglia una

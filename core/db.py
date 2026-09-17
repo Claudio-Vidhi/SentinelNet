@@ -32,7 +32,7 @@ from core import data_config
 
 logger = logging.getLogger("sentinelnet.db")
 
-SCHEMA_VERSION = 11         # schema version supported by this code (v11: incidents ack columns)
+SCHEMA_VERSION = 14         # schema version supported by this code (v14: on-demand interface counter reads)
 QUEUE_MAX = 10_000          # max payloads in the write queue
 BATCH_SIZE = 500            # max payloads per single commit
 MAX_WRITER_RESTARTS = 5     # writer restarts allowed before fail-open

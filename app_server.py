@@ -89,8 +89,16 @@ async def lifespan(app: "FastAPI"):
     from services import ping_monitor
     ping_monitor.start()
 
+    from services import notifications
+    notifications.start_notification_loop()
+
+    from services import triage_scheduler
+    triage_scheduler.start_triage_scheduler()
+
     yield
 
+    triage_scheduler.stop_triage_scheduler()
+    notifications.stop_notification_loop()
     ping_monitor.stop()
     # Close the cached SSH transports to the jump-site bastions: they are real
     # long-lived sockets kept open for the process lifetime.
@@ -173,6 +181,10 @@ app.include_router(_config_drift_router.router)
 app.include_router(_cloud_backup_router.router)
 app.include_router(_route_table_router.router)
 app.include_router(_firewall_traffic_router.router)
+from routers import notifications as _notifications_router
+from routers import interface_errors as _interface_errors_router
+app.include_router(_notifications_router.router)
+app.include_router(_interface_errors_router.router)
 
 _default_origins = f"http://localhost:{effective_port()},http://127.0.0.1:{effective_port()}"
 ALLOWED_ORIGINS = [

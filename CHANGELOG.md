@@ -18,9 +18,44 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Added
 
+- **Triage automatico programmato a intervalli orari (v13).** Pianificazione di
+  scansioni di triage periodiche automatiche con intervalli configurabili (15 min - 7 giorni),
+  selezione del tenant o apparati specifici nel proprio perimetro autorizzato
+  (`user_group_scope`), motore asincrono di background con protezione concorrenza (`triage_lock`),
+  storico dettagliato degli esiti e interfaccia completa in Inventario Dispositivi.
+- **Errori delle interfacce.** Il poller SNMP raccoglie il set completo dei
+  contatori Ethernet (errori, scarti, CRC, allineamento, simboli, collisioni
+  singole/multiple/tardive/eccessive, carrier, frame troppo lunghi, errori MAC
+  interni). Si conta la CRESCITA nella finestra, non il valore assoluto, e un
+  azzeramento dei contatori non diventa un numero negativo. Visibili nella tab
+  Interfacce (cartello "Con errori", colonna Errori, finestra 1h/24h/7d), nel
+  dettaglio endpoint (errori della porta di accesso) e in Occupazione porte; la
+  colonna Errori parte nascosta e si attiva dal selettore colonne. In
+  Localizzazione Endpoint la sotto-tab "Errori porte" elenca le porte di tutti
+  gli apparati del tenant con errori o scarti in crescita. "Leggi errori ora" fa due letture a 10 secondi di
+  distanza via SNMP o, se non risponde, via SSH: Cisco IOS/IOS-XE/NX-OS,
+  Juniper Junos, HPE ProCurve/ArubaOS-Switch, Aruba AOS-CX, FortiOS, PAN-OS
+  (schema osservabilita' v14).
+- **Telemetria per tenant.** In Impostazioni un admin senza limiti di tenant
+  attiva o disattiva, per ciascun tenant / sede, ping ICMP, polling SNMP,
+  polling API REST e triage CLI programmato. Gli apparati senza gruppo seguono "Generale".
+- **Inventario endpoint: dettaglio espandibile e anteprima porte.** Clic su un
+  endpoint espande inline la riga di dettaglio con informazioni complete (MAC,
+  switch, porta, VLAN, primo/ultimo avvistamento). Diagnosi cliente scorporata
+  su pulsante dedicato. Nel subtab Occupazione porte aggiunta colonna per
+  l'anteprima configurazione porta (prime 3 righe) con pulsante Espandi/Comprimi.
+- **Notifiche email ed engine eventi (fase 1 di 3).** Tab dedicato Notifiche
+  (`tab-notifications`) con preferenze personali (filtro severità, tipo evento,
+  tenant, modalità immediata o digest, orari silenziosi), regole globali admin
+  per liste di distribuzione, storico invii isolato per utente, schema database
+  v12 (`notify_*`), hook su ping monitor (`device.down` / `device.up` a 2 cicli
+  confermati), `cve_intel` (`cve.new`), incidenti e allerte SIEM.
 - **Colonne delle tabelle spostabili.** Trascinamento o Alt+freccia per
   riordinare le colonne di qualunque tabella; l'ordine scelto viene ricordato
   nel browser. Doppio clic su un'intestazione ripristina l'ordine originale.
+  Ogni tabella ha un selettore "Colonne da mostrare" per nascondere o
+  mostrare le colonne; la scelta resta nel browser. Anche la larghezza si regola: trascinando il bordo destro dell'intestazione
+  o con Alt+Maiusc+freccia; doppio clic sul bordo la ripristina.
 - **Email di benvenuto alla creazione dell'account.** Quando l'utente viene
   creato con password ed email riceve una mail con username, ruolo e
   indirizzo di accesso, mai la password.
@@ -37,6 +72,33 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Changed
 
+- **Terminale SSH riducibile.** Un pulsante riduce la finestra a un riquadro in
+  basso a destra: la sessione resta aperta mentre si usa il resto
+  dell'applicazione, e un clic fuori dalla finestra la riduce invece di
+  chiuderla. Aprire un secondo terminale chiude il primo: prima restavano
+  aperte entrambe le sessioni e le loro uscite finivano mescolate nella stessa
+  finestra.
+- **Errori interfacce: niente errori inventati.** Alcuni agent SNMP restituiscono
+  valori privi di senso nei contatori Ethernet di dettaglio (per esempio
+  miliardi di CRC su una porta di management con ifInErrors a 0): un contatore
+  di dettaglio piu' grande del suo totale viene scartato, le collisioni semplici
+  non contano piu' come errori (restano le tardive e le eccessive), e un
+  contatore che scende non aggiunge piu' il proprio valore come errori nuovi.
+- **Snapshot dei poller soggetti a retention.** Gli snapshot SNMP/REST grezzi
+  (`api_observations`) non venivano mai eliminati: ora seguono la stessa
+  finestra degli eventi. I contatori per porta non finiscono piu' anche
+  sull'evento dell'apparato.
+- **Diagnosi client: errori della porta di accesso.** I contatori venivano
+  cercati dove non vengono salvati, quindi nessuna porta risultava mai con
+  errori.
+- **Origine MAC basata solo sull'ultima scansione di ogni switch.** Una porta
+  su cui il client non c'e' piu' non conta come seconda porta d'accesso, e la
+  sezione "Visto in transito" e' stata rimossa: mostrava uplink datati da
+  scansioni vecchie. Se nessuna scansione recente vede il MAC viene detto, con
+  la data dell'ultimo avvistamento.
+- **Occupazione porte: configurazione su una riga.** La colonna mostra le
+  prime istruzioni della porta; la configurazione completa si apre sotto la
+  riga, a tutta larghezza.
 - **Chi ha "Tab visibili" impostate non raggiunge piu' le API delle tab
   nascoste.** Prima il campo era solo un suggerimento per l'interfaccia; ora
   e' applicato anche lato server.

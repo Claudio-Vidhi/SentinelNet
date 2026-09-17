@@ -861,6 +861,7 @@
         renderAppSettings(d);
         loadCliBlacklistSetting();
         loadPingMonitorSettings();
+        loadTenantTelemetrySettings();
         loadSessionSettings();
         loadFleetVersions();
         if (typeof loadObsSettings === 'function') {
@@ -1416,6 +1417,109 @@
             <span class="status bad"><span class="led led-danger"></span>${escapeHtml(L.lblPingMonitorDown || 'Down')}: ${s.down}</span>
             <span class="status idle"><span class="led led-discovered"></span>${escapeHtml(L.invKpiUnknownLabel || 'Non misurabile')}: ${s.unknown || 0}</span>`;
     }
+
+    // --- TELEMETRIA PER TENANT ---
+    async function loadTenantTelemetrySettings() {
+        if (!isAdminRole(currentRole)) return;
+        const container = document.getElementById('tenantTelemetryContainer');
+        if (!container) return;
+        const res = await apiFetch('/api/settings/tenant-telemetry');
+        if (!res || !res.ok) { await toastOnForbidden(res); return; }
+        const data = await res.json();
+        renderTenantTelemetryTable(data);
+    }
+
+    function renderTenantTelemetryTable(telemetryMap) {
+        const container = document.getElementById('tenantTelemetryContainer');
+        if (!container) return;
+        const tenants = Object.keys(telemetryMap);
+        if (!tenants.length) {
+            container.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${escapeHtml(tr('ttNoTenants'))}</p>`;
+            return;
+        }
+
+        let html = `<table class="ui-table" style="width:100%; font-size:13px;">
+            <thead>
+                <tr>
+                    <th>${escapeHtml(tr('ttColTenant'))}</th>
+                    <th>${escapeHtml(tr('ttColPing'))}</th>
+                    <th>${escapeHtml(tr('ttColSnmp'))}</th>
+                    <th>${escapeHtml(tr('ttColApi'))}</th>
+                    <th>${escapeHtml(tr('ttColTriage'))}</th>
+                    <th>${escapeHtml(tr('ttColAction'))}</th>
+                </tr>
+            </thead>
+            <tbody>`;
+
+        for (const t of tenants) {
+            const item = telemetryMap[t];
+            html += `<tr>
+                <td><strong>${escapeHtml(t)}</strong></td>
+                <td>
+                    <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
+                        <input type="checkbox" id="tt_ping_${escapeHtml(t)}" ${item.ping_enabled ? 'checked' : ''}> Ping
+                    </label>
+                </td>
+                <td>
+                    <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
+                        <input type="checkbox" id="tt_snmp_${escapeHtml(t)}" ${item.snmp_enabled ? 'checked' : ''}> SNMP
+                    </label>
+                </td>
+                <td>
+                    <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
+                        <input type="checkbox" id="tt_api_${escapeHtml(t)}" ${item.api_enabled ? 'checked' : ''}> API
+                    </label>
+                </td>
+                <td>
+                    <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
+                        <input type="checkbox" id="tt_triage_${escapeHtml(t)}" ${item.triage_enabled ? 'checked' : ''}> Triage
+                    </label>
+                </td>
+                <td>
+                    <button type="button" class="btn btn-secondary btn-small" data-action="save-tenant-telemetry" data-tenant="${escapeHtml(t)}" style="width:auto; margin:0;">
+                        <i class="fa-solid fa-floppy-disk"></i> ${escapeHtml(tr('ttSave'))}
+                    </button>
+                </td>
+            </tr>`;
+        }
+
+        html += `</tbody></table>`;
+        container.innerHTML = html;
+    }
+
+    async function saveTenantTelemetry(tenant) {
+        const pingEl = document.getElementById(`tt_ping_${tenant}`);
+        const snmpEl = document.getElementById(`tt_snmp_${tenant}`);
+        const apiEl = document.getElementById(`tt_api_${tenant}`);
+        const triageEl = document.getElementById(`tt_triage_${tenant}`);
+        if (!pingEl || !snmpEl || !apiEl || !triageEl) return;
+
+        const payload = {
+            ping_enabled: pingEl.checked,
+            snmp_enabled: snmpEl.checked,
+            api_enabled: apiEl.checked,
+            triage_enabled: triageEl.checked
+        };
+
+        const res = await apiFetch(`/api/settings/tenant-telemetry/${encodeURIComponent(tenant)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (res && res.ok) {
+            showToast(`${tr('ttSaved')} ${tenant}`, 'success');
+        } else {
+            showToast(`${tr('ttSaveError')} ${tenant}`, 'error');
+        }
+    }
+
+    document.getElementById('tenantTelemetryContainer')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action="save-tenant-telemetry"]');
+        if (btn && btn.dataset.tenant) {
+            saveTenantTelemetry(btn.dataset.tenant);
+        }
+    });
 
     // Delegated and static event listeners
     document.getElementById('uiVariantSelect')?.addEventListener('change', (e) => {

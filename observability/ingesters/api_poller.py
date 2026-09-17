@@ -55,6 +55,7 @@ def poll_once() -> int:
     from services import cve_intel
     from services import fortigate_service
     from services import inventory_manager
+    from services.tenant_telemetry import is_telemetry_enabled
 
     # Gli snapshot CVE si rinfrescano qui invece che in un task proprio: sono
     # un giro di richieste periodiche verso una API, cioe' esattamente questo
@@ -75,6 +76,8 @@ def poll_once() -> int:
         if ip not in tokened:
             continue
         tenant = device.get("Group") or "Generale"
+        if not is_telemetry_enabled(tenant, "api"):
+            continue
         for kind, summary in _poll_device(device):
             db.enqueue_write(
                 "INSERT INTO api_observations(ts, tenant, device_ip, kind, summary_json) "

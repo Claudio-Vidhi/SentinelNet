@@ -558,3 +558,33 @@ def generate_self_signed_cert(payload: SelfSignedCertSchema,
               + (" e impostato come certificato TLS." if applied
                  else "; SENTINELNET_SSL_* dall'ambiente, impostazioni non toccate."))
     return {**result, "applied": applied}
+
+
+class TenantTelemetrySchema(BaseModel):
+    ping_enabled: bool = True
+    snmp_enabled: bool = True
+    api_enabled: bool = True
+    triage_enabled: bool = True
+
+
+@router.get("/api/settings/tenant-telemetry", dependencies=[Depends(require_tab("tab-settings"))])
+def get_tenant_telemetry_settings(current_user = Depends(require_unscoped_admin)):
+    """Restituisce le impostazioni di telemetria (ping, snmp, api, triage) per ciascun tenant."""
+    from services.tenant_telemetry import get_tenant_telemetry
+    from services.inventory_manager import get_all_groups
+    raw_groups = get_all_groups()
+    groups = [g["name"] if isinstance(g, dict) else str(g) for g in raw_groups]
+    if "Generale" not in groups:
+        groups.insert(0, "Generale")
+    return {g: get_tenant_telemetry(g) for g in groups}
+
+
+@router.put("/api/settings/tenant-telemetry/{tenant_name}", dependencies=[Depends(require_tab("tab-settings"))])
+def set_tenant_telemetry_settings(tenant_name: str, payload: TenantTelemetrySchema, current_user = Depends(require_unscoped_admin)):
+    """Aggiorna le impostazioni di telemetria per uno specifico tenant."""
+    from services.tenant_telemetry import save_tenant_telemetry
+    from services.inventory_manager import get_all_groups
+    if tenant_name != "Generale" and tenant_name not in get_all_groups():
+        raise HTTPException(status_code=404, detail="Tenant non trovato.")
+    return save_tenant_telemetry(tenant_name, payload.model_dump(), current_user.get("sub", "admin"))
+

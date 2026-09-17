@@ -151,8 +151,18 @@ class TestMacGroupPerTenant(unittest.TestCase):
 class TestMacLocateScoping(unittest.TestCase):
     """Il parametro tenant RESTRINGE lo scoping, non lo allarga."""
 
-    def _run(self, rows, current_user, tenant=None):
+    def _run(self, rows, current_user, tenant=None, other_rows=()):
+        """other_rows: sightings of OTHER MACs, visible only to the per-switch
+        last-scan lookup (a later scan of a switch that no longer saw MAC)."""
         seen = {}
+
+        def fake_latest(ips):
+            ips = set(ips)
+            out = {}
+            for r in list(rows) + list(other_rows):
+                if r["switch_ip"] in ips:
+                    out[r["switch_ip"]] = max(out.get(r["switch_ip"], ""), r["last_seen"])
+            return out
 
         def fake_search(mac=None, tenants=None, limit=500, **kw):
             seen["tenants"] = tenants
@@ -161,6 +171,7 @@ class TestMacLocateScoping(unittest.TestCase):
             return [r for r in rows if r["tenant"] in tenants]
 
         with patch("collectors.mac_history.search", side_effect=fake_search), \
+             patch("collectors.mac_history.latest_scan_by_switch", side_effect=fake_latest), \
              patch("collectors.mac_history.reclassify_sightings"):
             out = mac_router.mac_locate(mac=MAC, tenant=tenant,
                                         current_user=current_user)
@@ -186,6 +197,30 @@ class TestMacLocateScoping(unittest.TestCase):
 
         self.assertEqual(len(out["results"]), 2)
         self.assertTrue(all(r["status"] == "resolved" for r in out["results"]))
+
+    def test_only_each_switch_last_scan_counts(self):
+        """Client moved port, and switch .2's later scan no longer saw it on
+        its uplink: the old port is not a second access position and the old
+        uplink is not transit."""
+        rows = [
+            _sighting("sede-a", "192.0.2.1", "GigabitEthernet1/0/4", "2026-08-03T15:43:21"),
+            _sighting("sede-a", "192.0.2.1", "GigabitEthernet1/0/9", "2026-08-01T10:00:00"),
+            _sighting("sede-a", "192.0.2.2", "Port-channel1", "2026-07-20T10:00:00", is_uplink=1),
+        ]
+        later_scan = [_sighting("sede-a", "192.0.2.2", "GigabitEthernet1/0/1", "2026-08-03T16:00:00")]
+        out, _ = self._run(rows, ADMIN, other_rows=later_scan)
+
+        self.assertEqual(out["status"], "resolved")
+        self.assertEqual([s["interface"] for s in out["origin"]], ["GigabitEthernet1/0/4"])
+        self.assertEqual(out["transit"], [])
+
+    def test_mac_absent_from_every_last_scan_is_not_found(self):
+        rows = [_sighting("sede-a", "192.0.2.1", "GigabitEthernet1/0/4", "2026-08-01T10:00:00")]
+        later_scan = [_sighting("sede-a", "192.0.2.1", "GigabitEthernet1/0/1", "2026-08-03T16:00:00")]
+        out, _ = self._run(rows, ADMIN, other_rows=later_scan)
+
+        self.assertEqual(out["status"], "not_found")
+        self.assertEqual(out["last_seen"], "2026-08-01T10:00:00")
 
     def test_tenant_fuori_scope_e_403(self):
         with patch("routers.mac.user_group_scope", return_value={"sede-a"}):
@@ -232,6 +267,29 @@ class TestMacLocateFrontend(unittest.TestCase):
         rete. Su piu' tenant non c'entra niente: ogni posizione e' vera."""
         self.assertIn("in questo tenant", self.src)
         self.assertIn("non sono alternative fra cui scegliere", self.src)
+
+
+
+
+class TestLatestScanBySwitch(unittest.TestCase):
+    """One scan writes all rows of a switch with the same timestamp, so the
+    max last_seen per switch is that switch's last scan."""
+
+    def test_latest_scan_is_per_switch(self):
+        from collectors import mac_history
+        mac_history.init_db()
+        with mac_history._connect() as c:
+            c.execute("DELETE FROM mac_sightings WHERE switch_ip IN ('192.0.2.11', '192.0.2.12')")
+        with patch.object(mac_history, "_now_iso", return_value="2026-08-01T10:00:00"):
+            mac_history.record_sightings([{"mac": MAC, "interface": "Gi1/0/1"}], "192.0.2.11")
+            mac_history.record_sightings([{"mac": MAC, "interface": "Gi1/0/2"}], "192.0.2.12")
+        with patch.object(mac_history, "_now_iso", return_value="2026-08-02T10:00:00"):
+            mac_history.record_sightings([{"mac": "aa:bb:cc:dd:ee:02", "interface": "Gi1/0/3"}], "192.0.2.11")
+
+        latest = mac_history.latest_scan_by_switch(["192.0.2.11", "192.0.2.12", ""])
+        self.assertEqual(latest, {"192.0.2.11": "2026-08-02T10:00:00",
+                                  "192.0.2.12": "2026-08-01T10:00:00"})
+        self.assertEqual(mac_history.latest_scan_by_switch([]), {})
 
 
 if __name__ == "__main__":

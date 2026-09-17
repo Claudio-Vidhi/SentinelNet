@@ -127,7 +127,15 @@ class TestRouterParity(unittest.TestCase):
                     "/api/firewall-traffic",
                     # Correlazione CVE: snapshot per apparato, vista
                     # prioritizzata e resoconto per tenant.
-                    "/api/cve")
+                    "/api/cve",
+                    # Notifiche email (preferenze, regole admin, log).
+                    "/api/notifications",
+                    # Triage automatico programmato.
+                    "/api/triage/schedules",
+                    # Telemetria per tenant.
+                    "/api/settings/tenant-telemetry",
+                    # Contatori di errore delle interfacce (finestra e on demand).
+                    "/api/interface-errors")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
@@ -283,10 +291,25 @@ class TestFullParity(unittest.TestCase):
                     "/api/settings/session",
                     # Correlazione CVE: snapshot per apparato, vista
                     # prioritizzata e resoconto per tenant.
-                    "/api/cve")
+                    "/api/cve",
+                    # Notifiche email (preferenze, regole admin, log).
+                    "/api/notifications",
+                    # Triage automatico programmato.
+                    "/api/triage/schedules",
+                    # Telemetria per tenant.
+                    "/api/settings/tenant-telemetry",
+                    # Contatori di errore delle interfacce (finestra e on demand).
+                    "/api/interface-errors")
     # Come NEW_PREFIXES, filtra entrambi i lati: copre anche FortigatePreviewSchema,
     # rimosso insieme al flag di preview /api/settings/fortigate-preview.
     NEW_SCHEMAS = ("DeviceSiteSchema", "GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "ReportPdfSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection", "AgentBackupSchema", "AgentStatusItemSchema", "AgentStatusSchema", "FortigatePreviewSchema",
+                    # Schemi delle notifiche email (regole admin e preferenze).
+                    "UserPrefsSchema", "RuleSchema",
+                    # Triage automatico programmato.
+                    "ScheduledTriageRequest",
+                    # Telemetria per tenant.
+                    "TenantTelemetrySchema",
+                    "InterfaceErrorsReadSchema",
                    # Traceroute dall'apparato per l'analisi di percorso: unica
                    # rotta di questa vista che manda pacchetti, in POST sotto
                    # /api/routes (gia' in NEW_PREFIXES).

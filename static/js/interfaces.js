@@ -18,6 +18,13 @@
     let _deviceFilter = 'all';
     let _searchQuery = '';
     let _minTransitions = 4;
+    // Error counters from /api/interface-errors, keyed by tenant|ip|port.
+    /** @type {Map<string, any>} */
+    let _errByKey = new Map();
+    let _errWindow = '1h';
+    const _errKey = (tenant, ip, iface) =>
+        `${tenant || ''}|${ip || ''}|${expandIface(iface).toLowerCase()}`;
+    const _errOf = (r) => _errByKey.get(_errKey(r.tenant, r.device_ip, r.interface));
     /** @type {Set<number>} */
     const _selectedIndices = new Set();
 
@@ -107,13 +114,16 @@
         setVal('ifCardMaint', c.maint);
         setVal('ifCardByDesign', c.by_design);
         setVal('ifCardUnknown', c.unknown);
+        setVal('ifCardErrors', _ifaces.filter(r => (_errOf(r) || {}).status === 'erroring').length);
     };
 
     const _getFilteredRows = () => {
         const q = _searchQuery.trim().toLowerCase();
         return _ifaces.filter(r => {
             const state = _computeState(r);
-            if (_activeFilter !== 'all' && state !== _activeFilter) {
+            if (_activeFilter === 'errors') {
+                if ((_errOf(r) || {}).status !== 'erroring') return false;
+            } else if (_activeFilter !== 'all' && state !== _activeFilter) {
                 return false;
             }
             if (_tenantFilter !== 'all' && (r.tenant || '') !== _tenantFilter) {
@@ -172,6 +182,7 @@
                     <th>${_ifL('ifThInterface')}</th>
                     <th>${_ifL('ifThStatus')}</th>
                     <th class="if-col-num">${_ifL('ifThFlaps')}</th>
+                    <th data-col-default-hidden="1">${_ifL('ifThErrors')}</th>
                     <th>${_ifL('ifThExpected')}</th>
                     <th>${_ifL('ifThUntil')}</th>
                     <th>${_ifL('ifThReason')}</th>
@@ -225,6 +236,7 @@
                     </div>
                 </td>
                 <td class="if-col-num ${flapClass}">${r.transitions || 0}</td>
+                <td>${ifaceErrorsBadge(_errOf(r))}</td>
                 <td>
                     <label class="if-declare">
                         <input type="checkbox" id="ifx-chk-${r._idx}" ${r.suppressed ? 'checked' : ''}>
@@ -385,6 +397,71 @@
         await saveBulkSelection();
     };
 
+    // Errors are a second, independent request: a user without the counters
+    // (no SNMP anywhere) still gets the link-state view, with "—" in the column.
+    const _loadErrors = async () => {
+        _errByKey = new Map();
+        try {
+            const res = await apiFetch('/api/interface-errors?window=' + encodeURIComponent(_errWindow));
+            if (!res || !res.ok) return;
+            const data = await res.json();
+            (data.ports || []).forEach(p => _errByKey.set(_errKey(p.tenant, p.device_ip, p.interface), p));
+        } catch (err) {
+            console.error('[interfaces] errors', err);
+        }
+    };
+
+    const _renderReadResult = (d) => {
+        const box = document.getElementById('ifErrReadBox');
+        if (!box) return;
+        const bad = (d.ports || []).filter(p => p.status === 'erroring' || p.status === 'discards');
+        const names = {};
+        _ifaces.forEach(r => { if (r.hostname) names[r.device_ip] = r.hostname; });
+        box.hidden = false;
+        box.innerHTML = `<div class="iferr-read-head">
+                <strong>${_ifEsc(_ifL('ifErrReadDone')
+                    .replace('{device}', names[d.device_ip] || d.device_ip)
+                    .replace('{src}', String(d.source || '').toUpperCase())
+                    .replace('{s}', String(d.interval_s)))}</strong>
+                <span class="if-quiet">${_ifEsc(_ifL('ifErrReadSummary')
+                    .replace('{bad}', String(bad.length)).replace('{n}', String((d.ports || []).length)))}</span>
+            </div>
+            ${bad.length ? `<div class="iferr-read-list">${bad.map(p => `<span class="iferr-read-item">
+                <span class="if-port">${_ifEsc(p.interface)}</span>${ifaceErrorsBadge({ ...p, last_read: { ...p, ts: d.ts, source: d.source, interval_s: d.interval_s } })}</span>`).join('')}</div>`
+            : `<div class="if-quiet">${_ifEsc(_ifL('ifErrReadClean'))}</div>`}`;
+    };
+
+    const readErrorsNow = async () => {
+        if (_deviceFilter === 'all') {
+            showToast(_ifL('ifErrPickDevice'), 'warning');
+            return;
+        }
+        const row = _ifaces.find(r => r.device_ip === _deviceFilter) || {};
+        const btn = /** @type {HTMLButtonElement|null} */ (document.getElementById('ifBtnReadErrors'));
+        if (btn) btn.disabled = true;
+        const statusBox = document.getElementById('ifTabStatus');
+        if (statusBox) statusBox.textContent = _ifL('ifErrReading');
+        try {
+            const res = await apiFetch('/api/interface-errors/read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ device: _deviceFilter, tenant: row.tenant || null }),
+            });
+            if (!res || !res.ok) {
+                const body = res ? await res.json().catch(() => ({})) : {};
+                showToast(body.detail || _ifL('ifErrReadFailed'), 'error');
+                return;
+            }
+            _renderReadResult(await res.json());
+            await _loadErrors();
+            _renderCards();
+            _renderTable();
+        } finally {
+            if (btn) btn.disabled = false;
+            if (statusBox) statusBox.textContent = '';
+        }
+    };
+
     const loadInterfacesTab = async () => {
         const root = document.getElementById('tab-interfaces');
         if (!root) return;
@@ -392,7 +469,7 @@
         if (statusBox) statusBox.textContent = '';
 
         try {
-            const res = await apiFetch('/api/incidents/interfaces');
+            const [res] = await Promise.all([apiFetch('/api/incidents/interfaces'), _loadErrors()]);
             if (!res || !res.ok) {
                 const tableBox = document.getElementById('ifacesTableBox');
                 if (tableBox) tableBox.innerHTML = `<div style="color:var(--danger); font-size:12px; padding:16px;">${_ifL('ifErrLoad')}</div>`;
@@ -485,6 +562,14 @@
         // Refresh Button
         document.getElementById('ifBtnRefresh')?.addEventListener('click', () => {
             loadInterfacesTab();
+        });
+        document.getElementById('ifBtnReadErrors')?.addEventListener('click', readErrorsNow);
+        const errWindow = /** @type {HTMLSelectElement|null} */ (document.getElementById('ifErrWindow'));
+        errWindow?.addEventListener('change', async () => {
+            _errWindow = errWindow.value;
+            await _loadErrors();
+            _renderCards();
+            _renderTable();
         });
 
         // Bulk Actions

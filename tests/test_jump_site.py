@@ -1417,7 +1417,7 @@ class WsTerminalTokenIsNotInTheUrl(unittest.TestCase):
         js = pathlib.Path(__file__).resolve().parents[1] / "static" / "js" / "cli-modal.js"
         src = js.read_text(encoding="utf-8")
         self.assertNotIn("ws-terminal/${ip}?", src)
-        self.assertIn("wsSocket.send(ws_token)", src)
+        self.assertIn("socket.send(ws_token)", src)
 
 
 if __name__ == "__main__":
