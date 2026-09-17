@@ -1,4 +1,5 @@
-// -*- coding: utf-8 -*-
+// Copyright 2026 Claudio Vidhi
+// SPDX-License-Identifier: AGPL-3.0-only
 // Gestione frontend Notifiche Email (preferenze personali, regole admin, storico invii).
 
 let _notifySubtab = 'prefs';
