@@ -267,8 +267,11 @@
     let caConvLastPreview = '';
 
     function caRenderConvert(L) {
-        const vendorOpts = (sel) => ['fortios', 'panos'].map(v =>
-            `<option value="${v}" ${v === sel ? 'selected' : ''}>${v === 'fortios' ? 'FortiGate (FortiOS)' : 'Palo Alto (PAN-OS)'}</option>`).join('');
+        // Supported pairs: fortios<->panos, ios->c1200 (ai/config_analyzer.py CONVERSIONS).
+        const vendorNames = { fortios: 'FortiGate (FortiOS)', panos: 'Palo Alto (PAN-OS)',
+                              ios: 'Cisco IOS (2960/9200)', c1200: 'Cisco Catalyst 1200' };
+        const vendorOpts = (list, sel) => list.map(v =>
+            `<option value="${v}" ${v === sel ? 'selected' : ''}>${vendorNames[v]}</option>`).join('');
         return `<div style="border:1px solid var(--border); border-radius:0; background:var(--surface-2); padding:16px;">
             <div style="font-weight:600; margin-bottom:12px;"><i class="fa-solid fa-right-left" style="color:var(--primary); margin-right:8px;"></i>${escapeHtml(L.caConvertTitle)}</div>
             <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
@@ -276,10 +279,12 @@
                     ${caDeviceOptions(L, 'caConvDevicePick')}
                 </select>
                 <label style="font-size:12px; color:var(--text-muted);">${escapeHtml(L.caConvSource)}</label>
-                <select id="caConvSource" style="padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts('fortios')}</select>
+                <select id="caConvSource" style="padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts(['fortios', 'panos', 'ios'], 'fortios')}</select>
                 <label style="font-size:12px; color:var(--text-muted);">${escapeHtml(L.caConvTarget)}</label>
-                <select id="caConvTarget" style="padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts('panos')}</select>
+                <select id="caConvTarget" style="padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts(['fortios', 'panos', 'c1200'], 'panos')}</select>
                 <button class="btn btn-primary btn-small" style="width:auto; margin:0;" data-action="ca-convert-preview"><i class="fa-solid fa-eye"></i> ${escapeHtml(L.caConvPreviewBtn)}</button>
+                <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-action="ca-conv-upload"><i class="fa-solid fa-upload"></i> ${escapeHtml(L.caConvUploadBtn)}</button>
+                <input type="file" id="caConvFile" accept=".txt,.cfg,.conf,.log" style="display:none;" aria-label="${escapeHtml(L.caConvUploadAria)}">
             </div>
             <textarea id="caConvText" rows="8" placeholder="${escapeHtml(L.caConvTextPh)}" style="width:100%; font-family:var(--font-code); font-size:12px; border:1px solid var(--border); border-radius:0; background:var(--surface-3); color:var(--text); padding:10px; resize:vertical;"></textarea>
             <div id="caConvResult" style="margin-top:12px;"></div>
@@ -295,11 +300,36 @@
         const srcSel = document.getElementById('caConvSource');
         const tgtSel = document.getElementById('caConvTarget');
         if (dev && srcSel && tgtSel) {
-            const src = dev.config_type === 'panos' ? 'panos' : 'fortios';
-            srcSel.value = src;
-            tgtSel.value = src === 'fortios' ? 'panos' : 'fortios';
+            const pair = { panos: ['panos', 'fortios'], fortios: ['fortios', 'panos'],
+                           ios: ['ios', 'c1200'] }[dev.config_type || 'ios'] || ['fortios', 'panos'];
+            srcSel.value = pair[0];
+            tgtSel.value = pair[1];
         }
         caConvertPreview(true);
+    }
+
+    // A local 'show run' / config file: read it in the browser into the
+    // textarea, then preview it like pasted text (no new endpoint needed).
+    async function caConvLoadFile(input) {
+        const file = input.files && input.files[0];
+        input.value = '';  // same file picked twice must still fire 'change'
+        if (!file) return;
+        const out = document.getElementById('caConvResult');
+        if (file.size > 5 * 1024 * 1024) {
+            if (out) out.innerHTML = `<div style="color:var(--danger); font-size:13px;">${escapeHtml(tr('caConvFileTooBig'))}</div>`;
+            return;
+        }
+        const text = await file.text();
+        document.getElementById('caConvText').value = text;
+        const devSel = document.getElementById('caConvDevice');
+        if (devSel) devSel.value = '';
+        // An IOS running-config has 'hostname' and 'interface' at column 0,
+        // FortiOS/PAN-OS never do: preselect the IOS -> C1200 pair.
+        if (/^hostname\s/m.test(text) && /^interface\s/m.test(text)) {
+            document.getElementById('caConvSource').value = 'ios';
+            document.getElementById('caConvTarget').value = 'c1200';
+        }
+        caConvertPreview();
     }
 
     async function caConvertPreview(useIp) {
@@ -979,6 +1009,8 @@
     document.getElementById('caResults')?.addEventListener('change', (e) => {
         if (e.target.id === 'caConvDevice') {
             caConvPickDevice();
+        } else if (e.target.id === 'caConvFile') {
+            caConvLoadFile(e.target);
         }
     });
 
@@ -996,6 +1028,10 @@
         const convPrevBtn = e.target.closest('[data-action="ca-convert-preview"]');
         if (convPrevBtn) {
             caConvertPreview();
+            return;
+        }
+        if (e.target.closest('[data-action="ca-conv-upload"]')) {
+            document.getElementById('caConvFile')?.click();
             return;
         }
         const convDlBtn = e.target.closest('[data-action="ca-conv-download"]');
