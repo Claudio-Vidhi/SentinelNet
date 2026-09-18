@@ -10,6 +10,19 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-09-18
+
+### Added
+
+- Config Converter: conversione da switch Cisco IOS (Catalyst 2960/9200) a
+  Cisco Catalyst 1200. Copre hostname, VLAN, porte access/trunk (numerazione
+  piatta `GigabitEthernetN`), port-channel e LACP, SVI, default gateway,
+  SNMP, utenti locali e SSH. Cio' che il C1200 non supporta (porte uplink,
+  membri di stack, ACL, line vty, BPDU guard) resta nell'elenco dei non
+  mappati con il motivo.
+- Config Converter: caricamento di un file `show run` / config (.txt) da
+  convertire; una config IOS preseleziona la coppia IOS -> Catalyst 1200.
+
 ## [0.40.1] - 2026-09-17
 
 ### Security
