@@ -985,10 +985,8 @@ def analyze_wlc_config(content):
     return result
 
 
-# --- Config Converter (deterministic, FortiOS <-> PAN-OS) -------------------
-# Firewall vendors only: the converter no longer handles switches/routers (ios).
-
-FIREWALL_VENDORS = {'fortios', 'panos'}
+# --- Config Converter (deterministic: FortiOS <-> PAN-OS, IOS -> C1200) -----
+# The supported pairs are the keys of CONVERSIONS, next to convert_config.
 
 
 def _prefix_to_mask(pfx):
@@ -1266,22 +1264,31 @@ def _convert_panos_to_fortios(source_text):
     return mapped, unmapped
 
 
+def _convert_ios_to_c1200(source_text):
+    # Lazy: ai.convert_c1200 imports this module for the IOS parsing primitives.
+    from ai.convert_c1200 import convert_ios_to_c1200
+    return convert_ios_to_c1200(source_text)
+
+
+CONVERSIONS = {
+    ('fortios', 'panos'): _convert_fortios_to_panos,
+    ('panos', 'fortios'): _convert_panos_to_fortios,
+    ('ios', 'c1200'): _convert_ios_to_c1200,
+}
+
+
 def convert_config(source_text, source_vendor, target_vendor):
-    """Deterministic conversion (preview) between firewall vendors
-    ('fortios', 'panos'). Returns {"mapped": [{source,target,note}],
-    "unmapped": [str], "preview_text": str}. Raises ValueError on invalid
-    or matching vendors."""
+    """Deterministic conversion (preview) between the vendor pairs in
+    CONVERSIONS. Returns {"mapped": [{source,target,note}],
+    "unmapped": [str], "preview_text": str}. Raises ValueError on an
+    unsupported pair."""
     sv = (source_vendor or '').strip().lower()
     tv = (target_vendor or '').strip().lower()
-    if sv not in FIREWALL_VENDORS or tv not in FIREWALL_VENDORS:
-        raise ValueError(f"Vendor non supportato: {source_vendor!r} -> {target_vendor!r} "
-                         f"(solo vendor firewall supportati: {sorted(FIREWALL_VENDORS)})")
-    if sv == tv:
-        raise ValueError("Vendor sorgente e destinazione coincidono.")
-    if sv == 'fortios':
-        mapped, unmapped = _convert_fortios_to_panos(source_text or '')
-    else:
-        mapped, unmapped = _convert_panos_to_fortios(source_text or '')
+    fn = CONVERSIONS.get((sv, tv))
+    if fn is None:
+        raise ValueError(f"Conversione non supportata: {source_vendor!r} -> {target_vendor!r} "
+                         f"(supportate: {', '.join(f'{a}->{b}' for a, b in CONVERSIONS)})")
+    mapped, unmapped = fn(source_text or '')
     comment = '#' if tv == 'fortios' else '!'
     header = (f"{comment} Anteprima conversione {sv} -> {tv} — SentinelNet Config Converter\n"
               f"{comment} {len(mapped)} elementi mappati, {len(unmapped)} non mappati "
