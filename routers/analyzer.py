@@ -33,9 +33,13 @@ class ConvertSchema(BaseModel):
     target: str  # 'fortios' | 'panos'
 
 
-def _load_backup_text(ip: str, current_user) -> str:
+def _load_backup_text(ip: str, current_user, with_show_vlan: bool = False) -> str:
     """Testo del backup piu' recente per l'IP, con scoping per sede.
-    404 se il dispositivo non esiste o non ha backup."""
+    404 se il dispositivo non esiste o non ha backup.
+
+    ``with_show_vlan`` keeps the '--- SHOW VLAN ---' section after the
+    running-config: on a VTP client that section is the only place the VLAN
+    list lives, and the IOS -> C1200 converter needs it (no VTP on a C1200)."""
     device = assert_device_allowed(current_user, ip)
     if device is None:
         raise HTTPException(status_code=404, detail=f"Dispositivo {ip} non trovato.")
@@ -47,7 +51,12 @@ def _load_backup_text(ip: str, current_user) -> str:
             content = fh.read()
     except OSError:
         raise HTTPException(status_code=500, detail=f"Impossibile leggere il backup di {ip}.")
-    return "\n".join(config_analyzer.running_config(content))
+    text = "\n".join(config_analyzer.running_config(content))
+    if with_show_vlan:
+        m = re.search(r'--- SHOW VLAN ---.*?(?=\n--- [A-Z]|\n===|\Z)', content, re.S | re.I)
+        if m:
+            text += "\n\n" + m.group(0)
+    return text
 
 
 # --- ENDPOINTS ---
@@ -86,7 +95,8 @@ def config_analyzer_convert(payload: ConvertSchema, current_user = Depends(get_c
     text = payload.text
     from_ip = False
     if not text and payload.ip:
-        text = _load_backup_text(payload.ip, current_user)
+        text = _load_backup_text(payload.ip, current_user,
+                                 with_show_vlan=payload.source == 'ios')
         from_ip = True
     if not text:
         raise HTTPException(status_code=400, detail="Fornire 'text' oppure 'ip'.")

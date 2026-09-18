@@ -266,6 +266,26 @@
 
     let caConvLastPreview = '';
 
+    // Example configs shipped in static/samples/ (synthetic data, same network).
+    const CA_CONV_SAMPLES = [
+        { vendor: 'ios', file: 'ios-2960-9200-sample.txt' },
+        { vendor: 'c1200', file: 'c1200-sample.txt' },
+    ];
+
+    // Same button twice hides the sample; another sample replaces it.
+    async function caConvReadSample(file) {
+        const pre = document.getElementById('caConvSampleView');
+        if (!pre) return;
+        if (!pre.hidden && pre.dataset.sample === file) {
+            pre.hidden = true;
+            return;
+        }
+        const res = await fetch(`/static/samples/${file}`);
+        pre.textContent = res.ok ? await res.text() : `HTTP ${res.status}`;
+        pre.dataset.sample = file;
+        pre.hidden = false;
+    }
+
     function caRenderConvert(L) {
         // Supported pairs: fortios<->panos, ios->c1200 (ai/config_analyzer.py CONVERSIONS).
         const vendorNames = { fortios: 'FortiGate (FortiOS)', panos: 'Palo Alto (PAN-OS)',
@@ -287,6 +307,14 @@
                 <input type="file" id="caConvFile" accept=".txt,.cfg,.conf,.log" style="display:none;" aria-label="${escapeHtml(L.caConvUploadAria)}">
             </div>
             <textarea id="caConvText" rows="8" placeholder="${escapeHtml(L.caConvTextPh)}" style="width:100%; font-family:var(--font-code); font-size:12px; border:1px solid var(--border); border-radius:0; background:var(--surface-3); color:var(--text); padding:10px; resize:vertical;"></textarea>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px; font-size:12px;">
+                <span style="color:var(--text-muted);">${escapeHtml(L.caConvSamples)}:</span>
+                ${CA_CONV_SAMPLES.map(s => `
+                <span style="font-weight:600;">${vendorNames[s.vendor]}</span>
+                <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-action="ca-conv-sample-read" data-sample="${s.file}"><i class="fa-solid fa-file-lines"></i> ${escapeHtml(L.caConvSampleRead)}</button>
+                <a class="btn btn-secondary btn-small" style="width:auto; margin:0;" href="/static/samples/${s.file}" download="${s.file}"><i class="fa-solid fa-download"></i> ${escapeHtml(L.caConvSampleDownload)}</a>`).join('')}
+            </div>
+            <pre id="caConvSampleView" hidden style="white-space:pre-wrap; font-family:var(--font-code); font-size:11px; background:var(--surface-3); border:1px solid var(--border); border-radius:0; padding:10px; margin-top:8px; max-height:360px; overflow:auto;"></pre>
             <div id="caConvResult" style="margin-top:12px;"></div>
         </div>`;
     }
@@ -1028,6 +1056,11 @@
         const convPrevBtn = e.target.closest('[data-action="ca-convert-preview"]');
         if (convPrevBtn) {
             caConvertPreview();
+            return;
+        }
+        const sampleBtn = e.target.closest('[data-action="ca-conv-sample-read"]');
+        if (sampleBtn) {
+            caConvReadSample(sampleBtn.dataset.sample);
             return;
         }
         if (e.target.closest('[data-action="ca-conv-upload"]')) {
