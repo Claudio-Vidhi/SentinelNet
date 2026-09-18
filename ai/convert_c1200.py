@@ -29,11 +29,15 @@ _IF_HANDLED = ('description', 'switchport', 'ip address', 'no ip address',
 
 _IF_NAME = re.compile(r'([a-z-]+?)\s*(\d[\d/]*)$')
 
-# 'show run' framing captured by a terminal log: not configuration, never
-# worth an "unmapped" entry. The last alternative is the CLI prompt (SW1#sh run).
+# 'show run' / 'show vlan' framing captured by a terminal log: not
+# configuration, never worth an "unmapped" entry. '!' opens a comment line,
+# '\S+#' is the CLI prompt
+# (SW1#sh run); a line starting with a digit or dashes is a show-vlan table
+# row (the VLANs themselves are read by _vtp_vlans).
 _SHOW_RUN_NOISE = re.compile(
     r'(building configuration|current configuration|last configuration change'
-    r'|nvram config last updated|version \S+$|end$|\S+#)', re.I)
+    r'|nvram config last updated|version \S+$|end$|!|\S+#|\d|-{3}'
+    r'|vlan\s+(name|type)\s|primary\s+secondary)', re.I)
 
 
 def _c1200_ifname(name):
@@ -270,13 +274,19 @@ def convert_ios_to_c1200(source_text):
     unmapped = []
     globals_out = set()
     used_ports = set()
+    defined = set()     # VLANs with a 'vlan N' block in the running-config
+    referenced = set()  # VLANs the ports and SVIs actually use
 
     for header, body in config_analyzer._iter_blocks(lines):
         if _SHOW_RUN_NOISE.match(header.strip()):
             continue
         raw = "\n".join([header] + body)
+        m = re.match(r'vlan\s+(\d[\d,\-]*)\s*$', header.strip(), re.I)
+        if m:
+            defined.update(config_analyzer._expand_vlan_list(m.group(1)))
         if header.strip().lower().startswith('interface '):
             iface = config_analyzer._parse_interface(header, body)
+            referenced.update(_vlans_used(iface))
             out, note = _convert_interface(body, iface, globals_out)
             # 2960 Fa0/1 and Gi0/1 both land on GigabitEthernet1.
             if out and out[0].startswith('interface GigabitEthernet'):
@@ -294,7 +304,67 @@ def convert_ios_to_c1200(source_text):
             continue
         mapped.append({"source": raw, "target": "\n".join(out), "note": note})
 
+    vtp = _vtp_vlans(source_text or '', defined, referenced)
+    if vtp:
+        mapped.insert(0, vtp)
+
     for extra in sorted(globals_out):
         mapped.append({"source": '', "target": extra,
                        "note": "comando globale richiesto dal Catalyst 1200"})
     return mapped, unmapped
+
+
+# VLAN 1 and the IOS reserved 1002-1005 exist by themselves.
+_BUILTIN_VLANS = {1, 1002, 1003, 1004, 1005}
+
+
+def _vlans_used(iface):
+    """VLAN IDs an interface depends on. A trunk allowed list covering most of
+    the range ('1-4094') is not a real selection and is ignored."""
+    ids = [iface["access_vlan"], iface["trunk_native"], iface["voice_vlan"]]
+    if iface["mode"] == 'svi':
+        ids.append(iface["name"][4:].strip())
+    allowed = config_analyzer._expand_vlan_list(iface["trunk_allowed"])
+    if len(allowed) <= 256:
+        ids += allowed
+    return {int(v) for v in ids if v and v.isdigit()}
+
+
+def _compact(ids):
+    """[3, 8, 9, 31, 32] -> '3,8-9,31-32' (the form C1200 'vlan' accepts)."""
+    ids = sorted(ids)
+    runs = [[ids[0], ids[0]]]
+    for v in ids[1:]:
+        if v == runs[-1][1] + 1:
+            runs[-1][1] = v
+        else:
+            runs.append([v, v])
+    return ','.join(str(a) if a == b else f"{a}-{b}" for a, b in runs)
+
+
+def _vtp_vlans(source_text, defined, referenced):
+    """On a VTP client the VLANs are not in the running-config, and the C1200
+    has no VTP: they must be created by hand. Builds that block from the VLANs
+    the ports use plus any 'show vlan [brief]' output in the text (the
+    '--- SHOW VLAN ---' backup section or a pasted command output), which
+    also carries the names. Returns a mapped entry or None."""
+    names = {}
+    for ln in source_text.splitlines():
+        row = config_analyzer._SHOW_VLAN_ROW.match(ln.strip())
+        if row:
+            names[int(row.group(1))] = row.group(2)
+    defined_ids = {int(v) for v in defined}
+    missing = (referenced | set(names)) - defined_ids - _BUILTIN_VLANS
+    if not missing:
+        return None
+    lines = ["vlan database", f"vlan {_compact(missing)}", "exit"]
+    for v in sorted(missing):
+        # 'VLAN0010' is the IOS default name, not worth carrying over.
+        if names.get(v) and names[v].upper() != f"VLAN{v:04d}":
+            lines += [f"interface vlan {v}", f"name {names[v][:32]}", "exit"]
+    note = ("VLAN assenti dal running-config (VTP): il Catalyst 1200 non supporta VTP, "
+            "vanno create localmente")
+    if not names:
+        note += ("; nomi non disponibili: aggiungere l'output di 'show vlan brief' "
+                 "al file per importarli")
+    return {"source": '', "target": "\n".join(lines), "note": note}

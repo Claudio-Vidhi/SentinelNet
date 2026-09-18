@@ -1,0 +1,77 @@
+!
+! SentinelNet - sample Cisco Catalyst 1200 running-config
+! Example data only (RFC 5737 addresses, generic names).
+! Same network as ios-2960-9200-sample.txt, in C1200 syntax.
+! Differences from IOS worth knowing:
+!  - ports are numbered flat: GigabitEthernet1..24 (not Gi1/0/1)
+!  - VLANs are created in 'vlan database' and named under 'interface vlan N'
+!  - access is the default port mode: only 'switchport access vlan' shows
+!  - when typing the config, close each interface with 'exit'
+!    (the SMB CLI does not drop back to global mode like IOS)
+!  - no VTP, no PAgP (LACP is 'mode auto'), no per-port BPDU guard
+!  - LAG members take their L2 settings from the port-channel
+!  - 'snmp-server server' turns the SNMP agent on
+!
+vlan database
+vlan 10,20,30,99
+exit
+voice vlan id 20
+spanning-tree mode rapid-pvst
+port-channel load-balance src-dst-mac-ip
+hostname switch-01
+username admin password Example-Passw0rd privilege 15
+ip ssh server
+snmp-server server
+snmp-server community example-ro ro
+snmp-server location Server-Room
+snmp-server contact noc@example.com
+!
+interface vlan 10
+ name USERS
+!
+interface vlan 20
+ name VOICE
+!
+interface vlan 30
+ name CAMERAS
+!
+interface vlan 99
+ name MGMT
+ ip address 192.0.2.11 255.255.255.0
+!
+interface GigabitEthernet1
+ description "PC Office"
+ switchport access vlan 10
+ spanning-tree portfast
+!
+interface GigabitEthernet2
+ description "PC Office"
+ switchport access vlan 10
+ spanning-tree portfast
+!
+interface GigabitEthernet10
+ description Camera
+ switchport access vlan 30
+ spanning-tree portfast
+!
+interface GigabitEthernet20
+ description Unused
+ switchport access vlan 10
+ shutdown
+!
+interface GigabitEthernet23
+ description "Uplink core-01"
+ channel-group 1 mode auto
+!
+interface GigabitEthernet24
+ description "Uplink core-01"
+ channel-group 1 mode auto
+!
+interface po1
+ description "Uplink core-01"
+ switchport mode trunk
+ switchport trunk native vlan 99
+ switchport trunk allowed vlan add 10,20,30,99
+!
+exit
+ip default-gateway 192.0.2.1

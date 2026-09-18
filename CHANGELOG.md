@@ -22,6 +22,12 @@ happened — `git log --grep="chore(release)"` is the record for those.
   mappati con il motivo.
 - Config Converter: caricamento di un file `show run` / config (.txt) da
   convertire; una config IOS preseleziona la coppia IOS -> Catalyst 1200.
+- Config Converter IOS -> Catalyst 1200: le VLAN che su uno switch VTP
+  client non compaiono nel running-config vengono ricavate dalle porte e
+  dall'output `show vlan` (sezione del backup o incollato nel file) e create
+  localmente, con i nomi, visto che il C1200 non supporta VTP.
+- Config Converter: sample di configurazione Cisco IOS e Catalyst 1200
+  (stessa rete, dati di esempio) da leggere nell'app o scaricare.
 
 ## [0.40.1] - 2026-09-17
 

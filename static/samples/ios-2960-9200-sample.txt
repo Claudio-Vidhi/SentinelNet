@@ -1,0 +1,84 @@
+!
+! SentinelNet - sample Cisco IOS-XE running-config (Catalyst 9200 / 2960)
+! Example data only (RFC 5737 addresses, generic names).
+! Same network as c1200-sample.txt: convert this one to compare.
+!
+version 17.9
+hostname switch-01
+!
+username admin privilege 15 secret 0 Example-Passw0rd
+!
+vtp mode transparent
+!
+vlan 10
+ name USERS
+!
+vlan 20
+ name VOICE
+!
+vlan 30
+ name CAMERAS
+!
+vlan 99
+ name MGMT
+!
+spanning-tree mode rapid-pvst
+port-channel load-balance src-dst-ip
+!
+interface GigabitEthernet1/0/1
+ description PC Office
+ switchport access vlan 10
+ switchport mode access
+ switchport voice vlan 20
+ spanning-tree portfast
+!
+interface GigabitEthernet1/0/2
+ description PC Office
+ switchport access vlan 10
+ switchport mode access
+ switchport voice vlan 20
+ spanning-tree portfast
+!
+interface GigabitEthernet1/0/10
+ description Camera
+ switchport access vlan 30
+ switchport mode access
+ spanning-tree portfast
+!
+interface GigabitEthernet1/0/20
+ description Unused
+ switchport access vlan 10
+ switchport mode access
+ shutdown
+!
+interface GigabitEthernet1/0/23
+ description Uplink core-01
+ switchport mode trunk
+ channel-group 1 mode active
+!
+interface GigabitEthernet1/0/24
+ description Uplink core-01
+ switchport mode trunk
+ channel-group 1 mode active
+!
+interface Port-channel1
+ description Uplink core-01
+ switchport trunk native vlan 99
+ switchport trunk allowed vlan 10,20,30,99
+ switchport mode trunk
+!
+interface Vlan99
+ ip address 192.0.2.11 255.255.255.0
+!
+ip default-gateway 192.0.2.1
+ip ssh version 2
+!
+snmp-server community example-ro RO
+snmp-server location Server-Room
+snmp-server contact noc@example.com
+!
+line vty 0 4
+ login local
+ transport input ssh
+!
+end
