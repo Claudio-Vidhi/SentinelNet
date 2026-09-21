@@ -437,6 +437,37 @@ class TestOccupazionePorte(_Base):
         self.assertFalse(vlan_port["physical"])
         self.assertEqual(out["counts"]["free"], 1)      # solo la Gi, non la Vlan
 
+    def test_storico_mac_come_drift_rispetto_ultima_scansione(self):
+        """A MAC the last scan no longer found is history, not occupancy:
+        a port whose only MAC left a week ago is free, and says what was there."""
+        self._porta("GigabitEthernet1/0/1")
+        self._porta("GigabitEthernet1/0/2")
+        port1 = "GigabitEthernet1/0/1"
+        self._sighting(mac="aa:bb:cc:dd:ee:01", interface=port1, first_days=10)
+        self._sighting(mac="aa:bb:cc:dd:ee:02", interface=port1, first_days=0)
+        self._sighting(mac="aa:bb:cc:dd:ee:03", interface=port1, first_days=10, last_days=5)
+        self._sighting(mac="aa:bb:cc:dd:ee:04", interface="GigabitEthernet1/0/2",
+                       first_days=20, last_days=7)
+        # One scan writes one timestamp: pin it, or two _iso(0) calls a second
+        # apart would make the earlier row look gone.
+        scan = _iso(0)
+        with mac_history._lock, mac_history._connect() as c:
+            c.execute("UPDATE mac_sightings SET last_seen=? WHERE mac IN (?, ?)",
+                      (scan, "aa:bb:cc:dd:ee:01", "aa:bb:cc:dd:ee:02"))
+            c.execute("UPDATE mac_sightings SET first_seen=? WHERE mac=?",
+                      (scan, "aa:bb:cc:dd:ee:02"))
+
+        ports = {p["interface"]: p for p in mac_history.port_occupancy("192.0.2.1")["ports"]}
+        p1, p2 = ports[port1], ports["GigabitEthernet1/0/2"]
+
+        self.assertEqual([(m["mac"], m["status"]) for m in p1["mac_history"]],
+                         [("aa:bb:cc:dd:ee:02", "new"), ("aa:bb:cc:dd:ee:01", "present"),
+                          ("aa:bb:cc:dd:ee:03", "gone")])
+        self.assertEqual(p1["macs"], ["aa:bb:cc:dd:ee:01", "aa:bb:cc:dd:ee:02"])
+        self.assertEqual(p1["state"], "occupied")
+        self.assertEqual(p2["state"], "free")
+        self.assertEqual([m["status"] for m in p2["mac_history"]], ["gone"])
+
     def test_gli_avvistamenti_sono_scopati_per_tenant(self):
         """Questo livello (``port_occupancy``) scopa solo gli AVVISTAMENTI: un
         MAC di un tenant non visibile non compare fra quelli occupanti la

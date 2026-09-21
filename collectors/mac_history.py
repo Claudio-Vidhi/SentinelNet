@@ -1214,6 +1214,36 @@ def reclassify_sightings(rows, uplink_map=None, known_switches=None):
     return rows
 
 
+def _port_mac_history(rows, last_scan: str) -> list:
+    """One entry per access MAC ever recorded on a port, within retention:
+    new / present / gone against the switch's last scan. A MAC on several
+    VLANs of the same port collapses to its widest span.
+
+    Rows aggregate positions, they are not a journal (see ``client_history``):
+    a MAC that left and came back reads as present, not as gone-then-new.
+    """
+    by_mac: dict = {}
+    for s in rows:
+        if s.get("is_uplink"):
+            continue
+        m = by_mac.setdefault(s["mac"], {"mac": s["mac"], "first_seen": s["first_seen"],
+                                         "last_seen": s["last_seen"]})
+        m["first_seen"] = min(m["first_seen"], s["first_seen"])
+        m["last_seen"] = max(m["last_seen"], s["last_seen"])
+    current, gone = [], []
+    for m in by_mac.values():
+        if m["last_seen"] < last_scan:
+            m["status"] = "gone"
+            gone.append(m)
+        else:
+            m["status"] = "new" if m["first_seen"] >= last_scan else "present"
+            current.append(m)
+    # New first, then present, by address; gone ones most recent first.
+    current.sort(key=lambda m: (m["status"] != "new", m["mac"]))
+    gone.sort(key=lambda m: m["last_seen"], reverse=True)
+    return current + gone
+
+
 def port_occupancy(switch_ip: str, tenants=None) -> dict:
     """State of each port of a switch: occupied, uplink, or free.
 
@@ -1243,7 +1273,7 @@ def port_occupancy(switch_ip: str, tenants=None) -> dict:
             "WHERE switch_ip=? GROUP BY interface ORDER BY interface",
             (switch_ip,)).fetchall()]
         sql = ("SELECT mac, tenant, switch_ip, switch_name, interface, "
-               "port_channel, vlan, is_uplink, last_seen FROM mac_sightings "
+               "port_channel, vlan, is_uplink, first_seen, last_seen FROM mac_sightings "
                "WHERE switch_ip=?")
         args = [switch_ip]
         if tenant_list is not None:
@@ -1258,8 +1288,13 @@ def port_occupancy(switch_ip: str, tenants=None) -> dict:
     uplink_map, _known = topology_uplinks()
     ups = {k: v for k, v in (uplink_map.get(switch_ip) or {}).items()}
 
+    # The last scan splits each port's rows the way config drift splits two
+    # versions: seen by it (present, or new if first seen by it) or not (gone).
+    # Unscoped on purpose: it is a timestamp, not a row anyone could be denied.
+    last_scan = latest_scan_by_switch([switch_ip]).get(switch_ip) or ""
     by_port: dict = {}
     for s in sightings:
+        s["current"] = s["last_seen"] >= last_scan
         by_port.setdefault(_normalize_iface(s.get("interface") or ""), []).append(s)
 
     ports, counts = [], {"total": 0, "occupied": 0, "uplink": 0, "free": 0}
@@ -1268,7 +1303,10 @@ def port_occupancy(switch_ip: str, tenants=None) -> dict:
         norm = _normalize_iface(name)
         physical = _is_physical_iface(name)
         neigh = ups.get(norm)
-        seen = by_port.get(norm, [])
+        rows = by_port.get(norm, [])
+        # State is what is plugged in NOW: a MAC gone for a week does not make
+        # the port occupied, nor an old trunk sighting an uplink.
+        seen = [s for s in rows if s["current"]]
         access = [s for s in seen if not s.get("is_uplink")]
         if neigh or (seen and not access):
             state = "uplink"
@@ -1279,6 +1317,7 @@ def port_occupancy(switch_ip: str, tenants=None) -> dict:
         ports.append({"interface": name, "state": state, "physical": physical,
                       "uplink_to": neigh or "",
                       "macs": sorted({s["mac"] for s in access}),
+                      "mac_history": _port_mac_history(rows, last_scan),
                       "last_seen": row["last_seen"]})
         # The count concerns the ports into which a cable is plugged: a Vlan10
         # among the "free" ones would be a port that does not exist.
