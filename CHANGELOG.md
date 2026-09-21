@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-09-21
+
 ### Added
 
 - Inventario endpoint, vista porte: storico MAC per porta in stile config
