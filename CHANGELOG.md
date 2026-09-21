@@ -10,6 +10,24 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- Inventario endpoint, vista porte: storico MAC per porta in stile config
+  drift. Ogni MAC registrato sulla porta e' marcato nuovo, presente o
+  sparito rispetto all'ultima scansione dello switch, con le date di prima
+  e ultima vista; la riga si comprime in un riepilogo (`+N nuovi`,
+  `−N spariti`) e si espande sotto la porta. Lo storico arriva fin dove
+  arriva la retention MAC.
+
+### Fixed
+
+- Inventario endpoint, vista porte: una porta risultava occupata per
+  qualunque MAC visto entro la retention, anche se sparito da giorni; ora
+  conta solo cio' che l'ultima scansione ha trovato. Le porte con decine di
+  MAC non riempiono piu' la tabella.
+- Selettore del tenant nella barra laterale: in tema scuro la freccia del
+  menu si ripeteva come motivo dietro il nome del tenant.
+
 ## [0.41.0] - 2026-09-18
 
 ### Added
