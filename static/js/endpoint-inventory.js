@@ -499,6 +499,39 @@ async function _epReadErrors(btn) {
     }
 }
 
+// A port behind an unmanaged switch or a hypervisor learns dozens of MACs:
+// listing them all turned one row into a wall. Collapsed like the config cell,
+// and diffed like config drift: new / present / gone against the last scan.
+let _epPortHist = [];       // mac_history per rendered port, by row index
+
+function macCell(p, idx) {
+    const hist = p.mac_history || [];
+    const cur = hist.filter(m => m.status !== 'gone').map(m => m.mac);
+    const nNew = hist.filter(m => m.status === 'new').length;
+    const nGone = hist.length - cur.length;
+    if (cur.length <= 3 && !nGone) return escapeHtml(cur.join(', ') || (p.uplink_to ? '→ ' + p.uplink_to : '—'));
+    const label = tr('epMacExpand').replace('{n}', String(hist.length));
+    return `<button type="button" data-action="ep-toggle-macs" data-idx="${idx}" class="ep-cfg-toggle" aria-expanded="false"
+        aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">
+        <i class="fa-solid fa-chevron-right ep-chevron"></i>
+        <code class="ep-cfg-summary">${escapeHtml(cur.slice(0, 2).join(', ') || '—')}</code>
+        ${cur.length > 2 ? `<span class="ep-cfg-more">+${cur.length - 2}</span>` : ''}
+        ${nNew ? `<span class="ep-cfg-more ep-mac-new">${escapeHtml(tr('epMacNewN').replace('{n}', String(nNew)))}</span>` : ''}
+        ${nGone ? `<span class="ep-cfg-more ep-mac-gone">${escapeHtml(tr('epMacGoneN').replace('{n}', String(nGone)))}</span>` : ''}
+    </button>`;
+}
+
+function macHistHtml(hist) {
+    const day = _epTime;
+    const line = m => {
+        const [sign, note] = m.status === 'new' ? ['+', tr('epMacFirstSeen') + ' ' + day(m.first_seen)]
+            : m.status === 'gone' ? ['−', tr('epMacLastSeen') + ' ' + day(m.last_seen)]
+            : [' ', tr('epMacSince') + ' ' + day(m.first_seen)];
+        return `<div class="ep-mac-line is-${m.status}">${sign} ${escapeHtml(m.mac)}  <span>${escapeHtml(note)}</span></div>`;
+    };
+    return `<div class="ep-mac-hist"><div class="ep-mac-legend">${escapeHtml(tr('epMacLegend'))}</div>${hist.map(line).join('')}</div>`;
+}
+
 function endpointsPortsRender(d, ifaceConfigs = {}, portErrors = {}, sw = '') {
     const host = document.getElementById('epResults');
     const L = i18n[currentLang];
@@ -518,7 +551,8 @@ function endpointsPortsRender(d, ifaceConfigs = {}, portErrors = {}, sw = '') {
     const stateColor = { occupied: 'var(--success)', uplink: 'var(--warning)', free: 'var(--text-muted)' };
     const stateLabel = { occupied: L.epStateOccupied, uplink: L.epStateUplink, free: L.epStateFree };
 
-    const rows = (d.ports || []).map(p => {
+    _epPortHist = (d.ports || []).map(p => p.mac_history || []);
+    const rows = (d.ports || []).map((p, i) => {
         const raw = ifaceConfigs[expandIface(p.interface).toLowerCase()];
         let cfgHtml;
         if (raw) {
@@ -542,7 +576,7 @@ function endpointsPortsRender(d, ifaceConfigs = {}, portErrors = {}, sw = '') {
             <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(p.interface)}${
                 p.physical ? '' : ' <span style="font-size:10px; color:var(--text-muted); border:1px solid var(--border); border-radius:0; padding:0 4px;">virt</span>'}</td>
             <td><span style="font-size:10px; color:${stateColor[p.state]}; border:1px solid ${stateColor[p.state]}; border-radius:0; padding:1px 5px;">${escapeHtml(stateLabel[p.state] || p.state)}</span></td>
-            <td style="font-family:var(--font-code); font-size:11px;">${escapeHtml((p.macs || []).join(', ') || (p.uplink_to ? '→ ' + p.uplink_to : '—'))}</td>
+            <td style="font-family:var(--font-code); font-size:11px;">${macCell(p, i)}</td>
             <td>${ifaceErrorsBadge(portErrors[expandIface(p.interface).toLowerCase()])}</td>
             <td>${cfgHtml}</td>
         </tr>`;
@@ -615,7 +649,7 @@ document.getElementById('epResults')?.addEventListener('click', (e) => {
         }
         return;
     }
-    const toggleCfgBtn = e.target.closest('[data-action="ep-toggle-cfg"]');
+    const toggleCfgBtn = e.target.closest('[data-action="ep-toggle-cfg"], [data-action="ep-toggle-macs"]');
     if (toggleCfgBtn) {
         // The full block opens in a row of its own, full table width: inside the
         // cell it squeezed a multi-line config into a narrow column.
@@ -623,10 +657,15 @@ document.getElementById('epResults')?.addEventListener('click', (e) => {
         const next = row?.nextElementSibling;
         const open = toggleCfgBtn.getAttribute('aria-expanded') === 'true';
         if (next && next.classList.contains('ep-cfg-row')) next.remove();
+        // MAC and config toggles share the one detail row: the other closes.
+        row?.querySelectorAll('[data-action="ep-toggle-cfg"], [data-action="ep-toggle-macs"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
         if (row && !open) {
             const cfgRow = document.createElement('tr');
             cfgRow.className = 'ep-cfg-row';
-            cfgRow.innerHTML = `<td colspan="${row.cells.length}"><pre class="ep-cfg-full">${escapeHtml(toggleCfgBtn.dataset.raw || '')}</pre></td>`;
+            const body = toggleCfgBtn.dataset.action === 'ep-toggle-macs'
+                ? macHistHtml(_epPortHist[Number(toggleCfgBtn.dataset.idx)] || [])
+                : `<pre class="ep-cfg-full">${escapeHtml(toggleCfgBtn.dataset.raw || '')}</pre>`;
+            cfgRow.innerHTML = `<td colspan="${row.cells.length}">${body}</td>`;
             row.after(cfgRow);
         }
         toggleCfgBtn.setAttribute('aria-expanded', open ? 'false' : 'true');

@@ -516,8 +516,10 @@ main .tab-content, main .panel, main .hero { min-width: 0; }
   letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-soft);
 }
 .tenant-switch select {
-  width: 100%; padding: 0; margin: 0;
-  border: 0; background: transparent; box-shadow: none;
+  width: 100%; padding: 0 24px 0 0; margin: 0;
+  /* background-color, not the shorthand: the shorthand reset background-repeat
+     and the dark-theme select rule then re-applied the chevron as a tile. */
+  border: 0; background-color: transparent; box-shadow: none;
   font-family: var(--font-prose); font-size: 13px; font-weight: 600; color: var(--text);
   cursor: pointer;
 }
@@ -3412,6 +3414,14 @@ table[data-col-resized="1"] td { overflow: hidden; text-overflow: ellipsis; }
 }
 .ep-cfg-copy:hover, .ep-cfg-copy:focus-visible { color: var(--text); border-color: var(--border); }
 .ep-cfg-row > td { padding: 0 !important; background: var(--surface-2); }
+.ep-cfg-toggle .ep-mac-new { color: var(--success); border-color: var(--success); }
+.ep-cfg-toggle .ep-mac-gone { color: var(--danger); border-color: var(--danger); }
+.ep-mac-hist { padding: 10px 14px 10px 36px; font-family: var(--font-code); font-size: 12px; line-height: 1.6; }
+.ep-mac-legend { font-family: var(--font-prose); color: var(--text-muted); margin-bottom: 6px; }
+.ep-mac-line { white-space: pre; }
+.ep-mac-line span { color: var(--text-muted); }
+.ep-mac-line.is-new { background: color-mix(in srgb, var(--success) 12%, transparent); }
+.ep-mac-line.is-gone { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--text-muted); }
 .ep-cfg-full {
   margin: 0; padding: 10px 14px 10px 36px; font-family: var(--font-code); font-size: 12px;
   line-height: 1.5; white-space: pre; overflow-x: auto;
