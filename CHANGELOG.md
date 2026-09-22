@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.42.4] - 2026-09-22
+
 ### Added
 
 - Impostazioni, Riavvia e Aggiorna: il pannello segue il riavvio e dice in
