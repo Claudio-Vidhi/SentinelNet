@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.42.6] - 2026-09-22
+
 ### Fixed
 
 - Scansione MAC e raccolta ARP: un solo apparato senza credenziali (profilo
