@@ -26,6 +26,12 @@ _IS_WINDOWS = sys.platform == "win32"
 # Prefisso che marca i file scritti come blob DPAPI: distingue le chiavi protette
 # da quelle legacy in chiaro e ne permette la migrazione senza corromperle.
 _MAGIC = b"DPAPIv1:"
+# Machine-scoped DPAPI blob. The data directory is shared by the Windows
+# service (LocalSystem), an elevated installer and the interactive user: a
+# user-scoped blob is readable only by the account that wrote it, so a key
+# created by one of them crashed the others at startup. Who may read the file
+# is decided by its ACL (restrict_permissions), not by the DPAPI scope.
+_MAGIC_MACHINE = b"DPAPIm1:"
 
 if _IS_WINDOWS:
     from ctypes import wintypes
@@ -43,6 +49,7 @@ if _IS_WINDOWS:
 
     # CRYPTPROTECT_UI_FORBIDDEN: nessun prompt interattivo (compatibile con servizi).
     _CRYPTPROTECT_UI_FORBIDDEN = 0x01
+    _CRYPTPROTECT_LOCAL_MACHINE = 0x04
 
     def _to_blob(data: bytes) -> "_DATA_BLOB":
         buf = ctypes.create_string_buffer(data, len(data))
@@ -57,7 +64,7 @@ if _IS_WINDOWS:
         in_blob = _to_blob(data)
         out_blob = _DATA_BLOB()
         if not _crypt32.CryptProtectData(ctypes.byref(in_blob), None, None, None,
-                                         None, _CRYPTPROTECT_UI_FORBIDDEN,
+                                         None, _CRYPTPROTECT_UI_FORBIDDEN | _CRYPTPROTECT_LOCAL_MACHINE,
                                          ctypes.byref(out_blob)):
             raise OSError("CryptProtectData ha restituito un errore.")
         return _from_blob(out_blob)
@@ -88,7 +95,7 @@ def _store(path: str, key: bytes):
     """Scrive la chiave protetta con DPAPI su Windows, altrimenti in chiaro."""
     if _IS_WINDOWS:
         try:
-            _atomic_write(path, _MAGIC + _protect(key))
+            _atomic_write(path, _MAGIC_MACHINE + _protect(key))
             return
         except OSError as e:
             # DPAPI non disponibile: ripiega su file in chiaro. È un
@@ -110,7 +117,7 @@ def load_or_create(path: str, generator) -> bytes:
     if os.path.exists(path):
         with open(path, "rb") as f:
             raw = f.read()
-        if raw.startswith(_MAGIC):
+        if raw.startswith((_MAGIC, _MAGIC_MACHINE)):
             if not _IS_WINDOWS:
                 posix_path = path + ".posix"
                 if os.path.exists(posix_path):
@@ -125,10 +132,27 @@ def load_or_create(path: str, generator) -> bytes:
                     posix_key = posix_key.encode("utf-8")
                 _atomic_write(posix_path, posix_key)
                 return posix_key
-            return _unprotect(raw[len(_MAGIC):])
+            try:
+                key = _unprotect(raw[len(_MAGIC):])
+            except OSError:
+                raise RuntimeError(
+                    f"{path} e' stata cifrata da un altro account Windows e questo "
+                    "processo non puo' leggerla. Avvia SentinelNet una volta con "
+                    "l'account che l'ha creata (la chiave viene convertita e da "
+                    "quel momento la legge anche il servizio), oppure, se non ci "
+                    "sono ancora apparati salvati, cancella secret.key e "
+                    "jwt_secret.key dalla cartella dati."
+                ) from None
+            if raw.startswith(_MAGIC):
+                # User-scoped blob from an older release: rewrite it machine-scoped.
+                try:
+                    _atomic_write(path, _MAGIC_MACHINE + _protect(key))
+                except OSError as e:
+                    logging.warning("Chiave %s non convertita a DPAPI macchina: %s", path, e)
+            return key
         if _IS_WINDOWS:
             try:
-                _atomic_write(path, _MAGIC + _protect(raw))
+                _atomic_write(path, _MAGIC_MACHINE + _protect(raw))
             except OSError as e:
                 logging.warning(
                     "Chiave legacy in chiaro non migrata a DPAPI (%s): %s", e, path

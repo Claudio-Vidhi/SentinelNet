@@ -10,6 +10,20 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- Servizio Windows: andava in crash a ogni avvio se `secret.key` era stata
+  creata da un altro account (installer elevato, app desktop). Le chiavi ora
+  sono cifrate con DPAPI a livello macchina, e quelle esistenti vengono
+  convertite al primo avvio che riesce a leggerle; chi le legge lo decidono
+  le ACL del file. Una chiave illeggibile ora spiega cosa fare invece di un
+  traceback.
+- Avvio dall'icona con il servizio installato: al posto del traceback su
+  `audit.log` un messaggio dice che la cartella dati e' del servizio e che il
+  pannello si apre dal browser.
+- Installer: "Avvia SentinelNet" a fine installazione gira come l'utente che
+  ha lanciato il setup, non come l'account amministratore che l'ha elevato.
+
 ## [0.42.1] - 2026-09-22
 
 ### Fixed
