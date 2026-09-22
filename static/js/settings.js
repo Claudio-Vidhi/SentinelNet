@@ -1228,10 +1228,37 @@
             return;
         }
         const d = await res.json();
-        if (statusEl) {
-            statusEl.textContent = d.status === 'up-to-date'
-                ? tr('msgUpdateUpToDate') : tr('msgUpdateRunning');
+        if (d.status === 'up-to-date') {
+            if (statusEl) statusEl.textContent = tr('msgUpdateUpToDate');
+            return;
         }
+        watchRestart(d.latest || null);
+    }
+
+    // The answer to restart/update comes from the process that is about to go
+    // away, so it cannot tell how things ended. Poll /api/version (public)
+    // and report each phase: still up, down, back (with its version), or not
+    // back at all. `target`: the version an update must come back with.
+    async function watchRestart(target) {
+        const statusEl = document.getElementById('restartAppStatus');
+        const say = (key, vars) => { if (statusEl) statusEl.textContent = tr(key, vars); };
+        const start = Date.now();
+        let wentDown = false;
+        while (Date.now() - start < 5 * 60 * 1000) {
+            await new Promise(r => setTimeout(r, 2000));
+            const s = Math.round((Date.now() - start) / 1000);
+            let version = null;
+            try {
+                const r = await fetch('/api/version', { cache: 'no-store' });
+                if (r.ok) version = (await r.json()).version;
+            } catch (e) { /* down: that is the phase we are waiting through */ }
+            if (!version) { wentDown = true; say('msgRestartWaitingUp', { s }); continue; }
+            if (target && version === target) { say('msgRestartBack', { version }); return; }
+            if (!wentDown) { say('msgRestartWaitingDown', { s }); continue; }
+            say(target ? 'msgUpdateNotApplied' : 'msgRestartBack', { version });
+            return;
+        }
+        say('msgRestartNotBack');
     }
 
     async function restartApplication() {
@@ -1243,7 +1270,7 @@
             if (statusEl) statusEl.textContent = (tr('uiError')) + ((e && e.detail) || '');
             return;
         }
-        if (statusEl) statusEl.textContent = tr('msgRestartScheduled');
+        watchRestart(null);
     }
 
     // Disabilita in anticipo cio' che qui non puo' funzionare, invece di

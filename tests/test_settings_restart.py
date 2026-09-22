@@ -88,16 +88,29 @@ class SettingsRestart(unittest.TestCase):
         from unittest import mock
         from services import self_update
         with mock.patch.object(self_update, "supervisor",
-                               return_value="windows-service"),              mock.patch("subprocess.Popen") as popen:
+                               return_value="windows-service"),              mock.patch.object(self_update, "spawn_outside_service") as spawn:
             r = self.client.post("/api/settings/restart", headers=self.admin_h,
                                  json={"unit": "evil; rm -rf /"})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(r.json()["supervisor"], "windows-service")
-        argv = popen.call_args[0][0]
-        self.assertEqual(argv, ["powershell", "-NoProfile", "-NonInteractive",
-                                "-Command", "Restart-Service", "-Name",
-                                "SentinelNet"])
-        self.assertNotIn("evil", " ".join(argv))
+        # Outside the service's process tree: WinSW kills the tree on stop,
+        # and a Restart-Service inside it died before the start half.
+        cmdline = spawn.call_args[0][0]
+        self.assertEqual(cmdline, "powershell -NoProfile -NonInteractive "
+                                  "-Command Restart-Service -Name SentinelNet")
+        self.assertNotIn("evil", cmdline)
+
+    def test_the_spawned_command_never_becomes_powershell_source(self):
+        # The command line reaches WMI through an environment variable: a
+        # quote in it must not be able to close the string and add code.
+        from unittest import mock
+        from services import self_update
+        with mock.patch("subprocess.run") as run:
+            run.return_value.returncode = 0
+            self_update.spawn_outside_service('x"; Remove-Item C:\ -Recurse; "')
+        argv = run.call_args[0][0]
+        self.assertNotIn("Remove-Item", " ".join(argv))
+        self.assertIn("Remove-Item", run.call_args[1]["env"]["SENTINELNET_SPAWN"])
 
     def test_the_windows_supervisor_is_declared_by_the_service_installer(self):
         # Un servizio Windows non si distingue dall'esterno da un exe lanciato

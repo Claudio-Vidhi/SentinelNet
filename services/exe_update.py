@@ -178,21 +178,22 @@ def spawn_installer(path: str, with_service: bool) -> None:
     """Lancia l'installer in silenzio e STACCATO, poi torna.
 
     Staccato perche' l'installer ferma il servizio, cioe' il processo che lo ha
-    lanciato: da figlio morirebbe a meta' aggiornamento, lasciando il programma
-    sostituito a meta' e il servizio giu'.
+    lanciato: da figlio morirebbe a meta' aggiornamento, lasciando il servizio
+    giu'. DETACHED_PROCESS non bastava: vedi self_update.spawn_outside_service.
 
     /MERGETASKS mantiene selezionato il task del servizio: in modalita'
     silenziosa i task tornano ai valori predefiniti, e il predefinito e' senza
     servizio -- un aggiornamento lo lascerebbe deregistrato.
     """
+    from services import self_update
     args = [path, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"]
     if with_service:
         args.append("/MERGETASKS=service")
-    flags = (getattr(subprocess, "DETACHED_PROCESS", 0)
-             | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+    # Outside the service's process tree: WinSW kills the tree on stop, and
+    # the installer's first step is stopping the service.
     try:
-        subprocess.Popen(args, close_fds=True, creationflags=flags)
-    except OSError as e:
+        self_update.spawn_outside_service(subprocess.list2cmdline(args))
+    except self_update.SelfUpdateError as e:
         raise ExeUpdateError(f"Avvio dell'installer fallito: {e}") from e
 
 
@@ -221,4 +222,5 @@ def update(supervisor_kind: str) -> dict:
     path = download_and_verify(rel)
     spawn_installer(path, with_service=True)
     return {"status": "updating", "current": __version__,
-            "latest": rel["version"], "installer": os.path.basename(path)}
+            "latest": rel["version"], "installer": os.path.basename(path),
+            "supervisor": supervisor_kind}

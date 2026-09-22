@@ -68,6 +68,35 @@ def is_supervised() -> bool:
     return bool(supervisor())
 
 
+def spawn_outside_service(cmdline: str) -> None:
+    """Start ``cmdline`` so that stopping the service does not kill it.
+
+    WinSW 2 stops the service by killing the whole process tree it started,
+    children first (stopparentprocessfirst=false). DETACHED_PROCESS does not
+    leave that tree -- the child still records our PID as its parent -- so the
+    powershell running Restart-Service died at the stop half, and the installer
+    died when it stopped the service: both times the service stayed down. A
+    process created through WMI is parented to WmiPrvSE instead, outside the
+    tree, and runs as the same account (LocalSystem under the service).
+
+    ``cmdline`` travels in an environment variable, never spliced into the
+    PowerShell source, so no quoting in it can become code.
+    """
+    ps = ("$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create "
+          "-Arguments @{CommandLine=$env:SENTINELNET_SPAWN}; exit $r.ReturnValue")
+    try:
+        res = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
+            env={**os.environ, "SENTINELNET_SPAWN": cmdline},
+            capture_output=True, timeout=60)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise SelfUpdateError(f"Avvio del processo esterno fallito: {e}") from e
+    if res.returncode != 0:
+        raise SelfUpdateError(
+            f"Avvio del processo esterno fallito (Win32_Process.Create: {res.returncode}): "
+            f"{(res.stderr or b'').decode(errors='ignore').strip()[:300]}")
+
+
 def spawn_restart(kind: str) -> None:
     """Fa partire il riavvio delegandolo a un processo separato.
 
@@ -76,17 +105,12 @@ def spawn_restart(kind: str) -> None:
     scaricato. Due copie di questa logica divergerebbero, e la copia
     sbagliata sarebbe quella che spegne il pannello."""
     if kind == "windows-service":
-        # Staccato, e senza aspettarlo: Restart-Service ferma QUESTO processo,
-        # quindi un subprocess.run atteso non tornerebbe mai. Il prezzo e' che
-        # l'esito non si conosce -- lo stesso prezzo di --no-block su Linux.
-        try:
-            subprocess.Popen(
-                ["powershell", "-NoProfile", "-NonInteractive", "-Command",
-                 "Restart-Service", "-Name", WINDOWS_SERVICE_NAME],
-                creationflags=getattr(subprocess, "DETACHED_PROCESS", 0)
-                | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
-        except Exception as e:
-            raise SelfUpdateError(f"Riavvio non disponibile: {e}")
+        # Restart-Service stops THIS process, so it must run outside the
+        # service's process tree. The outcome is not known here: the panel
+        # polls /api/version to see the service come back.
+        spawn_outside_service(subprocess.list2cmdline(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+             "Restart-Service", "-Name", WINDOWS_SERVICE_NAME]))
     else:
         try:
             proc = subprocess.run(

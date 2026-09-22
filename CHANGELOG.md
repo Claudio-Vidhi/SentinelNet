@@ -10,6 +10,21 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- Impostazioni, Riavvia e Aggiorna: il pannello segue il riavvio e dice in
+  che fase e': servizio ancora attivo, fermo, di nuovo su (con la versione),
+  aggiornamento non applicato, oppure non ripartito entro 5 minuti.
+
+### Fixed
+
+- Servizio Windows: Riavvia e Aggiorna lo lasciavano fermo. WinSW, fermando
+  il servizio, uccide tutto l'albero dei processi, e il `Restart-Service` o
+  l'installer lanciati dall'app ne facevano parte. Ora partono tramite WMI,
+  fuori dall'albero. Gli aggiornamenti da 0.42.3 o precedenti vanno
+  installati a mano.
+- Aggiorna: la risposta tornava 500 dopo aver gia' avviato l'installer.
+
 ## [0.42.3] - 2026-09-22
 
 ### Added

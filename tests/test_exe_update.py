@@ -156,10 +156,13 @@ class TestUpdateRefusals(unittest.TestCase):
                           return_value=_release(version="99.0.0", digest="c" * 64)), \
              patch.object(exe_update, "download_and_verify",
                           return_value=r"C:\tmp\SentinelNet-Setup-99.0.0.exe"), \
-             patch.object(exe_update.subprocess, "Popen") as popen:
+             patch("services.self_update.spawn_outside_service") as spawn:
             out = exe_update.update("windows-service")
         self.assertEqual(out["status"], "updating")
-        args = popen.call_args[0][0]
+        # The route writes it into the audit line: a KeyError there answered
+        # 500 after the installer had already started.
+        self.assertEqual(out["supervisor"], "windows-service")
+        args = spawn.call_args[0][0]
         self.assertIn("/VERYSILENT", args)
         # Senza questo un aggiornamento silenzioso lascerebbe il servizio
         # deregistrato: in silent mode i task tornano ai default.
