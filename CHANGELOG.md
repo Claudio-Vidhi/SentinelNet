@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.42.7] - 2026-09-22
+
 ### Added
 
 - Errori porte: legenda che spiega le categorie (fisico, duplex, hardware,
