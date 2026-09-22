@@ -10,6 +10,12 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- Scansione subnet: pulsante "Seleziona verificati" che, dopo una verifica
+  delle credenziali, seleziona in un clic solo gli host su cui l'identita'
+  ha funzionato, invece di togliere a mano la spunta a quelli falliti.
+
 ## [0.42.2] - 2026-09-22
 
 ### Fixed

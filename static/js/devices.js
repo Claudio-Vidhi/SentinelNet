@@ -1207,6 +1207,12 @@
         const vendor = document.getElementById('scanVerifyVendorSelect')?.value;
         const verifyBtn = document.getElementById('btnScanVerify');
         const addBtn = document.getElementById('btnScanAddSelected');
+        const okBtn = document.getElementById('btnScanSelectVerified');
+        if (okBtn) {
+            const ok = _scanRows.filter(r => r.verify && r.verify.ok).length;
+            okBtn.textContent = tr('btnScanSelectVerified', { n: ok });
+            okBtn.style.display = ok ? '' : 'none';
+        }
         if (verifyBtn) {
             verifyBtn.textContent = (L.btnScanVerify || 'Verifica selezionati ({n})').replace('{n}', n);
             verifyBtn.disabled = n === 0 || !identity || !vendor;
@@ -1297,6 +1303,16 @@
 
     function toggleAllScanRows(master) {
         document.querySelectorAll('.scan-row-cb').forEach(cb => { cb.checked = master.checked; });
+        refreshScanActionButtons();
+    }
+
+    // After a verify round only the hosts that answered to the identity are
+    // worth adding: pick them in one click instead of unticking the failures.
+    function selectVerifiedScanRows() {
+        const ok = new Set(_scanRows.filter(r => r.verify && r.verify.ok).map(r => r.ip));
+        document.querySelectorAll('.scan-row-cb').forEach(cb => { cb.checked = ok.has(cb.dataset.ip); });
+        const master = document.getElementById('scanSelectAll');
+        if (master) master.checked = false;
         refreshScanActionButtons();
     }
 
@@ -2110,6 +2126,7 @@
     document.getElementById('btnAvviaScan')?.addEventListener('click', startSubnetScan);
     document.getElementById('btnScanVerify')?.addEventListener('click', verifySelectedScanRows);
     document.getElementById('btnScanAddSelected')?.addEventListener('click', addSelectedScanRows);
+    document.getElementById('btnScanSelectVerified')?.addEventListener('click', selectVerifiedScanRows);
 
     // Triage Scope modal listeners
     document.getElementById('btnCloseTriageScope')?.addEventListener('click', closeTriageScopeModal);

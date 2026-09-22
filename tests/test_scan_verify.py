@@ -240,6 +240,16 @@ class TestScanWindowVendorIsHonoured(unittest.TestCase):
         self.assertIn("profile: identityId ?", body)
         self.assertNotIn("verified", body)
 
+    def test_verified_hosts_can_be_selected_in_one_click(self):
+        # Unticking every failed host by hand after a verify round was the
+        # whole cost of the workflow on a /24.
+        with open(os.path.join(self.base, "templates", "dashboard.html"), encoding="utf-8") as f:
+            self.assertIn('id="btnScanSelectVerified"', f.read())
+        self.assertIn("getElementById('btnScanSelectVerified')?.addEventListener('click', selectVerifiedScanRows)",
+                      self.devices)
+        fn = self.devices[self.devices.index("function selectVerifiedScanRows"):]
+        self.assertIn("r.verify && r.verify.ok", fn[:fn.index("\n    }")])
+
     def test_scan_vendor_select_can_say_not_set(self):
         self.assertIn("function buildScanVendorOptions", self.core)
         helper = self.core[self.core.index("function buildScanVendorOptions"):]
