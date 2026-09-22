@@ -135,7 +135,7 @@ Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environmen
 ; che il codice lo guarda.
 ; Only offered when NOT running as a service: with the service up the
 ; port is already taken, and a second copy would just open the browser.
-Filename: "{app}\{#AppExeName}"; WorkingDir: "{commonappdata}\{#DataDirName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent; Tasks: not service
+Filename: "{app}\{#AppExeName}"; WorkingDir: "{commonappdata}\{#DataDirName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent runasoriginaluser; Tasks: not service
 
 [UninstallRun]
 ; Stop and deregister BEFORE the files go: uninstalling the exe out from

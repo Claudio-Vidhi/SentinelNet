@@ -35,6 +35,22 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 from core import data_config
+
+# With the Windows service installed the data directory belongs to SYSTEM and
+# Administrators only. The exe launched from the shortcut as a normal user then
+# died on the first log file it opened, with a traceback that named audit.log
+# instead of the reason. os.access ignores Windows ACLs, so actually try.
+if os.path.isdir(data_config.DATA_DIR):
+    import tempfile
+    try:
+        tempfile.TemporaryFile(dir=data_config.DATA_DIR).close()
+    except PermissionError:
+        print(f"ERRORE: la cartella dati {data_config.DATA_DIR} non e' scrivibile da "
+              "questo account.\nSe SentinelNet e' installato come servizio Windows, "
+              "il pannello si apre dal browser (il servizio deve essere avviato, "
+              "services.msc); l'eseguibile non va lanciato a mano.", file=sys.stderr)
+        sys.exit(1)
+
 from core import db
 from security import crypto_vault  # noqa: F401 (compat: patched by tests as app_server.crypto_vault)
 
