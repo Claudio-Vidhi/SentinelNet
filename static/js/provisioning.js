@@ -546,9 +546,11 @@ function populateProvisioningFormSelects() {
 
     const groupSelect = document.getElementById('devGroupSelect');
     if (groupSelect) {
+        const prevGroup = groupSelect.value;
         groupSelect.innerHTML = Object.keys(globalGroups).map(g =>
             `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`
         ).join('');
+        if (prevGroup in globalGroups) groupSelect.value = prevGroup;
     }
     populateSiteOptions();
     if (typeof window.populateGenCfgTenants === 'function') {

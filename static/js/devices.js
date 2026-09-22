@@ -506,7 +506,7 @@
 
         // La form di provisioning ora vive nella sua tab dedicata: prima di
         // precompilarla assicurati che sia quella visibile.
-        switchTab('tab-provisioning');
+        await switchTab('tab-provisioning');
 
         document.getElementById('devGroupSelect').value = dev.Group || 'Generale';
         const siteSel = document.getElementById('devSiteSelect');
