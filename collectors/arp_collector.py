@@ -106,8 +106,13 @@ def collect_from_device(device: dict) -> dict:
     source_type = "firewall" if driver_name == "paloalto_panos" else "switch"
 
     from core.net_ssh import ConnectHandler
-    from core.core_engine import get_device_credentials
-    username, password, secret = get_device_credentials(device)
+    from core.core_engine import (get_device_credentials, CredentialResolveError,
+                                  CredentialDecryptError)
+    try:
+        username, password, secret = get_device_credentials(device)
+    except (CredentialResolveError, CredentialDecryptError) as e:
+        # Per-device error, like mac_collector.collect_one: not the whole run.
+        return {"status": "error", "source_type": source_type, "message": str(e)}
     params = {"device_type": netmiko_type, "host": device["IP"],
               "username": username, "password": password, "secret": secret,
               "timeout": 20, "auth_timeout": 15, "banner_timeout": 15}

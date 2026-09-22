@@ -738,7 +738,13 @@ def collect_one(device: dict, transport=None) -> dict:
 
     ip = device["IP"]
     vendor = (device.get("Vendor") or "cisco").lower()
-    username, password, secret = core_engine.get_device_credentials(device)
+    try:
+        username, password, secret = core_engine.get_device_credentials(device)
+    except (core_engine.CredentialResolveError, core_engine.CredentialDecryptError) as e:
+        # One device without usable credentials is that device's error, not
+        # the scan's: raised here it aborted the whole pool and the route
+        # answered a bare 500 ("Errore:" with nothing after it).
+        return {"device": device, "error": str(e), "if_macs": []}
     try:
         _, netmiko_type = core_engine.resolve_driver(vendor)
     except ValueError as e:
