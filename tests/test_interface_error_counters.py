@@ -59,6 +59,13 @@ class TestIncrements(unittest.TestCase):
         self.assertEqual(ie.verdict({"in_errors": 10, "late_collisions": 1}),
                          ("erroring", "duplex", 11))
 
+    def test_a_detail_inside_its_total_is_not_counted_twice(self):
+        # 13 input errors that were all symbol errors read "26 · physical".
+        self.assertEqual(ie.verdict({"in_errors": 13, "symbol": 13}),
+                         ("erroring", "physical", 13))
+        # Without the total the detail is the only measure, and it counts.
+        self.assertEqual(ie.verdict({"crc": 4}), ("erroring", "physical", 4))
+
     def test_ranking_puts_erroring_ports_first(self):
         rows = [{"status": "clean"}, {"status": "erroring", "worst_class": "errors", "errors": 5},
                 {"status": "erroring", "worst_class": "physical", "errors": 1}]

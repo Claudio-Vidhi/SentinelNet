@@ -1631,6 +1631,22 @@
             </div>
           </div>
         </div>
+        <details id="peLegend" class="panel" style="margin-bottom:12px; padding:10px 14px; font-size:12.5px;">
+          <summary style="cursor:pointer; font-weight:600;" data-i18n="peLegendTitle">Legenda: cosa significano gli errori</summary>
+          <p data-i18n="peLegendBadge" style="margin:10px 0; color:var(--text-muted);">Il numero nel riquadro rosso e' quanti errori sono cresciuti nella finestra scelta (scarti esclusi); l'etichetta e' la categoria piu' grave fra quelle cresciute. "Contatori in crescita" elenca ogni contatore col suo incremento: conta la crescita, non il totale accumulato dall'avvio. Un contatore di dettaglio (CRC, simbolo...) e' gia' compreso negli errori in ingresso o in uscita: dice il perche', non si somma.</p>
+          <dl style="display:grid; grid-template-columns:max-content 1fr; gap:6px 12px; margin:0; align-items:start;">
+            <dt><span class="iferr iferr-bad" data-i18n="ifErrClass_physical">physical</span></dt>
+            <dd data-i18n="peLegend_physical" style="margin:0 0 8px 0; color:var(--text-muted);">CRC/FCS, allineamento/frame, errori di simbolo, runt, giant. Il segnale arriva corrotto: cavo o bretella danneggiati, connettore sporco, ottica/SFP difettosa o fuori specifica, interferenze. Controlla cavo e SFP (show interfaces transceiver: potenza rx/tx) e la porta all'altro capo.</dd>
+            <dt><span class="iferr iferr-bad" data-i18n="ifErrClass_duplex">duplex</span></dt>
+            <dd data-i18n="peLegend_duplex" style="margin:0 0 8px 0; color:var(--text-muted);">Collisioni tardive, collisioni eccessive, perdita di carrier. Quasi sempre un duplex mismatch (un lato full, l'altro half): velocita' e duplex vanno impostati uguali ai due capi, entrambi auto o entrambi fissi.</dd>
+            <dt><span class="iferr iferr-bad" data-i18n="ifErrClass_hardware">hardware</span></dt>
+            <dd data-i18n="peLegend_hardware" style="margin:0 0 8px 0; color:var(--text-muted);">Errori MAC interni in ricezione o trasmissione: li genera la porta stessa, non il cavo. Se continuano dopo aver cambiato cavo, sospetta la porta o la scheda.</dd>
+            <dt><span class="iferr iferr-bad" data-i18n="ifErrClass_errors">errors</span></dt>
+            <dd data-i18n="peLegend_errors" style="margin:0 0 8px 0; color:var(--text-muted);">Errori in ingresso o in uscita senza un contatore di dettaglio che dica il perche'. Guarda i dettagli sull'apparato (show interfaces).</dd>
+            <dt><span class="iferr iferr-warn" data-i18n="ifErrClass_discards">discards</span></dt>
+            <dd data-i18n="peLegend_discards" style="margin:0 0 8px 0; color:var(--text-muted);">Scarti in ingresso o in uscita: pacchetti validi buttati per code piene (congestione, microburst) o per policy/QoS. Non e' un guasto fisico; se crescono molto, la porta e' un collo di bottiglia.</dd>
+          </dl>
+        </details>
         <div id="peResults"></div>
       </div>
 

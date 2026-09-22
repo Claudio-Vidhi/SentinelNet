@@ -10,6 +10,18 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- Errori porte: legenda che spiega le categorie (fisico, duplex, hardware,
+  errori, scarti), i contatori che le compongono, la causa tipica e cosa
+  controllare, e come leggere il numero e i contatori in crescita.
+
+### Fixed
+
+- Errori porte: un contatore di dettaglio veniva sommato al totale che lo
+  contiene gia' (13 errori in ingresso che erano anche 13 errori di simbolo
+  risultavano 26). Ora conta il totale; il dettaglio da' solo la categoria.
+
 ## [0.42.6] - 2026-09-22
 
 ### Fixed

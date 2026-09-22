@@ -119,7 +119,12 @@ def verdict(delta: Optional[Dict[str, int]]) -> Tuple[str, Optional[str], int]:
         if value:
             by_class[FIELDS[field]] = by_class.get(FIELDS[field], 0) + value
     worst = next((c for c in CLASS_ORDER if by_class.get(c)), None)
-    errors = sum(v for c, v in by_class.items() if c != "discards")
+    # A detail counter is already inside its total (_PART_OF): summing both
+    # showed "26" for 13 input errors that were also 13 symbol errors. The
+    # detail still names the class; it adds to the count only without a total.
+    errors = sum(v for f, v in delta.items()
+                 if v and FIELDS[f] != "discards"
+                 and not (f in _PART_OF and _PART_OF[f] in delta))
     if errors:
         return "erroring", worst, errors
     if by_class.get("discards"):
