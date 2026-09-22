@@ -127,6 +127,17 @@ from core.version import __version__
 
 app = FastAPI(title="SentinelNet API", version=__version__, lifespan=lifespan)
 
+from core.device_credentials import CredentialDecryptError, CredentialResolveError
+
+
+# A device without usable credentials is a condition the operator fixes, not a
+# server fault: every route that resolves credentials got a bare 500 for it,
+# which the panel showed as "Errore:" followed by nothing.
+@app.exception_handler(CredentialResolveError)
+@app.exception_handler(CredentialDecryptError)
+async def _credential_error(request: Request, exc: Exception):
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
 @app.get("/api/version")
 def get_app_version():
     return {"app": "SentinelNet", "version": __version__}

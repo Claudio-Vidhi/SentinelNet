@@ -10,6 +10,15 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- Scansione MAC e raccolta ARP: un solo apparato senza credenziali (profilo
+  `default` senza identita') faceva fallire l'intera scansione, e il pannello
+  mostrava "Errore:" senza testo. Ora e' un errore di quell'apparato e gli
+  altri vengono raccolti.
+- Credenziali mancanti o non decifrabili rispondono 409 con il motivo invece
+  di un 500 vuoto, su ogni rotta che contatta un apparato.
+
 ## [0.42.5] - 2026-09-22
 
 ### Fixed
