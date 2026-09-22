@@ -250,7 +250,13 @@ def _run_backup_and_triage(device):
         log_audit(f"Triage fallito per dispositivo '{ip}': non raggiungibile sulla porta {ssh_port} ({cli_kind.upper()}).")
         return {"status": "error", "message": f"Device {ip} non raggiungibile sulla porta {ssh_port} ({cli_kind.upper()})"}
 
-    username, password, secret = get_device_credentials(device)
+    try:
+        username, password, secret = get_device_credentials(device)
+    except (CredentialResolveError, CredentialDecryptError) as e:
+        # Nothing was sent to the device: say why, and do not mark it
+        # auth_failed, which would schedule a retry that cannot succeed.
+        log_audit(f"Triage non eseguito per dispositivo '{ip}': {e}")
+        return {"status": "error", "message": str(e)}
 
     # Resolves driver and netmiko device_type BEFORE connecting: a vendor without
     # an associated driver fails immediately, without uselessly opening the SSH session.

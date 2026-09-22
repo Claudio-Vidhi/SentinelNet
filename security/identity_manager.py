@@ -18,6 +18,7 @@ from typing import Optional
 
 from core import data_config
 from security.crypto_vault import encrypt_password, decrypt_password
+from core.device_credentials import CredentialDecryptError
 
 IDENTITIES_JSON = data_config.get_path("identities.json")
 _lock = threading.RLock()
@@ -96,15 +97,30 @@ def get_identities(tenant: Optional[str] = None) -> list:
              "devices_using": len(_devices_using(r["id"]))} for r in rows]
 
 
+class IdentityDecryptError(CredentialDecryptError):
+    """The identity stores a password that no longer decrypts (secret.key
+    replaced). decrypt_password answers "" in that case, and an empty
+    password went to the devices as-is: every device on the identity failed
+    authentication, and nothing said why."""
+
+
 def get_identity_credentials(identity_id: str):
     """(username, password, secret) in chiaro — SOLO per uso interno
     (connessioni agli apparati). None se l'identita' non esiste."""
     with _lock:
         for r in _load():
             if r["id"] == identity_id:
-                return (r["username"],
-                        decrypt_password(r.get("password_enc", "")),
-                        decrypt_password(r.get("secret_enc", "")))
+                creds = []
+                for field in ("password_enc", "secret_enc"):
+                    raw = r.get(field, "")
+                    plain = decrypt_password(raw)
+                    if raw and not plain:
+                        raise IdentityDecryptError(
+                            f"Credenziali dell'identita' '{r.get('name', identity_id)}' "
+                            "non decifrabili (la chiave secret.key e' cambiata): "
+                            "reinserisci password ed enable secret nell'identita'.")
+                    creds.append(plain)
+                return (r["username"], creds[0], creds[1])
     return None
 
 

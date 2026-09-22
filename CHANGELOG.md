@@ -10,6 +10,17 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- Identita' con password non piu' decifrabile (chiave `secret.key`
+  sostituita): la password arrivava vuota agli apparati, con autenticazioni
+  fallite su tutto il tenant e, ripetute dal retry del triage, blocco dei
+  login lato apparato anche per chi aveva le credenziali giuste. Ora il
+  triage si ferma prima di collegarsi e dice di reinserire le credenziali
+  dell'identita'; scansione subnet e assegnazione in blocco rispondono 409.
+- Triage singolo: un apparato senza credenziali risolvibili rispondeva 500;
+  ora torna l'errore leggibile, e non viene ritentato.
+
 ## [0.42.4] - 2026-09-22
 
 ### Added
