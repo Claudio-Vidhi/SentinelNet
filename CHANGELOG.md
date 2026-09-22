@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.42.2] - 2026-09-22
+
 ### Fixed
 
 - Servizio Windows: andava in crash a ogni avvio se `secret.key` era stata
