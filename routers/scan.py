@@ -179,7 +179,10 @@ def start_scan_verify(
                                                 user_group_scope(current_user)):
         raise HTTPException(status_code=404, detail="Identita' non trovata.")
 
-    credentials = identity_manager.get_identity_credentials(payload.identity_id)
+    try:
+        credentials = identity_manager.get_identity_credentials(payload.identity_id)
+    except identity_manager.IdentityDecryptError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     if credentials is None:
         raise HTTPException(status_code=404, detail="Identita' non trovata.")
 

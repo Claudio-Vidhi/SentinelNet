@@ -74,6 +74,19 @@ class TestIdentityManager(unittest.TestCase):
         self.assertNotIn("pw!", raw)
         self.assertNotIn("sec!", raw)
 
+    def test_undecryptable_password_is_refused_not_sent_empty(self):
+        # After secret.key was replaced every identity password decrypted to
+        # "", and that empty password went to the devices: a wall of
+        # authentication failures with nothing pointing at the key.
+        ident = self.im.add_identity("adm", "T", "user1", "pw!", "sec!")
+        with mock.patch.object(self.im, "decrypt_password", return_value=""):
+            with self.assertRaises(self.im.IdentityDecryptError) as cm:
+                self.im.get_identity_credentials(ident["id"])
+        self.assertIn("adm", str(cm.exception))
+        # An identity without an enable secret is still fine.
+        ident2 = self.im.add_identity("nosec", "T", "user1", "pw!", "")
+        self.assertEqual(self.im.get_identity_credentials(ident2["id"])[2], "")
+
     def test_update(self):
         ident = self.im.add_identity("x", "T", "u1", "p1", "s1")
         self.im.update_identity(ident["id"], name="y", tenant="T", username="u2",

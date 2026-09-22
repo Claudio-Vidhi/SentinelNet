@@ -344,7 +344,10 @@ def identities_bulk_assign(identity_id: str, payload: BulkAssignIdentitySchema,
     if identity_id == "default":
         profile = "default"
     else:
-        creds = identity_manager.get_identity_credentials(identity_id)
+        try:
+            creds = identity_manager.get_identity_credentials(identity_id)
+        except identity_manager.IdentityDecryptError as e:
+            raise HTTPException(status_code=409, detail=str(e))
         if creds is None:
             raise HTTPException(status_code=404, detail="Identita' non trovata.")
         profile = f"identity:{identity_id}"
