@@ -1486,6 +1486,9 @@ async function refreshInventory() {
     globalDevices = data.devices;
     globalGroups = data.groups;
     globalVersions = data.detected_versions; // Cache globale delle versioni rilevate
+    // Endpoint panes build their device pickers once per load: an added or
+    // removed device must show up the next time they are opened.
+    if (typeof _locLoaded !== 'undefined') for (const v in _locLoaded) _locLoaded[v] = false;
 
     // Popola tendine Vendor + tendina Gruppi del form di provisioning
     // (estratto in populateProvisioningFormSelects: riusato anche da loadProvisioningTab).
@@ -1816,7 +1819,9 @@ async function switchTab(tabId, clickedBtn, opts = {}) {
     if (tabId === 'tab-devices') {
         renderDeviceTable();
     } else if (tabId === 'tab-provisioning') {
-        loadProvisioningTab();
+        // Awaited so editDevice() fills the form after the tab's own reload,
+        // not before: otherwise that reload resets tenant/profile/identities.
+        await loadProvisioningTab();
     } else if (tabId === 'tab-map') loadTopology();
     else if (tabId === 'tab-map-interactive') loadInteractiveMap();
     else if (tabId === 'tab-categories') loadCategoriesData();

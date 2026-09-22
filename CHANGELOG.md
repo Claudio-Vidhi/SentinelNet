@@ -10,6 +10,14 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- Provisioning: aprendo la modifica di un apparato dopo averne modificato un
+  altro, il form mostrava ancora tenant, profilo e identita' del precedente;
+  il ricaricamento della tab arrivava dopo la compilazione e la sovrascriveva.
+- Tracker MAC e le altre viste Endpoint: un apparato appena aggiunto non
+  compariva fra quelli selezionabili senza ricaricare la pagina.
+
 ## [0.42.0] - 2026-09-21
 
 ### Added
