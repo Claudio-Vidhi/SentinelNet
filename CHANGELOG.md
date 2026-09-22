@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.42.1] - 2026-09-22
+
 ### Fixed
 
 - Provisioning: aprendo la modifica di un apparato dopo averne modificato un
