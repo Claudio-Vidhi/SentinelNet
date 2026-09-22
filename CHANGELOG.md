@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.42.5] - 2026-09-22
+
 ### Fixed
 
 - Identita' con password non piu' decifrabile (chiave `secret.key`
