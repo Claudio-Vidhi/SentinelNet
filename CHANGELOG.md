@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.42.3] - 2026-09-22
+
 ### Added
 
 - Scansione subnet: pulsante "Seleziona verificati" che, dopo una verifica
