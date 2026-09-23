@@ -10,8 +10,11 @@ Rules (see CONTRIBUTING.md §3 and docs/adr/0004-single-process-sqlite-writer.md
   dropped and counted in ``metrics``).
 - Reads from async endpoints go through ``read()`` (off-loaded to a thread,
   read-only connection per call: WAL allows concurrent reads).
-- ``get_observability_connection()`` is ONLY for migrations and tests: forbidden
-  in async paths (CI gate via grep).
+- ``get_observability_connection()`` is a blocking connection: never on the
+  event loop. Migrations, tests, background worker threads and helpers handed
+  to ``asyncio.to_thread`` may use it (short transactional read-modify-write;
+  busy_timeout covers contention with the writer). Enforced by
+  tests/test_no_sync_db_on_event_loop.py.
 
 The writer performs BATCH commits: consumes up to ``BATCH_SIZE`` payloads or
 whatever is available, executes, a single commit. Writer crash → automatic restart
@@ -108,7 +111,7 @@ def _configure(conn: sqlite3.Connection) -> sqlite3.Connection:
 
 
 def get_observability_connection() -> sqlite3.Connection:
-    """ONLY for migrations and tests. Never in async paths (see CONTRIBUTING.md)."""
+    """Blocking connection: never on the event loop (see CONTRIBUTING.md §3)."""
     return _configure(sqlite3.connect(get_db_path()))
 
 

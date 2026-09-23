@@ -1118,7 +1118,7 @@
         }
         const banner = document.getElementById('appAdvRestartBanner');
         if (banner) banner.style.display = 'block';
-        showToast(i18n[currentLang].msgObsRestartRequired || 'Riavvio richiesto per applicare le modifiche.', 'warning');
+        showToast(tr('msgObsRestartRequired') || 'Riavvio richiesto per applicare le modifiche.', 'warning');
     }
 
     async function loadCliBlacklistSetting() {
@@ -1143,7 +1143,7 @@
             cb.checked = !cb.checked; // ripristina lo stato precedente
             return;
         }
-        if (statusEl) statusEl.textContent = i18n[currentLang].msgCliBlacklistSaved;
+        if (statusEl) statusEl.textContent = tr('msgCliBlacklistSaved');
     }
 
     function renderAppSettings(d) {

@@ -178,6 +178,18 @@ class TestReading(unittest.TestCase):
         r = self.client.get("/api/netsec-audit/history/999999", headers=CSRF)
         self.assertEqual(404, r.status_code)
 
+    def test_delete_removes_the_run(self):
+        # Exercises the handler body end to end: the delete runs in a thread
+        # now, off the event loop.
+        from services.netsec_audit import history
+        run_id = history.save({"benchmark": "cis", "score": 1, "summary": {}, "rules": []},
+                              tenant="sede-a", device_name="switch-01",
+                              device_ip="192.0.2.1", actor="admin")
+        r = self.client.delete(f"/api/netsec-audit/history/{run_id}", headers=CSRF)
+        self.assertEqual(200, r.status_code, r.text)
+        r = self.client.get(f"/api/netsec-audit/history/{run_id}", headers=CSRF)
+        self.assertEqual(404, r.status_code)
+
     def test_delete_is_admin_only(self):
         # Deleting evidence is not an operator action.
         import inspect

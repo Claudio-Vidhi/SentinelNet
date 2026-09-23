@@ -61,14 +61,14 @@
             box.innerHTML =
                 `<div style="display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--text-muted);">` +
                 `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--lamp-idle); flex-shrink:0;"></span>` +
-                `<span>${escapeHtml(i18n[currentLang].cbDisabled)}</span>` +
+                `<span>${escapeHtml(tr('cbDisabled'))}</span>` +
                 `</div>`;
             return;
         }
         const hours = st.hours_since_success;
         const stale = hours === null || hours > (st.stale_after_hours || 48);
         const age = hours === null
-            ? i18n[currentLang].cbNeverRan
+            ? tr('cbNeverRan')
             : `${Math.round(hours)} h`;
         const last = st.last_run || {};
         const stateColor = stale ? 'var(--lamp-warn)' : 'var(--lamp-up)';
@@ -79,21 +79,21 @@
             `  <div style="background:var(--surface); border:1px solid var(--border); padding:8px 12px; display:flex; align-items:center; gap:10px;">` +
             `    <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${stateColor}; flex-shrink:0;"></span>` +
             `    <div>` +
-            `      <div style="font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted);">${escapeHtml(i18n[currentLang].cbStale)}</div>` +
+            `      <div style="font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted);">${escapeHtml(tr('cbStale'))}</div>` +
             `      <div style="font-weight:700; color:${stateInk}; font-family:var(--font-mono, 'Azeret Mono');">${escapeHtml(age)}</div>` +
             `    </div>` +
             `  </div>` +
             `  <div style="background:var(--surface); border:1px solid var(--border); padding:8px 12px; display:flex; align-items:center; gap:10px;">` +
             `    <i class="fa-solid fa-clock-rotate-left" style="color:var(--text-muted); font-size:13px;"></i>` +
             `    <div>` +
-            `      <div style="font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted);">${escapeHtml(i18n[currentLang].cbPending)}</div>` +
+            `      <div style="font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted);">${escapeHtml(tr('cbPending'))}</div>` +
             `      <div style="font-weight:700; font-family:var(--font-mono, 'Azeret Mono');">${escapeHtml(String(st.pending))}</div>` +
             `    </div>` +
             `  </div>` +
             `  <div style="background:var(--surface); border:1px solid var(--border); padding:8px 12px; display:flex; align-items:center; gap:10px;">` +
             `    <i class="fa-solid ${last.ok ? 'fa-circle-check' : 'fa-triangle-exclamation'}" style="color:${last.ok ? 'var(--lamp-up)' : 'var(--lamp-fault)'}; font-size:13px;"></i>` +
             `    <div>` +
-            `      <div style="font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted);">${escapeHtml(i18n[currentLang].cbLastRun)}</div>` +
+            `      <div style="font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted);">${escapeHtml(tr('cbLastRun'))}</div>` +
             `      <div style="font-weight:600; font-size:12px; font-family:var(--font-mono, 'Azeret Mono');">${last.ok ? 'OK · ' + escapeHtml(String(last.uploaded || 0)) + ' ↑ · ' + escapeHtml(String(last.verified || 0)) + ' ✓' : escapeHtml(last.error || '—')}</div>` +
             `    </div>` +
             `  </div>` +
@@ -102,8 +102,8 @@
 
     function renderLoadError() {
         const box = document.getElementById('cbStatusBox');
-        if (box) box.textContent = i18n[currentLang].cbErrGeneric;
-        showToast(i18n[currentLang].cbErrGeneric, 'error');
+        if (box) box.textContent = tr('cbErrGeneric');
+        showToast(tr('cbErrGeneric'), 'error');
     }
 
     async function loadCloudBackup() {
@@ -117,43 +117,43 @@
     }
 
     document.getElementById('cbBtnSave')?.addEventListener('click', async () => {
-        if (!loaded) { showToast(i18n[currentLang].cbErrGeneric, 'error'); return; }
+        if (!loaded) { showToast(tr('cbErrGeneric'), 'error'); return; }
         const res = await apiFetch('/api/cloud-backup/settings', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(formValues()),
         });
         if (res && res.ok) {
-            showToast(i18n[currentLang].cbSaved, 'success');
+            showToast(tr('cbSaved'), 'success');
             loadCloudBackup();
         } else {
             const body = res ? await res.json() : {};
-            showToast(body.detail || i18n[currentLang].cbErrGeneric, 'error');
+            showToast(body.detail || tr('cbErrGeneric'), 'error');
         }
     });
 
     document.getElementById('cbBtnTest')?.addEventListener('click', async () => {
         const res = await apiFetch('/api/cloud-backup/test', { method: 'POST' });
-        const data = (res && res.ok) ? await res.json() : { ok: false, error: i18n[currentLang].cbErrHttp };
+        const data = (res && res.ok) ? await res.json() : { ok: false, error: tr('cbErrHttp') };
         if (!data.ok) {
-            showToast(data.error || i18n[currentLang].cbErrGeneric, 'error');
+            showToast(data.error || tr('cbErrGeneric'), 'error');
             return;
         }
         // The observed fingerprint is only useful if it can be pinned: drop it
         // into the empty field and say that Save is what makes it stick.
-        let msg = `${i18n[currentLang].cbTestOk} ${data.fingerprint}`;
+        let msg = `${tr('cbTestOk')} ${data.fingerprint}`;
         const field = document.getElementById('cbFingerprint');
         if (field && !field.value.trim() && data.fingerprint) {
             field.value = data.fingerprint;
-            msg += ` — ${i18n[currentLang].cbPinHint}`;
+            msg += ` — ${tr('cbPinHint')}`;
         }
         showToast(msg, 'success');
     });
 
     document.getElementById('cbBtnRun')?.addEventListener('click', async () => {
         const res = await apiFetch('/api/cloud-backup/run', { method: 'POST' });
-        const data = (res && res.ok) ? await res.json() : { ok: false, error: i18n[currentLang].cbErrHttp };
-        showToast(data.ok ? i18n[currentLang].cbRunOk : (data.error || i18n[currentLang].cbErrGeneric),
+        const data = (res && res.ok) ? await res.json() : { ok: false, error: tr('cbErrHttp') };
+        showToast(data.ok ? tr('cbRunOk') : (data.error || tr('cbErrGeneric')),
                   data.ok ? 'success' : 'error');
         loadCloudBackup();
     });

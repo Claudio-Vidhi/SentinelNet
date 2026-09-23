@@ -62,7 +62,7 @@ def _switch_port_for(src_ip: str, tenant: str) -> Optional[str]:
             e = entries[0]
             return f"{e.get('switch_name') or e.get('switch_ip')}:{e['switch_port']}"
     except Exception:
-        pass
+        logger.debug("switch port lookup failed for %s", src_ip, exc_info=True)
     return None
 
 

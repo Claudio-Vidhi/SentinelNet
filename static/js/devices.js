@@ -66,7 +66,7 @@
                     ${hasSnmp ? (tr('devConfigured'))
                               : (tr('devNotSet'))}</span>
                 ${isAdminRole(currentRole)
-                    ? `<button data-action="set-tenant-snmp" data-g="${escapeHtml(g)}" style="margin-left:8px; color:var(--primary); background:none; border:none; cursor:pointer;">${i18n[currentLang].btnSetTenantSnmp}</button>`
+                    ? `<button data-action="set-tenant-snmp" data-g="${escapeHtml(g)}" style="margin-left:8px; color:var(--primary); background:none; border:none; cursor:pointer;">${tr('btnSetTenantSnmp')}</button>`
                     : ''}</td>`;
 
             groupBody.innerHTML += `<tr>
@@ -303,8 +303,8 @@
         // Stato vuoto: guida l'utente invece di mostrare una tabella nuda
         if (!devBody.children.length) {
             const msg = globalDevices.length === 0
-                ? i18n[currentLang].emptyInventory
-                : i18n[currentLang].emptyInventoryFiltered;
+                ? tr('emptyInventory')
+                : tr('emptyInventoryFiltered');
             devBody.innerHTML = `<tr><td colspan="${isViewer ? 6 : 7}" style="text-align:center; padding:32px; color:var(--text-muted); font-size:13px;">
                 <i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${msg}
             </td></tr>`;
@@ -359,13 +359,13 @@
         if (!v) { hint.style.display = 'none'; return; }
         if (!ipRe.test(v) || v.split('.').some(o => +o > 255)) {
             hint.style.display = 'block'; hint.style.color = 'var(--danger)';
-            hint.innerHTML = i18n[currentLang].hintIpInvalid;
+            hint.innerHTML = tr('hintIpInvalid');
             return;
         }
         const existing = (globalDevices || []).find(d => d.IP === v);
         if (existing && !editingDeviceIp) {
             hint.style.display = 'block'; hint.style.color = 'var(--warning)';
-            hint.innerHTML = `${i18n[currentLang].hintIpExists} <a href="#" data-action="edit-device-hint" data-ip="${escapeHtml(v)}">${i18n[currentLang].hintIpEditLink}</a>`;
+            hint.innerHTML = `${tr('hintIpExists')} <a href="#" data-action="edit-device-hint" data-ip="${escapeHtml(v)}">${tr('hintIpEditLink')}</a>`;
         } else { hint.style.display = 'none'; }
     });
 
@@ -405,7 +405,7 @@
             parts.push(TRANSPORT_LABELS[p] + (port ? ':' + port : ''));
         }
         document.getElementById('devTransportsSummary').textContent =
-            parts.length ? parts.join(', ') : i18n[currentLang].lblTransportsNone;
+            parts.length ? parts.join(', ') : tr('lblTransportsNone');
     }
 
     document.getElementById('trTelnetEnabled').addEventListener('change', updateTelnetWarn);
@@ -476,7 +476,7 @@
         const snmpDisabled = document.getElementById('devSnmpDisabled');
         if (snmpDisabled) payload.snmp_disabled = snmpDisabled.checked;
 
-        if(!payload.ip) { alert(i18n[currentLang].alertEnterIp); return; }
+        if(!payload.ip) { alert(tr('alertEnterIp')); return; }
 
         // In modifica i campi credenziali vuoti significano "invariate":
         // add_or_update_device preserva quelle già salvate. Si compilano solo
@@ -491,7 +491,7 @@
             refreshInventory();
         } else if (res) {
             const err = await res.json();
-            alert(`${i18n[currentLang].alertFirstSetupError}${err.detail || i18n[currentLang].alertSaveDeviceError}`);
+            alert(`${tr('alertFirstSetupError')}${err.detail || tr('alertSaveDeviceError')}`);
         }
     });
 
@@ -529,7 +529,7 @@
         // Il segreto non torna dal server: il placeholder dice solo SE c'è.
         document.getElementById('devSnmp').value = '';
         document.getElementById('devSnmp').placeholder = dev.snmp_inherited
-            ? i18n[currentLang].hintSnmpInherited
+            ? tr('hintSnmpInherited')
             : (dev.snmp_enabled
                 ? (tr('devConfiguredLeaveBlankTo'))
                 : '—');
@@ -564,9 +564,9 @@
             el.placeholder = keepPh;
         }
 
-        document.getElementById('devFormTitle').innerHTML = i18n[currentLang].titleEditDevice;
+        document.getElementById('devFormTitle').innerHTML = tr('titleEditDevice');
         document.getElementById('devEditNotice').style.display = 'block';
-        document.getElementById('btnSaveDevice').innerHTML = i18n[currentLang].btnUpdateDevice;
+        document.getElementById('btnSaveDevice').innerHTML = tr('btnUpdateDevice');
         document.getElementById('btnCancelEditDevice').style.display = 'block';
 
         document.getElementById('devFormTitle').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -595,14 +595,14 @@
         document.getElementById('devSnmpClear').checked = false;
         const dsdReset = document.getElementById('devSnmpDisabled');
         if (dsdReset) dsdReset.checked = false;
-        document.getElementById('devFormTitle').innerHTML = i18n[currentLang].titleProvisioning;
+        document.getElementById('devFormTitle').innerHTML = tr('titleProvisioning');
         document.getElementById('devEditNotice').style.display = 'none';
-        document.getElementById('btnSaveDevice').innerHTML = i18n[currentLang].btnSaveDevice;
+        document.getElementById('btnSaveDevice').innerHTML = tr('btnSaveDevice');
         document.getElementById('btnCancelEditDevice').style.display = 'none';
     }
 
     async function deleteDevice(ip) {
-        if(confirm(i18n[currentLang].confirmDeleteDevice.replace("{ip}", ip))) {
+        if(confirm(tr('confirmDeleteDevice').replace("{ip}", ip))) {
             const res = await apiFetch('/api/delete-device', { 
                 method: 'POST', 
                 headers: {'Content-Type': 'application/json'}, 
@@ -618,7 +618,7 @@
     async function renameDevice(ip) {
         const dev = globalDevices.find(d => d.IP === ip);
         const current = dev ? (dev.Hostname || '') : '';
-        const label = i18n[currentLang].promptRenameDevice.replace("{ip}", ip);
+        const label = tr('promptRenameDevice').replace("{ip}", ip);
         const name = prompt(label, current);
         if (name === null) return;                 // annullato
         if (name.trim() === (current || '').trim()) return;  // nessuna modifica
@@ -630,7 +630,7 @@
         if (res && res.ok) {
             refreshInventory();
         } else if (res) {
-            alert(i18n[currentLang].alertRenameDeviceError);
+            alert(tr('alertRenameDeviceError'));
         }
     }
 
@@ -662,12 +662,12 @@
             await refreshIdentityOptions();
             renderIdentitiesPanel();
         } else if (res) {
-            alert(i18n[currentLang].alertGroupCreateError);
+            alert(tr('alertGroupCreateError'));
         }
     });
 
     async function deleteGroup(name) {
-        if(confirm(i18n[currentLang].confirmDeleteGroup.replace("{name}", name))) {
+        if(confirm(tr('confirmDeleteGroup').replace("{name}", name))) {
             const res = await apiFetch('/api/groups/delete', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -676,7 +676,7 @@
             if(res && res.ok) {
                 refreshInventory().then(loadSnmpDefaults);
             } else if (res) {
-                alert(i18n[currentLang].alertGroupDeleteError);
+                alert(tr('alertGroupDeleteError'));
             }
         }
     }
@@ -719,7 +719,7 @@
     async function addVendor() {
         const name = document.getElementById('newVendorName').value.trim().toLowerCase();
         const drv  = document.getElementById('newVendorDriver').value.trim() || null;
-        if (!name) { alert(i18n[currentLang].alertVendorRequired); return; }
+        if (!name) { alert(tr('alertVendorRequired')); return; }
         const res = await apiFetch('/api/vendors', {
             method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({name, driver: drv})
@@ -733,7 +733,7 @@
     }
 
     async function deleteVendor(name) {
-        if (!confirm(i18n[currentLang].confirmDeleteVendor.replace("{name}", name))) return;
+        if (!confirm(tr('confirmDeleteVendor').replace("{name}", name))) return;
         const res = await apiFetch('/api/vendors/delete', {
             method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({name})
@@ -1472,7 +1472,7 @@
         try {
             const res = await apiFetch(`/api/download-backup/${ip}`);
             if (!res || !res.ok) {
-                alert(i18n[currentLang].alertDownloadError);
+                alert(tr('alertDownloadError'));
                 return;
             }
             const blob = await res.blob();
@@ -1496,7 +1496,7 @@
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
         } catch (err) {
-            alert(i18n[currentLang].alertNetworkDownloadError);
+            alert(tr('alertNetworkDownloadError'));
         }
     }
 
@@ -1623,7 +1623,7 @@
         if (!exportColumns.length) {
             const res = await apiFetch("/api/export/devices/columns");
             if (!res || !res.ok) {
-                alert(i18n[currentLang].alertExportError);
+                alert(tr('alertExportError'));
                 return;
             }
             const data = await res.json();
@@ -1662,7 +1662,7 @@
             columns: checkedValues('exportColumnList'),
         };
         if (!prefs.columns.length) {
-            alert(i18n[currentLang].alertExportNoColumns);
+            alert(tr('alertExportNoColumns'));
             return;
         }
         localStorage.setItem(EXPORT_PREFS_KEY, JSON.stringify(prefs));
@@ -1671,7 +1671,7 @@
 
         const res = await apiFetch("/api/export/devices?" + qs.toString());
         if (!res || !res.ok) {
-            alert(i18n[currentLang].alertExportError);
+            alert(tr('alertExportError'));
             return;
         }
         const blob = await res.blob();
@@ -1794,7 +1794,7 @@
 
     document.getElementById('btnUploadCsv').addEventListener('click', async () => {
         const fileInput = document.getElementById('csvFileInput');
-        if (fileInput.files.length === 0) { alert(i18n[currentLang].alertSelectCsv); return; }
+        if (fileInput.files.length === 0) { alert(tr('alertSelectCsv')); return; }
 
         const file = fileInput.files[0];
         const reader = new FileReader();
@@ -1817,10 +1817,10 @@
                 } else if (res) {
                     let detail = '';
                     try { const err = await res.json(); detail = err && err.detail; } catch (e2) {}
-                    renderCsvImportResult(null, detail || i18n[currentLang].alertImportCsvError);
+                    renderCsvImportResult(null, detail || tr('alertImportCsvError'));
                 }
             } catch (err) {
-                renderCsvImportResult(null, `${i18n[currentLang].alertError}${err}`);
+                renderCsvImportResult(null, `${tr('alertError')}${err}`);
             }
         };
         reader.readAsText(file);
@@ -1896,11 +1896,11 @@
             } else {
                 const err = res ? await res.json() : null;
                 const errDetail = err?.detail || (tr('devUnknownError'));
-                alert(`${i18n[currentLang].alertReassignmentError}${errDetail}`);
+                alert(`${tr('alertReassignmentError')}${errDetail}`);
                 selectEl.value = originalGroup;
             }
         } catch (err) {
-            alert(i18n[currentLang].alertNetworkReassignmentError);
+            alert(tr('alertNetworkReassignmentError'));
             selectEl.value = originalGroup;
         }
         selectEl.disabled = false;
@@ -1960,7 +1960,7 @@
             setDeviceStatus(ip, "offline");
         }
         renderDeviceTable();
-        if (failure) alert(`${i18n[currentLang].alertTriageFailed}${failure}`);
+        if (failure) alert(`${tr('alertTriageFailed')}${failure}`);
     }
 
     // ips: the bulk selection; omitted = every device of the tenant in the filter.
@@ -1971,10 +1971,10 @@
         const btn = document.getElementById("btnPingCheck");
         const filterSelect = document.getElementById("filterGroupSelect");
         const group = Array.isArray(ips) ? "all" : (filterSelect ? filterSelect.value : "all");
-        const groupLabel = group === "all" ? i18n[currentLang].allSites : group;
+        const groupLabel = group === "all" ? tr('allSites') : group;
 
         btn.disabled = true;
-        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${i18n[currentLang].pingingBtnText.replace("{group}", groupLabel)}`;
+        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${tr('pingingBtnText').replace("{group}", groupLabel)}`;
 
         try {
             const res = await apiFetch("/api/ping-check", {
@@ -1986,13 +1986,13 @@
                 const data = await res.json();
                 applyPingResultsToTable(data.results);
             } else {
-                alert(i18n[currentLang].alertPingError);
+                alert(tr('alertPingError'));
             }
         } catch (err) {
             console.error("Ping check error:", err);
         }
 
-        btn.innerHTML = i18n[currentLang].btnPingCheck;
+        btn.innerHTML = tr('btnPingCheck');
         btn.disabled = false;
         pingInProgress = false;
     }

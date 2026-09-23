@@ -6,6 +6,7 @@
 import logging
 import re
 import os
+import time
 import requests
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -22,6 +23,33 @@ router = APIRouter(tags=["Backup"])
 NVD_BASE_URL = nvd.BASE_URL
 
 log = logging.getLogger("sentinelnet.nvd")
+
+# FIRST publishes EPSS once a day, so a score is good for a day. A failed call
+# backs off for ten minutes: on an isolated management LAN every CVE lookup
+# used to wait out the 3s timeout.
+# ponytail: unbounded in-process dict, CVE ids are a finite set; bound it if memory ever shows it.
+_EPSS_TTL = 86400
+_EPSS_RETRY_AFTER = 600
+_epss_cache: dict[str, tuple[float, float]] = {}
+_epss_down_until = 0.0
+
+
+def _epss_scores(cve_ids: list[str]) -> dict[str, float]:
+    global _epss_down_until
+    now = time.time()
+    missing = [c for c in cve_ids if now - _epss_cache.get(c, (0.0, 0.0))[1] > _EPSS_TTL]
+    if missing and now >= _epss_down_until:
+        try:
+            resp = requests.get(f"https://api.first.org/data/v1/epss?cve={','.join(missing)}",
+                                timeout=3)
+            resp.raise_for_status()
+            for entry in resp.json().get("data", []):
+                if "cve" in entry:
+                    _epss_cache[entry["cve"]] = (float(entry.get("epss", 0)), now)
+        except Exception as e:
+            log.warning("EPSS unavailable, retrying in %ss: %s", _EPSS_RETRY_AFTER, e)
+            _epss_down_until = now + _EPSS_RETRY_AFTER
+    return {c: _epss_cache[c][0] for c in cve_ids if c in _epss_cache}
 
 
 def cpe_from_device(vendor: str, text: str) -> "str | None":
@@ -332,17 +360,10 @@ async def proxy_enisa_search(request: Request, current_user = Depends(get_curren
                 text_label=text_val))
 
         if cve_ids:
-            try:
-                epss_url = f"https://api.first.org/data/v1/epss?cve={','.join(cve_ids[:100])}"
-                epss_resp = await run_in_threadpool(requests.get, epss_url, timeout=3)
-                if epss_resp.status_code == 200:
-                    epss_data = epss_resp.json().get("data", [])
-                    epss_map = {entry.get("cve"): float(entry.get("epss", 0)) for entry in epss_data if "cve" in entry}
-                    for it in items:
-                        if it["cve"] in epss_map:
-                            it["epss"] = epss_map[it["cve"]]
-            except Exception:
-                pass
+            epss_map = await run_in_threadpool(_epss_scores, cve_ids[:100])
+            for it in items:
+                if it["cve"] in epss_map:
+                    it["epss"] = epss_map[it["cve"]]
 
         # Chi apre la scheda di un apparato vuole sapere quanto e' esposto:
         # prima i CVE gia' sfruttati (CISA KEV), poi il punteggio, poi la data.

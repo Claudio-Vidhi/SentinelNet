@@ -140,7 +140,7 @@ function locTenantChanged() {
             const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
             return `<option value="${escapeHtml(d.IP)}">${escapeHtml(d.IP)}${name}</option>`;
         }).join('');
-        const allLabel = (i18n[currentLang] && i18n[currentLang].optMacAllDevices) || 'All devices';
+        const allLabel = (i18n[currentLang] && tr('optMacAllDevices')) || 'All devices';
         sel.innerHTML = (includeAll ? `<option value="all">${allLabel}</option>` : '') + opts;
         if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
     }
@@ -344,8 +344,8 @@ function locTenantChanged() {
         if (all) all.checked = (total > 0 && sel === total);
         const sum = document.getElementById('arpDeviceSummary');
         if (sum) sum.textContent = (sel === 0)
-            ? (i18n[currentLang].optMacAllDevices || 'Tutti i dispositivi')
-            : `${sel} ${i18n[currentLang].lblAiDevSelected || 'selezionati'}`;
+            ? (tr('optMacAllDevices') || 'Tutti i dispositivi')
+            : `${sel} ${tr('lblAiDevSelected') || 'selezionati'}`;
     }
 
     async function runArpScan() {
@@ -380,7 +380,7 @@ function locTenantChanged() {
                 return `<div>• <b>${escapeHtml(ip)}</b> — <span style="color:${color};">${r.status}</span>: ${detail}</div>`;
             }).join('');
             box.style.display = 'block';
-            box.innerHTML = `<b>${i18n[currentLang].titleArpScanSummary || 'Esito raccolta ARP'}</b>` +
+            box.innerHTML = `<b>${tr('titleArpScanSummary') || 'Esito raccolta ARP'}</b>` +
                 `<div style="margin-top:6px;">${rows || '—'}</div>`;
         } finally {
             btn.disabled = false;
@@ -427,7 +427,7 @@ function locTenantChanged() {
                     ? `<span title="${tr('cmapInTransitOnAn')}" style="font-size:10px; color:var(--warning); border:1px solid var(--warning); border-radius:0; padding:1px 5px;"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${tr('cmapTransit')}${r.uplink_to?` → ${escapeHtml(r.uplink_to)}`:''}</span>`
                     : `<span title="${tr('cmapAccessPortDeviceAttached')}" style="font-size:10px; color:var(--success); border:1px solid var(--success); border-radius:0; padding:1px 5px;"><i class="fa-solid fa-location-crosshairs"></i> ${tr('cmapAccess')}</span>`;
                 const portCfgBtn = (g.ip && r.interface)
-                    ? `<button data-action="show-port-config" data-switch-ip="${escapeHtml(g.ip)}" data-switch-port="${escapeHtml(r.interface)}" data-switch-name="${escapeHtml(g.name || '')}" title="${escapeHtml(i18n[currentLang].btnPortConfig)}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-file-lines"></i></button>`
+                    ? `<button data-action="show-port-config" data-switch-ip="${escapeHtml(g.ip)}" data-switch-port="${escapeHtml(r.interface)}" data-switch-name="${escapeHtml(g.name || '')}" title="${escapeHtml(tr('btnPortConfig'))}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-file-lines"></i></button>`
                     : '';
                 // Il tenant del gruppo viaggia col MAC: si sta guardando UNO
                 // switch di UNA sede, e la risposta deve essere di quella sede.

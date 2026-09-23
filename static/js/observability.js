@@ -174,10 +174,10 @@
         const banner = document.getElementById('obsRestartBanner');
         if (data && data.restart_required) {
             if (banner) banner.style.display = 'block';
-            showToast(i18n[currentLang].msgObsRestartRequired || 'Riavvio richiesto per applicare le modifiche.', 'warning');
+            showToast(tr('msgObsRestartRequired') || 'Riavvio richiesto per applicare le modifiche.', 'warning');
         } else {
             if (banner) banner.style.display = 'none';
-            showToast(i18n[currentLang].msgObsApplied || 'Modifiche applicate.', 'success');
+            showToast(tr('msgObsApplied') || 'Modifiche applicate.', 'success');
         }
     }
 
@@ -997,7 +997,7 @@
         _flowsSelectedKeys.forEach(k => { if (!filteredKeys.has(k) && !_flowsRawData.some(f => flowKey(f) === k)) _flowsSelectedKeys.delete(k); });
 
         if (filtered.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="10" style="padding:20px; text-align:center; color:var(--text-muted);">${i18n[currentLang].msgNoFlows || 'Nessun flusso nel periodo selezionato.'}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="10" style="padding:20px; text-align:center; color:var(--text-muted);">${tr('msgNoFlows') || 'Nessun flusso nel periodo selezionato.'}</td></tr>`;
             const all = document.getElementById('flowsSelectAll');
             if (all) all.checked = false;
             return;

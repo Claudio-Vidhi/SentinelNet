@@ -128,7 +128,7 @@
         if (!dev) { metaEl.innerHTML = ''; return; }
         const group = dev.Group || 'Generale';
         const vendor = (dev.Vendor || dev.Type || 'cisco').toUpperCase();
-        metaEl.innerHTML = `<span class="badge">${escapeHtml(i18n[currentLang].ptTenantLabel)}: ${escapeHtml(group)}</span> <span class="badge">Vendor: ${escapeHtml(vendor)}</span>`;
+        metaEl.innerHTML = `<span class="badge">${escapeHtml(tr('ptTenantLabel'))}: ${escapeHtml(group)}</span> <span class="badge">Vendor: ${escapeHtml(vendor)}</span>`;
     }
 
     function switchPolicySubtab(subtab) {
@@ -156,8 +156,8 @@
 
     async function runPolicyTrace() {
         if (!ptSelectedIp) {
-            alert(policyTenant() ? i18n[currentLang].ptChooseDeviceFirst
-                                 : i18n[currentLang].ptChooseTenantFirst);
+            alert(policyTenant() ? tr('ptChooseDeviceFirst')
+                                 : tr('ptChooseTenantFirst'));
             return;
         }
 
@@ -262,7 +262,7 @@
             html += `
             <div style="padding:10px 14px; margin-bottom:16px; border:1px solid var(--warning); background:var(--lamp-warn-wash); color:var(--warning); font-size:12px; display:flex; align-items:center; gap:10px;">
                 <i class="fa-solid fa-triangle-exclamation"></i>
-                <span>${escapeHtml(i18n[currentLang].ptDynamicRoutingWarning)}</span>
+                <span>${escapeHtml(tr('ptDynamicRoutingWarning'))}</span>
             </div>`;
         }
 
@@ -272,7 +272,7 @@
             html += `
             <div style="padding:10px 14px; margin-bottom:16px; border:1px solid var(--warning); background:var(--lamp-warn-wash); font-size:12px;">
                 <div style="font-weight:600; margin-bottom:6px; color:var(--warning);">
-                    <i class="fa-solid fa-circle-question"></i> ${escapeHtml(i18n[currentLang].ptUnresolvedTitle)}
+                    <i class="fa-solid fa-circle-question"></i> ${escapeHtml(tr('ptUnresolvedTitle'))}
                 </div>
                 <ul style="margin:0; padding-left:18px; color:var(--text);">
                     ${unresolved.map(u => `<li>${escapeHtml(u)}</li>`).join('')}

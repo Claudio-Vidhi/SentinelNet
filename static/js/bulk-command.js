@@ -10,7 +10,7 @@ let _bulkJobInterval = null;
 function openBulkCommandModal(preselect = []) {
     // Popola il filtro gruppo
     const gf = document.getElementById('bulkGroupFilter');
-    gf.innerHTML = `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
+    gf.innerHTML = `<option value="all">${tr('optFilterAll')}</option>` +
         Object.keys(globalGroups).map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
     // A preselection can span tenants: show them all so none is hidden and lost.
     gf.value = preselect.length ? 'all' : tenantSelectSeed('', Object.keys(globalGroups), 'all');
@@ -24,7 +24,7 @@ function openBulkCommandModal(preselect = []) {
     document.getElementById('bulkStatus').textContent = '';
     const btn = document.getElementById('btnBulkRun');
     btn.disabled = false;
-    btn.innerHTML = i18n[currentLang].btnBulkRun;
+    btn.innerHTML = tr('btnBulkRun');
 
     renderBulkTargets();
     if (preselect.length) {
@@ -104,7 +104,7 @@ async function startBulkCommand() {
         document.getElementById('bulkStatus').textContent =
             (tr('uiError')) + (err.detail || '');
         btn.disabled = false;
-        btn.innerHTML = i18n[currentLang].btnBulkRun;
+        btn.innerHTML = tr('btnBulkRun');
         return;
     }
     const { job_id, total } = await res.json();
@@ -117,7 +117,7 @@ function pollBulkJob(jobId, total) {
         if (!res || !res.ok) {
             clearInterval(_bulkJobInterval); _bulkJobInterval = null;
             const b = document.getElementById('btnBulkRun');
-            b.disabled = false; b.innerHTML = i18n[currentLang].btnBulkRun;
+            b.disabled = false; b.innerHTML = tr('btnBulkRun');
             return;
         }
         const data = await res.json();
@@ -135,7 +135,7 @@ function pollBulkJob(jobId, total) {
             document.getElementById('bulkStatus').textContent =
                 tr('bulkCompletedOkErrors', {ok: ok, err: err});
             const b = document.getElementById('btnBulkRun');
-            b.disabled = false; b.innerHTML = i18n[currentLang].btnBulkRun;
+            b.disabled = false; b.innerHTML = tr('btnBulkRun');
         }
     }, 1500);
 }

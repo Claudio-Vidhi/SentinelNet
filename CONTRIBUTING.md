@@ -40,7 +40,11 @@ Bundled paths resolve via `sys._MEIPASS`.
 - Reads: `await db.read(sql, params)` (off-loaded to a thread).
 - Writes: `db.enqueue_write(...)` / `db.enqueue_flow(...)` (bounded queue,
   dedicated writer, batch commit).
-- `db.get_observability_connection()` is permitted ONLY in migrations and tests.
+- `db.get_observability_connection()` is a blocking connection: never in the
+  body of an `async def`. Migrations, tests, worker threads and a helper
+  handed to `asyncio.to_thread` may use it — that is how short transactional
+  read-modify-writes (incident transitions, notification cursors) are done.
+  `tests/test_no_sync_db_on_event_loop.py` enforces it.
 
 ```python
 # ✅ correct (async endpoint)
@@ -97,7 +101,7 @@ observability module.
 | Gate | What it protects | Command | Expected |
 |---|---|---|---|
 | L-1 | Session JWT must not be readable by JavaScript — cookie only | `grep -c "sessionStorage" templates/dashboard.html` | No token usage |
-| — | No `sqlite3` on async paths | `grep -n "get_observability_connection" app_server.py routers/ observability/ingesters/` | Migrations and tests only |
+| — | No blocking `sqlite3` on the event loop | `uv run pytest tests/test_no_sync_db_on_event_loop.py` | Green |
 | I-2 | Provisioner day-0 config must not emit cleartext secrets | `tests/test_provisioning_secrets.py` | Green |
 | I-1 | LLM context passes the redaction choke-point | `tests/test_redaction.py` | Green |
 | H-1 | TLS config is fail-closed, no silent HTTP fallback | `tests/test_tls_config.py` | Green |

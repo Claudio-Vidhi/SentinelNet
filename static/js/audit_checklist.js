@@ -407,8 +407,8 @@
         const item = ref ? currentTemplate.items.find(i => i.ref === ref) : null;
 
         document.getElementById("tplItemModalTitle").innerHTML = item
-            ? `<i class="fa-solid fa-pen" style="color:var(--primary);"></i> ${i18n[currentLang].titleTplItemEdit} ${escapeHtml(ref)}`
-            : i18n[currentLang].titleTplItemNew;
+            ? `<i class="fa-solid fa-pen" style="color:var(--primary);"></i> ${tr('titleTplItemEdit')} ${escapeHtml(ref)}`
+            : tr('titleTplItemNew');
 
         const refEl = document.getElementById("tplItemRef");
         refEl.value = item ? item.ref : "";

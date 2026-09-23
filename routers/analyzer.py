@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Router Analyzer. Estratto da app_server.py (fase 6.6)."""
 
+import asyncio
 import json
 import os
 import re
@@ -401,12 +402,14 @@ async def netsec_audit_history_delete(run_id: int,
     if scope is not None and (row_tenant is None or row_tenant not in scope):
         raise HTTPException(status_code=404, detail="Audit non trovato.")
 
-    conn = db.get_observability_connection()
-    try:
-        conn.execute("DELETE FROM netsec_audit_runs WHERE id = ?", (run_id,))
-        conn.commit()
-    finally:
-        conn.close()
+    def _delete():
+        conn = db.get_observability_connection()
+        try:
+            conn.execute("DELETE FROM netsec_audit_runs WHERE id = ?", (run_id,))
+            conn.commit()
+        finally:
+            conn.close()
 
+    await asyncio.to_thread(_delete)
     log_audit(f"Audit run #{run_id} eliminato dallo storico da '{current_user.get('sub')}'.")
     return {"status": "ok", "deleted": run_id}

@@ -23,7 +23,7 @@
         if (sel) {
             const cur = sel.value;
             const groups = Object.keys(globalGroups || {});
-            sel.innerHTML = `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
+            sel.innerHTML = `<option value="all">${tr('optFilterAll')}</option>` +
                 groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
             sel.value = tenantSelectSeed(cur, groups, 'all');
         }
@@ -619,7 +619,7 @@
             });
             edges.push({
                 from: 'center', to: nid,
-                label: `${hopCounts[hop]} ${i18n[currentLang].lblCaRouteMapEdge}`,
+                label: `${hopCounts[hop]} ${tr('lblCaRouteMapEdge')}`,
                 // Anche l'arco selezionato ha un default vis.js fuori palette
                 // (#2B7CE9): si tiene la tinta dell'arco, schiarita.
                 color: hopHasDefault[hop]

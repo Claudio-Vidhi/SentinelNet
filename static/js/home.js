@@ -95,7 +95,8 @@ async function loadHome() {
                 // loadHome() is cheap here — globalDevices is cached, so
                 // only the ping status and the render are repeated.
                 const ms = Math.max(5, pm.interval_seconds || 60) * 1000;
-                _pingRefreshTimer = setInterval(() => loadHome(), ms);
+                // A hidden browser tab has nobody to show the result to.
+                _pingRefreshTimer = setInterval(() => { if (!document.hidden) loadHome(); }, ms);
             }
         }
     } catch (_) { /* monitor endpoint optional */ }
@@ -153,7 +154,7 @@ async function loadHome() {
     const body = document.getElementById('homeAttentionBody');
     if (body) {
         if (attention.length === 0) {
-            const okMsg = i18n[currentLang].homeNoAttention;
+            const okMsg = tr('homeNoAttention');
             body.innerHTML = `<tr><td colspan="4" style="color:var(--text-muted); text-align:center; padding:16px;">${okMsg}</td></tr>`;
         } else {
             body.innerHTML = attention.slice(0, 8).map(d => {
@@ -482,7 +483,7 @@ async function loadHomeAnomalies() {
 function renderEventStripDenied() {
     const strip = document.getElementById('homeEventStrip');
     if (strip) strip.innerHTML =
-        `<p class="eventstrip-empty">${escapeHtml(i18n[currentLang].homeEventStripDenied)}</p>`;
+        `<p class="eventstrip-empty">${escapeHtml(tr('homeEventStripDenied'))}</p>`;
 }
 
 // Striscia eventi: una riga per evento, la piu' recente in alto, come la

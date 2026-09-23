@@ -77,6 +77,57 @@ def test_filters_and_scope():
                         assert eq == 1
 
 
+def _scoped_users():
+    """admin_all sees every tenant, operator_scoped only TenantA."""
+    return (
+        patch.object(user_manager, "get_users", return_value={
+            "admin_all": {"email": "admin@example.com", "role": "super_admin", "groups": []},
+            "operator_scoped": {"email": "op@example.com", "role": "operator", "groups": ["TenantA"]},
+        }),
+        patch.object(user_manager, "get_user_groups",
+                     side_effect=lambda u: ["TenantA"] if u == "operator_scoped" else []),
+    )
+
+
+def test_tenant_without_device_ip_reaches_scoped_user():
+    # incident.opened carries the tenant and no device IP: before the fix the
+    # group stayed None and a scoped operator never got an incident email.
+    users, groups = _scoped_users()
+    with patch.object(mailer, "get_config", return_value={"enabled": True}), users, groups, \
+            patch("services.inventory_manager.get_all_devices", return_value=[]):
+        assert notifications.emit(kind="incident.opened", device_ip=None, severity="high",
+                                  title="t", tenant="TenantA", dedup_key="a") == 2
+        assert notifications.emit(kind="incident.opened", device_ip=None, severity="high",
+                                  title="t", tenant="TenantB", dedup_key="b") == 1
+
+
+def test_ip_shared_by_two_tenants_names_no_group():
+    # The same private IP in two tenants is ordinary: guessing the first row
+    # could mail one customer's event to another customer's operator.
+    users, groups = _scoped_users()
+    # TenantA first: the old first-match lookup would guess it and mail the operator.
+    devices = [{"IP": "192.0.2.30", "Group": "TenantA"}, {"IP": "192.0.2.30", "Group": "TenantB"}]
+    with patch.object(mailer, "get_config", return_value={"enabled": True}), users, groups, \
+            patch("services.inventory_manager.get_all_devices", return_value=devices):
+        assert notifications.emit(kind="incident.opened", device_ip="192.0.2.30", severity="high",
+                                  title="t", dedup_key="c") == 1
+        # The explicit tenant wins over the IP lookup.
+        assert notifications.emit(kind="incident.opened", device_ip="192.0.2.30", severity="high",
+                                  title="t", tenant="TenantA", dedup_key="d") == 2
+
+
+def test_group_filter_excludes_event_of_unknown_group():
+    # "Only TenantA" in the preferences must not let through an event whose
+    # group is unknown: before the fix grp=None slipped past the filter.
+    users, groups = _scoped_users()
+    with patch.object(mailer, "get_config", return_value={"enabled": True}), users, groups, \
+            patch("services.inventory_manager.get_all_devices", return_value=[]), \
+            patch.object(notifications, "get_user_prefs",
+                         return_value={"enabled": True, "groups": ["TenantA"]}):
+        assert notifications.emit(kind="incident.opened", device_ip=None, severity="high",
+                                  title="t", dedup_key="e") == 0
+
+
 def test_anti_flood_suppressed():
     with patch.object(mailer, "get_config", return_value={"enabled": True, "from_email": "sn@example.com"}):
         with patch.object(user_manager, "get_users", return_value={
