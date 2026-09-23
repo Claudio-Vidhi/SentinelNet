@@ -242,7 +242,10 @@ _CSP = (
     "style-src 'self' 'unsafe-inline'; "
     "font-src 'self'; "
     "img-src 'self' data:; "
-    "connect-src 'self' ws: wss:; "
+    # Bare ws:/wss: means a socket to ANY host — an exfiltration channel after
+    # an XSS. CSP3 'self' already matches same-origin ws(s), and the terminal
+    # (cli-modal.js) is the only socket and always targets location.host.
+    "connect-src 'self'; "
     "frame-ancestors 'none'; "
     # Without base-uri an injected <base href> repoints every relative script
     # src, which is how script-src 'self' gets walked around. form-action stops

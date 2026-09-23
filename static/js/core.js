@@ -967,6 +967,7 @@ let _sessionConfirmed = false;
 // Dati di /api/auth/me letti in checkAuthRequirements: appInit li riusa
 // invece di rifare la stessa chiamata per ruolo/username/tab.
 let _meCache = null;
+let _lastUnreachableToast = 0;
 
 // Funzione centralizzata per iniettare e controllare gli header di autenticazione ed evitare disallineamenti della UI
 async function apiFetch(url, options = {}) {
@@ -994,6 +995,13 @@ async function apiFetch(url, options = {}) {
         return res;
     } catch (err) {
         console.error(`[ApiFetch Error] ${url}:`, err);
+        // Most callers stop on a null response without a word: say it once
+        // here instead of leaving an empty panel. Throttled, because one
+        // outage fails every poll on the page at once.
+        if (_sessionConfirmed && Date.now() - _lastUnreachableToast > 15000) {
+            _lastUnreachableToast = Date.now();
+            showToast(tr('errServerUnreachable'), 'error');
+        }
         return null;
     }
 }
@@ -1069,8 +1077,8 @@ document.getElementById('btnRegisterAdmin').addEventListener('click', async () =
     const user = document.getElementById('wizUser').value.trim();
     const pass = document.getElementById('wizPass').value.trim();
 
-    if (!user || !pass) { alert(i18n[currentLang].alertFirstSetupFill); return; }
-    if (pass.length < 8) { alert(i18n[currentLang].alertPassTooShort); return; }
+    if (!user || !pass) { alert(tr('alertFirstSetupFill')); return; }
+    if (pass.length < 8) { alert(tr('alertPassTooShort')); return; }
 
     const res = await fetch('/api/auth/register', {
         method: 'POST',
@@ -1093,12 +1101,12 @@ document.getElementById('btnRegisterAdmin').addEventListener('click', async () =
             appInit();
         } else {
             // Fallback improbabile: account creato ma login fallito.
-            alert(i18n[currentLang].alertFirstSetupSuccess);
+            alert(tr('alertFirstSetupSuccess'));
             checkAuthRequirements();
         }
     } else {
         const err = await res.json();
-        alert(i18n[currentLang].alertFirstSetupError + (err.detail || "Impossibile creare l'account."));
+        alert(tr('alertFirstSetupError') + (err.detail || "Impossibile creare l'account."));
     }
 });
 
@@ -1109,7 +1117,7 @@ document.getElementById('btnLogin').addEventListener('click', async () => {
     const pass = passInput ? passInput.value.trim() : '';
     const errDiv = document.getElementById('loginError');
 
-    if (!user || !pass) { errDiv.innerText = i18n[currentLang].alertLoginFill; errDiv.style.display = 'block'; return; }
+    if (!user || !pass) { errDiv.innerText = tr('alertLoginFill'); errDiv.style.display = 'block'; return; }
     errDiv.style.display = 'none';
 
     const res = await fetch('/api/auth/login', {
@@ -1137,7 +1145,7 @@ document.getElementById('btnLogin').addEventListener('click', async () => {
         document.getElementById('authOverlay').style.display = 'none';
         appInit(); // Avvia il caricamento dei dispositivi di rete
     } else {
-        errDiv.innerText = i18n[currentLang].alertLoginDenied;
+        errDiv.innerText = tr('alertLoginDenied');
         errDiv.style.display = 'block';
     }
 });
@@ -1178,7 +1186,7 @@ document.getElementById('btnSendForgotPw')?.addEventListener('click', async () =
     const username = userEl ? userEl.value.trim() : '';
     if (!msgEl) return;
     if (!username) {
-        msgEl.textContent = i18n[currentLang].fpNeedUser;
+        msgEl.textContent = tr('fpNeedUser');
         msgEl.style.color = 'var(--danger)';
         msgEl.style.display = 'block';
         return;
@@ -1192,7 +1200,7 @@ document.getElementById('btnSendForgotPw')?.addEventListener('click', async () =
         const d = await res.json().catch(() => ({}));
         // 200 e 429 dicono entrambi quello che l'utente puo' sapere: il
         // messaggio del server non distingue mai un account esistente.
-        msgEl.textContent = d.message || d.detail || i18n[currentLang].fpSent;
+        msgEl.textContent = d.message || d.detail || tr('fpSent');
         msgEl.style.color = res.ok ? 'var(--success)' : 'var(--danger)';
         msgEl.style.display = 'block';
     } catch (err) {
@@ -1210,8 +1218,8 @@ document.getElementById('btnSubmitResetPw')?.addEventListener('click', async () 
     const errDiv = document.getElementById('loginError');
     errDiv.style.display = 'none';
 
-    if (np.length < 8) { errDiv.innerText = i18n[currentLang].alertPassTooShort; errDiv.style.display = 'block'; return; }
-    if (np !== cp) { errDiv.innerText = i18n[currentLang].alertPassMismatch; errDiv.style.display = 'block'; return; }
+    if (np.length < 8) { errDiv.innerText = tr('alertPassTooShort'); errDiv.style.display = 'block'; return; }
+    if (np !== cp) { errDiv.innerText = tr('alertPassMismatch'); errDiv.style.display = 'block'; return; }
 
     const res = await fetch('/api/auth/reset-password', {
         method: 'POST',
@@ -1224,12 +1232,12 @@ document.getElementById('btnSubmitResetPw')?.addEventListener('click', async () 
         window.history.replaceState({}, document.title, window.location.pathname);
         document.getElementById('resetPwSection').style.display = 'none';
         document.getElementById('loginSection').style.display = 'block';
-        errDiv.innerText = i18n[currentLang].rpDone;
+        errDiv.innerText = tr('rpDone');
         errDiv.style.color = 'var(--success)';
         errDiv.style.display = 'block';
     } else {
         const d = await res.json().catch(() => ({}));
-        errDiv.innerText = d.detail || i18n[currentLang].rpFailed;
+        errDiv.innerText = d.detail || tr('rpFailed');
         errDiv.style.display = 'block';
     }
 });
@@ -1243,8 +1251,8 @@ document.getElementById('btnSubmitAcceptInvite')?.addEventListener('click', asyn
     const errDiv = document.getElementById('loginError');
     errDiv.style.display = 'none';
 
-    if (np.length < 8) { errDiv.innerText = i18n[currentLang].alertPassTooShort; errDiv.style.display = 'block'; return; }
-    if (np !== cp) { errDiv.innerText = i18n[currentLang].alertPassMismatch; errDiv.style.display = 'block'; return; }
+    if (np.length < 8) { errDiv.innerText = tr('alertPassTooShort'); errDiv.style.display = 'block'; return; }
+    if (np !== cp) { errDiv.innerText = tr('alertPassMismatch'); errDiv.style.display = 'block'; return; }
 
     const res = await fetch('/api/auth/accept-invite', {
         method: 'POST',
@@ -1253,7 +1261,7 @@ document.getElementById('btnSubmitAcceptInvite')?.addEventListener('click', asyn
     });
     const d = await res.json().catch(() => ({}));
     if (!res.ok) {
-        errDiv.innerText = d.detail || i18n[currentLang].aiFailed;
+        errDiv.innerText = d.detail || tr('aiFailed');
         errDiv.style.display = 'block';
         return;
     }
@@ -1288,8 +1296,8 @@ document.getElementById('btnChangePass').addEventListener('click', async () => {
     const errDiv = document.getElementById('loginError');
     errDiv.style.display = 'none';
 
-    if (np.length < 8) { errDiv.innerText = i18n[currentLang].alertPassTooShort; errDiv.style.display = 'block'; return; }
-    if (np !== cp) { errDiv.innerText = i18n[currentLang].alertPassMismatch; errDiv.style.display = 'block'; return; }
+    if (np.length < 8) { errDiv.innerText = tr('alertPassTooShort'); errDiv.style.display = 'block'; return; }
+    if (np !== cp) { errDiv.innerText = tr('alertPassMismatch'); errDiv.style.display = 'block'; return; }
 
     const res = await fetch('/api/auth/change-password', {
         method: 'POST',
@@ -1309,7 +1317,7 @@ document.getElementById('btnChangePass').addEventListener('click', async () => {
         document.getElementById('authOverlay').style.display = 'none';
         appInit();
     } else {
-        errDiv.innerText = i18n[currentLang].alertPassChangeErr;
+        errDiv.innerText = tr('alertPassChangeErr');
         errDiv.style.display = 'block';
     }
 });
@@ -1500,7 +1508,7 @@ async function refreshInventory() {
 
     // Popola tendina Filtro Gruppi nella tabella dell'inventario
     if (filterSelect) {
-        filterSelect.innerHTML = `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
+        filterSelect.innerHTML = `<option value="all">${tr('optFilterAll')}</option>` +
             Object.keys(globalGroups).map(g =>
                 `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
         filterSelect.value = prevFilter;
@@ -1513,8 +1521,8 @@ async function refreshInventory() {
         // Default = nessuna scelta: il report Port-Channel resta vuoto
         // finché l'utente non indica un Tenant.
         const prevTopoFilter = topoSelect.value || '';
-        topoSelect.innerHTML = `<option value="">${i18n[currentLang].optSelectSite}</option>` +
-            `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
+        topoSelect.innerHTML = `<option value="">${tr('optSelectSite')}</option>` +
+            `<option value="all">${tr('optFilterAll')}</option>` +
             Object.keys(globalGroups).map(g =>
                 `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
         topoSelect.value = prevTopoFilter;
@@ -1527,8 +1535,8 @@ async function refreshInventory() {
         // Default = nessuna scelta: la mappa interattiva non disegna nulla
         // finché l'utente non indica una Sede.
         const prevInterFilter = interSelect.value || '';
-        interSelect.innerHTML = `<option value="">${i18n[currentLang].optSelectSite}</option>` +
-            `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
+        interSelect.innerHTML = `<option value="">${tr('optSelectSite')}</option>` +
+            `<option value="all">${tr('optFilterAll')}</option>` +
             Object.keys(globalGroups).map(g =>
                 `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
         interSelect.value = prevInterFilter;
@@ -1709,7 +1717,7 @@ async function ensureTabScripts(tabId) {
         await Promise.all(scripts.map(loadAssetOnce));
     } catch (e) {
         console.error('[lazy]', e);
-        showToast((i18n[currentLang] || {}).toastModuleLoadError || 'Errore di caricamento modulo', 'error');
+        showToast(tr('toastModuleLoadError') || 'Errore di caricamento modulo', 'error');
     }
 }
 
@@ -1855,6 +1863,18 @@ async function switchTab(tabId, clickedBtn, opts = {}) {
 // --- FLUSSI LIVE (fase 5): top talker + anomalie correlate -------------
 // Toast minimale non bloccante (il resto della dashboard usa alert()).
 function showToast(msg, kind) {
+    // One live region for every toast: screen readers announce what lands in
+    // it, and toasts stack in a column instead of on top of each other.
+    let stack = document.getElementById('toastStack');
+    if (!stack) {
+        stack = document.createElement('div');
+        stack.id = 'toastStack';
+        stack.setAttribute('role', 'status');
+        stack.setAttribute('aria-live', 'polite');
+        stack.style.cssText = 'position:fixed; bottom:24px; right:24px; z-index:9999;'
+            + 'display:flex; flex-direction:column; gap:8px; align-items:flex-end;';
+        document.body.appendChild(stack);
+    }
     const el = document.createElement('div');
     el.textContent = msg;
     // Il colore significa stato: il fondo resta una superficie del sistema e lo
@@ -1863,12 +1883,11 @@ function showToast(msg, kind) {
     const edge = kind === 'error' ? 'var(--lamp-fault)'
         : kind === 'warning' ? 'var(--lamp-warn)'
             : 'var(--border-strong)';
-    el.style.cssText = 'position:fixed; bottom:24px; right:24px; z-index:9999;'
-        + 'padding:10px 16px; border-radius:0; font-size:13px;'
+    el.style.cssText = 'padding:10px 16px; border-radius:0; font-size:13px;'
         + 'font-family:var(--font-prose); color:var(--text);'
         + 'background:var(--surface-3); box-shadow:var(--shadow-float);'
         + 'border:1px solid ' + edge + ';';
-    document.body.appendChild(el);
+    stack.appendChild(el);
     setTimeout(() => el.remove(), 4000);
 }
 
@@ -1934,9 +1953,9 @@ async function refreshIdentityOptions(preserve) {
     const keep = preserve || sel.value;
     const res = await apiFetch('/api/identities?tenant=' + encodeURIComponent(tenant));
     const idents = res && res.ok ? (await res.json()).identities : [];
-    sel.innerHTML = `<option value="default">${i18n[currentLang].optProfileDefault.replace(/<[^>]*>/g, '')}</option>` +
+    sel.innerHTML = `<option value="default">${tr('optProfileDefault').replace(/<[^>]*>/g, '')}</option>` +
         idents.map(i => `<option value="identity:${i.id}">${escapeHtml(i.name)} (${escapeHtml(i.username)})</option>`).join('') +
-        `<option value="custom">${i18n[currentLang].optProfileCustom.replace(/<[^>]*>/g, '')}</option>`;
+        `<option value="custom">${tr('optProfileCustom').replace(/<[^>]*>/g, '')}</option>`;
     sel.value = Array.from(sel.options).some(o => o.value === keep) ? keep : 'default';
     document.getElementById('customCredsForm').style.display = sel.value === 'custom' ? 'block' : 'none';
     window._tenantIdentities = idents;
@@ -1948,7 +1967,7 @@ function renderIdentitiesPanel() {
     body.innerHTML = idents.length ? idents.map(i => {
         let tenantLabel = '';
         if (!i.tenant || i.tenant === 'all') {
-            tenantLabel = `<span class="badge" style="background:var(--surface-2); color:var(--text-muted); font-size:10.5px; padding:2px 6px; border:1px solid var(--border); text-transform:uppercase; letter-spacing:0.02em;">${escapeHtml(i18n[currentLang].optTenantAll || 'Globale')}</span>`;
+            tenantLabel = `<span class="badge" style="background:var(--surface-2); color:var(--text-muted); font-size:10.5px; padding:2px 6px; border:1px solid var(--border); text-transform:uppercase; letter-spacing:0.02em;">${escapeHtml(tr('optTenantAll') || 'Globale')}</span>`;
         } else if (Array.isArray(i.tenant)) {
             tenantLabel = i.tenant.map(t => `<span class="badge" style="background:color-mix(in srgb, var(--primary) 12%, transparent); color:var(--primary); border:1px solid color-mix(in srgb, var(--primary) 30%, transparent); font-size:10.5px; padding:2px 6px; margin-right:3px; display:inline-block; text-transform:uppercase; letter-spacing:0.02em;">${escapeHtml(t)}</span>`).join('');
         } else {
@@ -1962,13 +1981,13 @@ function renderIdentitiesPanel() {
         <td style="padding:8px 6px; text-align:center; font-family:var(--font-code); font-size:12px;">${i.devices_using}</td>
         <td style="padding:8px 6px; text-align:right;">
           <div style="display:flex; gap:4px; justify-content:flex-end;">
-            <button class="btn-icon" data-action="assign-identity" data-id="${i.id}" style="width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center;" title="${escapeHtml(i18n[currentLang].btnAssignIdentityTitle || 'Assign to devices')}"><i class="fa-solid fa-users-rectangle" style="font-size:11px;"></i></button>
+            <button class="btn-icon" data-action="assign-identity" data-id="${i.id}" style="width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center;" title="${escapeHtml(tr('btnAssignIdentityTitle') || 'Assign to devices')}"><i class="fa-solid fa-users-rectangle" style="font-size:11px;"></i></button>
             <button class="btn-icon" data-action="edit-identity" data-id="${i.id}" style="width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center;" title="Edit"><i class="fa-solid fa-pen" style="font-size:11px;"></i></button>
             <button class="btn-icon danger" data-action="delete-identity" data-id="${i.id}" style="width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center;" title="Delete"><i class="fa-solid fa-trash-can" style="font-size:11px;"></i></button>
           </div>
         </td></tr>`;
     }).join('')
-        : `<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:16px; font-size:13px;">${i18n[currentLang].emptyIdentities}</td></tr>`;
+        : `<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:16px; font-size:13px;">${tr('emptyIdentities')}</td></tr>`;
 }
 
 // ===== Port Config Modal (promosso da static/js/topology.js: usato anche

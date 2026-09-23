@@ -61,6 +61,12 @@ class TestContentSecurityPolicy(unittest.TestCase):
         self.assertIn("frame-ancestors 'none'", self.csp)
         self.assertIn("object-src 'none'", self.csp)
 
+    def test_connect_src_has_no_bare_websocket_scheme(self):
+        # A scheme with no host allows sockets to anywhere: after an XSS that
+        # is where the data goes. 'self' already covers the same-origin terminal.
+        connect = [p.strip() for p in self.csp.split(";") if p.strip().startswith("connect-src")][0]
+        self.assertEqual(connect.split()[1:], ["'self'"])
+
     def test_base_uri_and_form_action_are_clamped(self):
         # script-src 'self' resolves relative srcs against <base>, so an
         # injected <base href> walks around it; form-action stops injected

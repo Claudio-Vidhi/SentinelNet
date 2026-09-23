@@ -95,14 +95,14 @@
                 // quando l'utente sceglie un vendor o preme aggiorna.
                 vwState.vendor = entries[0][0];
                 const statusEl = document.getElementById('vwStatus');
-                if (statusEl) statusEl.textContent = i18n[currentLang].vwStatusIdle;
+                if (statusEl) statusEl.textContent = tr('vwStatusIdle');
             } else {
                 const statusEl = document.getElementById('vwStatus');
-                if (statusEl) statusEl.textContent = i18n[currentLang].noDevicesText.replace(/<[^>]*>/g, '');
+                if (statusEl) statusEl.textContent = tr('noDevicesText').replace(/<[^>]*>/g, '');
             }
         } catch (err) {
             const statusEl = document.getElementById('vwStatus');
-            if (statusEl) statusEl.textContent = i18n[currentLang].vwStatusError + err.message;
+            if (statusEl) statusEl.textContent = tr('vwStatusError') + err.message;
         }
     }
 
@@ -160,7 +160,7 @@
         const statusEl = document.getElementById('vwStatus');
         const bodyEl = document.getElementById('vwBody');
         if (!statusEl || !bodyEl) return;
-        statusEl.textContent = i18n[currentLang].vwStatusLoading;
+        statusEl.textContent = tr('vwStatusLoading');
 
         const params = new URLSearchParams();
         if (vwState.vendor) params.set('vendor', vwState.vendor);
@@ -186,7 +186,7 @@
             vwState.data = [];
             vwState.filtered = [];
             vwRenderTable();
-            statusEl.textContent = i18n[currentLang].vwStatusError + err.message;
+            statusEl.textContent = tr('vwStatusError') + err.message;
         }
     }
 
@@ -222,7 +222,7 @@
         });
         vwRenderTable();
         const statusEl = document.getElementById('vwStatus');
-        if (statusEl) statusEl.textContent = vwState.filtered.length + ' ' + i18n[currentLang].vwStatusRows;
+        if (statusEl) statusEl.textContent = vwState.filtered.length + ' ' + tr('vwStatusRows');
     }
 
     function applyThreatSeverityFilter() {
@@ -347,7 +347,7 @@
         const selGroup = document.getElementById("threatGroupSelect")?.value || 'all';
         const includeDiscovered = document.getElementById("threatIncludeDiscovered")?.checked || false;
 
-        const queryingText = i18n[currentLang].queryingEnisa.replace(/<[^>]*>/g, '');
+        const queryingText = tr('queryingEnisa').replace(/<[^>]*>/g, '');
         container.innerHTML = `<div style="text-align:center; padding: 40px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><br><br>${queryingText}</div>`;
 
         const res = await apiFetch('/api/local-devices');
@@ -373,7 +373,7 @@
         // ── SEZIONE 1: Dispositivi inventariati online ──────────────────────────
         if (onlineDevices.length === 0) {
             container.innerHTML += `<div style="padding: 20px; border: 1px solid var(--border); border-radius:0; text-align:center; color: var(--text-muted); margin-bottom: 20px;">
-                ${i18n[currentLang].noDevicesText}
+                ${tr('noDevicesText')}
             </div>`;
         } else {
             // One table row per device, ranked by the stored critical/high
@@ -417,7 +417,7 @@
                         <button type="button" id="btn-mgd-${safeIpId}" class="btn btn-secondary btn-small" style="width:auto; margin:0; white-space:nowrap;"
                             data-action="run-managed-vuln-check"
                             data-ip="${escapeHtml(d.IP)}" data-vendor="${escapeHtml(d.Vendor)}" data-version="${escapeHtml(scan.version || '')}" data-model="${escapeHtml(model)}">
-                            ${i18n[currentLang].btnAnalyzeVuln}
+                            ${tr('btnAnalyzeVuln')}
                         </button>
                     </td>
                 </tr>
@@ -458,10 +458,10 @@
         sectionHeader.innerHTML = `
             <div style="border-top: 1px solid var(--border); margin: 25px 0 15px 0; padding-top: 20px;">
                 <h3 style="font-size:17px; margin-bottom:6px;">
-                    ${i18n[currentLang].discoveredNeighborsTitle}
+                    ${tr('discoveredNeighborsTitle')}
                 </h3>
                 <p style="font-size:13px; color:var(--text-muted);">
-                    ${i18n[currentLang].discoveredNeighborsDesc}
+                    ${tr('discoveredNeighborsDesc')}
                 </p>
             </div>
         `;
@@ -505,7 +505,7 @@
                     data-version="${escapeHtml(n.version)}" data-vshort="${escapeHtml(versionShort)}"
                     data-vendor="${escapeHtml((n.vendor && n.vendor !== 'discovered') ? n.vendor : '')}"
                     style="width:100%; padding:8px; border-radius:0; border:none; background:var(--cta); color:var(--cta-text); font-weight:700; font-size:13px; cursor:pointer; transition:all 0.2s;">
-                    ${i18n[currentLang].btnAnalyzeVuln}
+                    ${tr('btnAnalyzeVuln')}
                 </button>
             `;
             card.onmouseenter = () => card.style.borderColor = 'var(--warning)';
@@ -532,7 +532,7 @@
     }
 
     function extractReadableVersion(sysDesc) {
-        if (!sysDesc) return i18n[currentLang].versionNotAvailable;
+        if (!sysDesc) return tr('versionNotAvailable');
         const ciscoMatch = sysDesc.match(/Version\s+([\w.()]+)/i);
         if (ciscoMatch) return `IOS Version ${ciscoMatch[1]}`;
         const linuxMatch = sysDesc.match(/^(Ubuntu|Debian|CentOS|RHEL|Rocky|Alpine)\s+([\d.\w]+)/i);
@@ -547,7 +547,7 @@
         if (!resultArea) return;
 
         btnEl.disabled = true;
-        btnEl.innerHTML = i18n[currentLang].scanningEuvd;
+        btnEl.innerHTML = tr('scanningEuvd');
         card.style.borderColor = 'var(--primary)';
         card.dataset.checked = '1';
 
@@ -571,7 +571,7 @@
                     <i class="fa-solid fa-satellite-dish" style="color:var(--warning);"></i>
                     ${escapeHtml(label)} <span style="color:var(--text-muted); font-size:12px; font-weight:400;">(${escapeHtml(nodeId)})</span>
                     <span id="disc-status-${safeId}" style="float:right; font-size:13px; color:var(--text-muted);">
-                        ${i18n[currentLang].queryingEnisa}
+                        ${tr('queryingEnisa')}
                     </span>
                 </div>
                 <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
@@ -584,7 +584,7 @@
         await runEuvdQuery(`disc-${safeId}`, vendor, versionShort, `disc-status-${safeId}`, `disc-vuln-${safeId}`);
 
         btnEl.disabled = false;
-        btnEl.innerHTML = i18n[currentLang].btnRescan;
+        btnEl.innerHTML = tr('btnRescan');
     }
 
     // Analisi vulnerabilità di UN singolo dispositivo gestito (scelto dall'utente).
@@ -594,7 +594,7 @@
         const detail = document.getElementById(`ti-detail-${safeIpId}`);
         if (detail) detail.hidden = false;
         btnEl.disabled = true;
-        btnEl.innerHTML = i18n[currentLang].scanningEuvd;
+        btnEl.innerHTML = tr('scanningEuvd');
         const validModel = (model && model !== 'Non Rilevato') ? model : '';
         const queryText = (validModel ? (validModel + ' ' + (version || '')) : (version || '')).trim();
         // Il modello va anche a parte: serve al server per capire quali CVE
@@ -602,7 +602,7 @@
         // stesso treno software.
         await runEuvdQuery(safeIpId, vendor, queryText, null, null, validModel);
         btnEl.disabled = false;
-        btnEl.innerHTML = i18n[currentLang].btnRescan;
+        btnEl.innerHTML = tr('btnRescan');
     }
 
     function toggleVulnDesc(id, btn) {
@@ -672,7 +672,7 @@
                     const cardsEl = document.getElementById(`vulncards-${effectiveResultsId}`);
                     items.slice(0, 3).forEach((v, idx) => {
                         const cveId = v.cveId || v.cve || v.id || "CVE-Unknown";
-                        const description = v.description || v.summary || i18n[currentLang].descriptionNotAvailable;
+                        const description = v.description || v.summary || tr('descriptionNotAvailable');
                         // Il punteggio CVSS è nel campo 'baseScore' (numero, può essere 0).
                         const score      = (v.baseScore != null && v.baseScore !== "")
                                          ? v.baseScore : (v.cvssScore || v.score || "N/A");
@@ -707,7 +707,7 @@
                                     <span class="severity-pill severity-${severity}">CVSS: ${escapeHtml(score)}</span>
                                 </div>
                                 <div id="${descId}" style="color:var(--text-muted); margin-bottom:6px; line-height:1.4;">${escapeHtml(description)}</div>
-                                <div style="font-size:10px; color:var(--primary);">${i18n[currentLang].relevantNis2}</div>
+                                <div style="font-size:10px; color:var(--primary);">${tr('relevantNis2')}</div>
                             </div>
                         `;
                     });
@@ -718,14 +718,14 @@
                     statusEl.innerHTML = `<span style="color: var(--warning);"><i class="fa-solid fa-circle-question"></i> ${tr('tiVersionUnknown')}</span>`;
                     resultsEl.innerHTML = `<div style="color:var(--text-muted); font-size:13px;">${escapeHtml(tr('tiVersionUnknownHint'))}<br><code style="font-size:11px; color:var(--primary);">${escapeHtml(vulnData.query || '')}</code></div>`;
                 } else {
-                    statusEl.innerHTML = `<span style="color: var(--success);"><i class="fa-solid fa-circle-check"></i> ${i18n[currentLang].safeRelease}</span>`;
-                    resultsEl.innerHTML = `<div style="color:var(--text-muted); font-size:13px; font-style:italic;">${i18n[currentLang].noThreatsFound}</div>`;
+                    statusEl.innerHTML = `<span style="color: var(--success);"><i class="fa-solid fa-circle-check"></i> ${tr('safeRelease')}</span>`;
+                    resultsEl.innerHTML = `<div style="color:var(--text-muted); font-size:13px; font-style:italic;">${tr('noThreatsFound')}</div>`;
                 }
             } else {
-                statusEl.innerHTML = `<span style="color: var(--warning);"><i class="fa-solid fa-triangle-exclamation"></i> ${i18n[currentLang].errorMatch}</span>`;
+                statusEl.innerHTML = `<span style="color: var(--warning);"><i class="fa-solid fa-triangle-exclamation"></i> ${tr('errorMatch')}</span>`;
             }
         } catch (err) {
-            statusEl.innerHTML = `<span style="color: var(--danger);">${i18n[currentLang].errorScan}</span>`;
+            statusEl.innerHTML = `<span style="color: var(--danger);">${tr('errorScan')}</span>`;
         }
     }
 

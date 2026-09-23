@@ -205,6 +205,30 @@ def _fortigate_backup_and_triage(device):
 BACKUP_READ_TIMEOUT = 120
 
 
+def _run_tagged(net_connect, cmds, read_timeout=None, prefix_hostname=False):
+    """Run accessory triage commands, each output under its tag.
+
+    A command the device does not know must not sink the triage, so a failure
+    only drops that section — now logged, where it used to vanish without a
+    trace. read_timeout None keeps netmiko's default. prefix_hostname writes
+    Linux's bare `hostname` output as `hostname <name>`, the form
+    extract_hostname_from_config reads.
+    """
+    kwargs = {"read_timeout": read_timeout} if read_timeout else {}
+    text = ""
+    for cmd, tag in cmds:
+        try:
+            out = net_connect.send_command(cmd, **kwargs)
+        except Exception as e:
+            logging.debug(f"triage command {cmd!r} failed: {e}")
+            continue
+        out_str = out if isinstance(out, str) else str(out or "")
+        if prefix_hostname and tag == "--- HOSTNAME ---":
+            out_str = f"hostname {out_str.strip()}"
+        text += f"\n{tag}\n{out_str}"
+    return text
+
+
 # Login slots shared by EVERY triage path (group run, row button, bulk
 # selection, agent). Past 4-5 simultaneous SSH logins, AAA servers and device
 # login throttles (login block-for, TACACS/RADIUS rate limits) start refusing
@@ -315,75 +339,45 @@ def _run_backup_and_triage(device):
 
             config_out += "\n\n=== NEIGHBOR DISCOVERY ===\n"
             if vendor == 'cisco':
-                for cmd, tag in [
+                config_out += _run_tagged(net_connect, [
                     ("show cdp neighbors",        "--- SHOW CDP NEIGHBORS ---"),
                     ("show cdp neighbors detail",  "--- SHOW CDP NEIGHBORS DETAIL ---"),
                     ("show lldp neighbors",        "--- SHOW LLDP NEIGHBORS ---"),
                     ("show lldp neighbors detail", "--- SHOW LLDP NEIGHBORS DETAIL ---"),
                     ("show switch",                "--- SHOW SWITCH ---"),
                     ("show inventory",             "--- SHOW INVENTORY ---"),
-                ]:
-                    try:
-                        out = net_connect.send_command(cmd)
-                        out_str = out if isinstance(out, str) else str(out or "")
-                        config_out += f"\n{tag}\n{out_str}"
-                    except Exception:
-                        pass
+                ])
             elif vendor == 'hpe':
-                for cmd, tag in [
+                config_out += _run_tagged(net_connect, [
                     ("show lldp info remote-device",        "--- SHOW LLDP NEIGHBORS ---"),
                     ("show lldp info remote-device detail", "--- SHOW LLDP NEIGHBORS DETAIL ---"),
-                ]:
-                    try:
-                        out = net_connect.send_command(cmd)
-                        out_str = out if isinstance(out, str) else str(out or "")
-                        config_out += f"\n{tag}\n{out_str}"
-                    except Exception:
-                        pass
+                ])
             elif vendor == 'cisco_9800':
                 # Catalyst 9800 is IOS-XE: it answers the switch commands, and
                 # 'show chassis' is where an HA pair names both of its members.
-                for cmd, tag in [
+                config_out += _run_tagged(net_connect, [
                     ("show cdp neighbors detail",  "--- SHOW CDP NEIGHBORS DETAIL ---"),
                     ("show lldp neighbors detail", "--- SHOW LLDP NEIGHBORS DETAIL ---"),
                     ("show chassis",               "--- SHOW CHASSIS ---"),
                     ("show redundancy",            "--- SHOW REDUNDANCY ---"),
                     ("show inventory",             "--- SHOW INVENTORY ---"),
-                ]:
-                    try:
-                        out = net_connect.send_command(cmd, read_timeout=30)
-                        out_str = out if isinstance(out, str) else str(out or "")
-                        config_out += f"\n{tag}\n{out_str}"
-                    except Exception:
-                        pass
+                ], read_timeout=30)
             elif vendor == 'cisco_wlc':
                 # AireOS: 'show redundancy summary' is the only place the HA
                 # SSO pair is described, and it is not an IOS command.
-                for cmd, tag in [
+                config_out += _run_tagged(net_connect, [
                     ("show system info",           "--- SYSTEM INFO ---"),
                     ("show inventory",             "--- SHOW INVENTORY ---"),
                     ("show redundancy summary",    "--- SHOW REDUNDANCY SUMMARY ---"),
-                ]:
-                    try:
-                        out = net_connect.send_command(cmd, read_timeout=30)
-                        out_str = out if isinstance(out, str) else str(out or "")
-                        config_out += f"\n{tag}\n{out_str}"
-                    except Exception:
-                        pass
+                ], read_timeout=30)
             elif vendor in ('fortinet', 'paloalto'):
-                for cmd, tag in [
+                config_out += _run_tagged(net_connect, [
                     ("get system status",          "--- SYSTEM STATUS ---"),
                     ("show system info",           "--- SYSTEM INFO ---"),
                     ("show inventory",             "--- SHOW INVENTORY ---"),
                     ("show environment all",       "--- SHOW ENVIRONMENT ALL ---"),
                     ("show license all",           "--- SHOW LICENSE ALL ---"),
-                ]:
-                    try:
-                        out = net_connect.send_command(cmd, read_timeout=30)
-                        out_str = out if isinstance(out, str) else str(out or "")
-                        config_out += f"\n{tag}\n{out_str}"
-                    except Exception:
-                        pass
+                ], read_timeout=30)
             elif vendor == 'linux':
                 # `hostname` comes out as a bare name: it is written in the form
                 # `hostname <name>` so extract_hostname_from_config recognizes it
@@ -448,15 +442,7 @@ def _run_backup_and_triage(device):
                         ("nft list ruleset 2>/dev/null || iptables -S 2>/dev/null",
                          "--- FIREWALL RULES ---"),
                     ]
-                for cmd, tag in linux_cmds:
-                    try:
-                        out = net_connect.send_command(cmd)
-                        out_str = out if isinstance(out, str) else str(out or "")
-                        if tag == "--- HOSTNAME ---":
-                            out_str = f"hostname {out_str.strip()}"
-                        config_out += f"\n{tag}\n{out_str}"
-                    except Exception:
-                        pass
+                config_out += _run_tagged(net_connect, linux_cmds, prefix_hostname=True)
             elif vendor == 'windows':
                 # La catena sta in drivers/windows.py: e' logica di vendor,
                 # e ogni comando formatta la propria uscita a delimitatori
@@ -467,13 +453,7 @@ def _run_backup_and_triage(device):
                 # `powershell -Command` paga l'avvio del runtime .NET, e su
                 # un server sotto carico i 10s di default non bastano.
                 from drivers.windows import TRIAGE_COMMANDS as windows_cmds
-                for cmd, tag in windows_cmds:
-                    try:
-                        out = net_connect.send_command(cmd, read_timeout=45)
-                        out_str = out if isinstance(out, str) else str(out or "")
-                        config_out += f"\n{tag}\n{out_str}"
-                    except Exception:
-                        pass
+                config_out += _run_tagged(net_connect, windows_cmds, read_timeout=45)
 
             hostname_from_cfg = extract_hostname_from_config(config_out)
             sys_name = hostname_from_cfg or live_hostname or f"{vendor}_{ip}"
@@ -2084,7 +2064,7 @@ def _generate_network_map(group_filter=None) -> dict:
                 _group = ip_to_device.get(_ip, {}).get('Group', 'Generale')
                 ap_store.record_aps(_ip, _group, _aps)
         except Exception:
-            pass
+            logging.warning(f"AP serial harvest failed for {_ip}", exc_info=True)
 
     # Nodi inventariati
     versions = get_detected_versions()

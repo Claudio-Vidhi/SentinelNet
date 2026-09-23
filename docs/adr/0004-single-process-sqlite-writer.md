@@ -30,6 +30,14 @@ Binding rules ([CONTRIBUTING.md](../../CONTRIBUTING.md) §3):
 - `db.get_observability_connection()` is for migrations and tests only, enforced
   by a grep gate in review.
 
+  *Amended 2026-09-23:* by then ~50 call sites used it off the event loop —
+  worker threads and `asyncio.to_thread` helpers doing short transactional
+  read-modify-writes the fire-and-forget queue cannot express. The binding
+  rule is now "never on the event loop", enforced by an AST test
+  (`tests/test_no_sync_db_on_event_loop.py`); the grep gate flagged correct
+  code and missed two real violations. High-volume ingest still goes through
+  the writer queue.
+
 Writer resilience: if one payload in a batch fails, roll back and re-run the
 batch item by item, dropping only the bad payloads (`writes_dropped_error`). If
 the writer thread crashes, restart with exponential backoff up to 5 attempts;

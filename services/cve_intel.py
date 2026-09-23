@@ -338,9 +338,10 @@ def refresh(device: dict, version_text: str = "", version_seen_at: str = "") -> 
                         title=f"Nuova CVE {c.get('id')} per {device.get('IP')}: {c.get('summary', '')[:100]}",
                         ctx={"cve_id": c.get("id"), "device_ip": device.get("IP"), "cvss": c.get("cvss")},
                         dedup_key=f"cve:{device.get('IP')}:{c.get('id')}",
+                        tenant=device.get("Group") or "Generale",
                     )
                 except Exception:
-                    pass
+                    log.warning("CVE notification failed for %s", device.get("IP"), exc_info=True)
 
     return snapshot
 

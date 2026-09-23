@@ -15,12 +15,15 @@ The worker re-reads the configuration on every cycle, so enable/disable and
 interval changes apply immediately without a restart.
 """
 
+import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
 from core.app_settings import get_app_settings, save_app_settings
 from security.security_manager import log_audit
+
+_log = logging.getLogger("sentinelnet.ping")
 
 DEFAULT_INTERVAL = 60
 MIN_INTERVAL = 5
@@ -170,7 +173,7 @@ def _run_cycle() -> None:
                     dedup_key=f"ping:{ip}:up",
                 )
         except Exception:
-            pass
+            _log.warning("ping notification failed for %s", ip, exc_info=True)
 
 
 def _worker() -> None:
@@ -185,7 +188,7 @@ def _worker() -> None:
         try:
             _run_cycle()
         except Exception as e:
-            print(f"[ping-monitor] cycle failed: {e}")
+            _log.error("ping-monitor cycle failed: %s", e, exc_info=True)
         # Sleep for the configured interval, but wake immediately if the
         # configuration changes (disable or new interval).
         _cycle.wait(timeout=cfg["interval_seconds"])

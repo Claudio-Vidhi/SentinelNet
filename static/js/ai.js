@@ -23,7 +23,7 @@
                 <input type="checkbox" class="ai-attach-device" value="${escapeHtml(d.IP)}"${cur.has(d.IP) ? ' checked' : ''} style="accent-color:var(--primary);">
                 <span>${escapeHtml(d.Hostname || d.IP)} (${escapeHtml(d.IP)})</span>
             </label>`
-        ).join('') : `<span style="color:var(--text-muted); padding:4px 8px; display:block;">${i18n[currentLang].msgAiNoDevices || 'Nessun dispositivo'}</span>`;
+        ).join('') : `<span style="color:var(--text-muted); padding:4px 8px; display:block;">${tr('msgAiNoDevices') || 'Nessun dispositivo'}</span>`;
         updateAiDeviceBtnLabel();
     }
 
@@ -70,7 +70,7 @@
             const tenantOpts = Object.keys(globalGroups || {}).map(g =>
                 `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`
             ).join('');
-            tenantSel.innerHTML = `<option value="">${i18n[currentLang].optAiNoTenant}</option>` + tenantOpts;
+            tenantSel.innerHTML = `<option value="">${tr('optAiNoTenant')}</option>` + tenantOpts;
             tenantSel.value = [...tenantSel.options].some(o => o.value === curTenant) ? curTenant : '';
             if (tenantSel.value !== curTenant) populateAiAttachDevices();
         }
@@ -90,7 +90,7 @@
         const d = new Date((ts || 0) * 1000);
         const days = Math.floor((Date.now() - d.getTime()) / 86400000);
         if (days <= 0) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        if (days === 1) return i18n[currentLang].lblAiYesterday || 'ieri';
+        if (days === 1) return tr('lblAiYesterday') || 'ieri';
         return d.toLocaleDateString();
     }
 
@@ -98,17 +98,17 @@
         const box = document.getElementById('aiConvList');
         if (!box) return;
         if (!aiConversations.length) {
-            box.innerHTML = `<div class="ai-conv-empty">${escapeHtml(i18n[currentLang].msgAiNoConversations || 'Nessuna conversazione salvata.')}</div>`;
+            box.innerHTML = `<div class="ai-conv-empty">${escapeHtml(tr('msgAiNoConversations') || 'Nessuna conversazione salvata.')}</div>`;
             return;
         }
-        const untitled = i18n[currentLang].lblAiUntitledChat || 'Nuova conversazione';
+        const untitled = tr('lblAiUntitledChat') || 'Nuova conversazione';
         box.innerHTML = aiConversations.map(c => `
             <div class="ai-conv-item${c.id === aiConvId ? ' active' : ''}" data-action="open-conv" data-conv-id="${Number(c.id)}">
                 <i class="fa-regular fa-comment" style="font-size:11px;"></i>
                 <span class="ai-conv-title" title="${escapeHtml(c.title || untitled)}">${escapeHtml(c.title || untitled)}</span>
                 <span style="font-size:10px; color:var(--text-muted);">${escapeHtml(fmtAiConvTime(c.updated_ts))}</span>
                 <button class="ai-conv-del" data-action="delete-conv" data-conv-id="${Number(c.id)}"
-                        title="${escapeHtml(i18n[currentLang].btnAiDeleteChat || 'Elimina conversazione')}">
+                        title="${escapeHtml(tr('btnAiDeleteChat') || 'Elimina conversazione')}">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>`).join('');
@@ -118,8 +118,8 @@
         aiConvTitle = title || '';
         const el = document.getElementById('aiChatTitle');
         if (el) el.textContent = aiConvTitle
-            || (aiConvId !== null ? (i18n[currentLang].lblAiUntitledChat || 'Nuova conversazione')
-                                  : (i18n[currentLang].titleAiChat || 'Conversazione'));
+            || (aiConvId !== null ? (tr('lblAiUntitledChat') || 'Nuova conversazione')
+                                  : (tr('titleAiChat') || 'Conversazione'));
     }
 
     async function loadAiConversations() {
@@ -169,7 +169,7 @@
     }
 
     async function deleteAiConversation(id) {
-        if (!confirm(i18n[currentLang].confirmAiDeleteChat || 'Eliminare questa conversazione?')) return;
+        if (!confirm(tr('confirmAiDeleteChat') || 'Eliminare questa conversazione?')) return;
         try {
             const res = await apiFetch(`/api/ai/conversations/${Number(id)}`, { method: 'DELETE' });
             if (!res || !res.ok) return;
@@ -184,7 +184,7 @@
 
     async function renameAiConversation() {
         if (aiConvId === null) return;
-        const next = prompt(i18n[currentLang].promptAiRenameChat || 'Nuovo titolo:', aiConvTitle);
+        const next = prompt(tr('promptAiRenameChat') || 'Nuovo titolo:', aiConvTitle);
         if (next === null) return;
         const title = next.trim();
         if (!title) return;
@@ -229,7 +229,7 @@
         if (!sel) return;
         const cur = sel.value;
         const profiles = aiProfilesCache || [];
-        sel.innerHTML = `<option value="">${i18n[currentLang].optGenCfgActiveProfile || '-- usa profilo AI attivo --'}</option>` +
+        sel.innerHTML = `<option value="">${tr('optGenCfgActiveProfile') || '-- usa profilo AI attivo --'}</option>` +
             profiles.map(p =>
                 `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name || 'Senza nome')} (${escapeHtml(p.provider || 'auto')}${p.model ? ' - ' + escapeHtml(p.model) : ''})</option>`
             ).join('');
@@ -262,7 +262,7 @@
         const tenant = document.getElementById('genCfgTenant')?.value || '';
         const cur = sel.value;
         const devices = (globalDevices || []).filter(d => (d.Group || 'Generale') === tenant);
-        sel.innerHTML = `<option value="">${i18n[currentLang].optGenCfgNoTemplate || '-- usa parametri comuni del tenant --'}</option>` +
+        sel.innerHTML = `<option value="">${tr('optGenCfgNoTemplate') || '-- usa parametri comuni del tenant --'}</option>` +
             devices.map(d =>
                 `<option value="${escapeHtml(d.IP)}">${escapeHtml(d.Hostname || d.IP)} (${escapeHtml(d.IP)})</option>`
             ).join('');
@@ -320,7 +320,7 @@
         if (!out || !out.textContent) return;
         try {
             await navigator.clipboard.writeText(out.textContent);
-            if (statusEl) statusEl.textContent = i18n[currentLang].msgGenCfgCopied || 'Configurazione copiata negli appunti.';
+            if (statusEl) statusEl.textContent = tr('msgGenCfgCopied') || 'Configurazione copiata negli appunti.';
         } catch (e) {
             if (statusEl) statusEl.textContent = (tr('aiCopyFailed')) + e;
         }
@@ -345,14 +345,14 @@
                 ).join('');
                 activeSel.innerHTML = (aiProfilesCache.length
                     ? opts
-                    : `<option value="">${i18n[currentLang].optAiNoProfile}</option>`);
+                    : `<option value="">${tr('optAiNoProfile')}</option>`);
                 activeSel.value = aiActiveProfileId;
             }
             populateGenCfgProfiles();
             const badge = document.getElementById('aiActiveProfileBadge');
             if (badge) {
                 const active = aiProfilesCache.find(p => p.id === aiActiveProfileId);
-                badge.textContent = active ? `${active.name} · ${active.model || i18n[currentLang].optAiModelCustom}` : '';
+                badge.textContent = active ? `${active.name} · ${active.model || tr('optAiModelCustom')}` : '';
             }
 
             const editSel = document.getElementById('aiProfileEditSelect');
@@ -361,7 +361,7 @@
                 const editOpts = aiProfilesCache.map(p =>
                     `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`
                 ).join('');
-                editSel.innerHTML = `<option value="__new__" data-i18n="optAiNewProfile">${i18n[currentLang].optAiNewProfile}</option>` + editOpts;
+                editSel.innerHTML = `<option value="__new__" data-i18n="optAiNewProfile">${tr('optAiNewProfile')}</option>` + editOpts;
                 editSel.value = [...editSel.options].some(o => o.value === curEdit) ? curEdit : '__new__';
                 onAiProfileEditSelectChange();
             }
@@ -439,7 +439,7 @@
                 aiActiveProfileId = profileId;
                 const badge = document.getElementById('aiActiveProfileBadge');
                 const active = aiProfilesCache.find(p => p.id === profileId);
-                if (badge) badge.textContent = active ? `${active.name} · ${active.model || i18n[currentLang].optAiModelCustom}` : '';
+                if (badge) badge.textContent = active ? `${active.name} · ${active.model || tr('optAiModelCustom')}` : '';
             }
         } catch (e) { /* silenzioso */ }
     }
@@ -461,7 +461,7 @@
             document.getElementById('aiContextBudget').value = 0;
             document.getElementById('aiAllowUnredacted').checked = false;
             apiKeyInput.value = '';
-            apiKeyInput.placeholder = i18n[currentLang].phAiApiKeyEmpty || 'Inserisci una API key';
+            apiKeyInput.placeholder = tr('phAiApiKeyEmpty') || 'Inserisci una API key';
             document.getElementById('btnAiDeleteProfile').style.display = 'none';
         } else {
             const p = aiProfilesCache.find(x => x.id === id);
@@ -475,8 +475,8 @@
             document.getElementById('aiAllowUnredacted').checked = !!p.allow_unredacted;
             apiKeyInput.value = '';
             apiKeyInput.placeholder = p.api_key_set
-                ? (i18n[currentLang].phAiApiKeySet || '•••••• (già impostata, lascia vuoto per non modificare)')
-                : (i18n[currentLang].phAiApiKeyEmpty || 'Inserisci una API key');
+                ? (tr('phAiApiKeySet') || '•••••• (già impostata, lascia vuoto per non modificare)')
+                : (tr('phAiApiKeyEmpty') || 'Inserisci una API key');
             document.getElementById('btnAiDeleteProfile').style.display = '';
         }
         // NESSUNA chiamata API automatica: l'elenco modelli si aggiorna solo
@@ -491,7 +491,7 @@
     // appartenere al provider correntemente selezionato.
     function resetAiModelList() {
         const sel = document.getElementById('aiModelSelect');
-        if (sel) sel.innerHTML = `<option value="" data-i18n="optAiModelCustom">${i18n[currentLang].optAiModelCustom || '-- modello personalizzato --'}</option>`;
+        if (sel) sel.innerHTML = `<option value="" data-i18n="optAiModelCustom">${tr('optAiModelCustom') || '-- modello personalizzato --'}</option>`;
     }
 
     async function refreshAiModels(silent) {
@@ -500,7 +500,7 @@
         if (!sel) return;
         const provider = document.getElementById('aiProvider').value;
         if (!provider) {
-            if (statusEl) statusEl.textContent = i18n[currentLang].errAiProviderRequired || 'Seleziona prima un provider.';
+            if (statusEl) statusEl.textContent = tr('errAiProviderRequired') || 'Seleziona prima un provider.';
             return;
         }
         const editSel = document.getElementById('aiProfileEditSelect');
@@ -539,11 +539,11 @@
         const editingId = (editSel && editSel.value !== '__new__') ? editSel.value : null;
         const name = document.getElementById('aiProfileName').value.trim();
         if (!name) {
-            if (statusEl) statusEl.textContent = i18n[currentLang].errAiProfileNameRequired || 'Il nome del profilo è obbligatorio.';
+            if (statusEl) statusEl.textContent = tr('errAiProfileNameRequired') || 'Il nome del profilo è obbligatorio.';
             return;
         }
         if (!document.getElementById('aiProvider').value) {
-            if (statusEl) statusEl.textContent = i18n[currentLang].errAiProviderRequired || 'Seleziona prima un provider.';
+            if (statusEl) statusEl.textContent = tr('errAiProviderRequired') || 'Seleziona prima un provider.';
             return;
         }
         const body = {
@@ -567,7 +567,7 @@
                 });
             if (res && res.ok) {
                 const saved = await res.json();
-                if (statusEl) statusEl.textContent = i18n[currentLang].msgAiProfileSaved || 'Profilo salvato.';
+                if (statusEl) statusEl.textContent = tr('msgAiProfileSaved') || 'Profilo salvato.';
                 await loadAiProfiles();
                 const editSel2 = document.getElementById('aiProfileEditSelect');
                 if (editSel2 && saved.id) { editSel2.value = saved.id; onAiProfileEditSelectChange(); }
@@ -588,7 +588,7 @@
         try {
             const res = await apiFetch(`/api/ai/profiles/${encodeURIComponent(id)}`, { method: 'DELETE' });
             if (res && res.ok) {
-                if (statusEl) statusEl.textContent = i18n[currentLang].msgAiProfileDeleted || 'Profilo eliminato.';
+                if (statusEl) statusEl.textContent = tr('msgAiProfileDeleted') || 'Profilo eliminato.';
                 await loadAiProfiles();
             } else {
                 const err = res ? await res.json().catch(() => ({})) : {};
@@ -731,7 +731,7 @@
         div.style.display = 'flex';
         div.style.flexDirection = 'column';
         div.style.alignItems = isUser ? 'flex-end' : 'flex-start';
-        const label = isUser ? (i18n[currentLang].lblAiChatYou || 'Tu') : (meta || (i18n[currentLang].lblAiChatAssistant || 'AI'));
+        const label = isUser ? (tr('lblAiChatYou') || 'Tu') : (meta || (tr('lblAiChatAssistant') || 'AI'));
         div.innerHTML = `<div style="font-size:11px; color:var(--text-muted); margin-bottom:3px;">${escapeHtml(label)}</div>
             <div style="white-space:pre-wrap; max-width:85%; background:${isUser ? 'var(--primary)' : 'var(--surface-3)'}; color:${isUser ? 'var(--on-lamp)' : 'inherit'}; border-radius:0; ${isUser ? 'border-bottom-right-radius:2px;' : 'border-bottom-left-radius:2px;'} padding:8px 12px; font-size:13px;">${escapeHtml(text)}</div>`;
         box.appendChild(div);
@@ -784,7 +784,7 @@
                 renderAiConfigProposal(parseAiConfigProposal(data.reply), attachDeviceIps);
             } else if (res && res.status === 429) {
                 const err = await res.json().catch(() => ({}));
-                appendAiMessage('assistant', '⏳ ' + (i18n[currentLang].errAiRateLimited || 'Troppe richieste: limite di frequenza superato. Riprova tra qualche secondo.') + (err.detail ? ' (' + err.detail + ')' : ''));
+                appendAiMessage('assistant', '⏳ ' + (tr('errAiRateLimited') || 'Troppe richieste: limite di frequenza superato. Riprova tra qualche secondo.') + (err.detail ? ' (' + err.detail + ')' : ''));
             } else {
                 const err = res ? await res.json().catch(() => ({})) : {};
                 appendAiMessage('assistant', 'Errore: ' + (err.detail || 'richiesta fallita.'));

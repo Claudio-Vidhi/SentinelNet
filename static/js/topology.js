@@ -679,7 +679,7 @@
             statusColor = cssVar('--lamp-idle-ink', '#93a0a8');
             statusBg = cssVar('--lamp-idle-wash', 'rgba(108, 122, 131, 0.16)');
             statusGlow = cssVar('--lamp-idle', '#6c7a83');
-            statusText = i18n[currentLang].mapStatusUnknown;
+            statusText = tr('mapStatusUnknown');
         }
 
         if (isBoundary) {
@@ -832,7 +832,7 @@
         else if (n.status === "offline") statusLed = `<span style="color: var(--lamp-fault-ink); font-weight: bold;">● OFFLINE</span>`;
         else if (n.status === "auth_failed") statusLed = `<span style="color: var(--lamp-warn-ink); font-weight: bold;">● AUTH FAILED</span>`;
         else if (n.status === "discovered") statusLed = `<span style="color: var(--lamp-idle-ink); font-weight: bold;">● DISCOVERED</span>`;
-        else if (n.status === "unknown") statusLed = `<span style="color: var(--lamp-idle-ink); font-weight: bold;">● ${escapeHtml(i18n[currentLang].mapStatusUnknown)}</span>`;
+        else if (n.status === "unknown") statusLed = `<span style="color: var(--lamp-idle-ink); font-weight: bold;">● ${escapeHtml(tr('mapStatusUnknown'))}</span>`;
         
         const firmware = (n.version) ? n.version : ((scan && scan.version) ? scan.version : (tr('topoNotDetectedOffline')));
         const vendorName = (resolvedVendor && resolvedVendor !== 'discovered') ? resolvedVendor : (tr('topoLldpCdpNeighbor'));
@@ -3312,7 +3312,7 @@
     // Usata sia dall'export PNG che da quello PDF.
     function captureMapCanvas(cb) {
         if (!networkInstance) {
-            alert(i18n[currentLang].alertNoTopology);
+            alert(tr('alertNoTopology'));
             return;
         }
 
@@ -3508,7 +3508,7 @@
 
     async function exportVisioMap() {
         if (!networkInstance) {
-            alert(i18n[currentLang].alertNoTopology);
+            alert(tr('alertNoTopology'));
             return;
         }
         const positions = networkInstance.getPositions();
@@ -3575,7 +3575,7 @@
             body: JSON.stringify({ nodes, edges, primitives, connectors })
         });
         if (!res || !res.ok) {
-            alert(i18n[currentLang].alertVisioExportError);
+            alert(tr('alertVisioExportError'));
             return;
         }
         const blob = await res.blob();
@@ -3587,11 +3587,11 @@
     }
 
     async function resetTopology() {
-        if (!confirm(i18n[currentLang].confirmReset)) return;
+        if (!confirm(tr('confirmReset'))) return;
 
         const res = await apiFetch('/api/topology/reset', { method: 'POST' });
         if (!res || !res.ok) {
-            alert(i18n[currentLang].alertTopologyResetError);
+            alert(tr('alertTopologyResetError'));
             return;
         }
 
@@ -3746,7 +3746,7 @@
     async function openClassificationExportModal() {
         if (!clsExportColumns.length) {
             const res = await apiFetch('/api/export/classification/columns');
-            if (!res || !res.ok) { alert(i18n[currentLang].alertExportError); return; }
+            if (!res || !res.ok) { alert(tr('alertExportError')); return; }
             const data = await res.json();
             clsExportColumns = data.columns;
             const seed = readClsPrefs();
@@ -3787,7 +3787,7 @@
             only_matching_neighbours:
                 document.getElementById('clsOnlyMatchingNeighbours')?.checked,
         };
-        if (!prefs.columns.length) { alert(i18n[currentLang].alertExportNoColumns); return; }
+        if (!prefs.columns.length) { alert(tr('alertExportNoColumns')); return; }
         localStorage.setItem(CLS_EXPORT_PREFS_KEY, JSON.stringify(prefs));
         const qs = new URLSearchParams();
         for (const [k, v] of Object.entries(prefs)) {
@@ -3795,7 +3795,7 @@
             else if (v) qs.set(k, 'true');
         }
         const res = await apiFetch('/api/export/classification?' + qs.toString());
-        if (!res || !res.ok) { alert(i18n[currentLang].alertExportError); return; }
+        if (!res || !res.ok) { alert(tr('alertExportError')); return; }
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');

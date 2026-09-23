@@ -33,7 +33,7 @@ async function populateIdentTenantOptions(selected) {
     if (typeof window.populateGenCfgTenants === 'function') window.populateGenCfgTenants();
 
     // Single select options
-    const options = [`<option value="all">${escapeHtml(i18n[currentLang].optTenantAll || 'Tutti i tenant (Globale)')}</option>`]
+    const options = [`<option value="all">${escapeHtml(tr('optTenantAll') || 'Tutti i tenant (Globale)')}</option>`]
         .concat(allTenants.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`));
     sel.innerHTML = options.join('');
 
@@ -97,11 +97,11 @@ async function editIdentity(id) {
 }
 
 async function deleteIdentity(id) {
-    if (!confirm(i18n[currentLang].confirmDeleteIdentity)) return;
+    if (!confirm(tr('confirmDeleteIdentity'))) return;
     const res = await apiFetch('/api/identities/' + id, { method: 'DELETE' });
     if (res && res.status === 409) {
         const err = await res.json();
-        alert(i18n[currentLang].alertIdentityInUse + '\n' + (err.detail.devices || []).join(', '));
+        alert(tr('alertIdentityInUse') + '\n' + (err.detail.devices || []).join(', '));
         return;
     }
     await refreshIdentityOptions(); renderIdentitiesPanel();
@@ -126,7 +126,7 @@ document.getElementById('btnSaveIdentity').addEventListener('click', async () =>
     if (chkSpecific && chkSpecific.checked) {
         const selectedCbs = Array.from(document.querySelectorAll('.identTenantCb:checked')).map(cb => cb.value);
         if (!selectedCbs.length) {
-            alert(i18n[currentLang].alertSelectTenant || 'Seleziona almeno un tenant.');
+            alert(tr('alertSelectTenant') || 'Seleziona almeno un tenant.');
             return;
         }
         tenantPayload = selectedCbs.length === 1 ? selectedCbs[0] : selectedCbs;
@@ -144,7 +144,7 @@ document.getElementById('btnSaveIdentity').addEventListener('click', async () =>
         enable_secret: secretEl ? secretEl.value : '',
     };
     if (!payload.name || !payload.username || (!id && !payload.password)) {
-        alert(i18n[currentLang].alertIdentityFields); return;
+        alert(tr('alertIdentityFields')); return;
     }
     const res = await apiFetch(id ? '/api/identities/' + id : '/api/identities', {
         method: id ? 'PUT' : 'POST',

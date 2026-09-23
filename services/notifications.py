@@ -355,7 +355,8 @@ def _is_suppressed(conn: sqlite3.Connection, target: str, dedup_key: str, now: i
 
 
 def emit(kind: str, device_ip: str | None, severity: str | int | float,
-         title: str, ctx: dict | None = None, dedup_key: str | None = None) -> int:
+         title: str, ctx: dict | None = None, dedup_key: str | None = None,
+         tenant: str | None = None) -> int:
     """Emette un evento verso le notifiche.
 
     Risolve perimetro, filtri, anti-flood e accoda in notify_outbox.
@@ -368,13 +369,16 @@ def emit(kind: str, device_ip: str | None, severity: str | int | float,
     sev_norm = normalize_severity(severity)
     ctx = ctx or {}
 
-    # Risolve tenant/gruppo da device_ip
-    grp = None
-    if device_ip:
-        for d in inventory_manager.get_all_devices():
-            if d.get("IP") == device_ip:
-                grp = d.get("Group") or "Generale"
-                break
+    # The caller's tenant wins; the IP is only a fallback. The same private IP
+    # under two tenants is ordinary, so an ambiguous IP names no group rather
+    # than the first match — guessing would mail one customer's event to
+    # another customer's operator.
+    grp = tenant
+    if grp is None and device_ip:
+        groups = {d.get("Group") or "Generale"
+                  for d in inventory_manager.get_all_devices() if d.get("IP") == device_ip}
+        if len(groups) == 1:
+            grp = groups.pop()
 
     now = int(time.time())
     dt_now = datetime.now(timezone.utc)
@@ -412,7 +416,7 @@ def emit(kind: str, device_ip: str | None, severity: str | int | float,
 
             # Filtri: gruppi scelti dall'utente (se specificati)
             pref_groups = prefs.get("groups") or []
-            if pref_groups and grp and grp not in pref_groups:
+            if pref_groups and grp not in pref_groups:
                 continue
 
             target = f"user:{uname}"
@@ -467,7 +471,7 @@ def emit(kind: str, device_ip: str | None, severity: str | int | float,
 
             # Filtri: gruppi scelti dalla regola (se specificati)
             rule_groups = rule.get("groups") or []
-            if rule_groups and grp and grp not in rule_groups:
+            if rule_groups and grp not in rule_groups:
                 continue
 
             target = f"rule:{rule['id']}"
@@ -556,6 +560,13 @@ def _format_digest_mail(items: list[dict]) -> tuple[str, str]:
 
 async def notification_tick() -> None:
     """Un ciclo di invio notifiche."""
+    # The whole tick runs in a thread: it opens a blocking SQLite connection,
+    # resolves users and inventory in emit(), and sends SMTP. On the event loop
+    # a busy database (busy_timeout 5s) froze every request and the terminal.
+    await asyncio.to_thread(_tick)
+
+
+def _tick() -> None:
     cfg = mailer.get_config()
     if not cfg.get("enabled"):
         return
@@ -578,6 +589,7 @@ async def notification_tick() -> None:
                 title=f"Incidente aperto: {inc['title'] or 'Incidente rilevato'}",
                 ctx={"incident_id": inc["id"], "tenant": inc["tenant"]},
                 dedup_key=f"incident:{inc['id']}",
+                tenant=inc["tenant"],
             )
             last_inc_id = inc["id"]
         conn.execute("""
@@ -606,6 +618,7 @@ async def notification_tick() -> None:
                 title=f"Allerta SIEM: {msg[:100] if msg else 'Attività sospetta'}",
                 ctx={"event_id": ev["id"], "tenant": ev["tenant"]},
                 dedup_key=f"siem:{ev['id']}",
+                tenant=ev["tenant"],
             )
             last_evt_id = ev["id"]
         conn.execute("""
@@ -674,7 +687,7 @@ async def notification_tick() -> None:
             last_err = ""
             for rec in recipients:
                 try:
-                    await asyncio.to_thread(mailer.send_email, rec, subject, body)
+                    mailer.send_email(rec, subject, body)
                     conn.execute("""
                         INSERT INTO notify_log (ts, target, recipient, kind, title, status, error, item_count)
                         VALUES (?, ?, ?, ?, ?, 'sent', NULL, ?)
