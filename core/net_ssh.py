@@ -18,10 +18,13 @@ only stall the threads dialling THAT site, not every jump-mode connection in
 the process. The registry lock below only ever guards a dict lookup, never
 network I/O, so it is held for microseconds.
 """
+import base64
+import hashlib
 import logging
 import os
 import socket
 import threading
+import time
 
 import paramiko
 import netmiko
@@ -136,8 +139,12 @@ def _pin_host_key(host: str, port: int, key, scope: "str | None" = None) -> None
     keys.save(path)
 
 
-def _dial(site: dict) -> paramiko.Transport:
-    """Open and authenticate one transport to the site's bastion. No caching."""
+def _dial(site: dict, pin: bool = True) -> paramiko.Transport:
+    """Open and authenticate one transport to the site's bastion. No caching.
+
+    pin=False is the site wizard's draft test: the key is shown to the
+    operator first and pinned only by pin_confirmed().
+    """
     from security import identity_manager
     site_id = site["id"]
     creds = identity_manager.get_identity_credentials(site["jump_identity"])
@@ -182,7 +189,7 @@ def _dial(site: dict) -> paramiko.Transport:
                 f"'{_host_key_id(host, port)}' da ssh_known_hosts; "
                 f"altrimenti la tratta non e' fidata.") from e
         raise
-    if pinned is None:
+    if pinned is None and pin:
         _pin_host_key(host, port, tr.get_remote_server_key())
     return tr
 
@@ -223,15 +230,66 @@ def invalidate_site(site_id: str) -> None:
             pass
 
 
-def probe_bastion(site: dict) -> None:
+def probe_bastion(site: dict) -> str:
     """Dial the bastion with the site's current identity and hang up.
 
     Deliberately does NOT go through _transport: the point is to test the
     credential as configured now, and a cached transport opened with the
-    previous one would answer 'fine'. Raises BastionAuthError on a refused
-    login, or the underlying socket/SSH error otherwise.
+    previous one would answer 'fine'. Returns the host key fingerprint.
+    Raises BastionAuthError on a refused login, or the underlying socket/SSH
+    error otherwise.
     """
-    _dial(site).close()
+    tr = _dial(site)
+    try:
+        return fingerprint(tr.get_remote_server_key())
+    finally:
+        tr.close()
+
+
+# Keys seen by a draft probe, waiting for the operator to confirm them.
+# ponytail: in-process dict — a restart forgets pending confirmations, and
+# the wizard then answers "test again", which is the safe direction.
+PROBE_TTL = 600
+_probed_keys: dict = {}
+
+
+def fingerprint(key) -> str:
+    """OpenSSH SHA256 fingerprint, the form `ssh-keygen -lf` prints."""
+    digest = hashlib.sha256(key.asbytes()).digest()
+    return "SHA256:" + base64.b64encode(digest).decode().rstrip("=")
+
+
+def probe_bastion_draft(host: str, port: int, identity: str) -> dict:
+    """Test an unsaved bastion. Pins nothing: the key waits in _probed_keys
+    until the operator confirms its fingerprint (pin_confirmed)."""
+    port = int(port)
+    known = _pinned_host_key(host, port) is not None
+    tr = _dial({"id": "(draft)", "jump_host": host, "jump_port": port,
+                "jump_identity": identity}, pin=False)
+    try:
+        key = tr.get_remote_server_key()
+    finally:
+        tr.close()
+    _probed_keys[(host, port)] = (key, time.time())
+    return {"fingerprint": fingerprint(key), "key_type": key.get_name(), "known": known}
+
+
+def pin_confirmed(host: str, port: int, fp: str) -> bool:
+    """Pin the key a draft probe saw for (host, port) if fp is its fingerprint.
+
+    The browser never sends key material: it sends back the fingerprint the
+    operator confirmed, and this checks it against what the server saw.
+    """
+    port = int(port)
+    entry = _probed_keys.get((host, port))
+    if not entry or time.time() - entry[1] > PROBE_TTL:
+        return False
+    key = entry[0]
+    if fingerprint(key) != fp:
+        return False
+    _pin_host_key(host, port, key)
+    _probed_keys.pop((host, port), None)
+    return True
 
 
 def _netmiko_connect(**params):

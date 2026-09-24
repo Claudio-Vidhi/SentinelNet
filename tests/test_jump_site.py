@@ -1218,9 +1218,12 @@ class BastionAuthIsReportedSeparately(unittest.TestCase):
         net_ssh._transports["customer-a"] = cached
         try:
             with mock.patch.object(net_ssh, "_dial") as dial:
-                net_ssh.probe_bastion(dict(self.SITE))
+                dial.return_value.get_remote_server_key.return_value = \
+                    paramiko.ECDSAKey.generate()
+                fp = net_ssh.probe_bastion(dict(self.SITE))
             dial.assert_called_once()
             dial.return_value.close.assert_called_once()
+            self.assertTrue(fp.startswith("SHA256:"))
         finally:
             net_ssh._transports.pop("customer-a", None)
 
