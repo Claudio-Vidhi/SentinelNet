@@ -9,7 +9,14 @@ import sys
 # Read the data directory from the environment (e.g. '/app/data' in Docker).
 # Without the variable, state files are confined to ./data
 # instead of filling the current directory next to the executable (DF-1).
-DATA_DIR = os.getenv("SENTINELNET_DATA_DIR") or os.path.join(os.getcwd(), "data")
+# The installed exe finds its folder under ProgramData by itself: the installer
+# used to publish it as a machine-wide variable, and that variable also hijacked
+# every `python app_server.py` run from a source checkout on the same PC.
+_INSTALLED_DATA_DIR = os.path.join(os.getenv("PROGRAMDATA") or "", "SentinelNet")
+DATA_DIR = (os.getenv("SENTINELNET_DATA_DIR")
+            or (_INSTALLED_DATA_DIR if getattr(sys, "frozen", False)
+                and os.path.isdir(_INSTALLED_DATA_DIR) else None)
+            or os.path.join(os.getcwd(), "data"))
 
 # Known state files, candidates for one-time migration from CWD to DATA_DIR.
 _STATE_FILES = [
