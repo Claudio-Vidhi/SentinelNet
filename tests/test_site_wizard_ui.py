@@ -55,6 +55,17 @@ class SiteWizardUi(unittest.TestCase):
         steps = self.js[start:self.js.index("onFinish:", start)]
         self.assertEqual(4, steps.count("!!sw.token"), steps)
 
+    def test_the_next_button_label_belongs_to_the_wizard(self):
+        # data-i18n would reset it to "Next" on a language switch, even on the
+        # step whose label is Save.
+        start = self.html.index("data-wizard-next")
+        tag = self.html[self.html.rindex("<", 0, start):self.html.index(">", start)]
+        self.assertNotIn("data-i18n=", tag)
+
+    def test_resuming_an_edit_draft_keeps_edit_mode(self):
+        # "+ New identity" during an edit comes back through "Nuova sede".
+        self.assertIn("editable: !!sw.editing", self.js)
+
     def test_unverified_badge(self):
         self.assertIn("chipNotVerified", self.js)
         self.assertIn("bastion_verified_ts", self.js)

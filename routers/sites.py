@@ -156,10 +156,15 @@ def update_site_ep(payload: SiteUpdateSchema, current_user = Depends(require_uns
     if any(k in jump_kwargs for k in ("jump_host", "jump_port", "jump_identity")):
         from core import net_ssh
         net_ssh.invalidate_site(payload.id)
+    # The wizard resends the jump fields on every save: compare the stored
+    # bastion before and after, not the presence of the fields.
+    after = site_manager.get_site(payload.id) or {}
+    bastion_changed = any((existing or {}).get(k) != after.get(k)
+                          for k in ("jump_host", "jump_port", "jump_identity"))
     if fp and existing:
         site_manager.mark_bastion_verified(payload.id)
         log_audit(f"Sede '{payload.id}': impronta del bastione {fp} confermata da '{who}'.")
-    elif any(k in jump_kwargs for k in ("jump_host", "jump_port", "jump_identity")):
+    elif bastion_changed:
         log_audit(f"Sede '{payload.id}': bastione modificato senza verifica da '{who}'.")
     log_audit(f"Sede '{payload.id}' aggiornata da '{current_user.get('sub')}'.")
     out: Dict[str, Any] = {"status": "success"}
@@ -235,6 +240,9 @@ async def test_bastion_draft_ep(payload: BastionDraftSchema,
     except net_ssh.BastionHostKeyError as e:
         log_audit(f"Test bozza bastione {host} da '{who}': chiave host diversa.")
         return {"status": "host_key_mismatch", "message": str(e)}
+    except ValueError as e:
+        # The identity no longer exists (_dial): a form error, not the network.
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         log_audit(f"Test bozza bastione {host} da '{who}': irraggiungibile.")
         return {"status": "unreachable", "message": str(e)}
