@@ -208,7 +208,8 @@
         const resume = sw.keepDraft;
         if (!resume) resetSiteWizard();
         sw.keepDraft = false;
-        siteWizard.open({ at: resume ? 'details' : 'mode', onClose: onSiteWizardClose });
+        // A resumed edit draft stays an edit: same rail, same update on save.
+        siteWizard.open({ at: resume ? 'details' : 'mode', editable: !!sw.editing, onClose: onSiteWizardClose });
     }
 
     async function openEditSiteWizard(siteId) {

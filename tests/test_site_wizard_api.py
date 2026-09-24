@@ -73,6 +73,24 @@ class SiteWizardApi(unittest.TestCase):
                              json={**DRAFT, "jump_port": 70000})
         self.assertEqual(r.status_code, 400)
 
+    def test_draft_with_a_missing_identity_is_400_not_unreachable(self):
+        # _dial raises ValueError when the identity is gone: that is a form
+        # error, not a network one.
+        r = self._draft(side_effect=ValueError("Identita' id-hk non trovata."))
+        self.assertEqual(r.status_code, 400, r.text)
+        self.assertIn("non trovata", r.json()["detail"])
+
+    def test_resaving_an_unchanged_bastion_is_not_audited_as_a_change(self):
+        # The wizard sends the jump fields on every save of a jump site.
+        r = self.client.post("/api/sites", headers=self.h, json={
+            "name": "wiz-rename", "mode": "jump", **DRAFT})
+        sid = r.json()["site"]["id"]
+        with mock.patch("routers.sites.log_audit") as audit:
+            r = self.client.post("/api/sites/update", headers=self.h,
+                                 json={"id": sid, "name": "wiz-renamed", **DRAFT})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertFalse(any("senza verifica" in c.args[0] for c in audit.call_args_list))
+
     def test_scoped_admin_is_refused(self):
         r = self.client.post("/api/sites/test-bastion/draft", headers=self.hs, json=DRAFT)
         self.assertEqual(r.status_code, 403)
