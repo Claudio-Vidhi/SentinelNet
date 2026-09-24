@@ -77,9 +77,11 @@ function createWizard(panelId, { steps, onFinish }) {
 
     btnNext.addEventListener('click', next);
     btnBack.addEventListener('click', () => move(-1));
-    // Any edit inside the panel may change what the current step accepts.
+    // Any edit inside the panel may change what the current step accepts; a
+    // committed choice (a radio, a select) may also change which steps apply,
+    // so it redraws the rail too.
     panel.addEventListener('input', refresh);
-    panel.addEventListener('change', refresh);
+    panel.addEventListener('change', render);
 
     return {
         /** @param {{at?: string, editable?: boolean, onClose?: Function}} [opts] */
