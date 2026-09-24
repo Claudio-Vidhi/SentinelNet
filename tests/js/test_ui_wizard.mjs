@@ -67,8 +67,8 @@ assert.strictEqual(wiz.current(), 'b');
 back.fire('click'); await tick();
 assert.strictEqual(wiz.current(), 'a');
 
-skipB = true; wiz.goTo('a');
-assert.strictEqual(rail.children.length, 2, 'a skipped step leaves the rail');
+skipB = true; panel.fire('change');
+assert.strictEqual(rail.children.length, 2, 'a change that skips a step updates the rail at once');
 next.fire('click'); await tick();
 assert.strictEqual(wiz.current(), 'c', 'Next jumps over a skipped step');
 assert.strictEqual(next.textContent, 'save', 'last step shows its finishLabel');
