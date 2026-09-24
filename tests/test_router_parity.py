@@ -358,7 +358,10 @@ class TestFullParity(unittest.TestCase):
                     # Account lifecycle (routes already in NEW_PREFIXES).
                     "UserNameSchema", "ProfileEmailSchema", "VerifyEmailSchema",
                     # Configurazione SSO (rotta gia' in NEW_PREFIXES).
-                    "SsoSettingsSchema")
+                    "SsoSettingsSchema",
+                    # Site wizard (2026-09-23): body of the draft bastion test,
+                    # POST /api/sites/test-bastion/draft (already in NEW_PREFIXES).
+                    "BastionDraftSchema")
     # v7: /anomalies ora restituisce INCIDENTI invece di singoli eventi
     # correlati. Parametri e forma della risposta restano quelli storici (li
     # consumano il tab Flussi e il tool MCP), è cambiata la descrizione.
