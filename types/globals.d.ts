@@ -137,6 +137,7 @@ declare var _vwVendor: any;
 // identifier is declared twice.
 interface Window {
     loadAssetOnce: any;      // core.js
+    createWizard: any;       // ui-wizard.js
     globalSelectedTenant: any; // core.js
     tenantSelectSeed: any;   // core.js, used by every panel tenant select
     redundancyTenantChanged: any; // redundancy.js, called by applyGlobalTenant
