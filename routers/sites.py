@@ -43,6 +43,8 @@ class SiteSchema(BaseModel):
     jump_identity: Optional[str] = None
     # Default identity for the devices behind the bastion (not the bastion's own).
     device_identity: Optional[str] = None
+    # Fingerprint the operator confirmed in the wizard's test step.
+    confirmed_fingerprint: Optional[str] = None
 
 class SiteUpdateSchema(BaseModel):
     id: str
@@ -57,9 +59,15 @@ class SiteUpdateSchema(BaseModel):
     # Spento di default: acceso, le credenziali dei dispositivi lasciano la
     # sede e vivono anche sul centrale (vedi docs/remote-sites.md, principio 2).
     central_manages_devices: Optional[bool] = None
+    confirmed_fingerprint: Optional[str] = None
 
 class SiteIdSchema(BaseModel):
     id: str
+
+class BastionDraftSchema(BaseModel):
+    jump_host: str
+    jump_port: int = 22
+    jump_identity: str
 
 class SiteCommandSchema(BaseModel):
     ip: str
@@ -78,8 +86,21 @@ def list_sites_ep(current_user = Depends(require_operator)):
         sites = [{"id": s["id"], "name": s["name"], "mode": s["mode"]} for s in sites]
     return {"sites": sites}
 
+def _pin_or_409(host: str, port: int, fp: str) -> None:
+    """Pin the key the draft test saw, or refuse: the confirmation is only
+    worth something for the key the server itself observed."""
+    from core import net_ssh
+    if not net_ssh.pin_confirmed(host, port, fp):
+        raise HTTPException(
+            status_code=409,
+            detail="Impronta non piu' valida per questo bastione: ripetere il test.")
+
 @router.post("/api/sites", dependencies=[Depends(require_tab("tab-sites"))])
 def create_site_ep(payload: SiteSchema, current_user = Depends(require_unscoped_admin)):
+    who = current_user.get('sub')
+    fp = payload.confirmed_fingerprint if payload.mode == "jump" else None
+    if fp:
+        _pin_or_409((payload.jump_host or "").strip(), payload.jump_port or 22, fp)
     try:
         site, token = site_manager.create_site(
             payload.name, payload.mode, payload.subnets,
@@ -88,7 +109,13 @@ def create_site_ep(payload: SiteSchema, current_user = Depends(require_unscoped_
             device_identity=payload.device_identity)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    log_audit(f"Sede '{site['id']}' (mode: {payload.mode}) creata da '{current_user.get('sub')}'.")
+    log_audit(f"Sede '{site['id']}' (mode: {payload.mode}) creata da '{who}'.")
+    if fp:
+        site_manager.mark_bastion_verified(site["id"])
+        site = site_manager.get_site(site["id"])
+        log_audit(f"Sede '{site['id']}': impronta del bastione {fp} confermata da '{who}'.")
+    elif payload.mode == "jump":
+        log_audit(f"Sede '{site['id']}' salvata con bastione non verificato da '{who}'.")
     # Il token in chiaro è restituito UNA SOLA VOLTA (poi solo hash su disco).
     return {"status": "success", "site": site, "token": token}
 
@@ -109,6 +136,13 @@ def update_site_ep(payload: SiteUpdateSchema, current_user = Depends(require_uns
         jump_kwargs["device_identity"] = payload.device_identity
     if payload.central_manages_devices is not None:
         jump_kwargs["central_manages_devices"] = bool(payload.central_manages_devices)
+    who = current_user.get('sub')
+    fp = payload.confirmed_fingerprint
+    existing = site_manager.get_site(payload.id)
+    if fp and existing:
+        host = (payload.jump_host or existing.get("jump_host") or "").strip()
+        port = payload.jump_port or existing.get("jump_port") or 22
+        _pin_or_409(host, port, fp)
     try:
         ok = site_manager.update_site(payload.id, payload.name, payload.mode,
                                       payload.subnets, **jump_kwargs)
@@ -122,6 +156,11 @@ def update_site_ep(payload: SiteUpdateSchema, current_user = Depends(require_uns
     if any(k in jump_kwargs for k in ("jump_host", "jump_port", "jump_identity")):
         from core import net_ssh
         net_ssh.invalidate_site(payload.id)
+    if fp and existing:
+        site_manager.mark_bastion_verified(payload.id)
+        log_audit(f"Sede '{payload.id}': impronta del bastione {fp} confermata da '{who}'.")
+    elif any(k in jump_kwargs for k in ("jump_host", "jump_port", "jump_identity")):
+        log_audit(f"Sede '{payload.id}': bastione modificato senza verifica da '{who}'.")
     log_audit(f"Sede '{payload.id}' aggiornata da '{current_user.get('sub')}'.")
     out: Dict[str, Any] = {"status": "success"}
     # Passare a 'agent' senza token lascia una sede inservibile: update_site
@@ -158,17 +197,49 @@ async def test_bastion_ep(payload: SiteIdSchema, current_user = Depends(require_
         raise HTTPException(status_code=404, detail="Sede non trovata.")
     if site.get("mode") != "jump":
         raise HTTPException(status_code=400, detail="La sede non e' in modalita' jump.")
+    who = current_user.get('sub')
     try:
         # WP11: il probe SSH del bastione gira sul pool dedicato.
-        await run_ssh(net_ssh.probe_bastion, site)
+        fp = await run_ssh(net_ssh.probe_bastion, site)
     except net_ssh.BastionAuthError as e:
-        log_audit(f"Test bastione sede '{payload.id}' da '{current_user.get('sub')}': credenziali rifiutate.")
+        log_audit(f"Test bastione sede '{payload.id}' da '{who}': credenziali rifiutate.")
         return {"status": "auth_failed", "message": str(e)}
+    except net_ssh.BastionHostKeyError as e:
+        log_audit(f"Test bastione sede '{payload.id}' da '{who}': chiave host diversa.")
+        return {"status": "host_key_mismatch", "message": str(e)}
     except Exception as e:
-        log_audit(f"Test bastione sede '{payload.id}' da '{current_user.get('sub')}': irraggiungibile.")
+        log_audit(f"Test bastione sede '{payload.id}' da '{who}': irraggiungibile.")
         return {"status": "unreachable", "message": str(e)}
-    log_audit(f"Test bastione sede '{payload.id}' da '{current_user.get('sub')}': OK.")
-    return {"status": "success"}
+    site_manager.mark_bastion_verified(payload.id)
+    log_audit(f"Test bastione sede '{payload.id}' da '{who}': OK.")
+    return {"status": "success", "fingerprint": fp}
+
+
+@router.post("/api/sites/test-bastion/draft", dependencies=[Depends(require_tab("tab-sites"))])
+async def test_bastion_draft_ep(payload: BastionDraftSchema,
+                                current_user = Depends(require_unscoped_admin)):
+    # The wizard's test step: dial a bastion that is not saved yet. Nothing is
+    # pinned here — the key waits for the operator to confirm its fingerprint.
+    from core import net_ssh
+    from core.ssh_pool import run_ssh
+    host = payload.jump_host.strip()
+    if not host or not (1 <= payload.jump_port <= 65535) or not payload.jump_identity:
+        raise HTTPException(status_code=400, detail="Host, porta o identita' del bastione non validi.")
+    who = current_user.get('sub')
+    try:
+        info = await run_ssh(net_ssh.probe_bastion_draft, host,
+                             payload.jump_port, payload.jump_identity)
+    except net_ssh.BastionAuthError as e:
+        log_audit(f"Test bozza bastione {host} da '{who}': credenziali rifiutate.")
+        return {"status": "auth_failed", "message": str(e)}
+    except net_ssh.BastionHostKeyError as e:
+        log_audit(f"Test bozza bastione {host} da '{who}': chiave host diversa.")
+        return {"status": "host_key_mismatch", "message": str(e)}
+    except Exception as e:
+        log_audit(f"Test bozza bastione {host} da '{who}': irraggiungibile.")
+        return {"status": "unreachable", "message": str(e)}
+    log_audit(f"Test bozza bastione {host} da '{who}': OK, impronta {info['fingerprint']}.")
+    return {"status": "success", **info}
 
 @router.post("/api/sites/regenerate-token", dependencies=[Depends(require_tab("tab-sites"))])
 def regenerate_site_token_ep(payload: SiteIdSchema, current_user = Depends(require_unscoped_admin)):
