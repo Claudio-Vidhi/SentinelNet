@@ -46,8 +46,8 @@ PrivilegesRequired=admin
 ArchitecturesInstallIn64BitMode=x64compatible
 ArchitecturesAllowed=x64compatible
 UninstallDisplayIcon={app}\{#AppExeName}
-; We write SENTINELNET_DATA_DIR to the machine environment; this makes Setup
-; broadcast WM_SETTINGCHANGE so already-open shells pick it up.
+; We delete the old machine-wide SENTINELNET_DATA_DIR; this makes Setup
+; broadcast WM_SETTINGCHANGE so already-open shells drop it.
 ChangesEnvironment=yes
 VersionInfoVersion={#AppVersion}
 
@@ -124,9 +124,11 @@ Name: "{group}\SentinelNet data folder"; Filename: "{commonappdata}\{#DataDirNam
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{commonappdata}\{#DataDirName}"; Tasks: desktopicon
 
 [Registry]
-; Machine-wide so the app finds its data however it is launched -- shortcut,
-; command line, or a Windows service running as another account.
-Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: expandsz; ValueName: "SENTINELNET_DATA_DIR"; ValueData: "{commonappdata}\{#DataDirName}"; Flags: preservestringtype uninsdeletevalue
+; Older releases wrote SENTINELNET_DATA_DIR machine-wide. It leaked into every
+; process, a source checkout included, which then opened the installed data
+; (or died on its ACLs). The exe now finds {commonappdata} by itself and the
+; service sets the variable in its own XML, so an upgrade removes it.
+Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: none; ValueName: "SENTINELNET_DATA_DIR"; Flags: deletevalue
 
 [Run]
 ; La registrazione del servizio NON sta qui: [Run] ignora il codice di uscita,

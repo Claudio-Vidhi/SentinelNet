@@ -10,6 +10,40 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- Siti: la creazione, la modifica e l'enrollment passano da un pannello
+  laterale a passi che sostituisce le tre finestre separate. Il bastion si
+  prova prima di salvare: il test mostra il fingerprint senza fissarlo, il
+  salvataggio fissa quello confermato e segna il sito come verificato. Cambiare
+  il bastion toglie il segno.
+
+### Changed
+
+- Cartella dati: l'installer non scrive piu' `SENTINELNET_DATA_DIR`
+  nell'ambiente di macchina e l'aggiornamento la rimuove. L'exe installato
+  trova `C:\ProgramData\SentinelNet` da solo e il servizio la dichiara nel suo
+  XML. Prima la variabile valeva per ogni processo, e un clone del repository
+  sullo stesso PC apriva i dati dell'installazione (o si fermava sui loro
+  permessi) invece di `./data`.
+- Il pannello dice una volta "server non raggiungibile" invece di lasciare i
+  riquadri vuoti; le notifiche si impilano in un'unica area. La home non si
+  aggiorna mentre la scheda del browser e' nascosta.
+- Punteggi EPSS in cache per un giorno, con 10 minuti di pausa dopo un errore.
+
+### Fixed
+
+- Notifiche: le email degli incidenti non arrivavano agli operatori limitati a
+  un gruppo, i filtri per gruppo lasciavano passare eventi di gruppo ignoto e
+  un IP presente in due tenant veniva attribuito al primo. Un IP ambiguo ora
+  non nomina alcun gruppo.
+- Sicurezza: la CSP permetteva WebSocket verso qualunque host; ora solo verso
+  il server stesso.
+- Il ciclo delle notifiche e la cancellazione dello storico audit bloccavano
+  il server durante l'accesso al database; ora girano in un thread.
+- Wizard siti: tornare indietro dopo l'emissione del token riportava al
+  riepilogo, dove Salva avrebbe creato il sito una seconda volta.
+
 ## [0.42.7] - 2026-09-22
 
 ### Added

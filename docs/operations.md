@@ -12,8 +12,9 @@ All state lives in **one** directory, resolved by
 [core/data_config.py](../core/data_config.py):
 
 ```
-SENTINELNET_DATA_DIR   if set
-./data                 otherwise (relative to the process CWD)
+SENTINELNET_DATA_DIR       if set
+%ProgramData%\SentinelNet  installed exe, if that folder exists
+./data                     otherwise (relative to the process CWD)
 ```
 
 It is not the executable's directory: an exe launched from another folder looks
@@ -299,9 +300,11 @@ L'installer separa le due cose:
 | Programma | `C:\Program Files\SentinelNet` | sostituito | rimosso |
 | Dati | `C:\ProgramData\SentinelNet` | **intatti** | **conservati** |
 
-`SENTINELNET_DATA_DIR` viene scritta nell'ambiente di macchina (HKLM), cosi'
-l'app trova i dati comunque la si avvii — collegamento, riga di comando o
-servizio Windows sotto un altro account.
+The installed exe finds `C:\ProgramData\SentinelNet` by itself when
+`SENTINELNET_DATA_DIR` is unset; the Windows service sets the variable in its own
+WinSW XML. Releases up to 0.42.7 wrote it machine-wide (HKLM), which also sent
+every source checkout on the same PC to the installed data; the installer now
+deletes that value on upgrade.
 
 Al primo avvio l'installer chiede se c'e' una cartella `data` di una copia
 precedente da importare; la copia e' in sola lettura sull'originale. La domanda
