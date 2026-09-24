@@ -17,6 +17,11 @@ from security import user_manager
 @pytest.fixture(autouse=True)
 def setup_db_and_clean():
     db.migrate()
+    _reset_notify_state()
+    yield
+
+
+def _reset_notify_state():
     conn = db.get_observability_connection()
     try:
         conn.execute("DELETE FROM notify_outbox")
@@ -24,10 +29,16 @@ def setup_db_and_clean():
         conn.execute("DELETE FROM notify_rules")
         conn.execute("DELETE FROM notify_prefs")
         conn.execute("DELETE FROM notify_cursors")
+        # Cursors at the current high-water mark, not wiped to 0: this
+        # observability.db is shared with the other modules of the worker, and
+        # their incidents/events must not be replayed into these tests.
+        conn.execute("""INSERT INTO notify_cursors (source, last_id)
+                        SELECT 'incidents', COALESCE(MAX(id), 0) FROM incidents""")
+        conn.execute("""INSERT INTO notify_cursors (source, last_id)
+                        SELECT 'events', COALESCE(MAX(id), 0) FROM events""")
         conn.commit()
     finally:
         conn.close()
-    yield
 
 
 def test_smtp_disabled_enqueues_nothing():
@@ -174,6 +185,34 @@ def test_quiet_hours_defer_and_critical_bypass():
 
 
 @pytest.mark.anyio
+async def test_rows_left_by_other_modules_are_not_replayed():
+    # The suite shares one observability.db per worker: incidents written by
+    # other modules are already there. With the cursors wiped the tick replayed
+    # them and mailed every user with an email -- the extra 'sent' row that
+    # made test_notification_tick_delivery_and_retry fail one run in a few.
+    now = int(time.time())
+    conn = db.get_observability_connection()
+    try:
+        conn.execute("""
+            INSERT INTO incidents (tenant, entity_key, opened_ts, last_event_ts, title,
+                                   severity, event_count, status, cause_kind, confidence)
+            VALUES ('TenantZ', 'ip:192.0.2.9', ?, ?, 'left by another module', 3, 1, 'new', 'x', 50)
+        """, (now - 600, now - 300))
+        conn.commit()
+    finally:
+        conn.close()
+    # What the next test's fixture sees: the leftover is already in the DB.
+    _reset_notify_state()
+    users = {"other-module-user": {"email": "other@example.com"}}
+    with patch.object(mailer, "get_config", return_value={"enabled": True, "from_email": "sn@example.com"}), \
+         patch.object(user_manager, "get_users", return_value=users), \
+         patch.object(user_manager, "get_user_groups", return_value=[]), \
+         patch.object(mailer, "send_email", return_value=None) as send:
+        await notifications.notification_tick()
+    send.assert_not_called()
+
+
+@pytest.mark.anyio
 async def test_notification_tick_delivery_and_retry():
     # Inserisce un item direttamente nell'outbox con due_ts nel passato
     now = int(time.time())
@@ -221,7 +260,7 @@ async def test_notification_tick_delivery_and_retry():
         outbox_rows = conn.execute("SELECT * FROM notify_outbox WHERE target = 'user:testuser'").fetchall()
         assert len(outbox_rows) == 0
         log_rows = conn.execute("SELECT * FROM notify_log WHERE status = 'sent'").fetchall()
-        assert len(log_rows) == 1
+        assert len(log_rows) == 1, [(r["target"], r["kind"], r["title"]) for r in log_rows]
         assert log_rows[0]["recipient"] == "test@example.com"
     finally:
         conn.close()
