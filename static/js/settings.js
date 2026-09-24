@@ -164,8 +164,10 @@
 
     const siteWizard = createWizard('siteWizard', {
         steps: [
-            { id: 'mode', label: 'swStepMode', validate: () => !!swMode() },
-            { id: 'details', label: 'swStepDetails', onEnter: onSwDetailsEnter,
+            // Once a token is issued the site exists: every step but
+            // Enrollment skips, so Back cannot reach Save a second time.
+            { id: 'mode', label: 'swStepMode', skip: () => !!sw.token, validate: () => !!swMode() },
+            { id: 'details', label: 'swStepDetails', onEnter: onSwDetailsEnter, skip: () => !!sw.token,
               validate: () => {
                   if (!swEl('swName').value.trim() || !swSubnets().every(isCidr)) return false;
                   if (swMode() !== 'jump') return true;
@@ -173,9 +175,10 @@
                   return !!j.jump_host && !!j.jump_identity && j.jump_port >= 1 && j.jump_port <= 65535;
               } },
             { id: 'connect', label: 'swStepConnect',
-              skip: () => swMode() !== 'jump' || !swJumpChanged(),
+              skip: () => !!sw.token || swMode() !== 'jump' || !swJumpChanged(),
               validate: () => swTestPassed() || swEl('swSkipVerify').checked },
-            { id: 'summary', label: 'swStepSummary', onEnter: renderSwSummary, finishLabel: 'btnSaveSite' },
+            { id: 'summary', label: 'swStepSummary', onEnter: renderSwSummary, skip: () => !!sw.token,
+              finishLabel: 'btnSaveSite' },
             { id: 'enroll', label: 'swStepEnroll', skip: () => !sw.token,
               onEnter: startSwHeartbeat, finishLabel: 'btnClose' },
         ],
