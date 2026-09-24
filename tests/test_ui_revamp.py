@@ -1422,9 +1422,8 @@ class TestSitesTabRestyle(unittest.TestCase):
 
     def test_preserve_ids(self):
         html = _html()
-        # sitesTableBody (brief) + the create-site form fields read directly
-        # by createSite().
-        for _id in ('sitesTableBody', 'newSiteName', 'newSiteMode', 'newSiteSubnets'):
+        # sitesTableBody + the site wizard fields read by saveSiteWizard().
+        for _id in ('sitesTableBody', 'swName', 'swSubnets', 'btnNewSite'):
             self.assertIn(f'id="{_id}"', html, f"lost preserve-ID {_id}")
 
     def test_endpoint_contract_present(self):
@@ -1432,7 +1431,7 @@ class TestSitesTabRestyle(unittest.TestCase):
         html = frontend_source()
         # GET /api/sites (list) and POST /api/sites (create) share one literal.
         self.assertIn("apiFetch('/api/sites')", html)
-        self.assertIn("apiFetch('/api/sites', {", html)
+        self.assertIn("'/api/sites/update' : '/api/sites'", html)
         for endpoint in ('/api/sites/delete', '/api/sites/regenerate-token'):
             self.assertIn(endpoint, html)
         # Brief also lists POST /api/sites/update, POST /api/sites/{id}/command
@@ -1457,7 +1456,7 @@ class TestSitesTabRestyle(unittest.TestCase):
         # loadSites() and all mutating handlers must survive byte-for-byte.
         self.assertIn("async function loadSites()", html)
         self.assertIn("if (!isAdminRole(currentRole)) return;", html)
-        for hook in ('createSite()', 'regenSiteToken(', 'deleteSite('):
+        for hook in ('saveSiteWizard()', 'regenSiteToken(', 'deleteSite('):
             self.assertIn(hook, html)
 
     def test_rbac_preserved(self):
@@ -1475,18 +1474,17 @@ class TestSitesTabRestyle(unittest.TestCase):
         tab = self._tab(html)
         for cls in ('class="page-head"', 'class="table-wrap"'):
             self.assertIn(cls, tab)
-        # sites table only; the create form (with the jump-site fields and
-        # limitations) is the createSiteModal dialog.
+        # sites table only; creation and editing live in the siteWizard side panel.
         self.assertEqual(tab.count('class="panel'), 1)
-        self.assertIn('data-open-modal="createSiteModal"', tab)
-        self.assertIn('id="jumpLimits"', html)
+        self.assertIn('id="btnNewSite"', tab)
+        self.assertIn('id="siteWizard"', html)
         self.assertNotIn('table-container', tab)
 
     def test_i18n_keys_both_langs(self):
         html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
         for key in ('sitesEyebrow:', 'titleSites:', 'descSites:', 'lblSiteName:',
                     'lblSiteMode:', 'thSiteLastContact:', 'titleNewSite:',
-                    'lblSiteSubnets:', 'btnCreateSite:', 'btnRegenSiteToken:',
+                    'lblSiteSubnets:', 'btnSaveSite:', 'btnRegenSiteToken:',
                     'btnDeleteSite:', 'lblSiteDefault:'):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 

@@ -125,33 +125,31 @@ class TestSiteEditingUi(unittest.TestCase):
         cls.html = _read("templates", "dashboard.html")
         cls.js = _read("static", "js", "settings.js")
 
-    def test_the_modal_and_its_controls_exist(self):
-        for el in ('id="editSiteModal"', 'id="editSiteName"',
-                   'id="editSiteSubnets"', 'id="editSiteMode"',
-                   'id="editSiteJumpHost"', 'id="editSiteJumpPort"'):
+    def test_the_panel_and_its_controls_exist(self):
+        for el in ('id="siteWizard"', 'id="swName"', 'id="swSubnets"',
+                   'name="swMode"', 'id="swJumpHost"', 'id="swJumpPort"'):
             self.assertIn(el, self.html, el)
 
     def test_the_row_offers_the_edit_action(self):
         self.assertIn('data-action="edit-site"', self.js)
         self.assertIn("act === 'edit-site'", self.js)
 
-    def test_the_modal_listener_binds_an_id_that_exists(self):
-        # getElementById('inesistente')?.addEventListener non solleva: lascia
-        # il pulsante morto in silenzio.
-        self.assertIn("getElementById('editSiteModal')?.addEventListener", self.js)
-        self.assertIn('id="editSiteModal"', self.html)
+    def test_the_panel_listener_binds_an_id_that_exists(self):
+        # getElementById('missing')?.addEventListener raises nothing: it
+        # leaves the button silently dead.
+        self.assertIn("getElementById('siteWizard')?.addEventListener", self.js)
+        self.assertIn('id="siteWizard"', self.html)
 
-    def test_the_modal_goes_through_the_modal_manager(self):
-        self.assertIn("openModal('editSiteModal'", self.js)
-        self.assertIn("closeModal('editSiteModal')", self.js)
+    def test_the_panel_goes_through_the_modal_manager(self):
+        self.assertIn("createWizard('siteWizard'", self.js)
 
-    def test_a_mode_change_is_confirmed_first(self):
-        self.assertIn("confirm(modeChangeWarning(mode))", self.js)
+    def test_a_mode_change_is_explained_before_saving(self):
+        self.assertIn("modeChangeWarning(swMode())", self.js)
 
     def test_the_token_shown_after_the_save_comes_from_the_save(self):
-        # Non con una seconda chiamata a rigenera-token: se quella fallisse la
-        # sede resterebbe senza token dopo un salvataggio andato a buon fine.
-        self.assertIn("if (data.token) showSiteEnrollment(id, data.token)", self.js)
+        # Not from a second regenerate-token call: if that one failed the site
+        # would be left without a token after a successful save.
+        self.assertIn("if (data.token) { showSiteEnrollment(id, data.token)", self.js)
 
 
 
@@ -168,28 +166,28 @@ class TestSiteEnrollment(unittest.TestCase):
         cls.html = _read("templates", "dashboard.html")
         cls.js = _read("static", "js", "settings.js")
 
-    def test_the_modal_exists(self):
-        for el in ('id="siteEnrollModal"', 'id="siteEnrollConfig"',
+    def test_the_enrollment_step_exists(self):
+        for el in ('data-step="enroll"', 'id="siteEnrollConfig"',
                    'id="siteEnrollCommands"'):
             self.assertIn(el, self.html, el)
 
     def test_no_token_is_shown_as_a_bare_string_any_more(self):
         self.assertNotIn("prompt(tr('setSiteTokenShownOnly')", self.js)
         self.assertNotIn("prompt(tr('setNewTokenShownOnly')", self.js)
-        # I tre momenti in cui un token nasce: creazione, rigenerazione,
-        # passaggio a modalita' agent.
+        # Token-issuing paths: the wizard save (creation AND switch to agent,
+        # both answer with data.token) and the regeneration.
         call_sites = (self.js.count("showSiteEnrollment(")
                       - self.js.count("function showSiteEnrollment("))
-        self.assertEqual(3, call_sites,
-                         "un percorso di emissione del token non passa dal modale")
+        self.assertEqual(2, call_sites,
+                         "a token-issuing path does not go through the panel")
 
     def test_the_token_is_written_as_text_not_markup(self):
         self.assertIn("siteEnrollConfig').textContent", self.js)
         self.assertNotIn("siteEnrollConfig').innerHTML", self.js)
 
     def test_the_listener_binds_an_id_that_exists(self):
-        self.assertIn("getElementById('siteEnrollModal')?.addEventListener", self.js)
-        self.assertIn("openModal('siteEnrollModal')", self.js)
+        self.assertIn("getElementById('siteWizard')?.addEventListener", self.js)
+        self.assertIn("siteWizard.goTo('enroll')", self.js)
 
     def test_the_config_is_consistent_with_the_token(self):
         node = shutil.which("node")

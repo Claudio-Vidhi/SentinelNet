@@ -112,7 +112,7 @@ def create_site_ep(payload: SiteSchema, current_user = Depends(require_unscoped_
     log_audit(f"Sede '{site['id']}' (mode: {payload.mode}) creata da '{who}'.")
     if fp:
         site_manager.mark_bastion_verified(site["id"])
-        site = site_manager.get_site(site["id"])
+        site = site_manager.get_site(site["id"]) or site
         log_audit(f"Sede '{site['id']}': impronta del bastione {fp} confermata da '{who}'.")
     elif payload.mode == "jump":
         log_audit(f"Sede '{site['id']}' salvata con bastione non verificato da '{who}'.")
