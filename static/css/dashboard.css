@@ -3293,6 +3293,80 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
 .callout h4 { margin: 0 0 6px; font-size: 13px; color: var(--lamp-warn-ink); }
 .callout ul { margin: 0; padding-left: 18px; line-height: 1.6; }
 
+/* Side panel (ui-wizard.js): a modal anchored to the right edge, with a step
+   rail on top. Site wizard first; device and provisioning flows reuse it. */
+.modal-overlay.sheet-overlay { justify-content: flex-end; align-items: stretch; }
+.modal.sheet {
+  width: 560px; max-width: 100vw; height: 100vh;
+  display: flex; flex-direction: column;
+  animation: sheetIn 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.sheet .sheet-body { flex: 1; overflow-y: auto; }
+.sheet .modal-actions { margin-top: auto; }
+@keyframes sheetIn { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .modal.sheet { animation: none; } }
+@media (max-width: 720px) { .modal.sheet { width: 100vw; } }
+
+.wizard-rail { display: flex; gap: 4px; list-style: none; margin: 0 0 16px; padding: 0; }
+.wizard-step {
+  flex: 1; padding: 6px 0 0; border-top: 2px solid var(--border);
+  font-size: var(--font-size-sm); color: var(--text-soft);
+}
+.wizard-step.is-done { border-top-color: var(--lamp-up); color: var(--text-muted); }
+.wizard-step.is-current { border-top-color: var(--primary); color: var(--text); font-weight: 600; }
+.wizard-step button {
+  background: none; border: 0; padding: 0; color: inherit; font: inherit;
+  cursor: pointer; text-align: left;
+}
+.wizard-step button:hover { color: var(--text); text-decoration: underline; }
+
+.choice-group { border: 0; margin: 0; padding: 0; display: grid; gap: 10px; }
+.choice-group legend { font-weight: 600; margin-bottom: 8px; padding: 0; }
+.choice-card {
+  display: grid; grid-template-columns: auto 1fr; gap: 2px 10px;
+  padding: 12px 14px; border: var(--seam) solid var(--border);
+  background: var(--surface-2); cursor: pointer;
+}
+.choice-card:has(input:checked) { border-color: var(--primary); background: var(--surface); }
+.choice-card:has(input:disabled) { cursor: not-allowed; opacity: 0.6; }
+.choice-card:focus-within { outline: 2px solid var(--primary-glow); outline-offset: 1px; }
+.choice-card input { margin-top: 3px; }
+.choice-title { font-weight: 600; }
+.choice-desc, .choice-card ul { grid-column: 2; }
+.choice-desc { color: var(--text-muted); font-size: var(--font-size-md); }
+.choice-card ul { margin: 6px 0 0; padding: 0; list-style: none; font-size: var(--font-size-sm); line-height: 1.6; }
+.choice-card .pro::before { content: "\2713  "; color: var(--lamp-up-ink); }
+.choice-card .con::before { content: "\2717  "; color: var(--lamp-fault-ink); }
+
+.form-hint { color: var(--text-muted); font-size: var(--font-size-sm); margin: 4px 0 0; }
+.subnet-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.chip.is-bad { border-color: var(--lamp-fault); color: var(--lamp-fault-ink); }
+.chip.is-warn { border-color: var(--lamp-warn); color: var(--lamp-warn-ink); background: var(--lamp-warn-wash); }
+
+.test-result {
+  margin-top: 12px; padding: 10px 14px;
+  border: var(--seam) solid var(--border); font-size: var(--font-size-md);
+}
+.test-result:empty { display: none; }
+.test-result.is-ok { border-color: var(--lamp-up); background: var(--lamp-up-wash); }
+.test-result.is-bad { border-color: var(--lamp-fault); background: var(--lamp-fault-wash); }
+.test-result pre {
+  font-family: var(--font-code); font-size: var(--font-size-sm);
+  white-space: pre-wrap; word-break: break-all; margin: 6px 0 0;
+}
+.fingerprint-confirm { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+
+.sheet dl.summary { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; }
+.sheet dl.summary dt { color: var(--text-muted); }
+.sheet dl.summary dd { margin: 0; word-break: break-word; }
+
+.sheet pre.enroll-block {
+  background: var(--surface-3); border: var(--seam) solid var(--border);
+  padding: 10px; font-family: var(--font-code); font-size: var(--font-size-xs);
+  overflow-x: auto; margin: 0 0 12px;
+}
+.heartbeat { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: var(--font-size-md); }
+
 /* Settings: index on the left, one section per concern on the right. */
 .settings-layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 20px; align-items: start; }
 .settings-nav { position: sticky; top: 68px; display: flex; flex-direction: column; gap: 1px; }
