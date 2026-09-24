@@ -213,6 +213,7 @@ def create_site(name: str, mode: str, subnets=None, **kwargs):
             "token_hash": token_hash,
             "created": time.time(),
             "last_seen": None,
+            "bastion_verified_ts": None,
             **jump_fields,
         }
         _save(data)
@@ -228,6 +229,9 @@ def set_site_flow_status(site_id: str, active: bool) -> bool:
         site["flow_active"] = bool(active)
         _save(data)
         return True
+
+
+_BASTION_LINK = ("jump_host", "jump_port", "jump_identity")
 
 
 def update_site(site_id: str, name=None, mode=None, subnets=None, **kwargs) -> bool:
@@ -256,7 +260,12 @@ def update_site(site_id: str, name=None, mode=None, subnets=None, **kwargs) -> b
         # values merged with any incoming kwargs) before the generic passthrough
         # below can write an invalid jump site.
         if site["mode"] == "jump":
+            before = tuple(site.get(k) for k in _BASTION_LINK)
             site.update(_validate_jump({**site, **kwargs}))
+            # A verification vouches for one bastion: pointing the site at
+            # another host, port or login makes it unverified again.
+            if tuple(site.get(k) for k in _BASTION_LINK) != before:
+                site["bastion_verified_ts"] = None
             kwargs = {k: v for k, v in kwargs.items()
                       if k not in ("jump_host", "jump_port", "jump_identity",
                                    "device_identity")}
@@ -298,6 +307,18 @@ def touch_last_seen(site_id: str) -> None:
         if site:
             site["last_seen"] = time.time()
             _save(data)
+
+
+def mark_bastion_verified(site_id: str) -> bool:
+    """Record that the site's bastion answered a test with a confirmed key."""
+    with _lock:
+        data = _load()
+        site = data.get(site_id)
+        if not site:
+            return False
+        site["bastion_verified_ts"] = time.time()
+        _save(data)
+        return True
 
 
 # --- Autenticazione agente (token per-sede, separata dal JWT utente) ---
