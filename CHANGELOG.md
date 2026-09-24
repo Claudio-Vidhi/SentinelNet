@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-09-24
+
 ### Added
 
 - Siti: la creazione, la modifica e l'enrollment passano da un pannello
