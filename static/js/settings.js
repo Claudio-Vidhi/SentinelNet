@@ -56,6 +56,9 @@
                     ? `<span class="status ok"><span class="led led-success"></span>${L.lblAgentOnline}</span>`
                     : `<span class="status bad"><span class="led led-danger"></span>${L.lblAgentOffline}</span>`;
             }
+            if (s.mode === 'jump' && !s.bastion_verified_ts) {
+                statusCell = `<span class="chip is-warn">${escapeHtml(tr('chipNotVerified'))}</span>`;
+            }
             let actions = '';
             if (s.mode === 'agent') {
                 actions += `<button data-action="open-agent-control" data-site-id="${escapeHtml(s.id)}" style="color:var(--warning); background:none; border:none; cursor:pointer; margin-right:10px;" title="Pannello di controllo ed aggiornamento agente remoti"><i class="fa-solid fa-gears"></i> Gestione Agente</button>`;
@@ -106,18 +109,6 @@
         }).join('');
     }
 
-    // Toggles the bastion fields + limitation notice for the 'jump' mode, and
-    // (re)populates the identity select the first time it becomes visible.
-    async function onNewSiteModeChange() {
-        const mode = document.getElementById('newSiteMode').value;
-        const isJump = mode === 'jump';
-        const fields = document.getElementById('jumpFields');
-        const limits = document.getElementById('jumpLimits');
-        if (fields) fields.style.display = isJump ? 'grid' : 'none';
-        if (limits) limits.style.display = isJump ? 'block' : 'none';
-        if (isJump) await populateJumpIdentitySelect();
-    }
-
     let identitiesCache = null;
 
     async function getIdentities() {
@@ -133,77 +124,328 @@
             escapeHtml(i.username)})</option>`).join('');
     }
 
-    async function populateJumpIdentitySelect() {
-        const sel = document.getElementById('newSiteJumpIdentity');
-        const dev = document.getElementById('newSiteDeviceIdentity');
-        if (!sel || sel.dataset.loaded) return;
+    // --- Site wizard (docs/superpowers/specs/2026-09-23-site-wizard-design.md) ---
+    // One side panel for create, edit and agent enrollment:
+    // Mode → Details → Connection (jump only) → Summary → Enrollment (new token).
+    const CIDR_RE = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/;
+    function isCidr(s) {
+        const m = CIDR_RE.exec(s);
+        return !!m && m.slice(1, 5).every((o) => +o <= 255) && +m[5] <= 32;
+    }
+    const sw = {
+        editing: null,     // site being edited; null when creating
+        test: null,        // last draft-test answer for the current bastion fields
+        token: null,       // agent token to enroll, shown once
+        siteId: null,      // site the enrollment step is about
+        heartbeat: null,   // interval polling last_seen during enrollment
+        keepDraft: false,  // closed only to go create an identity: keep the fields
+    };
+    const swEl = (id) => document.getElementById(id);
+    const swMode = () => document.querySelector('input[name="swMode"]:checked')?.value || '';
+    const swSubnets = () => swEl('swSubnets').value.split(',').map((x) => x.trim()).filter(Boolean);
+    function swJumpFields() {
+        return {
+            jump_host: swEl('swJumpHost').value.trim(),
+            jump_port: parseInt(swEl('swJumpPort').value, 10) || 22,
+            jump_identity: swEl('swJumpIdentity').value,
+        };
+    }
+    // Editing a jump site whose bastion is untouched needs no new test.
+    function swJumpChanged() {
+        const e = sw.editing;
+        if (!e || e.mode !== 'jump') return true;
+        const j = swJumpFields();
+        return j.jump_host !== (e.jump_host || '') || j.jump_port !== (e.jump_port || 22)
+            || j.jump_identity !== (e.jump_identity || '');
+    }
+    function swTestPassed() {
+        return !!sw.test && sw.test.status === 'success' && swEl('swFpConfirm').checked;
+    }
+
+    const siteWizard = createWizard('siteWizard', {
+        steps: [
+            { id: 'mode', label: 'swStepMode', validate: () => !!swMode() },
+            { id: 'details', label: 'swStepDetails', onEnter: onSwDetailsEnter,
+              validate: () => {
+                  if (!swEl('swName').value.trim() || !swSubnets().every(isCidr)) return false;
+                  if (swMode() !== 'jump') return true;
+                  const j = swJumpFields();
+                  return !!j.jump_host && !!j.jump_identity && j.jump_port >= 1 && j.jump_port <= 65535;
+              } },
+            { id: 'connect', label: 'swStepConnect',
+              skip: () => swMode() !== 'jump' || !swJumpChanged(),
+              validate: () => swTestPassed() || swEl('swSkipVerify').checked },
+            { id: 'summary', label: 'swStepSummary', onEnter: renderSwSummary, finishLabel: 'btnSaveSite' },
+            { id: 'enroll', label: 'swStepEnroll', skip: () => !sw.token,
+              onEnter: startSwHeartbeat, finishLabel: 'btnClose' },
+        ],
+        onFinish: async (stepId) => {
+            if (stepId === 'enroll') { siteWizard.close(); return; }
+            await saveSiteWizard();
+        },
+    });
+
+    function resetSiteWizard() {
+        stopSwHeartbeat();
+        Object.assign(sw, { editing: null, test: null, token: null, siteId: null, keepDraft: false });
+        swEl('siteWizardForm').reset();
+        swInvalidateTest();
+        swEl('swSubnetChips').replaceChildren();
+        swEl('swSaveError').textContent = '';
+        document.querySelectorAll('input[name="swMode"]').forEach((r) => { r.disabled = false; });
+        swEl('siteWizardTitle').textContent = tr('titleNewSite');
+    }
+
+    function onSiteWizardClose() {
+        stopSwHeartbeat();
+        if (!sw.keepDraft) resetSiteWizard();
+    }
+
+    function openNewSiteWizard() {
+        const resume = sw.keepDraft;
+        if (!resume) resetSiteWizard();
+        sw.keepDraft = false;
+        siteWizard.open({ at: resume ? 'details' : 'mode', onClose: onSiteWizardClose });
+    }
+
+    async function openEditSiteWizard(siteId) {
+        const res = await apiFetch('/api/sites');
+        if (!res || !res.ok) return;
+        const site = ((await res.json()).sites || []).find((s) => s.id === siteId);
+        if (!site) return;
+        resetSiteWizard();
+        sw.editing = site;
+        swEl('siteWizardTitle').textContent = tr('swTitleEdit');
+        document.querySelectorAll('input[name="swMode"]').forEach((r) => {
+            r.checked = r.value === (site.mode || 'central');
+            // The default site is the central's own: changing its mode would
+            // take away the central's direct path to its own devices.
+            r.disabled = site.id === 'central';
+        });
+        swEl('swName').value = site.name || '';
+        swEl('swSubnets').value = (site.subnets || []).join(', ');
+        swEl('swJumpHost').value = site.jump_host || '';
+        swEl('swJumpPort').value = site.jump_port || 22;
+        await populateSwIdentitySelects(site.jump_identity || '', site.device_identity || '');
+        siteWizard.open({ at: 'details', editable: true, onClose: onSiteWizardClose });
+    }
+
+    async function populateSwIdentitySelects(jumpValue, deviceValue) {
         const identities = await getIdentities();
-        // Current values are kept across a repopulate: this runs again when a
-        // new identity is created with the form already open, and resetting
-        // the two selects would silently undo what the user had picked.
-        const keepJump = sel.value;
-        const keepDev = dev ? dev.value : '';
-        sel.innerHTML = identityOptions(identities, keepJump);
+        swEl('swJumpIdentity').innerHTML = identityOptions(identities, jumpValue);
         // The device default is optional: without it the devices behind the
-        // bastion have no credential at all (core/device_credentials.py).
-        if (dev) {
-            const L = i18n[currentLang];
-            dev.innerHTML = `<option value="">${escapeHtml(L.optNoDeviceIdentity)}</option>`
-                + identityOptions(identities, keepDev);
-        }
-        sel.dataset.loaded = '1';
+        // bastion fall back to the global credentials (core/device_credentials.py).
+        swEl('swDeviceIdentity').innerHTML = `<option value="">${escapeHtml(tr('optNoDeviceIdentity'))}</option>`
+            + identityOptions(identities, deviceValue);
     }
 
     // Called after an identity is created, edited or deleted (provisioning.js).
-    // Without it both guards above keep the stale list until a page reload:
-    // identitiesCache never expired, and dataset.loaded made the select
-    // repopulate exactly once per page. Going off to create the identity you
-    // forgot and coming back to the bastion form is the normal way to hit it.
     window.refreshSiteIdentitySelects = async function () {
         identitiesCache = null;
-        const sel = document.getElementById('newSiteJumpIdentity');
-        if (!sel) return;
-        delete sel.dataset.loaded;
-        // Repopulate NOW when the bastion fields are on screen: waiting for
-        // the next mode change would show the stale list to someone looking
-        // straight at it.
-        const fields = document.getElementById('jumpFields');
-        if (fields && fields.style.display !== 'none') {
-            await populateJumpIdentitySelect();
-        }
+        if (!isModalOpen('siteWizard') && !sw.keepDraft) return;
+        await populateSwIdentitySelects(swEl('swJumpIdentity').value, swEl('swDeviceIdentity').value);
     };
 
-    async function createSite() {
-        const name = document.getElementById('newSiteName').value.trim();
-        const mode = document.getElementById('newSiteMode').value;
-        const subnets = document.getElementById('newSiteSubnets').value
-            .split(',').map(x => x.trim()).filter(Boolean);
-        if (!name) { alert(tr('setSiteNameRequired')); return; }
-        const payload = { name, mode, subnets };
-        if (mode === 'jump') {
-            payload.jump_host = document.getElementById('newSiteJumpHost').value.trim();
-            payload.jump_port = parseInt(document.getElementById('newSiteJumpPort').value, 10) || 22;
-            payload.jump_identity = document.getElementById('newSiteJumpIdentity').value;
-            payload.device_identity = document.getElementById('newSiteDeviceIdentity').value;
-        }
-        const res = await apiFetch('/api/sites', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+    // "+ New identity": the draft survives the trip to the identities panel,
+    // and "Nuova sede" resumes it at the Details step.
+    function goCreateIdentity() {
+        sw.keepDraft = true;
+        siteWizard.close();
+        switchTab('tab-provisioning');
+        document.getElementById('identitiesPanel')?.scrollIntoView();
+    }
+
+    async function onSwDetailsEnter() {
+        const jump = swMode() === 'jump';
+        swEl('swJumpFields').hidden = !jump;
+        if (jump) await populateSwIdentitySelects(swEl('swJumpIdentity').value, swEl('swDeviceIdentity').value);
+        renderSwSubnetChips();
+        siteWizard.refresh();
+    }
+
+    function renderSwSubnetChips() {
+        swEl('swSubnetChips').replaceChildren(...swSubnets().map((s) => {
+            const chip = document.createElement('span');
+            const ok = isCidr(s);
+            chip.className = 'chip' + (ok ? '' : ' is-bad');
+            chip.textContent = s;
+            if (!ok) chip.title = tr('swSubnetInvalid');
+            return chip;
+        }));
+    }
+
+    // A test vouches for the exact host/port/identity it ran against.
+    function swInvalidateTest() {
+        sw.test = null;
+        const out = swEl('swTestResult');
+        out.replaceChildren();
+        out.className = 'test-result';
+        swEl('swFpConfirmWrap').hidden = true;
+        swEl('swFpConfirm').checked = false;
+    }
+
+    async function swRunTest() {
+        swInvalidateTest();
+        const out = swEl('swTestResult');
+        out.textContent = tr('swTesting');
+        siteWizard.refresh();
+        const res = await apiFetch('/api/sites/test-bastion/draft', {
+            method: 'POST', body: JSON.stringify(swJumpFields()),
         });
-        if (res && res.ok) {
-            const data = await res.json();
-            document.getElementById('newSiteName').value = '';
-            document.getElementById('newSiteSubnets').value = '';
-            if (mode === 'jump') {
-                document.getElementById('newSiteJumpHost').value = '';
-                document.getElementById('newSiteJumpPort').value = '22';
-            }
-            closeModal('createSiteModal');
-            if (data.token) showSiteEnrollment(data.site.id, data.token);
-            loadSites();
-        } else if (res) {
-            const e = await res.json(); alert((tr('uiError')) + (e.detail || ''));
+        if (!res) { out.textContent = ''; return; }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            out.className = 'test-result is-bad';
+            out.textContent = data.detail || tr('uiError');
+            return;
         }
+        sw.test = data;
+        renderSwTestResult(data);
+        siteWizard.refresh();
+    }
+
+    function renderSwTestResult(data) {
+        const out = swEl('swTestResult');
+        const ok = data.status === 'success';
+        out.className = 'test-result ' + (ok ? 'is-ok' : 'is-bad');
+        const head = document.createElement('strong');
+        head.textContent = ok ? tr('swTestOk')
+            : data.status === 'auth_failed' ? tr('msgBastionAuthFailed')
+            : data.status === 'host_key_mismatch' ? tr('swTestHostKey')
+            : tr('msgBastionUnreachable');
+        const pre = document.createElement('pre');
+        pre.textContent = ok ? `${tr('swFpLabel')} (${data.key_type})\n${data.fingerprint}` : (data.message || '');
+        out.replaceChildren(head, pre);
+        if (!ok) return;
+        swEl('swFpConfirmWrap').hidden = false;
+        // Already pinned and matching: nothing new to trust.
+        swEl('swFpConfirm').checked = !!data.known;
+        if (data.known) {
+            const note = document.createElement('p');
+            note.textContent = tr('swFpKnown');
+            out.appendChild(note);
+        }
+    }
+
+    function renderSwSummary() {
+        const mode = swMode();
+        const modeLabel = { central: 'swModeCentral', agent: 'swModeAgent', jump: 'optSiteJump' }[mode];
+        const rows = [
+            ['lblSiteName', swEl('swName').value.trim()],
+            ['lblSiteMode', tr(modeLabel)],
+            ['lblSiteSubnets', swSubnets().join(', ') || '—'],
+        ];
+        if (mode === 'jump') {
+            const j = swJumpFields();
+            const verified = swJumpChanged() ? swTestPassed() : !!sw.editing.bastion_verified_ts;
+            rows.push(['lblJumpHost', `${j.jump_host}:${j.jump_port}`]);
+            rows.push(['swSumBastion', tr(verified ? 'swVerified' : 'swNotVerified')]);
+        }
+        swEl('swSummary').replaceChildren(...rows.flatMap(([key, value]) => {
+            const dt = document.createElement('dt');
+            dt.textContent = tr(key);
+            const dd = document.createElement('dd');
+            dd.textContent = value;
+            return [dt, dd];
+        }));
+        // The consequences of a mode change are said BEFORE saving: two of
+        // the three touch the token, i.e. the agent's ability to log in.
+        const was = sw.editing ? sw.editing.mode : null;
+        const warn = swEl('swModeWarning');
+        warn.hidden = !was || was === mode;
+        warn.textContent = warn.hidden ? '' : modeChangeWarning(swMode());
+        swEl('swSaveError').textContent = '';
+    }
+
+    async function saveSiteWizard() {
+        const mode = swMode();
+        const editing = sw.editing;
+        const body = { name: swEl('swName').value.trim(), subnets: swSubnets() };
+        if (mode === 'jump') {
+            Object.assign(body, swJumpFields(), { device_identity: swEl('swDeviceIdentity').value });
+            if (swJumpChanged() && swTestPassed()) body.confirmed_fingerprint = sw.test.fingerprint;
+        }
+        if (editing) {
+            body.id = editing.id;
+            if (mode !== editing.mode) body.mode = mode;
+        } else {
+            body.mode = mode;
+        }
+        const res = await apiFetch(editing ? '/api/sites/update' : '/api/sites', {
+            method: 'POST', body: JSON.stringify(body),
+        });
+        if (!res) return;
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            swEl('swSaveError').textContent = data.detail || tr('uiError');
+            // 409: the confirmed key is not the one the server saw any more.
+            if (res.status === 409) {
+                swInvalidateTest();
+                siteWizard.goTo('connect');
+                swEl('swTestResult').textContent = data.detail || '';
+            }
+            return;
+        }
+        loadSites();
+        const id = editing ? editing.id : data.site.id;
+        // Switching to 'agent' issues the token in the save itself (see
+        // routers/sites.py): shown once, like on creation.
+        if (data.token) { showSiteEnrollment(id, data.token); return; }
+        siteWizard.close();
+        showToast(tr('swSaved'), 'info');
+    }
+
+    function showSiteEnrollment(siteId, token) {
+        sw.token = token;
+        sw.siteId = siteId;
+        const { cfg, cmds } = enrollmentText(siteId, token);
+        // textContent, not innerHTML: the token is a value, not markup.
+        document.getElementById('siteEnrollConfig').textContent = cfg;
+        document.getElementById('siteEnrollCommands').textContent = cmds;
+        if (isModalOpen('siteWizard')) siteWizard.goTo('enroll');
+        else siteWizard.open({ at: 'enroll', onClose: onSiteWizardClose });
+    }
+
+    function paintSwHeartbeat(online) {
+        swEl('swHeartbeatLed').className = 'led ' + (online ? 'led-success' : 'led-warning');
+        swEl('swHeartbeatText').textContent = tr(online ? 'swEnrollOnline' : 'swEnrollWaiting');
+    }
+
+    // Green on the first heartbeat AFTER the token was issued: an agent still
+    // running with the old token cannot produce one.
+    function startSwHeartbeat() {
+        stopSwHeartbeat();
+        paintSwHeartbeat(false);
+        const since = Date.now() / 1000;
+        sw.heartbeat = setInterval(async () => {
+            const res = await apiFetch('/api/sites');
+            if (!res || !res.ok) return;
+            const site = ((await res.json()).sites || []).find((s) => s.id === sw.siteId);
+            if (site && site.last_seen && site.last_seen >= since) {
+                paintSwHeartbeat(true);
+                stopSwHeartbeat();
+                loadSites();
+            }
+        }, 5000);
+    }
+
+    function stopSwHeartbeat() {
+        if (sw.heartbeat) clearInterval(sw.heartbeat);
+        sw.heartbeat = null;
+    }
+
+    async function testBastion(id) {
+        const res = await apiFetch('/api/sites/test-bastion', {
+            method: 'POST', body: JSON.stringify({ id }),
+        });
+        if (!res) return;
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { showToast(data.detail || tr('uiError'), 'error'); return; }
+        if (data.status === 'success') showToast(`${tr('msgBastionOk')} ${data.fingerprint || ''}`, 'info');
+        else if (data.status === 'auth_failed') showToast(`${tr('msgBastionAuthFailed')} ${data.message || ''}`, 'error');
+        else if (data.status === 'host_key_mismatch') showToast(`${tr('swTestHostKey')} ${data.message || ''}`, 'error');
+        else showToast(`${tr('msgBastionUnreachable')} ${data.message || ''}`, 'error');
+        loadSites();
     }
 
     async function regenSiteToken(id) {
@@ -217,20 +459,6 @@
             showSiteEnrollment(id, data.token);
             loadSites();
         } else if (res) { const e = await res.json(); alert((tr('uiError')) + (e.detail || '')); }
-    }
-
-    async function testBastion(id) {
-        const L = i18n[currentLang];
-        const res = await apiFetch('/api/sites/test-bastion', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id })
-        });
-        if (!res) return;
-        const data = await res.json();
-        if (!res.ok) { alert((L.lblError || 'Errore') + ': ' + (data.detail || '')); return; }
-        if (data.status === 'success') alert(L.msgBastionOk);
-        else if (data.status === 'auth_failed') alert(L.msgBastionAuthFailed + '\n\n' + (data.message || ''));
-        else alert(L.msgBastionUnreachable + '\n\n' + (data.message || ''));
     }
 
     async function setSiteJumpIdentity(id, identityId) {
@@ -296,103 +524,10 @@
         return { cfg, cmds };
     }
 
-    function showSiteEnrollment(siteId, token) {
-        const { cfg, cmds } = enrollmentText(siteId, token);
-        // textContent, non innerHTML: il token e' un valore, non markup.
-        document.getElementById('siteEnrollConfig').textContent = cfg;
-        document.getElementById('siteEnrollCommands').textContent = cmds;
-        openModal('siteEnrollModal');
-    }
-
     function copySiteEnrollment() {
         const cfg = document.getElementById('siteEnrollConfig').textContent;
         const cmds = document.getElementById('siteEnrollCommands').textContent;
         navigator.clipboard.writeText(cfg + '\n\n' + cmds);
-    }
-
-    // --- Modifica di una sede esistente (nome, subnet, modalita', bastione) ---
-    // update_site accetta questi campi dal primo giorno e nessuna schermata li
-    // offriva: cambiare l'indirizzo di un bastione voleva dire una chiamata
-    // API fatta a mano.
-    let editingSite = null;
-
-    function onEditSiteModeChange() {
-        const mode = document.getElementById('editSiteMode').value;
-        const jump = document.getElementById('editSiteJumpFields');
-        if (jump) jump.style.display = mode === 'jump' ? 'block' : 'none';
-        const warn = document.getElementById('editSiteModeWarning');
-        if (!warn) return;
-        const wasMode = editingSite ? editingSite.mode : mode;
-        // Le conseguenze del cambio si dicono PRIMA del salvataggio: due delle
-        // tre toccano il token, cioe' la capacita' dell'agente di autenticarsi.
-        let key = '';
-        if (mode !== wasMode) {
-            if (mode === 'central') key = 'warnSiteModeToCentral';
-            else if (mode === 'agent') key = 'warnSiteModeToAgent';
-            else if (mode === 'jump') key = 'warnSiteModeToJump';
-        }
-        warn.textContent = key ? tr(key) : '';
-        warn.style.display = key ? 'block' : 'none';
-    }
-
-    async function openEditSiteModal(siteId) {
-        const res = await apiFetch('/api/sites');
-        if (!res || !res.ok) return;
-        const sites = (await res.json()).sites || [];
-        const site = sites.find(s => s.id === siteId);
-        if (!site) return;
-        editingSite = site;
-        document.getElementById('editSiteId').textContent = site.id;
-        document.getElementById('editSiteName').value = site.name || '';
-        document.getElementById('editSiteSubnets').value = (site.subnets || []).join(', ');
-        const modeSel = document.getElementById('editSiteMode');
-        modeSel.value = site.mode || 'central';
-        // La sede predefinita e' quella del centrale: cambiarle modalita'
-        // vorrebbe dire togliere al centrale la via diretta verso i propri
-        // apparati.
-        modeSel.disabled = site.id === 'central';
-        document.getElementById('editSiteJumpHost').value = site.jump_host || '';
-        document.getElementById('editSiteJumpPort').value = site.jump_port || 22;
-        onEditSiteModeChange();
-        openModal('editSiteModal', () => { editingSite = null; });
-    }
-
-    async function saveEditSite() {
-        if (!editingSite) return;
-        const id = editingSite.id;
-        const wasMode = editingSite.mode;
-        const mode = document.getElementById('editSiteMode').value;
-        const name = document.getElementById('editSiteName').value.trim();
-        if (!name) { alert(tr('setSiteNameRequired')); return; }
-        if (mode !== wasMode && !confirm(modeChangeWarning(mode))) return;
-        const body = {
-            id, name,
-            subnets: document.getElementById('editSiteSubnets').value
-                .split(',').map(x => x.trim()).filter(Boolean),
-        };
-        if (mode !== wasMode) body.mode = mode;
-        if (mode === 'jump') {
-            body.jump_host = document.getElementById('editSiteJumpHost').value.trim();
-            body.jump_port = parseInt(document.getElementById('editSiteJumpPort').value, 10) || 22;
-        }
-        const res = await apiFetch('/api/sites/update', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-        if (!res) return;
-        if (!res.ok) {
-            const e = await res.json().catch(() => ({}));
-            alert(tr('uiError') + (e.detail || ''));
-            return;
-        }
-        // Passando ad 'agent' il centrale emette il token nel salvataggio
-        // stesso (vedi routers/sites.py): lo mostra una volta sola, come alla
-        // creazione. Non lo si chiede con una seconda chiamata: la sede
-        // resterebbe senza token se quella fallisse.
-        const data = await res.json().catch(() => ({}));
-        closeModal('editSiteModal');
-        if (data.token) showSiteEnrollment(id, data.token);
-        loadSites();
     }
 
     function modeChangeWarning(mode) {
@@ -1627,22 +1762,27 @@
         const act = btn.dataset.action;
         const siteId = btn.dataset.siteId;
         if (act === 'open-agent-control' && typeof openAgentControlModal === 'function') openAgentControlModal(siteId);
-        else if (act === 'edit-site') openEditSiteModal(siteId);
+        else if (act === 'edit-site') openEditSiteWizard(siteId);
         else if (act === 'regen-site-token') regenSiteToken(siteId);
         else if (act === 'delete-site') deleteSite(siteId);
         else if (act === 'test-bastion') testBastion(siteId);
     });
 
-    // Il modale vive fuori da sitesTableBody: ha bisogno del proprio listener.
-    document.getElementById('editSiteModal')?.addEventListener('click', (e) => {
-        if (e.target.closest('[data-action="save-edit-site"]')) saveEditSite();
-        else if (e.target.closest('[data-action="close-edit-site"]')) closeModal('editSiteModal');
+    // The panel lives outside sitesTableBody: it needs its own listeners.
+    document.getElementById('siteWizard')?.addEventListener('click', (e) => {
+        if (e.target.closest('#swTestBtn')) swRunTest();
+        else if (e.target.closest('[data-action="copy-site-enroll"]')) copySiteEnrollment();
+        else if (e.target.closest('[data-action="sw-new-identity"]')) goCreateIdentity();
     });
-    document.getElementById('editSiteMode')?.addEventListener('change', onEditSiteModeChange);
-    document.getElementById('siteEnrollModal')?.addEventListener('click', (e) => {
-        if (e.target.closest('[data-action="copy-site-enroll"]')) copySiteEnrollment();
-        else if (e.target.closest('[data-action="close-site-enroll"]')) closeModal('siteEnrollModal');
+    document.getElementById('siteWizard')?.addEventListener('input', (e) => {
+        if (e.target.id === 'swSubnets') renderSwSubnetChips();
+        if (['swJumpHost', 'swJumpPort'].includes(e.target.id)) swInvalidateTest();
     });
+    document.getElementById('siteWizard')?.addEventListener('change', (e) => {
+        if (e.target.name === 'swMode' || e.target.id === 'swJumpIdentity') swInvalidateTest();
+    });
+    // Enter in a field must not submit (and reload) the page.
+    document.getElementById('siteWizardForm')?.addEventListener('submit', (e) => e.preventDefault());
 
     document.getElementById('sitesTableBody')?.addEventListener('change', (e) => {
         const sel = e.target.closest('[data-action="set-site-device-identity"]');
@@ -1706,8 +1846,7 @@
 
     document.getElementById('btnCreateUser')?.addEventListener('click', createUser);
     document.getElementById('btnInviteUser')?.addEventListener('click', inviteUser);
-    document.getElementById('btnCreateSite')?.addEventListener('click', createSite);
-    document.getElementById('newSiteMode')?.addEventListener('change', onNewSiteModeChange);
+    document.getElementById('btnNewSite')?.addEventListener('click', openNewSiteWizard);
     document.getElementById('smtpBtnSave')?.addEventListener('click', saveSmtpSettings);
     document.getElementById('smtpBtnTest')?.addEventListener('click', sendSmtpTest);
     document.getElementById('ssoBtnSave')?.addEventListener('click', saveSsoSettings);

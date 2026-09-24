@@ -3303,6 +3303,9 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
 }
 .sheet .sheet-body { flex: 1; overflow-y: auto; }
 .sheet .modal-actions { margin-top: auto; }
+/* .btn and .fingerprint-confirm set display, which beats the UA [hidden] rule:
+   without this the wizard's Back button and the confirm box never hide. */
+.sheet [hidden] { display: none !important; }
 @keyframes sheetIn { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .modal.sheet { animation: none; } }
 @media (max-width: 720px) { .modal.sheet { width: 100vw; } }

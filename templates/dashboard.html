@@ -2746,7 +2746,7 @@
           <p data-i18n="descSites">Gestisci le sedi remote su VPN. <strong>Central poll</strong>: il centrale raggiunge i dispositivi direttamente tramite il routing VPN. <strong>Site agent</strong>: un agente remoto si connette in uscita al centrale e vi spinge inventario/MAC; i comandi CLI sono inoltrati tramite coda.</p>
         </div>
         <div class="page-head-actions">
-          <button type="button" class="btn btn-primary" data-open-modal="createSiteModal"><i class="fa-solid fa-plus"></i> <span data-i18n="titleNewSite">Nuova sede</span></button>
+          <button type="button" class="btn btn-primary" id="btnNewSite"><i class="fa-solid fa-plus"></i> <span data-i18n="titleNewSite">Nuova sede</span></button>
         </div>
       </div>
 
@@ -4975,34 +4975,6 @@
     </div>
   </div>
 
-  <!-- Arruolamento di una sede agent: il token si vede UNA VOLTA, e da solo
-       non dice cosa farne. Qui esce insieme al file di configurazione e ai
-       comandi che lo usano. -->
-  <div class="modal-overlay" id="siteEnrollModal">
-    <div class="modal" style="width: 720px; max-width: 96%;">
-      <div class="modal-header">
-        <h3 data-i18n="titleSiteEnroll"><i class="fa-solid fa-key" style="color: var(--warning);"></i> Arruolamento agente di sede</h3>
-        <i class="fa-solid fa-xmark modal-close" data-action="close-site-enroll"></i>
-      </div>
-      <p style="color: var(--warning); font-size: 12px; margin-bottom: 12px;" data-i18n="descSiteEnroll">
-        Il token è mostrato una sola volta: copialo adesso. Chiudendo questa finestra non è più recuperabile (si può solo rigenerare).
-      </p>
-      <h4 style="font-size:12px; margin:0 0 6px;"><code>agent.json</code></h4>
-      <pre id="siteEnrollConfig" style="background:var(--surface-3); border:1px solid var(--border); padding:10px; font-size:11px; overflow-x:auto; margin-bottom:12px;"></pre>
-      <h4 style="font-size:12px; margin:0 0 6px;" data-i18n="lblSiteEnrollCommands">Comandi di installazione</h4>
-      <pre id="siteEnrollCommands" style="background:var(--surface-3); border:1px solid var(--border); padding:10px; font-size:11px; overflow-x:auto; margin-bottom:12px;"></pre>
-      <div style="display:flex; gap:10px;">
-        <button class="btn btn-primary" data-action="copy-site-enroll" data-i18n="btnCopySiteEnroll" style="width:auto;">
-          <i class="fa-solid fa-copy"></i> Copia tutto
-        </button>
-        <button class="btn btn-secondary" data-action="close-site-enroll" data-i18n="btnClose" style="width:auto;">Chiudi</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modifica sede: nome, subnet, modalita' e, per una sede jump, il bastione.
-       update_site accettava tutto questo dal primo giorno; l'unico modo di
-       cambiarlo era una chiamata API a mano. -->
   <!-- Users tab: create an account. Same ids the form had inside the tab. -->
   <div class="modal-overlay" id="createUserModal">
     <div class="modal" style="width: 520px; max-width: 95%;">
@@ -5061,60 +5033,127 @@
     </div>
   </div>
 
-  <!-- Sites tab: create a site. The jump fields and their limits stay in the
-       same dialog, shown by the mode select as before. -->
-  <div class="modal-overlay" id="createSiteModal">
-    <div class="modal" style="width: 640px; max-width: 95%;">
+  <!-- Site wizard: create, edit and agent enrollment in one side panel
+       (ui-wizard.js). Spec: docs/superpowers/specs/2026-09-23-site-wizard-design.md -->
+  <div class="modal-overlay sheet-overlay" id="siteWizard">
+    <div class="modal sheet" aria-labelledby="siteWizardTitle">
       <div class="modal-header">
-        <h3><i class="fa-solid fa-plus"></i> <span data-i18n="titleNewSite">Nuova sede</span></h3>
-        <button type="button" class="modal-close" data-close-modal="createSiteModal" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+        <h3 id="siteWizardTitle" data-i18n="titleNewSite">Nuova sede</h3>
+        <button type="button" class="modal-close" data-close-modal="siteWizard" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
       </div>
-      <div class="modal-grid">
-        <div class="form-group">
-          <label for="newSiteName" data-i18n="lblSiteName">Nome</label><input id="newSiteName" type="text" placeholder="es. Milano" data-i18n-placeholder="phNewSiteName" style="padding-left:12px;">
-        </div>
-        <div class="form-group">
-          <label for="newSiteMode" data-i18n="lblSiteMode">Modalità</label><select id="newSiteMode">
-            <option value="central">Central poll</option>
-            <option value="agent">Site agent</option>
-            <option value="jump" data-i18n="optSiteJump">Jump (bastion SSH)</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-group">
-        <label for="newSiteSubnets" data-i18n="lblSiteSubnets">Subnet (separate da virgola)</label><input id="newSiteSubnets" type="text" placeholder="es. 10.0.0.0/24, 10.0.1.0/24" data-i18n-placeholder="phNewSiteSubnets" style="padding-left:12px;">
-      </div>
+      <ol class="wizard-rail" data-wizard-rail aria-label="Passi" data-i18n-aria-label="swRailLabel"></ol>
+      <form id="siteWizardForm" class="sheet-body" novalidate>
+        <section data-step="mode">
+          <fieldset class="choice-group" role="radiogroup" aria-labelledby="swModeLegend">
+            <legend id="swModeLegend" data-i18n="swModeLegend">Come raggiunge i dispositivi il centrale?</legend>
+            <label class="choice-card">
+              <input type="radio" name="swMode" value="central">
+              <span class="choice-title" data-i18n="swModeCentral">Central poll</span>
+              <span class="choice-desc" data-i18n="swModeCentralDesc">Il centrale raggiunge i dispositivi direttamente, via routing VPN.</span>
+              <ul>
+                <li class="pro" data-i18n="swModeCentralPro1">Ping, SNMP, syslog e flow diretti</li>
+                <li class="pro" data-i18n="swModeCentralPro2">Scansione e discovery dal centrale</li>
+                <li class="con" data-i18n="swModeCentralCon1">Serve un percorso IP verso le subnet della sede</li>
+              </ul>
+            </label>
+            <label class="choice-card">
+              <input type="radio" name="swMode" value="agent">
+              <span class="choice-title" data-i18n="swModeAgent">Site agent</span>
+              <span class="choice-desc" data-i18n="swModeAgentDesc">Un agente in sede si collega in uscita al centrale e gli spinge i dati.</span>
+              <ul>
+                <li class="pro" data-i18n="swModeAgentPro1">Nessun accesso in ingresso alla sede</li>
+                <li class="pro" data-i18n="swModeAgentPro2">Le credenziali dei dispositivi restano in sede</li>
+                <li class="con" data-i18n="swModeAgentCon1">Va installato un agente Linux in sede</li>
+              </ul>
+            </label>
+            <label class="choice-card">
+              <input type="radio" name="swMode" value="jump">
+              <span class="choice-title" data-i18n="optSiteJump">Jump (bastione SSH)</span>
+              <span class="choice-desc" data-i18n="swModeJumpDesc">Il centrale entra in sede via SSH attraverso un bastione.</span>
+              <ul>
+                <li class="pro" data-i18n="jumpLimitsWorks">Funzionano: inventario, backup config, MAC/ARP, comandi CLI, audit.</li>
+                <li class="con" data-i18n="jumpLimitsPing">Nessun ping ICMP: lo stato online/offline resta "non misurabile".</li>
+                <li class="con" data-i18n="jumpLimitsScan">Nessuna scansione di subnet ne' discovery dal centrale.</li>
+                <li class="con" data-i18n="jumpLimitsUdp">Nessun syslog, flow o SNMP in ingresso.</li>
+                <li class="con" data-i18n="jumpLimitsRest">Nessuna API REST vendor (FortiGate): solo CLI.</li>
+              </ul>
+            </label>
+          </fieldset>
+        </section>
 
-      <div id="jumpFields" class="modal-grid" style="display:none;">
-        <div class="form-group">
-          <label for="newSiteJumpHost" data-i18n="lblJumpHost">Host bastione (IP/hostname)</label><input id="newSiteJumpHost" type="text" placeholder="es. 198.51.100.10" data-i18n-placeholder="phNewSiteJumpHost" style="padding-left:12px;">
-        </div>
-        <div class="form-group">
-          <label for="newSiteJumpPort" data-i18n="lblJumpPort">Porta SSH bastione</label><input id="newSiteJumpPort" type="number" value="22" min="1" max="65535" style="padding-left:12px;">
-        </div>
-        <div class="form-group">
-          <label for="newSiteJumpIdentity" data-i18n="lblJumpIdentity">Identità (credenziali) bastione</label><select id="newSiteJumpIdentity"></select>
-        </div>
-        <div class="form-group">
-          <label for="newSiteDeviceIdentity" data-i18n="lblDeviceIdentity">Identità di default dei dispositivi</label><select id="newSiteDeviceIdentity"></select>
-        </div>
-      </div>
+        <section data-step="details" hidden>
+          <div class="form-group">
+            <label for="swName" data-i18n="lblSiteName">Nome</label>
+            <input id="swName" type="text" placeholder="es. Milano" data-i18n-placeholder="phNewSiteName">
+          </div>
+          <div class="form-group">
+            <label for="swSubnets" data-i18n="lblSiteSubnets">Subnet (separate da virgola)</label>
+            <input id="swSubnets" type="text" placeholder="es. 10.0.0.0/24, 10.0.1.0/24" data-i18n-placeholder="phNewSiteSubnets" aria-describedby="swSubnetsHint">
+            <p id="swSubnetsHint" class="form-hint" data-i18n="swSubnetsHint">Formato CIDR, separate da virgola.</p>
+            <div id="swSubnetChips" class="subnet-chips"></div>
+          </div>
+          <div id="swJumpFields" hidden>
+            <div class="modal-grid">
+              <div class="form-group">
+                <label for="swJumpHost" data-i18n="lblJumpHost">Host bastione (IP/hostname)</label>
+                <input id="swJumpHost" type="text" placeholder="es. 198.51.100.10" data-i18n-placeholder="phNewSiteJumpHost">
+              </div>
+              <div class="form-group">
+                <label for="swJumpPort" data-i18n="lblJumpPort">Porta SSH bastione</label>
+                <input id="swJumpPort" type="number" value="22" min="1" max="65535">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="swJumpIdentity" data-i18n="lblJumpIdentity">Identità (credenziali) bastione</label>
+              <select id="swJumpIdentity"></select>
+              <button type="button" class="btn btn-secondary btn-small" data-action="sw-new-identity" data-i18n="swNewIdentity">+ Nuova identità</button>
+            </div>
+            <div class="form-group">
+              <label for="swDeviceIdentity" data-i18n="lblDeviceIdentity">Identità di default dei dispositivi</label>
+              <select id="swDeviceIdentity" aria-describedby="swDeviceIdentityHint"></select>
+              <p id="swDeviceIdentityHint" class="form-hint" data-i18n="jumpLimitsIdentity">L'identità del bastione e quella dei dispositivi sono distinte: la seconda vale per i dispositivi il cui profilo è "default".</p>
+            </div>
+          </div>
+        </section>
 
-      <div class="callout" id="jumpLimits" style="display:none;">
-        <h4 data-i18n="jumpLimitsTitle">Cosa non funziona su un sito jump</h4>
-        <ul>
-          <li data-i18n="jumpLimitsPing">Nessun ping ICMP: lo stato online/offline resta "non misurabile".</li>
-          <li data-i18n="jumpLimitsScan">Nessuna scansione di subnet ne' discovery dal centrale.</li>
-          <li data-i18n="jumpLimitsUdp">Nessun syslog, flow o SNMP in ingresso.</li>
-          <li data-i18n="jumpLimitsRest">Nessuna API REST vendor (FortiGate): solo CLI.</li>
-          <li data-i18n="jumpLimitsWorks">Funzionano: inventario, backup config, MAC/ARP, comandi CLI, audit.</li>
-          <li data-i18n="jumpLimitsIdentity">L'identità del bastione e quella dei dispositivi sono distinte: la seconda vale per i dispositivi il cui profilo è "default".</li>
-        </ul>
-      </div>
+        <section data-step="connect" hidden>
+          <p data-i18n="swTestIntro">Prova il login sul bastione prima di salvare.</p>
+          <button type="button" class="btn btn-secondary" id="swTestBtn"><i class="fa-solid fa-plug-circle-check"></i> <span data-i18n="swBtnTest">Test connessione</span></button>
+          <div id="swTestResult" class="test-result" role="status" aria-live="polite"></div>
+          <label id="swFpConfirmWrap" class="fingerprint-confirm" hidden>
+            <input type="checkbox" id="swFpConfirm">
+            <span data-i18n="swFpConfirm">È l'impronta del mio bastione</span>
+          </label>
+          <label class="fingerprint-confirm">
+            <input type="checkbox" id="swSkipVerify">
+            <span data-i18n="swSkipVerify">Salva senza verificare</span>
+          </label>
+          <p class="form-hint" data-i18n="swSkipWarn">La sede sarà segnata come non verificata e la chiave verrà accettata al primo collegamento.</p>
+        </section>
 
+        <section data-step="summary" hidden>
+          <dl id="swSummary" class="summary"></dl>
+          <p id="swModeWarning" class="callout" hidden></p>
+          <p id="swSaveError" class="form-hint" role="alert"></p>
+        </section>
+
+        <section data-step="enroll" hidden>
+          <p data-i18n="descSiteEnroll">Il token e' mostrato una sola volta: copialo adesso. Chiudendo questa finestra non e' piu' recuperabile (si puo' solo rigenerare).</p>
+          <h4><code>agent.json</code></h4>
+          <pre id="siteEnrollConfig" class="enroll-block"></pre>
+          <h4 data-i18n="lblSiteEnrollCommands">Comandi di installazione</h4>
+          <pre id="siteEnrollCommands" class="enroll-block"></pre>
+          <button type="button" class="btn btn-secondary" data-action="copy-site-enroll" data-i18n="btnCopySiteEnroll"><i class="fa-solid fa-copy"></i> Copia tutto</button>
+          <div id="swHeartbeat" class="heartbeat" role="status" aria-live="polite">
+            <span id="swHeartbeatLed" class="led led-warning"></span>
+            <span id="swHeartbeatText" data-i18n="swEnrollWaiting">In attesa del primo contatto dell'agente…</span>
+          </div>
+        </section>
+      </form>
       <div class="modal-actions">
-        <button type="button" class="btn btn-secondary" data-close-modal="createSiteModal" data-i18n="uiCancel">Annulla</button>
-        <button class="btn btn-primary" id="btnCreateSite"><i class="fa-solid fa-plus"></i> <span data-i18n="btnCreateSite">Crea sede</span></button>
+        <button type="button" class="btn btn-secondary" data-close-modal="siteWizard" data-i18n="uiCancel">Annulla</button>
+        <button type="button" class="btn btn-secondary" data-wizard-back data-i18n="wizBack">Indietro</button>
+        <button type="button" class="btn btn-primary" data-wizard-next data-i18n="wizNext">Avanti</button>
       </div>
     </div>
   </div>
@@ -5135,51 +5174,6 @@
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" data-close-modal="addVendorModal" data-i18n="uiCancel">Annulla</button>
         <button class="btn btn-primary" id="btnAddVendor" data-i18n="btnAdd"><i class="fa-solid fa-plus"></i> Aggiungi</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="editSiteModal">
-    <div class="modal" style="width: 560px; max-width: 95%;">
-      <div class="modal-header">
-        <h3 data-i18n="titleEditSite"><i class="fa-solid fa-pen" style="color: var(--primary);"></i> Modifica sede</h3>
-        <i class="fa-solid fa-xmark modal-close" id="btnCloseEditSite" data-action="close-edit-site"></i>
-      </div>
-      <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 14px;">
-        <span data-i18n="lblSiteId">ID sede</span>: <strong id="editSiteId">—</strong>
-      </p>
-      <div class="form-group">
-        <label for="editSiteName" data-i18n="lblSiteName">Nome</label>
-        <input id="editSiteName" type="text" style="padding-left:12px;">
-      </div>
-      <div class="form-group">
-        <label for="editSiteSubnets" data-i18n="lblSiteSubnets">Subnet (separate da virgola)</label>
-        <input id="editSiteSubnets" type="text" placeholder="es. 10.0.0.0/24, 10.0.1.0/24" data-i18n-placeholder="phNewSiteSubnets" style="padding-left:12px;">
-      </div>
-      <div class="form-group">
-        <label for="editSiteMode" data-i18n="lblSiteMode">Modalità</label>
-        <select id="editSiteMode">
-          <option value="central">Central poll</option>
-          <option value="agent">Site agent</option>
-          <option value="jump" data-i18n="optSiteJump">Jump (bastion SSH)</option>
-        </select>
-      </div>
-      <div id="editSiteJumpFields" style="display:none;">
-        <div class="form-group">
-          <label for="editSiteJumpHost" data-i18n="lblJumpHost">Host bastione (IP/hostname)</label>
-          <input id="editSiteJumpHost" type="text" placeholder="es. 198.51.100.10" data-i18n-placeholder="phNewSiteJumpHost" style="padding-left:12px;">
-        </div>
-        <div class="form-group">
-          <label for="editSiteJumpPort" data-i18n="lblJumpPort">Porta SSH bastione</label>
-          <input id="editSiteJumpPort" type="number" min="1" max="65535" style="padding-left:12px;">
-        </div>
-      </div>
-      <p id="editSiteModeWarning" style="display:none; color: var(--warning); font-size: 12px; margin-bottom: 12px;"></p>
-      <div style="display:flex; gap:10px;">
-        <button class="btn btn-primary" id="btnSaveEditSite" data-action="save-edit-site" data-i18n="btnSaveSite" style="width:auto;">
-          <i class="fa-solid fa-floppy-disk"></i> Salva sede
-        </button>
-        <button class="btn btn-secondary" data-action="close-edit-site" data-i18n="uiCancel" style="width:auto;">Annulla</button>
       </div>
     </div>
   </div>
