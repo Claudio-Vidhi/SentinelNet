@@ -48,6 +48,13 @@ class SiteWizardUi(unittest.TestCase):
         tag = self.html[self.html.rindex("<", 0, start):self.html.index(">", start)]
         self.assertIn('aria-live="polite"', tag)
 
+    def test_after_the_token_only_the_enrollment_step_remains(self):
+        # Back from Enrollment to Summary would offer Save again and create the
+        # site a second time: once a token is issued every other step skips.
+        start = self.js.index("createWizard('siteWizard'")
+        steps = self.js[start:self.js.index("onFinish:", start)]
+        self.assertEqual(4, steps.count("!!sw.token"), steps)
+
     def test_unverified_badge(self):
         self.assertIn("chipNotVerified", self.js)
         self.assertIn("bastion_verified_ts", self.js)
