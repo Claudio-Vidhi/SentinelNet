@@ -53,6 +53,18 @@ class VolatileLinesAreStripped(unittest.TestCase):
         self.assertEqual(normalize.normalize("", "hostname switch-01   \n\n\n"),
                          normalize.normalize("weird-os", "hostname switch-01\n"))
 
+    def test_triage_output_after_the_config_is_not_drift(self):
+        # The backup file carries show-command output after the config:
+        # CDP holdtimes and LLDP timers change on every run.
+        def backup(holdtime):
+            return ("hostname switch-01\n"
+                    f"\n\n{normalize.TRIAGE_MARKER}\n"
+                    "\n--- SHOW CDP NEIGHBORS DETAIL ---\n"
+                    f"Holdtime : {holdtime} sec\n")
+        self.assertEqual(normalize.normalize("cisco", backup(142)),
+                         normalize.normalize("cisco", backup(179)))
+        self.assertEqual("hostname switch-01\n", normalize.normalize("cisco", backup(142)))
+
     def test_normalisation_is_idempotent(self):
         text = "Current configuration : 10 bytes\nhostname switch-01\n"
         once = normalize.normalize("cisco", text)
