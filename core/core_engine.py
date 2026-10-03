@@ -247,8 +247,14 @@ def run_backup_and_triage(device):
     with _TRIAGE_SLOTS:
         with trace.get_tracer("sentinelnet.triage").start_as_current_span(
                 "triage.device", attributes={"server.address": str(device.get("IP") or ""),
-                                             "device.vendor": str(device.get("Vendor") or "")}):
-            return _run_backup_and_triage(device)
+                                             "device.vendor": str(device.get("Vendor") or "")}) as span:
+            result = _run_backup_and_triage(device)
+            # Failures come back as {"status": "error"}, not as exceptions:
+            # without this an unreachable device shows as a green span.
+            if (result or {}).get("status") != "success":
+                span.set_status(trace.StatusCode.ERROR,
+                                str((result or {}).get("message") or "")[:200])
+            return result
 
 
 def _run_backup_and_triage(device):

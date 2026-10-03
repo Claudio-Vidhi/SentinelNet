@@ -79,6 +79,25 @@ class TestSshSpans(unittest.TestCase):
         self.assertEqual(trace.StatusCode.ERROR, span.status.status_code)
 
 
+class TestTriageSpan(unittest.TestCase):
+
+    def setUp(self):
+        EXPORTER.clear()
+
+    def test_an_error_result_marks_the_span_failed(self):
+        from core import core_engine
+        device = {"IP": "192.0.2.50", "Vendor": "cisco"}
+        for result, expected in (({"status": "success"}, trace.StatusCode.UNSET),
+                                 ({"status": "error", "message": "non raggiungibile"},
+                                  trace.StatusCode.ERROR)):
+            EXPORTER.clear()
+            with mock.patch.object(core_engine, "_run_backup_and_triage", return_value=result):
+                self.assertEqual(result, core_engine.run_backup_and_triage(device))
+            (span,) = EXPORTER.get_finished_spans()
+            self.assertEqual("triage.device", span.name)
+            self.assertEqual(expected, span.status.status_code)
+
+
 class TestSnmpSpans(unittest.TestCase):
 
     def setUp(self):
