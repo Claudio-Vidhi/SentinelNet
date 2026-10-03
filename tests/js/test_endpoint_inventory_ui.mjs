@@ -5,7 +5,7 @@
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 
-const src = readFileSync(new URL('../../static/js/endpoint-inventory.js', import.meta.url), 'utf8');
+const src = readFileSync(new URL('../../static/js/endpoint-inventory.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
 // Verifica che il click sulla riga usi ep-row-toggle e non più ep-row-diagnose
 assert.ok(src.includes('data-action="ep-row-toggle"'), 'Manca data-action="ep-row-toggle" sulle righe');
