@@ -26,10 +26,47 @@ import socket
 import threading
 import time
 
+import functools
+
 import paramiko
 import netmiko
+from netmiko.base_connection import BaseConnection
+from opentelemetry import trace
 
 logger = logging.getLogger("sentinelnet.ssh")
+_tracer = trace.get_tracer("sentinelnet.ssh")
+
+
+def _traced_command(method):
+    """One ssh.command span per CLI call, on every netmiko connection.
+
+    Patched on the base class rather than per call site: commands are sent
+    from 20-odd modules and every driver, and a class-level wrapper leaves the
+    MagicMock connections of the tests untouched. Without an OTLP endpoint the
+    tracer is the no-op one and this costs a function call.
+
+    Only the first three words of a command are recorded: enough to tell
+    "show running-config" from "show mac address-table", short of a custom
+    command that carries a secret. Config sets record their line count only."""
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        first = args[0] if args else (kwargs.get("command_string")
+                                      or kwargs.get("config_commands"))
+        attrs = {"server.address": str(getattr(self, "host", "") or ""),
+                 "netmiko.method": method.__name__,
+                 "netmiko.device_type": str(getattr(self, "device_type", "") or "")}
+        if method.__name__ == "send_config_set":
+            if isinstance(first, (list, tuple)):
+                attrs["cli.lines"] = len(first)
+        elif isinstance(first, str):
+            attrs["cli.command"] = " ".join(first.split()[:3])
+        with _tracer.start_as_current_span("ssh.command", attributes=attrs):
+            return method(self, *args, **kwargs)
+    return wrapper
+
+
+for _name in ("send_command", "send_command_timing", "send_config_set"):
+    setattr(BaseConnection, _name, _traced_command(getattr(BaseConnection, _name)))
 
 # Bounds on connecting to a bastion. Without them, paramiko.Transport handed a
 # bare (host, port) tuple uses a blocking socket with no timeout, and a dead
@@ -382,13 +419,28 @@ def ConnectHandler(site_id: "str | None" = None, tenant: "str | None" = None, **
     site_id names the site explicitly, for callers whose target is not in the
     inventory yet (day-0 provisioning): the default path is still the
     inventory lookup, and site_id is only consulted when that finds nothing.
+
+    The whole dial is one ssh.connect span: handshake, authentication and
+    netmiko's prompt discovery, which is where a slow device spends its time.
+    A failure is recorded on the span with its exception type.
     """
+    attrs = {"server.address": str(params.get("host") or params.get("ip") or ""),
+             "server.port": int(params.get("port") or 22),
+             "netmiko.device_type": str(params.get("device_type") or "")}
+    with _tracer.start_as_current_span("ssh.connect", attributes=attrs):
+        return _connect(site_id, tenant, **params)
+
+
+def _connect(site_id: "str | None", tenant: "str | None", **params):
     host = params.get("host") or params.get("ip")
     site = jump_site_for(host, tenant=tenant) if host else None
     if site is None and site_id:
         from services import site_manager
         candidate = site_manager.get_site(site_id)
         site = candidate if candidate and candidate.get("mode") == "jump" else None
+    if site:
+        trace.get_current_span().set_attribute("sentinelnet.bastion_site",
+                                               str(site.get("id") or ""))
     port = int(params.get("port") or 22)
     # Host keys of devices behind a bastion are pinned in that bastion's own
     # file: private IPs are only unique within their site.

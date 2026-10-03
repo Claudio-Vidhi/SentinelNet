@@ -8,6 +8,7 @@ import logging
 import socket
 import threading
 from typing import Optional, Any, Dict, List, Tuple
+from opentelemetry import trace
 from core.net_ssh import ConnectHandler
 from services.inventory_manager import (
     update_version_inventory, get_all_devices, get_detected_versions,
@@ -240,8 +241,14 @@ _TRIAGE_SLOTS = threading.BoundedSemaphore(TRIAGE_MAX_CONCURRENT)
 
 
 def run_backup_and_triage(device):
+    # One trace per device for a scheduled triage, which has no request to
+    # hang under: the ssh.connect and ssh.command spans nest here. Opened
+    # after the slot is taken, so its duration is the device, not the queue.
     with _TRIAGE_SLOTS:
-        return _run_backup_and_triage(device)
+        with trace.get_tracer("sentinelnet.triage").start_as_current_span(
+                "triage.device", attributes={"server.address": str(device.get("IP") or ""),
+                                             "device.vendor": str(device.get("Vendor") or "")}):
+            return _run_backup_and_triage(device)
 
 
 def _run_backup_and_triage(device):
