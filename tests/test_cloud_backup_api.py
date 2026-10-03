@@ -46,6 +46,14 @@ class TestCloudBackupApi(unittest.TestCase):
         return {"Authorization": f"Bearer {self.tokens[who]}",
                 "X-Requested-With": "SentinelNet"}
 
+    def test_remote_without_config_answers_at_once(self):
+        # Empty store = mirror never set up. open_target is NOT mocked: it
+        # used to try an SSH connect to "" and answer 502 after ~16s.
+        with mock.patch("services.cloud_backup.sftp.paramiko.SSHClient") as ssh:
+            r = self.client.get("/api/cloud-backup/remote", headers=self._headers("cbadmin"))
+        self.assertEqual(409, r.status_code)
+        ssh.assert_not_called()
+
     def test_settings_require_admin(self):
         r = self.client.get("/api/cloud-backup/settings", headers=self._headers("cbviewer"))
         self.assertEqual(403, r.status_code)

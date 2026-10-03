@@ -147,6 +147,8 @@ async def list_cloud_backup_remote(current_user=Depends(get_current_user)):
 
     try:
         manifest = await asyncio.to_thread(_fetch)
+    except cb_sftp.NotConfigured:
+        raise HTTPException(status_code=409, detail="Mirror offsite non configurato.")
     except Exception as exc:
         # str(exc) carries the key_path for a missing key and both fingerprints
         # for a host key mismatch; this route is open to any authenticated role.
