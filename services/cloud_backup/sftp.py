@@ -23,6 +23,10 @@ class HostKeyMismatch(Exception):
     """The server presented a key different from the pinned fingerprint."""
 
 
+class NotConfigured(Exception):
+    """No host to connect to: the mirror was never set up."""
+
+
 def _fingerprint(host_key) -> str:
     digest = hashlib.sha256(base64.b64decode(host_key.get_base64())).digest()
     return "SHA256:" + base64.b64encode(digest).decode().rstrip("=")
@@ -107,6 +111,10 @@ class _PinningPolicy(paramiko.MissingHostKeyPolicy):
 def open_target(cfg: dict) -> SftpTarget:
     """Connects with the operator's key or password. The key file is read,
     never created or rewritten."""
+    # An empty host is not an address paramiko rejects: it resolves to the
+    # local machine and waits out the 20s timeout before failing.
+    if not (cfg.get("host") or "").strip():
+        raise NotConfigured("mirror offsite non configurato: host mancante")
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(_PinningPolicy(cfg.get("host_key_fingerprint") or ""))
     kwargs = {
