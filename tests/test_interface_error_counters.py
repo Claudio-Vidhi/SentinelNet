@@ -282,6 +282,16 @@ class TestSnmpErrorColumns(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(out, {"1": {"in_errors": 3, "crc": 2, "late_collisions": 4},
                                "2": {"late_collisions": 1}})
 
+    async def test_a_silent_device_is_asked_once_not_once_per_column(self):
+        # Each walk on a silent agent costs a full timeout: 13 of them kept the
+        # on-demand read waiting a minute before falling back to SSH.
+        from unittest.mock import AsyncMock, patch
+        from observability.ingesters import snmp_poller
+        walk = AsyncMock(return_value={})
+        with patch.object(snmp_poller, "_walk_column", walk):
+            self.assertEqual({}, await snmp_poller.read_error_counters("192.0.2.40", "c"))
+        self.assertEqual(1, walk.await_count)
+
     def test_every_snmp_field_is_in_the_vocabulary(self):
         from observability.ingesters import snmp_poller
         self.assertLessEqual(set(snmp_poller._ERROR_COLUMNS.values()), set(ie.FIELDS))

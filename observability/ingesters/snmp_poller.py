@@ -279,6 +279,11 @@ async def read_error_counters(ip: str, community: str, port: int = 161) -> dict:
             target = await UdpTransportTarget.create((ip, port), timeout=TIMEOUT_S,
                                                      retries=RETRIES)
             names = await _walk_column(engine, auth, target, context, "1.3.6.1.2.1.31.1.1.1.1")
+            # No names, no answer: every further walk would wait out its own
+            # timeout, a minute in all before the caller falls back to SSH.
+            span.set_attribute("snmp.silent", not names)
+            if not names:
+                return {}
             counters = await _error_counters(engine, auth, target, context)
         except Exception as e:
             span.record_exception(e)
