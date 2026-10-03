@@ -10,6 +10,15 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- Config drift: l'output dei comandi show salvato nel backup dopo la
+  configurazione (vicini CDP/LLDP con holdtime e timer, licenze, uptime,
+  spazio disco) veniva letto come una modifica a ogni raccolta. Il
+  confronto ora si ferma alla configurazione; il file archiviato resta
+  completo. Al primo backup dopo l'aggiornamento ogni apparato archivia
+  una versione in piu', poi lo storico resta stabile.
+
 ## [0.45.1] - 2026-10-03
 
 ### Fixed

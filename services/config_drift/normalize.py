@@ -14,6 +14,11 @@ restored from.
 """
 import re
 
+# core_engine appends show-command output (CDP/LLDP holdtimes, licences,
+# uptime, disk usage...) to the backup after this line. That is state, not
+# configuration: it changes on every run, so drift stops reading here.
+TRIAGE_MARKER = "=== NEIGHBOR DISCOVERY ==="
+
 # Lines that change by themselves, whatever the vendor is.
 _COMMON = (
     re.compile(r"^\s*Building configuration\.\.\.\s*$", re.IGNORECASE),
@@ -58,7 +63,8 @@ def normalize(vendor: str, text: str) -> str:
     from services import inventory_manager
     vendor = inventory_manager.normalize_vendor(vendor)
     patterns = _COMMON + _BY_VENDOR.get((vendor or "").strip().lower(), ())
+    config = (text or "").split("\n" + TRIAGE_MARKER + "\n", 1)[0]
     kept = [line.rstrip()
-            for line in (text or "").splitlines()
+            for line in config.splitlines()
             if not any(p.match(line) for p in patterns)]
     return "\n".join(kept) + "\n" if kept else ""

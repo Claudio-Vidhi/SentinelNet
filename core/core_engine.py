@@ -350,7 +350,8 @@ def _run_backup_and_triage(device):
                                                read_timeout=BACKUP_READ_TIMEOUT)
             config_out = raw_out if isinstance(raw_out, str) else str(raw_out or "")
 
-            config_out += "\n\n=== NEIGHBOR DISCOVERY ===\n"
+            from services.config_drift.normalize import TRIAGE_MARKER
+            config_out += f"\n\n{TRIAGE_MARKER}\n"
             if vendor == 'cisco':
                 config_out += _run_tagged(net_connect, [
                     ("show cdp neighbors",        "--- SHOW CDP NEIGHBORS ---"),
