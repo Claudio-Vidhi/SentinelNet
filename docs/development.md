@@ -156,6 +156,32 @@ Both artifacts must stay buildable on every change
 There is no CI. It was removed deliberately — the build is local and stays
 local.
 
+### 5.1 Tracing (OpenTelemetry)
+
+Off by default: the code only uses `opentelemetry-api`, whose tracer is a
+no-op until an endpoint is configured. To see where time goes, start a
+collector and run the app with the SDK and an OTLP endpoint:
+
+```sh
+docker run -d --name jaeger -p 16686:16686 -p 4318:4318 jaegertracing/all-in-one
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 OTEL_SERVICE_NAME=sentinelnet \
+  uv run --with "fastapi[opentelemetry]" app_server.py
+```
+
+Jaeger UI: <http://localhost:16686>. What arrives:
+
+| Span | From | Attributes |
+|---|---|---|
+| `GET /api/...` | fastapi, every request | route, status code |
+| `triage.device` | `core_engine.run_backup_and_triage` | device IP, vendor |
+| `ssh.connect` | `core.net_ssh.ConnectHandler` | device IP, port, device type, bastion site |
+| `ssh.command` | every netmiko `send_command*`/`send_config_set` | first 3 words of the command, or the line count of a config set |
+| `snmp.round` / `snmp.poll` | `snmp_poller.poll_once` | device count / device IP, `snmp.silent` |
+| `snmp.read_error_counters` | on-demand interface error read | device IP |
+
+Traces carry device IPs and command names: send them to a local collector,
+not to a cloud service, when the inventory is a customer's.
+
 ---
 
 ## 6. Pre-commit checklist

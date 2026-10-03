@@ -33,7 +33,10 @@ import logging
 from observability import ingesters
 import time
 
+from opentelemetry import trace
+
 logger = logging.getLogger("sentinelnet.obs.snmp_poller")
+_tracer = trace.get_tracer("sentinelnet.snmp")
 
 MAX_INTERFACES = 200      # tetto per apparato: uno chassis grosso non deve
                           # bloccare il giro degli altri
@@ -270,16 +273,20 @@ async def read_error_counters(ip: str, community: str, port: int = 161) -> dict:
     engine = SnmpEngine()
     auth = CommunityData(community, mpModel=1)
     context = ContextData()
-    try:
-        target = await UdpTransportTarget.create((ip, port), timeout=TIMEOUT_S,
-                                                 retries=RETRIES)
-        names = await _walk_column(engine, auth, target, context, "1.3.6.1.2.1.31.1.1.1.1")
-        counters = await _error_counters(engine, auth, target, context)
-    except Exception as e:
-        logger.debug("SNMP %s: error counters not readable (%s)", ip, e)
-        return {}
-    finally:
-        engine.close_dispatcher()
+    with _tracer.start_as_current_span("snmp.read_error_counters",
+                                       attributes={"server.address": ip}) as span:
+        try:
+            target = await UdpTransportTarget.create((ip, port), timeout=TIMEOUT_S,
+                                                     retries=RETRIES)
+            names = await _walk_column(engine, auth, target, context, "1.3.6.1.2.1.31.1.1.1.1")
+            counters = await _error_counters(engine, auth, target, context)
+        except Exception as e:
+            span.record_exception(e)
+            span.set_status(trace.StatusCode.ERROR)
+            logger.debug("SNMP %s: error counters not readable (%s)", ip, e)
+            return {}
+        finally:
+            engine.close_dispatcher()
     return {str(names[i]): c for i, c in counters.items() if names.get(i)}
 
 
@@ -396,14 +403,24 @@ async def poll_once() -> int:
         # Un apparato che solleva non ferma il giro: su UDP il silenzio e' il
         # caso comune, non l'eccezione.
         async with semaforo:
-            try:
-                return await _poll_device(device["ip"], device["community"])
-            except Exception as e:
-                logger.info("SNMP fallito su %s: %s", device["ip"], e)
-                return []
+            # Span opened inside the semaphore: its duration is the device's
+            # own answer time, not the wait for a free slot.
+            with _tracer.start_as_current_span(
+                    "snmp.poll", attributes={"server.address": device["ip"]}) as span:
+                try:
+                    snapshots = await _poll_device(device["ip"], device["community"])
+                except Exception as e:
+                    span.record_exception(e)
+                    span.set_status(trace.StatusCode.ERROR)
+                    logger.info("SNMP fallito su %s: %s", device["ip"], e)
+                    return []
+                span.set_attribute("snmp.silent", not snapshots)
+                return snapshots
 
-    for device, snapshots in zip(devices,
-                                 await asyncio.gather(*(_uno(d) for d in devices))):
+    with _tracer.start_as_current_span("snmp.round",
+                                       attributes={"snmp.devices": len(devices)}):
+        results = await asyncio.gather(*(_uno(d) for d in devices))
+    for device, snapshots in zip(devices, results):
         if not snapshots:
             # Il silenzio diventa un fatto. Prima un apparato che smetteva di
             # rispondere non produceva NIENTE: nessun evento, nessuna regola

@@ -16,6 +16,9 @@ dependencies = [
     "fastapi>=0.142.2",
     "ncclient>=0.6.15",
     "netmiko>=4.3.0",
+    # Spans on SSH/SNMP calls. API only: a no-op until an OTLP endpoint and
+    # the SDK (fastapi[opentelemetry]) are there, see docs/development.md.
+    "opentelemetry-api>=1.45.0",
     "paramiko>=3.4.0",
     "pydantic>=2.6.0",
     "pyjwt>=2.8.0",
@@ -41,6 +44,9 @@ dev = [
     # are declared so the warning goes away without losing the fallback.
     "httpx>=0.28.0",
     "httpx2>=2.12.0",
+    # tests/test_tracing.py reads the SSH/SNMP spans back from the SDK's
+    # in-memory exporter. Runtime needs only opentelemetry-api.
+    "opentelemetry-sdk>=1.45.0",
     # scripts/build.ps1, CONTRIBUTING.md e il PR template dicono tutti
     # `uv run pyinstaller SentinelNet.spec`, ma il pacchetto non era dichiarato:
     # dopo un `uv sync` quel comando non esisteva. Stesso motivo di graphifyy
