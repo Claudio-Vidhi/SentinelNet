@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.45.2] - 2026-10-03
+
 ### Fixed
 
 - Config drift: l'output dei comandi show salvato nel backup dopo la
