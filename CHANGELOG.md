@@ -10,6 +10,15 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.45.1] - 2026-10-03
+
+### Fixed
+
+- Errori interfacce, lettura su richiesta: su un apparato che non risponde
+  via SNMP l'attesa prima del passaggio a SSH era di circa un minuto (ogni
+  colonna dei contatori aspettava il proprio timeout). Ora ci si ferma alla
+  prima lettura vuota, in pochi secondi.
+
 ## [0.45.0] - 2026-10-03
 
 ### Added
