@@ -10,10 +10,10 @@ requires-python = ">=3.11"
 dependencies = [
     "bcrypt>=4.1.0",
     "cryptography>=42.0.0",
-    # fastapi 0.141 introduces lazy routing (_IncludedRouter), which breaks
-    # the app.routes introspection the route-contract tests rely on;
-    # verified green with 0.136.x on Python 3.11 and 3.14 alike.
-    "fastapi>=0.110.0,<0.141",
+    # 0.137+ keeps included routers as _IncludedRouter nodes instead of
+    # copying their routes: tests/routes.py walks them through
+    # iter_route_contexts (0.137.2+), the route-contract tests need it.
+    "fastapi>=0.142.2",
     "ncclient>=0.6.15",
     "netmiko>=4.3.0",
     "paramiko>=3.4.0",

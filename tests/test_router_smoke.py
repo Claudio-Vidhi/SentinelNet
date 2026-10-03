@@ -135,6 +135,48 @@ class RouteWalkerSurvivesNesting(unittest.TestCase):
         self.assertTrue(any(getattr(r, "path", "") == "/api/deep"
                             for r in iter_routes(parent)))
 
+    def test_it_sees_included_routes_as_served(self):
+        # The shape every router of the app has: prefixed path, router-level
+        # dependency merged into the dependant, WebSocket under the prefix.
+        from fastapi import APIRouter, Depends, FastAPI
+        from tests.routes import iter_routes
+
+        def gate():  # pragma: no cover - never called, only registered
+            return None
+
+        child = APIRouter(prefix="/api/x", dependencies=[Depends(gate)])
+
+        @child.get("/deep")
+        def _deep():  # pragma: no cover
+            return {}
+
+        @child.websocket("/ws")
+        async def _ws(ws):  # pragma: no cover
+            pass
+
+        app = FastAPI()
+        app.include_router(child)
+
+        routes = {getattr(r, "path", ""): r for r in iter_routes(app)}
+        self.assertIn("/api/x/ws", routes)
+        self.assertIn("GET", routes["/api/x/deep"].methods)
+        self.assertTrue(any(d.call is gate
+                            for d in routes["/api/x/deep"].dependant.dependencies))
+
+    def test_it_does_not_drop_routes_across_many_routers(self):
+        # The walk builds a fresh context per included route: a guard keyed on
+        # id() of freed objects silently skipped most of them (39 of 320).
+        from fastapi import APIRouter, FastAPI
+        from tests.routes import route_paths
+
+        app = FastAPI()
+        for i in range(50):
+            r = APIRouter()
+            r.add_api_route(f"/api/r{i}", lambda: {})
+            app.include_router(r)
+        self.assertEqual({f"/api/r{i}" for i in range(50)},
+                         {p for p in route_paths(app) if p.startswith("/api/r")})
+
     def test_a_cycle_does_not_hang_the_walk(self):
         from tests.routes import iter_routes
 

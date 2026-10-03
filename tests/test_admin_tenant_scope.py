@@ -18,6 +18,7 @@ import app_server
 from routers import deps
 from routers.deps import CSRF_HEADER
 from security import security_manager, user_manager
+from tests.routes import iter_routes
 
 H = {CSRF_HEADER: "1"}
 PW = "PasswordSicura1!"
@@ -60,7 +61,7 @@ def _uses(dependant, fn) -> bool:
 
 def guarded_routes():
     out = set()
-    for r in app_server.app.routes:
+    for r in iter_routes(app_server.app):
         dependant = getattr(r, "dependant", None)
         if dependant is not None and _uses(dependant, deps.require_unscoped_admin):
             for m in getattr(r, "methods", None) or ():

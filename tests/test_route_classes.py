@@ -10,16 +10,20 @@ from fastapi.routing import APIRoute, APIWebSocketRoute
 
 import app_server
 from routers import route_classes as rc
+from tests.routes import iter_routes
 
 TEMPLATE = Path(__file__).resolve().parents[1] / "templates" / "dashboard.html"
 
 
 def _api_routes():
-    for r in app_server.app.routes:
-        if isinstance(r, APIRoute) and r.path.startswith("/api"):
+    for r in iter_routes(app_server.app):
+        # A route served through include_router is a context wrapping the
+        # APIRoute it was declared as.
+        kind = getattr(r, "original_route", r)
+        if isinstance(kind, APIRoute) and r.path.startswith("/api"):
             for m in sorted(r.methods - {"HEAD", "OPTIONS"}):
                 yield m, r.path, r
-        elif isinstance(r, APIWebSocketRoute) and r.path.startswith("/api"):
+        elif isinstance(kind, APIWebSocketRoute) and r.path.startswith("/api"):
             yield "WS", r.path, r
 
 
