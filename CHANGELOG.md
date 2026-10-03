@@ -10,6 +10,17 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-10-03
+
+### Changed
+
+- Dipendenze aggiornate: fastapi 0.142 (da 0.136), paramiko 5, uvicorn 0.54,
+  netmiko 4.8, pyjwt 2.15, pysnmp 7.1.30, starlette 1.7. Meno memoria nella
+  gestione delle dipendenze delle route; OpenTelemetry disponibile ma spento
+  finche' non si configura un endpoint OTLP. Schema OpenAPI invariato.
+- `requirements.txt` (immagine Docker) torna allineato a `uv.lock`:
+  cryptography e websockets erano rimasti indietro.
+
 ## [0.43.0] - 2026-09-24
 
 ### Added
