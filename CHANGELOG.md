@@ -10,6 +10,24 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-10-03
+
+### Added
+
+- Tracing OpenTelemetry su connessioni SSH, comandi CLI, triage per
+  dispositivo e polling SNMP: con un collector OTLP (per esempio Jaeger) si
+  vede quale apparato e' lento a connettersi, quale comando pesa e quali
+  apparati SNMP restano muti. Spento finche' non si configura
+  `OTEL_EXPORTER_OTLP_ENDPOINT`; dei comandi si registrano solo le prime tre
+  parole, delle configurazioni inviate solo il numero di righe. Istruzioni in
+  `docs/development.md` §5.1.
+
+### Fixed
+
+- Backup cloud: con il mirror non configurato, la lettura del remoto
+  rispondeva 502 dopo circa 16 secondi (e il test di connessione restava
+  appeso allo stesso modo). Ora risponde subito "non configurato".
+
 ## [0.44.0] - 2026-10-03
 
 ### Changed
