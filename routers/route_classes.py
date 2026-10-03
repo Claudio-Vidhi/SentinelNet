@@ -15,7 +15,7 @@ no explicit list here, they are discovered via route_tabs().
 """
 
 # (method, path) pairs, method upper-case, path exactly as it appears in
-# app.routes, WebSocket method is "WS".
+# tests/routes.iter_routes (prefix included), WebSocket method is "WS".
 # BASE: session/self routes, data the dashboard loads at boot for every tab
 # (appInit, core.js), the terminal (governed by role, opened from device rows
 # in many tabs) and the MCP server's own configuration read.

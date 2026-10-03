@@ -86,7 +86,7 @@ def build(incident_id: int) -> list:
                FROM evidence WHERE incident_id = ?
                ORDER BY ts ASC, id ASC""", (incident_id,)).fetchall()
 
-        entries = []
+        entries: list[dict] = []
         ips = set()
         for ev in evidence_rows:
             for ip in (ev["src_ip"], ev["dst_ip"]):

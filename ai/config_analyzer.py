@@ -833,7 +833,7 @@ def analyze_wlc_config(content):
         r'^config (sysname|wlan|interface|radius|mobility|network)\b',
         text, re.MULTILINE))
 
-    wlans = {}   # id -> dict
+    wlans: dict[str, dict] = {}   # id -> dict
     dyn_ifaces = {}
     radius = []
     mobility_group = ''
