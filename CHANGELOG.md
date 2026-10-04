@@ -10,6 +10,12 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- Test suite: la stringa con il percorso Windows nella prova di injection
+  del riavvio era una sequenza di escape non valida, che le prossime
+  versioni di Python tratteranno come errore. Ora e' una raw string.
+
 ## [0.45.2] - 2026-10-03
 
 ### Fixed
