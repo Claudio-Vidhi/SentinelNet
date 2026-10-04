@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.45.3] - 2026-10-04
+
 ### Fixed
 
 - Test suite: la stringa con il percorso Windows nella prova di injection
