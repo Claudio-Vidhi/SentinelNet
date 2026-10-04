@@ -107,7 +107,7 @@ class SettingsRestart(unittest.TestCase):
         from services import self_update
         with mock.patch("subprocess.run") as run:
             run.return_value.returncode = 0
-            self_update.spawn_outside_service('x"; Remove-Item C:\ -Recurse; "')
+            self_update.spawn_outside_service(r'x"; Remove-Item C:\ -Recurse; "')
         argv = run.call_args[0][0]
         self.assertNotIn("Remove-Item", " ".join(argv))
         self.assertIn("Remove-Item", run.call_args[1]["env"]["SENTINELNET_SPAWN"])
