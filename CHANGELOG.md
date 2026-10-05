@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-10-05
+
 ### Added
 
 - Inventario → **Cronologia**: sotto-tab con la linea del tempo di ogni
