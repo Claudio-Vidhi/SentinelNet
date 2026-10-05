@@ -93,6 +93,7 @@ declare var toggleAuditSaveNameInput: any;
 // config-drift.js
 declare var loadConfigDriftTab: any;
 declare var loadRoutesTab: any;
+declare var rtModel: any;
 
 // notifications.js
 declare function loadNotificationsTab(): Promise<void>;

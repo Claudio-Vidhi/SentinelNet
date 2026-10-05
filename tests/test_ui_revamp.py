@@ -642,20 +642,20 @@ class TestCategoriesTabRestyle(unittest.TestCase):
 
     def test_preserve_ids(self):
         html = _html()
-        for _id in ('categoriesGroupSelect', 'categoriesCatFilter', 'catKeyList',
-                    'categoryColumnsMenu', 'categoryColumnsList', 'categoryCountCards',
-                    'categoriesDeviceList', 'btnSaveCatEdits', 'btnDiscardCatEdits',
-                    'newCatKey', 'newCatLabel', 'newSubcat'):
+        for _id in ('categoriesGroupSelect', 'catKeyList', 'clsRail', 'clsAddCat',
+                    'clsSearch', 'categoriesDeviceList', 'clsInspector',
+                    'newCatKey', 'newCatLabel', 'newSubcat', 'btnCreateCategory'):
             self.assertIn(f'id="{_id}"', html)
         # action hooks preserved in frontend
         for hook in ('renderCategoriesPanel', 'saveCategoryEdits', 'discardCategoryEdits',
-                     'exportCategoriesCsv', 'loadCategoriesData', 'createCategory'):
+                     'loadCategoriesData', 'createCategory'):
             self.assertIn(hook, frontend_source())
-        # RBAC gating preserved on write-gated controls
-        self.assertIn('id="btnSaveCatEdits"', html)
-        save_start = html.index('id="btnSaveCatEdits"')
-        save_tag = html.rindex('<button', 0, save_start)
-        self.assertIn('requires-write', html[save_tag:save_start])
+        # RBAC: creating a category is write-gated in the template; the
+        # inspector renders Save/Cancel only for a role that may write.
+        add_start = html.index('id="clsAddCat"')
+        add_tag = html.rindex('<details', 0, add_start)
+        self.assertIn('requires-write', html[add_tag:add_start])
+        self.assertIn("const foot = canWrite ?", frontend_source())
 
     def test_endpoint_contract_present(self):
         # loadCategoriesData/saveCategoryEdits/createCategory/deleteCategory/
@@ -686,9 +686,10 @@ class TestCategoriesTabRestyle(unittest.TestCase):
         tab_start = html.index('<div id="tab-categories"')
         tab_end = html.index('<!-- TAB 5: Threat Intel')
         tab_html = html[tab_start:tab_end]
-        for cls in ('class="page-head"', 'class="filterbar"'):
+        # One bay split in rail | list | inspector, under the page head.
+        for cls in ('class="page-head"', 'class="panel cls-shell"', 'class="cls-rail"',
+                    'class="cls-list"', 'class="cls-insp"'):
             self.assertIn(cls, tab_html)
-        self.assertGreaterEqual(tab_html.count('class="panel'), 4)
 
     def test_i18n_keys_both_langs(self):
         html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
@@ -771,7 +772,7 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
         self.assertIn('requires-write', html[scan_tag:scan_start])
         self.assertIn('id="macRetentionDays"', html)
         ret_idx = html.index('id="macRetentionDays"')
-        admin_wrap = html.rindex('class="requires-admin"', 0, ret_idx)
+        admin_wrap = html.rindex('class="requires-admin', 0, ret_idx)
         self.assertLess(ret_idx - admin_wrap, 400)
         # Ad-hoc overrides panel stays write-gated
         adhoc_idx = html.index('titleMacAdhoc')
@@ -841,7 +842,8 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
         tab_start = html.index('<div id="tab-endpoint"')
         tab_end = html.index('<div id="tab-wlc"')
         tab_html = html[tab_start:tab_end]
-        for cls in ('class="hero"', 'class="hero-card"', 'class="filterbar"', 'class="table-wrap"'):
+        # Search and collection share one console panel (no per-panel filterbar).
+        for cls in ('class="hero"', 'class="hero-card"', 'class="panel mac-console"', 'class="table-wrap"'):
             self.assertIn(cls, tab_html)
         self.assertGreaterEqual(tab_html.count('class="oneline-foot"'), 1)
         self.assertGreaterEqual(tab_html.count('class="panel'), 3)
@@ -2832,9 +2834,9 @@ class TestRedundancyUi(unittest.TestCase):
         self.assertIn("function stackLine", source)
         # Fascia STACK nella card SVG della mappa classica.
         self.assertIn("STACK ×", source)
-        # Riga espandibile con le unità nella tab Dispositivi.
-        self.assertIn("function toggleStackRow", source)
-        self.assertIn("stack-members", source)
+        # Units of the stack in the device inspector of the Devices tab.
+        self.assertIn("cls-stack-t", source)
+        self.assertIn("function saveStackMembers", source)
 
     def test_topology_ui_has_one_ha_heartbeat_style(self):
         source = frontend_source()
