@@ -633,6 +633,7 @@
     const SECONDARY_TAB_LABELS = {
         'tab-map-interactive': 'tabInteractive',
         'tab-provisioner': 'tabProvisioner',
+        'tab-device-history': 'dhSubHistory',
     };
 
     // The five requires-admin tabs that ARE a concession on an admin-level

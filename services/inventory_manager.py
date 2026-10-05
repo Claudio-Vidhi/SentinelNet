@@ -261,6 +261,7 @@ def safe_write_hosts_csv(devices):
     # tollera dizionari con chiavi extra (retrocompatibilità).
     _fieldnames = ['IP', 'Vendor', 'Profile', 'Username', 'Password', 'Enable Secret', 'Group', 'Hostname', 'Site', 'SSH Port', 'Transports', 'SNMP Community', 'SNMP Disabled']
     with _hosts_csv_lock:
+        old_rows = _read_hosts_csv(hosts_csv) if os.path.exists(hosts_csv) else []
         try:
             with open(temp_filename, mode='w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=_fieldnames, extrasaction='ignore')
@@ -288,6 +289,14 @@ def safe_write_hosts_csv(devices):
                 except OSError:
                     pass
             raise e
+        # The inventory is already on disk: a failing history append must
+        # not turn a saved device into an error for the caller. Diffed against
+        # the file as re-read, so both sides carry the same read defaults.
+        try:
+            from services import device_history
+            device_history.record(old_rows, _read_hosts_csv(hosts_csv))
+        except Exception:
+            logger.exception("Storico dispositivi non aggiornato")
 
 # Righe gia' analizzate, con la firma del file da cui vengono. 64 chiamanti
 # rileggevano e ri-parsavano lo stesso CSV, alcuni dentro cicli e uno

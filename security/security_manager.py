@@ -229,6 +229,20 @@ def set_client_tag(raw: "str | None") -> str:
     return tag
 
 
+# Who is making the current request, for records written deep below the route
+# (device_history). Set by middleware: a contextvar set inside a sync
+# dependency would live in a threadpool copy of the context and be lost.
+_actor: "ContextVar[str]" = ContextVar("audit_actor", default="")
+
+
+def set_actor(sub: str) -> None:
+    _actor.set(sub or "")
+
+
+def current_actor() -> str:
+    return _actor.get()
+
+
 def log_audit(message: str):
     """Scrive un record di tracciabilità all'interno del registro sicuro audit.log."""
     tag = _client_tag.get()

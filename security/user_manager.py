@@ -345,6 +345,7 @@ TAB_ALIASES = {
 SUBTAB_GRANTS = {
     "tab-map": ("tab-map-interactive",),
     "tab-provisioning": ("tab-provisioner",),
+    "tab-devices": ("tab-device-history",),
 }
 
 # Tabs every restricted user holds anyway: home is the fallback panel for

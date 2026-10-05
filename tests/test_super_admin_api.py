@@ -316,7 +316,10 @@ class TestScopedAdminUserPerimeter(_PrivateUsers):
         r = self._as("sadm").post("/api/users", headers=H, json={
             "username": "new-a", "password": PW, "role": "operator", "groups": ["tenant-a"]})
         self.assertEqual(r.status_code, 200, r.text)
-        self.assertEqual(set(user_manager.get_allowed_tabs("new-a")), {"tab-devices", "tab-users"})
+        # The actor's EFFECTIVE tabs are copied, so the sub-tab that
+        # tab-devices implies (SUBTAB_GRANTS) comes along with it.
+        self.assertEqual(set(user_manager.get_allowed_tabs("new-a")),
+                         {"tab-devices", "tab-device-history", "tab-users"})
 
     def test_set_tabs_refuses_empty_or_home_only_for_tab_restricted_actor(self):
         user_manager.set_allowed_tabs("sadm", ["tab-devices", "tab-users"])
