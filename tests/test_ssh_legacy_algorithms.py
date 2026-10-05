@@ -24,8 +24,8 @@ class _Server(paramiko.ServerInterface):
     pass
 
 
-def _legacy_only_server(key):
-    """A listening socket whose server speaks only group14-sha1 + ssh-rsa."""
+def _legacy_only_server(key, kex="diffie-hellman-group14-sha1", ciphers=None, macs=None):
+    """A listening socket whose server speaks only ``kex`` + ssh-rsa."""
     lsock = socket.socket()
     lsock.bind(("127.0.0.1", 0))
     lsock.listen(4)
@@ -39,8 +39,12 @@ def _legacy_only_server(key):
             t = paramiko.Transport(conn)
             t.add_server_key(key)
             opts = t.get_security_options()
-            opts.kex = ["diffie-hellman-group14-sha1"]
+            opts.kex = [kex]
             opts.key_types = ["ssh-rsa"]
+            if ciphers:
+                opts.ciphers = ciphers
+            if macs:
+                opts.digests = macs
             try:
                 t.start_server(server=_Server())
             except Exception:
@@ -81,6 +85,41 @@ class LegacySshAlgorithmsTest(unittest.TestCase):
         kex = paramiko.Transport._preferred_kex
         self.assertEqual(tuple(kex[-len(ssh_legacy.LEGACY_KEX):]), ssh_legacy.LEGACY_KEX)
         self.assertEqual(paramiko.Transport._preferred_keys[-1], "ssh-rsa")
+
+
+class Group1OnlyDeviceTest(LegacySshAlgorithmsTest):
+    """Old IOS: group1-sha1 only, CBC ciphers, SHA-1/MD5 MACs."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.key = paramiko.RSAKey.generate(2048)
+        cls.lsock = _legacy_only_server(
+            cls.key, "diffie-hellman-group1-sha1",
+            ciphers=["aes128-cbc", "3des-cbc", "aes192-cbc", "aes256-cbc"],
+            macs=["hmac-sha1", "hmac-sha1-96", "hmac-md5", "hmac-md5-96"])
+        cls.port = cls.lsock.getsockname()[1]
+
+    def test_terminal_shows_what_the_device_offered(self):
+        from routers.commands import _ssh_failure_hint
+
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        with self.assertRaises(paramiko.ssh_exception.IncompatiblePeer) as cm:
+            client.connect("127.0.0.1", port=self.port, username="u", password="p",
+                           look_for_keys=False, allow_agent=False, timeout=5,
+                           disabled_algorithms=ssh_legacy.MODERN_ONLY,
+                           transport_factory=ssh_legacy.OfferTransport)
+        offer = client._transport.remote_offer
+        client.close()
+        hint = _ssh_failure_hint(cm.exception, offer)
+        self.assertIn("kex: diffie-hellman-group1-sha1", hint)
+        self.assertIn("cipher: aes128-cbc, 3des-cbc", hint)
+
+    def test_an_algorithm_paramiko_lacks_is_flagged(self):
+        text = ssh_legacy.describe_offer({"kex_algo_list": ["made-up-kex"],
+                                          "client_encrypt_algo_list": ["aes128-cbc"]})
+        self.assertIn("kex: made-up-kex   <-- non supportato", text)
+        self.assertNotIn("aes128-cbc   <--", text)
 
 
 class ConnectFallbackTest(unittest.TestCase):

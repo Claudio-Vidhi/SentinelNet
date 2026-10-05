@@ -274,7 +274,7 @@ def get_ws_token(current_user = Depends(require_operator)):
     _ws_tokens[otp] = (current_user.get("sub"), time.time())
     return {"ws_token": otp}
 
-def _ssh_failure_hint(exc) -> str:
+def _ssh_failure_hint(exc, offer: "dict | None" = None) -> str:
     """Il messaggio che il terminale mostra a video, tradotto in una diagnosi.
 
     "Error reading SSH protocol banner" è il più fuorviante degli errori di
@@ -298,6 +298,9 @@ def _ssh_failure_hint(exc) -> str:
                 "riconfigurato, oppure qualcuno che si e' interposto sulla "
                 "tratta. Verifica l'apparato prima di rimuovere la voce da "
                 "ssh_known_hosts.]")
+    if offer and ssh_legacy.is_negotiation_failure(exc):
+        return (msg + "\r\n[Nessun algoritmo in comune. L'apparato propone:\r\n"
+                + ssh_legacy.describe_offer(offer) + "]")
     if "banner" in msg.lower():
         return (msg + "\r\n[Il dispositivo ha accettato la connessione e l'ha "
                 "chiusa senza presentarsi: di norma sta rifiutando nuove "
@@ -412,6 +415,7 @@ async def ws_terminal(websocket: WebSocket, ip: str):
             ip, port=ssh_port, username=username, password=pwd,
             look_for_keys=False, allow_agent=False, timeout=10,
             disabled_algorithms=extra,
+            transport_factory=ssh_legacy.OfferTransport,
             sock=net_ssh.jump_channel(site, ip, ssh_port) if site else None), ip)
 
     try:
@@ -453,7 +457,8 @@ async def ws_terminal(websocket: WebSocket, ip: str):
         # raises WebSocketDisconnect out of the endpoint, which uvicorn
         # then logs as an unhandled ASGI exception.
         with contextlib.suppress(WebSocketDisconnect):
-            await websocket.send_text(f"\r\n[Errore Connessione] {_ssh_failure_hint(e)}\r\n")
+            offer = getattr(getattr(client, "_transport", None), "remote_offer", None)
+            await websocket.send_text(f"\r\n[Errore Connessione] {_ssh_failure_hint(e, offer)}\r\n")
             await websocket.close()
             return
 
