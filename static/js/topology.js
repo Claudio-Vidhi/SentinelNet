@@ -2672,45 +2672,62 @@
     // ===== Pannello Dispositivi & Categorie (classificazione manuale) =====
     let categoriesData = { categories: {}, nodes: [], counts_by_category: {}, counts_by_group: {}, vendors: [], models: {} };
 
-    // Colonne disponibili nella tabella Dispositivi & Categorie. 'fixed' = sempre visibile.
-    const CAT_COLUMNS = [
-        { key: 'hostname', it: 'Hostname',  en: 'Hostname', fixed: true },
-        { key: 'ip',       it: 'IP',        en: 'IP' },
-        { key: 'source',   it: 'Origine',   en: 'Source' },
-        { key: 'vendor',   it: 'Vendor',    en: 'Vendor' },
-        { key: 'model',    it: 'Modello',   en: 'Model' },
-        { key: 'version',  it: 'Versione',  en: 'Version' },
-        { key: 'vtp',      it: 'VTP',       en: 'VTP' },
-        { key: 'ha',       it: 'HA',        en: 'HA' },
-        { key: 'stack',    it: 'Stack',     en: 'Stack' },
-        { key: 'category', it: 'Categoria', en: 'Category', fixed: true },
-    ];
-    function colLabel(c) { return currentLang === 'en' ? c.en : c.it; }
-    let catColVis = {};
-    try { catColVis = JSON.parse(localStorage.getItem('catColVis') || '{}'); } catch (e) { catColVis = {}; }
-    function isColVisible(key) {
-        const c = CAT_COLUMNS.find(x => x.key === key);
-        if (c && c.fixed) return true;
-        return catColVis[key] !== false;
-    }
+    // ===== Dispositivi & Categorie: rail | lista | inspector =====
+    // The list is read-only; the inspector edits ONE device and saves it on
+    // its own. The old table put an input in every cell and saved a batch of
+    // rows at once: dense to read, and a half-edited row was easy to miss.
     function attrEsc(s) { return escapeHtml(String(s == null ? '' : s)).replace(/"/g, '&quot;'); }
+
+    // 'todo' | 'conflict' | 'all' | '<cat>' | '<cat>/<sub>'
+    let clsView = 'all';
+    let clsSelected = null;
+    let clsDirty = false;
+    let clsViewChosen = false;
+
+    // A device discovered via CDP/LLDP whose category was only inferred: no
+    // human has looked at it yet. That is the queue the view opens on.
+    function clsToClassify(n) { return n.discovered && !n.is_manual; }
+    function clsHasConflict(n) { return (n.name_options || []).length > 1; }
+    function clsCanWrite() { return isAdminRole(currentRole) || currentRole === 'operator'; }
+
+    function clsScopedNodes() {
+        const g = /** @type {HTMLSelectElement|null} */ (document.getElementById('categoriesGroupSelect'))?.value || 'all';
+        return categoriesData.nodes.filter(n => g === 'all' || n.group === g);
+    }
+
+    function clsInView(n) {
+        if (clsView === 'all') return true;
+        if (clsView === 'todo') return clsToClassify(n);
+        if (clsView === 'conflict') return clsHasConflict(n);
+        const [cat, sub] = clsView.split('/');
+        return n.device_type === cat && (sub === undefined || (n.subcategory || '') === sub);
+    }
+
+    function clsVisibleNodes() {
+        const q = (/** @type {HTMLInputElement|null} */ (document.getElementById('clsSearch'))?.value || '').trim().toLowerCase();
+        return clsScopedNodes()
+            .filter(clsInView)
+            .filter(n => !q || [n.label, n.display_ip, n.vendor, n.model]
+                .some(v => String(v || '').toLowerCase().includes(q)))
+            .sort((a, b) => (a.group || '').localeCompare(b.group || '')
+                || (a.label || '').localeCompare(b.label || ''));
+    }
 
     async function loadCategoriesData() {
         const devList = document.getElementById("categoriesDeviceList");
-        if (!categoriesData && devList && devList.innerHTML.trim() === '') {
-            devList.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><p style="margin-top:10px; font-size:13px;">${tr('topoScanningBackupsAndClassifying')}</p></div>`;
+        if (!categoriesData.nodes.length && devList) {
+            devList.innerHTML = `<p class="cls-empty"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> ${escapeHtml(tr('topoScanningBackupsAndClassifying'))}</p>`;
         }
         const res = await apiFetch("/api/device-classification");
         if (!res || !res.ok) {
-            if (devList && !categoriesData) devList.innerHTML = '';
+            if (devList && !categoriesData.nodes.length) devList.innerHTML = '';
             return;
         }
         categoriesData = await res.json();
         categoriesData.vendors = categoriesData.vendors || [];
         categoriesData.models = categoriesData.models || {};
 
-        // Filtro sedi
-        const gsel = document.getElementById("categoriesGroupSelect");
+        const gsel = /** @type {HTMLSelectElement|null} */ (document.getElementById("categoriesGroupSelect"));
         if (gsel) {
             const cur = gsel.value;
             const groups = Object.keys(categoriesData.counts_by_group).sort();
@@ -2718,375 +2735,377 @@
                 groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join("");
             gsel.value = tenantSelectSeed(cur, groups, "all");
         }
-        // Filtro categorie + datalist di creazione
-        const csel = document.getElementById("categoriesCatFilter");
         const dl = document.getElementById("catKeyList");
-        const catKeys = Object.keys(categoriesData.categories);
-        if (csel) {
-            const cur = csel.value;
-            csel.innerHTML = `<option value="all">${tr('topoAllCategories')}</option>` +
-                catKeys.map(k => `<option value="${escapeHtml(k)}">${escapeHtml(categoriesData.categories[k].label)}</option>`).join("");
-            csel.value = catKeys.includes(cur) ? cur : "all";
-        }
-        if (dl) dl.innerHTML = catKeys.map(k => `<option value="${escapeHtml(k)}">`).join("");
+        if (dl) dl.innerHTML = Object.keys(categoriesData.categories)
+            .map(k => `<option value="${escapeHtml(k)}">`).join("");
 
-        renderColumnsMenu();
+        // First open: start on the queue when there is something in it.
+        if (!clsViewChosen) clsView = clsScopedNodes().some(clsToClassify) ? 'todo' : 'all';
+        clsDirty = false;
         renderCategoriesPanel();
-        updateSaveBar();
-    }
-
-    function renderColumnsMenu() {
-        const box = document.getElementById("categoryColumnsList");
-        if (!box) return;
-        box.innerHTML = CAT_COLUMNS.map(c => `
-            <label style="display:flex; align-items:center; gap:8px; font-size:12px; padding:3px 0; cursor:${c.fixed?'default':'pointer'}; color:${c.fixed?'var(--text-muted)':'var(--text)'};">
-                <input type="checkbox" ${isColVisible(c.key)?'checked':''} ${c.fixed?'disabled':''} data-action="toggle-cat-column" data-key="${attrEsc(c.key)}" style="accent-color:var(--primary);">
-                ${colLabel(c)}
-            </label>`).join("");
-    }
-
-    document.getElementById('categoryColumnsList')?.addEventListener('change', (e) => {
-        const cb = e.target.closest('input[data-action="toggle-cat-column"]');
-        if (cb && cb.dataset.key) {
-            toggleCatColumn(cb.dataset.key, cb.checked);
-        }
-    });
-
-    function toggleCatColumn(key, on) {
-        catColVis[key] = on;
-        localStorage.setItem('catColVis', JSON.stringify(catColVis));
-        renderCategoriesPanel();
-    }
-
-    function categoryOptions(selected) {
-        return Object.keys(categoriesData.categories).map(k =>
-            `<option value="${escapeHtml(k)}"${k===selected?' selected':''}>${escapeHtml(categoriesData.categories[k].label)}</option>`
-        ).join("");
-    }
-
-    function getFilteredCategoryNodes() {
-        const groupFilter = document.getElementById("categoriesGroupSelect")?.value || "all";
-        const catFilter = document.getElementById("categoriesCatFilter")?.value || "all";
-        let nodes = categoriesData.nodes.slice();
-        if (groupFilter !== "all") nodes = nodes.filter(n => n.group === groupFilter);
-        if (catFilter !== "all") nodes = nodes.filter(n => n.device_type === catFilter);
-        return nodes;
-    }
-
-    // Modifiche in sospeso non ancora salvate: { node_id: { field: value } }.
-    // Le modifiche alla tabella NON vengono salvate in automatico: si applicano
-    // solo col pulsante "Salva Modifiche" (admin/operator).
-    let pendingEdits = {};
-
-    // Valore effettivo di un attributo: lo staged se presente, altrimenti il nodo.
-    function effVal(n, field) {
-        const p = pendingEdits[n.id];
-        if (p && Object.prototype.hasOwnProperty.call(p, field)) return p[field];
-        switch (field) {
-            case 'category': return n.device_type;
-            default: return n[field];
-        }
-    }
-    function stageEdit(nodeId, field, value) {
-        pendingEdits[nodeId] = pendingEdits[nodeId] || {};
-        pendingEdits[nodeId][field] = value;
-        const row = document.querySelector(`tr[data-node="${nodeId}"]`);
-        if (row) row.classList.add('row-dirty');
-        updateSaveBar();
-    }
-    function updateSaveBar() {
-        const n = Object.keys(pendingEdits).length;
-        const save = document.getElementById('btnSaveCatEdits');
-        const disc = document.getElementById('btnDiscardCatEdits');
-        [save, disc].forEach(b => { if (b) { b.disabled = !n; b.style.opacity = n ? '1' : '0.5'; } });
-        if (save) save.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> ${tr('topoSaveChanges')}${n?` (${n})`:''}`;
     }
 
     function renderCategoriesPanel() {
-        const cats = categoriesData.categories;
-        const canWrite = (isAdminRole(currentRole) || currentRole === 'operator');
-        // Le API /api/redundancy/groups sono admin-only: la gestione stack segue.
+        const visible = clsVisibleNodes();
+        if (!visible.some(n => n.id === clsSelected)) clsSelected = visible.length ? visible[0].id : null;
+        renderClsRail();
+        renderClsList(visible);
+        renderClsInspector();
+    }
+
+    function clsSwatch(type) {
+        return `<span class="cls-sq" style="background:${deviceTypeMeta(type).color}" aria-hidden="true"></span>`;
+    }
+
+    function clsCatLabel(k) {
+        const c = categoriesData.categories[k];
+        return c ? c.label : deviceTypeLabel(k);
+    }
+
+    function renderClsRail() {
+        const box = document.getElementById('clsRail');
+        if (!box) return;
+        const nodes = clsScopedNodes();
+        const canWrite = clsCanWrite();
+        const count = f => nodes.filter(f).length;
+        const item = (key, label, n, lead, cls = '', del = '') =>
+            `<div class="cls-rail-row ${cls}">
+               <button type="button" class="cls-rail-item" data-action="cls-view" data-view="${attrEsc(key)}"
+                       aria-current="${clsView === key}">${lead}<span class="cls-rail-label">${escapeHtml(label)}</span><span class="cls-rail-n">${n}</span></button>${del}
+             </div>`;
+        const delBtn = (action, k, s, aria) => canWrite
+            ? `<button type="button" class="cls-rail-del" data-action="${action}" data-k="${attrEsc(k)}"${s !== undefined ? ` data-s="${attrEsc(s)}"` : ''}
+                       aria-label="${attrEsc(aria)}" title="${attrEsc(aria)}"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>` : '';
+        let html = `<div class="cls-rail-h">${escapeHtml(tr('clsQueues'))}</div>`
+            + item('todo', tr('clsToClassify'), count(clsToClassify),
+                   '<span class="cls-iso warn" aria-hidden="true"></span>', 'queue')
+            + item('conflict', tr('clsConflicts'), count(clsHasConflict),
+                   '<span class="cls-iso fault" aria-hidden="true"></span>', 'queue')
+            + `<div class="cls-rail-h">${escapeHtml(tr('clsCategories'))}</div>`
+            + item('all', tr('clsAll'), nodes.length, '<span class="cls-sq all" aria-hidden="true"></span>');
+        for (const [k, c] of Object.entries(categoriesData.categories)) {
+            html += item(k, c.label, count(x => x.device_type === k), clsSwatch(k), '',
+                         c.builtin ? '' : delBtn('delete-category', k, undefined, tr('clsDeleteCategory', { label: c.label })));
+            for (const s of (c.subcategories || [])) {
+                html += item(`${k}/${s}`, s, count(x => x.device_type === k && (x.subcategory || '') === s), '', 'sub',
+                             delBtn('delete-subcategory', k, s, tr('clsDeleteSub', { sub: s })));
+            }
+        }
+        box.innerHTML = html;
+    }
+
+    function renderClsList(visible) {
+        const title = document.getElementById('clsListTitle');
+        const countEl = document.getElementById('clsListCount');
+        const hint = document.getElementById('clsHint');
+        const box = document.getElementById('categoriesDeviceList');
+        if (!box) return;
+        const [cat, sub] = clsView.split('/');
+        if (title) title.textContent = clsView === 'all' ? tr('clsAll')
+            : clsView === 'todo' ? tr('clsToClassify')
+            : clsView === 'conflict' ? tr('clsConflicts')
+            : clsCatLabel(cat) + (sub !== undefined ? ` / ${sub}` : '');
+        if (countEl) countEl.textContent = tr('clsCountN', { n: visible.length });
+        if (hint) hint.hidden = !(clsView === 'todo' && visible.length);
+        if (!visible.length) {
+            box.innerHTML = `<p class="cls-empty">${escapeHtml(tr(clsView === 'todo' ? 'clsEmptyQueue' : 'clsEmptyList'))}</p>`;
+            return;
+        }
+        const byGroup = {};
+        visible.forEach(n => { (byGroup[n.group] ||= []).push(n); });
+        box.innerHTML = Object.keys(byGroup).map(g =>
+            `<div class="cls-grp">${escapeHtml(g)} <span>${byGroup[g].length}</span></div>`
+            + byGroup[g].map(n => {
+                const vm = [n.vendor && n.vendor !== 'discovered' ? n.vendor : '', n.model].filter(Boolean).join(' · ');
+                const flags = (n.stack ? `<span class="cls-flag" title="${attrEsc(tr('topoShowStackUnits'))}">×${n.stack.member_count}</span>` : '')
+                    + (n.stack && n.stack.health === 'degraded' ? `<span class="cls-iso fault" title="${attrEsc(tr('topoDegradedStack'))}"></span>` : '')
+                    + (n.ha_group ? '<span class="cls-flag">HA</span>' : '')
+                    + (clsHasConflict(n) ? `<span class="cls-iso fault" title="${attrEsc(tr('topoCdpLldpNameConflict'))}"></span>` : '');
+                return `<button type="button" class="cls-row" data-action="cls-select" data-node-id="${attrEsc(n.id)}"
+                        aria-current="${n.id === clsSelected}">
+                    ${clsSwatch(n.device_type)}
+                    <span class="cls-id"><span class="cls-name">${escapeHtml(n.label)}</span><span class="cls-vm">${escapeHtml(vm || '—')}</span></span>
+                    <span class="cls-ip">${escapeHtml(n.display_ip || '—')}</span>
+                    <span class="cls-cat">${escapeHtml(clsCatLabel(n.device_type))}${n.subcategory ? ` <i>/ ${escapeHtml(n.subcategory)}</i>` : ''}</span>
+                    <span class="cls-src${n.discovered ? ' disc' : ''}">${escapeHtml(tr(n.discovered ? 'clsDiscovered' : 'clsManaged'))}</span>
+                    <span class="cls-flags">${flags}</span>
+                </button>`;
+            }).join('')).join('');
+    }
+
+    function clsField(id, label, control) {
+        return `<div class="cls-field"><label for="${id}">${escapeHtml(label)}</label>${control}</div>`;
+    }
+
+    function clsSubSelect(subs, cur) {
+        return clsField('clsFSub', tr('clsFieldSub'), `<select id="clsFSub" data-field="subcategory">
+            <option value="">—</option>${subs.map(s => `<option value="${attrEsc(s)}"${s === cur ? ' selected' : ''}>${escapeHtml(s)}</option>`).join('')}
+          </select>`);
+    }
+
+    function renderClsInspector() {
+        const box = document.getElementById('clsInspector');
+        if (!box) return;
+        const n = categoriesData.nodes.find(x => x.id === clsSelected);
+        clsDirty = false;
+        if (!n) { box.innerHTML = `<p class="cls-empty">${escapeHtml(tr('clsPickDevice'))}</p>`; return; }
+        const canWrite = clsCanWrite();
+        // /api/redundancy/groups is admin-only: so is stack editing.
         const canAdmin = isAdminRole(currentRole);
-        const cols = CAT_COLUMNS.filter(c => isColVisible(c.key));
+        const cats = categoriesData.categories;
+        const subs = (cats[n.device_type] && cats[n.device_type].subcategories) || [];
+        const vendor = n.vendor && n.vendor !== 'discovered' ? n.vendor : '';
 
-        // Conteggi per categoria RELATIVI alla sede selezionata (non al totale).
-        const groupFilterForCounts = document.getElementById("categoriesGroupSelect")?.value || "all";
-        const counts = {};
-        categoriesData.nodes
-            .filter(n => groupFilterForCounts === "all" || n.group === groupFilterForCounts)
-            .forEach(n => { counts[n.device_type] = (counts[n.device_type] || 0) + 1; });
+        const conflict = clsHasConflict(n) ? `<div class="cls-conflict">
+              <p>${escapeHtml(tr('clsConflictMsg', { ip: n.display_ip || n.id }))}</p>
+              <div class="cls-conflict-opts">${n.name_options.map(o =>
+                  `<button type="button" class="chip-choice" data-action="cls-pick-name" data-name="${attrEsc(o.name)}"
+                           data-ver="${attrEsc(o.version || '')}" aria-pressed="${o.name === n.label}"${canWrite ? '' : ' disabled'}>${
+                      escapeHtml(o.name)}${o.version ? `<span class="cls-ver">${escapeHtml(o.version)}</span>` : ''}</button>`).join('')}</div>
+            </div>` : '';
 
-        // Riquadri di conteggio per categoria
-        const cardBox = document.getElementById("categoryCountCards");
-        if (cardBox) {
-            cardBox.innerHTML = Object.keys(cats).map(k => {
-                const c = cats[k];
-                const color = deviceTypeMeta(k).color;
-                const n = counts[k] || 0;
-                const delBtn = (!c.builtin && canWrite)
-                    ? `<i class="fa-solid fa-trash" title="${tr('topoDeleteCategory')}" style="position:absolute; top:8px; right:8px; font-size:11px; color:var(--text-muted); cursor:pointer;" data-action="delete-category" data-k="${escapeHtml(k)}"></i>` : '';
-                const subChips = c.subcategories.length
-                    ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;">${c.subcategories.map(s => `<span style="display:inline-flex; align-items:center; gap:4px; font-size:10px; color:var(--text-muted); background:var(--surface-3); border:1px solid var(--border); border-radius:9999px; padding:1px 8px;">${escapeHtml(s)}${canWrite?`<i class="fa-solid fa-xmark" title="${tr('topoRemoveSubcategory')}" data-action="delete-subcategory" data-k="${escapeHtml(k)}" data-s="${escapeHtml(s)}" style="cursor:pointer; color:var(--danger); margin-left:3px;"></i>`:''}</span>`).join('')}</div>` : '';
-                return `<div class="category-card">
-                    ${delBtn}
-                    <div style="font-size:var(--font-size-2xl); font-weight:800; color:${color}; font-family:var(--font-data); line-height:1.1;">${n}</div>
-                    <div style="font-size:12.5px; font-weight:600; color:var(--text); margin-top:4px;">${escapeHtml(c.label)}</div>
-                    ${subChips}
-                </div>`;
-            }).join("");
+        let fields;
+        if (canWrite) {
+            fields = clsField('clsFName', tr('clsFieldName'),
+                        `<input id="clsFName" class="ui-input" data-field="name" value="${attrEsc(n.label)}">`)
+                + `<div class="cls-two">${clsField('clsFCat', tr('clsFieldCategory'),
+                        `<select id="clsFCat" data-field="category">${Object.keys(cats).map(k =>
+                            `<option value="${attrEsc(k)}"${k === n.device_type ? ' selected' : ''}>${escapeHtml(cats[k].label)}</option>`).join('')}</select>`)}${
+                    subs.length ? clsSubSelect(subs, n.subcategory || '') : ''}</div>`
+                + `<div class="cls-two">${clsField('clsFVendor', tr('clsFieldVendor'),
+                        `<input id="clsFVendor" class="ui-input" data-field="vendor" list="catVendorDL" value="${attrEsc(vendor)}" placeholder="—">`)}${
+                    clsField('clsFModel', tr('clsFieldModel'),
+                        `<input id="clsFModel" class="ui-input" data-field="model" list="catModelDL" value="${attrEsc(n.model || '')}" placeholder="—">`)}</div>`
+                + clsField('clsFHa', tr('clsFieldHa'),
+                        `<input id="clsFHa" class="ui-input" data-field="ha_group" value="${attrEsc(n.ha_group || '')}" placeholder="${attrEsc(tr('clsHaNone'))}">`)
+                + `<datalist id="catVendorDL">${categoriesData.vendors.map(v => `<option value="${attrEsc(v)}">`).join('')}</datalist>`
+                + `<datalist id="catModelDL">${(categoriesData.models[vendor.toLowerCase()] || []).map(m => `<option value="${attrEsc(m)}">`).join('')}</datalist>`;
+        } else {
+            fields = `<dl class="cls-facts">
+                <dt>${escapeHtml(tr('clsFieldCategory'))}</dt><dd>${escapeHtml(clsCatLabel(n.device_type))}${n.subcategory ? ' / ' + escapeHtml(n.subcategory) : ''}</dd>
+                <dt>${escapeHtml(tr('clsFieldVendor'))}</dt><dd>${escapeHtml(vendor || '—')}</dd>
+                <dt>${escapeHtml(tr('clsFieldModel'))}</dt><dd>${escapeHtml(n.model || '—')}</dd>
+                <dt>${escapeHtml(tr('clsFieldHa'))}</dt><dd>${escapeHtml(n.ha_group || '—')}</dd>
+              </dl>`;
         }
 
-        document.getElementById('categoryCountCards')?.addEventListener('click', (e) => {
-            const delCat = e.target.closest('[data-action="delete-category"]');
-            if (delCat && delCat.dataset.k) {
-                deleteCategory(delCat.dataset.k);
-                return;
-            }
-            const delSub = e.target.closest('[data-action="delete-subcategory"]');
-            if (delSub && delSub.dataset.k && delSub.dataset.s) {
-                deleteSubcategory(delSub.dataset.k, delSub.dataset.s);
-            }
-        });
-
-        const nodes = getFilteredCategoryNodes();
-        const byGroup = {};
-        nodes.forEach(n => { (byGroup[n.group] = byGroup[n.group] || []).push(n); });
-
-        const listBox = document.getElementById("categoriesDeviceList");
-        if (!listBox) return;
-        if (!nodes.length) { listBox.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${tr('topoNoDevices')}</p>`; return; }
-
-        // Datalist condivise per vendor e modelli (per editing inline).
-        const vendorDL = `<datalist id="catVendorDL">${(categoriesData.vendors||[]).map(v=>`<option value="${attrEsc(v)}">`).join('')}</datalist>`;
-        const modelDLs = Object.keys(categoriesData.models||{}).map(vk =>
-            `<datalist id="catModelDL_${attrEsc(vk)}">${(categoriesData.models[vk]||[]).map(m=>`<option value="${attrEsc(m)}">`).join('')}</datalist>`
-        ).join('');
-
-        const cellHtml = (col, n) => {
-            const meta = deviceTypeMeta(effVal(n, 'category'));
-            const td = (inner, extra='') => `<td style="padding:6px 8px; ${extra}">${inner}</td>`;
-            switch (col.key) {
-                case 'hostname': {
-                    const conflictIcon = (canWrite && n.name_options && n.name_options.length > 1)
-                        ? ` <i class="fa-solid fa-triangle-exclamation" title="${tr('topoCdpLldpNameConflict')}" data-action="open-conflict-modal" data-node-id="${escapeHtml(n.id)}" style="cursor:pointer; color:var(--warning); font-size:11px;"></i>` : '';
-                    // Chevron di espansione: mostra le unità fisiche dello stack.
-                    const chevron = n.stack
-                        ? `<i class="fa-solid fa-chevron-right" id="stackChev_${attrEsc(n.id)}" title="${tr('topoShowStackUnits')}" data-action="toggle-stack-row" data-node-id="${escapeHtml(n.id)}" style="cursor:pointer; color:${STACK_COLOR}; font-size:10px; margin-right:6px; width:9px;"></i>`
-                        : '';
-                    const dot = `${chevron}<span style="display:inline-block; width:9px; height:9px; border-radius:0; background:${meta.color}; margin-right:6px;"></span>`;
-                    // Rinomina inline: modifica il nome mostrato (stage 'name', salvato col pulsante).
-                    if (canWrite) {
-                        const p = pendingEdits[n.id];
-                        const curName = (p && Object.prototype.hasOwnProperty.call(p, 'name')) ? p.name : (n.label || '');
-                        return td(`${dot}<input value="${attrEsc(curName)}" data-action="stage-edit-name" data-node-id="${escapeHtml(n.id)}" title="${tr('uiRenameDevice')}" placeholder="${tr('topoName2')}" style="width:150px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">${conflictIcon}`);
-                    }
-                    return td(`${dot}${escapeHtml(n.label)} ${n.is_manual?'<i class="fa-solid fa-user-pen" title="'+(tr('topoManuallyClassified'))+'" style="font-size:10px; color:var(--warning);"></i>':''}${conflictIcon}`);
-                }
-                case 'ip':
-                    return td(escapeHtml(n.display_ip || '—'), 'font-family:var(--font-code); font-size:12px; color:var(--text-muted);');
-                case 'source': {
-                    const badge = n.discovered
-                        ? `<span style="font-size:10px; color:var(--lamp-idle-ink); border:1px solid var(--lamp-idle); border-radius:0; padding:1px 5px;">${tr('topoDiscovered2')}</span>`
-                        : `<span style="font-size:10px; color:var(--primary); border:1px solid var(--primary); border-radius:0; padding:1px 5px;">${tr('topoManaged')}</span>`;
-                    // Promozione di un dispositivo scoperto a gestito (operator/admin).
-                    const promote = (n.discovered && canWrite && n.display_ip)
-                        ? ` <button data-action="promote-device" data-node-id="${escapeHtml(n.id)}" title="${tr('topoAddToManagedTriage')}" style="font-size:10px; cursor:pointer; border:1px solid var(--success); color:var(--success); background:transparent; border-radius:0; padding:1px 5px;"><i class="fa-solid fa-arrow-up-from-bracket"></i> ${tr('topoPromote')}</button>` : '';
-                    return td(badge + promote);
-                }
-                case 'vendor': {
-                    const v = (function(){ const e = effVal(n,'vendor'); return (e && e !== 'discovered') ? e : ''; })();
-                    return td(canWrite
-                        ? `<input list="catVendorDL" value="${attrEsc(v)}" data-action="stage-edit-vendor" data-node-id="${escapeHtml(n.id)}" placeholder="—" style="width:110px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
-                        : `<span style="font-size:12px; color:var(--text-muted);">${escapeHtml(v||'—')}</span>`);
-                }
-                case 'model': {
-                    const vk = String(effVal(n,'vendor')||'').toLowerCase();
-                    return td(canWrite
-                        ? `<input list="catModelDL_${attrEsc(vk)}" value="${attrEsc(effVal(n,'model')||'')}" data-action="stage-model" data-node-id="${escapeHtml(n.id)}" placeholder="—" style="width:140px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
-                        : `<span style="font-size:12px; color:var(--text-muted);">${escapeHtml(effVal(n,'model')||'—')}</span>`);
-                }
-                case 'version':
-                    return td(escapeHtml(n.version||'-'), 'font-size:12px; color:var(--text-muted);');
-                case 'vtp': {
-                    const v = [n.vtp_domain, n.vtp_mode].filter(Boolean).join(' · ');
-                    return td(v ? `<span style="font-size:12px; color:${vtpDomainColor(n.vtp_domain)};">${escapeHtml(v)}</span>` : '<span style="color:var(--text-muted);">—</span>');
-                }
-                case 'ha': {
-                    const hg = effVal(n,'ha_group') || '';
-                    const badge = hg ? `<span title="HA" style="font-size:9px; font-weight:900; color:var(--cond-d); border:1px solid var(--cond-d); border-radius:0; padding:1px 4px; margin-right:4px;">HA</span>` : '';
-                    return td(canWrite
-                        ? `${badge}<input value="${attrEsc(hg)}" data-action="stage-edit-ha-group" data-node-id="${escapeHtml(n.id)}" placeholder="${tr('topoHaGroup')}" style="width:110px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
-                        : (hg ? `${badge}<span style="font-size:12px; color:var(--cond-d);">${escapeHtml(hg)}</span>` : '<span style="color:var(--text-muted);">—</span>'));
-                }
-                case 'stack': {
-                    if (n.stack) {
-                        const warn = n.stack.health === 'degraded'
-                            ? ` <i class="fa-solid fa-triangle-exclamation" title="${tr('topoDegradedStack')}" style="color:var(--danger); font-size:10px;"></i>` : '';
-                        return td(`<span title="${attrEsc(stackLine(n.stack, '', n.model))}" style="display:inline-block; white-space:nowrap; font-size:10px; font-weight:900; color:${STACK_COLOR}; border:1px solid ${STACK_COLOR}; border-radius:0; padding:2px 6px; cursor:pointer;" data-action="toggle-stack-row" data-node-id="${escapeHtml(n.id)}"><i class="fa-solid fa-layer-group"></i> STACK ×${n.stack.member_count}</span>${warn}`, 'white-space:nowrap;');
-                    }
-                    // Solo switch/router gestiti possono essere marcati a mano.
-                    const canMark = canAdmin && !n.discovered && ['switch','router'].includes(effVal(n,'category'));
-                    return td(canMark
-                        ? `<button data-action="mark-as-stack" data-node-id="${escapeHtml(n.id)}" title="${tr('topoDeclareThisDeviceAs')}" style="white-space:nowrap; font-size:10px; cursor:pointer; border:1px solid var(--border); color:var(--text-muted); background:transparent; border-radius:0; padding:2px 6px;"><i class="fa-solid fa-layer-group"></i> ${tr('topoMark')}</button>`
-                        : '<span style="color:var(--text-muted);">—</span>', 'white-space:nowrap;');
-                }
-                case 'category': {
-                    const curCat = effVal(n, 'category');
-                    const curSub = effVal(n, 'subcategory') || '';
-                    const subs = (cats[curCat]?.subcategories) || [];
-                    // Il menù sottocategoria viene reso SOLO se la categoria ne ha:
-                    // così, rimuovendo l'ultima sottocategoria, non resta spazio vuoto.
-                    const subSel = (canWrite && subs.length)
-                        ? `<select class="subcat-sel" data-action="stage-edit-subcategory" data-node-id="${escapeHtml(n.id)}" style="padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
-                            <option value="">${tr('topoSubcat')}</option>
-                            ${subs.map(s => `<option value="${escapeHtml(s)}"${s===curSub?' selected':''}>${escapeHtml(s)}</option>`).join('')}
-                        </select>` : '';
-                    const ctrl = canWrite
-                        ? `<select data-action="stage-category" data-node-id="${escapeHtml(n.id)}" style="padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
-                            ${categoryOptions(curCat)}
-                        </select>${subSel}`
-                        : `<span style="font-size:12px; color:${meta.color}; font-weight:700;">${escapeHtml(deviceTypeLabel(curCat))}</span>${curSub?` <span style="font-size:11px; color:var(--text-muted);">/ ${escapeHtml(curSub)}</span>`:''}`;
-                    return td(`<div style="display:flex; gap:6px; align-items:center;">${ctrl}</div>`);
-                }
-                default: return td('');
-            }
-        };
-
-        // Riga espansa con le unità fisiche dello stack (nascosta di default).
-        const stackRowHtml = (n) => {
-            if (!n.stack) return '';
+        let stack = '';
+        if (n.stack) {
             const members = n.stack.members || [];
-            const hdr = ['#', tr('topoRole'), tr('topoModel'), tr('topoSerial'), tr('topoState')];
-            // Gli input riempiono la colonna: la tabella unità occupa tutta la
-            // larghezza della riga espansa invece di stringersi a sinistra.
-            const inp = (i, field, val) => canAdmin
-                ? `<input data-stack-field="${field}" data-stack-idx="${i}" value="${attrEsc(val||'')}" style="width:100%; box-sizing:border-box; padding:3px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;">`
-                : `<span style="font-size:11px;">${escapeHtml(val || '—')}</span>`;
-            const body = members.map((m, i) => `<tr>
-                <td style="padding:3px 8px; font-size:11px; color:var(--text-muted);">${escapeHtml(String(m.index != null ? m.index : i + 1))}</td>
-                <td style="padding:3px 8px;">${inp(i, 'role', m.role)}</td>
-                <td style="padding:3px 8px;">${inp(i, 'model', m.model)}</td>
-                <td style="padding:3px 8px;">${inp(i, 'serial', m.serial)}</td>
-                <td style="padding:3px 8px; font-size:11px; white-space:nowrap; color:${m.state && m.state !== 'ready' ? 'var(--danger)' : 'var(--text-muted)'};">${escapeHtml(m.state || '—')}</td>
-            </tr>`).join('');
-            // Azioni accanto al titolo: sfruttano lo spazio orizzontale libero.
-            const actions = canAdmin ? `<div style="display:flex; gap:8px;">
-                <button data-action="save-stack-members" data-node-id="${escapeHtml(n.id)}" style="white-space:nowrap; font-size:11px; cursor:pointer; border:1px solid var(--success); color:var(--success); background:transparent; border-radius:0; padding:3px 10px;"><i class="fa-solid fa-floppy-disk"></i> ${tr('topoSaveStack')}</button>
-                <button data-action="remove-stack" data-node-id="${escapeHtml(n.id)}" style="white-space:nowrap; font-size:11px; cursor:pointer; border:1px solid var(--danger); color:var(--danger); background:transparent; border-radius:0; padding:3px 10px;"><i class="fa-solid fa-trash"></i> ${tr('topoRemoveStack')}</button>
-            </div>` : '';
-            // Larghezze: #, Ruolo, Modello, Serial, Stato.
-            const widths = ['36px', '18%', '32%', '30%', '90px'];
-            return `<tr class="stack-members" data-stack-for="${attrEsc(n.id)}" style="display:none;"><td colspan="${cols.length}" style="padding:10px 14px; background:var(--surface);">
-                <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:8px;">
-                    <div style="font-size:12px; font-weight:700; color:${STACK_COLOR};"><i class="fa-solid fa-layer-group"></i> ${escapeHtml(stackLine(n.stack, '', n.model))}</div>
-                    ${actions}
-                </div>
-                <table style="width:100%; table-layout:fixed;">
-                    <colgroup>${widths.map(w=>`<col style="width:${w};">`).join('')}</colgroup>
-                    <thead><tr>${hdr.map(h=>`<th style="padding:3px 8px; font-size:10px;">${h}</th>`).join('')}</tr></thead>
-                    <tbody>${body}</tbody>
-                </table>
-            </td></tr>`;
-        };
+            const cell = (i, f, v, label) => canAdmin
+                ? `<input class="ui-input" data-stack-field="${f}" data-stack-idx="${i}" value="${attrEsc(v || '')}" aria-label="${attrEsc(label + ' ' + (i + 1))}">`
+                : escapeHtml(v || '—');
+            stack = `<div class="cls-stack">
+                <div class="cls-sec-h">${escapeHtml(tr('clsStackUnits', { n: members.length }))}${n.stack.health === 'degraded'
+                    ? ` <span class="cls-bad">${escapeHtml(tr('topoDegradedStack'))}</span>` : ''}</div>
+                <table class="cls-stack-t" data-no-colpicker><thead><tr>
+                  <th data-no-sort="1">#</th><th data-no-sort="1">${escapeHtml(tr('topoRole'))}</th>
+                  <th data-no-sort="1">${escapeHtml(tr('topoModel'))}</th><th data-no-sort="1">${escapeHtml(tr('topoSerial'))}</th>
+                  <th data-no-sort="1">${escapeHtml(tr('topoState'))}</th></tr></thead><tbody>${members.map((m, i) => `<tr>
+                    <td>${escapeHtml(String(m.index != null ? m.index : i + 1))}</td>
+                    <td>${cell(i, 'role', m.role, tr('topoRole'))}</td>
+                    <td>${cell(i, 'model', m.model, tr('topoModel'))}</td>
+                    <td>${cell(i, 'serial', m.serial, tr('topoSerial'))}</td>
+                    <td class="${m.state && m.state !== 'ready' ? 'cls-bad' : ''}">${escapeHtml(m.state || '—')}</td></tr>`).join('')}</tbody></table>
+                ${canAdmin ? `<div class="cls-actions">
+                    <button type="button" class="btn btn-secondary btn-small" data-action="save-stack-members">${escapeHtml(tr('topoSaveStack'))}</button>
+                    <button type="button" class="btn btn-danger btn-small cls-isolate" data-action="remove-stack">${escapeHtml(tr('topoRemoveStack'))}</button>
+                  </div>` : ''}
+              </div>`;
+        }
 
-        const headHtml = cols.map(c => `<th style="padding:8px;">${colLabel(c)}</th>`).join('');
-        listBox.innerHTML = vendorDL + modelDLs + Object.keys(byGroup).sort().map(g => {
-            const rows = byGroup[g].map(n => `<tr data-node="${attrEsc(n.id)}" class="${pendingEdits[n.id]?'row-dirty':''}">${cols.map(c => cellHtml(c, n)).join('')}</tr>${stackRowHtml(n)}`).join("");
-            return `<div style="margin-bottom:18px;">
-                <h4 style="font-size:14px; margin-bottom:8px;"><i class="fa-solid fa-location-dot" style="color:var(--primary);"></i> ${escapeHtml(g)} <span style="color:var(--text-muted); font-weight:400;">(${byGroup[g].length})</span></h4>
-                <div class="table-wrap" style="margin-top:0;">
-                <table>
-                    <thead><tr>${headHtml}</tr></thead>
-                    <tbody>${rows}</tbody>
-                </table>
-                </div>
-            </div>`;
-        }).join("");
+        const canMark = canAdmin && !n.stack && !n.discovered && ['switch', 'router'].includes(n.device_type);
+        const vtp = [n.vtp_domain, n.vtp_mode].filter(Boolean).join(' · ');
+        const facts = `<dl class="cls-facts">
+            <dt>${escapeHtml(tr('clsVersion'))}</dt><dd>${escapeHtml(n.version || '—')}</dd>
+            ${n.serial ? `<dt>${escapeHtml(tr('topoSerial'))}</dt><dd>${escapeHtml(n.serial)}</dd>` : ''}
+            ${vtp ? `<dt>VTP</dt><dd>${escapeHtml(vtp)}</dd>` : ''}
+            <dt>${escapeHtml(tr('clsOrigin'))}</dt><dd>${escapeHtml(tr(n.is_manual ? 'clsOriginManual' : 'clsOriginAuto'))}</dd>
+          </dl>`;
+        const actions = [
+            (n.discovered && canWrite && n.display_ip)
+                ? `<button type="button" class="btn btn-secondary btn-small" data-action="promote-device" title="${attrEsc(tr('topoAddToManagedTriage'))}">
+                     <i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i> ${escapeHtml(tr('clsPromote'))}</button>` : '',
+            canMark ? `<button type="button" class="btn btn-secondary btn-small" data-action="mark-as-stack" title="${attrEsc(tr('topoDeclareThisDeviceAs'))}">
+                     <i class="fa-solid fa-layer-group" aria-hidden="true"></i> ${escapeHtml(tr('clsMarkStack'))}</button>` : '',
+        ].filter(Boolean).join('');
+
+        const foot = canWrite ? `<div class="cls-foot">
+              <button type="button" class="btn btn-primary btn-small" id="btnSaveCatEdits" data-action="cls-save">${
+                  escapeHtml(tr(clsToClassify(n) ? 'clsConfirm' : 'clsSave'))}</button>
+              <button type="button" class="btn btn-secondary btn-small" id="btnDiscardCatEdits" data-action="cls-undo">${escapeHtml(tr('clsUndo'))}</button>
+              <span class="cls-dirty">${escapeHtml(tr('clsUnsaved'))}</span>
+              <span class="cls-kbd" aria-hidden="true">↑ ↓</span>
+            </div>` : '';
+
+        box.innerHTML = `<div class="cls-insp-head">
+              <div class="cls-insp-title">${clsSwatch(n.device_type)}<span>${escapeHtml(n.label)}</span></div>
+              <div class="cls-insp-sub">${escapeHtml([n.display_ip || '—', n.group, tr(n.discovered ? 'clsDiscoveredVia' : 'clsManaged')].join(' · '))}</div>
+            </div>
+            <div class="cls-insp-body">${conflict}${fields}${stack}${facts}${actions ? `<div class="cls-actions">${actions}</div>` : ''}</div>
+            ${foot}`;
     }
+
+    function clsSetDirty(on) {
+        clsDirty = on;
+        document.querySelector('#clsInspector .cls-foot')?.classList.toggle('is-dirty', on);
+    }
+
+    // Leaving a device with unsaved edits asks first: the list is not a place
+    // to lose a half-typed model name silently.
+    function clsMayLeave() {
+        if (!clsDirty) return true;
+        const n = categoriesData.nodes.find(x => x.id === clsSelected);
+        return confirm(tr('clsDiscardConfirm', { name: n ? n.label : '' }));
+    }
+
+    function clsSelect(id, focusRow) {
+        if (id === clsSelected) return;
+        if (!clsMayLeave()) return;
+        clsSelected = id;
+        document.querySelectorAll('#categoriesDeviceList .cls-row').forEach(r =>
+            r.setAttribute('aria-current', String(r.getAttribute('data-node-id') === id)));
+        const row = /** @type {HTMLElement|null} */ (document.querySelector(
+            `#categoriesDeviceList .cls-row[data-node-id="${CSS.escape(id)}"]`));
+        row?.scrollIntoView({ block: 'nearest' });
+        if (focusRow) row?.focus();
+        renderClsInspector();
+    }
+
+    function clsMove(step) {
+        const ids = clsVisibleNodes().map(n => n.id);
+        if (!ids.length) return;
+        const i = ids.indexOf(clsSelected);
+        clsSelect(ids[Math.max(0, Math.min(ids.length - 1, i + step))], true);
+    }
+
+    // Save only what changed, for this one device. Confirming a queued device
+    // always sends the category: that is what turns "inferred" into "manual".
+    async function saveCategoryEdits() {
+        const n = categoriesData.nodes.find(x => x.id === clsSelected);
+        if (!n) return;
+        const box = document.getElementById('clsInspector');
+        const val = f => /** @type {HTMLInputElement|null} */ (box?.querySelector(`[data-field="${f}"]`))?.value.trim();
+        const was = { name: n.label, category: n.device_type, subcategory: n.subcategory || '',
+                      vendor: n.vendor && n.vendor !== 'discovered' ? n.vendor : '',
+                      model: n.model || '', ha_group: n.ha_group || '' };
+        const body = { node_id: n.id };
+        for (const f of Object.keys(was)) {
+            const v = val(f);
+            if (v !== undefined && v !== was[f]) body[f] = v;
+        }
+        // The category changed: the old subcategory belongs to another list.
+        if (body.category && val('subcategory') === undefined) body.subcategory = '';
+        if (clsToClassify(n)) body.category = val('category') || n.device_type;
+        // A new model is filed under its vendor's catalogue.
+        if (body.model && !body.vendor && was.vendor) body.vendor = was.vendor;
+        if (Object.keys(body).length === 1) { clsSetDirty(false); return; }
+
+        const nextInQueue = clsView === 'todo'
+            ? clsVisibleNodes().map(x => x.id).filter(id => id !== n.id)[0] : null;
+        const res = await apiFetch("/api/device-categories/assign", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+        });
+        if (!(res && res.ok)) { alert(tr('clsSaveFailed')); return; }
+        clsDirty = false;
+        if (nextInQueue) clsSelected = nextInQueue;
+        await loadCategoriesData();
+        showToast(tr('clsSaved', { name: body.name || n.label }));
+    }
+
+    function discardCategoryEdits() {
+        renderClsInspector();
+    }
+
+    async function clsPickName(btn) {
+        const n = categoriesData.nodes.find(x => x.id === clsSelected);
+        if (!n) return;
+        const res = await apiFetch("/api/device-categories/assign", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ node_id: n.id, name: btn.dataset.name, version: btn.dataset.ver || '' })
+        });
+        if (res && res.ok) loadCategoriesData();
+        else alert(tr('topoFailedToResolveConflict'));
+    }
+
+    document.getElementById('clsRail')?.addEventListener('click', (e) => {
+        const el = /** @type {HTMLElement} */ (e.target).closest('[data-action]');
+        if (!(el instanceof HTMLElement)) return;
+        const act = el.dataset.action;
+        if (act === 'cls-view') {
+            if (!clsMayLeave()) return;
+            clsDirty = false;
+            clsView = el.dataset.view || 'all';
+            clsViewChosen = true;
+            renderCategoriesPanel();
+        } else if (act === 'delete-category' && el.dataset.k) {
+            deleteCategory(el.dataset.k);
+        } else if (act === 'delete-subcategory' && el.dataset.k && el.dataset.s) {
+            deleteSubcategory(el.dataset.k, el.dataset.s);
+        }
+    });
 
     document.getElementById('categoriesDeviceList')?.addEventListener('click', (e) => {
-        const actEl = e.target.closest('[data-action]');
-        if (!actEl) return;
-        const act = actEl.dataset.action;
-        const nodeId = actEl.dataset.nodeId;
-        if (act === 'open-conflict-modal') openConflictModal(nodeId);
-        else if (act === 'toggle-stack-row') toggleStackRow(nodeId);
-        else if (act === 'promote-device') promoteDevice(nodeId);
-        else if (act === 'mark-as-stack') markAsStack(nodeId);
-        else if (act === 'save-stack-members') saveStackMembers(nodeId);
-        else if (act === 'remove-stack') removeStack(nodeId);
+        const row = /** @type {HTMLElement} */ (e.target).closest('[data-action="cls-select"]');
+        if (row instanceof HTMLElement && row.dataset.nodeId) clsSelect(row.dataset.nodeId, false);
     });
 
-    document.getElementById('categoriesDeviceList')?.addEventListener('change', (e) => {
-        const actEl = e.target.closest('[data-action]');
-        if (!actEl) return;
-        const act = actEl.dataset.action;
-        const nodeId = actEl.dataset.nodeId;
-        if (act === 'stage-edit-name') stageEdit(nodeId, 'name', actEl.value.trim());
-        else if (act === 'stage-edit-vendor') stageEdit(nodeId, 'vendor', actEl.value.trim());
-        else if (act === 'stage-model') stageModel(nodeId, actEl.value.trim());
-        else if (act === 'stage-edit-ha-group') stageEdit(nodeId, 'ha_group', actEl.value.trim());
-        else if (act === 'stage-edit-subcategory') stageEdit(nodeId, 'subcategory', actEl.value);
-        else if (act === 'stage-category') stageCategory(nodeId, actEl.value);
+    document.getElementById('clsInspector')?.addEventListener('click', (e) => {
+        const el = /** @type {HTMLElement} */ (e.target).closest('[data-action]');
+        if (!(el instanceof HTMLElement) || !clsSelected) return;
+        const act = el.dataset.action;
+        if (act === 'cls-save') saveCategoryEdits();
+        else if (act === 'cls-undo') discardCategoryEdits();
+        else if (act === 'cls-pick-name') clsPickName(el);
+        else if (act === 'promote-device') promoteDevice(clsSelected);
+        else if (act === 'mark-as-stack') markAsStack(clsSelected);
+        else if (act === 'save-stack-members') saveStackMembers(clsSelected);
+        else if (act === 'remove-stack') removeStack(clsSelected);
     });
 
-    // Cambio categoria: azzera la sottocategoria (cambiano le opzioni) e ridisegna
-    // così il menù sottocategoria si aggiorna alla nuova categoria.
-    function stageCategory(nodeId, category) {
-        pendingEdits[nodeId] = pendingEdits[nodeId] || {};
-        pendingEdits[nodeId].category = category;
-        pendingEdits[nodeId].subcategory = "";
-        updateSaveBar();
-        renderCategoriesPanel();
-    }
-    // Modello: registra anche il vendor effettivo, così alla salvataggio il modello
-    // viene catalogato sotto il vendor corretto.
-    function stageModel(nodeId, model) {
-        const n = categoriesData.nodes.find(x => x.id === nodeId);
-        pendingEdits[nodeId] = pendingEdits[nodeId] || {};
-        pendingEdits[nodeId].model = model;
-        const v = effVal(n, 'vendor');
-        if (v && v !== 'discovered') pendingEdits[nodeId].vendor = v;
-        const row = document.querySelector(`tr[data-node="${nodeId}"]`);
-        if (row) row.classList.add('row-dirty');
-        updateSaveBar();
-    }
+    document.getElementById('clsInspector')?.addEventListener('input', (e) => {
+        if (/** @type {HTMLElement} */ (e.target).closest('[data-field]')) clsSetDirty(true);
+    });
+    // Another category has other subcategories: redraw that select only, so
+    // what was typed in the other fields stays.
+    document.getElementById('clsInspector')?.addEventListener('change', (e) => {
+        const t = e.target;
+        if (!(t instanceof HTMLSelectElement) || t.dataset.field !== 'category') return;
+        clsSetDirty(true);
+        const subs = (categoriesData.categories[t.value] && categoriesData.categories[t.value].subcategories) || [];
+        const html = subs.length ? clsSubSelect(subs, '') : '';
+        const holder = document.getElementById('clsFSub')?.closest('.cls-field');
+        if (holder) holder.outerHTML = html;
+        else if (html) t.closest('.cls-two')?.insertAdjacentHTML('beforeend', html);
+    });
 
-    async function saveCategoryEdits() {
-        const ids = Object.keys(pendingEdits);
-        if (!ids.length) return;
-        let failed = 0;
-        for (const id of ids) {
-            const res = await apiFetch("/api/device-categories/assign", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(Object.assign({ node_id: id }, pendingEdits[id]))
-            });
-            if (!(res && res.ok)) failed++;
+    document.getElementById('clsSearch')?.addEventListener('input', () => {
+        const visible = clsVisibleNodes();
+        if (!visible.some(n => n.id === clsSelected) && !clsDirty) {
+            clsSelected = visible.length ? visible[0].id : null;
+            renderClsInspector();
         }
-        pendingEdits = {};
-        if (failed) alert((tr('topoSomeChangesFailed')) + failed);
-        await loadCategoriesData();
-        updateSaveBar();
-    }
-    function discardCategoryEdits() {
-        pendingEdits = {};
-        renderCategoriesPanel();
-        updateSaveBar();
-    }
+        renderClsList(visible);
+    });
+
+    // Up/down walk the list while the tab is open and focus is not in a field:
+    // working through the queue should not need the mouse.
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        const tab = document.getElementById('tab-categories');
+        if (!tab || !tab.classList.contains('active')) return;
+        const a = document.activeElement;
+        if (a && (a.matches('input, select, textarea') || a.closest('.modal, details[open]'))) return;
+        e.preventDefault();
+        clsMove(e.key === 'ArrowDown' ? 1 : -1);
+    });
 
     // ===== Gestione stack (tab Dispositivi) =====
     // I gruppi vivono in redundancy.db via /api/redundancy/groups (admin-only).
     // Salvare a mano marca il gruppo 'manual': il rilevamento CLI non lo tocca più.
-    function toggleStackRow(nodeId) {
-        const row = document.querySelector(`tr.stack-members[data-stack-for="${CSS.escape(nodeId)}"]`);
-        if (!row) return;
-        const open = row.style.display === 'none';
-        row.style.display = open ? '' : 'none';
-        const chev = document.getElementById(`stackChev_${nodeId}`);
-        if (chev) chev.className = `fa-solid fa-chevron-${open ? 'down' : 'right'}`;
-    }
-
     async function saveStackGroup(n, members, groupId) {
         const res = await apiFetch(groupId ? `/api/redundancy/groups/${groupId}` : '/api/redundancy/groups', {
             method: groupId ? 'PUT' : 'POST',
@@ -3106,11 +3125,11 @@
 
     async function saveStackMembers(nodeId) {
         const n = categoriesData.nodes.find(x => x.id === nodeId);
-        if (!n || !n.stack) return;
-        const row = document.querySelector(`tr.stack-members[data-stack-for="${CSS.escape(nodeId)}"]`);
-        if (!row) return;
+        const box = document.getElementById('clsInspector');
+        if (!n || !n.stack || !box) return;
         const members = (n.stack.members || []).map((m, i) => {
-            const get = (f) => row.querySelector(`[data-stack-field="${f}"][data-stack-idx="${i}"]`)?.value.trim();
+            const get = (f) => /** @type {HTMLInputElement|null} */ (
+                box.querySelector(`[data-stack-field="${f}"][data-stack-idx="${i}"]`))?.value.trim();
             return {
                 role: get('role') || m.role || 'member',
                 model: get('model') || null,
@@ -3147,7 +3166,7 @@
     async function promoteDevice(nodeId) {
         const n = categoriesData.nodes.find(x => x.id === nodeId);
         if (!n || !n.display_ip) { alert(tr('topoNoAnnouncedIpAvailable')); return; }
-        const vendor = (effVal(n,'vendor') && effVal(n,'vendor') !== 'discovered') ? effVal(n,'vendor') : 'cisco';
+        const vendor = (n.vendor && n.vendor !== 'discovered') ? n.vendor : 'cisco';
         const msg = tr('topoPromoteToManagedIn', {label: n.label, display_ip: n.display_ip, group: n.group});
         if (!confirm(msg)) return;
         const res = await apiFetch("/api/promote-device", {
@@ -3156,15 +3175,14 @@
             body: JSON.stringify({
                 node_id: nodeId, ip: n.display_ip, vendor, group: n.group,
                 // Eredita ciò che è già stato scoperto via CDP/LLDP, incluso il
-                // nome eventualmente rinominato (staged o salvato).
-                model: effVal(n,'model') || '',
+                // nome eventualmente rinominato.
+                model: n.model || '',
                 version: n.version || '',
                 device_type: n.device_type || '',
-                hostname: (effVal(n,'name') || n.label || '')
+                hostname: n.label || ''
             })
         });
         if (res && res.ok) {
-            delete pendingEdits[nodeId];
             await loadCategoriesData();
             // Aggiorna la cache inventario così il nuovo gestito appare nel triage.
             try {
@@ -3178,61 +3196,6 @@
             const e = res ? await res.json().catch(()=>({})) : {};
             alert(e.detail || (tr('topoPromotionFailed')));
         }
-    }
-
-    // ===== Risoluzione conflitti CDP/LLDP (stesso device, nomi diversi) =====
-    function closeConflictModal() {
-        const m = document.getElementById('conflictModal');
-        if (m) m.remove();
-    }
-    function openConflictModal(nodeId) {
-        const n = categoriesData.nodes.find(x => x.id === nodeId);
-        if (!n || !n.name_options || n.name_options.length < 2) return;
-        const cur = n.label;
-        const rows = n.name_options.map(o => `
-            <label style="display:flex; gap:10px; align-items:center; padding:9px 10px; border:1px solid var(--border); border-radius:0; margin-bottom:6px; cursor:pointer;">
-                <input type="radio" name="confName" value="${attrEsc(o.name)}" data-ver="${attrEsc(o.version||'')}" ${o.name===cur?'checked':''} style="accent-color:var(--primary);">
-                <span style="font-weight:700;">${escapeHtml(o.name)}</span>
-                <span style="margin-left:auto; font-family:var(--font-code); font-size:12px; color:var(--text-muted);">${o.version?escapeHtml(o.version):'—'}</span>
-            </label>`).join('');
-        const ov = document.createElement('div');
-        ov.id = 'conflictModal';
-        ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:color-mix(in srgb, var(--bg) 82%, transparent); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
-        ov.innerHTML = `
-            <div style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:22px; width:min(480px,92vw); box-shadow:var(--shadow-float);">
-                <h3 style="font-size:17px; margin-bottom:6px;"><i class="fa-solid fa-code-branch" style="color:var(--warning);"></i> ${tr('topoResolveCdpLldpConflict')}</h3>
-                <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">${tr('topoTheSameDeviceWas')}</p>
-                ${rows}
-                <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px;">
-                    <button data-action="close-conflict-modal" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${tr('uiCancel')}</button>
-                    <button data-action="confirm-conflict" data-node-id="${escapeHtml(nodeId)}" class="btn btn-primary btn-small" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);">${tr('topoApply')}</button>
-                </div>
-            </div>`;
-        ov.addEventListener('click', e => {
-            if (e.target === ov || e.target.closest('[data-action="close-conflict-modal"]')) {
-                closeConflictModal();
-                return;
-            }
-            const confBtn = e.target.closest('[data-action="confirm-conflict"]');
-            if (confBtn && confBtn.dataset.nodeId) {
-                confirmConflict(confBtn.dataset.nodeId);
-            }
-        });
-        document.body.appendChild(ov);
-    }
-    async function confirmConflict(nodeId) {
-        const sel = document.querySelector('#conflictModal input[name="confName"]:checked');
-        if (!sel) { closeConflictModal(); return; }
-        const name = sel.value;
-        const version = sel.getAttribute('data-ver') || '';
-        closeConflictModal();
-        const res = await apiFetch("/api/device-categories/assign", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ node_id: nodeId, name, version })
-        });
-        if (res && res.ok) loadCategoriesData();
-        else alert(tr('topoFailedToResolveConflict'));
     }
 
     async function createCategory() {
@@ -3647,9 +3610,6 @@
     document.getElementById('btnExportPdfMap')?.addEventListener('click', exportPdfMap);
     document.getElementById('legendToggleBtn')?.addEventListener('click', toggleLegend);
     document.getElementById('categoriesGroupSelect')?.addEventListener('change', renderCategoriesPanel);
-    document.getElementById('categoriesCatFilter')?.addEventListener('change', renderCategoriesPanel);
-    document.getElementById('btnSaveCatEdits')?.addEventListener('click', saveCategoryEdits);
-    document.getElementById('btnDiscardCatEdits')?.addEventListener('click', discardCategoryEdits);
     document.getElementById('btnRefreshCategories')?.addEventListener('click', loadCategoriesData);
     document.getElementById('btnCreateCategory')?.addEventListener('click', createCategory);
 

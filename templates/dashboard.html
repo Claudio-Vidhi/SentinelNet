@@ -1224,69 +1224,57 @@
       <div class="page-head">
         <div class="page-head-text">
           <h2 data-i18n="titleCategories">Dispositivi Scoperti &amp; Classificazione</h2>
-          <p data-i18n="descCategories">Conteggio per categoria dei dispositivi inventariati e scoperti via CDP/LLDP. Operatori e amministratori possono riclassificare manualmente i dispositivi e creare nuove categorie/sottocategorie.</p>
+          <p data-i18n="descCategories">Inventariati e scoperti via CDP/LLDP, per categoria. Scegli una coda o una categoria a sinistra, un dispositivo al centro, e correggilo a destra.</p>
         </div>
-      </div>
-
-      <div class="panel" style="margin-bottom:18px;">
-        <div class="filterbar" style="display:flex; justify-content:space-between; align-items:center; margin-top:0; flex-wrap:wrap; gap:12px;">
-          <div style="display:flex; align-items:center; gap: 12px; flex-wrap:wrap;">
-            <select id="categoriesGroupSelect" aria-label="Tenant delle categorie" data-i18n-aria-label="ariaCategoriesTenant">
-              <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
-            </select>
-            <select id="categoriesCatFilter" aria-label="Filtra per categoria" data-i18n-aria-label="ariaCategoriesFilter">
-              <option value="all" data-i18n="optCatAll">Tutte le categorie</option>
-            </select>
-          </div>
-          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <button class="btn btn-primary btn-small requires-write" id="btnSaveCatEdits" disabled style="width:auto; margin:0; opacity:0.5;" data-i18n="btnSaveEdits">
-              <i class="fa-solid fa-floppy-disk"></i> Salva Modifiche
-            </button>
-            <button class="btn btn-secondary btn-small requires-write" id="btnDiscardCatEdits" disabled style="width:auto; margin:0; opacity:0.5;" data-i18n="btnDiscardEdits">
-              <i class="fa-solid fa-rotate-left"></i> Annulla
-            </button>
-            <details id="categoryColumnsMenu" style="position:relative;">
-              <summary class="btn btn-secondary btn-small" style="width:auto; margin:0; list-style:none; cursor:pointer;"><i class="fa-solid fa-table-columns"></i> <span data-i18n="btnColumns">Colonne</span></summary>
-              <div id="categoryColumnsList" style="position:absolute; right:0; top:110%; z-index:50; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px; min-width:170px; box-shadow:var(--shadow-float);"></div>
-            </details>
-            <button class="btn btn-secondary btn-small" id="btnExportClassification" style="width:auto; margin:0;" data-i18n="btnExportCsv">
-              <i class="fa-solid fa-file-csv"></i> Esporta CSV
-            </button>
-            <button class="btn btn-secondary btn-small" id="btnRefreshCategories" style="width:auto; margin:0;" data-i18n="btnRefreshCategories">
-              <i class="fa-solid fa-arrows-rotate"></i> Aggiorna
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Riquadri di conteggio per categoria -->
-      <div class="panel" style="margin-bottom:18px;">
-        <div id="categoryCountCards"></div>
-      </div>
-
-      <!-- Creazione nuova categoria / sottocategoria (admin/operator) -->
-      <div class="panel requires-write" style="margin-bottom:18px;">
-        <h4 style="font-size: 14px; margin-bottom: 12px;"><i class="fa-solid fa-folder-plus" style="color: var(--primary);"></i> <span data-i18n="titleNewCategory">Nuova Categoria / Sottocategoria</span></h4>
-        <div class="cat-add-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) auto; gap: 10px; align-items:end;">
-          <div>
-            <label for="newCatKey" style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblNewCatExisting">Categoria esistente (o nuova)</label><input id="newCatKey" class="ui-input" list="catKeyList" type="text" placeholder="es. iot, ups, nas" data-i18n-placeholder="phNewCatKey">
-            <datalist id="catKeyList"></datalist>
-          </div>
-          <div>
-            <label for="newCatLabel" style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblNewCatLabel">Etichetta (solo nuova categoria)</label><input id="newCatLabel" class="ui-input" type="text" placeholder="es. Dispositivi IoT" data-i18n-placeholder="phNewCatLabel">
-          </div>
-          <div>
-            <label for="newSubcat" style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblNewSubcat">Sottocategoria (opzionale)</label><input id="newSubcat" class="ui-input" type="text" placeholder="es. videosorveglianza" data-i18n-placeholder="phNewSubcat">
-          </div>
-          <button class="btn btn-primary btn-small" id="btnCreateCategory" style="width:auto; margin:0;" data-i18n="btnCreateCategory">
-            <i class="fa-solid fa-plus"></i> Crea
+        <div class="page-head-actions">
+          <select id="categoriesGroupSelect" class="cls-tenant" aria-label="Tenant delle categorie" data-i18n-aria-label="ariaCategoriesTenant">
+            <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
+          </select>
+          <button class="btn btn-secondary btn-small" id="btnExportClassification" data-i18n="btnExportCsv">
+            <i class="fa-solid fa-file-csv"></i> Esporta CSV
+          </button>
+          <button class="btn btn-secondary btn-small" id="btnRefreshCategories" data-i18n="btnRefreshCategories">
+            <i class="fa-solid fa-arrows-rotate"></i> Aggiorna
           </button>
         </div>
       </div>
 
-      <!-- Lista dispositivi raggruppati per sede -->
-      <div class="panel">
-        <div id="categoriesDeviceList"></div>
+      <!-- Rail (queues + category tree) | read-only list | inspector of the
+           selected device. Edits happen in the inspector only, one device at
+           a time. -->
+      <div class="panel cls-shell">
+        <nav class="cls-rail" aria-label="Code e categorie" data-i18n-aria-label="clsRailAria">
+          <div id="clsRail"></div>
+          <details class="cls-add requires-write" id="clsAddCat">
+            <summary><i class="fa-solid fa-plus" aria-hidden="true"></i> <span data-i18n="clsNewCategory">nuova categoria</span></summary>
+            <div class="cls-add-form">
+              <label for="newCatKey" data-i18n="lblNewCatExisting">Categoria esistente (o nuova)</label>
+              <input id="newCatKey" class="ui-input" list="catKeyList" type="text" placeholder="es. iot, ups, nas" data-i18n-placeholder="phNewCatKey">
+              <datalist id="catKeyList"></datalist>
+              <label for="newCatLabel" data-i18n="lblNewCatLabel">Etichetta (solo nuova categoria)</label>
+              <input id="newCatLabel" class="ui-input" type="text" placeholder="es. Dispositivi IoT" data-i18n-placeholder="phNewCatLabel">
+              <label for="newSubcat" data-i18n="lblNewSubcat">Sottocategoria (opzionale)</label>
+              <input id="newSubcat" class="ui-input" type="text" placeholder="es. videosorveglianza" data-i18n-placeholder="phNewSubcat">
+              <button class="btn btn-secondary btn-small" id="btnCreateCategory" data-i18n="btnCreateCategory">
+                <i class="fa-solid fa-plus"></i> Crea
+              </button>
+            </div>
+          </details>
+        </nav>
+
+        <section class="cls-list">
+          <div class="cls-top">
+            <h3 id="clsListTitle"></h3>
+            <span id="clsListCount" class="cls-count"></span>
+            <input type="search" id="clsSearch" class="ui-input" placeholder="Cerca nome, IP, modello"
+                   data-i18n-placeholder="clsSearch" aria-label="Cerca nome, IP, modello"
+                   data-i18n-aria-label="clsSearch" autocomplete="off" spellcheck="false">
+          </div>
+          <p id="clsHint" class="cls-hint" hidden data-i18n="clsHintQueue">Scoperti via CDP/LLDP con una categoria solo dedotta. Conferma o correggi a destra; con le frecce su e giu' passi al successivo.</p>
+          <div id="categoriesDeviceList" class="cls-rows" aria-label="Dispositivi" data-i18n-aria-label="clsListAria"></div>
+        </section>
+
+        <section id="clsInspector" class="cls-insp" aria-label="Dettaglio dispositivo" data-i18n-aria-label="clsInspAria"></section>
       </div>
     </div>
 
@@ -1497,111 +1485,114 @@
         <span><span data-i18n="macKpiRetentionLabel">Retention (giorni)</span> <b id="kpiMacRetention">&mdash;</b></span>
       </div>
 
-      <!-- MAC e ARP sono due meta' della stessa raccolta: si lanciano insieme,
-           si leggono insieme. Due pannelli separati li facevano sembrare due
-           funzioni distinte, con la seconda quasi invisibile sotto la prima. -->
-      <div class="panel" style="margin-bottom:18px;">
-        <h3 style="margin:0 0 10px; font-size:17px;" data-i18n="titleMacScanPanel">Scansione MAC</h3>
-        <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
-          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <details id="macDeviceMenu" style="position:relative;">
-              <summary style="list-style:none; cursor:pointer; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; display:inline-flex; align-items:center; gap:6px;">
-                <i class="fa-solid fa-list-check" style="color:var(--text-muted);"></i>
+      <!-- One console: search on top (the daily job), collection underneath
+           (MAC scan, ARP from the L3 gateways, retention, ad-hoc commands).
+           Three stacked panels with their own header strips spent a screen
+           of height on four rows of controls. -->
+      <div class="panel mac-console" style="margin-bottom:18px;">
+        <div class="mac-row mac-search">
+          <span class="mac-legend" data-i18n="titleMacSearchPanel">Cerca MAC</span>
+          <div class="mac-field">
+            <label for="macSearchMac" data-i18n="lblMacSearch">MAC (anche parziale / OUI)</label><input id="macSearchMac" class="ui-input" type="text" placeholder="aa:bb:cc / aabb.ccdd.eeff" style="width:210px;">
+          </div>
+          <div class="mac-field">
+            <label for="macSearchVlan" data-i18n="lblMacVlan">VLAN</label><input id="macSearchVlan" class="ui-input" type="text" placeholder="10" style="width:76px;">
+          </div>
+          <div class="mac-field">
+            <label for="macSearchIface" data-i18n="lblMacIface">Interfaccia / Port-channel</label><input id="macSearchIface" class="ui-input" type="text" placeholder="Gi1/0/5, Po1" style="width:160px;">
+          </div>
+          <div class="mac-field">
+            <label for="macSearchSwitch" data-i18n="lblMacSwitch">Switch (IP)</label><select id="macSearchSwitch" class="ui-input" style="width:200px;"></select>
+          </div>
+          <button class="btn btn-primary btn-small" id="btnMacSearch" data-i18n="btnMacSearchGo">
+            <i class="fa-solid fa-magnifying-glass"></i> Cerca
+          </button>
+          <button class="btn btn-secondary btn-small" id="btnMacSearchReset" data-i18n="btnMacReset">
+            <i class="fa-solid fa-rotate-left"></i> Reset
+          </button>
+        </div>
+
+        <!-- MAC and ARP are two halves of the same collection: they sit on one
+             row, each with its own device picker. -->
+        <div class="mac-row mac-collect">
+          <div class="mac-group">
+            <span class="mac-legend" data-i18n="titleMacScanPanel">Scansione MAC</span>
+            <details id="macDeviceMenu" class="mac-dev-menu">
+              <summary>
+                <i class="fa-solid fa-list-check" aria-hidden="true"></i>
                 <span id="macDeviceSummary" data-i18n="optMacAllDevices">Tutti i dispositivi</span>
-                <i class="fa-solid fa-chevron-down" style="font-size:10px; color:var(--text-muted);"></i>
+                <i class="fa-solid fa-chevron-down mac-caret" aria-hidden="true"></i>
               </summary>
-              <div id="macDeviceList" style="position:absolute; top:110%; left:0; z-index:60; min-width:250px; max-height:300px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:8px; box-shadow:var(--shadow-float);"></div>
+              <div id="macDeviceList" class="mac-dev-list"></div>
             </details>
-            <select id="macScanTransport" title="" aria-label="Trasporto per la raccolta MAC" data-i18n-aria-label="ariaMacTransport">
+            <select id="macScanTransport" class="mac-transport" title="" aria-label="Trasporto per la raccolta MAC" data-i18n-aria-label="ariaMacTransport">
               <option value="" data-i18n="optMacTransportAuto">Trasporto: Auto</option>
               <option value="netconf">NETCONF</option>
               <option value="restconf">RESTCONF</option>
               <option value="cli">CLI</option>
             </select>
-          </div>
-          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <button class="btn btn-primary btn-small requires-write" id="btnMacScan" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);" data-i18n="btnMacScan">
+            <button class="btn btn-secondary btn-small requires-write" id="btnMacScan" data-i18n="btnMacScan">
               <i class="fa-solid fa-satellite-dish"></i> Avvia MAC Scan
             </button>
-            <div class="requires-admin" style="display:flex; align-items:center; gap:6px;">
-              <label for="macRetentionDays" style="font-size:12px; color:var(--text-muted);" data-i18n="lblMacRetention">Retention (giorni):</label><input id="macRetentionDays" type="number" min="1" max="3650" style="width:70px; padding:5px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
-              <button class="btn btn-secondary btn-small" id="btnSaveMacRetention" style="width:auto; margin:0;" data-i18n="btnSave">Salva</button>
-            </div>
           </div>
-        </div>
 
-        <!-- Raccolta ARP L3: stessa scheda, riga separata da un filetto. -->
-        <h3 style="margin:18px 0 10px; padding-top:16px; border-top:1px solid var(--border); font-size:17px;" data-i18n="titleArpCollectPanel">Raccolta ARP (gateway L3)</h3>
-        <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
-          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <details id="arpDeviceMenu" style="position:relative;">
-              <summary style="list-style:none; cursor:pointer; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; display:inline-flex; align-items:center; gap:6px;">
-                <i class="fa-solid fa-list-check" style="color:var(--text-muted);"></i>
+          <div class="mac-group">
+            <span class="mac-legend" data-i18n="titleArpCollectPanel">Raccolta ARP (gateway L3)</span>
+            <details id="arpDeviceMenu" class="mac-dev-menu">
+              <summary>
+                <i class="fa-solid fa-list-check" aria-hidden="true"></i>
                 <span id="arpDeviceSummary" data-i18n="optMacAllDevices">Tutti i dispositivi</span>
-                <i class="fa-solid fa-chevron-down" style="font-size:10px; color:var(--text-muted);"></i>
+                <i class="fa-solid fa-chevron-down mac-caret" aria-hidden="true"></i>
               </summary>
-              <div id="arpDeviceList" style="position:absolute; top:110%; left:0; z-index:60; min-width:250px; max-height:300px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:8px; box-shadow:var(--shadow-float);"></div>
+              <div id="arpDeviceList" class="mac-dev-list"></div>
             </details>
+            <button class="btn btn-secondary btn-small requires-write" id="btnArpScan" data-i18n="btnArpScan">
+              <i class="fa-solid fa-satellite-dish"></i> Raccogli ARP (gateway L3)
+            </button>
           </div>
-          <button class="btn btn-primary btn-small requires-write" id="btnArpScan" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);" data-i18n="btnArpScan">
-            <i class="fa-solid fa-satellite-dish"></i> Raccogli ARP (gateway L3)
-          </button>
-        </div>
-        <div id="arpScanSummary" style="display:none; margin-top:14px; font-size:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:12px;"></div>
-      </div>
 
-      <!-- Comandi ad-hoc per apparati non ordinari (es. C8000V bridge-domain) -->
-      <details class="panel requires-write" style="margin-bottom:18px; padding:0; overflow:hidden;">
-        <summary style="cursor:pointer; padding:14px 18px; font-weight:700; list-style:none;">
-          <i class="fa-solid fa-terminal" style="margin-right:6px;"></i>
-          <span data-i18n="titleMacAdhoc">Comandi ad-hoc (apparati non standard)</span>
-        </summary>
-        <div style="padding:0 18px 18px; border-top:1px solid var(--border); padding-top:14px;">
-          <p style="font-size:12px; color:var(--text-muted); margin-bottom:10px;" data-i18n="descMacAdhoc">
-            Per apparati dove la MAC-table non si legge in modo standard (es. Catalyst 8000V con bridge-domain: i MAC stanno in "show bridge-domain"), definisci un comando CLI dedicato e il formato di parsing. Verrà usato al posto di "show mac address-table" per quell'apparato.
-          </p>
-          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
-            <div>
-              <label for="macOvDevice" style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacSwitch">Switch (IP)</label><select id="macOvDevice" class="ui-input" style="width:220px;"></select>
-            </div>
-            <div>
-              <label for="macOvCommand" style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacAdhocCmd">Comando CLI</label><input id="macOvCommand" class="ui-input" type="text" placeholder="show bridge-domain" style="width:220px;">
-            </div>
-            <div>
-              <label for="macOvFmt" style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacAdhocFmt">Formato</label><select id="macOvFmt" class="ui-input">
-                <option value="bridge-domain">bridge-domain</option>
-                <option value="mac-address-table">mac-address-table</option>
-                <option value="generic" data-i18n="optMacFmtGeneric">generico</option>
-              </select>
-            </div>
-            <button class="btn btn-primary btn-small" id="btnSaveMacOverride" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);" data-i18n="btnSave">Salva</button>
-          </div>
-          <div id="macOverridesList" style="margin-top:12px;"></div>
         </div>
-      </details>
 
-      <div class="panel" style="margin-bottom:18px;">
-        <h3 style="margin:0 0 10px; font-size:17px;" data-i18n="titleMacSearchPanel">Cerca MAC</h3>
-        <div class="filterbar" style="align-items:flex-end; margin-top:0;">
-          <div>
-            <label for="macSearchMac" style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacSearch">MAC (anche parziale / OUI)</label><input id="macSearchMac" class="ui-input" type="text" placeholder="aa:bb:cc / aabb.ccdd.eeff" style="width:200px;">
+        <!-- Footer row: the rarely used settings, ad-hoc commands on the left
+             and retention on the right. -->
+        <div class="mac-row mac-foot">
+        <!-- Comandi ad-hoc per apparati non ordinari (es. C8000V bridge-domain) -->
+        <details class="requires-write mac-adhoc">
+          <summary>
+            <i class="fa-solid fa-terminal" aria-hidden="true"></i>
+            <span data-i18n="titleMacAdhoc">Comandi ad-hoc (apparati non standard)</span>
+            <i class="fa-solid fa-chevron-down mac-caret" aria-hidden="true"></i>
+          </summary>
+          <div class="mac-adhoc-body">
+            <p data-i18n="descMacAdhoc">
+              Per apparati dove la MAC-table non si legge in modo standard (es. Catalyst 8000V con bridge-domain: i MAC stanno in "show bridge-domain"), definisci un comando CLI dedicato e il formato di parsing. Verrà usato al posto di "show mac address-table" per quell'apparato.
+            </p>
+            <div class="mac-row">
+              <div class="mac-field">
+                <label for="macOvDevice" data-i18n="lblMacSwitch">Switch (IP)</label><select id="macOvDevice" class="ui-input" style="width:220px;"></select>
+              </div>
+              <div class="mac-field">
+                <label for="macOvCommand" data-i18n="lblMacAdhocCmd">Comando CLI</label><input id="macOvCommand" class="ui-input" type="text" placeholder="show bridge-domain" style="width:220px;">
+              </div>
+              <div class="mac-field">
+                <label for="macOvFmt" data-i18n="lblMacAdhocFmt">Formato</label><select id="macOvFmt" class="ui-input">
+                  <option value="bridge-domain">bridge-domain</option>
+                  <option value="mac-address-table">mac-address-table</option>
+                  <option value="generic" data-i18n="optMacFmtGeneric">generico</option>
+                </select>
+              </div>
+              <button class="btn btn-secondary btn-small" id="btnSaveMacOverride" data-i18n="btnSave">Salva</button>
+            </div>
+            <div id="macOverridesList" style="margin-top:12px;"></div>
           </div>
-          <div>
-            <label for="macSearchVlan" style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacVlan">VLAN</label><input id="macSearchVlan" class="ui-input" type="text" placeholder="10" style="width:80px;">
+        </details>
+          <div class="requires-admin mac-retention">
+            <label for="macRetentionDays" data-i18n="lblMacRetention">Retention (giorni):</label><input id="macRetentionDays" class="ui-input" type="number" min="1" max="3650">
+            <button class="btn btn-secondary btn-small" id="btnSaveMacRetention" data-i18n="btnSave">Salva</button>
           </div>
-          <div>
-            <label for="macSearchIface" style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacIface">Interfaccia / Port-channel</label><input id="macSearchIface" class="ui-input" type="text" placeholder="Gi1/0/5, Po1" style="width:160px;">
-          </div>
-          <div>
-            <label for="macSearchSwitch" style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacSwitch">Switch (IP)</label><select id="macSearchSwitch" class="ui-input" style="width:200px;"></select>
-          </div>
-          <button class="btn btn-primary btn-small" id="btnMacSearch" style="width:auto; margin:0;" data-i18n="btnMacSearchGo">
-            <i class="fa-solid fa-magnifying-glass"></i> Cerca
-          </button>
-          <button class="btn btn-secondary btn-small" id="btnMacSearchReset" style="width:auto; margin:0;" data-i18n="btnMacReset">
-            <i class="fa-solid fa-rotate-left"></i> Reset
-          </button>
         </div>
+
+        <div id="arpScanSummary" style="display:none; margin-top:12px; font-size:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:12px;"></div>
       </div>
 
       <!-- Risultati raggruppati per switch: clic sull'host per espandere i MAC -->
@@ -4465,18 +4456,21 @@
   </div> <!-- End #tab-netsec-audit -->
 
   <!-- TAB: ROUTING TABLES -->
+  <!-- Config Analyzer legge l'intento (le statiche nel backup, un apparato).
+       Qui c'e' la RIB viva di piu' apparati: la domanda e' "chi ha una rotta
+       verso questa rete, e gli altri?", quindi la vista e' una matrice. -->
   <div id="tab-routes" class="tab-content" role="tabpanel" tabindex="0">
     <div class="hero" style="margin-bottom:18px;">
       <div class="hero-card" style="flex:1;">
         <h2 data-i18n="rtTitle">Tabelle di Routing</h2>
-        <p data-i18n="rtDesc">Le tabelle di routing degli apparati che le pubblicano, in una sola vista raggruppata per apparato e tipo di rotta. Sola lettura: nessuna modifica viene scritta.</p>
+        <p data-i18n="rtDesc">Le tabelle di routing di piu' apparati a confronto: un prefisso per riga, un apparato per colonna. Scrivi un indirizzo per vedere quale rotta lo prende su ciascuno. Sola lettura.</p>
       </div>
     </div>
 
-    <div class="panel" style="margin-bottom:18px;">
-      <div class="filterbar" style="align-items:flex-end; gap:14px; flex-wrap:wrap;">
-        <div class="form-group" style="margin-bottom:0; min-width:240px;">
-          <span class="picker-label" id="rtDeviceFilterLabel" data-i18n="rtFilterDevice">Apparato</span>
+    <div class="panel rt-board" style="margin-bottom:18px;">
+      <div class="rt-controls">
+        <div class="form-group rt-ctl-devices">
+          <span class="picker-label" id="rtDeviceFilterLabel" data-i18n="rtFilterDevice">Apparati</span>
           <details class="picker" id="rtDeviceFilter">
             <summary class="picker-summary" aria-labelledby="rtDeviceFilterLabel">
               <span class="picker-value"></span>
@@ -4494,27 +4488,16 @@
             </div>
           </details>
         </div>
-        <div class="form-group" style="margin-bottom:0; min-width:180px;">
-          <label for="rtTypeFilter" data-i18n="rtFilterType">Tipo rotta</label>
-          <select id="rtTypeFilter">
-            <option value="" data-i18n="rtTypeAll">Tutti</option>
-            <option value="connected" data-i18n="rtTypeConnected">Connected</option>
-            <option value="local" data-i18n="rtTypeLocal">Local</option>
-            <option value="static" data-i18n="rtTypeStatic">Statica</option>
-            <option value="ospf">OSPF</option>
-            <option value="bgp">BGP</option>
-            <option value="eigrp">EIGRP</option>
-            <option value="rip">RIP</option>
-            <option value="other" data-i18n="rtTypeOther">Altro</option>
-          </select>
+        <button id="btnRtRefresh" class="btn btn-primary rt-ctl-load">
+          <i class="fa-solid fa-download" aria-hidden="true"></i> <span data-i18n="rtRefresh">Leggi tabelle</span>
+        </button>
+        <div class="form-group rt-ctl-query">
+          <label for="rtSearch" data-i18n="rtFilterSearch">Indirizzo, prefisso o testo</label>
+          <input type="search" id="rtSearch" placeholder="es. 10.30.0.7 oppure 10.0.0.0/16"
+                 data-i18n-placeholder="rtSearchPl" autocomplete="off" spellcheck="false">
         </div>
-        <div class="form-group" style="margin-bottom:0; flex:1; min-width:220px;">
-          <label for="rtSearch" data-i18n="rtFilterSearch">Cerca rete, next-hop o interfaccia</label>
-          <input type="text" id="rtSearch" placeholder="es. 10.0.0.0/16"
-                 data-i18n-placeholder="rtSearchPl">
-        </div>
-        <button id="btnRtRefresh" class="btn btn-secondary" style="width:auto; margin:0;">
-          <i class="fa-solid fa-rotate"></i> <span data-i18n="rtRefresh">Aggiorna</span>
+        <button type="button" id="btnRtDiffOnly" class="chip-choice rt-ctl-diff" aria-pressed="false">
+          <span data-i18n="rtDiffOnly">Solo differenze</span>
         </button>
       </div>
       <div id="rtErrors" style="display:none; margin-top:12px;"></div>
@@ -4540,7 +4523,7 @@
           <input type="text" id="rtTraceDst" placeholder="es. 10.30.0.7"
                  data-i18n-placeholder="rtTraceDstPl" autocomplete="off" spellcheck="false">
         </div>
-        <button id="btnRtTrace" class="btn btn-primary" style="width:auto; margin:0;">
+        <button id="btnRtTrace" class="btn btn-secondary" style="width:auto; margin:0;">
           <i class="fa-solid fa-diagram-project"></i> <span data-i18n="rtTraceRun">Analizza</span>
         </button>
         <button id="btnRtTracePlay" class="btn btn-secondary" style="width:auto; margin:0; display:none;">
@@ -4562,36 +4545,18 @@
       </div>
     </div>
 
-    <div class="panel" style="margin-bottom:18px;">
-      <h4 style="margin:0 0 10px; font-size:14px; color:var(--text-muted);">
-        <i class="fa-solid fa-chart-simple"></i> <span data-i18n="rtChartTitle">Composizione delle rotte</span>
-      </h4>
-      <div id="rtBreakdown" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:18px;"></div>
-      <p style="margin:8px 0 0; font-size:12px; color:var(--text-muted);" data-i18n="rtChartNote">Le barre contano le rotte visibili con i filtri correnti. Nessun apparato espone i pacchetti per singola rotta: una barra di traffico qui sarebbe un numero inventato.</p>
-    </div>
-
-    <div class="panel">
-      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
-        <h4 style="margin:0; font-size:14px; color:var(--text-muted);">
-          <i class="fa-solid fa-table-list"></i> <span data-i18n="rtTableTitle">Rotte</span>
-        </h4>
-        <span id="rtCount" style="font-size:12px; color:var(--text-muted);"></span>
-      </div>
-      <div class="table-container" style="max-height:520px; overflow:auto;">
-        <table style="width:100%; border-collapse:collapse;">
-          <thead>
-            <tr>
-              <th style="text-align:left; padding:6px 8px;" data-i18n="rtColNetwork">Rete</th>
-              <th style="text-align:left; padding:6px 8px;" data-i18n="rtColNextHop">Next-hop / Interfaccia</th>
-              <th style="text-align:left; padding:6px 8px;" data-i18n="rtColVrf">VRF</th>
-              <th style="text-align:left; padding:6px 8px;" data-i18n="rtColType">Tipo</th>
-              <th style="text-align:right; padding:6px 8px;" data-i18n="rtColDistance">Distanza</th>
-              <th style="text-align:right; padding:6px 8px;" data-i18n="rtColMetric">Metrica</th>
-            </tr>
-          </thead>
-          <tbody id="rtTableBody"></tbody>
+    <div class="panel rt-matrix-panel">
+      <h3 data-i18n="rtTableTitle">Rotte per prefisso</h3>
+      <!-- Cartiglio: le quantita' e i tipi, che fanno anche da filtro. -->
+      <div id="rtTally" class="oneline-foot rt-tally"></div>
+      <div id="rtTypeChips" class="rt-chips" role="group" aria-label="Tipo rotta" data-i18n-aria-label="rtFilterType"></div>
+      <div class="table-container rt-mx-wrap">
+        <table class="rt-mx" data-no-colpicker>
+          <thead id="rtMxHead"></thead>
+          <tbody id="rtMxBody"></tbody>
         </table>
       </div>
+      <div id="rtMxLegend" class="rt-legend"></div>
     </div>
   </div> <!-- End #tab-routes -->
 

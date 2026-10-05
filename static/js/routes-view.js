@@ -1,30 +1,36 @@
 // Copyright 2026 Claudio Vidhi
 // SPDX-License-Identifier: AGPL-3.0-only
-// Tabelle di routing di piu' apparati in una vista sola.
+// Routing tables of several devices, side by side.
 //
-// La tab FortiGate mostra da sempre la RIB di UN firewall alla volta. La
-// domanda che si fa davvero e' l'altra — "chi ha una rotta verso questa rete,
-// e i due apparati sono d'accordo" — e per rispondere bisognava aprire la tab
-// una volta per apparato e confrontare a occhio.
+// Config Analyzer already answers "what is configured on this box" from the
+// backup. This view answers the runtime question across boxes: who has a
+// route to this prefix, and what do the others do instead. Hence a matrix,
+// one prefix per row and one device per column, and an address lookup that
+// marks the route each device would pick.
 //
-// Qui non si raccoglie niente di nuovo: /api/routes chiama lo stesso servizio
-// su tutti gli apparati in scope e ne normalizza le risposte.
+// Nothing new is collected: /api/routes calls the same service on the chosen
+// devices. Rows are fetched once per "Leggi tabelle"; search, type chips and
+// the differences toggle work on what is already in the browser, so typing
+// no longer reopens an SSH session per keystroke.
 (function () {
     'use strict';
 
     let _rtRows = [];
-    let _rtCounts = {};
-    let _rtBreakdown = {};
     let _rtErrors = [];
+    let _rtLoaded = [];          // [{value, label}] devices of the last read
+    let _rtMatrix = [];
+    const _rtTypes = new Set();  // empty = every type
+    let _rtDiffOnly = false;
+    const _rtOpen = new Set();
+    // ponytail: rendering cap, a full BGP table would freeze the tab.
+    // Paginate if someone really needs to scroll past it.
+    const RT_MAX_ROWS = 1500;
 
-    // I colori dei tipi sono gli stessi in tabella e nel grafico: una barra
-    // gialla e una riga gialla devono voler dire la stessa cosa senza che
-    // l'utente debba leggere due legende.
+    // I colori dei tipi sono gli stessi in matrice, nei chip e nell'analisi
+    // di percorso: un riquadro giallo deve voler dire la stessa cosa ovunque.
     // Solo le quattro famiglie che si incontrano davvero hanno un colore
     // proprio; il resto resta muto. --accent non esiste in questa palette (i
-    // token sono --primary/--success/--warning/--danger/--info): chiederlo
-    // tornava stringa vuota, quindi la barra BGP finiva sul grigio di ripiego
-    // e il badge su un var() non valido.
+    // token sono --primary/--success/--warning/--danger/--info).
     const RT_TYPE_COLORS = {
         connected: '--success',
         local: '--text-muted',
@@ -45,18 +51,134 @@
         return `var(${varName})`;
     }
 
-    function rtSelectedDevices() {
-        return pickerValues('rtDeviceFilter');
+    // --- Model (pure, exercised by tests/js/test_routes_matrix.mjs) ----------
+
+    /** Dotted quad to unsigned int, or null. */
+    function ip4(s) {
+        const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec((s || '').trim());
+        if (!m) return null;
+        const o = m.slice(1).map(Number);
+        if (o.some(n => n > 255)) return null;
+        return (((o[0] << 24) | (o[1] << 16) | (o[2] << 8) | o[3]) >>> 0);
     }
 
-    function rtFilters() {
-        const val = id => {
-            const el = /** @type {HTMLInputElement|HTMLSelectElement|null} */ (
-                document.getElementById(id));
-            return el ? el.value : '';
-        };
-        return { device: rtSelectedDevices().join(','),
-                 type: val('rtTypeFilter'), q: val('rtSearch') };
+    /** "10.0.0.0/16", "10.0.0.0 255.255.0.0" or a bare address (/32). */
+    function parseNet(s) {
+        const [addr, mask] = (s || '').trim().split(/[\/\s]+/);
+        const base = ip4(addr);
+        if (base === null) return null;
+        let len = 32;
+        if (mask !== undefined) {
+            // "10.0.0.0/" mid-typing: Number('') is 0, which read as /0.
+            if (mask === '') return null;
+            const dotted = ip4(mask);
+            len = dotted === null ? Number(mask) : 32 - Math.log2(((~dotted) >>> 0) + 1);
+            if (!Number.isInteger(len) || len < 0 || len > 32) return null;
+        }
+        const bits = len === 0 ? 0 : (0xFFFFFFFF << (32 - len)) >>> 0;
+        return { net: (base & bits) >>> 0, len, bits };
+    }
+
+    function netContains(n, ip) { return ((ip & n.bits) >>> 0) === n.net; }
+
+    /** The rows of one device that win for `ip`: longest prefix, then lowest
+     *  distance. Several rows on a tie (ECMP). */
+    function rtLpm(rows, ip) {
+        let best = [], bestLen = -1, bestAd = Infinity;
+        for (const r of rows) {
+            const n = parseNet(r.network);
+            if (!n || !netContains(n, ip)) continue;
+            const ad = r.distance == null ? 0 : r.distance;
+            if (n.len > bestLen || (n.len === bestLen && ad < bestAd)) {
+                best = [r]; bestLen = n.len; bestAd = ad;
+            } else if (n.len === bestLen && ad === bestAd) {
+                best.push(r);
+            }
+        }
+        return best;
+    }
+
+    /** One entry per (vrf, prefix). For each device: its rows, or what it
+     *  does instead — a covering shorter prefix, nothing at all ("hole"), or
+     *  "unknown" when the device cannot be judged (it did not answer, or only
+     *  its backup statics are known: absence there proves nothing). */
+    function rtBuildMatrix(rows, devices, unknownIps) {
+        const byKey = new Map();
+        const perDev = new Map(devices.map(d => [d.value, []]));
+        for (const r of rows) {
+            const key = (r.vrf || '') + '|' + r.network;
+            if (!byKey.has(key)) {
+                byKey.set(key, { key, vrf: r.vrf || '', network: r.network,
+                                 net: parseNet(r.network), cells: {} });
+            }
+            (byKey.get(key).cells[r.device_ip] ||= []).push(r);
+            if (perDev.has(r.device_ip)) perDev.get(r.device_ip).push(r);
+        }
+        const out = [];
+        for (const e of byKey.values()) {
+            e.cover = {};
+            e.missing = 0; e.holes = 0;
+            for (const d of devices) {
+                const own = e.cells[d.value];
+                if (own) { own.sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0)); continue; }
+                e.missing += 1;
+                if (unknownIps.has(d.value) || !e.net) { e.cover[d.value] = 'unknown'; continue; }
+                // ponytail: linear scan per missing cell, fine for a few
+                // thousand routes; index by prefix length if it gets slow.
+                // Shorter prefixes only, BEFORE the match: a more specific
+                // route (a /25 inside this /24) would otherwise win the LPM
+                // and hide the /8 that really covers the prefix.
+                const same = perDev.get(d.value).filter(r => {
+                    const n = parseNet(r.network);
+                    return (r.vrf || '') === e.vrf && !!n && n.len < e.net.len;
+                });
+                const via = rtLpm(same, e.net.net);
+                if (via.length) e.cover[d.value] = via[0];
+                else { e.cover[d.value] = 'hole'; e.holes += 1; }
+            }
+            out.push(e);
+        }
+        out.sort((a, b) => a.vrf.localeCompare(b.vrf)
+            || (a.net && b.net ? (a.net.net - b.net.net) || (a.net.len - b.net.len)
+                               : a.network.localeCompare(b.network)));
+        return out;
+    }
+
+    /** What the search box means: an address (lookup), a prefix (overlap) or
+     *  free text (substring on network, next-hop, interface). */
+    function rtQuery(text) {
+        const t = (text || '').trim();
+        if (!t) return { kind: 'none' };
+        if (t.indexOf('/') === -1) {
+            const ip = ip4(t);
+            if (ip !== null) return { kind: 'ip', ip, text: t };
+        } else {
+            const n = parseNet(t);
+            if (n) return { kind: 'net', net: n };
+        }
+        return { kind: 'text', needle: t.toLowerCase() };
+    }
+
+    function rtMatches(entry, q) {
+        if (q.kind === 'none') return true;
+        if (q.kind === 'ip') return !!entry.net && netContains(entry.net, q.ip);
+        if (q.kind === 'net') {
+            if (!entry.net) return false;
+            // Overlap: one of the two contains the other's network address.
+            const wide = entry.net.len <= q.net.len ? entry.net : q.net;
+            const narrow = wide === entry.net ? q.net : entry.net;
+            return netContains(wide, narrow.net);
+        }
+        if (entry.network.toLowerCase().indexOf(q.needle) !== -1) return true;
+        return Object.values(entry.cells).some(rs => rs.some(r =>
+            (r.gateway || '').toLowerCase().indexOf(q.needle) !== -1
+            || (r.interface || '').toLowerCase().indexOf(q.needle) !== -1));
+    }
+
+    // --- Data -----------------------------------------------------------------
+
+    function rtSelectedDevices() {
+        return pickerValues('rtDeviceFilter');
     }
 
     // L'elenco arriva dall'inventario, non dalle righe tornate: un apparato
@@ -83,43 +205,42 @@
         await loadRtDeviceList();
         rtTraceSyncSources();
         renderRtTrace();
-        renderRtTable();
-        renderRtChart();
+        renderRtMatrix();
     }
 
     async function loadRoutesTab() {
-        const f = rtFilters();
-        if (!f.device) {
+        const chosen = pickerSelected('rtDeviceFilter');
+        _rtOpen.clear();
+        if (!chosen.length) {
             // Nessun apparato scelto: nessuna sessione aperta.
-            _rtRows = []; _rtCounts = {}; _rtBreakdown = {}; _rtErrors = [];
+            _rtRows = []; _rtErrors = []; _rtLoaded = []; _rtMatrix = [];
             renderRtErrors();
-            renderRtTable();
-            renderRtChart();
+            renderRtMatrix();
             return;
         }
-        const url = `/api/routes?device=${encodeURIComponent(f.device)}`
-            + `&type=${encodeURIComponent(f.type)}&q=${encodeURIComponent(f.q.trim())}`;
-        const body = document.getElementById('rtTableBody');
+        const body = document.getElementById('rtMxBody');
         if (body) {
-            body.innerHTML = `<tr><td colspan="5" style="padding:20px; text-align:center;
-                color:var(--text-muted);">${escapeHtml(tr('rtLoading'))}</td></tr>`;
+            body.innerHTML = `<tr><td class="rt-mx-empty">${escapeHtml(tr('rtLoading'))}</td></tr>`;
         }
         try {
-            const res = await apiFetch(url);
+            const res = await apiFetch('/api/routes?device='
+                + encodeURIComponent(chosen.map(d => d.value).join(',')));
             if (!res || !res.ok) throw new Error('HTTP ' + (res ? res.status : '?'));
             const data = await res.json();
             _rtRows = data.rows || [];
-            _rtCounts = data.counts || {};
-            _rtBreakdown = data.breakdown || {};
             _rtErrors = data.errors || [];
         } catch (e) {
             _rtRows = [];
-            _rtCounts = {}; _rtBreakdown = {};
             _rtErrors = [{ device_ip: '', error: String(e) }];
         }
+        _rtLoaded = chosen;
+        // Only a live answer lets absence mean "no route": a device that went
+        // silent, or of which only the backup statics are known, is unknown.
+        const live = new Set(_rtRows.filter(r => !r.from_backup).map(r => r.device_ip));
+        const unknown = new Set(chosen.map(d => d.value).filter(ip => !live.has(ip)));
+        _rtMatrix = rtBuildMatrix(_rtRows, chosen, unknown);
         renderRtErrors();
-        renderRtTable();
-        renderRtChart();
+        renderRtMatrix();
     }
 
     function renderRtErrors() {
@@ -130,120 +251,178 @@
         // vuota per tutti: senza dirlo, l'assenza delle sue rotte si legge
         // come "non ne ha".
         box.style.display = '';
-        box.innerHTML = `<div style="border:1px solid var(--warning);
-              background:color-mix(in srgb, var(--warning) 8%, transparent); padding:10px 14px; font-size:12px;">
+        box.innerHTML = `<div class="rt-partial">
             <strong>${escapeHtml(tr('rtPartial', { n: _rtErrors.length }))}</strong>
-            <ul style="margin:6px 0 0; padding-left:18px;">${
-                _rtErrors.map(e => `<li><span style="font-family:var(--font-code);">${
+            <ul>${_rtErrors.map(e => `<li><span class="rt-code">${
                     escapeHtml(e.device_ip || '?')}</span> &mdash; ${escapeHtml(e.error)}</li>`).join('')}</ul>
           </div>`;
     }
 
-    function rtTypeBadge(type) {
-        const color = rtTypeColor(type);
-        return `<span class="badge" style="border-color:${color}; color:${color};">${
-            escapeHtml(type)}</span>`;
+    // --- Render ---------------------------------------------------------------
+
+    function rtKind(type) {
+        return `<b class="rt-kind" style="background:${rtTypeColor(type)}" aria-hidden="true">${
+            escapeHtml((type || '?').slice(0, 1).toUpperCase())}</b>`;
     }
 
-    function renderRtTable() {
-        const tbody = document.getElementById('rtTableBody');
-        const count = document.getElementById('rtCount');
-        if (!tbody) return;
-        if (count) count.textContent = tr('rtCount', { n: _rtRows.length });
-        if (!_rtRows.length) {
-            const msg = rtSelectedDevices().length ? tr('rtEmpty') : tr('rtPickDevices');
-            tbody.innerHTML = `<tr><td colspan="5" style="padding:20px; text-align:center;
-                color:var(--text-muted);">${escapeHtml(msg)}</td></tr>`;
+    function rtVisible(q) {
+        return _rtMatrix.filter(e =>
+            (!_rtDiffOnly || e.missing > 0)
+            && (!_rtTypes.size || Object.values(e.cells).some(rs => rs.some(r => _rtTypes.has(r.type))))
+            && rtMatches(e, q));
+    }
+
+    function rtSearchValue() {
+        const el = /** @type {HTMLInputElement|null} */ (document.getElementById('rtSearch'));
+        return el ? el.value : '';
+    }
+
+    function renderRtMatrix() {
+        const head = document.getElementById('rtMxHead');
+        const body = document.getElementById('rtMxBody');
+        if (!head || !body) return;
+        const q = rtQuery(rtSearchValue());
+        const devs = _rtLoaded;
+        renderRtTally();
+        renderRtChips();
+        renderRtLegend();
+
+        if (!devs.length) {
+            head.innerHTML = '';
+            body.innerHTML = `<tr><td class="rt-mx-empty">${escapeHtml(tr('rtPickDevices'))}</td></tr>`;
             return;
         }
-        const dash = '<span style="color:var(--text-muted);">&mdash;</span>';
-        let lastGroup = null;
-        const html = [];
-        for (const r of _rtRows) {
-            const group = `${r.device} ${r.type}`;
-            if (group !== lastGroup) {
-                lastGroup = group;
-                // Intestazione di gruppo: raggruppare per apparato E tipo e'
-                // il modo in cui si legge una RIB, non per righe alfabetiche.
-                // Righe lette dal backup e non dall'apparato: il badge sta
-                // sull'intestazione perche' l'origine e' dell'apparato, non
-                // della singola rotta.
-                const fromBackup = r.from_backup
-                    ? ` <span class="badge" style="border-color:var(--warning); color:var(--warning);">${
-                          escapeHtml(tr('rtFromBackup'))}</span>` : '';
-                html.push(`<tr style="background:var(--surface-3);">
-                    <td colspan="6" style="padding:6px 8px; font-weight:700; font-size:12px;">
-                      ${escapeHtml(r.device)} &middot; ${rtTypeBadge(r.type)}${fromBackup}
-                      <span style="color:var(--text-muted); font-weight:400; font-family:var(--font-code);">
-                        ${escapeHtml(r.device_ip || '')}</span>
-                    </td></tr>`);
+        const backup = new Set(_rtRows.filter(r => r.from_backup).map(r => r.device_ip));
+        const answered = new Set(_rtRows.map(r => r.device_ip));
+        head.innerHTML = `<tr><th data-no-sort="1" class="rt-mx-net">${escapeHtml(tr('rtColNetwork'))}</th>${
+            devs.map(d => {
+                const tag = backup.has(d.value)
+                    ? `<span class="rt-col-tag warn">${escapeHtml(tr('rtFromBackup'))}</span>`
+                    : !answered.has(d.value)
+                        ? `<span class="rt-col-tag">${escapeHtml(tr('rtMxSilent'))}</span>` : '';
+                return `<th data-no-sort="1"><span class="rt-col-name">${escapeHtml(d.label)}</span>
+                    <span class="rt-col-ip">${escapeHtml(d.value)}</span>${tag}</th>`;
+            }).join('')}</tr>`;
+
+        const rows = rtVisible(q);
+        if (q.kind === 'ip') rows.sort((a, b) => b.net.len - a.net.len);
+        const span = devs.length + 1;
+        if (!rows.length) {
+            const msg = q.kind === 'ip' ? tr('rtMxNoCover', { ip: q.text }) : tr('rtEmpty');
+            body.innerHTML = `<tr><td class="rt-mx-empty" colspan="${span}">${escapeHtml(msg)}</td></tr>`;
+            return;
+        }
+        // Lookup: each device's winning route is marked. That is the answer to
+        // "where does this address go from here".
+        const winners = new Set();
+        if (q.kind === 'ip') {
+            for (const d of devs) {
+                for (const r of rtLpm(_rtRows.filter(x => x.device_ip === d.value), q.ip)) {
+                    winners.add(d.value + '|' + (r.vrf || '') + '|' + r.network);
+                }
             }
-            const hop = [r.gateway, r.interface ? `(${r.interface})` : '']
-                .filter(Boolean).join(' ');
-            html.push(`<tr style="border-top:1px solid var(--border); font-size:12px;">
-                <td style="padding:6px 8px; font-family:var(--font-code);">${escapeHtml(r.network)}</td>
-                <td style="padding:6px 8px; font-family:var(--font-code);">${hop ? escapeHtml(hop) : dash}</td>
-                <td style="padding:6px 8px; font-family:var(--font-code);">${r.vrf ? escapeHtml(r.vrf) : dash}</td>
-                <td style="padding:6px 8px;">${rtTypeBadge(r.type)}</td>
-                <td style="padding:6px 8px; text-align:right; font-family:var(--font-code);">${
-                    r.distance === null || r.distance === undefined ? dash : escapeHtml(String(r.distance))}</td>
-                <td style="padding:6px 8px; text-align:right; font-family:var(--font-code);">${
-                    r.metric === null || r.metric === undefined ? dash : escapeHtml(String(r.metric))}</td>
-            </tr>`);
         }
-        tbody.innerHTML = html.join('');
+        const html = [];
+        for (const e of rows.slice(0, RT_MAX_ROWS)) {
+            const open = _rtOpen.has(e.key);
+            const state = e.holes ? 'hole' : e.missing ? 'gap' : 'full';
+            html.push(`<tr class="rt-mx-row ${state}${open ? ' open' : ''}">
+                <th scope="row" class="rt-mx-net">
+                  <button type="button" class="rt-mx-toggle" data-action="rt-mx-toggle"
+                          data-key="${escapeHtml(e.key)}" aria-expanded="${open}">
+                    <i class="fa-solid fa-chevron-right" aria-hidden="true"></i><span>${
+                        escapeHtml(e.network)}</span>
+                  </button>${e.vrf ? `<span class="rt-mx-vrf">${escapeHtml(e.vrf)}</span>` : ''}
+                </th>${devs.map(d => rtCell(e, d, winners)).join('')}</tr>`);
+            if (open) html.push(rtDetailRow(e, devs));
+        }
+        if (rows.length > RT_MAX_ROWS) {
+            html.push(`<tr><td class="rt-mx-empty" colspan="${span}">${
+                escapeHtml(tr('rtMxCapped', { n: RT_MAX_ROWS, total: rows.length }))}</td></tr>`);
+        }
+        body.innerHTML = html.join('');
     }
 
-    // Barre orizzontali in HTML, non un canvas disegnato a mano.
-    // Il grafico precedente impilava le rotte per apparato: con un apparato
-    // solo era una barra unica che non diceva niente, e con venti diventavano
-    // colonne troppo strette da leggere. Le due domande vere sono "di che tipo
-    // sono le rotte" e "in quale VRF stanno": due elenchi ordinati per
-    // conteggio rispondono meglio, si leggono a qualsiasi larghezza e non
-    // hanno bisogno di una legenda.
-    function rtBars(title, counts, colorFor) {
-        const entries = Object.entries(counts || {})
-            .filter(([, n]) => n > 0)
-            .sort((a, b) => b[1] - a[1]);
-        if (!entries.length) return '';
-        const peak = Math.max(...entries.map(([, n]) => n), 1);
-        const rows = entries.map(([label, n]) => {
-            const pct = Math.max(2, Math.round((n / peak) * 100));
-            const color = colorFor ? colorFor(label) : 'var(--primary)';
-            return `<div style="display:grid; grid-template-columns:minmax(90px,auto) 1fr 42px; align-items:center; gap:8px; margin-bottom:6px;">
-                <span style="font-size:12px; font-family:var(--font-code); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
-                <span style="height:10px; background:var(--surface-3); display:block;">
-                  <span style="display:block; height:100%; width:${pct}%; background:${color};"></span>
-                </span>
-                <span style="font-size:12px; text-align:right; font-family:var(--font-code);">${n}</span>
-            </div>`;
-        }).join('');
-        return `<div>
-            <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">${escapeHtml(title)}</div>
-            ${rows}
-        </div>`;
+    function rtCell(e, d, winners) {
+        const own = e.cells[d.value];
+        if (own) {
+            const r = own[0];
+            const win = winners.has(d.value + '|' + e.vrf + '|' + e.network);
+            const more = own.length > 1 ? `<span class="rt-more">+${own.length - 1}</span>` : '';
+            const hop = r.gateway || r.interface;
+            return `<td class="rt-cell${win ? ' win' : ''}"${win ? ` title="${escapeHtml(tr('rtMxWins'))}"` : ''}>${
+                rtKind(r.type)}<span class="visually-hidden">${escapeHtml(r.type)} </span>${
+                hop ? escapeHtml(hop) : '&mdash;'}${more}</td>`;
+        }
+        const c = e.cover[d.value];
+        if (c === 'unknown') {
+            return `<td class="rt-cell unknown"><span class="rt-mark unknown" aria-hidden="true"></span>${
+                escapeHtml(tr('rtMxUnknown'))}</td>`;
+        }
+        if (c === 'hole') {
+            return `<td class="rt-cell hole"><span class="rt-mark hole" aria-hidden="true"></span>${
+                escapeHtml(tr('rtMxHole'))}</td>`;
+        }
+        return `<td class="rt-cell covered">${escapeHtml(tr('rtMxCoveredBy', { net: c.network }))}</td>`;
     }
 
-    function renderRtChart() {
-        const box = document.getElementById('rtBreakdown');
+    function rtDetailRow(e, devs) {
+        const dash = '&mdash;';
+        const lines = devs.flatMap(d => (e.cells[d.value] || []).map(r => `<tr>
+            <td>${escapeHtml(d.label)}</td>
+            <td>${rtKind(r.type)}${escapeHtml(r.raw_type || r.type || '')}</td>
+            <td>${r.gateway ? escapeHtml(r.gateway) : dash}</td>
+            <td>${r.interface ? escapeHtml(r.interface) : dash}</td>
+            <td class="rt-num">${r.distance == null ? dash : escapeHtml(String(r.distance))}</td>
+            <td class="rt-num">${r.metric == null ? dash : escapeHtml(String(r.metric))}</td>
+          </tr>`)).join('');
+        return `<tr class="rt-mx-detail"><td colspan="${devs.length + 1}">
+            <table class="rt-cand" data-no-colpicker><thead><tr>
+              <th data-no-sort="1">${escapeHtml(tr('rtColDevice'))}</th>
+              <th data-no-sort="1">${escapeHtml(tr('rtColType'))}</th>
+              <th data-no-sort="1">${escapeHtml(tr('rtColGateway'))}</th>
+              <th data-no-sort="1">${escapeHtml(tr('rtColIface'))}</th>
+              <th data-no-sort="1" class="rt-num">${escapeHtml(tr('rtColDistance'))}</th>
+              <th data-no-sort="1" class="rt-num">${escapeHtml(tr('rtColMetric'))}</th>
+            </tr></thead><tbody>${lines}</tbody></table></td></tr>`;
+    }
+
+    function renderRtTally() {
+        const box = document.getElementById('rtTally');
         if (!box) return;
-        const b = _rtBreakdown || {};
-        if (!b.total) {
-            box.innerHTML = `<div style="font-size:12px; color:var(--text-muted);">${escapeHtml(tr('rtChartEmpty'))}</div>`;
-            return;
-        }
-        const css = getComputedStyle(document.body);
-        const typeColor = t => (css.getPropertyValue(
-            RT_TYPE_COLORS[t] || '--text-muted') || '#888').trim();
-        // La chiave vuota e' la tabella globale (nessuna VRF): l'etichetta la
-        // mette qui la UI, tradotta, invece di arrivare gia' scritta dal
-        // server e restare in inglese.
-        const byVrf = {};
-        for (const [k, n] of Object.entries(b.by_vrf || {})) {
-            byVrf[k || tr('rtVrfGlobal')] = n;
-        }
-        box.innerHTML = rtBars(tr('rtChartByType'), b.by_type, typeColor)
-                      + rtBars(tr('rtChartByVrf'), byVrf, null);
+        if (!_rtLoaded.length) { box.innerHTML = ''; box.style.display = 'none'; return; }
+        box.style.display = '';
+        const gaps = _rtMatrix.filter(e => e.missing).length;
+        const holes = _rtMatrix.filter(e => e.holes).length;
+        const answered = new Set(_rtRows.map(r => r.device_ip)).size;
+        const item = (label, n) => `<span>${escapeHtml(label)} <b>${n}</b></span>`;
+        box.innerHTML = item(tr('rtTallyDevices'), `${answered}/${_rtLoaded.length}`)
+            + item(tr('rtTallyRoutes'), _rtRows.length)
+            + item(tr('rtTallyPrefixes'), _rtMatrix.length)
+            + item(tr('rtTallyGaps'), gaps)
+            + item(tr('rtTallyHoles'), holes);
+    }
+
+    function renderRtChips() {
+        const box = document.getElementById('rtTypeChips');
+        if (!box) return;
+        const counts = {};
+        for (const r of _rtRows) counts[r.type] = (counts[r.type] || 0) + 1;
+        box.innerHTML = RT_TYPE_ORDER.filter(t => counts[t]).map(t =>
+            `<button type="button" class="chip-choice rt-chip" data-action="rt-type"
+                data-type="${escapeHtml(t)}" aria-pressed="${_rtTypes.has(t)}">${
+                rtKind(t)}${escapeHtml(t)}<span class="rt-chip-n">${counts[t]}</span></button>`).join('');
+    }
+
+    function renderRtLegend() {
+        const box = document.getElementById('rtMxLegend');
+        if (!box) return;
+        if (!_rtLoaded.length) { box.innerHTML = ''; return; }
+        box.innerHTML = `<span><span class="rt-mark hole" aria-hidden="true"></span>${escapeHtml(tr('rtLegendHole'))}</span>
+            <span><span class="rt-legend-cover">${escapeHtml(tr('rtMxCoveredBy', { net: '0.0.0.0/0' }))}</span>${
+                escapeHtml(tr('rtLegendCover'))}</span>
+            <span><span class="rt-mark unknown" aria-hidden="true"></span>${escapeHtml(tr('rtLegendUnknown'))}</span>
+            <span><span class="rt-legend-win"></span>${escapeHtml(tr('rtLegendWin'))}</span>`;
     }
 
 
@@ -595,23 +774,56 @@
         if (/** @type {KeyboardEvent} */ (e).key === 'Enter') loadRtTrace();
     });
 
+    // Search re-renders what is already loaded. An address also becomes the
+    // path analysis destination: the next question after "who routes it" is
+    // "and where does it end up".
     let _rtSearchTimer = null;
     document.getElementById('rtSearch')?.addEventListener('input', () => {
         clearTimeout(_rtSearchTimer);
-        _rtSearchTimer = setTimeout(loadRoutesTab, 350);
+        _rtSearchTimer = setTimeout(() => {
+            const q = rtQuery(rtSearchValue());
+            const dst = /** @type {HTMLInputElement|null} */ (document.getElementById('rtTraceDst'));
+            if (q.kind === 'ip' && dst) dst.value = q.text;
+            renderRtMatrix();
+        }, 150);
+    });
+    document.getElementById('btnRtDiffOnly')?.addEventListener('click', e => {
+        _rtDiffOnly = !_rtDiffOnly;
+        /** @type {HTMLElement} */ (e.currentTarget).setAttribute('aria-pressed', String(_rtDiffOnly));
+        renderRtMatrix();
+    });
+    document.getElementById('rtTypeChips')?.addEventListener('click', e => {
+        const chip = /** @type {HTMLElement} */ (e.target).closest('[data-action="rt-type"]');
+        if (!chip) return;
+        const t = chip.getAttribute('data-type') || '';
+        if (_rtTypes.has(t)) _rtTypes.delete(t); else _rtTypes.add(t);
+        renderRtMatrix();
+        /** @type {HTMLElement|null} */ (document.querySelector(
+            `#rtTypeChips [data-type="${CSS.escape(t)}"]`))?.focus();
+    });
+    document.getElementById('rtMxBody')?.addEventListener('click', e => {
+        const btn = /** @type {HTMLElement} */ (e.target).closest('[data-action="rt-mx-toggle"]');
+        if (!btn) return;
+        const key = btn.getAttribute('data-key') || '';
+        if (_rtOpen.has(key)) _rtOpen.delete(key); else _rtOpen.add(key);
+        renderRtMatrix();
+        /** @type {HTMLElement|null} */ (document.querySelector(
+            `#rtMxBody [data-key="${CSS.escape(key)}"]`))?.focus();
     });
     // La selezione non fa partire da sola la query: si sceglie e si preme
-    // Aggiorna. Ogni apparato in piu' e' una sessione in piu' aperta.
-    document.getElementById('rtTypeFilter')?.addEventListener('change', loadRoutesTab);
+    // Leggi tabelle. Ogni apparato in piu' e' una sessione in piu' aperta.
     document.getElementById('btnRtRefresh')?.addEventListener('click', loadRoutesTab);
 
     // Cambiare tenant svuota la selezione: gli apparati scelti prima possono
     // non essere piu' in scope, e le righe gia' a schermo sarebbero di un
     // altro cliente.
     window.addEventListener('globalTenantChanged', () => {
-        _rtRows = []; _rtCounts = {}; _rtErrors = [];
+        _rtRows = []; _rtErrors = []; _rtLoaded = []; _rtMatrix = [];
+        _rtOpen.clear();
         routesTabShown();
     });
 
     window.loadRoutesTab = routesTabShown;
+    // The pure model, for tests/js/test_routes_matrix.mjs.
+    window.rtModel = { ip4, parseNet, rtLpm, rtBuildMatrix, rtQuery, rtMatches };
 })();

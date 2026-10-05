@@ -339,7 +339,7 @@
                         <strong>${L('incRemediation')}</strong> ${escapeHtml(r.remediation)}</div>` : ''}
                     ${(r.parameters || []).length ? `<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
                         ${r.parameters.map(p => `<div>
-                            <label style="font-size:11px; color:var(--text-muted); display:block;" title="${escapeHtml(p.description || '')}">
+                            <label for="rp-${escapeHtml(r.id)}-${escapeHtml(p.name)}" style="font-size:11px; color:var(--text-muted); display:block;" title="${escapeHtml(p.description || '')}">
                                 ${escapeHtml(p.name)} (${escapeHtml(p.min)}–${escapeHtml(p.max)})
                             </label>
                             <input type="number" id="rp-${escapeHtml(r.id)}-${escapeHtml(p.name)}"

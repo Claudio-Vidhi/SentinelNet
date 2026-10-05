@@ -615,9 +615,9 @@ class RoutesTabIsWiredEndToEnd(unittest.TestCase):
         self.assertIn("renderPickerItems('rtDeviceFilter'", self.mod)
 
     def test_every_bound_id_exists_in_the_template(self):
-        for element_id in ("rtDeviceFilter", "rtTypeFilter", "rtSearch",
-                           "btnRtRefresh", "rtTableBody", "rtBreakdown",
-                           "rtErrors", "rtCount",
+        for element_id in ("rtDeviceFilter", "rtSearch", "btnRtRefresh",
+                           "btnRtDiffOnly", "rtTally", "rtTypeChips",
+                           "rtMxHead", "rtMxBody", "rtMxLegend", "rtErrors",
                            # Analisi di percorso: un id agganciato e assente
                            # dal template non solleva niente, lascia solo un
                            # pulsante muto.
@@ -629,12 +629,20 @@ class RoutesTabIsWiredEndToEnd(unittest.TestCase):
                           f"{element_id} e' agganciato da routes-view.js ma "
                           "non esiste nel template")
 
-    def test_the_chart_counts_routes_and_says_so(self):
-        # Il mockup di partenza disegnava pkt/s per rotta. Nessun apparato lo
-        # espone: la barra conta le rotte, e la nota sotto il grafico lo dice
-        # invece di lasciare che il numero venga letto come traffico.
-        self.assertIn("rtChartNote", self.html)
+    def test_typing_does_not_query_the_devices(self):
+        # The search used to re-run /api/routes on every keystroke, i.e. one
+        # SSH session per selected device per pause in typing. Only the
+        # explicit button reads the tables now.
+        handler = self.mod.split("getElementById('rtSearch')")[1].split("});")[0]
+        self.assertNotIn("loadRoutesTab", handler)
         self.assertNotIn("pkt/s", self.mod)
+
+    @unittest.skipUnless(shutil.which("node"), "node non disponibile")
+    def test_the_matrix_model(self):
+        harness = os.path.join(self._ROOT, "tests", "js", "test_routes_matrix.mjs")
+        proc = subprocess.run([shutil.which("node"), harness],
+                              capture_output=True, text=True, cwd=self._ROOT)
+        self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
 
     def test_a_partial_answer_is_shown_and_not_swallowed(self):
         self.assertIn("rtPartial", self.mod)

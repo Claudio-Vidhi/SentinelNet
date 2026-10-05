@@ -794,6 +794,7 @@
             return `<tr style="${disabled ? 'opacity:0.55;' : ''}">
                 <td><strong>${escapeHtml(u.username)}</strong>${isSelf ? ` <span style="color:var(--text-muted); font-size:11px;">(${tr('setYou')})</span>` : ''}${disabledBadge}${pendingBadge}</td>
                 <td><input type="text" value="${escapeHtml(u.email || '')}" placeholder="${tr('setNone')}"
+                       aria-label="${escapeHtml(tr('lblInviteEmail') + ' ' + u.username)}"
                        data-action="save-user-email" data-username="${escapeHtml(u.username)}" ${(manageable || isSelf) ? '' : 'disabled'}
                        style="font-size:12px; padding:4px 8px; width:190px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); outline:none;"></td>
                 <td>${manageable
@@ -1213,7 +1214,7 @@
             const minAttr = f.min != null ? `min="${f.min}"` : (f.type === 'number' ? 'min="1"' : '');
             return `${hdr}
             <div class="form-group" style="max-width:420px;">
-                <label data-i18n="${f.lbl}">${escapeHtml(L[f.lbl] || f.key)}</label>${envNote}
+                <label for="appadv_${f.key}" data-i18n="${f.lbl}">${escapeHtml(L[f.lbl] || f.key)}</label>${envNote}
                 <input id="appadv_${f.key}" type="${f.type}" ${minAttr} ${over ? 'disabled' : ''}
                        value="${s[f.key] != null ? escapeHtml(String(s[f.key])) : ''}"
                        placeholder="${def[f.key] != null ? def[f.key] : ''}" style="padding-left:12px;">
@@ -1308,7 +1309,7 @@
                 <span style="font-family:var(--font-code); font-size:12px;">${escapeHtml(d.port != null ? String(d.port) : '—')}</span>
             </div>
             <div class="form-group" style="max-width:360px;">
-                <select id="netHostSelect" ${d.env_override ? 'disabled' : ''} style="padding-left:12px;">${optHtml}</select>
+                <select id="netHostSelect" aria-label="${escapeHtml(L.titleNetExpose)}" ${d.env_override ? 'disabled' : ''} style="padding-left:12px;">${optHtml}</select>
             </div>
             ${envNote}
             <div style="margin-top:12px;">

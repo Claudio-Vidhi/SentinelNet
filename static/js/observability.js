@@ -28,6 +28,7 @@
                     <span style="font-size:13px; text-transform:uppercase;">${l}</span>
                 </label>
                 <input id="obs_${l}_port" type="number" min="1" max="65535"
+                       aria-label="${escapeHtml(l.toUpperCase() + ' ' + tr('lblNetPort'))}"
                        value="${lc.port != null ? lc.port : ''}"
                        placeholder="${OBS_DEFAULT_PORTS[l]}"
                        style="width:100px; padding:6px 10px; border-radius:0; border:1px solid var(--border);
@@ -41,20 +42,20 @@
                 <span style="font-size:13px; font-weight:700;" data-i18n="lblObsEnabled">Abilita observability</span>
             </label>
             <div class="form-group" style="max-width:280px;">
-                <label data-i18n="lblObsBind">Indirizzo di ascolto (bind)</label>
+                <label for="obs_bind" data-i18n="lblObsBind">Indirizzo di ascolto (bind)</label>
                 <input id="obs_bind" type="text" value="${escapeHtml(d.bind || '')}" style="padding-left:12px;">
             </div>
             <div class="form-group" style="max-width:200px;">
-                <label data-i18n="lblObsApiPoll">Intervallo polling API (s)</label>
+                <label for="obs_api_poll_s" data-i18n="lblObsApiPoll">Intervallo polling API (s)</label>
                 <input id="obs_api_poll_s" type="number" min="1" value="${d.api_poll_s != null ? d.api_poll_s : ''}" style="padding-left:12px;">
             </div>
             <div class="form-group" style="max-width:280px;">
-                <label data-i18n="lblObsSnmpPoll">Intervallo polling SNMP (s)</label>
+                <label for="obs_snmp_poll_s" data-i18n="lblObsSnmpPoll">Intervallo polling SNMP (s)</label>
                 <input id="obs_snmp_poll_s" type="number" min="0" value="${d.snmp_poll_s != null ? d.snmp_poll_s : 0}" style="padding-left:12px;">
                 <small style="color:var(--text-muted); font-size:11px;" data-i18n="hintObsSnmpPoll">0 = spento. Interroga solo gli apparati che hanno una community configurata nella loro scheda.</small>
             </div>
             <div class="form-group" style="max-width:280px;">
-                <label data-i18n="lblObsLinuxPoll">Intervallo polling host Linux/Windows (s)</label>
+                <label for="obs_linux_poll_s" data-i18n="lblObsLinuxPoll">Intervallo polling host Linux/Windows (s)</label>
                 <input id="obs_linux_poll_s" type="number" min="0" value="${d.linux_poll_s != null ? d.linux_poll_s : 0}" style="padding-left:12px;">
                 <small style="color:var(--text-muted); font-size:11px;" data-i18n="hintObsLinuxPoll">0 = spento. Apre una sessione SSH verso gli host con vendor «linux» o «windows» e ne rileva CPU, memoria e disco.</small>
             </div>
