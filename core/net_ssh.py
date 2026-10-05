@@ -30,6 +30,7 @@ import functools
 
 import paramiko
 import netmiko
+from core import ssh_legacy
 from netmiko.base_connection import BaseConnection
 from opentelemetry import trace
 
@@ -448,35 +449,50 @@ def _connect(site_id: "str | None", tenant: "str | None", **params):
              if site else None)
     if host:
         params = _device_ssh_params(params, scope)
+    caller_disabled = params.pop("disabled_algorithms", None)
     if not (host and site):
+        def direct(extra):
+            return _netmiko_connect(
+                **params, **_disabled_kw(ssh_legacy.merged(caller_disabled, extra)))
         try:
-            conn = _netmiko_connect(**params)
+            conn = ssh_legacy.with_fallback(direct, host or "")
         except Exception as e:
             if host and _pinned_host_key(host, port) is not None:
                 _raise_if_host_key_error(e, host, port)
             raise
         _persist_device_key(host, port, conn)
         return conn
-    chan = jump_channel(site, host, port)
-    try:
+
+    def tunnelled(extra):
+        # One channel per attempt: a refused handshake leaves its channel
+        # unusable, so the fallback cannot reuse it.
+        chan = jump_channel(site, host, port)
         try:
-            conn = _netmiko_connect(sock=chan, **params)
-        except Exception as e:
-            if _pinned_host_key(host, port, scope) is not None:
-                _raise_if_host_key_error(e, host, port)
+            return _netmiko_connect(
+                sock=chan, **params, **_disabled_kw(ssh_legacy.merged(caller_disabled, extra)))
+        except Exception:
+            # The channel lives on the shared, long-lived per-site transport, so
+            # nothing reclaims it on failure: `with ConnectHandler(...)` at the
+            # call sites cannot help, because the context manager never binds
+            # when the constructor raises. Without this, a site polled on a
+            # schedule with wrong credentials piles channels onto the transport
+            # until the process restarts. Same leak class as the bastion socket
+            # in _transport, one layer up.
+            chan.close()
             raise
-        _persist_device_key(host, port, conn, scope)
-        return conn
-    except Exception:
-        # The channel lives on the shared, long-lived per-site transport, so
-        # nothing reclaims it on failure: `with ConnectHandler(...)` at the
-        # call sites cannot help, because the context manager never binds
-        # when the constructor raises. Without this, a site polled on a
-        # schedule with wrong credentials piles channels onto the transport
-        # until the process restarts. Same leak class as the bastion socket
-        # in _transport, one layer up.
-        chan.close()
+    try:
+        conn = ssh_legacy.with_fallback(tunnelled, host)
+    except Exception as e:
+        if _pinned_host_key(host, port, scope) is not None:
+            _raise_if_host_key_error(e, host, port)
         raise
+    _persist_device_key(host, port, conn, scope)
+    return conn
+
+
+def _disabled_kw(disabled: "dict | None") -> dict:
+    """netmiko kwarg only when there is something to disable."""
+    return {"disabled_algorithms": disabled} if disabled else {}
 
 
 def close_all() -> None:
