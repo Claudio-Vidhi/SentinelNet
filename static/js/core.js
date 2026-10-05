@@ -1681,6 +1681,7 @@ const LAZY_TAB_SCRIPTS = {
     'tab-policy-test': ['/static/js/policy-test.js'],
     'tab-config-drift': ['/static/js/config-drift.js'],
     'tab-routes': ['/static/js/routes-view.js'],
+    'tab-device-history': ['/static/js/device-history.js'],
     'tab-notifications': ['/static/js/notifications.js'],
 };
 
@@ -1857,6 +1858,7 @@ async function switchTab(tabId, clickedBtn, opts = {}) {
     else if (tabId === 'tab-policy-test') loadPolicyTestTab();
     else if (tabId === 'tab-config-drift') loadConfigDriftTab();
     else if (tabId === 'tab-routes') loadRoutesTab();
+    else if (tabId === 'tab-device-history') loadDeviceHistoryTab();
     else if (tabId === 'tab-notifications' && typeof loadNotificationsTab === 'function') loadNotificationsTab();
 }
 
@@ -1967,19 +1969,18 @@ function renderIdentitiesPanel() {
     body.innerHTML = idents.length ? idents.map(i => {
         let tenantLabel = '';
         if (!i.tenant || i.tenant === 'all') {
-            tenantLabel = `<span class="badge" style="background:var(--surface-2); color:var(--text-muted); font-size:10.5px; padding:2px 6px; border:1px solid var(--border); text-transform:uppercase; letter-spacing:0.02em;">${escapeHtml(tr('optTenantAll') || 'Globale')}</span>`;
+            tenantLabel = `<span class="badge" style="background:var(--surface-2); color:var(--text-muted); font-size:10.5px; padding:2px 6px; border:1px solid var(--border); text-transform:uppercase; letter-spacing:0.02em;">${escapeHtml(tr('identAllTenants'))}</span>`;
         } else if (Array.isArray(i.tenant)) {
             tenantLabel = i.tenant.map(t => `<span class="badge" style="background:color-mix(in srgb, var(--primary) 12%, transparent); color:var(--primary); border:1px solid color-mix(in srgb, var(--primary) 30%, transparent); font-size:10.5px; padding:2px 6px; margin-right:3px; display:inline-block; text-transform:uppercase; letter-spacing:0.02em;">${escapeHtml(t)}</span>`).join('');
         } else {
             const parts = String(i.tenant).split(',').map(s => s.trim()).filter(Boolean);
             tenantLabel = parts.map(t => `<span class="badge" style="background:color-mix(in srgb, var(--primary) 12%, transparent); color:var(--primary); border:1px solid color-mix(in srgb, var(--primary) 30%, transparent); font-size:10.5px; padding:2px 6px; margin-right:3px; display:inline-block; text-transform:uppercase; letter-spacing:0.02em;">${escapeHtml(t)}</span>`).join('');
         }
-        return `<tr style="border-bottom:1px solid color-mix(in srgb, var(--border) 50%, transparent);">
-        <td style="padding:8px 6px; font-weight:600; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${escapeHtml(i.name)}">${escapeHtml(i.name)}</td>
-        <td style="padding:8px 6px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${tenantLabel}</td>
-        <td style="padding:8px 6px; font-family:var(--font-code); font-size:12px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${escapeHtml(i.username)}">${escapeHtml(i.username)}</td>
-        <td style="padding:8px 6px; text-align:center; font-family:var(--font-code); font-size:12px;">${i.devices_using}</td>
-        <td style="padding:8px 6px; text-align:right;">
+        return `<tr>
+        <td title="${escapeHtml(i.name)}"><span class="ident-name">${escapeHtml(i.name)}</span><span class="ident-user">${escapeHtml(i.username)}</span></td>
+        <td>${tenantLabel}</td>
+        <td class="ident-num">${i.devices_using}</td>
+        <td class="ident-act">
           <div style="display:flex; gap:4px; justify-content:flex-end;">
             <button class="btn-icon" data-action="assign-identity" data-id="${i.id}" style="width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center;" title="${escapeHtml(tr('btnAssignIdentityTitle') || 'Assign to devices')}"><i class="fa-solid fa-users-rectangle" style="font-size:11px;"></i></button>
             <button class="btn-icon" data-action="edit-identity" data-id="${i.id}" style="width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center;" title="Edit"><i class="fa-solid fa-pen" style="font-size:11px;"></i></button>
@@ -1987,7 +1988,7 @@ function renderIdentitiesPanel() {
           </div>
         </td></tr>`;
     }).join('')
-        : `<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:16px; font-size:13px;">${tr('emptyIdentities')}</td></tr>`;
+        : `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:16px; font-size:13px;">${tr('emptyIdentities')}</td></tr>`;
 }
 
 // ===== Port Config Modal (promosso da static/js/topology.js: usato anche
@@ -2429,6 +2430,7 @@ function buildCommandPaletteItems(query = '') {
         { id: 'tab-policy-test', title: tr('corePolicyRoutingValidation'), desc: tr('corePolicyTraceAndRouting'), group: tr('coreViews') },
         { id: 'tab-config-drift', title: 'Config Drift', desc: tr('coreRunningConfigVsBackup'), group: tr('coreViews') },
         { id: 'tab-routes', title: tr('coreRoutingTables'), desc: tr('coreRoutesAcrossDevices'), group: tr('coreViews') },
+        { id: 'tab-device-history', title: tr('dhTitle'), desc: tr('dhSubtitle'), group: tr('coreViews') },
         { id: 'tab-provisioning', title: 'Provisioning', desc: tr('coreAddNewDevicesAnd'), group: tr('coreViews') },
         { id: 'tab-import', title: tr('coreCsvImport'), desc: tr('coreBulkImportDevicesFrom'), group: tr('coreViews') },
         { id: 'tab-users', title: tr('coreUsers'), desc: tr('coreManageLocalUserAccounts'), group: tr('coreViews') },

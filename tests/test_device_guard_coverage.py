@@ -41,6 +41,9 @@ WAIVED = {
     ("commands.py", "ws_terminal"):
         "Declined 2026-08-08: HTTPException is meaningless over a WebSocket. "
         "The handler sends a message and closes with 1008.",
+    ("inventory.py", "list_device_history"):
+        "ip filters tenant-scoped history events, which also name devices "
+        "already removed from inventory; no device is contacted.",
     ("mac.py", "mac_switch"):
         "Reads the tenant-scoped switch table; no device is contacted.",
     ("observability.py", "obs_api_context"):

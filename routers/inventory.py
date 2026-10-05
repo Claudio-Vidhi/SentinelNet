@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from routers.deps import require_tab
 from pydantic import BaseModel, Field
 
-from services import inventory_manager, site_manager
+from services import device_history, inventory_manager, site_manager
 from security.security_manager import log_audit
 from core.csv_safe import csv_cell as _csv_cell
 from routers.deps import (
@@ -548,3 +548,35 @@ def reassign_device_site(payload: DeviceSiteSchema, current_user = Depends(requi
         f"alla sede '{payload.new_site}' dall'utente '{current_user.get('sub')}'."
     )
     return {"status": "success", "message": f"Dispositivo spostato nella sede '{payload.new_site}'"}
+
+
+@router.get("/api/device-history", dependencies=[Depends(require_tab("tab-devices", "tab-device-history"))])
+def list_device_history(tenant: str = "", ip: str = "", current_user=Depends(require_operator)):
+    """Added/changed/removed events of the inventory, newest first, within scope."""
+    scope = user_group_scope(current_user)
+    if tenant:
+        if scope is not None and tenant not in scope:
+            raise HTTPException(status_code=403, detail="Tenant non consentito.")
+        scope = {tenant}
+    return {"events": device_history.events(scope, ip.strip(), limit=5000)}
+
+
+@router.get("/api/device-history/{event_id}/config", dependencies=[Depends(require_tab("tab-devices", "tab-device-history"))])
+def device_history_config(event_id: str, current_user=Depends(require_operator)):
+    """Newest archived running-config of the device an event names, redacted.
+
+    Read from the event's own snapshot, not the inventory: this is how the
+    config of a device that has since been removed stays reachable."""
+    from security import redaction
+    from services.config_drift import history
+    event = device_history.get(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Evento non trovato.")
+    assert_group_allowed(current_user, event.get("tenant"))
+    device = event["device"]
+    versions = history.list_versions(device)
+    if not versions:
+        raise HTTPException(status_code=404, detail="Nessuna configurazione archiviata.")
+    text = history.read_version(device, versions[0]["seen_at"])
+    return {"seen_at": versions[0]["seen_at"], "versions": len(versions),
+            "text": redaction.redact(text)}

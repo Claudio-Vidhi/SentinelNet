@@ -10,7 +10,27 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- Inventario → **Cronologia**: sotto-tab con la linea del tempo di ogni
+  apparato aggiunto, modificato o dismesso per tenant, raggruppata per
+  giorno. Per ogni evento: chi l'ha fatto, i campi cambiati (prima →
+  dopo; le credenziali solo come "cambiata", mai il valore), i dettagli
+  dell'apparato in quel momento e l'ultima configurazione archiviata, con
+  le credenziali mascherate, anche dopo la dismissione. Un import CSV o
+  un sync dell'agente è una sola riga espandibile; una dismissione dice
+  quanto è rimasto in inventario. Filtri per tenant, periodo, tipo e
+  ricerca, con il saldo del periodo.
+- La cronologia parte con il passato già ricostruito dal registro di
+  audit (aggiunte, salvataggi, eliminazioni, spostamenti di tenant e di
+  sede, promozioni), segnato come tale e limitato a ciò che il registro
+  ha davvero scritto.
+
 ### Fixed
+
+- Provisioning → Identità del tenant: nel pannello laterale le colonne
+  erano tagliate e le azioni finivano fuori vista. Ora lo username sta
+  sotto il nome, il tenant va a capo e il pannello è più largo.
 
 - SSH verso switch Cisco IOS meno recenti: dalla 0.44.0 (paramiko 5) ogni
   triage, backup e sessione terminale su apparati che offrono solo scambi

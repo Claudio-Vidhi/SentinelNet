@@ -263,6 +263,14 @@ async def client_tag_middleware(request: Request, call_next):
     from security import security_manager
     security_manager.set_client_tag(
         request.headers.get(security_manager.CLIENT_TAG_HEADER))
+    # Only writes are attributed (device history); the route's own
+    # dependency still decides whether the token is accepted.
+    if request.method != "GET":
+        auth = request.headers.get("authorization", "")
+        token = auth[7:] if auth.lower().startswith("bearer ") else \
+            request.cookies.get("net_session")
+        payload = security_manager.verify_access_token(token) if token else None
+        security_manager.set_actor((payload or {}).get("sub", ""))
     return await call_next(request)
 
 

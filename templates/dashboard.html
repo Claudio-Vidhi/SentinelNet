@@ -284,7 +284,7 @@
       <div class="nav-group" data-nav-group="inventory">
         <h3><button type="button" class="nav-group-toggle" aria-expanded="true" aria-controls="navItems-inventory"><span class="nav-group-label" data-i18n="navInventory">Inventario</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button></h3>
         <div class="nav-group-items" id="navItems-inventory">
-        <button class="nav-item" data-tab="tab-devices" role="tab" aria-controls="tab-devices" aria-selected="false" tabindex="-1">
+        <button class="nav-item" data-tabs="tab-devices tab-device-history" data-tab="tab-devices" role="tab" aria-controls="tab-devices" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabInventory"><i class="fa-solid fa-list-check"></i> Network Inventory</span>
         </button>
         <button class="nav-item" data-tabs="tab-map tab-map-interactive" data-tab="tab-map" role="tab" aria-controls="tab-map" aria-selected="false" tabindex="-1">
@@ -622,6 +622,11 @@
         </div>
       </div>
 
+      <div class="subtab-bar requires-write">
+        <button class="btn btn-secondary ti-subtab active" data-switch-tab="tab-devices" data-i18n="dhSubInventory">Inventario</button>
+        <button class="btn btn-secondary ti-subtab" data-switch-tab="tab-device-history" data-i18n="dhSubHistory">Cronologia</button>
+      </div>
+
       <div class="panel inv-panel">
         <!-- Status tabs: whole-fleet counts (updateInventoryKpis), and a filter on the table below. -->
         <div class="inv-tabs">
@@ -683,6 +688,58 @@
       </div>
     </div>
 
+    <!-- TAB 1a: Cronologia inventario.
+         THESIS: the inventory's own printer roll - a spine by day where a
+         device enters, changes and leaves, not an audit-log table.
+         GEOMETRY: added = filled node, decommissioned = hollow node, changed =
+         small node. Ink only: colour is state, and these are events.
+         BATCH: one import or agent sync is one row, opened on demand.
+         EVIDENCE: every row opens on the snapshot at that moment, the last
+         archived config and, for a decommission, how long it was in service. -->
+    <div id="tab-device-history" class="tab-content" role="tabpanel" tabindex="0">
+      <div class="page-head">
+        <div class="page-head-text">
+          <h2 data-i18n="dhTitle">Cronologia inventario</h2>
+          <p data-i18n="dhSubtitle">Quando ogni apparato e' entrato in un tenant, cosa e' cambiato e quando e' stato dismesso, con chi l'ha fatto e la configurazione che aveva.</p>
+        </div>
+      </div>
+      <div class="subtab-bar">
+        <button class="btn btn-secondary ti-subtab" data-switch-tab="tab-devices" data-i18n="dhSubInventory">Inventario</button>
+        <button class="btn btn-secondary ti-subtab active" data-switch-tab="tab-device-history" data-i18n="dhSubHistory">Cronologia</button>
+      </div>
+
+      <div class="panel dh-panel">
+        <div class="dh-controls">
+          <div class="form-group">
+            <label for="dhTenant" data-i18n="dhLblTenant">Tenant</label>
+            <select id="dhTenant"></select>
+          </div>
+          <div class="form-group">
+            <label for="dhPeriod" data-i18n="dhLblPeriod">Periodo</label>
+            <select id="dhPeriod">
+              <option value="7" data-i18n="dhPeriod7">Ultimi 7 giorni</option>
+              <option value="30" data-i18n="dhPeriod30" selected>Ultimi 30 giorni</option>
+              <option value="90" data-i18n="dhPeriod90">Ultimi 90 giorni</option>
+              <option value="365" data-i18n="dhPeriod365">Ultimo anno</option>
+              <option value="0" data-i18n="dhPeriodAll">Tutto</option>
+            </select>
+          </div>
+          <div class="form-group dh-search">
+            <label for="dhSearch" data-i18n="dhLblSearch">Cerca</label>
+            <input id="dhSearch" type="search" autocomplete="off" placeholder="IP, hostname, utente" data-i18n-placeholder="dhSearchPl">
+          </div>
+        </div>
+        <div class="inv-tabs dh-kinds" role="group" aria-label="Tipo di evento" data-i18n-aria-label="dhAriaKinds">
+          <button type="button" class="inv-tab active" data-dh-kind="all" aria-pressed="true"><span data-i18n="dhKindAll">Tutti</span><span class="inv-tab-count" id="dhCountAll">&mdash;</span></button>
+          <button type="button" class="inv-tab" data-dh-kind="added" aria-pressed="false"><i class="dh-node" data-ev="added" aria-hidden="true"></i><span data-i18n="dhKindAdded">Aggiunti</span><span class="inv-tab-count" id="dhCountAdded">&mdash;</span></button>
+          <button type="button" class="inv-tab" data-dh-kind="removed" aria-pressed="false"><i class="dh-node" data-ev="removed" aria-hidden="true"></i><span data-i18n="dhKindRemoved">Dismessi</span><span class="inv-tab-count" id="dhCountRemoved">&mdash;</span></button>
+          <button type="button" class="inv-tab" data-dh-kind="changed" aria-pressed="false"><i class="dh-node" data-ev="changed" aria-hidden="true"></i><span data-i18n="dhKindChanged">Modificati</span><span class="inv-tab-count" id="dhCountChanged">&mdash;</span></button>
+          <span class="dh-net"><span data-i18n="dhNet">Saldo del periodo</span> <b id="dhNet">&mdash;</b></span>
+        </div>
+        <div id="dhTimeline" class="dh-timeline" aria-live="polite"></div>
+      </div>
+    </div>
+
     <!-- TAB 1b: Provisioning Apparato (estratto da Network Inventory) -->
     <div id="tab-provisioning" class="tab-content" role="tabpanel" tabindex="0">
       <div class="page-head">
@@ -696,7 +753,7 @@
         <button class="btn btn-secondary ti-subtab" data-switch-tab="tab-provisioner" data-i18n="tabProvisioner"></button>
       </div>
 
-      <div style="display:grid; grid-template-columns: minmax(380px, 1fr) minmax(320px, 420px); gap:18px; align-items:start;" class="prov-grid">
+      <div style="display:grid; grid-template-columns: minmax(380px, 1fr) minmax(420px, 520px); gap:18px; align-items:start;" class="prov-grid">
         <article class="panel requires-write">
           <div class="requires-write">
             <h3 style="margin-bottom: 12px; font-size: 17px;" id="devFormTitle" data-i18n="titleProvisioning"><i class="fa-solid fa-circle-plus"></i> Provisioning Apparato</h3>
@@ -854,15 +911,17 @@
 
         <article class="panel requires-write" id="identitiesPanel">
           <h3 style="font-size:17px; margin-bottom:6px;" data-i18n="titleIdentities"><i class="fa-solid fa-id-badge"></i> Identità del Tenant</h3>
-          <div class="table-wrap" style="overflow-x:hidden;">
-            <table style="width:100%; table-layout:fixed; border-collapse:collapse;">
+          <div class="table-wrap">
+            <!-- A side panel, not a schedule: four fixed columns that fit it.
+                 Resize/reorder/picker would let a saved width push the
+                 actions out of view, which is what happened. -->
+            <table class="ident-table" data-no-resize data-no-reorder data-no-colpicker>
               <thead>
-                <tr style="border-bottom:1px solid var(--border);">
-                  <th style="width:25%; padding:8px 6px; text-align:left;" data-i18n="thIdentName">Nome</th>
-                  <th style="width:30%; padding:8px 6px; text-align:left;" data-i18n="thIdentTenant">Tenant</th>
-                  <th style="width:22%; padding:8px 6px; text-align:left;">Username</th>
-                  <th style="width:8%; padding:8px 6px; text-align:center;" data-i18n="thIdentDevices">Device</th>
-                  <th style="width:15%; padding:8px 6px; text-align:right;" data-i18n="thIdentActions">Azioni</th>
+                <tr>
+                  <th data-i18n="thIdentName">Nome</th>
+                  <th data-i18n="thIdentTenant">Tenant</th>
+                  <th class="ident-num" data-i18n="thIdentDevices">Device</th>
+                  <th class="ident-act" data-i18n="thIdentActions">Azioni</th>
                 </tr>
               </thead>
               <tbody id="identitiesTableBody"></tbody>
