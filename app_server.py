@@ -569,17 +569,24 @@ def main():
     if (not os.environ.get("SENTINELNET_WINDOWS_SERVICE")
             and not os.environ.get("SENTINELNET_PORT")
             and _windows_service_registered()):
-        if _port_in_use(host, port):
+        if not getattr(sys, "frozen", False):
+            # A source checkout is not the shortcut: it has its own ./data,
+            # so it runs side by side on the next port instead of deferring.
+            # ponytail: assumes the service sits on the default port, set
+            # SENTINELNET_PORT if it does not.
+            port += 1
+        elif _port_in_use(host, port):
             print(f"SentinelNet e' gestito dal servizio Windows: "
                   f"{browse_url(scheme, host, port)}")
             if not no_browser:
                 webbrowser.open(browse_url(scheme, host, port))
             return
-        print(f"Il servizio Windows SentinelNet e' installato ma non risponde "
-              f"su {host}:{port}. Avvialo da services.msc, o riavvia la "
-              f"macchina: questo collegamento non ne apre un secondo, perche' "
-              f"toglierebbe la porta al servizio.", file=sys.stderr)
-        sys.exit(1)
+        else:
+            print(f"Il servizio Windows SentinelNet e' installato ma non risponde "
+                  f"su {host}:{port}. Avvialo da services.msc, o riavvia la "
+                  f"macchina: questo collegamento non ne apre un secondo, perche' "
+                  f"toglierebbe la porta al servizio.", file=sys.stderr)
+            sys.exit(1)
 
     if _port_in_use(host, port):
         # Sotto il servizio Windows la scorciatoia non vale: uscire con 0
