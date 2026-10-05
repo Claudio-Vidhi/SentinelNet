@@ -10,6 +10,19 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- SSH verso switch Cisco IOS 12.x: questi apparati offrono come scambio
+  di chiavi solo `diffie-hellman-group1-sha1`, che il fallback SHA-1 della
+  0.46.0 non copriva, quindi terminale, triage e backup fallivano ancora
+  con "no acceptable kex algorithm". Ora group1 è proposto per ultimo,
+  sempre e solo nel secondo tentativo.
+
+- Terminale SSH: quando la negoziazione fallisce ("no acceptable ...") il
+  messaggio ora elenca cosa propone l'apparato (kex, chiave host, cipher,
+  MAC) e segna le categorie che SentinelNet non supporta. Prima serviva
+  `ssh -vv` da un'altra macchina per scoprirlo.
+
 ## [0.47.0] - 2026-10-05
 
 ### Changed
