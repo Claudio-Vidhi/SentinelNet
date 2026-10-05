@@ -570,7 +570,8 @@ def main():
             and not os.environ.get("SENTINELNET_PORT")
             and _windows_service_registered()):
         if _port_in_use(host, port):
-            print("SentinelNet e' gestito dal servizio Windows: apro l'interfaccia.")
+            print(f"SentinelNet e' gestito dal servizio Windows: "
+                  f"{browse_url(scheme, host, port)}")
             if not no_browser:
                 webbrowser.open(browse_url(scheme, host, port))
             return
@@ -592,11 +593,13 @@ def main():
             print(f"Porta {host}:{port} occupata da un altro processo: "
                   f"il servizio riprova fra poco.", file=sys.stderr)
             sys.exit(1)
-        print(f"SentinelNet e' gia' in esecuzione su {host}:{port}: apro l'interfaccia.")
+        print(f"SentinelNet e' gia' in esecuzione: {browse_url(scheme, host, port)}")
         if not no_browser:
             webbrowser.open(browse_url(scheme, host, port))
         return
 
+    # Uvicorn logs the bind address (0.0.0.0 included), not a URL to open.
+    print(f"SentinelNet: {browse_url(scheme, host, port)}")
     if not no_browser:
         threading.Thread(target=open_browser, args=(scheme, host, port),
                          daemon=True).start()
