@@ -118,7 +118,22 @@ def gate():
         run(args, capture=False)
 
 
+def console_safe() -> None:
+    """Never die printing the CHANGELOG preview.
+
+    A Windows console is cp1252: an arrow or a curly quote in the notes raised
+    UnicodeEncodeError before anything was done, and the release stopped.
+    Unprintable characters become '?' on screen; the files are written UTF-8
+    regardless.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure:
+            reconfigure(errors="replace")
+
+
 def main():
+    console_safe()
     ap = argparse.ArgumentParser(description="Prepara una release (non pubblica).")
     ap.add_argument("part", choices=("major", "minor", "patch"))
     ap.add_argument("--dry-run", action="store_true",

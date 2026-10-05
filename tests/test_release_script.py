@@ -109,5 +109,22 @@ class PrintedCommandsRunInPowerShell(unittest.TestCase):
         self.assertIn("dist/SentinelNet-Setup-{new}.exe", create[0])
 
 
+class ConsoleSafe(unittest.TestCase):
+    def test_a_cp1252_console_survives_an_arrow_in_the_notes(self):
+        # 0.46.0: "→" in the CHANGELOG killed the preview print on Windows.
+        import io
+        buf = io.BytesIO()
+        out = io.TextIOWrapper(buf, encoding="cp1252")
+        saved = sys.stdout
+        sys.stdout = out
+        try:
+            release.console_safe()
+            print("prima → dopo")
+            out.flush()
+        finally:
+            sys.stdout = saved
+        self.assertEqual(buf.getvalue().strip(), b"prima ? dopo")
+
+
 if __name__ == "__main__":
     unittest.main()
