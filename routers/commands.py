@@ -26,6 +26,7 @@ from services import site_manager
 from core import core_engine
 from core import data_config
 from core import net_ssh
+from core import ssh_legacy
 from security import crypto_vault
 from security.security_manager import log_audit
 from core.app_settings import get_app_settings
@@ -406,9 +407,12 @@ async def ws_terminal(websocket: WebSocket, ip: str):
         # raw, so without the channel a jump-site device stays reachable
         # from triage and unreachable from the terminal.
         site = net_ssh.jump_site_for(ip)
-        client.connect(ip, port=ssh_port, username=username, password=pwd,
-                       look_for_keys=False, allow_agent=False, timeout=10,
-                       sock=net_ssh.jump_channel(site, ip, ssh_port) if site else None)
+        # Same SHA-1 fallback as every netmiko session (core/ssh_legacy.py).
+        ssh_legacy.with_fallback(lambda extra: client.connect(
+            ip, port=ssh_port, username=username, password=pwd,
+            look_for_keys=False, allow_agent=False, timeout=10,
+            disabled_algorithms=extra,
+            sock=net_ssh.jump_channel(site, ip, ssh_port) if site else None), ip)
 
     try:
         # 2. Primo tentativo di connessione invisibile

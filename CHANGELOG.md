@@ -10,6 +10,16 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- SSH verso switch Cisco IOS meno recenti: dalla 0.44.0 (paramiko 5) ogni
+  triage, backup e sessione terminale su apparati che offrono solo scambi
+  di chiavi SHA-1 e chiave host `ssh-rsa` falliva alla negoziazione
+  ("no acceptable kex algorithm"). Ora il primo tentativo usa solo
+  algoritmi moderni; se l'apparato li rifiuta tutti si ritenta una volta
+  con `diffie-hellman-group14-sha1` / `group-exchange-sha1` e `ssh-rsa`.
+  Un apparato moderno non vede mai SHA-1 tra le proposte.
+
 ## [0.45.3] - 2026-10-04
 
 ### Fixed

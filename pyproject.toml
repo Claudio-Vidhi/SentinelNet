@@ -19,7 +19,11 @@ dependencies = [
     # Spans on SSH/SNMP calls. API only: a no-op until an OTLP endpoint and
     # the SDK (fastapi[opentelemetry]) are there, see docs/development.md.
     "opentelemetry-api>=1.45.0",
-    "paramiko>=3.4.0",
+    # One major only: core/ssh_legacy.py puts back the SHA-1 key exchanges
+    # and ssh-rsa that paramiko 5 deleted (older Cisco IOS speaks nothing
+    # else) by touching paramiko internals. A new major gets re-checked
+    # against tests/test_ssh_legacy_algorithms.py before the bound moves.
+    "paramiko>=5,<6",
     "pydantic>=2.6.0",
     "pyjwt>=2.8.0",
     # switch_provisioner drives the console port over pyserial: without it a
