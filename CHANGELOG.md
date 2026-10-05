@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-10-05
+
 ### Changed
 
 - **Tabelle di routing** rifatte come matrice: un prefisso per riga, un
