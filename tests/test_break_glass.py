@@ -162,6 +162,8 @@ def _stub_launch(monkeypatch, app_server, port_busy):
     # SENTINELNET_PORT ereditata dall'ambiente disattiverebbe la guardia e
     # renderebbe questi test dipendenti da chi lancia la suite.
     monkeypatch.delenv("SENTINELNET_PORT", raising=False)
+    # The guard protects the installed exe's shortcut, not a source checkout.
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setenv("SENTINELNET_NO_BROWSER", "true")
     monkeypatch.setattr(app_server, "_port_in_use", lambda h, p: port_busy)
     monkeypatch.setattr(app_server, "resolve_bind_host", lambda: "192.0.2.10")
@@ -201,6 +203,22 @@ def test_with_the_service_registered_but_down_it_says_so_instead_of_binding(monk
     with pytest.raises(SystemExit) as exc:
         app_server.main()
     assert exc.value.code != 0
+
+
+def test_a_source_run_starts_beside_the_service_on_the_next_port(monkeypatch):
+    # The repo has its own ./data: it must run alongside the installed
+    # service, not hand over to it.
+    import app_server
+
+    monkeypatch.delenv("SENTINELNET_WINDOWS_SERVICE", raising=False)
+    monkeypatch.setattr(app_server, "_windows_service_registered", lambda: True)
+    _stub_launch(monkeypatch, app_server, port_busy=False)
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    started = {}
+    monkeypatch.setattr(app_server.uvicorn, "run",
+                        lambda *a, **k: started.update(k) or None)
+    app_server.main()
+    assert started.get("port") == 8001
 
 
 def test_an_explicit_port_is_not_a_bid_for_the_services_port(monkeypatch):
