@@ -10,6 +10,31 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Changed
+
+- **Tabelle di routing** rifatte come matrice: un prefisso per riga, un
+  apparato per colonna. Per ogni apparato senza quella rotta la cella dice
+  cosa fa invece — una rotta più corta che la copre, nessuna rotta
+  ("buco"), oppure "non giudicabile" se l'apparato non ha risposto o se ne
+  conoscono solo le statiche del backup. La ricerca accetta un indirizzo
+  (evidenzia la rotta che vince su ciascun apparato), un prefisso
+  (sovrapposizione) o testo libero; chip per tipo e "Solo differenze".
+  Le tabelle si leggono una volta con "Leggi tabelle": filtrare e cercare
+  non riapre più una sessione SSH a ogni tasto.
+- **Dispositivi & Categorie** in tre colonne: categorie a sinistra, elenco
+  in sola lettura al centro, ispettore a destra che modifica e salva un
+  apparato alla volta. La vista si apre sulla coda degli apparati scoperti
+  via CDP/LLDP con categoria solo dedotta; uscire da un apparato con
+  modifiche non salvate chiede conferma.
+- Localizzazione Endpoint: pannelli di ricerca MAC/ARP ridisegnati.
+
+### Fixed
+
+- Accessibilità: circa 60 campi generati da JavaScript (impostazioni
+  observability e avanzate, parametri delle regole incidenti, indirizzo di
+  ascolto, email nella tabella utenti, selettore lingua) non avevano un
+  nome accessibile per i lettori di schermo.
+
 ## [0.46.0] - 2026-10-05
 
 ### Added
