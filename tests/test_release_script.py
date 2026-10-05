@@ -99,6 +99,15 @@ class PrintedCommandsRunInPowerShell(unittest.TestCase):
             self.assertFalse(line.rstrip().endswith("\\"),
                              f"continuazione di riga in stile bash: {line!r}")
 
+    def test_release_create_attaches_installer(self):
+        # The in-app updater reads the .exe asset: 0.45.3 was published
+        # without it and no installed copy could update.
+        src = (ROOT / "scripts" / "dev" / "release.py").read_text(encoding="utf-8")
+        printed = src.split('Per pubblicarla', 1)[1].split('"""', 1)[0]
+        create = [l for l in printed.splitlines() if "gh release create" in l]
+        self.assertEqual(len(create), 1)
+        self.assertIn("dist/SentinelNet-Setup-{new}.exe", create[0])
+
 
 if __name__ == "__main__":
     unittest.main()

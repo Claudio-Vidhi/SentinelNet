@@ -178,7 +178,11 @@ Per pubblicarla (una riga alla volta):
   git push origin Dev
   git push --force-with-lease origin master
   git push origin v{new}
-  gh release create v{new} --title "SentinelNet {new}" --notes-file "{notes}" --latest
+  pwsh scripts/build_installer.ps1
+  gh release create v{new} dist/SentinelNet-Setup-{new}.exe --title "SentinelNet {new}" --notes-file "{notes}" --latest
+
+The installer must ride on the release itself: the in-app updater reads the
+.exe asset, and a release without it is invisible to it (0.45.3 shipped bare).
 
 Per annullarla, finche' non hai spinto:
 
