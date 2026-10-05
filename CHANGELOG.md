@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.48.0] - 2026-10-05
+
 ### Fixed
 
 - SSH verso switch Cisco IOS 12.x: questi apparati offrono come scambio
