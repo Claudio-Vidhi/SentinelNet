@@ -839,6 +839,14 @@ def get_sdwan_health(device):
     return {"source": "api", "data": data.get("results", data)}
 
 
+def get_policy_routes(device):
+    """Configured policy routes (PBR). They are matched BEFORE the routing
+    table, so a route graph that ignores them shows a path the traffic does
+    not take. REST only: the CLI text is not parsed anywhere."""
+    data = api_get_cmdb(device["IP"], "cmdb/router/policy")
+    return {"source": "api", "data": data.get("results", data)}
+
+
 def get_route_for(device, dst_ip: str):
     """La rotta che il FortiGate userebbe per ``dst_ip``: prefisso più
     specifico che lo contiene, con gateway e interfaccia di uscita.

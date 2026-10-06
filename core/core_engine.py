@@ -2310,11 +2310,13 @@ def _generate_network_map(group_filter=None) -> dict:
         local_pc  = sorted(acc["src_pc"])[0] if acc["src_pc"] else None
         remote_pc = sorted(acc["tgt_pc"])[0] if acc["tgt_pc"] else None
         # Fallback: if a side has no channel-group in config but announces a
-        # Port-channel, use that; otherwise fall back to the common pc_name.
+        # Port-channel, use that. Never the common pc_name: that is the OTHER
+        # side's id as often as not (Po8 on the core labelled the access
+        # switch's end too). An unknown end stays None and the map says so.
         if not local_pc:
-            local_pc = next((p for p in src_list if _is_portchannel_port(p)), None) or pc_name
+            local_pc = next((p for p in src_list if _is_portchannel_port(p)), None)
         if not remote_pc:
-            remote_pc = next((p for p in tgt_list if _is_portchannel_port(p)), None) or pc_name
+            remote_pc = next((p for p in tgt_list if _is_portchannel_port(p)), None)
 
         links.append({
             "source":         src,

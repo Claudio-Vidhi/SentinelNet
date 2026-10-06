@@ -73,7 +73,7 @@ def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
       lines: [{points:[[x,y],...], color, alpha, width, dash}]
       polys: [{points, fill, alpha}]
       rects: [{x, y, w, h, fill, alpha}]
-      texts: [{x, y, text, color, size, bold, w}]
+      texts: [{x, y, text, color, size, bold, w, [angle]}]  (angle: radians, canvas)
     connectors: lista opzionale di cavi strutturati (mappa minimalista):
       [{from, to, points:[[x,y],...], color, width, dash}]
       Ogni cavo diventa UNA forma 1-D continua, INCOLLATA (glue) ai connection
@@ -272,7 +272,7 @@ def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
           </Section>
         </Shape>''')
 
-    def text_shape(cx, cy, text, color, size_px, bold, w_px):
+    def text_shape(cx, cy, text, color, size_px, bold, w_px, angle=0.0):
         sid = next_id()
         w = max((w_px or len(text) * size_px * 0.6) * _SCALE, 0.1)
         h = max(size_px * 1.4 * _SCALE, 0.08)
@@ -285,6 +285,7 @@ def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
           <Cell N="Height" V="{h:.4f}"/>
           <Cell N="LocPinX" V="{w/2:.4f}"/>
           <Cell N="LocPinY" V="{h/2:.4f}"/>
+          <Cell N="Angle" V="{angle:.4f}"/>
           <Cell N="LinePattern" V="0"/>
           <Cell N="FillPattern" V="0"/>
           {char_section(pt, color, bold)}
@@ -374,9 +375,11 @@ def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
                            dash=bool(ln.get("dash")))
         for t in primitives.get("texts", []):
             if t.get("text"):
+                # Canvas turns clockwise with y down, Visio counter-clockwise
+                # with y up: the same rotation has the opposite sign.
                 text_shape(t["x"], t["y"], t["text"], t.get("color") or "#455a64",
                            float(t.get("size", 10)), bool(t.get("bold")),
-                           float(t.get("w") or 0))
+                           float(t.get("w") or 0), -float(t.get("angle") or 0))
     else:
         # Mappa classica: una linea retta per arco, con etichetta.
         for e in edges:

@@ -147,6 +147,100 @@ class SingleDeviceCollection(unittest.TestCase):
         self.assertIn("timeout", out["error"])
 
 
+SDWAN_HEALTH = {
+    "ping-dns": {"wan1": {"status": "up", "latency": 12.5, "jitter": 0.4, "packet_loss": 0},
+                 "wan2": {"status": "up", "latency": 30.1, "jitter": 2.0, "packet_loss": 1},
+                 "lte": {"status": "down"}},
+    "http-saas": {"wan1": {"status": "up", "latency": 40.0, "jitter": 1.0, "packet_loss": 0},
+                  "wan2": {"status": "down"},
+                  "lte": {"status": "down"}},
+}
+
+
+POLICY_ROUTES = [
+    {"seq-num": 1, "status": "enable", "action": "permit",
+     "input-device": [{"name": "internal"}], "src": [{"subnet": "10.10.0.0 255.255.255.0"}],
+     "dst": [{"subnet": "198.51.100.0 255.255.255.0"}], "dstaddr": [{"name": "saas-net"}],
+     "gateway": "203.0.113.254", "output-device": "wan2", "comments": "SaaS via wan2"},
+    {"seq-num": 2, "status": "disable", "action": "deny", "input-device": [], "dst": []},
+]
+
+
+class FortiGateContext(unittest.TestCase):
+    """The route graph names a next hop from these: interface addresses, HA
+    members, IPsec tunnels. Asked only of a FortiGate that answered over REST."""
+
+    def _ctx(self, answer):
+        ifaces = {"port1": {"name": "port1", "ip": "203.0.113.9", "mask": 24}}
+        tunnels = [{"name": "vpn-site-b", "rgwy": "198.51.100.7",
+                    "proxyid": [{"status": "down"}, {"status": "up"}]},
+                   {"name": "vpn-dead", "rgwy": "198.51.100.8", "proxyid": [{"status": "down"}]}]
+        with mock.patch.object(fortigate_service, "get_interfaces",
+                               return_value={"source": "api", "data": ifaces}) as gi, \
+             mock.patch.object(fortigate_service, "get_ha_status",
+                               return_value={"results": [{"hostname": "fw-edge", "serial_no": "FGT0001"},
+                                                         {"hostname": "fw-edge-b", "serial_no": "FGT0002"}]}), \
+             mock.patch.object(fortigate_service, "get_vpn_tunnels",
+                               return_value={"source": "api", "data": tunnels}), \
+             mock.patch.object(fortigate_service, "get_sdwan_health",
+                               return_value={"source": "api", "data": SDWAN_HEALTH}), \
+             mock.patch.object(fortigate_service, "get_policy_routes",
+                               return_value={"source": "api", "data": POLICY_ROUTES}):
+            return route_table.fortigate_context(FGT_A, answer), gi
+
+    def test_policy_routes_are_normalised(self):
+        ctx, _ = self._ctx({"source": "api", "rows": [{"type": "static"}]})
+        first, second = ctx["policy_routes"]
+        self.assertEqual(first, {"seq": 1, "enabled": True, "permit": True, "input": ["internal"],
+                                 "src": ["10.10.0.0/24"], "dst": ["198.51.100.0/24", "saas-net"],
+                                 "gateway": "203.0.113.254", "output": "wan2", "comment": "SaaS via wan2"})
+        self.assertFalse(second["enabled"])
+        self.assertFalse(second["permit"], "FortiOS 'deny' = fall back to the routing table")
+        self.assertEqual(second["dst"], [], "no dst = any")
+
+    def test_a_live_fortigate_gives_addresses_ha_and_tunnels(self):
+        ctx, _ = self._ctx({"source": "api", "rows": [{"type": "static"}]})
+        self.assertEqual([a["ip"] for a in ctx["addresses"]], ["203.0.113.9"])
+        self.assertEqual([p["hostname"] for p in ctx["ha"]], ["fw-edge", "fw-edge-b"])
+        self.assertEqual(ctx["tunnels"], [
+            {"name": "vpn-site-b", "remote_gw": "198.51.100.7", "up": True},
+            {"name": "vpn-dead", "remote_gw": "198.51.100.8", "up": False}])
+
+    def test_a_silent_or_backup_only_fortigate_is_not_asked_again(self):
+        for answer in ({"error": "timeout"}, {"source": "backup", "rows": [{"type": "static"}]}):
+            ctx, gi = self._ctx(answer)
+            self.assertEqual(ctx, {"addresses": [], "ha": [], "tunnels": [], "sdwan": [],
+                                   "policy_routes": []})
+            gi.assert_not_called()
+
+    def test_a_failing_part_leaves_the_others(self):
+        with mock.patch.object(fortigate_service, "get_interfaces",
+                               return_value={"source": "api", "data": {}}), \
+             mock.patch.object(fortigate_service, "get_ha_status",
+                               side_effect=fortigate_service.FortiGateError("404")), \
+             mock.patch.object(fortigate_service, "get_vpn_tunnels",
+                               return_value={"source": "api", "data": [{"name": "t1", "rgwy": "198.51.100.7"}]}), \
+             mock.patch.object(fortigate_service, "get_sdwan_health",
+                               side_effect=fortigate_service.FortiGateError("404")):
+            ctx = route_table.fortigate_context(FGT_A, {"source": "api", "rows": []})
+        self.assertEqual(ctx["ha"], [])
+        self.assertEqual([t["name"] for t in ctx["tunnels"]], ["t1"])
+        self.assertEqual(ctx["sdwan"], [], "no SD-WAN configured (404) is no members, not an error")
+
+    def test_sdwan_members_state_from_their_checks(self):
+        ctx, _ = self._ctx({"source": "api", "rows": [{"type": "static"}]})
+        by = {m["interface"]: m for m in ctx["sdwan"]}
+        self.assertEqual(by["wan1"]["state"], "up")
+        self.assertEqual(by["wan2"]["state"], "degraded", "one check of two is down")
+        self.assertEqual(by["lte"]["state"], "down")
+        self.assertEqual(by["wan1"]["checks"][0],
+                         {"name": "ping-dns", "status": "up", "latency": 12.5, "jitter": 0.4, "loss": 0})
+
+    def test_sdwan_members_tolerate_odd_shapes(self):
+        self.assertEqual(route_table.sdwan_members([]), [])
+        self.assertEqual(route_table.sdwan_members({"hc": "x"}), [])
+
+
 class IosRouteParsing(unittest.TestCase):
     """`show ip route` e' l'unica forma in cui uno switch pubblica la sua RIB.
 

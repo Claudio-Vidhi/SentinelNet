@@ -17,6 +17,9 @@
 
     let _rtRows = [];
     let _rtErrors = [];
+    // Per device, from /api/routes: interface addresses, HA members, IPsec
+    // tunnels. The route graph names next hops with it.
+    let _rtContext = {};
     let _rtLoaded = [];          // [{value, label}] devices of the last read
     let _rtMatrix = [];
     const _rtTypes = new Set();  // empty = every type
@@ -37,13 +40,16 @@
         static: '--primary',
         ospf: '--warning',
         bgp: '--info',
+        // Policy routes are not RIB entries: a colour of their own, a conductor
+        // hue rather than a status lamp.
+        policy: '--cond-d',
         eigrp: '--text-muted',
         rip: '--text-muted',
         isis: '--text-muted',
         other: '--text-muted',
         unknown: '--text-muted',
     };
-    const RT_TYPE_ORDER = ['connected', 'local', 'static', 'ospf', 'bgp',
+    const RT_TYPE_ORDER = ['connected', 'local', 'static', 'ospf', 'bgp', 'policy',
                            'eigrp', 'rip', 'isis', 'other', 'unknown'];
 
     function rtTypeColor(type) {
@@ -175,6 +181,185 @@
             || (r.interface || '').toLowerCase().indexOf(q.needle) !== -1));
     }
 
+    /** Which selected device an address belongs to: its management IP, or a
+     *  /32 "local" route it reports for one of its own interfaces. A shared
+     *  connected subnet proves nothing (both ends have it), so it is not used. */
+    // SD-WAN member state, worst wins when several members feed one ribbon.
+    const RT_SK_STATE = { up: 1, degraded: 2, down: 3 };
+
+    function rtDeviceOwners(allRows, devices, context = {}) {
+        const owners = new Map(devices.map(d => [d.value, d.value]));
+        for (const r of allRows) {
+            const n = parseNet(r.network);
+            if (r.type === 'local' && n && n.len === 32) owners.set(r.network.split('/')[0], r.device_ip);
+        }
+        // A FortiGate reports no local routes: its interface addresses come
+        // from the REST interface list (context, from /api/routes).
+        for (const d of devices) {
+            for (const a of (context[d.value] || {}).addresses || []) owners.set(a.ip, d.value);
+        }
+        return owners;
+    }
+
+    /** Where a route goes: `{to, label, tunnel}`. `to` is the selected device
+     *  that owns the next hop, if any. A FortiGate route into an IPsec tunnel
+     *  has no gateway, only the tunnel's name as interface: the tunnel's
+     *  remote gateway is the real next hop, often another selected FortiGate. */
+    function rtHopResolver(owners, context, directLabel) {
+        return r => {
+            const ctx = context[r.device_ip] || {};
+            // The route leaves through an SD-WAN member: its health checks say
+            // whether that link is carrying traffic right now.
+            const sdwan = (ctx.sdwan || []).find(m => m.interface === r.interface) || null;
+            const gw = r.gateway && r.gateway !== '0.0.0.0' ? r.gateway : '';
+            // The member's name next to the gateway: which link, not only which ISP.
+            if (gw) return { to: owners.get(gw), label: sdwan ? `${gw} · ${sdwan.interface}` : gw, tunnel: null, sdwan };
+            const tunnel = (ctx.tunnels || []).find(t => t.name === r.interface);
+            if (tunnel) {
+                return { to: owners.get(tunnel.remote_gw), tunnel, sdwan,
+                         label: tunnel.remote_gw ? `${tunnel.name} ⇢ ${tunnel.remote_gw}` : tunnel.name };
+            }
+            return { to: undefined, label: r.interface || directLabel, tunnel: null, sdwan };
+        };
+    }
+
+    /** Depth of each device in the "routes via" graph: a device another
+     *  selected device uses as next hop sits one stage after it. Back edges of
+     *  a loop are ignored, so the result is always a finite left-to-right order. */
+    function rtDeviceDepths(rows, devices, resolve) {
+        const next = new Map(devices.map(d => [d.value, new Set()]));
+        const fed = new Set();
+        for (const r of rows) {
+            const to = resolve(r).to;
+            if (to && to !== r.device_ip && next.has(to) && next.has(r.device_ip)) {
+                next.get(r.device_ip).add(to); fed.add(to);
+            }
+        }
+        const depth = new Map();
+        const walk = (d, k, path) => {
+            if ((depth.get(d) ?? -1) >= k) return;
+            depth.set(d, k);
+            for (const s of next.get(d)) if (!path.has(s)) walk(s, k + 1, new Set(path).add(d));
+        };
+        const ids = devices.map(d => d.value);
+        ids.filter(d => !fed.has(d)).forEach(d => walk(d, 0, new Set()));
+        ids.filter(d => !depth.has(d)).forEach(d => walk(d, 0, new Set()));  // a pure loop
+        return depth;
+    }
+
+    /** Route flows for the Sankey: device -> route type -> next hop, each link
+     *  weighted by how many routes take it, and carrying those routes for the
+     *  detail view. A next hop that is another selected device IS that
+     *  device's node, so a chain reads left to right. Next hops past the
+     *  `cap` busiest fold into one "other" node per stage. */
+    function rtBuildSankey(rows, devices, { cap, resolve, otherLabel }) {
+        const name = new Map(devices.map(d => [d.value, d.label]));
+        const depth = rtDeviceDepths(rows, devices, resolve);
+        const hopOf = r => resolve(r).label;
+        const hopCount = new Map();
+        for (const r of rows) hopCount.set(hopOf(r), (hopCount.get(hopOf(r)) || 0) + 1);
+        const keep = new Set([...hopCount.entries()].sort((a, b) => b[1] - a[1])
+            .slice(0, cap).map(([h]) => h));
+        const nodes = new Map();
+        const links = new Map();
+        const node = (id, col, label, kind, extra) => {
+            if (!nodes.has(id)) nodes.set(id, { id, col, label, kind, inn: 0, out: 0, ...extra });
+            return nodes.get(id);
+        };
+        const worse = (a, b) => (RT_SK_STATE[b] || 0) > (RT_SK_STATE[a] || 0) ? b : a;
+        const link = (s, t, type, r, hop) => {
+            const k = s.id + '>' + t.id;
+            if (!links.has(k)) links.set(k, { source: s.id, target: t.id, type, value: 0, rows: [] });
+            const l = links.get(k);
+            l.value += 1; l.rows.push(r);
+            // A ribbon into a tunnel says which one, and whether it is down;
+            // one over an SD-WAN member carries that member's worst state.
+            if (hop && hop.tunnel) { l.tunnel = hop.tunnel.name; l.down = l.down || !hop.tunnel.up; }
+            if (hop && hop.sdwan) {
+                l.sdwan = hop.sdwan;
+                l.state = worse(l.state, hop.sdwan.state);
+                t.state = worse(t.state, hop.sdwan.state);
+            }
+            s.out += 1; t.inn += 1;
+        };
+        const devNode = ip => node('d|' + ip, 2 * (depth.get(ip) || 0), name.get(ip) || ip, 'device', { ip });
+        for (const r of rows) {
+            const type = r.type || 'unknown';
+            const k = depth.get(r.device_ip) || 0;
+            const d = devNode(r.device_ip);
+            const t = node(`t|${r.device_ip}|${type}`, 2 * k + 1, type, 'type', { type, ip: r.device_ip });
+            const hopInfo = resolve(r);
+            const to = hopInfo.to;
+            const other = to && to !== r.device_ip;
+            // Only forward: the back edge of a loop stays a plain hop, named.
+            let h;
+            if (other && depth.has(to) && depth.get(to) > k) h = devNode(to);
+            else {
+                const hop = keep.has(hopOf(r)) || other ? hopOf(r) : otherLabel;
+                h = node(`h|${2 * k + 2}|${hop}`, 2 * k + 2, other ? `${hop} · ${name.get(to) || to}` : hop,
+                         hop === otherLabel ? 'other' : 'hop',
+                         { down: !!(hopInfo.tunnel && !hopInfo.tunnel.up) });
+            }
+            link(d, t, type, r, null);
+            link(t, h, type, r, hopInfo);
+        }
+        const all = [...nodes.values()];
+        all.forEach(n => { n.value = Math.max(n.inn, n.out); });
+        // Type nodes follow their device's position, then RT_TYPE_ORDER, so a
+        // device's ribbons fan out without crossing its neighbour's.
+        const devRank = new Map(all.filter(n => n.kind === 'device')
+            .sort((a, b) => a.col - b.col || b.value - a.value).map((n, i) => [n.ip, i]));
+        const typeRank = t => (RT_TYPE_ORDER.indexOf(t) + 100) % 100;
+        const kindRank = { device: 0, type: 0, hop: 1, other: 2 };
+        const ncols = Math.max(...all.map(n => n.col)) + 1;
+        const cols = Array.from({ length: ncols }, (_, c) => all.filter(n => n.col === c).sort((a, b) =>
+            kindRank[a.kind] - kindRank[b.kind]
+            || (a.kind === 'type' && b.kind === 'type'
+                ? devRank.get(a.ip) - devRank.get(b.ip) || typeRank(a.type) - typeRank(b.type)
+                : b.value - a.value)));
+        return { cols, links: [...links.values()], total: rows.length };
+    }
+
+    /** FortiGate policy routes as pseudo-rows for the graph only: one per
+     *  enabled 'permit' policy route, type 'policy'. They are matched before
+     *  the routing table, so leaving them out draws a path traffic may not
+     *  take. Not in the matrix: they are not RIB entries. 'deny' ones send
+     *  traffic back to the RIB and draw nothing of their own. */
+    function rtPolicyRows(context, devices) {
+        const out = [];
+        for (const d of devices) {
+            for (const p of (context[d.value] || {}).policy_routes || []) {
+                if (!p.enabled || !p.permit) continue;
+                const src = p.src.length ? p.src.join(', ') : 'any';
+                out.push({ device: d.label, device_ip: d.value, vrf: '', from_backup: false,
+                           network: p.dst.length ? p.dst.join(', ') : '0.0.0.0/0',
+                           gateway: p.gateway, interface: p.output, type: 'policy',
+                           raw_type: `policy #${p.seq} · src ${src}${p.input.length ? ' · in ' + p.input.join(', ') : ''}`,
+                           distance: null, metric: null, policy: p });
+            }
+        }
+        return out;
+    }
+
+    /** The search box applied to a policy row: its destinations may be
+     *  subnets or object names, and no destination means any. */
+    function rtPolicyMatches(row, q) {
+        if (q.kind === 'none') return true;
+        const dst = row.policy.dst;
+        if (q.kind === 'ip' || q.kind === 'net') {
+            if (!dst.length) return true;
+            return dst.some(x => {
+                const n = parseNet(x);
+                if (!n) return false;
+                if (q.kind === 'ip') return netContains(n, q.ip);
+                const wide = n.len <= q.net.len ? n : q.net;
+                return netContains(wide, (wide === n ? q.net : n).net);
+            });
+        }
+        return [row.network, row.gateway, row.interface, row.raw_type]
+            .some(v => (v || '').toLowerCase().indexOf(q.needle) !== -1);
+    }
+
     // --- Data -----------------------------------------------------------------
 
     function rtSelectedDevices() {
@@ -211,9 +396,10 @@
     async function loadRoutesTab() {
         const chosen = pickerSelected('rtDeviceFilter');
         _rtOpen.clear();
+        _skSel = '';
         if (!chosen.length) {
             // Nessun apparato scelto: nessuna sessione aperta.
-            _rtRows = []; _rtErrors = []; _rtLoaded = []; _rtMatrix = [];
+            _rtRows = []; _rtErrors = []; _rtLoaded = []; _rtMatrix = []; _rtContext = {};
             renderRtErrors();
             renderRtMatrix();
             return;
@@ -229,8 +415,9 @@
             const data = await res.json();
             _rtRows = data.rows || [];
             _rtErrors = data.errors || [];
+            _rtContext = data.context || {};
         } catch (e) {
-            _rtRows = [];
+            _rtRows = []; _rtContext = {};
             _rtErrors = [{ device_ip: '', error: String(e) }];
         }
         _rtLoaded = chosen;
@@ -288,6 +475,7 @@
         renderRtLegend();
 
         if (!devs.length) {
+            renderRtSankey([]);
             head.innerHTML = '';
             body.innerHTML = `<tr><td class="rt-mx-empty">${escapeHtml(tr('rtPickDevices'))}</td></tr>`;
             return;
@@ -305,6 +493,8 @@
             }).join('')}</tr>`;
 
         const rows = rtVisible(q);
+        // Same filters as the matrix: search, type chips, differences only.
+        renderRtSankey(rows);
         if (q.kind === 'ip') rows.sort((a, b) => b.net.len - a.net.len);
         const span = devs.length + 1;
         if (!rows.length) {
@@ -349,7 +539,8 @@
             const r = own[0];
             const win = winners.has(d.value + '|' + e.vrf + '|' + e.network);
             const more = own.length > 1 ? `<span class="rt-more">+${own.length - 1}</span>` : '';
-            const hop = r.gateway || r.interface;
+            // FortiOS writes 0.0.0.0 for "no gateway": the interface is the hop.
+            const hop = (r.gateway && r.gateway !== '0.0.0.0' ? r.gateway : '') || r.interface;
             return `<td class="rt-cell${win ? ' win' : ''}"${win ? ` title="${escapeHtml(tr('rtMxWins'))}"` : ''}>${
                 rtKind(r.type)}<span class="visually-hidden">${escapeHtml(r.type)} </span>${
                 hop ? escapeHtml(hop) : '&mdash;'}${more}</td>`;
@@ -385,6 +576,196 @@
               <th data-no-sort="1" class="rt-num">${escapeHtml(tr('rtColDistance'))}</th>
               <th data-no-sort="1" class="rt-num">${escapeHtml(tr('rtColMetric'))}</th>
             </tr></thead><tbody>${lines}</tbody></table></td></tr>`;
+    }
+
+    // ponytail: hand-rolled Sankey (fixed stage columns, no crossing
+    // minimisation beyond ordering), enough for device -> type -> next hop
+    // chains. A vendor lib only if it ever needs free-form graphs.
+    const RT_SK_MAX_HOPS = 12;
+    const RT_SK_DETAIL_MAX = 300;
+    const _skHidden = new Set();   // route types switched off in the graph
+    let _sk = null;                // last graph drawn, for the detail view
+    let _skSel = '';               // 'n|<node id>' or 'l|<link index>'
+
+    function renderRtSkTypes(rows) {
+        const box = document.getElementById('rtSkTypes');
+        if (!box) return;
+        const counts = {};
+        for (const r of rows) counts[r.type || 'unknown'] = (counts[r.type || 'unknown'] || 0) + 1;
+        box.innerHTML = RT_TYPE_ORDER.filter(t => counts[t]).map(t =>
+            `<button type="button" class="chip-choice rt-chip" data-action="rt-sk-type"
+                data-type="${escapeHtml(t)}" aria-pressed="${!_skHidden.has(t)}">${
+                rtKind(t)}${escapeHtml(t)}<span class="rt-chip-n">${counts[t]}</span></button>`).join('');
+    }
+
+    // State colours are the lamp tokens, reserved for state: never a type.
+    const skStateColor = st => st === 'down' ? 'var(--lamp-fault)'
+        : st === 'degraded' ? 'var(--lamp-warn)' : '';
+    // ...and always carry a word, so the state is never colour alone.
+    const skStateNote = n => {
+        const key = n.down ? 'rtSkDown' : n.state === 'down' ? 'rtSkSdwanDown'
+            : n.state === 'degraded' ? 'rtSkSdwanDegraded' : '';
+        return key ? ` · ${escapeHtml(tr(key))}` : '';
+    };
+    const skSdwanText = m => tr('rtSkSdwanMember', { name: m.interface }) + ': ' + m.checks.map(c =>
+        c.status === 'up'
+            ? `${c.name} ${c.latency == null ? '' : c.latency + ' ms'}${c.loss == null ? '' : ' · ' + tr('rtSkLoss', { n: c.loss })}`.trim()
+            : `${c.name} ${tr('rtSkCheckDown')}`).join('; ');
+
+    function renderRtSankey(entries) {
+        const box = document.getElementById('rtSankey');
+        if (!box) return;
+        const q = rtQuery(rtSearchValue());
+        const shown = entries.flatMap(e => Object.values(e.cells).flat())
+            .concat(rtPolicyRows(_rtContext, _rtLoaded).filter(r => rtPolicyMatches(r, q)))
+            .filter(r => !_rtTypes.size || _rtTypes.has(r.type));
+        renderRtSkTypes(shown);
+        const rows = shown.filter(r => !_skHidden.has(r.type || 'unknown'));
+        _sk = null;
+        if (!rows.length) {
+            const msg = !_rtLoaded.length ? 'rtPickDevices' : shown.length ? 'rtSkAllHidden' : 'rtEmpty';
+            box.innerHTML = `<p class="rt-mx-empty">${escapeHtml(tr(msg))}</p>`;
+            renderRtSkDetail();
+            return;
+        }
+        // An HA cluster is one node: its name says so, the tooltip says with whom.
+        const devices = _rtLoaded.map(d => {
+            const peers = ((_rtContext[d.value] || {}).ha || []).map(p => p.hostname).filter(Boolean);
+            return peers.length > 1 ? { ...d, label: `${d.label} · HA` } : d;
+        });
+        const g = rtBuildSankey(rows, devices, {
+            cap: RT_SK_MAX_HOPS, otherLabel: tr('rtSkOther'),
+            resolve: rtHopResolver(rtDeviceOwners(_rtRows, _rtLoaded, _rtContext), _rtContext, tr('rtSkDirect')) });
+        _sk = g;
+        const ncols = g.cols.length;
+        const NODE_W = 12, GAP = 10, PAD_L = 170, PAD_R = 190, COL_MIN = 170;
+        const W = Math.max(box.clientWidth || 900, PAD_L + PAD_R + (ncols - 1) * COL_MIN);
+        const most = Math.max(...g.cols.map(c => c.length));
+        const widest = Math.max(...g.cols.map(c => c.reduce((s, n) => s + n.value, 0)));
+        // A thin node still owns a slot tall enough for its two label lines.
+        const SLOT = 30;
+        const k = (Math.max(220, Math.min(620, most * 38)) - GAP * (most - 1)) / widest;
+        const xAt = c => PAD_L + c * (W - PAD_L - PAD_R - NODE_W) / Math.max(1, ncols - 1);
+        const slot = n => Math.max(SLOT, n.value * k);
+        const height = col => col.reduce((s, n) => s + slot(n), 0) + GAP * (col.length - 1);
+        const H = Math.max(...g.cols.map(height));
+        const byId = new Map();
+        g.cols.forEach((col, c) => {
+            let y = (H - height(col)) / 2;  // a shorter column sits centred
+            for (const n of col) {
+                const h = Math.max(2, n.value * k);
+                Object.assign(n, { x: xAt(c), y: y + (slot(n) - h) / 2, h, usedOut: 0, usedIn: 0 });
+                byId.set(n.id, n);
+                y += slot(n) + GAP;
+            }
+        });
+        // Stack each node's links in the order of the nodes they reach, so
+        // ribbons leave and arrive without crossing inside a node.
+        const ls = g.links.map((l, i) => ({ ...l, i, s: byId.get(l.source), t: byId.get(l.target), w: l.value * k }));
+        for (const l of [...ls].sort((a, b) => a.t.y - b.t.y || a.s.y - b.s.y)) {
+            l.sy = l.s.y + l.s.usedOut + l.w / 2; l.s.usedOut += l.w;
+        }
+        for (const l of [...ls].sort((a, b) => a.s.y - b.s.y || a.t.y - b.t.y)) {
+            l.ty = l.t.y + l.t.usedIn + l.w / 2; l.t.usedIn += l.w;
+        }
+        const ink = 'var(--text)', muted = 'var(--text-muted)';
+        const pct = v => `${v} (${(100 * v / g.total).toFixed(1)}%)`;
+        const paths = ls.map(l => {
+            const x0 = l.s.x + NODE_W, x1 = l.t.x, xm = (x0 + x1) / 2;
+            const on = _skSel === 'l|' + l.i ? ' rt-sk-on' : '';
+            return `<path class="rt-sk-link${on}" data-sk="l|${l.i}" data-s="${escapeHtml(l.source)}" data-t="${escapeHtml(l.target)}"
+                d="M${x0},${l.sy}C${xm},${l.sy} ${xm},${l.ty} ${x1},${l.ty}"
+                stroke="${skStateColor(l.down ? 'down' : l.state) || rtTypeColor(l.type)}" stroke-width="${Math.max(1, l.w)}"><title>${
+                escapeHtml(`${l.s.label} → ${l.t.label}: ${pct(l.value)}`
+                    + (l.tunnel ? ` · ${tr(l.down ? 'rtSkTunnelDown' : 'rtSkTunnelUp', { name: l.tunnel })}` : '')
+                    + (l.sdwan ? ` · ${skSdwanText(l.sdwan)}` : ''))}</title></path>`;
+        }).join('');
+        const nodesSvg = [...byId.values()].map(n => {
+            const fill = skStateColor(n.down ? 'down' : n.state) || (n.type ? rtTypeColor(n.type) : n.kind === 'device' ? 'var(--primary)' : muted);
+            const left = n.col === 0;
+            const tx = left ? n.x - 8 : n.x + NODE_W + 8;
+            const cy = n.y + n.h / 2;
+            const anchor = left ? 'end' : 'start';
+            const on = _skSel === 'n|' + n.id ? ' rt-sk-on' : '';
+            const peers = n.kind === 'device'
+                ? ((_rtContext[n.ip] || {}).ha || []).map(p => p.hostname).filter(Boolean) : [];
+            const say = `${n.label}: ${pct(n.value)}`
+                + (peers.length > 1 ? ` · ${tr('rtSkHaMembers', { names: peers.join(', ') })}` : '');
+            return `<g class="rt-sk-node${on}" data-sk="n|${escapeHtml(n.id)}" tabindex="0" role="button"
+                    aria-label="${escapeHtml(say)}"><title>${escapeHtml(say)}</title>
+                <rect x="${n.x - 4}" y="${n.y - 4}" width="${NODE_W + 8}" height="${n.h + 8}" fill="transparent"/>
+                <rect x="${n.x}" y="${n.y}" width="${NODE_W}" height="${n.h}" rx="2" fill="${fill}"/>
+                <text x="${tx}" y="${cy - 2}" text-anchor="${anchor}" fill="${ink}" class="rt-sk-name">${escapeHtml(n.label)}</text>
+                <text x="${tx}" y="${cy + 12}" text-anchor="${anchor}" fill="${muted}" class="rt-sk-val">${pct(n.value)}${skStateNote(n)}</text></g>`;
+        }).join('');
+        const heads = g.cols.map((_, c) => {
+            const t = c === 0 ? tr('rtColDevice') : c % 2 ? tr('rtColType')
+                : g.cols[c].some(n => n.kind === 'device') ? tr('rtSkStage') : tr('rtSkNextHop');
+            return `<text x="${c === 0 ? xAt(0) + NODE_W : xAt(c)}" y="-10" text-anchor="${c === 0 ? 'end' : 'start'}"
+                class="rt-sk-head" fill="${muted}">${escapeHtml(t)}</text>`;
+        }).join('');
+        box.innerHTML = `<svg class="rt-sk-svg" viewBox="0 -24 ${W} ${H + 32}" style="min-width:${W}px" role="group"
+            aria-label="${escapeHtml(tr('rtSkAria', { n: g.total }))}">${heads}${paths}${nodesSvg}</svg>`;
+        renderRtSkDetail();
+    }
+
+    /** The routes behind the selected node or ribbon: the "which prefixes
+     *  end up here" question the picture alone cannot answer. */
+    function renderRtSkDetail() {
+        const box = document.getElementById('rtSkDetail');
+        if (!box) return;
+        const kind = _skSel.slice(0, 1), id = _skSel.slice(2);
+        const nodeOf = nid => _sk && _sk.cols.flat().find(n => n.id === nid);
+        let title = '', rows = [];
+        if (_sk && kind === 'l' && _sk.links[Number(id)]) {
+            const l = _sk.links[Number(id)];
+            title = `${(nodeOf(l.source) || { label: '?' }).label} → ${(nodeOf(l.target) || { label: '?' }).label}`;
+            rows = l.rows;
+        } else if (kind === 'n' && nodeOf(id)) {
+            title = nodeOf(id).label;
+            const seen = new Set();
+            for (const l of _sk.links) {
+                if (l.source === id || l.target === id) l.rows.forEach(r => seen.add(r));
+            }
+            rows = [...seen];
+        }
+        if (!rows.length) { _skSel = ''; box.hidden = true; box.innerHTML = ''; return; }
+        const name = new Map(_rtLoaded.map(d => [d.value, d.label]));
+        const dash = '&mdash;';
+        rows = [...rows].sort((a, b) => (a.device_ip || '').localeCompare(b.device_ip || '')
+            || ((parseNet(a.network) || { net: 0 }).net - (parseNet(b.network) || { net: 0 }).net));
+        const body = rows.slice(0, RT_SK_DETAIL_MAX).map(r => `<tr>
+            <td>${escapeHtml(name.get(r.device_ip) || r.device_ip)}</td>
+            <td class="rt-code">${escapeHtml(r.network)}${r.vrf ? ` <span class="rt-mx-vrf">${escapeHtml(r.vrf)}</span>` : ''}</td>
+            <td>${rtKind(r.type)}${escapeHtml(r.raw_type || r.type || '')}</td>
+            <td class="rt-code">${r.gateway ? escapeHtml(r.gateway) : dash}</td>
+            <td>${r.interface ? escapeHtml(r.interface) : dash}</td>
+            <td class="rt-num">${r.distance == null ? dash : escapeHtml(String(r.distance))}/${r.metric == null ? dash : escapeHtml(String(r.metric))}</td>
+          </tr>`).join('');
+        const more = rows.length > RT_SK_DETAIL_MAX
+            ? `<p class="rt-mx-empty">${escapeHtml(tr('rtSkMore', { n: rows.length - RT_SK_DETAIL_MAX }))}</p>` : '';
+        box.hidden = false;
+        box.innerHTML = `<div class="rt-sk-detail-head">
+              <strong>${escapeHtml(tr('rtSkDetailTitle', { name: title, n: rows.length }))}</strong>
+              <button type="button" class="btn btn-secondary btn-small" data-action="rt-sk-close"
+                      style="width:auto; margin:0;">${escapeHtml(tr('btnClose'))}</button>
+            </div>
+            <div class="table-container"><table class="rt-cand" data-no-colpicker><thead><tr>
+              <th data-no-sort="1">${escapeHtml(tr('rtColDevice'))}</th>
+              <th data-no-sort="1">${escapeHtml(tr('rtColNetwork'))}</th>
+              <th data-no-sort="1">${escapeHtml(tr('rtColType'))}</th>
+              <th data-no-sort="1">${escapeHtml(tr('rtColGateway'))}</th>
+              <th data-no-sort="1">${escapeHtml(tr('rtColIface'))}</th>
+              <th data-no-sort="1" class="rt-num">${escapeHtml(tr('rtColDistance'))}/${escapeHtml(tr('rtColMetric'))}</th>
+            </tr></thead><tbody>${body}</tbody></table></div>${more}`;
+    }
+
+    function rtSkSelect(key) {
+        _skSel = key;
+        document.querySelectorAll('#rtSankey .rt-sk-on').forEach(el => el.classList.remove('rt-sk-on'));
+        document.querySelector(`#rtSankey [data-sk="${CSS.escape(key)}"]`)?.classList.add('rt-sk-on');
+        renderRtSkDetail();
+        document.getElementById('rtSkDetail')?.scrollIntoView({ block: 'nearest' });
     }
 
     function renderRtTally() {
@@ -801,6 +1182,52 @@
         /** @type {HTMLElement|null} */ (document.querySelector(
             `#rtTypeChips [data-type="${CSS.escape(t)}"]`))?.focus();
     });
+    // Sankey: its own type switches (the table keeps its chips), and the
+    // routes behind a node or ribbon on double click / Enter.
+    document.getElementById('rtSkTypes')?.addEventListener('click', e => {
+        const chip = /** @type {HTMLElement} */ (e.target).closest('[data-action="rt-sk-type"]');
+        if (!chip) return;
+        const t = chip.getAttribute('data-type') || '';
+        if (_skHidden.has(t)) _skHidden.delete(t); else _skHidden.add(t);
+        renderRtSankey(rtVisible(rtQuery(rtSearchValue())));
+        /** @type {HTMLElement|null} */ (document.querySelector(
+            `#rtSkTypes [data-type="${CSS.escape(t)}"]`))?.focus();
+    });
+    const skTarget = e => /** @type {Element} */ (e.target).closest('[data-sk]');
+    // Hovering (or focusing) a node keeps its own ribbons lit and dims the
+    // rest: with a dozen hops the eye cannot follow one flow otherwise.
+    const skFocus = e => {
+        const svg = document.querySelector('#rtSankey svg');
+        const el = skTarget(e);
+        if (!svg) return;
+        svg.querySelectorAll('.rt-sk-hl').forEach(p => p.classList.remove('rt-sk-hl'));
+        const key = el ? el.getAttribute('data-sk') || '' : '';
+        svg.classList.toggle('rt-sk-focus', key.startsWith('n|'));
+        if (!key.startsWith('n|')) return;
+        const id = key.slice(2);
+        svg.querySelectorAll('.rt-sk-link').forEach(p => {
+            if (p.getAttribute('data-s') === id || p.getAttribute('data-t') === id) p.classList.add('rt-sk-hl');
+        });
+    };
+    document.getElementById('rtSankey')?.addEventListener('mouseover', skFocus);
+    document.getElementById('rtSankey')?.addEventListener('focusin', skFocus);
+    document.getElementById('rtSankey')?.addEventListener('mouseleave', skFocus);
+    document.getElementById('rtSankey')?.addEventListener('dblclick', e => {
+        const el = skTarget(e);
+        if (el) rtSkSelect(el.getAttribute('data-sk') || '');
+    });
+    document.getElementById('rtSankey')?.addEventListener('keydown', e => {
+        const el = skTarget(e);
+        if (!el || (e.key !== 'Enter' && e.key !== ' ')) return;
+        e.preventDefault();
+        rtSkSelect(el.getAttribute('data-sk') || '');
+    });
+    document.getElementById('rtSkDetail')?.addEventListener('click', e => {
+        if (!/** @type {Element} */ (e.target).closest('[data-action="rt-sk-close"]')) return;
+        _skSel = '';
+        document.querySelectorAll('#rtSankey .rt-sk-on').forEach(el => el.classList.remove('rt-sk-on'));
+        renderRtSkDetail();
+    });
     document.getElementById('rtMxBody')?.addEventListener('click', e => {
         const btn = /** @type {HTMLElement} */ (e.target).closest('[data-action="rt-mx-toggle"]');
         if (!btn) return;
@@ -818,12 +1245,14 @@
     // non essere piu' in scope, e le righe gia' a schermo sarebbero di un
     // altro cliente.
     window.addEventListener('globalTenantChanged', () => {
-        _rtRows = []; _rtErrors = []; _rtLoaded = []; _rtMatrix = [];
+        _rtRows = []; _rtErrors = []; _rtLoaded = []; _rtMatrix = []; _rtContext = {};
         _rtOpen.clear();
         routesTabShown();
     });
 
     window.loadRoutesTab = routesTabShown;
     // The pure model, for tests/js/test_routes_matrix.mjs.
-    window.rtModel = { ip4, parseNet, rtLpm, rtBuildMatrix, rtQuery, rtMatches };
+    window.rtModel = { ip4, parseNet, rtLpm, rtBuildMatrix, rtQuery, rtMatches,
+                       rtBuildSankey, rtDeviceOwners, rtDeviceDepths, rtHopResolver,
+                       rtPolicyRows, rtPolicyMatches };
 })();

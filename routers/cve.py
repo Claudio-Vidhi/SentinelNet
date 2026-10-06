@@ -14,7 +14,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from routers.deps import require_tab
 
-from routers.deps import (require_operator, assert_device_allowed,
+from routers.deps import (require_operator, get_current_user, assert_device_allowed,
                           devices_in_scope)
 from security.security_manager import log_audit
 from services import cve_intel
@@ -61,14 +61,14 @@ def _scoped_devices(current_user, tenant: str) -> list:
 # /summary e /priority stanno PRIMA di /{ip}: altrimenti il path param se le
 # mangia e "summary" viene cercato in inventario come se fosse un IP.
 @router.get("/api/cve/summary", dependencies=[Depends(require_tab("tab-home", "tab-security"))])
-def cve_summary(tenant: str = "", current_user=Depends(require_operator)):
+def cve_summary(tenant: str = "", current_user=Depends(get_current_user)):
     """Una riga per tenant. Ogni conteggio con il suo denominatore."""
     return {"tenants": cve_intel.summary(_scoped_devices(current_user, tenant))}
 
 
 @router.get("/api/cve/priority", dependencies=[Depends(require_tab("tab-security"))])
 def cve_priority(tenant: str = "", limit: int = 200,
-                 current_user=Depends(require_operator)):
+                 current_user=Depends(get_current_user)):
     """Cosa sistemare per primo: i CVE degli apparati in scope, per punteggio."""
     rows = []
     devices = _scoped_devices(current_user, tenant)
@@ -93,7 +93,7 @@ def cve_priority(tenant: str = "", limit: int = 200,
 
 
 @router.get("/api/cve/{ip}", dependencies=[Depends(require_tab("tab-security"))])
-def cve_device(ip: str, current_user=Depends(require_operator)):
+def cve_device(ip: str, current_user=Depends(get_current_user)):
     return _device_view(_device_or_404(current_user, ip))
 
 

@@ -649,23 +649,33 @@
     // handled by hiding the invite button (applyRoleUI), not by this hint.
     const UNSCOPED_ADMIN_HINT_TABS = ['tab-settings', 'tab-sites', 'tab-groups', 'tab-mcp'];
 
+    // Secondary panels a viewer cannot load (every GET is operator+). A
+    // requires-write nav button covers its own panels; these ride on a
+    // button a viewer does see. tests/test_viewer_tabs.py derives the real
+    // set from the server routes and fails when this one falls behind.
+    const WRITE_ONLY_SECONDARY_TABS = ['tab-device-history'];
+
     // rowRole: role of the account being edited. Admin-level rows also offer
     // the ADMIN_GROUP_TABS; other rows never do (granting one would have no
-    // effect, the button stays hidden by the requires-admin CSS gate).
+    // effect, the button stays hidden by the requires-admin CSS gate). A
+    // viewer row never offers a requires-write tab: it would open on 403s.
     function assignableTabs(rowRole) {
         const rowIsAdmin = rowRole === 'admin' || rowRole === 'super_admin';
+        const rowIsViewer = rowRole === 'viewer';
         const out = [];
         const seen = new Set();
         document.querySelectorAll('.nav-item[data-tab]').forEach(btn => {
             const primary = btn.getAttribute('data-tab');
             const isAdminGroupBtn = btn.classList.contains('requires-admin');
             if (isAdminGroupBtn && !(rowIsAdmin && ADMIN_GROUP_TABS.includes(primary))) return;
+            if (rowIsViewer && btn.classList.contains('requires-write')) return;
             const ids = (btn.getAttribute('data-tabs') || primary || '').split(/\s+/);
             const navLabel = btn.querySelector('[data-i18n]');
             const navKey = navLabel ? navLabel.getAttribute('data-i18n') : null;
             ids.forEach(id => {
                 // tab-home e' sempre visibile: non e' una concessione.
                 if (!id || id === 'tab-home' || seen.has(id)) return;
+                if (rowIsViewer && WRITE_ONLY_SECONDARY_TABS.includes(id)) return;
                 seen.add(id);
                 out.push({ id, key: SECONDARY_TAB_LABELS[id] || navKey,
                           needsUnscopedAdmin: UNSCOPED_ADMIN_HINT_TABS.includes(id) });
@@ -895,34 +905,168 @@
         }
     }
 
+    // --- Guided user creation (createUserModal + ui-wizard.js) ---
+    // What a role sees is derived from the same nav gates the sidebar uses
+    // (requires-admin / requires-write), so the summary cannot drift from
+    // what the account will actually get.
+    const uwEl = (id) => document.getElementById(id);
+    const uwRole = () => document.querySelector('input[name="uwRole"]:checked')?.value || '';
+    const uwMode = (name) => document.querySelector(`input[name="${name}"]:checked`)?.value || '';
+    const uwChecked = (listId) => [...uwEl(listId).querySelectorAll('input:checked')].map(cb => cb.value);
+    const uwTabLabel = (t) => (t.key && i18n[currentLang][t.key]) || t.id;
+
+    function navPanels() {
+        const out = [];
+        const seen = new Set();
+        document.querySelectorAll('.nav-item[data-tab]').forEach(btn => {
+            const primary = btn.getAttribute('data-tab');
+            const navLabel = btn.querySelector('[data-i18n]');
+            const navKey = navLabel ? navLabel.getAttribute('data-i18n') : null;
+            (btn.getAttribute('data-tabs') || primary).split(/\s+/).forEach(id => {
+                if (!id || id === 'tab-home' || seen.has(id)) return;
+                seen.add(id);
+                out.push({ id, key: SECONDARY_TAB_LABELS[id] || navKey,
+                           admin: btn.classList.contains('requires-admin'),
+                           write: btn.classList.contains('requires-write') || WRITE_ONLY_SECONDARY_TABS.includes(id) });
+            });
+        });
+        return out;
+    }
+
+    function roleCanSee(role, panel) {
+        if (role === 'super_admin') return true;
+        if (panel.admin) return role === 'admin';
+        return !(panel.write && role === 'viewer');
+    }
+
+    // A scoped / tab-restricted actor cannot grant "all": the server refuses
+    // the empty list (assert_groups_within_scope / assert_tabs_within_grant).
+    const uwActorScoped = () => currentUserGroups.length > 0;
+    const uwActorTabLimited = () => currentAllowedTabs.length > 0;
+
+    function uwAccessValid() {
+        if (uwRole() === 'super_admin') return true;
+        const t = uwMode('uwTenantMode'), b = uwMode('uwTabMode');
+        return (t === 'all' || (t === 'custom' && uwChecked('uwTenantList').length > 0))
+            && (b === 'all' || (b === 'custom' && uwChecked('uwTabList').length > 0));
+    }
+
+    function onUwRoleEnter() {
+        document.querySelectorAll('input[name="uwRole"]').forEach(r => {
+            r.disabled = !canAssignRole(currentRole, r.value);
+            if (r.disabled) r.checked = false;
+        });
+    }
+
+    function onUwAccessEnter() {
+        const role = uwRole();
+        const tenants = uwActorScoped() ? currentUserGroups : Object.keys(globalGroups);
+        const keepT = new Set(uwChecked('uwTenantList'));
+        uwEl('uwTenantList').innerHTML = tenants.map(g =>
+            `<label><input type="checkbox" value="${escapeHtml(g)}" ${keepT.has(g) ? 'checked' : ''}> ${escapeHtml(g)}</label>`).join('')
+            || `<span class="form-hint">${escapeHtml(tr('setNoTenants'))}</span>`;
+        // Only tabs this role can open are offered: a viewer is never offered
+        // Config Drift, an operator never an admin panel.
+        const keepB = new Set(uwChecked('uwTabList'));
+        uwEl('uwTabList').innerHTML = assignableTabs(role).map(t =>
+            `<label><input type="checkbox" value="${t.id}" ${keepB.has(t.id) ? 'checked' : ''}> ${uwTabLabel(t)}</label>`).join('');
+        [['uwTenantMode', uwActorScoped()], ['uwTabMode', uwActorTabLimited()]].forEach(([name, limited]) => {
+            const all = document.querySelector(`input[name="${name}"][value="all"]`);
+            all.disabled = limited;
+            if (!uwMode(name)) document.querySelector(`input[name="${name}"][value="${limited ? 'custom' : 'all'}"]`).checked = true;
+            if (limited && all.checked) document.querySelector(`input[name="${name}"][value="custom"]`).checked = true;
+        });
+        uwEl('uwScopeHint').hidden = !(uwActorScoped() || uwActorTabLimited());
+        uwSyncLists();
+    }
+
+    function uwSyncLists() {
+        uwEl('uwTenantList').hidden = uwMode('uwTenantMode') !== 'custom';
+        uwEl('uwTabList').hidden = uwMode('uwTabMode') !== 'custom';
+    }
+
+    function renderUwSummary() {
+        const role = uwRole();
+        const email = uwEl('newUserEmail').value.trim();
+        const restricted = role !== 'super_admin';
+        const tenants = restricted && uwMode('uwTenantMode') === 'custom' ? uwChecked('uwTenantList') : [];
+        const tabs = restricted && uwMode('uwTabMode') === 'custom' ? uwChecked('uwTabList') : [];
+        const rows = [
+            ['lblNewUserName', uwEl('newUserName').value.trim()],
+            ['lblNewUserEmail', email || '—'],
+            ['uwSumPassword', tr(uwEl('newUserPass').value ? 'uwPassSet' : 'uwPassLink')],
+            ['lblNewUserRole', roleLabel(role)],
+            ['uwTenantsLegend', tenants.length ? tenants.join(', ') : tr('uiAllTenants')],
+        ];
+        uwEl('uwSummary').replaceChildren(...rows.flatMap(([key, value]) => {
+            const dt = document.createElement('dt');
+            dt.textContent = tr(key);
+            const dd = document.createElement('dd');
+            dd.textContent = value;
+            return [dt, dd];
+        }));
+        const sees = [], hidden = [];
+        navPanels().forEach(p => {
+            const ok = roleCanSee(role, p) && (!tabs.length || tabs.includes(p.id));
+            (ok ? sees : hidden).push(`<span class="chip">${uwTabLabel(p)}</span>`);
+        });
+        uwEl('uwSeesList').innerHTML = sees.join('');
+        uwEl('uwNotSeesList').innerHTML = hidden.join('') || `<span class="form-hint">—</span>`;
+        uwEl('uwError').textContent = '';
+    }
+
+    const userWizard = createWizard('createUserModal', {
+        steps: [
+            // No password is fine with an email: the user sets one from a mailed link.
+            { id: 'account', label: 'uwStepAccount',
+              validate: () => !!uwEl('newUserName').value.trim()
+                  && (!!uwEl('newUserPass').value || uwEl('newUserEmail').value.includes('@')) },
+            { id: 'role', label: 'uwStepRole', onEnter: onUwRoleEnter, validate: () => !!uwRole() },
+            { id: 'access', label: 'uwStepAccess', onEnter: onUwAccessEnter,
+              skip: () => uwRole() === 'super_admin', validate: uwAccessValid },
+            { id: 'summary', label: 'uwStepSummary', onEnter: renderUwSummary, finishLabel: 'uwCreate' },
+        ],
+        onFinish: createUser,
+    });
+
+    function openCreateUserWizard() {
+        uwEl('createUserForm').reset();
+        uwEl('uwTenantList').replaceChildren();
+        uwEl('uwTabList').replaceChildren();
+        userWizard.open({ editable: false });
+    }
+
     async function createUser() {
-        const username = document.getElementById('newUserName').value.trim();
-        const password = document.getElementById('newUserPass').value;
-        const role     = document.getElementById('newUserRole').value;
-        const email    = document.getElementById('newUserEmail').value.trim();
-        // No password is fine with an email: the user sets one from a mailed link.
-        if (!username || (!password && !email)) {
-            alert(tr('setUsernameAndPasswordAre'));
-            return;
-        }
+        const username = uwEl('newUserName').value.trim();
+        const password = uwEl('newUserPass').value;
+        const role     = uwRole();
+        const email    = uwEl('newUserEmail').value.trim();
+        const restricted = role !== 'super_admin';
+        const groups = restricted && uwMode('uwTenantMode') === 'custom' ? uwChecked('uwTenantList') : [];
+        const tabs = restricted && uwMode('uwTabMode') === 'custom' ? uwChecked('uwTabList') : [];
         const res = await apiFetch('/api/users', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password, role, email })
+            body: JSON.stringify({ username, password, role, email, groups })
         });
-        if (res && res.ok) {
-            const d = await res.json().catch(() => ({}));
-            if (d.setup_link_sent) showToast(tr('setSetupLinkSent', {email: email}), 'success');
-            else if (d.welcome_mail_sent) showToast(tr('setWelcomeMailSent'), 'success');
-            if (d.welcome_mail_error) showToast(tr('setWelcomeMailFailed', {error: d.welcome_mail_error}), 'warning');
-            document.getElementById('newUserName').value = '';
-            document.getElementById('newUserPass').value = '';
-            document.getElementById('newUserEmail').value = '';
-            closeModal('createUserModal');
-            loadUsers();
-        } else if (res) {
-            const e = await res.json();
-            alert((tr('uiError')) + (e.detail || ''));
+        if (!res) return;
+        if (!res.ok) {
+            const e = await res.json().catch(() => ({}));
+            uwEl('uwError').textContent = tr('uiError') + (e.detail || '');
+            return;
         }
+        const d = await res.json().catch(() => ({}));
+        if (tabs.length) {
+            const tabsRes = await apiFetch('/api/users/tabs', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, allowed_tabs: tabs })
+            });
+            if (tabsRes && !tabsRes.ok) showToast(tr('uwTabsNotSaved'), 'warning');
+        }
+        if (d.setup_link_sent) showToast(tr('setSetupLinkSent', {email: email}), 'success');
+        else if (d.welcome_mail_sent) showToast(tr('setWelcomeMailSent'), 'success');
+        if (d.welcome_mail_error) showToast(tr('setWelcomeMailFailed', {error: d.welcome_mail_error}), 'warning');
+        userWizard.close();
+        loadUsers();
     }
 
     async function deleteUser(username) {
@@ -1850,7 +1994,9 @@
         }
     });
 
-    document.getElementById('btnCreateUser')?.addEventListener('click', createUser);
+    document.getElementById('btnOpenCreateUser')?.addEventListener('click', openCreateUserWizard);
+    // Tenant/tab mode radios show or hide their checkbox list.
+    document.getElementById('createUserForm')?.addEventListener('change', uwSyncLists);
     document.getElementById('btnInviteUser')?.addEventListener('click', inviteUser);
     document.getElementById('btnNewSite')?.addEventListener('click', openNewSiteWizard);
     document.getElementById('smtpBtnSave')?.addEventListener('click', saveSmtpSettings);

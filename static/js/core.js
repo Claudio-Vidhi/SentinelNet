@@ -1659,7 +1659,8 @@ const LAZY_TAB_SCRIPTS = {
     'tab-map-interactive': ['/static/vendor/vis/vis-network.min.js', '/static/js/topology.js'],
     'tab-categories': ['/static/js/topology.js'],
     'tab-flows': ['/static/js/flow-analytics.js', '/static/js/observability.js'],
-    'tab-config': ['/static/js/config-analyzer.js'],
+    // vis-network: the Routing sub-tab draws its route map with it.
+    'tab-config': ['/static/vendor/vis/vis-network.min.js', '/static/js/config-analyzer.js'],
     'tab-ai': ['/static/js/ai.js'],
     // The AI config generator is a panel of the Provisioner sub-tab, so its
     // module has to load there too, not only on the AI tab.
@@ -2403,6 +2404,24 @@ document.getElementById('btnRemoveDeviceContext')?.addEventListener('click', () 
 let _cmdSelectedIdx = 0;
 let _cmdItems = [];
 
+// Whether the current user can open a tab: same gates as the sidebar
+// (requires-admin / requires-write CSS, the allowed-tabs list), so the
+// palette never offers a tab that would open on a 403.
+function canOpenTab(tabId) {
+    if (tabId === 'tab-home') return true;
+    if (currentAllowedTabs.length > 0 && !currentAllowedTabs.includes(tabId)) return false;
+    const btn = [...document.querySelectorAll('.nav-item[data-tab]')].find(b =>
+        (b.getAttribute('data-tabs') || b.getAttribute('data-tab') || '').split(/\s+/).includes(tabId));
+    if (!btn) return true;
+    if (getComputedStyle(btn).display === 'none') return false;
+    // A secondary panel (device history) is gated by its own subtab bar.
+    if (btn.getAttribute('data-tab') !== tabId) {
+        const sub = document.querySelector(`[data-switch-tab="${tabId}"]`);
+        if (sub && getComputedStyle(sub.closest('.subtab-bar') || sub).display === 'none') return false;
+    }
+    return true;
+}
+
 function buildCommandPaletteItems(query = '') {
     const q = query.trim().toLowerCase();
     const items = [];
@@ -2441,7 +2460,8 @@ function buildCommandPaletteItems(query = '') {
     ];
 
     navItems.forEach(item => {
-        if (!q || item.title.toLowerCase().includes(q) || item.desc.toLowerCase().includes(q)) {
+        if (!canOpenTab(item.id)) return;
+        if (!q ||item.title.toLowerCase().includes(q) || item.desc.toLowerCase().includes(q)) {
             items.push({
                 type: 'tab',
                 tabId: item.id,

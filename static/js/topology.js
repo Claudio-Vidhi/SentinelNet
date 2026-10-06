@@ -34,6 +34,37 @@
             .replace(/^Port-channel/i, 'Po');
     }
 
+    // Port-channel name on each end of a link. The id often differs between
+    // the two devices (Po8 on the core, Po1 on the access switch), and one
+    // shared name hid which was which. '?' marks the end whose config is not
+    // known: borrowing the other end's name would show a Po that is not there.
+    function pcEnds(l) {
+        const fallback = l.pc_name ? shortIface(l.pc_name)
+            : (l.member_count > 1 ? `LAG ×${l.member_count}` : 'LAG');
+        const a = l.local_pc ? shortIface(l.local_pc) : '';
+        const b = l.remote_pc ? shortIface(l.remote_pc) : '';
+        if (!a && !b) return { local: fallback, remote: fallback, same: true, text: fallback };
+        const local = a || '?', remote = b || '?';
+        return { local, remote, same: local === remote,
+                 text: local === remote ? local : `${local} ⇄ ${remote}` };
+    }
+
+    // A mid-cable label cannot say which end is which, so its order does:
+    // the device drawn on the left (or above, for a vertical cable) is
+    // written first. `s` = {prefix, a, b, same, am?, bm?}, a/am = link source.
+    function sideLabel(s, aFirst) {
+        const [x, y, xm, ym] = aFirst ? [s.a, s.b, s.am, s.bm] : [s.b, s.a, s.bm, s.am];
+        let t = s.prefix + (s.same ? x : `${x} ⇄ ${y}`);
+        if (xm && ym) t += `\n${xm} ⇄ ${ym}`;
+        return t;
+    }
+
+    function aIsLeft(pos, from, to) {
+        const a = pos[from], b = pos[to];
+        if (!a || !b) return true;
+        return Math.abs(b.x - a.x) >= Math.abs(b.y - a.y) ? a.x <= b.x : a.y <= b.y;
+    }
+
     let cachedPortchannelsData = null;
     let cachedTopologyNodes = [];
     // Adiacenze dell'ultima mappa caricata: il pannello laterale ci legge i
@@ -139,6 +170,13 @@
     // richiude il suo gruppo.
     let layeredGroupOfChild = {};
     let lastRenderedNodeIds = [];
+    let lastNetworkView = null;   // view of the instance being replaced (renderNetwork)
+    let viewPositions = {}, viewPosGroup = null;   // view -> {id: {x, y}}, for one site selection
+
+    // Optional names of the hierarchy levels, per site selection:
+    // {"<gruppo>": ["", "Core", ...]}. Empty by default: no "Level 1" text.
+    let layeredLevelNames = {};
+    try { layeredLevelNames = JSON.parse(localStorage.getItem('layeredLevelNames') || '{}'); } catch (e) { layeredLevelNames = {}; }
 
     // Generatore dinamico di schede SVG ad alta tecnologia per i nodi del network
     // Metadati per tipo di apparato: colore distintivo (feature: colori per tipo
@@ -163,7 +201,8 @@
     const TIER_LEVEL = { firewall: 0, router: 1, wlc: 1, switch: 2, ap: 3, server: 3, phone: 4, camera: 4, pc: 4, other: 3 };
     // Radici candidate in ordine di preferenza: chi sta al confine con l'esterno.
     const ROOT_TYPES = ['firewall', 'router'];
-    const LAYERED_SEPARATION = 220;
+    const LAYERED_SEPARATION = 190;   // row pitch: 56px cards, port tags in between, clusters up to ~140px
+    const LAYERED_PITCH = 250;        // card centre to card centre on one row (cards ~220px)
 
     function tierLevel(t) {
         return TIER_LEVEL[t] === undefined ? TIER_LEVEL.other : TIER_LEVEL[t];
@@ -239,6 +278,13 @@
         saveLayeredExpanded();
         redrawInteractiveMap();
     }
+    // Free move: cards go anywhere and stay there, per site:
+    // {"<site>": {"<id>": {x, y}}}. Off, the automatic layout is back;
+    // "Riordina mappa" forgets the site's positions.
+    let layeredFree = localStorage.getItem('layeredFree') === '1';
+    let layeredFreePos = {};
+    try { layeredFreePos = JSON.parse(localStorage.getItem('layeredFreePos') || '{}'); } catch (e) { layeredFreePos = {}; }
+    function saveLayeredFreePos() { localStorage.setItem('layeredFreePos', JSON.stringify(layeredFreePos)); }
     function collapseAllLayeredGroups(group) {
         delete layeredExpanded[group];
         saveLayeredExpanded();
@@ -333,10 +379,14 @@
                 .map(l => {
                     const mine = l.source === topNode.id;
                     const other = (cachedTopologyNodes || []).find(n => n.id === (mine ? l.target : l.source));
+                    const ends = pcEnds(l);
+                    const theirs = mine ? ends.remote : ends.local;
+                    const neighbor = (other && other.label) || (mine ? l.target : l.source);
                     return {
-                        name: l.pc_name || 'LAG',
+                        // This device's own Po, and the neighbour's next to its name.
+                        name: mine ? ends.local : ends.remote,
                         members: (mine ? l.local_ports : l.remote_ports) || [],
-                        neighbor: (other && other.label) || (mine ? l.target : l.source),
+                        neighbor: ends.same ? neighbor : `${neighbor} (${theirs})`,
                     };
                 });
         }
@@ -479,10 +529,6 @@
             drawerAnalysisCache.set(ip, pending);
         }
         return pending;
-    }
-
-    function groupHint() {
-        return tr('topoClickToExpand');
     }
 
     // Tooltip dell'aggregato: i membri, con il loro indirizzo quando c'è.
@@ -643,96 +689,24 @@
         return `${n} × ${parts} in STACK`;
     }
 
-    function createNodeSvg(label, ip, deviceType, status, isBoundary, vendor, vtp, stack) {
-        // Il colore di stato viene letto dai token della resa attiva: l'SVG e'
-        // disegnato su canvas e non risolve var(--...), ma il neon fisso della
-        // vecchia resa era illeggibile sul laminato chiaro (1.4:1).
-        let statusColor = cssVar('--lamp-idle-ink', '#93a0a8');
-        let statusBg = cssVar('--lamp-idle-wash', 'rgba(108, 122, 131, 0.16)');
-        let statusGlow = cssVar('--lamp-idle', '#6c7a83');
-        let statusText = "OFFLINE";
+    // Node state → colours and text, read from the active theme tokens:
+    // the SVG is painted on canvas and cannot resolve var(--...).
+    function nodeStatusMeta(status, isBoundary) {
+        const lamp = k => ({ color: cssVar(`--lamp-${k}-ink`, '#93a0a8'), glow: cssVar(`--lamp-${k}`, '#6c7a83') });
+        if (isBoundary) return { color: cssVar('--text-soft', '#909ba2'), glow: 'transparent', text: tr('topoExternal'), problem: false };
+        if (status === 'online')      return { ...lamp('up'),    text: 'ONLINE',   problem: false };
+        if (status === 'offline')     return { ...lamp('fault'), text: 'OFFLINE',  problem: true };
+        if (status === 'auth_failed') return { ...lamp('warn'),  text: 'AUTH ERR', problem: true };
+        if (status === 'discovered')  return { ...lamp('idle'),  text: tr('topoDiscovered'), problem: false };
+        // Jump-site device: the SSH bastion tunnel carries no ICMP, so
+        // reachability is not measurable — never paint it as the red
+        // "offline" fault lamp, that would be a false down.
+        if (status === 'unknown')     return { ...lamp('idle'),  text: tr('mapStatusUnknown'), problem: false };
+        return { ...lamp('idle'), text: 'OFFLINE', problem: false };
+    }
 
-        if (status === "online") {
-            statusColor = cssVar('--lamp-up-ink', '#6ed394');
-            statusBg = cssVar('--lamp-up-wash', 'rgba(86, 192, 122, 0.14)');
-            statusGlow = cssVar('--lamp-up', '#56c07a');
-            statusText = "ONLINE";
-        } else if (status === "offline") {
-            statusColor = cssVar('--lamp-fault-ink', '#ff8377');
-            statusBg = cssVar('--lamp-fault-wash', 'rgba(239, 107, 94, 0.14)');
-            statusGlow = cssVar('--lamp-fault', '#ef6b5e');
-            statusText = "OFFLINE";
-        } else if (status === "auth_failed") {
-            statusColor = cssVar('--lamp-warn-ink', '#e8b055');
-            statusBg = cssVar('--lamp-warn-wash', 'rgba(224, 160, 60, 0.14)');
-            statusGlow = cssVar('--lamp-warn', '#e0a03c');
-            statusText = "AUTH ERR";
-        } else if (status === "discovered") {
-            statusColor = cssVar('--lamp-idle-ink', '#93a0a8');
-            statusBg = cssVar('--lamp-idle-wash', 'rgba(108, 122, 131, 0.16)');
-            statusGlow = cssVar('--lamp-idle', '#6c7a83');
-            statusText = tr('topoDiscovered');
-        } else if (status === "unknown") {
-            // Jump-site device: the SSH bastion tunnel carries no ICMP, so
-            // reachability is not measurable — never paint it as the red
-            // "offline" fault lamp, that would be a false down.
-            statusColor = cssVar('--lamp-idle-ink', '#93a0a8');
-            statusBg = cssVar('--lamp-idle-wash', 'rgba(108, 122, 131, 0.16)');
-            statusGlow = cssVar('--lamp-idle', '#6c7a83');
-            statusText = tr('mapStatusUnknown');
-        }
-
-        if (isBoundary) {
-            statusColor = cssVar('--text-soft', '#909ba2');
-            statusBg = cssVar('--lamp-idle-wash', 'rgba(108, 122, 131, 0.16)');
-            statusGlow = "transparent";
-            statusText = tr('topoExternal');
-        }
-
-        // Colore per TIPO di apparato (feature: colori per tipo di device).
-        // L'icona usa il colore del tipo; lo stato resta nella barra/badge laterale.
-        const typeColor = deviceTypeMeta(deviceType).color;
-
-        // Colore tema per il bordo sfumato della scheda basato sullo stato del nodo
-        let borderGradStart = statusColor;
-        let borderGradEnd = cssVar('--border-strong', '#46535c');
-
-        // Badge in alto a destra: SEMPRE il tipo di apparato. Il dominio VTP, se
-        // attivo, va su una riga separata sotto (non deve coprire il tipo).
-        vtp = vtp || {};
-        const badgeText = deviceTypeLabel(deviceType);
-        const badgeColor = typeColor;
-        // VTP pill: quando presente il riquadro cresce in altezza (vedi hasVtp più
-        // sotto) e la pillola prende una fascia orizzontale propria SOTTO le righe
-        // IP/badge, così non si sovrappone più al badge tipo né all'hostname.
-        // Fasce opzionali sotto le righe IP/badge: una per riga, la scheda cresce
-        // di 22px per ciascuna (mai sovrapposte al badge tipo o all'hostname).
-        const bands = [];
-        if (stack) {
-            bands.push({
-                color: STACK_COLOR,
-                text: `STACK ×${stack.member_count}${stack.model ? ' · ' + stack.model : ''}`.slice(0, 34),
-            });
-        }
-        const hasVtp = !!(vtp.showDomain && vtp.domain);
-        if (hasVtp) {
-            const dcol = vtpDomainColor(vtp.domain);
-            borderGradStart = dcol;
-            const dEsc = String(vtp.domain).slice(0, 24);
-            // Se disponibile, aggiunge la modalità VTP (server/client/transparent/off)
-            // accanto al dominio; troncata per stare nella pillola larga 216px.
-            const modeEsc = vtp.mode ? String(vtp.mode).toLowerCase() : '';
-            bands.push({ color: dcol, text: `VTP: ${(modeEsc ? `${dEsc} · ${modeEsc}` : dEsc).slice(0, 30)}` });
-        }
-        const bandsSvg = bands.map((b, i) => {
-            const y = 80 + 22 * i;
-            const txt = String(b.text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-            return `<rect x="16" y="${y}" width="216" height="16" rx="4" fill="${b.color}22" stroke="${b.color}" stroke-opacity="0.45" stroke-width="1" />
-          <text x="124" y="${y + 11.5}" font-family="'Rubik','Inter',sans-serif" font-size="8.5" font-weight="800" fill="${b.color}" text-anchor="middle" letter-spacing="0.2">${txt}</text>`;
-        }).join('\n');
-        const cardH = 84 + 22 * bands.length;
-
-        // Carica icone vettoriali moderne basate sulla tipologia di apparato
+    // Vector icon (viewBox 24) for each device type.
+    function nodeIconSvg(deviceType, typeColor) {
         let iconSvg = "";
         if (deviceType === "router") {
             // Icona router
@@ -763,66 +737,90 @@
             iconSvg = `<path d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6zm3 2h2v2H7V8zm0 4h2v2H7v-2zm4-4h2v2h-2V8zm0 4h2v2h-2v-2zm4-4h2v2h-2V8zm0 4h2v2h-2v-2z" fill="${typeColor}"/>`;
         }
 
-        const escapedLabel = label.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        const escapedIp = ip.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        const escapedVendor = (vendor && vendor !== 'discovered' ? vendor : (tr('topoNeighbor'))).toUpperCase();
-        const escapedBadge = String(badgeText).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").slice(0, 22);
+        return iconSvg;
+    }
 
-        // Stringa ID per gradienti isolati per ciascun apparato per prevenire conflitti DOM
-        const gradId = escapedIp.replace(/[^a-zA-Z0-9]/g, '_');
+    // System fonts: an SVG image drawn on canvas cannot load the page fonts.
+    const SVG_FONT = 'Segoe UI, Roboto, Helvetica, Arial, sans-serif';
+    const SVG_MONO = 'Consolas, Menlo, monospace';
 
-        const svg = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="240" height="${cardH}" viewBox="0 0 240 ${cardH}">
-          <defs>
-            <linearGradient id="cardGrad_${gradId}" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="${cssVar('--surface-3', '#2a333a')}" />
-              <stop offset="100%" stop-color="${cssVar('--surface-2', '#181e23')}" />
-            </linearGradient>
-            <linearGradient id="borderGrad_${gradId}" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stop-color="${borderGradStart}" />
-              <stop offset="100%" stop-color="${borderGradEnd}" />
-            </linearGradient>
-          </defs>
+    // Classic card height: 62px, plus 20px per STACK/VTP band.
+    function classicCardHeight(bands) { return 62 + (bands ? 20 * bands + 2 : 0); }
 
-          <!-- Sfondo della scheda con gradiente scuro e bordo lucido nello stato corrente -->
-          <rect x="2" y="2" width="236" height="${cardH - 4}" rx="12" fill="url(#cardGrad_${gradId})" stroke="url(#borderGrad_${gradId})" stroke-width="1.5" />
-
-          <!-- Barra d'accento laterale colorata in base allo stato (altezza segue cardH) -->
-          <path d="M2 14C2 7.37 7.37 2 14 2H18V${cardH - 2}H14C7.37 ${cardH - 2} 2 ${cardH - 7.37} 2 ${cardH - 14}V14Z" fill="${statusColor}" opacity="0.85" />
-          
-          <!-- Cerchio contenitore per l'icona dell'apparato (bordo nel colore del tipo) -->
-          <circle cx="44" cy="42" r="22" fill="${cssVar('--surface', '#1e242a')}" stroke="${typeColor}" stroke-dasharray="1.5" stroke-width="1.5" />
-
-          <!-- Posizionamento SVG dell'icona -->
-          <g transform="translate(32, 30)">
-            <svg width="24" height="24" viewBox="0 0 24 24">
-                ${iconSvg}
-            </svg>
-          </g>
-
-          <!-- Badge tipo apparato (in alto a destra) -->
-          <rect x="138" y="9" width="94" height="15" rx="4" fill="${badgeColor}22" stroke="${badgeColor}" stroke-opacity="0.5" stroke-width="1" />
-          <text x="185" y="19.5" font-family="'Rubik', 'Inter', sans-serif" font-size="8.5" font-weight="900" fill="${badgeColor}" text-anchor="middle" letter-spacing="0.3">${escapedBadge}</text>
-
-          <!-- Informazioni testuali: Hostname e Indirizzo IP -->
-          <text x="78" y="32" font-family="'Rubik', 'Inter', -apple-system, sans-serif" font-size="13" font-weight="900" fill="${cssVar('--text', '#e8ebe6')}" letter-spacing="-0.3">${escapedLabel}</text>
-          <text x="78" y="49" font-family="Menlo, monospace" font-size="11" font-weight="700" fill="${cssVar('--text-muted', '#a2acb2')}">${escapedIp}</text>
-
-          <!-- Badge del Vendor (Cisco, HPE) -->
-          <rect x="78" y="58" width="55" height="14" rx="4" fill="rgba(44, 188, 195, 0.1)" stroke="rgba(44, 188, 195, 0.2)" stroke-width="1" />
-          <text x="105.5" y="68" font-family="'Rubik', 'Inter', sans-serif" font-size="9" font-weight="900" fill="${cssVar('--text-muted', '#a2acb2')}" text-anchor="middle" letter-spacing="0.5">${escapedVendor}</text>
-
-          <!-- Badge dello Stato Operativo (ONLINE, OFFLINE...) -->
-          <rect x="139" y="58" width="70" height="14" rx="4" fill="${statusBg}" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
-          <text x="174" y="68" font-family="'Rubik', 'Inter', sans-serif" font-size="8" font-weight="900" fill="${statusColor}" text-anchor="middle" letter-spacing="0.5">${statusText}</text>
-
-          <!-- Fasce STACK / VTP sotto le righe IP/badge (solo se presenti): mai
-               sovrapposte al badge tipo o all'hostname (Fix B). -->
+    // Classic card: type chip, name, address and state in words. Flat: the
+    // old gradient, shadow and pair of badges took room without saying more.
+    // The border turns to the state colour only when something is wrong.
+    function createNodeSvg(label, ip, deviceType, status, isBoundary, vendor, vtp, stack) {
+        const st = nodeStatusMeta(status, isBoundary);
+        const typeColor = deviceTypeMeta(deviceType).color;
+        const muted = cssVar('--text-muted', '#94a3b8');
+        vtp = vtp || {};
+        let border = cssVar('--border', '#233245');
+        const bands = [];
+        if (stack) {
+            bands.push({ color: STACK_COLOR, text: `STACK ×${stack.member_count}${stack.model ? ' · ' + stack.model : ''}`.slice(0, 34) });
+        }
+        if (vtp.showDomain && vtp.domain) {
+            const dcol = vtpDomainColor(vtp.domain);
+            border = dcol;
+            const dEsc = String(vtp.domain).slice(0, 24);
+            const modeEsc = vtp.mode ? String(vtp.mode).toLowerCase() : '';
+            bands.push({ color: dcol, text: `VTP: ${(modeEsc ? `${dEsc} · ${modeEsc}` : dEsc).slice(0, 30)}` });
+        }
+        if (st.problem) border = st.color;
+        const cardH = classicCardHeight(bands.length);
+        const bandsSvg = bands.map((b, i) => {
+            const y = 62 + 20 * i;
+            return `<rect x="12" y="${y}" width="196" height="15" rx="4" fill="${b.color}" fill-opacity="0.13" stroke="${b.color}" stroke-opacity="0.45"/>
+          <text x="110" y="${y + 10.5}" font-family="${SVG_FONT}" font-size="8.5" font-weight="800" fill="${b.color}" text-anchor="middle">${escapeHtml(b.text)}</text>`;
+        }).join('');
+        const vendorTxt = (vendor && vendor !== 'discovered' ? vendor : tr('topoNeighbor')).toUpperCase();
+        const right = `${vendorTxt} · ${deviceTypeLabel(deviceType)}`.slice(0, 28);
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="${cardH}" viewBox="0 0 220 ${cardH}">
+          <rect x="1" y="1" width="218" height="${cardH - 2}" rx="8" fill="${cssVar('--surface', '#121a24')}" stroke="${border}" stroke-width="${st.problem ? 2 : 1}"/>
+          <rect x="10" y="10" width="28" height="28" rx="6" fill="${typeColor}" fill-opacity="0.14" stroke="${typeColor}" stroke-opacity="0.55"/>
+          <g transform="translate(15, 15) scale(0.75)">${nodeIconSvg(deviceType, typeColor)}</g>
+          <text x="48" y="22" font-family="${SVG_FONT}" font-size="13" font-weight="700" fill="${cssVar('--text', '#f1f5f9')}">${escapeHtml(label)}</text>
+          <text x="48" y="37" font-family="${SVG_MONO}" font-size="10.5" fill="${muted}">${escapeHtml(ip)}</text>
+          <circle cx="15" cy="51" r="3.5" fill="${st.glow}"/>
+          <text x="23" y="54.5" font-family="${SVG_FONT}" font-size="9.5" font-weight="700" fill="${st.color}">${escapeHtml(st.text)}</text>
+          <text x="208" y="54.5" font-family="${SVG_FONT}" font-size="8.5" font-weight="700" letter-spacing="0.4" fill="${muted}" text-anchor="end">${escapeHtml(right)}</text>
           ${bandsSvg}
-
-        </svg>
-        `;
+        </svg>`;
         return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    }
+
+    // Collapsed group of leaves (layered view): one dot per member, red when
+    // it is down, so an offline AP shows without opening the group.
+    const CLUSTER_COLS = 8, CLUSTER_MAX = 48;
+    function createGroupClusterSvg(n) {
+        const members = n.members || [];
+        const shown = members.slice(0, CLUSTER_MAX);
+        const W = 180, H = 34 + Math.max(1, Math.ceil(shown.length / CLUSTER_COLS)) * 17;
+        const typeColor = deviceTypeMeta(n.device_type).color;
+        const fault = cssVar('--lamp-fault', '#ef4444'), idle = cssVar('--lamp-idle', '#6c7a83');
+        const off = members.filter(m => m.status === 'offline').length;
+        const dots = shown.map((m, i) => {
+            const fill = m.status === 'offline' ? fault : (m.status === 'online' ? typeColor : idle);
+            return `<circle cx="${17 + (i % CLUSTER_COLS) * 19}" cy="${35 + Math.floor(i / CLUSTER_COLS) * 17}" r="6" fill="${fill}" fill-opacity="${m.status === 'offline' ? 1 : 0.7}"/>`;
+        }).join('');
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+          <rect x="1" y="1" width="${W - 2}" height="${H - 2}" rx="10" fill="${cssVar('--surface-3', '#1d2a3b')}" fill-opacity="0.6" stroke="${off ? fault : cssVar('--border', '#233245')}"/>
+          <text x="10" y="17" font-family="${SVG_FONT}" font-size="11" font-weight="700" fill="${cssVar('--text', '#f1f5f9')}">${escapeHtml(deviceTypeLabel(n.device_type))} ×${members.length}</text>
+          ${off ? `<text x="${W - 10}" y="17" font-family="${SVG_MONO}" font-size="9.5" font-weight="700" fill="${fault}" text-anchor="end">${off} OFFLINE</text>` : ''}
+          ${dots}
+        </svg>`;
+        return { image: "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg), size: Math.min(W, H) / 2 };
+    }
+
+    // A node's image and vis.js size for the current view. vis.js scales
+    // the image so that its short side measures 2 × size.
+    function nodeVisual(n, status, vendor, vtp, stack) {
+        // Groups of leaves only exist in the hierarchy view.
+        if (n.is_group) return createGroupClusterSvg(n);
+        const bands = (stack ? 1 : 0) + ((vtp && vtp.showDomain && vtp.domain) ? 1 : 0);
+        return { image: createNodeSvg(n.label || String(n.id), String(n.id), n.device_type, status, n.is_boundary, vendor, vtp, stack),
+                 size: Math.round(classicCardHeight(bands) * 0.45) };
     }
 
     // Generatore dinamico del Tooltip HTML premium per ciascun apparato (al passaggio del mouse)
@@ -1020,7 +1018,7 @@
         updateMapViewButtons();
         if (getMapView() === 'minimal') {
             const hoverInfo = document.getElementById("toggleMinimalHover")?.checked || false;
-            const { nodes, edges, options, bundles, groupsInfo } = buildMinimalGraph(filteredNodesData, filteredLinksData, { showVtpDomain, highlightPC, hoverInfo });
+            const { nodes, edges, options, bundles, groupsInfo } = buildMinimalGraph(filteredNodesData, filteredLinksData, { showVtpDomain, highlightPC, hoverInfo, group: selectedGroup });
             const hasOverlay = (bundles && bundles.length) || (groupsInfo && groupsInfo.length > 1);
             // Conservati per l'export Visio: il .vsdx replica ESATTAMENTE il
             // disegno dell'overlay (cavi paralleli, etichette porta, pillole).
@@ -1036,7 +1034,7 @@
         // nodo aggregato eredita poi il piano dei suoi membri.
         layeredGroup = selectedGroup;
         layeredGroupOfChild = {};
-        if (getMapView() === 'layered') {
+        {
             fillLayeredCoreSelect(filteredNodesData, selectedGroup);
             layeredAssigned = computeLayeredLevels(filteredNodesData, filteredLinksData, selectedGroup);
             const grouped = groupLayeredLeaves(filteredNodesData, filteredLinksData, selectedGroup);
@@ -1048,8 +1046,6 @@
             });
             filteredNodesData = grouped.nodes;
             filteredLinksData = grouped.links;
-        } else {
-            layeredAssigned = {};
         }
 
         // Trasforma nodi filtrati per l'interfaccia interattiva Vis.js
@@ -1066,21 +1062,15 @@
 
             const vtp = { domain: n.vtp_domain, mode: n.vtp_mode, showDomain: showVtpDomain };
             const stack = nodeStack(n);
-            const bandCount = (stack ? 1 : 0) + ((vtp.showDomain && vtp.domain) ? 1 : 0);
 
             return {
                 id: n.id,
                 shape: "image",
-                // Sull'aggregato al posto dell'IP va l'invito ad aprirlo: la sua
-                // chiave "grp:<padre>:<tipo>" non è un indirizzo. Il tooltip
-                // elenca i membri, così si sa cosa c'è dentro senza aprirlo.
-                image: createNodeSvg(n.label, n.is_group ? groupHint() : n.id, n.device_type, effectiveStatus, n.is_boundary, resolvedVendor, vtp, stack),
+                // image + size: card, or cluster for a group of leaves.
+                ...nodeVisual(n, effectiveStatus, resolvedVendor, vtp, stack),
+                // A group's tooltip lists its members: what is inside shows
+                // without opening it.
                 title: n.is_group ? groupTooltip(n) : createNodeTooltip(n, scan, resolvedVendor),
-                // Fix B: la card SVG cresce di 22px per ogni fascia (STACK, VTP); il
-                // nodo vis.js deve crescere di conseguenza, altrimenti l'immagine più
-                // alta viene ridotta in scala e il testo torna illeggibile.
-                size: 38 + 8 * bandCount,
-                level: layeredAssigned[n.id] || 0,
                 labelVal: n.label,
                 deviceTypeVal: n.device_type,
                 isBoundaryVal: n.is_boundary || false,
@@ -1098,12 +1088,11 @@
                 return {
                     from: l.source,
                     to: l.target,
-                    label: `×${l.member_count}`,
+                    // The cluster already shows the count.
+                    label: '',
                     dashes: [4, 4],
-                    font: { color: cssVar('--text-muted', '#8d9bb0'), size: 11, strokeWidth: 0,
-                            background: cssVar('--surface-2', '#181e23') },
                     color: { color: hexToRgba(cssVar('--text-soft', '#8d9bb0'), 0.55), highlight: cssVar('--text-soft', '#c4bdf7') },
-                    width: 2,
+                    width: 1.5,
                     arrows: { to: { enabled: false } },
                     kind: 'group'
                 };
@@ -1128,36 +1117,25 @@
             const localPorts  = (Array.isArray(l.local_ports)  && l.local_ports.length)  ? l.local_ports  : [l.local_port];
             const remotePorts = (Array.isArray(l.remote_ports) && l.remote_ports.length) ? l.remote_ports : [l.remote_port];
 
-            // Etichetta dell'aggregato: nome Port-channel dalla config, altrimenti
-            // "LAG ×N" quando ci sono più link fisici verso lo stesso vicino.
-            const pcTag = l.pc_name
-                ? shortIface(l.pc_name)
-                : (l.member_count > 1 ? `LAG ×${l.member_count}` : 'LAG');
+            // Nome dell'aggregato per estremo (Po8 sul core, Po1 sull'accesso),
+            // altrimenti "LAG ×N" quando ci sono più link fisici verso lo stesso vicino.
+            const ends = pcEnds(l);
 
             // Interfacce membro compatte: Et0/1+Et0/2 ⇄ Et0/0+Et0/2
             const localMembers  = localPorts.map(shortIface).filter(Boolean).join('+');
             const remoteMembers = remotePorts.map(shortIface).filter(Boolean).join('+');
 
-            // visualizza le porte collegate come etichetta fluttuante sul cavo
-            let portLabel = l.local_port && l.local_port !== 'Vicino' && l.local_port !== 'Neighbor'
-                ? `${shortIface(l.local_port)} ⇄ ${shortIface(l.remote_port)}` : '';
-            if (emphasize) {
-                // Con l'evidenziazione attiva: nome del Port-channel + tutte le interfacce membro
-                portLabel = `⛓ ${pcTag}`;
-                if (localMembers && remoteMembers) portLabel += `\n${localMembers} ⇄ ${remoteMembers}`;
-            }
-
             const pcBadge = isPC ? `
               <div style="display:inline-flex; align-items:center; gap:6px; font-size:10px; font-weight:700; color:var(--warning); background:color-mix(in srgb, var(--warning) 12%, transparent); border:1px solid color-mix(in srgb, var(--warning) 30%, transparent); padding:2px 7px; border-radius:0; margin-bottom:8px;">
-                <i class="fa-solid fa-link"></i> ${tr('topoAggregated')} · ${escapeHtml(l.pc_name || (tr('topoPortChannelLag')))}${l.member_count > 1 ? ` · ${l.member_count} ${tr('topoMembers')}` : ''}
+                <i class="fa-solid fa-link"></i> ${tr('topoAggregated')} · ${escapeHtml(ends.text)}${l.member_count > 1 ? ` · ${l.member_count} ${tr('topoMembers')}` : ''}
               </div>` : '';
 
-            // Interfacce membro per lato, mostrate solo per gli aggregati
+            // Interfacce membro per lato, con il Port-channel di quel lato.
             const memberRows = (isPC && (localMembers || remoteMembers)) ? `
               <div style="margin-top:8px; border-top:1px solid rgba(255,255,255,0.08); padding-top:6px; font-family:var(--font-code); font-size:10px;">
                 <div style="color:var(--text-muted); font-size:9px; text-transform:uppercase; margin-bottom:4px;">${tr('topoMemberInterfaces')}</div>
-                <div style="display:flex; justify-content:space-between; gap:10px; padding:1px 0;"><span style="color:var(--text-muted);">${escapeHtml(l.source)}</span><span style="color:var(--success);">${escapeHtml(localMembers || '—')}</span></div>
-                <div style="display:flex; justify-content:space-between; gap:10px; padding:1px 0;"><span style="color:var(--text-muted);">${escapeHtml(l.target)}</span><span style="color:var(--success);">${escapeHtml(remoteMembers || '—')}</span></div>
+                <div style="display:flex; justify-content:space-between; gap:10px; padding:1px 0;"><span style="color:var(--text-muted);">${escapeHtml(l.source)}</span><span><b style="color:var(--warning);">${escapeHtml(ends.local)}</b> <span style="color:var(--success);">${escapeHtml(localMembers || '—')}</span></span></div>
+                <div style="display:flex; justify-content:space-between; gap:10px; padding:1px 0;"><span style="color:var(--text-muted);">${escapeHtml(l.target)}</span><span><b style="color:var(--warning);">${escapeHtml(ends.remote)}</b> <span style="color:var(--success);">${escapeHtml(remoteMembers || '—')}</span></span></div>
               </div>` : '';
 
             // Generatore del Tooltip HTML premium al passaggio sul collegamento
@@ -1189,55 +1167,53 @@
             return {
                 from: l.source,
                 to: l.target,
-                label: portLabel,
                 title: container, // HTML Tooltip DOM element
-                font: {
-                    color: emphasize ? "#ffb84d" : "#b1a7f0",
-                    size: 11,
-                    face: "Menlo, monospace",
-                    strokeWidth: 0,
-                    background: cssVar('--surface-2', '#181e23') // Combacia con lo sfondo della mappa
-                },
-                color: emphasize
-                    ? { color: "rgba(255, 184, 77, 0.85)", highlight: "#ffb84d", hover: "#ffd27d" }
-                    // vis.js disegna su canvas: un "var(--x)" qui non e' un colore,
-                    // e' una stringa che il browser non risolve. Serve cssVar().
-                    : { color: "rgba(106, 95, 193, 0.45)", highlight: cssVar('--text-muted', '#8d9bb0'), hover: "#c4bdf7" },
-                dashes: emphasize ? [8, 4] : false,
                 arrows: { to: { enabled: false } },
-                width: emphasize ? 5 : 3.5,
-                hoverWidth: 1.5,
                 // ponytail: dati "piatti" (no oggetti color vis.js) usati solo dall'export Visio
                 // Il colore finisce nel .vsdx: Visio vuole un #RRGGBB, e un
                 // "var(--x)" cadeva nel fallback viola di _hex_to_rgb_fraction().
-                exportVal: { isPortChannel: isPC, pcName: l.pc_name || '', color: emphasize ? '#FFB84D' : cssVar('--text-soft', '#8d9bb0') }
+                exportVal: { isPortChannel: isPC, pcEnds: ends, color: emphasize ? '#FFB84D' : cssVar('--text-soft', '#8d9bb0') }
             };
         });
 
-        renderNetwork(nodes, edges, getMapView() === 'layered' ? layeredMapOptions() : classicMapOptions());
+        // Hierarchy view: vis.js places each level (layeredMapOptions), the
+        // cables are drawn by the overlay (bus per parent, one line per Po
+        // member), so the vis.js edges only keep tooltip and selection.
+        nodes.forEach(nd => { nd.level = layeredAssigned[nd.id] || 0; });
+        edges.forEach((e, i) => Object.assign(e, {
+            lnk: filteredLinksData[i], label: '', dashes: false, width: 0.0001,
+            color: { color: 'rgba(0,0,0,0)', highlight: 'rgba(0,0,0,0)', hover: 'rgba(0,0,0,0)' }
+        }));
+        renderNetwork(nodes, edges, layeredMapOptions(), '', drawLayeredLinks, drawLayeredColumns);
     }
 
-    // ===== Selettore vista mappa (Classica / Nuova minimalista) =====
+    // ===== Map view selector (Schema / Hierarchy) =====
     // La scelta è ricordata in localStorage. Entrambe le viste condividono dati,
     // filtri, interruttori, selettore Sede/Categorie e istanza Vis.js.
-    const MAP_VIEWS = ['classic', 'minimal', 'layered'];
-    let mapViewMode = MAP_VIEWS.includes(localStorage.getItem('mapViewMode')) ? localStorage.getItem('mapViewMode') : 'classic';
+    // The overview is gone: a saved 'classic' opens the hierarchy, whose
+    // free move does what the overview was kept for.
+    const MAP_VIEWS = ['minimal', 'layered'];
+    let mapViewMode = MAP_VIEWS.includes(localStorage.getItem('mapViewMode')) ? localStorage.getItem('mapViewMode') : 'layered';
     function getMapView() { return mapViewMode; }
     function updateMapViewButtons() {
         const base = 'width:auto; margin:0; padding:5px 12px; border-radius:0; border:1px solid; font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;';
         const on  = base + 'background:var(--cta); color:var(--cta-text); border-color:var(--cta);';
         const off = base + 'background:var(--surface-2); color:var(--text-muted); border-color:var(--border);';
-        const c = document.getElementById('mapViewClassicBtn');
         const m = document.getElementById('mapViewMinimalBtn');
         const l = document.getElementById('mapViewLayeredBtn');
-        if (c) c.setAttribute('style', mapViewMode === 'classic' ? on : off);
         if (m) m.setAttribute('style', mapViewMode === 'minimal' ? on : off);
         if (l) l.setAttribute('style', mapViewMode === 'layered' ? on : off);
         const lrw = document.getElementById('layeredResetWrap');
         if (lrw) lrw.style.display = mapViewMode === 'layered' ? 'inline-flex' : 'none';
+        const fr = document.getElementById('toggleLayeredFree');
+        if (fr) fr.checked = layeredFree;
+        const ltb = document.getElementById('layeredTidyBtn');
+        if (ltb) ltb.style.display = layeredFree ? 'inline-block' : 'none';
         // L'interruttore "Info al passaggio" riguarda solo la nuova mappa.
         const hw = document.getElementById('minimalHoverWrap');
         if (hw) hw.style.display = mapViewMode === 'minimal' ? 'inline-flex' : 'none';
+        const tb = document.getElementById('schemaTidyBtn');
+        if (tb) tb.style.display = mapViewMode === 'minimal' ? 'inline-block' : 'none';
         const hc = document.getElementById('toggleMinimalHover');
         if (hc) hc.checked = localStorage.getItem('minimalHoverInfo') === '1';
         // Color-picker/legenda dei tipi di link: visibile solo sulla nuova mappa.
@@ -1248,56 +1224,29 @@
         if (cm) { cm.style.display = mapViewMode === 'minimal' ? 'inline-block' : 'none'; if (mapViewMode === 'minimal') renderMinimalCustomCatPanel(); }
     }
     function setMapView(mode) {
-        mapViewMode = MAP_VIEWS.includes(mode) ? mode : 'classic';
+        mapViewMode = MAP_VIEWS.includes(mode) ? mode : 'layered';
         localStorage.setItem('mapViewMode', mapViewMode);
         updateMapViewButtons();
         loadInteractiveMap();
     }
 
-    // Fisica barnesHut condivisa da entrambe le viste (classica e minimalista).
-    // Causa radice risolta QUI, non con toppe per-lato: valori tarati per nodi
-    // grandi (riquadri SVG ~248px, vedi createNodeSvg) così i riquadri restano
-    // compatti e non si sovrappongono ma nemmeno "volano via". La fisica serve
-    // SOLO a calcolare un layout iniziale ben distanziato: viene spenta al
-    // termine della stabilizzazione (freezeLayout), così i nodi non derivano e
-    // restano dove l'utente li mette.
-    function sharedMapPhysics() {
-        return {
-            enabled: true, solver: 'barnesHut',
-            stabilization: { enabled: true, iterations: 300, updateInterval: 25, onlyDynamicEdges: false, fit: true },
-            barnesHut: { gravitationalConstant: -3000, centralGravity: 0.4, springLength: 280, springConstant: 0.05, damping: 0.4, avoidOverlap: 1 },
-            minVelocity: 0.75
-        };
-    }
-
-    // Opzioni Vis.js della mappa classica.
-    function classicMapOptions() {
-        return {
-            layout: { improvedLayout: true, randomSeed: 42 },
-            physics: sharedMapPhysics(),
-            interaction: { hover: true, hoverConnectedEdges: true, selectConnectedEdges: true, tooltipDelay: 150, dragNodes: true, dragView: true, zoomView: true, multiselect: true },
-            nodes: { shadow: { enabled: true, color: "rgba(0,0,0,0.5)", size: 10, x: 0, y: 4 } },
-            edges: { smooth: { type: 'cubicBezier', forceDirection: 'none', roundness: 0.5 }, shadow: { enabled: true, color: "rgba(0,0,0,0.4)", size: 4, x: 0, y: 2 } }
-        };
-    }
-
-    // Vista "A livelli": stesse card, stessi dati, stessi tooltip/drawer della
-    // classica; cambia solo la disposizione, gerarchica dall'alto (firewall) al
-    // basso (access point/terminali) usando il layout nativo di vis.js.
+    // Hierarchy view: same cards, data, tooltips and drawer as the overview.
+    // vis.js packs each subtree under its parent from the levels we assign;
+    // a hand-made row layout spread a large site over a sparse, unreadable
+    // width.
     function layeredMapOptions() {
-        const c = classicMapOptions();
         return {
-            layout: { improvedLayout: false, randomSeed: 42, hierarchical: { enabled: true, direction: 'UD', sortMethod: 'directed', levelSeparation: LAYERED_SEPARATION, nodeSpacing: 260, treeSpacing: 260, shakeTowards: 'roots' } },
+            layout: { improvedLayout: false, randomSeed: 42, hierarchical: { enabled: true, direction: 'UD', sortMethod: 'directed', levelSeparation: LAYERED_SEPARATION, nodeSpacing: LAYERED_PITCH, treeSpacing: 300, shakeTowards: 'roots' } },
             physics: { enabled: false },
-            interaction: c.interaction,
-            nodes: c.nodes,
-            edges: Object.assign({}, c.edges, { smooth: { type: 'cubicBezier', forceDirection: 'vertical', roundness: 0.45 } })
+            interaction: { hover: true, hoverConnectedEdges: true, selectConnectedEdges: true, tooltipDelay: 150, dragNodes: true, dragView: true, zoomView: true, multiselect: true },
+            nodes: { shadow: { enabled: false } },
+            edges: { smooth: false, shadow: { enabled: false } }
         };
     }
 
     // Crea/ricrea l'istanza Vis.js condivisa e congela il layout a stabilizzazione
     // completata (usata da entrambe le viste).
-    function renderNetwork(nodes, edges, options, background, afterDraw) {
+    function renderNetwork(nodes, edges, options, background, afterDraw, beforeDraw) {
         const container = document.getElementById("networkGraphContainer");
         // Sfondo per-vista: la mappa minimalista usa il bianco, la classica torna
         // allo sfondo scuro definito nel CSS (#networkGraphContainer).
@@ -1310,13 +1259,24 @@
         // posizioni correnti PRIMA di distruggere e le riapplichiamo ai nodi
         // omonimi; se TUTTI i nodi sono già noti spegniamo del tutto la fisica così
         // la mappa resta immobile (niente reset). I nodi nuovi mantengono la fisica.
-        const prevPos = networkInstance ? networkInstance.getPositions() : null;
-        if (prevPos) {
+        // Each view keeps its own positions: opened after the hierarchy, the
+        // overview used to inherit its rows. The Schema ones also outlive a
+        // reload (saved per site in the browser).
+        const group = lastMapGroup || '';
+        if (viewPosGroup !== group) { viewPositions = {}; viewPosGroup = group; }
+        if (networkInstance && lastNetworkView) viewPositions[lastNetworkView] = networkInstance.getPositions();
+        const view = getMapView(), hierarchy = view === 'layered';
+        const prevPos = viewPositions[view] || (view === 'minimal' ? loadSchemaPositions(group) : null);
+        // Hierarchy view: the layout owns y (the level) and the column; only a
+        // horizontal drag inside the same row survives a refresh (re-applied
+        // after tidyLayeredTree, below).
+        if (prevPos && !hierarchy) {
             nodes.forEach(nd => {
                 const p = prevPos[nd.id];
                 if (p) { nd.x = p.x; nd.y = p.y; }
             });
         }
+        lastNetworkView = view;
         const allKnown = !!prevPos && nodes.length > 0 && nodes.every(nd => prevPos[nd.id]);
         if (allKnown) {
             // Clona per non mutare l'oggetto opzioni del chiamante e disattiva fisica.
@@ -1334,12 +1294,16 @@
         if (typeof afterDraw === 'function') {
             networkInstance.on('afterDrawing', afterDraw);
         }
+        // Under nodes and cables: site zones (classic), plane bands (layered).
+        if (typeof beforeDraw === 'function') {
+            networkInstance.on('beforeDrawing', beforeDraw);
+        }
         // Nella nuova mappa i riquadri non possono MAI sovrapporsi: al termine
         // di ogni trascinamento il nodo mosso viene respinto fuori dai riquadri
         // che intersecherebbe (Fix no node overlapping).
         if (getMapView() === 'minimal') {
             networkInstance.on('dragEnd', p => {
-                if (p.nodes && p.nodes.length) resolveNodeOverlaps(p.nodes);
+                if (p.nodes && p.nodes.length) { resolveNodeOverlaps(p.nodes); saveSchemaPositions(); }
             });
         }
         // Vista "A livelli": trascinare un nodo IN VERTICALE lo sposta di piano e
@@ -1352,12 +1316,23 @@
                     ? networkInstance.getPositions(p.nodes)[p.nodes[0]] : null;
             });
             networkInstance.on('dragEnd', p => {
+                // Free move: wherever it lands, no level change, kept per site.
+                if (layeredFree) {
+                    dragFrom = null;
+                    if (!p.nodes || !p.nodes.length) return;
+                    const saved = layeredFreePos[layeredGroup] || (layeredFreePos[layeredGroup] = {});
+                    Object.assign(saved, networkInstance.getPositions(p.nodes));
+                    saveLayeredFreePos();
+                    return;
+                }
                 if (!dragFrom || !p.nodes || !p.nodes.length) return;
                 const id = p.nodes[0];
                 const to = networkInstance.getPositions([id])[id];
                 const steps = Math.round((to.y - dragFrom.y) / LAYERED_SEPARATION);
+                const fromY = dragFrom.y;
                 dragFrom = null;
-                if (!steps) return;
+                // Same level: back onto its row, keeping the new x.
+                if (!steps) { networkInstance.moveNode(id, to.x, fromY); return; }
                 setLayeredLevel(layeredGroup, id, Math.max(0, (layeredAssigned[id] || 0) + steps));
                 redrawInteractiveMap();
             });
@@ -1397,14 +1372,443 @@
             // rendering della fisica: sulla mappa minimalista, con riquadri grandi e
             // avoidOverlap:1, il solver può non emettere mai 'stabilized' e restare
             // in animazione perenne se non forzato esplicitamente allo stop.
-            if (networkInstance && !mapFrozen) { mapFrozen = true; networkInstance.setOptions({ physics: { enabled: false } }); }
+            if (networkInstance && !mapFrozen) {
+                mapFrozen = true;
+                networkInstance.setOptions({ physics: { enabled: false } });
+            }
         };
+        // Schema: nothing known → full layout; some devices new → only those
+        // are placed, at the end of their row.
+        if (isMinimal && !allKnown) {
+            networkInstance.once('afterDrawing', () => {
+                const known = nodes.filter(nd => prevPos && prevPos[nd.id]).map(nd => nd.id);
+                if (known.length) placeNewSchemaNodes(known); else packSchemaRows();
+            });
+        }
+        // Hierarchy view: vis.js lays the rows out again on every render, so
+        // the tidy pass always runs; a horizontal drag is put back on top.
+        // vis.js fits the cards only, which cuts the site headers drawn
+        // above them; step back a little on the first frame.
+        if (hierarchy) {
+            networkInstance.once('afterDrawing', () => {
+                tidyLayeredTree();
+                // Only when the same cards come back: after a group opens or
+                // closes the tidy layout moved everyone, and the old x put the
+                // known cards on top of the new ones.
+                if (allKnown && Object.keys(prevPos).length === nodes.length) {
+                    const now = networkInstance.getPositions();
+                    Object.keys(now).forEach(id => {
+                        const p = prevPos[id];
+                        if (p && Math.abs(p.y - now[id].y) < 1) networkInstance.moveNode(id, p.x, now[id].y);
+                    });
+                }
+                const free = layeredFree && layeredFreePos[layeredGroup];
+                if (free) Object.keys(free).forEach(id => { if (nodes.some(nd => nd.id === id)) networkInstance.moveNode(id, free[id].x, free[id].y); });
+                if (!allKnown) {
+                    networkInstance.fit();
+                    networkInstance.moveTo({ scale: networkInstance.getScale() * 0.85 });
+                }
+            });
+        }
         networkInstance.once('stabilizationIterationsDone', freezeLayout);
         networkInstance.once('stabilized', freezeLayout);
         // Sulla mappa minimalista il solver barnesHut con riquadri grandi/avoidOverlap
         // può non stabilizzarsi mai: fallback più aggressivo (2.5s) per non lasciarla
         // in animazione percepibile "per sempre". La classica resta a 5s (invariata).
         networkInstance.once('afterDrawing', () => setTimeout(freezeLayout, isMinimal ? 2500 : 5000));
+    }
+
+    // Hierarchy view: vis.js fills each row in id order, so siblings were
+    // scattered, buses of different parents ran over each other, and a
+    // device hanging on one access switch could sit at the far end of the
+    // row with its cable across the whole site. The rows are kept, the x
+    // is redone as a tidy tree: every device has one parent (the nearest
+    // linked device above it), each subtree gets the width of its leaves,
+    // and a parent sits centred over its children. Sites stay side by side.
+    // ponytail: one pitch for every card; a narrower leaf cluster only
+    // leaves extra room.
+    const LAYERED_SITE_GAP = 160;
+    function tidyLayeredTree() {
+        const pos = networkInstance.getPositions(), ids = Object.keys(pos), adj = {}, kids = {}, isKid = {}, parentOf = {};
+        const nodesDs = networkInstance.body.data.nodes;
+        const site = id => { const nd = nodesDs.get(id); return (nd && nd.nodeDataVal && nd.nodeDataVal.group) || 'Generale'; };
+        networkInstance.body.data.edges.forEach(e => {
+            (adj[e.from] || (adj[e.from] = [])).push(e.to);
+            (adj[e.to] || (adj[e.to] = [])).push(e.from);
+        });
+        ids.sort((a, b) => pos[a].x - pos[b].x).forEach(id => {
+            const ups = (adj[id] || []).filter(n => pos[n] && pos[n].y < pos[id].y - 1 && site(n) === site(id))
+                .sort((a, b) => (pos[b].y - pos[a].y) || (Math.abs(pos[a].x - pos[id].x) - Math.abs(pos[b].x - pos[id].x)));
+            if (!ups.length) return;
+            (kids[ups[0]] || (kids[ups[0]] = [])).push(id);
+            isKid[id] = parentOf[id] = ups[0];
+        });
+        // A card's slot is as wide as its widest port tag: a Po with four
+        // members is wider than the card and ran over the next device's.
+        const meas = document.createElement('canvas').getContext('2d');
+        meas.font = `600 10px ${cssVar('--font-data', 'monospace')}`;
+        const tagW = {};
+        networkInstance.body.data.edges.forEach(e => {
+            const l = e.lnk;
+            if (!l || !pos[e.from] || !pos[e.to]) return;
+            const down = pos[e.from].y > pos[e.to].y ? e.from : e.to;
+            const ends = l.is_portchannel ? pcEnds(l) : { local: '', remote: '' };
+            [[ends.local, l.local_ports, l.local_port], [ends.remote, l.remote_ports, l.remote_port]].forEach(([po, ps, p]) => {
+                const ports = ((ps && ps.length) ? ps : [p]).map(shortIface).filter(Boolean).join(' · ');
+                const w = (po ? meas.measureText(po).width + 14 : 0) + (ports ? meas.measureText(ports).width + 14 : 0);
+                tagW[down] = Math.max(tagW[down] || 0, w + 30);
+            });
+        });
+        // Other parents with nothing of their own (the second firewall of a
+        // pair) join the root that owns their child: the pair becomes one
+        // block centred over the child, and the subtree widens to hold it.
+        const below = id => (adj[id] || []).find(n => pos[n] && pos[n].y > pos[id].y + 1 && parentOf[n]);
+        const beside = ids.filter(id => !isKid[id] && !kids[id] && below(id));
+        const satOf = {};
+        beside.forEach(id => {
+            const p = parentOf[below(id)];
+            if (!parentOf[p] && Math.abs(pos[p].y - pos[id].y) < 1) (satOf[p] || (satOf[p] = [])).push(id);
+        });
+        const inBlock = new Set([].concat(...Object.values(satOf)));
+        const width = {};
+        const span = id => width[id] || (width[id] = Math.max(LAYERED_PITCH * (1 + (satOf[id] || []).length), tagW[id] || 0,
+            (kids[id] || []).reduce((t, k) => t + span(k), 0)));
+        const place = (id, left) => {
+            const ks = kids[id] || [];
+            let l = left;
+            ks.forEach(k => { place(k, l); l += span(k); });
+            pos[id].x = ks.length ? (pos[ks[0]].x + pos[ks[ks.length - 1]].x) / 2 : left + span(id) / 2;
+        };
+        let left = 0, prevSite = null;
+        ids.filter(id => !isKid[id] && !beside.includes(id))
+            .sort((a, b) => site(a).localeCompare(site(b)) || (pos[a].x - pos[b].x))
+            .forEach(id => {
+                if (prevSite !== null && site(id) !== prevSite) left += LAYERED_SITE_GAP;
+                prevSite = site(id);
+                place(id, left);
+                const block = [id].concat(satOf[id] || []), half = (block.length - 1) / 2 * LAYERED_PITCH;
+                if (block.length > 1) {
+                    const c = Math.min(Math.max(pos[id].x, left + half + LAYERED_PITCH / 2), left + span(id) - half - LAYERED_PITCH / 2);
+                    block.forEach((b, j) => { pos[b].x = c - half + j * LAYERED_PITCH; });
+                }
+                left += span(id);
+            });
+        // The rest (its partner sits lower, or has a parent): beside it when
+        // there is room, else at the end of the row.
+        const taken = ids.filter(id => !beside.includes(id) || inBlock.has(id));
+        beside.filter(id => !inBlock.has(id)).forEach(id => {
+            const p = pos[parentOf[below(id)]];
+            const free = x => taken.every(o => Math.abs(pos[o].y - pos[id].y) > 1 || Math.abs(pos[o].x - x) >= LAYERED_PITCH);
+            const x = [1, -1, 2, -2, 3, -3].map(k => p.x + k * LAYERED_PITCH).find(free);
+            pos[id].x = x !== undefined ? x : (left += LAYERED_PITCH) - LAYERED_PITCH / 2;
+            taken.push(id);
+        });
+        ids.forEach(id => networkInstance.moveNode(id, pos[id].x, pos[id].y));
+    }
+
+    function roundRectPath(ctx, x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+    }
+
+    // Hierarchy view backdrop: a dot grid that pans and zooms with the map.
+    function drawDotGrid(ctx) {
+        const scale = networkInstance.getScale();
+        if (scale < 0.5) return;   // ponytail: too dense to read below half zoom, and costly
+        const c = document.getElementById('networkGraphContainer');
+        const a = networkInstance.DOMtoCanvas({ x: 0, y: 0 });
+        const b = networkInstance.DOMtoCanvas({ x: c.clientWidth, y: c.clientHeight });
+        const step = 24, s = 1.6 / scale;
+        ctx.save();
+        ctx.fillStyle = cssVar('--border', '#233245');
+        for (let x = Math.floor(a.x / step) * step; x < b.x; x += step) {
+            for (let y = Math.floor(a.y / step) * step; y < b.y; y += step) ctx.fillRect(x, y, s, s);
+        }
+        ctx.restore();
+    }
+
+    // Site panel header: name on the left, device count and offline count on
+    // the right. A collapsed group counts as its members.
+    function drawZoneHeader(ctx, name, nds, x0, x1, y0) {
+        let total = 0, off = 0;
+        nds.forEach(nd => {
+            const n = nd.nodeDataVal || {};
+            const ms = n.is_group ? (n.members || []) : [n];
+            total += ms.length;
+            off += ms.filter(m => m.status === 'offline').length;
+        });
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = cssVar('--text-muted', '#94a3b8');
+        ctx.font = `700 18px ${cssVar('--font-legend', 'sans-serif')}`;
+        ctx.fillText(String(name).toUpperCase(), x0 + 16, y0 + 26);
+        const txt = off ? tr('topoZoneSummary', { n: total, k: off }) : tr('topoZoneCount', { n: total });
+        ctx.font = `12px ${cssVar('--font-data', 'monospace')}`;
+        ctx.textAlign = 'right';
+        ctx.fillText(txt, x1 - 16, y0 + 26);
+        ctx.fillStyle = cssVar(off ? '--lamp-fault' : '--lamp-up', '#10b981');
+        ctx.beginPath();
+        ctx.arc(x1 - 26 - ctx.measureText(txt).width, y0 + 26, 4, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Hierarchy view, under the map: one panel per site, a dashed rule
+    // between levels, and the level's name only where the user wrote one.
+    function drawLayeredColumns(ctx) {
+        if (!networkInstance) return;
+        drawDotGrid(ctx);
+        const pos = networkInstance.getPositions();
+        const sites = {}, rows = {};
+        let top = Infinity, bottom = -Infinity;
+        networkInstance.body.data.nodes.forEach(nd => {
+            const bb = networkInstance.getBoundingBox(nd.id);
+            if (!bb || !pos[nd.id]) return;
+            const g = (nd.nodeDataVal && nd.nodeDataVal.group) || 'Generale';
+            const s = sites[g] || (sites[g] = { x0: Infinity, x1: -Infinity, nodes: [] });
+            s.x0 = Math.min(s.x0, bb.left); s.x1 = Math.max(s.x1, bb.right); s.nodes.push(nd);
+            top = Math.min(top, bb.top); bottom = Math.max(bottom, bb.bottom);
+            const lv = layeredAssigned[nd.id] || 0;
+            const r = rows[lv] || (rows[lv] = { top: Infinity, bottom: -Infinity });
+            r.top = Math.min(r.top, bb.top); r.bottom = Math.max(r.bottom, bb.bottom);
+        });
+        const levels = Object.keys(rows).map(Number).sort((a, b) => a - b);
+        if (!levels.length) return;
+        // A rule halfway between a row's lowest card and the next row's highest.
+        const rules = levels.slice(1).map((lv, i) => (rows[levels[i]].bottom + rows[lv].top) / 2);
+        const names = layeredLevelNames[layeredGroup] || [];
+        const y0 = top - 64, y1 = bottom + 30;
+        const border = cssVar('--border', '#233245');
+        ctx.save();
+        Object.keys(sites).forEach(g => {
+            const s = sites[g], x0 = s.x0 - 30, x1 = s.x1 + 30;
+            roundRectPath(ctx, x0, y0, x1 - x0, y1 - y0, 14);
+            ctx.globalAlpha = 0.4;
+            ctx.fillStyle = cssVar('--surface-3', '#1d2a3b');
+            ctx.fill();
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = border;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            drawZoneHeader(ctx, g, s.nodes, x0, x1, y0);
+            ctx.strokeStyle = border;
+            ctx.setLineDash([2, 5]);
+            ctx.beginPath();
+            rules.forEach(y => { ctx.moveTo(x0 + 12, y); ctx.lineTo(x1 - 12, y); });
+            ctx.stroke();
+            ctx.setLineDash([]);
+            levels.forEach((lv, i) => {
+                const name = names[lv];
+                if (!name) return;
+                const y = i ? rules[i - 1] : y0 + 50;
+                const t = name.toUpperCase();
+                ctx.font = `700 13px ${cssVar('--font-legend', 'sans-serif')}`;
+                roundRectPath(ctx, x0 + 12, y - 9, ctx.measureText(t).width + 14, 18, 4);
+                ctx.fillStyle = cssVar('--surface', '#121a24');
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = cssVar('--text-muted', '#94a3b8');
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(t, x0 + 19, y + 0.5);
+            });
+        });
+        ctx.restore();
+    }
+
+    // Copper for Port-Channel members: reads on both the light and dark map.
+    const PC_COPPER = '#c2773a';
+
+    // A cable end's label: a Po shows its name filled in copper with its
+    // member ports beside it; a plain link shows the port alone.
+    function drawEndTag(ctx, t, x, y, anchor) {
+        if (!t.ports && !t.po) return;
+        const mono = cssVar('--font-data', 'monospace'), h = 18;
+        ctx.font = `600 10px ${mono}`;
+        const w2 = t.ports ? ctx.measureText(t.ports).width + 14 : 0;
+        ctx.font = `700 10px ${mono}`;
+        const w1 = t.po ? ctx.measureText(t.po).width + 14 : 0;
+        const w = w1 + w2, X = anchor === 'start' ? x : anchor === 'end' ? x - w : x - w / 2;
+        roundRectPath(ctx, X, y - h / 2, w, h, h / 2);
+        ctx.fillStyle = cssVar('--surface-2', '#16202d');
+        ctx.fill();
+        ctx.save();
+        ctx.clip();
+        ctx.fillStyle = PC_COPPER;
+        if (t.po) ctx.fillRect(X, y - h / 2, w1, h);
+        ctx.restore();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = t.po ? PC_COPPER : cssVar('--border', '#233245');
+        ctx.stroke();
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'center';
+        if (t.po) {
+            ctx.font = `700 10px ${mono}`;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(t.po, X + w1 / 2, y + 0.5);
+        }
+        if (t.ports) {
+            ctx.font = `600 10px ${mono}`;
+            ctx.fillStyle = t.po ? cssVar('--text', '#f1f5f9') : cssVar('--text-muted', '#94a3b8');
+            ctx.fillText(t.ports, X + w1 + w2 / 2, y + 0.5);
+        }
+    }
+
+    // Hierarchy view cables: an elbow from the upper card's bottom edge to the
+    // lower card's top, one copper line per Port-Channel member, a straight
+    // run between cards on the same level. Dashed when it leaves the site.
+    function drawLayeredLinks(ctx) {
+        if (!networkInstance) return;
+        const pos = networkInstance.getPositions();
+        const bb = id => networkInstance.getBoundingBox(id);
+        const nodesDs = networkInstance.body.data.nodes;
+        const site = id => { const nd = nodesDs.get(id); return (nd && nd.nodeDataVal && nd.nodeDataVal.group) || 'Generale'; };
+        const edges = networkInstance.body.data.edges.get().filter(e => e.lnk && pos[e.from] && pos[e.to]);
+        const muted = hexToRgba(cssVar('--text-muted', '#94a3b8'), 0.55);
+        // Org-chart wiring: each parent drops ONE trunk to a bus that spans its
+        // children, and every child hangs off that bus. One cable per child
+        // with its own horizontal run piled a dozen lines on the same y and
+        // nobody could follow them on a large site.
+        // A child with several parents (two firewalls, a core and a side
+        // device) gets one drop per parent, side by side, ordered like the
+        // parents: on one shared drop their cables and tags overlapped.
+        const upper = e => (pos[e.from].y < pos[e.to].y ? e.from : e.to);
+        const lower = e => (pos[e.from].y < pos[e.to].y ? e.to : e.from);
+        const vert = edges.filter(e => Math.abs(pos[e.from].y - pos[e.to].y) >= 1);
+        const drops = {}, dropX = {}, dropIdx = {};
+        vert.forEach(e => (drops[lower(e)] || (drops[lower(e)] = [])).push(e));
+        Object.entries(drops).forEach(([d, es]) => {
+            es.sort((a, b) => pos[upper(a)].x - pos[upper(b)].x);
+            const w = bb(d).right - bb(d).left, step = es.length > 1 ? Math.min(70, (w - 40) / (es.length - 1)) : 0;
+            es.forEach((e, i) => { dropX[e.id] = pos[d].x + (i - (es.length - 1) / 2) * step; dropIdx[e.id] = i; });
+        });
+        // A drop that skips a level would run through the cards of the row in
+        // between: it comes down the nearest free gap beside them instead and
+        // steps across to its child just above the tags.
+        const ids = Object.keys(pos);
+        const hits = (x, y0, y1, skip) => ids.some(id => {
+            if (skip.includes(id)) return false;
+            const o = bb(id);
+            return x > o.left - 8 && x < o.right + 8 && o.bottom > y0 && o.top < y1;
+        });
+        const corridor = {};
+        vert.forEach(e => {
+            const U = upper(e), D = lower(e), y0 = bb(U).bottom + 24, y1 = bb(D).top - 60, skip = [U, D];
+            if (!hits(dropX[e.id], y0, y1, skip)) return;
+            const cands = [];
+            ids.forEach(id => {
+                if (skip.includes(id)) return;
+                const o = bb(id);
+                if (o.bottom > y0 && o.top < y1) cands.push(o.left - 16, o.right + 16);
+            });
+            const x = cands.filter(c => !hits(c, y0, y1, skip)).sort((a, b) => Math.abs(a - dropX[e.id]) - Math.abs(b - dropX[e.id]))[0];
+            if (x !== undefined) corridor[e.id] = x;
+        });
+        const buses = {};
+        vert.forEach(e => {
+            const up = upper(e);
+            const b = buses[up] || (buses[up] = { up, xs: [pos[up].x], pc: true });
+            b.xs.push(corridor[e.id] ?? dropX[e.id]);
+            b.pc = b.pc && !!e.lnk.is_portchannel;
+        });
+        // Buses below the same row get their own lane only where they overlap.
+        const busY = {}, laneEnds = {};
+        Object.values(buses).sort((a, b) => Math.min(...a.xs) - Math.min(...b.xs)).forEach(b => {
+            const lo = Math.min(...b.xs), hi = Math.max(...b.xs), row = Math.round(pos[b.up].y);
+            const ends = laneEnds[row] || (laneEnds[row] = []);
+            let lane = ends.findIndex(x => x < lo - 12);
+            if (lane === -1) lane = ends.length;
+            ends[lane] = hi;
+            busY[b.up] = bb(b.up).bottom + 16 + lane * 10;
+            b.lo = lo; b.hi = hi;
+        });
+        ctx.save();
+        ctx.lineWidth = 2;
+        Object.values(buses).forEach(b => {
+            ctx.strokeStyle = b.pc ? PC_COPPER : muted;
+            ctx.beginPath();
+            ctx.moveTo(pos[b.up].x, bb(b.up).bottom); ctx.lineTo(pos[b.up].x, busY[b.up]);
+            ctx.moveTo(b.lo, busY[b.up]); ctx.lineTo(b.hi, busY[b.up]);
+            ctx.stroke();
+        });
+        ctx.restore();
+        const plain = p => (p && p !== 'Vicino' && p !== 'Neighbor') ? shortIface(p) : '';
+        const tags = [];   // painted after every cable: no cable runs over a tag
+        const overLanes = {};   // row y -> last lane used above it
+        ctx.save();
+        ctx.lineJoin = 'round';
+        edges.forEach(e => {
+            const l = e.lnk, isPC = !!l.is_portchannel;
+            const kind = l.kind === 'group' ? 'group' : (l.kind === 'redundancy_heartbeat' ? 'ha' : (isPC ? 'pc' : 'link'));
+            const lp = ((l.local_ports && l.local_ports.length) ? l.local_ports : [l.local_port]).map(shortIface).filter(Boolean);
+            const rp = ((l.remote_ports && l.remote_ports.length) ? l.remote_ports : [l.remote_port]).map(shortIface).filter(Boolean);
+            // One line per member actually configured: a floor of 2 drew a
+            // one-port Po as two cables, a cap of 4 hid the rest.
+            const m = kind === 'pc' ? Math.max(1, lp.length, rp.length) : 1;
+            const ends = kind === 'pc' ? pcEnds(l) : null;
+            // fromSide: the end on the link's source device (local_*).
+            const endTag = fromSide => kind === 'pc'
+                ? { po: fromSide ? ends.local : ends.remote, ports: (fromSide ? lp : rp).join(' · ') }
+                : kind === 'link' ? { ports: plain(fromSide ? l.local_port : l.remote_port) } : null;
+            ctx.strokeStyle = kind === 'pc' ? PC_COPPER : (kind === 'ha' ? '#f9a825' : muted);
+            ctx.lineWidth = kind === 'pc' ? 2 : 1.5;
+            ctx.setLineDash(kind === 'group' || kind === 'ha' ? [4, 4] : (site(e.from) !== site(e.to) ? [7, 4] : []));
+            const a = pos[e.from], b = pos[e.to];
+            ctx.beginPath();
+            if (Math.abs(a.y - b.y) < 1) {
+                const fromLeft = a.x <= b.x;
+                const L = fromLeft ? e.from : e.to, R = fromLeft ? e.to : e.from;
+                const x1 = bb(L).right, x2 = bb(R).left;
+                // Other cards in between: up from both tops, across above the
+                // row, down again; a straight run crossed every card between.
+                if (hits((x1 + x2) / 2, a.y - 1, a.y + 1, [L, R]) || ids.some(id => id !== L && id !== R
+                        && Math.abs(pos[id].y - a.y) < 1 && pos[id].x > pos[L].x && pos[id].x < pos[R].x)) {
+                    const top = Math.min(bb(L).top, bb(R).top), row = Math.round(a.y);
+                    const lane = overLanes[row] = (overLanes[row] ?? -1) + 1;
+                    const ly = top - 58 - lane * 10;
+                    const lx = bb(L).right - 24, rx = bb(R).left + 24;
+                    for (let k = 0; k < m; k++) {
+                        const o = (k - (m - 1) / 2) * 5;
+                        ctx.moveTo(lx + o, bb(L).top); ctx.lineTo(lx + o, ly - o); ctx.lineTo(rx - o, ly - o); ctx.lineTo(rx - o, bb(R).top);
+                    }
+                    ctx.stroke();
+                    tags.push([endTag(fromLeft), lx + 10, ly - 12, 'start'], [endTag(!fromLeft), rx - 10, ly - 12, 'end']);
+                    return;
+                }
+                for (let k = 0; k < m; k++) {
+                    const o = (k - (m - 1) / 2) * 6;
+                    ctx.moveTo(x1, a.y + o); ctx.lineTo(x2, a.y + o);
+                }
+                ctx.stroke();
+                tags.push([endTag(fromLeft), x1 + 6, a.y - 20, 'start'], [endTag(!fromLeft), x2 - 6, a.y + 20, 'end']);
+                return;
+            }
+            const fromUp = a.y < b.y, U = fromUp ? e.from : e.to, D = fromUp ? e.to : e.from;
+            const cx = dropX[e.id], cy = bb(D).top, lift = (drops[D].length - 1 - dropIdx[e.id]) * 46;
+            // The child's drop from its parent's bus: one line per Po member.
+            const cor = corridor[e.id], jy = cy - 56 - lift;
+            for (let k = 0; k < m; k++) {
+                const o = (k - (m - 1) / 2) * 5;
+                if (cor === undefined) { ctx.moveTo(cx + o, busY[U]); ctx.lineTo(cx + o, cy); continue; }
+                ctx.moveTo(cor + o, busY[U]); ctx.lineTo(cor + o, jy + o); ctx.lineTo(cx + o, jy + o); ctx.lineTo(cx + o, cy);
+            }
+            ctx.stroke();
+            // Both ends sit on the lower card's own drop, upper device first:
+            // siblings' tags can never land on each other.
+            // With several parents the pairs stack, the leftmost parent's on top.
+            // Same Po and members on both ends (a symmetric bundle): one tag,
+            // two identical ones only stacked noise on the drop.
+            const tu = endTag(fromUp), td = endTag(!fromUp);
+            if (JSON.stringify(tu) === JSON.stringify(td)) tags.push([td, cx, cy - 15 - lift, 'middle']);
+            else tags.push([tu, cx, cy - 38 - lift, 'middle'], [td, cx, cy - 15 - lift, 'middle']);
+        });
+        ctx.setLineDash([]);
+        tags.forEach(([t, x, y, anchor]) => { if (t) drawEndTag(ctx, t, x, y, anchor); });
+        ctx.restore();
     }
 
     // "visto dal WLC 3 h fa": età dell'ultimo censimento del controller, con la
@@ -1512,8 +1916,11 @@
                     const localPorts = (mine ? l.local_ports : l.remote_ports) || [mine ? l.local_port : l.remote_port];
                     const remotePorts = (mine ? l.remote_ports : l.local_ports) || [mine ? l.remote_port : l.local_port];
                     const fmt = p => (p || []).map(shortIface).filter(Boolean).join('+') || '—';
+                    // Same order as the ports below: this device's Po first.
+                    const ends = pcEnds(l);
+                    const ownPc = mine ? ends.local : ends.remote, peerPc = mine ? ends.remote : ends.local;
                     const pcTag = l.is_portchannel
-                        ? `<span class="badge badge-warning" style="font-size:10px;">${escapeHtml(l.pc_name ? shortIface(l.pc_name) : 'LAG')}</span>`
+                        ? `<span class="badge badge-warning" style="font-size:10px;">${escapeHtml(ends.same ? ownPc : `${ownPc} ⇄ ${peerPc}`)}</span>`
                         : (l.kind === 'redundancy_heartbeat'
                             ? '<span class="badge badge-warning" style="font-size:10px;">HA</span>' : '');
                     return `<div class="drawer-list-item">
@@ -1658,6 +2065,111 @@
         // animarsi da sola dopo la stabilizzazione iniziale).
         networkInstance.setOptions({ physics: { enabled: false } });
         networkInstance.redraw();
+    }
+
+    // Schema view layout, run once the boxes have their real size: one row
+    // per level, each box under the mean x of its neighbours in the rows
+    // above, never closer than SCHEMA_GAP to the next one. The space between
+    // two rows grows with the cables crossing it, so their runs get tracks.
+    // ponytail: one top-down barycentre pass, like the hierarchy view's.
+    const SCHEMA_GAP = 70;
+    function packSchemaRows() {
+        if (!networkInstance) return;
+        const ds = networkInstance.body.data.nodes;
+        const box = {}, rows = {};
+        ds.forEach(nd => {
+            const b = networkInstance.getBoundingBox(nd.id);
+            box[nd.id] = { w: b.right - b.left, h: b.bottom - b.top };
+            (rows[nd.schemaLevel] || (rows[nd.schemaLevel] = [])).push(nd);
+        });
+        const adj = {}, wires = {}, same = {};
+        (minimalOverlayData ? minimalOverlayData.bundles : []).forEach(b => {
+            (adj[b.from] || (adj[b.from] = [])).push(b.to);
+            (adj[b.to] || (adj[b.to] = [])).push(b.from);
+            const la = ds.get(b.from), lb = ds.get(b.to);
+            if (!la || !lb) return;
+            const top = Math.min(la.schemaLevel, lb.schemaLevel);
+            if (la.schemaLevel !== lb.schemaLevel) wires[top] = (wires[top] || 0) + b.members.length;
+            else same[top] = (same[top] || 0) + b.members.length;
+        });
+        const pos = {};
+        let top = 0;
+        Object.keys(rows).map(Number).sort((a, b) => a - b).forEach(lv => {
+            // Room above the row for cables between its own boxes that run over it.
+            if (same[lv]) top += 20 + 8 * same[lv];
+            const want = nd => {
+                const xs = (adj[nd.id] || []).filter(id => pos[id]).map(id => pos[id].x);
+                return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+            };
+            const row = rows[lv].map(nd => ({ nd, w: want(nd) }))
+                .sort((a, b) => ((a.w ?? Infinity) - (b.w ?? Infinity)) || String(a.nd.id).localeCompare(String(b.nd.id)));
+            let right = -Infinity;
+            row.forEach(r => {
+                const bw = box[r.nd.id].w;
+                const x = Math.max(r.w ?? (right === -Infinity ? 0 : right + SCHEMA_GAP + bw / 2), right + SCHEMA_GAP + bw / 2);
+                pos[r.nd.id] = { x, y: top + box[r.nd.id].h / 2 };
+                right = x + bw / 2;
+            });
+            // Pushed right by the packing: slide the row back so it stays
+            // centred under what it hangs from.
+            const off = row.filter(r => r.w !== null).map(r => pos[r.nd.id].x - r.w);
+            const shift = off.length ? off.reduce((a, b) => a + b, 0) / off.length : 0;
+            row.forEach(r => { pos[r.nd.id].x -= shift; });
+            top += Math.max(...row.map(r => box[r.nd.id].h)) + 120 + 8 * (wires[lv] || 0);
+        });
+        Object.entries(pos).forEach(([id, p]) => networkInstance.moveNode(id, p.x, p.y));
+        saveSchemaPositions();
+        setTimeout(() => networkInstance && networkInstance.fit(), 50);
+    }
+
+    // Schema positions per site, in the browser: {"<site>": {"<id>": [x, y]}}.
+    // Same persistence as the hierarchy levels; "Riordina mappa" rewrites them.
+    function loadSchemaPositions(group) {
+        try {
+            const m = (JSON.parse(localStorage.getItem('schemaPositions') || '{}') || {})[group];
+            if (!m) return null;
+            const out = {};
+            Object.entries(m).forEach(([id, p]) => { out[id] = { x: p[0], y: p[1] }; });
+            return out;
+        } catch (e) { return null; }
+    }
+    function saveSchemaPositions() {
+        if (!networkInstance || getMapView() !== 'minimal') return;
+        try {
+            const all = JSON.parse(localStorage.getItem('schemaPositions') || '{}') || {};
+            const m = {};
+            Object.entries(networkInstance.getPositions()).forEach(([id, p]) => { m[id] = [Math.round(p.x), Math.round(p.y)]; });
+            all[lastMapGroup || ''] = m;
+            localStorage.setItem('schemaPositions', JSON.stringify(all));
+        } catch (e) { /* storage full or blocked: the layout just is not remembered */ }
+    }
+
+    // Devices new since the saved layout: each goes at the right end of its
+    // level's row (the row of an already placed device of the same level),
+    // so nothing the user arranged moves. A level with no saved row goes
+    // below the drawing.
+    function placeNewSchemaNodes(knownIds) {
+        const ds = networkInstance.body.data.nodes, known = new Set(knownIds);
+        const rowTop = {}, rowRight = {};
+        let bottom = -Infinity;
+        // A row is a level: boxes of one row share their top edge, not their centre.
+        ds.forEach(nd => {
+            if (!known.has(nd.id)) return;
+            const b = networkInstance.getBoundingBox(nd.id), lv = nd.schemaLevel;
+            bottom = Math.max(bottom, b.bottom);
+            rowTop[lv] = Math.min(rowTop[lv] ?? Infinity, b.top);
+            rowRight[lv] = Math.max(rowRight[lv] ?? -Infinity, b.right);
+        });
+        ds.forEach(nd => {
+            if (known.has(nd.id)) return;
+            const b = networkInstance.getBoundingBox(nd.id), w = b.right - b.left, h = b.bottom - b.top;
+            const lv = nd.schemaLevel;
+            if (rowTop[lv] === undefined) { rowTop[lv] = bottom + 160; bottom += 160 + h; }
+            const x = (rowRight[lv] ?? -SCHEMA_GAP) + SCHEMA_GAP + w / 2;
+            rowRight[lv] = x + w / 2;
+            networkInstance.moveNode(nd.id, x, rowTop[lv] + h / 2);
+        });
+        saveSchemaPositions();
     }
 
     // ===== Nuova mappa minimalista (stile diagramma Visio) =====
@@ -1892,6 +2404,13 @@
     // filtrati della mappa classica. Nodi = riquadri con nome in grassetto e
     // vendor/modello sulla seconda riga; i Port-Channel sono SEMPRE visibili come
     // un arco aggregato con etichetta "Po1" + coppie di interfacce membro sotto.
+    // Port-channel name shown at each end of a bundle, beside the bracket that
+    // groups its member ports. Empty for plain links and keepalives.
+    function pcEndTags(b) {
+        if (b.type !== 'pc' && b.type !== 'peer') return { from: '', to: '' };
+        return b.asymmetricPc ? { from: b.localLabel, to: b.remoteLabel } : { from: b.label, to: b.label };
+    }
+
     function buildMinimalGraph(nodeData, linkData, opts) {
         const S = MINIMAL_MAP_STYLE;
         const showVtpDomain = !!(opts && opts.showVtpDomain);
@@ -2027,12 +2546,28 @@
         const _measCtx = _measCanvas.getContext('2d');
         _measCtx.font = '9px Arial, Helvetica, sans-serif';
         const measurePort = t => t ? _measCtx.measureText(t).width : 0;
-        const nodeReq = {};   // id -> { spread, labelW, slots }
-        const bumpReq = (id, spread, labelW, slots) => {
-            const r = nodeReq[id] || (nodeReq[id] = { spread: 0, labelW: 0, slots: 0 });
+        // Bracket (4 gap + 4 tick + 4 gap) + Port-channel name in bold 10px.
+        const measureTag = t => {
+            if (!t) return 0;
+            _measCtx.font = 'bold 10px Arial, Helvetica, sans-serif';
+            const w = _measCtx.measureText(t).width;
+            _measCtx.font = '9px Arial, Helvetica, sans-serif';
+            return w + 12;
+        };
+        // Rows by level, as in the hierarchy view: the core on top, its
+        // children below. A physics layout scattered the boxes at random and
+        // every cable crossed half the drawing to reach its peer. The level
+        // also tells which side of the box each cable uses (sizing below).
+        const levels = computeLayeredLevels(nodeData, linkData, (opts && opts.group) || '');
+        const nodeReq = {};   // id -> { spread, labelW, N, S, E }: port slots per side
+        const bumpReq = (id, peer, spread, labelW, slots, portW) => {
+            const r = nodeReq[id] || (nodeReq[id] = { spread: 0, labelW: 0, portW: 0, N: 0, S: 0, E: 0 });
             r.spread = Math.max(r.spread, spread);
             r.labelW = Math.max(r.labelW, labelW);
-            r.slots += slots || 0;
+            r.portW = Math.max(r.portW, portW);
+            const lv = levels[id] || 0, pl = levels[peer] || 0;
+            // Same row: E/W beside a neighbour, over the top (N) otherwise.
+            if (pl < lv) r.N += slots; else if (pl > lv) r.S += slots; else { r.N += slots; r.E += slots; }
         };
         const edges = linkData.map(l => {
             const isPC      = !!l.is_portchannel;
@@ -2050,13 +2585,16 @@
             const remotePorts = (Array.isArray(l.remote_ports) && l.remote_ports.length) ? l.remote_ports : [l.remote_port];
             const members       = localPorts.map(shortIface).filter(Boolean).join(', ');
             const remoteMembers = remotePorts.map(shortIface).filter(Boolean).join(', ');
-            const pcTag = l.pc_name ? shortIface(l.pc_name) : (l.member_count > 1 ? `LAG ×${l.member_count}` : 'LAG');
             // Nome aggregato per-lato: il Port-channel può avere id diverso sui due
             // estremi (es. Po1 su A, Po4 su B). Se differiscono si etichetta ciascun
             // estremo col proprio id; se coincidono si tiene la pillola centrale.
-            const localPcTag  = l.local_pc  ? shortIface(l.local_pc)  : pcTag;
-            const remotePcTag = l.remote_pc ? shortIface(l.remote_pc) : pcTag;
-            const asymmetricPc = !!(localPcTag && remotePcTag && localPcTag !== remotePcTag);
+            const ends = pcEnds(l);
+            // pcTag also keys the saved pill positions (pillKey): it keeps
+            // its old value, the per-end names are only for display.
+            const pcTag = l.pc_name ? shortIface(l.pc_name) : (l.member_count > 1 ? `LAG ×${l.member_count}` : 'LAG');
+            const localPcTag  = ends.local;
+            const remotePcTag = ends.remote;
+            const asymmetricPc = !ends.same;
 
             // OGNI collegamento è reso dall'overlay ortogonale con stile
             // UNIFORME (Fix rappresentazione standardizzata): i Port-Channel
@@ -2103,16 +2641,19 @@
             // Requisiti di spazio per i due nodi: lo spread dei cavi, la
             // larghezza del testo di porta più lungo su ciascun lato e il
             // numero di slot occupati sul perimetro del riquadro.
+            // The Port-channel bracket and its name sit beside the port labels,
+            // so they count toward the same width.
             const spread = (memberPairs.length - 1) * 11;
-            const locW = Math.max(...memberPairs.map(m => measurePort(m.local)), 0);
-            const remW = Math.max(...memberPairs.map(m => measurePort(m.remote)), 0);
-            bumpReq(l.source, spread, locW, memberPairs.length);
-            bumpReq(l.target, spread, remW, memberPairs.length);
+            const tags = pcEndTags(bundles[bundles.length - 1]);
+            const locP = Math.max(...memberPairs.map(m => measurePort(m.local)), 0);
+            const remP = Math.max(...memberPairs.map(m => measurePort(m.remote)), 0);
+            bumpReq(l.source, l.target, spread, locP + measureTag(tags.from), memberPairs.length, locP);
+            bumpReq(l.target, l.source, spread, remP + measureTag(tags.to), memberPairs.length, remP);
 
             const tip = document.createElement('div');
             tip.innerHTML = `<div style="font-family:var(--font-main); min-width:180px; color:var(--text); font-size:11px;">
                 <strong style="color:var(--primary);">${escapeHtml(l.source)} ⇄ ${escapeHtml(l.target)}</strong>
-                ${isPC ? `<div style="margin-top:4px; color:var(--text-muted);">${tr('topoAggregate')}: <span style="color:var(--warning);">${escapeHtml(pcTag)}</span>${l.member_count > 1 ? ` · ${l.member_count} ${tr('topoMembers')}` : ''}</div>
+                ${isPC ? `<div style="margin-top:4px; color:var(--text-muted);">${tr('topoAggregate')}: <span style="color:var(--warning);">${escapeHtml(ends.text)}</span>${l.member_count > 1 ? ` · ${l.member_count} ${tr('topoMembers')}` : ''}</div>
                 <div style="font-family:var(--font-code); font-size:10px; margin-top:2px;">${escapeHtml(members||'—')} ⇄ ${escapeHtml(remoteMembers||'—')}</div>`
                 : `<div style="font-family:var(--font-code); font-size:10px; margin-top:4px;">${escapeHtml(shortIface(l.local_port)||'—')} ⇄ ${escapeHtml(shortIface(l.remote_port)||'—')}</div>`}
             </div>`;
@@ -2160,22 +2701,26 @@
             // Fascia verticale occupata dal blocco nome (righe non vuote × ~14px).
             const nameLines = nd._nameTexts.filter(Boolean).length || 1;
             const nameH = nameLines * 14;
-            // Caso peggiore: tutti gli slot del nodo impilati su UN solo lato.
-            const stack = r.slots * LINE_H;
-            // Altezza: la pila peggiore su ciascun lato + buffer resta fuori dalla
-            // fascia nome centrata → H/2 ≥ INSET + stack + BUF + nameH/2.
-            const minH = Math.max(2 * (INSET + stack + BUF) + nameH, 46);
-            // Larghezza: nome centrale + etichette porta E/W ai due bordi; e in
-            // più lo spread orizzontale degli ancoraggi N/S con il testo porta.
-            const minW = Math.max(textW + 2 * (r.labelW + INSET + BUF),
-                                  stack + 2 * EDGE_INSET + r.labelW + BUF, 100);
+            // Sized for the sides the row layout really uses: the labels of the
+            // top and bottom stacks stay clear of the centred name, and E/W
+            // labels only widen a box that has a neighbour on its own row.
+            // Sizing for every slot on one side drew the core as a tall empty
+            // column.
+            // Top/bottom: vertical labels, then the bracket, then the Po name
+            // at one of two depths (9 + label + 4 + 2 x 11).
+            const depth = (r.N || r.S) ? r.portW + 35 : INSET;
+            const minH = Math.max(2 * (depth + BUF) + nameH, r.E * LINE_H + 2 * EDGE_INSET, 46);
+            const minW = Math.max(textW + (r.E ? 2 * (r.labelW + INSET + BUF) : 2 * INSET),
+                                  Math.max(r.N, r.S) * LINE_H + 2 * EDGE_INSET, 100);
             nd.widthConstraint  = { minimum: Math.round(minW) };
             nd.heightConstraint = { minimum: Math.round(minH) };
         });
 
+        // Final x/y come from packSchemaRows() once vis.js has sized the boxes.
+        nodes.forEach((nd, i) => { nd.schemaLevel = levels[nd.id] || 0; nd.x = i * 400; nd.y = nd.schemaLevel * 400; });
         const options = {
-            layout: { improvedLayout: true, randomSeed: 42 },
-            physics: sharedMapPhysics(),
+            layout: { improvedLayout: false, randomSeed: 42 },
+            physics: { enabled: false },
             interaction: { hover: hoverInfo, hoverConnectedEdges: hoverInfo, selectConnectedEdges: true, tooltipDelay: 150, dragNodes: true, dragView: true, zoomView: true, multiselect: true },
             nodes: { shadow: { enabled: false } },
             edges: { smooth: { type: 'continuous', roundness: 0.2 }, shadow: { enabled: false } }
@@ -2194,6 +2739,7 @@
     try { pillAdjust = JSON.parse(localStorage.getItem('minimalPillAdjust') || '{}'); } catch (e) { pillAdjust = {}; }
     let pillHitboxes = [];     // ricostruiti a ogni disegno: {key, x,y,w,h, hx,hy,hr}
     let pillDrag = null;       // {key, mode:'move'|'resize'|'label', startM, orig, cx, cy}
+    let hoverBundleKey = null; // pillKey of the bundle under the mouse
     const pillKey = b => `${b.from}~${b.to}~${b.pcTag || ''}`;
     const pillAdj = key => pillAdjust[key] || { dx: 0, dy: 0, scale: 1 };
     // Scostamento delle ETICHETTE di testo (es. "po1"), indipendente dalla
@@ -2308,6 +2854,20 @@
         };
         window.addEventListener('mouseup', endDrag);
         window.addEventListener('pointerup', endDrag);
+        // Hovering a cable or pill dims every other bundle, so its members
+        // can be followed through a crowded stretch.
+        const setHover = key => {
+            if (key === hoverBundleKey) return;
+            hoverBundleKey = key;
+            networkInstance.redraw();
+        };
+        container.addEventListener('mousemove', ev => {
+            if (pillDrag || getMapView() !== 'minimal' || !networkInstance) return;
+            const m = toNet(ev);
+            const pill = pillHitboxes.find(p => m.x >= p.x && m.x <= p.x + p.w && m.y >= p.y && m.y <= p.y + p.h);
+            setHover(pill ? pill.key : hitEdgeAt(m));
+        });
+        container.addEventListener('mouseleave', () => { if (networkInstance) setHover(null); });
         // Click destro su un cavo: menu per assegnare/rimuovere una categoria
         // personalizzata al collegamento (Task categorie link).
         container.addEventListener('contextmenu', ev => {
@@ -2334,6 +2894,7 @@
         pillHitboxes = [];   // ricostruiti sotto per l'hit-test di drag/resize
         labelHitboxes = [];  // ricostruiti sotto per il drag delle etichette
         edgeHitSegs = [];    // ricostruiti sotto per l'hit-test del menu categorie
+        const deferredTags = [];
 
         // --- 1) Contenitori di raggruppamento per Sede/Gruppo ------------------
         if (Array.isArray(groupsInfo) && groupsInfo.length > 1) {
@@ -2404,9 +2965,22 @@
             catch (e) { return null; }
             if (!p1 || !p2) return null;
             const dx = p2.x - p1.x, dy = p2.y - p1.y;
-            const horizontal = Math.abs(dx) >= Math.abs(dy);
-            const fromSide = horizontal ? (dx >= 0 ? 'E' : 'W') : (dy >= 0 ? 'S' : 'N');
-            const toSide   = horizontal ? (dx >= 0 ? 'W' : 'E') : (dy >= 0 ? 'N' : 'S');
+            // Side by side (boxes overlapping in height): E/W; otherwise the
+            // cable leaves from the bottom/top, which on the row layout keeps
+            // it out of the boxes of the same row.
+            const ba = bbox(b.from), bb2 = bbox(b.to);
+            let horizontal = ba && bb2 ? (ba.top < bb2.bottom && bb2.top < ba.bottom) : Math.abs(dx) >= Math.abs(dy);
+            // Same row with other boxes in between: a straight run would cross
+            // them, so the cable leaves both tops and runs above the row.
+            const over = !!(horizontal && ba && bb2) && networkInstance.body.data.nodes.getIds().some(id => {
+                if (id === b.from || id === b.to) return false;
+                const o = bbox(id);
+                return o && o.right > Math.min(ba.right, bb2.right) && o.left < Math.max(ba.left, bb2.left)
+                    && o.top < Math.max(ba.bottom, bb2.bottom) && o.bottom > Math.min(ba.top, bb2.top);
+            });
+            if (over) horizontal = false;
+            const fromSide = over ? 'N' : horizontal ? (dx >= 0 ? 'E' : 'W') : (dy >= 0 ? 'S' : 'N');
+            const toSide   = over ? 'N' : horizontal ? (dx >= 0 ? 'W' : 'E') : (dy >= 0 ? 'N' : 'S');
             const reg = (id, side, key) => {
                 const sides = sideRegistry[id] || (sideRegistry[id] = {});
                 const arr = sides[side] || (sides[side] = []);
@@ -2414,7 +2988,7 @@
                 arr.push(entry);
                 return entry;
             };
-            return { b, bi, horizontal, fromSide, toSide,
+            return { b, bi, horizontal, over, fromSide, toSide,
                      fromEntry: reg(b.from, fromSide, horizontal ? p2.y : p2.x),
                      toEntry:   reg(b.to,   toSide,   horizontal ? p1.y : p1.x) };
         }).filter(Boolean);
@@ -2428,7 +3002,7 @@
                 const usable = Math.max(sideLen - 2 * EDGE_INSET, 0);
                 const step = total > 1 ? Math.min(spacing, usable / (total - 1)) : 0;
                 let slot = 0;
-                entries.forEach(e => { e.slot = slot; e.step = step; e.total = total; slot += e.count; });
+                entries.forEach((e, j) => { e.slot = slot; e.step = step; e.total = total; e.idx = j; slot += e.count; });
             });
         });
 
@@ -2456,6 +3030,9 @@
                 if (g.horizontal) {
                     const mid = (A.x + B.x) / 2 + (i - half) * spacing;
                     pts = [A, { x: mid, y: A.y }, { x: mid, y: B.y }, B];
+                } else if (g.over) {
+                    const top = Math.min(A.y, B.y) - 24 - i * spacing;
+                    pts = [A, { x: A.x, y: top }, { x: B.x, y: top }, B];
                 } else {
                     const mid = (A.y + B.y) / 2 + (i - half) * spacing;
                     pts = [A, { x: A.x, y: mid }, { x: B.x, y: mid }, B];
@@ -2463,6 +3040,50 @@
                 return { m, A, B, pts };
             });
             return Object.assign({}, g, { members, style: styleFor(b) });
+        });
+
+        // Vertical cables leaving the same box side fan out like a ribbon:
+        // the wire heading furthest out turns first, so no two of them
+        // cross. Without this every run sat on the halfway line and each
+        // cable bridged over all the others.
+        const fans = {};
+        geoms.forEach(g => {
+            if (g.horizontal || g.over) return;
+            g.members.forEach(mm => {
+                const up = mm.A.y <= mm.B.y ? mm.A : mm.B, dn = up === mm.A ? mm.B : mm.A;
+                const key = `${up === mm.A ? g.b.from : g.b.to}|${dn.x >= up.x ? 'R' : 'L'}`;
+                (fans[key] || (fans[key] = [])).push({ mm, up, dn });
+            });
+        });
+        Object.entries(fans).forEach(([key, ws]) => {
+            const right = key.endsWith('R');
+            ws.sort((a, c) => right ? c.up.x - a.up.x : a.up.x - c.up.x);
+            ws.forEach((w, k) => {
+                const y = Math.min(w.up.y + 22 + k * 8, w.dn.y - 20);
+                w.mm.pts[1].y = y; w.mm.pts[2].y = y;
+            });
+        });
+
+        // Middle runs of different bundles all sat on the same halfway line
+        // and merged into one unreadable band. Slide each bundle's middle
+        // run to the nearest free track, staying between its two ends.
+        // ponytail: greedy, first come first served; crossings stay (bridged).
+        const placedRuns = [];
+        geoms.forEach(g => {
+            const ax = g.horizontal ? 'x' : 'y', bx = g.horizontal ? 'y' : 'x';
+            const runs = d => g.members.map(mm => {
+                const c = mm.pts[1][ax] + d;
+                return { c, lo: Math.min(mm.pts[1][bx], mm.pts[2][bx]), hi: Math.max(mm.pts[1][bx], mm.pts[2][bx]),
+                         ok: g.over ? c < Math.min(mm.A.y, mm.B.y) - 12
+                             : c > Math.min(mm.A[ax], mm.B[ax]) + 6 && c < Math.max(mm.A[ax], mm.B[ax]) - 6 };
+            });
+            const clash = rs => rs.some(r => !r.ok || placedRuns.some(p => p.h === g.horizontal
+                && Math.abs(p.c - r.c) < 7 && p.lo < r.hi && r.lo < p.hi));
+            let d = 0;
+            for (let k = 1; k < 40 && clash(runs(d)); k++) d = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 8;
+            if (clash(runs(d))) d = 0;
+            g.members.forEach(mm => { mm.pts[1][ax] += d; mm.pts[2][ax] += d; });
+            runs(0).forEach(r => placedRuns.push(Object.assign(r, { h: g.horizontal })));
         });
 
         // Raccolta dei segmenti verticali (per membro) da tutti i fasci: sono gli
@@ -2508,10 +3129,10 @@
         // --- PASSO 3: disegno cavi + etichette ------------------------------
         geoms.forEach(g => {
             const b = g.b, horizontal = g.horizontal, color = g.style.color;
-            const sdx = horizontal ? (g.fromSide === 'E' ? 1 : -1) : 0;
-            const sdy = horizontal ? 0 : (g.fromSide === 'S' ? 1 : -1);
 
             ctx.save();
+            // Not on the export context: only the live map follows the mouse.
+            if (hoverBundleKey && !visioConnectorSink && pillKey(b) !== hoverBundleKey) ctx.globalAlpha = 0.18;
             ctx.strokeStyle = color;
             ctx.lineWidth = g.style.lw;
             ctx.setLineDash(g.style.dash || []);
@@ -2525,13 +3146,23 @@
             // orizzontale, quindi le etichette centrate si accavallavano in un
             // groviglio illeggibile ("Te1/1d1t21/1"). Le impiliamo verticalmente una
             // per riga (slotIdx), allineate a sinistra, come già avviene sui lati E/W.
-            const drawPortLabel = (text, pt, side, slotIdx) => {
+            // Top and bottom sides: the label turns vertical and runs inward
+            // along its own cable, as on a Visio rack drawing. Stacked one row
+            // per port, a core with twenty uplinks became a tall empty column.
+            const drawPortLabel = (text, pt, side) => {
                 if (!text) return;
                 ctx.fillStyle = color;
                 if (side === 'E')      { ctx.textAlign = 'right';  ctx.fillText(text, pt.x - 13, pt.y - 5); }
                 else if (side === 'W') { ctx.textAlign = 'left';   ctx.fillText(text, pt.x + 13, pt.y - 5); }
-                else if (side === 'S') { ctx.textAlign = 'left';   ctx.fillText(text, pt.x + 4, pt.y - 13 - (slotIdx || 0) * 11); }
-                else                   { ctx.textAlign = 'left';   ctx.fillText(text, pt.x + 4, pt.y + 13 + (slotIdx || 0) * 11); }
+                else {
+                    ctx.save();
+                    ctx.translate(pt.x, side === 'S' ? pt.y - 9 : pt.y + 9);
+                    ctx.rotate(side === 'S' ? -Math.PI / 2 : Math.PI / 2);
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(text, 0, 0);
+                    ctx.restore();
+                }
             };
 
             // ponytail: quadratino di terminazione appena DENTRO il bordo, colore del
@@ -2573,8 +3204,8 @@
                 }
                 // Indice di slot globale sul lato (entry.slot + i): garantisce che le
                 // etichette N/S di fasci diversi si impilino su righe distinte.
-                drawPortLabel(mm.m.local,  mm.A, g.fromSide, g.fromEntry.slot + i);
-                drawPortLabel(mm.m.remote, mm.B, g.toSide,   g.toEntry.slot + i);
+                drawPortLabel(mm.m.local,  mm.A, g.fromSide);
+                drawPortLabel(mm.m.remote, mm.B, g.toSide);
             });
             // Segmenti del fascio per l'hit-test del menu categorie (click destro).
             edgeHitSegs.push({ key: pillKey(b), segs: g.members.flatMap(mm =>
@@ -2582,28 +3213,37 @@
             ctx.setLineDash([]);
 
             // Centro del fascio e ampiezza (per pillola/etichette).
-            const aC = { x: g.members.reduce((s, m) => s + m.A.x, 0) / g.members.length,
-                         y: g.members.reduce((s, m) => s + m.A.y, 0) / g.members.length };
-            const bC = { x: g.members.reduce((s, m) => s + m.B.x, 0) / g.members.length,
-                         y: g.members.reduce((s, m) => s + m.B.y, 0) / g.members.length };
             const half = (b.members.length - 1) / 2;
             const spread = half * spacing;
-            const cx = (aC.x + bC.x) / 2, cy = (aC.y + bC.y) / 2;
+            // On the cable itself: the first (E/W) or the last (N/S) leg, both
+            // straight runs of the whole bundle. The midpoint of the two ends
+            // floated in empty space once the runs fanned out.
+            const leg = horizontal ? 0 : 2;
+            const mid = k => g.members.reduce((t, mm) => t + (mm.pts[leg][k] + mm.pts[leg + 1][k]) / 2, 0) / g.members.length;
+            const cx = mid('x'), cy = mid('y');
 
             // Cartiglio bianco riutilizzabile per i nomi aggregato. Se 'key' è
             // fornita, il cartiglio è trascinabile: applica lo scostamento
             // dell'utente e registra la propria hitbox per il drag.
             const drawTag = (text, lx, ly, key) => {
-                if (key) { const la = labelAdj(key); lx += la.dx || 0; ly += la.dy || 0; }
+                const la = key ? labelAdj(key) : {};
+                lx += la.dx || 0; ly += la.dy || 0;
                 ctx.font = 'bold 10px Arial, Helvetica, sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 const tw = ctx.measureText(text).width;
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(lx - tw / 2 - 3, ly - 7, tw + 6, 14);
-                ctx.fillStyle = color;
-                ctx.fillText(text, lx, ly);
                 if (key) labelHitboxes.push({ key, x: lx - tw / 2 - 3, y: ly - 7, w: tw + 6, h: 14 });
+                // Painted after every cable: drawn inline, the next bundle's
+                // cables ran over the tags of the previous ones.
+                deferredTags.push(() => {
+                    ctx.font = 'bold 10px Arial, Helvetica, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(lx - tw / 2 - 3, ly - 7, tw + 6, 14);
+                    ctx.fillStyle = color;
+                    ctx.fillText(text, lx, ly);
+                });
             };
 
             if (b.type === 'keepalive') {
@@ -2643,30 +3283,60 @@
             pillHitboxes.push({ key: pillKey(b), x: px, y: py, w: pw, h: ph,
                                 hx: px + pw, hy: py + ph, hr: 6, cx: pcx, cy: pcy });
 
-            if (b.asymmetricPc) {
-                // Nomi Port-channel diversi sui due lati (es. Po1 ⇄ Po4): si
-                // etichetta ciascun estremo accanto al dispositivo d'origine,
-                // indicando la direzione da cui il nome proviene.
-                if (horizontal) {
-                    drawTag(b.localLabel  || b.localPcTag,  aC.x + sdx * 26, aC.y - spread - 10, pillKey(b) + '~a');
-                    drawTag(b.remoteLabel || b.remotePcTag, bC.x - sdx * 26, bC.y - spread - 10, pillKey(b) + '~b');
+            // Port-channel name at each end, inside the device box: a bracket
+            // groups the member port labels and carries that side's name
+            // (po1 on one end, po2 on the other when they differ). A tag on
+            // the cable covered the cables of the bundles it crossed.
+            const drawBracket = (text, ends, ports, side, entry) => {
+                if (!text) return;
+                ctx.font = '9px Arial, Helvetica, sans-serif';
+                const ws = ports.map(p => p ? ctx.measureText(p).width : 0);
+                let x, y0, y1, tick;
+                if (side === 'E' || side === 'W') {
+                    // Port labels: aligned 13px in from the anchor, 5px above it.
+                    const inward = side === 'E' ? -1 : 1;
+                    tick = -inward * 4;
+                    x = ends[0].x + inward * (13 + Math.max(...ws) + 4);
+                    y0 = Math.min(...ends.map(p => p.y)) - 10;
+                    y1 = Math.max(...ends.map(p => p.y));
                 } else {
-                    drawTag(b.localLabel  || b.localPcTag,  aC.x - spread - 14, aC.y + sdy * 22, pillKey(b) + '~a');
-                    drawTag(b.remoteLabel || b.remotePcTag, bC.x - spread - 14, bC.y - sdy * 22, pillKey(b) + '~b');
+                    // Vertical port labels: a horizontal bracket closes them
+                    // and the name sits past it. Neighbouring bundles take
+                    // turns at two depths so their names never touch.
+                    const inward = side === 'S' ? -1 : 1;
+                    const y = ends[0].y + inward * (9 + Math.max(...ws) + 4);
+                    const xa = Math.min(...ends.map(p => p.x)) - 3, xb = Math.max(...ends.map(p => p.x)) + 3;
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(xa, y - inward * 4); ctx.lineTo(xa, y); ctx.lineTo(xb, y); ctx.lineTo(xb, y - inward * 4);
+                    ctx.stroke();
+                    ctx.font = 'bold 10px Arial, Helvetica, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillStyle = color;
+                    ctx.fillText(text, (xa + xb) / 2, y + inward * (8 + (entry.idx % 2) * 11));
+                    return;
                 }
-            } else {
-                // ponytail: etichetta (es. "Po1", "Po1 / vPC") accostata alla pillola
-                // e spostata LUNGO il cavo verso lo switch a cui il Port-channel
-                // appartiene (lo switch 'from'), affiancata alla linea come in drawio.
-                const towardX = Math.sign(aC.x - pcx) || 1;
-                const towardY = Math.sign(aC.y - pcy) || 1;
-                let lx, ly;
-                if (horizontal) { lx = pcx + towardX * (pillHalfW + 20); ly = pcy - pillHalfSpread - 9; }
-                else            { lx = pcx - pillHalfSpread - 16;        ly = pcy + towardY * (pillHalfW + 16); }
-                drawTag(b.label || b.pcTag || 'po', lx, ly, pillKey(b) + '~tag');
-            }
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x + tick, y0); ctx.lineTo(x, y0); ctx.lineTo(x, y1); ctx.lineTo(x + tick, y1);
+                ctx.stroke();
+                ctx.font = 'bold 10px Arial, Helvetica, sans-serif';
+                ctx.textAlign = side === 'E' ? 'right' : 'left';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = color;
+                ctx.fillText(text, x - tick, (y0 + y1) / 2);
+            };
+            const tags = pcEndTags(b);
+            drawBracket(tags.from, g.members.map(mm => mm.A), g.members.map(mm => mm.m.local),  g.fromSide, g.fromEntry);
+            drawBracket(tags.to,   g.members.map(mm => mm.B), g.members.map(mm => mm.m.remote), g.toSide,   g.toEntry);
             ctx.restore();
         });
+        ctx.save();
+        deferredTags.forEach(paint => paint());
+        ctx.restore();
     }
 
     // ===== Pannello Dispositivi & Categorie (classificazione manuale) =====
@@ -3256,7 +3926,7 @@
                 const stack = nodeStack(node.nodeDataVal);
 
                 if (node.shape === 'image') {
-                    node.image = createNodeSvg(node.labelVal || ip, ip, node.deviceTypeVal, newStatus, node.isBoundaryVal, node.vendorVal, vtp, stack);
+                    Object.assign(node, nodeVisual(node.nodeDataVal, newStatus, node.vendorVal, vtp, stack));
                 }
                 node.title = createNodeTooltip(node.nodeDataVal, scan, node.vendorVal);
                 if (node.opacity !== undefined) {
@@ -3416,8 +4086,13 @@
             strokeStyle: '#000', fillStyle: '#000', lineWidth: 1,
             font: '10px Arial', textAlign: 'left', textBaseline: 'alphabetic',
             lineJoin: 'round', lineCap: 'butt', _dash: [],
-            save() { stack.push({ s: this.strokeStyle, f: this.fillStyle, w: this.lineWidth, fo: this.font, a: this.textAlign, b: this.textBaseline, d: this._dash }); },
-            restore() { const p = stack.pop(); if (p) { this.strokeStyle = p.s; this.fillStyle = p.f; this.lineWidth = p.w; this.font = p.fo; this.textAlign = p.a; this.textBaseline = p.b; this._dash = p.d; } },
+            // Translate/rotate are only used around vertical port labels:
+            // tracked for fillText, never applied to paths.
+            _t: { x: 0, y: 0, a: 0 },
+            save() { stack.push({ s: this.strokeStyle, f: this.fillStyle, w: this.lineWidth, fo: this.font, a: this.textAlign, b: this.textBaseline, d: this._dash, t: Object.assign({}, this._t) }); },
+            restore() { const p = stack.pop(); if (p) { this.strokeStyle = p.s; this.fillStyle = p.f; this.lineWidth = p.w; this.font = p.fo; this.textAlign = p.a; this.textBaseline = p.b; this._dash = p.d; this._t = p.t; } },
+            translate(x, y) { const t = this._t; t.x += x * Math.cos(t.a) - y * Math.sin(t.a); t.y += x * Math.sin(t.a) + y * Math.cos(t.a); },
+            rotate(r) { this._t.a += r; },
             setLineDash(d) { this._dash = d || []; },
             beginPath() { subpaths = []; cur = null; },
             moveTo(x, y) { cur = [[x, y]]; subpaths.push(cur); },
@@ -3462,8 +4137,9 @@
                 else if (this.textAlign === 'right') cx = x - w / 2;
                 if (this.textBaseline === 'bottom') cy = y - size / 2;
                 else if (this.textBaseline === 'top') cy = y + size / 2;
+                const t = this._t, cos = Math.cos(t.a), sin = Math.sin(t.a);
                 const c = visioColor(this.fillStyle);
-                prims.texts.push({ x: cx, y: cy, text, color: c.hex, size, bold, w });
+                prims.texts.push({ x: t.x + cx * cos - cy * sin, y: t.y + cx * sin + cy * cos, text, color: c.hex, size, bold, w, angle: t.a });
             }
         };
         return ctx;
@@ -3522,11 +4198,16 @@
                 visioConnectorSink = null;
             }
         } else {
+            const pos = networkInstance.getPositions();
             edges = edgesDs.get().map(e => {
                 const ex = e.exportVal || {};
+                const pe = ex.pcEnds;
                 return {
                     source: e.from, target: e.to,
-                    label: ex.isPortChannel ? (ex.pcName || 'Port-Channel') : '',
+                    // Same orientation as on screen: the left device's Po first.
+                    label: ex.isPortChannel && pe
+                        ? sideLabel({ prefix: '', a: pe.local, b: pe.remote, same: pe.same }, aIsLeft(pos, e.from, e.to))
+                        : '',
                     color: ex.color || cssVar('--text-soft', '#8d9bb0')
                 };
             });
@@ -3584,9 +4265,13 @@
     document.getElementById('toggleDiscovered')?.addEventListener('change', loadInteractiveMap);
     document.getElementById('togglePortChannel')?.addEventListener('change', loadInteractiveMap);
     document.getElementById('toggleVtpDomain')?.addEventListener('change', loadInteractiveMap);
-    document.getElementById('mapViewClassicBtn')?.addEventListener('click', () => setMapView('classic'));
     document.getElementById('mapViewMinimalBtn')?.addEventListener('click', () => setMapView('minimal'));
     document.getElementById('mapViewLayeredBtn')?.addEventListener('click', () => setMapView('layered'));
+    // Schema: positions survive refreshes and drags, so after a few changes
+    // the boxes drift; this lays them out again in rows, on demand.
+    document.getElementById('schemaTidyBtn')?.addEventListener('click', () => {
+        if (getMapView() === 'minimal') packSchemaRows();
+    });
     document.getElementById('layeredResetBtn')?.addEventListener('click', () => {
         const g = document.getElementById('interactiveGroupSelect');
         resetLayeredLevels(g ? g.value : 'all');
@@ -3594,6 +4279,46 @@
     document.getElementById('layeredCoreSelect')?.addEventListener('change', ev => {
         const g = document.getElementById('interactiveGroupSelect');
         setLayeredRoot(g ? g.value : 'all', ev.target.value);
+    });
+    // Level names: one field per row of the map, labelled with a few of its
+    // devices so it is clear which row is which. Empty fields stay empty.
+    document.getElementById('layeredNamesBtn')?.addEventListener('click', () => {
+        if (!networkInstance) return;
+        const rows = {};
+        networkInstance.body.data.nodes.forEach(nd => {
+            const lv = layeredAssigned[nd.id] || 0;
+            (rows[lv] || (rows[lv] = [])).push(nd.labelVal || nd.id);
+        });
+        const names = layeredLevelNames[layeredGroup] || [];
+        document.getElementById('layeredNamesList').innerHTML = Object.keys(rows).map(Number).sort((a, b) => a - b).map(lv => {
+            const who = rows[lv].slice(0, 3).join(', ') + (rows[lv].length > 3 ? ` +${rows[lv].length - 3}` : '');
+            return `<div class="form-group">
+                <label for="layeredName${lv}">${escapeHtml(tr('topoLevelN', { n: lv + 1 }))} · <span style="font-weight:400;">${escapeHtml(who)}</span></label>
+                <input id="layeredName${lv}" data-level="${lv}" type="text" maxlength="40" value="${attrEsc(names[lv] || '')}" placeholder="${attrEsc(tr('phLayeredName'))}" style="padding-left:12px;">
+            </div>`;
+        }).join('');
+        openModal('layeredNamesModal');
+    });
+    document.getElementById('btnSaveLayeredNames')?.addEventListener('click', () => {
+        const names = [];
+        document.querySelectorAll('#layeredNamesList input[data-level]').forEach(inp => {
+            names[+inp.dataset.level] = inp.value.trim();
+        });
+        layeredLevelNames[layeredGroup] = names;
+        localStorage.setItem('layeredLevelNames', JSON.stringify(layeredLevelNames));
+        closeModal('layeredNamesModal');
+        if (networkInstance) networkInstance.redraw();
+    });
+    document.getElementById('toggleLayeredFree')?.addEventListener('change', e => {
+        layeredFree = e.target.checked;
+        localStorage.setItem('layeredFree', layeredFree ? '1' : '0');
+        updateMapViewButtons();
+        redrawInteractiveMap();
+    });
+    document.getElementById('layeredTidyBtn')?.addEventListener('click', () => {
+        delete layeredFreePos[layeredGroup];
+        saveLayeredFreePos();
+        redrawInteractiveMap();
     });
     document.getElementById('layeredCollapseBtn')?.addEventListener('click', () => {
         const g = document.getElementById('interactiveGroupSelect');

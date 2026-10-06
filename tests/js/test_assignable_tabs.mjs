@@ -106,6 +106,19 @@ for (const rowRole of ['operator', 'viewer', undefined]) {
     }
 }
 
+// --- viewer row: tabs a viewer cannot load (requires-write button, or a
+// write-only secondary panel) are not offered; an operator row keeps them. ---
+const viewerIds = assignableTabs('viewer').map((t) => t.id);
+const operatorIds = assignableTabs('operator').map((t) => t.id);
+for (const id of ['tab-config-drift', 'tab-device-history', 'tab-provisioning',
+                  'tab-provisioner', 'tab-import']) {
+    assert.ok(!viewerIds.includes(id), `riga viewer: tab non caricabile offerta: ${id}`);
+    assert.ok(operatorIds.includes(id), `riga operator: tab sparita: ${id}`);
+}
+assert.ok(viewerIds.includes('tab-devices'), 'riga viewer: inventario sparito');
+
+console.log('ok - assignableTabs(viewer) omette le tab che un viewer non puo\' caricare');
+
 // --- attore con tab ristrette: offre solo quelle che detiene, qualunque
 // sia il ruolo della riga in modifica. ---
 global.currentAllowedTabs = ['tab-devices', 'tab-users'];
