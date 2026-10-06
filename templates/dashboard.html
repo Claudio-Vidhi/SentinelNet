@@ -322,7 +322,7 @@
           <span class="nav-left" data-i18n="tabConfigAnalyzer"><i class="fa-solid fa-file-code"></i> Config Analyzer</span>
         </button>
         <button id="navNetSecAudit" class="nav-item" data-tab="tab-netsec-audit" role="tab" aria-controls="tab-netsec-audit" aria-selected="false" tabindex="-1">
-          <span class="nav-left"><i class="fa-solid fa-shield-cat"></i> NetSec Audit</span>
+          <span class="nav-left" data-i18n="tabNetSecAudit"><i class="fa-solid fa-shield-cat"></i> NetSec Audit</span>
         </button>
         <button id="navPolicyTest" class="nav-item" data-tab="tab-policy-test" role="tab" aria-controls="tab-policy-test" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabPolicyTest"><i class="fa-solid fa-route"></i> Validazione Policy &amp; Routing</span>
@@ -330,7 +330,7 @@
         <button id="navRoutes" class="nav-item" data-tab="tab-routes" role="tab" aria-controls="tab-routes" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabRoutes"><i class="fa-solid fa-signs-post"></i> Tabelle di Routing</span>
         </button>
-        <button id="navConfigDrift" class="nav-item" data-tab="tab-config-drift" role="tab" aria-controls="tab-config-drift" aria-selected="false" tabindex="-1">
+        <button id="navConfigDrift" class="nav-item requires-write"data-tab="tab-config-drift" role="tab" aria-controls="tab-config-drift" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabConfigDrift"><i class="fa-solid fa-code-compare"></i> Config Drift</span>
         </button>
         <button id="navNotifications" class="nav-item" data-tab="tab-notifications" role="tab" aria-controls="tab-notifications" aria-selected="false" tabindex="-1">
@@ -1088,21 +1088,27 @@
             <span data-i18n="lblVtpDomain">Dominio VTP</span>
           </label>
 
-          <!-- Selettore vista: mappa classica oppure la nuova mappa minimalista -->
+          <!-- View selector: Schema or Hierarchy -->
           <div style="display:inline-flex; align-items:center; gap:4px; padding-left:10px; border-left:1px solid var(--border);">
-            <button id="mapViewClassicBtn" class="map-view-btn chip" style="width:auto; margin:0; padding:5px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnMapClassic">Classica</button>
-            <button id="mapViewMinimalBtn" class="map-view-btn chip" style="width:auto; margin:0; padding:5px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnMapMinimal">Nuova</button>
-            <button id="mapViewLayeredBtn" class="map-view-btn chip" style="width:auto; margin:0; padding:5px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnMapLayered">A livelli</button>
+            <button id="mapViewMinimalBtn" class="map-view-btn chip" style="width:auto; margin:0; padding:5px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnMapMinimal">Schema</button>
+            <button id="mapViewLayeredBtn" class="map-view-btn chip" style="width:auto; margin:0; padding:5px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnMapLayered">Gerarchia</button>
           </div>
 
           <!-- Vista "A livelli": suggerimento + azzeramento dei piani riassegnati a mano -->
           <span id="layeredResetWrap" style="display:none; align-items:center; gap:8px; padding-left:10px; border-left:1px solid var(--border);">
-            <span style="font-size:12px; color:var(--text-muted);" data-i18n="lblLayeredHint">Trascina in verticale per cambiare piano · click su un gruppo per aprirlo · apri un apparato per segnarlo come core</span>
+            <span style="font-size:12px; color:var(--text-muted);" data-i18n="lblLayeredHint">Trascina in verticale per cambiare livello · click su un gruppo per aprirlo · apri un apparato per segnarlo come core</span>
             <!-- Il core dedotto (confine o nodo piu' connesso) puo' non essere
                  quello vero: qui l'utente lo indica e i piani si rifanno da li'. -->
             <select id="layeredCoreSelect" title="Core" style="font-weight:700;" aria-label="Nodo core della mappa a livelli" data-i18n-aria-label="ariaLayeredCore"><option value="">Core: automatico</option></select>
             <button id="layeredCollapseBtn" class="chip" style="width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnLayeredCollapse">Comprimi gruppi</button>
-            <button id="layeredResetBtn" class="chip" style="width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnLayeredReset">Azzera piani</button>
+            <button id="layeredResetBtn" class="chip" style="width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnLayeredReset">Azzera livelli</button>
+            <button id="layeredNamesBtn" class="chip" style="width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnLayeredNames">Nomi livelli</button>
+            <!-- Free move: cards go anywhere, positions saved per site. -->
+            <label for="toggleLayeredFree" style="display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--text-muted); cursor:pointer; user-select:none; margin:0;">
+              <input type="checkbox" id="toggleLayeredFree" style="width:16px; height:16px; accent-color:var(--text-soft); cursor:pointer; border-radius:0;">
+              <span data-i18n="lblLayeredFree">Spostamento libero</span>
+            </label>
+            <button id="layeredTidyBtn" class="chip" style="display:none; width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnSchemaTidy">Riordina mappa</button>
           </span>
 
           <!-- Interruttore tooltip al passaggio del mouse: solo per la nuova mappa,
@@ -1111,6 +1117,8 @@
             <input type="checkbox" id="toggleMinimalHover" style="width: 16px; height: 16px; accent-color: var(--text-soft); cursor: pointer; border-radius: 0;">
             <span data-i18n="lblHoverInfo">Info al passaggio</span>
           </label>
+          <!-- Schema: rimette i riquadri in righe ordinate dopo i trascinamenti. -->
+          <button id="schemaTidyBtn" class="chip" style="display:none; width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnSchemaTidy">Riordina mappa</button>
 
           <!-- Color-picker + legenda dei tipi di collegamento: solo nuova mappa.
                Generato da MINIMAL_LINK_TYPES (stessa tabella usata dal renderer). -->
@@ -2765,7 +2773,7 @@
         </div>
         <div class="page-head-actions">
           <button type="button" class="btn btn-secondary" data-open-modal="inviteUserModal"><i class="fa-solid fa-envelope-open-text"></i> <span data-i18n="btnOpenInviteUser">Invita per email</span></button>
-          <button type="button" class="btn btn-primary" data-open-modal="createUserModal"><i class="fa-solid fa-user-plus"></i> <span data-i18n="btnNewUser">Nuovo utente</span></button>
+          <button type="button" class="btn btn-primary" id="btnOpenCreateUser"><i class="fa-solid fa-user-plus"></i> <span data-i18n="btnNewUser">Nuovo utente</span></button>
         </div>
       </div>
 
@@ -4545,6 +4553,20 @@
       </div>
     </div>
 
+    <!-- Sankey: device -> route type -> next hop, over the matrix's filters. -->
+    <div class="panel rt-sankey-panel" style="margin-bottom:18px;">
+      <h3 data-i18n="rtSkTitle">Flussi delle rotte</h3>
+      <p class="rt-trace-desc" data-i18n="rtSkDesc">Quante rotte escono da ogni apparato, di che tipo sono e verso quale next-hop vanno. Segue gli stessi filtri della tabella.</p>
+      <!-- Its own switches, labelled: the table's chips below look the same and filter both. -->
+      <div class="rt-sk-types-row">
+        <span class="rt-sk-types-label" data-i18n="rtSkTypesShort" aria-hidden="true">Nel grafico:</span>
+        <div id="rtSkTypes" class="rt-chips" role="group" aria-label="Tipi nel grafico" data-i18n-aria-label="rtSkTypesLabel"></div>
+      </div>
+      <p class="form-hint" data-i18n="rtSkHint">Doppio clic (o Invio) su un nodo o su una fascia per vedere le rotte che contiene.</p>
+      <div id="rtSankey" class="rt-sankey"></div>
+      <div id="rtSkDetail" class="rt-sk-detail" hidden></div>
+    </div>
+
     <div class="panel rt-matrix-panel">
       <h3 data-i18n="rtTableTitle">Rotte per prefisso</h3>
       <!-- Cartiglio: le quantita' e i tipi, che fanno anche da filtro. -->
@@ -4999,33 +5021,110 @@
     </div>
   </div>
 
-  <!-- Users tab: create an account. Same ids the form had inside the tab. -->
-  <div class="modal-overlay" id="createUserModal">
-    <div class="modal" style="width: 520px; max-width: 95%;">
+  <!-- Users tab: guided account creation (ui-wizard.js). Account, role with
+       what it can see and do, tenant/tab access, summary. Same field ids the
+       old single form had. -->
+  <div class="modal-overlay sheet-overlay" id="createUserModal">
+    <div class="modal sheet" aria-labelledby="createUserTitle">
       <div class="modal-header">
-        <h3><i class="fa-solid fa-user-plus"></i> <span data-i18n="btnNewUser">Nuovo utente</span></h3>
+        <h3 id="createUserTitle"><i class="fa-solid fa-user-plus"></i> <span data-i18n="btnNewUser">Nuovo utente</span></h3>
         <button type="button" class="modal-close" data-close-modal="createUserModal" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
       </div>
-      <div class="form-group">
-        <label for="newUserName" data-i18n="lblNewUserName">Username</label><input id="newUserName" type="text" placeholder="es. mario.rossi" data-i18n-placeholder="phNewUserName" style="padding-left:12px;">
-      </div>
-      <div class="form-group">
-        <label for="newUserEmail" data-i18n="lblNewUserEmail">Email (opzionale)</label><input id="newUserEmail" type="text" placeholder="mario.rossi@example.com" style="padding-left:12px;">
-      </div>
-      <div class="form-group">
-        <label for="newUserPass" data-i18n="lblNewUserPass">Password (vuota = link via email)</label><input id="newUserPass" type="password" placeholder="••••••••" style="padding-left:12px;">
-      </div>
-      <div class="form-group">
-        <label for="newUserRole" data-i18n="lblNewUserRole">Ruolo</label><select id="newUserRole" data-role-select>
-          <option value="viewer" data-i18n="roleViewer">Viewer (sola lettura)</option>
-          <option value="operator" data-i18n="roleOperator">Operator (operazioni)</option>
-          <option value="admin" data-i18n="roleAdmin">Admin (totale)</option>
-          <option value="super_admin" data-i18n="roleSuperAdmin">Super admin (gestisce gli admin)</option>
-        </select>
-      </div>
+      <ol class="wizard-rail" data-wizard-rail aria-label="Passi" data-i18n-aria-label="swRailLabel"></ol>
+      <form id="createUserForm" class="sheet-body" novalidate>
+        <section data-step="account">
+          <div class="form-group">
+            <label for="newUserName" data-i18n="lblNewUserName">Username</label>
+            <input id="newUserName" type="text" autocomplete="off" placeholder="es. mario.rossi" data-i18n-placeholder="phNewUserName">
+          </div>
+          <div class="form-group">
+            <label for="newUserEmail" data-i18n="lblNewUserEmail">Email (opzionale)</label>
+            <input id="newUserEmail" type="email" autocomplete="off" placeholder="mario.rossi@example.com">
+          </div>
+          <div class="form-group">
+            <label for="newUserPass" data-i18n="lblNewUserPass">Password (vuota = link via email)</label>
+            <input id="newUserPass" type="password" autocomplete="new-password" placeholder="••••••••" aria-describedby="uwPassHint">
+            <p id="uwPassHint" class="form-hint" data-i18n="uwPassHint">Con una password, l'utente la cambia al primo accesso. Senza, serve l'email: riceve un link per sceglierla.</p>
+          </div>
+        </section>
+
+        <section data-step="role" hidden>
+          <fieldset id="newUserRole" class="choice-group" role="radiogroup" aria-labelledby="uwRoleLegend">
+            <legend id="uwRoleLegend" data-i18n="uwRoleLegend">Cosa deve poter fare questo utente?</legend>
+            <label class="choice-card">
+              <input type="radio" name="uwRole" value="viewer">
+              <span class="choice-title" data-i18n="roleViewer">Viewer (sola lettura)</span>
+              <span class="choice-desc" data-i18n="uwViewerDesc">Consulta la rete senza poterla cambiare.</span>
+              <ul>
+                <li class="pro" data-i18n="uwViewerPro1">Vede inventario, mappe, endpoint, traffico e Threat Intel (CVE)</li>
+                <li class="pro" data-i18n="uwViewerPro2">Legge Config Analyzer, NetSec Audit, policy e tabelle di routing</li>
+                <li class="con" data-i18n="uwViewerCon1">Non lancia triage, comandi CLI, provisioning né import</li>
+                <li class="con" data-i18n="uwViewerCon2">Non vede Config Drift, cronologia apparati né i backup delle configurazioni</li>
+              </ul>
+            </label>
+            <label class="choice-card">
+              <input type="radio" name="uwRole" value="operator">
+              <span class="choice-title" data-i18n="roleOperator">Operator (operazioni)</span>
+              <span class="choice-desc" data-i18n="uwOperatorDesc">Lavora sulla rete ogni giorno.</span>
+              <ul>
+                <li class="pro" data-i18n="uwOperatorPro1">Tutto quello che vede un viewer, più Config Drift e cronologia apparati</li>
+                <li class="pro" data-i18n="uwOperatorPro2">Triage, comandi CLI, backup, provisioning e import CSV</li>
+                <li class="con" data-i18n="uwOperatorCon1">Non gestisce utenti, tenant, sedi né impostazioni</li>
+                <li class="con" data-i18n="uwOperatorCon2">Non vede Incidenti né FortiGate Management</li>
+              </ul>
+            </label>
+            <label class="choice-card">
+              <input type="radio" name="uwRole" value="admin">
+              <span class="choice-title" data-i18n="roleAdmin">Admin (totale)</span>
+              <span class="choice-desc" data-i18n="uwAdminDesc">Amministra la piattaforma per i tenant che gli assegni.</span>
+              <ul>
+                <li class="pro" data-i18n="uwAdminPro1">Tutto quello che fa un operator, più Incidenti e FortiGate</li>
+                <li class="pro" data-i18n="uwAdminPro2">Gestisce utenti, baseline di drift e impostazioni</li>
+                <li class="con" data-i18n="uwAdminCon1">Se limitato a dei tenant: niente impostazioni globali, sedi né MCP</li>
+              </ul>
+            </label>
+            <label class="choice-card">
+              <input type="radio" name="uwRole" value="super_admin">
+              <span class="choice-title" data-i18n="roleSuperAdmin">Super admin (gestisce gli admin)</span>
+              <span class="choice-desc" data-i18n="uwSuperDesc">Controllo completo, senza limiti.</span>
+              <ul>
+                <li class="pro" data-i18n="uwSuperPro1">Tutti i tenant e tutte le tab, sempre</li>
+                <li class="pro" data-i18n="uwSuperPro2">Crea, modifica e rimuove gli admin</li>
+              </ul>
+            </label>
+          </fieldset>
+        </section>
+
+        <section data-step="access" hidden>
+          <fieldset class="uw-access">
+            <legend data-i18n="uwTenantsLegend">Tenant visibili</legend>
+            <label class="uw-radio"><input type="radio" name="uwTenantMode" value="all"> <span data-i18n="uwTenantsAll">Tutti i tenant</span></label>
+            <label class="uw-radio"><input type="radio" name="uwTenantMode" value="custom"> <span data-i18n="uwTenantsCustom">Solo quelli scelti</span></label>
+            <div id="uwTenantList" class="uw-check-list" hidden></div>
+          </fieldset>
+          <fieldset class="uw-access">
+            <legend data-i18n="uwTabsLegend">Tab visibili</legend>
+            <label class="uw-radio"><input type="radio" name="uwTabMode" value="all"> <span data-i18n="uwTabsAll">Tutte quelle del ruolo</span></label>
+            <label class="uw-radio"><input type="radio" name="uwTabMode" value="custom"> <span data-i18n="uwTabsCustom">Solo quelle scelte</span></label>
+            <div id="uwTabList" class="uw-check-list" hidden></div>
+          </fieldset>
+          <p id="uwScopeHint" class="form-hint" data-i18n="uwScopeHint" hidden>Il tuo account è limitato: puoi concedere solo tenant e tab che hai anche tu.</p>
+        </section>
+
+        <section data-step="summary" hidden>
+          <dl id="uwSummary" class="summary"></dl>
+          <h4 class="uw-sub" data-i18n="uwSees">Vedrà</h4>
+          <div id="uwSeesList" class="uw-chips"></div>
+          <h4 class="uw-sub" data-i18n="uwNotSees">Non vedrà</h4>
+          <div id="uwNotSeesList" class="uw-chips uw-chips-muted"></div>
+          <p id="uwError" class="form-hint" role="alert"></p>
+        </section>
+      </form>
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" data-close-modal="createUserModal" data-i18n="uiCancel">Annulla</button>
-        <button class="btn btn-primary" id="btnCreateUser" data-i18n="btnAddUser"><i class="fa-solid fa-plus"></i> Crea Utente</button>
+        <button type="button" class="btn btn-secondary" data-wizard-back data-i18n="wizBack">Indietro</button>
+        <!-- No data-i18n: ui-wizard.js sets the label per step (Next / Create). -->
+        <button type="button" class="btn btn-primary" id="btnCreateUser" data-wizard-next></button>
       </div>
     </div>
   </div>
@@ -5199,6 +5298,22 @@
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" data-close-modal="addVendorModal" data-i18n="uiCancel">Annulla</button>
         <button class="btn btn-primary" id="btnAddVendor" data-i18n="btnAdd"><i class="fa-solid fa-plus"></i> Aggiungi</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hierarchy map: optional level names, filled by openLayeredNames(). -->
+  <div class="modal-overlay" id="layeredNamesModal">
+    <div class="modal" style="width: 480px; max-width: 95%;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-layer-group"></i> <span data-i18n="btnLayeredNames">Nomi livelli</span></h3>
+        <button type="button" class="modal-close" data-close-modal="layeredNamesModal" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <p style="font-size:13px; color:var(--text-muted); margin:0 0 12px;" data-i18n="hintLayeredNames">Un nome per riga della mappa, dall'alto in basso. Lascia vuoto per non mostrarlo.</p>
+      <div id="layeredNamesList"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal="layeredNamesModal" data-i18n="uiCancel">Annulla</button>
+        <button type="button" class="btn btn-primary" id="btnSaveLayeredNames" data-i18n="btnSave">Salva</button>
       </div>
     </div>
   </div>

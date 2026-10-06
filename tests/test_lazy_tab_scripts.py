@@ -278,5 +278,14 @@ class CrossModuleCallsMustBeOptional(unittest.TestCase):
                     offenders.append(f"{caller_name} calls {owner_name}:{name}() bare")
         self.assertEqual(offenders, [], "\n".join(offenders))
 
+    def test_config_analyzer_bundle_loads_vis_first(self):
+        """The Routing sub-tab's route map is a vis.Network, and
+        caBuildRouteMap() returns silently when `vis` is undefined: without
+        the vendor in the bundle the map box just stays empty."""
+        core = (ROOT / "static/js/core.js").read_text(encoding="utf-8")
+        entry = re.search(r"'tab-config':\s*\[([^\]]*)\]", core).group(1)
+        self.assertNotEqual(-1, entry.find("vis-network.min.js"))
+        self.assertLess(entry.find("vis-network.min.js"), entry.find("config-analyzer.js"))
+
 if __name__ == "__main__":
     unittest.main()

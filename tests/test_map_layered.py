@@ -122,6 +122,23 @@ class TestLayeredMapView(unittest.TestCase):
                               capture_output=True, text=True, cwd=_REPO_ROOT)
         self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
 
+    @unittest.skipUnless(shutil.which("node"), "node non disponibile")
+    def test_portchannel_ends_keep_their_own_names(self):
+        # Po8 on one end and Po1 on the other: both shown, left device first.
+        harness = os.path.join(_REPO_ROOT, "tests", "js", "test_pc_ends.mjs")
+        proc = subprocess.run([shutil.which("node"), harness],
+                              capture_output=True, text=True, cwd=_REPO_ROOT)
+        self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
+
+    @unittest.skipUnless(shutil.which("node"), "node non disponibile")
+    def test_hierarchy_layout_and_cables(self):
+        # No overlapping cards, parents centred over their children, the
+        # firewall pair as one block, one line per configured Po port.
+        harness = os.path.join(_REPO_ROOT, "tests", "js", "test_map_layout.mjs")
+        proc = subprocess.run([shutil.which("node"), harness],
+                              capture_output=True, text=True, cwd=_REPO_ROOT)
+        self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
+
     def test_portchannel_report_waits_for_a_tenant(self):
         # Il report Port-Channel apriva il tab elencando TUTTI i tenant:
         # nessuna sede preselezionata, nessuna chiamata al backend.

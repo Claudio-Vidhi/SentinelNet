@@ -360,6 +360,119 @@ def _collect_ios(device) -> dict:
             "rows": [_row(device, e) for e in parsed]}
 
 
+def fortigate_context(device, answer: dict) -> dict:
+    """What lets the route graph name a next hop: interface addresses, HA
+    cluster members, IPsec tunnels with their remote gateway.
+
+    Asked only of a FortiGate that just answered over REST: one that timed out
+    or is only known from its backup would time out again, three times, for
+    data that would not be there anyway. Each part fails on its own and comes
+    back empty: a missing tunnel list must not hide the addresses."""
+    from services import path_trace
+    rows = answer.get("rows") or []
+    is_fortigate = (device.get("Vendor") or "").lower() == "fortinet"
+    live_rest = is_fortigate and answer.get("source") == "api"
+    # For a switch addresses_for() only reads its own local rows: no session.
+    out = {"addresses": path_trace.addresses_for(device, rows)
+                        if live_rest or not is_fortigate else [],
+           "ha": [], "tunnels": [], "sdwan": [], "policy_routes": []}
+    if not live_rest:
+        return out
+    try:
+        peers = fortigate_service.get_ha_status(device).get("results") or []
+        out["ha"] = [{"hostname": p.get("hostname") or "", "serial": p.get("serial_no") or ""}
+                     for p in peers if isinstance(p, dict)]
+    except fortigate_service.FortiGateError as e:
+        logger.debug("HA non letta da %s: %s", device.get("IP"), e)
+    try:
+        data = fortigate_service.get_vpn_tunnels(device).get("data")
+        for t in data if isinstance(data, list) else []:
+            if not isinstance(t, dict) or not t.get("name"):
+                continue
+            # Up when at least one phase-2 selector is: a phase 1 with every
+            # selector down carries no traffic.
+            proxies = [p for p in t.get("proxyid") or [] if isinstance(p, dict)]
+            out["tunnels"].append({"name": t["name"], "remote_gw": t.get("rgwy") or "",
+                                   "up": any(p.get("status") == "up" for p in proxies)})
+    except fortigate_service.FortiGateError as e:
+        logger.debug("tunnel non letti da %s: %s", device.get("IP"), e)
+    try:
+        out["sdwan"] = sdwan_members(fortigate_service.get_sdwan_health(device).get("data"))
+    except fortigate_service.FortiGateError as e:
+        # No SD-WAN configured answers 404: not an error, just no members.
+        logger.debug("SD-WAN non letta da %s: %s", device.get("IP"), e)
+    try:
+        out["policy_routes"] = policy_routes(fortigate_service.get_policy_routes(device).get("data"))
+    except fortigate_service.FortiGateError as e:
+        logger.debug("policy route non lette da %s: %s", device.get("IP"), e)
+    return out
+
+
+def _cidr(subnet) -> str:
+    """'10.0.0.0 255.255.255.0' (FortiOS) as '10.0.0.0/24'; anything else as is."""
+    import ipaddress
+    text = str(subnet or "").strip()
+    try:
+        return str(ipaddress.ip_network(text.replace(" ", "/"), strict=False))
+    except ValueError:
+        return text
+
+
+def policy_routes(data) -> list:
+    """`cmdb/router/policy` reduced to what decides a path:
+    ``[{seq, enabled, permit, input, src, dst, gateway, output, comment}]``.
+
+    `src`/`dst` hold subnets (as CIDR) and address-object names alike: FortiOS
+    7 accepts both, and an object name is still the answer to "which traffic".
+    An empty list means any. ``permit`` False is FortiOS 'deny': matching
+    traffic skips policy routing and falls back to the routing table."""
+    out = []
+    for p in data if isinstance(data, list) else []:
+        if not isinstance(p, dict):
+            continue
+        names = lambda key: [x.get("name") for x in p.get(key) or []
+                             if isinstance(x, dict) and x.get("name")]
+        subnets = lambda key: [_cidr(x.get("subnet")) for x in p.get(key) or []
+                               if isinstance(x, dict) and x.get("subnet")]
+        out.append({
+            "seq": p.get("seq-num"),
+            "enabled": (p.get("status") or "enable") == "enable",
+            "permit": (p.get("action") or "permit") == "permit",
+            "input": names("input-device"),
+            "src": subnets("src") + names("srcaddr"),
+            "dst": subnets("dst") + names("dstaddr"),
+            "gateway": p.get("gateway") or "",
+            "output": p.get("output-device") or "",
+            "comment": p.get("comments") or "",
+        })
+    return out
+
+
+def sdwan_members(data) -> list:
+    """`monitor/virtual-wan/health-check` as one entry per member interface:
+    ``[{interface, state, checks:[{name, status, latency, jitter, loss}]}]``.
+
+    FortiOS answers ``{check: {interface: {status, latency, ...}}}``. The state
+    is read from the per-check status only: 'down' when every check says the
+    member is dead, 'degraded' when some do. SLA targets are not judged here,
+    their meaning depends on how each SLA was configured."""
+    members: dict = {}
+    for check, per_iface in (data.items() if isinstance(data, dict) else []):
+        for iface, st in (per_iface.items() if isinstance(per_iface, dict) else []):
+            if not isinstance(st, dict):
+                continue
+            members.setdefault(iface, []).append({
+                "name": check, "status": st.get("status") or "",
+                "latency": st.get("latency"), "jitter": st.get("jitter"),
+                "loss": st.get("packet_loss")})
+    out = []
+    for iface, checks in members.items():
+        dead = [c for c in checks if c["status"] != "up"]
+        state = "down" if len(dead) == len(checks) else "degraded" if dead else "up"
+        out.append({"interface": iface, "state": state, "checks": checks})
+    return out
+
+
 def breakdown(rows) -> dict:
     """Totali per tipo e per VRF: quello che il pannello disegna.
 

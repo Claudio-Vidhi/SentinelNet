@@ -94,4 +94,110 @@ assert.equal(masked.cover.B.network, '10.0.0.0/8', 'covered, not a hole');
 assert.equal(parseNet('10.0.0.0/'), null, 'trailing slash while typing is not /0');
 assert.equal(rtQuery('10.0.0.0/').kind, 'text');
 
+// --- Sankey model: device -> type -> next hop, counts conserved per column,
+// next hops past the cap folded into one "other" node.
+{
+    const { rtBuildSankey, rtDeviceOwners, rtDeviceDepths, rtHopResolver } = windowStub.rtModel;
+    const via = (owners, ctx = {}) => rtHopResolver(owners, ctx, 'DIRECT');
+    const rows = [r('A', '10.1.0.0/16', { gateway: '192.0.2.1' }),
+                  r('A', '10.2.0.0/16', { gateway: '192.0.2.1' }),
+                  r('A', '10.3.0.0/16', { type: 'ospf', gateway: '192.0.2.2' }),
+                  r('B', '10.4.0.0/16', { type: 'connected', interface: 'Gi0/1' }),
+                  r('B', '10.5.0.0/16', { gateway: '192.0.2.3' })];
+    const devs = [{ value: 'A', label: 'switch-01' }, { value: 'B', label: 'switch-02' }];
+    const opts = { cap: 2, resolve: via(new Map()), otherLabel: 'OTHER' };
+    const g = rtBuildSankey(rows, devs, opts);
+    assert.equal(g.total, 5);
+    for (const col of g.cols) assert.equal(col.reduce((s, n) => s + n.value, 0), 5, 'every column carries every route');
+    assert.deepEqual(g.cols[0].map(n => n.label), ['switch-01', 'switch-02'], 'busiest device first');
+    assert.deepEqual(g.cols[1].map(n => n.label), ['static', 'ospf', 'connected', 'static'],
+                     'types grouped by device, then RT_TYPE_ORDER');
+    assert.deepEqual(g.cols[2].map(n => n.label), ['192.0.2.1', '192.0.2.2', 'OTHER'], 'cap 2 (ties: first seen), rest folded, other last');
+    const l = g.links.find(x => x.source === 'd|A' && x.target === 't|A|static');
+    assert.equal(l.value, 2);
+    assert.deepEqual(l.rows.map(x => x.network), ['10.1.0.0/16', '10.2.0.0/16'], 'a ribbon carries its routes');
+
+    // Chain: A's next hop 192.0.2.2 is B's own interface (a /32 local route),
+    // so B is a stage after A and A's ribbon lands on B's node.
+    const chain = [r('A', '10.1.0.0/16', { gateway: '192.0.2.2' }),
+                   r('A', '10.9.0.0/16', { gateway: '192.0.2.99' }),
+                   r('B', '192.0.2.2/32', { type: 'local', interface: 'Gi0/1' }),
+                   r('B', '10.1.0.0/16', { gateway: '198.51.100.1' })];
+    const owners = rtDeviceOwners(chain, devs);
+    assert.equal(owners.get('192.0.2.2'), 'B', 'local /32 names its owner');
+    assert.equal(rtDeviceDepths(chain, devs, via(owners)).get('B'), 1);
+    const gc = rtBuildSankey(chain, devs, { ...opts, cap: 12, resolve: via(owners) });
+    assert.equal(gc.cols.length, 5, 'two stages: A, type, B, type, hop');
+    assert.equal(gc.cols[2].find(n => n.id === 'd|B').kind, 'device', 'B sits where A\'s next hops are');
+    assert.ok(gc.links.some(x => x.source === 't|A|static' && x.target === 'd|B'), 'A -> static -> B');
+
+    // A loop (A via B, B via A) still yields a finite order; the back edge
+    // is drawn as a named hop, not a ribbon going backwards.
+    const loop = [r('A', '10.1.0.0/16', { gateway: 'B' }), r('B', '10.2.0.0/16', { gateway: 'A' })];
+    const gl = rtBuildSankey(loop, devs, { ...opts, resolve: via(rtDeviceOwners(loop, devs)) });
+    const colOf = id => gl.cols.flat().find(n => n.id === id).col;
+    assert.ok(gl.links.every(x => colOf(x.target) > colOf(x.source)), 'every ribbon goes right');
+    assert.ok(gl.cols.flat().some(n => n.label === 'A · switch-01'), 'back edge named after its device');
+
+    // FortiGate: no local routes, its addresses come from the REST interface
+    // list; a route into an IPsec tunnel has no gateway, only the tunnel name,
+    // and the tunnel's remote gateway is the next hop (here: firewall B).
+    const ctx = {
+        A: { addresses: [], tunnels: [{ name: 'vpn-b', remote_gw: '203.0.113.2', up: false }] },
+        B: { addresses: [{ iface: 'wan1', ip: '203.0.113.2', network: '203.0.113.0/24' }], tunnels: [] },
+    };
+    const fw = [r('A', '10.20.0.0/16', { gateway: '0.0.0.0', interface: 'vpn-b' }),
+                r('A', '10.21.0.0/16', { gateway: '0.0.0.0', interface: 'vpn-other' }),
+                r('B', '10.20.0.0/16', { type: 'connected', interface: 'internal' })];
+    const fwOwners = rtDeviceOwners(fw, devs, ctx);
+    assert.equal(fwOwners.get('203.0.113.2'), 'B', 'interface address names the firewall');
+    const resolve = via(fwOwners, ctx);
+    assert.deepEqual(resolve(fw[0]).to, 'B', 'the tunnel leads to B');
+    assert.equal(resolve(fw[1]).label, 'vpn-other', 'an unknown tunnel stays its interface name');
+    assert.equal(resolve(r('A', '10.0.0.0/8', { gateway: '0.0.0.0' })).label, 'DIRECT', '0.0.0.0 is no gateway');
+    const gf = rtBuildSankey(fw, devs, { ...opts, cap: 12, resolve });
+    const tl = gf.links.find(x => x.target === 'd|B');
+    assert.ok(tl && tl.tunnel === 'vpn-b' && tl.down === true, 'ribbon into a down tunnel is marked');
+    const remote = rtHopResolver(new Map(), ctx, 'DIRECT')(fw[0]);
+    assert.equal(remote.label, 'vpn-b ⇢ 203.0.113.2', 'remote gateway outside the selection is named');
+
+    // SD-WAN: a default route over two members; the ribbon and the hop carry
+    // the member's state, worst wins when both feed the same hop.
+    const sdCtx = { A: { addresses: [], tunnels: [], sdwan: [
+        { interface: 'wan1', state: 'up', checks: [] },
+        { interface: 'wan2', state: 'degraded', checks: [] }] } };
+    const sd = [r('A', '0.0.0.0/0', { gateway: '198.51.100.1', interface: 'wan1' }),
+                r('A', '0.0.0.0/0', { gateway: '198.51.100.9', interface: 'wan2' }),
+                r('A', '10.30.0.0/16', { gateway: '198.51.100.9', interface: 'wan2' })];
+    const gs = rtBuildSankey(sd, devs, { ...opts, cap: 12, resolve: via(new Map(), sdCtx) });
+    const hop = id => gs.cols.flat().find(n => n.id === id);
+    assert.equal(hop('h|2|198.51.100.1 · wan1').state, 'up');
+    assert.equal(hop('h|2|198.51.100.9 · wan2').state, 'degraded', 'member state reaches the hop');
+    const sl = gs.links.find(x => x.target === 'h|2|198.51.100.9 · wan2');
+    assert.equal(sl.state, 'degraded');
+    assert.equal(sl.sdwan.interface, 'wan2');
+    assert.equal(gs.links.find(x => x.target === 't|A|static').state, undefined,
+                 'the device -> type ribbon has no member of its own');
+
+    // Policy routes: only enabled 'permit' ones become rows, of type
+    // 'policy', and the search box reads their destinations.
+    const { rtPolicyRows, rtPolicyMatches, rtQuery } = windowStub.rtModel;
+    const pctx = { A: { policy_routes: [
+        { seq: 1, enabled: true, permit: true, input: ['internal'], src: ['10.10.0.0/24'],
+          dst: ['198.51.100.0/24'], gateway: '203.0.113.254', output: 'wan2', comment: '' },
+        { seq: 2, enabled: false, permit: true, input: [], src: [], dst: [], gateway: '', output: 'wan1', comment: '' },
+        { seq: 3, enabled: true, permit: false, input: [], src: [], dst: [], gateway: '', output: '', comment: '' },
+        { seq: 4, enabled: true, permit: true, input: [], src: [], dst: [], gateway: '203.0.113.1', output: 'wan1', comment: '' }] } };
+    const prs = rtPolicyRows(pctx, devs);
+    assert.deepEqual(prs.map(x => x.policy.seq), [1, 4], 'disabled and deny are not paths');
+    assert.equal(prs[0].type, 'policy');
+    assert.equal(prs[0].network, '198.51.100.0/24');
+    assert.equal(prs[1].network, '0.0.0.0/0', 'no destination = any');
+    assert.ok(prs[0].raw_type.includes('src 10.10.0.0/24') && prs[0].raw_type.includes('in internal'));
+    assert.ok(rtPolicyMatches(prs[0], rtQuery('198.51.100.7')), 'address inside the policy dst');
+    assert.ok(!rtPolicyMatches(prs[0], rtQuery('192.0.2.7')));
+    assert.ok(rtPolicyMatches(prs[1], rtQuery('192.0.2.7')), 'any matches every address');
+    assert.ok(rtPolicyMatches(prs[0], rtQuery('wan2')), 'free text reads the output interface');
+}
+
 console.log('ok');

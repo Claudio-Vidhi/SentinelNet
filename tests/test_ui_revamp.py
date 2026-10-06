@@ -541,7 +541,7 @@ class TestGroupsTabRestyle(unittest.TestCase):
 class TestMapTabRestyle(unittest.TestCase):
     def test_preserve_ids(self):
         html = _html()
-        for _id in ('mapViewClassicBtn', 'mapViewMinimalBtn', 'networkGraphContainer',
+        for _id in ('mapViewMinimalBtn', 'networkGraphContainer',
                     'topologyGroupSelect', 'interactiveGroupSelect', 'portchannelReport'):
             self.assertIn(f'id="{_id}"', html)
         # view-toggle + reset/export hooks preserved in frontend
@@ -603,7 +603,7 @@ class TestTopologyTabRestyle(unittest.TestCase):
     def test_preserve_ids(self):
         html = _html()
         for _id in ('networkGraphWrapper', 'networkGraphContainer', 'networkLegend',
-                    'mapViewClassicBtn', 'mapViewMinimalBtn'):
+                    'mapViewMinimalBtn'):
             self.assertIn(f'id="{_id}"', html)
 
     def test_endpoint_contract_present(self):
@@ -1391,7 +1391,7 @@ class TestUsersTabRestyle(unittest.TestCase):
         # Only the members table stays in the tab: creating and inviting are
         # dialogs opened from the header.
         self.assertEqual(tab.count('class="panel'), 1)
-        self.assertIn('data-open-modal="createUserModal"', tab)
+        self.assertIn('id="btnOpenCreateUser"', tab)  # opens the guided wizard
         self.assertIn('data-open-modal="inviteUserModal"', tab)
         self.assertNotIn('table-container', tab)
 

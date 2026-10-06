@@ -65,10 +65,15 @@ async def list_routes(
 
     async def one(dev):
         async with sem:
-            return await run_ssh(route_table.collect_for, dev)
+            answer = await run_ssh(route_table.collect_for, dev)
+            answer["context"] = await run_ssh(route_table.fortigate_context, dev, answer)
+            return answer
 
     answers = await asyncio.gather(*(one(d) for d in targets)) if targets else []
 
+    # Per device: interface addresses, HA members, IPsec tunnels. The route
+    # graph uses them to tell which selected device a next hop is.
+    context = {a["device_ip"]: a.pop("context") for a in answers}
     rows, errors = [], []
     for a in answers:
         note = a.get("error") or ""
@@ -97,7 +102,7 @@ async def list_routes(
 
     rows.sort(key=lambda r: (r["device"], r["type"], r["network"]))
     return {"total": len(rows), "rows": rows, "errors": errors,
-            "devices_queried": len(targets),
+            "devices_queried": len(targets), "context": context,
             "counts": route_table.group_counts(rows),
             "breakdown": route_table.breakdown(rows)}
 
