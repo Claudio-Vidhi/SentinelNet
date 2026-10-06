@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.49.0] - 2026-10-06
+
 ### Added
 
 - **Tabelle di routing → Flussi delle rotte**: un diagramma Sankey
