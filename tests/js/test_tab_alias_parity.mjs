@@ -9,6 +9,7 @@
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 
+assert.ok(process.argv[2], 'TAB_ALIASES JSON missing: run it through tests/test_tab_enforcement.py');
 const pyAliases = JSON.parse(process.argv[2]);
 
 const coreSrc = readFileSync(new URL('../../static/js/core.js', import.meta.url), 'utf8');

@@ -74,10 +74,11 @@ populated demo.
 - **Subnet scanning** — automatic host discovery (ping + SSH probe) with
   optional triage and inventory registration.
 - **Interactive topology map** — generates the 2D network map from CDP/LLDP
-  tables found in backups, rendered with Vis.js. Three views (classic, new,
-  layered); the layered one derives each device's tier from the topology and
-  lets an operator name the core switch when the deduction does not match the
-  rack, re-layering the map from that node.
+  tables found in backups, rendered with Vis.js. Two views (schema and
+  hierarchy); the hierarchy one derives each device's tier from the topology
+  and lets an operator name the core switch when the deduction does not match
+  the rack, re-layering the map from that node. Its free-move mode places
+  devices anywhere and keeps those positions per site.
 - **Interactive SSH terminal** — WebSocket/Xterm.js console for live SSH
   sessions from the browser, authenticated with a single-use OTP token.
 - **Groups and sites** — organize devices into logical groups (sites, customers)
