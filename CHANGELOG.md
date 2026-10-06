@@ -10,6 +10,42 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Tabelle di routing → Flussi delle rotte**: un diagramma Sankey
+  apparato → tipo di rotta → next-hop, con gli stessi filtri della matrice.
+  Sui FortiGate letti via REST il next-hop prende un nome: membro del
+  cluster HA, tunnel IPsec (con stato su/giù), membro SD-WAN con lo stato
+  dei suoi health check. Le policy route (PBR) compaiono con un colore loro,
+  perché vengono applicate prima della tabella di routing. Doppio click (o
+  Invio) su un nodo o un flusso apre le rotte che lo compongono.
+- **Creazione utente guidata**: un wizard sceglie ruolo, tenant e tab, e il
+  riepilogo mostra cosa vedrà davvero l'account, ricavato dagli stessi
+  controlli della barra laterale.
+- **Mappa, Gerarchia → Spostamento libero**: le card si trascinano dove si
+  vuole, senza cambiare livello, e le posizioni restano salvate per Sede.
+  "Riordina mappa" torna al layout automatico.
+
+### Changed
+
+- **Mappa topologia**: la vista Panoramica è stata rimossa e restano Schema
+  e Gerarchia. Lo spostamento libero della Gerarchia ne prende il posto, e
+  chi aveva la Panoramica salvata ora apre la Gerarchia.
+
+### Fixed
+
+- Gerarchia: aprire un gruppo di AP metteva le card nuove sopra quelle già
+  presenti, perché venivano rimesse le vecchie posizioni delle altre card.
+  Ora le vecchie posizioni si rimettono solo se le card sono le stesse.
+- Gerarchia: le due etichette Port-Channel identiche (stesso Po e stessi
+  membri sui due lati) ora vengono disegnate una volta sola.
+- Port-Channel: un lato senza configurazione nota non prende più il nome
+  del Po dell'altro lato (Po8 del core scritto anche sull'accesso): resta "?".
+- Ruolo viewer: le pagine CVE ora si aprono anche per un viewer, invece di
+  rispondere 403 dentro un tab che il viewer vede. La palette dei comandi
+  non propone più tab che l'utente non può aprire, e a un viewer non si
+  possono più assegnare tab che richiedono la scrittura.
+
 ## [0.48.0] - 2026-10-05
 
 ### Fixed

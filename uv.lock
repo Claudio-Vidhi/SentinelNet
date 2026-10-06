@@ -486,7 +486,7 @@ wheels = [
 
 [[package]]
 name = "graphifyy"
-version = "0.9.74"
+version = "0.9.77"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
@@ -521,9 +521,9 @@ dependencies = [
     { name = "tree-sitter-verilog" },
     { name = "tree-sitter-zig" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a1/31/8b57a189f76b2ba348fd11c911a81d1fdffd904d625fdd66790fc7a4d7b8/graphifyy-0.9.74.tar.gz", hash = "sha256:9c604410595948474b0be669cd22b635ed89d3988d534e79650057310f27d7b3", size = 2423367, upload-time = "2026-10-02T16:21:09.942Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/20/8a/eb39132e03a7d9800c76d27aa28b045988f4c0ff83b22650878f93a8a828/graphifyy-0.9.77.tar.gz", hash = "sha256:6571369e9ae9a1eee0a918b7f90eb93de8645a512b474652d2dccbffa932b897", size = 2504741, upload-time = "2026-10-05T19:25:57.398Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ef/f1/54603d7c70713418a94e90cf8f6ccf310d768e780f9712129fee875eeda8/graphifyy-0.9.74-py3-none-any.whl", hash = "sha256:7d7f2475be6f3dd5723743989d1a5a02f323f715ff6938cff999f3014cde41c5", size = 1525542, upload-time = "2026-10-02T16:21:07.981Z" },
+    { url = "https://files.pythonhosted.org/packages/9e/aa/f6c0cfe8e11c8827601774767f802f60f95cd60e805272a8db92de8363c2/graphifyy-0.9.77-py3-none-any.whl", hash = "sha256:9b23a0194ec6f326642c4f6e63fbeadc861ae85c7808638eb986ede8b04a26fa", size = 1554901, upload-time = "2026-10-05T19:25:55.396Z" },
 ]
 
 [[package]]
@@ -1681,7 +1681,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "graphifyy", specifier = ">=0.9.55" },
+    { name = "graphifyy", specifier = ">=0.9.77" },
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "httpx2", specifier = ">=2.12.0" },
     { name = "opentelemetry-sdk", specifier = ">=1.45.0" },
