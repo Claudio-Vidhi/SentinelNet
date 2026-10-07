@@ -10,6 +10,59 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Server MCP, 13 strumenti in sola lettura** sulle rotte già esistenti:
+  `list_incidents`, `get_incident`, `cve_priority`, `cve_for_device`,
+  `search_vulnerabilities`, `drift_summary`, `drift_versions`, `drift_diff`
+  (questi tre richiedono un account operator), `interface_errors`,
+  `interface_errors_port`, `get_routes`, `trace_route`,
+  `get_device_classification`. Ruoli, tenant e redazione restano lato server.
+- **Dispositivi Scoperti & Classificazione → Suggerisci con AI / Pulisci
+  modelli**: una sola richiesta AI propone categoria, sottocategoria,
+  vendor, modello e, se il nome non segue la convenzione del tenant, un nome
+  nuovo; un'altra trova i doppioni nel catalogo modelli. Sono proposte: si
+  applicano alla scheda e si salvano come una modifica a mano. Nessun
+  indirizzo IP viene inviato.
+- **Suggerisci con AI → coppie HA**: la proposta indica anche il Gruppo HA
+  quando due apparati hanno stesso modello e versione e nomi che differiscono
+  solo per A/B, 1/2, 01/02 o primary/secondary. "Applica alla scheda"
+  compila anche quel campo.
+- **Audit di sicurezza, benchmark per piattaforma**: CIS FortiGate, CIS
+  Cisco IOS e CIS Ubuntu sono benchmark distinti, accanto ai framework NIST
+  e PCI. "CIS — automatico" sceglie quello della piattaforma riconosciuta;
+  se il benchmark scelto non ha regole per quella configurazione, l'audit
+  passa a quello giusto invece di mostrare una matrice vuota.
+
+### Changed
+
+- **Pannello AI**: intestazione come le altre schede, contesto allegato
+  nella barra di composizione, profili con scelta del provider a tessere e
+  campi divisi per sezione.
+- Assistente AI: timeout di lettura portato a 180 s (connessione 10 s), così
+  i modelli che ragionano prima di rispondere non vengono interrotti; errori
+  di rete leggibili invece del testo grezzo; modello Gemini predefinito
+  `gemini-3.5-flash-lite`.
+- **Classificazione manuale e catalogo modelli in SQLite**
+  (`data/device_meta.db`): un salvataggio scrive una riga invece di
+  riscrivere tutto il file. Al primo avvio `device_categories.json` e
+  `device_models.json` vengono importati e rinominati `*.migrated` (non
+  cancellati). Le letture sono in cache finché il database non cambia.
+
+### Fixed
+
+- **Dispositivi Scoperti & Classificazione**: nome, versione, vendor e
+  modello salvati a mano non arrivavano né alla mappa né alla scheda, per
+  cui ogni salvataggio sembrava perso. Un dispositivo classificato restava
+  in "Da classificare" e l'AI lo riproponeva.
+- Scegliere un nome tra quelli annunciati da CDP e LLDP ora chiude il
+  conflitto: prima il dispositivo restava in "Conflitti di nome".
+- Le cache della mappa e della lista client non perdono più un salvataggio
+  fatto subito dopo un altro: su Windows i due salvataggi potevano avere la
+  stessa data di modifica.
+- La chiave API di Gemini viaggia in un header e non più nella query
+  string: un errore di connessione la riportava nell'interfaccia e nei log.
+
 ## [0.49.0] - 2026-10-06
 
 ### Added
