@@ -59,7 +59,7 @@ FORBIDDEN_TRACKED = re.compile(
     r"|login_attempts\.json|tenant_snmp\.json|ap_inventory\.json"
     r"|config_baselines\.json|detected_versions\.json|device_models\.json"
     r"|device_categories\.json|agent\.json|ssh_known_hosts.*"
-    r"|.*\.db|.*\.db-wal|.*\.db-shm|secret\.key|jwt_secret\.key)$"
+    r"|.*\.db|.*\.db-wal|.*\.db-shm|.*\.db-journal|secret\.key|jwt_secret\.key)$"
 )
 
 # Il testo che segnala un segreto, non il segreto stesso.

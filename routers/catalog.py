@@ -4,6 +4,8 @@
 """Router Catalog. Estratto da app_server.py (fase 6.6): percorsi, metodi,
 parametri e risposte identici al monolite."""
 
+import json
+import time
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -11,7 +13,7 @@ from routers.deps import require_tab
 from pydantic import BaseModel, Field
 
 from services import inventory_manager
-from core import core_engine
+from core import core_engine, data_config
 from security.security_manager import log_audit
 from routers.deps import (
     get_current_user, require_unscoped_admin, require_operator, user_group_scope,
@@ -157,11 +159,13 @@ def assemble_classification(scope):
     counts_by_category: dict = {}
     counts_by_group: dict = {}
     for n in data["nodes"]:
-        a = assignments.get(n["id"], {})
         red = n.get("redundancy") or {}
         dtype = n.get("device_type", "switch")
         group = n.get("group", "Generale")
         discovered = n.get("status") == "discovered"
+        # Same key the save path writes: a discovered node has no site of its
+        # own and is filed under 'Generale' (see tenant_for_node).
+        a = assignments.get(inventory_manager._akey(None if discovered else group, n["id"]), {})
         # IP mostrato in tabella: per i nodi scoperti l'IP annunciato (CDP/LLDP),
         # non l'id sintetico "discovered_<hostname>".
         display_ip = (n.get("reported_ip") or "") if discovered else n["id"]
@@ -182,7 +186,8 @@ def assemble_classification(scope):
             "vtp_domain": n.get("vtp_domain"),
             "vtp_mode": n.get("vtp_mode"),
             "discovered": discovered,
-            "name_options": n.get("name_options") or [],
+            # A saved name is the user's answer to the CDP/LLDP conflict.
+            "name_options": [] if a.get("name") else (n.get("name_options") or []),
             # Badge stack (già calcolato da generate_network_map): unità fisiche
             # dietro questo IP di management.
             "stack": red if red.get("type") == "stack" else None,
@@ -535,3 +540,152 @@ def assign_device_category(payload: DeviceCategorySchema, current_user = Depends
         f"da '{current_user.get('sub')}'."
     )
     return {"status": "success"}
+
+
+# --- AI suggestions (classification, naming, model catalogue) -----------------
+# One request covers many devices: free AI tiers allow a few requests a day.
+# Nothing here writes a device record except /api/device-models/merge, which
+# the user confirms per merge; classification proposals are applied through
+# /api/device-categories/assign like any manual edit.
+
+def _ai_suggest_file() -> str:
+    # Resolved per call, not at import: the data dir is pinned by tests and
+    # set by the launcher, both after this module may have been imported.
+    return data_config.get_path("ai_classification_suggestions.json")
+
+
+class AiSuggestSchema(BaseModel):
+    group: str = "all"
+    lang: str = "it"
+
+
+class AiModelsSchema(BaseModel):
+    lang: str = "it"
+
+
+class ModelMergeSchema(BaseModel):
+    vendor: str
+    canonical: str
+    duplicates: list[str] = Field(default_factory=list)
+
+
+def _load_ai_suggestions() -> dict:
+    try:
+        with open(_ai_suggest_file(), encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        data = {}
+    return {"suggestions": data.get("suggestions") or {},
+            "conventions": data.get("conventions") or {}}
+
+
+def _classify_queue(nodes: list, group: str = "all") -> list:
+    """Same rule as the tab's "Da classificare": discovered, never confirmed."""
+    return [n for n in nodes if n["discovered"] and not n["is_manual"]
+            and (group in ("", "all") or n["group"] == group)]
+
+
+@router.get("/api/device-classification/ai-suggestions", dependencies=[Depends(require_tab("tab-categories"))])
+def get_ai_classification_suggestions(current_user = Depends(get_current_user)):
+    """Saved proposals for devices still in the queue, so reopening the tab
+    does not spend another request."""
+    data = assemble_classification(user_group_scope(current_user))
+    queue_ids = {n["id"] for n in _classify_queue(data["nodes"])}
+    store = _load_ai_suggestions()
+    return {
+        "suggestions": {k: v for k, v in store["suggestions"].items() if k in queue_ids},
+        "conventions": {t: c for t, c in store["conventions"].items() if t in data["counts_by_group"]},
+    }
+
+
+@router.post("/api/device-classification/ai-suggest", dependencies=[Depends(require_tab("tab-categories"))])
+def run_ai_classification_suggest(payload: AiSuggestSchema, current_user = Depends(require_operator)):
+    """One AI request for the classification queue: category, subcategory,
+    vendor, model and, where the name breaks the tenant's convention, a name."""
+    from ai import classification_assist as ca
+    from routers.ai import chat_with_active_profile
+
+    data = assemble_classification(user_group_scope(current_user))
+    nodes = data["nodes"]
+    queue = _classify_queue(nodes, payload.group)
+    if not queue:
+        raise HTTPException(status_code=400, detail="Nessun dispositivo da classificare.")
+    store = _load_ai_suggestions()
+    # Devices without a proposal first; once all have one, a run refreshes them.
+    pending = [n for n in queue if n["id"] not in store["suggestions"]] or queue
+    batch_nodes = pending[:ca.MAX_DEVICES_PER_RUN]
+
+    by_id = {n["id"]: n for n in nodes}
+    neighbours: dict = {}
+    for link in data.get("links", []):
+        src, dst = link.get("source"), link.get("target")
+        for me, other, port in ((src, dst, link.get("local_port")),
+                                (dst, src, link.get("remote_port"))):
+            o = by_id.get(other)
+            if me and o:
+                neighbours.setdefault(me, []).append(
+                    {"device": o["label"], "category": o["device_type"], "own_port": port or ""})
+
+    def _vendor(n):
+        return n.get("vendor") if n.get("vendor") not in (None, "", "discovered") else ""
+
+    batch = [{
+        "id": n["id"], "name": n["label"], "tenant": n["group"],
+        "vendor": _vendor(n), "model": n.get("model") or "", "version": n.get("version") or "",
+        "neighbours": neighbours.get(n["id"], [])[:ca.MAX_NEIGHBOURS],
+    } for n in batch_nodes]
+    tenants = {n["group"] for n in batch_nodes}
+    examples: dict = {}
+    for n in nodes:
+        if n["group"] in tenants and (not n["discovered"] or n["is_manual"]):
+            examples.setdefault(n["group"], []).append({
+                "name": n["label"], "category": n["device_type"],
+                "subcategory": n.get("subcategory") or "", "model": n.get("model") or "",
+                "ha_group": n.get("ha_group") or ""})
+
+    reply, profile = chat_with_active_profile(
+        ca.build_messages(batch, examples, data["categories"], payload.lang))
+    suggestions, conventions = ca.parse_suggestions(
+        reply, [b["id"] for b in batch], data["categories"])
+
+    now = int(time.time())
+    for k, v in suggestions.items():
+        store["suggestions"][k] = dict(v, ts=now)
+    store["conventions"].update({t: c for t, c in conventions.items() if t in tenants})
+    inventory_manager.safe_json_write(_ai_suggest_file(), store)
+    log_audit(f"Suggerimenti AI di classificazione: {len(suggestions)}/{len(batch)} dispositivi "
+              f"da '{current_user.get('sub')}' (provider {profile.get('provider', '')}).")
+    return {"suggestions": suggestions, "conventions": conventions,
+            "requested": len(batch), "remaining": max(0, len(pending) - len(batch))}
+
+
+@router.post("/api/device-models/ai-normalize", dependencies=[Depends(require_tab("tab-categories"))])
+def run_ai_model_normalize(payload: AiModelsSchema, current_user = Depends(require_operator)):
+    """Propose merges of duplicate spellings in the model catalogue. Sends the
+    catalogue only, no device."""
+    from ai import classification_assist as ca
+    from routers.ai import chat_with_active_profile
+
+    models = {v: m for v, m in inventory_manager.get_models().items() if len(m) > 1}
+    if not models:
+        raise HTTPException(status_code=400, detail="Nessun vendor con piu' di un modello nel catalogo.")
+    reply, _profile = chat_with_active_profile(ca.build_model_messages(models, payload.lang))
+    merges = ca.parse_model_merges(reply, models)
+    log_audit(f"Proposte AI di unione modelli: {len(merges)}, da '{current_user.get('sub')}'.")
+    return {"merges": merges}
+
+
+@router.post("/api/device-models/merge", dependencies=[Depends(require_tab("tab-categories"))])
+def merge_device_models(payload: ModelMergeSchema, current_user = Depends(require_operator)):
+    """Apply one merge: catalogue and the devices that use a duplicate."""
+    # The catalogue and the device assignments it rewrites span every tenant.
+    if user_group_scope(current_user) is not None:
+        raise HTTPException(status_code=403, detail="Serve un utente senza restrizioni di sede.")
+    known = inventory_manager.get_models().get(payload.vendor.strip().lower(), [])
+    if payload.canonical not in known or not payload.duplicates \
+            or any(d not in known for d in payload.duplicates):
+        raise HTTPException(status_code=400, detail="Modelli non presenti nel catalogo.")
+    changed = inventory_manager.merge_models(payload.vendor, payload.canonical, payload.duplicates)
+    log_audit(f"Modelli {payload.duplicates} uniti in '{payload.canonical}' ({payload.vendor}), "
+              f"{changed} dispositivi aggiornati, da '{current_user.get('sub')}'.")
+    return {"status": "success", "devices_updated": changed}

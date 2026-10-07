@@ -26,6 +26,7 @@ for `data/` next to *that*. First thing to check when "the data disappeared".
 | `observability.db` (+ `-wal`, `-shm`) | Flows, syslog, events, evidence, incidents |
 | `mac_history.db` | MAC position history, ARP |
 | `redundancy.db` | HA group state |
+| `device_meta.db` | Manual device classification (category, name, vendor, model, HA group per site) and the per-vendor model catalogue. Replaces `device_categories.json` / `device_models.json`, imported once and left as `*.migrated` |
 | `users.json` | Local accounts, bcrypt |
 | `groups.json` / `sites.json` | Groups and sites |
 | `app_settings.json` | GUI configuration (observability, rule thresholds, suppressions, preview flags) |

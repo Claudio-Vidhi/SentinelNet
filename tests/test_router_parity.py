@@ -112,6 +112,9 @@ class TestRouterParity(unittest.TestCase):
                     "/api/mcp-client",
                     # Pannello versioni della flotta (centrale + agenti).
                     "/api/fleet",
+                    # Proposte AI nel tab Dispositivi: classificazione,
+                    # nomi e doppioni del catalogo modelli.
+                    "/api/device-classification/ai-", "/api/device-models/",
                     # Riavvio dell'applicazione dal pannello (unit oneshot).
                     "/api/settings/restart",
                     # Aggiornamento del centrale dal pannello (pull, dipendenze, riavvio).
@@ -283,6 +286,9 @@ class TestFullParity(unittest.TestCase):
                     "/api/mcp-client",
                     # Pannello versioni della flotta (centrale + agenti).
                     "/api/fleet",
+                    # Proposte AI nel tab Dispositivi: classificazione,
+                    # nomi e doppioni del catalogo modelli.
+                    "/api/device-classification/ai-", "/api/device-models/",
                     # Riavvio dell'applicazione dal pannello (unit oneshot).
                     "/api/settings/restart",
                     # Aggiornamento del centrale dal pannello (pull, dipendenze, riavvio).
@@ -309,6 +315,8 @@ class TestFullParity(unittest.TestCase):
     NEW_SCHEMAS = ("DeviceSiteSchema", "GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "ReportPdfSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection", "AgentBackupSchema", "AgentStatusItemSchema", "AgentStatusSchema", "FortigatePreviewSchema",
                     # Schemi delle notifiche email (regole admin e preferenze).
                     "UserPrefsSchema", "RuleSchema",
+                    # Proposte AI nel tab Dispositivi.
+                    "AiSuggestSchema", "AiModelsSchema", "ModelMergeSchema",
                     # Triage automatico programmato.
                     "ScheduledTriageRequest",
                     # Telemetria per tenant.

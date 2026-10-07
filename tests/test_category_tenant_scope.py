@@ -23,11 +23,17 @@ data_config.DATA_DIR = _TMP_DATA_DIR
 from services import inventory_manager  # noqa: E402
 
 
+def _reset_store():
+    path = inventory_manager.meta_db_path()
+    if os.path.exists(path):
+        os.remove(path)
+    inventory_manager._meta_ready.discard(path)
+
+
 class _Base(unittest.TestCase):
     def setUp(self):
-        # File categorie vuoto a ogni test: il contenuto e' il soggetto.
-        with open(inventory_manager.CATEGORIES_FILE, "w", encoding="utf-8") as f:
-            json.dump({"categories": {}, "assignments": {}}, f)
+        # Empty store for every test: its content is the subject.
+        _reset_store()
         # Le sedi vanno create prima: add_or_update_device riporta a 'Generale'
         # un gruppo che non esiste, e il test misurerebbe quel fallback.
         inventory_manager.add_group("sede-a")
@@ -82,11 +88,17 @@ class TestScopingPerSede(_Base):
 
 
 class TestMigrazioneChiaviVecchie(_Base):
-    """Il file scritto prima che la chiave portasse la sede."""
+    """The JSON file written before the key carried the site, imported once
+    into the SQLite store."""
 
     def _write_legacy(self, assignments):
-        with open(inventory_manager.CATEGORIES_FILE, "w", encoding="utf-8") as f:
+        _reset_store()
+        with open(self._legacy, "w", encoding="utf-8") as f:
             json.dump({"categories": {}, "assignments": assignments}, f)
+
+    @property
+    def _legacy(self):
+        return data_config.get_path("device_categories.json")
 
     def test_a_bare_key_is_resolved_from_inventory(self):
         self._write_legacy({"192.0.2.50": {"category": "pc"}})
@@ -97,14 +109,17 @@ class TestMigrazioneChiaviVecchie(_Base):
         self._write_legacy({"203.0.113.9": {"category": "pc"}})
         self.assertIn("Generale|203.0.113.9", self._assignments())
 
-    def test_the_migration_is_written_once_and_does_not_repeat(self):
+    def test_the_import_runs_once_and_keeps_the_old_file(self):
         self._write_legacy({"192.0.2.50": {"category": "pc"}})
         self._assignments()
-        mtime = os.path.getmtime(inventory_manager.CATEGORIES_FILE)
-        for _ in range(3):
-            self._assignments()
-        self.assertEqual(os.path.getmtime(inventory_manager.CATEGORIES_FILE), mtime,
-                         "il file viene riscritto a ogni lettura")
+        self.assertFalse(os.path.exists(self._legacy))
+        self.assertTrue(os.path.exists(self._legacy + ".migrated"))
+        # A JSON reappearing later (restored by hand) is not merged again.
+        with open(self._legacy, "w", encoding="utf-8") as f:
+            json.dump({"assignments": {"198.51.100.50": {"category": "phone"}}}, f)
+        inventory_manager.set_device_meta("192.0.2.50", category="camera")
+        self.assertEqual(self._assignments(), {"sede-a|192.0.2.50": {"category": "camera"}})
+        os.remove(self._legacy)
 
     def test_nothing_is_lost_in_the_migration(self):
         self._write_legacy({"192.0.2.50": {"category": "pc", "name": "sw-a"},

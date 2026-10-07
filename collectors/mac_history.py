@@ -805,8 +805,8 @@ def _inventory_stamp() -> tuple:
     ancora; se un giorno servisse esatto, la strada e' una colonna id
     AUTOINCREMENT anche qui, non un group_concat che scansiona tutto.
 
-    Nel mucchio anche il file delle assegnazioni manuali, che decide
-    ``client_type`` e non sta nel database."""
+    Nel mucchio anche la firma delle assegnazioni manuali, che decidono
+    ``client_type`` e stanno in un altro database."""
     from services import inventory_manager
     with _connect() as c:
         row = c.execute(
@@ -820,11 +820,7 @@ def _inventory_stamp() -> tuple:
             "       (SELECT MAX(last_seen) FROM switch_if_macs),"
             "       (SELECT MIN(mac) FROM switch_if_macs),"
             "       (SELECT MAX(mac) FROM switch_if_macs)").fetchone()
-    try:
-        assign_mtime = os.path.getmtime(inventory_manager.CATEGORIES_FILE)
-    except OSError:
-        assign_mtime = 0.0
-    return tuple(row) + (assign_mtime,)
+    return tuple(row) + (inventory_manager.meta_signature(),)
 
 
 def endpoint_inventory(tenants=None, site: Optional[str] = None,
