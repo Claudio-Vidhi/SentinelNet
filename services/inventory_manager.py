@@ -5,8 +5,10 @@ import logging
 import os
 import csv
 import re
+import sqlite3
 import threading
 import time
+from contextlib import closing
 from typing import Any, Dict, Optional, Tuple
 from security import crypto_vault
 from core import data_config
@@ -608,8 +610,6 @@ def save_vendors(vendors: dict):
 
 # --- CATEGORIE DISPOSITIVI (classificazione manuale + categorie custom) ---
 
-CATEGORIES_FILE = data_config.get_path("device_categories.json")
-
 # Categorie predefinite riconosciute dalla classificazione automatica. Restano
 # sempre presenti; l'utente può aggiungerne di custom e definire sottocategorie.
 BUILTIN_CATEGORIES = {
@@ -653,76 +653,181 @@ def tenant_for_node(node_id: str) -> str:
     return _tenant_key(d.get('Group') if d else None)
 
 
-def _load_categories() -> dict:
-    if os.path.exists(CATEGORIES_FILE):
+_META_FIELDS = ("category", "subcategory", "vendor", "model", "ha_group", "name", "ver")
+
+# Manual classification and the per-vendor model catalogue live in SQLite:
+# a save touches one row instead of rewriting the whole file. The JSON files
+# they replace are imported once and renamed *.migrated (kept, not deleted).
+#
+# Default rollback journal, not WAL, on purpose: only then does every commit
+# bump the file change counter that meta_signature() reads for the network
+# map and client caches (WAL leaves it alone).
+_META_SCHEMA = """
+CREATE TABLE IF NOT EXISTS categories (
+  key   TEXT PRIMARY KEY,
+  label TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS subcategories (
+  category TEXT NOT NULL,
+  name     TEXT NOT NULL,
+  PRIMARY KEY (category, name)
+);
+CREATE TABLE IF NOT EXISTS assignments (
+  tenant      TEXT NOT NULL,
+  node_id     TEXT NOT NULL,
+  category    TEXT,
+  subcategory TEXT,
+  vendor      TEXT,
+  model       TEXT,
+  ha_group    TEXT,
+  name        TEXT,
+  ver         TEXT,
+  PRIMARY KEY (tenant, node_id)
+);
+CREATE TABLE IF NOT EXISTS models (
+  vendor TEXT NOT NULL,
+  model  TEXT NOT NULL,
+  PRIMARY KEY (vendor, model)
+);
+"""
+_META_VERSION = 1
+_meta_ready: set = set()
+
+
+def meta_db_path() -> str:
+    # Resolved per call: the data dir is pinned by tests and by the launcher,
+    # both possibly after this module was imported.
+    return data_config.get_path("device_meta.db")
+
+
+def meta_signature() -> tuple:
+    """(file id, SQLite file change counter at header offset 24): the counter
+    is bumped by every commit in rollback-journal mode, the id tells a
+    recreated file apart. Not mtime: Windows updates it at timer resolution,
+    so two saves in a row could share one."""
+    try:
+        with open(meta_db_path(), "rb") as f:
+            return (os.fstat(f.fileno()).st_ino, int.from_bytes(f.read(28)[24:28], "big"))
+    except OSError:
+        return (0, 0)
+
+
+def _meta_connect() -> sqlite3.Connection:
+    path = meta_db_path()
+    conn = sqlite3.connect(path, timeout=10)
+    conn.row_factory = sqlite3.Row
+    if path not in _meta_ready:
+        with _io_lock:
+            if path not in _meta_ready:
+                with conn:
+                    conn.executescript(_META_SCHEMA)
+                    if conn.execute("PRAGMA user_version").fetchone()[0] < _META_VERSION:
+                        _import_legacy_json(conn)
+                        conn.execute(f"PRAGMA user_version = {_META_VERSION}")
+                _meta_ready.add(path)
+    return conn
+
+
+def _import_legacy_json(conn: sqlite3.Connection):
+    """One-time import of device_categories.json / device_models.json."""
+    cat_file = data_config.get_path("device_categories.json")
+    models_file = data_config.get_path("device_models.json")
+    for path in (cat_file, models_file):
+        if not os.path.exists(path):
+            continue
         try:
-            with open(CATEGORIES_FILE, "r", encoding="utf-8") as f:
+            with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-        except Exception:
-            data = {}
-    else:
-        data = {}
-    data.setdefault("categories", {})
-    data.setdefault("assignments", {})
-    # Assignments written before the key carried the tenant. Resolved once,
-    # from the site the device has in inventory; the rewritten file has no bare
-    # keys left, so this does not run again.
-    legacy = [k for k in data["assignments"] if "|" not in k]
-    if legacy:
-        for old in legacy:
-            data["assignments"][_akey(tenant_for_node(old), old)] = \
-                data["assignments"].pop(old)
-        safe_json_write(CATEGORIES_FILE, data)
-    return data
+        except (OSError, ValueError):
+            logger.exception("File legacy illeggibile, non importato: %s", path)
+            continue
+        if path == cat_file:
+            for key, c in (data.get("categories") or {}).items():
+                conn.execute("INSERT OR REPLACE INTO categories VALUES (?, ?)",
+                             (key, BUILTIN_CATEGORIES.get(key, c.get("label") or key)))
+                conn.executemany("INSERT OR IGNORE INTO subcategories VALUES (?, ?)",
+                                 [(key, s) for s in c.get("subcategories") or []])
+            for k, a in (data.get("assignments") or {}).items():
+                # Keys written before they carried the tenant: resolved once,
+                # from the site the device has in inventory.
+                tenant, node_id = k.split("|", 1) if "|" in k else (tenant_for_node(k), k)
+                _write_assignment(conn, tenant, node_id, a)
+        else:
+            conn.executemany("INSERT OR IGNORE INTO models VALUES (?, ?)",
+                             [(v, m) for v, lst in data.items() for m in lst])
+        conn.commit()  # before the rename: a failed rename must not lose the import
+        os.replace(path, path + ".migrated")
+
+
+def _write_assignment(conn, tenant, node_id, entry: dict):
+    fields = {k: v for k, v in entry.items() if k in _META_FIELDS and v}
+    if not fields:
+        conn.execute("DELETE FROM assignments WHERE tenant = ? AND node_id = ?",
+                     (tenant, node_id))
+        return
+    conn.execute(
+        f"INSERT OR REPLACE INTO assignments (tenant, node_id, {', '.join(_META_FIELDS)}) "
+        f"VALUES (?, ?{', ?' * len(_META_FIELDS)})",
+        (tenant, node_id, *(fields.get(k) for k in _META_FIELDS)))
+
 
 def get_device_categories() -> dict:
     """Ritorna {categories: {key: {label, builtin, subcategories[]}}, assignments}.
     Le categorie predefinite sono sempre incluse."""
-    data = _load_categories()
-    stored = data["categories"]
+    with closing(_meta_connect()) as conn:
+        stored = {r["key"]: r["label"] for r in conn.execute("SELECT key, label FROM categories")}
+        subs: dict = {}
+        for r in conn.execute("SELECT category, name FROM subcategories ORDER BY name"):
+            subs.setdefault(r["category"], []).append(r["name"])
     categories = {}
     for key, label in BUILTIN_CATEGORIES.items():
-        s = stored.get(key, {})
-        categories[key] = {
-            # Le categorie predefinite usano sempre l'etichetta di sistema (non
-            # quella eventualmente salvata, che poteva essere corrotta col key).
-            "label": label,
-            "builtin": True,
-            "subcategories": sorted(s.get("subcategories", [])),
-        }
-    for key, s in stored.items():
-        if key in BUILTIN_CATEGORIES:
-            continue
-        categories[key] = {
-            "label": s.get("label", key),
-            "builtin": False,
-            "subcategories": sorted(s.get("subcategories", [])),
-        }
-    return {"categories": categories, "assignments": data["assignments"]}
+        categories[key] = {"label": label, "builtin": True, "subcategories": subs.get(key, [])}
+    for key, label in stored.items():
+        if key not in BUILTIN_CATEGORIES:
+            categories[key] = {"label": label, "builtin": False, "subcategories": subs.get(key, [])}
+    return {"categories": categories, "assignments": get_category_assignments()}
+
+
+# Read on every map rebuild, tab load and client list; a full SELECT costs ~3x
+# the signature check. Callers only read the returned dict, never mutate it.
+_assign_cache: tuple = (None, {})
+
 
 def get_category_assignments() -> dict:
-    return _load_categories().get("assignments", {})
+    """{'tenant|node_id': {field: value}}, only the fields that are set."""
+    global _assign_cache
+    path = meta_db_path()
+    if path in _meta_ready and _assign_cache[0] == (path, meta_signature()):
+        return _assign_cache[1]
+    with closing(_meta_connect()) as conn:
+        # Signed before the SELECT: a commit in between only costs a re-read.
+        key = (path, meta_signature())
+        rows = conn.execute("SELECT * FROM assignments").fetchall()
+    out = {_akey(r["tenant"], r["node_id"]): {k: r[k] for k in _META_FIELDS if r[k]}
+           for r in rows}
+    _assign_cache = (key, out)
+    return out
+
 
 def add_category(key: str, label: str, subcategory: str = "") -> bool:
     """Crea una categoria custom (o aggiunge una sottocategoria a una esistente)."""
     key = _norm_cat_key(key)
     if not key:
         return False
-    with _io_lock:
-        data = _load_categories()
-        cats = data["categories"]
-        default_label = BUILTIN_CATEGORIES.get(key, label.strip() or key)
-        entry = cats.setdefault(key, {
-            "label": default_label,
-            "subcategories": [],
-        })
-        if label.strip() and key not in BUILTIN_CATEGORIES:
-            entry["label"] = label.strip()
+    label = label.strip()
+    with closing(_meta_connect()) as conn, conn:
+        if key in BUILTIN_CATEGORIES:
+            conn.execute("INSERT OR IGNORE INTO categories VALUES (?, ?)",
+                         (key, BUILTIN_CATEGORIES[key]))
+        elif label:
+            conn.execute("INSERT OR REPLACE INTO categories VALUES (?, ?)", (key, label))
+        else:
+            conn.execute("INSERT OR IGNORE INTO categories VALUES (?, ?)", (key, key))
         sub = subcategory.strip()
-        if sub and sub not in entry["subcategories"]:
-            entry["subcategories"].append(sub)
-        safe_json_write(CATEGORIES_FILE, data)
-        return True
+        if sub:
+            conn.execute("INSERT OR IGNORE INTO subcategories VALUES (?, ?)", (key, sub))
+    return True
+
 
 def delete_category(key: str) -> bool:
     """Elimina una categoria custom e libera i dispositivi ad essa assegnati.
@@ -730,16 +835,13 @@ def delete_category(key: str) -> bool:
     key = _norm_cat_key(key)
     if key in BUILTIN_CATEGORIES:
         return False
-    with _io_lock:
-        data = _load_categories()
-        if key not in data["categories"]:
+    with closing(_meta_connect()) as conn, conn:
+        if not conn.execute("DELETE FROM categories WHERE key = ?", (key,)).rowcount:
             return False
-        data["categories"].pop(key, None)
-        data["assignments"] = {
-            n: a for n, a in data["assignments"].items() if a.get("category") != key
-        }
-        safe_json_write(CATEGORIES_FILE, data)
-        return True
+        conn.execute("DELETE FROM subcategories WHERE category = ?", (key,))
+        conn.execute("DELETE FROM assignments WHERE category = ?", (key,))
+    return True
+
 
 def delete_subcategory(category: str, subcategory: str) -> bool:
     """Rimuove una sottocategoria da una categoria e la sgancia dai dispositivi
@@ -748,19 +850,14 @@ def delete_subcategory(category: str, subcategory: str) -> bool:
     subcategory = (subcategory or '').strip()
     if not category or not subcategory:
         return False
-    with _io_lock:
-        data = _load_categories()
-        entry = data["categories"].get(category)
-        if not entry or subcategory not in entry.get("subcategories", []):
+    with closing(_meta_connect()) as conn, conn:
+        if not conn.execute("DELETE FROM subcategories WHERE category = ? AND name = ?",
+                            (category, subcategory)).rowcount:
             return False
-        entry["subcategories"].remove(subcategory)
-        for a in data["assignments"].values():
-            if a.get("subcategory") == subcategory:
-                a.pop("subcategory", None)
-        safe_json_write(CATEGORIES_FILE, data)
-        return True
+        conn.execute("UPDATE assignments SET subcategory = NULL WHERE subcategory = ?",
+                     (subcategory,))
+    return True
 
-_META_FIELDS = ("category", "subcategory", "vendor", "model", "ha_group", "name", "ver")
 
 def migrate_assignment(old_id: str, new_id: str, old_tenant=None, new_tenant=None):
     """Sposta l'assegnazione manuale da un id-nodo a un altro (es. quando un
@@ -768,12 +865,11 @@ def migrate_assignment(old_id: str, new_id: str, old_tenant=None, new_tenant=Non
 
     Il nodo scoperto non ha una sede propria, quindi di norma parte da
     'Generale' e arriva nella sede in cui il dispositivo viene promosso."""
-    with _io_lock:
-        data = _load_categories()
-        a = data["assignments"].pop(_akey(old_tenant, old_id), None)
-        if a:
-            data["assignments"][_akey(new_tenant, new_id)] = a
-            safe_json_write(CATEGORIES_FILE, data)
+    with closing(_meta_connect()) as conn, conn:
+        conn.execute("UPDATE OR REPLACE assignments SET tenant = ?, node_id = ? "
+                     "WHERE tenant = ? AND node_id = ?",
+                     (_tenant_key(new_tenant), new_id, _tenant_key(old_tenant), old_id))
+
 
 def set_device_meta(node_id: str, tenant=None, **fields) -> bool:
     """Aggiorna in modo incrementale gli attributi manuali di un dispositivo
@@ -788,70 +884,68 @@ def set_device_meta(node_id: str, tenant=None, **fields) -> bool:
     provided = {k: v for k, v in fields.items() if k in _META_FIELDS and v is not None}
     if not provided:
         return False
-    key = _akey(tenant if tenant is not None else tenant_for_node(node_id), node_id)
-    with _io_lock:
-        data = _load_categories()
-        entry = dict(data["assignments"].get(key, {}))
+    tenant = _tenant_key(tenant if tenant is not None else tenant_for_node(node_id))
+    with _io_lock, closing(_meta_connect()) as conn, conn:
+        row = conn.execute("SELECT * FROM assignments WHERE tenant = ? AND node_id = ?",
+                           (tenant, node_id)).fetchone()
+        entry = {k: row[k] for k in _META_FIELDS} if row else {}
         for k, v in provided.items():
             v = v.strip() if isinstance(v, str) else v
             if k == "category" and v:
                 cat = _norm_cat_key(v)
-                valid = set(BUILTIN_CATEGORIES) | set(data["categories"])
-                if cat not in valid:
+                if cat not in BUILTIN_CATEGORIES and not conn.execute(
+                        "SELECT 1 FROM categories WHERE key = ?", (cat,)).fetchone():
                     return False
-                entry["category"] = cat
-            elif v:
-                entry[k] = v
-            else:
-                entry.pop(k, None)
-        if entry:
-            data["assignments"][key] = entry
-        else:
-            data["assignments"].pop(key, None)
-        safe_json_write(CATEGORIES_FILE, data)
-        return True
+                v = cat
+            entry[k] = v
+        _write_assignment(conn, tenant, node_id, entry)
+    return True
 
 # --- REGISTRO MODELLI (per vendor) ---
 
-MODELS_FILE = data_config.get_path("device_models.json")
-
 def get_models() -> dict:
     """Ritorna {vendor_key: [model, ...]}."""
-    if os.path.exists(MODELS_FILE):
-        try:
-            with open(MODELS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (OSError, ValueError):
-            logger.exception("Registro modelli illeggibile: %s", MODELS_FILE)
-            return {}
-    return {}
+    out: dict = {}
+    with closing(_meta_connect()) as conn:
+        for r in conn.execute("SELECT vendor, model FROM models ORDER BY vendor, model"):
+            out.setdefault(r["vendor"], []).append(r["model"])
+    return out
 
 def add_model(vendor: str, model: str) -> bool:
     vendor = (vendor or '').strip().lower()
     model = (model or '').strip()
     if not vendor or not model:
         return False
-    with _io_lock:
-        data = get_models()
-        lst = data.setdefault(vendor, [])
-        if model not in lst:
-            lst.append(model)
-            lst.sort()
-            safe_json_write(MODELS_FILE, data)
-        return True
+    with closing(_meta_connect()) as conn, conn:
+        conn.execute("INSERT OR IGNORE INTO models VALUES (?, ?)", (vendor, model))
+    return True
 
 def delete_model(vendor: str, model: str) -> bool:
     vendor = (vendor or '').strip().lower()
     model = (model or '').strip()
-    with _io_lock:
-        data = get_models()
-        if vendor in data and model in data[vendor]:
-            data[vendor].remove(model)
-            if not data[vendor]:
-                data.pop(vendor)
-            safe_json_write(MODELS_FILE, data)
-            return True
-    return False
+    with closing(_meta_connect()) as conn, conn:
+        return conn.execute("DELETE FROM models WHERE vendor = ? AND model = ?",
+                            (vendor, model)).rowcount > 0
+
+def merge_models(vendor: str, canonical: str, duplicates: list) -> int:
+    """Fold duplicate spellings of one model into ``canonical``: in the
+    catalogue, and on every device whose manual model is one of them, so the
+    inspector does not show a spelling the catalogue no longer lists.
+    Returns how many devices were rewritten."""
+    vendor = (vendor or '').strip().lower()
+    canonical = (canonical or '').strip()
+    dups = sorted({d.strip() for d in duplicates or [] if d and d.strip() and d.strip() != canonical})
+    if not vendor or not canonical or not dups:
+        return 0
+    marks = ", ".join("?" * len(dups))
+    with closing(_meta_connect()) as conn, conn:
+        conn.execute(f"DELETE FROM models WHERE vendor = ? AND model IN ({marks})", (vendor, *dups))
+        conn.execute("INSERT OR IGNORE INTO models VALUES (?, ?)", (vendor, canonical))
+        return conn.execute(
+            f"UPDATE assignments SET model = ? WHERE model IN ({marks}) "
+            "AND lower(trim(coalesce(vendor, ''))) IN ('', ?)",
+            (canonical, *dups, vendor)).rowcount
+
 
 VENDOR_NVD_MAP = {
     "hewlett packard enterprise": "hpe",

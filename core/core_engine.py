@@ -13,7 +13,7 @@ from core.net_ssh import ConnectHandler
 from services.inventory_manager import (
     update_version_inventory, get_all_devices, get_detected_versions,
     update_device_hostname, get_all_vendors, get_category_assignments,
-    parse_transports, CATEGORIES_FILE,
+    parse_transports, meta_signature,
 )
 from drivers.linux import sanitize_session
 from drivers.windows import prepare_session as prepare_windows_session
@@ -1863,7 +1863,7 @@ def _get_portchannel_report(group_filter=None) -> list:
 # regex parsing of every .txt file is expensive and is invoked on every request
 # from multiple endpoints (device-classification, topology, network-map, mac uplinks).
 # The cache is invalidated by an economical "signature" (count + max mtime of the
-# backups, mtime of the category-assignments file) computed with a single
+# backups, signature of the category-assignments store) computed with a single
 # os.walk/stat pass, much lighter than the full scan it replaces.
 _netmap_cache: dict = {"sig": None, "by_filter": {}, "sig_ts": 0.0, "last_sig": None}
 # Same signature, different payload: the port-channel report parses the very
@@ -1889,10 +1889,7 @@ def _netmap_signature():
                     continue
                 if mtime > max_mtime:
                     max_mtime = mtime
-    try:
-        cat_mtime = os.path.getmtime(CATEGORIES_FILE)
-    except OSError:
-        cat_mtime = 0.0
+    cat_mtime = meta_signature()
     # The inventory belongs in the signature too: both cached reports join the
     # backups against it for group and hostname, so adding or removing a device
     # changes the answer without any backup file changing.
@@ -2337,9 +2334,13 @@ def _generate_network_map(group_filter=None) -> dict:
     # conflicts, but also vendor/model reclassified by hand in the Categories tab):
     # they must be reflected on the map node so that, e.g., the vendor used
     # by the EUVD query is the real one and not the device hostname.
-    for node_id, a in category_assignments.items():
-        node = nodes_map.get(node_id)
-        if not node:
+    # Keyed by (site, node) like apply_category: a node outside inventory is
+    # filed under 'Generale'.
+    from services.inventory_manager import _akey
+    for node_id, node in nodes_map.items():
+        tenant = ip_to_device[node_id].get('Group') if node_id in ip_to_device else None
+        a = category_assignments.get(_akey(tenant, node_id))
+        if not a:
             continue
         if a.get("name"):
             node["label"] = a["name"]

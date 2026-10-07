@@ -1238,6 +1238,12 @@
           <select id="categoriesGroupSelect" class="cls-tenant" aria-label="Tenant delle categorie" data-i18n-aria-label="ariaCategoriesTenant">
             <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
           </select>
+          <button type="button" class="btn btn-secondary btn-small requires-write" id="btnClsAiSuggest" title="Una richiesta AI per i dispositivi da classificare" data-i18n-title="clsAiSuggestTitle">
+            <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> <span data-i18n="clsAiSuggest">Suggerisci con AI</span>
+          </button>
+          <button type="button" class="btn btn-secondary btn-small requires-write" id="btnClsAiModels" title="Doppioni nel catalogo modelli" data-i18n-title="clsAiModelsTitle">
+            <i class="fa-solid fa-broom" aria-hidden="true"></i> <span data-i18n="clsAiModels">Pulisci modelli</span>
+          </button>
           <button class="btn btn-secondary btn-small" id="btnExportClassification" data-i18n="btnExportCsv">
             <i class="fa-solid fa-file-csv"></i> Esporta CSV
           </button>
@@ -4919,6 +4925,18 @@
   </div>
 
   <!-- Subnet Scanner Modal -->
+  <!-- Catalogo modelli: unioni di doppioni proposte dall'AI, una per una. -->
+  <div class="modal-overlay" id="clsModelsModal">
+    <div class="modal" style="width: 640px; max-width: 96%;">
+      <div class="modal-header">
+        <h3 data-i18n="clsAiModelsTitle">Doppioni nel catalogo modelli</h3>
+        <i class="fa-solid fa-xmark modal-close" id="btnCloseClsModels"></i>
+      </div>
+      <p class="cls-ai-note" data-i18n="clsAiModelsDesc">Viene inviato solo l'elenco dei modelli, nessun dispositivo. Unire riscrive anche i dispositivi che usano la grafia scartata.</p>
+      <div id="clsModelsBody"></div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="subnetScanModal">
     <div class="modal" style="width: 720px; max-width: 96%;">
       <div class="modal-header">

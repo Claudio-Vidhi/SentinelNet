@@ -47,6 +47,8 @@ observability.db-shm
 mac_history.db
 mac_history.db-wal
 mac_history.db-shm
+device_meta.db
+device_meta.db-journal
 
 # Report di analisi e documenti di lavoro con contenuto del cliente.
 Semgrep_Code_Combined_Findings_*.csv

@@ -3353,6 +3353,10 @@
     let clsSelected = null;
     let clsDirty = false;
     let clsViewChosen = false;
+    // AI proposals for queued devices + naming convention per tenant. Read
+    // from the server, which keeps them: reopening the tab costs no request.
+    let clsAi = { suggestions: {}, conventions: {} };
+    let clsMerges = [];
 
     // A device discovered via CDP/LLDP whose category was only inferred: no
     // human has looked at it yet. That is the queue the view opens on.
@@ -3394,6 +3398,7 @@
             return;
         }
         categoriesData = await res.json();
+        await loadClsAiSuggestions();
         categoriesData.vendors = categoriesData.vendors || [];
         categoriesData.models = categoriesData.models || {};
 
@@ -3490,7 +3495,8 @@
                 const flags = (n.stack ? `<span class="cls-flag" title="${attrEsc(tr('topoShowStackUnits'))}">×${n.stack.member_count}</span>` : '')
                     + (n.stack && n.stack.health === 'degraded' ? `<span class="cls-iso fault" title="${attrEsc(tr('topoDegradedStack'))}"></span>` : '')
                     + (n.ha_group ? '<span class="cls-flag">HA</span>' : '')
-                    + (clsHasConflict(n) ? `<span class="cls-iso fault" title="${attrEsc(tr('topoCdpLldpNameConflict'))}"></span>` : '');
+                    + (clsHasConflict(n) ? `<span class="cls-iso fault" title="${attrEsc(tr('topoCdpLldpNameConflict'))}"></span>` : '')
+                    + (clsAi.suggestions[n.id] ? `<span class="cls-flag cls-flag-ai" title="${attrEsc(tr('clsAiFlag'))}">AI</span>` : '');
                 return `<button type="button" class="cls-row" data-action="cls-select" data-node-id="${attrEsc(n.id)}"
                         aria-current="${n.id === clsSelected}">
                     ${clsSwatch(n.device_type)}
@@ -3612,9 +3618,133 @@
               <div class="cls-insp-title">${clsSwatch(n.device_type)}<span>${escapeHtml(n.label)}</span></div>
               <div class="cls-insp-sub">${escapeHtml([n.display_ip || '—', n.group, tr(n.discovered ? 'clsDiscoveredVia' : 'clsManaged')].join(' · '))}</div>
             </div>
-            <div class="cls-insp-body">${conflict}${fields}${stack}${facts}${actions ? `<div class="cls-actions">${actions}</div>` : ''}</div>
+            <div class="cls-insp-body">${canWrite ? clsAiBox(n) : ''}${conflict}${fields}${stack}${facts}${actions ? `<div class="cls-actions">${actions}</div>` : ''}</div>
             ${foot}`;
     }
+
+    async function loadClsAiSuggestions() {
+        const r = await apiFetch('/api/device-classification/ai-suggestions');
+        clsAi = (r && r.ok) ? await r.json() : { suggestions: {}, conventions: {} };
+    }
+
+    // The proposal is shown, not applied: "Applica" fills the form and the
+    // user saves it like any manual edit.
+    function clsAiBox(n) {
+        const s = clsAi.suggestions[n.id];
+        if (!s) return '';
+        const cat = s.category ? clsCatLabel(s.category) + (s.subcategory ? ` / ${s.subcategory}` : '') : '';
+        const row = (k, v) => v ? `<dt>${escapeHtml(tr(k))}</dt><dd>${escapeHtml(v)}</dd>` : '';
+        const conv = clsAi.conventions[n.group];
+        return `<div class="cls-ai">
+              <div class="cls-ai-h"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> ${escapeHtml(tr('clsAiBoxTitle'))}
+                <span class="cls-ai-conf">${escapeHtml(tr('clsAiConfidence', { n: s.confidence }))}</span></div>
+              <dl>${row('clsFieldName', s.name)}${row('clsFieldCategory', cat)}${row('clsFieldVendor', s.vendor)}${row('clsFieldModel', s.model)}${row('clsFieldHa', s.ha_group)}</dl>
+              ${s.reason ? `<p class="cls-ai-why">${escapeHtml(s.reason)}</p>` : ''}
+              ${conv ? `<p class="cls-ai-why">${escapeHtml(tr('clsAiConv', { text: conv }))}</p>` : ''}
+              <button type="button" class="btn btn-secondary btn-small" data-action="cls-ai-apply">${escapeHtml(tr('clsAiApply'))}</button>
+            </div>`;
+    }
+
+    function clsApplyAi() {
+        const s = clsAi.suggestions[clsSelected];
+        const box = document.getElementById('clsInspector');
+        if (!s || !box) return;
+        const field = f => /** @type {HTMLInputElement|HTMLSelectElement|null} */ (box.querySelector(`[data-field="${f}"]`));
+        const cat = field('category');
+        if (s.category && cat) {
+            cat.value = s.category;
+            // Redraws the subcategory select for the new category.
+            cat.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        for (const f of ['subcategory', 'name', 'vendor', 'model', 'ha_group']) {
+            const el = field(f);
+            if (el && s[f]) el.value = s[f];
+        }
+        clsSetDirty(true);
+    }
+
+    async function runClsAiSuggest() {
+        if (!clsMayLeave()) return;
+        const btn = /** @type {HTMLButtonElement|null} */ (document.getElementById('btnClsAiSuggest'));
+        const label = btn ? btn.innerHTML : '';
+        if (btn) { btn.disabled = true; btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> ${escapeHtml(tr('clsAiRunning'))}`; }
+        try {
+            const group = /** @type {HTMLSelectElement|null} */ (document.getElementById('categoriesGroupSelect'))?.value || 'all';
+            const res = await apiFetch('/api/device-classification/ai-suggest', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ group, lang: currentLang })
+            });
+            const data = res ? await res.json().catch(() => ({})) : {};
+            if (!(res && res.ok)) { showToast(data.detail || tr('clsAiFailed'), 'error'); return; }
+            showToast(tr('clsAiDone', { n: Object.keys(data.suggestions || {}).length,
+                                        req: data.requested, rem: data.remaining }), 'info');
+            await loadClsAiSuggestions();
+            clsView = 'todo';
+            clsViewChosen = true;
+            renderCategoriesPanel();
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = label; }
+        }
+    }
+
+    function renderClsMerges() {
+        const body = document.getElementById('clsModelsBody');
+        if (!body) return;
+        if (!clsMerges.some(Boolean)) { body.innerHTML = `<p class="cls-ai-note">${escapeHtml(tr('clsAiModelsNone'))}</p>`; return; }
+        body.innerHTML = clsMerges.map((m, i) => m ? `<div class="cls-merge">
+              <div class="cls-merge-main"><span class="cls-merge-vendor">${escapeHtml(m.vendor)}</span>
+                <b>${escapeHtml(m.canonical)}</b> ← ${m.duplicates.map(d => `<s>${escapeHtml(d)}</s>`).join(', ')}</div>
+              ${m.reason ? `<p class="cls-ai-why">${escapeHtml(m.reason)}</p>` : ''}
+              <div class="cls-merge-act">
+                <button type="button" class="btn btn-primary btn-small" data-action="cls-merge-apply" data-i="${i}">${escapeHtml(tr('clsAiMerge'))}</button>
+                <button type="button" class="btn btn-secondary btn-small" data-action="cls-merge-skip" data-i="${i}">${escapeHtml(tr('clsAiSkip'))}</button>
+              </div>
+            </div>` : '').join('');
+    }
+
+    async function openClsModels() {
+        const body = document.getElementById('clsModelsBody');
+        if (!body) return;
+        openModal('clsModelsModal');
+        body.innerHTML = `<p class="cls-ai-note"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> ${escapeHtml(tr('clsAiRunning'))}</p>`;
+        const res = await apiFetch('/api/device-models/ai-normalize', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lang: currentLang })
+        });
+        const data = res ? await res.json().catch(() => ({})) : {};
+        if (!(res && res.ok)) {
+            body.innerHTML = `<p class="cls-ai-note cls-bad">${escapeHtml(data.detail || tr('clsAiFailed'))}</p>`;
+            return;
+        }
+        clsMerges = data.merges || [];
+        renderClsMerges();
+    }
+
+    async function applyClsMerge(i) {
+        const m = clsMerges[i];
+        if (!m) return;
+        const res = await apiFetch('/api/device-models/merge', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vendor: m.vendor, canonical: m.canonical, duplicates: m.duplicates })
+        });
+        const data = res ? await res.json().catch(() => ({})) : {};
+        if (!(res && res.ok)) { showToast(data.detail || tr('clsAiMergeFailed'), 'error'); return; }
+        showToast(tr('clsAiMerged', { n: data.devices_updated || 0 }), 'info');
+        clsMerges[i] = null;
+        renderClsMerges();
+        loadCategoriesData();
+    }
+
+    document.getElementById('btnClsAiSuggest')?.addEventListener('click', runClsAiSuggest);
+    document.getElementById('btnClsAiModels')?.addEventListener('click', openClsModels);
+    document.getElementById('btnCloseClsModels')?.addEventListener('click', () => closeModal('clsModelsModal'));
+    document.getElementById('clsModelsBody')?.addEventListener('click', (e) => {
+        const el = /** @type {HTMLElement} */ (e.target).closest('[data-action]');
+        if (!(el instanceof HTMLElement)) return;
+        const i = Number(el.dataset.i);
+        if (el.dataset.action === 'cls-merge-apply') applyClsMerge(i);
+        else if (el.dataset.action === 'cls-merge-skip') { clsMerges[i] = null; renderClsMerges(); }
+    });
 
     function clsSetDirty(on) {
         clsDirty = on;
@@ -3730,6 +3860,7 @@
         if (act === 'cls-save') saveCategoryEdits();
         else if (act === 'cls-undo') discardCategoryEdits();
         else if (act === 'cls-pick-name') clsPickName(el);
+        else if (act === 'cls-ai-apply') clsApplyAi();
         else if (act === 'promote-device') promoteDevice(clsSelected);
         else if (act === 'mark-as-stack') markAsStack(clsSelected);
         else if (act === 'save-stack-members') saveStackMembers(clsSelected);

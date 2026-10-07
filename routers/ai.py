@@ -130,6 +130,34 @@ def _get_active_ai_profile():
     profiles, active = _get_ai_profiles_raw()
     return _find_ai_profile(profiles, active)
 
+def chat_with_active_profile(messages):
+    """Send ``messages`` with the active profile; HTTP errors the UI can show.
+    Returns ``(reply, profile)``."""
+    profile = _get_active_ai_profile()
+    if profile is None:
+        raise HTTPException(status_code=400, detail="Nessun profilo AI configurato/attivo. "
+                            "Un amministratore deve crearne uno prima.")
+    provider = profile.get("provider", "")
+    api_key = (crypto_vault.decrypt_password(profile.get("api_key_enc", ""))
+               if profile.get("api_key_enc") else None)
+    if provider != "ollama" and not api_key:
+        raise HTTPException(status_code=400, detail="API key non configurata per il profilo AI attivo.")
+    try:
+        reply = ai_assistant.chat(
+            messages,
+            provider=provider,
+            model=profile.get("model") or None,
+            api_key=api_key,
+            base_url=profile.get("base_url") or None,
+            rate_limit_rpm=profile.get("rate_limit_rpm", 0),
+            allow_unredacted=bool(profile.get("allow_unredacted", False)),
+        )
+    except ai_assistant.RateLimitExceededError as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    except ai_assistant.AiAssistantError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return reply or "", profile
+
 def _device_inventory_summary(current_user) -> str:
     """Riepilogo testuale sintetico dell'inventario, scopato per sede utente."""
     scope = user_group_scope(current_user)

@@ -22,8 +22,8 @@ most of what this product holds is about equipment. Three categories are not.
 | Data | Where | Why it is there |
 |---|---|---|
 | MAC addresses | `mac_history.db` (`mac_sightings`, `arp_entries`) | The MAC is the only stable identifier of a device on L2, and the product exists to answer "where is this device plugged in" |
-| IP addresses (private and public) | `mac_history.db`, `observability.db` (`flow_aggregates`, `syslog_events`, `events`), `network_hosts.csv` | Inventory, flows, and the correlation between them |
-| Hostnames | `network_hosts.csv`, `detected_versions.json`, `observability.db` | Naming an endpoint by hostname is what makes a report readable |
+| IP addresses (private and public) | `mac_history.db`, `observability.db` (`flow_aggregates`, `syslog_events`, `events`), `network_hosts.csv`, `device_meta.db` (`assignments`, keyed by site and node) | Inventory, flows, and the correlation between them |
+| Hostnames | `network_hosts.csv`, `detected_versions.json`, `observability.db`, `device_meta.db` (names chosen by hand) | Naming an endpoint by hostname is what makes a report readable |
 | Switch port and VLAN of an endpoint | `mac_history.db` | The physical position of a device |
 
 A MAC or an IP is personal data whenever it can be tied to a person — a
