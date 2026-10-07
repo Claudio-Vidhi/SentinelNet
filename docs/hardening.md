@@ -265,7 +265,7 @@ nothing to bring the process back, "restart" would only mean "stop".
 
 ## 7. MCP tools: least privilege
 
-The MCP bridge exposes 46 tools to whatever model the operator points at it.
+The MCP bridge exposes 59 tools to whatever model the operator points at it.
 They all run **as the authenticated user**: `ai/mcp_server.py` calls the REST
 API with that user's token, so RBAC, tenant scoping and the redaction
 choke-point apply exactly as they do in the browser. An MCP client therefore
@@ -278,7 +278,7 @@ the risk this section is about. Decide per tool, not per bridge.
 
 | Tier | Tools | Why |
 |---|---|---|
-| **Read-only, safe to enable** | `list_devices`, `get_network_map`, `get_port_channels`, `locate_mac`, `search_mac`, `mac_to_ip`, `client_map`, `endpoint_inventory`, `analyze_config`, `get_triage_status`, `list_sites`, every `fortigate_*` and `wlc_*` read, `diagnose_client`, `policy_trace`, `policy_findings` | They read what the panel already shows to that user. The worst case is a model summarising data the user could open in two clicks |
+| **Read-only, safe to enable** | `list_devices`, `get_network_map`, `get_port_channels`, `locate_mac`, `search_mac`, `mac_to_ip`, `client_map`, `endpoint_inventory`, `analyze_config`, `get_triage_status`, `list_sites`, every `fortigate_*` and `wlc_*` read, `diagnose_client`, `policy_trace`, `policy_findings`, `list_incidents`, `get_incident`, `cve_priority`, `cve_for_device`, `search_vulnerabilities`, `drift_summary`, `drift_versions`, `drift_diff`, `interface_errors`, `interface_errors_port`, `get_routes`, `trace_route`, `get_device_classification` | They read what the panel already shows to that user. The worst case is a model summarising data the user could open in two clicks. The three `drift_*` tools need an operator account, like the drift tab; `get_routes` runs read-only `show` commands on the devices it is given |
 | **Touches devices — enable deliberately** | `send_cli_command`, `arp_scan`, `generate_fortigate_config`, `generate_switch_config` | `send_cli_command` opens an SSH session and runs a string: the CLI blacklist still applies (admins bypass it, audited — see §M-1 in the code), but a model chooses the command. `arp_scan` interrogates gateways. The two generators produce configuration that someone may paste without reading |
 | **Disabled by default** | `get_top_talkers`, `get_anomalies`, `linux_health` | `routers/mcp.py:_MCP_DEFAULT_DISABLED`. They stay off until an admin saves an explicit MCP setting: absent settings mean off, not "all on" |
 
