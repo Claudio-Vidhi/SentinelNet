@@ -483,12 +483,23 @@
         // col pulsante dedicato. Qui si svuota soltanto la lista locale, che
         // altrimenti mostrerebbe i modelli di un altro provider/profilo.
         resetAiModelList();
+        syncAiProviderUi();
         renderAiProfileCards();   // sposta l'evidenziazione sulla card in modifica
     }
 
     // Svuota la select dei modelli (nessuna chiamata di rete). Usata quando
     // cambia provider o profilo in modifica: i modelli elencati devono sempre
     // appartenere al provider correntemente selezionato.
+    // Le tessere provider e i campi che dipendono dal provider (API key,
+    // endpoint) seguono il valore di #aiProvider, scritto anche via codice.
+    function syncAiProviderUi() {
+        const v = document.getElementById('aiProvider').value;
+        const form = document.getElementById('aiProfileForm');
+        if (form) form.dataset.provider = v;
+        document.querySelectorAll('#aiProfileForm .ai-provider-tile').forEach(t =>
+            t.setAttribute('aria-checked', String(t.dataset.provider === v)));
+    }
+
     function resetAiModelList() {
         const sel = document.getElementById('aiModelSelect');
         if (sel) sel.innerHTML = `<option value="" data-i18n="optAiModelCustom">${tr('optAiModelCustom') || '-- modello personalizzato --'}</option>`;
@@ -727,13 +738,10 @@
         if (!box) return null;
         const div = document.createElement('div');
         const isUser = role === 'user';
-        div.style.marginBottom = '12px';
-        div.style.display = 'flex';
-        div.style.flexDirection = 'column';
-        div.style.alignItems = isUser ? 'flex-end' : 'flex-start';
+        div.className = 'ai-msg' + (isUser ? ' ai-msg-user' : '');
         const label = isUser ? (tr('lblAiChatYou') || 'Tu') : (meta || (tr('lblAiChatAssistant') || 'AI'));
-        div.innerHTML = `<div style="font-size:11px; color:var(--text-muted); margin-bottom:3px;">${escapeHtml(label)}</div>
-            <div style="white-space:pre-wrap; max-width:85%; background:${isUser ? 'var(--primary)' : 'var(--surface-3)'}; color:${isUser ? 'var(--on-lamp)' : 'inherit'}; border-radius:0; ${isUser ? 'border-bottom-right-radius:2px;' : 'border-bottom-left-radius:2px;'} padding:8px 12px; font-size:13px;">${escapeHtml(text)}</div>`;
+        div.innerHTML = `<div class="ai-msg-meta">${escapeHtml(label)}</div>
+            <div class="ai-msg-body">${escapeHtml(text)}</div>`;
         box.appendChild(div);
         box.scrollTop = box.scrollHeight;
         return div;
@@ -843,7 +851,7 @@
 
     document.getElementById('aiProfileSelect')?.addEventListener('change', onAiProfileSelectChange);
     document.getElementById('aiProfileEditSelect')?.addEventListener('change', onAiProfileEditSelectChange);
-    document.getElementById('aiProvider')?.addEventListener('change', resetAiModelList);
+    document.getElementById('aiProvider')?.addEventListener('change', () => { resetAiModelList(); syncAiProviderUi(); });
     document.getElementById('btnAiRefreshModels')?.addEventListener('click', refreshAiModels);
     document.getElementById('btnAiSaveSettings')?.addEventListener('click', saveAiSettings);
     document.getElementById('btnAiDeleteProfile')?.addEventListener('click', deleteAiProfile);
@@ -868,6 +876,20 @@
         }
         if (e.target.closest('[data-action="ai-deselect-all-devices"]')) {
             setAllAiAttachDevices(false);
+            return;
+        }
+        const tile = e.target.closest('[data-action="ai-pick-provider"]');
+        if (tile) {
+            const sel = document.getElementById('aiProvider');
+            sel.value = tile.dataset.provider;
+            sel.dispatchEvent(new Event('change'));
+            return;
+        }
+        const suggest = e.target.closest('[data-action="ai-suggest"]');
+        if (suggest) {
+            const input = document.getElementById('aiChatInput');
+            input.value = suggest.textContent.trim();
+            input.focus();
             return;
         }
         const newProf = e.target.closest('[data-action="select-profile"][data-profile-id="__new__"]');

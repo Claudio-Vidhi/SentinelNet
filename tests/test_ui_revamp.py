@@ -1033,8 +1033,9 @@ class TestAiAssistantTabRestyle(unittest.TestCase):
         tab_start = html.index('<div id="tab-ai"')
         tab_end = html.index('<!-- TAB: Switch da Zero (Provisioner) -->')
         tab_html = html[tab_start:tab_end]
-        for cls in ('class="hero"', 'class="hero-card"',
-                    'class="filterbar', 'class="panel'):
+        # Header come le altre schede (page-head); il contesto allegato vive
+        # nella barra del composer, non piu' in una filterbar separata.
+        for cls in ('class="page-head"', 'class="ai-composer-bar"', 'class="panel'):
             self.assertIn(cls, tab_html)
         # due panel card in #tab-ai: profili e chat (il generatore di config
         # e' stato spostato nella scheda Provisioner)

@@ -71,6 +71,16 @@ class TestNetSecAuditScan(unittest.TestCase):
         self.assertEqual(res["summary"]["passed"], 0)
         self.assertEqual(res["summary"]["unknown"], res["summary"]["total"])
 
+    def test_benchmark_catalog_lists_title_group_rules(self):
+        """La tendina dei benchmark si popola da qui: titolo e gruppo per voce."""
+        r = self._client().get("/api/netsec-audit/benchmarks")
+        self.assertEqual(r.status_code, 200, r.text)
+        data = r.json()
+        self.assertEqual(data["cis-ios"]["group"], "cis")
+        self.assertEqual(data["nist"]["group"], "framework")
+        self.assertTrue(data["cis-ubuntu"]["title"])
+        self.assertTrue(data["cis-fortigate"]["rules"])
+
     def test_scan_without_config_or_device_is_rejected(self):
         c = self._client()
         r = c.post("/api/netsec-audit/scan", headers=CSRF,
@@ -149,17 +159,44 @@ class TestAuditEngineResults(unittest.TestCase):
                 self.assertEqual(r["evidence"], [])
 
     def test_all_benchmarks_run(self):
-        for bench in ("cis", "nist", "pci"):
+        for bench in ("cis-fortigate", "nist", "pci"):
             res = netsec_audit.run_netsec_audit(
                 config_text=self._cfg("fortigate_violations.conf"),
                 benchmark=bench)
             self.assertEqual(res["benchmark"], bench)
             self.assertTrue(res["rules"])
+            self.assertIsNone(res["suggested_benchmark"])
 
     def test_unknown_benchmark_falls_back_to_cis(self):
         res = netsec_audit.run_netsec_audit(
             config_text=self._cfg("fortigate_clean.conf"), benchmark="nope")
-        self.assertEqual(res["benchmark"], "cis")
+        self.assertEqual(res["benchmark"], "cis-fortigate")
+
+    def test_cis_resolves_to_the_platform_benchmark(self):
+        """"cis" non e' un benchmark: sceglie quello CIS della piattaforma."""
+        for fixture, key in (("fortigate_violations.conf", "cis-fortigate"),
+                             ("ios_violations.conf", "cis-ios"),
+                             ("linux_violations.conf", "cis-ubuntu")):
+            res = netsec_audit.run_netsec_audit(
+                config_text=self._cfg(fixture), benchmark="cis")
+            self.assertEqual(res["benchmark"], key, fixture)
+            self.assertEqual(res["benchmark_title"], netsec_audit.BENCHMARK_TITLES[key])
+            self.assertTrue(res["rules"], fixture)
+
+    def test_wrong_platform_benchmark_suggests_the_right_one(self):
+        """CIS FortiGate su una config Cisco: nessuna regola, e il motore dice
+        quale benchmark si applica invece di restituire una matrice vuota muta."""
+        res = netsec_audit.run_netsec_audit(
+            config_text=self._cfg("ios_violations.conf"), benchmark="cis-fortigate")
+        self.assertEqual(res["rules"], [])
+        self.assertEqual(res["suggested_benchmark"], "cis-ios")
+
+    def test_each_cis_benchmark_covers_one_platform(self):
+        from services.netsec_audit import benchmarks
+        cis = [k for k, g in benchmarks.BENCHMARK_GROUPS.items() if g == "cis"]
+        self.assertEqual(sorted(cis), ["cis-fortigate", "cis-ios", "cis-ubuntu"])
+        for key in cis:
+            self.assertEqual(len(benchmarks.vendors_of(key)), 1, key)
 
     def test_summary_keys_present(self):
         res = netsec_audit.run_netsec_audit(

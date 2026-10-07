@@ -25,7 +25,8 @@ sta lavorando — per questo ``lang`` e' un parametro, non una preferenza global
 
 from typing import Any, Dict, List, Optional
 
-from .benchmarks import BENCHMARK_TITLES, BENCHMARKS, FORTIOS, IOS, LINUX
+from .benchmarks import (BENCHMARK_GROUPS, BENCHMARK_TITLES, BENCHMARKS, FORTIOS,
+                         IOS, LINUX, cis_for)
 from .guidance import guidance_for
 from .ios_parser import parse_ios
 from .linux_parser import parse_linux
@@ -34,8 +35,10 @@ from .model import UNKNOWN, RuleOutcome, score_rules
 from .parser import parse_with_lines
 
 __all__ = ["run_netsec_audit", "detect_vendor", "BENCHMARKS",
-           "BENCHMARK_TITLES", "FORTIOS", "IOS", "LINUX", "LANGS"]
+           "BENCHMARK_TITLES", "BENCHMARK_GROUPS", "FORTIOS", "IOS", "LINUX", "LANGS"]
 
+# "cis" is not a benchmark of its own: it picks the per-product CIS benchmark
+# of the platform found in the configuration (see ``run_netsec_audit``).
 _DEFAULT_BENCHMARK = "cis"
 
 # Marcatori cercati riga per riga. Sono strutturali (parole chiave della
@@ -97,12 +100,12 @@ def run_netsec_audit(config_text: Optional[str] = None,
                      benchmark: str = _DEFAULT_BENCHMARK,
                      lang: str = DEFAULT_LANG) -> Dict[str, Any]:
     """Valuta ``config_text`` contro il benchmark richiesto, nella lingua data."""
-    key = (benchmark or _DEFAULT_BENCHMARK).lower().strip()
-    if key not in BENCHMARKS:
-        key = _DEFAULT_BENCHMARK
     code = normalize_lang(lang)
 
     vendor = detect_vendor(config_text)
+    key = (benchmark or _DEFAULT_BENCHMARK).lower().strip()
+    if key not in BENCHMARKS:
+        key = cis_for(vendor)
     # Vendor non riconosciuto: si tenta comunque FortiOS, che e' la piattaforma
     # storica di questo motore, ma il payload lo dichiara e la UI puo' dirlo.
     if vendor == IOS:
@@ -151,11 +154,16 @@ def run_netsec_audit(config_text: Optional[str] = None,
         })
 
     score, summary = score_rules(evaluated)
+    # A benchmark with no rule for this platform (CIS FortiGate on a Cisco
+    # config, NIST on a Linux host) yields an empty matrix that looks like
+    # "nothing to report". Name the benchmark that does apply instead.
+    suggested = cis_for(vendor) if (vendor and not applicable) else None
     return {
         "benchmark": key,
         "benchmark_title": BENCHMARK_TITLES.get(key, key.upper()),
         "lang": code,
         "vendor": vendor,
+        "suggested_benchmark": suggested,
         "score": score,
         "summary": summary,
         "rules": evaluated,

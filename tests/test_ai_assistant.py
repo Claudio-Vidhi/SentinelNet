@@ -5,6 +5,7 @@
 chiamate HTTP (requests.post) mockate: nessuna rete reale coinvolta."""
 
 import unittest
+import requests
 from unittest.mock import patch, MagicMock
 
 from ai import ai_assistant
@@ -58,10 +59,22 @@ class TestAiAssistantDispatch(unittest.TestCase):
         reply = ai_assistant.chat(self._messages(), provider="gemini",
                                    model="gemini-3-flash", api_key="AIza-x")
         self.assertEqual(reply, "Ciao Gemini")
-        args, _kwargs = mock_post.call_args
+        args, kwargs = mock_post.call_args
         self.assertIn("generativelanguage.googleapis.com", args[0])
-        self.assertIn("AIza-x", args[0])
+        # La chiave viaggia nell'header: nell'URL finirebbe nei messaggi di
+        # errore di requests, quindi in UI e nei log.
+        self.assertNotIn("AIza-x", args[0])
+        self.assertEqual(kwargs["headers"]["x-goog-api-key"], "AIza-x")
         self.assertIn("/models/gemini-3-flash:generateContent", args[0])
+
+    @patch("ai.ai_assistant.requests.post")
+    def test_timeout_message_is_readable(self, mock_post):
+        mock_post.side_effect = requests.ReadTimeout("HTTPSConnectionPool(...): Read timed out.")
+        with self.assertRaises(ai_assistant.AiAssistantError) as ctx:
+            ai_assistant.chat(self._messages(), provider="gemini", api_key="AIza-x")
+        msg = str(ctx.exception)
+        self.assertIn("non ha risposto entro 180 s", msg)
+        self.assertNotIn("HTTPSConnectionPool", msg)
 
     @patch("ai.ai_assistant.requests.post")
     def test_gemini_default_model(self, mock_post):
@@ -70,7 +83,7 @@ class TestAiAssistantDispatch(unittest.TestCase):
         )
         ai_assistant.chat(self._messages(), provider="gemini", api_key="AIza-x")
         args, _kwargs = mock_post.call_args
-        self.assertIn("/models/gemini-3-flash:generateContent", args[0])
+        self.assertIn("/models/gemini-3.5-flash-lite:generateContent", args[0])
 
     @patch("ai.ai_assistant.requests.post")
     def test_gemini_model_strips_models_prefix(self, mock_post):
@@ -89,8 +102,8 @@ class TestAiAssistantDispatch(unittest.TestCase):
     def test_normalize_gemini_model_helper(self):
         self.assertEqual(ai_assistant._normalize_gemini_model("models/gemini-3-flash"), "gemini-3-flash")
         self.assertEqual(ai_assistant._normalize_gemini_model("gemini-2.5-pro"), "gemini-2.5-pro")
-        self.assertEqual(ai_assistant._normalize_gemini_model(None), "gemini-3-flash")
-        self.assertEqual(ai_assistant._normalize_gemini_model(""), "gemini-3-flash")
+        self.assertEqual(ai_assistant._normalize_gemini_model(None), "gemini-3.5-flash-lite")
+        self.assertEqual(ai_assistant._normalize_gemini_model(""), "gemini-3.5-flash-lite")
 
     @patch("ai.ai_assistant.requests.get")
     def test_list_models_gemini(self, mock_get):
@@ -105,6 +118,7 @@ class TestAiAssistantDispatch(unittest.TestCase):
         self.assertEqual(models, ["gemini-3-flash", "gemini-2.5-pro"])
         args, _kwargs = mock_get.call_args
         self.assertIn("generativelanguage.googleapis.com/v1beta/models", args[0])
+        self.assertNotIn("AIza-x", args[0])
 
     def test_list_models_unsupported_provider(self):
         with self.assertRaises(ai_assistant.AiAssistantError):
@@ -157,7 +171,7 @@ class TestAiAssistantDispatch(unittest.TestCase):
     def test_default_models_per_provider(self):
         self.assertEqual(ai_assistant.get_default_model("anthropic"), "claude-3-5-sonnet-latest")
         self.assertEqual(ai_assistant.get_default_model("openai"), "gpt-4o-mini")
-        self.assertEqual(ai_assistant.get_default_model("gemini"), "gemini-3-flash")
+        self.assertEqual(ai_assistant.get_default_model("gemini"), "gemini-3.5-flash-lite")
         self.assertEqual(ai_assistant.get_default_model("ollama"), "llama3")
         self.assertEqual(ai_assistant.get_default_model("nope"), "")
 
