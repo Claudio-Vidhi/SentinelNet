@@ -542,6 +542,112 @@ TOOLS = {
         _obj({"ip": {**_S, "description": "Device IP"}}, ["ip"]),
         lambda a: api("GET", f"/api/policy-test/{a['ip']}/findings"),
     ),
+    # --- "What is wrong and why": incidents, CVE, drift, port errors, routing,
+    # classification. Read-only bridges to existing routes.
+    "list_incidents": (
+        "List correlated incidents (grouped evidence: syslog, flows, port "
+        "state) for a time window. Read-only, tenant-scoped.",
+        _obj({"status": {**_S, "description": "'new' (default), 'ack', 'resolved', 'all'"},
+              "window": {**_S, "description": "Time window, e.g. 24h (default), 7d"},
+              "limit": {"type": "integer", "description": "Max incidents (default 50)"}}),
+        lambda a: api("GET", "/api/incidents", params={
+            "status": a.get("status", "new"), "window": a.get("window", "24h"),
+            "limit": int(a.get("limit", 50))}),
+    ),
+    "get_incident": (
+        "Full detail of one incident: timeline, evidence, affected entities.",
+        _obj({"incident_id": {"type": "integer"}}, ["incident_id"]),
+        lambda a: api("GET", f"/api/incidents/{int(a['incident_id'])}"),
+    ),
+    "cve_priority": (
+        "Devices ranked by vulnerability exposure (CVSS, known-exploited), "
+        "i.e. what to patch first. Read-only, tenant-scoped.",
+        _obj({"tenant": {**_S, "description": "Site/group filter (optional)"},
+              "limit": {"type": "integer", "description": "Max devices (default 200)"}}),
+        lambda a: api("GET", "/api/cve/priority", params={
+            "tenant": a.get("tenant", ""), "limit": int(a.get("limit", 200))}),
+    ),
+    "cve_for_device": (
+        "Known vulnerabilities matched to one device's vendor/model/version.",
+        _obj({"ip": {**_S, "description": "Device IP (must be in inventory)"}}, ["ip"]),
+        lambda a: api("GET", f"/api/cve/{a['ip']}"),
+    ),
+    "search_vulnerabilities": (
+        "Search public vulnerability databases (NVD/EUVD) by vendor, model, "
+        "free text or CVE id.",
+        _obj({"vendor": _S, "model": _S, "text": _S,
+              "cve": {**_S, "description": "CVE id, e.g. CVE-2024-0001"}}),
+        lambda a: api("GET", "/api/search", params={
+            k: a[k] for k in ("vendor", "model", "text", "cve") if a.get(k)}),
+    ),
+    "drift_summary": (
+        "Configuration drift per device: changed since last backup and "
+        "deviation from the tenant baseline. Requires an operator account.",
+        _obj({"tenant": {**_S, "description": "Site/group filter (optional)"}}),
+        lambda a: api("GET", "/api/drift/summary", params={"tenant": a.get("tenant", "")}),
+    ),
+    "drift_versions": (
+        "List the archived configuration versions of a device (for drift_diff). "
+        "Requires an operator account.",
+        _obj({"ip": _S}, ["ip"]),
+        lambda a: api("GET", f"/api/drift/{a['ip']}/versions"),
+    ),
+    "drift_diff": (
+        "Unified, redacted diff between two archived configuration versions "
+        "of a device. Requires an operator account.",
+        _obj({"ip": _S,
+              "from_version": {**_S, "description": "'seen_at' of the older version, from drift_versions"},
+              "to_version": {**_S, "description": "'seen_at' of the newer version, from drift_versions"}},
+             ["ip", "from_version", "to_version"]),
+        lambda a: api("GET", f"/api/drift/{a['ip']}/diff", params={
+            "from_version": a["from_version"], "to_version": a["to_version"]}),
+    ),
+    "interface_errors": (
+        "Ports with interface errors (CRC, input/output errors, drops) over a "
+        "time window, worst first. Read-only, tenant-scoped.",
+        _obj({"window": {**_S, "description": "e.g. 1h (default), 24h"},
+              "device": {**_S, "description": "Limit to one device IP (optional)"},
+              "tenant": {**_S, "description": "Tenant of that device when its IP is ambiguous"}}),
+        lambda a: api("GET", "/api/interface-errors", params={
+            k: a[k] for k in ("window", "device", "tenant") if a.get(k)}),
+    ),
+    "interface_errors_port": (
+        "Error counters and their trend for one port of one device.",
+        _obj({"device": {**_S, "description": "Device IP"},
+              "port": {**_S, "description": "Interface name, e.g. Gi1/0/1"},
+              "window": {**_S, "description": "e.g. 24h (default)"},
+              "tenant": _S},
+             ["device", "port"]),
+        lambda a: api("GET", "/api/interface-errors/port", params={
+            k: a[k] for k in ("device", "port", "window", "tenant") if a.get(k)}),
+    ),
+    "get_routes": (
+        "Routing tables read live (read-only show commands) from the given "
+        "devices, optionally filtered by route type or text.",
+        _obj({"devices": {**_S, "description": "Comma-separated device IPs"},
+              "type": {**_S, "description": "Route type filter, e.g. static, ospf, bgp (optional)"},
+              "q": {**_S, "description": "Text/prefix filter (optional)"}},
+             ["devices"]),
+        lambda a: api("GET", "/api/routes", params={
+            "device": a["devices"], "type": a.get("type", ""), "q": a.get("q", "")}),
+    ),
+    "trace_route": (
+        "Hop-by-hop path to a destination computed from the routing tables of "
+        "the given devices, starting at device 'src'. No packet is sent.",
+        _obj({"devices": {**_S, "description": "Comma-separated device IPs to consider (must include src)"},
+              "src": {**_S, "description": "Starting device IP"},
+              "dst": {**_S, "description": "Destination IP"}},
+             ["devices", "src", "dst"]),
+        lambda a: api("GET", "/api/routes/trace", params={
+            "device": a["devices"], "src": a["src"], "dst": a["dst"]}),
+    ),
+    "get_device_classification": (
+        "Inventoried and CDP/LLDP-discovered devices with category, "
+        "subcategory, vendor, model, HA group and whether the classification "
+        "is manual or inferred; plus the category list and counts.",
+        _obj(),
+        lambda a: api("GET", "/api/device-classification"),
+    ),
 }
 
 
