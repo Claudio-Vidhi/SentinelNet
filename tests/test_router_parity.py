@@ -242,7 +242,7 @@ class TestFullParity(unittest.TestCase):
     # NEW_PREFIXES filtra entrambi i lati del confronto, quindi copre anche
     # i percorsi RIMOSSI: /api/settings/fortigate-preview era il flag della
     # tab FortiGate in anteprima, sparito quando la tab è diventata normale.
-    NEW_PREFIXES = ("/api/redundancy", "/api/agent/syslog", "/api/observability/protocol-distribution", "/api/sites/{site_id}/agent", "/api/sites/test-bastion", "/api/reassign-device-site", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/settings/fortigate-preview", "/api/flow-siem", "/api/wlc/{ip}/diagnose-client", "/api/ws-token", "/api/wlc/{ip}/wlan-summary", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/observability/events", "/api/ai/conversations", "/api/diagnose", "/api/agent/arp",
+    NEW_PREFIXES = ("/api/mcp/authorize", "/api/mcp/token", "/api/mcp/session", "/api/mcp/grants", "/api/mcp/my-grants", "/api/redundancy", "/api/agent/syslog", "/api/observability/protocol-distribution", "/api/sites/{site_id}/agent", "/api/sites/test-bastion", "/api/reassign-device-site", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/settings/fortigate-preview", "/api/flow-siem", "/api/wlc/{ip}/diagnose-client", "/api/ws-token", "/api/wlc/{ip}/wlan-summary", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/observability/events", "/api/ai/conversations", "/api/diagnose", "/api/agent/arp",
                     "/api/routes", "/api/firewall-traffic",
                     "/api/observability/hosts",
                     "/api/observability/host-series",
@@ -367,6 +367,8 @@ class TestFullParity(unittest.TestCase):
                     "ForgotPasswordSchema", "ResetPasswordSchema", "UserEmailSchema",
                     # Corpi degli inviti utente (rotte gia' in NEW_PREFIXES).
                     "InviteUserSchema", "AcceptInviteSchema",
+                    # MCP bridge browser sign-in (routes already in NEW_PREFIXES).
+                    "McpAuthorizeSchema", "McpTokenSchema", "McpSessionSchema", "McpRevokeSchema",
                     # Account lifecycle (routes already in NEW_PREFIXES).
                     "UserNameSchema", "ProfileEmailSchema", "VerifyEmailSchema",
                     # Configurazione SSO (rotta gia' in NEW_PREFIXES).

@@ -34,6 +34,15 @@ for _stream in (sys.stdout, sys.stderr):
     except (OSError, ValueError):
         pass
 
+# The MCP bridge only speaks HTTP to a running server: it needs neither the
+# data directory nor the app. Dispatch it before the writability check below,
+# which otherwise kills `SentinelNet.exe --mcp` for every non-admin user once
+# the Windows service owns C:\ProgramData\SentinelNet.
+if "--mcp" in sys.argv:
+    from ai import mcp_server
+    mcp_server.main()
+    sys.exit(0)
+
 from core import data_config
 
 # With the Windows service installed the data directory belongs to SYSTEM and
@@ -361,6 +370,13 @@ def read_index():
     return FileResponse(get_resource_path(os.path.join("templates", "dashboard.html")))
 
 
+# MCP bridge consent page (security/mcp_grants.py): a page of its own, not a
+# dashboard tab, so the client being authorized is all the operator sees.
+@app.get("/mcp/authorize", include_in_schema=False)
+def read_mcp_authorize():
+    return FileResponse(get_resource_path(os.path.join("templates", "mcp_authorize.html")))
+
+
 # Each tab has its own address (/devices, /settings, ...): a reload or a shared
 # link reopens that tab. Only real tab names are served; the rest stays a 404.
 # Registered after every router, so it never shadows an API or docs path.
@@ -530,11 +546,6 @@ def main():
     parser.add_argument("--user", help="Account da reimpostare con --reset-admin "
                                        "(default: primo amministratore)")
     args, _ = parser.parse_known_args()
-
-    if args.mcp:
-        from ai import mcp_server
-        mcp_server.main()
-        return
 
     if args.reset_admin:
         sys.exit(reset_admin_cli(args.user))

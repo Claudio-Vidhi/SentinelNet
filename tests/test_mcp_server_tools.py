@@ -91,7 +91,9 @@ class TestDisabledToolsFailClosed(unittest.TestCase):
         self.assertTrue(mcp_server._disabled["synced"])
 
     def test_tool_list_is_empty_when_fail_closed(self):
-        with patch("ai.mcp_server.api", side_effect=RuntimeError("centrale irraggiungibile")):
+        # Signed in (else the bridge lists only its login tool), server down.
+        with patch("ai.mcp_server.api", side_effect=RuntimeError("centrale irraggiungibile")), \
+             patch.object(mcp_server, "PASSWORD", "x"):
             listing = mcp_server._tool_list()
         self.assertEqual(listing["tools"], [])
 

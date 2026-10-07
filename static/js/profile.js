@@ -48,7 +48,32 @@ async function openProfile() {
     clearProfileFields(['profCurPass', 'profNewPass', 'profConfirmPass', 'profNewEmail', 'profEmailPass']);
     const msg = document.getElementById('profileMsg');
     if (msg) msg.style.display = 'none';
+    loadProfileMcpGrants();
     openModal('profileModal');
+}
+
+async function loadProfileMcpGrants() {
+    const box = document.getElementById('profMcpList');
+    if (!box) return;
+    const res = await apiFetch('/api/mcp/my-grants');
+    if (!res || !res.ok) return;
+    const grants = (await res.json()).grants || [];
+    const when = (ts) => ts ? new Date(ts * 1000).toLocaleString() : tr('mcpGrantNever');
+    box.innerHTML = grants.length ? grants.map(g => `
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12.5px; padding:8px 10px; border:1px solid var(--border); background:var(--surface);">
+          <span>${escapeHtml(g.label || '')} · ${escapeHtml(tr(g.read_only ? 'mcpGrantReadOnly' : 'mcpGrantFullRole'))}
+            <span style="display:block; color:var(--text-muted); font-size:11px;">${escapeHtml(tr('mcpGrantLastUsed'))} ${escapeHtml(when(g.last_used))}</span>
+          </span>
+          <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-action="revoke-my-mcp-grant" data-id="${escapeHtml(g.id)}">${escapeHtml(tr('mcpGrantRevoke'))}</button>
+        </div>`).join('')
+        : `<span style="color:var(--text-muted); font-size:12px;">${escapeHtml(tr('profMcpNone'))}</span>`;
+}
+
+async function revokeProfileMcpGrant(id) {
+    if (!confirm(tr('mcpGrantRevokeConfirm'))) return;
+    const res = await apiFetch('/api/mcp/my-grants/revoke', { method: 'POST', body: JSON.stringify({ id }) });
+    if (!res || !res.ok) profileMsg(tr('mcpGrantRevokeFailed'), false);
+    loadProfileMcpGrants();
 }
 
 async function profileChangePassword() {
@@ -103,3 +128,7 @@ document.getElementById('btnCloseProfile')?.addEventListener('click', () => clos
 document.getElementById('btnProfChangePw')?.addEventListener('click', profileChangePassword);
 document.getElementById('btnProfEmail')?.addEventListener('click', profileChangeEmail);
 document.getElementById('btnProfLogoutAll')?.addEventListener('click', profileLogoutAll);
+document.getElementById('profMcpList')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action="revoke-my-mcp-grant"]');
+    if (btn) revokeProfileMcpGrant(btn.dataset.id);
+});

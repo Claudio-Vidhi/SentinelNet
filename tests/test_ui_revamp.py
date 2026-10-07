@@ -1582,10 +1582,11 @@ class TestMcpTabRestyle(unittest.TestCase):
         tab = self._tab(html)
         for cls in ('class="page-head"', 'class="panel"'):
             self.assertIn(cls, tab)
-        # client-config panel + tool-list panel. La Checklist Audit Firewall,
-        # Fortigate Management e MCP Client non sono piu' in preview: i loro
-        # toggle sono stati rimossi (l'ultima insieme alla tab stessa).
-        self.assertEqual(tab.count('class="panel"'), 2)
+        # client-config panel + tool-list panel + authorized-clients panel.
+        # La Checklist Audit Firewall, Fortigate Management e MCP Client non
+        # sono piu' in preview: i loro toggle sono stati rimossi (l'ultima
+        # insieme alla tab stessa).
+        self.assertEqual(tab.count('class="panel"'), 3)
 
     def test_status_chip_classes_present_in_render_fn(self):
         # loadMcpTab() moved to static/js/settings.js.

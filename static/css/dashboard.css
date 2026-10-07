@@ -4101,10 +4101,247 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
 /* Integrations: client snippet beside the tool switches. */
 .mcp-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 16px; align-items: start; }
 .mcp-layout > .panel { margin: 0; }
+#panelMcpGrants { grid-column: 1 / -1; }
 .mcp-layout .panel-head { margin-bottom: 14px; }
 .code-block { margin: 0; padding: 12px; background-color: var(--surface-2); border: var(--seam) solid var(--border); font-family: var(--font-code); font-size: 12px; overflow-x: auto; white-space: pre; }
 .mcp-tool-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; margin-bottom: 14px; }
-@media (max-width: 1200px) { .mcp-layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 1200px) {
+  .mcp-layout { grid-template-columns: minmax(0, 1fr); }
+  #panelMcpGrants { grid-column: auto; }
+}
+
+/* MCP Client Selection Tabs */
+.mcp-client-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.mcp-client-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.mcp-client-tab:hover {
+  color: var(--text);
+  border-color: var(--primary);
+}
+.mcp-client-tab.is-active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+/* Guide Banner */
+.mcp-guide-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+}
+.mcp-guide-icon {
+  color: var(--primary);
+  font-size: 14px;
+  margin-top: 2px;
+}
+.mcp-guide-body {
+  flex: 1;
+  min-width: 0;
+}
+.mcp-guide-path code {
+  font-family: var(--font-code);
+  font-size: 11.5px;
+  color: var(--text);
+  word-break: break-all;
+}
+.mcp-guide-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+/* Pre-warning card in tab-mcp */
+.mcp-prewarn-card {
+  margin: 12px 0;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+}
+.mcp-prewarn-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.mcp-prewarn-icon {
+  font-size: 16px;
+  color: var(--primary);
+  margin-top: 2px;
+}
+.mcp-prewarn-header strong {
+  display: block;
+  font-size: 12.5px;
+  margin-bottom: 2px;
+  color: var(--text);
+}
+.mcp-prewarn-header p {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin: 0;
+}
+.mcp-prewarn-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+.mcp-prewarn-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.mcp-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+/* Tools Toolbar (Presets & Filter) */
+.mcp-tools-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.mcp-presets-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.mcp-filter-box {
+  flex: 1;
+  min-width: 180px;
+  max-width: 260px;
+}
+.mcp-filter-box .head-search {
+  width: 100%;
+  height: 28px;
+  font-size: 12px;
+  padding: 0 8px;
+}
+
+/* Tool Category Headings */
+.mcp-tool-category-head {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px dashed var(--border);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.mcp-tool-category-head:first-child {
+  margin-top: 0;
+}
+
+/* Grants Table & Empty State */
+.mcp-grants-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.mcp-grants-table th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 10px;
+  background: var(--surface-2);
+}
+.mcp-grants-table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  vertical-align: middle;
+}
+.mcp-grant-client {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mcp-client-icon {
+  font-size: 16px;
+  color: var(--primary);
+  width: 20px;
+  text-align: center;
+}
+.btn-danger-hover:hover {
+  background: var(--danger) !important;
+  color: #fff !important;
+  border-color: var(--danger) !important;
+}
+.mcp-empty-state {
+  text-align: center;
+  padding: 32px 16px;
+  border: 1px dashed var(--border);
+  background: var(--surface);
+}
+.mcp-empty-icon {
+  font-size: 28px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  opacity: 0.7;
+}
+.mcp-empty-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.mcp-empty-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 460px;
+  margin: 0 auto;
+}
 
 /* ==== Tools, Inventory and Change tabs ==== */
 /* A select living in a page header sits on the same line as its buttons. */
@@ -4365,3 +4602,163 @@ details[open] > summary .mac-caret { transform: rotate(180deg); }
 }
 #tab-netsec-audit .nsa-resolved { margin: 6px 0 0; font-size: 11.5px; color: var(--text-soft); }
 #tab-netsec-audit .nsa-resolved:empty { display: none; }
+
+/* ---------------------------------------------------------------
+   MCP CONSENT — templates/mcp_authorize.html
+   A page of its own: the client being authorized is all there is to see.
+   Same drawing as the dashboard: the client and SentinelNet are two nodes
+   on one bus, and the lamp on the bus is the state of the link (idle while
+   asking, warn when the grant would allow commands, up once connected).
+   --------------------------------------------------------------- */
+.consent-page {
+  min-height: 100vh;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 39px, var(--engrave-lo) 39px 40px),
+    repeating-linear-gradient(90deg, transparent 0 39px, var(--engrave-lo) 39px 40px),
+    var(--bg);
+  color: var(--text);
+  display: flex; justify-content: center; align-items: flex-start;
+  padding: 56px 16px 32px;
+}
+.consent { width: 460px; max-width: 100%; }
+.consent [hidden] { display: none !important; }
+
+.consent-line { display: flex; align-items: center; justify-content: center; margin-bottom: 18px; }
+.consent-node {
+  width: 56px; height: 56px; flex: none;
+  display: grid; place-items: center;
+  background: var(--surface); color: var(--text);
+  border: var(--seam) solid var(--border-strong);
+  font-size: 22px;
+}
+.consent-bus {
+  position: relative; width: 96px; height: 2px;
+  background: var(--border-strong);
+}
+.consent-lamp {
+  position: absolute; left: 50%; top: 50%;
+  width: 14px; height: 14px; transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  background: var(--lamp-idle);
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+.consent-lamp[data-state="up"] { background: var(--lamp-up); }
+.consent-lamp[data-state="warn"] { background: var(--lamp-warn); }
+.consent-lamp[data-state="fault"] { background: var(--lamp-fault); }
+
+.consent-title {
+  font-family: var(--font-legend); font-weight: 600;
+  font-size: 22px; letter-spacing: 0.04em; text-align: center;
+  margin-bottom: 18px; overflow-wrap: anywhere;
+}
+.consent-stepper-wrap { text-align: center; margin-bottom: 12px; }
+.consent-guided-alert {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.consent-card {
+  background-color: var(--surface);
+  background-image: var(--plate-grain); background-size: 140px 140px;
+  border: var(--seam) solid var(--border-strong);
+  box-shadow: var(--shadow-float);
+  padding: 22px 24px;
+  animation: plateDrop 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.consent-muted { color: var(--text-muted); font-size: 13px; line-height: 1.55; }
+.consent-mono { font-family: var(--font-data); font-weight: 600; }
+.consent-card .form-group { margin-bottom: 14px; }
+.consent-card form { margin-top: 14px; }
+
+.consent-account {
+  display: flex; gap: 12px; align-items: flex-start;
+  font-size: 13px; line-height: 1.6;
+  padding-bottom: 16px; border-bottom: var(--seam) solid var(--border);
+}
+.consent-account > i { font-size: 26px; color: var(--text-soft); margin-top: 2px; }
+.consent-role {
+  display: inline-block; margin-left: 4px; padding: 0 6px;
+  border: var(--seam) solid var(--border); color: var(--text-muted);
+  font-size: 11px;
+}
+.consent-link {
+  display: block; background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--cta); font-size: 12px; text-decoration: underline;
+}
+
+.consent-block { padding: 16px 0; border-bottom: var(--seam) solid var(--border); }
+.consent-legend {
+  font-family: var(--font-legend); font-weight: 600; text-transform: uppercase;
+  font-size: 12px; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 10px;
+}
+.consent-perms { list-style: none; display: grid; gap: 8px; }
+.consent-perms li { display: flex; gap: 10px; font-size: 13px; line-height: 1.45; }
+.consent-perms li i { width: 14px; margin-top: 3px; flex: none; }
+.consent-perms li[data-on="1"] i { color: var(--lamp-up-ink); }
+.consent-perms li[data-on="0"] { color: var(--text-soft); }
+.consent-ro {
+  display: flex; gap: 10px; align-items: flex-start; margin-top: 14px;
+  padding: 10px 12px; background: var(--surface-2);
+  border: var(--seam) solid var(--border);
+  font-size: 12.5px; line-height: 1.45; cursor: pointer;
+}
+.consent-ro input { margin-top: 2px; }
+.consent-warn {
+  margin-top: 10px; padding: 8px 12px; font-size: 12.5px; line-height: 1.45;
+  background: var(--lamp-warn-wash); color: var(--lamp-warn-ink);
+  border-left: 3px solid var(--lamp-warn);
+}
+
+.consent-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 14px 0; }
+.consent-facts dt {
+  font-family: var(--font-legend); text-transform: uppercase; letter-spacing: 0.1em;
+  font-size: 10.5px; color: var(--text-soft);
+}
+.consent-facts dd { font-family: var(--font-data); font-size: 12px; overflow-wrap: anywhere; }
+
+.consent-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.consent-redirect { margin-top: 10px; text-align: center; font-size: 11.5px; color: var(--text-soft); }
+.consent-redirect code { font-family: var(--font-data); color: var(--text-muted); }
+.consent-error {
+  margin-bottom: 12px; padding: 8px 12px; font-size: 12.5px;
+  background: var(--lamp-fault-wash); color: var(--lamp-fault-ink);
+  border-left: 3px solid var(--lamp-fault);
+}
+.consent-or {
+  display: flex; align-items: center; gap: 10px; margin: 14px 0 12px;
+  color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+}
+.consent-or::before, .consent-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.consent-sso { text-decoration: none; }
+
+.consent-result { text-align: center; }
+.consent-result h2 {
+  font-family: var(--font-legend); font-weight: 600; font-size: 19px;
+  letter-spacing: 0.04em; margin: 12px 0 6px;
+}
+.consent-result-icon {
+  display: inline-grid; place-items: center; width: 44px; height: 44px;
+  border-radius: 50%; font-size: 20px;
+  background: var(--lamp-idle-wash); color: var(--lamp-idle-ink);
+}
+.consent-result-icon[data-kind="done"] { background: var(--lamp-up-wash); color: var(--lamp-up-ink); }
+.consent-result-icon[data-kind="failed"] { background: var(--lamp-fault-wash); color: var(--lamp-fault-ink); }
+
+.consent-foot { margin-top: 16px; text-align: center; font-size: 11.5px; color: var(--text-soft); line-height: 1.5; }
+
+@media (max-width: 480px) {
+  .consent-page { padding-top: 28px; }
+  .consent-card { padding: 18px 16px; }
+  .consent-facts { grid-template-columns: 1fr 1fr; }
+  .consent-bus { width: 56px; }
+}
+
+/* Integrazioni → "Collega un client AI": the three steps before the snippet. */
+.mcp-steps { margin: 0 0 12px 18px; display: grid; gap: 6px; font-size: 12.5px; line-height: 1.5; color: var(--text); }
+.mcp-steps li::marker { font-family: var(--font-data); color: var(--text-soft); }

@@ -130,6 +130,10 @@ def renew_session_cookie(request: Request, response: Response) -> None:
         payload = get_current_user(request, None)
     except HTTPException:
         return
+    # A read-only MCP token is never a browser session: renewing it would mint
+    # a cookie without the "ro" claim, i.e. with the user's full role.
+    if payload.get("ro"):
+        return
     cfg = session_settings()
     idle_s = cfg["idle_minutes"] * 60
     now = time.time()
@@ -818,8 +822,18 @@ def sso_public_config():
     return {"enabled": True, "provider_name": cfg["provider_name"]}
 
 
+# Where SSO lands after the IdP. Only the MCP consent page may ask to be
+# returned to: any other value would make the login an open redirect.
+SSO_NEXT_COOKIE = "sn_sso_next"
+_SSO_NEXT_PREFIX = "/mcp/authorize?"
+
+
+def _sso_next_ok(next_url: str) -> bool:
+    return next_url.startswith(_SSO_NEXT_PREFIX) and "\\" not in next_url
+
+
 @router.get("/api/auth/sso/login")
-def sso_login():
+def sso_login(next: str = ""):
     """Avvia il flusso authorization code + PKCE verso l'IdP."""
     from core.app_settings import BaseUrlError
     from fastapi.responses import RedirectResponse
@@ -832,7 +846,13 @@ def sso_login():
         auth_url = sso.start_login(cfg, _sso_redirect_uri())
     except (sso.SSOError, BaseUrlError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    return RedirectResponse(auth_url, status_code=302)
+    response = RedirectResponse(auth_url, status_code=302)
+    if _sso_next_ok(next):
+        # Lax, not strict: the IdP sends the browser back with a cross-site
+        # top-level GET, which strict cookies would not ride.
+        response.set_cookie(SSO_NEXT_COOKIE, next, max_age=600, httponly=True,
+                            samesite="lax", path="/api/auth/sso/callback")
+    return response
 
 
 def _sso_synced_role(existing_role: str, mapped_role: str, sync: bool) -> str:
@@ -910,6 +930,8 @@ def sso_callback(request: Request, code: str = "", state: str = "", error: str =
     access_token = _issue_token(username, role)
     clear_account_lockouts(username)
     log_audit(f"Utente '{username}' (ruolo: {role}) autenticato via SSO.")
-    response = RedirectResponse("/", status_code=302)
+    next_url = request.cookies.get(SSO_NEXT_COOKIE, "")
+    response = RedirectResponse(next_url if _sso_next_ok(next_url) else "/", status_code=302)
+    response.delete_cookie(SSO_NEXT_COOKIE, path="/api/auth/sso/callback")
     _set_session_cookie(request, response, access_token)
     return response

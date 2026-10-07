@@ -39,6 +39,12 @@ BASE_ROUTES: frozenset[tuple[str, str]] = frozenset({
     # Read by ai/mcp_server.py with the caller's own account: gating it by a
     # tab would disable every MCP tool for any user with a tab list.
     ("GET", "/api/mcp/tool-config"),
+    # Any signed-in user may approve a bridge for their own account.
+    ("POST", "/api/mcp/authorize"),
+    ("GET", "/api/mcp/authorize/info"),
+    # Own MCP clients, from the profile: no tab owns them.
+    ("GET", "/api/mcp/my-grants"),
+    ("POST", "/api/mcp/my-grants/revoke"),
 })
 
 # PUBLIC: reachable before a session exists (first run, login screen,
@@ -55,6 +61,10 @@ PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset({
     ("GET", "/api/auth/sso/config"),
     ("GET", "/api/auth/sso/login"),
     ("GET", "/api/auth/sso/callback"),
+    # MCP bridge sign-in: the one-time code + PKCE verifier, then the grant
+    # token, are the credentials (security/mcp_grants.py).
+    ("POST", "/api/mcp/token"),
+    ("POST", "/api/mcp/session"),
 })
 
 # MACHINE: site agents, authenticated by X-Site-Token.

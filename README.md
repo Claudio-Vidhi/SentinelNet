@@ -376,25 +376,115 @@ tracker and config analyzer, run CLI commands and generate day-0 configuration �
 with authorization (roles, tenants, command blacklist) always enforced
 server-side.
 
-Example Claude Desktop configuration (`claude_desktop_config.json`):
+The bridge runs on the client's machine and talks HTTP to a **running**
+SentinelNet server, so start SentinelNet first and point `SENTINELNET_URL` at
+the port it listens on. It works with any client that launches MCP servers
+over stdio: Claude Desktop, Claude Code, Cursor, VS Code, Cline, LM Studio,
+Continue, Windsurf and others.
+
+Claude Desktop reads `claude_desktop_config.json` (*Settings → Developer →
+Edit Config*; on Windows `%APPDATA%\Claude\`, or
+`%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\` for the Store
+build); other clients take the same `command`/`args`/`env` triple in their
+own MCP settings. The dashboard's **MCP Server** tab prints the right block
+for the install it runs from. Otherwise pick one:
+
+**Windows installer (`SentinelNet.exe`)** — the exe embeds the bridge behind
+`--mcp`, no Python needed:
 
 ```json
 {
   "mcpServers": {
     "sentinelnet": {
-      "command": "python",
-      "args": ["/path/to/SentinelNet/ai/mcp_server.py"],
-      "env": {
-        "SENTINELNET_URL": "http://127.0.0.1:8000",
-        "SENTINELNET_USERNAME": "admin",
-        "SENTINELNET_PASSWORD": "..."
-      }
+      "command": "C:\\Program Files\\SentinelNet\\SentinelNet.exe",
+      "args": ["--mcp"],
+      "env": { "SENTINELNET_URL": "http://127.0.0.1:8000" }
     }
   }
 }
 ```
 
-The central server must be running. Available tools, by area:
+**From the repository** — use the project's virtualenv interpreter, by full
+path:
+
+```json
+{
+  "mcpServers": {
+    "sentinelnet": {
+      "command": "C:\\path\\to\\SentinelNet\\.venv\\Scripts\\python.exe",
+      "args": ["C:\\path\\to\\SentinelNet\\ai\\mcp_server.py"],
+      "env": { "SENTINELNET_URL": "http://127.0.0.1:8000" }
+    }
+  }
+}
+```
+
+On Linux/macOS the interpreter is `/path/to/SentinelNet/.venv/bin/python`.
+Do not write a bare `"python"`: the client does not inherit your shell or
+virtualenv, and on Windows `python` often resolves to the Microsoft Store
+alias, which prints *"Python was not found"* and exits — the client then logs
+only *"Server transport closed unexpectedly"*. In JSON every Windows backslash
+is doubled. Fully quit the client (tray icon too) after editing the file.
+
+### Signing in — no password in the config
+
+The config above holds no credentials. The first time the client starts the
+bridge, the browser opens SentinelNet's consent page (`/mcp/authorize`): it
+names the client and the computer asking ("Claude Desktop wants to access
+SentinelNet"), shows who is signing in, and lists what the client will be
+able to do. Sign in there (password or SSO), then **Authorize** or
+**Cancel**; cancelling stops the bridge at once. An operator or admin can
+tick **Read-only** (on by default): the client then acts as a viewer whatever
+the user's role, so the model cannot run commands. The page counts down the
+five minutes the bridge waits and says so when the request has expired.
+
+The bridge keeps the resulting revocable grant in the OS keychain (Windows
+Credential Manager, macOS Keychain, Linux Secret Service); later starts use it
+silently. Grants are listed, with their client, computer and read-only flag,
+and revoked in the **MCP Server** tab; *Sign out everywhere* ends them too.
+
+Not every client or host supports every step, so each has a fallback:
+
+| Situation | What happens / what to do |
+|---|---|
+| Client supports `tools/list_changed` (Claude Desktop, VS Code, Cursor, …) | The tools appear by themselves as soon as you approve. |
+| Client ignores it | Until approval it shows one tool, `sentinelnet_login`, which reopens the page and tells the model what to say. After approving, reload the MCP tools or restart the client. |
+| Sign in ahead of time, from a terminal | `SentinelNet.exe --mcp --login` or `python ai/mcp_server.py --login` (with `SENTINELNET_URL` set). Then start the client. |
+| No keychain (headless Linux, containers) | `--login` prints the grant; put it in the config as `SENTINELNET_TOKEN`. Still revocable from the MCP Server tab. |
+| No browser on that machine | Run `--login` on any machine that reaches the server, then use `SENTINELNET_TOKEN` as above. |
+| Keep the old way | `SENTINELNET_USERNAME` + `SENTINELNET_PASSWORD` still work and take precedence. Prefer a dedicated *viewer* account. |
+
+The sign-in uses `127.0.0.1:38461` for the browser to hand the grant back to
+the bridge; nothing else listens there, and only for the minutes of the
+sign-in.
+
+**Testing the bridge by hand.** Before blaming the client, feed the bridge two
+messages from a terminal, with the same `SENTINELNET_URL` you put in the
+config (if it has never been authorized, the browser opens first):
+
+```powershell
+$env:SENTINELNET_URL = "http://127.0.0.1:8000"
+$init = '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}'
+$list = '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+
+# installed exe
+$init, $list | & "C:\Program Files\SentinelNet\SentinelNet.exe" --mcp
+# repository
+$init, $list | .\.venv\Scripts\python.exe ai\mcp_server.py
+```
+
+- Reply to `id: 0` (`"protocolVersion": ...`) → the bridge starts; if the
+  client still fails, the problem is the `command`/`args` in its config.
+- Reply to `id: 1` listing only `sentinelnet_login` → not authorized yet:
+  approve in the browser, or run `--login`.
+- Reply to `id: 1` with the full `tools` array → sign-in and URL are right.
+  An empty array means the bridge could not reach the server or its grant
+  was revoked: it fails closed and exposes nothing.
+
+The client-side log on Windows is
+`%APPDATA%\Claude\logs\mcp-server-sentinelnet.log`.
+
+Available tools, by area:
 
 | Area | Tools |
 |---|---|
