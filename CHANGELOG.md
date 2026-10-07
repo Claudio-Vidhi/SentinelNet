@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-10-07
+
 ### Added
 
 - **Server MCP, 13 strumenti in sola lettura** sulle rotte già esistenti:
