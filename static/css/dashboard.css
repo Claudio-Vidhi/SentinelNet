@@ -1813,13 +1813,78 @@ details.mac-switch > summary:hover,
 #tab-ai .ai-conv-item .ai-conv-del:hover { color: var(--lamp-fault-ink); }
 #tab-ai .ai-conv-empty { font-size: 12px; color: var(--text-soft); padding: 10px 4px; }
 #tab-ai .ai-chat-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
-#tab-ai .ai-chat-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: var(--seam) solid var(--border); flex:0 0 auto; background: var(--surface-3); }
-#tab-ai .ai-chat-header h3 { flex: 1; min-width: 0; }
-#tab-ai .ai-chat-context { padding: 9px 14px; border-bottom: var(--seam) solid var(--border); align-items: center; background: var(--surface-2); flex:0 0 auto; }
+#tab-ai .ai-conv-heading { font-family: var(--font-legend); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-soft); padding: 6px 3px 0; }
+#tab-ai .ai-chat-header { display: flex; align-items: center; gap: 4px; padding: 10px 14px; border-bottom: var(--seam) solid var(--border); flex:0 0 auto; background: var(--surface); }
+#tab-ai .ai-chat-header h3 { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tab-ai .ai-icon-btn { border: var(--seam) solid transparent; background: none; color: var(--text-soft); cursor: pointer; padding: 6px 8px; font-size: 12px; transition: background var(--transition), color var(--transition); }
+#tab-ai .ai-icon-btn:hover { background: var(--surface-3); color: var(--text); }
+#tab-ai .ai-icon-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 #tab-ai #aiChatMessages { flex: 1 1 0; min-height: 0; }
-#tab-ai .ai-chat-composer { display: flex; gap: 8px; padding: 10px 14px; border-top: var(--seam) solid var(--border); background: var(--surface-2); flex:0 0 auto; }
+/* Stato vuoto finché il thread non ha messaggi. */
+#tab-ai #aiChatMessages:empty { display: none; }
+#tab-ai .ai-chat-main:has(#aiChatMessages:not(:empty)) .ai-chat-empty { display: none; }
+#tab-ai .ai-chat-empty { flex: 1 1 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px 16px; text-align: center; background: var(--surface); }
+#tab-ai .ai-chat-empty-icon { font-size: 22px; color: var(--primary); margin-bottom: 4px; }
+#tab-ai .ai-chat-empty h3 { margin: 0; font-size: 20px; font-weight: 600; }
+#tab-ai .ai-chat-empty p { margin: 0; font-size: 13px; color: var(--text-muted); max-width: 52ch; }
+#tab-ai .ai-suggestions { display: flex; flex-direction: column; gap: 6px; width: min(100%, 520px); margin-top: 14px; }
+#tab-ai .ai-suggestion { text-align: left; padding: 10px 14px; border: var(--seam) solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; transition: background var(--transition), border-color var(--transition); }
+#tab-ai .ai-suggestion:hover { background: var(--surface-3); border-color: var(--border-strong); }
+#tab-ai .ai-suggestion:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+/* Messaggi: l'utente in un riquadro a destra, l'assistente come testo pieno. */
+#tab-ai .ai-msg { display: flex; flex-direction: column; margin-bottom: 18px; }
+#tab-ai .ai-msg-user { align-items: flex-end; }
+#tab-ai .ai-msg-meta { font-family: var(--font-data); font-size: 10.5px; color: var(--text-soft); margin-bottom: 4px; }
+#tab-ai .ai-msg-body { white-space: pre-wrap; font-size: 13.5px; line-height: 1.6; max-width: 78ch; }
+#tab-ai .ai-msg-user .ai-msg-body { max-width: 75%; padding: 8px 12px; background: var(--surface-3); border: var(--seam) solid var(--border); }
+#tab-ai .ai-chat-composer { display: block; padding: 10px 14px 8px; border-top: var(--seam) solid var(--border); background: var(--surface); flex:0 0 auto; }
+#tab-ai .ai-composer-box { border: var(--seam) solid var(--border-strong); background: var(--surface-2); transition: border-color var(--transition); }
+#tab-ai .ai-composer-box:focus-within { border-color: var(--text-muted); }
+#tab-ai #aiChatInput { display: block; width: 100%; box-sizing: border-box; padding: 10px 12px; border: 0; border-radius: 0; background: transparent; color: var(--text); font: inherit; font-size: 13.5px; resize: none; min-height: 52px; max-height: 200px; }
+#tab-ai #aiChatInput:focus { outline: none; box-shadow: none; }
+#tab-ai .ai-composer-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 8px; }
+#tab-ai .ai-ctx-chip { display: inline-flex; align-items: center; gap: 6px; width: auto; margin: 0; padding: 4px 9px; border: var(--seam) solid var(--border); background: var(--surface); color: var(--text-muted); font-size: 11.5px; cursor: pointer; }
+#tab-ai .ai-ctx-chip:hover { color: var(--text); border-color: var(--border-strong); }
+#tab-ai .ai-ctx-chip:has(input:checked) { color: var(--text); border-color: var(--primary); }
+#tab-ai .ai-ctx-chip input { margin: 0; }
+#tab-ai .ai-ctx-chip, #tab-ai select.ai-ctx-chip { box-sizing: border-box; height: 28px; min-height: 0; line-height: 1; }
+/* Il select globale forza 36px con !important: qui serve la stessa altezza delle altre chip. */
+#tab-ai select.ai-ctx-chip { max-width: 200px; height: 28px !important; line-height: 26px !important; padding-left: 9px !important; font-family: inherit; }
+#tab-ai .ai-send { width: auto; margin: 0 0 0 auto; }
+#tab-ai .ai-composer-hint { margin: 6px 2px 0; font-size: 11px; color: var(--text-soft); }
 #tab-ai .ai-profile-layout { display: grid; grid-template-columns: 222px 1fr; gap: 16px; align-items: start; }
-#tab-ai .ai-profile-form { border-left: var(--seam) solid var(--border); padding-left: 16px; }
+#tab-ai .ai-profile-form { border-left: var(--seam) solid var(--border); padding-left: 20px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+#tab-ai .ai-form-section { display: flex; flex-direction: column; gap: 14px; padding: 4px 0 18px; border-bottom: var(--seam) solid var(--border); margin-bottom: 14px; }
+#tab-ai .ai-form-section-title { font-family: var(--font-legend); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-soft); }
+#tab-ai .ai-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px 18px; align-items: start; }
+#tab-ai .ai-field { gap: 6px; min-width: 0; margin: 0; }
+#tab-ai .ai-field label { margin: 0; font-family: inherit; font-size: 13px; font-weight: 600; letter-spacing: normal; text-transform: none; color: var(--text); }
+#tab-ai .ai-field input:not([type="checkbox"]) { padding-left: 12px; }
+#tab-ai .ai-hint { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--text-soft); }
+#tab-ai .ai-model-row { display: flex; gap: 6px; }
+#tab-ai .ai-model-row select { flex: 1; min-width: 0; }
+#tab-ai .ai-model-row .btn { width: auto; margin: 0; }
+#tab-ai .ai-provider-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+#tab-ai .ai-provider-tile { display: grid; grid-template-columns: 22px 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: center; text-align: left; padding: 10px 12px; border: var(--seam) solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; cursor: pointer; transition: background var(--transition), border-color var(--transition); }
+#tab-ai .ai-provider-tile i { grid-row: 1 / 3; font-size: 15px; color: var(--text-soft); text-align: center; }
+#tab-ai .ai-provider-tile .ai-pt-name { font-size: 13px; font-weight: 600; }
+#tab-ai .ai-provider-tile .ai-pt-sub { font-size: 11px; color: var(--text-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#tab-ai .ai-provider-tile:hover { background: var(--surface-3); border-color: var(--border-strong); }
+#tab-ai .ai-provider-tile[aria-checked="true"] { border-color: var(--primary); background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--primary); }
+#tab-ai .ai-provider-tile[aria-checked="true"] i { color: var(--primary); }
+#tab-ai .ai-provider-tile:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* Campi che non servono al provider scelto: Ollama non usa chiave, Anthropic e Gemini non hanno endpoint alternativo. */
+#tab-ai #aiProfileForm[data-provider="ollama"] .ai-f-apikey,
+#tab-ai #aiProfileForm[data-provider="anthropic"] .ai-f-baseurl,
+#tab-ai #aiProfileForm[data-provider="gemini"] .ai-f-baseurl { display: none; }
+#tab-ai .ai-setting-row { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: var(--seam) solid var(--border); background: var(--surface-2); cursor: pointer; text-transform: none; letter-spacing: normal; font-family: inherit; font-weight: 400; margin: 0; }
+#tab-ai .ai-setting-row input { margin-top: 2px; flex: 0 0 auto; }
+#tab-ai .ai-setting-row > span { display: flex; flex-direction: column; gap: 3px; }
+#tab-ai .ai-setting-row .ai-setting-title { font-size: 13px; font-weight: 600; color: var(--text); }
+#tab-ai .ai-setting-row:has(input:checked) { border-color: var(--lamp-warn, var(--warning)); }
+#tab-ai .ai-form-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#tab-ai .ai-form-actions #aiSettingsStatus { flex: 1; min-width: 160px; }
+#tab-ai .ai-form-actions .btn { margin: 0; }
 #tab-ai .ai-profile-card { display: flex; flex-direction: column; gap: 3px; padding: 9px 11px; border: var(--seam) solid var(--border-strong); background: var(--surface-2); cursor: pointer; transition: background var(--transition), border-color var(--transition); }
 #tab-ai .ai-profile-card:hover { background: var(--surface-3); }
 #tab-ai .ai-profile-card.editing { border-color: var(--text); background: var(--surface-3); }
@@ -4209,3 +4274,79 @@ details[open] > summary .mac-caret { transform: rotate(180deg); }
   .mac-field, .mac-field .ui-input { width: 100% !important; }
 }
 @media (prefers-reduced-motion: reduce) { .mac-caret { transition: none; } }
+
+/* NetSec Audit: impostazione -> esito -> risultati */
+#tab-netsec-audit .nsa-step-title { font-family: var(--font-legend); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-soft); margin-bottom: 10px; }
+#tab-netsec-audit .nsa-setup { padding: 0; margin-bottom: 16px; }
+#tab-netsec-audit .nsa-setup-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+#tab-netsec-audit .nsa-source, #tab-netsec-audit .nsa-bench { padding: 16px 18px; min-width: 0; }
+#tab-netsec-audit .nsa-bench { border-left: var(--seam) solid var(--border); }
+#tab-netsec-audit .nsa-source-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 12px; align-items: stretch; }
+#tab-netsec-audit .nsa-field { margin: 0; }
+#tab-netsec-audit .nsa-field select { padding-left: 10px; }
+#tab-netsec-audit .nsa-or { align-self: center; font-size: 11px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.12em; }
+#tab-netsec-audit .nsa-dropzone { display: flex; align-items: center; justify-content: center; text-align: center; padding: 12px; border: var(--seam) dashed var(--border-strong); background: var(--surface-2); cursor: pointer; font-size: 12px; color: var(--text-muted); transition: border-color var(--transition), background var(--transition); }
+#tab-netsec-audit .nsa-dropzone:hover { border-color: var(--primary); background: var(--surface-3); }
+#tab-netsec-audit .nsa-dropzone .fa-2x { font-size: 1.4em; margin-bottom: 4px !important; }
+#tab-netsec-audit .nsa-reqs { margin-top: 10px; border: var(--seam) solid var(--border); background: var(--surface-2); }
+#tab-netsec-audit .nsa-reqs summary { padding: 8px 12px; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text-muted); }
+#tab-netsec-audit .nsa-reqs #auditBenchmarkReqsBody { padding: 0 12px 12px; }
+#tab-netsec-audit .nsa-setup-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 18px; border-top: var(--seam) solid var(--border); background: var(--surface-2); }
+#tab-netsec-audit .nsa-save { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12.5px; cursor: pointer; text-transform: none; letter-spacing: normal; font-family: inherit; color: var(--text); }
+#tab-netsec-audit .nsa-runname input { width: 280px; max-width: 100%; padding: 6px 10px; border: var(--seam) solid var(--border); background: var(--surface); color: var(--text); font-size: 12px; }
+#tab-netsec-audit .nsa-summary { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr); gap: 16px; margin-bottom: 16px; }
+#tab-netsec-audit .nsa-score-card { padding: 16px 18px; margin: 0; }
+#tab-netsec-audit .nsa-score-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+#tab-netsec-audit #auditScoreValue { margin: 0; font-family: var(--font-display); font-size: 34px; line-height: 1; color: var(--text); }
+#tab-netsec-audit #auditGradeBadge { font-size: 11px; font-weight: 700; }
+#tab-netsec-audit .nsa-score-bar { height: 6px; margin: 14px 0 10px; background: var(--surface-3); overflow: hidden; }
+#tab-netsec-audit .nsa-score-bar span { display: block; height: 100%; background: var(--text-soft); transition: width 0.4s ease; }
+#tab-netsec-audit .nsa-score-bar span[data-level="good"] { background: var(--success); }
+#tab-netsec-audit .nsa-score-bar span[data-level="warn"] { background: var(--warning); }
+#tab-netsec-audit .nsa-score-bar span[data-level="bad"] { background: var(--danger); }
+#tab-netsec-audit .nsa-score-foot { font-size: 12px; color: var(--text-muted); }
+#tab-netsec-audit .nsa-score-foot b { color: var(--text); }
+#tab-netsec-audit .nsa-breakdown { margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+#tab-netsec-audit .nsa-bd-item { display: flex; align-items: center; gap: 10px; padding: 14px 18px; font-size: 13px; color: var(--text-muted); border-bottom: var(--seam) solid var(--border); }
+#tab-netsec-audit .nsa-bd-item:nth-child(odd) { border-right: var(--seam) solid var(--border); }
+#tab-netsec-audit .nsa-bd-item:nth-last-child(-n+2) { border-bottom: 0; }
+#tab-netsec-audit .nsa-bd-item b { margin-left: auto; font-family: var(--font-display); font-size: 24px; color: var(--text); }
+#tab-netsec-audit .nsa-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-soft); flex: 0 0 auto; }
+#tab-netsec-audit .nsa-bd-fail .nsa-dot { background: var(--danger); }
+#tab-netsec-audit .nsa-bd-warn .nsa-dot { background: var(--warning); }
+#tab-netsec-audit .nsa-bd-pass .nsa-dot { background: var(--success); }
+#tab-netsec-audit .nsa-partial { margin: -4px 0 16px; padding: 8px 12px; background: var(--lamp-warn-wash); border: var(--seam) solid var(--warning); font-size: 12px; color: var(--warning); }
+#tab-netsec-audit .nsa-results { padding: 0; margin-bottom: 16px; }
+#tab-netsec-audit .nsa-results-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 14px 18px; border-bottom: var(--seam) solid var(--border); }
+#tab-netsec-audit .nsa-results-head h4 { margin: 0; font-size: 14px; }
+#tab-netsec-audit .nsa-export { display: flex; align-items: center; gap: 8px; }
+#tab-netsec-audit .nsa-export label { font-size: 12px; color: var(--text-muted); margin: 0; }
+#tab-netsec-audit .nsa-toolbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 0 18px; border-bottom: var(--seam) solid var(--border); }
+#tab-netsec-audit .nsa-status-tabs { display: flex; gap: 2px; flex-wrap: wrap; }
+#tab-netsec-audit .nsa-status-tab { display: inline-flex; align-items: center; gap: 8px; padding: 12px 12px 10px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--text-muted); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+#tab-netsec-audit .nsa-status-tab b { font-family: var(--font-data); font-size: 11px; padding: 1px 6px; background: var(--surface-3); color: var(--text-muted); }
+#tab-netsec-audit .nsa-status-tab:hover { color: var(--text); }
+#tab-netsec-audit .nsa-status-tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--primary); }
+#tab-netsec-audit .nsa-st-fail b { color: var(--danger); }
+#tab-netsec-audit .nsa-st-warn b { color: var(--warning); }
+#tab-netsec-audit .nsa-st-pass b { color: var(--success); }
+#tab-netsec-audit .nsa-status-tab:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+#tab-netsec-audit .nsa-filters { display: flex; gap: 8px; padding: 8px 0; }
+#tab-netsec-audit .nsa-results .table-container { border: 0; margin: 0; }
+#tab-netsec-audit .nsa-pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; font-size: 11px; font-weight: 700; white-space: nowrap; border: var(--seam) solid var(--border); color: var(--text-muted); background: var(--surface-3); }
+#tab-netsec-audit .nsa-pill-pass { color: var(--success); border-color: var(--success); background: transparent; }
+#tab-netsec-audit .nsa-pill-fail { color: var(--danger); border-color: var(--danger); background: transparent; }
+#tab-netsec-audit .nsa-pill-warn { color: var(--warning); border-color: var(--warning); background: transparent; }
+#tab-netsec-audit .nsa-sev { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; white-space: nowrap; color: var(--text-muted); }
+#tab-netsec-audit .nsa-sev-critical { color: var(--danger); }
+#tab-netsec-audit .nsa-sev-critical .nsa-dot { background: var(--danger); }
+#tab-netsec-audit .nsa-sev-high { color: var(--warning); }
+#tab-netsec-audit .nsa-sev-high .nsa-dot { background: var(--warning); }
+#tab-netsec-audit .nsa-sev-medium .nsa-dot { background: var(--text-muted); }
+@media (max-width: 1100px) {
+  #tab-netsec-audit .nsa-setup-grid, #tab-netsec-audit .nsa-summary { grid-template-columns: 1fr; }
+  #tab-netsec-audit .nsa-bench { border-left: 0; border-top: var(--seam) solid var(--border); }
+  #tab-netsec-audit .nsa-source-row { grid-template-columns: 1fr; }
+}
+#tab-netsec-audit .nsa-resolved { margin: 6px 0 0; font-size: 11.5px; color: var(--text-soft); }
+#tab-netsec-audit .nsa-resolved:empty { display: none; }

@@ -1661,27 +1661,27 @@
       </div>
       <div id="locPane-porterrors" class="loc-pane" style="display:none;">
         <div class="panel" style="margin-bottom:12px;">
-          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; align-items:end;">
-            <div>
-              <label for="peDevice" style="font-size:12px; color:var(--text-muted);" data-i18n="peDevice">Apparato</label>
-              <select id="peDevice"><option value="" data-i18n="peDeviceAll">Tutti gli apparati</option></select>
+          <div class="if-scope">
+            <div class="if-field">
+              <label class="if-field-label" for="peDevice" data-i18n="peDevice">Apparato</label>
+              <select id="peDevice" class="if-select"><option value="" data-i18n="peDeviceAll">Tutti gli apparati</option></select>
             </div>
-            <div>
-              <label for="peWindow" style="font-size:12px; color:var(--text-muted);" data-i18n="ifErrWindow">Finestra errori</label>
-              <select id="peWindow">
+            <div class="if-field">
+              <label class="if-field-label" for="peWindow" data-i18n="ifErrWindow">Finestra errori</label>
+              <select id="peWindow" class="if-select">
                 <option value="1h" data-i18n="ifErrWin1h">Ultima ora</option>
                 <option value="24h" selected data-i18n="ifErrWin24h">Ultime 24 ore</option>
                 <option value="7d" data-i18n="ifErrWin7d">Ultimi 7 giorni</option>
               </select>
             </div>
-            <div>
-              <label for="peShow" style="font-size:12px; color:var(--text-muted);" data-i18n="peShow">Mostra</label>
-              <select id="peShow">
+            <div class="if-field">
+              <label class="if-field-label" for="peShow" data-i18n="peShow">Mostra</label>
+              <select id="peShow" class="if-select">
                 <option value="bad" selected data-i18n="peShowBad">Porte con errori o scarti</option>
                 <option value="all" data-i18n="peShowAll">Tutte le porte con contatori</option>
               </select>
             </div>
-            <div style="display:flex; gap:8px;">
+            <div style="display:flex; gap:8px; margin-left:auto;">
               <button type="button" id="peRefresh" class="btn btn-secondary btn-small" style="width:auto; margin:0;">
                 <i class="fa-solid fa-rotate"></i> <span data-i18n="ifBtnRefresh">Aggiorna</span></button>
               <button type="button" id="peReadNow" class="btn btn-secondary btn-small requires-write" style="width:auto; margin:0;" title="Seleziona un apparato e leggi ora i contatori di errore (SNMP, altrimenti SSH)" data-i18n-title="ifBtnReadErrorsTitle">
@@ -2258,12 +2258,10 @@
 
     <!-- TAB: AI Assistant -->
     <div id="tab-ai" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
-        <div class="hero-card">
+      <div class="page-head">
+        <div class="page-head-text">
           <h2 data-i18n="titleAiAssistant">AI Assistant</h2>
-          <p data-i18n="descAiAssistant">
-            Chat con un assistente AI (Anthropic Claude, OpenAI ChatGPT, Google Gemini o un LLM locale via Ollama). Puoi allegare l'inventario o la configurazione di un dispositivo come contesto.
-          </p>
+          <p data-i18n="descAiAssistant">Chat con un assistente AI (Anthropic Claude, OpenAI ChatGPT, Google Gemini o un LLM locale via Ollama). Puoi allegare l'inventario o la configurazione di un dispositivo come contesto.</p>
         </div>
       </div>
 
@@ -2278,7 +2276,7 @@
           <span data-i18n="titleAiSettings">Configurazione Provider (Profili)</span>
           <span id="aiActiveProfileBadge" class="chip" style="font-size:11px; margin-left:auto;"></span>
         </summary>
-        <div style="padding:0 16px 16px 16px;">
+        <div style="padding:16px; border-top:var(--seam) solid var(--border);">
           <div style="display:none;">
             <select id="aiProfileSelect" aria-label="Profilo AI attivo" data-i18n-aria-label="ariaAiProfile">
               <option value="" data-i18n="optAiNoProfile">Nessun profilo</option>
@@ -2295,62 +2293,98 @@
                 <i class="fa-solid fa-plus"></i> <span data-i18n="optAiNewProfile">-- nuovo profilo --</span>
               </button>
             </div>
-            <div class="ai-profile-form">
-          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
-            <div class="form-group" style="min-width:160px; flex:1;">
-              <label for="aiProfileName" data-i18n="lblAiProfileName">Nome profilo</label><input id="aiProfileName" type="text" placeholder="es. Claude prod" data-i18n-placeholder="phAiProfileName" style="padding-left:12px;">
-            </div>
-          </div>
-          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
-            <div class="form-group" style="min-width:150px;">
-              <label for="aiProvider" data-i18n="lblAiProvider">Provider</label><select id="aiProvider">
-                <option value="" data-i18n="optAiNoProvider">-- seleziona provider --</option>
-                <option value="anthropic">Anthropic (Claude)</option>
-                <option value="openai">OpenAI (ChatGPT)</option>
-                <option value="gemini">Google Gemini</option>
-                <option value="ollama">Ollama (LLM locale)</option>
-              </select>
-            </div>
-            <div class="form-group" style="min-width:200px;">
-              <label data-i18n="lblAiModel">Modello</label>
-              <div style="display:flex; gap:4px;">
-                <select id="aiModelSelect" style="flex:1;" aria-label="Modello AI" data-i18n-aria-label="ariaAiModel">
-                  <option value="" data-i18n="optAiModelCustom">-- modello personalizzato --</option>
-                </select>
-                <button type="button" class="btn btn-secondary btn-small" id="btnAiRefreshModels" style="width:auto; margin:0;" title="Aggiorna elenco modelli" data-i18n-title="btnAiRefreshModelsTitle">
-                  <i class="fa-solid fa-rotate"></i>
+            <div class="ai-profile-form" id="aiProfileForm" data-provider="">
+              <section class="ai-form-section">
+                <div class="ai-form-section-title" data-i18n="aiSecGeneral">Generale</div>
+                <div class="form-group ai-field">
+                  <label for="aiProfileName" data-i18n="lblAiProfileName">Nome profilo</label>
+                  <input id="aiProfileName" type="text" placeholder="es. Claude prod" data-i18n-placeholder="phAiProfileName">
+                </div>
+                <div class="form-group ai-field">
+                  <label for="aiProvider" id="aiProviderLbl" data-i18n="lblAiProvider">Provider</label>
+                  <!-- La select resta la sorgente di verità per ai.js; le tessere
+                       sono una vista che ne scrive il valore. -->
+                  <select id="aiProvider" style="display:none;">
+                    <option value="" data-i18n="optAiNoProvider">-- seleziona provider --</option>
+                    <option value="anthropic">Anthropic (Claude)</option>
+                    <option value="openai">OpenAI (ChatGPT)</option>
+                    <option value="gemini">Google Gemini</option>
+                    <option value="ollama">Ollama (LLM locale)</option>
+                  </select>
+                  <div class="ai-provider-tiles" role="radiogroup" aria-labelledby="aiProviderLbl">
+                    <button type="button" class="ai-provider-tile" role="radio" aria-checked="false" data-action="ai-pick-provider" data-provider="anthropic">
+                      <i class="fa-solid fa-a"></i><span class="ai-pt-name">Anthropic</span><span class="ai-pt-sub">Claude</span></button>
+                    <button type="button" class="ai-provider-tile" role="radio" aria-checked="false" data-action="ai-pick-provider" data-provider="openai">
+                      <i class="fa-solid fa-o"></i><span class="ai-pt-name">OpenAI</span><span class="ai-pt-sub">ChatGPT</span></button>
+                    <button type="button" class="ai-provider-tile" role="radio" aria-checked="false" data-action="ai-pick-provider" data-provider="gemini">
+                      <i class="fa-solid fa-gem"></i><span class="ai-pt-name">Google</span><span class="ai-pt-sub">Gemini</span></button>
+                    <button type="button" class="ai-provider-tile" role="radio" aria-checked="false" data-action="ai-pick-provider" data-provider="ollama">
+                      <i class="fa-solid fa-server"></i><span class="ai-pt-name">Ollama</span><span class="ai-pt-sub" data-i18n="lblAiLocalLlm">LLM locale (nessuna chiave)</span></button>
+                  </div>
+                </div>
+              </section>
+
+              <section class="ai-form-section">
+                <div class="ai-form-section-title" data-i18n="aiSecModel">Modello e accesso</div>
+                <div class="ai-form-grid">
+                  <div class="form-group ai-field">
+                    <label for="aiModel" data-i18n="lblAiModel">Modello</label>
+                    <div class="ai-model-row">
+                      <select id="aiModelSelect" aria-label="Modello AI" data-i18n-aria-label="ariaAiModel">
+                        <option value="" data-i18n="optAiModelCustom">-- modello personalizzato --</option>
+                      </select>
+                      <button type="button" class="btn btn-secondary btn-small" id="btnAiRefreshModels" title="Aggiorna elenco modelli" data-i18n-title="btnAiRefreshModelsTitle" aria-label="Aggiorna elenco modelli" data-i18n-aria-label="btnAiRefreshModelsTitle">
+                        <i class="fa-solid fa-rotate"></i>
+                      </button>
+                    </div>
+                    <input id="aiModel" type="text" placeholder="es. claude-3-5-sonnet-latest" data-i18n-placeholder="phAiModel">
+                    <p class="ai-hint" data-i18n="hintAiModel">Scegli dall'elenco (aggiornalo col pulsante) oppure scrivi il nome del modello.</p>
+                  </div>
+                  <div class="form-group ai-field ai-f-apikey">
+                    <label for="aiApiKey" id="aiApiKeyLabel" data-i18n="lblAiApiKey">API Key</label>
+                    <input id="aiApiKey" type="password" autocomplete="off" placeholder="•••••• (lascia vuoto per non modificare)" data-i18n-placeholder="phAiApiKey">
+                    <p class="ai-hint" data-i18n="hintAiApiKey">Non viene mai rimostrata dopo il salvataggio: lascia vuoto per tenere quella attuale.</p>
+                  </div>
+                  <div class="form-group ai-field ai-f-baseurl">
+                    <label for="aiBaseUrl" data-i18n="lblAiBaseUrl">Endpoint API</label>
+                    <input id="aiBaseUrl" type="text" placeholder="http://localhost:11434">
+                    <p class="ai-hint" data-i18n="hintAiBaseUrl">Ollama: indirizzo del server locale. OpenAI: solo per un endpoint compatibile, altrimenti lascia vuoto.</p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="ai-form-section">
+                <div class="ai-form-section-title" data-i18n="aiSecLimits">Limiti e privacy</div>
+                <div class="ai-form-grid">
+                  <div class="form-group ai-field">
+                    <label for="aiRateLimitRpm" data-i18n="lblAiRateLimit">Limite richieste/min</label>
+                    <input id="aiRateLimitRpm" type="number" min="0" step="1">
+                    <p class="ai-hint" data-i18n="phAiRateLimit">0 = illimitato</p>
+                  </div>
+                  <div class="form-group ai-field">
+                    <label for="aiContextBudget" data-i18n="lblAiContextBudget">Budget contesto (caratteri)</label>
+                    <input id="aiContextBudget" type="number" min="0" step="1000">
+                    <p class="ai-hint" data-i18n="phAiContextBudget">0 = auto per modello</p>
+                  </div>
+                </div>
+                <label class="ai-setting-row" for="aiAllowUnredacted">
+                  <input type="checkbox" id="aiAllowUnredacted">
+                  <span>
+                    <span class="ai-setting-title" data-i18n="lblAiAllowUnredacted">Invia config non redatte (solo LLM locale attendibile)</span>
+                    <span class="ai-hint" data-i18n="hintAiAllowUnredacted">Password, chiavi e community SNMP partono in chiaro. Il server lo accetta solo verso Ollama o un endpoint OpenAI su rete locale.</span>
+                  </span>
+                </label>
+              </section>
+
+              <footer class="ai-form-actions">
+                <div id="aiSettingsStatus" class="ai-hint"></div>
+                <button class="btn btn-secondary" style="width:auto;" id="btnAiDeleteProfile" data-i18n="btnAiDeleteProfile">
+                  <i class="fa-solid fa-trash"></i> Elimina profilo
                 </button>
-              </div>
-              <input id="aiModel" type="text" placeholder="es. claude-3-5-sonnet-latest" data-i18n-placeholder="phAiModel" style="padding-left:12px; margin-top:4px;" aria-label="es. claude-3-5-sonnet-latest" data-i18n-aria-label="phAiModel">
-            </div>
-            <div class="form-group" style="min-width:220px;">
-              <label for="aiApiKey" id="aiApiKeyLabel" data-i18n="lblAiApiKey">API Key</label><input id="aiApiKey" type="password" placeholder="•••••• (lascia vuoto per non modificare)" data-i18n-placeholder="phAiApiKey" style="padding-left:12px;">
-            </div>
-            <div class="form-group" style="min-width:220px;">
-              <label for="aiBaseUrl" data-i18n="lblAiBaseUrl">Endpoint locale (Ollama)</label><input id="aiBaseUrl" type="text" placeholder="http://localhost:11434" style="padding-left:12px;">
-            </div>
-            <div class="form-group" style="min-width:150px;">
-              <label for="aiRateLimitRpm" data-i18n="lblAiRateLimit">Limite richieste/min</label><input id="aiRateLimitRpm" type="number" min="0" step="1" placeholder="0 = illimitato" data-i18n-placeholder="phAiRateLimit" style="padding-left:12px;">
-            </div>
-            <div class="form-group" style="min-width:170px;">
-              <label for="aiContextBudget" data-i18n="lblAiContextBudget">Budget contesto (caratteri)</label><input id="aiContextBudget" type="number" min="0" step="1000" placeholder="0 = auto per modello" data-i18n-placeholder="phAiContextBudget" style="padding-left:12px;">
-            </div>
-            <div class="form-group" style="min-width:260px;">
-              <label style="font-size:13px; display:flex; align-items:center; gap:6px; margin-top:22px;">
-                <input type="checkbox" id="aiAllowUnredacted">
-                <span data-i18n="lblAiAllowUnredacted">Invia config non redatte (solo LLM locale attendibile)</span>
-              </label>
-            </div>
-          </div>
-          <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
-            <button class="btn btn-primary" id="btnAiSaveSettings" style="width:auto;" data-i18n="btnAiSaveSettings">
-              <i class="fa-solid fa-floppy-disk"></i> Salva profilo
-            </button>
-            <button class="btn btn-secondary" style="width:auto;" id="btnAiDeleteProfile" data-i18n="btnAiDeleteProfile">
-              <i class="fa-solid fa-trash"></i> Elimina profilo
-            </button>
-          </div>
-          <div id="aiSettingsStatus" style="font-size:12px; color:var(--text-muted); margin-top:8px;"></div>
+                <button class="btn btn-primary" id="btnAiSaveSettings" style="width:auto;" data-i18n="btnAiSaveSettings">
+                  <i class="fa-solid fa-floppy-disk"></i> Salva profilo
+                </button>
+              </footer>
             </div>
           </div>
         </div>
@@ -2371,52 +2405,67 @@
           <button class="btn btn-primary btn-small" id="btnAiNewChat" style="width:100%;" data-i18n="btnAiNewChat">
             <i class="fa-solid fa-plus"></i> Nuova conversazione
           </button>
+          <div class="ai-conv-heading" data-i18n="lblAiRecentChats">Conversazioni recenti</div>
           <div id="aiConvList" class="ai-conv-list"></div>
         </div>
 
         <section class="ai-chat-main">
           <header class="ai-chat-header">
-            <h3 id="aiChatTitle" style="margin:0; font-size:15px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" data-i18n="titleAiChat">Conversazione</h3>
-            <button class="btn btn-secondary btn-small" style="width:auto;" id="btnAiRenameChat" data-i18n-title="btnAiRenameChat" title="Rinomina conversazione">
+            <h3 id="aiChatTitle" data-i18n="titleAiChat">Conversazione</h3>
+            <button type="button" class="ai-icon-btn" id="btnAiRenameChat" data-i18n-title="btnAiRenameChat" title="Rinomina conversazione" aria-label="Rinomina conversazione" data-i18n-aria-label="btnAiRenameChat">
               <i class="fa-solid fa-pen"></i>
             </button>
-            <button class="btn btn-secondary btn-small" style="width:auto;" id="btnAiDeleteChat" data-i18n-title="btnAiDeleteChat" title="Elimina conversazione">
+            <button type="button" class="ai-icon-btn" id="btnAiDeleteChat" data-i18n-title="btnAiDeleteChat" title="Elimina conversazione" aria-label="Elimina conversazione" data-i18n-aria-label="btnAiDeleteChat">
               <i class="fa-solid fa-trash"></i>
             </button>
           </header>
 
-          <!-- Contesto allegato: era un pannello separato in cima alla pagina,
-               ma si sceglie mentre si scrive, non prima. -->
-          <div class="filterbar ai-chat-context" style="margin:0;">
-            <label style="font-size:13px; display:flex; align-items:center; gap:6px;">
-              <input type="checkbox" id="aiAttachInventory"> <span data-i18n="lblAiAttachInventory">Allega riepilogo inventario</span>
-            </label>
-            <select id="aiAttachTenant" aria-label="Tenant dell inventario allegato" data-i18n-aria-label="ariaAiAttachTenant">
-              <option value="" data-i18n="optAiNoTenant">Nessun tenant allegato</option>
-            </select>
-            <div style="position:relative; display:inline-block;">
-              <button id="aiAttachDeviceBtn" class="btn" style="padding:6px 12px;">
-                <i class="fa-solid fa-server"></i> <span id="aiAttachDeviceBtnLabel">Dispositivi</span>
-              </button>
-              <div id="aiAttachDeviceDropdown" style="display:none; position:absolute; top:100%; left:0; background:var(--surface-2); border:1px solid var(--border); border-radius:0; min-width:260px; max-height:300px; overflow-y:auto; z-index:1000; box-shadow:var(--shadow-lift);">
-                <div style="padding:8px;">
-                  <div style="display:flex; gap:12px; padding:2px 8px 8px; border-bottom:1px solid var(--border); margin-bottom:6px;">
-                    <a href="javascript:void(0)" data-action="ai-select-all-devices" style="font-size:11px;" data-i18n="lnkSelectAll">Seleziona tutti</a>
-                    <a href="javascript:void(0)" data-action="ai-deselect-all-devices" style="font-size:11px;" data-i18n="lnkDeselectAll">Deseleziona tutti</a>
-                  </div>
-                  <div id="aiAttachDeviceList" style="font-size:13px;"></div>
-                </div>
-              </div>
+          <!-- Stato vuoto: visibile finché #aiChatMessages non ha figli (regola
+               :has in CSS), così clearAiChat() non deve sapere che esiste. -->
+          <div class="ai-chat-empty">
+            <i class="fa-solid fa-robot ai-chat-empty-icon"></i>
+            <h3 data-i18n="titleAiEmpty">Come posso aiutarti con la rete?</h3>
+            <p data-i18n="descAiEmpty">Allega l'inventario, un tenant o dei dispositivi qui sotto: l'assistente risponde su quel contesto.</p>
+            <div class="ai-suggestions">
+              <button type="button" class="ai-suggestion" data-action="ai-suggest" data-i18n="aiSuggestInventory">Riassumi lo stato dell'inventario e segnala le anomalie</button>
+              <button type="button" class="ai-suggestion" data-action="ai-suggest" data-i18n="aiSuggestSecurity">Controlla la configurazione dei dispositivi allegati per problemi di sicurezza</button>
+              <button type="button" class="ai-suggestion" data-action="ai-suggest" data-i18n="aiSuggestVlan">Spiegami come sono organizzate VLAN e uplink nei dispositivi allegati</button>
             </div>
           </div>
 
           <div id="aiChatMessages" style="flex:1 1 0; min-height:0; overflow-y:auto; padding:16px; background:var(--surface);"></div>
 
           <div class="ai-chat-composer">
-            <textarea id="aiChatInput" rows="2" placeholder="Scrivi un messaggio..." data-i18n-placeholder="phAiChatInput" style="flex:1; padding:10px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); resize:vertical;" aria-label="Scrivi un messaggio..." data-i18n-aria-label="phAiChatInput"></textarea>
-            <button class="btn btn-primary" id="btnAiSend" style="width:auto;" data-i18n="btnAiSend">
-              <i class="fa-solid fa-paper-plane"></i> Invia
-            </button>
+            <div class="ai-composer-box">
+              <textarea id="aiChatInput" rows="2" placeholder="Scrivi un messaggio..." data-i18n-placeholder="phAiChatInput" aria-label="Scrivi un messaggio..." data-i18n-aria-label="phAiChatInput"></textarea>
+              <!-- Contesto allegato: si sceglie mentre si scrive, non prima. -->
+              <div class="ai-composer-bar">
+                <label class="ai-ctx-chip">
+                  <input type="checkbox" id="aiAttachInventory"> <i class="fa-solid fa-boxes-stacked"></i> <span data-i18n="lblAiAttachInventory">Allega riepilogo inventario</span>
+                </label>
+                <select id="aiAttachTenant" class="ai-ctx-chip" aria-label="Tenant dell inventario allegato" data-i18n-aria-label="ariaAiAttachTenant">
+                  <option value="" data-i18n="optAiNoTenant">Nessun tenant allegato</option>
+                </select>
+                <div style="position:relative;">
+                  <button type="button" id="aiAttachDeviceBtn" class="ai-ctx-chip">
+                    <i class="fa-solid fa-server"></i> <span id="aiAttachDeviceBtnLabel">Dispositivi</span>
+                  </button>
+                  <div id="aiAttachDeviceDropdown" style="display:none; position:absolute; bottom:calc(100% + 6px); left:0; background:var(--surface-2); border:1px solid var(--border); border-radius:0; min-width:260px; max-height:300px; overflow-y:auto; z-index:1000; box-shadow:var(--shadow-lift);">
+                    <div style="padding:8px;">
+                      <div style="display:flex; gap:12px; padding:2px 8px 8px; border-bottom:1px solid var(--border); margin-bottom:6px;">
+                        <a href="javascript:void(0)" data-action="ai-select-all-devices" style="font-size:11px;" data-i18n="lnkSelectAll">Seleziona tutti</a>
+                        <a href="javascript:void(0)" data-action="ai-deselect-all-devices" style="font-size:11px;" data-i18n="lnkDeselectAll">Deseleziona tutti</a>
+                      </div>
+                      <div id="aiAttachDeviceList" style="font-size:13px;"></div>
+                    </div>
+                  </div>
+                </div>
+                <button class="btn btn-primary btn-small ai-send" id="btnAiSend" data-i18n="btnAiSend">
+                  <i class="fa-solid fa-paper-plane"></i> Invia
+                </button>
+              </div>
+            </div>
+            <p class="ai-composer-hint" data-i18n="lblAiComposerHint">Invio per inviare, Maiusc+Invio per andare a capo. L'AI può sbagliare: verifica ogni proposta prima di applicarla.</p>
           </div>
         </section>
       </div>
@@ -4151,100 +4200,130 @@
 
       <!-- Sotto-tab 1: Scansione Automatica & Compliance -->
       <div id="netsecSubtabScan">
-      <div class="hero" style="margin-bottom:18px;">
-        <div class="hero-card" style="flex:1;">
+      <div class="page-head">
+        <div class="page-head-text">
           <h2 data-i18n="nsaTitle">Auditing Configurazione Firewall, Router e Switch</h2>
           <p data-i18n="nsaDesc">Valutazione automatizzata delle policy di sicurezza, regole di accesso, cifrari e hardening degli apparati di rete gestiti.</p>
         </div>
-        <div class="hero-card" style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:16px 24px;">
-          <span style="font-size:11px; text-transform:uppercase; color:var(--text-muted); font-weight:700;" data-i18n="nsaScoreLabel">Score Compliance Security</span>
-          <h1 id="auditScoreValue" style="margin:4px 0; font-family:var(--font-display); font-size:30px; color:var(--primary);">--</h1>
-          <span id="auditGradeBadge" class="badge" style="font-size:11px; font-weight:700;">--</span>
-        </div>
       </div>
 
-      <div class="oneline-foot" style="margin-bottom:18px;">
-        <span><span data-i18n="nsaKpiTotal">Regole Auditate</span> <b id="auditStatTotal">0</b></span>
-        <span><span data-i18n="nsaKpiFailed">Vulnerabili / Fail</span> <b id="auditStatFailed" style="color:var(--danger);">0</b></span>
-        <span><span data-i18n="nsaKpiPassed">Conformi / Pass</span> <b id="auditStatPassed" style="color:var(--success);">0</b></span>
-        <span><span data-i18n="nsaKpiWarned">Warning / Attenzione</span> <b id="auditStatWarned" style="color:var(--warning);">0</b></span>
-        <span title="Sezioni di configurazione assenti dal file analizzato: non valutabili, escluse dal calcolo dello score." data-i18n-title="nsaKpiUnknownHint"><span data-i18n="nsaKpiUnknown">Non valutabili</span> <b id="auditStatUnknown" style="color:var(--text-muted);">0</b></span>
-      </div>
-      <div id="auditPartialWarning" style="display:none; margin:-8px 0 18px; padding:8px 12px; border-radius:0; background:var(--lamp-warn-wash); border:1px solid var(--warning); font-size:12px; color:var(--warning);">
-        <i class="fa-solid fa-circle-info"></i> <span id="auditPartialWarningText"></span>
-      </div>
-
-      <div style="display:grid; grid-template-columns: 1fr 340px; gap:18px; margin-bottom:18px;">
-        <div class="panel" style="padding:16px;">
-          <h4 style="margin:0 0 12px; font-size:14px; color:var(--primary);" data-i18n="nsaScanParams"><i class="fa-solid fa-sliders"></i> Parametri di Scansione Audit</h4>
-          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
-            <div>
-              <label for="auditDeviceSelect" style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="nsaTargetLabel">Apparato Target dall'Inventario</label><select id="auditDeviceSelect" style="width:100%;">
-                <!-- La scansione multi-dispositivo non e' implementata: questa
-                     voce e' un segnaposto, non una promessa di funzionalita'. -->
-                <option value="all" data-i18n="nsaSelectDevice">— Seleziona un dispositivo —</option>
-              </select>
-            </div>
-            <div>
-              <label for="auditBenchmarkSelect" style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="nsaBenchmarkLabel">Benchmark / Standard di Security</label><select id="auditBenchmarkSelect" style="width:100%;">
-                <option value="cis" data-i18n="nsaBenchCis">CIS Benchmark (FortiGate 7.4.x / Cisco IOS XE 17.x / Ubuntu 24.04 LTS)</option>
-                <option value="nist" data-i18n="nsaBenchNist">NIST SP 800-53 Rev. 5</option>
-                <option value="pci" data-i18n="nsaBenchPci">PCI-DSS v4.0 Network Requirement</option>
-              </select>
-              <div style="margin-top:10px;">
-                <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer; margin-bottom:4px;">
-                  <input type="checkbox" id="auditSaveRun">
-                  <span data-i18n="auditSaveRunLabel">Conserva questa esecuzione nello storico</span>
-                </label>
-                <div id="auditSaveNameContainer" style="margin-top:4px;">
-                  <input type="text" id="auditRunName" placeholder="Nome / Etichetta Audit (opzionale, es. Audit Q3)" data-i18n-placeholder="auditRunNamePh" style="width:100%; padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;" aria-label="Nome / Etichetta Audit (opzionale, es. Audit Q3)" data-i18n-aria-label="auditRunNamePh">
+      <!-- 1. Cosa analizzare: origine della config + benchmark, poi l'azione. -->
+      <div class="panel nsa-setup">
+        <div class="nsa-setup-grid">
+          <div class="nsa-source">
+            <div class="nsa-step-title" data-i18n="nsaSourceLabel">Configurazione da analizzare</div>
+            <div class="nsa-source-row">
+              <div class="form-group nsa-field">
+                <label for="auditDeviceSelect" data-i18n="nsaTargetLabel">Apparato Target dall'Inventario</label>
+                <select id="auditDeviceSelect">
+                  <!-- La scansione multi-dispositivo non e' implementata: questa
+                       voce e' un segnaposto, non una promessa di funzionalita'. -->
+                  <option value="all" data-i18n="nsaSelectDevice">— Seleziona un dispositivo —</option>
+                </select>
+              </div>
+              <span class="nsa-or" data-i18n="nsaOr">oppure</span>
+              <div id="auditDropZone" class="nsa-dropzone">
+                <input type="file" id="auditFileInput" style="display:none;" accept=".conf,.cfg,.txt,.xml" aria-label="File di audit da caricare" data-i18n-aria-label="ariaAuditFile">
+                <!-- Il testo tradotto sta in uno span interno: il drop di un file
+                     riscrive #auditDropText, e un data-i18n sul contenitore
+                     ripristinerebbe l'invito al caricamento a ogni cambio lingua,
+                     cancellando il nome del file appena caricato. -->
+                <div id="auditDropText">
+                  <i class="fa-solid fa-cloud-arrow-up fa-2x" style="color:var(--primary); margin-bottom:8px;"></i><br>
+                  <span data-i18n="nsaDropText">Trascina qui il file di configurazione o clicca per caricare</span>
                 </div>
               </div>
             </div>
           </div>
-
-          <details id="auditBenchmarkReqs" style="margin-bottom:12px; border:1px solid var(--border); border-radius:0; background:var(--surface-2);">
-            <summary style="padding:8px 12px; cursor:pointer; font-size:12px; font-weight:600; color:var(--primary);" data-i18n="nsaReqsSummary">
-              <i class="fa-solid fa-circle-info"></i> Requisiti verificati da questo benchmark
-            </summary>
-            <div id="auditBenchmarkReqsBody" style="padding:0 12px 12px;"></div>
-          </details>
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
-            <button id="btnRunAuditScan" class="btn btn-primary" style="width:auto; margin:0;" data-i18n="nsaBtnRun"><i class="fa-solid fa-play"></i> Esegui Audit Scan</button>
-            <div style="display:flex; align-items:center; gap:8px;">
-              <!-- Lingua del REPORT, non dell'interfaccia: un audit si consegna,
-                   e il destinatario puo' non leggere la lingua di chi lo esegue.
-                   Default sulla lingua della UI, sovrascrivibile. -->
-              <label for="auditReportLang" style="font-size:12px; color:var(--text-muted);" data-i18n="nsaReportLangLabel">Lingua report</label>
-              <select id="auditReportLang">
-                <option value="it">Italiano</option>
-                <option value="en">English</option>
+          <div class="nsa-bench">
+            <div class="nsa-step-title" data-i18n="nsaBenchStep">Standard di riferimento</div>
+            <div class="form-group nsa-field">
+              <label for="auditBenchmarkSelect" data-i18n="nsaBenchmarkLabel">Benchmark / Standard di Security</label>
+              <select id="auditBenchmarkSelect">
+                <!-- Gli altri benchmark arrivano da /api/netsec-audit/benchmarks
+                     (populateBenchmarkSelect), raggruppati CIS / Framework. -->
+                <option value="cis" data-i18n="nsaBenchAuto">CIS — automatico in base all'apparato</option>
               </select>
-              <button id="btnExportAuditReport" class="btn btn-secondary" style="width:auto; margin:0;" data-i18n="nsaBtnExport"><i class="fa-solid fa-file-pdf"></i> Esporta Report Compliance</button>
+              <p id="auditBenchmarkResolved" class="nsa-resolved"></p>
             </div>
+            <details id="auditBenchmarkReqs" class="nsa-reqs">
+              <summary data-i18n="nsaReqsSummary">
+                <i class="fa-solid fa-circle-info"></i> Requisiti verificati da questo benchmark
+              </summary>
+              <div id="auditBenchmarkReqsBody"></div>
+            </details>
           </div>
         </div>
-
-        <div class="panel" style="padding:16px; display:flex; flex-direction:column; justify-content:center;">
-          <h4 style="margin:0 0 8px; font-size:13px; color:var(--text-muted);" data-i18n="nsaUploadTitle"><i class="fa-solid fa-file-arrow-up"></i> Upload File Config (.conf / .cfg / .xml)</h4>
-          <div id="auditDropZone" style="border:2px dashed var(--border); border-radius:0; padding:20px; text-align:center; cursor:pointer; background:var(--surface-2);">
-            <input type="file" id="auditFileInput" style="display:none;" accept=".conf,.cfg,.txt,.xml" aria-label="File di audit da caricare" data-i18n-aria-label="ariaAuditFile">
-            <!-- Il testo tradotto sta in uno span interno: il drop di un file
-                 riscrive #auditDropText, e un data-i18n sul contenitore
-                 ripristinerebbe l'invito al caricamento a ogni cambio lingua,
-                 cancellando il nome del file appena caricato. -->
-            <div id="auditDropText" style="font-size:12px; color:var(--text-muted);">
-              <i class="fa-solid fa-cloud-arrow-up fa-2x" style="color:var(--primary); margin-bottom:8px;"></i><br>
-              <span data-i18n="nsaDropText">Trascina qui il file di configurazione o clicca per caricare</span>
-            </div>
+        <div class="nsa-setup-foot">
+          <label class="nsa-save" for="auditSaveRun">
+            <input type="checkbox" id="auditSaveRun">
+            <span data-i18n="auditSaveRunLabel">Conserva questa esecuzione nello storico</span>
+          </label>
+          <div id="auditSaveNameContainer" class="nsa-runname">
+            <input type="text" id="auditRunName" placeholder="Nome / Etichetta Audit (opzionale, es. Audit Q3)" data-i18n-placeholder="auditRunNamePh" aria-label="Nome / Etichetta Audit (opzionale, es. Audit Q3)" data-i18n-aria-label="auditRunNamePh">
           </div>
+          <button id="btnRunAuditScan" class="btn btn-primary" style="width:auto; margin:0 0 0 auto;" data-i18n="nsaBtnRun"><i class="fa-solid fa-play"></i> Esegui Audit Scan</button>
         </div>
       </div>
 
-      <div class="panel" style="padding:16px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
-          <h4 style="margin:0; font-size:15px;" data-i18n="nsaResultsTitle"><i class="fa-solid fa-list-check"></i> Matrice Risultati Audit Policy</h4>
-          <div style="display:flex; gap:8px;">
+      <!-- 2. Esito: punteggio e ripartizione. -->
+      <div class="nsa-summary">
+        <div class="panel nsa-score-card">
+          <div class="nsa-step-title" data-i18n="nsaScoreLabel">Score Compliance Security</div>
+          <div class="nsa-score-row">
+            <h1 id="auditScoreValue">--</h1>
+            <span id="auditGradeBadge" class="badge">--</span>
+          </div>
+          <div class="nsa-score-bar"><span id="auditScoreBar" style="width:0%;"></span></div>
+          <div class="nsa-score-foot"><span data-i18n="nsaKpiTotal">Regole Auditate</span> <b id="auditStatTotal">0</b></div>
+        </div>
+        <div class="panel nsa-breakdown">
+          <div class="nsa-bd-item nsa-bd-fail"><span class="nsa-dot"></span><span data-i18n="nsaKpiFailed">Vulnerabili / Fail</span><b id="auditStatFailed">0</b></div>
+          <div class="nsa-bd-item nsa-bd-warn"><span class="nsa-dot"></span><span data-i18n="nsaKpiWarned">Warning / Attenzione</span><b id="auditStatWarned">0</b></div>
+          <div class="nsa-bd-item nsa-bd-pass"><span class="nsa-dot"></span><span data-i18n="nsaKpiPassed">Conformi / Pass</span><b id="auditStatPassed">0</b></div>
+          <div class="nsa-bd-item nsa-bd-unknown" title="Sezioni di configurazione assenti dal file analizzato: non valutabili, escluse dal calcolo dello score." data-i18n-title="nsaKpiUnknownHint"><span class="nsa-dot"></span><span data-i18n="nsaKpiUnknown">Non valutabili</span><b id="auditStatUnknown">0</b></div>
+        </div>
+      </div>
+      <div id="auditPartialWarning" class="nsa-partial" style="display:none;">
+        <i class="fa-solid fa-circle-info"></i> <span id="auditPartialWarningText"></span>
+      </div>
+
+      <!-- 3. Risultati: schede di stato con conteggi, filtri, matrice. -->
+      <div class="panel nsa-results">
+        <div class="nsa-results-head">
+          <h4 data-i18n="nsaResultsTitle"><i class="fa-solid fa-list-check"></i> Matrice Risultati Audit Policy</h4>
+          <div class="nsa-export">
+            <!-- Lingua del REPORT, non dell'interfaccia: un audit si consegna,
+                 e il destinatario puo' non leggere la lingua di chi lo esegue.
+                 Default sulla lingua della UI, sovrascrivibile. -->
+            <label for="auditReportLang" data-i18n="nsaReportLangLabel">Lingua report</label>
+            <select id="auditReportLang">
+              <option value="it">Italiano</option>
+              <option value="en">English</option>
+            </select>
+            <button id="btnExportAuditReport" class="btn btn-secondary" style="width:auto; margin:0;" data-i18n="nsaBtnExport"><i class="fa-solid fa-file-pdf"></i> Esporta Report Compliance</button>
+          </div>
+        </div>
+        <div class="nsa-toolbar">
+          <!-- Le schede scrivono in #auditStatusFilter, che resta la sorgente
+               di verita' letta da renderAuditRulesTable(). -->
+          <div id="auditStatusTabs" class="nsa-status-tabs" role="tablist" aria-label="Filtra per stato" data-i18n-aria-label="ariaAuditStatus">
+            <button type="button" class="nsa-status-tab" role="tab" aria-selected="true" data-status="all"><span data-i18n="nsaTabAll">Tutti</span> <b id="auditTabCountAll">0</b></button>
+            <button type="button" class="nsa-status-tab nsa-st-fail" role="tab" aria-selected="false" data-status="FAIL">Fail <b id="auditTabCountFail">0</b></button>
+            <button type="button" class="nsa-status-tab nsa-st-warn" role="tab" aria-selected="false" data-status="WARN">Warn <b id="auditTabCountWarn">0</b></button>
+            <button type="button" class="nsa-status-tab nsa-st-pass" role="tab" aria-selected="false" data-status="PASS">Pass <b id="auditTabCountPass">0</b></button>
+            <button type="button" class="nsa-status-tab" role="tab" aria-selected="false" data-status="UNKNOWN">N/D <b id="auditTabCountUnknown">0</b></button>
+          </div>
+          <!-- Gli stati sono le costanti di services/netsec_audit/model.py;
+               UNKNOWN qui si legge "N/D", come nel badge della tabella. -->
+          <select id="auditStatusFilter" style="display:none;" aria-label="Filtra per stato" data-i18n-aria-label="ariaAuditStatus">
+            <option value="all" data-i18n="nsaFilterStatusAll">Filtra Stato: Tutti</option>
+            <option value="PASS">Pass</option>
+            <option value="FAIL">Fail</option>
+            <option value="WARN">Warn</option>
+            <option value="UNKNOWN">N/D</option>
+          </select>
+          <div class="nsa-filters">
             <select id="auditSevFilter" aria-label="Filtra per gravita" data-i18n-aria-label="ariaAuditSeverity">
               <option value="all" data-i18n="nsaFilterSevAll">Filtra Severità: Tutte</option>
               <option value="critical">Critical</option>
@@ -4266,19 +4345,10 @@
               <option value="threat prevention">Threat Prevention</option>
               <option value="availability">Availability</option>
             </select>
-            <!-- Gli stati sono le costanti di services/netsec_audit/model.py;
-                 UNKNOWN qui si legge "N/D", come nel badge della tabella. -->
-            <select id="auditStatusFilter" aria-label="Filtra per stato" data-i18n-aria-label="ariaAuditStatus">
-              <option value="all" data-i18n="nsaFilterStatusAll">Filtra Stato: Tutti</option>
-              <option value="PASS">Pass</option>
-              <option value="FAIL">Fail</option>
-              <option value="WARN">Warn</option>
-              <option value="UNKNOWN">N/D</option>
-            </select>
           </div>
         </div>
         <div class="table-container">
-          <table>
+          <table class="nsa-table">
             <thead>
               <tr>
                 <th data-i18n="nsaThId">ID Regola</th>
@@ -4295,13 +4365,13 @@
       </div>
 
       <!-- Storico Audit -->
-      <div id="auditHistoryPanel" class="panel" style="margin-top:16px; padding:16px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-          <h4 style="margin:0; font-size:15px; color:var(--primary);" data-i18n="auditHistoryTitle"><i class="fa-solid fa-clock-rotate-left"></i> Storico Esecuzioni Audit</h4>
-          <button id="btnRefreshAuditHistory" class="btn btn-secondary" style="width:auto; margin:0; padding:4px 10px; font-size:12px;"><i class="fa-solid fa-rotate"></i> <span data-i18n="btnRefresh">Aggiorna</span></button>
+      <div id="auditHistoryPanel" class="panel nsa-results">
+        <div class="nsa-results-head">
+          <h4 data-i18n="auditHistoryTitle"><i class="fa-solid fa-clock-rotate-left"></i> Storico Esecuzioni Audit</h4>
+          <button id="btnRefreshAuditHistory" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-rotate"></i> <span data-i18n="btnRefresh">Aggiorna</span></button>
         </div>
         <div class="table-container">
-          <table>
+          <table class="nsa-table">
             <thead>
               <tr>
                 <th data-i18n="auditHistThDate">Data / Ora</th>

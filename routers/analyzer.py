@@ -204,7 +204,9 @@ class NetSecAuditSchema(BaseModel):
     config_text: Optional[str] = None
     device_ip: Optional[str] = None
     device_name: Optional[str] = None
-    benchmark: str = "cis"  # 'cis' | 'nist' | 'pci'
+    # A key of services/netsec_audit/benchmarks, or "cis" for the CIS
+    # benchmark of the platform detected in the configuration.
+    benchmark: str = "cis"
     # Lingua del REPORT, indipendente da quella dell'interfaccia: un audit si
     # consegna, e il destinatario puo' non leggere la lingua di chi lo esegue.
     lang: str = "it"        # 'it' | 'en'
@@ -230,8 +232,10 @@ def netsec_audit_benchmarks(lang: str = "it",
         return value or ""
 
     return {
-        key: [
-            {
+        key: {
+            "title": netsec_audit.BENCHMARK_TITLES[key],
+            "group": netsec_audit.BENCHMARK_GROUPS[key],
+            "rules": [{
                 "id": r["id"],
                 "title": _text(r["title"]),
                 "severity": r["severity"],
@@ -248,8 +252,8 @@ def netsec_audit_benchmarks(lang: str = "it",
                 "remediation": _text(r["remediation"]),
                 "guidance": _guidance.guidance_for(r["check"].__name__, code),
             }
-            for r in rules
-        ]
+            for r in rules],
+        }
         for key, rules in netsec_audit.BENCHMARKS.items()
     }
 

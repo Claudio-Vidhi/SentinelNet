@@ -40,6 +40,7 @@
         const langSel = document.getElementById('auditReportLang');
         if (langSel) langSel.value = (currentLang === 'en') ? 'en' : 'it';
         populateAuditDeviceSelect();
+        populateBenchmarkSelect();
         renderAuditOverview();
         renderAuditRulesTable();
         setupConfigDropzone();
@@ -211,6 +212,16 @@
             if (el) el.textContent = val;
         };
         set('auditStatTotal', s.total);
+        set('auditTabCountAll', s.total);
+        set('auditTabCountFail', s.failed);
+        set('auditTabCountWarn', s.warned);
+        set('auditTabCountPass', s.passed);
+        set('auditTabCountUnknown', unknown);
+        const bar = document.getElementById('auditScoreBar');
+        if (bar) {
+            bar.style.width = hasScore ? `${score}%` : '0%';
+            bar.dataset.level = !hasScore ? '' : (score >= 80 ? 'good' : score >= 60 ? 'warn' : 'bad');
+        }
         set('auditStatFailed', s.failed);
         set('auditStatPassed', s.passed);
         set('auditStatWarned', s.warned);
@@ -267,18 +278,17 @@
 
         tbody.innerHTML = filtered.map(r => {
             const statusBadge = r.status === 'PASS'
-                ? `<span class="badge" style="background:rgba(34, 197, 94, 0.15); color:var(--success);"><i class="fa-solid fa-check"></i> PASS</span>`
+                ? `<span class="nsa-pill nsa-pill-pass"><i class="fa-solid fa-check"></i> PASS</span>`
                 : r.status === 'FAIL'
-                ? `<span class="badge" style="background:rgba(239, 68, 68, 0.15); color:var(--danger);"><i class="fa-solid fa-xmark"></i> FAIL</span>`
+                ? `<span class="nsa-pill nsa-pill-fail"><i class="fa-solid fa-xmark"></i> FAIL</span>`
                 : r.status === 'WARN'
-                ? `<span class="badge" style="background:rgba(245, 158, 11, 0.15); color:var(--warning);"><i class="fa-solid fa-triangle-exclamation"></i> WARN</span>`
-                : `<span class="badge" style="background:var(--surface-3); color:var(--text-muted);" title="${tr('nsaConfigSectionAbsentNot')}"><i class="fa-solid fa-circle-question"></i> N/D</span>`;
+                ? `<span class="nsa-pill nsa-pill-warn"><i class="fa-solid fa-triangle-exclamation"></i> WARN</span>`
+                : `<span class="nsa-pill" title="${tr('nsaConfigSectionAbsentNot')}"><i class="fa-solid fa-circle-question"></i> N/D</span>`;
 
-            const sevBadge = r.severity === 'CRITICAL'
-                ? `<span class="badge" style="background:var(--danger); color:#fff; font-weight:700;">CRITICAL</span>`
-                : r.severity === 'HIGH'
-                ? `<span class="badge" style="background:var(--warning); color:#000; font-weight:700;">HIGH</span>`
-                : `<span class="badge" style="background:var(--surface-3);">${escapeHtml(r.severity || 'MEDIUM')}</span>`;
+            // Gravita' come punto colorato + testo: il colore pieno era
+            // riservato agli stati, due sistemi di badge pieni si annullavano.
+            const sev = String(r.severity || 'MEDIUM').toUpperCase();
+            const sevBadge = `<span class="nsa-sev nsa-sev-${escapeHtml(sev.toLowerCase())}"><span class="nsa-dot"></span>${escapeHtml(sev)}</span>`;
 
             // Riferimento alla raccomandazione nel benchmark di origine: senza
             // di esso l'esito non e' verificabile contro il documento.
@@ -424,6 +434,18 @@
                 _auditVendor = data.vendor || null;
                 _auditDeviceName = data.device_name || (uploaded ? _droppedConfigName : (devSel ? devSel.options[devSel.selectedIndex]?.text : '')) || 'Device';
                 _auditBenchmarkName = data.benchmark_title || data.benchmark || benchmark;
+                _auditResolvedBenchmark = data.benchmark || null;
+                // Benchmark senza regole per questa piattaforma (CIS FortiGate
+                // su una config Cisco): si passa a quello giusto e si rilancia,
+                // invece di mostrare una matrice vuota che sembra "tutto ok".
+                const benchSel = document.getElementById('auditBenchmarkSelect');
+                if (data.suggested_benchmark && !_auditRules.length && benchSel
+                        && [...benchSel.options].some(o => o.value === data.suggested_benchmark)) {
+                    benchSel.value = data.suggested_benchmark;
+                    showToast(tr('nsaBenchSwitched', {title: benchSel.options[benchSel.selectedIndex].text}), 'info');
+                    return runAuditScan();
+                }
+                syncBenchmarkResolved();
                 renderAuditOverview();
                 renderAuditRulesTable();
                 if (data.saved_id) {
@@ -445,7 +467,7 @@
         } finally {
             if (btn) {
                 btn.disabled = false;
-                btn.innerHTML = `<i class="fa-solid fa-play"></i> Esegui Audit Scan`;
+                btn.innerHTML = tr('nsaBtnRun');
             }
         }
     }
@@ -1548,6 +1570,50 @@ ${pagesHtml}
     // Requisiti dichiarati dal motore, non una copia scritta a mano nella UI:
     // se una regola cambia titolo, severita' o rimedio, questo elenco segue.
     let _benchmarkCatalog = null;
+    // Benchmark realmente applicato dall'ultima scansione: con "cis"
+    // (automatico) e' quello della piattaforma riconosciuta.
+    let _auditResolvedBenchmark = null;
+
+    async function loadBenchmarkCatalog() {
+        if (_benchmarkCatalog) return _benchmarkCatalog;
+        const res = await apiFetch('/api/netsec-audit/benchmarks');
+        if (!res || !res.ok) return null;
+        _benchmarkCatalog = await res.json();
+        return _benchmarkCatalog;
+    }
+
+    // Le voci vengono dal registro del motore (services/netsec_audit/
+    // benchmarks): aggiungere un benchmark li' basta a farlo comparire qui.
+    async function populateBenchmarkSelect() {
+        const sel = document.getElementById('auditBenchmarkSelect');
+        if (!sel) return;
+        let catalog;
+        try { catalog = await loadBenchmarkCatalog(); } catch (e) { return; }
+        if (!catalog) return;
+        const groups = { cis: tr('nsaGroupCis'), framework: tr('nsaGroupFramework') };
+        const current = sel.value;
+        // Ricostruzione idempotente: il tab si carica piu' volte e due
+        // chiamate possono attendere il catalogo insieme. Un flag impostato
+        // dopo l'await non le ferma, e ognuna aggiungeva i suoi gruppi.
+        sel.querySelectorAll('optgroup').forEach(g => g.remove());
+        Object.keys(groups).forEach(g => {
+            const keys = Object.keys(catalog).filter(k => catalog[k].group === g);
+            if (!keys.length) return;
+            const og = document.createElement('optgroup');
+            og.label = groups[g];
+            keys.forEach(k => og.appendChild(new Option(catalog[k].title, k)));
+            sel.appendChild(og);
+        });
+        sel.value = [...sel.options].some(o => o.value === current) ? current : 'cis';
+    }
+
+    function syncBenchmarkResolved() {
+        const el = document.getElementById('auditBenchmarkResolved');
+        if (!el) return;
+        const sel = document.getElementById('auditBenchmarkSelect');
+        el.textContent = (sel && sel.value === 'cis' && _auditBenchmarkName)
+            ? tr('nsaBenchApplied', {title: _auditBenchmarkName}) : '';
+    }
 
     async function renderBenchmarkRequirements() {
         const details = document.getElementById('auditBenchmarkReqs');
@@ -1559,24 +1625,29 @@ ${pagesHtml}
         if (!_benchmarkCatalog) {
             body.innerHTML = `<div style="font-size:12px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> ${tr('nsaLoadingRequirements')}</div>`;
             try {
-                const res = await apiFetch('/api/netsec-audit/benchmarks');
-                if (!res || !res.ok) {
+                if (!await loadBenchmarkCatalog()) {
                     body.innerHTML = `<div style="font-size:12px; color:var(--danger);">${tr('nsaUnableToLoadThe')}</div>`;
                     return;
                 }
-                _benchmarkCatalog = await res.json();
             } catch (e) {
                 body.innerHTML = `<div style="font-size:12px; color:var(--danger);">${tr('nsaNetworkErrorWhileLoading')}</div>`;
                 return;
             }
         }
 
-        const reqs = _benchmarkCatalog[key] || [];
+        // "cis" automatico non ha un elenco proprio: si mostra quello
+        // applicato dall'ultima scansione, se c'e'.
+        const shownKey = (key === 'cis') ? _auditResolvedBenchmark : key;
+        if (!shownKey || !_benchmarkCatalog[shownKey]) {
+            body.innerHTML = `<div style="font-size:12px; color:var(--text-muted);">${tr('nsaReqsPickSpecific')}</div>`;
+            return;
+        }
+        const reqs = _benchmarkCatalog[shownKey].rules || [];
         const sevColor = { CRITICAL: 'var(--danger)', HIGH: 'var(--danger)', MEDIUM: 'var(--warning)', LOW: 'var(--text-muted)' };
         // Le regole di un benchmark coprono piu' piattaforme: una scansione ne
         // esegue solo quelle del vendor riconosciuto nella configurazione, e
         // dirlo qui evita che l'elenco sembri una promessa di eseguirle tutte.
-        const vendorLabel = { fortios: 'FortiOS', ios: 'Cisco IOS XE' };
+        const vendorLabel = { fortios: 'FortiOS', ios: 'Cisco IOS XE', linux: 'Ubuntu Linux' };
         const counts = reqs.reduce((acc, r) => {
             acc[r.vendor] = (acc[r.vendor] || 0) + 1;
             return acc;
@@ -1751,7 +1822,10 @@ ${pagesHtml}
         if (btn && btn.dataset.subtab) switchNetSecSubtab(btn.dataset.subtab);
     });
 
-    document.getElementById('auditBenchmarkSelect')?.addEventListener('change', renderBenchmarkRequirements);
+    document.getElementById('auditBenchmarkSelect')?.addEventListener('change', () => {
+        renderBenchmarkRequirements();
+        syncBenchmarkResolved();
+    });
     document.getElementById('auditBenchmarkReqs')?.addEventListener('toggle', renderBenchmarkRequirements);
     document.getElementById('auditRunName')?.addEventListener('input', toggleAuditSaveNameInput);
     document.getElementById('btnRunAuditScan')?.addEventListener('click', runAuditScan);
@@ -1759,6 +1833,15 @@ ${pagesHtml}
     document.getElementById('auditSevFilter')?.addEventListener('change', renderAuditRulesTable);
     document.getElementById('auditCatFilter')?.addEventListener('change', renderAuditRulesTable);
     document.getElementById('auditStatusFilter')?.addEventListener('change', renderAuditRulesTable);
+    document.getElementById('auditStatusTabs')?.addEventListener('click', (e) => {
+        const tab = e.target.closest('[data-status]');
+        if (!tab) return;
+        const sel = document.getElementById('auditStatusFilter');
+        sel.value = tab.dataset.status;
+        document.querySelectorAll('#auditStatusTabs [data-status]').forEach(t =>
+            t.setAttribute('aria-selected', String(t === tab)));
+        sel.dispatchEvent(new Event('change'));
+    });
     document.getElementById('btnRefreshAuditHistory')?.addEventListener('click', loadAuditHistory);
     window.addEventListener('globalTenantChanged', populateAuditDeviceSelect);
 

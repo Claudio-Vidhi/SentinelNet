@@ -31,13 +31,19 @@ import requests
 
 from security.redaction import redact
 
-DEFAULT_TIMEOUT = 60
+# (connect, read): an unreachable host fails fast, while a reasoning model
+# that thinks before answering gets time to do so. A flat 60 s read timeout
+# cut off slower Gemini/Ollama replies mid-generation.
+DEFAULT_TIMEOUT = (10, 180)
 
 # Sensible per-provider default model when the user does not specify one.
 DEFAULT_MODELS = {
     "anthropic": "claude-3-5-sonnet-latest",
     "openai": "gpt-4o-mini",
-    "gemini": "gemini-3-flash",
+    # "gemini-3-flash" does not exist for keys created now (404), and older
+    # models are being retired for new users: keep this on a model ListModels
+    # actually returns and that answers on the free tier.
+    "gemini": "gemini-3.5-flash-lite",
     "ollama": "llama3",
 }
 
@@ -303,6 +309,20 @@ def _raise_provider_http_error(provider_label, resp):
     raise AiAssistantError(f"{provider_label} API error {resp.status_code}: {resp.text[:500]}")
 
 
+def _network_error(provider, e, timeout):
+    """Readable message for a transport failure, instead of the raw urllib3 text."""
+    if isinstance(e, requests.Timeout):
+        read_s = timeout[1] if isinstance(timeout, tuple) else timeout
+        return AiAssistantError(
+            f"Il provider '{provider}' non ha risposto entro {read_s} s. Riprova, "
+            "riduci il contesto allegato o scegli un modello più veloce.")
+    if isinstance(e, requests.ConnectionError):
+        return AiAssistantError(
+            f"Impossibile raggiungere il provider '{provider}': controlla la "
+            "connessione, il proxy o l'endpoint configurato.")
+    return AiAssistantError(f"Errore di rete verso il provider '{provider}': {e}")
+
+
 def _split_system(messages):
     """Separates any 'system' messages (concatenated) from the rest of the conversation."""
     system_parts = [m["content"] for m in messages if m.get("role") == "system"]
@@ -384,7 +404,7 @@ def _chat_gemini(messages, model, api_key, timeout):
     model_name = _normalize_gemini_model(model)
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{model_name}:generateContent?key={api_key}"
+        f"{model_name}:generateContent"
     )
     role_map = {"assistant": "model", "user": "user"}
     contents = [
@@ -394,7 +414,10 @@ def _chat_gemini(messages, model, api_key, timeout):
     payload: Dict[str, Any] = {"contents": contents}
     if system:
         payload["systemInstruction"] = {"parts": [{"text": system}]}
-    resp = requests.post(url, json=payload, timeout=timeout)
+    # Key in a header, not in the query string: requests puts the URL in
+    # connection-error messages, which reach the UI and the logs.
+    resp = requests.post(url, json=payload, headers={"x-goog-api-key": api_key},
+                         timeout=timeout)
     if resp.status_code >= 400:
         _raise_provider_http_error("Gemini", resp)
     data = resp.json()
@@ -422,8 +445,8 @@ def _chat_ollama(messages, model, timeout, base_url=None):
 def _list_models_gemini(api_key, timeout):
     if not api_key:
         raise AiAssistantError("API key Gemini mancante.")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
-    resp = requests.get(url, timeout=timeout)
+    url = "https://generativelanguage.googleapis.com/v1beta/models"
+    resp = requests.get(url, headers={"x-goog-api-key": api_key}, timeout=timeout)
     if resp.status_code >= 400:
         raise AiAssistantError(f"Gemini API error {resp.status_code}: {resp.text[:500]}")
     data = resp.json()
@@ -513,7 +536,7 @@ def list_models(provider, api_key=None, base_url=None, timeout=DEFAULT_TIMEOUT):
     except AiAssistantError:
         raise
     except requests.RequestException as e:
-        raise AiAssistantError(f"Errore di rete verso il provider '{provider}': {e}")
+        raise _network_error(provider, e, timeout)
 
 
 _PROVIDERS = {"anthropic", "openai", "gemini", "ollama"}
@@ -586,4 +609,4 @@ def chat(messages, provider, model=None, api_key=None, base_url=None, timeout=DE
     except AiAssistantError:
         raise
     except requests.RequestException as e:
-        raise AiAssistantError(f"Errore di rete verso il provider '{provider}': {e}")
+        raise _network_error(provider, e, timeout)

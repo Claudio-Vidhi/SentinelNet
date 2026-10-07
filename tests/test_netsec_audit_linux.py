@@ -111,7 +111,7 @@ class TestCleanConfiguration(unittest.TestCase):
 
     def test_every_rule_passes(self):
         failed = []
-        for tmpl in netsec_audit.BENCHMARKS["cis"]:
+        for tmpl in netsec_audit.BENCHMARKS["cis-ubuntu"]:
             if tmpl["vendor"] != LINUX:
                 continue
             outcome = tmpl["check"](self.cfg)
