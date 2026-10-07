@@ -13,6 +13,7 @@ pyjwt==2.15.1
 websockets==17.1
 paramiko==5.0.0
 requests==2.34.2
+keyring==25.7.0
 ncclient==0.7.1
 pyserial==3.5
 pysnmp==7.1.30

@@ -2880,6 +2880,7 @@
     <div id="tab-mcp" class="tab-content" role="tabpanel" tabindex="0">
       <div class="page-head">
         <div class="page-head-text">
+          <div class="page-eyebrow" data-i18n="mcpEyebrow"><i class="fa-solid fa-plug"></i> Integrazioni</div>
           <h2 data-i18n="titleMcp">MCP Server — client LLM esterni</h2>
           <p data-i18n="descMcp">SentinelNet è utilizzabile da client LLM esterni (Claude Desktop, LM Studio, Cline…) tramite il protocollo <strong>MCP</strong> (Model Context Protocol): il ponte <code>mcp_server.py</code> gira sulla macchina del client, si autentica con un account SentinelNet e inoltra le richieste all'API REST. Ruoli, tenant e blacklist comandi restano applicati lato server. Consiglio: crea un account dedicato (<em>viewer</em> per sola lettura, <em>operator</em> se servono i comandi CLI).</p>
         </div>
@@ -2888,35 +2889,133 @@
       <!-- What the client needs (read and copy) beside what it may call
            (toggles and one Save). -->
       <div class="mcp-layout">
-        <section class="panel">
+        <section class="panel" id="panelMcpConnect">
           <div class="panel-head">
-            <h3 data-i18n="titleMcpClientConfig">Configurazione client</h3>
+            <h3 data-i18n="titleMcpClientConfig">Collega un client AI</h3>
             <button class="btn btn-secondary btn-small" id="btnCopyMcpConfig" style="width:auto;">
               <i class="fa-solid fa-copy"></i> <span data-i18n="btnCopyJson">Copia JSON</span>
             </button>
           </div>
+
+          <div class="mcp-client-tabs" role="tablist" aria-label="Client supportati" data-i18n-aria-label="lblMcpClientTabs">
+            <button type="button" class="mcp-client-tab is-active" data-client="claude" role="tab" aria-selected="true" id="tabClientClaude">
+              <i class="fa-solid fa-brain"></i> <span data-i18n="mcpClientClaude">Claude Desktop</span>
+            </button>
+            <button type="button" class="mcp-client-tab" data-client="cursor" role="tab" aria-selected="false" id="tabClientCursor">
+              <i class="fa-solid fa-code"></i> <span data-i18n="mcpClientCursor">Cursor</span>
+            </button>
+            <button type="button" class="mcp-client-tab" data-client="cline" role="tab" aria-selected="false" id="tabClientCline">
+              <i class="fa-solid fa-robot"></i> <span data-i18n="mcpClientCline">Cline</span>
+            </button>
+            <button type="button" class="mcp-client-tab" data-client="cli" role="tab" aria-selected="false" id="tabClientCli">
+              <i class="fa-solid fa-terminal"></i> <span data-i18n="mcpClientCli">PowerShell / CLI</span>
+            </button>
+          </div>
+
+          <div class="mcp-guide-banner" id="mcpClientGuideBanner">
+            <div class="mcp-guide-icon"><i class="fa-solid fa-folder-open"></i></div>
+            <div class="mcp-guide-body">
+              <div class="mcp-guide-path"><code id="mcpClientPathText" data-i18n="mcpPathClaude">Config: %APPDATA%\Claude\claude_desktop_config.json</code></div>
+              <div class="mcp-guide-sub" id="mcpClientSubText" data-i18n="mcpStepClaude">Copia questa configurazione nel file MCP di Claude (Impostazioni → Sviluppatore → Modifica configurazione), poi riavvialo.</div>
+            </div>
+          </div>
+
+          <div class="mcp-prewarn-card">
+            <div class="mcp-prewarn-header">
+              <i class="fa-solid fa-compass mcp-prewarn-icon"></i>
+              <div>
+                <strong data-i18n="mcpPreWarnTitle">Cosa aspettarsi (Procedura Guidata):</strong>
+                <p data-i18n="mcpPreWarnDesc">Al primo avvio del client (o del comando sotto), si aprirà automaticamente una nuova finestra del browser su SentinelNet. Questa finestra serve a farti verificare ed approvare i permessi in modo sicuro prima di concedere l'accesso.</p>
+              </div>
+            </div>
+            <div class="mcp-prewarn-steps">
+              <div class="mcp-prewarn-step">
+                <span class="mcp-step-num">1</span>
+                <span data-i18n="mcpPreStep1">1. Configura client</span>
+              </div>
+              <div class="mcp-prewarn-step">
+                <span class="mcp-step-num">2</span>
+                <span data-i18n="mcpPreStep2">2. Si apre il browser</span>
+              </div>
+              <div class="mcp-prewarn-step">
+                <span class="mcp-step-num">3</span>
+                <span data-i18n="mcpPreStep3">3. Approva permessi</span>
+              </div>
+            </div>
+            <button type="button" class="btn btn-secondary btn-small" id="btnOpenMcpGuideModal" style="width:auto; margin-top:10px;">
+              <i class="fa-solid fa-circle-question"></i> <span data-i18n="btnMcpGuideModal">Visualizza guida dettagliata passo-passo</span>
+            </button>
+          </div>
+
+          <!-- The request to connect always starts from the client: these
+               steps say so, because nothing here can start it. -->
+          <ol class="mcp-steps">
+            <li data-i18n="mcpStep1">Copia questa configurazione nel file MCP del client (Claude Desktop: Impostazioni → Sviluppatore → Modifica configurazione).</li>
+            <li data-i18n="mcpStep2">Chiudi del tutto il client e riaprilo: si apre il browser sulla pagina di autorizzazione di SentinelNet.</li>
+            <li data-i18n="mcpStep3">Accedi, lascia «Solo lettura» e premi Autorizza. Il client compare in «Client autorizzati» e nel tuo profilo.</li>
+          </ol>
           <p class="set-desc" data-i18n="descMcpClientConfig">
-            Snippet per <code>claude_desktop_config.json</code> (o equivalente del tuo client). Sostituisci utente e password
-            con l'account dedicato; il percorso deve puntare alla copia locale di <code>mcp_server.py</code>.
+            Comando e percorsi sono quelli di questa installazione: validi se il client gira su questa macchina, altrimenti adattali.
           </p>
           <pre id="mcpConfigSnippet" class="code-block"></pre>
+          <div class="panel-head" style="margin-top:14px;">
+            <h4 style="font-size:13px; margin:0;" data-i18n="mcpLoginNowTitle">Autorizza adesso, da terminale</h4>
+            <button class="btn btn-secondary btn-small" id="btnCopyMcpLogin" style="width:auto;">
+              <i class="fa-solid fa-copy"></i> <span data-i18n="btnCopyCommand">Copia comando</span>
+            </button>
+          </div>
+          <p class="set-desc" data-i18n="mcpLoginNowDesc">Senza aspettare il client: esegui questo comando in PowerShell sulla macchina del client, approva nella pagina che si apre, poi avvia il client.</p>
+          <pre id="mcpLoginCommand" class="code-block"></pre>
         </section>
 
-        <section class="panel">
+        <section class="panel" id="panelMcpTools">
           <div class="panel-head">
-            <h3 data-i18n="titleMcpTools">Tool esposti</h3>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <h3 data-i18n="titleMcpTools">Tool esposti</h3>
+              <span id="mcpToolsCountBadge" class="badge" style="font-size:11px;"></span>
+            </div>
+            <div class="set-actions" style="margin:0;">
+              <button class="btn btn-primary btn-small" id="btnSaveMcpSettings" style="width:auto;">
+                <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btnSave">Salva</span>
+              </button>
+              <span id="mcpSettingsStatus" class="set-status"></span>
+            </div>
           </div>
           <p class="set-desc" data-i18n="descMcpTools">
             Scegli quali tool i client MCP possono usare. I tool disattivati spariscono dall'elenco del client e ogni
             chiamata viene rifiutata. La modifica vale per tutti i client collegati (ricaricano l'elenco entro ~1 minuto).
           </p>
-          <div id="mcpToolList" class="mcp-tool-list"></div>
-          <div class="set-actions">
-            <button class="btn btn-primary btn-small" id="btnSaveMcpSettings" style="width:auto;">
-              <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btnSave">Salva</span>
-            </button>
-            <span id="mcpSettingsStatus" class="set-status"></span>
+
+          <div class="mcp-tools-toolbar">
+            <div class="mcp-presets-group">
+              <span style="font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase;" data-i18n="lblMcpPresets">Preset:</span>
+              <button type="button" class="btn btn-secondary btn-small" id="btnMcpPresetSafe" data-i18n="mcpPresetSafe">Solo lettura sicura</button>
+              <button type="button" class="btn btn-secondary btn-small" id="btnMcpPresetAll" data-i18n="mcpPresetAll">Tutti attivi</button>
+              <button type="button" class="btn btn-secondary btn-small" id="btnMcpPresetDefault" data-i18n="mcpPresetDefault">Default SentinelNet</button>
+            </div>
+            <div class="mcp-filter-box">
+              <input type="search" id="mcpToolFilterInput" class="head-search" placeholder="Filtra tool..." data-i18n-placeholder="mcpFilterPlaceholder" aria-label="Filtra tool MCP" data-i18n-aria-label="lblMcpFilterTool">
+            </div>
           </div>
+
+          <div id="mcpToolList" class="mcp-tool-list"></div>
+        </section>
+
+        <section class="panel" id="panelMcpGrants">
+          <div class="panel-head">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <h3 data-i18n="titleMcpGrants">Client autorizzati</h3>
+              <span id="mcpGrantsCountBadge" class="badge" style="font-size:11px;"></span>
+            </div>
+            <button type="button" class="btn btn-secondary btn-small" id="btnRefreshMcpGrants" style="width:auto;">
+              <i class="fa-solid fa-arrows-rotate"></i> <span data-i18n="btnRefresh">Aggiorna</span>
+            </button>
+          </div>
+          <p class="set-desc" data-i18n="descMcpGrants">
+            Client MCP che hanno ottenuto l'accesso dal browser. Ognuno agisce con i permessi dell'utente che l'ha
+            autorizzato; revocarlo lo scollega al prossimo accesso.
+          </p>
+          <div id="mcpGrantList"></div>
         </section>
       </div>
     </div>
@@ -5456,6 +5555,10 @@
       </div>
       <button type="button" class="btn btn-secondary btn-small" id="btnProfEmail" style="width:auto; margin:0 0 18px;" data-i18n="btnProfEmail">Salva indirizzo</button>
 
+      <h4 style="font-size:14px; margin:0 0 4px;" data-i18n="profMcpTitle">Client AI collegati</h4>
+      <p style="font-size:12px; color:var(--text-muted); margin:0 0 8px;" data-i18n="profMcpDesc">Client MCP (Claude, Cursor, VS Code…) che hai autorizzato dal browser. Agiscono con il tuo account.</p>
+      <div id="profMcpList" class="mcp-tool-list" style="margin-bottom:18px;"></div>
+
       <h4 style="font-size:14px; margin:0 0 4px;" data-i18n="profSessionsTitle">Sessioni</h4>
       <p style="font-size:12px; color:var(--text-muted); margin:0 0 8px;" data-i18n="profSessionsDesc">Chiude la sessione su tutti i browser e i client (script, MCP), compreso questo.</p>
       <button type="button" class="btn btn-secondary btn-small" id="btnProfLogoutAll" style="width:auto; margin:0; color:var(--danger);" data-i18n="btnProfLogoutAll">Esci da tutte le sessioni</button>
@@ -6059,6 +6162,46 @@
         <span>Focus sul filtro di ricerca</span> <kbd style="font-family:var(--font-code); padding:2px 6px; background:var(--surface-2); border:1px solid var(--border);">/</kbd>
         <span>Chiudi modale / Rimuovi contesto apparato</span> <kbd style="font-family:var(--font-code); padding:2px 6px; background:var(--surface-2); border:1px solid var(--border);">Esc</kbd>
         <span>Alterna tema chiaro / scuro</span> <kbd style="font-family:var(--font-code); padding:2px 6px; background:var(--surface-2); border:1px solid var(--border);">T</kbd>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modale Guida Connessione Client MCP -->
+  <div id="modalMcpGuide" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalMcpGuideTitle" hidden style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:var(--scrim); backdrop-filter:blur(4px); z-index:10000; display:flex; align-items:center; justify-content:center;">
+    <div style="background:var(--surface); border:1px solid var(--border-strong); box-shadow:var(--shadow-float); width:90%; max-width:560px; padding:24px; max-height:90vh; overflow-y:auto;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 id="modalMcpGuideTitle" style="margin:0; font-size:16px;"><i class="fa-solid fa-compass" style="color:var(--primary); margin-right:8px;"></i> <span data-i18n="modalMcpGuideTitle">Procedura Guidata Connessione Client MCP</span></h3>
+        <button type="button" class="btn btn-secondary btn-small" id="btnCloseMcpGuide" aria-label="Chiudi guida" data-i18n-aria-label="btnMcpGuideClose" style="width:auto; padding:4px 8px;"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      
+      <div class="mcp-modal-steps" style="display:flex; flex-direction:column; gap:14px; font-size:13px; line-height:1.5;">
+        <div style="display:flex; gap:12px; align-items:flex-start;">
+          <span style="display:flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:50%; background:var(--primary); color:#fff; font-weight:700; flex:none;">1</span>
+          <div>
+            <strong data-i18n="mcpGuideModalStep1Title">1. Configurazione del Client</strong>
+            <p style="margin:4px 0 0; color:var(--text-muted); font-size:12px;" data-i18n="mcpGuideModalStep1Desc">Scegli il tuo client preferito (Claude Desktop, Cursor, Cline o CLI). Copia lo snippet JSON generato nel file di configurazione indicato nel banner.</p>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:12px; align-items:flex-start;">
+          <span style="display:flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:50%; background:var(--warning); color:#fff; font-weight:700; flex:none;">2</span>
+          <div>
+            <strong data-i18n="mcpGuideModalStep2Title">2. Apertura del Browser (Preavviso)</strong>
+            <p style="margin:4px 0 0; color:var(--text-muted); font-size:12px;" data-i18n="mcpGuideModalStep2Desc">Quando avvii il client AI (o lanci il comando da terminale), il ponte MCP apre in automatico la pagina di autorizzazione sul browser predefinito. Questo passaggio è previsto e serve a evitare che credenziali o token vengano memorizzati in chiaro.</p>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:12px; align-items:flex-start;">
+          <span style="display:flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:50%; background:var(--success); color:#fff; font-weight:700; flex:none;">3</span>
+          <div>
+            <strong data-i18n="mcpGuideModalStep3Title">3. Conferma e Sola Lettura</strong>
+            <p style="margin:4px 0 0; color:var(--text-muted); font-size:12px;" data-i18n="mcpGuideModalStep3Desc">Nella pagina del browser che si aprirà, effettua l'accesso se richiesto, mantieni selezionata l'opzione «Solo lettura (consigliato)» e clicca «Autorizza». Il token cifrato viene archiviato nel keychain di sistema e il client sarà subito pronto.</p>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:20px; display:flex; justify-content:flex-end; gap:8px;">
+        <button type="button" class="btn btn-primary btn-small" id="btnConfirmMcpGuide" style="width:auto;" data-i18n="btnMcpGuideClose">Ho capito, chiudi</button>
       </div>
     </div>
   </div>

@@ -73,6 +73,10 @@ def get_current_user(request: Request,
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session ended.")
     # Allinea sempre il ruolo allo stato corrente su disco.
     payload["role"] = role
+    # An MCP client authorized read-only (security/mcp_grants.py) is a viewer
+    # whatever the user's role: every role check below reads this field.
+    if payload.get("ro"):
+        payload["role"] = "viewer"
     return payload
 
 

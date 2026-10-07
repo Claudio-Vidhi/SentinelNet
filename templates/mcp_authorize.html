@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="no-referrer">
+  <title>SentinelNet</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230f172a'/%3E%3Cpath d='M46 14H24a9 9 0 0 0 0 18h16a9 9 0 0 1 0 18H18' fill='none' stroke='%23f1f5f9' stroke-width='6' stroke-linecap='round'/%3E%3Ccircle cx='48' cy='14' r='6' fill='%233b82f6'/%3E%3Ccircle cx='16' cy='50' r='5' fill='%230f172a' stroke='%23f1f5f9' stroke-width='3.5'/%3E%3C/svg%3E">
+  <link rel="preload" href="/static/fonts/saira-condensed-600.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/static/fonts/azeret-mono-var.woff2" as="font" type="font/woff2" crossorigin>
+  <link href="/static/vendor/fontawesome/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+  <script src="/static/js/boot-theme.js"></script>
+</head>
+<!-- MCP bridge consent (security/mcp_grants.py, ai/mcp_server.py). Opened by
+     the bridge with ?port=&state=&challenge=&client=&host=&exp=, and again by
+     the bridge's loopback callback with ?result=done|denied. Drawn as a
+     one-line: the client and SentinelNet are two nodes on one bus, and the
+     lamp on the bus is the state of the link. -->
+<body class="consent-page">
+  <main class="consent">
+    <div class="consent-line" aria-hidden="true">
+      <span class="consent-node"><i class="fa-solid fa-robot"></i></span>
+      <span class="consent-bus"><span class="consent-lamp" id="mcpcLamp"></span></span>
+      <span class="consent-node consent-node-brand">
+        <svg viewBox="0 0 64 64" width="30" height="30" focusable="false"><path d="M46 14H24a9 9 0 0 0 0 18h16a9 9 0 0 1 0 18H18" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><circle cx="48" cy="14" r="6" style="fill: var(--cta)"/><circle cx="16" cy="50" r="5" stroke="currentColor" stroke-width="3.5" style="fill: var(--surface)"/></svg>
+      </span>
+    </div>
+    <div class="consent-stepper-wrap">
+      <span class="badge badge-info" style="font-size:11.5px; padding:4px 10px; border-radius:12px;">
+        <i class="fa-solid fa-shield-halved"></i> <span data-i18n="mcpcStepTitle">Passaggio guidato · Conferma di sicurezza</span>
+      </span>
+    </div>
+
+    <h1 class="consent-title" id="mcpcTitle"></h1>
+
+    <div class="consent-guided-alert">
+      <div style="display:flex; align-items:flex-start; gap:10px;">
+        <i class="fa-solid fa-circle-info" style="color:var(--primary); margin-top:2px; font-size:14px;"></i>
+        <div>
+          <strong style="display:block; margin-bottom:2px;" data-i18n="mcpcAlertTitle">Autorizzazione richiesta da client esterno</strong>
+          <span style="color:var(--text-muted);" data-i18n="mcpcAlertDesc">Questa pagina si è aperta perché un client AI locale (o il comando di terminale) sta richiedendo la connessione a SentinelNet. Puoi verificare sotto quali strumenti saranno disponibili e confermare in totale sicurezza.</span>
+        </div>
+      </div>
+    </div>
+
+    <section class="consent-card" id="mcpcLoading">
+      <p class="consent-muted"><i class="fa-solid fa-circle-notch fa-spin"></i> <span data-i18n="mcpcLoading">Verifica della sessione…</span></p>
+    </section>
+
+    <section class="consent-card" id="mcpcLogin" hidden>
+      <p class="consent-muted" data-i18n="mcpcLoginLead">Accedi a SentinelNet per decidere se autorizzare il client.</p>
+      <form id="mcpcLoginForm" novalidate>
+        <div class="form-group">
+          <label for="mcpcUser" data-i18n="lblUser">Username</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-user"></i>
+            <input id="mcpcUser" type="text" autocomplete="username" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="mcpcPass" data-i18n="lblPass">Password</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-lock"></i>
+            <input id="mcpcPass" type="password" autocomplete="current-password" required>
+          </div>
+        </div>
+        <p class="consent-error" id="mcpcLoginError" role="alert" hidden></p>
+        <button type="submit" class="btn btn-primary" id="btnMcpcLogin">
+          <i class="fa-solid fa-right-to-bracket"></i> <span data-i18n="mcpcLoginBtn">Accedi</span>
+        </button>
+      </form>
+      <div id="mcpcSsoBox" hidden>
+        <div class="consent-or"><span data-i18n="ssoOr">oppure</span></div>
+        <a id="mcpcSsoLink" class="btn btn-secondary consent-sso" href="/api/auth/sso/login">
+          <i class="fa-solid fa-id-badge"></i> <span id="mcpcSsoText">Single Sign-On</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="consent-card" id="mcpcAsk" hidden>
+      <div class="consent-account">
+        <i class="fa-solid fa-circle-user"></i>
+        <div>
+          <span data-i18n="mcpcAs">Accesso come</span>
+          <strong class="consent-mono" id="mcpcUsername"></strong>
+          <span class="consent-role" id="mcpcRole"></span>
+          <button type="button" class="consent-link" id="btnMcpcSwitch" data-i18n="mcpcSwitch">Non sei tu? Cambia account</button>
+        </div>
+      </div>
+
+      <div class="consent-block">
+        <h2 class="consent-legend" data-i18n="mcpcCanTitle">Il client potrà</h2>
+        <ul class="consent-perms" id="mcpcPerms"></ul>
+        <label class="consent-ro" id="mcpcRoBox" hidden>
+          <input type="checkbox" id="mcpcReadOnly" checked>
+          <span data-i18n="mcpcReadOnly">Solo lettura — consigliato.</span>
+        </label>
+        <p class="consent-warn" id="mcpcWarn" hidden>
+          <i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="mcpcWarnActions">Il modello potrà eseguire comandi.</span>
+        </p>
+      </div>
+
+      <dl class="consent-facts">
+        <div><dt data-i18n="mcpcFactClient">Client</dt><dd id="mcpcClient"></dd></div>
+        <div><dt data-i18n="mcpcFactHost">Computer</dt><dd id="mcpcHost"></dd></div>
+        <div><dt data-i18n="mcpcFactExpires">Scade tra</dt><dd id="mcpcExpires"></dd></div>
+      </dl>
+
+      <p class="consent-error" id="mcpcAskError" role="alert" hidden></p>
+      <div class="consent-actions">
+        <button type="button" class="btn btn-secondary" id="btnMcpcDeny" data-i18n="mcpcDeny">Annulla</button>
+        <button type="button" class="btn btn-primary" id="btnMcpcApprove" data-i18n="mcpcApprove">Autorizza</button>
+      </div>
+      <p class="consent-redirect"><span data-i18n="mcpcRedirect">Al termine il browser torna al client su</span> <code id="mcpcRedirectTo"></code></p>
+    </section>
+
+    <section class="consent-card consent-result" id="mcpcResult" hidden>
+      <span class="consent-result-icon" id="mcpcResultIcon"><i class="fa-solid fa-check"></i></span>
+      <h2 id="mcpcResultTitle"></h2>
+      <p class="consent-muted" id="mcpcResultText"></p>
+    </section>
+
+    <p class="consent-foot" data-i18n="mcpcFoot">Gli accessi concessi si revocano nella tab MCP Server.</p>
+  </main>
+  <script src="/static/js/i18n.js"></script>
+  <script src="/static/js/mcp-authorize.js"></script>
+</body>
+</html>

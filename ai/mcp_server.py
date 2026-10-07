@@ -12,26 +12,50 @@ remains entirely server-side.
 
 Configuration (environment variables):
     SENTINELNET_URL        Base URL of the central server (default http://127.0.0.1:8000)
-    SENTINELNET_USERNAME   SentinelNet user for authentication
-    SENTINELNET_PASSWORD   Password
     SENTINELNET_VERIFY_TLS "0" to skip certificate verification (default "1")
+
+Sign-in, first match wins:
+    SENTINELNET_USERNAME + SENTINELNET_PASSWORD
+                           legacy: a password kept in the client's config
+    SENTINELNET_TOKEN      a revocable grant pasted in the config, for hosts
+                           with no keychain or no browser
+    OS keychain            the grant left there by a browser sign-in
+    browser sign-in        none of the above: the dashboard opens, the
+                           operator approves, the grant goes to the keychain
+
+Clients that honour `notifications/tools/list_changed` pick the tools up as
+soon as the operator approves; the others see one `sentinelnet_login` tool
+until they are restarted. `--login` runs the browser sign-in once from a
+terminal and exits, for any client.
 
 Example (Claude Desktop / claude_desktop_config.json):
     {"mcpServers": {"sentinelnet": {
-        "command": "python", "args": ["/path/to/SentinelNet/mcp_server.py"],
-        "env": {"SENTINELNET_URL": "http://127.0.0.1:8000",
-                "SENTINELNET_USERNAME": "admin",
-                "SENTINELNET_PASSWORD": "..."}}}}
+        "command": "/path/to/SentinelNet/.venv/bin/python",
+        "args": ["/path/to/SentinelNet/ai/mcp_server.py"],
+        "env": {"SENTINELNET_URL": "http://127.0.0.1:8000"}}}}
 
 Transport: JSON-RPC 2.0, one message per line on stdin/stdout (MCP stdio).
 """
+import base64
+import hashlib
 import os
+import secrets
+import socket
 import sys
 import json
+import threading
 import time
+import webbrowser
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import requests
 from typing import Any, Dict, List, Optional
+
+# Run as a script (the documented client config), sys.path[0] is ai/, not the
+# repo root, and `security` would not import.
+if not __package__:
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from security.redaction import redact
 
@@ -55,13 +79,213 @@ _current_tool = ""
 CLIENT_TAG_HEADER = "X-SentinelNet-Client"
 
 
+# --- Browser sign-in (server side: security/mcp_grants.py) ------------------
+
+KEYRING_SERVICE = "SentinelNet MCP"
+# Fixed on purpose: binding it is also the lock that keeps the client's
+# parallel bridge processes (Claude Desktop starts more than one) from opening
+# one browser tab each. The loser waits for the winner's grant in the keychain.
+CALLBACK_PORT = 38461
+AUTH_TIMEOUT = 300
+LOGIN_TOOL = "sentinelnet_login"
+
+# clientInfo.name -> what the consent page shows. Unknown names pass through.
+CLIENT_NAMES = {
+    "claude-ai": "Claude Desktop", "claude-code": "Claude Code",
+    "cursor-vscode": "Cursor", "Visual Studio Code": "VS Code",
+    "Cline": "Cline", "windsurf-client": "Windsurf", "lm-studio": "LM Studio",
+    "continue-client": "Continue", "Zed": "Zed",
+}
+
+_grant = os.environ.get("SENTINELNET_TOKEN") or None
+_client_name = ""              # from the client's initialize, for the consent page
+_auth_url = ""                 # page the pending sign-in opened, for the login tool
+_auth_thread = None
+_auth_lock = threading.Lock()
+
+
+def _log(text: str) -> None:
+    # stderr only: stdout is the JSON-RPC channel.
+    print(f"[sentinelnet-mcp] {text}", file=sys.stderr, flush=True)
+
+
+def _stored_grant():
+    try:
+        import keyring
+        return keyring.get_password(KEYRING_SERVICE, BASE_URL)
+    except Exception:
+        return None
+
+
+def _store_grant(token: str) -> None:
+    global _grant
+    _grant = token
+    try:
+        import keyring
+        keyring.set_password(KEYRING_SERVICE, BASE_URL, token)
+    except Exception as e:
+        _log(f"Portachiavi di sistema non disponibile ({e}). L'accesso vale solo "
+             f"per questa sessione; per renderlo stabile metti nel config "
+             f"SENTINELNET_TOKEN={token}")
+
+
+def _forget_grant() -> None:
+    global _grant
+    _grant = None
+    try:
+        import keyring
+        keyring.delete_password(KEYRING_SERVICE, BASE_URL)
+    except Exception:
+        pass
+
+
+def _signed_in() -> bool:
+    return bool(PASSWORD or _grant or _stored_grant())
+
+
+class _CallbackServer(HTTPServer):
+    state = ""
+    code = None
+    denied = False
+
+
+class _CallbackHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        srv = self.server
+        assert isinstance(srv, _CallbackServer)
+        url = urlparse(self.path)
+        q = parse_qs(url.query)
+        ours = (url.path == "/callback"
+                and secrets.compare_digest(q.get("state", [""])[0], srv.state))
+        if ours and q.get("code"):
+            srv.code = q["code"][0]
+            result = "done"
+        elif ours and q.get("error") == ["access_denied"]:
+            # Cancel on the consent page: stop waiting now, not in five minutes.
+            srv.denied = True
+            result = "denied"
+        else:
+            result = ""
+        if result:
+            # Back to the consent page, which shows the outcome.
+            self.send_response(302)
+            self.send_header("Location", f"{BASE_URL}/mcp/authorize?" + urlencode(
+                {"result": result, "client": _client_name}))
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        body = "SentinelNet: richiesta non valida.".encode("utf-8")
+        self.send_response(400)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format, *args):
+        pass
+
+
+def _browser_login() -> str:
+    """Loopback redirect + PKCE: opens the dashboard, waits for the operator
+    to approve, trades the one-time code for a grant and stores it."""
+    global _auth_url
+    try:
+        srv = _CallbackServer(("127.0.0.1", CALLBACK_PORT), _CallbackHandler)
+    except OSError:
+        _log("Un altro processo del client sta gia' chiedendo l'autorizzazione: attendo.")
+        deadline = time.monotonic() + AUTH_TIMEOUT
+        while time.monotonic() < deadline:
+            token = _stored_grant()
+            if token:
+                _store_grant(token)
+                return token
+            time.sleep(2)
+        raise RuntimeError("autorizzazione non completata in tempo")
+    verifier = secrets.token_urlsafe(48)
+    challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(verifier.encode("ascii")).digest()).rstrip(b"=").decode("ascii")
+    srv.state = secrets.token_urlsafe(16)
+    _auth_url = f"{BASE_URL}/mcp/authorize?" + urlencode({
+        "port": CALLBACK_PORT, "state": srv.state, "challenge": challenge,
+        "client": _client_name, "host": socket.gethostname(),
+        # When this bridge stops listening: the page greys out a stale request
+        # instead of sending the browser to a closed port.
+        "exp": int(time.time()) + AUTH_TIMEOUT})
+    _log(f"Autorizza questo client nel browser: {_auth_url}")
+    webbrowser.open(_auth_url)
+    srv.timeout = 1
+    deadline = time.monotonic() + AUTH_TIMEOUT
+    with srv:
+        while srv.code is None and not srv.denied and time.monotonic() < deadline:
+            srv.handle_request()
+    if srv.denied:
+        raise RuntimeError("autorizzazione annullata nel browser")
+    if srv.code is None:
+        raise RuntimeError("autorizzazione non completata in tempo")
+    r = _session.post(f"{BASE_URL}/api/mcp/token",
+                      json={"code": srv.code, "verifier": verifier},
+                      verify=VERIFY_TLS, timeout=15)
+    r.raise_for_status()
+    data = r.json()
+    _store_grant(data["token"])
+    _log(f"Autorizzato come '{data.get('username')}'.")
+    return data["token"]
+
+
+def _authorize_in_background() -> None:
+    """Browser sign-in without blocking the JSON-RPC loop; when it lands the
+    client is told to fetch the tool list again."""
+    global _auth_thread
+
+    def run():
+        try:
+            _browser_login()
+        except Exception as e:
+            _log(f"Autorizzazione non riuscita: {e}")
+            return
+        _disabled["at"] = 0.0
+        _notify("notifications/tools/list_changed")
+
+    with _auth_lock:
+        if _auth_thread is not None and _auth_thread.is_alive():
+            return
+        _auth_thread = threading.Thread(target=run, daemon=True)
+        _auth_thread.start()
+
+
+def _login_tool_call() -> str:
+    """The one tool a client sees before sign-in: for clients that ignore
+    list_changed, it is how the model can tell the user what to do."""
+    if _signed_in():
+        return ("Il client e' gia' autorizzato. Se gli strumenti di SentinelNet "
+                "non compaiono, ricarica gli strumenti MCP o riavvia il client.")
+    _authorize_in_background()
+    page = f" ({_auth_url})" if _auth_url else ""
+    return (f"Ho aperto nel browser la pagina di accesso di SentinelNet{page}. "
+            f"Dopo l'approvazione gli strumenti compaiono da soli; se il client "
+            f"non li mostra, ricaricali o riavvia il client.")
+
+
 # --- Authenticated HTTP client toward the central server --------------------
 
 def _login() -> str:
     global _token
-    r = _session.post(f"{BASE_URL}/api/auth/login",
-                      json={"username": USERNAME, "password": PASSWORD},
-                      verify=VERIFY_TLS, timeout=15)
+    if PASSWORD:
+        r = _session.post(f"{BASE_URL}/api/auth/login",
+                          json={"username": USERNAME, "password": PASSWORD},
+                          verify=VERIFY_TLS, timeout=15)
+    else:
+        grant = _grant or _stored_grant()
+        if not grant:
+            _authorize_in_background()
+            raise RuntimeError("client MCP non ancora autorizzato: completa "
+                               "l'accesso nella pagina aperta nel browser")
+        r = _session.post(f"{BASE_URL}/api/mcp/session", json={"token": grant},
+                          verify=VERIFY_TLS, timeout=15)
+        if r.status_code == 401:
+            _forget_grant()
+            _authorize_in_background()
+            raise RuntimeError("accesso MCP revocato: autorizza di nuovo nel browser")
     r.raise_for_status()
     _token = r.json()["access_token"]
     _warn_if_privileged_account()
@@ -80,7 +304,7 @@ def _warn_if_privileged_account() -> None:
     role = (me or {}).get("role")
     if role and role != "viewer":
         print(f"[sentinelnet-mcp] ATTENZIONE: l'account configurato "
-              f"'{USERNAME}' ha ruolo '{role}'. Ogni client MCP eredita "
+              f"'{me.get('username') or USERNAME}' ha ruolo '{role}'. Ogni client MCP eredita "
               f"questo ruolo: gli strumenti di azione (send_cli_command, "
               f"arp_scan, ...) diventano eseguibili dal modello. Per l'accesso "
               f"in sola lettura usare un account viewer.", file=sys.stderr)
@@ -677,17 +901,37 @@ def disabled_tools() -> set:
 
 # --- JSON-RPC loop on stdio -------------------------------------------------
 
+_out_lock = threading.Lock()   # the sign-in thread writes notifications too
+
+
+def _write(out: dict) -> None:
+    with _out_lock:
+        sys.stdout.write(json.dumps(out, ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+
+
 def _reply(msg_id, result=None, error=None):
     out = {"jsonrpc": "2.0", "id": msg_id}
     if error is not None:
         out["error"] = error
     else:
         out["result"] = result
-    sys.stdout.write(json.dumps(out, ensure_ascii=False) + "\n")
-    sys.stdout.flush()
+    _write(out)
+
+
+def _notify(method: str) -> None:
+    _write({"jsonrpc": "2.0", "method": method})
 
 
 def _tool_list():
+    if not _signed_in():
+        return {"tools": [{
+            "name": LOGIN_TOOL,
+            "description": ("SentinelNet non e' ancora autorizzato su questo client. "
+                            "Chiamalo per aprire la pagina di accesso nel browser; "
+                            "spiega all'utente di approvare e poi ricaricare gli strumenti."),
+            "inputSchema": {"type": "object", "properties": {}},
+        }]}
     off = disabled_tools()
     return {"tools": [
         {"name": name, "description": desc, "inputSchema": schema}
@@ -698,6 +942,8 @@ def _tool_list():
 def _tool_call(params):
     name = params.get("name")
     args = params.get("arguments") or {}
+    if name == LOGIN_TOOL:
+        return {"content": [{"type": "text", "text": _login_tool_call()}]}
     if name not in TOOLS:
         return {"content": [{"type": "text", "text": f"Unknown tool: {name}"}],
                 "isError": True}
@@ -732,9 +978,18 @@ def _tool_call(params):
 
 
 def main():
-    if not USERNAME or not PASSWORD:
-        sys.stderr.write("SENTINELNET_USERNAME / SENTINELNET_PASSWORD non impostate.\n")
+    global _client_name
+    if PASSWORD and not USERNAME:
+        _log("SENTINELNET_PASSWORD senza SENTINELNET_USERNAME.")
         sys.exit(1)
+    if "--login" in sys.argv:
+        _client_name = "Terminale"
+        try:
+            _browser_login()
+        except Exception as e:
+            _log(f"Autorizzazione non riuscita: {e}")
+            sys.exit(1)
+        return
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -746,9 +1001,16 @@ def main():
         method = msg.get("method")
         msg_id = msg.get("id")
         if method == "initialize":
+            info = (msg.get("params") or {}).get("clientInfo") or {}
+            name = str(info.get("name") or "")
+            _client_name = CLIENT_NAMES.get(name, name)[:60]
+            if not _signed_in():
+                # Here and not at start-up: clients start throwaway probe
+                # processes that never initialize, and each would open a tab.
+                _authorize_in_background()
             _reply(msg_id, {
                 "protocolVersion": msg.get("params", {}).get("protocolVersion", PROTOCOL_VERSION),
-                "capabilities": {"tools": {}},
+                "capabilities": {"tools": {"listChanged": True}},
                 "serverInfo": SERVER_INFO,
             })
         elif method == "notifications/initialized":

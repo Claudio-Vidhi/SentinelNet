@@ -551,50 +551,218 @@
 
     // --- TAB MCP SERVER (guida + selezione tool esposti ai client LLM) ---
 
-    function mcpConfigSnippetText() {
+    let currentMcpLaunch = null;
+    let selectedMcpClientType = 'claude';
+
+    // launch = {command, args} from /api/mcp/settings: the exe with --mcp,
+    // or the venv interpreter plus ai/mcp_server.py when run from source.
+    function mcpConfigSnippetText(launch) {
         return JSON.stringify({
             mcpServers: {
                 sentinelnet: {
-                    command: "python",
-                    // Il modulo sta in ai/, non nella radice: lo snippet è
-                    // fatto per essere incollato, quindi il percorso deve
-                    // essere quello vero.
-                    args: ["/percorso/SentinelNet/ai/mcp_server.py"],
-                    env: {
-                        SENTINELNET_URL: window.location.origin,
-                        SENTINELNET_USERNAME: "<utente-dedicato>",
-                        SENTINELNET_PASSWORD: "<password>"
-                    }
+                    command: launch.command,
+                    args: launch.args,
+                    // No credentials: the bridge signs in through the
+                    // browser and keeps a revocable grant in the keychain.
+                    env: { SENTINELNET_URL: window.location.origin }
                 }
             }
         }, null, 2);
     }
 
-    async function loadMcpTab() {
+    function selectMcpClient(client) {
+        selectedMcpClientType = client;
+        document.querySelectorAll('.mcp-client-tab').forEach(b => {
+            const active = b.dataset.client === client;
+            b.classList.toggle('is-active', active);
+            b.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        const pathEl = document.getElementById('mcpClientPathText');
+        const subEl = document.getElementById('mcpClientSubText');
         const pre = document.getElementById('mcpConfigSnippet');
-        if (pre) pre.textContent = mcpConfigSnippetText();
+        if (!currentMcpLaunch) return;
+
+        if (client === 'cursor') {
+            if (pathEl) pathEl.textContent = tr('mcpPathCursor');
+            if (subEl) subEl.textContent = tr('mcpStepCursor');
+            if (pre) pre.textContent = JSON.stringify({
+                mcpServers: {
+                    sentinelnet: {
+                        command: currentMcpLaunch.command,
+                        args: currentMcpLaunch.args,
+                        env: { SENTINELNET_URL: window.location.origin }
+                    }
+                }
+            }, null, 2);
+        } else if (client === 'cline') {
+            if (pathEl) pathEl.textContent = tr('mcpPathCline');
+            if (subEl) subEl.textContent = tr('mcpStepCline');
+            if (pre) pre.textContent = JSON.stringify({
+                mcpServers: {
+                    sentinelnet: {
+                        command: currentMcpLaunch.command,
+                        args: currentMcpLaunch.args,
+                        env: { SENTINELNET_URL: window.location.origin },
+                        disabled: false,
+                        autoApprove: []
+                    }
+                }
+            }, null, 2);
+        } else if (client === 'cli') {
+            if (pathEl) pathEl.textContent = tr('mcpPathCli');
+            if (subEl) subEl.textContent = tr('mcpStepCli');
+            if (pre) pre.textContent = mcpLoginCommandText(currentMcpLaunch);
+        } else {
+            if (pathEl) pathEl.textContent = tr('mcpPathClaude');
+            if (subEl) subEl.textContent = tr('mcpStepClaude');
+            if (pre) pre.textContent = mcpConfigSnippetText(currentMcpLaunch);
+        }
+    }
+
+    const MCP_ACTION_TOOLS = new Set([
+        'send_cli_command', 'arp_scan', 'fortigate_full_config', 'drift_diff', 'drift_versions', 'drift_summary'
+    ]);
+    const MCP_MONITOR_TOOLS = new Set([
+        'get_top_talkers', 'get_anomalies', 'linux_health', 'get_interface_errors', 'ping_device', 'get_cve_list'
+    ]);
+    const MCP_DEFAULT_DISABLED = new Set([
+        'get_top_talkers', 'get_anomalies', 'linux_health'
+    ]);
+
+    function updateMcpToolCounters() {
+        const all = document.querySelectorAll('.mcp-tool-toggle');
+        const enabled = document.querySelectorAll('.mcp-tool-toggle:checked');
+        const badge = document.getElementById('mcpToolsCountBadge');
+        if (badge) badge.textContent = `${enabled.length} / ${all.length}`;
+    }
+
+    function onMcpToolToggleChange(cb) {
+        const isEnabled = cb.checked;
+        const card = cb.closest('label');
+        if (card) {
+            const st = card.querySelector('.status');
+            const led = card.querySelector('.led');
+            const stText = st?.querySelector('span[data-i18n]');
+            if (st) st.className = `status ${isEnabled ? 'ok' : 'bad'}`;
+            if (led) led.className = `led ${isEnabled ? 'led-success' : 'led-danger'}`;
+            if (stText) {
+                const L = i18n[currentLang];
+                const key = isEnabled ? 'mcpStEnabled' : 'mcpStDisabled';
+                stText.setAttribute('data-i18n', key);
+                stText.textContent = L[key] || key;
+            }
+        }
+        updateMcpToolCounters();
+    }
+
+    function applyMcpPreset(type) {
+        const toggles = document.querySelectorAll('.mcp-tool-toggle');
+        toggles.forEach(cb => {
+            const name = cb.value;
+            if (type === 'safe') {
+                cb.checked = !MCP_ACTION_TOOLS.has(name);
+            } else if (type === 'all') {
+                cb.checked = true;
+            } else if (type === 'default') {
+                cb.checked = !MCP_DEFAULT_DISABLED.has(name);
+            }
+            onMcpToolToggleChange(cb);
+        });
+    }
+
+    function filterMcpTools(q) {
+        q = (q || '').trim().toLowerCase();
+        document.querySelectorAll('#mcpToolList label').forEach(label => {
+            const toolName = label.getAttribute('data-tool') || '';
+            const text = label.textContent.toLowerCase();
+            const match = !q || toolName.includes(q) || text.includes(q);
+            label.style.display = match ? 'flex' : 'none';
+        });
+        document.querySelectorAll('.mcp-tool-category-head').forEach(head => {
+            if (!q) {
+                head.style.display = 'flex';
+                return;
+            }
+            let sib = head.nextElementSibling;
+            let hasVisible = false;
+            while (sib && !sib.classList.contains('mcp-tool-category-head')) {
+                if (sib.style.display !== 'none') {
+                    hasVisible = true;
+                    break;
+                }
+                sib = sib.nextElementSibling;
+            }
+            head.style.display = hasVisible ? 'flex' : 'none';
+        });
+    }
+
+    async function loadMcpTab() {
         const list = document.getElementById('mcpToolList');
         if (!list) return;
         const res = await apiFetch('/api/mcp/settings');
         if (!res || !res.ok) { list.innerHTML = '<span style="color:var(--text-muted); font-size:12px;">Impossibile caricare le impostazioni MCP.</span>'; return; }
         const data = await res.json();
+        currentMcpLaunch = data.client_launch;
+        const pre = document.getElementById('mcpConfigSnippet');
+        if (pre) pre.textContent = mcpConfigSnippetText(data.client_launch);
+        const cmd = document.getElementById('mcpLoginCommand');
+        if (cmd) cmd.textContent = mcpLoginCommandText(data.client_launch);
+        selectMcpClient(selectedMcpClientType);
+        loadMcpGrants();
         const disabled = new Set(data.disabled_tools || []);
         const L = i18n[currentLang];
-        list.innerHTML = (data.tools || []).map(t => {
+
+        const tools = data.tools || [];
+        const catDiscovery = [];
+        const catMonitoring = [];
+        const catActions = [];
+
+        tools.forEach(t => {
+            if (MCP_ACTION_TOOLS.has(t.name)) {
+                catActions.push(t);
+            } else if (MCP_MONITOR_TOOLS.has(t.name)) {
+                catMonitoring.push(t);
+            } else {
+                catDiscovery.push(t);
+            }
+        });
+
+        function renderToolCard(t) {
             const isEnabled = !disabled.has(t.name);
             const stKey = isEnabled ? 'mcpStEnabled' : 'mcpStDisabled';
+            const isAction = MCP_ACTION_TOOLS.has(t.name);
             return `
-            <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; padding:8px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); cursor:pointer;">
+            <label data-tool="${escapeHtml(t.name)}" style="display:flex; align-items:flex-start; gap:8px; font-size:13px; padding:8px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); cursor:pointer;">
               <input type="checkbox" class="mcp-tool-toggle" value="${escapeHtml(t.name)}" ${isEnabled ? 'checked' : ''} style="margin-top:2px;">
               <span style="flex:1;">
                 <span style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
                   <code style="font-size:12px;">${escapeHtml(t.name)}</code>
                   <span class="status ${isEnabled ? 'ok' : 'bad'}"><span class="led ${isEnabled ? 'led-success' : 'led-danger'}"></span><span data-i18n="${stKey}">${escapeHtml(L[stKey])}</span></span>
                 </span>
-                <span style="color:var(--text-muted); font-size:11px;">${escapeHtml(t.description || '')}</span>
+                <span style="color:var(--text-muted); font-size:11px; display:block; margin-top:2px;">${escapeHtml(t.description || '')}</span>
+                ${isAction ? `<span class="badge badge-warning" style="font-size:10px; margin-top:4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(tr('mcpDangerBadge'))}</span>` : ''}
               </span>
             </label>`;
-        }).join('');
+        }
+
+        let html = '';
+        if (catDiscovery.length) {
+            html += `<div class="mcp-tool-category-head"><i class="fa-solid fa-network-wired"></i> <span data-i18n="mcpCategoryDiscovery">${escapeHtml(tr('mcpCategoryDiscovery'))}</span></div>`;
+            html += catDiscovery.map(renderToolCard).join('');
+        }
+        if (catMonitoring.length) {
+            html += `<div class="mcp-tool-category-head"><i class="fa-solid fa-chart-line"></i> <span data-i18n="mcpCategoryMonitoring">${escapeHtml(tr('mcpCategoryMonitoring'))}</span></div>`;
+            html += catMonitoring.map(renderToolCard).join('');
+        }
+        if (catActions.length) {
+            html += `<div class="mcp-tool-category-head"><i class="fa-solid fa-terminal"></i> <span data-i18n="mcpCategoryActions">${escapeHtml(tr('mcpCategoryActions'))}</span></div>`;
+            html += catActions.map(renderToolCard).join('');
+        }
+
+        list.innerHTML = html || tools.map(renderToolCard).join('');
+        updateMcpToolCounters();
+        const filterInput = document.getElementById('mcpToolFilterInput');
+        if (filterInput && filterInput.value) filterMcpTools(filterInput.value);
     }
 
     async function saveMcpSettings() {
@@ -606,15 +774,103 @@
             body: JSON.stringify({ disabled_tools: disabled })
         });
         if (res && res.ok) {
-            if (statusEl) statusEl.textContent = 'Impostazioni salvate.';
+            if (statusEl) statusEl.textContent = tr('setSaved') || 'Impostazioni salvate.';
+            showToast(tr('setSaved') || 'Impostazioni salvate.', 'success');
         } else {
             const e = res ? await res.json().catch(() => ({})) : {};
             if (statusEl) statusEl.textContent = 'Errore: ' + (e.detail || 'salvataggio fallito.');
         }
     }
 
+    // The same launch as the snippet plus --login: the bridge opens the
+    // consent page now, and the grant is in the keychain before the client
+    // ever starts.
+    function mcpLoginCommandText(launch) {
+        const args = launch.args.map(a => `"${a}"`).join(' ');
+        return `$env:SENTINELNET_URL = "${window.location.origin}"\n& "${launch.command}" ${args} --login`;
+    }
+
+    async function loadMcpGrants() {
+        const box = document.getElementById('mcpGrantList');
+        if (!box) return;
+        const res = await apiFetch('/api/mcp/grants');
+        if (!res || !res.ok) return;
+        const grants = (await res.json()).grants || [];
+        const badge = document.getElementById('mcpGrantsCountBadge');
+        if (badge) badge.textContent = `${grants.length}`;
+        const when = (ts) => ts ? new Date(ts * 1000).toLocaleString() : tr('mcpGrantNever');
+        if (!grants.length) {
+            box.innerHTML = `
+            <div class="mcp-empty-state">
+              <div class="mcp-empty-icon"><i class="fa-solid fa-plug-circle-xmark"></i></div>
+              <div class="mcp-empty-title" data-i18n="mcpGrantEmptyLead">${escapeHtml(tr('mcpGrantEmptyLead'))}</div>
+              <p class="mcp-empty-desc" data-i18n="mcpGrantEmptySub">${escapeHtml(tr('mcpGrantEmptySub'))}</p>
+              <span style="display:none;" data-i18n="mcpGrantNone">${escapeHtml(tr('mcpGrantNone'))}</span>
+            </div>`;
+            return;
+        }
+        box.innerHTML = `
+        <div class="table-responsive">
+          <table class="table-modern mcp-grants-table">
+            <thead>
+              <tr>
+                <th data-i18n="mcpGrantColClient">${escapeHtml(tr('mcpGrantColClient'))}</th>
+                <th data-i18n="mcpGrantColUser">${escapeHtml(tr('mcpGrantColUser'))}</th>
+                <th data-i18n="mcpGrantColAccess">${escapeHtml(tr('mcpGrantColAccess'))}</th>
+                <th data-i18n="mcpGrantColLastUsed">${escapeHtml(tr('mcpGrantColLastUsed'))}</th>
+                <th style="text-align:right;" data-i18n="mcpGrantColActions">${escapeHtml(tr('mcpGrantColActions'))}</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${grants.map(g => {
+                const isRo = !!g.read_only;
+                return `
+                <tr>
+                  <td>
+                    <div class="mcp-grant-client">
+                      <i class="fa-solid fa-laptop-code mcp-client-icon"></i>
+                      <div>
+                        <strong>${escapeHtml(g.label || tr('mcpcClientFallback'))}</strong>
+                        <div class="text-muted" style="font-size:11px;">ID: <code>${escapeHtml(g.id)}</code></div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="badge badge-subtle"><i class="fa-solid fa-user"></i> ${escapeHtml(g.user || '')}</span>
+                  </td>
+                  <td>
+                    ${isRo ? `
+                      <span class="badge badge-success"><i class="fa-solid fa-shield-halved"></i> ${escapeHtml(tr('mcpGrantReadOnly'))}</span>
+                    ` : `
+                      <span class="badge badge-warning"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(tr('mcpGrantFullRole'))}</span>
+                    `}
+                  </td>
+                  <td>
+                    <div style="font-size:12px;">${escapeHtml(when(g.last_used))}</div>
+                    <div class="text-muted" style="font-size:10.5px;">${escapeHtml(tr('mcpGrantCreated'))}: ${escapeHtml(when(g.created))}</div>
+                  </td>
+                  <td style="text-align:right;">
+                    <button type="button" class="btn btn-secondary btn-small btn-danger-hover" data-action="revoke-mcp-grant" data-id="${escapeHtml(g.id)}" title="${escapeHtml(tr('mcpGrantRevoke'))}">
+                      <i class="fa-solid fa-trash-can"></i> <span>${escapeHtml(tr('mcpGrantRevoke'))}</span>
+                    </button>
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    async function revokeMcpGrant(id) {
+        if (!confirm(tr('mcpGrantRevokeConfirm'))) return;
+        const res = await apiFetch('/api/mcp/grants/revoke', { method: 'POST', body: JSON.stringify({ id }) });
+        if (!res || !res.ok) showToast(tr('mcpGrantRevokeFailed'), 'error');
+        loadMcpGrants();
+    }
+
     function copyMcpConfig() {
-        navigator.clipboard.writeText(mcpConfigSnippetText());
+        const pre = document.getElementById('mcpConfigSnippet');
+        if (pre) navigator.clipboard.writeText(pre.textContent);
     }
 
     // --- GESTIONE UTENTI (solo admin) ---
@@ -2003,5 +2259,35 @@
     document.getElementById('smtpBtnTest')?.addEventListener('click', sendSmtpTest);
     document.getElementById('ssoBtnSave')?.addEventListener('click', saveSsoSettings);
     document.getElementById('btnCopyMcpConfig')?.addEventListener('click', copyMcpConfig);
+    document.getElementById('btnCopyMcpLogin')?.addEventListener('click', () => {
+        const pre = document.getElementById('mcpLoginCommand');
+        if (pre) navigator.clipboard.writeText(pre.textContent);
+    });
     document.getElementById('btnSaveMcpSettings')?.addEventListener('click', saveMcpSettings);
+    document.getElementById('mcpGrantList')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action="revoke-mcp-grant"]');
+        if (btn) revokeMcpGrant(btn.dataset.id);
+    });
+    document.querySelector('.mcp-client-tabs')?.addEventListener('click', (e) => {
+        const tabBtn = e.target.closest('.mcp-client-tab');
+        if (tabBtn && tabBtn.dataset.client) selectMcpClient(tabBtn.dataset.client);
+    });
+    document.getElementById('btnMcpPresetSafe')?.addEventListener('click', () => applyMcpPreset('safe'));
+    document.getElementById('btnMcpPresetAll')?.addEventListener('click', () => applyMcpPreset('all'));
+    document.getElementById('btnMcpPresetDefault')?.addEventListener('click', () => applyMcpPreset('default'));
+    document.getElementById('mcpToolFilterInput')?.addEventListener('input', (e) => filterMcpTools(e.target.value));
+    document.getElementById('btnRefreshMcpGrants')?.addEventListener('click', loadMcpGrants);
+    document.getElementById('mcpToolList')?.addEventListener('change', (e) => {
+        const cb = e.target.closest('.mcp-tool-toggle');
+        if (cb) onMcpToolToggleChange(cb);
+    });
+    document.getElementById('btnOpenMcpGuideModal')?.addEventListener('click', () => {
+        openModal('modalMcpGuide');
+    });
+    document.getElementById('btnCloseMcpGuide')?.addEventListener('click', () => {
+        closeModal('modalMcpGuide');
+    });
+    document.getElementById('btnConfirmMcpGuide')?.addEventListener('click', () => {
+        closeModal('modalMcpGuide');
+    });
 
