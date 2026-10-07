@@ -1,6 +1,6 @@
 [project]
 name = "sentinelnet"
-version = "0.50.0"
+version = "0.51.0"
 description = "Self-hosted network management, observability, backup automation and vulnerability intelligence"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -14,6 +14,7 @@ dependencies = [
     # copying their routes: tests/routes.py walks them through
     # iter_route_contexts (0.137.2+), the route-contract tests need it.
     "fastapi>=0.142.2",
+    "keyring>=25.7.0",
     "ncclient>=0.6.15",
     "netmiko>=4.3.0",
     # Spans on SSH/SNMP calls. API only: a no-op until an OTLP endpoint and

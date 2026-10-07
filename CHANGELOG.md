@@ -10,6 +10,44 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-10-07
+
+### Added
+
+- **Server MCP, accesso dal browser senza password nel config**: al primo
+  avvio il bridge apre la pagina di consenso `/mcp/authorize`, che mostra
+  quale client e quale computer chiedono l'accesso, con quale account e con
+  quali permessi; si accede (anche via SSO, che riporta alla pagina) e si
+  clicca *Autorizza* o *Annulla*. Un operator o admin può concedere l'accesso
+  in *sola lettura* (proposta di default): il client agisce come viewer. Il
+  client riceve un accesso revocabile salvato nel portachiavi del sistema. La tab MCP Server elenca gli accessi e li revoca;
+  *Esci da tutte le sessioni* li chiude. Fallback per ogni client: strumento
+  `sentinelnet_login` per chi non ricarica l'elenco da solo, `--login` da
+  terminale, `SENTINELNET_TOKEN` dove non c'è portachiavi o browser, e
+  utente/password come prima.
+- **Tab MCP Server, onboarding guidato e gestione client**: selettore client
+  a schede (Claude Desktop, Cursor, Cline, PowerShell / CLI) con rilevamento
+  e percorsi di configurazione dinamici, avviso pre-volo prima dell'apertura
+  del browser e wizard modale di connessione passo-passo.
+- **Filtri e preset per strumenti MCP**: barra strumenti con conteggio in tempo
+  reale, ricerca rapida e preset di sicurezza con un click (*Sicuro*, *Tutti*, *Default*).
+- **Tabella accessi attivi e autorizzazioni**: elenco tabellare strutturato dei
+  token MCP con client, utente, ruolo concesso, data e revoca rapida.
+- **Pagina di consenso `/mcp/authorize`**: stepper guidato di sicurezza e
+  spiegazione contestuale sul perché la finestra si è aperta e sui criteri di
+  sicurezza.
+- **Snippet di configurazione MCP dinamico**: usa il comando reale di
+  questa installazione (`SentinelNet.exe --mcp`, oppure il Python del venv con
+  `ai/mcp_server.py`) invece di un `python` generico.
+
+### Fixed
+
+- **`ai/mcp_server.py` lanciato come script** (la configurazione documentata)
+  si fermava su `No module named 'security'`.
+- **`SentinelNet.exe --mcp`** si fermava sul controllo di scrittura della
+  cartella dati quando il servizio Windows ne è proprietario: il bridge non la
+  usa e ora parte prima del controllo.
+
 ## [0.50.0] - 2026-10-07
 
 ### Added
