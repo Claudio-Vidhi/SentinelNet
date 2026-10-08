@@ -8,7 +8,8 @@
 (function () {
     const $ = (id) => document.getElementById(id);
     // fixed: a manual device being re-uploaded from its row (fields locked).
-    const mc = { guide: null, files: [], rows: [], results: null, fixed: null };
+    // gen: bumped on every (re)open and review entry so a slower async run can tell it is stale.
+    const mc = { guide: null, files: [], rows: [], results: null, fixed: null, gen: 0 };
 
     // Analysis id -> [label key, tab that shows it].
     const ANALYSIS_TABS = {
@@ -65,6 +66,8 @@
 
     async function enterReview() {
         const vendor = vendorValue();
+        const gen = ++mc.gen;
+        const rows = [];
         $('mcReviewBody').innerHTML = `<p class="form-hint">${escapeHtml(tr('mcReading'))}</p>`;
         mc.rows = [];
         for (const file of mc.files) {
@@ -72,7 +75,8 @@
             const res = await apiFetch('/api/manual-config/preview', {
                 method: 'POST', body: JSON.stringify({ text, vendor }) });
             const p = res && res.ok ? await res.json() : null;
-            mc.rows.push({
+            if (gen !== mc.gen) return; // superseded by a newer run or a reopen
+            rows.push({
                 file, text, vendor,
                 ip: mc.fixed?.ip || p?.ip_candidates?.[0] || '',
                 candidates: p?.ip_candidates || [],
@@ -87,6 +91,8 @@
                 error: p ? '' : tr('mcPreviewFailed'),
             });
         }
+        if (gen !== mc.gen) return;
+        mc.rows = rows;
         fillApplyAll();
         renderReview();
         wizard.refresh();
@@ -133,29 +139,38 @@
     }
 
     async function importAll() {
+        const gen = mc.gen;
         const next = $('manualConfigWizard').querySelector('[data-wizard-next]');
         if (next instanceof HTMLButtonElement) next.disabled = true; // no double import
-        mc.results = [];
-        for (const r of mc.rows) {
-            const res = await apiFetch('/api/manual-config/import', {
-                method: 'POST',
-                body: JSON.stringify({
-                    text: r.text, vendor: r.vendor, ip: r.ip.trim(), group: r.group,
-                    site: r.site, hostname: r.hostname.trim(), category: r.category,
-                    version: r.version.trim(), model: r.model,
-                }),
-            });
-            let body = null;
-            try { body = res ? await res.json() : null; } catch (e) { body = null; }
-            const detail = body && body.detail;
-            mc.results.push({
-                row: r, ok: !!(res && res.ok),
-                detail: typeof detail === 'string' ? detail : (detail ? JSON.stringify(detail) : ''),
-                analyses: (body && body.analyses) || [],
-            });
+        const results = [];
+        try {
+            for (const r of mc.rows) {
+                const res = await apiFetch('/api/manual-config/import', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        text: r.text, vendor: r.vendor, ip: r.ip.trim(), group: r.group,
+                        site: r.site, hostname: r.hostname.trim(), category: r.category,
+                        version: r.version.trim(), model: r.model,
+                    }),
+                });
+                let body = null;
+                try { body = res ? await res.json() : null; } catch (e) { body = null; }
+                const detail = body && body.detail;
+                results.push({
+                    row: r, ok: !!(res && res.ok),
+                    detail: typeof detail === 'string' ? detail : (detail ? JSON.stringify(detail) : ''),
+                    analyses: (body && body.analyses) || [],
+                });
+            }
+            try { await refreshInventory(); } catch (e) { /* the results are still worth showing */ }
+            if (gen !== mc.gen) return; // sheet closed and reopened meanwhile
+            mc.results = results;
+            wizard.goTo('result');
+        } catch (e) {
+            showToast(tr('alertError'), 'error');
+        } finally {
+            if (next instanceof HTMLButtonElement) next.disabled = false;
         }
-        await refreshInventory();
-        wizard.goTo('result');
     }
 
     function renderResult() {
@@ -187,6 +202,7 @@
     });
 
     async function openManualConfigWizard(ip) {
+        mc.gen++;
         Object.assign(mc, { files: [], rows: [], results: null, fixed: null });
         const form = $('mcForm');
         if (form instanceof HTMLFormElement) form.reset();
@@ -197,7 +213,11 @@
             if (d) {
                 mc.fixed = { ip: d.IP, group: d.Group, site: d.Site || 'central', hostname: d.Hostname || '' };
                 const sel = $('mcVendor');
-                if (sel instanceof HTMLSelectElement && d.Vendor) sel.value = d.Vendor.toLowerCase();
+                // An unknown vendor leaves the first option selected: the guide step must stay usable.
+                if (sel instanceof HTMLSelectElement && d.Vendor) {
+                    const v = d.Vendor.toLowerCase();
+                    if (Array.from(sel.options).some((o) => o.value === v)) sel.value = v;
+                }
             }
         }
         const input = $('mcFileInput');
@@ -238,7 +258,9 @@
         const action = t.dataset.action;
         if (action === 'mc-copy') {
             const text = [$('mcPaging').textContent, $('mcCommands').textContent].filter(Boolean).join('\n');
-            navigator.clipboard?.writeText(text).then(() => showToast(tr('mcCopied'), 'success'));
+            navigator.clipboard?.writeText(text)
+                .then(() => showToast(tr('mcCopied'), 'success'))
+                .catch(() => showToast(tr('alertError'), 'error'));
         } else if (action === 'mc-pick-folder') {
             $('mcFolderInput').click();
         } else if (action === 'mc-remove-file') {
