@@ -417,6 +417,9 @@
 
       <div class="topbar-actions">
         <!-- #langSelect is injected here by initLanguageSelector() -->
+        <button type="button" id="btnOpenTutorials" class="topbar-icon" title="Tutorial &amp; Guide" aria-label="Tutorial &amp; Guide" data-i18n-title="titleTutorials" data-i18n-aria-label="titleTutorials">
+          <i class="fa-solid fa-graduation-cap"></i>
+        </button>
         <button type="button" id="btnOpenShortcuts" class="topbar-icon" title="Scorciatoie da tastiera (?)" data-i18n-title="titleShortcuts">
           <i class="fa-solid fa-keyboard"></i>
         </button>
@@ -2886,10 +2889,47 @@
         </div>
       </div>
 
-      <!-- What the client needs (read and copy) beside what it may call
-           (toggles and one Save). -->
+      <!-- Sotto-tab MCP Server: Client autorizzati / Collega client / Tool esposti -->
+      <div class="subtab-bar" id="mcpSubtabBar">
+        <button type="button" class="btn btn-secondary ti-subtab active" id="mcpSub-grants" data-mcp-pane="grants">
+          <i class="fa-solid fa-users-viewfinder"></i> <span data-i18n="titleMcpGrants">Client autorizzati</span>
+          <span id="mcpSubGrantsCountBadge" class="badge" style="font-size:10.5px; margin-left:6px;">0</span>
+        </button>
+        <button type="button" class="btn btn-secondary ti-subtab" id="mcpSub-connect" data-mcp-pane="connect">
+          <i class="fa-solid fa-plug"></i> <span data-i18n="titleMcpClientConfig">Collega un client AI</span>
+        </button>
+        <button type="button" class="btn btn-secondary ti-subtab" id="mcpSub-tools" data-mcp-pane="tools">
+          <i class="fa-solid fa-sliders"></i> <span data-i18n="titleMcpTools">Tool esposti</span>
+          <span id="mcpSubToolsCountBadge" class="badge" style="font-size:10.5px; margin-left:6px;"></span>
+        </button>
+      </div>
+
       <div class="mcp-layout">
-        <section class="panel" id="panelMcpConnect">
+        <!-- 1. Client autorizzati: visibile come primo pannello per monitoraggio immediato -->
+        <section class="panel" id="panelMcpGrants">
+          <div class="panel-head">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <h3 data-i18n="titleMcpGrants">Client autorizzati</h3>
+              <span id="mcpGrantsCountBadge" class="badge" style="font-size:11px;">0</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <button type="button" class="btn btn-primary btn-small" id="btnMcpGoToConnect" style="width:auto;">
+                <i class="fa-solid fa-plus"></i> <span data-i18n="btnMcpNewClient">Collega nuovo client</span>
+              </button>
+              <button type="button" class="btn btn-secondary btn-small" id="btnRefreshMcpGrants" style="width:auto;">
+                <i class="fa-solid fa-arrows-rotate"></i> <span data-i18n="btnRefresh">Aggiorna</span>
+              </button>
+            </div>
+          </div>
+          <p class="set-desc" data-i18n="descMcpGrants">
+            Client MCP che hanno ottenuto l'accesso dal browser. Ognuno agisce con i permessi dell'utente che l'ha
+            autorizzato; revocarlo lo scollega al prossimo accesso.
+          </p>
+          <div id="mcpGrantList"></div>
+        </section>
+
+        <!-- 2. Configurazione guidata client esterno -->
+        <section class="panel" id="panelMcpConnect" style="display:none;">
           <div class="panel-head">
             <h3 data-i18n="titleMcpClientConfig">Collega un client AI</h3>
             <button class="btn btn-secondary btn-small" id="btnCopyMcpConfig" style="width:auto;">
@@ -2968,7 +3008,8 @@
           <pre id="mcpLoginCommand" class="code-block"></pre>
         </section>
 
-        <section class="panel" id="panelMcpTools">
+        <!-- 3. Tool esposti & Governance permessi -->
+        <section class="panel" id="panelMcpTools" style="display:none;">
           <div class="panel-head">
             <div style="display:flex; align-items:center; gap:8px;">
               <h3 data-i18n="titleMcpTools">Tool esposti</h3>
@@ -2999,23 +3040,6 @@
           </div>
 
           <div id="mcpToolList" class="mcp-tool-list"></div>
-        </section>
-
-        <section class="panel" id="panelMcpGrants">
-          <div class="panel-head">
-            <div style="display:flex; align-items:center; gap:8px;">
-              <h3 data-i18n="titleMcpGrants">Client autorizzati</h3>
-              <span id="mcpGrantsCountBadge" class="badge" style="font-size:11px;"></span>
-            </div>
-            <button type="button" class="btn btn-secondary btn-small" id="btnRefreshMcpGrants" style="width:auto;">
-              <i class="fa-solid fa-arrows-rotate"></i> <span data-i18n="btnRefresh">Aggiorna</span>
-            </button>
-          </div>
-          <p class="set-desc" data-i18n="descMcpGrants">
-            Client MCP che hanno ottenuto l'accesso dal browser. Ognuno agisce con i permessi dell'utente che l'ha
-            autorizzato; revocarlo lo scollega al prossimo accesso.
-          </p>
-          <div id="mcpGrantList"></div>
         </section>
       </div>
     </div>
@@ -6167,7 +6191,7 @@
   </div>
 
   <!-- Modale Guida Connessione Client MCP -->
-  <div id="modalMcpGuide" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalMcpGuideTitle" hidden style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:var(--scrim); backdrop-filter:blur(4px); z-index:10000; display:flex; align-items:center; justify-content:center;">
+  <div id="modalMcpGuide" class="modal-overlay" style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:var(--scrim); backdrop-filter:blur(4px); z-index:10000; display:none; align-items:center; justify-content:center;">
     <div style="background:var(--surface); border:1px solid var(--border-strong); box-shadow:var(--shadow-float); width:90%; max-width:560px; padding:24px; max-height:90vh; overflow-y:auto;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
         <h3 id="modalMcpGuideTitle" style="margin:0; font-size:16px;"><i class="fa-solid fa-compass" style="color:var(--primary); margin-right:8px;"></i> <span data-i18n="modalMcpGuideTitle">Procedura Guidata Connessione Client MCP</span></h3>
@@ -6206,6 +6230,79 @@
     </div>
   </div>
 
+  <!-- Modale Hub Tutorial & Guide (On-Demand) -->
+  <div id="modalTutorialsHub" class="modal-overlay" style="display:none;">
+    <div class="modal" style="width:720px; max-width:94vw; max-height:90vh; display:flex; flex-direction:column;">
+      <div class="modal-header">
+        <h3 id="modalTutorialsHubTitle"><i class="fa-solid fa-graduation-cap" style="color:var(--primary); margin-right:8px;"></i> <span data-i18n="tutHubTitle">Tutorial &amp; Guide SentinelNet</span></h3>
+        <button type="button" class="modal-close" id="btnCloseTutorialsHub" aria-label="Chiudi guida" data-i18n-aria-label="tutBtnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div style="padding:14px 20px; overflow-y:auto; flex:1;">
+        <p style="margin:0 0 10px; font-size:12.5px; color:var(--text-muted); line-height:1.5;" data-i18n="tutHubDesc">Scegli un tour guidato interattivo per imparare a usare l'applicazione o ripassare le procedure operative.</p>
+        <div id="tutorialsHubList" class="tutorial-hub-grid"></div>
+      </div>
+      <div class="modal-actions" style="margin-top:0; padding:12px 20px; background:var(--surface-2); display:flex; justify-content:space-between; align-items:center;">
+        <button type="button" class="btn btn-secondary btn-small" id="btnResetTutorials" data-i18n="tutResetPrompts">Ripristina avvisi introduttivi</button>
+        <button type="button" class="btn btn-primary btn-small" data-close-modal="modalTutorialsHub" data-i18n="tutBtnClose">Chiudi</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Elementi Walkthrough Tutorial Interattivi (Spotlight & Popover Card) -->
+  <div id="tutorialOverlay" class="tutorial-overlay">
+    <svg id="tutorialSvgMask" class="tutorial-svg-mask" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <mask id="tutorialHoleMask">
+          <rect x="0" y="0" width="100%" height="100%" fill="#ffffff"></rect>
+          <rect id="tutorialCutout" x="0" y="0" width="0" height="0" rx="8" ry="8" fill="#000000"></rect>
+        </mask>
+      </defs>
+      <rect id="tutorialBackdropRect" x="0" y="0" width="100%" height="100%" fill="rgba(11, 15, 23, 0.52)" mask="url(#tutorialHoleMask)"></rect>
+      <rect id="tutorialCutoutBorder" x="0" y="0" width="0" height="0" rx="8" ry="8" fill="none" stroke="var(--primary)" stroke-width="2.5"></rect>
+    </svg>
+    <div id="tutorialCard" class="tutorial-card" role="region" aria-label="Tutorial guidato">
+      <div class="tutorial-progress-bar">
+        <div class="tutorial-progress-fill"></div>
+      </div>
+      <div class="tutorial-card-header">
+        <div class="tutorial-card-header-left">
+          <span class="tutorial-card-pill">GUIDA</span>
+          <span class="tutorial-card-step">Passo 1 di 5</span>
+        </div>
+        <button type="button" class="tutorial-card-close" aria-label="Chiudi tutorial" data-i18n-aria-label="tutBtnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="tutorial-card-body">
+        <h4 class="tutorial-card-title">Titolo</h4>
+        <p class="tutorial-card-text">Descrizione</p>
+      </div>
+      <div class="tutorial-card-footer">
+        <button type="button" class="btn btn-secondary btn-small tut-btn-skip" data-i18n="tutBtnExit">Esci</button>
+        <div class="tutorial-card-footer-right">
+          <button type="button" class="btn btn-secondary btn-small tut-btn-prev" data-i18n="tutBtnPrev">Indietro</button>
+          <button type="button" class="btn btn-primary btn-small tut-btn-next" data-i18n="tutBtnNext">Avanti</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Banner/Toast di Benvenuto Onboarding per Nuovi Utenti -->
+  <div id="onboardingWelcomeCard" class="onboarding-welcome-card" style="display:none;" role="region" aria-label="Benvenuto in SentinelNet">
+    <div class="onboarding-welcome-inner">
+      <div class="onboarding-welcome-icon">
+        <i class="fa-solid fa-compass"></i>
+      </div>
+      <div class="onboarding-welcome-content">
+        <div class="onboarding-welcome-title" data-i18n="tutWelcomeTitle">Benvenuto in SentinelNet!</div>
+        <p class="onboarding-welcome-text" data-i18n="tutWelcomeText">Vuoi scoprire le funzionalità principali con un rapido tour guidato di 2 minuti?</p>
+        <div class="onboarding-welcome-actions">
+          <button type="button" class="btn btn-primary btn-small" id="btnStartOnboardingTour" data-i18n="tutBtnStartTour">Inizia Tour</button>
+          <button type="button" class="btn btn-secondary btn-small" id="btnDismissOnboardingTour" data-i18n="tutBtnLater">Più tardi</button>
+        </div>
+      </div>
+      <button type="button" class="onboarding-welcome-close" id="btnCloseOnboardingToast" aria-label="Chiudi avviso" data-i18n-aria-label="tutBtnClose"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+  </div>
+
   <!-- Solo i moduli necessari prima del login e al boot della dashboard.
        Gli altri (topology, observability, ai, settings, fortigate, wlc,
        config-analyzer, flow-analytics, netsec-audit, audit_checklist,
@@ -6215,6 +6312,7 @@
   <script src="/static/js/ui-modal.js"></script>
   <script src="/static/js/ui-wizard.js"></script>
   <script src="/static/js/core.js"></script>
+  <script src="/static/js/tutorials.js"></script>
   <script src="/static/js/profile.js"></script>
   <script src="/static/js/threat-intel.js"></script>
   <script src="/static/js/provisioning.js"></script>

@@ -1641,6 +1641,7 @@ async function appInit() {
         }
 
         startTriageStatusPolling();
+        if (typeof initTutorialsOnboarding === 'function') initTutorialsOnboarding();
 
     } catch (err) {
         console.error(err);
@@ -2501,6 +2502,7 @@ function buildCommandPaletteItems(query = '') {
         { title: tr('coreRunArpCollection'), desc: tr('coreCollectArpBindingsFrom'), icon: 'fa-network-wired', action: () => { switchTab('tab-endpoint'); if (typeof locSwitchView === 'function') locSwitchView('mac'); const b = document.getElementById('btnArpScan'); if (b) b.click(); } },
         { title: tr('coreAddNewDevice'), desc: tr('coreOpenProvisioningFormFor'), icon: 'fa-circle-plus', action: () => switchTab('tab-provisioning') },
         { title: tr('coreToggleTheme'), desc: tr('coreSwitchDarkLightTheme'), icon: 'fa-circle-half-stroke', action: () => toggleTheme() },
+        { title: tr('cmdOpenTutorials'), desc: tr('cmdOpenTutorialsDesc'), icon: 'fa-graduation-cap', action: () => { if (typeof openTutorialsHub === 'function') openTutorialsHub(); } },
     ];
 
     quickActions.forEach(a => {
