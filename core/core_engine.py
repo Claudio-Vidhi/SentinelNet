@@ -13,7 +13,7 @@ from core.net_ssh import ConnectHandler
 from services.inventory_manager import (
     update_version_inventory, get_all_devices, get_detected_versions,
     update_device_hostname, get_all_vendors, get_category_assignments,
-    parse_transports, meta_signature,
+    parse_transports, meta_signature, is_manual,
 )
 from drivers.linux import sanitize_session
 from drivers.windows import prepare_session as prepare_windows_session
@@ -104,6 +104,12 @@ def get_cli_transport(device):
         transports = parse_transports(device)
     except Exception:
         transports = None
+    if transports and 'manual' in transports:
+        # Backstop for every CLI path (terminal, port actions, route
+        # collection): a manual device has no credentials, so a session would
+        # go out with the defaults to an address nobody said is reachable.
+        raise ValueError(f"Il dispositivo {device.get('IP')} e' manuale: "
+                         "la sua config si carica a mano, nessuna sessione.")
     if transports:
         if 'ssh' in transports:
             return 'ssh', transports['ssh'] or 22
@@ -240,6 +246,19 @@ TRIAGE_MAX_CONCURRENT = 3
 _TRIAGE_SLOTS = threading.BoundedSemaphore(TRIAGE_MAX_CONCURRENT)
 
 
+def _manual_refusal(device):
+    """The error result for a manual device, None for any other.
+
+    Same shape as the agent-site refusal, returned before anything resolves
+    credentials or dials the device."""
+    if not is_manual(device):
+        return None
+    return {"status": "error",
+            "message": (f"Il dispositivo {device.get('IP')} e' manuale: la sua "
+                        "config si carica a mano (Importa → Config manuale), "
+                        "SentinelNet non apre sessioni verso di esso.")}
+
+
 def run_backup_and_triage(device):
     # One trace per device for a scheduled triage, which has no request to
     # hang under: the ssh.connect and ssh.command spans nest here. Opened
@@ -258,6 +277,9 @@ def run_backup_and_triage(device):
 
 
 def _run_backup_and_triage(device):
+    refusal = _manual_refusal(device)
+    if refusal:
+        return refusal
     ip     = device['IP']
     vendor = device['Vendor'].lower()
 
@@ -523,6 +545,9 @@ def probe_device(device):
     Returns {"status": "success", "hostname": str|None} or
             {"status": "error", "message": str}.
     """
+    refusal = _manual_refusal(device)
+    if refusal:
+        return refusal
     vendor = device['Vendor'].lower()
     try:
         _, netmiko_type = resolve_driver(vendor)
@@ -567,6 +592,9 @@ def probe_device(device):
 
 
 def send_custom_command(device, command: str, bypass_blacklist: bool = False):
+    refusal = _manual_refusal(device)
+    if refusal:
+        return refusal
     # bypass_blacklist=True when the caller (API) has already authorized the
     # command based on role (admin, or blacklist disabled for operators).
     if not bypass_blacklist and any(cmd in command.lower() for cmd in DANGEROUS_COMMANDS):
@@ -615,6 +643,9 @@ def run_bulk_command(device, commands, config_mode=False, save_after=False):
       in bulk across multiple devices.
     The destructive-commands blacklist is applied upstream (API side).
     """
+    refusal = _manual_refusal(device)
+    if refusal:
+        return refusal
     ip = device['IP']
     cli_kind, ssh_port = get_cli_transport(device)
     # See run_backup_and_triage: an agent-site device is reached by its agent,

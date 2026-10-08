@@ -311,6 +311,11 @@ def collect_for(device) -> dict:
 def _collect_live(device) -> dict:
     """L'apparato, interrogato davvero."""
     ip = device.get("IP")
+    if inventory_manager.is_manual(device):
+        # Nothing to ask: collect_for shows the static routes of the uploaded
+        # config, with this line as the reason there is no live table.
+        return {"device_ip": ip,
+                "error": "dispositivo manuale: rotte dalla config caricata"}
     if _is_agent_site(device.get("Site") or "central"):
         # Provarci finirebbe in timeout: il centrale non ha una rotta verso
         # gli apparati di una sede agent, e fingere di interrogarli
