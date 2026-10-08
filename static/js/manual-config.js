@@ -25,12 +25,14 @@
         (blankLabel !== undefined ? `<option value="">${escapeHtml(blankLabel)}</option>` : '')
         + items.map(([value, label]) => `<option value="${escapeHtml(value)}"${value === current ? ' selected' : ''}>${escapeHtml(label)}</option>`).join('');
 
+    const vendorItems = () => (mc.guide?.vendors || []).map((v) => [v.vendor, v.vendor.toUpperCase()]);
+
     async function loadGuide() {
         if (mc.guide) return mc.guide;
         const res = await apiFetch('/api/manual-config/guide');
         if (!res || !res.ok) return null;
         mc.guide = await res.json();
-        $('mcVendor').innerHTML = optionsHtml(mc.guide.vendors.map((v) => [v.vendor, v.vendor.toUpperCase()]), '');
+        $('mcVendor').innerHTML = optionsHtml(vendorItems(), '');
         return mc.guide;
     }
 
@@ -64,6 +66,35 @@
           </li>`).join('');
     }
 
+    async function previewFields(row) {
+        const res = await apiFetch('/api/manual-config/preview', {
+            method: 'POST', body: JSON.stringify({ text: row.text, vendor: row.vendor }) });
+        const p = res && res.ok ? await res.json() : null;
+        return {
+            candidates: p?.ip_candidates || [],
+            hostname: mc.fixed?.hostname || p?.hostname || '',
+            version: p?.version || '',
+            model: p?.model || '',
+            structured: !!p?.structured,
+            analyses: p?.analyses || [],
+            sniffed: p?.sniffed_vendor || '',
+            error: p ? '' : tr('mcPreviewFailed'),
+        };
+    }
+
+    // A card's vendor was changed: read the same file again under it.
+    async function repreview(i) {
+        const gen = mc.gen;
+        const row = mc.rows[i];
+        const fields = await previewFields(row);
+        if (gen !== mc.gen || mc.rows[i] !== row) return;
+        Object.assign(row, fields);
+        row.ip = row.ip || mc.fixed?.ip || fields.candidates[0] || '';
+        renderReview();
+        wizard.refresh();
+        $('mcReviewBody').querySelector(`[data-row="${i}"] [data-field="vendor"]`)?.focus();
+    }
+
     async function enterReview() {
         const vendor = vendorValue();
         const gen = ++mc.gen;
@@ -72,23 +103,15 @@
         mc.rows = [];
         for (const file of mc.files) {
             const text = await file.text();
-            const res = await apiFetch('/api/manual-config/preview', {
-                method: 'POST', body: JSON.stringify({ text, vendor }) });
-            const p = res && res.ok ? await res.json() : null;
+            const row = { file, text, vendor };
+            const fields = await previewFields(row);
             if (gen !== mc.gen) return; // superseded by a newer run or a reopen
             rows.push({
-                file, text, vendor,
-                ip: mc.fixed?.ip || p?.ip_candidates?.[0] || '',
-                candidates: p?.ip_candidates || [],
-                hostname: mc.fixed?.hostname || p?.hostname || '',
+                ...row, ...fields,
+                ip: mc.fixed?.ip || fields.candidates[0] || '',
                 group: mc.fixed?.group || '',
                 site: mc.fixed?.site || 'central',
                 category: '',
-                version: p?.version || '',
-                model: p?.model || '',
-                structured: !!p?.structured,
-                analyses: p?.analyses || [],
-                error: p ? '' : tr('mcPreviewFailed'),
             });
         }
         if (gen !== mc.gen) return;
@@ -115,7 +138,9 @@
           <fieldset class="mc-card" data-row="${i}">
             <legend>${escapeHtml(r.file.webkitRelativePath || r.file.name)}</legend>
             ${r.error ? `<p class="form-hint" role="alert">${escapeHtml(r.error)}</p>` : ''}
+            ${r.sniffed && r.sniffed !== r.vendor ? `<p class="form-hint" role="alert">${escapeHtml(tr('mcVendorMismatch', { chosen: r.vendor.toUpperCase(), detected: r.sniffed.toUpperCase() }))}</p>` : ''}
             <div class="mc-grid">
+              <label>${escapeHtml(tr('mcLblVendor'))}<select data-field="vendor"${lock}>${optionsHtml(vendorItems(), r.vendor)}</select></label>
               <label>${escapeHtml(tr('mcLblHostname'))}<input data-field="hostname" value="${escapeHtml(r.hostname)}"${lock}></label>
               <label>IP<input data-field="ip" list="mcIps${i}" value="${escapeHtml(r.ip)}" inputmode="decimal"${lock}></label>
               <datalist id="mcIps${i}">${r.candidates.map((c) => `<option value="${escapeHtml(c)}"></option>`).join('')}</datalist>
@@ -145,6 +170,7 @@
         const results = [];
         try {
             for (const r of mc.rows) {
+                if (gen !== mc.gen) break; // sheet closed or reopened: stop posting
                 const res = await apiFetch('/api/manual-config/import', {
                     method: 'POST',
                     body: JSON.stringify({
@@ -169,7 +195,7 @@
         } catch (e) {
             showToast(tr('alertError'), 'error');
         } finally {
-            if (next instanceof HTMLButtonElement) next.disabled = false;
+            if (gen === mc.gen && next instanceof HTMLButtonElement) next.disabled = false;
         }
     }
 
@@ -277,7 +303,9 @@
         if (!(t instanceof HTMLInputElement || t instanceof HTMLSelectElement)) return;
         const card = t.closest('[data-row]');
         if (!(card instanceof HTMLElement) || !t.dataset.field) return;
-        mc.rows[Number(card.dataset.row)][t.dataset.field] = t.value;
+        const i = Number(card.dataset.row);
+        mc.rows[i][t.dataset.field] = t.value;
+        if (t.dataset.field === 'vendor') repreview(i);
     };
     $('mcReviewBody')?.addEventListener('input', onFieldEdit);
     $('mcReviewBody')?.addEventListener('change', onFieldEdit);

@@ -5537,14 +5537,13 @@
           <fieldset id="mcApplyAll" class="mc-card">
             <legend data-i18n="mcApplyAllTitle">Uguale per tutti i file</legend>
             <div class="mc-grid">
-              <label for="mcAllGroup"><span data-i18n="mcLblTenant">Tenant</span></label>
-              <select id="mcAllGroup"></select>
-              <label for="mcAllSite"><span data-i18n="mcLblSite">Sede</span></label>
-              <select id="mcAllSite"></select>
-              <label for="mcAllCategory"><span data-i18n="mcLblCategory">Categoria</span></label>
-              <select id="mcAllCategory"></select>
+              <label><span data-i18n="mcLblTenant">Tenant</span><select id="mcAllGroup"></select></label>
+              <label><span data-i18n="mcLblSite">Sede</span><select id="mcAllSite"></select></label>
+              <label><span data-i18n="mcLblCategory">Categoria</span><select id="mcAllCategory"></select></label>
             </div>
-            <button type="button" class="btn btn-secondary btn-small" data-action="mc-apply-all" style="width:auto;" data-i18n="mcBtnApplyAll">Applica a tutti</button>
+            <div class="mc-apply-row">
+              <button type="button" class="btn btn-secondary btn-small" data-action="mc-apply-all" style="width:auto;" data-i18n="mcBtnApplyAll">Applica a tutti</button>
+            </div>
           </fieldset>
           <div id="mcReviewBody"></div>
         </section>
