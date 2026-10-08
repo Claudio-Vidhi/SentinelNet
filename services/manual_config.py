@@ -45,7 +45,9 @@ NOTES = {
     "windows": ["mcNoteWindowsCmd"],
 }
 
-_VENDOR_BY_TYPE = {"ios": "cisco", "fortios": "fortinet", "panos": "paloalto",
+# No "ios": it is detect_config_type's fallback, not a match. HPE, Aruba, CBS
+# and 9800 logs all land there, so it says nothing certain about the vendor.
+_VENDOR_BY_TYPE = {"fortios": "fortinet", "panos": "paloalto",
                    "wlc-aireos": "cisco_wlc", "linux": "linux", "windows": "windows"}
 _JUNOS = re.compile(r"^set (system host-name|interfaces) ", re.MULTILINE)
 
@@ -84,12 +86,17 @@ _UNKNOWN = ("Unknown", "Non Rilevato", "Non Rilevata")
 # Readline redraws a line that wraps at the terminal width as " \r"; the
 # triage never sees it (netmiko reads the raw stream), a pasted log does.
 _WRAP = re.compile(r" \r(?!\n)")
+# SecureCRT "timestamp each line" (default format '%h%m%s.%t: ').
+# ponytail: default format only; a custom one needs its own pattern here.
+_LINE_STAMP = re.compile(r"^\d{6}\.\d{3}: ?", re.MULTILINE)
 
 
 def _clean(text: str) -> str:
     """A terminal log as the triage's cleaned session would read: no escape
-    sequences (colour, bracketed paste, shell integration), no wrap redraws."""
-    return _WRAP.sub("", _ANSI_CSI.sub("", _SHELL_INTEGRATION.sub("", text or "")))
+    sequences (colour, bracketed paste, shell integration), no wrap redraws,
+    no per-line timestamps."""
+    text = _WRAP.sub("", _ANSI_CSI.sub("", _SHELL_INTEGRATION.sub("", text or "")))
+    return _LINE_STAMP.sub("", text)
 
 
 def _norm(command: str) -> str:
@@ -242,16 +249,16 @@ def analyses_for(vendor: str, config_type: str, version: str) -> list:
 
 
 def sniff_vendor(text: str) -> str:
-    """The vendor the content itself points to."""
+    """The vendor the content itself certainly points to; '' when unsure."""
     from ai.config_analyzer import detect_config_type
     return "juniper" if _JUNOS.search(text or "") else \
-        _VENDOR_BY_TYPE.get(detect_config_type(text), "cisco")
+        _VENDOR_BY_TYPE.get(detect_config_type(text), "")
 
 
 def preview(text: str, vendor: str = "") -> dict:
     from ai.config_analyzer import detect_config_type
-    sniffed = sniff_vendor(text)
-    vendor = vendor or sniffed
+    sniffed = sniff_vendor(_clean(text))  # anchored patterns: no timestamps in front
+    vendor = vendor or sniffed or "cisco"
     result = to_backup(vendor, text)
     backup = result.pop("backup")
     config_type = detect_config_type(backup, {"Vendor": vendor})

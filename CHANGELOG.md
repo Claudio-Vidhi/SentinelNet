@@ -21,7 +21,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
   viene salvata nello stesso formato del triage, quindi Analisi config,
   Config drift, NetSec Audit, Policy test, rotte statiche, mappa e CVE
   funzionano come per gli altri. Nessun ping, triage, SNMP o sessione verso
-  un dispositivo manuale.
+  un dispositivo manuale. Accetta anche i log di SecureCRT con il timestamp
+  su ogni riga.
 
 ## [0.51.1] - 2026-10-08
 

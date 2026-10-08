@@ -153,7 +153,8 @@ class ManualConfigApi(unittest.TestCase):
         self.assertEqual(p.status_code, 200, p.text)
         self.assertEqual(p.json()["hostname"], "switch-01")
         self.assertEqual(p.json()["ip_candidates"], ["192.0.2.10"])
-        self.assertEqual(p.json()["sniffed_vendor"], "cisco")
+        self.assertEqual(p.json()["sniffed_vendor"], "")  # IOS is a fallback, not a match
+        self.assertEqual(p.json()["vendor"], "cisco")
         g = self.client.get("/api/manual-config/guide")
         self.assertEqual(g.status_code, 200, g.text)
         self.assertIn("central", [s["id"] for s in g.json()["sites"]])

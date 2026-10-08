@@ -4388,6 +4388,14 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
   background-color: var(--surface-2);
   color: var(--text);
 }
+/* Text fields match the global `select`: same height, font and weight. */
+.mc-grid input:not([type="checkbox"]):not([type="radio"]) {
+  height: 36px;
+  box-sizing: border-box;
+  font-family: var(--font-prose);
+  font-size: 13px;
+  font-weight: 500;
+}
 .mc-grid input:focus, .mc-grid select:focus { outline: none; border-color: var(--focus); box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25); }
 .mc-apply-row { margin-top: 10px; }
 .mc-analyses { margin: 8px 0 0; font-size: var(--font-size-xs); color: var(--text-muted); }
