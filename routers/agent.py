@@ -101,6 +101,8 @@ def _devices_for_site(site_id: str, with_credentials: bool) -> List[dict]:
     for d in inventory_manager.get_all_devices():
         if d.get("Site") != site_id:
             continue
+        if inventory_manager.is_manual(d):
+            continue  # an agent must never be handed a device it cannot dial
         item = {
             "ip": d.get("IP"),
             "vendor": d.get("Vendor", "cisco"),

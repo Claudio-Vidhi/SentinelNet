@@ -82,8 +82,9 @@ def _require_fallback(device):
 def get_device_credentials(device):
     # A manual device has no credentials by design (its config is uploaded by
     # hand): refusing here stops every dial path, including the ones that do
-    # not go through core_engine (WLC, collectors), with the error each caller
-    # already handles for "no credential".
+    # not go through core_engine (WLC, collectors). It is the same error raised
+    # when no credential exists, so callers fail the way they already do for a
+    # device without credentials.
     from services import inventory_manager
     if inventory_manager.is_manual(device):
         raise CredentialResolveError(
