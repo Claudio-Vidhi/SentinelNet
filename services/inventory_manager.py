@@ -46,7 +46,7 @@ IP_PATTERN = re.compile(r"^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$")
 # Protocolli di connessione dichiarabili per apparato e relativa porta di
 # default (null nella mappa = usa questa porta di default del protocollo).
 # tcp/udp: protocolli generici senza porta di default, la sceglie l'utente.
-ALLOWED_TRANSPORTS = ("ssh", "telnet", "netconf", "restconf", "tcp", "udp")
+ALLOWED_TRANSPORTS = ("ssh", "telnet", "netconf", "restconf", "tcp", "udp", "manual")
 TRANSPORT_DEFAULT_PORTS = {"ssh": 22, "telnet": 23, "netconf": 830, "restconf": 443}
 
 
@@ -72,6 +72,12 @@ def parse_transports(device) -> dict:
     return {"ssh": p}
 
 
+def is_manual(device) -> bool:
+    """A device SentinelNet never connects to: its config is uploaded by hand
+    (services/manual_config.py), and nothing opens a session or a probe to it."""
+    return "manual" in parse_transports(device)
+
+
 def _validate_transports(transports):
     """Valida/normalizza una mappa {protocollo: porta|None}. Lancia ValueError
     (messaggi in italiano) su chiave o porta non valide. None => None."""
@@ -83,6 +89,10 @@ def _validate_transports(transports):
     for proto, port in transports.items():
         if proto not in ALLOWED_TRANSPORTS:
             raise ValueError(f"Protocollo di trasporto non supportato: '{proto}'.")
+        if proto == "manual":
+            # Nothing reaches a manual device, so a port would mean nothing.
+            clean[proto] = None
+            continue
         if port is None or port == "":
             clean[proto] = None
             continue
@@ -93,6 +103,9 @@ def _validate_transports(transports):
         if not (1 <= p <= 65535):
             raise ValueError(f"Porta non valida per il protocollo '{proto}': {port}.")
         clean[proto] = p
+    # Paired with a real transport, a device would be both reached and not.
+    if "manual" in clean and len(clean) > 1:
+        raise ValueError("Il trasporto 'manual' non si combina con altri protocolli.")
     return clean
 
 # Lock rientrante che serializza le sequenze read-modify-write sui file di stato
