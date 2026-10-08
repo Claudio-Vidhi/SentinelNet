@@ -90,6 +90,55 @@ class SessionLog(unittest.TestCase):
         self.assertFalse(out["structured"])
         self.assertEqual(out["backup"], "switch-01#sh run\nhostname switch-01\nend\n")
 
+    def test_fortios_prompt_change_mid_log(self):
+        log = (
+            "FGT-01 # show full-configuration\n"
+            "config system global\n"
+            "    set hostname \"FGT-01\"\n"
+            "end\n"
+            "FGT-01 (global) # get system status\n"
+            "Version: FortiGate-60F v7.2.5,build1517,230606 (GA)\n"
+            "FGT-01 (global) # \n"
+        )
+        out = mc.to_backup("fortinet", log)
+        self.assertTrue(out["structured"])
+        self.assertEqual(out["version"], "7.2.5")
+        self.assertNotIn("(global) #", out["backup"])
+        self.assertIn('set hostname "FGT-01"', out["backup"])
+
+    def test_cisco_user_exec_then_enable(self):
+        log = (
+            "R1>show version\n"
+            "Cisco IOS Software, Version 15.2(7)E2, RELEASE SOFTWARE\n"
+            "R1>enable\n"
+            "R1#show running-config\n"
+            "hostname R1\n"
+            "end\n"
+            "R1#\n"
+        )
+        out = mc.to_backup("cisco", log)
+        self.assertTrue(out["structured"])
+        self.assertIn("hostname R1", out["backup"].partition(TRIAGE_MARKER)[0])
+        self.assertNotIn("R1#", out["backup"])
+        self.assertEqual(out["version"], "15.2(7)E2")
+
+    def test_linux_hostname_section_is_prefixed(self):
+        backup_cmd, _, extras = mc._commands("linux")
+        host_cmd, host_tag = extras[0]
+        self.assertEqual((host_cmd, host_tag), ("hostname", "--- HOSTNAME ---"))
+        log = (
+            f"root@srv-01:~# {backup_cmd}\n"
+            "--- /etc/hosts ---\n"
+            "127.0.0.1 localhost\n"
+            f"root@srv-01:~# {host_cmd}\n"
+            "srv-01\n"
+            "root@srv-01:~#\n"
+        )
+        out = mc.to_backup("linux", log)
+        self.assertTrue(out["structured"])
+        self.assertIn(f"\n{host_tag}\nhostname srv-01", out["backup"])
+        self.assertEqual(out["hostname"], "srv-01")
+
 
 class PlainFiles(unittest.TestCase):
     def test_fortigate_gui_backup_is_stored_as_is(self):
@@ -111,6 +160,10 @@ class Candidates(unittest.TestCase):
         self.assertEqual(mc.ip_candidates(FORTI_GUI), ["192.0.2.1"])
         self.assertEqual(mc.ip_candidates(PANOS), ["203.0.113.5"])
         self.assertEqual(mc.ip_candidates(JUNOS), ["192.0.2.2"])
+
+    def test_invalid_octet_is_excluded(self):
+        text = " ip address 999.1.1.1 255.255.255.0\n ip address 192.0.2.7 255.255.255.0\n"
+        self.assertEqual(mc.ip_candidates(text), ["192.0.2.7"])
 
 
 class Preview(unittest.TestCase):
