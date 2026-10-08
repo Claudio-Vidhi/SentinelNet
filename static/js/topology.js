@@ -701,6 +701,7 @@
         // Jump-site device: the SSH bastion tunnel carries no ICMP, so
         // reachability is not measurable — never paint it as the red
         // "offline" fault lamp, that would be a false down.
+        if (status === 'manual')      return { ...lamp('idle'),  text: tr('devStManual'), problem: false };
         if (status === 'unknown')     return { ...lamp('idle'),  text: tr('mapStatusUnknown'), problem: false };
         return { ...lamp('idle'), text: 'OFFLINE', problem: false };
     }

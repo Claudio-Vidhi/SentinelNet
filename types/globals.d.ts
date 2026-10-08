@@ -144,6 +144,7 @@ declare var resetTutorialsOnboarding: any;
 // also re-exposed on window: only the 'window' half belongs here, otherwise the
 // identifier is declared twice.
 interface Window {
+    openManualConfigWizard: any; // manual-config.js, opened from devices.js rows
     loadAssetOnce: any;      // core.js
     createWizard: any;       // ui-wizard.js
     globalSelectedTenant: any; // core.js
