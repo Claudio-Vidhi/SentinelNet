@@ -60,49 +60,73 @@ old upload reads as stale — that is the truth about it.
 
 ## 2. Backend
 
-### `services/manual_config.py` (pure, no I/O)
+### The stored text must look like a triage backup
 
-- `guide() -> dict`: per vendor, `{label, steps[], command, notes}`.
-  The capture command comes from the driver (`get_backup_command()`), so the
-  guide and the automatic backup can never ask for different outputs. Steps add
-  what a human needs and the driver does implicitly: disable paging
-  (`terminal length 0`, FortiOS `config system console` / `set output standard`,
-  `set cli pager off` on PAN-OS, `| no-more` on Junos), capture `show version`
-  output for the version, save as plain text. Vendors: those with a driver in
-  `drivers/registry.py`.
-- `preview(text) -> dict`: `config_type` (existing
-  `config_analyzer.detect_config_type`), `vendor` suggestion, `hostname`,
-  `ip_candidates[]` (interface addresses, management interface first when
-  recognizable), `version`, `model` when the text carries them, and
-  `analyses[]` (see §4). Extraction failures yield empty fields, never an
-  exception: the user fills them in.
+A triage backup is not just the config: it is the config, then
+`TRIAGE_MARKER`, then one tagged section per accessory command
+(`--- SHOW CDP NEIGHBORS DETAIL ---`, `--- SHOW INVENTORY ---`, …). The map
+(CDP/LLDP links), stack detection and the inventory read those sections. A
+manual upload that stored only the config would leave the device as an island
+on the map.
+
+So the guide asks for the same commands the triage runs, and the upload is
+a **terminal session log** (PuTTY/SecureCRT/`script` logging): every command
+echo (`switch-01#show running-config`) marks where its output starts. The
+server splits the log at those echoes and rebuilds the triage layout. A file
+with no recognizable echo of the backup command is a plain config (e.g. a
+FortiGate GUI backup) and is stored as uploaded.
+
+To keep one list, the per-vendor accessory commands move out of the
+`if/elif` chain in `core_engine._run_backup_and_triage` into module-level data
+(`triage_extra_commands(vendor, privileged)`), read by both the triage and
+the guide. Version, model and serial come from running the driver's own
+`get_version/get_model/get_serial` against the captured outputs (a stand-in
+connection that answers `send_command` from the log), so there is no second
+parser for `show version`.
+
+### `services/manual_config.py` (pure, no I/O beyond the driver registry)
+
+- `guide() -> dict`: per vendor, `{vendor, paging, commands[], notes[]}`.
+  `commands` = driver backup command + the commands the driver's
+  `get_version/get_model/get_serial` send (recorded, not hand-listed) + the
+  triage accessory commands. `paging` is the vendor's pager-off command.
+- `to_backup(vendor, text) -> dict`: `{backup, structured, hostname, version,
+  model, serial}` — the triage-format text plus what the captured outputs say.
+- `preview(text, vendor="") -> dict`: `to_backup` fields plus `vendor`
+  (suggested from `detect_config_type` when not given), `ip_candidates[]`
+  (management addresses first when recognizable) and `analyses[]` (§4).
+  Extraction failures yield empty fields, never an exception.
 
 ### `routers/manual_config.py`
 
-All routes: operator role, `require_tab("tab-import")`.
+All routes: operator role, `require_tab("tab-import", "tab-devices")` — the
+upload also opens from the Devices table.
 
 | Route | Purpose |
 |---|---|
-| `GET /api/manual-config/guide` | the extraction guide |
-| `POST /api/manual-config/preview` | `{text, filename}` → `preview()`; writes nothing |
-| `POST /api/manual-config/import` | `{items: [{text, ip, hostname, vendor, group, site, category, subcategory, version, model}]}` |
+| `GET /api/manual-config/guide` | the guide, plus the category list and sites for the review form |
+| `POST /api/manual-config/preview` | `{text, vendor}` → `preview()`; writes nothing |
+| `POST /api/manual-config/import` | ONE device: `{text, ip, vendor, group, site, hostname, category, subcategory, version, model}` |
 
-`import` processes each item independently and returns one outcome per item
-(`ok` / `error` + message). Per item, in order:
+One device per call: the UI posts the rows one after another and shows each
+outcome as it lands; a list endpoint would only add a second error channel.
+Per call, in order:
 
 1. Validate: text non-empty, ≤ 5 MB (`MAX_CONFIG_BYTES`, shared with the
-   agent route), valid IP, `group` inside the caller's `user_group_scope`.
-2. Refuse if the IP already exists in that tenant as a **non-manual** device:
-   the next triage would overwrite the uploaded config.
+   agent route), valid IP, `group` exists and is inside the caller's
+   `user_group_scope`, `site` exists.
+2. Refuse (409) if the IP already exists in that tenant as a **non-manual**
+   device: the next triage would overwrite the uploaded config.
 3. `add_or_update_device(..., transports={"manual": None})`.
-4. `backup_store.save_backup(device, hostname or ip, text)`.
-5. `history.record_version(device, text)` — drift between uploaded versions.
-6. `update_version_inventory(ip, vendor, version, status="manual", model=...)`.
-7. `set_device_meta(ip, tenant=group, category=..., subcategory=...)` when given.
-8. `log_audit(...)` naming the user, device and size.
+4. `to_backup(vendor, text)` — server-side, never trusting a client rebuild.
+5. `backup_store.save_backup(device, hostname, backup)`.
+6. `history.record_version(device, backup)` — drift between uploaded versions.
+7. `update_version_inventory(ip, vendor, version, status="manual", ...)`.
+8. `update_device_hostname`, `set_device_meta(category, subcategory)` when given.
+9. `log_audit(...)` naming the user, device and size.
 
-The same `import` call serves a new device and a new version of an existing
-manual device (upsert).
+The same call serves a new device and a new version of an existing manual
+device (upsert).
 
 Uploaded configs are stored exactly like SSH backups: plain text in the
 gitignored `data/`, redacted only on egress (LLM, MCP, drift diff) by
@@ -115,37 +139,39 @@ Body is JSON; the browser reads files with `FileReader`. No
 
 Visual authority: `DESIGN.md` (mimic-panel). Surface mode: Operate.
 
-### Tab Import — "Config manuale"
+### One wizard, two doors
 
-A segmented control at the top of the tab: *Inventario CSV* | *Config manuale*.
-The CSV import stays as it is. The manual flow is an in-page stepper, not a
-modal:
+The flow is a side-sheet wizard built on the existing `ui-wizard.js`
+(`createWizard`, same pattern as the site and user wizards), not a new
+stepper. It opens from:
 
-1. **Vendor e guida** — vendor tabs; numbered steps; the command in a code
-   block with a Copy button.
+- **Tab Import** — a panel "Device non raggiungibili" next to the CSV import,
+  with a button *Carica config*;
+- **Devices table** — on a manual device's row, an upload button in place of
+  ping/triage/CLI: the same wizard, device fields prefilled and locked, one
+  file.
+
+Steps:
+
+1. **Vendor e guida** — vendor select; the pager-off command and the command
+   list in a code block with a Copy button; how to log the session.
 2. **Carica** — the existing dropzone pattern, accepting multiple files or a
    whole folder (`<input multiple>` + `webkitdirectory`).
-3. **Revisione** — one row per file: hostname, IP (select from
-   `ip_candidates` or type), vendor, tenant, site, category, plus the list of
-   analyses that config type unlocks. A top "apply to all" row sets
-   tenant/site/category on every row (the MSP case: many devices, one
-   customer). Import is disabled while any row lacks IP or tenant.
-4. **Esito** — per-row outcome; for each imported device, direct links to the
-   analyses it unlocks.
-
-### Device drawer
-
-A manual device's drawer shows "Carica nuova versione": a modal
-(`openModal`) running steps 2–3 for one file with the device fields prefilled
-and locked.
+3. **Revisione** — one row per file: hostname, IP (`ip_candidates` as a
+   datalist, or typed), tenant, site, category, plus the analyses that config
+   type unlocks. A top "apply to all" row sets tenant/site/category on every
+   row (the MSP case). *Importa* is disabled while any row lacks IP or tenant.
+4. **Esito** — per-row outcome; links to the tabs of the analyses unlocked.
 
 ### Devices table
 
-Badge "Manuale" and the config age in place of reachability.
+Status pill "Manuale" (the "not measurable" bucket, never offline) with the
+config age as its title.
 
 Frontend rules from AGENTS.md apply: `tr()` for every string (it + en), no
-inline handlers, accessible names on every control, modal manager, lazy-tab
-entry for any binding that lives in another tab (drawer → devices tab).
+inline handlers, accessible names on every control, modal manager. The module
+loads eagerly (`<script>` in `dashboard.html`): it is opened from two tabs, and
+a lazy entry for each would buy nothing.
 
 ## 4. What each config type unlocks
 
