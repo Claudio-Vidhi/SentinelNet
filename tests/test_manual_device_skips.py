@@ -51,6 +51,18 @@ class Skips(unittest.TestCase):
         one.assert_not_called()
 
 
+    def test_api_poller_skips_manual(self):
+        from observability.ingesters import api_poller
+        with mock.patch(DEVICES, return_value=[MANUAL]), \
+             mock.patch(TELEMETRY, return_value=True), \
+             mock.patch("services.fortigate_service.token_status",
+                        return_value={MANUAL["IP"]: {}}), \
+             mock.patch("services.cve_intel.refresh_due"), \
+             mock.patch.object(api_poller, "_poll_device") as poll:
+            api_poller.poll_once()
+        poll.assert_not_called()
+
+
 class CredentialGuard(unittest.TestCase):
     def test_manual_device_has_no_credentials(self):
         # Profile "custom" with a full login resolves for a normal device, so
@@ -94,6 +106,37 @@ class AgentPaths(unittest.TestCase):
         creds.assert_not_called()
         collect.assert_not_called()
         self.assertEqual(out, {"recorded": 0})
+
+
+class PingRoutes(unittest.TestCase):
+    ADMIN = {"sub": "admin", "role": "admin"}
+
+    def _patches(self):
+        return (mock.patch(DEVICES, return_value=[MANUAL]),
+                mock.patch("collectors.network_scanner._ping", return_value=False),
+                mock.patch("services.inventory_manager.get_detected_versions",
+                           return_value={MANUAL["IP"]: {"status": "manual"}}),
+                mock.patch("services.inventory_manager.update_version_inventory"))
+
+    def test_ping_check_never_pings_a_manual_device(self):
+        from routers import triage
+        devs, icmp, vers, upd = self._patches()
+        with devs, icmp as ping, vers, upd as write, \
+             mock.patch.object(triage, "user_group_scope", return_value=None):
+            out = triage.ping_check(triage.PingCheckRequest(), current_user=self.ADMIN)
+        ping.assert_not_called()
+        write.assert_not_called()
+        self.assertEqual(out["results"], {})
+
+    def test_ping_single_never_pings_a_manual_device(self):
+        from routers import triage
+        devs, icmp, vers, upd = self._patches()
+        with devs, icmp as ping, vers, upd as write, \
+             mock.patch.object(triage, "assert_group_allowed"):
+            out = triage.ping_single(MANUAL["IP"], current_user=self.ADMIN)
+        ping.assert_not_called()
+        write.assert_not_called()
+        self.assertIsNone(out["reachable"])
 
 
 class TriageRun(unittest.TestCase):

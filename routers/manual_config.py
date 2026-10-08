@@ -83,6 +83,11 @@ def manual_config_preview(payload: ManualPreviewSchema, current_user=Depends(req
 def manual_config_import(payload: ManualImportSchema, current_user=Depends(require_operator)):
     _check_text(payload.text)
     assert_group_allowed(current_user, payload.group)
+    # update_version_inventory is keyed by IP only: refuse an address that
+    # belongs to a tenant this user may not touch (same gate as /api/add-device).
+    for d in inventory_manager.get_all_devices():
+        if d.get("IP") == payload.ip:
+            assert_group_allowed(current_user, d.get("Group") or "Generale")
     if payload.group not in inventory_manager.get_all_groups():
         raise HTTPException(status_code=400, detail=f"Tenant '{payload.group}' inesistente.")
     if payload.site not in {s["id"] for s in site_manager.list_sites()}:
@@ -95,6 +100,8 @@ def manual_config_import(payload: ManualImportSchema, current_user=Depends(requi
         raise HTTPException(status_code=409, detail=(
             f"{payload.ip} e' gia' in inventario come dispositivo raggiungibile: "
             "il prossimo triage sovrascriverebbe la config caricata."))
+    # Pure computation first: a failure here must not leave an orphan row.
+    parsed = manual_config.to_backup(vendor, payload.text)
     try:
         inventory_manager.add_or_update_device(
             payload.ip, vendor, "", "", "", "", payload.group,
@@ -104,7 +111,6 @@ def manual_config_import(payload: ManualImportSchema, current_user=Depends(requi
     device = _row(payload.ip, payload.group)
     assert device is not None  # add_or_update_device just wrote it
 
-    parsed = manual_config.to_backup(vendor, payload.text)
     hostname = payload.hostname.strip() or parsed["hostname"] or payload.ip
     file_path = backup_store.save_backup(device, hostname, parsed["backup"])
     try:
