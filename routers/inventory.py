@@ -119,6 +119,7 @@ def get_devices_and_versions(current_user = Depends(get_current_user)):
         # table's status cell must not paint one of its devices "offline" from
         # a ping it never actually ran (see services.site_manager.has_direct_path).
         dev_copy["icmp_reachable"] = site_manager.has_direct_path(d.get("Site"))
+        dev_copy["manual"] = inventory_manager.is_manual(d)
         # La community non esce mai da qui, nemmeno cifrata: alla UI serve
         # sapere SE il polling SNMP è configurato, non quale sia il segreto.
         # Alla UI serve sapere SE il polling e' configurato e DA DOVE arriva
