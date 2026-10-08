@@ -180,6 +180,8 @@ def _linux_devices() -> list:
     from services import inventory_manager
     out = []
     for device in inventory_manager.get_all_devices():
+        if inventory_manager.is_manual(device):
+            continue
         if inventory_manager.normalize_vendor(device.get("Vendor")) not in ("linux", "windows"):
             continue
         out.append({"ip": device.get("IP"),

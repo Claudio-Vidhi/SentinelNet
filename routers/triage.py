@@ -159,6 +159,8 @@ def run_triage(payload: TriageRunRequest = TriageRunRequest(),
     direct_devices = []
     queued = 0
     for d in devices:
+        if inventory_manager.is_manual(d):
+            continue  # its config is uploaded by hand; _manual_refusal backs this up
         if site_manager.is_agent_site(d.get('Site')):
             # Il centrale non apre SSH verso una sede con agente: la
             # richiesta diventa un job che l'agente ritira al prossimo

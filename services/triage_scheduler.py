@@ -359,6 +359,8 @@ def execute_schedule_job(schedule_id: int, requested_by: Optional[str] = None) -
     direct_devices = []
     queued_count = 0
     for d in devices:
+        if inventory_manager.is_manual(d):
+            continue  # its config is uploaded by hand; _manual_refusal backs this up
         if site_manager.is_agent_site(d.get("Site")):
             if not site_manager.has_pending_triage_job(d["Site"], d["IP"]):
                 site_manager.enqueue_job(

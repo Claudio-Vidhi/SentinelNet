@@ -372,6 +372,8 @@ def _snmp_devices() -> list:
     from services.tenant_telemetry import is_telemetry_enabled
     out = []
     for device in inventory_manager.get_all_devices():
+        if inventory_manager.is_manual(device):
+            continue
         tenant = device.get("Group") or "Generale"
         if not is_telemetry_enabled(tenant, "snmp"):
             continue

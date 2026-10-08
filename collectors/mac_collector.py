@@ -796,6 +796,8 @@ def collect_all(devices: list, transport=None) -> dict:
     from concurrent.futures import ThreadPoolExecutor
     from functools import partial
     from collectors import mac_history
+    from services import inventory_manager
+    devices = [d for d in devices if not inventory_manager.is_manual(d)]
 
     if not devices:
         return {"scanned": 0, "results": [], "pruned": 0}

@@ -80,6 +80,14 @@ def _require_fallback(device):
 
 
 def get_device_credentials(device):
+    # A manual device has no credentials by design (its config is uploaded by
+    # hand): refusing here stops every dial path, including the ones that do
+    # not go through core_engine (WLC, collectors), with the error each caller
+    # already handles for "no credential".
+    from services import inventory_manager
+    if inventory_manager.is_manual(device):
+        raise CredentialResolveError(
+            f"Il dispositivo {device.get('IP')} e' manuale: nessuna credenziale, nessuna sessione.")
     profile = device.get('Profile', 'custom').lower()
     if profile == 'default':
         return _require_fallback(device)
