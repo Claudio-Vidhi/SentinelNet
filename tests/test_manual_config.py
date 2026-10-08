@@ -223,6 +223,19 @@ class Preview(unittest.TestCase):
         self.assertEqual((p["vendor"], p["sniffed_vendor"]), ("cisco", "fortinet"))
         self.assertEqual(mc.preview(FORTI_GUI)["sniffed_vendor"], "fortinet")
 
+    def test_securecrt_timestamps_read_like_a_plain_log(self):
+        # SecureCRT "timestamp each line": 'HHMMSS.mmm: ' before every line, blank ones included.
+        stamped = "".join(f"150701.{i:03d}: {line}\r\n" for i, line in enumerate(IOS_LOG.splitlines()))
+        plain, p = mc.preview(IOS_LOG, "cisco"), mc.preview(stamped, "cisco")
+        for key in ("hostname", "version", "model", "ip_candidates", "structured"):
+            self.assertEqual(p[key], plain[key], key)
+        self.assertEqual(p["hostname"], "switch-01")
+
+    def test_unrecognised_content_sniffs_nothing(self):
+        # An HPE/Aruba/CBS log falls into the IOS fallback: no vendor claim, no false warning.
+        p = mc.preview(IOS_LOG, "hpe")
+        self.assertEqual((p["vendor"], p["sniffed_vendor"]), ("hpe", ""))
+
 
 if __name__ == "__main__":
     unittest.main()

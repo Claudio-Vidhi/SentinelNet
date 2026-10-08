@@ -86,8 +86,10 @@
     async function repreview(i) {
         const gen = mc.gen;
         const row = mc.rows[i];
+        const vendor = row.vendor;
         const fields = await previewFields(row);
-        if (gen !== mc.gen || mc.rows[i] !== row) return;
+        if (gen !== mc.gen || mc.rows[i] !== row || row.vendor !== vendor) return;
+        for (const f of row.edited) delete fields[f]; // typed by hand: the user wins
         Object.assign(row, fields);
         row.ip = row.ip || mc.fixed?.ip || fields.candidates[0] || '';
         renderReview();
@@ -112,6 +114,7 @@
                 group: mc.fixed?.group || '',
                 site: mc.fixed?.site || 'central',
                 category: '',
+                edited: new Set(),
             });
         }
         if (gen !== mc.gen) return;
@@ -248,7 +251,8 @@
         }
         const input = $('mcFileInput');
         if (input instanceof HTMLInputElement) input.multiple = !mc.fixed;
-        wizard.open();
+        // Any close (Cancel, Esc, backdrop) stales the running preview/import loops.
+        wizard.open({ onClose: () => { mc.gen++; } });
     }
     window.openManualConfigWizard = openManualConfigWizard;
 
@@ -304,8 +308,11 @@
         const card = t.closest('[data-row]');
         if (!(card instanceof HTMLElement) || !t.dataset.field) return;
         const i = Number(card.dataset.row);
-        mc.rows[i][t.dataset.field] = t.value;
-        if (t.dataset.field === 'vendor') repreview(i);
+        const field = t.dataset.field;
+        mc.rows[i][field] = t.value;
+        // A select fires both input and change: re-read the file once, on change.
+        if (field === 'vendor') { if (e.type === 'change') repreview(i); }
+        else mc.rows[i].edited.add(field);
     };
     $('mcReviewBody')?.addEventListener('input', onFieldEdit);
     $('mcReviewBody')?.addEventListener('change', onFieldEdit);
