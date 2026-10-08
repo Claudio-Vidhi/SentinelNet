@@ -212,6 +212,131 @@ def _fortigate_backup_and_triage(device):
 BACKUP_READ_TIMEOUT = 120
 
 
+# Accessory commands the triage runs after the config, each output stored
+# under its tag. Data rather than branches so the manual-upload guide
+# (services/manual_config.py) asks a human for exactly the sections the
+# triage collects by itself. FortiGate is absent on purpose: it returns at
+# the FORTINET_VENDORS dispatch in _run_backup_and_triage and never runs these.
+TRIAGE_EXTRA_COMMANDS = {
+    'cisco': [
+        ("show cdp neighbors",        "--- SHOW CDP NEIGHBORS ---"),
+        ("show cdp neighbors detail",  "--- SHOW CDP NEIGHBORS DETAIL ---"),
+        ("show lldp neighbors",        "--- SHOW LLDP NEIGHBORS ---"),
+        ("show lldp neighbors detail", "--- SHOW LLDP NEIGHBORS DETAIL ---"),
+        ("show switch",                "--- SHOW SWITCH ---"),
+        ("show inventory",             "--- SHOW INVENTORY ---"),
+    ],
+    'hpe': [
+        ("show lldp info remote-device",        "--- SHOW LLDP NEIGHBORS ---"),
+        ("show lldp info remote-device detail", "--- SHOW LLDP NEIGHBORS DETAIL ---"),
+    ],
+    # Catalyst 9800 is IOS-XE: it answers the switch commands, and
+    # 'show chassis' is where an HA pair names both of its members.
+    'cisco_9800': [
+        ("show cdp neighbors detail",  "--- SHOW CDP NEIGHBORS DETAIL ---"),
+        ("show lldp neighbors detail", "--- SHOW LLDP NEIGHBORS DETAIL ---"),
+        ("show chassis",               "--- SHOW CHASSIS ---"),
+        ("show redundancy",            "--- SHOW REDUNDANCY ---"),
+        ("show inventory",             "--- SHOW INVENTORY ---"),
+    ],
+    # AireOS: 'show redundancy summary' is the only place the HA
+    # SSO pair is described, and it is not an IOS command.
+    'cisco_wlc': [
+        ("show system info",           "--- SYSTEM INFO ---"),
+        ("show inventory",             "--- SHOW INVENTORY ---"),
+        ("show redundancy summary",    "--- SHOW REDUNDANCY SUMMARY ---"),
+    ],
+    'paloalto': [
+        ("get system status",          "--- SYSTEM STATUS ---"),
+        ("show system info",           "--- SYSTEM INFO ---"),
+        ("show inventory",             "--- SHOW INVENTORY ---"),
+        ("show environment all",       "--- SHOW ENVIRONMENT ALL ---"),
+        ("show license all",           "--- SHOW LICENSE ALL ---"),
+    ],
+}
+# read_timeout per vendor; absent = netmiko's default. Windows pays the .NET
+# runtime start on the first `powershell -Command`.
+TRIAGE_EXTRA_TIMEOUT = {'cisco_9800': 30, 'cisco_wlc': 30, 'paloalto': 30, 'windows': 45}
+# `hostname` comes out as a bare name: it is written in the form
+# `hostname <name>` so extract_hostname_from_config recognizes it
+# without a dedicated parser (the Linux prompt
+# 'user@host:~$' is not usable).
+LINUX_TRIAGE_COMMANDS = [
+    ("hostname",           "--- HOSTNAME ---"),
+    ("uname -srm",         "--- UNAME ---"),
+    ("uptime -p",          "--- UPTIME ---"),
+    ("uptime -s",          "--- BOOT TIME ---"),
+    ("ip -br a",           "--- IP ADDRESS ---"),
+    # Counters and MTU per interface in one shot: status,
+    # RX-TX bytes/packets, errors and discards.
+    ("ip -s link",         "--- LINK STATS ---"),
+    # Speed/duplex from sysfs instead of ethtool: same
+    # data, no dependency to install and no privilege
+    # (on lo and virtuals the files do not exist, hence 2>/dev/null).
+    ('for i in /sys/class/net/*; do echo "$(basename $i)'
+     ' $(cat $i/speed 2>/dev/null) $(cat $i/duplex 2>/dev/null)"; done',
+     "--- LINK SPEED ---"),
+    ("ip route",           "--- IP ROUTE ---"),
+    ("lsblk",              "--- LSBLK ---"),
+    ("lsblk -dno NAME,MODEL,SERIAL,SIZE", "--- DISKS ---"),
+    ("lscpu",              "--- LSCPU ---"),
+    ("df -hT",             "--- DF ---"),
+    ("systemctl --failed", "--- SYSTEMCTL FAILED ---"),
+    ("systemctl list-unit-files --state=enabled --no-legend --no-pager",
+     "--- SYSTEMCTL ENABLED ---"),
+    ("ss -tuln",           "--- LISTENING SOCKETS ---"),
+    # Containers: they stay in the non-privileged tier because an
+    # operator in the 'docker' group sees them without sudo, and with
+    # the privileged tier the session is already root. If docker is
+    # not present, 2>/dev/null simply leaves the section empty.
+    ("docker ps --format "
+     "'{{.Names}}\\t{{.Image}}\\t{{.Status}}\\t{{.Ports}}' 2>/dev/null",
+     "--- CONTAINERS ---"),
+    ("docker version --format '{{.Server.Version}}' 2>/dev/null",
+     "--- DOCKER VERSION ---"),
+    # kubelet is installed on every cluster node, control
+    # plane or worker: it answers even where kubectl has no
+    # kubeconfig usable from this session.
+    ("kubelet --version 2>/dev/null", "--- KUBELET VERSION ---"),
+    ("lldpctl",            "--- SHOW LLDP NEIGHBORS ---"),
+]
+# Privileged tier: available only if the operator declared
+# the sudo password (Enable Secret).
+LINUX_PRIVILEGED_COMMANDS = [
+    ("ss -tulpn",       "--- LISTENING SOCKETS PID ---"),
+    ("stat -c '%a %U %G %n' /etc/shadow /etc/passwd /etc/group",
+     "--- FILE PERMISSIONS ---"),
+    ("sshd -T",         "--- SSHD EFFECTIVE CONFIG ---"),
+    ("cat /etc/sudoers /etc/sudoers.d/* 2>/dev/null",
+     "--- SUDOERS ---"),
+    # dmidecode -s one key at a time: the output becomes
+    # "key: value", same form as lscpu, a single parser.
+    ('for k in system-manufacturer system-product-name'
+     ' system-serial-number bios-version bios-release-date;'
+     ' do echo "$k: $(dmidecode -s $k 2>/dev/null)"; done',
+     "--- DMIDECODE ---"),
+    ("dmidecode -t 17", "--- MEMORY DEVICES ---"),
+    ("nft list ruleset 2>/dev/null || iptables -S 2>/dev/null",
+     "--- FIREWALL RULES ---"),
+]
+
+
+def triage_extra_commands(vendor: str, privileged: bool = False) -> list:
+    """[(command, tag)] the triage runs after the config for this vendor.
+
+    privileged adds Linux's root-only tier (the session has a sudo password).
+    """
+    if vendor == 'linux':
+        return LINUX_TRIAGE_COMMANDS + (LINUX_PRIVILEGED_COMMANDS if privileged else [])
+    if vendor == 'windows':
+        # The chain lives in drivers/windows.py: every command formats its
+        # own delimited output because Windows' text output is localized.
+        from drivers.windows import TRIAGE_COMMANDS
+        return list(TRIAGE_COMMANDS)
+    return list(TRIAGE_EXTRA_COMMANDS.get(vendor, ()))
+
+
+
 def _run_tagged(net_connect, cmds, read_timeout=None, prefix_hostname=False):
     """Run accessory triage commands, each output under its tag.
 
@@ -374,122 +499,13 @@ def _run_backup_and_triage(device):
 
             from services.config_drift.normalize import TRIAGE_MARKER
             config_out += f"\n\n{TRIAGE_MARKER}\n"
-            if vendor == 'cisco':
-                config_out += _run_tagged(net_connect, [
-                    ("show cdp neighbors",        "--- SHOW CDP NEIGHBORS ---"),
-                    ("show cdp neighbors detail",  "--- SHOW CDP NEIGHBORS DETAIL ---"),
-                    ("show lldp neighbors",        "--- SHOW LLDP NEIGHBORS ---"),
-                    ("show lldp neighbors detail", "--- SHOW LLDP NEIGHBORS DETAIL ---"),
-                    ("show switch",                "--- SHOW SWITCH ---"),
-                    ("show inventory",             "--- SHOW INVENTORY ---"),
-                ])
-            elif vendor == 'hpe':
-                config_out += _run_tagged(net_connect, [
-                    ("show lldp info remote-device",        "--- SHOW LLDP NEIGHBORS ---"),
-                    ("show lldp info remote-device detail", "--- SHOW LLDP NEIGHBORS DETAIL ---"),
-                ])
-            elif vendor == 'cisco_9800':
-                # Catalyst 9800 is IOS-XE: it answers the switch commands, and
-                # 'show chassis' is where an HA pair names both of its members.
-                config_out += _run_tagged(net_connect, [
-                    ("show cdp neighbors detail",  "--- SHOW CDP NEIGHBORS DETAIL ---"),
-                    ("show lldp neighbors detail", "--- SHOW LLDP NEIGHBORS DETAIL ---"),
-                    ("show chassis",               "--- SHOW CHASSIS ---"),
-                    ("show redundancy",            "--- SHOW REDUNDANCY ---"),
-                    ("show inventory",             "--- SHOW INVENTORY ---"),
-                ], read_timeout=30)
-            elif vendor == 'cisco_wlc':
-                # AireOS: 'show redundancy summary' is the only place the HA
-                # SSO pair is described, and it is not an IOS command.
-                config_out += _run_tagged(net_connect, [
-                    ("show system info",           "--- SYSTEM INFO ---"),
-                    ("show inventory",             "--- SHOW INVENTORY ---"),
-                    ("show redundancy summary",    "--- SHOW REDUNDANCY SUMMARY ---"),
-                ], read_timeout=30)
-            elif vendor in ('fortinet', 'paloalto'):
-                config_out += _run_tagged(net_connect, [
-                    ("get system status",          "--- SYSTEM STATUS ---"),
-                    ("show system info",           "--- SYSTEM INFO ---"),
-                    ("show inventory",             "--- SHOW INVENTORY ---"),
-                    ("show environment all",       "--- SHOW ENVIRONMENT ALL ---"),
-                    ("show license all",           "--- SHOW LICENSE ALL ---"),
-                ], read_timeout=30)
-            elif vendor == 'linux':
-                # `hostname` comes out as a bare name: it is written in the form
-                # `hostname <name>` so extract_hostname_from_config recognizes it
-                # without a dedicated parser (the Linux prompt
-                # 'user@host:~$' is not usable).
-                linux_cmds = [
-                    ("hostname",           "--- HOSTNAME ---"),
-                    ("uname -srm",         "--- UNAME ---"),
-                    ("uptime -p",          "--- UPTIME ---"),
-                    ("uptime -s",          "--- BOOT TIME ---"),
-                    ("ip -br a",           "--- IP ADDRESS ---"),
-                    # Counters and MTU per interface in one shot: status,
-                    # RX-TX bytes/packets, errors and discards.
-                    ("ip -s link",         "--- LINK STATS ---"),
-                    # Speed/duplex from sysfs instead of ethtool: same
-                    # data, no dependency to install and no privilege
-                    # (on lo and virtuals the files do not exist, hence 2>/dev/null).
-                    ('for i in /sys/class/net/*; do echo "$(basename $i)'
-                     ' $(cat $i/speed 2>/dev/null) $(cat $i/duplex 2>/dev/null)"; done',
-                     "--- LINK SPEED ---"),
-                    ("ip route",           "--- IP ROUTE ---"),
-                    ("lsblk",              "--- LSBLK ---"),
-                    ("lsblk -dno NAME,MODEL,SERIAL,SIZE", "--- DISKS ---"),
-                    ("lscpu",              "--- LSCPU ---"),
-                    ("df -hT",             "--- DF ---"),
-                    ("systemctl --failed", "--- SYSTEMCTL FAILED ---"),
-                    ("systemctl list-unit-files --state=enabled --no-legend --no-pager",
-                     "--- SYSTEMCTL ENABLED ---"),
-                    ("ss -tuln",           "--- LISTENING SOCKETS ---"),
-                    # Containers: they stay in the non-privileged tier because an
-                    # operator in the 'docker' group sees them without sudo, and with
-                    # the privileged tier the session is already root. If docker is
-                    # not present, 2>/dev/null simply leaves the section empty.
-                    ("docker ps --format "
-                     "'{{.Names}}\\t{{.Image}}\\t{{.Status}}\\t{{.Ports}}' 2>/dev/null",
-                     "--- CONTAINERS ---"),
-                    ("docker version --format '{{.Server.Version}}' 2>/dev/null",
-                     "--- DOCKER VERSION ---"),
-                    # kubelet is installed on every cluster node, control
-                    # plane or worker: it answers even where kubectl has no
-                    # kubeconfig usable from this session.
-                    ("kubelet --version 2>/dev/null", "--- KUBELET VERSION ---"),
-                    ("lldpctl",            "--- SHOW LLDP NEIGHBORS ---"),
-                ]
-                if secret:
-                    # Privileged tier: available only if the operator declared
-                    # the sudo password (Enable Secret).
-                    linux_cmds += [
-                        ("ss -tulpn",       "--- LISTENING SOCKETS PID ---"),
-                        ("stat -c '%a %U %G %n' /etc/shadow /etc/passwd /etc/group",
-                         "--- FILE PERMISSIONS ---"),
-                        ("sshd -T",         "--- SSHD EFFECTIVE CONFIG ---"),
-                        ("cat /etc/sudoers /etc/sudoers.d/* 2>/dev/null",
-                         "--- SUDOERS ---"),
-                        # dmidecode -s one key at a time: the output becomes
-                        # "key: value", same form as lscpu, a single parser.
-                        ('for k in system-manufacturer system-product-name'
-                         ' system-serial-number bios-version bios-release-date;'
-                         ' do echo "$k: $(dmidecode -s $k 2>/dev/null)"; done',
-                         "--- DMIDECODE ---"),
-                        ("dmidecode -t 17", "--- MEMORY DEVICES ---"),
-                        ("nft list ruleset 2>/dev/null || iptables -S 2>/dev/null",
-                         "--- FIREWALL RULES ---"),
-                    ]
-                config_out += _run_tagged(net_connect, linux_cmds, prefix_hostname=True)
-            elif vendor == 'windows':
-                # La catena sta in drivers/windows.py: e' logica di vendor,
-                # e ogni comando formatta la propria uscita a delimitatori
-                # perche' quella testuale di Windows e' localizzata. Qui si
-                # cammina solo la lista.
-                #
-                # read_timeout piu' lungo che su Linux: il primo
-                # `powershell -Command` paga l'avvio del runtime .NET, e su
-                # un server sotto carico i 10s di default non bastano.
-                from drivers.windows import TRIAGE_COMMANDS as windows_cmds
-                config_out += _run_tagged(net_connect, windows_cmds, read_timeout=45)
+            extras = triage_extra_commands(vendor, privileged=bool(secret))
+            if extras:
+                # Linux's bare `hostname` output is written as `hostname <name>`
+                # so extract_hostname_from_config reads it.
+                config_out += _run_tagged(net_connect, extras,
+                                          read_timeout=TRIAGE_EXTRA_TIMEOUT.get(vendor),
+                                          prefix_hostname=(vendor == 'linux'))
 
             hostname_from_cfg = extract_hostname_from_config(config_out)
             sys_name = hostname_from_cfg or live_hostname or f"{vendor}_{ip}"
