@@ -140,6 +140,42 @@ class SessionLog(unittest.TestCase):
         self.assertEqual(out["hostname"], "srv-01")
 
 
+    def test_linux_colour_codes_and_bracketed_paste_are_stripped(self):
+        backup_cmd, _, extras = mc._commands("linux")
+        host_cmd = extras[0][0]
+        ps = "\x1b[0;32mroot@srv-01\x1b[0m:\x1b[1;34m~\x1b[0m# "
+        log = (
+            f"{ps}\x1b[?2004l{backup_cmd}\r\n"
+            "\x1b]8003;start=abc\x1b\x5c--- /etc/hosts ---\r\n"
+            "127.0.0.1 localhost\r\n"
+            f"{ps}\x1b[?2004l{host_cmd}\r\n"
+            "srv-01\r\n"
+            f"{ps}\x1b[?2004l\r\n"
+        )
+        out = mc.to_backup("linux", log)
+        self.assertTrue(out["structured"])
+        self.assertNotIn("\x1b", out["backup"])
+        self.assertIn("127.0.0.1 localhost", out["backup"])
+        self.assertEqual(out["hostname"], "srv-01")
+
+    def test_linux_wrapped_command_echo_is_rejoined(self):
+        backup_cmd, _, extras = mc._commands("linux")
+        host_cmd = extras[0][0]
+        cut = len(backup_cmd) // 2
+        log = (
+            f"root@srv-01:~# {backup_cmd[:cut]} \r{backup_cmd[cut:]}\r\n"
+            "--- /etc/hosts ---\r\n"
+            "127.0.0.1 localhost\r\n"
+            f"root@srv-01:~# {host_cmd}\r\n"
+            "srv-01\r\n"
+            "root@srv-01:~#\r\n"
+        )
+        out = mc.to_backup("linux", log)
+        self.assertTrue(out["structured"])
+        self.assertIn("127.0.0.1 localhost", out["backup"])
+        self.assertEqual(out["hostname"], "srv-01")
+
+
 class PlainFiles(unittest.TestCase):
     def test_fortigate_gui_backup_is_stored_as_is(self):
         """Review focus 2."""
@@ -181,6 +217,11 @@ class Preview(unittest.TestCase):
 
     def test_given_vendor_wins(self):
         self.assertEqual(mc.preview(IOS_LOG, "cisco")["vendor"], "cisco")
+
+    def test_sniffed_vendor_ignores_the_given_one(self):
+        p = mc.preview(FORTI_GUI, "cisco")
+        self.assertEqual((p["vendor"], p["sniffed_vendor"]), ("cisco", "fortinet"))
+        self.assertEqual(mc.preview(FORTI_GUI)["sniffed_vendor"], "fortinet")
 
 
 if __name__ == "__main__":

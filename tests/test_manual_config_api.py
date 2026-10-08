@@ -133,12 +133,27 @@ class ManualConfigApi(unittest.TestCase):
         self._as("operator")
         self.assertEqual(self._import(ip="192.0.2.21").status_code, 200)
 
+    def test_scoped_user_cannot_overwrite_another_tenants_ip(self):
+        """update_version_inventory is keyed by IP only: a tenant-b operator must
+        not reach tenant-a's device through the same address."""
+        from services import inventory_manager
+        inventory_manager.add_or_update_device("192.0.2.22", "cisco", "", "admin", "x", "",
+                                               "tenant-a")
+        inventory_manager.update_version_inventory("192.0.2.22", "cisco", "1.0", "online")
+        self._as("operator", ["tenant-b"])
+        self.assertEqual(self._import(ip="192.0.2.22", group="tenant-b").status_code, 403)
+        entry = inventory_manager.get_detected_versions()["192.0.2.22"]
+        self.assertEqual((entry["version"], entry["status"]), ("1.0", "online"))
+        self.assertFalse(any(d["IP"] == "192.0.2.22" and d["Group"] == "tenant-b"
+                             for d in inventory_manager.get_all_devices()))
+
     def test_preview_and_guide(self):
         self._as("operator")
         p = self.client.post("/api/manual-config/preview", json={"text": IOS_LOG})
         self.assertEqual(p.status_code, 200, p.text)
         self.assertEqual(p.json()["hostname"], "switch-01")
         self.assertEqual(p.json()["ip_candidates"], ["192.0.2.10"])
+        self.assertEqual(p.json()["sniffed_vendor"], "cisco")
         g = self.client.get("/api/manual-config/guide")
         self.assertEqual(g.status_code, 200, g.text)
         self.assertIn("central", [s["id"] for s in g.json()["sites"]])

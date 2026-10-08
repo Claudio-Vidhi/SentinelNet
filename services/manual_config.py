@@ -16,6 +16,7 @@ Spec: docs/superpowers/specs/2026-10-08-manual-config-repository-design.md
 import re
 
 from core import core_engine
+from drivers.linux import _ANSI_CSI, _SHELL_INTEGRATION
 from services.config_drift.normalize import TRIAGE_MARKER
 
 # Inventory vendor keys the guide offers (drivers/registry.VENDOR_DRIVER_DEFAULTS
@@ -78,6 +79,17 @@ _IP_PATTERNS = (  # management-specific first
     re.compile(r"^\S+\s+UP\s+" + _IP + r"/", re.MULTILINE),                      # Linux `ip -br a`
 )
 _UNKNOWN = ("Unknown", "Non Rilevato", "Non Rilevata")
+
+
+# Readline redraws a line that wraps at the terminal width as " \r"; the
+# triage never sees it (netmiko reads the raw stream), a pasted log does.
+_WRAP = re.compile(r" \r(?!\n)")
+
+
+def _clean(text: str) -> str:
+    """A terminal log as the triage's cleaned session would read: no escape
+    sequences (colour, bracketed paste, shell integration), no wrap redraws."""
+    return _WRAP.sub("", _ANSI_CSI.sub("", _SHELL_INTEGRATION.sub("", text or "")))
 
 
 def _norm(command: str) -> str:
@@ -182,6 +194,7 @@ def _hostname(text: str, prompt) -> str:
 
 def to_backup(vendor: str, text: str) -> dict:
     """The upload as the triage would have stored it, plus what it says."""
+    text = _clean(text)
     backup_cmd, info, extras = _commands(vendor)
     sections, prompt = parse_session(text, [backup_cmd, *info, *(c for c, _ in extras)])
     config = sections.get(_norm(backup_cmd))
@@ -199,7 +212,7 @@ def to_backup(vendor: str, text: str) -> dict:
                 body = f"hostname {body.strip()}"
             stored += f"\n{tag}\n{body}"
     drv = _driver_cls(vendor)(_Replay(sections))
-    header = _FORTI_HEADER.search(text or "")
+    header = _FORTI_HEADER.search(text)
     return {
         "backup": stored,
         "structured": structured,
@@ -228,14 +241,20 @@ def analyses_for(vendor: str, config_type: str, version: str) -> list:
     return base + (["cve"] if version else [])
 
 
+def sniff_vendor(text: str) -> str:
+    """The vendor the content itself points to."""
+    from ai.config_analyzer import detect_config_type
+    return "juniper" if _JUNOS.search(text or "") else \
+        _VENDOR_BY_TYPE.get(detect_config_type(text), "cisco")
+
+
 def preview(text: str, vendor: str = "") -> dict:
     from ai.config_analyzer import detect_config_type
-    if not vendor:
-        vendor = "juniper" if _JUNOS.search(text or "") else \
-            _VENDOR_BY_TYPE.get(detect_config_type(text), "cisco")
+    sniffed = sniff_vendor(text)
+    vendor = vendor or sniffed
     result = to_backup(vendor, text)
     backup = result.pop("backup")
     config_type = detect_config_type(backup, {"Vendor": vendor})
-    return {**result, "vendor": vendor, "config_type": config_type,
+    return {**result, "vendor": vendor, "sniffed_vendor": sniffed, "config_type": config_type,
             "ip_candidates": ip_candidates(backup),
             "analyses": analyses_for(vendor, config_type, result["version"])}

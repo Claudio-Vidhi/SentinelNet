@@ -297,6 +297,8 @@ def ping_check(payload: PingCheckRequest, current_user = Depends(require_operato
     if payload.ips is not None:
         wanted = set(payload.ips)
         devices = [d for d in devices if d['IP'] in wanted]
+    # A manual device has nothing to ping and its status is "manual", never offline.
+    devices = [d for d in devices if not inventory_manager.is_manual(d)]
 
     # None = not measurable (jump site: ICMP cannot cross the bastion tunnel),
     # same tri-state vocabulary as services.ping_monitor / has_direct_path.
@@ -353,7 +355,9 @@ def ping_single(ip: str, current_user = Depends(require_operator)):
     # None = not measurable (jump site: ICMP cannot cross the bastion tunnel),
     # same tri-state as ping_check above / services.ping_monitor.
     alive: Optional[bool]
-    if _dev is not None and not site_manager.has_direct_path(_dev.get('Site')):
+    # A manual device is never probed either: its status stays "manual".
+    if _dev is not None and (inventory_manager.is_manual(_dev)
+                             or not site_manager.has_direct_path(_dev.get('Site'))):
         alive = None
     else:
         from collectors.network_scanner import _ping as icmp_ping
@@ -380,7 +384,7 @@ def ping_single(ip: str, current_user = Depends(require_operator)):
         except Exception as e:
             logging.warning(f"Stato ping non persistito per '{ip}': {e}")
 
-    alive_txt = "non misurabile (sito jump)" if alive is None else ("raggiungibile" if alive else "non raggiungibile")
+    alive_txt = "non misurabile (sito jump o manuale)" if alive is None else ("raggiungibile" if alive else "non raggiungibile")
     log_audit(f"Ping singolo verso '{ip}' eseguito dall'utente '{current_user.get('sub')}': {alive_txt}.")
     return {"ip": ip, "reachable": alive}
 
