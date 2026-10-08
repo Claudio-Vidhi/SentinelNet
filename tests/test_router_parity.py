@@ -140,7 +140,9 @@ class TestRouterParity(unittest.TestCase):
                     # Contatori di errore delle interfacce (finestra e on demand).
                     "/api/interface-errors",
                     # Device lifecycle log of the inventory.
-                    "/api/device-history")
+                    "/api/device-history",
+                    # Manual config upload for unreachable devices.
+                    "/api/manual-config")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
@@ -309,7 +311,9 @@ class TestFullParity(unittest.TestCase):
                     # Contatori di errore delle interfacce (finestra e on demand).
                     "/api/interface-errors",
                     # Device lifecycle log of the inventory.
-                    "/api/device-history")
+                    "/api/device-history",
+                    # Manual config upload for unreachable devices.
+                    "/api/manual-config")
     # Come NEW_PREFIXES, filtra entrambi i lati: copre anche FortigatePreviewSchema,
     # rimosso insieme al flag di preview /api/settings/fortigate-preview.
     NEW_SCHEMAS = ("DeviceSiteSchema", "GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "ReportPdfSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection", "AgentBackupSchema", "AgentStatusItemSchema", "AgentStatusSchema", "FortigatePreviewSchema",
@@ -331,6 +335,8 @@ class TestFullParity(unittest.TestCase):
                    # Bounce della porta di accesso trovata dalla diagnosi: unica
                    # scrittura della tab, rotta sotto /api/diagnose (già in NEW_PREFIXES).
                    "PortBounceSchema",
+                   # Bodies of POST /api/manual-config/{preview,import}.
+                   "ManualPreviewSchema", "ManualImportSchema",
                     # Certificato self-signed generato dal pannello: schema
                     # del solo host per POST /api/settings/tls/self-signed.
                     "SelfSignedCertSchema",
