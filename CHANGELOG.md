@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.51.2] - 2026-10-08
+
 ### Added
 
 - **Config manuale per i dispositivi non raggiungibili**: dalla tab Importa
