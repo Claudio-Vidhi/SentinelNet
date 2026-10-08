@@ -133,6 +133,13 @@ declare var _threatScanBusy: any;
 declare var _threatScanAgain: any;  // una selezione arrivata mentre la scansione era in corso
 declare var _vwVendor: any;
 
+// tutorials.js
+declare var startTutorial: any;
+declare var openTutorialsHub: any;
+declare var closeTutorialsHub: any;
+declare var initTutorialsOnboarding: any;
+declare var resetTutorialsOnboarding: any;
+
 // Names that already exist as a top-level declaration in some module AND are
 // also re-exposed on window: only the 'window' half belongs here, otherwise the
 // identifier is declared twice.
@@ -147,6 +154,11 @@ interface Window {
     clearGlobalDeviceContext: any; // core.js
     openCommandPalette: any; // core.js
     closeCommandPalette: any; // core.js
+    startTutorial: any;      // tutorials.js
+    openTutorialsHub: any;   // tutorials.js
+    closeTutorialsHub: any;  // tutorials.js
+    initTutorialsOnboarding: any; // tutorials.js
+    resetTutorialsOnboarding: any; // tutorials.js
     trafState: any;          // observability.js, read by flow-analytics.js
     _vwLoaded: any;          // threat-intel.js, first-load flag
     webkitAudioContext: any; // legacy Safari fallback in devices.js
@@ -155,4 +167,6 @@ interface Window {
     openTrafficoAnomalies: any; // observability.js, called from home.js
     openIncident: any; // incidents.js, called from observability.js
     renderCheckList: any; // devices.js, called from topology.js
+    switchMcpPane: any;   // settings.js
 }
+

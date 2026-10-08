@@ -761,8 +761,29 @@
 
         list.innerHTML = html || tools.map(renderToolCard).join('');
         updateMcpToolCounters();
+        const subToolsBadge = document.getElementById('mcpSubToolsCountBadge');
+        if (subToolsBadge) subToolsBadge.textContent = String(tools.length);
         const filterInput = document.getElementById('mcpToolFilterInput');
         if (filterInput && filterInput.value) filterMcpTools(filterInput.value);
+    }
+
+    const MCP_PANES = ['grants', 'connect', 'tools'];
+    let currentMcpPane = 'grants';
+
+    function switchMcpPane(pane) {
+        if (!MCP_PANES.includes(pane)) pane = 'grants';
+        currentMcpPane = pane;
+        const paneMap = {
+            grants: 'panelMcpGrants',
+            connect: 'panelMcpConnect',
+            tools: 'panelMcpTools',
+        };
+        MCP_PANES.forEach(p => {
+            const el = document.getElementById(paneMap[p]);
+            if (el) el.style.display = p === pane ? '' : 'none';
+            const btn = document.getElementById('mcpSub-' + p);
+            if (btn) btn.classList.toggle('active', p === pane);
+        });
     }
 
     async function saveMcpSettings() {
@@ -798,6 +819,8 @@
         const grants = (await res.json()).grants || [];
         const badge = document.getElementById('mcpGrantsCountBadge');
         if (badge) badge.textContent = `${grants.length}`;
+        const subBadge = document.getElementById('mcpSubGrantsCountBadge');
+        if (subBadge) subBadge.textContent = `${grants.length}`;
         const when = (ts) => ts ? new Date(ts * 1000).toLocaleString() : tr('mcpGrantNever');
         if (!grants.length) {
             box.innerHTML = `
@@ -805,6 +828,9 @@
               <div class="mcp-empty-icon"><i class="fa-solid fa-plug-circle-xmark"></i></div>
               <div class="mcp-empty-title" data-i18n="mcpGrantEmptyLead">${escapeHtml(tr('mcpGrantEmptyLead'))}</div>
               <p class="mcp-empty-desc" data-i18n="mcpGrantEmptySub">${escapeHtml(tr('mcpGrantEmptySub'))}</p>
+              <button type="button" class="btn btn-primary btn-small" id="btnMcpEmptyConnect" style="margin-top:12px;">
+                <i class="fa-solid fa-plus"></i> <span data-i18n="btnMcpNewClient">${escapeHtml(tr('btnMcpNewClient'))}</span>
+              </button>
               <span style="display:none;" data-i18n="mcpGrantNone">${escapeHtml(tr('mcpGrantNone'))}</span>
             </div>`;
             return;
@@ -2264,7 +2290,16 @@
         if (pre) navigator.clipboard.writeText(pre.textContent);
     });
     document.getElementById('btnSaveMcpSettings')?.addEventListener('click', saveMcpSettings);
+    document.getElementById('mcpSubtabBar')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-mcp-pane]');
+        if (btn && btn.dataset.mcpPane) switchMcpPane(btn.dataset.mcpPane);
+    });
+    document.getElementById('btnMcpGoToConnect')?.addEventListener('click', () => switchMcpPane('connect'));
     document.getElementById('mcpGrantList')?.addEventListener('click', (e) => {
+        if (e.target.closest('#btnMcpEmptyConnect')) {
+            switchMcpPane('connect');
+            return;
+        }
         const btn = e.target.closest('[data-action="revoke-mcp-grant"]');
         if (btn) revokeMcpGrant(btn.dataset.id);
     });
@@ -2290,4 +2325,6 @@
     document.getElementById('btnConfirmMcpGuide')?.addEventListener('click', () => {
         closeModal('modalMcpGuide');
     });
+
+    window.switchMcpPane = switchMcpPane;
 

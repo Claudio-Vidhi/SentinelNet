@@ -4098,15 +4098,15 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
   .set-grid-wide { grid-column: auto; }
 }
 
-/* Integrations: client snippet beside the tool switches. */
-.mcp-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 16px; align-items: start; }
-.mcp-layout > .panel { margin: 0; }
-#panelMcpGrants { grid-column: 1 / -1; }
+/* Integrations: MCP Server layout with subtabs & panels */
+.mcp-layout { display: flex; flex-direction: column; gap: 16px; }
+.mcp-layout > .panel { margin: 0; width: 100%; }
+#panelMcpGrants { grid-column: auto; }
 .mcp-layout .panel-head { margin-bottom: 14px; }
 .code-block { margin: 0; padding: 12px; background-color: var(--surface-2); border: var(--seam) solid var(--border); font-family: var(--font-code); font-size: 12px; overflow-x: auto; white-space: pre; }
 .mcp-tool-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; margin-bottom: 14px; }
 @media (max-width: 1200px) {
-  .mcp-layout { grid-template-columns: minmax(0, 1fr); }
+  .mcp-layout { width: 100%; }
   #panelMcpGrants { grid-column: auto; }
 }
 
@@ -4762,3 +4762,350 @@ details[open] > summary .mac-caret { transform: rotate(180deg); }
 /* Integrazioni → "Collega un client AI": the three steps before the snippet. */
 .mcp-steps { margin: 0 0 12px 18px; display: grid; gap: 6px; font-size: 12.5px; line-height: 1.5; color: var(--text); }
 .mcp-steps li::marker { font-family: var(--font-data); color: var(--text-soft); }
+
+/* ---------------------------------------------------------------
+   27. GUIDED TUTORIALS & ONBOARDING (Mobbin Inspired)
+   --------------------------------------------------------------- */
+.tutorial-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+@media (max-width: 640px) {
+  .tutorial-hub-grid { grid-template-columns: 1fr; }
+}
+
+.tutorial-hub-card {
+  background: var(--surface-2);
+  border: var(--seam) solid var(--border);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.tutorial-hub-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-lift);
+}
+
+.tutorial-hub-card-top {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.tutorial-hub-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--primary) 15%, transparent);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex: none;
+}
+
+.tutorial-hub-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.tutorial-hub-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+  gap: 8px;
+}
+
+.tutorial-hub-title {
+  margin: 0;
+  font-family: var(--font-legend);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+.tutorial-hub-badge {
+  font-family: var(--font-data);
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  color: var(--text-soft);
+  flex: none;
+}
+.tutorial-hub-badge.completed {
+  background: color-mix(in srgb, var(--lamp-up) 18%, transparent);
+  color: var(--lamp-up-ink);
+  font-weight: 600;
+}
+
+.tutorial-hub-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.tutorial-hub-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 8px;
+  border-top: var(--seam) solid var(--border);
+}
+
+.tutorial-hub-duration {
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--text-soft);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Onboarding Welcome Toast / Banner */
+.onboarding-welcome-card {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 370px;
+  max-width: calc(100vw - 32px);
+  background: var(--surface);
+  border: var(--seam) solid var(--border-strong);
+  box-shadow: var(--shadow-float);
+  z-index: 950;
+  padding: 16px;
+  animation: tutSlideIn 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes tutSlideIn {
+  from { transform: translateY(30px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.onboarding-welcome-inner {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  position: relative;
+}
+
+.onboarding-welcome-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--primary) 15%, transparent);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex: none;
+}
+
+.onboarding-welcome-content {
+  flex: 1;
+  min-width: 0;
+  padding-right: 18px;
+}
+
+.onboarding-welcome-title {
+  font-family: var(--font-legend);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.onboarding-welcome-text {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+}
+
+.onboarding-welcome-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.onboarding-welcome-close {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: none;
+  border: none;
+  color: var(--text-soft);
+  cursor: pointer;
+  padding: 4px;
+  font-size: 14px;
+  line-height: 1;
+}
+.onboarding-welcome-close:hover { color: var(--text); }
+
+/* Interactive Walkthrough Spotlight & Popover (SVG Mask Architecture) */
+.tutorial-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10100;
+  pointer-events: none;
+  display: none;
+}
+.tutorial-overlay.active {
+  display: block;
+}
+
+.tutorial-svg-mask {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 10101;
+  pointer-events: auto;
+}
+
+#tutorialCutout,
+#tutorialCutoutBorder {
+  transition: x 220ms cubic-bezier(0.2, 0, 0, 1),
+              y 220ms cubic-bezier(0.2, 0, 0, 1),
+              width 220ms cubic-bezier(0.2, 0, 0, 1),
+              height 220ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+#tutorialCutoutBorder {
+  filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.65));
+}
+
+.tutorial-card {
+  position: fixed;
+  z-index: 10102;
+  width: 410px;
+  max-width: calc(100vw - 28px);
+  background: var(--surface);
+  border: var(--seam) solid var(--border-strong);
+  box-shadow: var(--shadow-float);
+  border-radius: 4px;
+  pointer-events: auto;
+  animation: tutCardDrop 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  display: none;
+  overflow: hidden;
+}
+.tutorial-card.active {
+  display: flex;
+  flex-direction: column;
+}
+@keyframes tutCardDrop {
+  from { transform: translateY(-8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.tutorial-progress-bar {
+  height: 3px;
+  background: var(--surface-3);
+  width: 100%;
+}
+.tutorial-progress-fill {
+  height: 100%;
+  background: var(--primary);
+  transition: width 200ms ease;
+}
+
+.tutorial-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
+  background: var(--surface-2);
+  border-bottom: var(--seam) solid var(--border);
+}
+
+.tutorial-card-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tutorial-card-pill {
+  font-family: var(--font-legend);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  padding: 2px 7px;
+  border-radius: 2px;
+}
+
+.tutorial-card-step {
+  font-family: var(--font-data);
+  font-size: 11.5px;
+  color: var(--text-soft);
+  font-weight: 500;
+}
+
+.tutorial-card-close {
+  background: none;
+  border: none;
+  color: var(--text-soft);
+  cursor: pointer;
+  padding: 4px;
+  font-size: 14px;
+  line-height: 1;
+}
+.tutorial-card-close:hover { color: var(--text); }
+
+.tutorial-card-body {
+  padding: 16px;
+}
+
+.tutorial-card-title {
+  margin: 0 0 8px;
+  font-family: var(--font-legend);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text);
+}
+
+.tutorial-card-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text);
+}
+.tutorial-card-text kbd {
+  font-family: var(--font-code);
+  font-size: 11.5px;
+  padding: 2px 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 2px;
+}
+
+.tutorial-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border-top: var(--seam) solid var(--border);
+}
+
+.tutorial-card-footer-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+
