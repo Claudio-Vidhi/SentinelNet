@@ -10,6 +10,14 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.51.1] - 2026-10-08
+
+### Added
+
+- **Tutorial guidati e onboarding**: percorsi guidati passo per passo sulle
+  tab principali, avviabili dall'Help Hub e dalla Command Palette, più una
+  guida iniziale per i nuovi utenti.
+
 ## [0.51.0] - 2026-10-07
 
 ### Added
