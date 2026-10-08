@@ -106,6 +106,8 @@
 
     // One bucket per device, shared by the tab counts, the tab filter and the row pill.
     function inventoryStatusBucket(d) {
+        // A manual device is never probed: "not measurable", never offline.
+        if (d.manual) return 'unknown';
         // Jump site: same "not measurable" bucket as the row's pill (icmp_reachable is
         // set per-device by /api/local-devices). Without this a jump-site device never
         // triaged falls into offline and the "Offline: N" tab contradicts the row.
@@ -229,7 +231,10 @@
 
             // Jump site: ICMP cannot cross the bastion tunnel, so "offline" there would
             // be a ping that never ran, not a real down: the bucket says "not measurable".
-            const info = homeStatusInfo(bucket);
+            const info = homeStatusInfo(d.manual ? 'manual' : bucket);
+            const pillTitle = d.manual
+                ? tr('devConfigOf', { date: d.backup_ts ? new Date(d.backup_ts * 1000).toLocaleDateString() : '—' })
+                : (bucket === 'unknown' ? tr('jumpLimitsPing') : '');
             const statusLabel = tr(info.key);
             const selected = selectedDeviceIps.has(d.IP);
             const ipAttr = escapeHtml(d.IP);
@@ -268,7 +273,7 @@
                 ${isViewer ? '' : `<td class="inv-check"><input type="checkbox" data-action="select-device" data-ip="${ipAttr}" ${selected ? 'checked' : ''}
                     aria-label="${escapeHtml(tr('ariaSelectDevice', { ip: d.IP }))}"></td>`}
                 <td data-sort-value="${bucket}">
-                  <span class="status ${info.cls}"${bucket === 'unknown' ? ` title="${escapeHtml(tr('jumpLimitsPing'))}"` : ''}><span class="led ${info.led}"></span>${escapeHtml(statusLabel)}</span>
+                  <span class="status ${info.cls}"${pillTitle ? ` title="${escapeHtml(pillTitle)}"` : ''}><span class="led ${info.led}"></span>${escapeHtml(statusLabel)}</span>
                 </td>
                 <td data-sort-value="${escapeHtml(d.Hostname || '')}">
                   <div class="inv-host">
@@ -288,14 +293,20 @@
                 </td>
                 <td style="white-space:nowrap;">${_renderDeviceChips(d)}</td>
                 <td><div class="inv-row-actions">
-                    ${isViewer ? '<span class="inv-muted">—</span>' : [
+                    ${isViewer ? '<span class="inv-muted">—</span>' : (d.manual ? [
+                        // No ping/triage/CLI/edit: nothing connects to it, and the
+                        // edit form has no 'manual' transport to save back.
+                        iconBtn('upload-manual-config', 'fa-file-arrow-up', tr('devUploadConfig')),
+                        iconBtn('download-backup', 'fa-download', tr('devDownloadBackup')),
+                        iconBtn('delete-device', 'fa-trash-can', tr('uiDelete'), ' danger'),
+                    ] : [
                         iconBtn('ping-device', 'fa-wifi', tr('devPingDevice')),
                         iconBtn('triage-device', 'fa-bolt-lightning', tr('devTriageDevice')),
                         iconBtn('open-cli', 'fa-terminal', 'CLI'),
                         iconBtn('edit-device', 'fa-pen', tr('devEditDevice')),
                         iconBtn('download-backup', 'fa-download', tr('devDownloadBackup')),
                         iconBtn('delete-device', 'fa-trash-can', tr('uiDelete'), ' danger'),
-                    ].join('')}
+                    ]).join('')}
                 </div></td>
             </tr>`;
         });
@@ -324,6 +335,7 @@
         else if (action === 'triage-device') triageSingleDevice(ip, btn);
         else if (action === 'rename-device') renameDevice(ip);
         else if (action === 'download-backup') downloadBackup(ip);
+        else if (action === 'upload-manual-config') window.openManualConfigWizard(ip);
         else if (action === 'open-facet') openDeviceFacet(btn.dataset.facet, ip);
     });
 

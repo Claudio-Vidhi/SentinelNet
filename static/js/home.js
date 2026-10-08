@@ -47,6 +47,7 @@ function homeStatusInfo(status) {
     // not measurable, never a confirmed down. Reusing led-discovered (the
     // existing "not confirmed" grey/dashed lamp) rather than the red fault lamp.
     if (status === 'unknown')     return { cls: 'idle', led: 'led-discovered', key: 'homeStUnknown' };
+    if (status === 'manual')      return { cls: 'idle', led: 'led-discovered', key: 'devStManual' };
     return { cls: 'bad', led: 'led-danger', key: 'homeStOffline' };
 }
 
@@ -111,6 +112,9 @@ async function loadHome() {
     const viaBastion = [];
     devs.forEach(d => {
         const scan = globalVersions[d.IP] || {};
+        // Uploaded by hand, never probed: outside both counters, like a
+        // jump-site device, but not listed as "via bastion".
+        if (d.manual || scan.status === 'manual') { notMeasurable++; return; }
         // A jump-site device has no measurable reachability: the bastion tunnel
         // carries no ICMP. It is neither online nor something to act on, so it
         // stays out of both counters and out of the percentage's denominator.
@@ -372,6 +376,7 @@ function renderFleetOneline(devs) {
         // measurable, NOT a confirmed down. Its own bucket, not merged into
         // 'down' (that painted a bastion-only tenant's bay red as an outage).
         else if (st === 'unknown') b.unknown++;
+        else if (st === 'manual') b.unknown++;
         else if (st === 'offline') b.down++;
         else if (st !== 'online') b.warn++;
     });

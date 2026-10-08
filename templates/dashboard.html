@@ -2785,6 +2785,14 @@
                  e non copiabile. -->
             <div id="csvImportResult" style="display:none; margin-top:16px;"></div>
           </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3 data-i18n="mcPanelTitle">Device non raggiungibili</h3>
+              <button type="button" class="btn btn-secondary btn-small" id="btnOpenManualConfig" style="width:auto;" data-i18n="btnOpenManualConfig"><i class="fa-solid fa-file-arrow-up"></i> Carica config</button>
+            </div>
+            <p class="set-desc" style="margin:0;" data-i18n="mcPanelBody">Per un apparato che SentinelNet non raggiunge, né in SSH né tramite agente: ti dice quali comandi lanciare, carichi il log della sessione e il dispositivo entra in inventario con analisi, drift, audit e CVE come gli altri.</p>
+          </section>
         </div>
 
         <div class="panel import-aside">
@@ -5493,6 +5501,66 @@
     </div>
   </div>
 
+  <!-- Manual config upload for devices SentinelNet cannot reach (ui-wizard.js).
+       Spec: docs/superpowers/specs/2026-10-08-manual-config-repository-design.md -->
+  <div class="modal-overlay sheet-overlay" id="manualConfigWizard">
+    <div class="modal sheet" aria-labelledby="mcTitle">
+      <div class="modal-header">
+        <h3 id="mcTitle" data-i18n="mcTitle">Carica config manuale</h3>
+        <button type="button" class="modal-close" data-close-modal="manualConfigWizard" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <ol class="wizard-rail" data-wizard-rail aria-label="Passi" data-i18n-aria-label="swRailLabel"></ol>
+      <form id="mcForm" class="sheet-body" novalidate>
+        <section data-step="guide">
+          <div class="form-group">
+            <label for="mcVendor" data-i18n="mcLblVendor">Vendor</label>
+            <select id="mcVendor"></select>
+          </div>
+          <p data-i18n="mcGuideIntro">Attiva il log della sessione nel client SSH (PuTTY: Session → Logging → All session output), poi lancia i comandi nell'ordine. Al passo successivo carichi il file di log.</p>
+          <h4 data-i18n="mcLblPaging">Disattiva la paginazione</h4>
+          <pre id="mcPaging" class="enroll-block"></pre>
+          <h4 data-i18n="mcLblCommands">Comandi</h4>
+          <pre id="mcCommands" class="enroll-block"></pre>
+          <button type="button" class="btn btn-secondary" data-action="mc-copy" data-i18n="btnCopySiteEnroll"><i class="fa-solid fa-copy"></i> Copia tutto</button>
+          <ul id="mcNotes" class="mc-notes"></ul>
+        </section>
+        <section data-step="files" hidden>
+          <div id="mcDropZone" class="dropzone">
+            <input type="file" id="mcFileInput" multiple accept=".txt,.log,.conf,.cfg" hidden aria-label="File di config" data-i18n-aria-label="mcAriaFiles">
+            <input type="file" id="mcFolderInput" webkitdirectory multiple hidden aria-label="Cartella di config" data-i18n-aria-label="mcAriaFolder">
+            <div class="dropzone-text"><i class="fa-solid fa-file-lines fa-2x"></i><br><span data-i18n="mcDropText">Trascina qui i log o le config, oppure clicca per sceglierli</span></div>
+          </div>
+          <button type="button" class="btn btn-secondary btn-small" data-action="mc-pick-folder" style="width:auto; margin-top:8px;" data-i18n="mcPickFolder">Scegli una cartella</button>
+          <ul id="mcFileList" class="mc-file-list"></ul>
+        </section>
+        <section data-step="review" hidden>
+          <fieldset id="mcApplyAll" class="mc-card">
+            <legend data-i18n="mcApplyAllTitle">Uguale per tutti i file</legend>
+            <div class="mc-grid">
+              <label for="mcAllGroup"><span data-i18n="mcLblTenant">Tenant</span></label>
+              <select id="mcAllGroup"></select>
+              <label for="mcAllSite"><span data-i18n="mcLblSite">Sede</span></label>
+              <select id="mcAllSite"></select>
+              <label for="mcAllCategory"><span data-i18n="mcLblCategory">Categoria</span></label>
+              <select id="mcAllCategory"></select>
+            </div>
+            <button type="button" class="btn btn-secondary btn-small" data-action="mc-apply-all" style="width:auto;" data-i18n="mcBtnApplyAll">Applica a tutti</button>
+          </fieldset>
+          <div id="mcReviewBody"></div>
+        </section>
+        <section data-step="result" hidden>
+          <ul id="mcResultList" class="mc-result-list" aria-live="polite"></ul>
+        </section>
+      </form>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal="manualConfigWizard" data-i18n="uiCancel">Annulla</button>
+        <button type="button" class="btn btn-secondary" data-wizard-back data-i18n="wizBack">Indietro</button>
+        <!-- No data-i18n: ui-wizard.js sets the label per step. -->
+        <button type="button" class="btn btn-primary" data-wizard-next></button>
+      </div>
+    </div>
+  </div>
+
   <!-- Tenants tab: register a vendor driver. -->
   <div class="modal-overlay" id="addVendorModal">
     <div class="modal" style="width: 480px; max-width: 95%;">
@@ -6317,6 +6385,7 @@
   <script src="/static/js/threat-intel.js"></script>
   <script src="/static/js/provisioning.js"></script>
   <script src="/static/js/devices.js"></script>
+  <script src="/static/js/manual-config.js"></script>
   <script src="/static/js/client-map.js"></script>
   <script src="/static/js/diagnosi.js"></script>
   <script src="/static/js/endpoint-inventory.js"></script>

@@ -1309,8 +1309,9 @@ class TestImportTabRestyle(unittest.TestCase):
         html = _html()
         tab = self._tab(html)
         self.assertIn('class="page-head"', tab)
-        # prepare-the-file step + upload step, beside the Group/Site reference.
-        self.assertEqual(tab.count('<section class="panel">'), 2)
+        # prepare-the-file step + upload step + manual-config entry, beside the
+        # Group/Site reference.
+        self.assertEqual(tab.count('<section class="panel">'), 3)
         self.assertIn('class="panel import-aside"', tab)
 
     def test_i18n_keys_both_langs(self):
