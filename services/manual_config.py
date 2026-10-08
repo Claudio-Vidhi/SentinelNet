@@ -60,6 +60,8 @@ _ANALYSES = {
 
 # First prompt-looking prefix ending in #, > or $, then the command.
 _ECHO = re.compile(r"^(?P<prompt>\S[^\r\n]*?[#>$])\s*(?P<cmd>\S.*?)\s*$")
+_STEM = re.compile(r"[^\s(#>$]*")
+_BARE = re.compile(r"^\S[^\r\n]*[#>$]\s*$")
 _FORTI_HEADER = re.compile(r"^#config-version=([A-Za-z0-9]+)-(\d+\.\d+\.\d+)", re.MULTILINE)
 _HOSTNAMES = (
     re.compile(r"^set deviceconfig system hostname (\S+)", re.MULTILINE),  # PAN-OS
@@ -132,26 +134,28 @@ def guide() -> list:
 def parse_session(text: str, known: list):
     """Split a terminal session log at the echo of each known command.
 
-    Returns ({normalized command: output}, prompt). The prompt is learned from
-    the first known echo; after that any line starting with it (another
-    command, or the bare prompt at the end) closes the current section, and
-    only known commands open a new one."""
+    Returns ({normalized command: output}, prompt). The prompt is the first one
+    learned. An echo of a known command opens a section under any prompt, so
+    a changed prompt (`R1>` then `R1#` after `enable`, FortiOS `FGT # ` then
+    `FGT (global) # `) does not matter. A section closes at the next echo of
+    any command or bare prompt: a line starting with the first prompt, or with
+    its device-name stem (the leading run up to whitespace, '(', '#', '>' or
+    '$') that looks like a prompt line."""
     wanted = {_norm(c) for c in known}
-    sections, current, prompt = {}, None, None
+    sections, current, prompt, stem = {}, None, None, ""
     for line in (text or "").splitlines():
-        if prompt is not None and line.startswith(prompt):
-            cmd = _norm(line[len(prompt):])
-            current = cmd if cmd in wanted else None
-            if current:
-                sections[current] = []
-            continue
-        if prompt is None:
-            m = _ECHO.match(line)
-            if m and _norm(m["cmd"]) in wanted:
-                prompt, current = m["prompt"], _norm(m["cmd"])
-                sections[current] = []
-                continue
-        if current is not None:
+        m = _ECHO.match(line)
+        if m and _norm(m["cmd"]) in wanted:
+            if prompt is None:
+                prompt = m["prompt"]
+                stem = _STEM.findall(prompt)[0]
+            current = _norm(m["cmd"])
+            sections[current] = []
+        elif prompt is not None and (
+                line.startswith(prompt)
+                or (stem and line.startswith(stem) and (m or _BARE.match(line)))):
+            current = None
+        elif current is not None:
             sections[current].append(line)
     return {k: "\n".join(v).strip("\n") for k, v in sections.items()}, prompt
 
