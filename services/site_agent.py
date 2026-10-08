@@ -287,6 +287,8 @@ class Agent:
         for d in devices:
             if not isinstance(d, dict) or not d.get("IP"):
                 continue
+            if inventory_manager.is_manual(d):
+                continue  # no credentials by design: one would abort the whole push
             ip = d["IP"]
             vendor = (d.get("Vendor") or "cisco").lower()
             username, password, secret = core_engine.get_device_credentials(d)

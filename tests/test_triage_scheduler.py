@@ -171,6 +171,19 @@ class TestTriageScheduler(unittest.TestCase):
         self.assertEqual(res["status"], "success")
         self.assertEqual(res["queued"], 0)
 
+    def test_manual_device_is_not_handed_to_triage(self):
+        user = {"username": "admin1", "sub": "admin1", "role": "admin"}
+        sched = triage_scheduler.create_schedule({
+            "name": "Con manuale", "tenant": "Sede-1", "interval_minutes": 60,
+        }, user)
+        manual = {"IP": "192.0.2.50", "Group": "Sede-1", "Site": "central",
+                  "Transports": '{"manual":null}'}
+        normal = {"IP": "192.0.2.51", "Group": "Sede-1", "Site": "central"}
+        with patch.object(inventory_manager, "get_all_devices", return_value=[manual, normal]),              patch.object(triage_scheduler.threading, "Thread") as thread:
+            triage_scheduler.execute_schedule_job(sched["id"])
+        handed = thread.call_args.kwargs["args"][0]
+        self.assertEqual([d["IP"] for d in handed], ["192.0.2.51"])
+
     def test_api_endpoints_permissions(self):
         from routers.deps import require_operator, get_current_user
 

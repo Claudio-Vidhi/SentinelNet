@@ -53,9 +53,62 @@ class Skips(unittest.TestCase):
 
 class CredentialGuard(unittest.TestCase):
     def test_manual_device_has_no_credentials(self):
+        # Profile "custom" with a full login resolves for a normal device, so
+        # only the manual guard can make this raise.
         from core.device_credentials import CredentialResolveError, get_device_credentials
-        with self.assertRaises(CredentialResolveError):
-            get_device_credentials(dict(MANUAL, Profile="default"))
+        from security.crypto_vault import encrypt_password
+        dev = dict(MANUAL, Profile="custom", Username="admin",
+                   Password=encrypt_password("pw"))
+        self.assertEqual(get_device_credentials(dict(dev, Transports=""))[:2],
+                         ("admin", "pw"))
+        with self.assertRaises(CredentialResolveError) as ctx:
+            get_device_credentials(dev)
+        self.assertIn("manuale", str(ctx.exception))
+
+
+class AgentPaths(unittest.TestCase):
+    NORMAL = {"IP": "192.0.2.51", "Vendor": "linux", "Group": "Generale",
+              "Site": "site-a", "Transports": ""}
+
+    def test_agent_inventory_omits_manual(self):
+        from routers import agent
+        manual = dict(MANUAL, Site="site-a")
+        with mock.patch(DEVICES, return_value=[manual, self.NORMAL]):
+            out = agent._devices_for_site("site-a", with_credentials=False)
+        self.assertEqual([d["ip"] for d in out], ["192.0.2.51"])
+
+    def test_agent_inventory_with_credentials_does_not_raise(self):
+        from routers import agent
+        manual = dict(MANUAL, Site="site-a")
+        with mock.patch(DEVICES, return_value=[manual, self.NORMAL]),              mock.patch("core.device_credentials.get_device_credentials",
+                        return_value=("u", "p", "")):
+            out = agent._devices_for_site("site-a", with_credentials=True)
+        self.assertEqual([d["ip"] for d in out], ["192.0.2.51"])
+
+    def test_push_mac_skips_manual(self):
+        from services import site_agent
+        from collectors import mac_collector
+        agent_obj = site_agent.Agent.__new__(site_agent.Agent)
+        with mock.patch.object(site_agent.core_engine, "get_device_credentials") as creds,              mock.patch.object(mac_collector, "collect_mac_table") as collect:
+            out = agent_obj.push_mac([MANUAL])
+        creds.assert_not_called()
+        collect.assert_not_called()
+        self.assertEqual(out, {"recorded": 0})
+
+
+class TriageRun(unittest.TestCase):
+    def test_run_triage_does_not_hand_manual_to_background(self):
+        from routers import triage
+        normal = dict(MANUAL, IP="192.0.2.51", Transports="")
+        admin = {"sub": "admin", "role": "admin"}
+        with mock.patch(DEVICES, return_value=[MANUAL, normal]),              mock.patch.object(triage, "user_group_scope", return_value=None),              mock.patch.object(triage.threading, "Thread") as thread:
+            triage.triage_job["status"] = "idle"
+            try:
+                triage.run_triage(triage.TriageRunRequest(), current_user=admin)
+            finally:
+                triage.triage_job["status"] = "idle"
+        handed = thread.call_args.kwargs["args"][0]
+        self.assertEqual([d["IP"] for d in handed], ["192.0.2.51"])
 
 
 if __name__ == "__main__":
