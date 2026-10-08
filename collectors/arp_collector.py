@@ -141,6 +141,8 @@ def collect_all(devices: list) -> dict:
     """
     from concurrent.futures import ThreadPoolExecutor
     from collectors import mac_history
+    from services import inventory_manager
+    devices = [d for d in devices if not inventory_manager.is_manual(d)]
     summary = {"devices": {}, "total_new": 0, "total_updated": 0}
     if not devices:
         return summary
