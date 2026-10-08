@@ -183,6 +183,7 @@ from routers import config_drift as _config_drift_router
 from routers import cloud_backup as _cloud_backup_router
 from routers import route_table as _route_table_router
 from routers import firewall_traffic as _firewall_traffic_router
+from routers import manual_config as _manual_config_router
 from redundancy import router as _redundancy_router
 
 app.include_router(_fortigate_router.router)
@@ -217,6 +218,7 @@ app.include_router(_config_drift_router.router)
 app.include_router(_cloud_backup_router.router)
 app.include_router(_route_table_router.router)
 app.include_router(_firewall_traffic_router.router)
+app.include_router(_manual_config_router.router)
 from routers import notifications as _notifications_router
 from routers import interface_errors as _interface_errors_router
 app.include_router(_notifications_router.router)
