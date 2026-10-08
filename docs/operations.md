@@ -404,6 +404,26 @@ backing that key up separately, offline.
 
 ---
 
+## Dispositivi non raggiungibili (config manuale)
+
+Un dispositivo che SentinelNet non raggiunge — né in SSH dal centrale né
+tramite un agente di sede — si aggiunge caricandone la config: *Importa →
+Carica config*. La procedura mostra, per il vendor scelto, il comando per
+disattivare la paginazione e l'elenco dei comandi da lanciare (gli stessi che
+il triage esegue da sé). Con il log della sessione attivo nel client SSH, si
+lanciano i comandi e si carica il file di log.
+
+Il server divide il log a ogni comando riconosciuto e lo salva nel formato
+del triage: config, poi le sezioni dei vicini e dell'inventario. Un file senza
+comandi riconoscibili (per esempio il backup `.conf` scaricato dalla GUI di
+un FortiGate) viene salvato così com'è.
+
+Il dispositivo ha trasporto `manual`: nessun ping, triage, SNMP o sessione
+CLI parte verso di esso. Per aggiornarlo si carica una nuova config dalla sua
+riga in *Dispositivi*; ogni caricamento è una versione in Config drift.
+
+---
+
 ## 8. Limits to know before scaling
 
 - **Single-process SQLite writer.** Never `--workers > 1` with observability

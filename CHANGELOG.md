@@ -10,6 +10,19 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Config manuale per i dispositivi non raggiungibili**: dalla tab Importa
+  (*Carica config*) o dalla riga di un dispositivo manuale, una procedura
+  guidata mostra per ogni vendor i comandi da lanciare — gli stessi del
+  triage — con la paginazione da disattivare; si carica il log della
+  sessione (anche più file o una cartella), si assegnano tenant, sede e
+  categoria, e il dispositivo entra in inventario come *Manuale*. La config
+  viene salvata nello stesso formato del triage, quindi Analisi config,
+  Config drift, NetSec Audit, Policy test, rotte statiche, mappa e CVE
+  funzionano come per gli altri. Nessun ping, triage, SNMP o sessione verso
+  un dispositivo manuale.
+
 ## [0.51.1] - 2026-10-08
 
 ### Added
