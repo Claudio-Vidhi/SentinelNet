@@ -60,8 +60,14 @@ of `network_hosts.csv` never see them, so they need no change.
   is restoring as an internal exemption. Callers already turn
   `ValueError` into HTTP 400.
 - `core/data_config.py`: add `decommissioned_hosts.csv` to `_STATE_FILES`
-  next to `network_hosts.csv`. Cloud backup must include it: verify how its
-  payload picks files and add it there if it lists them explicitly.
+  next to `network_hosts.csv`. (Cloud backup mirrors the config-backup
+  folder, not the data directory: nothing to add there.)
+- The file lives next to `network_hosts.csv` (same directory as
+  `get_hosts_csv()`), so tests that point the inventory at a temp dir
+  isolate it too, and a probe agent — which has no such file — is
+  unaffected.
+- Writers that can now hit the guard and did not expect a `ValueError`
+  (`/api/reassign-device`, `/api/promote-device`) turn it into 400.
 - `data/` is gitignored as a directory: no `.gitignore` change.
 
 ## API — `routers/inventory.py`
@@ -95,7 +101,10 @@ All `require_tab("tab-devices")` + `require_operator`, like
   the snapshot.
 - UI (`static/js/device-history.js`): labels and icons for the two kinds;
   the service-days counter (`dhServiceDays`) also applies to
-  `decommissioned`.
+  `decommissioned`. The kind filter keeps its tabs: `decommissioned`
+  counts with removals, `reactivated` with additions. Today `removed` is
+  labelled «dismesso»; it becomes «eliminato» / "deleted", and the tab
+  «Dismessi» becomes «Rimossi» / "Removed".
 
 ## UI — inventory (`templates/dashboard.html`, `static/js/devices.js`)
 
