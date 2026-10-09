@@ -49,6 +49,9 @@ class TestUpsertRoundTrip(unittest.TestCase):
         self._orig = inventory_manager.HOSTS_CSV
         inventory_manager.HOSTS_CSV = self.csv_path
         inventory_manager.invalidate_device_ip_cache()
+        from services import location_manager
+        loc = location_manager.list_locations("Generale")
+        self.loc_id = loc[0]["id"] if loc else location_manager.create_location("Generale", "Sede Generale")["id"]
 
     def tearDown(self):
         inventory_manager.HOSTS_CSV = self._orig
@@ -58,7 +61,7 @@ class TestUpsertRoundTrip(unittest.TestCase):
     def test_roundtrip_transports(self):
         tr = {"ssh": 22, "telnet": None, "netconf": 8300, "restconf": 443}
         inventory_manager.add_or_update_device(
-            "10.0.0.5", "cisco", "default", "u", "p", "s", "Generale", transports=tr)
+            "10.0.0.5", "cisco", "default", "u", "p", "s", "Generale", transports=tr, location=self.loc_id)
         dev = next(d for d in inventory_manager.get_all_devices() if d["IP"] == "10.0.0.5")
         self.assertEqual(inventory_manager.parse_transports(dev), tr)
         # Colonna legacy 'SSH Port' rispecchia la porta ssh dichiarata.
@@ -68,14 +71,14 @@ class TestUpsertRoundTrip(unittest.TestCase):
         # tcp/udp: protocolli generici a porta libera, scelta dall'utente.
         tr = {"ssh": 22, "tcp": 9000, "udp": 161}
         inventory_manager.add_or_update_device(
-            "10.0.0.30", "cisco", "default", "u", "p", "s", "Generale", transports=tr)
+            "10.0.0.30", "cisco", "default", "u", "p", "s", "Generale", transports=tr, location=self.loc_id)
         dev = next(d for d in inventory_manager.get_all_devices() if d["IP"] == "10.0.0.30")
         self.assertEqual(inventory_manager.parse_transports(dev), tr)
 
     def test_legacy_upsert_synthesizes_ssh(self):
         # Upsert senza transports (chiamante legacy) → ssh-only dalla ssh_port.
         inventory_manager.add_or_update_device(
-            "10.0.0.6", "cisco", "default", "u", "p", "s", "Generale", ssh_port=2022)
+            "10.0.0.6", "cisco", "default", "u", "p", "s", "Generale", ssh_port=2022, location=self.loc_id)
         dev = next(d for d in inventory_manager.get_all_devices() if d["IP"] == "10.0.0.6")
         self.assertEqual(inventory_manager.parse_transports(dev), {"ssh": 2022})
 
@@ -155,6 +158,9 @@ class TestAddDeviceEndpoint(unittest.TestCase):
         self.audits = []
         self._log = inventory_router.log_audit
         inventory_router.log_audit = lambda msg: self.audits.append(msg)
+        from services import location_manager
+        loc = location_manager.list_locations("Generale")
+        self.loc_id = loc[0]["id"] if loc else location_manager.create_location("Generale", "Sede Generale")["id"]
 
     def tearDown(self):
         inventory_manager.HOSTS_CSV = self._orig
@@ -165,7 +171,7 @@ class TestAddDeviceEndpoint(unittest.TestCase):
     def test_telnet_enable_is_audited(self):
         dev = inventory_router.DeviceSchema(
             ip="10.0.0.20", vendor="cisco", profile="default",
-            transports={"ssh": 22, "telnet": 23})
+            transports={"ssh": 22, "telnet": 23}, location=self.loc_id)
         inventory_router.add_device(dev, current_user=ADMIN)
         self.assertTrue(any("Telnet" in a for a in self.audits),
                         f"nessun audit Telnet: {self.audits}")

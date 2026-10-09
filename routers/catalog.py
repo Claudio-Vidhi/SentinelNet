@@ -128,9 +128,17 @@ def remove_group(payload: GroupDeleteSchema, current_user = Depends(require_unsc
     if parked:
         raise HTTPException(status_code=400, detail=(
             f"Il gruppo ha {parked} apparati dismessi: riattivali o eliminali prima di eliminarlo."))
-    if inventory_manager.delete_group(group_name):
-        log_audit(f"Gruppo '{group_name}' eliminato dall'utente '{current_user.get('sub')}'.")
-        return {"status": "success"}
+    from services import location_manager
+    loc_count = len(location_manager.list_locations(group_name))
+    if loc_count:
+        raise HTTPException(status_code=400, detail=(
+            f"L'organizzazione contiene {loc_count} sedi: eliminale o spostale prima di eliminarla."))
+    try:
+        if inventory_manager.delete_group(group_name):
+            log_audit(f"Gruppo '{group_name}' eliminato dall'utente '{current_user.get('sub')}'.")
+            return {"status": "success"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     raise HTTPException(status_code=400, detail="Impossibile eliminare il gruppo")
 
 @router.get("/api/vendors")

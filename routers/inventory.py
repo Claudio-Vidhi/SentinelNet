@@ -34,6 +34,7 @@ class DeviceSchema(BaseModel):
     password: str = ""
     enable_secret: str = ""
     group: str = "Generale"
+    location: str = ""
     probe: str = "central"
     ssh_port: int = Field(22, ge=1, le=65535)
     # §11.6: mappa trasporti per-device {protocollo: porta|None}. None = legacy
@@ -57,6 +58,7 @@ class CSVImportRequest(BaseModel):
 class DeviceReassignSchema(BaseModel):
     ip: str
     new_group: str
+    new_location: str
 
 class DeviceProbeSchema(BaseModel):
     ip: str
@@ -67,6 +69,7 @@ class PromoteDeviceSchema(BaseModel):
     ip: str = Field(..., pattern=r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
     vendor: str = "cisco"
     group: str = "Generale"
+    location: str
     # Dati ereditati da CDP/LLDP da preservare sul dispositivo promosso.
     model: Optional[str] = None
     version: Optional[str] = None
@@ -350,6 +353,7 @@ def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
             ssh_port=device.ssh_port, transports=device.transports,
             snmp_community=device.snmp_community,
             snmp_disabled=device.snmp_disabled,
+            location=device.location.strip() or None,
         )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
@@ -491,10 +495,19 @@ def import_csv(payload: CSVImportRequest, current_user = Depends(require_operato
                                  f"scheda Sonde prima di importare")
 
             # Rimozione Profile: passa forzatamente il valore "custom" come parametro profile
+            location_name = (row.get('Location') or '').strip()
+            if not location_name:
+                raise ValueError("Sede mancante o vuota")
+            from services import location_manager
+            loc_obj = location_manager.get_location(location_name)
+            if not loc_obj or loc_obj.get("org") != group_name:
+                raise ValueError(f"Sede '{location_name}' inesistente o non appartenente al gruppo '{group_name}'")
+
             inventory_manager.add_or_update_device(
                 ip, vendor, "custom",
                 username, password, enable_secret,
-                group_name, probe=probe_name or None
+                group_name, probe=probe_name or None,
+                location=location_name,
             )
             # L'hostname del CSV veniva letto e buttato via: chi compilava la
             # colonna vedeva l'inventario restare senza nomi e non capiva
@@ -521,12 +534,17 @@ def promote_device(payload: PromoteDeviceSchema, current_user = Depends(require_
     assert_group_allowed(current_user, payload.group)
     if payload.group not in inventory_manager.get_all_groups():
         raise HTTPException(status_code=400, detail=f"Sede '{payload.group}' inesistente.")
+    from services import location_manager
+    loc_obj = location_manager.get_location(payload.location)
+    if not loc_obj or loc_obj.get("org") != payload.group:
+        raise HTTPException(status_code=400, detail=f"Sede '{payload.location}' inesistente o non appartenente al gruppo '{payload.group}'.")
     existing = next((d for d in inventory_manager.get_all_devices() if d['IP'] == payload.ip), None)
     if existing:
         raise HTTPException(status_code=400, detail=f"Dispositivo {payload.ip} già in inventario.")
     try:
         inventory_manager.add_or_update_device(
-            payload.ip, payload.vendor, "custom", "", "", "", payload.group
+            payload.ip, payload.vendor, "custom", "", "", "", payload.group,
+            location=payload.location,
         )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
@@ -575,6 +593,12 @@ def reassign_device(payload: DeviceReassignSchema, current_user = Depends(requir
             status_code=400,
             detail=f"Gruppo '{payload.new_group}' non esiste. Crealo prima."
         )
+    if not (payload.new_location or "").strip():
+        raise HTTPException(status_code=400, detail="Nuova sede obbligatoria.")
+    from services import location_manager
+    loc_obj = location_manager.get_location(payload.new_location.strip())
+    if not loc_obj or loc_obj.get("org") != payload.new_group:
+        raise HTTPException(status_code=400, detail=f"Sede '{payload.new_location}' inesistente o non appartenente al gruppo '{payload.new_group}'.")
 
     # Scoping: la sede di origine e quella di destinazione devono essere consentite
     assert_group_allowed(current_user, target.get('Group', 'Generale'))
@@ -582,6 +606,7 @@ def reassign_device(payload: DeviceReassignSchema, current_user = Depends(requir
 
     old_group = target.get('Group', 'Generale')
     target['Group'] = payload.new_group
+    target['Location'] = payload.new_location.strip()
     try:
         inventory_manager.safe_write_hosts_csv(devices)
     except ValueError as ve:

@@ -64,7 +64,6 @@ class TestRegistry(_Base):
                          ["10.1.0.0/16", "10.2.0.0/16"])
         self.assertEqual(probe_manager.get_probe("central")["subnets"], ["10.3.0.0/16"])
 
-    @unittest.skip("Task 3: add_or_update_device(location=)")
     def test_delete_refused_while_devices_reference_it(self):
         loc = location_manager.create_location("acme", "Milano")
         inventory_manager.add_or_update_device("192.0.2.10", "cisco", "custom", "u", "p", "",
@@ -75,7 +74,6 @@ class TestRegistry(_Base):
         location_manager.delete_location(loc["id"])
         self.assertIsNone(location_manager.get_location(loc["id"]))
 
-    @unittest.skip("Task 3: add_or_update_device(location=)")
     def test_decommissioned_devices_count(self):
         loc = location_manager.create_location("acme", "Milano")
         inventory_manager.add_or_update_device("192.0.2.10", "cisco", "custom", "u", "p", "",
@@ -85,7 +83,6 @@ class TestRegistry(_Base):
         with self.assertRaises(ValueError):
             location_manager.delete_location(loc["id"])
 
-    @unittest.skip("Task 3: add_or_update_device(location=)")
     def test_apply_probe_to_devices(self):
         probe, _ = probe_manager.create_probe("Lab", "agent")
         loc = location_manager.create_location("acme", "Milano")

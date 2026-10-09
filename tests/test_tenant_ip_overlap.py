@@ -22,6 +22,11 @@ class SameIpInTwoTenantsCoexist(unittest.TestCase):
     def setUp(self):
         inventory_manager.add_group("ACME", "ACME Corp")
         inventory_manager.add_group("BETA", "Beta LLC")
+        from services import location_manager
+        loc_acme = location_manager.list_locations("ACME")
+        self.loc_acme = loc_acme[0]["id"] if loc_acme else location_manager.create_location("ACME", "Loc ACME")["id"]
+        loc_beta = location_manager.list_locations("BETA")
+        self.loc_beta = loc_beta[0]["id"] if loc_beta else location_manager.create_location("BETA", "Loc BETA")["id"]
         # Clear hosts csv
         hosts_csv = inventory_manager.get_hosts_csv()
         if os.path.exists(hosts_csv):
@@ -32,12 +37,12 @@ class SameIpInTwoTenantsCoexist(unittest.TestCase):
         inventory_manager.add_or_update_device(
             ip="192.0.2.10", vendor="cisco", profile="custom",
             username="admin", password="pwd", enable_secret="sec",
-            group="ACME"
+            group="ACME", location=self.loc_acme
         )
         inventory_manager.add_or_update_device(
             ip="192.0.2.10", vendor="cisco", profile="custom",
             username="admin", password="pwd", enable_secret="sec",
-            group="BETA"
+            group="BETA", location=self.loc_beta
         )
 
         rows = [d for d in inventory_manager.get_all_devices() if d["IP"] == "192.0.2.10"]
@@ -48,14 +53,14 @@ class SameIpInTwoTenantsCoexist(unittest.TestCase):
         inventory_manager.add_or_update_device(
             ip="192.0.2.10", vendor="cisco", profile="custom",
             username="admin_a", password="pwd", enable_secret="sec",
-            group="ACME"
+            group="ACME", location=self.loc_acme
         )
         inventory_manager.update_device_hostname("192.0.2.10", "switch-01", group="ACME")
 
         inventory_manager.add_or_update_device(
             ip="192.0.2.10", vendor="cisco", profile="custom",
             username="admin_b", password="pwd", enable_secret="sec",
-            group="BETA"
+            group="BETA", location=self.loc_beta
         )
         inventory_manager.update_device_hostname("192.0.2.10", "switch-99", group="BETA")
 
@@ -63,7 +68,7 @@ class SameIpInTwoTenantsCoexist(unittest.TestCase):
         inventory_manager.add_or_update_device(
             ip="192.0.2.10", vendor="cisco", profile="custom",
             username="admin_a_updated", password="pwd", enable_secret="sec",
-            group="ACME"
+            group="ACME", location=self.loc_acme
         )
 
         rows = {r["Group"]: r for r in inventory_manager.get_all_devices()
@@ -80,6 +85,11 @@ class ResolveDeviceAllowedScopeAware(unittest.TestCase):
         from routers import deps
         inventory_manager.add_group("ACME", "ACME Corp")
         inventory_manager.add_group("BETA", "Beta LLC")
+        from services import location_manager
+        loc_acme = location_manager.list_locations("ACME")
+        loc_acme_id = loc_acme[0]["id"] if loc_acme else location_manager.create_location("ACME", "Loc ACME")["id"]
+        loc_beta = location_manager.list_locations("BETA")
+        loc_beta_id = loc_beta[0]["id"] if loc_beta else location_manager.create_location("BETA", "Loc BETA")["id"]
         hosts_csv = inventory_manager.get_hosts_csv()
         if os.path.exists(hosts_csv):
             os.remove(hosts_csv)
@@ -89,14 +99,14 @@ class ResolveDeviceAllowedScopeAware(unittest.TestCase):
         inventory_manager.add_or_update_device(
             ip="192.0.2.10", vendor="cisco", profile="custom",
             username="admin_a", password="pwd", enable_secret="sec",
-            group="ACME"
+            group="ACME", location=loc_acme_id
         )
         inventory_manager.update_device_hostname("192.0.2.10", "switch-01", group="ACME")
 
         inventory_manager.add_or_update_device(
             ip="192.0.2.10", vendor="cisco", profile="custom",
             username="admin_b", password="pwd", enable_secret="sec",
-            group="BETA"
+            group="BETA", location=loc_beta_id
         )
         inventory_manager.update_device_hostname("192.0.2.10", "switch-99", group="BETA")
 
@@ -184,6 +194,11 @@ class GetDeviceByIpTenantAware(unittest.TestCase):
     def setUp(self):
         inventory_manager.add_group("ACME", "ACME Corp")
         inventory_manager.add_group("BETA", "Beta LLC")
+        from services import location_manager
+        loc_acme = location_manager.list_locations("ACME")
+        loc_acme_id = loc_acme[0]["id"] if loc_acme else location_manager.create_location("ACME", "Loc ACME")["id"]
+        loc_beta = location_manager.list_locations("BETA")
+        loc_beta_id = loc_beta[0]["id"] if loc_beta else location_manager.create_location("BETA", "Loc BETA")["id"]
         hosts_csv = inventory_manager.get_hosts_csv()
         if os.path.exists(hosts_csv):
             os.remove(hosts_csv)
@@ -193,14 +208,14 @@ class GetDeviceByIpTenantAware(unittest.TestCase):
         inventory_manager.add_or_update_device(
             ip="192.0.2.10", vendor="cisco", profile="custom",
             username="admin_a", password="pwd", enable_secret="sec",
-            group="ACME"
+            group="ACME", location=loc_acme_id
         )
         inventory_manager.update_device_hostname("192.0.2.10", "switch-01", group="ACME")
 
         inventory_manager.add_or_update_device(
             ip="192.0.2.10", vendor="cisco", profile="custom",
             username="admin_b", password="pwd", enable_secret="sec",
-            group="BETA"
+            group="BETA", location=loc_beta_id
         )
         inventory_manager.update_device_hostname("192.0.2.10", "switch-99", group="BETA")
 

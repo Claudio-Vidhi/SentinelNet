@@ -35,10 +35,13 @@ class ManualSurvivesOtherWrites(unittest.TestCase):
         p = mock.patch.object(im, "get_hosts_csv", return_value=self.hosts)
         p.start()
         self.addCleanup(p.stop)
+        from services import location_manager
+        loc = location_manager.create_location("Generale", "Sede Manual")
+        self.loc_id = loc["id"]
 
     def test_update_without_transports_keeps_manual(self):
         im.add_or_update_device("192.0.2.30", "cisco", "", "", "", "", "Generale",
-                                transports={"manual": None})
+                                transports={"manual": None}, location=self.loc_id)
         im.add_or_update_device("192.0.2.30", "cisco", "", "", "", "", "Generale",
                                 probe="central")
         row = next(d for d in im.get_all_devices() if d["IP"] == "192.0.2.30")

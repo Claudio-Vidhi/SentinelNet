@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 import app_server
 from routers.deps import CSRF_HEADER
 from security import security_manager, user_manager
-from services import inventory_manager, probe_manager
+from services import inventory_manager, location_manager, probe_manager
 
 H = {CSRF_HEADER: "1"}
 PW = "PasswordSicura1!"
@@ -31,12 +31,20 @@ class _Isolated(unittest.TestCase):
         p = patch.object(user_manager, "USERS_JSON", os.path.join(tmp, "users.json"))
         p.start()
         self.addCleanup(p.stop)
+        from services import location_manager
+        p = patch.object(location_manager, "LOCATIONS_JSON", os.path.join(tmp, "locations.json"))
+        p.start()
+        self.addCleanup(p.stop)
         security_manager._failed_attempts.clear()
         inventory_manager.save_groups({"tenant-a": {"description": ""},
                                        "tenant-b": {"description": ""}})
+        self.loc_a = location_manager.create_location("tenant-a", "Sede A")
+        self.loc_b = location_manager.create_location("tenant-b", "Sede B")
+        locs = {"tenant-a": self.loc_a["id"], "tenant-b": self.loc_b["id"]}
         for ip, tenant in (("192.0.2.10", "tenant-a"), ("192.0.2.20", "tenant-a"),
                            ("192.0.2.20", "tenant-b")):
-            inventory_manager.add_or_update_device(ip, "cisco", "custom", "u", "p", "", tenant)
+            inventory_manager.add_or_update_device(ip, "cisco", "custom", "u", "p", "", tenant,
+                                                   location=locs[tenant])
         user_manager.create_user("adm", PW, role="admin")
         user_manager.create_user("op", PW, role="operator", groups=["tenant-a"])
         user_manager.create_user("view", PW, role="viewer")
@@ -104,7 +112,7 @@ class TestGuardOverHttp(_Isolated):
     def test_reassign_onto_a_decommissioned_pair_is_400(self):
         adm = self._as("adm")
         adm.post("/api/devices/decommission", json={"devices": [B20]})
-        r = adm.post("/api/reassign-device", json={"ip": "192.0.2.20", "new_group": "tenant-b"})
+        r = adm.post("/api/reassign-device", json={"ip": "192.0.2.20", "new_group": "tenant-b", "new_location": self.loc_b["id"]})
         self.assertEqual(r.status_code, 400, r.text)
         self.assertIn("riattivalo", r.json()["detail"])
 
@@ -112,15 +120,15 @@ class TestGuardOverHttp(_Isolated):
         adm = self._as("adm")
         adm.post("/api/devices/decommission", json={"devices": [A10]})
         r = adm.post("/api/promote-device",
-                     json={"node_id": "n1", "ip": "192.0.2.10", "group": "tenant-a"})
+                     json={"node_id": "n1", "ip": "192.0.2.10", "group": "tenant-a", "location": self.loc_a["id"]})
         self.assertEqual(r.status_code, 400, r.text)
 
     def test_csv_import_reports_the_decommissioned_row_and_imports_the_rest(self):
         adm = self._as("adm")
         adm.post("/api/devices/decommission", json={"devices": [A10]})
-        csv_data = ("IP,Vendor,Group\n"
-                    "192.0.2.10,cisco,tenant-a\n"
-                    "192.0.2.30,cisco,tenant-a\n")
+        csv_data = ("IP,Vendor,Group,Location\n"
+                    f"192.0.2.10,cisco,tenant-a,{self.loc_a['id']}\n"
+                    f"192.0.2.30,cisco,tenant-a,{self.loc_a['id']}\n")
         r = adm.post("/api/import-csv", json={"csv_data": csv_data})
         self.assertEqual(r.status_code, 200, r.text)
         body = r.json()
@@ -138,6 +146,7 @@ class TestOtherWriters(_Isolated):
         p.start()
         self.addCleanup(p.stop)
         probe, token = probe_manager.create_probe("Lab", "agent")
+        location_manager.create_location("tenant-a", "Lab Sede", probe=probe["id"])
         self._as("adm").post("/api/devices/decommission", json={"devices": [A10]})
         devices = [{"ip": "192.0.2.10", "group": "tenant-a"},
                    {"ip": "192.0.2.10", "group": ""},

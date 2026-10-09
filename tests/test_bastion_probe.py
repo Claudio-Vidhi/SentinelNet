@@ -142,9 +142,12 @@ class JumpChannelRealDeviceLookup(unittest.TestCase):
 
     def test_connect_handler_finds_jump_probe_via_real_device_lookup(self):
         from core import net_ssh
+        from services import location_manager
+        loc = location_manager.list_locations("Generale")
+        loc_id = loc[0]["id"] if loc else location_manager.create_location("Generale", "Centrale")["id"]
         inventory_manager.add_or_update_device(
             "192.0.2.5", "cisco", "default", "u", "p", "s", "Generale",
-            probe="customer-a")
+            probe="customer-a", location=loc_id)
         chan = object()
         probe = {"id": "customer-a", "mode": "jump", "jump_host": "198.51.100.10",
                 "jump_port": 22, "jump_identity": "id-1"}

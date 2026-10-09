@@ -38,8 +38,11 @@ class _Isolated(unittest.TestCase):
         security_manager._failed_attempts.clear()
         inventory_manager.save_groups({"tenant-a": {"description": ""},
                                        "tenant-b": {"description": ""}})
+        from services import location_manager
+        loc_a = location_manager.create_location("tenant-a", "Sede A")
+        self.loc_a_id = loc_a["id"]
         inventory_manager.add_or_update_device("192.0.2.10", "cisco", "custom", "u", "p", "",
-                                               "tenant-a")
+                                               "tenant-a", location=self.loc_a_id)
         user_manager.create_user("adm", PW, role="admin")
         user_manager.create_user("op", PW, role="operator", groups=["tenant-a"])
 
@@ -80,7 +83,7 @@ class TestRename(_Isolated):
         adm = self._as("adm")
         adm.post("/api/groups/rename", json={"old_name": "tenant-a", "new_name": "Acme SpA"})
         r = adm.post("/api/import-csv",
-                     json={"csv_data": "IP,Group\n192.0.2.20,Acme SpA\n"})
+                     json={"csv_data": f"IP,Group,Location\n192.0.2.20,Acme SpA,{self.loc_a_id}\n"})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(r.json()["failed"], [])
         self.assertNotIn("Acme SpA", inventory_manager.get_all_groups())

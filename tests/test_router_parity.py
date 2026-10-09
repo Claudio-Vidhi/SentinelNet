@@ -484,7 +484,8 @@ class TestFullParity(unittest.TestCase):
     # existing field removed or retyped.
     # FortiGateProvisionSchema: admin_user/admin_password became mandatory
     # (validator, not a field change) when the day-0 defaults were removed.
-    ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema", "FgtLogQuerySchema", "IdentitySchema",
+    ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema", "DeviceReassignSchema", "PromoteDeviceSchema",
+                               "FgtLogQuerySchema", "IdentitySchema",
                                "SubnetScanRequest", "AiGenerateConfigSchema",
                                # Optional 'ips' (default None = whole group): the
                                # inventory's bulk selection. Additive, no field retyped.

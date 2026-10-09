@@ -35,6 +35,7 @@ class ManualImportSchema(BaseModel):
     ip: str
     vendor: str
     group: str
+    location: str = ""
     probe: str = "central"
     hostname: str = ""
     category: str = ""
@@ -105,7 +106,8 @@ def manual_config_import(payload: ManualImportSchema, current_user=Depends(requi
     try:
         inventory_manager.add_or_update_device(
             payload.ip, vendor, "", "", "", "", payload.group,
-            probe=payload.probe, transports={"manual": None})
+            probe=payload.probe, transports={"manual": None},
+            location=payload.location.strip() or None)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     device = _row(payload.ip, payload.group)

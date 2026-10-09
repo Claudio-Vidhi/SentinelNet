@@ -167,9 +167,12 @@ def agent_push_inventory(payload: AgentInventorySchema, probe = Depends(get_agen
     """L'agente spinge il proprio inventario locale: viene rispecchiato sul
     centrale, taggato con la sede. Le credenziali NON sono replicate (i comandi
     passano dal relay, eseguiti in locale dall'agente)."""
+    from services import location_manager
     probe_id = probe["id"]
     n = 0
-    existing_groups = {d.get("IP"): d.get("Group") for d in inventory_manager.get_all_devices()}
+    all_devices = inventory_manager.get_all_devices()
+    existing_map = {(d.get("Group") or "Generale", d.get("IP")): d for d in all_devices}
+    existing_groups = {d.get("IP"): d.get("Group") for d in all_devices}
     # The agent never deletes its local rows, so it keeps pushing devices the
     # operator decommissioned: skip them, without failing the rest of the push.
     decommissioned_ips = {d.get("IP") for d in inventory_manager.get_decommissioned_devices()}
@@ -181,9 +184,19 @@ def agent_push_inventory(payload: AgentInventorySchema, probe = Depends(get_agen
             continue  # would come back under Generale, a tenant it never had
         group = req_group or existing_groups.get(d.ip) or "Generale"
         vendor = inventory_manager.normalize_vendor(d.vendor)
+        existing = existing_map.get((group, d.ip))
+        if existing is not None:
+            loc = existing.get("Location")
+        else:
+            candidates = [l for l in location_manager.list_locations(group) if l.get("probe") == probe_id]
+            if len(candidates) != 1:
+                log_audit(f"Agente sonda '{probe_id}': dispositivo '{d.ip}' scartato ({len(candidates)} sedi candidate nel gruppo '{group}').")
+                probe_manager.record_unlocated_device(probe_id)
+                continue
+            loc = candidates[0]["id"]
         try:
             inventory_manager.add_or_update_device(
-                d.ip, vendor, "custom", "", "", "", group, probe=probe_id)
+                d.ip, vendor, "custom", "", "", "", group, probe=probe_id, location=loc)
         except ValueError:
             continue  # decommissioned in this tenant (or invalid): not ours to revive
         if d.hostname:
