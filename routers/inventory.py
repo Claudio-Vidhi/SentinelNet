@@ -346,7 +346,7 @@ def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
         )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
-    log_audit(f"Dispositivo '{device.ip}' (vendor: '{device.vendor}', gruppo: '{device.group}', sede: '{probe_val}') aggiunto/aggiornato dall'utente '{current_user.get('sub')}'.")
+    log_audit(f"Dispositivo '{device.ip}' (vendor: '{device.vendor}', gruppo: '{device.group}', sonda: '{probe_val}') aggiunto/aggiornato dall'utente '{current_user.get('sub')}'.")
     # §11.6: Telnet è in chiaro — traccia esplicitamente l'abilitazione.
     if device.transports and 'telnet' in device.transports:
         log_audit(f"ATTENZIONE: Telnet (trasmissione in chiaro) abilitato per il dispositivo '{device.ip}' dall'utente '{current_user.get('sub')}'.")

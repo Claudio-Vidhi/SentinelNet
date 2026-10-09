@@ -353,7 +353,7 @@ _S = {"type": "string"}
 
 TOOLS = {
     "list_devices": (
-        "List all managed network devices (IP, hostname, vendor, group/site, "
+        "List all managed network devices (IP, hostname, vendor, group/tenant, "
         "status) from the SentinelNet inventory.",
         _obj(),
         lambda a: api("GET", "/api/local-devices"),
@@ -362,7 +362,7 @@ TOOLS = {
         "Get the discovered network topology: nodes (devices with type, vendor, "
         "VTP info) and links (local/remote ports, Port-Channel/LAG membership "
         "with per-side aggregate ids).",
-        _obj({"group": {**_S, "description": "Site/group filter, 'all' for everything"}}),
+        _obj({"group": {**_S, "description": "Tenant/group filter, 'all' for everything"}}),
         lambda a: api("GET", "/api/network-map", params={"group": a.get("group", "all")}),
     ),
     "get_port_channels": (
@@ -421,9 +421,9 @@ TOOLS = {
         "Collect the ARP tables from managed L3 devices (switches and "
         "firewalls) and store MAC<->IP bindings in the historical DB. "
         "Requires operator role; optionally restrict to one device IP or a "
-        "site/group.",
+        "tenant/group.",
         _obj({"ip": {**_S, "description": "Only this device (optional)"},
-              "group": {**_S, "description": "Site/group filter, 'all' default"}}),
+              "group": {**_S, "description": "Tenant/group filter, 'all' default"}}),
         lambda a: api("POST", "/api/arp/scan",
                       body={"ip": a.get("ip"), "group": a.get("group", "all")}),
     ),
@@ -614,7 +614,7 @@ TOOLS = {
               "dest": {**_S, "description": "Optional destination IP/FQDN: enables policy lookup and the path"},
               "dest_port": {"type": "integer", "description": "Default 443"},
               "protocol": {**_S, "description": "TCP | UDP | ICMP (default TCP)"},
-              "tenant": {**_S, "description": "Restrict to one tenant/site when the address exists in several "
+              "tenant": {**_S, "description": "Restrict to one tenant when the address exists in several "
                                               "(a prior call returns 'status': 'ambiguous' with the candidate "
                                               "tenants in that case)"}},
              ["client"]),
@@ -786,7 +786,7 @@ TOOLS = {
     "cve_priority": (
         "Devices ranked by vulnerability exposure (CVSS, known-exploited), "
         "i.e. what to patch first. Read-only, tenant-scoped.",
-        _obj({"tenant": {**_S, "description": "Site/group filter (optional)"},
+        _obj({"tenant": {**_S, "description": "Tenant/group filter (optional)"},
               "limit": {"type": "integer", "description": "Max devices (default 200)"}}),
         lambda a: api("GET", "/api/cve/priority", params={
             "tenant": a.get("tenant", ""), "limit": int(a.get("limit", 200))}),
@@ -807,7 +807,7 @@ TOOLS = {
     "drift_summary": (
         "Configuration drift per device: changed since last backup and "
         "deviation from the tenant baseline. Requires an operator account.",
-        _obj({"tenant": {**_S, "description": "Site/group filter (optional)"}}),
+        _obj({"tenant": {**_S, "description": "Tenant/group filter (optional)"}}),
         lambda a: api("GET", "/api/drift/summary", params={"tenant": a.get("tenant", "")}),
     ),
     "drift_versions": (

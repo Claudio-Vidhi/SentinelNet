@@ -27,7 +27,7 @@ def sanitize_filename(filename: str) -> str:
 
 
 def group_backup_dir(group: str, vendor: Optional[str] = None) -> str:
-    """Backup folder dedicated to a group/site, with subfolder per
+    """Backup folder dedicated to a group/tenant, with subfolder per
     vendor (backup-config/<group>/<vendor>/), created if absent."""
     path = os.path.join(BACKUP_FOLDER, sanitize_filename(group or "Generale"))
     if vendor:

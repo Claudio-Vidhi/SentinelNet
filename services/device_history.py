@@ -100,7 +100,7 @@ def record(old_rows: list, new_rows: list) -> None:
 # events once, marked source="audit", so the UI can say they were rebuilt and
 # show only what the line actually recorded (no credentials, no profile).
 _AUDIT_TS = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ - \[AUDIT\] - (.*)$")
-_A_UPSERT = re.compile(r"^Dispositivo '([^']+)' \(vendor: '([^']*)', gruppo: '([^']*)'(?:, sede: '([^']*)')?\) "
+_A_UPSERT = re.compile(r"^Dispositivo '([^']+)' \(vendor: '([^']*)', gruppo: '([^']*)'(?:, (?:sede|sonda): '([^']*)')?\) "
                        r"aggiunto/aggiornato dall'utente '([^']*)'")
 _A_DELETE = re.compile(r"^Dispositivo '([^']+)' eliminato dall'inventario dall'utente '([^']*)'")
 _A_GROUP = re.compile(r"^Dispositivo '([^']+)' spostato dal gruppo '([^']*)' al gruppo '([^']*)' dall'utente '([^']*)'")

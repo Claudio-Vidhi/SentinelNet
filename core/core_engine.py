@@ -2232,7 +2232,7 @@ def _generate_network_map(group_filter=None) -> dict:
             if target_ip not in nodes_map:
                 # Create discovered node: type deduced from Platform/Capabilities (CDP) and
                 # System Description (LLDP), version and VTP domain if available.
-                # The node inherits the group/site of the device that discovered it.
+                # The node inherits the group/tenant of the device that discovered it.
                 auto_type = classify_device_type(
                     base_neigh_id, neigh_desc or "", neigh_plat or "", neigh_caps or ""
                 )
@@ -2381,7 +2381,7 @@ def _generate_network_map(group_filter=None) -> dict:
     # conflicts, but also vendor/model reclassified by hand in the Categories tab):
     # they must be reflected on the map node so that, e.g., the vendor used
     # by the EUVD query is the real one and not the device hostname.
-    # Keyed by (site, node) like apply_category: a node outside inventory is
+    # Keyed by (tenant, node) like apply_category: a node outside inventory is
     # filed under 'Generale'.
     from services.inventory_manager import _akey
     for node_id, node in nodes_map.items():

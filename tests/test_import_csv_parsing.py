@@ -37,7 +37,7 @@ class TestHeaderRecognition(unittest.TestCase):
         self.assertEqual("Vendor", _canonical_header("Marca"))
 
     def test_tenant_and_probe_are_two_columns_not_one(self):
-        """Prima 'site' e 'sede' finivano su Group mentre l'export scriveva
+        """Prima l'intestazione pre-0.52 e 'sede' finivano su Group mentre l'export scriveva
         entrambe le colonne: reimportare un file esportato riscriveva il
         tenant di ogni apparato con il suo id di sede, in silenzio."""
         for spelling in ("Group", "Gruppo", "Tenant"):

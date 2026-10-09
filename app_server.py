@@ -71,7 +71,7 @@ from core.app_settings import (  # noqa: F401
 @asynccontextmanager
 async def lifespan(app: "FastAPI"):
     # Before anything reads probes.json, the CSV or the SQLite files: the
-    # persisted names were 'site' until 0.52 (spec 2026-10-09, site renamed to probe).
+    # persisted names carried the pre-0.52 spelling (spec 2026-10-09, renamed to probe).
     from core import probe_migration
     from security.security_manager import log_audit
     data_dir = os.path.dirname(data_config.get_path("users.json"))
