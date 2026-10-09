@@ -62,10 +62,15 @@ function dhTime(ts) {
 function dhServiceDays(ev) {
     const i = dhEvents.indexOf(ev);
     const ip = ev.device?.IP;
-    const added = dhEvents.slice(i + 1).find(e => e.event === 'added'
+    const added = dhEvents.slice(i + 1).find(e => (e.event === 'added' || e.event === 'reactivated')
         && e.tenant === ev.tenant && e.device?.IP === ip);
     return added ? Math.max(0, Math.round((ev.ts - added.ts) / 86400)) : null;
 }
+
+// Decommission and reactivation are their own events, but they count with
+// the removals and additions they mirror in the kind filter and the net total.
+const DH_BUCKET = { decommissioned: 'removed', reactivated: 'added' };
+const dhBucket = e => DH_BUCKET[e.event] || e.event;
 
 function dhFiltered() {
     const tenant = document.getElementById('dhTenant')?.value || 'all';
@@ -83,8 +88,10 @@ function dhFiltered() {
 
 function dhVerb(kind, batch) {
     const keys = batch
-        ? { added: 'dhBatchAdded', removed: 'dhBatchRemoved', changed: 'dhBatchChanged' }
-        : { added: 'dhVerbAdded', removed: 'dhVerbRemoved', changed: 'dhVerbChanged' };
+        ? { added: 'dhBatchAdded', removed: 'dhBatchRemoved', changed: 'dhBatchChanged',
+            decommissioned: 'dhBatchDecommissioned', reactivated: 'dhBatchReactivated' }
+        : { added: 'dhVerbAdded', removed: 'dhVerbRemoved', changed: 'dhVerbChanged',
+            decommissioned: 'dhVerbDecommissioned', reactivated: 'dhVerbReactivated' };
     return keys[kind];
 }
 
@@ -134,7 +141,7 @@ function dhSingle(e) {
     let extra = '';
     if (e.event === 'changed') {
         extra = escapeHtml(Object.keys(e.changes || {}).map(dhFieldLabel).join(', '));
-    } else if (e.event === 'removed') {
+    } else if (dhBucket(e) === 'removed') {
         const days = dhServiceDays(e);
         if (days !== null) extra = escapeHtml(tr('dhInService', { n: days }));
     }
@@ -150,7 +157,7 @@ function dhSingle(e) {
       ${dhSummary(e, title, dhMeta(e, extra))}
       <div class="dh-body">
         ${changes}
-        <h4 class="dh-h">${escapeHtml(tr(e.event === 'removed' ? 'dhSnapLast' : 'dhSnapAt'))}</h4>
+        <h4 class="dh-h">${escapeHtml(tr(dhBucket(e) === 'removed' ? 'dhSnapLast' : 'dhSnapAt'))}</h4>
         <dl class="dh-snap">${dhSnapshot(d, rebuilt)}</dl>
         <div class="dh-config">
           <button type="button" class="btn btn-secondary btn-small" data-dh-config="${escapeHtml(e.id)}"><i class="fa-solid fa-file-lines" aria-hidden="true"></i> ${escapeHtml(tr('dhViewConfig'))}</button>
@@ -186,7 +193,7 @@ function renderDeviceHistory() {
     const box = document.getElementById('dhTimeline');
     if (!box || !dhLoaded) return;
     const inScope = dhFiltered();
-    const count = k => inScope.filter(e => e.event === k).length;
+    const count = k => inScope.filter(e => dhBucket(e) === k).length;
     const added = count('added');
     const removed = count('removed');
     const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = String(v); };
@@ -197,7 +204,7 @@ function renderDeviceHistory() {
     const net = added - removed;
     setText('dhNet', net > 0 ? `+${net}` : net < 0 ? `−${-net}` : '0');
 
-    const shown = dhKind === 'all' ? inScope : inScope.filter(e => e.event === dhKind);
+    const shown = dhKind === 'all' ? inScope : inScope.filter(e => dhBucket(e) === dhKind);
     if (!dhEvents.length) { box.innerHTML = dhEmpty(tr('dhEmptyAll')); return; }
     if (!shown.length) { box.innerHTML = dhEmpty(tr('dhEmptyFilter')); return; }
 

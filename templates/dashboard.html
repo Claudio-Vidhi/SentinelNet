@@ -638,6 +638,7 @@
           <button type="button" class="inv-tab" data-inv-status="offline" aria-pressed="false"><span class="led led-offline"></span><span data-i18n="homeStOffline">Offline</span><span class="inv-tab-count" id="invKpiOffline">&mdash;</span></button>
           <button type="button" class="inv-tab" data-inv-status="auth_failed" aria-pressed="false"><span class="led led-auth_failed"></span><span data-i18n="homeStAuth">Autenticazione fallita</span><span class="inv-tab-count" id="invKpiAuthFailed">&mdash;</span></button>
           <button type="button" class="inv-tab" data-inv-status="unknown" aria-pressed="false"><span class="led led-discovered"></span><span data-i18n="homeStUnknown">Non misurabile</span><span class="inv-tab-count" id="invKpiUnknown">&mdash;</span></button>
+          <button type="button" class="inv-tab" data-inv-status="decommissioned" aria-pressed="false"><i class="fa-solid fa-box-archive" aria-hidden="true"></i><span data-i18n="invTabDecommissioned">Dismessi</span><span class="inv-tab-count" id="invKpiDecommissioned">&mdash;</span></button>
         </div>
 
         <div class="filterbar">
@@ -669,6 +670,9 @@
           <button type="button" class="btn btn-secondary btn-small" id="btnSelTriage" data-i18n="invSelTriage"><i class="fa-solid fa-bolt-lightning"></i> Triage</button>
           <button type="button" class="btn btn-secondary btn-small" id="btnSelPing" data-i18n="invSelPing"><i class="fa-solid fa-wifi"></i> Ping</button>
           <button type="button" class="btn btn-secondary btn-small" id="btnSelCommands" data-i18n="invSelCommands"><i class="fa-solid fa-terminal"></i> Invia comandi</button>
+          <button type="button" class="btn btn-secondary btn-small" id="btnSelDecommission" data-i18n="invSelDecommission"><i class="fa-solid fa-box-archive"></i> Dismetti</button>
+          <button type="button" class="btn btn-secondary btn-small" id="btnSelReactivate" data-i18n="invSelReactivate" hidden><i class="fa-solid fa-rotate-left"></i> Riattiva</button>
+          <button type="button" class="btn btn-secondary btn-small" id="btnSelDelete" data-i18n="invSelDelete"><i class="fa-solid fa-trash"></i> Elimina</button>
           <button type="button" class="inv-link" id="btnSelClear" data-i18n="invClearSelection">Deseleziona</button>
         </div>
 
@@ -5057,6 +5061,21 @@
 
   <!-- Subnet Scanner Modal -->
   <!-- Catalogo modelli: unioni di doppioni proposte dall'AI, una per una. -->
+  <div class="modal-overlay" id="invBulkModal">
+    <div class="modal" style="width: 560px; max-width: 96%;">
+      <div class="modal-header">
+        <h3 id="invBulkTitle"></h3>
+        <i class="fa-solid fa-xmark modal-close" id="btnCloseInvBulk"></i>
+      </div>
+      <p id="invBulkText"></p>
+      <ul id="invBulkList" class="inv-bulk-list"></ul>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" id="btnInvBulkCancel" data-i18n="btnCancel">Annulla</button>
+        <button type="button" class="btn btn-primary" id="btnInvBulkConfirm"></button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="clsModelsModal">
     <div class="modal" style="width: 640px; max-width: 96%;">
       <div class="modal-header">

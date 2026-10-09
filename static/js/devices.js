@@ -130,15 +130,37 @@
     // Status tab filter and bulk selection. Both survive re-renders; the
     // selection is pruned to devices that still exist.
     let invStatusFilter = 'all';
-    const selectedDeviceIps = new Set();
+    // Keyed by tenant + IP: two tenants may own the same address, and the
+    // lifecycle actions (decommission, reactivate, delete) act on one of them.
+    const selectedDevices = new Set();
+    const selKey = d => JSON.stringify([d.Group || 'Generale', d.IP]);
+    const selectedIps = () => [...new Set([...selectedDevices].map(k => JSON.parse(k)[1]))];
+    const selectedPairs = () => [...selectedDevices].map(k => {
+        const [tenant, ip] = JSON.parse(k);
+        return { tenant, ip };
+    });
+    let _decomCache = null;  // GET /api/devices/decommissioned; null = not loaded yet
+
+    async function loadDecommissioned() {
+        const res = await apiFetch('/api/devices/decommissioned');
+        _decomCache = (res && res.ok) ? (await res.json()).devices : [];
+    }
 
     function syncInventorySelection() {
-        const known = new Set((globalDevices || []).map(d => d.IP));
-        selectedDeviceIps.forEach(ip => { if (!known.has(ip)) selectedDeviceIps.delete(ip); });
+        const decom = invStatusFilter === 'decommissioned';
+        const pool = decom ? (_decomCache || []) : (globalDevices || []);
+        const known = new Set(pool.map(selKey));
+        selectedDevices.forEach(k => { if (!known.has(k)) selectedDevices.delete(k); });
+        ['btnSelTriage', 'btnSelPing', 'btnSelCommands', 'btnSelDecommission'].forEach(id => {
+            const b = document.getElementById(id);
+            if (b) b.hidden = decom;
+        });
+        const re = document.getElementById('btnSelReactivate');
+        if (re) re.hidden = !decom;
         const bar = document.getElementById('invSelectionBar');
-        if (bar) bar.hidden = selectedDeviceIps.size === 0;
+        if (bar) bar.hidden = selectedDevices.size === 0;
         const count = document.getElementById('invSelectionCount');
-        if (count) count.textContent = tr('invSelectedCount', { n: selectedDeviceIps.size });
+        if (count) count.textContent = tr('invSelectedCount', { n: selectedDevices.size });
         const all = /** @type {HTMLInputElement|null} */ (document.getElementById('invSelectAll'));
         const boxes = Array.from(document.querySelectorAll('#deviceTableBody input[data-action="select-device"]'));
         if (all) {
@@ -196,6 +218,36 @@
         return chips.length ? chips.join(' ') : '<span style="color:var(--text-muted)">—</span>';
     }
 
+    // Decommissioned rows: no live status, no row actions, only what the
+    // lifecycle bar needs (selection) and who parked the device and when.
+    function renderDecommissionedRows(devBody, selectedGroup, term, isViewer) {
+        (_decomCache || []).forEach(d => {
+            if (selectedGroup !== 'all' && d.Group !== selectedGroup) return;
+            if (term && ![d.IP, d.Hostname, d.Vendor, d.Group, d.Probe, d['Decommissioned By']]
+                .some(x => (x || '').toString().toLowerCase().includes(term))) return;
+            const key = selKey(d);
+            const selected = selectedDevices.has(key);
+            const when = d.Decommissioned ? new Date(d.Decommissioned).toLocaleDateString() : '—';
+            const by = tr('invDecomBy', { date: when, user: d['Decommissioned By'] || '—' });
+            devBody.insertAdjacentHTML('beforeend', `<tr class="inv-decommissioned${selected ? ' is-selected' : ''}">
+                ${isViewer ? '' : `<td class="inv-check"><input type="checkbox" data-action="select-device" data-key="${escapeHtml(key)}"
+                    ${selected ? 'checked' : ''} aria-label="${escapeHtml(tr('ariaSelectDevice', { ip: d.IP }))}"></td>`}
+                <td><span class="status" title="${escapeHtml(by)}">${escapeHtml(tr('invDecomStatus'))}</span></td>
+                <td><div class="inv-host">
+                    <span class="inv-host-name">${d.Hostname ? escapeHtml(d.Hostname) : '<span class="inv-muted">—</span>'}</span>
+                    <span class="inv-host-where">${escapeHtml(orgLabel(d.Group))} · ${escapeHtml(d.Probe || 'central')}</span>
+                </div></td>
+                <td><strong>${escapeHtml(d.IP)}</strong></td>
+                <td>${escapeHtml((d.Vendor || '').toUpperCase())}</td>
+                <td><span class="inv-muted">${escapeHtml(by)}</span></td>
+                <td><span class="inv-muted">—</span></td>
+            </tr>`);
+        });
+        if (!devBody.children.length) {
+            devBody.innerHTML = `<tr><td colspan="${isViewer ? 6 : 7}" class="inv-muted" style="text-align:center; padding:32px;">${escapeHtml(tr('invDecomEmpty'))}</td></tr>`;
+        }
+    }
+
     function renderDeviceTable() {
         updateInventoryKpis();
 
@@ -204,6 +256,9 @@
         // when it lands; until then each row offers only its own probe, so the
         // table is never blocked on the request.
         if (_probesCache === null) loadDeviceProbes().then(renderDeviceTable);
+        if (_decomCache === null) loadDecommissioned().then(renderDeviceTable);
+        const decomCount = document.getElementById('invKpiDecommissioned');
+        if (decomCount) decomCount.textContent = _decomCache ? String(_decomCache.length) : '—';
 
         const filterSelect  = document.getElementById('filterGroupSelect');
         const selectedGroup = filterSelect ? filterSelect.value : 'all';
@@ -215,6 +270,11 @@
         const isViewer = currentRole === 'viewer';
 
         devBody.innerHTML = '';
+        if (invStatusFilter === 'decommissioned') {
+            renderDecommissionedRows(devBody, selectedGroup, term, isViewer);
+            syncInventorySelection();
+            return;
+        }
         globalDevices.forEach(d => {
             if (selectedGroup !== 'all' && d.Group !== selectedGroup) return;
             const bucket = inventoryStatusBucket(d);
@@ -236,7 +296,7 @@
                 ? tr('devConfigOf', { date: d.backup_ts ? new Date(d.backup_ts * 1000).toLocaleDateString() : '—' })
                 : (bucket === 'unknown' ? tr('jumpLimitsPing') : '');
             const statusLabel = tr(info.key);
-            const selected = selectedDeviceIps.has(d.IP);
+            const selected = selectedDevices.has(selKey(d));
             const ipAttr = escapeHtml(d.IP);
 
             const probeOptions = (current) => (_probesCache || []).map(st => {
@@ -270,7 +330,7 @@
                 `<button type="button" class="inv-icon-btn${extra}" data-action="${action}" data-ip="${ipAttr}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}"><i class="fa-solid ${icon}"></i></button>`;
 
             devBody.innerHTML += `<tr class="${selected ? 'is-selected' : ''}">
-                ${isViewer ? '' : `<td class="inv-check"><input type="checkbox" data-action="select-device" data-ip="${ipAttr}" ${selected ? 'checked' : ''}
+                ${isViewer ? '' : `<td class="inv-check"><input type="checkbox" data-action="select-device" data-ip="${ipAttr}" data-key="${escapeHtml(selKey(d))}" ${selected ? 'checked' : ''}
                     aria-label="${escapeHtml(tr('ariaSelectDevice', { ip: d.IP }))}"></td>`}
                 <td data-sort-value="${bucket}">
                   <span class="status ${info.cls}"${pillTitle ? ` title="${escapeHtml(pillTitle)}"` : ''}><span class="led ${info.led}"></span>${escapeHtml(statusLabel)}</span>
@@ -611,6 +671,60 @@
         document.getElementById('devEditNotice').style.display = 'none';
         document.getElementById('btnSaveDevice').innerHTML = tr('btnSaveDevice');
         document.getElementById('btnCancelEditDevice').style.display = 'none';
+    }
+
+    const LIFECYCLE = {
+        decommission: { title: 'invBulkDecomTitle', text: 'invBulkDecomText', confirm: 'invBulkDecomConfirm' },
+        reactivate: { title: 'invBulkReactTitle', text: 'invBulkReactText', confirm: 'invBulkReactConfirm' },
+        delete: { title: 'invBulkDelTitle', text: 'invBulkDelText', confirm: 'invBulkDelConfirm' },
+    };
+    let _lifecycleAction = null;
+    const _el = id => /** @type {HTMLElement} */ (document.getElementById(id));
+
+    function openLifecycleModal(action) {
+        if (!selectedDevices.size) return;
+        _lifecycleAction = action;
+        const m = LIFECYCLE[action];
+        const pool = invStatusFilter === 'decommissioned' ? (_decomCache || []) : globalDevices;
+        const byKey = new Map(pool.map(d => [selKey(d), d]));
+        _el('invBulkTitle').textContent = tr(m.title, { n: selectedDevices.size });
+        _el('invBulkText').textContent = tr(m.text);
+        _el('invBulkList').innerHTML = [...selectedDevices].map(k => {
+            const [tenant, ip] = JSON.parse(k);
+            const d = byKey.get(k) || {};
+            return `<li><b>${escapeHtml(d.Hostname || ip)}</b> <span class="inv-muted">${escapeHtml(ip)} · ${escapeHtml(orgLabel(tenant))}</span></li>`;
+        }).join('');
+        const btn = _el('btnInvBulkConfirm');
+        btn.textContent = tr(m.confirm);
+        btn.classList.toggle('btn-danger', action === 'delete');
+        btn.classList.toggle('btn-primary', action !== 'delete');
+        openModal('invBulkModal');
+    }
+
+    async function runLifecycleAction() {
+        const action = _lifecycleAction;
+        const btn = /** @type {HTMLButtonElement} */ (_el('btnInvBulkConfirm'));
+        btn.disabled = true;
+        try {
+            const res = await apiFetch(`/api/devices/${action}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ devices: selectedPairs() }),
+            });
+            const data = res ? await res.json().catch(() => ({})) : {};
+            if (!res || !res.ok) {
+                showToast(typeof data.detail === 'string' ? data.detail : tr('invBulkFailed'), 'error');
+                return;
+            }
+            closeModal('invBulkModal');
+            showToast(tr('invBulkDone', { n: data.count }));
+            selectedDevices.clear();
+            _decomCache = null;
+            await refreshInventory();
+            renderDeviceTable();
+        } finally {
+            btn.disabled = false;
+        }
     }
 
     async function deleteDevice(ip) {
@@ -2052,7 +2166,10 @@
     document.querySelector('#tab-devices .inv-tabs')?.addEventListener('click', (e) => {
         const tab = e.target.closest('[data-inv-status]');
         if (!tab) return;
+        const wasDecom = invStatusFilter === 'decommissioned';
         invStatusFilter = tab.dataset.invStatus;
+        // Active and decommissioned rows take different actions: never mix them.
+        if (wasDecom !== (invStatusFilter === 'decommissioned')) selectedDevices.clear();
         document.querySelectorAll('#tab-devices .inv-tab').forEach(t => {
             const on = t === tab;
             t.classList.toggle('active', on);
@@ -2064,8 +2181,8 @@
     document.getElementById('deviceTableBody')?.addEventListener('change', (e) => {
         const box = e.target.closest('input[data-action="select-device"]');
         if (!box) return;
-        if (box.checked) selectedDeviceIps.add(box.dataset.ip);
-        else selectedDeviceIps.delete(box.dataset.ip);
+        if (box.checked) selectedDevices.add(box.dataset.key);
+        else selectedDevices.delete(box.dataset.key);
         box.closest('tr')?.classList.toggle('is-selected', box.checked);
         syncInventorySelection();
     });
@@ -2074,18 +2191,24 @@
         const on = e.target.checked;
         document.querySelectorAll('#deviceTableBody input[data-action="select-device"]').forEach(box => {
             box.checked = on;
-            if (on) selectedDeviceIps.add(box.dataset.ip);
-            else selectedDeviceIps.delete(box.dataset.ip);
+            if (on) selectedDevices.add(box.dataset.key);
+            else selectedDevices.delete(box.dataset.key);
             box.closest('tr')?.classList.toggle('is-selected', on);
         });
         syncInventorySelection();
     });
 
-    document.getElementById('btnSelTriage')?.addEventListener('click', () => startGroupTriage('all', [...selectedDeviceIps]));
-    document.getElementById('btnSelPing')?.addEventListener('click', () => runPingCheck([...selectedDeviceIps]));
-    document.getElementById('btnSelCommands')?.addEventListener('click', () => openBulkCommandModal([...selectedDeviceIps]));
+    document.getElementById('btnSelTriage')?.addEventListener('click', () => startGroupTriage('all', selectedIps()));
+    document.getElementById('btnSelPing')?.addEventListener('click', () => runPingCheck(selectedIps()));
+    document.getElementById('btnSelCommands')?.addEventListener('click', () => openBulkCommandModal(selectedIps()));
+    document.getElementById('btnSelDecommission')?.addEventListener('click', () => openLifecycleModal('decommission'));
+    document.getElementById('btnSelReactivate')?.addEventListener('click', () => openLifecycleModal('reactivate'));
+    document.getElementById('btnSelDelete')?.addEventListener('click', () => openLifecycleModal('delete'));
+    document.getElementById('btnInvBulkConfirm')?.addEventListener('click', runLifecycleAction);
+    document.getElementById('btnInvBulkCancel')?.addEventListener('click', () => closeModal('invBulkModal'));
+    document.getElementById('btnCloseInvBulk')?.addEventListener('click', () => closeModal('invBulkModal'));
     document.getElementById('btnSelClear')?.addEventListener('click', () => {
-        selectedDeviceIps.clear();
+        selectedDevices.clear();
         renderDeviceTable();
     });
     document.getElementById('btnRunDeviceExport')?.addEventListener('click', exportDeviceCsv);
