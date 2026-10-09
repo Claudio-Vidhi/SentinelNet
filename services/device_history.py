@@ -78,10 +78,15 @@ def diff(old_rows: list, new_rows: list) -> list:
     return out
 
 
-def record(old_rows: list, new_rows: list) -> None:
+def record(old_rows: list, new_rows: list, relabel: "dict | None" = None) -> None:
+    """Append the events turning ``old_rows`` into ``new_rows``. ``relabel``
+    renames diff kinds for writes that are not plain adds/removes, e.g.
+    ``{"removed": "decommissioned"}``."""
     found = diff(old_rows, new_rows)
     if not found:
         return
+    for e in found:
+        e["event"] = (relabel or {}).get(e["event"], e["event"])
     from security import security_manager
     actor = security_manager.current_actor() or "system"
     ts = time.time()

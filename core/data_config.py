@@ -25,7 +25,7 @@ _STATE_FILES = [
     "mac_history.db-wal", "redundancy.db", "redundancy.db-shm",
     "redundancy.db-wal", "secret.key", "probes.json", "users.json",
     "vendors.json", "detected_versions.json", "device_models.json",
-    "device_categories.json", "network_hosts.csv",
+    "device_categories.json", "network_hosts.csv", "decommissioned_hosts.csv",
 ]
 
 # Sensitive files to protect with restrictive ACLs.
