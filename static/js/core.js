@@ -175,6 +175,12 @@ function cssVar(name, fallback) {
 
 let globalDevices = [];
 let globalGroups = {};
+// A tenant's key never changes; once renamed it carries a display `name`.
+// Values (option values, filters, API params) stay the key; text shows this.
+function orgLabel(id) {
+    return (globalGroups && globalGroups[id] && globalGroups[id].name) || id;
+}
+window.orgLabel = orgLabel;
 let globalVendors = {};
 let globalVersions = {}; // Cache globale per lo stato delle scansioni (ottimizzazione UI)
 let currentRole = 'viewer';   // ruolo dell'utente loggato (admin/operator/viewer)
@@ -1510,7 +1516,7 @@ async function refreshInventory() {
     if (filterSelect) {
         filterSelect.innerHTML = `<option value="all">${tr('optFilterAll')}</option>` +
             Object.keys(globalGroups).map(g =>
-                `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+                `<option value="${escapeHtml(g)}">${escapeHtml(orgLabel(g))}</option>`).join('');
         filterSelect.value = prevFilter;
         if (filterSelect.selectedIndex === -1) filterSelect.value = 'all';
     }
@@ -1524,7 +1530,7 @@ async function refreshInventory() {
         topoSelect.innerHTML = `<option value="">${tr('optSelectSite')}</option>` +
             `<option value="all">${tr('optFilterAll')}</option>` +
             Object.keys(globalGroups).map(g =>
-                `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+                `<option value="${escapeHtml(g)}">${escapeHtml(orgLabel(g))}</option>`).join('');
         topoSelect.value = prevTopoFilter;
         if (topoSelect.selectedIndex === -1) topoSelect.value = '';
     }
@@ -1538,7 +1544,7 @@ async function refreshInventory() {
         interSelect.innerHTML = `<option value="">${tr('optSelectSite')}</option>` +
             `<option value="all">${tr('optFilterAll')}</option>` +
             Object.keys(globalGroups).map(g =>
-                `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+                `<option value="${escapeHtml(g)}">${escapeHtml(orgLabel(g))}</option>`).join('');
         interSelect.value = prevInterFilter;
         if (interSelect.selectedIndex === -1) interSelect.value = '';
     }
@@ -2267,7 +2273,7 @@ function populateGlobalTenantSelect() {
     const L = i18n[currentLang] || {};
     // The card already says "Tenant": the first option only needs "All".
     sel.innerHTML = `<option value="all">${L.invTabAll || 'Tutti'}</option>` +
-        groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+        groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(orgLabel(g))}</option>`).join('');
     sel.value = groups.includes(cur) ? cur : 'all';
     window.globalSelectedTenant = sel.value;
     reflectTenantInUrl(sel.value);
@@ -2484,7 +2490,7 @@ function buildCommandPaletteItems(query = '') {
             items.push({
                 type: 'device',
                 title: `${d.Hostname || d.IP} (${d.IP})`,
-                desc: `Tenant: ${d.Group || '—'} · ${d.Site || 'central'}`,
+                desc: `Tenant: ${d.Group ? orgLabel(d.Group) : '—'} · ${d.Site || 'central'}`,
                 group: tr('coreDevices'),
                 icon: 'fa-server',
                 action: () => {

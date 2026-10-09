@@ -34,7 +34,7 @@ async function populateIdentTenantOptions(selected) {
 
     // Single select options
     const options = [`<option value="all">${escapeHtml(tr('optTenantAll') || 'Tutti i tenant (Globale)')}</option>`]
-        .concat(allTenants.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`));
+        .concat(allTenants.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(orgLabel(g))}</option>`));
     sel.innerHTML = options.join('');
 
     // Multi-tenant checkboxes
@@ -548,7 +548,7 @@ function populateProvisioningFormSelects() {
     if (groupSelect) {
         const prevGroup = groupSelect.value;
         groupSelect.innerHTML = Object.keys(globalGroups).map(g =>
-            `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`
+            `<option value="${escapeHtml(g)}">${escapeHtml(orgLabel(g))}</option>`
         ).join('');
         if (prevGroup in globalGroups) groupSelect.value = prevGroup;
     }

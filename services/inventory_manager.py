@@ -1111,54 +1111,47 @@ def add_group(group_name: str, description: str = "") -> bool:
             return True
     return False
 
-def update_group(old_name: str, new_name: str, description: str = "") -> bool:
-    """Rinomina un gruppo ed aggiorna tutti i dispositivi ad esso associati."""
-    old_name = old_name.strip()
-    new_name = new_name.strip()
-    if not old_name or not new_name or old_name == "Generale":
-        return False
+def resolve_group(value: str) -> Optional[str]:
+    """Tenant key for a key or a display name typed by a user, or None."""
+    value = (value or "").strip()
+    groups = get_all_groups()
+    if value in groups:
+        return value
+    return next((gid for gid, info in groups.items() if info.get("name") == value), None)
 
+
+def update_group(group_id: str, new_name: str, description: str = "") -> bool:
+    """Rename a tenant: only its display name changes.
+
+    The key stays, because it is what hosts.csv, user scopes, identity
+    profiles, SNMP defaults, backup folders, SQLite `tenant` columns and the
+    site agents' own inventories all store. Rewriting it meant rewriting all of
+    them, and the old code rewrote only hosts.csv."""
+    group_id = group_id.strip()
+    new_name = new_name.strip()
+    if not group_id or not new_name or group_id == "Generale":
+        return False
     with _io_lock:
         groups = get_all_groups()
-        if old_name in groups:
-            info = groups.pop(old_name)
-            if description:
-                info["description"] = description
-            groups[new_name] = info
-            save_groups(groups)
+        if group_id not in groups:
+            return False
+        groups[group_id]["name"] = new_name
+        if description:
+            groups[group_id]["description"] = description
+        save_groups(groups)
+        return True
 
-            # Aggiorna i dispositivi
-            devices = get_all_devices()
-            updated = False
-            for d in devices:
-                if d.get('Group') == old_name:
-                    d['Group'] = new_name
-                    updated = True
-            if updated:
-                safe_write_hosts_csv(devices)
-            return True
-    return False
 
 def delete_group(group_name: str) -> bool:
-    """Rimuove un gruppo e riassegna i dispositivi associati a 'Generale'."""
+    """Remove a tenant with no devices. One with devices is left alone: moving
+    them to another tenant silently changed who could see them."""
     group_name = group_name.strip()
     if not group_name or group_name == "Generale":
         return False
-
     with _io_lock:
         groups = get_all_groups()
-        if group_name in groups:
-            groups.pop(group_name)
-            save_groups(groups)
-
-            # Riassegna i dispositivi
-            devices = get_all_devices()
-            updated = False
-            for d in devices:
-                if d.get('Group') == group_name:
-                    d['Group'] = "Generale"
-                    updated = True
-            if updated:
-                safe_write_hosts_csv(devices)
-            return True
-    return False
+        if group_name not in groups or any(d.get('Group') == group_name for d in get_all_devices()):
+            return False
+        groups.pop(group_name)
+        save_groups(groups)
+        return True

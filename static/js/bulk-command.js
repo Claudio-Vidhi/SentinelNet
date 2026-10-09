@@ -11,7 +11,7 @@ function openBulkCommandModal(preselect = []) {
     // Popola il filtro gruppo
     const gf = document.getElementById('bulkGroupFilter');
     gf.innerHTML = `<option value="all">${tr('optFilterAll')}</option>` +
-        Object.keys(globalGroups).map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+        Object.keys(globalGroups).map(g => `<option value="${escapeHtml(g)}">${escapeHtml(orgLabel(g))}</option>`).join('');
     // A preselection can span tenants: show them all so none is hidden and lost.
     gf.value = preselect.length ? 'all' : tenantSelectSeed('', Object.keys(globalGroups), 'all');
 
@@ -54,7 +54,7 @@ function renderBulkTargets() {
                 <input type="checkbox" class="bulk-target" value="${escapeHtml(d.IP)}" ${isOn}>
                 <span style="font-family:var(--font-code); color:var(--primary);">${escapeHtml(d.IP)}</span>
                 <span>${hn}</span>
-                <span class="badge" style="margin-left:auto;">${escapeHtml(d.Group)}</span>
+                <span class="badge" style="margin-left:auto;">${escapeHtml(orgLabel(d.Group))}</span>
             </label>`;
         }).join('');
     list.innerHTML = rows || `<div style="padding:12px; color:var(--text-muted); font-size:12px;">${tr('bulkNoDevicesInThis')}</div>`;

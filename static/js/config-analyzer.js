@@ -24,7 +24,7 @@
             const cur = sel.value;
             const groups = Object.keys(globalGroups || {});
             sel.innerHTML = `<option value="all">${tr('optFilterAll')}</option>` +
-                groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+                groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(orgLabel(g))}</option>`).join('');
             sel.value = tenantSelectSeed(cur, groups, 'all');
         }
         fetchConfigAnalyzer();

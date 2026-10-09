@@ -396,7 +396,10 @@ def import_csv(payload: CSVImportRequest, current_user = Depends(require_operato
             ip = ip.strip()
 
             # Se il campo Group è presente e non vuoto, chiama immediatamente inventory_manager.add_group(row['Group'])
-            group_name = (row.get('Group') or '').strip() or 'Generale'
+            # The column may hold a renamed tenant's display name: resolve it
+            # to the key, or the import would create a duplicate tenant.
+            raw_group = (row.get('Group') or '').strip() or 'Generale'
+            group_name = inventory_manager.resolve_group(raw_group) or raw_group
             # Scoping: un operatore limitato non può importare in sedi non consentite
             if scope is not None and group_name not in scope:
                 raise ValueError(f"Sede '{group_name}' non consentita per il tuo profilo")
