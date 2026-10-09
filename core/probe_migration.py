@@ -63,7 +63,11 @@ def _device_history(d: str) -> list:
     out, renamed = [], False
     for line in lines:
         if f'"{field}"' in line:  # cheap prefilter; values may match too
-            e = json.loads(line)
+            try:
+                e = json.loads(line)
+            except ValueError:  # torn line from a crash mid-write: keep verbatim
+                out.append(line)
+                continue
             for key in ("device", "changes"):
                 if field in e.get(key, {}):
                     e[key] = {("Probe" if k == field else k): v for k, v in e[key].items()}
