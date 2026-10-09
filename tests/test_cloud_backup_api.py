@@ -112,7 +112,7 @@ class TestCloudBackupApi(unittest.TestCase):
 
     def test_remote_filters_files_to_caller_group_scope(self):
         try:
-            user_manager.create_user("cbscoped", "Pass123!", role="viewer", groups=["site-a"])
+            user_manager.create_user("cbscoped", "Pass123!", role="viewer", groups=["tenant-a"])
         except Exception:
             pass
         r = self.client.post("/api/auth/login",
@@ -120,8 +120,8 @@ class TestCloudBackupApi(unittest.TestCase):
         headers = {"Authorization": f"Bearer {r.json().get('access_token', '')}",
                    "X-Requested-With": "SentinelNet"}
         manifest = {"updated_at": "2026-08-25T00:00:00Z", "encrypted": False,
-                    "files": {"site-a/switch-01.cfg": {"sha256": "sha256:aaa"},
-                              "site-b/switch-02.cfg": {"sha256": "sha256:bbb"}}}
+                    "files": {"tenant-a/switch-01.cfg": {"sha256": "sha256:aaa"},
+                              "tenant-b/switch-02.cfg": {"sha256": "sha256:bbb"}}}
 
         class FakeTarget:
             def get(self, path):
@@ -134,8 +134,8 @@ class TestCloudBackupApi(unittest.TestCase):
             r = self.client.get("/api/cloud-backup/remote", headers=headers)
         self.assertEqual(200, r.status_code)
         files = r.json()["files"]
-        self.assertIn("site-a/switch-01.cfg", files)
-        self.assertNotIn("site-b/switch-02.cfg", files)
+        self.assertIn("tenant-a/switch-01.cfg", files)
+        self.assertNotIn("tenant-b/switch-02.cfg", files)
 
     def test_remote_scope_matches_the_sanitized_directory_name(self):
         # Backups land under sanitize_filename(group): "Sede Milano" becomes
@@ -152,7 +152,7 @@ class TestCloudBackupApi(unittest.TestCase):
                    "X-Requested-With": "SentinelNet"}
         manifest = {"updated_at": "2026-08-25T00:00:00Z", "encrypted": False,
                     "files": {"Sede_Milano/cisco/switch-01.cfg": {"sha256": "sha256:aaa"},
-                              "site-b/switch-02.cfg": {"sha256": "sha256:bbb"}}}
+                              "tenant-b/switch-02.cfg": {"sha256": "sha256:bbb"}}}
 
         class FakeTarget:
             def get(self, path):
@@ -166,10 +166,10 @@ class TestCloudBackupApi(unittest.TestCase):
         self.assertEqual(200, r.status_code)
         files = r.json()["files"]
         self.assertIn("Sede_Milano/cisco/switch-01.cfg", files)
-        self.assertNotIn("site-b/switch-02.cfg", files)
+        self.assertNotIn("tenant-b/switch-02.cfg", files)
 
     def test_status_hides_the_failing_file_path_from_a_non_admin(self):
-        detail = "site-a/cisco/switch-01-192.0.2.10.txt: permission denied"
+        detail = "tenant-a/cisco/switch-01-192.0.2.10.txt: permission denied"
         with mock.patch("services.cloud_backup.status", return_value={
                 "enabled": True, "encrypt_payload": False, "pending": 0,
                 "hours_since_success": 1.0, "stale_after_hours": 48,

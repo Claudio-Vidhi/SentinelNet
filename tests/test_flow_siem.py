@@ -138,13 +138,13 @@ class TestFlowSiem(unittest.TestCase):
 
     # --- scoping per tenant ------------------------------------------------
 
-    def test_operator_does_not_see_other_sites_events(self):
+    def test_operator_does_not_see_other_tenants_events(self):
         c = self._client("op_a_siem")
         events = c.get("/api/flow-siem/events?window=24h").json()["events"]
         self.assertTrue(events)
         self.assertEqual({e["tenant"] for e in events}, {"sede-a"})
 
-    def test_admin_sees_every_site(self):
+    def test_admin_sees_every_tenant(self):
         c = self._client("adm_siem")
         events = c.get("/api/flow-siem/events?window=24h").json()["events"]
         self.assertIn("sede-b", {e["tenant"] for e in events})

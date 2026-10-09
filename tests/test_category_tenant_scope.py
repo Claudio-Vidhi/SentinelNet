@@ -49,7 +49,7 @@ class _Base(unittest.TestCase):
 
 class TestScopingPerSede(_Base):
 
-    def test_the_same_address_in_two_sites_keeps_two_labels(self):
+    def test_the_same_address_in_two_tenants_keeps_two_labels(self):
         # Lo stesso indirizzo privato esiste in ogni sede del mondo: e' il caso
         # normale, non quello limite.
         inventory_manager.set_device_meta("10.0.0.1", tenant="sede-a", category="pc")
@@ -58,7 +58,7 @@ class TestScopingPerSede(_Base):
         self.assertEqual(a["sede-a|10.0.0.1"]["category"], "pc")
         self.assertEqual(a["sede-b|10.0.0.1"]["category"], "phone")
 
-    def test_the_site_is_taken_from_inventory_when_not_given(self):
+    def test_the_tenant_is_taken_from_inventory_when_not_given(self):
         # Il chiamante (la rotta di assegnazione) non conosce la sede: la porta
         # il dispositivo, in inventario.
         inventory_manager.set_device_meta("192.0.2.50", category="pc")
@@ -69,7 +69,7 @@ class TestScopingPerSede(_Base):
         inventory_manager.set_device_meta("203.0.113.9", category="pc")
         self.assertIn("Generale|203.0.113.9", self._assignments())
 
-    def test_clearing_one_site_leaves_the_other_alone(self):
+    def test_clearing_one_tenant_leaves_the_other_alone(self):
         inventory_manager.set_device_meta("10.0.0.1", tenant="sede-a", category="pc")
         inventory_manager.set_device_meta("10.0.0.1", tenant="sede-b", category="pc")
         inventory_manager.set_device_meta("10.0.0.1", tenant="sede-a", category="")
@@ -77,7 +77,7 @@ class TestScopingPerSede(_Base):
         self.assertNotIn("sede-a|10.0.0.1", a)
         self.assertEqual(a["sede-b|10.0.0.1"]["category"], "pc")
 
-    def test_promotion_moves_the_label_into_the_new_site(self):
+    def test_promotion_moves_the_label_into_the_new_tenant(self):
         # Il nodo scoperto sta sotto 'Generale'; promosso, appartiene alla sede.
         inventory_manager.set_device_meta("203.0.113.9", category="pc")
         inventory_manager.migrate_assignment("203.0.113.9", "192.0.2.50",
@@ -88,7 +88,7 @@ class TestScopingPerSede(_Base):
 
 
 class TestMigrazioneChiaviVecchie(_Base):
-    """The JSON file written before the key carried the site, imported once
+    """The JSON file written before the key carried the tenant, imported once
     into the SQLite store."""
 
     def _write_legacy(self, assignments):

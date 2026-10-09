@@ -87,7 +87,7 @@ class TestStore(unittest.TestCase):
 
 class TestClassificationReadsTheSavedAssignment(unittest.TestCase):
     """The tab used to look the assignment up by bare node id while the store
-    keys it by (site, node): a classified device never left the queue."""
+    keys it by (tenant, node): a classified device never left the queue."""
 
     MAP = {"nodes": [
         {"id": "192.0.2.1", "label": "switch-01", "group": "sede-a",
@@ -113,7 +113,7 @@ class TestClassificationReadsTheSavedAssignment(unittest.TestCase):
 
 class TestMapAppliesSavedOverrides(unittest.TestCase):
     """Saved name/version/vendor/model were looked up by bare node id against
-    'site|node' keys: every save was silently ignored by the map."""
+    'tenant|node' keys: every save was silently ignored by the map."""
 
     def setUp(self):
         self.backup_dir = tempfile.mkdtemp(prefix="devmeta_backup_")
@@ -137,8 +137,8 @@ class TestMapAppliesSavedOverrides(unittest.TestCase):
         self.assertEqual(node["version"], "17.9")
         self.assertEqual(node["model"], "C9300")
 
-    def test_another_sites_override_is_not_applied(self):
-        node = self._map({"sede-b|192.0.2.7": {"name": "other-site"}})
+    def test_another_tenants_override_is_not_applied(self):
+        node = self._map({"sede-b|192.0.2.7": {"name": "other-tenant"}})
         self.assertEqual(node["label"], "switch-01")
 
 

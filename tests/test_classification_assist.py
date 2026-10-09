@@ -38,7 +38,7 @@ CATS = {
 class TestParseSuggestions(unittest.TestCase):
     def test_keeps_only_storable_values(self):
         reply = "```json\n" + json.dumps({
-            "conventions": {"tenant-a": "SITE-ROLE-NN"},
+            "conventions": {"tenant-a": "LOC-ROLE-NN"},
             "suggestions": [
                 {"id": "d1", "category": "Switch", "subcategory": "access",
                  "vendor": "Cisco", "model": "C9200L-48P-4G", "name": "MI-SW-ACC-07",
@@ -55,7 +55,7 @@ class TestParseSuggestions(unittest.TestCase):
         # Unknown category, sub of nothing, non-hostname name: nothing usable left.
         self.assertNotIn("d2", out)
         self.assertNotIn("not-in-queue", out)
-        self.assertEqual(conv, {"tenant-a": "SITE-ROLE-NN"})
+        self.assertEqual(conv, {"tenant-a": "LOC-ROLE-NN"})
 
     def test_ha_pair_label_is_kept_when_storable(self):
         reply = json.dumps({"suggestions": [
@@ -138,7 +138,7 @@ class TestEndpoints(unittest.TestCase):
         # "disc-1" from a shared data dir would drop it from the request.
         if os.path.exists(catalog._ai_suggest_file()):
             os.remove(catalog._ai_suggest_file())
-        reply = json.dumps({"conventions": {"tenant-a": "SITE-SW-ROLE-NN"}, "suggestions": [
+        reply = json.dumps({"conventions": {"tenant-a": "LOC-SW-ROLE-NN"}, "suggestions": [
             {"id": "disc-1", "category": "switch", "subcategory": "Access",
              "name": "MI-SW-ACC-02", "confidence": 80, "reason": "r"}]})
         with patch.object(catalog, "assemble_classification", return_value=FAKE_DATA), \
@@ -158,7 +158,7 @@ class TestEndpoints(unittest.TestCase):
 
             saved = c.get("/api/device-classification/ai-suggestions").json()
             self.assertIn("disc-1", saved["suggestions"])
-            self.assertEqual(saved["conventions"]["tenant-a"], "SITE-SW-ROLE-NN")
+            self.assertEqual(saved["conventions"]["tenant-a"], "LOC-SW-ROLE-NN")
         # Proposal only: no device assignment was written.
         self.assertNotIn("disc-1", str(inventory_manager.get_device_categories()["assignments"]))
 

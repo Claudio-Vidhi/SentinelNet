@@ -16,7 +16,7 @@ class TestCloudBackupPayload(unittest.TestCase):
         self.assertEqual(clear, payload.decrypt_bytes(token))
 
     def test_remote_name_marks_encrypted_files(self):
-        rel = "site-a/cisco/switch-01-192.0.2.10.txt"
+        rel = "tenant-a/cisco/switch-01-192.0.2.10.txt"
         self.assertEqual(rel, payload.remote_name(rel, False))
         self.assertEqual(rel + ".enc", payload.remote_name(rel, True))
 

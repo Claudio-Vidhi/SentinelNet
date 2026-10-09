@@ -21,7 +21,7 @@ class TestVerification(unittest.TestCase):
 
     def setUp(self):
         self.root = tempfile.mkdtemp()
-        _write(self.root, "site-a/cisco/switch-01-192.0.2.10.txt", "hostname switch-01\n")
+        _write(self.root, "tenant-a/cisco/switch-01-192.0.2.10.txt", "hostname switch-01\n")
         cfg = {"enabled": True, "kind": "sftp", "host": "backup.example.net", "port": 22,
                "username": "sentinelnet", "auth": "password", "password": "s3cret",
                "remote_root": "/srv/backups", "encrypt_payload": False,
@@ -51,7 +51,7 @@ class TestManifestVerification(unittest.TestCase):
 
     def setUp(self):
         self.root = tempfile.mkdtemp()
-        _write(self.root, "site-a/cisco/switch-01-192.0.2.10.txt", "hostname switch-01\n")
+        _write(self.root, "tenant-a/cisco/switch-01-192.0.2.10.txt", "hostname switch-01\n")
         cfg = {"enabled": True, "kind": "sftp", "host": "backup.example.net", "port": 22,
                "username": "sentinelnet", "auth": "password", "password": "s3cret",
                "remote_root": "/srv/backups", "encrypt_payload": False,

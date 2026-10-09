@@ -19,7 +19,7 @@ class TestRestoreScript(unittest.TestCase):
     def _archive(self, encrypted=False, key=None, sha256=None, rel=None):
         root = tempfile.mkdtemp()
         if rel is None:
-            rel = "site-a/cisco/switch-01-192.0.2.10.txt"
+            rel = "tenant-a/cisco/switch-01-192.0.2.10.txt"
         clear = b"hostname switch-01\n"
         body = clear
         rel_remote = rel
