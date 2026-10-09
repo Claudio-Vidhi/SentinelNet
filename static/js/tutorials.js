@@ -77,17 +77,24 @@
                 },
                 {
                     tab: 'tab-devices',
-                    target: '#filterDeviceText',
+                    target: '#deviceSearch',
                     badgeKey: 'tutBadgeInv',
                     titleKey: 'tutInvS2Title',
                     textKey: 'tutInvS2Text'
                 },
                 {
                     tab: 'tab-devices',
-                    target: '#tableDevices',
+                    target: '#deviceTableBody',
                     badgeKey: 'tutBadgeInv',
                     titleKey: 'tutInvS3Title',
                     textKey: 'tutInvS3Text'
+                },
+                {
+                    tab: 'tab-devices',
+                    target: '#tab-devices .inv-tabs',
+                    badgeKey: 'tutBadgeInv',
+                    titleKey: 'tutInvS5Title',
+                    textKey: 'tutInvS5Text'
                 },
                 {
                     tab: 'tab-provisioning',
@@ -155,6 +162,68 @@
                     badgeKey: 'tutBadgeCmd',
                     titleKey: 'tutCmdS2Title',
                     textKey: 'tutCmdS2Text'
+                }
+            ]
+        },
+        probes: {
+            id: 'probes',
+            titleKey: 'tutHubProbesTitle',
+            descKey: 'tutHubProbesDesc',
+            badgeKey: 'tutBadgeProbes',
+            duration: 2,
+            icon: 'fa-tower-broadcast',
+            steps: [
+                {
+                    tab: 'tab-probes',
+                    target: '#tab-probes',
+                    badgeKey: 'tutBadgeProbes',
+                    titleKey: 'tutProbesS1Title',
+                    textKey: 'tutProbesS1Text'
+                },
+                {
+                    tab: 'tab-probes',
+                    target: '#btnNewProbe',
+                    badgeKey: 'tutBadgeProbes',
+                    titleKey: 'tutProbesS2Title',
+                    textKey: 'tutProbesS2Text'
+                },
+                {
+                    tab: 'tab-probes',
+                    target: '#probesTableBody',
+                    badgeKey: 'tutBadgeProbes',
+                    titleKey: 'tutProbesS3Title',
+                    textKey: 'tutProbesS3Text'
+                }
+            ]
+        },
+        device_history: {
+            id: 'device_history',
+            titleKey: 'tutHubHistTitle',
+            descKey: 'tutHubHistDesc',
+            badgeKey: 'tutBadgeHist',
+            duration: 2,
+            icon: 'fa-clock-rotate-left',
+            steps: [
+                {
+                    tab: 'tab-device-history',
+                    target: '#tab-device-history',
+                    badgeKey: 'tutBadgeHist',
+                    titleKey: 'tutHistS1Title',
+                    textKey: 'tutHistS1Text'
+                },
+                {
+                    tab: 'tab-device-history',
+                    target: '#tab-device-history .dh-kinds',
+                    badgeKey: 'tutBadgeHist',
+                    titleKey: 'tutHistS2Title',
+                    textKey: 'tutHistS2Text'
+                },
+                {
+                    tab: 'tab-device-history',
+                    target: '#dhTimeline',
+                    badgeKey: 'tutBadgeHist',
+                    titleKey: 'tutHistS3Title',
+                    textKey: 'tutHistS3Text'
                 }
             ]
         },

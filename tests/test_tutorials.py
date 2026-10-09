@@ -53,6 +53,22 @@ class TestTutorialsAndOnboarding(unittest.TestCase):
             self.assertIn(f"{key}:", it_part, f"Chiave {key} mancante nel dizionario italiano")
             self.assertIn(f"{key}:", en_part, f"Chiave {key} mancante nel dizionario inglese")
 
+    def test_every_step_target_exists(self):
+        # A step whose #id left the template highlights nothing: the tour
+        # silently shows a card over the whole page (two inventory steps did).
+        targets = re.findall(r"target:\s*'#([A-Za-z0-9_-]+)", self.js)
+        self.assertTrue(targets)
+        for t in set(targets):
+            with self.subTest(target=t):
+                self.assertTrue(f'id="{t}"' in self.html, f"#{t} not in dashboard.html")
+
+    def test_probe_and_history_tours_exist(self):
+        for tour in ("probes:", "device_history:"):
+            with self.subTest(tour=tour):
+                self.assertIn(tour, self.js)
+        self.assertIn("tab: 'tab-probes'", self.js)
+        self.assertIn("tab: 'tab-device-history'", self.js)
+
 
 if __name__ == "__main__":
     unittest.main()
