@@ -255,7 +255,11 @@ def _read_inventory_csv(raw: str):
 _hosts_csv_lock = threading.RLock()
 
 
-def safe_write_hosts_csv(devices):
+_HOSTS_FIELDS = ['IP', 'Vendor', 'Profile', 'Username', 'Password', 'Enable Secret', 'Group',
+                 'Hostname', 'Probe', 'SSH Port', 'Transports', 'SNMP Community', 'SNMP Disabled']
+
+
+def safe_write_hosts_csv(devices, exempt=frozenset(), relabel=None):
     invalidate_device_ip_cache()  # l'inventario cambia: la cache IP→device decade
     _invalidate_rows_cache()  # idem per le righe: due scritture nello stesso
     # tick di clock, di pari dimensione, avrebbero la stessa firma di stat.
@@ -268,9 +272,10 @@ def safe_write_hosts_csv(devices):
     temp_filename = hosts_csv + ".tmp"
     # 'Probe' identifica la sede multi-sede (default 'central'); 'extrasaction=ignore'
     # tollera dizionari con chiavi extra (retrocompatibilità).
-    _fieldnames = ['IP', 'Vendor', 'Profile', 'Username', 'Password', 'Enable Secret', 'Group', 'Hostname', 'Probe', 'SSH Port', 'Transports', 'SNMP Community', 'SNMP Disabled']
+    _fieldnames = _HOSTS_FIELDS
     with _hosts_csv_lock:
         old_rows = _read_hosts_csv(hosts_csv) if os.path.exists(hosts_csv) else []
+        _refuse_decommissioned(devices, old_rows, exempt)
         try:
             with open(temp_filename, mode='w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=_fieldnames, extrasaction='ignore')
@@ -303,7 +308,7 @@ def safe_write_hosts_csv(devices):
         # the file as re-read, so both sides carry the same read defaults.
         try:
             from services import device_history
-            device_history.record(old_rows, _read_hosts_csv(hosts_csv))
+            device_history.record(old_rows, _read_hosts_csv(hosts_csv), relabel)
         except Exception:
             logger.exception("Storico dispositivi non aggiornato")
 
@@ -534,6 +539,114 @@ def delete_device(ip: str, group: Optional[str] = None):
         else:
             devices = [d for d in devices if d.get('IP') != ip]
         safe_write_hosts_csv(devices)
+
+
+# --- Decommissioned devices -------------------------------------------------
+# A decommissioned device leaves network_hosts.csv for its own file next to
+# it, so the ~75 readers of get_all_devices() and every read-rewrite path stop
+# seeing it without a filter any of them could forget (spec 2026-10-09
+# device-decommission). Moves write the copy first and remove second: an
+# interrupted move leaves the row in both files, never in neither. They hold
+# _io_lock like every other read-modify-write of the inventory.
+_DECOM_COLS = ['Decommissioned', 'Decommissioned By']
+
+
+def device_pair(row: dict) -> tuple:
+    """Inventory identity: (tenant, IP)."""
+    return (row.get("Group") or "Generale", row.get("IP"))
+
+
+def get_decommissioned_csv() -> str:
+    return os.path.join(os.path.dirname(get_hosts_csv()), "decommissioned_hosts.csv")
+
+
+def get_decommissioned_devices() -> list:
+    path = get_decommissioned_csv()
+    with _hosts_csv_lock:
+        if not os.path.exists(path):
+            return []
+        return _read_hosts_csv(path)
+
+
+def _write_decommissioned(rows: list) -> None:
+    path = get_decommissioned_csv()
+    tmp = path + ".tmp"
+    with _hosts_csv_lock:
+        with open(tmp, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=_HOSTS_FIELDS + _DECOM_COLS, extrasaction="ignore")
+            w.writeheader()
+            w.writerows(rows)
+        os.replace(tmp, path)
+
+
+def _refuse_decommissioned(devices, old_rows, exempt) -> None:
+    """A row new to the active file must not be a decommissioned device: two
+    copies of one (tenant, IP) would later be reactivated over each other.
+    Only new rows are checked, so the leftover of an interrupted move never
+    blocks unrelated writes."""
+    new = {device_pair(d) for d in devices} - {device_pair(r) for r in old_rows} - set(exempt)
+    if not new:
+        return
+    clash = sorted(new & {device_pair(r) for r in get_decommissioned_devices()})
+    if clash:
+        raise ValueError("; ".join(
+            f"{ip} è dismesso nel tenant {tenant}: riattivalo o eliminalo prima"
+            for tenant, ip in clash))
+
+
+def decommission(pairs, actor: str) -> int:
+    want = set(pairs)
+    with _io_lock:
+        active = get_all_devices()
+        moving = [d for d in active if device_pair(d) in want]
+        if not moving:
+            return 0
+        stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        kept = [r for r in get_decommissioned_devices() if device_pair(r) not in want]
+        _write_decommissioned(kept + [dict(d, **{"Decommissioned": stamp,
+                                                 "Decommissioned By": actor})
+                                      for d in moving])
+        safe_write_hosts_csv([d for d in active if device_pair(d) not in want],
+                             relabel={"removed": "decommissioned"})
+    return len(moving)
+
+
+def reactivate(pairs) -> int:
+    want = set(pairs)
+    with _io_lock:
+        dec = get_decommissioned_devices()
+        back = [r for r in dec if device_pair(r) in want]
+        if not back:
+            return 0
+        active = get_all_devices()
+        have = {device_pair(d) for d in active}
+        restored = [{k: v for k, v in r.items() if k not in _DECOM_COLS}
+                    for r in back if device_pair(r) not in have]
+        if restored:
+            safe_write_hosts_csv(active + restored,
+                                 exempt={device_pair(r) for r in restored},
+                                 relabel={"added": "reactivated"})
+        _write_decommissioned([r for r in dec if device_pair(r) not in want])
+    return len(back)
+
+
+def delete_devices(pairs) -> int:
+    want = set(pairs)
+    with _io_lock:
+        active = get_all_devices()
+        n = sum(1 for d in active if device_pair(d) in want)
+        if n:
+            safe_write_hosts_csv([d for d in active if device_pair(d) not in want])
+        dec = get_decommissioned_devices()
+        gone = [r for r in dec if device_pair(r) in want]
+        if gone:
+            _write_decommissioned([r for r in dec if device_pair(r) not in want])
+            try:
+                from services import device_history
+                device_history.record(gone, [])
+            except Exception:
+                logger.exception("Storico dispositivi non aggiornato")
+    return n + len(gone)
 
 VENDOR_ALIASES = {
     "fotinet": "fortinet",
