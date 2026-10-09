@@ -23,14 +23,14 @@ _STATE_FILES = [
     "app_settings.json", "audit.log", "error_log.txt", "groups.json",
     "jwt_secret.key", "mac_history.db", "mac_history.db-shm",
     "mac_history.db-wal", "redundancy.db", "redundancy.db-shm",
-    "redundancy.db-wal", "secret.key", "sites.json", "users.json",
+    "redundancy.db-wal", "secret.key", "probes.json", "users.json",
     "vendors.json", "detected_versions.json", "device_models.json",
     "device_categories.json", "network_hosts.csv",
 ]
 
 # Sensitive files to protect with restrictive ACLs.
 _SENSITIVE_FILES = {"secret.key", "jwt_secret.key", "users.json",
-                    "sites.json", "mac_history.db"}
+                    "probes.json", "mac_history.db"}
 
 
 # Well-known SIDs, not account names. Granting by %USERNAME% worked from

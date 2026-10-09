@@ -164,7 +164,7 @@ class TestTriageScheduler(unittest.TestCase):
         sched = triage_scheduler.create_schedule({
             "name": "Telemetria spenta", "tenant": "Sede-1", "interval_minutes": 60,
         }, user)
-        devs = [{"IP": "192.0.2.10", "Group": "Sede-1", "Site": "central"}]
+        devs = [{"IP": "192.0.2.10", "Group": "Sede-1", "Probe": "central"}]
         with patch.object(inventory_manager, "get_all_devices", return_value=devs),              patch("services.tenant_telemetry.get_app_settings",
                    return_value={"tenant_telemetry": {"Sede-1": {"triage_enabled": False}}}):
             res = triage_scheduler.execute_schedule_job(sched["id"])
@@ -176,9 +176,9 @@ class TestTriageScheduler(unittest.TestCase):
         sched = triage_scheduler.create_schedule({
             "name": "Con manuale", "tenant": "Sede-1", "interval_minutes": 60,
         }, user)
-        manual = {"IP": "192.0.2.50", "Group": "Sede-1", "Site": "central",
+        manual = {"IP": "192.0.2.50", "Group": "Sede-1", "Probe": "central",
                   "Transports": '{"manual":null}'}
-        normal = {"IP": "192.0.2.51", "Group": "Sede-1", "Site": "central"}
+        normal = {"IP": "192.0.2.51", "Group": "Sede-1", "Probe": "central"}
         with patch.object(inventory_manager, "get_all_devices", return_value=[manual, normal]),              patch.object(triage_scheduler.threading, "Thread") as thread:
             triage_scheduler.execute_schedule_job(sched["id"])
         handed = thread.call_args.kwargs["args"][0]

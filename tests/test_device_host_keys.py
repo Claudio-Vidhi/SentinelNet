@@ -63,7 +63,7 @@ class TestDeviceHostKeys(unittest.TestCase):
 
     def test_direct_connect_pins_on_first_use(self):
         key = paramiko.RSAKey.generate(2048)
-        with mock.patch.object(net_ssh, "jump_site_for", return_value=None), \
+        with mock.patch.object(net_ssh, "bastion_probe_for", return_value=None), \
              mock.patch.object(net_ssh, "_netmiko_connect",
                                return_value=self._fake_conn(key)) as m_conn, \
              mock.patch.object(net_ssh, "_pin_host_key") as m_pin:
@@ -77,7 +77,7 @@ class TestDeviceHostKeys(unittest.TestCase):
     def test_direct_connect_does_not_repin_known_host(self):
         key = paramiko.RSAKey.generate(2048)
         net_ssh._pin_host_key("192.0.2.12", 22, key)
-        with mock.patch.object(net_ssh, "jump_site_for", return_value=None), \
+        with mock.patch.object(net_ssh, "bastion_probe_for", return_value=None), \
              mock.patch.object(net_ssh, "_netmiko_connect",
                                return_value=self._fake_conn(key)), \
              mock.patch.object(net_ssh, "_pin_host_key") as m_pin:
@@ -88,7 +88,7 @@ class TestDeviceHostKeys(unittest.TestCase):
     def test_direct_connect_rejects_changed_key(self):
         pinned = paramiko.RSAKey.generate(2048)
         net_ssh._pin_host_key("192.0.2.13", 22, pinned)
-        with mock.patch.object(net_ssh, "jump_site_for", return_value=None), \
+        with mock.patch.object(net_ssh, "bastion_probe_for", return_value=None), \
              mock.patch.object(
                  net_ssh, "_netmiko_connect",
                  side_effect=paramiko.BadHostKeyException(
@@ -102,11 +102,11 @@ class TestDeviceHostKeys(unittest.TestCase):
 
     def test_tunnelled_connect_pins_and_closes_channel_on_failure(self):
         key = paramiko.RSAKey.generate(2048)
-        site = {"id": "sede-x", "mode": "jump",
+        probe = {"id": "sede-x", "mode": "jump",
                 "jump_host": "203.0.113.9", "jump_port": 22}
         scope = "203.0.113.9"
         chan = mock.MagicMock()
-        with mock.patch.object(net_ssh, "jump_site_for", return_value=site), \
+        with mock.patch.object(net_ssh, "bastion_probe_for", return_value=probe), \
              mock.patch.object(net_ssh, "jump_channel", return_value=chan), \
              mock.patch.object(net_ssh, "_netmiko_connect",
                                return_value=self._fake_conn(key)) as m_conn, \
@@ -119,7 +119,7 @@ class TestDeviceHostKeys(unittest.TestCase):
         m_pin.assert_called_once_with("192.0.2.14", 22, key, scope)
 
         # al fallimento il canale verso il bastione va richiuso
-        with mock.patch.object(net_ssh, "jump_site_for", return_value=site), \
+        with mock.patch.object(net_ssh, "bastion_probe_for", return_value=probe), \
              mock.patch.object(net_ssh, "jump_channel", return_value=chan), \
              mock.patch.object(net_ssh, "_netmiko_connect",
                                side_effect=paramiko.AuthenticationException("no")):
@@ -138,8 +138,8 @@ class TestDeviceHostKeys(unittest.TestCase):
         site_a = {"mode": "jump", "jump_host": "203.0.113.1", "jump_port": 22}
         site_b = {"mode": "jump", "jump_host": "203.0.113.2", "jump_port": 22}
 
-        for site, key in ((site_a, key_a), (site_b, key_b)):
-            with mock.patch.object(net_ssh, "jump_site_for", return_value=site),                  mock.patch.object(net_ssh, "jump_channel",
+        for probe, key in ((site_a, key_a), (site_b, key_b)):
+            with mock.patch.object(net_ssh, "bastion_probe_for", return_value=probe),                  mock.patch.object(net_ssh, "jump_channel",
                                    return_value=mock.MagicMock()),                  mock.patch.object(net_ssh, "_netmiko_connect",
                                    return_value=self._fake_conn(key)):
                 net_ssh.ConnectHandler(host=ip, port=22, device_type="cisco_ios")

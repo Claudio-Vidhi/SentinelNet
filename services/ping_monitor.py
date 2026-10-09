@@ -71,12 +71,12 @@ def _ping_one(ip: str) -> tuple:
 def _run_cycle() -> None:
     """One ping round over the full inventory."""
     global _last_run
-    from services import inventory_manager, site_manager
+    from services import inventory_manager, probe_manager
     from services.tenant_telemetry import is_telemetry_enabled
     devices = inventory_manager.get_all_devices()
-    # Map IP -> Site so a jump-site device can be excluded from ICMP without
-    # losing its identity (a plain set of IPs would drop the Site column).
-    ip_site = {}
+    # Map IP -> Probe so a bastion-probe device can be excluded from ICMP without
+    # losing its identity (a plain set of IPs would drop the Probe column).
+    ip_probe = {}
     for d in devices:
         if inventory_manager.is_manual(d):
             continue  # never reachable by design: a ping would only paint it red
@@ -85,8 +85,8 @@ def _run_cycle() -> None:
             continue
         ip = (d.get("IP") or "").strip()
         if ip:
-            ip_site[ip] = d.get("Site") or "central"
-    if not ip_site:
+            ip_probe[ip] = d.get("Probe") or "central"
+    if not ip_probe:
         with _lock:
             _state.clear()
             _last_run = time.time()
@@ -95,9 +95,9 @@ def _run_cycle() -> None:
     # A jump site is reachable over SSH only: ICMP cannot cross the bastion
     # tunnel, so these devices are never pinged and are reported "unknown"
     # rather than a false "down".
-    pingable_ips = sorted(ip for ip, site in ip_site.items()
-                          if site_manager.has_direct_path(site))
-    unknown_ips = sorted(ip for ip in ip_site if ip not in pingable_ips)
+    pingable_ips = sorted(ip for ip, probe in ip_probe.items()
+                          if probe_manager.has_direct_path(probe))
+    unknown_ips = sorted(ip for ip in ip_probe if ip not in pingable_ips)
 
     results = {}
     if pingable_ips:
@@ -140,7 +140,7 @@ def _run_cycle() -> None:
                     prev["reported_status"] = new_status
                     events_to_emit.append((ip, new_status))
         for ip in unknown_ips:
-            # No history to carry forward: a jump-site device has nothing to
+            # No history to carry forward: a bastion-probe device has nothing to
             # transition from/to, it is simply not measurable.
             _state[ip] = {
                 "up": None, "status": "unknown",
@@ -149,7 +149,7 @@ def _run_cycle() -> None:
             }
         # Devices removed from inventory drop out of the state.
         for ip in list(_state.keys()):
-            if ip not in ip_site:
+            if ip not in ip_probe:
                 del _state[ip]
         _last_run = now
 

@@ -57,11 +57,16 @@ def _columns(db: str, table: str) -> list:
 
 def _mac_history(d: str) -> list:
     db = os.path.join(d, "mac_history.db")
-    if not os.path.exists(db) or OLD not in _columns(db, "mac_sightings"):
+    if not os.path.exists(db):
         return []
-    with sqlite3.connect(db) as c:
-        c.execute(f"ALTER TABLE mac_sightings RENAME COLUMN {OLD} TO probe")
-    return ["mac_history: colonna " + OLD + " -> probe"]
+    done = []
+    for table in ("mac_sightings", "arp_entries"):
+        if OLD not in _columns(db, table):
+            continue
+        with sqlite3.connect(db) as c:
+            c.execute(f"ALTER TABLE {table} RENAME COLUMN {OLD} TO probe")
+        done.append(f"mac_history: {table} colonna {OLD} -> probe")
+    return done
 
 
 def _jobs(d: str) -> list:

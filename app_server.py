@@ -70,6 +70,14 @@ from core.app_settings import (  # noqa: F401
 
 @asynccontextmanager
 async def lifespan(app: "FastAPI"):
+    # Before anything reads probes.json, the CSV or the SQLite files: the
+    # persisted names were 'site' until 0.52 (spec 2026-10-09, site renamed to probe).
+    from core import probe_migration
+    from security.security_manager import log_audit
+    data_dir = os.path.dirname(data_config.get_path("users.json"))
+    for step in probe_migration.migrate(data_dir):
+        log_audit(f"Migrazione sonde: {step}.")
+
     # Prima di tutto il resto: ripara le ACL dei file che contengono segreti.
     # Sotto il servizio Windows l'irrigidimento falliva (icacls 1332, account
     # macchina non risolvibile) e secret.key restava leggibile da qualunque
@@ -125,7 +133,7 @@ async def lifespan(app: "FastAPI"):
     triage_scheduler.stop_triage_scheduler()
     notifications.stop_notification_loop()
     ping_monitor.stop()
-    # Close the cached SSH transports to the jump-site bastions: they are real
+    # Close the cached SSH transports to the bastion-probe bastions: they are real
     # long-lived sockets kept open for the process lifetime.
     from core import net_ssh
     net_ssh.close_all()

@@ -58,6 +58,19 @@ class TestDb(unittest.TestCase):
         with self.assertRaises(db.SchemaTooNewError):
             db.migrate()
 
+    def test_v15_renames_the_engagement_place_to_location(self):
+        db.migrate()
+        conn = db.get_observability_connection()
+        conn.execute("ALTER TABLE audit_engagements RENAME COLUMN location_id TO site_id")  # check-site-name: ok
+        conn.commit()
+        conn.close()
+        db.migrate()
+        conn = db.get_observability_connection()
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(audit_engagements)")}
+        conn.close()
+        self.assertIn("location_id", cols)
+        self.assertNotIn("site_id", cols)  # check-site-name: ok
+
     # --- 1.4 UPSERT / bucketing ---
 
     def _drain(self):

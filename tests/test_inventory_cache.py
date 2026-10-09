@@ -98,7 +98,7 @@ class InventoryCache(unittest.TestCase):
         with open(self.csv, "w", encoding="utf-8", newline="") as f:
             f.write("IP,Hostname,Group\n192.0.2.1,switch-01,Generale\n")
         device = inventory_manager.get_all_devices()[0]
-        self.assertEqual(device["Site"], "central")
+        self.assertEqual(device["Probe"], "central")
         self.assertEqual(device["SSH Port"], "22")
 
 

@@ -39,7 +39,7 @@ def _fallback_credentials(device):
     ``None`` when there are none to use.
 
     A site may declare a default identity for the devices behind it
-    (site_manager: 'device_identity'). Without it the only fallback is the
+    (probe_manager: 'device_identity'). Without it the only fallback is the
     global admin account, which for a customer site behind a bastion means
     dialling that customer's devices with this installation's default
     login — the wrong credential, sent to the right device.
@@ -47,14 +47,14 @@ def _fallback_credentials(device):
     Returning ``None`` rather than a made-up pair is what lets the caller
     fail loudly; see CredentialResolveError.
     """
-    # hosts.csv rows carry 'Site'; the get_device_by_ip cache carries 'site'
+    # hosts.csv rows carry 'Probe'; the get_device_by_ip cache carries 'probe'
     # (see services/inventory_manager.py). Both shapes reach this function.
-    site_id = device.get('Site') or device.get('site') or ''
-    if site_id:
-        from services import site_manager
+    probe_id = device.get('Probe') or device.get('probe') or ''
+    if probe_id:
+        from services import probe_manager
         from security import identity_manager
-        site = site_manager.get_site(site_id)
-        identity = (site or {}).get('device_identity')
+        probe = probe_manager.get_probe(probe_id)
+        identity = (probe or {}).get('device_identity')
         if identity:
             creds = identity_manager.get_identity_credentials(identity)
             if creds:

@@ -29,11 +29,11 @@ data_config.DATA_DIR = _TMP_DATA_DIR
 
 DEVICES = [
     {"IP": "192.0.2.10", "Hostname": "switch-01", "Vendor": "cisco",
-     "Group": "sede-a", "Site": "central", "Profile": "default", "SSH Port": "22"},
+     "Group": "sede-a", "Probe": "central", "Profile": "default", "SSH Port": "22"},
     {"IP": "192.0.2.11", "Hostname": "switch-02", "Vendor": "cisco",
-     "Group": "sede-b", "Site": "branch", "Profile": "default", "SSH Port": "22"},
+     "Group": "sede-b", "Probe": "branch", "Profile": "default", "SSH Port": "22"},
     {"IP": "192.0.2.12", "Hostname": "fw-01", "Vendor": "fortinet",
-     "Group": "sede-a", "Site": "branch", "Profile": "default", "SSH Port": "22"},
+     "Group": "sede-a", "Probe": "branch", "Profile": "default", "SSH Port": "22"},
 ]
 
 VERSIONS = {

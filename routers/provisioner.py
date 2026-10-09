@@ -234,7 +234,7 @@ def provisioner_push_ssh(payload: SwitchProvisionSSHSchema, current_user = Depen
         config_text=config_text,
         port=payload.ssh_port,
         save=payload.save_after,
-        site=payload.ssh_site,
+        probe=payload.ssh_site,
     )
     log_audit(
         f"Push SSH config day-0 su '{payload.ssh_host}' (hostname target: "

@@ -47,8 +47,8 @@ class SiteWizardApi(unittest.TestCase):
         shutil.rmtree(_TMP, ignore_errors=True)
 
     def _site(self, sid):
-        sites = self.client.get("/api/sites", headers=self.h).json()["sites"]
-        return next(s for s in sites if s["id"] == sid)
+        probes = self.client.get("/api/sites", headers=self.h).json()["sites"]
+        return next(s for s in probes if s["id"] == sid)
 
     def _draft(self, **patch):
         with mock.patch.object(net_ssh, "probe_bastion_draft", **patch):
@@ -112,8 +112,8 @@ class SiteWizardApi(unittest.TestCase):
                 "name": "wiz-stale", "mode": "jump", **DRAFT,
                 "confirmed_fingerprint": FP})
         self.assertEqual(r.status_code, 409)
-        sites = self.client.get("/api/sites", headers=self.h).json()["sites"]
-        self.assertFalse(any(s["name"] == "wiz-stale" for s in sites))
+        probes = self.client.get("/api/sites", headers=self.h).json()["sites"]
+        self.assertFalse(any(s["name"] == "wiz-stale" for s in probes))
 
     def test_unverified_save_is_allowed_and_audited(self):
         with mock.patch("routers.sites.log_audit") as audit:
@@ -127,8 +127,8 @@ class SiteWizardApi(unittest.TestCase):
         r = self.client.post("/api/sites", headers=self.h, json={
             "name": "wiz-move", "mode": "jump", **DRAFT})
         sid = r.json()["site"]["id"]
-        from services import site_manager
-        site_manager.mark_bastion_verified(sid)
+        from services import probe_manager
+        probe_manager.mark_bastion_verified(sid)
         r = self.client.post("/api/sites/update", headers=self.h,
                              json={"id": sid, "jump_host": "198.51.100.71"})
         self.assertEqual(r.status_code, 200, r.text)

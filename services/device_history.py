@@ -5,7 +5,7 @@
 in which tenant, by whom, and what it looked like at that moment.
 
 Fed from ``inventory_manager.safe_write_hosts_csv``, the single place every
-inventory write goes through (UI, CSV import, site-agent sync, rename,
+inventory write goes through (UI, CSV import, probe-agent sync, rename,
 reassign, promote), by diffing the rows before and after the write. The
 running-config itself is not copied here: Config Drift already archives every
 version under '.history', and the snapshot below carries what is needed to find
@@ -25,7 +25,7 @@ from security import crypto_vault
 # Credentials never enter the log, not even encrypted: only whether one is set
 # and whether it changed.
 _SECRETS = ("Password", "Enable Secret", "SNMP Community")
-_FIELDS = ("IP", "Hostname", "Vendor", "Profile", "Group", "Site", "Username",
+_FIELDS = ("IP", "Hostname", "Vendor", "Profile", "Group", "Probe", "Username",
            "SSH Port", "Transports", "SNMP Disabled")
 
 _lock = threading.Lock()
@@ -104,7 +104,7 @@ _A_UPSERT = re.compile(r"^Dispositivo '([^']+)' \(vendor: '([^']*)', gruppo: '([
                        r"aggiunto/aggiornato dall'utente '([^']*)'")
 _A_DELETE = re.compile(r"^Dispositivo '([^']+)' eliminato dall'inventario dall'utente '([^']*)'")
 _A_GROUP = re.compile(r"^Dispositivo '([^']+)' spostato dal gruppo '([^']*)' al gruppo '([^']*)' dall'utente '([^']*)'")
-_A_SITE = re.compile(r"^Dispositivo '([^']+)' spostato dalla sede '([^']*)' alla sede '([^']*)' dall'utente '([^']*)'")
+_A_PROBE = re.compile(r"^Dispositivo '([^']+)' spostato dalla sede '([^']*)' alla sede '([^']*)' dall'utente '([^']*)'")
 _A_PROMOTE = re.compile(r"^Dispositivo scoperto '([^']*)' promosso a gestito \(IP ([0-9.]+), vendor ([^,]*), sede ([^)]*)\) da '([^']*)'")
 _backfilled: "set[str]" = set()  # log paths already merged in this process
 
@@ -139,10 +139,10 @@ def backfill_from_audit(lines: list, inventory: list, live: list) -> list:
     tenant_of = {}  # ip -> last tenant seen, for lines that do not name one
     current = {(r.get("Group") or "Generale", r.get("IP")): r for r in inventory}
 
-    def snap(ip, tenant, vendor="", site=""):
+    def snap(ip, tenant, vendor="", probe=""):
         cur = current.get((tenant, ip), {})
         return {"IP": ip, "Hostname": cur.get("Hostname") or "", "Vendor": vendor,
-                "Group": tenant, "Site": site}
+                "Group": tenant, "Probe": probe}
 
     def emit(kind, ts, actor, device, changes=None):
         e = {"event": kind, "device": device, "id": uuid.uuid4().hex, "ts": ts,
@@ -155,14 +155,14 @@ def backfill_from_audit(lines: list, inventory: list, live: list) -> list:
         if ts >= before:
             break
         if m := _A_UPSERT.match(msg):
-            ip, vendor, tenant, site, actor = m.groups()
+            ip, vendor, tenant, probe, actor = m.groups()
             tenant = tenant or "Generale"
             prev = known.get((tenant, ip))
-            new = snap(ip, tenant, vendor.lower(), site or (prev or {}).get("Site", ""))
+            new = snap(ip, tenant, vendor.lower(), probe or (prev or {}).get("Probe", ""))
             if prev is None:
                 emit("added", ts, actor, new)
             else:
-                emit("changed", ts, actor, new, {k: [prev[k], new[k]] for k in ("Vendor", "Site")
+                emit("changed", ts, actor, new, {k: [prev[k], new[k]] for k in ("Vendor", "Probe")
                                                 if prev[k] and new[k] and prev[k] != new[k]})
             known[(tenant, ip)] = new
             tenant_of[ip] = tenant
@@ -178,17 +178,17 @@ def backfill_from_audit(lines: list, inventory: list, live: list) -> list:
             emit("added", ts, actor, moved)
             known[(new_t, ip)] = moved
             tenant_of[ip] = new_t
-        elif m := _A_SITE.match(msg):
+        elif m := _A_PROBE.match(msg):
             ip, old_s, new_s, actor = m.groups()
             tenant = tenant_of.get(ip) or next((t for t, i in current if i == ip), "Generale")
-            prev = known.get((tenant, ip)) or snap(ip, tenant, site=old_s)
-            new = dict(prev, Site=new_s)
-            emit("changed", ts, actor, new, {"Site": [old_s, new_s]})
+            prev = known.get((tenant, ip)) or snap(ip, tenant, probe=old_s)
+            new = dict(prev, Probe=new_s)
+            emit("changed", ts, actor, new, {"Probe": [old_s, new_s]})
             known[(tenant, ip)] = new
         elif m := _A_PROMOTE.match(msg):
-            name, ip, vendor, site, actor = m.groups()
+            name, ip, vendor, probe, actor = m.groups()
             tenant = next((t for t, i in current if i == ip), "Generale")
-            new = dict(snap(ip, tenant, vendor.lower(), site), Hostname=snap(ip, tenant)["Hostname"] or name)
+            new = dict(snap(ip, tenant, vendor.lower(), probe), Hostname=snap(ip, tenant)["Hostname"] or name)
             emit("added", ts, actor, new)
             known[(tenant, ip)] = new
             tenant_of[ip] = tenant
@@ -200,7 +200,7 @@ def backfill_from_audit(lines: list, inventory: list, live: list) -> list:
     for (tenant, ip), row in current.items():
         if (tenant, ip) not in added:
             out.append({"event": "added", "device": dict(snap(ip, tenant, row.get("Vendor") or "",
-                                                          row.get("Site") or "")),
+                                                          row.get("Probe") or "")),
                         "id": uuid.uuid4().hex, "ts": start, "actor": "", "tenant": tenant,
                         "source": "baseline"})
     return out

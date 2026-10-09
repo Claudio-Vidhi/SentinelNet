@@ -111,7 +111,7 @@ CREATE TABLE IF NOT EXISTS audit_engagements (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     customer_name    TEXT NOT NULL,
     tenant           TEXT,
-    site_id          TEXT,
+    location_id      TEXT,
     template_id      INTEGER NOT NULL,
     status           TEXT NOT NULL CHECK(status IN ('draft', 'in_progress', 'completed')),
     created_ts       INTEGER NOT NULL,

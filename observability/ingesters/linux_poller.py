@@ -195,7 +195,7 @@ def _poll_device(device: dict) -> list:
     from core.net_ssh import ConnectHandler
     from core import core_engine
     from drivers.linux import sanitize_session
-    from services import inventory_manager, site_manager
+    from services import inventory_manager, probe_manager
 
     if inventory_manager.normalize_vendor(device.get("Vendor")) == "windows":
         from observability.ingesters import windows_poller
@@ -203,9 +203,9 @@ def _poll_device(device: dict) -> list:
 
     ip = str(device.get("IP") or "")
     cli_kind, port = core_engine.get_cli_transport(device)
-    # A jump-site host is reached only through the bastion tunnel (core.net_ssh);
+    # A bastion-probe host is reached only through the bastion tunnel (core.net_ssh);
     # the central has no direct route to probe, so skip the pre-check.
-    if site_manager.has_direct_path(device.get("Site")) and not core_engine.is_reachable(ip, port):
+    if probe_manager.has_direct_path(device.get("Probe")) and not core_engine.is_reachable(ip, port):
         return []
     username, password, _ = core_engine.get_device_credentials(device)
     try:

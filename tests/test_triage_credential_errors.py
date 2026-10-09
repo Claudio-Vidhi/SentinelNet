@@ -19,10 +19,10 @@ from security.identity_manager import IdentityDecryptError
 class TestTriageCredentialErrors(unittest.TestCase):
 
     def test_undecryptable_identity_returns_an_error_without_connecting(self):
-        dev = {"IP": "192.0.2.10", "Vendor": "cisco", "Site": "central",
+        dev = {"IP": "192.0.2.10", "Vendor": "cisco", "Probe": "central",
                "Profile": "identity:abc"}
-        with mock.patch.object(core_engine.site_manager, "is_agent_site", return_value=False), \
-             mock.patch.object(core_engine.site_manager, "has_direct_path", return_value=True), \
+        with mock.patch.object(core_engine.probe_manager, "is_agent_probe", return_value=False), \
+             mock.patch.object(core_engine.probe_manager, "has_direct_path", return_value=True), \
              mock.patch.object(core_engine, "is_reachable", return_value=True), \
              mock.patch.object(core_engine, "get_device_credentials",
                                side_effect=IdentityDecryptError("Credenziali dell'identita' 'adm' non decifrabili")), \

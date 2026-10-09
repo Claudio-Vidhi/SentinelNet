@@ -133,10 +133,10 @@ class TestCentralStoresWhatTheAgentReports(unittest.TestCase):
                               json={"version": "0.0.0", "syslog_enabled": False,
                                     "data_dir": "/opt/sentinelnet/agent-data"})
         self.assertEqual(hb.status_code, 200, hb.text)
-        sites = self.client.get("/api/sites", headers=self.h).json()["sites"]
-        site = next(s for s in sites if s["id"] == sid)
-        self.assertIs(site["syslog_enabled"], False)
-        self.assertEqual(site["agent_data_dir"], "/opt/sentinelnet/agent-data")
+        probes = self.client.get("/api/sites", headers=self.h).json()["sites"]
+        probe = next(s for s in probes if s["id"] == sid)
+        self.assertIs(probe["syslog_enabled"], False)
+        self.assertEqual(probe["agent_data_dir"], "/opt/sentinelnet/agent-data")
 
     def test_the_config_route_accepts_the_toggle(self):
         r = self.client.post("/api/sites", headers=self.h,
@@ -146,8 +146,8 @@ class TestCentralStoresWhatTheAgentReports(unittest.TestCase):
         r = self.client.post(f"/api/sites/{sid}/agent/config", headers=self.h,
                              json={"syslog_enabled": False})
         self.assertEqual(r.status_code, 200, r.text)
-        from services import site_manager
-        job = site_manager.get_job(r.json()["job_id"])
+        from services import probe_manager
+        job = probe_manager.get_job(r.json()["job_id"])
         self.assertIn('"syslog_enabled":false', job["command"].replace(" ", ""))
 
 

@@ -13,7 +13,7 @@ os.environ.setdefault("SENTINELNET_DATA_DIR", tempfile.mkdtemp(prefix="sentineln
 from core import core_engine  # noqa: E402
 
 MANUAL = {"IP": "192.0.2.40", "Vendor": "cisco", "Group": "Generale",
-          "Site": "central", "Transports": '{"manual":null}'}
+          "Probe": "central", "Transports": '{"manual":null}'}
 
 
 class SessionGuards(unittest.TestCase):

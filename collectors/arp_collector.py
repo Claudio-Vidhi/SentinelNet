@@ -164,7 +164,7 @@ def collect_all(devices: list) -> dict:
             source_name=device.get("Hostname") or "",
             source_type=res["source_type"],
             tenant=device.get("Group") or "",
-            site=device.get("Site") or "central")
+            probe=device.get("Probe") or "central")
         summary["devices"][ip] = {"status": "success",
                                   "entries": len(entries), **counts}
         summary["total_new"] += counts["new"]

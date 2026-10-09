@@ -73,14 +73,14 @@ class IlDriverWlcDaTempoAllaVersione(unittest.TestCase):
 class IlBackupDelTriageAspettaAbbastanza(unittest.TestCase):
 
     DEVICE = {"IP": "192.0.2.50", "Group": "ACME-WLC-TEST", "Vendor": "cisco_wlc",
-              "Site": "", "Model": ""}
+              "Probe": "", "Model": ""}
 
     def _run(self):
         conn = _FakeConnection()
-        with mock.patch.object(core_engine.site_manager, "is_agent_site",
-                               lambda site: False), \
-             mock.patch.object(core_engine.site_manager, "has_direct_path",
-                               lambda site: False), \
+        with mock.patch.object(core_engine.probe_manager, "is_agent_probe",
+                               lambda probe: False), \
+             mock.patch.object(core_engine.probe_manager, "has_direct_path",
+                               lambda probe: False), \
              mock.patch.object(core_engine, "get_device_credentials",
                                lambda d: ("u", "p", "")), \
              mock.patch.object(core_engine, "ConnectHandler", lambda **kw: conn), \

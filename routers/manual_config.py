@@ -18,7 +18,7 @@ from core import backup_store
 from routers.agent import MAX_CONFIG_BYTES
 from routers.deps import assert_group_allowed, require_operator, require_tab
 from security.security_manager import log_audit
-from services import inventory_manager, manual_config, site_manager
+from services import inventory_manager, manual_config, probe_manager
 
 router = APIRouter(tags=["manual-config"])
 # Opened from the Import tab and from a manual device's row in Devices.
@@ -66,7 +66,7 @@ def manual_config_guide(current_user=Depends(require_operator)):
         "categories": {k: {"label": v["label"], "subcategories": v["subcategories"]}
                        for k, v in cats.items()},
         "sites": [{"id": s["id"], "name": s.get("name") or s["id"]}
-                  for s in site_manager.list_sites()],
+                  for s in probe_manager.list_probes()],
     }
 
 
@@ -90,7 +90,7 @@ def manual_config_import(payload: ManualImportSchema, current_user=Depends(requi
             assert_group_allowed(current_user, d.get("Group") or "Generale")
     if payload.group not in inventory_manager.get_all_groups():
         raise HTTPException(status_code=400, detail=f"Tenant '{payload.group}' inesistente.")
-    if payload.site not in {s["id"] for s in site_manager.list_sites()}:
+    if payload.site not in {s["id"] for s in probe_manager.list_probes()}:
         raise HTTPException(status_code=400, detail=f"Sede '{payload.site}' inesistente.")
     vendor = inventory_manager.normalize_vendor(payload.vendor)
     if vendor not in manual_config.GUIDE_VENDORS:
@@ -105,7 +105,7 @@ def manual_config_import(payload: ManualImportSchema, current_user=Depends(requi
     try:
         inventory_manager.add_or_update_device(
             payload.ip, vendor, "", "", "", "", payload.group,
-            site=payload.site, transports={"manual": None})
+            probe=payload.site, transports={"manual": None})
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     device = _row(payload.ip, payload.group)

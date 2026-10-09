@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from routers.deps import require_tab
 from pydantic import BaseModel, Field
 
-from services import device_history, inventory_manager, site_manager
+from services import device_history, inventory_manager, probe_manager
 from security.security_manager import log_audit
 from core.csv_safe import csv_cell as _csv_cell
 from routers.deps import (
@@ -115,10 +115,10 @@ def get_devices_and_versions(current_user = Depends(get_current_user)):
         dev_copy["position"] = positions.get(d["IP"])
         dev_copy["backup_ts"] = backup_ts.get(
             (backup_store.sanitize_filename(d.get("Group") or "Generale"), d["IP"]))
-        # ICMP cannot cross the bastion tunnel of a jump site: the inventory
+        # ICMP cannot cross the bastion tunnel of a bastion probe: the inventory
         # table's status cell must not paint one of its devices "offline" from
-        # a ping it never actually ran (see services.site_manager.has_direct_path).
-        dev_copy["icmp_reachable"] = site_manager.has_direct_path(d.get("Site"))
+        # a ping it never actually ran (see services.probe_manager.has_direct_path).
+        dev_copy["icmp_reachable"] = probe_manager.has_direct_path(d.get("Probe"))
         dev_copy["manual"] = inventory_manager.is_manual(d)
         # La community non esce mai da qui, nemmeno cifrata: alla UI serve
         # sapere SE il polling SNMP è configurato, non quale sia il segreto.
@@ -153,7 +153,7 @@ _EXPORT_COLUMNS = {
     "model":      ("Model",      lambda d, s, b, m: d.get("Model") or s.get("model", "")),
     "serial":     ("Serial",     lambda d, s, b, m: s.get("serial", "")),
     "group":      ("Tenant",     lambda d, s, b, m: d.get("Group", "")),
-    "site":       ("Site",       lambda d, s, b, m: d.get("Site", "")),
+    "site":       ("Probe",       lambda d, s, b, m: d.get("Probe", "")),
     "version":    ("Version",    lambda d, s, b, m: s.get("version", "Non Scansionato")),
     "status":     ("Status",     lambda d, s, b, m: s.get("status", "unknown")),
     "profile":    ("Profile",    lambda d, s, b, m: d.get("Profile", "")),
@@ -218,7 +218,7 @@ def assemble_device_export_rows(
         raise HTTPException(status_code=400, detail=f"Colonne sconosciute: {', '.join(unknown)}")
 
     want_groups = _csv_filter(groups)
-    want_sites = _csv_filter(sites)
+    want_probes = _csv_filter(sites)
     want_vendors = _csv_filter(vendors)
     want_redundancy = _csv_filter(redundancy)
 
@@ -228,8 +228,8 @@ def assemble_device_export_rows(
         devices = [d for d in devices if d.get('Group') in scope]
     if want_groups is not None:
         devices = [d for d in devices if d.get('Group', '') in want_groups]
-    if want_sites is not None:
-        devices = [d for d in devices if d.get('Site', '') in want_sites]
+    if want_probes is not None:
+        devices = [d for d in devices if d.get('Probe', '') in want_probes]
     if want_vendors is not None:
         devices = [d for d in devices if str(d.get('Vendor', '')).lower() in
                    {v.lower() for v in want_vendors}]
@@ -330,23 +330,23 @@ def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
     if existing:
         assert_group_allowed(current_user, existing.get('Group', 'Generale'))
 
-    site_val = (device.site or 'central').strip()
-    all_sites = {s['id'] for s in site_manager.list_sites()}
-    if site_val not in all_sites:
-        raise HTTPException(status_code=400, detail=f"Sede '{site_val}' inesistente")
+    probe_val = (device.site or 'central').strip()
+    all_probes = {s['id'] for s in probe_manager.list_probes()}
+    if probe_val not in all_probes:
+        raise HTTPException(status_code=400, detail=f"Sede '{probe_val}' inesistente")
 
     try:
         inventory_manager.add_or_update_device(
             device.ip, device.vendor, device.profile,
             device.username, device.password, device.enable_secret, device.group,
-            site=site_val,
+            probe=probe_val,
             ssh_port=device.ssh_port, transports=device.transports,
             snmp_community=device.snmp_community,
             snmp_disabled=device.snmp_disabled,
         )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
-    log_audit(f"Dispositivo '{device.ip}' (vendor: '{device.vendor}', gruppo: '{device.group}', sede: '{site_val}') aggiunto/aggiornato dall'utente '{current_user.get('sub')}'.")
+    log_audit(f"Dispositivo '{device.ip}' (vendor: '{device.vendor}', gruppo: '{device.group}', sede: '{probe_val}') aggiunto/aggiornato dall'utente '{current_user.get('sub')}'.")
     # §11.6: Telnet è in chiaro — traccia esplicitamente l'abilitazione.
     if device.transports and 'telnet' in device.transports:
         log_audit(f"ATTENZIONE: Telnet (trasmissione in chiaro) abilitato per il dispositivo '{device.ip}' dall'utente '{current_user.get('sub')}'.")
@@ -414,22 +414,22 @@ def import_csv(payload: CSVImportRequest, current_user = Depends(require_operato
 
             vendor = (row.get('Vendor') or '').strip() or 'cisco'
 
-            # Site (sede fisica) è cosa diversa da Group (tenant): la colonna
+            # Probe (come si raggiunge) è cosa diversa da Group (tenant): la colonna
             # veniva letta e buttata via, quindi un inventario esportato e
             # reimportato perdeva l'assegnazione alle sedi con agente.
             # Non si crea al volo come si fa con il tenant: una sede ha una
             # modalità e un token, inventarla qui produrrebbe un apparato che
             # nessun agente raccoglierà mai. Meglio un errore sulla riga.
-            site_name = (row.get('Site') or '').strip()
-            if site_name and site_name not in {s['id'] for s in site_manager.list_sites()}:
-                raise ValueError(f"Sede '{site_name}' inesistente: creala nella "
+            probe_name = (row.get('Probe') or '').strip()
+            if probe_name and probe_name not in {s['id'] for s in probe_manager.list_probes()}:
+                raise ValueError(f"Sede '{probe_name}' inesistente: creala nella "
                                  f"scheda Sedi prima di importare")
 
             # Rimozione Profile: passa forzatamente il valore "custom" come parametro profile
             inventory_manager.add_or_update_device(
                 ip, vendor, "custom",
                 username, password, enable_secret,
-                group_name, site=site_name or None
+                group_name, probe=probe_name or None
             )
             # L'hostname del CSV veniva letto e buttato via: chi compilava la
             # colonna vedeva l'inventario restare senza nomi e non capiva
@@ -524,15 +524,15 @@ def reassign_device(payload: DeviceReassignSchema, current_user = Depends(requir
 
 @router.post("/api/reassign-device-site", dependencies=[Depends(require_tab("tab-devices"))])
 def reassign_device_site(payload: DeviceSiteSchema, current_user = Depends(require_operator)):
-    """Sposta un dispositivo in un'altra sede aggiornando solo il campo Site.
+    """Sposta un dispositivo in un'altra sede aggiornando solo il campo Probe.
 
     Separata da /api/reassign-device perche' cambia una cosa diversa: il
     tenant e' il confine di autorizzazione, la sede decide COME si raggiunge
     l'apparato (diretto, agente, tunnel sul bastione). Spostarlo su una sede
     jump lo toglie dal ping ICMP e lo mette dietro il bastione al giro dopo.
     """
-    from services import site_manager
-    if not site_manager.get_site(payload.new_site):
+    from services import probe_manager
+    if not probe_manager.get_probe(payload.new_site):
         raise HTTPException(status_code=400,
                             detail=f"Sede '{payload.new_site}' non esiste.")
     devices = inventory_manager.get_all_devices()
@@ -543,12 +543,12 @@ def reassign_device_site(payload: DeviceSiteSchema, current_user = Depends(requi
     # dispositivo non ne cambia nemmeno la sede.
     assert_group_allowed(current_user, target.get('Group', 'Generale'))
 
-    old_site = target.get('Site', 'central')
-    target['Site'] = payload.new_site
+    old_probe = target.get('Probe', 'central')
+    target['Probe'] = payload.new_site
     inventory_manager.safe_write_hosts_csv(devices)
 
     log_audit(
-        f"Dispositivo '{payload.ip}' spostato dalla sede '{old_site}' "
+        f"Dispositivo '{payload.ip}' spostato dalla sede '{old_probe}' "
         f"alla sede '{payload.new_site}' dall'utente '{current_user.get('sub')}'."
     )
     return {"status": "success", "message": f"Dispositivo spostato nella sede '{payload.new_site}'"}

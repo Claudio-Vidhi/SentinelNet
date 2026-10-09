@@ -168,20 +168,14 @@ _CSV_ALIASES: Dict[str, str] = {
     "secret": "Enable Secret", "enablepassword": "Enable Secret",
     "hostname": "Hostname", "nome": "Hostname", "name": "Hostname",
     "device": "Hostname", "nomeapparato": "Hostname",
-    # DUE concetti distinti, non sinonimi — vedi il riquadro della scheda
-    # Import, che li spiega all'utente con le stesse parole:
-    #   Group  = TENANT. Il confine RBAC: chi vede cosa. E' la colonna su cui
-    #            filtra ogni vista, ed e' il `tenant` di ogni riga di
-    #            osservabilita'.
-    #   Site   = SEDE FISICA. Da dove si raggiunge l'apparato: 'central'
-    #            (polling diretto) oppure l'id di una sede con agente.
-    #
-    # Prima 'site' e 'sede' finivano su Group, mentre l'export scriveva
-    # ENTRAMBE le colonne: reimportare un file esportato riscriveva il tenant
-    # di ogni apparato con il suo id di sede, in silenzio. Un round-trip deve
-    # restituire l'inventario che ha esportato.
+    # Two distinct concepts, not synonyms:
+    #   Group  = tenant, the RBAC boundary: who sees what.
+    #   Probe  = how the device is reached: 'central', an agent probe or a
+    #            bastion probe.
+    # 'site' is the column's name before the rename: an old export must
+    # reimport onto the same probes. 'sede' is reserved for Location.
     "group": "Group", "gruppo": "Group", "tenant": "Group",
-    "site": "Site", "sede": "Site",
+    "probe": "Probe", "sonda": "Probe", "site": "Probe",  # check-site-name: ok
     "vendor": "Vendor", "marca": "Vendor", "produttore": "Vendor",
     "brand": "Vendor",
     # Colonne canoniche restanti: senza questi alias un round-trip
@@ -272,9 +266,9 @@ def safe_write_hosts_csv(devices):
     config_analyzer._analyze_device_at.cache_clear()
     hosts_csv = get_hosts_csv()
     temp_filename = hosts_csv + ".tmp"
-    # 'Site' identifica la sede multi-sede (default 'central'); 'extrasaction=ignore'
+    # 'Probe' identifica la sede multi-sede (default 'central'); 'extrasaction=ignore'
     # tollera dizionari con chiavi extra (retrocompatibilità).
-    _fieldnames = ['IP', 'Vendor', 'Profile', 'Username', 'Password', 'Enable Secret', 'Group', 'Hostname', 'Site', 'SSH Port', 'Transports', 'SNMP Community', 'SNMP Disabled']
+    _fieldnames = ['IP', 'Vendor', 'Profile', 'Username', 'Password', 'Enable Secret', 'Group', 'Hostname', 'Probe', 'SSH Port', 'Transports', 'SNMP Community', 'SNMP Disabled']
     with _hosts_csv_lock:
         old_rows = _read_hosts_csv(hosts_csv) if os.path.exists(hosts_csv) else []
         try:
@@ -329,9 +323,9 @@ def _read_hosts_csv(hosts_csv) -> list:
     rows = []
     with open(hosts_csv, mode='r', encoding='utf-8') as f:
         for row in csv.DictReader(f):
-            # Inventari legacy senza colonna 'Site': default alla sede centrale.
-            if not row.get('Site'):
-                row['Site'] = 'central'
+            # Inventari legacy senza colonna 'Probe': default alla sede centrale.
+            if not row.get('Probe'):
+                row['Probe'] = 'central'
             # Inventari legacy senza colonna 'SSH Port': default 22.
             if not row.get('SSH Port'):
                 row['SSH Port'] = '22'
@@ -391,12 +385,12 @@ def invalidate_device_ip_cache():
 
 
 def get_device_by_ip(ip: str, tenant: Optional[str] = None):
-    """Resolve an IP to {'ip', 'hostname', 'tenant', 'site'}, or None if
-    unknown. 'tenant' is the device's Group column, 'site' its Site column
+    """Resolve an IP to {'ip', 'hostname', 'tenant', 'probe'}, or None if
+    unknown. 'tenant' is the device's Group column, 'probe' its Probe column
     (defaulting to 'central').
 
     If tenant is given, resolves directly within that tenant:
-    (tenant, ip) -> {'ip', 'hostname', 'tenant', 'site'}.
+    (tenant, ip) -> {'ip', 'hostname', 'tenant', 'probe'}.
 
     If tenant is None:
     If MULTIPLE devices share the same IP, returns the sentinel
@@ -417,7 +411,7 @@ def get_device_by_ip(ip: str, tenant: Optional[str] = None):
                     "ip": key,
                     "hostname": d.get('Hostname') or "",
                     "tenant": tenant_val,
-                    "site": d.get('Site') or 'central',
+                    "probe": d.get('Probe') or 'central',
                 }
                 tenant_ip_cache[(tenant_val, key)] = dev_entry
 
@@ -441,7 +435,7 @@ def _same_device(row: dict, ip: str, group: str) -> bool:
     return row.get("IP") == ip and (row.get("Group") or "Generale") == (group or "Generale")
 
 
-def add_or_update_device(ip, vendor, profile, username, password, enable_secret, group, site=None, ssh_port=None, transports=None, snmp_community=None, snmp_disabled=None):
+def add_or_update_device(ip, vendor, profile, username, password, enable_secret, group, probe=None, ssh_port=None, transports=None, snmp_community=None, snmp_disabled=None):
     # Validazione IP robusta
     match = IP_PATTERN.match(ip)
     if not match or not all(0 <= int(octet) <= 255 for octet in match.groups()):
@@ -486,7 +480,7 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
             enc_secret = crypto_vault.encrypt_password(enable_secret)
         existing_hostname = existing.get('Hostname') if existing else None
         # Preserva la sede esistente se non ne viene indicata una nuova.
-        resolved_site = site or (existing.get('Site') if existing else None) or 'central'
+        resolved_probe = probe or (existing.get('Probe') if existing else None) or 'central'
         resolved_port = ssh_port if ssh_port is not None else \
             ((existing.get('SSH Port') if existing else None) or 22)
         # Trasporti: esplicito > esistente (se già migrato) > sintesi ssh-only.
@@ -521,7 +515,7 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
             'IP': ip, 'Vendor': vendor.lower(), 'Profile': profile,
             'Username': username, 'Password': enc_password, 'Enable Secret': enc_secret,
             'Group': resolved_group,
-            'Site': resolved_site,
+            'Probe': resolved_probe,
             'SSH Port': str(ssh_mirror),
             'Transports': json.dumps(resolved_transports, separators=(',', ':')),
             'SNMP Community': enc_community,

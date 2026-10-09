@@ -22,7 +22,7 @@ from typing import List, Optional
 import paramiko
 from services import inventory_manager
 from security import user_manager
-from services import site_manager
+from services import probe_manager
 from core import core_engine
 from core import data_config
 from core import net_ssh
@@ -159,11 +159,11 @@ async def send_command(payload: CommandRequest, current_user = Depends(require_o
         # Dispositivo di una sede agent: il centrale non lo raggiunge via SSH.
         # Il comando passa dalla coda di relay e si attende (breve) l'esito
         # dell'agente, restituendo la stessa forma della via diretta.
-        site = await asyncio.to_thread(site_manager.get_site,
-                                       target_device.get('Site') or 'central')
-        if site and site.get('mode') == 'agent':
+        probe = await asyncio.to_thread(probe_manager.get_probe,
+                                        target_device.get('Probe') or 'central')
+        if probe and probe.get('mode') == 'agent':
             job = await asyncio.to_thread(
-                site_manager.enqueue_job, site['id'], payload.ip, payload.command,
+                probe_manager.enqueue_job, probe['id'], payload.ip, payload.command,
                 requested_by=current_user.get('sub'),
                 blacklist_bypass=blacklist_bypass)
             # L'attesa e' su asyncio, non su time.sleep: la rotta e' async, e
@@ -172,7 +172,7 @@ async def send_command(payload: CommandRequest, current_user = Depends(require_o
             deadline = time.time() + 90       # l'agente fa polling (default 60s)
             while time.time() < deadline:
                 await asyncio.sleep(2)
-                j = await asyncio.to_thread(site_manager.get_job, job['id'])
+                j = await asyncio.to_thread(probe_manager.get_job, job['id'])
                 if j and j['status'] in ('done', 'error'):
                     if j['status'] == 'done':
                         return {"status": "success", "output": j.get('result', '')}
@@ -407,16 +407,16 @@ async def ws_terminal(websocket: WebSocket, ip: str):
     # e con esso ogni altra rotta async — per tutto il timeout di connessione.
     def _ssh_connect(pwd):
         # Same bastion hop netmiko gets from core.net_ssh: paramiko here is
-        # raw, so without the channel a jump-site device stays reachable
+        # raw, so without the channel a bastion-probe device stays reachable
         # from triage and unreachable from the terminal.
-        site = net_ssh.jump_site_for(ip)
+        probe = net_ssh.bastion_probe_for(ip)
         # Same SHA-1 fallback as every netmiko session (core/ssh_legacy.py).
         ssh_legacy.with_fallback(lambda extra: client.connect(
             ip, port=ssh_port, username=username, password=pwd,
             look_for_keys=False, allow_agent=False, timeout=10,
             disabled_algorithms=extra,
             transport_factory=ssh_legacy.OfferTransport,
-            sock=net_ssh.jump_channel(site, ip, ssh_port) if site else None), ip)
+            sock=net_ssh.jump_channel(probe, ip, ssh_port) if probe else None), ip)
 
     try:
         # 2. Primo tentativo di connessione invisibile

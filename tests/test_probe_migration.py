@@ -57,6 +57,15 @@ class TestProbeMigration(unittest.TestCase):
             self.assertIn("probe", cols)
             self.assertEqual(c.execute("SELECT probe FROM mac_sightings").fetchone()[0], "central")
 
+    def test_arp_entries_column_renamed_too(self):
+        db = os.path.join(self.d, "mac_history.db")
+        with sqlite3.connect(db) as c:
+            c.execute("CREATE TABLE arp_entries (mac TEXT, site TEXT DEFAULT 'central')")  # check-site-name: ok
+            c.execute("INSERT INTO arp_entries VALUES ('AA:BB:CC:DD:EE:FF', 'central')")
+        probe_migration.migrate(self.d)
+        with sqlite3.connect(db) as c:
+            self.assertEqual(c.execute("SELECT probe FROM arp_entries").fetchone()[0], "central")
+
     def test_jobs_table_dropped(self):
         db = os.path.join(self.d, "agent_jobs.db")
         with sqlite3.connect(db) as c:
@@ -77,6 +86,14 @@ class TestProbeMigration(unittest.TestCase):
         self._write("network_hosts.csv", HEADER_OLD)
         probe_migration.migrate(self.d)
         self.assertEqual(probe_migration.migrate(self.d), [])
+
+
+class TestWiring(unittest.TestCase):
+    def test_lifespan_runs_the_migration_first(self):
+        import inspect
+        import app_server
+        src = inspect.getsource(app_server.lifespan)
+        self.assertLess(src.index("probe_migration.migrate"), src.index("db.start_writer"))
 
 
 if __name__ == "__main__":

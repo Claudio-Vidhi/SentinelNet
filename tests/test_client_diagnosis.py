@@ -897,7 +897,7 @@ class TestAgentSiteRelay(_Base):
     che non ci sia una policy. Si accoda e si dice."""
 
     def _agent_site(self):
-        return patch("services.client_diagnosis._is_agent_site",
+        return patch("services.client_diagnosis._is_agent_probe",
                      return_value=True)
 
     def test_pending_relay_is_declared(self):
@@ -905,12 +905,12 @@ class TestAgentSiteRelay(_Base):
              patch("services.fortigate_service.list_targets",
                    return_value=[{"ip": "192.0.2.1"}]), \
              patch("services.inventory_manager.get_all_devices",
-                   return_value=[dict(FGT_DEVICE, Site="milano")]), \
-             patch("services.site_manager.find_recent_rest_result",
+                   return_value=[dict(FGT_DEVICE, Probe="milano")]), \
+             patch("services.probe_manager.find_recent_rest_result",
                    return_value=None), \
-             patch("services.site_manager.has_pending_rest_job",
+             patch("services.probe_manager.has_pending_rest_job",
                    return_value=False), \
-             patch("services.site_manager.enqueue_job",
+             patch("services.probe_manager.enqueue_job",
                    return_value={"id": "j1"}) as enq:
             f = client_diagnosis._firewall(
                 "192.0.2.10", {"known": True, "ip": "192.0.2.10",
@@ -928,8 +928,8 @@ class TestAgentSiteRelay(_Base):
              patch("services.fortigate_service.list_targets",
                    return_value=[{"ip": "192.0.2.1"}]), \
              patch("services.inventory_manager.get_all_devices",
-                   return_value=[dict(FGT_DEVICE, Site="milano")]), \
-             patch("services.site_manager.find_recent_rest_result",
+                   return_value=[dict(FGT_DEVICE, Probe="milano")]), \
+             patch("services.probe_manager.find_recent_rest_result",
                    return_value=ready):
             f = client_diagnosis._firewall(
                 "192.0.2.10", {"known": True, "ip": "192.0.2.10",
@@ -943,12 +943,12 @@ class TestAgentSiteRelay(_Base):
              patch("services.fortigate_service.list_targets",
                    return_value=[{"ip": "192.0.2.1"}]), \
              patch("services.inventory_manager.get_all_devices",
-                   return_value=[dict(FGT_DEVICE, Site="milano")]), \
-             patch("services.site_manager.find_recent_rest_result",
+                   return_value=[dict(FGT_DEVICE, Probe="milano")]), \
+             patch("services.probe_manager.find_recent_rest_result",
                    return_value=None), \
-             patch("services.site_manager.has_pending_rest_job",
+             patch("services.probe_manager.has_pending_rest_job",
                    return_value=True), \
-             patch("services.site_manager.enqueue_job") as enq:
+             patch("services.probe_manager.enqueue_job") as enq:
             client_diagnosis._firewall(
                 "192.0.2.10", {"known": True, "ip": "192.0.2.10",
                                "gateway_ip": "192.0.2.1"},
@@ -963,7 +963,7 @@ class TestResolveEndpoint(_Base):
         with _client_map([]), \
              patch("collectors.mac_history.search_arp",
                    return_value=[dict(CLIENT, ip="198.51.100.20",
-                                      tenant="dc", site="datacenter")]):
+                                      tenant="dc", probe="datacenter")]):
             e = client_diagnosis.resolve_endpoint("198.51.100.20")
         self.assertTrue(e["known"])
         self.assertEqual(e["derived"], "observed-arp")
@@ -974,7 +974,7 @@ class TestResolveEndpoint(_Base):
         """Il LIKE 'ip%' di search_arp non deve far passare un vicino."""
         with patch("collectors.mac_history.search_arp",
                    return_value=[dict(CLIENT, ip="198.51.100.200")]), \
-             patch("services.site_manager.list_sites", return_value=[]):
+             patch("services.probe_manager.list_probes", return_value=[]):
             e = client_diagnosis.resolve_endpoint("198.51.100.20")
         self.assertFalse(e["known"])
 
@@ -982,7 +982,7 @@ class TestResolveEndpoint(_Base):
         """Il campo 'subnets' delle sedi esisteva da sempre e non lo leggeva
         nessuno: qui diventa la risposta quando l'indirizzo non e' osservato."""
         with patch("collectors.mac_history.search_arp", return_value=[]), \
-             patch("services.site_manager.list_sites", return_value=[
+             patch("services.probe_manager.list_probes", return_value=[
                  {"id": "datacenter", "subnets": ["198.51.100.0/24"]}]):
             e = client_diagnosis.resolve_endpoint("198.51.100.20")
         self.assertTrue(e["known"])
@@ -993,7 +993,7 @@ class TestResolveEndpoint(_Base):
         """Il campo non e' mai stato validato: una riga scritta male non deve
         impedire di leggere quelle giuste."""
         with patch("collectors.mac_history.search_arp", return_value=[]), \
-             patch("services.site_manager.list_sites", return_value=[
+             patch("services.probe_manager.list_probes", return_value=[
                  {"id": "rotta", "subnets": ["non-una-subnet", "///"]},
                  {"id": "datacenter", "subnets": ["198.51.100.0/24"]}]):
             e = client_diagnosis.resolve_endpoint("198.51.100.20")
@@ -1001,7 +1001,7 @@ class TestResolveEndpoint(_Base):
 
     def test_unlocatable_address_says_so(self):
         with patch("collectors.mac_history.search_arp", return_value=[]), \
-             patch("services.site_manager.list_sites", return_value=[]):
+             patch("services.probe_manager.list_probes", return_value=[]):
             e = client_diagnosis.resolve_endpoint("203.0.113.9")
         self.assertFalse(e["known"])
         self.assertIn("subnet dichiarata", e["reason"])
@@ -1017,7 +1017,7 @@ class TestAcrossSites(_Base):
     def test_same_site_needs_no_far_end(self):
         with self._resolve({"known": True, "site": "central",
                             "gateway_ip": "192.0.2.1"}):
-            a = client_diagnosis._across_sites(
+            a = client_diagnosis._across_probes(
                 {"known": True, "site": "central", "gateway_ip": "192.0.2.1",
                  "ip": "192.0.2.10"}, "192.0.2.50", 443, "TCP", None)
         self.assertTrue(a["same_site"])
@@ -1037,7 +1037,7 @@ class TestAcrossSites(_Base):
                    return_value={"source": "api", "data": [{"name": "to-dc"}]}), \
              patch("services.fortigate_service.get_route_for",
                    return_value={"source": "api", "data": {"matched": True}}):
-            a = client_diagnosis._across_sites(
+            a = client_diagnosis._across_probes(
                 {"known": True, "site": "central", "gateway_ip": "192.0.2.1",
                  "ip": "192.0.2.10"}, "198.51.100.20", 443, "TCP", None)
         self.assertFalse(a["same_site"])
@@ -1056,7 +1056,7 @@ class TestAcrossSites(_Base):
                    return_value={"source": "api", "data": []}), \
              patch("services.fortigate_service.get_route_for",
                    return_value={"source": "api", "data": {"matched": False}}):
-            a = client_diagnosis._across_sites(
+            a = client_diagnosis._across_probes(
                 {"known": True, "site": "central", "gateway_ip": "192.0.2.1",
                  "ip": "192.0.2.10"}, "198.51.100.20", 443, "TCP", None)
         self.assertFalse(a["far_end_policy"]["known"])
@@ -1064,7 +1064,7 @@ class TestAcrossSites(_Base):
 
     def test_unlocatable_destination_stops_the_comparison(self):
         with self._resolve({"known": False, "reason": "mai osservato"}):
-            a = client_diagnosis._across_sites(
+            a = client_diagnosis._across_probes(
                 {"known": True, "site": "central", "gateway_ip": "192.0.2.1",
                  "ip": "192.0.2.10"}, "203.0.113.9", 443, "TCP", None)
         self.assertIsNone(a["same_site"])
@@ -1280,8 +1280,8 @@ class TestGatewayCandidatesScoping(unittest.TestCase):
     tutti gli altri clienti."""
 
     DEVICES = [
-        {"IP": "192.0.2.10", "Hostname": "sw-a", "Group": "sede-a", "Site": "site-a"},
-        {"IP": "198.51.100.10", "Hostname": "sw-b", "Group": "sede-b", "Site": "site-b"},
+        {"IP": "192.0.2.10", "Hostname": "sw-a", "Group": "sede-a", "Probe": "site-a"},
+        {"IP": "198.51.100.10", "Hostname": "sw-b", "Group": "sede-b", "Probe": "site-b"},
     ]
     SITES = [
         {"id": "site-a", "name": "Sede A", "subnets": ["192.0.2.0/24"]},
@@ -1292,7 +1292,7 @@ class TestGatewayCandidatesScoping(unittest.TestCase):
         with patch("collectors.mac_history.search_arp", return_value=[]), \
              patch("services.inventory_manager.get_all_devices",
                    return_value=self.DEVICES), \
-             patch("services.site_manager.list_sites", return_value=self.SITES):
+             patch("services.probe_manager.list_probes", return_value=self.SITES):
             return client_diagnosis.get_tenant_gateway_candidates(tenant, tenants)
 
     def test_the_user_scope_alone_filters_the_inventory(self):

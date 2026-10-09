@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """La suite non deve MAI scrivere nella cartella ``data/`` del repository.
 
-Questo test e' la rete che mancava quando ``test_remote_site`` ha sovrascritto
+Questo test e' la rete che mancava quando ``test_agent_probe`` ha sovrascritto
 l'hash della password dell'amministratore reale: i moduli risolvono i propri
 percorsi a import time, quindi un solo file di test che importi l'app senza
 aver impostato ``SENTINELNET_DATA_DIR`` dirotta l'INTERA suite sui dati veri.
