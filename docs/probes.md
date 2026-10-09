@@ -1,45 +1,54 @@
-# Remote sites and the site agent
+# Probes and the probe agent
+
+> **Upgrading from 0.51 or earlier:** probes used to be called "sites". The
+> agent protocol changed (`X-Probe-Id` / `X-Probe-Token`, config key
+> `probe_id`, flag `--probe-id`): reinstall every probe agent after upgrading
+> central. Data files are renamed automatically on first start. An agent whose
+> systemd unit still runs `services/site_agent.py` stops after a self-update
+> (`git pull`), because that file is now `services/probe_agent.py`: reinstall it
+> (section 4).
 
 SentinelNet manages multiple remote sites (reachable over VPN or the Internet)
-from a single central server. Each site has a **connection mode** that
-determines how central interacts with that site's devices:
+from a single central server. Each probe (the record for one remote site) has a
+**connection mode** that determines how central interacts with that site's
+devices:
 
 | Mode | How it works | When to use it |
 |---|---|---|
-| **Central poll** (Mode A) | Central opens SSH connections directly to remote devices through site-to-site VPN routing. No extra process. | Stable site-to-site VPN, remote subnets directly reachable from central. |
-| **Site agent** (Mode B) | A lightweight process (`services/site_agent.py`) runs on a server or VM inside the site and connects **outbound** to central over HTTPS. It pushes inventory, MAC tables and status; CLI commands travel through a job queue. | NAT or firewalls that block inbound connections to the site, an unstable VPN, or a requirement to keep credentials inside the site. |
-| **Jump site** (Mode C) | Central opens one SSH connection to a bastion host inside the customer's network and tunnels every device SSH session through it (`core/net_ssh.py`, `direct-tcpip` channel). Nothing is installed at the site beyond the bastion's own `sshd`. | Customer refuses any installed agent or software, and grants only SSH access to a single Linux host that can reach the managed devices. |
+| **Direct (central server)** (Mode A) | Central opens SSH connections directly to remote devices through site-to-site VPN routing. No extra process. | Stable site-to-site VPN, remote subnets directly reachable from central. |
+| **Agent probe** (Mode B) | A lightweight process (`services/probe_agent.py`) runs on a server or VM inside the site and connects **outbound** to central over HTTPS. It pushes inventory, MAC tables and status; CLI commands travel through a job queue. | NAT or firewalls that block inbound connections to the site, an unstable VPN, or a requirement to keep credentials inside the site. |
+| **Bastion probe** (Mode C) | Central opens one SSH connection to a bastion host inside the customer's network and tunnels every device SSH session through it (`core/net_ssh.py`, `direct-tcpip` channel). Nothing is installed at the site beyond the bastion's own `sshd`. | Customer refuses any installed agent or software, and grants only SSH access to a single Linux host that can reach the managed devices. |
 
-The default site `central` always exists and cannot be deleted.
+The default probe `central` always exists and cannot be deleted.
 
 ## Supported platforms
 
-**The site agent runs on Linux only, and a Windows agent is not on the
+**The probe agent runs on Linux only, and a Windows agent is not on the
 roadmap.** The agent is not merely "untested" elsewhere: remote management of
 it assumes systemd. Reading its log from the dashboard runs `journalctl -u
 sentinelnet-agent`, and "Restart agent" exits the process expecting systemd to
 bring it back. Neither has an equivalent on a host without systemd, so both
-would fail -- the first with an error, the second by leaving the site with no
+would fail -- the first with an error, the second by leaving the probe with no
 agent at all.
 
 **Central is the part that may run on Windows**, as a service or as the exe;
 see [hardening.md](hardening.md) section 6 for restarting it from the dashboard
-there. Central being on Windows says nothing about the sites: their agents
+there. Central being on Windows says nothing about the probes: their agents
 still need Linux.
 
-A site whose only available host is Windows is a **jump site** (Mode C) or
-central poll (Mode A), not an agent site.
+A probe whose only available host is Windows is a **bastion probe** (Mode C) or
+Direct (central server) (Mode A), not an agent probe.
 
 ---
 
-## 1. Site agent architecture (Mode B)
+## 1. Probe agent architecture (Mode B)
 
 ```
 ┌─────────────────────────────────────────┐               ┌──────────────────────────────────────────────┐
 │         CENTRAL SENTINELNET             │               │            REMOTE SITE (VM / AGENT)          │
 │                                         │  HTTPS (443)  │                                              │
-│  - Web dashboard & API                  │ ◄───────────  │  - site_agent.py                             │
-│  - Site registry & token hash           │  Outbound     │  - Local inventory (network_hosts.csv)       │
+│  - Web dashboard & API                  │ ◄───────────  │  - probe_agent.py                            │
+│  - Probe registry & token hash          │  Outbound     │  - Local inventory (network_hosts.csv)       │
 │  - Job queue (SQLite)                   │  polling      │  - Credentials stored locally                │
 │  - Consolidated inventory & MAC tracker │               │  - Direct local SSH to switches/firewalls    │
 └─────────────────────────────────────────┘               └──────────────────────┬───────────────────────┘
@@ -59,15 +68,15 @@ Key principles:
    metadata (IP, hostname, vendor, MAC table) is sent to central. This limits
    credential exfiltration from a compromised central server.
 3. **CLI command relay.** When an administrator sends a CLI command from the
-   dashboard to a device in an agent site, central enqueues a job. The agent
+   dashboard to a device in an agent probe, central enqueues a job. The agent
    picks it up during polling, executes it locally over SSH and returns the
    output.
 4. **UDP syslog relay.** The agent listens for syslog locally on UDP `5514` (or
    `--syslog-port`), batches messages and transmits them to central over HTTPS
    (`POST /api/agent/syslog`), where they are stored in central observability
-   tagged by site and tenant.
+   tagged by probe and tenant.
 5. **Central never dials the devices.** Principle 1 is only worth anything if
-   nothing on central contradicts it, so an agent site's devices are excluded
+   nothing on central contradicts it, so an agent probe's devices are excluded
    from every direct probe: no ICMP from the ping check or the ping monitor,
    no TCP/22 reachability test, no SSH session for triage or bulk commands.
    Their status is what the agent pushes: ping results every cycle
@@ -76,23 +85,23 @@ Key principles:
    on a schedule — a `triage` job an operator can enqueue from the dashboard
    the same way as a CLI command. Where nothing has been pushed yet the answer
    is "not measurable" rather than a guessed "offline" — the same tri-state a
-   jump site uses. The predicates are
-   `site_manager.has_direct_path()` (false for `jump` **and** `agent`) and
-   `site_manager.is_agent_site()` (the operation belongs to the agent, not
-   merely the network path). A site id central does not know keeps its direct
+   bastion probe uses. The predicates are
+   `probe_manager.has_direct_path()` (false for `jump` **and** `agent`) and
+   `probe_manager.is_agent_site()` (the operation belongs to the agent, not
+   merely the network path). A probe id central does not know keeps its direct
    path, which is what lets the agent run this same code over its own
    inventory.
 
-6. **Who owns the inventory, per site.** By default the agent does: it holds
+6. **Who owns the inventory, per probe.** By default the agent does: it holds
    the device list and the credentials, and the central mirrors what is pushed
    up. Turning on **Inventario dal centrale**
-   (`central_manages_devices` on the site) reverses it — the central owns the
-   list for that site and hands it to the agent on each heartbeat, so a device
+   (`central_manages_devices` on the probe) reverses it — the central owns the
+   list for that probe and hands it to the agent on each heartbeat, so a device
    added on the central appears at the site without anyone editing a CSV
    there.
 
    The flag is off by default, and that is deliberate: switching it on trades
-   away principle 2. The credentials stop being site-only and live on the
+   away principle 2. The credentials stop being probe-only and live on the
    central too, which is the right call when one team runs both ends and the
    wrong one when the customer's passwords must not sit on a shared server.
 
@@ -117,37 +126,37 @@ Key principles:
    every cycle, which is how it behaved before it had a clock.
 
 > **Known gap:** an authenticated agent currently receives *all* pending jobs
-> for its site and executes them against whichever local device record matches
+> for its probe and executes them against whichever local device record matches
 > the requested IP. The agent control plane and the device data plane are not
 > yet fully separated. See [roadmap.md](roadmap.md).
 
-> **Known gap:** two agent sites that use the same RFC 1918 address for
+> **Known gap:** two agent probes that use the same RFC 1918 address for
 > different devices will overwrite each other's status and hostname on the
-> central. Each endpoint refuses an IP that is not tagged to the calling site,
-> so no site can write another's *record* — but `detected_versions.json` and
+> central. Each endpoint refuses an IP that is not tagged to the calling probe,
+> so no probe can write another's *record* — but `detected_versions.json` and
 > the hostname store are keyed by IP alone across the whole product, so the
-> second site's device resolves to the first one's row. This predates the
-> agent relay and applies equally to a central-poll site; it is an inventory
+> second probe's device resolves to the first one's row. This predates the
+> agent relay and applies equally to a Direct (central server) probe; it is an inventory
 > keying limitation, not an authentication one.
 
 ---
 
-## 2. Creating a site on central
+## 2. Creating a probe on central
 
-From the dashboard (**admin** account): **Multi-site** tab → *New site*.
+From the dashboard (**admin** account): **Probes** tab → *New probe*.
 
 1. **Name** — e.g. `Milan-VM` (the derived alphanumeric id will be `milan-vm`).
    *Note: all non-alphanumeric characters including spaces and underscores (`_`)
    are converted to hyphens (`-`). For example, `test_ub_agent` produces id `test-ub-agent`.*
-2. **Mode** — select `Site agent`.
-3. **Subnets** — the site's networks, e.g. `192.168.56.0/24` (for reference and
+2. **Mode** — select `Agent probe`.
+3. **Subnets** — the probe's networks, e.g. `192.168.56.0/24` (for reference and
    documentation).
 
-> **Important:** for **agent** sites, the agent authentication token (e.g.
+> **Important:** for **agent** probes, the agent authentication token (e.g.
 > `agent_tok_...`) is shown **exactly once**, at creation. Copy it immediately.
 > Central stores only the token's SHA-256 hash.
 
-### Creating a site via API
+### Creating a probe via API
 
 ```bash
 # 1. Admin authentication to obtain the JWT
@@ -155,8 +164,8 @@ TOKEN=$(curl -s -X POST http://<CENTRAL_IP>:8000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"<ADMIN_PASSWORD>"}' | jq -r .access_token)
 
-# 2. Create the agent site
-curl -X POST http://<CENTRAL_IP>:8000/api/sites \
+# 2. Create the agent probe
+curl -X POST http://<CENTRAL_IP>:8000/api/probes \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name": "Milan-VM", "mode": "agent", "subnets": ["192.168.56.0/24"]}'
@@ -185,7 +194,7 @@ Create `agent.json` in the `SentinelNet` root:
 ```json
 {
   "central_url": "http://<CENTRAL_IP>:8000",
-  "site_id": "milan-vm",
+  "probe_id": "milan-vm",
   "token": "<TOKEN_SHOWN_AT_CREATION>",
   "interval": 15,
   "verify_tls": false,
@@ -196,8 +205,8 @@ Create `agent.json` in the `SentinelNet` root:
 Or pass everything on the command line:
 
 ```bash
-python3 services/site_agent.py --central-url http://<CENTRAL_IP>:8000 \
-                               --site-id milan-vm \
+python3 services/probe_agent.py --central-url http://<CENTRAL_IP>:8000 \
+                               --probe-id milan-vm \
                                --token <TOKEN> \
                                --no-verify-tls \
                                --data-dir ./agent-data
@@ -209,7 +218,7 @@ present:
 ```bash
 python3 scripts/vm_agent_test_helper.py setup \
   --central-url http://<CENTRAL_IP>:8000 \
-  --site-id milan-vm \
+  --probe-id milan-vm \
   --token <TOKEN> \
   --interval 15 \
   --no-verify-tls
@@ -221,7 +230,7 @@ python3 scripts/vm_agent_test_helper.py setup \
 mkdir -p agent-data
 
 cat << 'EOF' > agent-data/network_hosts.csv
-IP,Vendor,Profile,Username,Password,Enable Secret,Group,Hostname,Site,SSH Port,Transports,SNMP Community,SNMP Disabled
+IP,Vendor,Profile,Username,Password,Enable Secret,Group,Hostname,Probe,SSH Port,Transports,SNMP Community,SNMP Disabled
 192.0.2.10,cisco,custom,admin,,,Tenant_Milano,switch-01,milan-vm,22,,,
 EOF
 ```
@@ -230,15 +239,16 @@ These thirteen columns are the canonical schema — the same ones
 `inventory_manager.safe_write_hosts_csv` writes. Unrecognised columns are
 dropped the first time the inventory is rewritten.
 
-**`Group` and `Site` are two different things, and conflating them is the
+**`Group` and `Probe` are two different things, and conflating them is the
 classic multi-site mistake.** `Group` is the **tenant**: the visibility
 boundary that RBAC filters on and that every observability row carries.
-`Site` is the **physical location**: `central` (the server reaches the device
-directly) or an agent site id. One tenant can span several sites; one site can
+`Probe` is the **physical location**: `central` (the server reaches the device
+directly) or a probe id. One tenant can span several probes; one probe can
 host devices from several tenants. On import, `group`/`gruppo`/`tenant` all
-mean `Group`, and `site`/`sede` mean `Site`.
+mean `Group`, and `probe`/`sonda`/`site` mean `Probe`, so exports from before
+the rename still load.
 
-Only `IP` is required. `Site` defaults to `central`, `SSH Port` to `22`.
+Only `IP` is required. `Probe` defaults to `central`, `SSH Port` to `22`.
 `Transports` is a JSON map (`{"ssh": 22}`) — leave it empty for plain SSH.
 
 `Password`, `Enable Secret` and `SNMP Community` must be **Fernet ciphertext
@@ -252,26 +262,26 @@ does not hold the agent's key.
 
 ```bash
 curl -i -X POST http://<CENTRAL_IP>:8000/api/agent/heartbeat \
-  -H "X-Site-Id: milan-vm" \
-  -H "X-Site-Token: <TOKEN>" \
+  -H "X-Probe-Id: milan-vm" \
+  -H "X-Probe-Token: <TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
 
-`HTTP/1.1 200 OK` with `{"ok":true,"site_id":"milan-vm",...}` means
+`HTTP/1.1 200 OK` with `{"ok":true,"probe_id":"milan-vm",...}` means
 authentication is correct.
 
 ### 3.5 Start the agent
 
 ```bash
-python services/site_agent.py --config agent.json
+python services/probe_agent.py --config agent.json
 ```
 
 Expected output:
 
 ```text
-[agent] avviato: centrale=http://192.168.1.100:8000 sede=milano-vm intervallo=15s
-[heartbeat] sede 'milano-vm' ok, 1 dispositivi locali
+[agent] avviato: centrale=http://192.168.1.100:8000 sonda=milano-vm intervallo=15s
+[heartbeat] sonda 'milano-vm' ok, 1 dispositivi locali
 ```
 
 (Agent log messages are in Italian, per the project's language convention: user-
@@ -280,10 +290,10 @@ facing strings are Italian, identifiers are English. See
 
 ### 3.6 Verify on central
 
-1. **Site status** — in the **Multi-site** tab, the `Milan-VM` row shows a live
+1. **Probe status** — in the **Probes** tab, the `Milan-VM` row shows a live
    **Last contact** timestamp.
 2. **Mirrored inventory** — in the **Device inventory** tab, `192.168.56.10`
-   appears automatically, tagged with site `milan-vm`.
+   appears automatically, tagged with probe `milan-vm`.
 3. **CLI relay** — select the device and send a CLI command (e.g.
    `show version`). Central enqueues the job, the agent picks it up, runs it
    over local SSH and returns the result within seconds.
@@ -299,7 +309,7 @@ facing strings are Italian, identifiers are English. See
 ```bash
 sudo tee /etc/systemd/system/sentinelnet-agent.service << EOF
 [Unit]
-Description=SentinelNet Site Agent
+Description=SentinelNet Probe Agent
 After=network-online.target
 Wants=network-online.target
 
@@ -307,7 +317,7 @@ Wants=network-online.target
 Type=simple
 User=$USER
 WorkingDirectory=/opt/SentinelNet
-ExecStart=/opt/SentinelNet/.venv/bin/python services/site_agent.py --config /opt/SentinelNet/agent.json
+ExecStart=/opt/SentinelNet/.venv/bin/python services/probe_agent.py --config /opt/SentinelNet/agent.json
 Restart=always
 RestartSec=10
 
@@ -325,15 +335,15 @@ sudo systemctl status sentinelnet-agent
 Not supported, and not planned. This section used to carry NSSM instructions;
 they are gone because what they produced was an agent the dashboard could
 neither read the log of nor restart -- see **Supported platforms** at the top
-of this document. Use a Linux host for the agent, or connect the site as a jump
-site (Mode C, section 6) instead.
+of this document. Use a Linux host for the agent, or connect the site through a bastion
+probe (Mode C, section 6) instead.
 
 ---
 
 ## 5. CLI relay and the job queue API
 
 - `POST /api/send-command` (operator/admin) detects automatically whether the
-  device belongs to an agent site. It enqueues the job and waits for the agent's
+  device belongs to an agent probe. It enqueues the job and waits for the agent's
   response for up to ~90 seconds.
 - If the agent takes longer, the HTTP response returns:
 
@@ -360,12 +370,12 @@ reliable CLI equivalent — `monitor/firewall/policy-lookup` ("which policy woul
 match this flow?") has none at all. Without it, branch sites answer
 "unavailable" to precisely the questions the feature is for.
 
-The path must match `site_manager.REST_RELAY_ALLOWLIST`: **`monitor/` and
+The path must match `probe_manager.REST_RELAY_ALLOWLIST`: **`monitor/` and
 `log/` only**, never `cmdb/` (which writes configuration), never
 `config-script/upload`. `rest_path_allowed()` is checked **twice** — by central
 when the job is queued, and by the agent before it touches the device. The
 second check is deliberate: the point of agent mode is that credentials stay in
-the site even if central is compromised, and an agent that runs whatever path
+the probe even if central is compromised, and an agent that runs whatever path
 central dictates gives that away. See
 [ADR-0008](adr/0008-agent-rest-relay.md).
 
@@ -386,7 +396,7 @@ rather than on any schedule central controls.
 
 ---
 
-## 6. Jump site (bastion SSH, Mode C)
+## 6. Bastion probe (bastion SSH, Mode C)
 
 Pick this mode when the customer will not allow any SentinelNet process inside
 their network — no agent, nothing installed — and grants only SSH access to a
@@ -403,15 +413,15 @@ bastion; the customer never installs anything beyond the bastion's own
   explicit `no` blocks it).
 - The bastion has IP reachability to the devices central needs to manage.
 
-### 6.2 Create the identity first, then the site
+### 6.2 Create the identity first, then the probe
 
-Bastion credentials are not stored on the site. They live as an **identity**
-(`security/identity_manager.py`), and the site stores only that identity's id
-— `sites.json` never holds the secret itself.
+Bastion credentials are not stored on the probe. They live as an **identity**
+(`security/identity_manager.py`), and the probe stores only that identity's id
+— `probes.json` never holds the secret itself.
 
 1. **Identities** tab (or `POST /api/identities`) — create an identity with
    the bastion's username and password.
-2. **Multi-site** tab → *New site* → **Mode**: `Jump (bastion SSH)`. Four
+2. **Probes** tab → *New probe* → **Mode**: `Bastion probe (SSH)`. Four
    fields appear:
    - **Bastion host (IP/hostname)** — the bastion's IP or hostname, e.g. `198.51.100.10`.
    - **Bastion SSH port** — the bastion's SSH port, default `22`.
@@ -419,26 +429,26 @@ Bastion credentials are not stored on the site. They live as an **identity**
    - **Default device identity** — optional, and a *different* credential:
      the login used on the devices behind the bastion. See 6.2.1.
 
-No token is issued for a jump site (there is no agent to configure).
+No token is issued for a bastion probe (there is no agent to configure).
 
 #### 6.2.1 Two credentials, not one
 
 The bastion login and the device login are separate. A device row picks its
 own credential through the `Profile` column (`identity:<id>`, or an inline
-username/password); when that column says `default`, the site's **default
-device identity** is used, and only if the site declares none does the
+username/password); when that column says `default`, the probe's **default
+device identity** is used, and only if the probe declares none does the
 resolution fall back to the installation-wide `SENTINELNET_ADMIN_USER` /
-`SENTINELNET_ADMIN_PASS`. Setting the site default is what stops a customer's
+`SENTINELNET_ADMIN_PASS`. Setting the probe default is what stops a customer's
 devices from being dialled with this installation's own admin account.
 
-The field can be changed later from the site row in the **Multi-site** tab, or
-with `POST /api/sites/update` (`{"id": "...", "device_identity": "<id>"}`);
+The field can be changed later from the probe row in the **Probes** tab, or
+with `POST /api/probes/update` (`{"id": "...", "device_identity": "<id>"}`);
 an empty string clears it.
 
 Because the two hops have their own credential, a refused login is reported
 per hop: the bastion refusing us raises `BastionAuthError`
 (`core/net_ssh.py`), whose message says the device was never contacted. The
-**Test bastion** button on the site row (`POST /api/sites/test-bastion`) dials
+**Test bastion** button on the probe row (`POST /api/probes/test-bastion`) dials
 the bastion with the identity as currently configured — bypassing the cached
 transport on purpose — and answers `success`, `auth_failed` or `unreachable`.
 
@@ -450,13 +460,13 @@ If the bastion is rebuilt and the key changes, the stale entry must be manually
 removed from `ssh_known_hosts` before reconnecting.
 
 **Editing the bastion identity:** The bastion identity (username, password, or
-enable secret) can be changed in the **Multi-site** tab or via `POST
-/api/sites/update`. When the identity changes, the cached transport is
-automatically invalidated by `invalidate_site()` (`core/net_ssh.py`), so the
+enable secret) can be changed in the **Probes** tab or via `POST
+/api/probes/update`. When the identity changes, the cached transport is
+automatically invalidated by `invalidate_probe()` (`core/net_ssh.py`), so the
 next connection uses the updated credentials. This allows credential rotation
 without restarting the application.
 
-### Creating a jump site via API
+### Creating a bastion probe via API
 
 ```bash
 TOKEN=$(curl -s -X POST http://<CENTRAL_IP>:8000/api/auth/login \
@@ -469,8 +479,8 @@ IDENTITY_ID=$(curl -s -X POST http://<CENTRAL_IP>:8000/api/identities \
   -d '{"name":"Bastion","tenant":"Customer_A","username":"svc-jump","password":"<BASTION_PASSWORD>","enable_secret":""}' \
   | jq -r .id)
 
-# 2. Create the jump site, referencing the identity by id
-curl -X POST http://<CENTRAL_IP>:8000/api/sites \
+# 2. Create the bastion probe, referencing the identity by id
+curl -X POST http://<CENTRAL_IP>:8000/api/probes \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d "{\"name\": \"Customer A\", \"mode\": \"jump\", \"subnets\": [\"192.0.2.0/24\"], \
        \"jump_host\": \"198.51.100.10\", \"jump_port\": 22, \"jump_identity\": \"$IDENTITY_ID\", \
@@ -483,18 +493,18 @@ The bastion gives us **outbound TCP only, initiated by us**. Everything
 SentinelNet does that is not "open a TCP connection from central to a
 device" stays broken.
 
-**Works through a jump site:**
+**Works through a bastion probe:**
 
 | Capability | Why it works |
 |---|---|
 | CLI collection: inventory, version, config backup (`core/core_engine.py:313,511,555,602`) | netmiko over a `direct-tcpip` channel |
 | MAC table and ARP collection (`collectors/mac_collector.py`, `collectors/arp_collector.py`) | same |
 | Port actions (`services/port_action.py`) | same |
-| Switch day-0 provisioning via CLI | same, but pick the site in **Sede del target / Target site** on the SSH delivery panel: a day-0 device is not in the inventory yet, so the site cannot be derived from its IP. A FortiGate day-0 config is not pushed by SentinelNet at all, so nothing crosses the bastion |
+| Switch day-0 provisioning via CLI | same, but pick the probe in the **Target probe** selector on the SSH delivery panel: a day-0 device is not in the inventory yet, so the probe cannot be derived from its IP. A FortiGate day-0 config is not pushed by SentinelNet at all, so nothing crosses the bastion |
 | WLC CLI (`services/wlc_service.py`) | same |
 | Bulk command, CLI modal, config analyzer, netsec audit (they consume CLI output) | same |
 
-**Cannot work over a jump site (only ping and subnet scan are actively
+**Cannot work over a bastion probe (only ping and subnet scan are actively
 refused — the rest simply have no working code path, and fail with a plain
 connection error if you try):**
 
@@ -507,11 +517,11 @@ connection error if you try):**
 | SNMP (if ever wired up; `pysnmp` is a dependency but currently unused in code) | UDP |
 | Real-time device status in the inventory KPIs | derives from ping |
 
-A jump site shows inventory and configs but never shows online/offline:
-triage on a jump site reports reachability as **"not measurable"**, never as
-"down". Manual ping (single or bulk) on a jump-site device returns that same
+A bastion probe shows inventory and configs but never shows online/offline:
+triage on a bastion probe reports reachability as **"not measurable"**, never as
+"down". Manual ping (single or bulk) on a bastion-probe device returns that same
 "not measurable" result instead of attempting ICMP; a subnet scan targeting a
-jump site's subnet is refused outright with `HTTP 409` rather than answered
+bastion probe's subnet is refused outright with `HTTP 409` rather than answered
 with a false "down".
 
 ### 6.4 No bastion host-key verification
@@ -523,7 +533,7 @@ network path to the bastion would not be detected.
 
 ### 6.5 Connection lifecycle
 
-One SSH transport is kept per jump site and shared by all of that site's
+One SSH transport is kept per bastion probe and shared by all of that probe's
 devices; each device gets its own `direct-tcpip` channel over the shared
 transport. A dead transport is rebuilt on the next call. Connecting to the
 bastion is bounded by an explicit TCP connect timeout and an SSH banner
@@ -533,17 +543,17 @@ netmiko session fails to start (bad credentials, for instance) is closed
 immediately rather than left on the shared transport, and every cached
 transport is closed when the application shuts down.
 
-Because the central has no direct IP route to a jump site's devices, the
+Because the central has no direct IP route to a bastion probe's devices, the
 direct-socket reachability pre-check that guards the CLI paths (triage and
 backup, bulk command, the Linux health poller) is skipped for them: those
 paths go straight to the tunnel. It still runs, unchanged, for central and
-agent sites.
+agent probes.
 
 ## 7. Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| **HTTP 401 (heartbeat failed)** | Wrong token or site id | Check `agent.json`. If the token is lost, use **Regenerate token** in the dashboard and update `agent.json`. |
+| **HTTP 401 (heartbeat failed)** | Wrong token or probe id | Check `agent.json`. If the token is lost, use **Regenerate token** in the dashboard and update `agent.json`. |
 | **Devices don't appear on central** | `network_hosts.csv` empty or wrong on the remote host | Verify that `data_dir` in `agent.json` points at the folder containing `network_hosts.csv`. |
-| **CLI command stuck in `queued`** | Agent not running, or the device IP is missing from the agent's *local* inventory | Confirm `site_agent.py` is running and that the requested IP exists in the agent's local inventory. |
+| **CLI command stuck in `queued`** | Agent not running, or the device IP is missing from the agent's *local* inventory | Confirm `probe_agent.py` is running and that the requested IP exists in the agent's local inventory. |
 | **TLS certificate error** | Self-signed certificate on central | Set `"verify_tls": false` in `agent.json` (test/lab only), or import the CA into the remote host's trust store. |

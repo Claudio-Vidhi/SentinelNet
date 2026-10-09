@@ -1,11 +1,11 @@
-# ADR-0008 — The site agent relays read-only REST calls, restricted by an allowlist checked at both ends
+# ADR-0008 — The probe agent relays read-only REST calls, restricted by an allowlist checked at both ends
 
 **Status:** Accepted
 **Date:** 2026-08-01
 
 ## Context
 
-In agent mode (Mode B) central never reaches the site's devices: the agent
+In agent mode (Mode B) central never reaches the probe's devices: the agent
 connects outbound over HTTPS and pulls work from a job queue. Until now that
 queue carried **one thing** — a CLI command string — which `run_jobs` executed
 over local SSH.
@@ -24,7 +24,7 @@ reliable CLI equivalent:
 
 Without a REST path, every branch and remote site answers "unavailable" to
 exactly the questions the feature exists to answer. With an *unrestricted* REST
-path, a site token becomes arbitrary API access to every device in the site —
+path, a probe token becomes arbitrary API access to every device in the probe —
 including `cmdb/` writes — and the separation between the agent control plane
 and the device data plane ([roadmap.md](../roadmap.md) §2) disappears.
 
@@ -33,7 +33,7 @@ and the device data plane ([roadmap.md](../roadmap.md) §2) disappears.
 `command_jobs` gains a `kind` column (`cli` | `rest`; existing rows and older
 agents default to `cli`). For `kind='rest'` the `command` column holds
 `{"path": ..., "params": {...}}` and the path must match
-`site_manager.REST_RELAY_ALLOWLIST`.
+`probe_manager.REST_RELAY_ALLOWLIST`.
 
 The allowlist is **read-only by construction**: only `monitor/` and `log/`
 paths. Never `cmdb/` (which writes configuration), never
@@ -46,7 +46,7 @@ paths. Never `cmdb/` (which writes configuration), never
 2. by the agent, in `_execute_rest_job()`, before touching the device.
 
 The second check is not redundant. The stated security property of Mode B is
-that device credentials stay inside the site *even if central is compromised*.
+that device credentials stay inside the probe *even if central is compromised*.
 An agent that executes whatever path central dictates gives that property away.
 The agent trusts central for **scheduling**, not for **authorisation**.
 
@@ -62,7 +62,7 @@ The agent trusts central for **scheduling**, not for **authorisation**.
   tries to run the JSON as a command and returns an error. Ugly but contained,
   and the job is marked `error` rather than silently lost.
 - Cost: two copies of the allowlist logic must stay in step. They share one
-  function in `site_manager`, so the agent and central cannot drift — but an
+  function in `probe_manager`, so the agent and central cannot drift — but an
   agent running old code carries an old list. That is the intended direction of
   failure: an outdated agent permits *less*, never more.
 - The relay still cannot write. Anything that changes device configuration goes
@@ -71,12 +71,12 @@ The agent trusts central for **scheduling**, not for **authorisation**.
 ## Alternatives rejected
 
 **Leave it unavailable and say so.** The honest minimum, and what the first
-draft did: the firewall section would report "agent site: REST not reachable".
+draft did: the firewall section would report "agent probe: REST not reachable".
 Correct, but it makes the feature useless at exactly the sites that need it
 most — a branch is where you cannot walk to the rack.
 
 **Relay arbitrary REST calls, rely on RBAC at central.** Collapses the two
-planes into one. Whoever holds a site token, or whoever compromises central,
+planes into one. Whoever holds a probe token, or whoever compromises central,
 gets the device API. The credential isolation that justifies Mode B in the first
 place would be decorative.
 

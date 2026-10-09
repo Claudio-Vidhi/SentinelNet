@@ -310,8 +310,8 @@ messages. Real values from `data/` verify the parsers; they never enter the tree
   something they cannot express — an installed-package/CVE inventory would qualify.
 - **A top-level "Servers" tab.** Every surface a Linux host needs already exists. Add when
   Linux gains workflows unrelated to inventory — not before.
-- **Agent-site support.** Central cannot SSH into `mode == 'agent'` sites
-  ([commands.py:158](routers/commands.py#L158)); the poller is central-sites-only and must
-  say so in its docstring. Add to `services/site_agent.py` when a customer needs it.
+- **Agent-probe support.** Central cannot SSH into `mode == 'agent'` probes
+  ([commands.py:158](routers/commands.py#L158)); the poller is direct-probes-only and must
+  say so in its docstring. Add to `services/probe_agent.py` when a customer needs it.
 - **Package/CVE inventory per host.** EUVD matching on the kernel version via the existing
   `euvd_term` covers the first-order case.

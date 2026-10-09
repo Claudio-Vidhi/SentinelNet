@@ -32,7 +32,7 @@ and share inventory, RBAC and audit with it.
         SOURCES                           (collectors.md)
   IPFIX 4739 / NetFlow 2055 / sFlow 6343 / syslog 5514   ← UDP, passive
   FortiGate REST (api_poller)  ·  SNMP v2c (snmp_poller) ← active polling
-  site agents (outbound HTTPS)
+  probe agents (outbound HTTPS)
                     │
                     ▼
         RAW TABLES                        observability/storage/schema.sql
@@ -220,8 +220,8 @@ Two things it resolves that nothing else did:
   `client_map` *is* the VLAN's gateway. Failing that, a single configured
   FortiGate is used; with several and no match it reports that it cannot tell,
   rather than guessing and sending someone to read the wrong policy table.
-- **Which site an arbitrary address belongs to** (`resolve_endpoint`): first
-  observed ARP, then the `subnets` declared on the site — a field that existed
+- **Which probe an arbitrary address belongs to** (`resolve_endpoint`): first
+  observed ARP, then the `subnets` declared on the probe — a field that existed
   since the beginning and was read by nobody. The declared answer is marked
   `derived: "declared-subnet"`. This does not contradict
   [ADR-0005](adr/0005-strict-tenant-attribution.md): that forbids *guessing a
@@ -232,7 +232,7 @@ Across sites the report adds a section of its own: the far end's policy (a flow
 between two sites crosses **two** firewalls and either can deny it), live IPsec
 tunnel state, and a longest-prefix route lookup — because a permitted policy
 and a missing route produce the same symptom and need different fixes. At
-agent-mode sites the firewall half goes through the REST relay
+agent-mode probes the firewall half goes through the REST relay
 ([ADR-0008](adr/0008-agent-rest-relay.md)), which is asynchronous: the report
 queues the request and says so, and the next run collects the answer.
 
@@ -318,7 +318,7 @@ and audit log unchanged.
 | [observability/](../observability/) | The whole §2 pipeline, plus `ingesters/` |
 | [collectors/](../collectors/) | ARP, MAC tables, MAC history, subnet scanner, `l2_scheduler.py` (scheduled L2 discovery, opt-in) |
 | [routers/](../routers/) | ~31 FastAPI routers, one per area |
-| [services/](../services/) | FortiGate, WLC, inventory, provisioners, sites, agent, Visio export, `netsec_audit/` (compliance engine & `netsec_audit_runs` history), `config_drift/` (§10: per-tenant history & baseline), `notifications.py` (email engine: preferences, admin rules, outbox, digest), `triage_scheduler.py` (scheduled triage), `tenant_telemetry.py` (per-tenant on/off for ping, SNMP, REST, triage) |
+| [services/](../services/) | FortiGate, WLC, inventory, provisioners, probes, probe agent, Visio export, `netsec_audit/` (compliance engine & `netsec_audit_runs` history), `config_drift/` (§10: per-tenant history & baseline), `notifications.py` (email engine: preferences, admin rules, outbox, digest), `triage_scheduler.py` (scheduled triage), `tenant_telemetry.py` (per-tenant on/off for ping, SNMP, REST, triage) |
 | [security/](../security/) | JWT/RBAC/audit, credential encryption, keystore, identities, redaction, `command_policy.py` (the one dangerous-command policy) |
 | [ai/](../ai/) | Multi-provider assistant, config analyzer, MCP server and client |
 | [drivers/](../drivers/) | One driver per vendor, `BaseDriver` as the contract, `registry.py` (vendor → driver → netmiko mapping) |

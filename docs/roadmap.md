@@ -95,31 +95,31 @@ all-or-nothing authority boundary:
 
 | Plane | Principal | Responsibility | Must not grant |
 |---|---|---|---|
-| Agent / control | The registered site agent | Prove agent identity, deliver work, report health, inventory and results | Unrestricted access to every device or every possible action |
+| Agent / control | The registered probe agent | Prove agent identity, deliver work, report health, inventory and results | Unrestricted access to every device or every possible action |
 | Device / data | A device identity and its credential/policy | Connect to, observe and change one device | Authority to impersonate the agent, create jobs, or administer central |
 
 **Sound today:** the agent connects outbound over HTTPS only, central needs no
-inbound access to the site, central authenticates the agent with a per-site
+inbound access to the site, central authenticates the agent with a per-probe
 token (stored as a SHA-256 hash), and device credentials stay in the agent's
 local data directory. That already limits credential exfiltration from a
 compromised central server.
 
 **Not yet separated:** an authenticated agent receives *all* pending jobs for
-its site and executes them using whichever local device record matches the
+its probe and executes them using whichever local device record matches the
 requested IP. Agent identity therefore implies full device authority within the
 site.
 
 If this gets built, it belongs in an ADR — it changes an authority boundary, not
-just an implementation. See [remote-sites.md](remote-sites.md).
+just an implementation. See [probes.md](probes.md).
 
 **Partially addressed, deliberately narrowly.** The job queue now also carries
-read-only REST calls, so client diagnosis works at agent sites
+read-only REST calls, so client diagnosis works at agent probes
 ([ADR-0008](adr/0008-agent-rest-relay.md)). That *widened* what an agent may do,
 which is the opposite direction from this item — so it was bounded by an
 allowlist (`monitor/` and `log/` only, never `cmdb/`) enforced both at central
 and, independently, at the agent. The agent trusts central for scheduling, not
 for authorisation. The plane separation itself is still unbuilt: an
-authenticated agent still receives every pending job for its site. The signal
+authenticated agent still receives every pending job for its probe. The signal
 that this can no longer be deferred is the allowlist growing to cover writes, or
 a second consumer wanting the relay — at that point the separate device-plane
 credential ADR-0008 declined is the right answer.
@@ -180,8 +180,8 @@ credential ADR-0008 declined is the right answer.
 
 ### Larger efforts
 
-7. **Unified remote agent** — the same site agent also collects local server
-   data: one deployment per site.
+7. **Unified remote agent** — the same probe agent also collects local server
+   data: one deployment per probe.
 8. **AD/LDAP integration** — SentinelNet login with domain credentials, and the
    AD computer list as an inventory source.
 9. **SNMP against servers.** Note the transport is *not* missing: the SNMP

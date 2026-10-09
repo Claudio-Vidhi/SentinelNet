@@ -10,7 +10,7 @@ reference for *what SentinelNet will send and when* is
 [services/fortigate_provisioner.py](../services/fortigate_provisioner.py) and
 [routers/provisioner.py](../routers/provisioner.py).
 
-Related: [remote-sites.md](remote-sites.md) for what a bastion can and cannot
+Related: [probes.md](probes.md) for what a bastion can and cannot
 carry, [operations.md](operations.md) for where `audit.log` lives.
 
 ---
@@ -22,7 +22,7 @@ carry, [operations.md](operations.md) for where `audit.log` lives.
 | An **admin** account, to push | `POST /api/provisioner/push-ssh` and `/push-serial` are `require_admin`. Generating, downloading and listing serial ports are `require_operator`. A `viewer` never sees the tab at all — the nav entry is `requires-write`. |
 | A decided IP plan | The wizard validates nothing. The first thing that checks your input is the device. |
 | Physical access **or** a reachable temporary address, for a Cisco push | Serial delivery needs the cable plugged into the machine running the SentinelNet server, not into your laptop (§7). SSH delivery needs the device already answering on some address. |
-| The site record, if the Cisco switch sits behind a bastion | Create the jump site first ([remote-sites.md §6](remote-sites.md)) — a day-0 device cannot be resolved to a site by IP. |
+| The probe record, if the Cisco switch sits behind a bastion | Create the bastion probe first ([probes.md §6](probes.md)) — a day-0 device cannot be resolved to a probe by IP. |
 
 **SentinelNet delivers a config only to Cisco switches.** For a FortiGate the
 workflow ends at the generated text: you review it, download it and apply it
@@ -45,19 +45,19 @@ worth being sure which one you are on:
 
 | Sub-tab | id | What it is |
 |---|---|---|
-| **Provisioning Apparato** | `#tab-provisioning` | Inventory CRUD: register an *existing* device, assign it to a tenant and a physical site, set transports and credentials. Also where tenant credential identities are managed. |
+| **Provisioning Apparato** | `#tab-provisioning` | Inventory CRUD: register an *existing* device, assign it to a tenant and a probe, set transports and credentials. Also where tenant credential identities are managed. |
 | **Zero-Touch Provisioning** | `#tab-provisioner` | The day-0 wizard. Generates a full config from scratch and delivers it. |
 
 Everything in §3–§8 is `#tab-provisioner`. §9 goes back to `#tab-provisioning`.
 
 ---
 
-## 3. Tenant, site and vendor
+## 3. Tenant, probe and vendor
 
 **The day-0 wizard has no tenant field.** It generates text from the parameters
 you type; it does not read tenant defaults and does not tag the result. Tenant
 assignment happens later, when you register the device (§9). Two selectors on
-the page do mention a tenant or a site, and neither is what you might assume:
+the page do mention a tenant or a probe, and neither is what you might assume:
 
 - `#genCfgTenant` belongs to the **AI config generator** panel at the top
   ("Genera configurazione nuovo switch"). That panel calls
@@ -65,7 +65,7 @@ the page do mention a tenant or a site, and neither is what you might assume:
   with a Copy button. It does **not** fill the wizard form below and its output
   is never pushed. It is a separate path from the deterministic wizard and is
   out of scope here.
-- `#provSshSite` ("Sede del target") is on the SSH delivery panel and only
+- `#provSshProbe` ("Sonda del target") is on the SSH delivery panel and only
   affects whether the Cisco push is tunnelled through a bastion. See §6.2.
 
 **Vendor** is `#provVendorChips` — two chips, Cisco switch or FortiGate
@@ -357,29 +357,29 @@ Then **Applica via SSH**. What happens on the server:
 > other rejection. A config where half the lines bounced still reports success.
 > The rejections are in the output text; read them.
 
-### 6.2 Target site: when you need it
+### 6.2 Target probe: when you need it
 
 `core.net_ssh.ConnectHandler` decides whether to tunnel through a bastion in
 this order ([core/net_ssh.py](../core/net_ssh.py), pinned by
-`ProvisioningNamesTheSiteExplicitly` in
-[tests/test_jump_site.py](../tests/test_jump_site.py)):
+`ProvisioningNamesTheProbeExplicitly` in
+[tests/test_bastion_probe.py](../tests/test_bastion_probe.py)):
 
-1. Look the target IP up in the inventory. If it belongs to a site in `jump`
-   mode, tunnel through that site's bastion.
-2. Only if the inventory lookup finds **nothing**, use the site you named in
+1. Look the target IP up in the inventory. If it belongs to a probe in `jump`
+   mode, tunnel through that probe's bastion.
+2. Only if the inventory lookup finds **nothing**, use the probe you named in
    `#provSshSite`.
-3. Tunnel only if that named site is in `jump` mode. Naming a `central` or
-   `agent` site changes nothing.
+3. Tunnel only if that named probe is in `jump` mode. Naming a `central` or
+   `agent` probe changes nothing.
 
 A day-0 device has no inventory row by definition, so step 1 finds nothing and
 the connection is dialled **directly from central** — which, for a device
 inside a customer network reachable only through a bastion, is a connect
-timeout. **Name the site.** The dropdown is filled from `/api/sites` the first
+timeout. **Name the probe.** The dropdown is filled from `/api/probes` the first
 time you switch the delivery mode to SSH.
 
-Note that this is the *jump* mechanism only. An **agent**-mode site does not
+Note that this is the *jump* mechanism only. An **agent**-mode probe does not
 relay provisioning pushes: the push is dialled directly from central regardless
-of what you select. For an agent site the device must be reachable from central
+of what you select. For an agent probe the device must be reachable from central
 by IP.
 
 ---
@@ -439,8 +439,8 @@ Neither generating nor pushing touches the inventory. Go to the sibling sub-tab,
 **Provisioning Apparato** (`#tab-provisioning`), and add the device:
 
 1. **Tenant** `#devGroupSelect` (`#btnInlineNewTenant` creates one inline).
-2. **Physical site** `#devSiteSelect` — for a device behind a bastion, the same
-   jump site you named in `#provSshSite`. From now on the site is resolved from
+2. **Probe** `#devProbeSelect` — for a device behind a bastion, the same
+   bastion probe you named in `#provSshSite`. From now on the probe is resolved from
    the inventory and you never name it again.
 3. **IP** `#devIp` — the management address the day-0 config just set.
 4. **Vendor engine** `#devVendor`.
@@ -487,15 +487,15 @@ Cause: `#provSshSite` left on "Automatica (da inventario)". A day-0 device is
 not in the inventory, so there is nothing to resolve and the push is dialled
 directly from central (§6.2).
 
-Fix: pick the jump site explicitly. Check that the site really is in `jump`
-mode — a `central` or `agent` site in that dropdown is accepted and ignored.
+Fix: pick the bastion probe explicitly. Check that the probe really is in `jump`
+mode — a `central` or `agent` probe in that dropdown is accepted and ignored.
 
 Two bastion-specific errors surface through the same `message` field, and both
 mean the *bastion* refused you, not the device:
 
 - **`Il bastione ... ha rifiutato l'utente ...: credenziali del bastione, non
-  del dispositivo.`** Fix the site's jump identity. Rotating the device
-  credential will not help. Note that a site's cached SSH transport is
+  del dispositivo.`** Fix the probe's bastion identity. Rotating the device
+  credential will not help. Note that a probe's cached SSH transport is
   invalidated when you edit the bastion address, port or identity, so the next
   attempt re-authenticates.
 - **`Il bastione ... presenta una chiave host diversa da quella registrata.`**
