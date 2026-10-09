@@ -41,8 +41,8 @@ const build = expanded => (0, eval)(`(function () {
 
 // Two access switches: one with 4 APs and 1 phone, one with 2 APs.
 const nodes = [
-    { id: '192.0.2.10', label: 'switch-01', device_type: 'switch', status: 'online', group: 'site-a' },
-    { id: '192.0.2.11', label: 'switch-02', device_type: 'switch', status: 'online', group: 'site-a' },
+    { id: '192.0.2.10', label: 'switch-01', device_type: 'switch', status: 'online', group: 'tenant-a' },
+    { id: '192.0.2.11', label: 'switch-02', device_type: 'switch', status: 'online', group: 'tenant-a' },
     { id: '192.0.2.20', label: 'ap-01', device_type: 'ap', status: 'online' },
     { id: '192.0.2.21', label: 'ap-02', device_type: 'ap', status: 'online' },
     { id: '192.0.2.22', label: 'ap-03', device_type: 'ap', status: 'offline' },
@@ -62,7 +62,7 @@ const links = [
     { source: '192.0.2.11', target: '192.0.2.31' },
 ];
 
-let out = build({})(nodes, links, 'site-a');
+let out = build({})(nodes, links, 'tenant-a');
 const ids = out.nodes.map(n => n.id);
 const groupId = 'grp:192.0.2.10:ap';
 
@@ -97,7 +97,7 @@ assert.ok(out.links.some(l => l.source === '192.0.2.10' && l.target === '192.0.2
 
 // Expanded: the members come back, the group node disappears, and every member
 // maps back to its group so a double-click can collapse it again.
-out = build({ 'site-a': [groupId] })(nodes, links, 'site-a');
+out = build({ 'tenant-a': [groupId] })(nodes, links, 'tenant-a');
 const ids2 = out.nodes.map(n => n.id);
 assert.ok(!ids2.includes(groupId));
 ['192.0.2.20', '192.0.2.21', '192.0.2.22', '192.0.2.23'].forEach(
@@ -105,7 +105,7 @@ assert.ok(!ids2.includes(groupId));
 assert.equal(out.links.filter(l => l.kind === 'group').length, 0);
 
 // The expanded state is per site: another site's map is unaffected.
-out = build({ 'site-b': [groupId] })(nodes, links, 'site-a');
+out = build({ 'tenant-b': [groupId] })(nodes, links, 'tenant-a');
 assert.ok(out.nodes.map(n => n.id).includes(groupId));
 
 console.log('layered_groups: ok');

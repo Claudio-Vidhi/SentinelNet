@@ -9,8 +9,9 @@ asserting old headers are refused, the migration's old names) carries the
 marker below; adding one is a reviewable diff, the same rule as
 check_no_private_data.
 
-PENDING lists files not renamed yet. It only shrinks: a listed file that no
-longer offends fails too, so the list cannot go stale."""
+"site" for a tenant is the same confusion, so no tracked file may spell it;
+there is no pending list."""
+import functools
 import re
 import subprocess
 import unittest
@@ -20,53 +21,28 @@ ROOT = Path(__file__).resolve().parent.parent
 MARK = "check-site-name: ok"
 SCANNED = re.compile(r"\.(py|js|mjs|html|ts|sql|ps1|sh|spec|service)$")
 TOKEN = re.compile(r"[A-Za-z0-9_-]*[Ss][Ii][Tt][Ee][A-Za-z0-9_-]*")
-QUOTED = re.compile(r"""['"]Sites?['"]|/sites\b""")
+QUOTED = re.compile(r"""['"]sites?['"]|/sites?\b""", re.I)
 # Words that merely contain the letters; each was reviewed.
-WORDS = ("site-to-site", "prerequisite", "opposite", "offsite", "onsite",
+WORDS = ("site-to-site", "prerequisite", "prerequisites", "opposite", "offsite", "onsite",
          "composite", "website", "requisite", "parasite", "visited", "on-site",
-         "samesite", "sitemap", "statusitem")
+         "samesite", "sitemap", "statusitem", "cross-site")
 
-PENDING = frozenset({
-    "routers/auth.py",
-    "routers/deps.py",
-    "static/js/core.js",
-    "static/js/devices.js",
-    "static/js/i18n.js",
-    "static/js/topology.js",
-    "templates/dashboard.html",
-    "tests/js/test_layered_groups.mjs",
-    "tests/js/test_layered_levels.mjs",
-    "tests/js/test_map_layout.mjs",
-    "tests/test_bugfix_batch.py",
-    "tests/test_category_tenant_scope.py",
-    "tests/test_classification_assist.py",
-    "tests/test_classify_device_type.py",
-    "tests/test_client_diagnosis.py",
-    "tests/test_cloud_backup_api.py",
-    "tests/test_cloud_backup_payload.py",
-    "tests/test_cloud_backup_restore_script.py",
-    "tests/test_cloud_backup_state.py",
-    "tests/test_cloud_backup_sync.py",
-    "tests/test_cloud_backup_transport.py",
-    "tests/test_cloud_backup_verify.py",
-    "tests/test_config_analyzer_panos.py",
-    "tests/test_config_analyzer_scoping.py",
-    "tests/test_device_meta_store.py",
-    "tests/test_firewall_traffic.py",
-    "tests/test_flow_siem.py",
-    "tests/test_map_layered.py",
-    "tests/test_route_table.py",
-    "tests/test_scan_verify.py",
-    "tests/test_settings_restart.py",
-    "tests/test_ui_revamp.py",
-})
+
+_COMPOUNDS = [w for w in WORDS if "-" in w]
+_PARTS = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+")
 
 
 def _bad(token: str) -> bool:
-    t = token.lower()
-    for w in WORDS:
-        t = t.replace(w, "")
-    return "site" in t and t not in ("site", "sites")
+    """Words are stripped only as a whole token or a hyphen-delimited part,
+    never inside camelCase: SiteStatusItem is bad, SameSite is not."""
+    low = token.lower()
+    if low in ("site", "sites") or low in WORDS:
+        return False
+    for w in _COMPOUNDS:
+        token = re.sub(r"(?<![A-Za-z0-9])" + re.escape(w) + r"(?![A-Za-z0-9])",
+                       " ", token, flags=re.I)
+    return any("site" in p and p not in WORDS
+               for p in map(str.lower, _PARTS.findall(token)))
 
 
 def offending(text: str):
@@ -86,29 +62,41 @@ def _tracked():
     return [p for p in out if not p.startswith("docs/")]
 
 
+@functools.cache
+def _offenders():
+    found = {}
+    for rel in _tracked():
+        if rel == "tests/test_no_site_identifier.py":
+            continue
+        if _bad(Path(rel).name):
+            found[rel] = [(0, ["<file name>"])]
+            continue
+        if not SCANNED.search(rel):
+            continue
+        hits = offending((ROOT / rel).read_text(encoding="utf-8", errors="replace"))
+        if hits:
+            found[rel] = hits
+    return found
+
+
 class TestNoSiteIdentifier(unittest.TestCase):
-    def _offenders(self):
-        found = {}
-        for rel in _tracked():
-            if rel == "tests/test_no_site_identifier.py":
-                continue
-            if _bad(Path(rel).name):
-                found[rel] = [(0, ["<file name>"])]
-                continue
-            if not SCANNED.search(rel):
-                continue
-            hits = offending((ROOT / rel).read_text(encoding="utf-8", errors="replace"))
-            if hits:
-                found[rel] = hits
-        return found
-
     def test_no_new_offenders(self):
-        new = {p: h[:3] for p, h in self._offenders().items() if p not in PENDING}
-        self.assertEqual(new, {}, "rename to probe, or mark the line with " + MARK)
+        new = {p: h[:3] for p, h in _offenders().items()}
+        self.assertEqual(new, {}, "rename to probe/tenant, or mark the line with " + MARK)
 
-    def test_pending_only_shrinks(self):
-        stale = sorted(PENDING - set(self._offenders()))
-        self.assertEqual(stale, [], "remove these from PENDING: they are clean")
+    def test_bad_token_rules(self):
+        for t in ("site_id", "SiteStatusItem", "onSiteWizardClose", "allSites",
+                  "site-a", "SITE_ID", "getWebsiteSite"):
+            self.assertTrue(_bad(t), t)
+        for t in ("is_prerequisite", "samesite", "SameSite", "fa-sitemap",
+                  "site-to-site", "website", "visited", "cross-site", "site",
+                  "sites", "isOpposite", "getWebsiteUrl"):
+            self.assertFalse(_bad(t), t)
+
+    def test_quoted_rules(self):
+        for line in ("x['site']", 'y["Sites"]', "fetch('/api/site/1')", "/sites"):
+            self.assertTrue(QUOTED.search(line), line)
+        self.assertFalse(QUOTED.search("website"))
 
 
 if __name__ == "__main__":

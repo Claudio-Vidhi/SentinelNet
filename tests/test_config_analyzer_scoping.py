@@ -68,11 +68,11 @@ class TestConfigAnalyzerDeviceScoping(unittest.TestCase):
         r = self._get("192.0.2.99", ["sede-a"])
         self.assertEqual(r.status_code, 403)
 
-    def test_ip_of_another_site_stays_403(self):
+    def test_ip_of_another_tenant_stays_403(self):
         r = self._get("192.0.2.10", ["sede-a"])
         self.assertEqual(r.status_code, 403)
 
-    def test_ip_of_own_site_passes(self):
+    def test_ip_of_own_tenant_passes(self):
         r = self._get("192.0.2.10", ["sede-b"])
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json(), ANALYSIS)

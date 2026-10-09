@@ -47,18 +47,18 @@ class TestWalkAndPlan(unittest.TestCase):
 
     def setUp(self):
         self.root = tempfile.mkdtemp()
-        _write(self.root, "site-a/cisco/switch-01-192.0.2.10.txt", "hostname switch-01\n")
-        _write(self.root, "site-a/cisco/.history/192.0.2.10-index.json",
+        _write(self.root, "tenant-a/cisco/switch-01-192.0.2.10.txt", "hostname switch-01\n")
+        _write(self.root, "tenant-a/cisco/.history/192.0.2.10-index.json",
                '{"device":"192.0.2.10"}')
-        _write(self.root, "site-a/cisco/.history/switch-01-192.0.2.10.20260819T110233.451207Z.txt",
+        _write(self.root, "tenant-a/cisco/.history/switch-01-192.0.2.10.20260819T110233.451207Z.txt",
                "hostname switch-01\n! older\n")
 
     def test_walk_includes_history_and_uses_posix_paths(self):
         local = sync.walk_local(self.root)
-        self.assertIn("site-a/cisco/switch-01-192.0.2.10.txt", local)
-        self.assertIn("site-a/cisco/.history/192.0.2.10-index.json", local)
+        self.assertIn("tenant-a/cisco/switch-01-192.0.2.10.txt", local)
+        self.assertIn("tenant-a/cisco/.history/192.0.2.10-index.json", local)
         self.assertEqual(3, len(local))
-        self.assertTrue(local["site-a/cisco/switch-01-192.0.2.10.txt"]["sha256"]
+        self.assertTrue(local["tenant-a/cisco/switch-01-192.0.2.10.txt"]["sha256"]
                         .startswith("sha256:"))
 
     def test_plan_skips_what_is_already_offsite(self):
@@ -69,8 +69,8 @@ class TestWalkAndPlan(unittest.TestCase):
     def test_plan_reuploads_a_changed_file(self):
         local = sync.walk_local(self.root)
         known = {p: e["sha256"] for p, e in local.items()}
-        known["site-a/cisco/switch-01-192.0.2.10.txt"] = "sha256:stale"
-        self.assertEqual(["site-a/cisco/switch-01-192.0.2.10.txt"],
+        known["tenant-a/cisco/switch-01-192.0.2.10.txt"] = "sha256:stale"
+        self.assertEqual(["tenant-a/cisco/switch-01-192.0.2.10.txt"],
                          sync.plan_uploads(local, known))
 
     def test_plan_uploads_everything_when_nothing_is_known(self):
@@ -84,7 +84,7 @@ class TestRunMirror(unittest.TestCase):
 
     def setUp(self):
         self.root = tempfile.mkdtemp()
-        _write(self.root, "site-a/cisco/switch-01-192.0.2.10.txt", "hostname switch-01\n")
+        _write(self.root, "tenant-a/cisco/switch-01-192.0.2.10.txt", "hostname switch-01\n")
         self.target = FakeTarget()
         self.cfg = {"enabled": True, "kind": "sftp", "host": "backup.example.net",
                     "port": 22, "username": "sentinelnet", "auth": "password",
@@ -101,7 +101,7 @@ class TestRunMirror(unittest.TestCase):
         result = sync.run_mirror(open_target=lambda cfg: self.target)
         self.assertTrue(result["ok"], result.get("error"))
         self.assertEqual(1, result["uploaded"])
-        self.assertIn("/srv/backups/site-a/cisco/switch-01-192.0.2.10.txt", self.target.written)
+        self.assertIn("/srv/backups/tenant-a/cisco/switch-01-192.0.2.10.txt", self.target.written)
         self.assertIn("/srv/backups/_manifest.json", self.target.written)
         self.assertIn("/srv/backups/restore.py", self.target.written)
 
@@ -109,7 +109,7 @@ class TestRunMirror(unittest.TestCase):
         self.cfg["encrypt_payload"] = True
         result = sync.run_mirror(open_target=lambda cfg: self.target)
         self.assertTrue(result["ok"], result.get("error"))
-        rel = "site-a/cisco/switch-01-192.0.2.10.txt"
+        rel = "tenant-a/cisco/switch-01-192.0.2.10.txt"
         self.assertIn(f"/srv/backups/{rel}.enc", self.target.written)
         self.assertNotEqual(b"hostname switch-01\n",
                             self.target.written[f"/srv/backups/{rel}.enc"])
@@ -125,9 +125,9 @@ class TestRunMirror(unittest.TestCase):
         self.assertFalse(result["ok"])
 
     def test_manifest_omits_a_file_that_failed_to_upload(self):
-        _write(self.root, "site-a/cisco/switch-02-192.0.2.11.txt", "hostname switch-02\n")
+        _write(self.root, "tenant-a/cisco/switch-02-192.0.2.11.txt", "hostname switch-02\n")
         broken = os.path.normpath(
-            os.path.join(self.root, "site-a", "cisco", "switch-02-192.0.2.11.txt"))
+            os.path.join(self.root, "tenant-a", "cisco", "switch-02-192.0.2.11.txt"))
         real_open = open
         calls = {"n": 0}
 
@@ -145,16 +145,16 @@ class TestRunMirror(unittest.TestCase):
             result = sync.run_mirror(open_target=lambda cfg: self.target)
         self.assertFalse(result["ok"])
         manifest = json.loads(self.target.written["/srv/backups/_manifest.json"])
-        self.assertNotIn("site-a/cisco/switch-02-192.0.2.11.txt", manifest["files"])
-        self.assertIn("site-a/cisco/switch-01-192.0.2.10.txt", manifest["files"])
+        self.assertNotIn("tenant-a/cisco/switch-02-192.0.2.11.txt", manifest["files"])
+        self.assertIn("tenant-a/cisco/switch-01-192.0.2.10.txt", manifest["files"])
 
 
 class TestStatus(unittest.TestCase):
 
     def setUp(self):
         self.root = tempfile.mkdtemp()
-        _write(self.root, "site-a/cisco/switch-01-192.0.2.10.txt", "hostname switch-01\n")
-        _write(self.root, "site-a/cisco/switch-02-192.0.2.11.txt", "hostname switch-02\n")
+        _write(self.root, "tenant-a/cisco/switch-01-192.0.2.10.txt", "hostname switch-01\n")
+        _write(self.root, "tenant-a/cisco/switch-02-192.0.2.11.txt", "hostname switch-02\n")
         self.cfg = {"enabled": True, "encrypt_payload": False, "stale_after_hours": 48}
         for p in [mock.patch("services.cloud_backup.sync.BACKUP_FOLDER", self.root),
                   mock.patch("services.cloud_backup.settings.read",
@@ -162,7 +162,7 @@ class TestStatus(unittest.TestCase):
                   mock.patch("services.cloud_backup.state.read", return_value={
                       "last_run": {"ok": True}, "last_success_at": "2026-08-20T00:00:00Z"}),
                   mock.patch("services.cloud_backup.state.known_hashes",
-                             return_value={"site-a/cisco/switch-01-192.0.2.10.txt": "sha256:known"}),
+                             return_value={"tenant-a/cisco/switch-01-192.0.2.10.txt": "sha256:known"}),
                   mock.patch("services.cloud_backup.state.hours_since_success", return_value=5.0)]:
             p.start(); self.addCleanup(p.stop)
 

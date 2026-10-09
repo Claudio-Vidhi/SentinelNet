@@ -141,9 +141,9 @@ class TestScanVerify(ScanApiTestCase):
 
     def test_identity_outside_scope_is_404_and_never_decrypts(self):
         from routers import scan
-        scoped = self.im.add_identity("altra-sede", "SiteZ", "u", "p", "s")["id"]
+        scoped = self.im.add_identity("altra-sede", "TenantZ", "u", "p", "s")["id"]
         try:
-            with mock.patch.object(scan, "user_group_scope", return_value={"SiteA"}), \
+            with mock.patch.object(scan, "user_group_scope", return_value={"TenantA"}), \
                  mock.patch.object(self.im, "get_identity_credentials") as creds:
                 r = self._client().post("/api/scan-verify", json={
                     "ips": ["192.0.2.10"], "vendor": "cisco", "identity_id": scoped,
@@ -171,36 +171,36 @@ class TestScanVerify(ScanApiTestCase):
 
 
 class TestIdentityVisibility(unittest.TestCase):
-    """A caller restricted to some sites must not borrow another site's
+    """A caller restricted to some tenants must not borrow another tenant's
     credentials by guessing an identity id."""
 
     def setUp(self):
         from security import identity_manager
         self.im = identity_manager
         self.global_id = self.im.add_identity("globale", "all", "u", "p", "s")["id"]
-        self.site_a_id = self.im.add_identity("sede-a", "SiteA", "u", "p", "s")["id"]
-        self.multi_id = self.im.add_identity("multi", ["SiteA", "SiteB"], "u", "p", "s")["id"]
+        self.tenant_a_id = self.im.add_identity("sede-a", "TenantA", "u", "p", "s")["id"]
+        self.multi_id = self.im.add_identity("multi", ["TenantA", "TenantB"], "u", "p", "s")["id"]
 
     def tearDown(self):
-        for ident in (self.global_id, self.site_a_id, self.multi_id):
+        for ident in (self.global_id, self.tenant_a_id, self.multi_id):
             self.im.delete_identity(ident)
 
     def test_none_scope_sees_everything(self):
-        for ident in (self.global_id, self.site_a_id, self.multi_id):
+        for ident in (self.global_id, self.tenant_a_id, self.multi_id):
             self.assertTrue(self.im.identity_visible_to(ident, None))
 
     def test_global_identity_is_visible_to_any_scope(self):
-        self.assertTrue(self.im.identity_visible_to(self.global_id, {"SiteC"}))
+        self.assertTrue(self.im.identity_visible_to(self.global_id, {"TenantC"}))
 
-    def test_scoped_identity_hidden_from_other_site(self):
-        self.assertFalse(self.im.identity_visible_to(self.site_a_id, {"SiteC"}))
+    def test_scoped_identity_hidden_from_other_tenant(self):
+        self.assertFalse(self.im.identity_visible_to(self.tenant_a_id, {"TenantC"}))
 
-    def test_scoped_identity_visible_to_its_own_site(self):
-        self.assertTrue(self.im.identity_visible_to(self.site_a_id, {"SiteA"}))
+    def test_scoped_identity_visible_to_its_own_tenant(self):
+        self.assertTrue(self.im.identity_visible_to(self.tenant_a_id, {"TenantA"}))
 
-    def test_multi_tenant_identity_matches_any_of_its_sites(self):
-        self.assertTrue(self.im.identity_visible_to(self.multi_id, {"SiteB"}))
-        self.assertFalse(self.im.identity_visible_to(self.multi_id, {"SiteC"}))
+    def test_multi_tenant_identity_matches_any_of_its_tenants(self):
+        self.assertTrue(self.im.identity_visible_to(self.multi_id, {"TenantB"}))
+        self.assertFalse(self.im.identity_visible_to(self.multi_id, {"TenantC"}))
 
     def test_unknown_id_is_not_visible(self):
         self.assertFalse(self.im.identity_visible_to("deadbeef", None))

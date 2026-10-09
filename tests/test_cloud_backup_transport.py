@@ -76,12 +76,12 @@ class TestSftpTarget(unittest.TestCase):
 
     def test_put_writes_a_temp_name_then_renames(self):
         target, client = self._target()
-        target.put(b"hostname switch-01\n", "/srv/backups/site-a/switch-01.txt")
+        target.put(b"hostname switch-01\n", "/srv/backups/tenant-a/switch-01.txt")
         kinds = [c[0] for c in client.calls if c[0] in ("open", "rename")]
         self.assertEqual(["open", "rename"], kinds)
         opened = [c for c in client.calls if c[0] == "open"][0][1]
         self.assertTrue(opened.endswith(".part"), opened)
-        self.assertEqual(("rename", opened, "/srv/backups/site-a/switch-01.txt"),
+        self.assertEqual(("rename", opened, "/srv/backups/tenant-a/switch-01.txt"),
                          [c for c in client.calls if c[0] == "rename"][0])
 
     def test_a_pinned_fingerprint_that_does_not_match_aborts_before_any_write(self):
@@ -97,24 +97,24 @@ class TestSftpTarget(unittest.TestCase):
 
     def test_ensure_dir_creates_each_missing_level_once(self):
         target, client = self._target()
-        target.ensure_dir("/srv/backups/site-a/cisco")
+        target.ensure_dir("/srv/backups/tenant-a/cisco")
         made = [c[1] for c in client.calls if c[0] == "mkdir"]
-        self.assertEqual(["/srv", "/srv/backups", "/srv/backups/site-a",
-                          "/srv/backups/site-a/cisco"], made)
+        self.assertEqual(["/srv", "/srv/backups", "/srv/backups/tenant-a",
+                          "/srv/backups/tenant-a/cisco"], made)
         client.calls.clear()
-        target.ensure_dir("/srv/backups/site-a/cisco")
+        target.ensure_dir("/srv/backups/tenant-a/cisco")
         self.assertEqual([], [c for c in client.calls if c[0] == "mkdir"])
 
     def test_put_removes_the_temp_file_when_the_write_fails(self):
         target, client = self._target()
         with self.assertRaises(IOError):
-            target.put(b"boom", "/srv/backups/site-a/switch-01.txt")
+            target.put(b"boom", "/srv/backups/tenant-a/switch-01.txt")
         kinds = [c[0] for c in client.calls if c[0] in ("open", "remove", "rename")]
         self.assertEqual(["open", "remove"], kinds)
         opened = [c for c in client.calls if c[0] == "open"][0][1]
         removed = [c for c in client.calls if c[0] == "remove"][0][1]
         self.assertEqual(opened, removed)
-        self.assertNotIn("/srv/backups/site-a/switch-01.txt", client.files)
+        self.assertNotIn("/srv/backups/tenant-a/switch-01.txt", client.files)
 
 
 class TestPinningPolicy(unittest.TestCase):

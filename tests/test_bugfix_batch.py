@@ -148,7 +148,7 @@ class TestOnelineBayOpensFilteredInventory(unittest.TestCase):
     def test_bay_state_partial_down_is_warn(self):
         # Se solo alcuni apparati sono down, lo stato della bay deve essere 'warn' (attenzione),
         # e 'down' solo se tutti gli apparati della bay sono giù.
-        # (jump-host-sites Task 4 round 2: 'warn' now also covers a mix that
+        # (jump-host plan, Task 4 round 2: 'warn' now also covers a mix that
         # includes not-measurable devices, alongside down/warn — see
         # tests/test_bastion_probe.py::FleetOnelineBayIsNotPaintedDownForUnmeasurable.)
         self.assertIn("(b.down === b.total) ? 'down'", self.src)

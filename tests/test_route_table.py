@@ -172,7 +172,7 @@ class FortiGateContext(unittest.TestCase):
 
     def _ctx(self, answer):
         ifaces = {"port1": {"name": "port1", "ip": "203.0.113.9", "mask": 24}}
-        tunnels = [{"name": "vpn-site-b", "rgwy": "198.51.100.7",
+        tunnels = [{"name": "vpn-branch-b", "rgwy": "198.51.100.7",
                     "proxyid": [{"status": "down"}, {"status": "up"}]},
                    {"name": "vpn-dead", "rgwy": "198.51.100.8", "proxyid": [{"status": "down"}]}]
         with mock.patch.object(fortigate_service, "get_interfaces",
@@ -203,7 +203,7 @@ class FortiGateContext(unittest.TestCase):
         self.assertEqual([a["ip"] for a in ctx["addresses"]], ["203.0.113.9"])
         self.assertEqual([p["hostname"] for p in ctx["ha"]], ["fw-edge", "fw-edge-b"])
         self.assertEqual(ctx["tunnels"], [
-            {"name": "vpn-site-b", "remote_gw": "198.51.100.7", "up": True},
+            {"name": "vpn-branch-b", "remote_gw": "198.51.100.7", "up": True},
             {"name": "vpn-dead", "remote_gw": "198.51.100.8", "up": False}])
 
     def test_a_silent_or_backup_only_fortigate_is_not_asked_again(self):
@@ -353,7 +353,7 @@ class CliCollection(unittest.TestCase):
         self.assertEqual(len(out["rows"]), 7)
         self.assertEqual(out["source"], "ssh")
 
-    def test_an_agent_site_is_not_dialled_at_all(self):
+    def test_an_agent_probe_is_not_dialled_at_all(self):
         # Il centrale non ha una rotta verso gli apparati di una sede agent:
         # provarci allunga ogni refresh di un timeout per niente.
         with mock.patch.object(route_table, "_is_agent_probe", return_value=True),              mock.patch("core.core_engine.send_custom_command") as ssh:
@@ -583,7 +583,7 @@ class RouteApi(unittest.TestCase):
         self.assertIn(TestClient(app_server.app).get("/api/routes").status_code,
                       (401, 403))
 
-    def test_an_admin_sees_every_site(self):
+    def test_an_admin_sees_every_tenant(self):
         out = self._get("adm_rt")
         self.assertEqual({r["device"] for r in out["rows"]},
                          {"fw-edge", "fw-dc", "sw-core"})
@@ -622,7 +622,7 @@ class RouteApi(unittest.TestCase):
         self.assertEqual({r["device"] for r in out["rows"]}, {"fw-edge"})
         self.assertEqual(out["devices_queried"], 1)
 
-    def test_scope_keeps_another_site_out(self):
+    def test_scope_keeps_another_tenant_out(self):
         # sede-a tiene il firewall e lo switch; fw-dc sta in sede-b.
         out = self._get("op_a_rt")
         self.assertEqual({r["device"] for r in out["rows"]}, {"fw-edge", "sw-core"})

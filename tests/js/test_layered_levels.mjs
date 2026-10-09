@@ -58,7 +58,7 @@ const links = [
     { source: '192.0.2.20', target: '192.0.2.30' },
 ];
 
-let levels = build({})(nodes, links, 'site-a');
+let levels = build({})(nodes, links, 'tenant-a');
 // The whole point: same device_type, different tiers — core above access.
 assert.equal(levels['192.0.2.1'], 0);
 assert.equal(levels['192.0.2.10'], 1);
@@ -68,37 +68,37 @@ assert.equal(levels['192.0.2.21'], 2);
 assert.equal(levels['192.0.2.30'], 3);
 
 // A user override wins over the computed depth, and only for its own site.
-levels = build({ 'site-a': { '192.0.2.20': 0 } })(nodes, links, 'site-a');
+levels = build({ 'tenant-a': { '192.0.2.20': 0 } })(nodes, links, 'tenant-a');
 assert.equal(levels['192.0.2.20'], 0);
 assert.equal(levels['192.0.2.21'], 2);
-levels = build({ 'site-a': { '192.0.2.20': 0 } })(nodes, links, 'site-b');
+levels = build({ 'tenant-a': { '192.0.2.20': 0 } })(nodes, links, 'tenant-b');
 assert.equal(levels['192.0.2.20'], 2);
 
 // No boundary device: the most connected node becomes the root, so the map
 // still gets tiers instead of collapsing onto one row.
 const noFw = nodes.filter(n => n.device_type !== 'firewall');
 const noFwLinks = links.filter(l => l.source !== '192.0.2.1');
-levels = build({})(noFw, noFwLinks, 'site-a');
+levels = build({})(noFw, noFwLinks, 'tenant-a');
 assert.equal(levels['192.0.2.10'], 0);
 assert.equal(levels['192.0.2.20'], 1);
 assert.equal(levels['192.0.2.30'], 2);
 
 // An isolated node (no adjacency at all) falls back to its device type.
-levels = build({})(nodes.concat([{ id: '192.0.2.99', device_type: 'server' }]), links, 'site-a');
+levels = build({})(nodes.concat([{ id: '192.0.2.99', device_type: 'server' }]), links, 'tenant-a');
 assert.equal(levels['192.0.2.99'], 3);
 
 // A hand-picked core is the only root: the firewall is no longer tier 0 and the
 // whole map re-layers around the chosen switch, for that site only.
-levels = build({}, { 'site-a': '192.0.2.20' })(nodes, links, 'site-a');
+levels = build({}, { 'tenant-a': '192.0.2.20' })(nodes, links, 'tenant-a');
 assert.equal(levels['192.0.2.20'], 0);
 assert.equal(levels['192.0.2.10'], 1);
 assert.equal(levels['192.0.2.30'], 1);
 assert.equal(levels['192.0.2.1'], 2);
 assert.equal(levels['192.0.2.21'], 3);
-levels = build({}, { 'site-a': '192.0.2.20' })(nodes, links, 'site-b');
+levels = build({}, { 'tenant-a': '192.0.2.20' })(nodes, links, 'tenant-b');
 assert.equal(levels['192.0.2.1'], 0);
 // A core pointing at a device that left the map falls back to the deduction.
-levels = build({}, { 'site-a': '192.0.2.77' })(nodes, links, 'site-a');
+levels = build({}, { 'tenant-a': '192.0.2.77' })(nodes, links, 'tenant-a');
 assert.equal(levels['192.0.2.1'], 0);
 
 console.log('layered_levels: ok');

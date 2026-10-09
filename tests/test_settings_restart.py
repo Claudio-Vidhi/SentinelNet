@@ -354,7 +354,7 @@ class AgentIsLinuxOnlyAndSaysSo(unittest.TestCase):
         root = pathlib.Path(__file__).resolve().parents[1]
         return root.joinpath(*parts).read_text(encoding="utf-8")
 
-    def test_remote_sites_states_the_agent_is_linux_only(self):
+    def test_probes_doc_states_the_agent_is_linux_only(self):
         doc = self._read("docs", "probes.md")
         self.assertIn("## Supported platforms", doc)
         self.assertIn("probe agent runs on Linux only", doc)

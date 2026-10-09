@@ -32,8 +32,8 @@ class TestCloudBackupState(unittest.TestCase):
     def test_a_successful_run_records_its_time_and_hashes(self):
         cb_state.record_run({"ok": True, "uploaded": 2, "skipped": 5, "failed": 0,
                              "verified": 2, "error": None,
-                             "files": {"site-a/cisco/switch-01-192.0.2.10.txt": "sha256:1f0a"}})
-        self.assertEqual({"site-a/cisco/switch-01-192.0.2.10.txt": "sha256:1f0a"},
+                             "files": {"tenant-a/cisco/switch-01-192.0.2.10.txt": "sha256:1f0a"}})
+        self.assertEqual({"tenant-a/cisco/switch-01-192.0.2.10.txt": "sha256:1f0a"},
                          cb_state.known_hashes())
         self.assertLess(cb_state.hours_since_success(), 1)
 

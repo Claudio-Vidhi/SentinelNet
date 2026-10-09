@@ -156,7 +156,7 @@ class PolicyTrafficApi(unittest.TestCase):
         self.assertEqual({r["device"] for r in out["rows"]}, {"fw-edge", "fw-dc"})
         self.assertEqual(out["devices_queried"], 2)
 
-    def test_scope_keeps_another_site_out(self):
+    def test_scope_keeps_another_tenant_out(self):
         out = self._get("op_a_ft")
         self.assertEqual({r["device"] for r in out["rows"]}, {"fw-edge"})
 

@@ -110,7 +110,7 @@ class TestClassifyDeviceType(unittest.TestCase):
         # Description LLDP dicesse esplicitamente "Cisco AP Software".
         self.assertEqual(
             classify_device_type(
-                "site-ap-01",
+                "hq-ap-01",
                 description="Cisco AP Software, ap1g7-k9w8 Version: 1.2.3",
                 capabilities="Router Trans-Bridge",
             ),
@@ -135,7 +135,7 @@ class TestClassifyDeviceType(unittest.TestCase):
         # la classificazione prima di leggere il modello nella Platform.
         self.assertEqual(
             classify_device_type(
-                "site-gw-01",
+                "hq-gw-01",
                 platform="cisco ISR4321/K9",
                 capabilities="Router Switch IGMP",
             ),
@@ -146,7 +146,7 @@ class TestClassifyDeviceType(unittest.TestCase):
         # Contro-prova: stesse Capabilities, ma Platform di switch -> switch.
         self.assertEqual(
             classify_device_type(
-                "site-sw-01",
+                "hq-sw-01",
                 platform="cisco WS-C3850-12XS",
                 capabilities="Router Switch IGMP",
             ),
@@ -158,7 +158,7 @@ class TestClassifyDeviceType(unittest.TestCase):
         # e prima finivano nel generico "client".
         self.assertEqual(
             classify_device_type(
-                "site-cam-01",
+                "hq-cam-01",
                 description="ACME M1234 Fixed Dome Network Camera 1.2.3",
             ),
             "camera",
@@ -222,7 +222,7 @@ class TestClassifyByModel(unittest.TestCase):
         # backup was classified from its hostname, because the model was
         # computed for display and never handed to the classifier.
         self.assertEqual(
-            classify_device_type("site-ap-lab", model="WS-C2960X-24PS-L"),
+            classify_device_type("hq-ap-lab", model="WS-C2960X-24PS-L"),
             "switch",
         )
 
