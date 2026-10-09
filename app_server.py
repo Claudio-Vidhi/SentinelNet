@@ -77,6 +77,11 @@ async def lifespan(app: "FastAPI"):
     data_dir = os.path.dirname(data_config.get_path("users.json"))
     for step in probe_migration.migrate(data_dir):
         log_audit(f"Migrazione sonde: {step}.")
+    # Locations from the (organization, probe) pairs (spec 2026-10-09
+    # organizations-locations); needs the probe names above.
+    from core import location_migration
+    for step in location_migration.migrate(data_dir):
+        log_audit(f"Migrazione sedi: {step}.")
 
     # Prima di tutto il resto: ripara le ACL dei file che contengono segreti.
     # Sotto il servizio Windows l'irrigidimento falliva (icacls 1332, account
