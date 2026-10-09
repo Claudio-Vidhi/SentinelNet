@@ -30,7 +30,7 @@ NOW = int(time.time())
 # Come lo restituisce mac_history.client_map().
 CLIENT = {
     "mac": "aa:bb:cc:dd:ee:ff", "ip": "192.0.2.10", "vlan": "10",
-    "tenant": "sede-a", "site": "central", "client_type": "client",
+    "tenant": "sede-a", "probe": "central", "client_type": "client",
     "source_ip": "192.0.2.1", "source_name": "FGT", "source_type": "firewall",
     "switch_ip": "192.0.2.20", "switch_name": "ACC-SW1",
     "switch_port": "GigabitEthernet1/0/5", "port_vlan": "10",
@@ -237,7 +237,7 @@ class TestPositionRecency(unittest.TestCase):
                    switch_name="SW-CASA", switch_port="Ethernet0/0",
                    last_seen="2026-08-01T20:00:00+00:00",
                    port_last_seen="2026-08-01T20:00:00+00:00")
-    NEW_L2 = {"mac": CLIENT["mac"], "tenant": "ufficio", "site": "central",
+    NEW_L2 = {"mac": CLIENT["mac"], "tenant": "ufficio", "probe": "central",
               "switch_ip": "192.0.2.30", "switch_name": "SW-UFF",
               "interface": "GigabitEthernet2/0/25", "vlan": "31",
               "last_seen": "2026-08-03T12:30:00+00:00"}
@@ -292,7 +292,7 @@ class TestPositionWithoutArp(unittest.TestCase):
     — si sentiva rispondere "sconosciuto" su un client perfettamente
     localizzato dagli switch."""
 
-    SIGHT = {"mac": "aa:bb:cc:dd:ee:ff", "tenant": "sede-a", "site": "central",
+    SIGHT = {"mac": "aa:bb:cc:dd:ee:ff", "tenant": "sede-a", "probe": "central",
              "switch_ip": "192.0.2.20", "switch_name": "ACC-SW1",
              "interface": "GigabitEthernet1/0/5", "vlan": "10",
              "last_seen": "2026-08-01T10:00:00+00:00"}
@@ -849,7 +849,7 @@ class TestReport(_Base):
         self.assertEqual(r["resolved_ip"], "192.0.2.10")
         self.assertEqual(set(r["sections"]),
                          {"position", "l2_health", "history", "path",
-                          "firewall", "denies", "across_sites"})
+                          "firewall", "denies", "across_probes"})
         # Storico vuoto NON e' una sezione ignota: e' una risposta ("mai visto
         # prima"), e come tale non deve trascinare giu' il complete.
         self.assertTrue(r["sections"]["history"]["known"])
@@ -891,17 +891,17 @@ class TestReport(_Base):
         self.assertIn("destinazione", r["sections"]["path"]["reason"])
 
 
-class TestAgentSiteRelay(_Base):
+class TestAgentProbeRelay(_Base):
     """Nelle sedi agent il centrale non raggiunge l'apparato. Fingere di
     provarci significherebbe un timeout; tacere significherebbe far credere
     che non ci sia una policy. Si accoda e si dice."""
 
-    def _agent_site(self):
+    def _agent_probe(self):
         return patch("services.client_diagnosis._is_agent_probe",
                      return_value=True)
 
     def test_pending_relay_is_declared(self):
-        with self._agent_site(), \
+        with self._agent_probe(), \
              patch("services.fortigate_service.list_targets",
                    return_value=[{"ip": "192.0.2.1"}]), \
              patch("services.inventory_manager.get_all_devices",
@@ -924,7 +924,7 @@ class TestAgentSiteRelay(_Base):
     def test_a_ready_relay_result_is_used(self):
         ready = {"status": "done",
                  "result": json.dumps({"results": {"policy_id": 9}})}
-        with self._agent_site(), \
+        with self._agent_probe(), \
              patch("services.fortigate_service.list_targets",
                    return_value=[{"ip": "192.0.2.1"}]), \
              patch("services.inventory_manager.get_all_devices",
@@ -939,7 +939,7 @@ class TestAgentSiteRelay(_Base):
         self.assertEqual(f["policy_lookup"]["data"]["policy_id"], 9)
 
     def test_no_duplicate_job_while_one_is_queued(self):
-        with self._agent_site(), \
+        with self._agent_probe(), \
              patch("services.fortigate_service.list_targets",
                    return_value=[{"ip": "192.0.2.1"}]), \
              patch("services.inventory_manager.get_all_devices",
@@ -967,7 +967,7 @@ class TestResolveEndpoint(_Base):
             e = client_diagnosis.resolve_endpoint("198.51.100.20")
         self.assertTrue(e["known"])
         self.assertEqual(e["derived"], "observed-arp")
-        self.assertEqual(e["site"], "datacenter")
+        self.assertEqual(e["probe"], "datacenter")
         self.assertEqual(e["gateway_ip"], "192.0.2.1")
 
     def test_exact_match_only(self):
@@ -987,7 +987,7 @@ class TestResolveEndpoint(_Base):
             e = client_diagnosis.resolve_endpoint("198.51.100.20")
         self.assertTrue(e["known"])
         self.assertEqual(e["derived"], "declared-subnet")
-        self.assertEqual(e["site"], "datacenter")
+        self.assertEqual(e["probe"], "datacenter")
 
     def test_a_malformed_subnet_does_not_break_the_others(self):
         """Il campo non e' mai stato validato: una riga scritta male non deve
@@ -997,7 +997,7 @@ class TestResolveEndpoint(_Base):
                  {"id": "rotta", "subnets": ["non-una-subnet", "///"]},
                  {"id": "datacenter", "subnets": ["198.51.100.0/24"]}]):
             e = client_diagnosis.resolve_endpoint("198.51.100.20")
-        self.assertEqual(e["site"], "datacenter")
+        self.assertEqual(e["probe"], "datacenter")
 
     def test_unlocatable_address_says_so(self):
         with patch("collectors.mac_history.search_arp", return_value=[]), \
@@ -1007,25 +1007,25 @@ class TestResolveEndpoint(_Base):
         self.assertIn("subnet dichiarata", e["reason"])
 
 
-class TestAcrossSites(_Base):
+class TestAcrossProbes(_Base):
     """Un flusso fra due sedi attraversa DUE firewall: basta che uno neghi."""
 
     def _resolve(self, dst):
         return patch("services.client_diagnosis.resolve_endpoint",
                      return_value=dst)
 
-    def test_same_site_needs_no_far_end(self):
-        with self._resolve({"known": True, "site": "central",
+    def test_same_probe_needs_no_far_end(self):
+        with self._resolve({"known": True, "probe": "central",
                             "gateway_ip": "192.0.2.1"}):
             a = client_diagnosis._across_probes(
-                {"known": True, "site": "central", "gateway_ip": "192.0.2.1",
+                {"known": True, "probe": "central", "gateway_ip": "192.0.2.1",
                  "ip": "192.0.2.10"}, "192.0.2.50", 443, "TCP", None)
-        self.assertTrue(a["same_site"])
+        self.assertTrue(a["same_probe"])
         self.assertNotIn("far_end_policy", a)
 
     def test_far_end_policy_is_consulted(self):
         dst_fgt = {"IP": "203.0.113.1", "Vendor": "fortinet"}
-        with self._resolve({"known": True, "site": "datacenter",
+        with self._resolve({"known": True, "probe": "datacenter",
                             "gateway_ip": "203.0.113.1"}), \
              patch("services.fortigate_service.list_targets",
                    return_value=[{"ip": "192.0.2.1"}, {"ip": "203.0.113.1"}]), \
@@ -1038,15 +1038,15 @@ class TestAcrossSites(_Base):
              patch("services.fortigate_service.get_route_for",
                    return_value={"source": "api", "data": {"matched": True}}):
             a = client_diagnosis._across_probes(
-                {"known": True, "site": "central", "gateway_ip": "192.0.2.1",
+                {"known": True, "probe": "central", "gateway_ip": "192.0.2.1",
                  "ip": "192.0.2.10"}, "198.51.100.20", 443, "TCP", None)
-        self.assertFalse(a["same_site"])
+        self.assertFalse(a["same_probe"])
         self.assertEqual(a["far_end_policy"]["data"]["policy_id"], 9)
         self.assertTrue(a["tunnels"]["data"])
         self.assertTrue(a["route"]["data"]["matched"])
 
     def test_unmanaged_far_end_is_declared_not_hidden(self):
-        with self._resolve({"known": True, "site": "datacenter",
+        with self._resolve({"known": True, "probe": "datacenter",
                             "gateway_ip": "203.0.113.1"}), \
              patch("services.fortigate_service.list_targets",
                    return_value=[{"ip": "192.0.2.1"}]), \
@@ -1057,7 +1057,7 @@ class TestAcrossSites(_Base):
              patch("services.fortigate_service.get_route_for",
                    return_value={"source": "api", "data": {"matched": False}}):
             a = client_diagnosis._across_probes(
-                {"known": True, "site": "central", "gateway_ip": "192.0.2.1",
+                {"known": True, "probe": "central", "gateway_ip": "192.0.2.1",
                  "ip": "192.0.2.10"}, "198.51.100.20", 443, "TCP", None)
         self.assertFalse(a["far_end_policy"]["known"])
         self.assertIn("non e' fra i target", a["far_end_policy"]["reason"])
@@ -1065,9 +1065,9 @@ class TestAcrossSites(_Base):
     def test_unlocatable_destination_stops_the_comparison(self):
         with self._resolve({"known": False, "reason": "mai osservato"}):
             a = client_diagnosis._across_probes(
-                {"known": True, "site": "central", "gateway_ip": "192.0.2.1",
+                {"known": True, "probe": "central", "gateway_ip": "192.0.2.1",
                  "ip": "192.0.2.10"}, "203.0.113.9", 443, "TCP", None)
-        self.assertIsNone(a["same_site"])
+        self.assertIsNone(a["same_probe"])
         self.assertIn("non e' collocabile", a["note"])
 
 
@@ -1114,7 +1114,7 @@ class TestEndpoint(_Base):
         self.assertEqual(r.status_code, 200)
         self.assertIsNone(seen["tenants"])
 
-    def test_operator_is_scoped_to_its_sites(self):
+    def test_operator_is_scoped_to_its_probes(self):
         seen = {}
 
         def spy(client, dest, dest_port, protocol, tenants, max_age_s=None, **kwargs):
@@ -1275,24 +1275,24 @@ class TestGatewayOverrideAndTraceroute(unittest.TestCase):
 
 class TestGatewayCandidatesScoping(unittest.TestCase):
     """Il picker dei gateway e' l'unica rotta che elenca inventario e sedi a un
-    utente non admin: /api/sites vuole require_admin. Se lo scoping non arriva
+    utente non admin: /api/probes vuole require_admin. Se lo scoping non arriva
     fino in fondo, un utente di una sede legge gli apparati e le subnet di
     tutti gli altri clienti."""
 
     DEVICES = [
-        {"IP": "192.0.2.10", "Hostname": "sw-a", "Group": "sede-a", "Probe": "site-a"},
-        {"IP": "198.51.100.10", "Hostname": "sw-b", "Group": "sede-b", "Probe": "site-b"},
+        {"IP": "192.0.2.10", "Hostname": "sw-a", "Group": "sede-a", "Probe": "probe-a"},
+        {"IP": "198.51.100.10", "Hostname": "sw-b", "Group": "sede-b", "Probe": "probe-b"},
     ]
-    SITES = [
-        {"id": "site-a", "name": "Sede A", "subnets": ["192.0.2.0/24"]},
-        {"id": "site-b", "name": "Sede B", "subnets": ["198.51.100.0/24"]},
+    PROBES = [
+        {"id": "probe-a", "name": "Sede A", "subnets": ["192.0.2.0/24"]},
+        {"id": "probe-b", "name": "Sede B", "subnets": ["198.51.100.0/24"]},
     ]
 
     def _candidates(self, tenant=None, tenants=None):
         with patch("collectors.mac_history.search_arp", return_value=[]), \
              patch("services.inventory_manager.get_all_devices",
                    return_value=self.DEVICES), \
-             patch("services.probe_manager.list_probes", return_value=self.SITES):
+             patch("services.probe_manager.list_probes", return_value=self.PROBES):
             return client_diagnosis.get_tenant_gateway_candidates(tenant, tenants)
 
     def test_the_user_scope_alone_filters_the_inventory(self):
@@ -1303,10 +1303,10 @@ class TestGatewayCandidatesScoping(unittest.TestCase):
         self.assertIn("192.0.2.10", ips)
         self.assertNotIn("198.51.100.10", ips)
 
-    def test_the_subnet_gateways_of_other_sites_are_not_listed(self):
+    def test_the_subnet_gateways_of_other_probes_are_not_listed(self):
         out = self._candidates(tenant=None, tenants=["sede-a"])
         self.assertEqual([c["tenant"] for c in out if c["source"] == "subnet"],
-                         ["site-a"])
+                         ["probe-a"])
 
     def test_an_unscoped_profile_still_sees_everything(self):
         ips = [c["ip"] for c in self._candidates(tenant=None, tenants=None)]

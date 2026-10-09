@@ -34,7 +34,7 @@ class DeviceSchema(BaseModel):
     password: str = ""
     enable_secret: str = ""
     group: str = "Generale"
-    site: str = "central"
+    probe: str = "central"
     ssh_port: int = Field(22, ge=1, le=65535)
     # §11.6: mappa trasporti per-device {protocollo: porta|None}. None = legacy
     # (deriva ssh-only dalla porta SSH). Validazione in inventory_manager.
@@ -58,9 +58,9 @@ class DeviceReassignSchema(BaseModel):
     ip: str
     new_group: str
 
-class DeviceSiteSchema(BaseModel):
+class DeviceProbeSchema(BaseModel):
     ip: str
-    new_site: str
+    new_probe: str
 
 class PromoteDeviceSchema(BaseModel):
     node_id: str
@@ -153,7 +153,7 @@ _EXPORT_COLUMNS = {
     "model":      ("Model",      lambda d, s, b, m: d.get("Model") or s.get("model", "")),
     "serial":     ("Serial",     lambda d, s, b, m: s.get("serial", "")),
     "group":      ("Tenant",     lambda d, s, b, m: d.get("Group", "")),
-    "site":       ("Probe",       lambda d, s, b, m: d.get("Probe", "")),
+    "probe":      ("Probe",       lambda d, s, b, m: d.get("Probe", "")),
     "version":    ("Version",    lambda d, s, b, m: s.get("version", "Non Scansionato")),
     "status":     ("Status",     lambda d, s, b, m: s.get("status", "unknown")),
     "profile":    ("Profile",    lambda d, s, b, m: d.get("Profile", "")),
@@ -205,7 +205,7 @@ def export_devices_columns(current_user = Depends(get_current_user)):
 def assemble_device_export_rows(
     current_user: dict,
     groups: str = "",
-    sites: str = "",
+    probes: str = "",
     vendors: str = "",
     redundancy: str = "",
     columns: str = "",
@@ -218,7 +218,7 @@ def assemble_device_export_rows(
         raise HTTPException(status_code=400, detail=f"Colonne sconosciute: {', '.join(unknown)}")
 
     want_groups = _csv_filter(groups)
-    want_probes = _csv_filter(sites)
+    want_probes = _csv_filter(probes)
     want_vendors = _csv_filter(vendors)
     want_redundancy = _csv_filter(redundancy)
 
@@ -263,7 +263,7 @@ def assemble_device_export_rows(
 @router.get("/api/export/devices", dependencies=[Depends(require_tab("tab-devices"))])
 def export_devices_csv(
     groups: str = "",
-    sites: str = "",
+    probes: str = "",
     vendors: str = "",
     redundancy: str = "",
     columns: str = "",
@@ -273,7 +273,7 @@ def export_devices_csv(
     headers, rows = assemble_device_export_rows(
         current_user=current_user,
         groups=groups,
-        sites=sites,
+        probes=probes,
         vendors=vendors,
         redundancy=redundancy,
         columns=columns,
@@ -300,7 +300,7 @@ def export_devices_csv(
 @router.get("/api/export/devices/preview", dependencies=[Depends(require_tab("tab-devices"))])
 def preview_devices_export(
     groups: str = "",
-    sites: str = "",
+    probes: str = "",
     vendors: str = "",
     redundancy: str = "",
     columns: str = "",
@@ -310,7 +310,7 @@ def preview_devices_export(
     headers, rows = assemble_device_export_rows(
         current_user=current_user,
         groups=groups,
-        sites=sites,
+        probes=probes,
         vendors=vendors,
         redundancy=redundancy,
         columns=columns,
@@ -330,10 +330,10 @@ def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
     if existing:
         assert_group_allowed(current_user, existing.get('Group', 'Generale'))
 
-    probe_val = (device.site or 'central').strip()
+    probe_val = (device.probe or 'central').strip()
     all_probes = {s['id'] for s in probe_manager.list_probes()}
     if probe_val not in all_probes:
-        raise HTTPException(status_code=400, detail=f"Sede '{probe_val}' inesistente")
+        raise HTTPException(status_code=400, detail=f"Sonda '{probe_val}' inesistente")
 
     try:
         inventory_manager.add_or_update_device(
@@ -422,8 +422,8 @@ def import_csv(payload: CSVImportRequest, current_user = Depends(require_operato
             # nessun agente raccoglierà mai. Meglio un errore sulla riga.
             probe_name = (row.get('Probe') or '').strip()
             if probe_name and probe_name not in {s['id'] for s in probe_manager.list_probes()}:
-                raise ValueError(f"Sede '{probe_name}' inesistente: creala nella "
-                                 f"scheda Sedi prima di importare")
+                raise ValueError(f"Sonda '{probe_name}' inesistente: creala nella "
+                                 f"scheda Sonde prima di importare")
 
             # Rimozione Profile: passa forzatamente il valore "custom" come parametro profile
             inventory_manager.add_or_update_device(
@@ -522,8 +522,8 @@ def reassign_device(payload: DeviceReassignSchema, current_user = Depends(requir
     )
     return {"status": "success", "message": f"Dispositivo spostato in '{payload.new_group}'"}
 
-@router.post("/api/reassign-device-site", dependencies=[Depends(require_tab("tab-devices"))])
-def reassign_device_site(payload: DeviceSiteSchema, current_user = Depends(require_operator)):
+@router.post("/api/reassign-device-probe", dependencies=[Depends(require_tab("tab-devices"))])
+def reassign_device_probe(payload: DeviceProbeSchema, current_user = Depends(require_operator)):
     """Sposta un dispositivo in un'altra sede aggiornando solo il campo Probe.
 
     Separata da /api/reassign-device perche' cambia una cosa diversa: il
@@ -532,9 +532,9 @@ def reassign_device_site(payload: DeviceSiteSchema, current_user = Depends(requi
     jump lo toglie dal ping ICMP e lo mette dietro il bastione al giro dopo.
     """
     from services import probe_manager
-    if not probe_manager.get_probe(payload.new_site):
+    if not probe_manager.get_probe(payload.new_probe):
         raise HTTPException(status_code=400,
-                            detail=f"Sede '{payload.new_site}' non esiste.")
+                            detail=f"Sonda '{payload.new_probe}' non esiste.")
     devices = inventory_manager.get_all_devices()
     target = next((d for d in devices if d['IP'] == payload.ip), None)
     if not target:
@@ -544,14 +544,14 @@ def reassign_device_site(payload: DeviceSiteSchema, current_user = Depends(requi
     assert_group_allowed(current_user, target.get('Group', 'Generale'))
 
     old_probe = target.get('Probe', 'central')
-    target['Probe'] = payload.new_site
+    target['Probe'] = payload.new_probe
     inventory_manager.safe_write_hosts_csv(devices)
 
     log_audit(
         f"Dispositivo '{payload.ip}' spostato dalla sede '{old_probe}' "
-        f"alla sede '{payload.new_site}' dall'utente '{current_user.get('sub')}'."
+        f"alla sede '{payload.new_probe}' dall'utente '{current_user.get('sub')}'."
     )
-    return {"status": "success", "message": f"Dispositivo spostato nella sede '{payload.new_site}'"}
+    return {"status": "success", "message": f"Dispositivo spostato nella sede '{payload.new_probe}'"}
 
 
 @router.get("/api/device-history", dependencies=[Depends(require_tab("tab-devices", "tab-device-history"))])

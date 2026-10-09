@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Unit tests for the 'jump' site mode (data model, Task 1 of the
-jump-host-sites plan). No tunnel here: only the bastion fields on the site
+"""Unit tests for the 'jump' probe mode (data model, Task 1 of the
+jump-host plan). No tunnel here: only the bastion fields on the probe
 dict.
 
 Isolates SENTINELNET_DATA_DIR in a temp dir BEFORE importing probe_manager,
@@ -35,11 +35,11 @@ class JumpProbeModel(unittest.TestCase):
     def test_create_jump_probe_keeps_fields_and_issues_no_token(self):
         # subnets uses 203.0.113.0/24 (RFC 5737 TEST-NET-3), not 192.0.2.0/24:
         # probe_manager binds its storage path at first import across the whole
-        # suite (see module docstring), so a site declared here is visible to
+        # suite (see module docstring), so a probe declared here is visible to
         # every test file that runs afterwards in the same process. 192.0.2.x
         # is this codebase's default example device range, so declaring it as
-        # an owned site subnet would make any later, unrelated test that scans
-        # or probes a 192.0.2.x address collide with this jump site.
+        # an owned probe subnet would make any later, unrelated test that scans
+        # or probes a 192.0.2.x address collide with this bastion probe.
         probe, token = probe_manager.create_probe(
             "Customer A", "jump", subnets=["203.0.113.0/24"],
             jump_host="198.51.100.10", jump_port=22, jump_identity="id-1")
@@ -85,7 +85,7 @@ class JumpChannel(unittest.TestCase):
         # row. JumpChannelRealDeviceLookup below exercises the real function
         # instead of a hand-picked shape.
         device = {"ip": "192.0.2.5", "hostname": "", "tenant": "Generale",
-                  "site": "customer-a"}
+                  "probe": "customer-a"}
         probe = {"id": "customer-a", "mode": "jump", "jump_host": "198.51.100.10",
                 "jump_port": 22, "jump_identity": "id-1"}
         with mock.patch.object(net_ssh, "_netmiko_connect") as nm, \
@@ -100,7 +100,7 @@ class JumpChannel(unittest.TestCase):
     def test_connect_handler_is_untouched_for_a_central_device(self):
         from core import net_ssh
         device = {"ip": "192.0.2.6", "hostname": "", "tenant": "Generale",
-                  "site": "central"}
+                  "probe": "central"}
         probe = {"id": "central", "mode": "central"}
         with mock.patch.object(net_ssh, "_netmiko_connect") as nm, \
              mock.patch("services.inventory_manager.get_device_by_ip", return_value=device), \
@@ -158,8 +158,8 @@ class JumpChannelRealDeviceLookup(unittest.TestCase):
 
 
 class JumpTransportLocking(unittest.TestCase):
-    """Covers the per-probe locking fix: a slow/dead bastion for one site must
-    not block a connect to a different, healthy site's bastion."""
+    """Covers the per-probe locking fix: a slow/dead bastion for one probe must
+    not block a connect to a different, healthy probe's bastion."""
 
     def tearDown(self):
         from core import net_ssh
@@ -179,7 +179,7 @@ class JumpTransportLocking(unittest.TestCase):
         def fake_create_connection(addr, timeout=None):
             if addr[0] == probe_a["jump_host"]:
                 started_a.set()
-                # Stands in for a black-holed bastion: site A's connect
+                # Stands in for a black-holed bastion: probe A's connect
                 # hangs here until the test releases it.
                 release_a.wait(timeout=5)
             return mock.Mock()
@@ -194,13 +194,13 @@ class JumpTransportLocking(unittest.TestCase):
             t.start()
             try:
                 self.assertTrue(started_a.wait(timeout=5),
-                                "site A's connect never started")
+                                "probe A's connect never started")
 
                 start = time.monotonic()
                 net_ssh._transport(probe_b)
                 elapsed = time.monotonic() - start
                 self.assertLess(elapsed, 1.0,
-                                "site B waited on site A's lock: locking is not per-probe")
+                                "probe B waited on probe A's lock: locking is not per-probe")
             finally:
                 release_a.set()
                 t.join(timeout=5)
@@ -242,7 +242,7 @@ class JumpTransportLocking(unittest.TestCase):
 
 class BastionHostKeyIsPinned(unittest.TestCase):
     """A bastion carries every device behind it: an unverified hop there is a
-    MITM on the whole site, silently."""
+    MITM on the whole probe, silently."""
 
     def _probe(self, sid):
         return {"id": sid, "jump_host": "198.51.100.50", "jump_port": 22,
@@ -303,7 +303,7 @@ class IcmpSkippedForJumpProbes(unittest.TestCase):
     (services/ping_monitor.py:66), which pings every inventory device and
     keeps per-IP state in `_state`; the per-device pinger `_ping_one` (line 59)
     only ever sees a bare IP, so the jump-probe guard has to happen in
-    `_run_cycle` where the device's Site is still known. This test drives that
+    `_run_cycle` where the device's Probe is still known. This test drives that
     real path instead."""
 
     def setUp(self):
@@ -417,7 +417,7 @@ class ManualPingSkipsJumpProbes(unittest.TestCase):
         p.assert_not_called()
         self.assertIsNone(result["results"]["192.0.2.5"])
         # Not measurable is not "unknown": persisting would clobber whatever
-        # real status an agent site pushed moments earlier. Response stays
+        # real status an agent probe pushed moments earlier. Response stays
         # None either way, only the write is skipped.
         uvi.assert_not_called()
 
@@ -449,7 +449,7 @@ class ManualPingSkipsJumpProbes(unittest.TestCase):
         p.assert_not_called()
         self.assertIsNone(result["reachable"])
         # Same rationale as ping-check: not measurable must not become a
-        # write, or it would clobber a status an agent site just pushed.
+        # write, or it would clobber a status an agent probe just pushed.
         uvi.assert_not_called()
 
     def test_ping_single_still_pings_a_central_device(self):
@@ -481,7 +481,7 @@ class NetworkMapReportsUnknownForJumpDevices(unittest.TestCase):
                           {"id": "192.0.2.7", "status": "offline"}],
                 "links": []}
         pm_status = {"devices": [
-            {"ip": "192.0.2.5", "up": None},   # jump site: not measurable
+            {"ip": "192.0.2.5", "up": None},   # bastion probe: not measurable
             {"ip": "192.0.2.6", "up": True},
             {"ip": "192.0.2.7", "up": False},
         ]}
@@ -725,9 +725,9 @@ class PingMonitorPanelRendersTheThirdBucket(unittest.TestCase):
 
 class JumpLimitsRestNoLongerClaimsAWlcRestApi(unittest.TestCase):
     """A previous ruling removed the WLC half of this claim from
-    docs/remote-sites.md — there is no WLC REST path in this codebase, WLC is
+    docs/probes.md — there is no WLC REST path in this codebase, WLC is
     CLI-only and already works through the tunnel — but the fix never reached
-    the string the operator actually reads in the site-creation panel."""
+    the string the operator actually reads in the probe-creation panel."""
 
     def test_both_locales_and_the_template_fallback_drop_wlc(self):
         import os
@@ -745,7 +745,7 @@ class JumpLimitsRestNoLongerClaimsAWlcRestApi(unittest.TestCase):
 
 
 class NoDirectNetmikoImports(unittest.TestCase):
-    """Every SSH call site must go through core.net_ssh, otherwise a jump site
+    """Every SSH call site must go through core.net_ssh, otherwise a bastion probe
     silently bypasses the tunnel and tries to reach the device directly."""
 
     # probe_agent.py runs inside the remote network: it must NOT tunnel.
@@ -774,9 +774,9 @@ class NoDirectNetmikoImports(unittest.TestCase):
 
 
 class JumpProbeApi(unittest.TestCase):
-    """Task 5: POST /api/sites accepts mode='jump' and the three bastion
-    fields, and GET /api/sites never leaks a secret for it (a jump site has
-    no token, unlike an agent site)."""
+    """Task 5: POST /api/probes accepts mode='jump' and the three bastion
+    fields, and GET /api/probes never leaks a secret for it (a bastion probe has
+    no token, unlike an agent probe)."""
 
     @classmethod
     def setUpClass(cls):
@@ -802,16 +802,16 @@ class JumpProbeApi(unittest.TestCase):
     def test_post_probes_accepts_jump_mode(self):
         # 203.0.113.0/24 (RFC 5737 TEST-NET-3), not 192.0.2.0/24: probe_manager
         # binds its storage path at first import across the whole suite (see
-        # JumpProbeModel's docstring above), so this site is visible to every
+        # JumpProbeModel's docstring above), so this probe is visible to every
         # test file that runs afterwards in the same process. 192.0.2.x is
         # this codebase's default example device range, so an owned jump-probe
         # subnet there would make later unrelated scan/ping tests probing
         # 192.0.2.x collide with it (409 "scansione ICMP non e' possibile").
-        r = self.client.post("/api/sites", headers=self.admin_h, json={
-            "name": "Jump API Test Site", "mode": "jump", "jump_host": "198.51.100.11",
+        r = self.client.post("/api/probes", headers=self.admin_h, json={
+            "name": "Jump API Test Probe", "mode": "jump", "jump_host": "198.51.100.11",
             "jump_port": 22, "jump_identity": "id-1", "subnets": ["203.0.113.0/24"]})
         self.assertEqual(r.status_code, 200, r.text)
-        body = r.json()["site"]
+        body = r.json()["probe"]
         self.assertEqual(body["mode"], "jump")
         self.assertNotIn("token_hash", body)
         self.assertIsNone(r.json()["token"])
@@ -820,16 +820,16 @@ class JumpProbeApi(unittest.TestCase):
         # Same 203.0.113.0/24 reasoning as above; a distinct name/subnet from
         # the other test in this class so the two don't collide in the shared
         # storage (see the comment on test_post_probes_accepts_jump_mode).
-        r = self.client.post("/api/sites", headers=self.admin_h, json={
-            "name": "Jump GET Roundtrip Site", "mode": "jump",
+        r = self.client.post("/api/probes", headers=self.admin_h, json={
+            "name": "Jump GET Roundtrip Probe", "mode": "jump",
             "jump_host": "198.51.100.12", "jump_port": 2222,
             "jump_identity": "id-roundtrip", "subnets": ["203.0.113.0/25"]})
         self.assertEqual(r.status_code, 200, r.text)
-        probe_id = r.json()["site"]["id"]
+        probe_id = r.json()["probe"]["id"]
 
-        r = self.client.get("/api/sites", headers=self.admin_h)
+        r = self.client.get("/api/probes", headers=self.admin_h)
         self.assertEqual(r.status_code, 200, r.text)
-        probe = next(s for s in r.json()["sites"] if s["id"] == probe_id)
+        probe = next(s for s in r.json()["probes"] if s["id"] == probe_id)
 
         # The bastion fields round-trip exactly as sent.
         self.assertEqual(probe["jump_host"], "198.51.100.12")
@@ -838,7 +838,7 @@ class JumpProbeApi(unittest.TestCase):
 
         # jump_identity is a reference (an id string resolved server-side at
         # connect time, see core/net_ssh.py) — never a credential itself, and
-        # no key on the site object may carry one either.
+        # no key on the probe object may carry one either.
         forbidden_keys = {"token_hash", "password", "enable_secret",
                           "enable secret", "username"}
         self.assertEqual(forbidden_keys & set(probe.keys()), set())
@@ -848,13 +848,13 @@ class JumpChannelIsClosedWhenNetmikoFails(unittest.TestCase):
     """The direct-tcpip channel lives on the shared, long-lived per-probe
     transport. `with ConnectHandler(...)` at the call sites cannot reclaim it
     when the netmiko constructor raises, because the context manager never
-    binds. Rotated bastion-site credentials plus a scheduled collector would
+    binds. Rotated bastion-probe credentials plus a scheduled collector would
     then pile one channel per device per cycle onto the transport until the
     process restarts."""
 
     JUMP_PROBE = {"id": "customer-a", "mode": "jump", "jump_host": "198.51.100.10",
                  "jump_port": 22, "jump_identity": "id-1"}
-    DEVICE = {"ip": "192.0.2.5", "site": "customer-a"}
+    DEVICE = {"ip": "192.0.2.5", "probe": "customer-a"}
 
     def test_channel_is_closed_and_the_error_propagates(self):
         from core import net_ssh
@@ -885,11 +885,11 @@ class JumpChannelIsClosedWhenNetmikoFails(unittest.TestCase):
 
 class ProvisioningNamesTheProbeExplicitly(unittest.TestCase):
     """A device being provisioned (day 0) is not in hosts.csv yet, so
-    core.net_ssh.bastion_probe_for cannot resolve its site from the inventory and
+    core.net_ssh.bastion_probe_for cannot resolve its probe from the inventory and
     the push would be dialled directly — a connect timeout for a switch that
     the bastion could have reached. Both push_via_ssh entry points therefore
-    take an explicit site, forwarded to ConnectHandler as probe_id; the
-    inventory lookup stays the default when no site is named."""
+    take an explicit probe, forwarded to ConnectHandler as probe_id; the
+    inventory lookup stays the default when no probe is named."""
 
     JUMP_PROBE = {"id": "customer-a", "mode": "jump", "jump_host": "198.51.100.10",
                  "jump_port": 22, "jump_identity": "id-1"}
@@ -934,7 +934,7 @@ class ProvisioningNamesTheProbeExplicitly(unittest.TestCase):
 
 class CliPathsSkipTheDirectPrecheckForJumpProbes(unittest.TestCase):
     """Every CLI entry point gates on core_engine.is_reachable, a raw socket
-    connect from the central to the device. For a jump site that route does
+    connect from the central to the device. For a bastion probe that route does
     not exist by definition — the session is tunnelled through the bastion by
     core.net_ssh — so the gate always failed and netmiko was never reached:
     no backup, no inventory, and a false "offline" persisted from a probe of a
@@ -942,7 +942,7 @@ class CliPathsSkipTheDirectPrecheckForJumpProbes(unittest.TestCase):
 
     The predicate is probe_manager.has_direct_path (renamed from
     is_reachable_by_icmp: it always meant "the central has a direct IP path to
-    this site's devices", which is what both the ICMP and the TCP callers
+    this probe's devices", which is what both the ICMP and the TCP callers
     need).
 
     ConnectHandler is made to fail with an authentication error rather than
@@ -1117,7 +1117,7 @@ class WsTerminalThroughBastion(unittest.TestCase):
 
 
 class JumpProbeDeviceIdentity(unittest.TestCase):
-    """A jump site declares two credentials: one for the bastion, one as the
+    """A bastion probe declares two credentials: one for the bastion, one as the
     default for the devices behind it."""
 
     def test_device_identity_is_stored_and_clearable(self):
@@ -1149,13 +1149,13 @@ class DeviceCredentialFallback(unittest.TestCase):
     admin account: that is this installation's credential, sent to somebody
     else's device."""
 
-    SITE = {"id": "customer-a", "mode": "jump", "device_identity": "id-devices"}
+    PROBE = {"id": "customer-a", "mode": "jump", "device_identity": "id-devices"}
 
     def _creds(self, device, probe=None):
         from core import core_engine
         from security import identity_manager
         with mock.patch("services.probe_manager.get_probe",
-                        return_value=self.SITE if probe is None else probe),\
+                        return_value=self.PROBE if probe is None else probe),\
              mock.patch.object(identity_manager, "get_identity_credentials",
                                side_effect=lambda i: ("probe-user", "probe-pw", "probe-secret")
                                if i == "id-devices" else ("row-user", "row-pw", "row-secret")):
@@ -1190,7 +1190,7 @@ class DeviceCredentialFallback(unittest.TestCase):
 
 
 class BastionAuthIsReportedSeparately(unittest.TestCase):
-    SITE = {"id": "customer-a", "mode": "jump", "jump_host": "198.51.100.10",
+    PROBE = {"id": "customer-a", "mode": "jump", "jump_host": "198.51.100.10",
             "jump_port": 22, "jump_identity": "id-1"}
 
     def test_a_refused_bastion_login_is_not_a_device_credential_problem(self):
@@ -1203,7 +1203,7 @@ class BastionAuthIsReportedSeparately(unittest.TestCase):
              mock.patch.object(net_ssh.socket, "create_connection"),\
              mock.patch.object(net_ssh.paramiko, "Transport", return_value=tr):
             with self.assertRaises(net_ssh.BastionAuthError) as ctx:
-                net_ssh._transport(dict(self.SITE))
+                net_ssh._transport(dict(self.PROBE))
         msg = str(ctx.exception)
         self.assertIn("bastion-user", msg)
         self.assertIn("198.51.100.10", msg)
@@ -1220,7 +1220,7 @@ class BastionAuthIsReportedSeparately(unittest.TestCase):
             with mock.patch.object(net_ssh, "_dial") as dial:
                 dial.return_value.get_remote_server_key.return_value = \
                     paramiko.ECDSAKey.generate()
-                fp = net_ssh.probe_bastion(dict(self.SITE))
+                fp = net_ssh.probe_bastion(dict(self.PROBE))
             dial.assert_called_once()
             dial.return_value.close.assert_called_once()
             self.assertTrue(fp.startswith("SHA256:"))
@@ -1235,10 +1235,10 @@ class BastionAuthIsReportedSeparately(unittest.TestCase):
 
 
 class DeviceProbeIsEditableFromInventory(unittest.TestCase):
-    """The site decides HOW a device is reached (direct, agent, bastion), so it
+    """The probe decides HOW a device is reached (direct, agent, bastion), so it
     has to be changeable after import, not only at creation time."""
 
-    # None is a meaningful value for `site` here ("the site does not
+    # None is a meaningful value for `probe` here ("the probe does not
     # exist"), so the default cannot be None.
     _DEFAULT = object()
 
@@ -1252,8 +1252,8 @@ class DeviceProbeIsEditableFromInventory(unittest.TestCase):
              mock.patch.object(inventory_manager, "safe_write_hosts_csv") as write,\
              mock.patch("routers.inventory.assert_group_allowed"),\
              mock.patch("routers.inventory.log_audit"):
-            res = inv_router.reassign_device_site(
-                inv_router.DeviceSiteSchema(ip=ip, new_site=new_probe),
+            res = inv_router.reassign_device_probe(
+                inv_router.DeviceProbeSchema(ip=ip, new_probe=new_probe),
                 {"sub": "admin", "role": "admin"})
         return res, write
 
@@ -1285,10 +1285,10 @@ class DeviceProbeIsEditableFromInventory(unittest.TestCase):
 class ChangingTheBastionIdentityTakesEffect(unittest.TestCase):
     """Editing the bastion login must apply to the next connection.
 
-    Reported from the field: the operator set a site's credential after
-    creating the site and 'Test bastion' still authenticated as the original
+    Reported from the field: the operator set a probe's credential after
+    creating the probe and 'Test bastion' still authenticated as the original
     user. Two causes, both here: the row dropdown edited the DEVICE identity
-    while the bastion one was reachable only in the create-site form, and a
+    while the bastion one was reachable only in the create-probe form, and a
     live transport authenticated with the old credential was reused.
     """
 
@@ -1320,33 +1320,33 @@ class ChangingTheBastionIdentityTakesEffect(unittest.TestCase):
         net_ssh.invalidate_probe("never-dialled")
 
     def test_updating_the_identity_invalidates_the_cached_transport(self):
-        from routers import sites as sites_router
-        payload = sites_router.SiteUpdateSchema(id="customer-a",
+        from routers import probes as probes_router
+        payload = probes_router.ProbeUpdateSchema(id="customer-a",
                                                 jump_identity="new-identity")
-        with mock.patch.object(sites_router.probe_manager, "update_probe",
+        with mock.patch.object(probes_router.probe_manager, "update_probe",
                                return_value=True),\
-             mock.patch.object(sites_router, "log_audit"),\
+             mock.patch.object(probes_router, "log_audit"),\
              mock.patch("core.net_ssh.invalidate_probe") as inv:
-            sites_router.update_site_ep(payload, {"sub": "tester"})
+            probes_router.update_probe_ep(payload, {"sub": "tester"})
         inv.assert_called_once_with("customer-a")
 
     def test_updating_only_the_device_identity_leaves_the_transport_alone(self):
         """The bastion session is unaffected by the devices' own credential."""
-        from routers import sites as sites_router
-        payload = sites_router.SiteUpdateSchema(id="customer-a",
+        from routers import probes as probes_router
+        payload = probes_router.ProbeUpdateSchema(id="customer-a",
                                                 device_identity="new-identity")
-        with mock.patch.object(sites_router.probe_manager, "update_probe",
+        with mock.patch.object(probes_router.probe_manager, "update_probe",
                                return_value=True),\
-             mock.patch.object(sites_router, "log_audit"),\
+             mock.patch.object(probes_router, "log_audit"),\
              mock.patch("core.net_ssh.invalidate_probe") as inv:
-            sites_router.update_site_ep(payload, {"sub": "tester"})
+            probes_router.update_probe_ep(payload, {"sub": "tester"})
         inv.assert_not_called()
 
 
 class TheBastionIdentityIsEditableAfterCreation(unittest.TestCase):
     """The settings row must expose BOTH identities, distinguishably.
 
-    A jump site requires a bastion identity, so its select carries no empty
+    A bastion probe requires a bastion identity, so its select carries no empty
     option; the device one keeps its "global credentials" choice.
     """
 
@@ -1358,11 +1358,11 @@ class TheBastionIdentityIsEditableAfterCreation(unittest.TestCase):
             self.js = fh.read()
 
     def test_the_row_renders_a_bastion_identity_select(self):
-        self.assertIn('data-action="set-site-jump-identity"', self.js)
+        self.assertIn('data-action="set-probe-jump-identity"', self.js)
         self.assertIn("s.jump_identity", self.js)
 
     def test_the_bastion_select_is_bound(self):
-        self.assertIn("setSiteJumpIdentity(jump.dataset.siteId", self.js)
+        self.assertIn("setProbeJumpIdentity(jump.dataset.probeId", self.js)
 
     def test_the_handler_sends_jump_identity(self):
         self.assertIn("jump_identity: identityId", self.js)

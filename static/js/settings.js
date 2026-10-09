@@ -1,9 +1,9 @@
 // Copyright 2026 Claudio Vidhi
 // SPDX-License-Identifier: AGPL-3.0-only
-    // ===== Settings tab (Users, Sites, MCP Server, App/Network/CLI Settings) =====
+    // ===== Settings tab (Users, Probes, MCP Server, App/Network/CLI Settings) =====
 
     // A tenant-scoped admin passes isAdminRole() locally but 403s server-side
-    // on a route gated by require_unscoped_admin (global settings, sites,
+    // on a route gated by require_unscoped_admin (global settings, probes,
     // fleet, ...): these loaders used to swallow that response and leave the
     // panel blank with no explanation.
     // A Settings open fires ~8 of these loaders in quick succession; without
@@ -19,26 +19,26 @@
     }
 
     // --- SEDI MULTI-SITO (admin) ---
-    async function loadSites() {
+    async function loadProbes() {
         if (!isAdminRole(currentRole)) return;
-        const res = await apiFetch('/api/sites');
+        const res = await apiFetch('/api/probes');
         if (!res || !res.ok) { await toastOnForbidden(res); return; }
         const data = await res.json();
-        await renderSitesTable(data.sites || []);
+        await renderProbesTable(data.probes || []);
     }
 
-    async function renderSitesTable(sites) {
-        const body = document.getElementById('sitesTableBody');
+    async function renderProbesTable(probes) {
+        const body = document.getElementById('probesTableBody');
         if (!body) return;
         const L = i18n[currentLang];
         // A jump row carries its device-default identity inline: the bastion
         // login and the login used on the devices behind it are two different
         // credentials, and there is no other screen to change the second one.
-        const identities = sites.some(s => s.mode === 'jump') ? await getIdentities() : [];
-        body.innerHTML = sites.map(s => {
+        const identities = probes.some(s => s.mode === 'jump') ? await getIdentities() : [];
+        body.innerHTML = probes.map(s => {
             const isCentral = s.id === 'central';
             const modeBadge = s.mode === 'agent'
-                ? '<span class="chip">SITE AGENT</span>'
+                ? '<span class="chip">PROBE AGENT</span>'
                 : s.mode === 'jump'
                 ? '<span class="chip">JUMP (BASTION)</span>'
                 : '<span class="status ok"><span class="led led-success"></span>CENTRAL POLL</span>';
@@ -61,41 +61,41 @@
             }
             let actions = '';
             if (s.mode === 'agent') {
-                actions += `<button data-action="open-agent-control" data-site-id="${escapeHtml(s.id)}" style="color:var(--warning); background:none; border:none; cursor:pointer; margin-right:10px;" title="Pannello di controllo ed aggiornamento agente remoti"><i class="fa-solid fa-gears"></i> Gestione Agente</button>`;
+                actions += `<button data-action="open-agent-control" data-probe-id="${escapeHtml(s.id)}" style="color:var(--warning); background:none; border:none; cursor:pointer; margin-right:10px;" title="Pannello di controllo ed aggiornamento agente remoti"><i class="fa-solid fa-gears"></i> Gestione Agente</button>`;
                 // Chi possiede l'inventario di questa sede. Spento: l'agente,
                 // e le credenziali non lasciano la sede. Acceso: il centrale,
                 // che le spinge all'agente -- comodo, ma e' una scelta di
                 // sicurezza, quindi va vista nella riga della sede.
                 actions += `<label style="margin-right:10px; font-size:11px; color:var(--text-muted); cursor:pointer;">`
-                    + `<input type="checkbox" data-action="set-site-central-managed" data-site-id="${escapeHtml(s.id)}"${s.central_manages_devices ? ' checked' : ''} style="vertical-align:middle; margin-right:4px;">`
+                    + `<input type="checkbox" data-action="set-probe-central-managed" data-probe-id="${escapeHtml(s.id)}"${s.central_manages_devices ? ' checked' : ''} style="vertical-align:middle; margin-right:4px;">`
                     + `${escapeHtml(L.lblCentralManagesDevices)}</label>`;
-                actions += `<button data-action="regen-site-token" data-site-id="${escapeHtml(s.id)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-key"></i> ${L.btnRegenSiteToken}</button>`;
+                actions += `<button data-action="regen-probe-token" data-probe-id="${escapeHtml(s.id)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-key"></i> ${L.btnRegenProbeToken}</button>`;
             }
             if (s.mode === 'jump') {
                 // Two identities, two selects. One unlabelled dropdown next to
                 // "Test bastion" read as the bastion credential while it set
                 // the DEVICE one, so an operator could fix the login the test
                 // does not use and see the same refusal again — with no way to
-                // reach the bastion identity at all after site creation.
+                // reach the bastion identity at all after probe creation.
                 actions += `<span style="font-size:10px; color:var(--text-muted); margin-right:3px;">${escapeHtml(L.lblIdentityBastionShort)}</span>`;
                 // A select whose stored value matches no option silently
                 // displays the FIRST one, which reads as "configured" while
-                // the site still points at an identity that no longer exists.
+                // the probe still points at an identity that no longer exists.
                 const jumpKnown = identities.some(i => i.id === s.jump_identity);
                 const jumpMissing = jumpKnown ? '' : `<option value="" selected>${escapeHtml(L.optMissingIdentity)}</option>`;
-                actions += `<select data-action="set-site-jump-identity" data-site-id="${escapeHtml(s.id)}" title="${escapeHtml(L.lblJumpIdentity)}" style="margin-right:10px; padding:2px 6px; font-size:12px;">${jumpMissing}${identityOptions(identities, s.jump_identity || '')}</select>`;
+                actions += `<select data-action="set-probe-jump-identity" data-probe-id="${escapeHtml(s.id)}" title="${escapeHtml(L.lblJumpIdentity)}" style="margin-right:10px; padding:2px 6px; font-size:12px;">${jumpMissing}${identityOptions(identities, s.jump_identity || '')}</select>`;
                 actions += `<span style="font-size:10px; color:var(--text-muted); margin-right:3px;">${escapeHtml(L.lblIdentityDeviceShort)}</span>`;
-                actions += `<select data-action="set-site-device-identity" data-site-id="${escapeHtml(s.id)}" title="${escapeHtml(L.lblDeviceIdentity)}" style="margin-right:10px; padding:2px 6px; font-size:12px;"><option value="">${escapeHtml(L.optNoDeviceIdentity)}</option>${identityOptions(identities, s.device_identity || '')}</select>`;
-                actions += `<button data-action="test-bastion" data-site-id="${escapeHtml(s.id)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-plug-circle-check"></i> ${L.btnTestBastion}</button>`;
+                actions += `<select data-action="set-probe-device-identity" data-probe-id="${escapeHtml(s.id)}" title="${escapeHtml(L.lblDeviceIdentity)}" style="margin-right:10px; padding:2px 6px; font-size:12px;"><option value="">${escapeHtml(L.optNoDeviceIdentity)}</option>${identityOptions(identities, s.device_identity || '')}</select>`;
+                actions += `<button data-action="test-bastion" data-probe-id="${escapeHtml(s.id)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-plug-circle-check"></i> ${L.btnTestBastion}</button>`;
             }
-            const editBtn = `<button data-action="edit-site" data-site-id="${escapeHtml(s.id)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-pen"></i> ${L.btnEditSite}</button>`;
+            const editBtn = `<button data-action="edit-probe" data-probe-id="${escapeHtml(s.id)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-pen"></i> ${L.btnEditProbe}</button>`;
             if (!isCentral) {
-                actions += `<button data-action="delete-site" data-site-id="${escapeHtml(s.id)}" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${L.btnDeleteSite}</button>`;
+                actions += `<button data-action="delete-probe" data-probe-id="${escapeHtml(s.id)}" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${L.btnDeleteProbe}</button>`;
                 actions = editBtn + actions;
             } else {
                 // La sede predefinita non si elimina e non cambia modalita',
                 // ma nome e subnet sono suoi come di ogni altra.
-                actions = editBtn + `<span class="chip">${L.lblSiteDefault}</span>`;
+                actions = editBtn + `<span class="chip">${L.lblProbeDefault}</span>`;
             }
             return `<tr>
                 <td><strong>${escapeHtml(s.id)}</strong></td>
@@ -124,7 +124,7 @@
             escapeHtml(i.username)})</option>`).join('');
     }
 
-    // --- Site wizard (docs/superpowers/specs/2026-09-23-site-wizard-design.md) ---
+    // --- Probe wizard (docs/superpowers/specs/2026-09-23-site-wizard-design.md) --- // check-site-name: ok
     // One side panel for create, edit and agent enrollment:
     // Mode → Details → Connection (jump only) → Summary → Enrollment (new token).
     const CIDR_RE = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/;
@@ -133,10 +133,10 @@
         return !!m && m.slice(1, 5).every((o) => +o <= 255) && +m[5] <= 32;
     }
     const sw = {
-        editing: null,     // site being edited; null when creating
+        editing: null,     // probe being edited; null when creating
         test: null,        // last draft-test answer for the current bastion fields
         token: null,       // agent token to enroll, shown once
-        siteId: null,      // site the enrollment step is about
+        probeId: null,      // probe the enrollment step is about
         heartbeat: null,   // interval polling last_seen during enrollment
         keepDraft: false,  // closed only to go create an identity: keep the fields
     };
@@ -150,7 +150,7 @@
             jump_identity: swEl('swJumpIdentity').value,
         };
     }
-    // Editing a jump site whose bastion is untouched needs no new test.
+    // Editing a bastion probe whose bastion is untouched needs no new test.
     function swJumpChanged() {
         const e = sw.editing;
         if (!e || e.mode !== 'jump') return true;
@@ -162,9 +162,9 @@
         return !!sw.test && sw.test.status === 'success' && swEl('swFpConfirm').checked;
     }
 
-    const siteWizard = createWizard('siteWizard', {
+    const probeWizard = createWizard('probeWizard', {
         steps: [
-            // Once a token is issued the site exists: every step but
+            // Once a token is issued the probe exists: every step but
             // Enrollment skips, so Back cannot reach Save a second time.
             { id: 'mode', label: 'swStepMode', skip: () => !!sw.token, validate: () => !!swMode() },
             { id: 'details', label: 'swStepDetails', onEnter: onSwDetailsEnter, skip: () => !!sw.token,
@@ -178,60 +178,60 @@
               skip: () => !!sw.token || swMode() !== 'jump' || !swJumpChanged(),
               validate: () => swTestPassed() || swEl('swSkipVerify').checked },
             { id: 'summary', label: 'swStepSummary', onEnter: renderSwSummary, skip: () => !!sw.token,
-              finishLabel: 'btnSaveSite' },
+              finishLabel: 'btnSaveProbe' },
             { id: 'enroll', label: 'swStepEnroll', skip: () => !sw.token,
               onEnter: startSwHeartbeat, finishLabel: 'btnClose' },
         ],
         onFinish: async (stepId) => {
-            if (stepId === 'enroll') { siteWizard.close(); return; }
-            await saveSiteWizard();
+            if (stepId === 'enroll') { probeWizard.close(); return; }
+            await saveProbeWizard();
         },
     });
 
-    function resetSiteWizard() {
+    function resetProbeWizard() {
         stopSwHeartbeat();
-        Object.assign(sw, { editing: null, test: null, token: null, siteId: null, keepDraft: false });
-        swEl('siteWizardForm').reset();
+        Object.assign(sw, { editing: null, test: null, token: null, probeId: null, keepDraft: false });
+        swEl('probeWizardForm').reset();
         swInvalidateTest();
         swEl('swSubnetChips').replaceChildren();
         swEl('swSaveError').textContent = '';
         document.querySelectorAll('input[name="swMode"]').forEach((r) => { r.disabled = false; });
-        swEl('siteWizardTitle').textContent = tr('titleNewSite');
+        swEl('probeWizardTitle').textContent = tr('titleNewProbe');
     }
 
-    function onSiteWizardClose() {
+    function onProbeWizardClose() {
         stopSwHeartbeat();
-        if (!sw.keepDraft) resetSiteWizard();
+        if (!sw.keepDraft) resetProbeWizard();
     }
 
-    function openNewSiteWizard() {
+    function openNewProbeWizard() {
         const resume = sw.keepDraft;
-        if (!resume) resetSiteWizard();
+        if (!resume) resetProbeWizard();
         sw.keepDraft = false;
         // A resumed edit draft stays an edit: same rail, same update on save.
-        siteWizard.open({ at: resume ? 'details' : 'mode', editable: !!sw.editing, onClose: onSiteWizardClose });
+        probeWizard.open({ at: resume ? 'details' : 'mode', editable: !!sw.editing, onClose: onProbeWizardClose });
     }
 
-    async function openEditSiteWizard(siteId) {
-        const res = await apiFetch('/api/sites');
+    async function openEditProbeWizard(probeId) {
+        const res = await apiFetch('/api/probes');
         if (!res || !res.ok) return;
-        const site = ((await res.json()).sites || []).find((s) => s.id === siteId);
-        if (!site) return;
-        resetSiteWizard();
-        sw.editing = site;
-        swEl('siteWizardTitle').textContent = tr('swTitleEdit');
+        const probe = ((await res.json()).probes || []).find((s) => s.id === probeId);
+        if (!probe) return;
+        resetProbeWizard();
+        sw.editing = probe;
+        swEl('probeWizardTitle').textContent = tr('swTitleEdit');
         document.querySelectorAll('input[name="swMode"]').forEach((r) => {
-            r.checked = r.value === (site.mode || 'central');
-            // The default site is the central's own: changing its mode would
+            r.checked = r.value === (probe.mode || 'central');
+            // The default probe is the central's own: changing its mode would
             // take away the central's direct path to its own devices.
-            r.disabled = site.id === 'central';
+            r.disabled = probe.id === 'central';
         });
-        swEl('swName').value = site.name || '';
-        swEl('swSubnets').value = (site.subnets || []).join(', ');
-        swEl('swJumpHost').value = site.jump_host || '';
-        swEl('swJumpPort').value = site.jump_port || 22;
-        await populateSwIdentitySelects(site.jump_identity || '', site.device_identity || '');
-        siteWizard.open({ at: 'details', editable: true, onClose: onSiteWizardClose });
+        swEl('swName').value = probe.name || '';
+        swEl('swSubnets').value = (probe.subnets || []).join(', ');
+        swEl('swJumpHost').value = probe.jump_host || '';
+        swEl('swJumpPort').value = probe.jump_port || 22;
+        await populateSwIdentitySelects(probe.jump_identity || '', probe.device_identity || '');
+        probeWizard.open({ at: 'details', editable: true, onClose: onProbeWizardClose });
     }
 
     async function populateSwIdentitySelects(jumpValue, deviceValue) {
@@ -244,9 +244,9 @@
     }
 
     // Called after an identity is created, edited or deleted (provisioning.js).
-    window.refreshSiteIdentitySelects = async function () {
+    window.refreshProbeIdentitySelects = async function () {
         identitiesCache = null;
-        if (!isModalOpen('siteWizard') && !sw.keepDraft) return;
+        if (!isModalOpen('probeWizard') && !sw.keepDraft) return;
         await populateSwIdentitySelects(swEl('swJumpIdentity').value, swEl('swDeviceIdentity').value);
     };
 
@@ -254,7 +254,7 @@
     // and "Nuova sede" resumes it at the Details step.
     function goCreateIdentity() {
         sw.keepDraft = true;
-        siteWizard.close();
+        probeWizard.close();
         switchTab('tab-provisioning');
         document.getElementById('identitiesPanel')?.scrollIntoView();
     }
@@ -264,7 +264,7 @@
         swEl('swJumpFields').hidden = !jump;
         if (jump) await populateSwIdentitySelects(swEl('swJumpIdentity').value, swEl('swDeviceIdentity').value);
         renderSwSubnetChips();
-        siteWizard.refresh();
+        probeWizard.refresh();
     }
 
     function renderSwSubnetChips() {
@@ -292,8 +292,8 @@
         swInvalidateTest();
         const out = swEl('swTestResult');
         out.textContent = tr('swTesting');
-        siteWizard.refresh();
-        const res = await apiFetch('/api/sites/test-bastion/draft', {
+        probeWizard.refresh();
+        const res = await apiFetch('/api/probes/test-bastion/draft', {
             method: 'POST', body: JSON.stringify(swJumpFields()),
         });
         if (!res) { out.textContent = ''; return; }
@@ -305,7 +305,7 @@
         }
         sw.test = data;
         renderSwTestResult(data);
-        siteWizard.refresh();
+        probeWizard.refresh();
     }
 
     function renderSwTestResult(data) {
@@ -333,11 +333,11 @@
 
     function renderSwSummary() {
         const mode = swMode();
-        const modeLabel = { central: 'swModeCentral', agent: 'swModeAgent', jump: 'optSiteJump' }[mode];
+        const modeLabel = { central: 'swModeCentral', agent: 'swModeAgent', jump: 'optProbeJump' }[mode];
         const rows = [
-            ['lblSiteName', swEl('swName').value.trim()],
-            ['lblSiteMode', tr(modeLabel)],
-            ['lblSiteSubnets', swSubnets().join(', ') || '—'],
+            ['lblProbeName', swEl('swName').value.trim()],
+            ['lblProbeMode', tr(modeLabel)],
+            ['lblProbeSubnets', swSubnets().join(', ') || '—'],
         ];
         if (mode === 'jump') {
             const j = swJumpFields();
@@ -361,7 +361,7 @@
         swEl('swSaveError').textContent = '';
     }
 
-    async function saveSiteWizard() {
+    async function saveProbeWizard() {
         const mode = swMode();
         const editing = sw.editing;
         const body = { name: swEl('swName').value.trim(), subnets: swSubnets() };
@@ -375,7 +375,7 @@
         } else {
             body.mode = mode;
         }
-        const res = await apiFetch(editing ? '/api/sites/update' : '/api/sites', {
+        const res = await apiFetch(editing ? '/api/probes/update' : '/api/probes', {
             method: 'POST', body: JSON.stringify(body),
         });
         if (!res) return;
@@ -385,29 +385,29 @@
             // 409: the confirmed key is not the one the server saw any more.
             if (res.status === 409) {
                 swInvalidateTest();
-                siteWizard.goTo('connect');
+                probeWizard.goTo('connect');
                 swEl('swTestResult').textContent = data.detail || '';
             }
             return;
         }
-        loadSites();
-        const id = editing ? editing.id : data.site.id;
+        loadProbes();
+        const id = editing ? editing.id : data.probe.id;
         // Switching to 'agent' issues the token in the save itself (see
-        // routers/sites.py): shown once, like on creation.
-        if (data.token) { showSiteEnrollment(id, data.token); return; }
-        siteWizard.close();
+        // routers/probes.py): shown once, like on creation.
+        if (data.token) { showProbeEnrollment(id, data.token); return; }
+        probeWizard.close();
         showToast(tr('swSaved'), 'info');
     }
 
-    function showSiteEnrollment(siteId, token) {
+    function showProbeEnrollment(probeId, token) {
         sw.token = token;
-        sw.siteId = siteId;
-        const { cfg, cmds } = enrollmentText(siteId, token);
+        sw.probeId = probeId;
+        const { cfg, cmds } = enrollmentText(probeId, token);
         // textContent, not innerHTML: the token is a value, not markup.
-        document.getElementById('siteEnrollConfig').textContent = cfg;
-        document.getElementById('siteEnrollCommands').textContent = cmds;
-        if (isModalOpen('siteWizard')) siteWizard.goTo('enroll');
-        else siteWizard.open({ at: 'enroll', onClose: onSiteWizardClose });
+        document.getElementById('probeEnrollConfig').textContent = cfg;
+        document.getElementById('probeEnrollCommands').textContent = cmds;
+        if (isModalOpen('probeWizard')) probeWizard.goTo('enroll');
+        else probeWizard.open({ at: 'enroll', onClose: onProbeWizardClose });
     }
 
     function paintSwHeartbeat(online) {
@@ -422,13 +422,13 @@
         paintSwHeartbeat(false);
         const since = Date.now() / 1000;
         sw.heartbeat = setInterval(async () => {
-            const res = await apiFetch('/api/sites');
+            const res = await apiFetch('/api/probes');
             if (!res || !res.ok) return;
-            const site = ((await res.json()).sites || []).find((s) => s.id === sw.siteId);
-            if (site && site.last_seen && site.last_seen >= since) {
+            const probe = ((await res.json()).probes || []).find((s) => s.id === sw.probeId);
+            if (probe && probe.last_seen && probe.last_seen >= since) {
                 paintSwHeartbeat(true);
                 stopSwHeartbeat();
-                loadSites();
+                loadProbes();
             }
         }, 5000);
     }
@@ -439,7 +439,7 @@
     }
 
     async function testBastion(id) {
-        const res = await apiFetch('/api/sites/test-bastion', {
+        const res = await apiFetch('/api/probes/test-bastion', {
             method: 'POST', body: JSON.stringify({ id }),
         });
         if (!res) return;
@@ -449,27 +449,27 @@
         else if (data.status === 'auth_failed') showToast(`${tr('msgBastionAuthFailed')} ${data.message || ''}`, 'error');
         else if (data.status === 'host_key_mismatch') showToast(`${tr('swTestHostKey')} ${data.message || ''}`, 'error');
         else showToast(`${tr('msgBastionUnreachable')} ${data.message || ''}`, 'error');
-        loadSites();
+        loadProbes();
     }
 
-    async function regenSiteToken(id) {
+    async function regenProbeToken(id) {
         if (!confirm(tr('setRegenerateTheTokenFor', {id: id}))) return;
-        const res = await apiFetch('/api/sites/regenerate-token', {
+        const res = await apiFetch('/api/probes/regenerate-token', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id })
         });
         if (res && res.ok) {
             const data = await res.json();
-            showSiteEnrollment(id, data.token);
-            loadSites();
+            showProbeEnrollment(id, data.token);
+            loadProbes();
         } else if (res) { const e = await res.json(); alert((tr('uiError')) + (e.detail || '')); }
     }
 
-    async function setSiteJumpIdentity(id, identityId) {
-        // A jump site cannot exist without a bastion identity, so there is no
+    async function setProbeJumpIdentity(id, identityId) {
+        // A bastion probe cannot exist without a bastion identity, so there is no
         // empty option to send.
-        if (!identityId) { loadSites(); return; }
-        const res = await apiFetch('/api/sites/update', {
+        if (!identityId) { loadProbes(); return; }
+        const res = await apiFetch('/api/probes/update', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id, jump_identity: identityId })
         });
@@ -477,23 +477,23 @@
             const e = await res.json();
             alert((tr('uiError')) + (e.detail || ''));
         }
-        loadSites();
+        loadProbes();
     }
 
-    async function setSiteDeviceIdentity(id, identityId) {
-        const res = await apiFetch('/api/sites/update', {
+    async function setProbeDeviceIdentity(id, identityId) {
+        const res = await apiFetch('/api/probes/update', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id, device_identity: identityId })
         });
         if (res && !res.ok) {
             const e = await res.json();
             alert((tr('uiError')) + (e.detail || ''));
-            loadSites();
+            loadProbes();
         }
     }
 
-    async function setSiteCentralManaged(id, enabled) {
-        const res = await apiFetch('/api/sites/update', {
+    async function setProbeCentralManaged(id, enabled) {
+        const res = await apiFetch('/api/probes/update', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id, central_manages_devices: enabled })
         });
@@ -501,17 +501,17 @@
             const e = await res.json();
             alert((tr('uiError')) + (e.detail || ''));
         }
-        loadSites();
+        loadProbes();
     }
 
     // --- Arruolamento di una sede agent (G5) ---
     // Il token si mostra una volta sola, e da solo non dice cosa farne: chi
     // installa l'agente doveva ricavare agent.json e i comandi dalla
     // documentazione e incollarci il token a mano. Escono insieme.
-    function enrollmentText(siteId, token) {
+    function enrollmentText(probeId, token) {
         const cfg = JSON.stringify({
             central_url: window.location.origin,
-            site_id: siteId,
+            probe_id: probeId,
             token: token,
             interval: 60,
             verify_tls: window.location.protocol === 'https:',
@@ -528,24 +528,24 @@
         return { cfg, cmds };
     }
 
-    function copySiteEnrollment() {
-        const cfg = document.getElementById('siteEnrollConfig').textContent;
-        const cmds = document.getElementById('siteEnrollCommands').textContent;
+    function copyProbeEnrollment() {
+        const cfg = document.getElementById('probeEnrollConfig').textContent;
+        const cmds = document.getElementById('probeEnrollCommands').textContent;
         navigator.clipboard.writeText(cfg + '\n\n' + cmds);
     }
 
     function modeChangeWarning(mode) {
-        return tr(mode === 'central' ? 'warnSiteModeToCentral'
-            : mode === 'agent' ? 'warnSiteModeToAgent' : 'warnSiteModeToJump');
+        return tr(mode === 'central' ? 'warnProbeModeToCentral'
+            : mode === 'agent' ? 'warnProbeModeToAgent' : 'warnProbeModeToJump');
     }
 
-    async function deleteSite(id) {
-        if (!confirm(tr('setDeleteSite', {id: id}))) return;
-        const res = await apiFetch('/api/sites/delete', {
+    async function deleteProbe(id) {
+        if (!confirm(tr('setDeleteProbe', {id: id}))) return;
+        const res = await apiFetch('/api/probes/delete', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id })
         });
-        if (res && res.ok) loadSites();
+        if (res && res.ok) loadProbes();
         else if (res) { const e = await res.json(); alert((tr('uiError')) + (e.detail || '')); }
     }
 
@@ -922,14 +922,14 @@
     // row (they gate the admin panels themselves). tab-incidents and
     // tab-fortigate are also requires-admin but are ordinary operational
     // tabs, not part of the admin-management group, so they stay excluded.
-    const ADMIN_GROUP_TABS = ['tab-users', 'tab-groups', 'tab-sites', 'tab-mcp', 'tab-settings'];
+    const ADMIN_GROUP_TABS = ['tab-users', 'tab-groups', 'tab-probes', 'tab-mcp', 'tab-settings'];
 
     // Of ADMIN_GROUP_TABS, only these route to endpoints gated by
     // require_unscoped_admin (spec D5): tab-users' own routes (create,
     // role, disable, ...) only need require_admin + the scope/grant asserts,
     // not an unscoped admin — only /api/users/invite does, and that's
     // handled by hiding the invite button (applyRoleUI), not by this hint.
-    const UNSCOPED_ADMIN_HINT_TABS = ['tab-settings', 'tab-sites', 'tab-groups', 'tab-mcp'];
+    const UNSCOPED_ADMIN_HINT_TABS = ['tab-settings', 'tab-probes', 'tab-groups', 'tab-mcp'];
 
     // Secondary panels a viewer cannot load (every GET is operator+). A
     // requires-write nav button covers its own panels; these ride on a
@@ -1906,7 +1906,7 @@
             if (a.dirty) marks.push(`<span class="status bad"><span class="led led-warning"></span>${escapeHtml(tr('lblFleetDirty'))}</span>`);
             if (!marks.length) marks.push(`<span class="status ok"><span class="led led-success"></span>${escapeHtml(tr('lblFleetAligned'))}</span>`);
             rows.push(`<tr>
-                <td>${escapeHtml(a.name || a.site_id)}</td>
+                <td>${escapeHtml(a.name || a.probe_id)}</td>
                 <td>${escapeHtml(a.version || dash)}</td>
                 <td>${escapeHtml(a.commit || dash)}</td>
                 <td>${escapeHtml(a.branch || dash)}</td>
@@ -1999,7 +1999,7 @@
                 ? `${L.lblPingMonitorLastRun || 'Ultimo ciclo'}: ${lastRun}`
                 : (L.msgPingMonitorDisabled || 'Monitor ping disattivato.');
         }
-        // Three buckets, not two: a jump-site device is never pinged (the
+        // Three buckets, not two: a bastion-probe device is never pinged (the
         // bastion tunnel carries no ICMP), so the backend reports it under
         // summary.unknown. Rendering only up/down made those devices vanish
         // from the panel with no explanation. Same vocabulary and lamp as the
@@ -2188,41 +2188,41 @@
         if (e.target.closest('#btnSaveAppSettings')) saveAppSettings();
     });
 
-    document.getElementById('sitesTableBody')?.addEventListener('click', (e) => {
+    document.getElementById('probesTableBody')?.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-action]');
-        if (!btn || !btn.dataset.siteId) return;
+        if (!btn || !btn.dataset.probeId) return;
         const act = btn.dataset.action;
-        const siteId = btn.dataset.siteId;
-        if (act === 'open-agent-control' && typeof openAgentControlModal === 'function') openAgentControlModal(siteId);
-        else if (act === 'edit-site') openEditSiteWizard(siteId);
-        else if (act === 'regen-site-token') regenSiteToken(siteId);
-        else if (act === 'delete-site') deleteSite(siteId);
-        else if (act === 'test-bastion') testBastion(siteId);
+        const probeId = btn.dataset.probeId;
+        if (act === 'open-agent-control' && typeof openAgentControlModal === 'function') openAgentControlModal(probeId);
+        else if (act === 'edit-probe') openEditProbeWizard(probeId);
+        else if (act === 'regen-probe-token') regenProbeToken(probeId);
+        else if (act === 'delete-probe') deleteProbe(probeId);
+        else if (act === 'test-bastion') testBastion(probeId);
     });
 
-    // The panel lives outside sitesTableBody: it needs its own listeners.
-    document.getElementById('siteWizard')?.addEventListener('click', (e) => {
+    // The panel lives outside probesTableBody: it needs its own listeners.
+    document.getElementById('probeWizard')?.addEventListener('click', (e) => {
         if (e.target.closest('#swTestBtn')) swRunTest();
-        else if (e.target.closest('[data-action="copy-site-enroll"]')) copySiteEnrollment();
+        else if (e.target.closest('[data-action="copy-probe-enroll"]')) copyProbeEnrollment();
         else if (e.target.closest('[data-action="sw-new-identity"]')) goCreateIdentity();
     });
-    document.getElementById('siteWizard')?.addEventListener('input', (e) => {
+    document.getElementById('probeWizard')?.addEventListener('input', (e) => {
         if (e.target.id === 'swSubnets') renderSwSubnetChips();
         if (['swJumpHost', 'swJumpPort'].includes(e.target.id)) swInvalidateTest();
     });
-    document.getElementById('siteWizard')?.addEventListener('change', (e) => {
+    document.getElementById('probeWizard')?.addEventListener('change', (e) => {
         if (e.target.name === 'swMode' || e.target.id === 'swJumpIdentity') swInvalidateTest();
     });
     // Enter in a field must not submit (and reload) the page.
-    document.getElementById('siteWizardForm')?.addEventListener('submit', (e) => e.preventDefault());
+    document.getElementById('probeWizardForm')?.addEventListener('submit', (e) => e.preventDefault());
 
-    document.getElementById('sitesTableBody')?.addEventListener('change', (e) => {
-        const sel = e.target.closest('[data-action="set-site-device-identity"]');
-        if (sel && sel.dataset.siteId) setSiteDeviceIdentity(sel.dataset.siteId, sel.value);
-        const jump = e.target.closest('[data-action="set-site-jump-identity"]');
-        if (jump && jump.dataset.siteId) setSiteJumpIdentity(jump.dataset.siteId, jump.value);
-        const cm = e.target.closest('[data-action="set-site-central-managed"]');
-        if (cm && cm.dataset.siteId) setSiteCentralManaged(cm.dataset.siteId, cm.checked);
+    document.getElementById('probesTableBody')?.addEventListener('change', (e) => {
+        const sel = e.target.closest('[data-action="set-probe-device-identity"]');
+        if (sel && sel.dataset.probeId) setProbeDeviceIdentity(sel.dataset.probeId, sel.value);
+        const jump = e.target.closest('[data-action="set-probe-jump-identity"]');
+        if (jump && jump.dataset.probeId) setProbeJumpIdentity(jump.dataset.probeId, jump.value);
+        const cm = e.target.closest('[data-action="set-probe-central-managed"]');
+        if (cm && cm.dataset.probeId) setProbeCentralManaged(cm.dataset.probeId, cm.checked);
     });
 
     document.getElementById('usersTableBody')?.addEventListener('change', (e) => {
@@ -2280,7 +2280,7 @@
     // Tenant/tab mode radios show or hide their checkbox list.
     document.getElementById('createUserForm')?.addEventListener('change', uwSyncLists);
     document.getElementById('btnInviteUser')?.addEventListener('click', inviteUser);
-    document.getElementById('btnNewSite')?.addEventListener('click', openNewSiteWizard);
+    document.getElementById('btnNewProbe')?.addEventListener('click', openNewProbeWizard);
     document.getElementById('smtpBtnSave')?.addEventListener('click', saveSmtpSettings);
     document.getElementById('smtpBtnTest')?.addEventListener('click', sendSmtpTest);
     document.getElementById('ssoBtnSave')?.addEventListener('click', saveSsoSettings);

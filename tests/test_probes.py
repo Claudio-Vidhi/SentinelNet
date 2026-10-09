@@ -129,5 +129,69 @@ class TestJobQueueLifecycle(ResetMixin):
         self.assertEqual(claimed_b[0]["device_ip"], "203.0.113.2")
 
 
+class TestApiPaths(unittest.TestCase):
+    def test_no_route_keeps_the_old_name(self):
+        import app_server
+        paths = list(app_server.app.openapi()["paths"])
+        self.assertEqual([p for p in paths if "/sites" in p], [])  # check-site-name: ok
+        self.assertIn("/api/probes", paths)
+
+
+class TestRouterSmoke(unittest.TestCase):
+    """One logged-in hit per router whose body changed in the probe
+    rename. OpenAPI parity never executes a handler, so a missing import or a
+    stale name only shows here; any of these statuses proves the body ran."""
+
+    PW = "PasswordSicura1!"
+
+    def setUp(self):
+        from unittest.mock import patch
+        from security import security_manager, user_manager
+        tmp = tempfile.mkdtemp(prefix="probes_smoke_")
+        p = patch.object(user_manager, "USERS_JSON", os.path.join(tmp, "users.json"))
+        p.start()
+        self.addCleanup(p.stop)
+        security_manager._failed_attempts.clear()
+        user_manager.create_user("smoke_adm", self.PW, role="admin")
+
+    def _client(self):
+        import app_server
+        from fastapi.testclient import TestClient
+        from routers.deps import CSRF_HEADER
+        c = TestClient(app_server.app, raise_server_exceptions=False)
+        r = c.post("/api/auth/login", json={"username": "smoke_adm", "password": self.PW})
+        self.assertEqual(r.status_code, 200, r.text)
+        c.headers.update({CSRF_HEADER: "1"})
+        return c
+
+    def test_every_touched_router_answers(self):
+        c = self._client()
+        hits = [
+            ("probes", "get", "/api/probes", None, {200}),
+            ("agent", "post", "/api/agent/heartbeat", {}, {401, 403, 422}),
+            ("inventory", "get", "/api/export/devices/preview?columns=probe", None, {200}),
+            ("inventory", "post", "/api/reassign-device-probe",
+             {"ip": "192.0.2.1", "new_probe": "no-such-probe"}, {400}),
+            ("scan", "post", "/api/scan-subnet", {"network": "not-a-network"}, {400, 422}),
+            ("triage", "post", "/api/triage/schedules", {}, {400, 422}),
+            ("commands", "post", "/api/send-command",
+             {"ip": "192.0.2.1", "command": "show version"}, {400, 403, 404, 422}),
+            ("audit_checklist", "post", "/api/audit-checklist/templates/1/items", {}, {400, 422}),
+            ("manual_config", "get", "/api/manual-config/guide", None, {200}),
+            ("provisioner", "get", "/api/identities", None, {200}),
+            ("ai", "get", "/api/ai/profiles", None, {200}),
+            ("endpoint_inventory", "get", "/api/endpoints/list?probe=central", None, {200}),
+            ("settings", "get", "/api/fleet/versions", None, {200}),
+            ("auth", "get", "/api/auth/status", None, {200}),
+            ("cloud_backup", "get", "/api/cloud-backup/settings", None, {200}),
+        ]
+        for router, method, path, body, ok in hits:
+            with self.subTest(router=router, path=path):
+                r = c.get(path) if method == "get" else c.post(path, json=body)
+                self.assertIn(r.status_code, ok, r.text[:300])
+        self.assertIn("probes", c.get("/api/probes").json())
+        self.assertIn("probes", c.get("/api/manual-config/guide").json())
+
+
 if __name__ == "__main__":
     unittest.main()

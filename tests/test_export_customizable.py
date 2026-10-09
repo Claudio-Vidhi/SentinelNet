@@ -4,7 +4,7 @@
 """Customizable inventory export.
 
 The CSV export used to be a fixed six-column dump of the whole (scoped)
-inventory. It now takes filters (tenant, site, vendor, redundancy type) and an
+inventory. It now takes filters (tenant, probe, vendor, redundancy type) and an
 explicit column list, and it can put one row per physical unit so that the
 serial of every switch in a stack -- or of every node in an HA pair -- lands in
 its own row instead of being concatenated into one unfilterable cell.
@@ -183,8 +183,8 @@ class TestFilters(unittest.TestCase):
         rows = _rows(_export("?groups=sede-a&columns=ip"))
         self.assertEqual({r[0] for r in rows[1:]}, {"192.0.2.10", "192.0.2.12"})
 
-    def test_site_filter(self):
-        rows = _rows(_export("?sites=branch&columns=ip"))
+    def test_probe_filter(self):
+        rows = _rows(_export("?probes=branch&columns=ip"))
         self.assertEqual({r[0] for r in rows[1:]}, {"192.0.2.11", "192.0.2.12"})
 
     def test_vendor_filter_ignores_case(self):
@@ -192,7 +192,7 @@ class TestFilters(unittest.TestCase):
         self.assertEqual({r[0] for r in rows[1:]}, {"192.0.2.12"})
 
     def test_filters_combine(self):
-        rows = _rows(_export("?groups=sede-a&sites=branch&columns=ip"))
+        rows = _rows(_export("?groups=sede-a&probes=branch&columns=ip"))
         self.assertEqual({r[0] for r in rows[1:]}, {"192.0.2.12"})
 
     def test_redundancy_filter_including_standalone(self):

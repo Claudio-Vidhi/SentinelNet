@@ -1,33 +1,33 @@
 // Copyright 2026 Claudio Vidhi
 // SPDX-License-Identifier: AGPL-3.0-only
-// static/js/site-agent.js
-// Remote Site Agent Control Plane & RPC Management (Checkmk Style)
+// static/js/probe-agent.js
+// Remote Probe Agent Control Plane & RPC Management (Checkmk Style)
 
 (function () {
-    let _activeAgentSiteId = null;
+    let _activeAgentProbeId = null;
 
-    async function openAgentControlModal(siteId) {
-        _activeAgentSiteId = siteId;
+    async function openAgentControlModal(probeId) {
+        _activeAgentProbeId = probeId;
         const modal = document.getElementById('agentControlModal');
         const title = document.getElementById('agentControlTitle');
         const body = document.getElementById('agentControlBody');
         if (!modal || !body) return;
 
-        if (title) title.innerHTML = `<i class="fa-solid fa-gears" style="color:var(--primary);"></i> Gestione Remota Agente Sede: <strong>${escapeHtml(siteId)}</strong>`;
+        if (title) title.innerHTML = `<i class="fa-solid fa-gears" style="color:var(--primary);"></i> Gestione Remota Agente Sonda: <strong>${escapeHtml(probeId)}</strong>`;
 
         body.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><br><br>Caricamento telemetria agente...</div>`;
         openModal(modal);
 
-        // Load jobs history and site details
-        const [jobsRes, sitesRes] = await Promise.all([
-            apiFetch(`/api/sites/${siteId}/command-jobs`),
-            apiFetch(`/api/sites`)
+        // Load jobs history and probe details
+        const [jobsRes, probesRes] = await Promise.all([
+            apiFetch(`/api/probes/${probeId}/command-jobs`),
+            apiFetch(`/api/probes`)
         ]);
 
-        let site = null;
-        if (sitesRes && sitesRes.ok) {
-            const sData = await sitesRes.json();
-            site = (sData.sites || []).find(x => x.id === siteId);
+        let probe = null;
+        if (probesRes && probesRes.ok) {
+            const sData = await probesRes.json();
+            probe = (sData.probes || []).find(x => x.id === probeId);
         }
 
         let jobs = [];
@@ -36,30 +36,30 @@
             jobs = jData.jobs || [];
         }
 
-        const lastSeen = site && site.last_seen ? new Date(site.last_seen * 1000).toLocaleString() : 'Mai / Offline';
-        const isOnline = site && site.last_seen && (Date.now() / 1000 - site.last_seen < 120);
+        const lastSeen = probe && probe.last_seen ? new Date(probe.last_seen * 1000).toLocaleString() : 'Mai / Offline';
+        const isOnline = probe && probe.last_seen && (Date.now() / 1000 - probe.last_seen < 120);
 
-        // Valori APPLICATI: sempre e solo da site.* (autoritativo, riportato
+        // Valori APPLICATI: sempre e solo da probe.* (autoritativo, riportato
         // dall'agente ad ogni heartbeat — vedi routers/agent.py). NON vanno
         // sovrascritti con quanto richiesto via job, perché un job può essere
         // ancora in coda, fallito, o mai eseguito: mostrare il richiesto come
         // se fosse applicato inganna l'admin facendogli credere che la modifica
         // abbia già avuto effetto.
-        let curPort = (site && site.syslog_port) || 5514;
-        let curInterval = (site && site.interval) || 60;
-        let curBackupInterval = (site && site.backup_interval) || 3600;
+        let curPort = (probe && probe.syslog_port) || 5514;
+        let curInterval = (probe && probe.interval) || 60;
+        let curBackupInterval = (probe && probe.backup_interval) || 3600;
         // 0 e' un valore valido (ad ogni ciclo), quindi non si puo' usare
         // "|| 300": azzerarlo dal pannello tornerebbe sempre a 300.
-        let curL2Interval = (site && site.l2_interval != null) ? site.l2_interval : 300;
+        let curL2Interval = (probe && probe.l2_interval != null) ? probe.l2_interval : 300;
         // Anche questi due vengono dall'heartbeat: syslog_enabled e' lo stato
         // REALE del listener (l'agente guarda il proprio collector), non quello
         // richiesto, quindi una porta occupata si legge come spento invece di
         // restare una bugia nel pannello. Un agente vecchio non li manda: il
         // default e' "accesso", che era il comportamento fisso di prima.
-        const syslogOn = !site || site.syslog_enabled == null ? true : !!site.syslog_enabled;
-        const dataDir = (site && site.agent_data_dir) || tr('agentDataDirUnknown');
+        const syslogOn = !probe || probe.syslog_enabled == null ? true : !!probe.syslog_enabled;
+        const dataDir = (probe && probe.agent_data_dir) || tr('agentDataDirUnknown');
 
-        // jobs arriva già ordinato dal più recente al più vecchio (site_manager.list_jobs
+        // jobs arriva già ordinato dal più recente al più vecchio (probe_manager.list_jobs
         // usa ORDER BY created DESC), quindi il primo match è già l'ultimo richiesto.
         const lastCfgJob = jobs.find(j => j.command && j.command.startsWith('_agent_config'));
         let pendingCfg = null;
@@ -94,7 +94,7 @@
             }
         }
 
-        const isFlowActive = site && site.flow_active !== false;
+        const isFlowActive = probe && probe.flow_active !== false;
 
         // jobs arriva ORDER BY created DESC (piu' recente per primo): i 10 job
         // da mostrare sono quindi i PRIMI 10, gia' nell'ordine giusto. Il
@@ -128,14 +128,14 @@
                         <span class="led ${isFlowActive ? 'led-success' : 'led-warning'}"></span>
                         ${isFlowActive ? 'FLUSSO ATTIVO' : 'FLUSSO PAUSATO'}
                     </span>
-                    <button class="btn btn-sm ${isFlowActive ? 'btn-secondary' : 'btn-primary'}" data-action="toggle-flow" data-site-id="${escapeHtml(siteId)}" data-active="${!isFlowActive}" style="padding:4px 10px; font-size:11px;">
+                    <button class="btn btn-sm ${isFlowActive ? 'btn-secondary' : 'btn-primary'}" data-action="toggle-flow" data-probe-id="${escapeHtml(probeId)}" data-active="${!isFlowActive}" style="padding:4px 10px; font-size:11px;">
                         <i class="fa-solid ${isFlowActive ? 'fa-pause' : 'fa-play'}"></i> ${isFlowActive ? 'Interrompi Flusso Dati' : 'Riavvia Flusso Dati'}
                     </button>
                 </div>
             </div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:12px;">
                 <div><strong>Ultimo contatto:</strong> ${lastSeen}</div>
-                <div><strong>Modalità:</strong> Site Agent (Outbound HTTPS)</div>
+                <div><strong>Modalità:</strong> Probe Agent (Outbound HTTPS)</div>
                 <div><strong>Syslog UDP Listener:</strong> ${syslogOn ? `${tr('agentSyslogOn')} ${curPort}` : tr('agentSyslogOff')}</div>
                 <div><strong>Intervallo Sync:</strong> ${curInterval}s (Syslog streaming 2s)</div>
                 <div style="grid-column:1 / -1;"><strong>${tr('agentDataDir')}:</strong> <code>${escapeHtml(dataDir)}</code></div>
@@ -165,7 +165,7 @@
                     <label for="agentCfgSyslogEnabled" style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;">${tr('agentSyslogEnabled')}</label>
                     <input id="agentCfgSyslogEnabled" type="checkbox"${syslogOn ? ' checked' : ''} style="accent-color:var(--primary); cursor:pointer;">
                 </div>
-                <button class="btn btn-sm" data-action="save-config" data-site-id="${escapeHtml(siteId)}" style="padding:6px 14px; background:var(--cta); color:var(--cta-text);">
+                <button class="btn btn-sm" data-action="save-config" data-probe-id="${escapeHtml(probeId)}" style="padding:6px 14px; background:var(--cta); color:var(--cta-text);">
                     <i class="fa-solid fa-floppy-disk"></i> Salva Config
                 </button>
             </div>
@@ -174,12 +174,12 @@
 
         <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px; margin-bottom:16px;">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-                <h4 style="margin:0; font-size:13px; color:var(--warning);"><i class="fa-solid fa-file-csv"></i> Editor Inventario Locale Sede (network_hosts.csv)</h4>
-                <button class="btn btn-sm btn-secondary" data-action="fetch-inv" data-site-id="${escapeHtml(siteId)}" style="padding:4px 10px; font-size:11px;">
+                <h4 style="margin:0; font-size:13px; color:var(--warning);"><i class="fa-solid fa-file-csv"></i> Editor Inventario Locale Sonda (network_hosts.csv)</h4>
+                <button class="btn btn-sm btn-secondary" data-action="fetch-inv" data-probe-id="${escapeHtml(probeId)}" style="padding:4px 10px; font-size:11px;">
                     <i class="fa-solid fa-download"></i> Leggi da Agente
                 </button>
             </div>
-            <textarea id="agentInventoryTextarea" placeholder="IP,Vendor,Profile,Username,Password,Enable Secret,Group,Hostname,Site,SSH Port,Transports,SNMP Community&#10;192.0.2.1,fortigate,custom,admin,,,Tenant_Milano,fw-01,milano,22,,&#10;192.0.2.2,cisco,custom,admin,,,Tenant_Milano,switch-01,milano,22,," style="width:100%; height:100px; font-family:var(--font-code); font-size:11px; padding:8px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); resize:vertical;"></textarea>
+            <textarea id="agentInventoryTextarea" placeholder="IP,Vendor,Profile,Username,Password,Enable Secret,Group,Hostname,Probe,SSH Port,Transports,SNMP Community&#10;192.0.2.1,fortigate,custom,admin,,,Tenant_Milano,fw-01,milano,22,,&#10;192.0.2.2,cisco,custom,admin,,,Tenant_Milano,switch-01,milano,22,," style="width:100%; height:100px; font-family:var(--font-code); font-size:11px; padding:8px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); resize:vertical;"></textarea>
             <div style="margin-top:6px; font-size:11px; color:var(--text-muted); line-height:1.5;">
                 Serve almeno la colonna <code>IP</code>; il separatore può essere <code>,</code> o <code>;</code> e le altre
                 colonne sono opzionali. Il tenant è la colonna <strong>Group</strong> (non "Tenant"): con un nome diverso
@@ -190,7 +190,7 @@
                 delle credenziali di default. Per impostare credenziali reali usa l'inventario locale sull'agente.
             </div>
             <div style="margin-top:8px; display:flex; justify-content:flex-end;">
-                <button class="btn btn-sm" data-action="save-inv" data-site-id="${escapeHtml(siteId)}" style="padding:6px 14px; background:var(--warning); color:var(--on-lamp); font-weight:700;">
+                <button class="btn btn-sm" data-action="save-inv" data-probe-id="${escapeHtml(probeId)}" style="padding:6px 14px; background:var(--warning); color:var(--on-lamp); font-weight:700;">
                     <i class="fa-solid fa-upload"></i> Salva Inventario Remoto
                 </button>
             </div>
@@ -199,13 +199,13 @@
         <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px; margin-bottom:16px;">
             <h4 style="margin:0 0 10px; font-size:13px; color:var(--primary);"><i class="fa-solid fa-screwdriver-wrench"></i> Azioni di Gestione Remota (Checkmk Style)</h4>
             <div style="display:flex; flex-wrap:wrap; gap:10px;">
-                <button class="btn btn-sm" data-action="self-update" data-site-id="${escapeHtml(siteId)}" style="background:var(--primary); color:#fff; padding:8px 14px;">
+                <button class="btn btn-sm" data-action="self-update" data-probe-id="${escapeHtml(probeId)}" style="background:var(--primary); color:#fff; padding:8px 14px;">
                     <i class="fa-solid fa-rotate"></i> Aggiorna Agente da Git (git pull)
                 </button>
-                <button class="btn btn-sm btn-secondary" data-action="agent-logs" data-site-id="${escapeHtml(siteId)}" style="padding:8px 14px;">
+                <button class="btn btn-sm btn-secondary" data-action="agent-logs" data-probe-id="${escapeHtml(probeId)}" style="padding:8px 14px;">
                     <i class="fa-solid fa-file-lines"></i> ${escapeHtml(tr('agtBtnLogs'))}
                 </button>
-                <button class="btn btn-sm btn-secondary" data-action="restart-agent" data-site-id="${escapeHtml(siteId)}" style="padding:8px 14px;">
+                <button class="btn btn-sm btn-secondary" data-action="restart-agent" data-probe-id="${escapeHtml(probeId)}" style="padding:8px 14px;">
                     <i class="fa-solid fa-power-off" style="color:var(--warning);"></i> Riavvia Agente
                 </button>
             </div>
@@ -230,42 +230,42 @@
         }
     }
 
-    async function triggerAgentSelfUpdate(siteId) {
-        if (!confirm(tr('agtConfirmUpdate', {siteId: siteId}))) return;
-        const res = await apiFetch(`/api/sites/${siteId}/agent/update`, { method: 'POST' });
+    async function triggerAgentSelfUpdate(probeId) {
+        if (!confirm(tr('agtConfirmUpdate', {probeId: probeId}))) return;
+        const res = await apiFetch(`/api/probes/${probeId}/agent/update`, { method: 'POST' });
         if (res && res.ok) {
-            alert(tr('agtUpdateQueued', {siteId: siteId}));
-            openAgentControlModal(siteId);
+            alert(tr('agtUpdateQueued', {probeId: probeId}));
+            openAgentControlModal(probeId);
         } else {
             const err = res ? await res.json() : null;
             alert(tr('agtUpdateQueueError', {detail: err ? err.detail : tr('agtUnknownError')}));
         }
     }
 
-    async function triggerAgentRestart(siteId) {
-        if (!confirm(tr('agtConfirmRestart', {siteId: siteId}))) return;
-        const res = await apiFetch(`/api/sites/${siteId}/agent/restart`, { method: 'POST' });
+    async function triggerAgentRestart(probeId) {
+        if (!confirm(tr('agtConfirmRestart', {probeId: probeId}))) return;
+        const res = await apiFetch(`/api/probes/${probeId}/agent/restart`, { method: 'POST' });
         if (res && res.ok) {
-            alert(tr('agtRestartQueued', {siteId: siteId}));
-            openAgentControlModal(siteId);
+            alert(tr('agtRestartQueued', {probeId: probeId}));
+            openAgentControlModal(probeId);
         } else {
             const err = res ? await res.json() : null;
             alert(tr('agtRestartQueueError', {detail: err ? err.detail : tr('agtUnknownError')}));
         }
     }
 
-    async function triggerAgentLogs(siteId) {
-        const res = await apiFetch(`/api/sites/${siteId}/agent/logs`, { method: 'POST' });
+    async function triggerAgentLogs(probeId) {
+        const res = await apiFetch(`/api/probes/${probeId}/agent/logs`, { method: 'POST' });
         if (res && res.ok) {
-            alert(tr('agtLogsQueued', {siteId: siteId}));
-            openAgentControlModal(siteId);
+            alert(tr('agtLogsQueued', {probeId: probeId}));
+            openAgentControlModal(probeId);
         } else {
             const err = res ? await res.json() : null;
             alert(tr('agtLogsQueueError', {detail: err ? err.detail : tr('agtUnknownError')}));
         }
     }
 
-    async function triggerAgentConfigSave(siteId) {
+    async function triggerAgentConfigSave(probeId) {
         const port = parseInt(document.getElementById('agentCfgSyslogPort').value, 10) || 514;
         const interval = parseInt(document.getElementById('agentCfgInterval').value, 10) || 60;
         const backupInterval = parseInt(document.getElementById('agentCfgBackupInterval').value, 10) || 0;
@@ -274,7 +274,7 @@
         const l2Raw = parseInt(document.getElementById('agentCfgL2Interval').value, 10);
         const l2Interval = isNaN(l2Raw) ? 300 : l2Raw;
         const syslogEnabled = document.getElementById('agentCfgSyslogEnabled').checked;
-        const res = await apiFetch(`/api/sites/${siteId}/agent/config`, {
+        const res = await apiFetch(`/api/probes/${probeId}/agent/config`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ syslog_port: port, interval: interval,
@@ -282,36 +282,36 @@
                                    syslog_enabled: syslogEnabled })
         });
         if (res && res.ok) {
-            alert(tr('agtConfigQueued', {siteId: siteId, port: port, interval: interval}));
-            openAgentControlModal(siteId);
+            alert(tr('agtConfigQueued', {probeId: probeId, port: port, interval: interval}));
+            openAgentControlModal(probeId);
         } else {
             const err = res ? await res.json() : null;
             alert(tr('agtConfigSaveError', {detail: err ? err.detail : tr('agtUnknownError')}));
         }
     }
 
-    async function fetchAgentInventory(siteId) {
-        const res = await apiFetch(`/api/sites/${siteId}/agent/inventory/get`, { method: 'POST' });
+    async function fetchAgentInventory(probeId) {
+        const res = await apiFetch(`/api/probes/${probeId}/agent/inventory/get`, { method: 'POST' });
         if (res && res.ok) {
-            alert(tr('agtInventoryReadQueued', {siteId: siteId}));
-            openAgentControlModal(siteId);
+            alert(tr('agtInventoryReadQueued', {probeId: probeId}));
+            openAgentControlModal(probeId);
         } else {
             const err = res ? await res.json() : null;
             alert(tr('agtInventoryReadError', {detail: err ? err.detail : tr('agtUnknownError')}));
         }
     }
 
-    async function saveAgentInventory(siteId) {
+    async function saveAgentInventory(probeId) {
         const content = document.getElementById('agentInventoryTextarea').value;
         if (!content.trim()) { alert(tr('agtInventoryCsvRequired')); return; }
-        const res = await apiFetch(`/api/sites/${siteId}/agent/inventory/save`, {
+        const res = await apiFetch(`/api/probes/${probeId}/agent/inventory/save`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ content: content })
         });
         if (res && res.ok) {
-            alert(tr('agtInventorySaveQueued', {siteId: siteId}));
-            openAgentControlModal(siteId);
+            alert(tr('agtInventorySaveQueued', {probeId: probeId}));
+            openAgentControlModal(probeId);
         } else {
             const err = res ? await res.json() : null;
             alert(tr('agtInventorySaveError', {detail: err ? err.detail : tr('agtUnknownError')}));
@@ -323,16 +323,16 @@
         if (modal) closeModal(modal);
     }
 
-    async function toggleAgentDataFlow(siteId, newActiveState) {
+    async function toggleAgentDataFlow(probeId, newActiveState) {
         const actionName = newActiveState ? 'riavviare' : 'interrompere';
-        if (!confirm(tr('agtConfirmFlowAction', {actionName: actionName, siteId: siteId}))) return;
-        const res = await apiFetch(`/api/sites/${siteId}/agent/flow-control`, {
+        if (!confirm(tr('agtConfirmFlowAction', {actionName: actionName, probeId: probeId}))) return;
+        const res = await apiFetch(`/api/probes/${probeId}/agent/flow-control`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ active: newActiveState })
         });
         if (res && res.ok) {
-            openAgentControlModal(siteId);
+            openAgentControlModal(probeId);
         } else {
             const err = res ? await res.json() : null;
             alert(tr('agtFlowActionError', {detail: err ? err.detail : tr('agtUnknownError')}));
@@ -350,16 +350,16 @@
     // the real container, not on a wrapper that does not exist.
     document.getElementById('agentControlBody')?.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-action]');
-        if (!btn || !btn.dataset.siteId) return;
+        if (!btn || !btn.dataset.probeId) return;
         const action = btn.dataset.action;
-        const siteId = btn.dataset.siteId;
-        if (action === 'toggle-flow') toggleAgentDataFlow(siteId, btn.dataset.active === 'true');
-        else if (action === 'save-config') triggerAgentConfigSave(siteId);
-        else if (action === 'fetch-inv') fetchAgentInventory(siteId);
-        else if (action === 'save-inv') saveAgentInventory(siteId);
-        else if (action === 'self-update') triggerAgentSelfUpdate(siteId);
-        else if (action === 'restart-agent') triggerAgentRestart(siteId);
-        else if (action === 'agent-logs') triggerAgentLogs(siteId);
+        const probeId = btn.dataset.probeId;
+        if (action === 'toggle-flow') toggleAgentDataFlow(probeId, btn.dataset.active === 'true');
+        else if (action === 'save-config') triggerAgentConfigSave(probeId);
+        else if (action === 'fetch-inv') fetchAgentInventory(probeId);
+        else if (action === 'save-inv') saveAgentInventory(probeId);
+        else if (action === 'self-update') triggerAgentSelfUpdate(probeId);
+        else if (action === 'restart-agent') triggerAgentRestart(probeId);
+        else if (action === 'agent-logs') triggerAgentLogs(probeId);
     });
 
     // Expose functions globally for UI buttons

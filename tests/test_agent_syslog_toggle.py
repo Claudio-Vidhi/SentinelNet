@@ -34,7 +34,7 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _agent_js() -> str:
-    with open(os.path.join(_REPO_ROOT, "static", "js", "site-agent.js"),
+    with open(os.path.join(_REPO_ROOT, "static", "js", "probe-agent.js"),
               encoding="utf-8") as f:
         return f.read()
 
@@ -122,28 +122,28 @@ class TestCentralStoresWhatTheAgentReports(unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(_TMP, ignore_errors=True)
 
-    def test_the_site_row_learns_the_listener_state_and_the_directory(self):
-        r = self.client.post("/api/sites", headers=self.h,
+    def test_the_probe_row_learns_the_listener_state_and_the_directory(self):
+        r = self.client.post("/api/probes", headers=self.h,
                              json={"name": "Syslog-HB", "mode": "agent",
                                    "subnets": []})
         self.assertEqual(r.status_code, 200, r.text)
-        sid, token = r.json()["site"]["id"], r.json()["token"]
+        sid, token = r.json()["probe"]["id"], r.json()["token"]
         hb = self.client.post("/api/agent/heartbeat",
                               headers={"X-Probe-Id": sid, "X-Probe-Token": token},
                               json={"version": "0.0.0", "syslog_enabled": False,
                                     "data_dir": "/opt/sentinelnet/agent-data"})
         self.assertEqual(hb.status_code, 200, hb.text)
-        probes = self.client.get("/api/sites", headers=self.h).json()["sites"]
+        probes = self.client.get("/api/probes", headers=self.h).json()["probes"]
         probe = next(s for s in probes if s["id"] == sid)
         self.assertIs(probe["syslog_enabled"], False)
         self.assertEqual(probe["agent_data_dir"], "/opt/sentinelnet/agent-data")
 
     def test_the_config_route_accepts_the_toggle(self):
-        r = self.client.post("/api/sites", headers=self.h,
+        r = self.client.post("/api/probes", headers=self.h,
                              json={"name": "Syslog-Cfg", "mode": "agent",
                                    "subnets": []})
-        sid = r.json()["site"]["id"]
-        r = self.client.post(f"/api/sites/{sid}/agent/config", headers=self.h,
+        sid = r.json()["probe"]["id"]
+        r = self.client.post(f"/api/probes/{sid}/agent/config", headers=self.h,
                              json={"syslog_enabled": False})
         self.assertEqual(r.status_code, 200, r.text)
         from services import probe_manager
@@ -160,7 +160,7 @@ class TestThePanelOffersIt(unittest.TestCase):
 
     def test_the_directory_is_shown_read_only(self):
         js = _agent_js()
-        self.assertIn("site.agent_data_dir", js)
+        self.assertIn("probe.agent_data_dir", js)
         # Nessun input: il percorso lo decide l'avvio dell'agente, non il
         # pannello.
         self.assertNotIn('id="agentCfgDataDir"', js)

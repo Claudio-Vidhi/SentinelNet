@@ -219,7 +219,7 @@ function renderDiagnosi(d, dest) {
 
     const position = _diagCard('fa-location-dot', tr('diagPosition'), s.position, p =>
         _kv('MAC', p.mac) + _kv('IP', p.ip) +
-        _kv(tr('diagTenantSite'), `${p.tenant || '—'} / ${p.site || '—'}`) +
+        _kv(tr('diagTenantProbe'), `${p.tenant || '—'} / ${p.probe || '—'}`) +
         _kv(tr('uiAccessSwitch'), `${p.switch_name || ''} ${p.switch_ip || ''}`.trim()) +
         _kv(tr('diagPortVlan'), `${p.switch_port || '—'} / ${p.port_vlan || '—'}`) +
         _kv('Gateway', `${p.gateway_name || ''} ${p.gateway_ip || ''} (${p.gateway_type || '—'})`.trim()) +
@@ -301,12 +301,12 @@ function renderDiagnosi(d, dest) {
         return out;
     }, relayNote);
 
-    const across = !s.across_sites ? '' : _diagCard('fa-tower-broadcast',
-        tr('diagAcrossSites'), s.across_sites, a => {
-        if (a.same_site === null) return `<div style="color:var(--text-muted); font-size:12px;">${escapeHtml(a.note || '')}</div>`;
-        let out = _kv(tr('diagSourceSite'), a.source.site) +
-                  _kv(tr('diagDestinationSite'), `${a.destination.site || '—'}`);
-        if (a.same_site) return out + `<div style="color:var(--text-muted); font-size:12px; margin-top:6px;">${escapeHtml(a.note || '')}</div>`;
+    const across = !s.across_probes ? '' : _diagCard('fa-tower-broadcast',
+        tr('diagAcrossProbes'), s.across_probes, a => {
+        if (a.same_probe === null) return `<div style="color:var(--text-muted); font-size:12px;">${escapeHtml(a.note || '')}</div>`;
+        let out = _kv(tr('diagSourceProbe'), a.source.probe) +
+                  _kv(tr('diagDestinationProbe'), `${a.destination.probe || '—'}`);
+        if (a.same_probe) return out + `<div style="color:var(--text-muted); font-size:12px; margin-top:6px;">${escapeHtml(a.note || '')}</div>`;
         const fe = a.far_end_policy || {};
         out += `<div style="margin-top:8px; font-size:12px; font-weight:600;">${escapeHtml(tr('diagFarEndFirewallPolicy'))}</div>`;
         out += fe.data

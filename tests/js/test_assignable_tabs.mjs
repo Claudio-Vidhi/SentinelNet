@@ -60,7 +60,7 @@ for (const id of ['tab-devices', 'tab-map', 'tab-map-interactive', 'tab-endpoint
     assert.ok(ids.includes(id), `tab concedibile sparita: ${id}`);
 }
 // requires-admin e home non sono concessioni.
-for (const id of ['tab-users', 'tab-settings', 'tab-sites', 'tab-mcp',
+for (const id of ['tab-users', 'tab-settings', 'tab-probes', 'tab-mcp',
                   'tab-incidents', 'tab-fortigate', 'tab-groups', 'tab-home']) {
     assert.ok(!ids.includes(id), `tab non assegnabile offerta: ${id}`);
 }
@@ -85,7 +85,7 @@ console.log(`ok - ${ids.length} tab concedibili derivate dalla navigazione`);
 
 // --- rowRole: le 5 tab del gruppo di gestione (utenti/gruppi/sedi/mcp/
 // impostazioni) sono una concessione SOLO su una riga admin-level. ---
-const ADMIN_GROUP_TABS = ['tab-users', 'tab-groups', 'tab-sites', 'tab-mcp', 'tab-settings'];
+const ADMIN_GROUP_TABS = ['tab-users', 'tab-groups', 'tab-probes', 'tab-mcp', 'tab-settings'];
 
 for (const rowRole of ['admin', 'super_admin']) {
     const adminIds = assignableTabs(rowRole).map((t) => t.id);
@@ -137,7 +137,7 @@ console.log('ok - assignableTabs(rowRole) rispetta il ruolo della riga e le tab 
 const adminRowTabs = assignableTabs('admin');
 const hinted = new Set(adminRowTabs.filter((t) => t.needsUnscopedAdmin).map((t) => t.id));
 assert.deepStrictEqual([...hinted].sort(),
-    ['tab-groups', 'tab-mcp', 'tab-settings', 'tab-sites'],
+    ['tab-groups', 'tab-mcp', 'tab-probes', 'tab-settings'],
     'hint "richiede admin senza limiti di tenant" su tab sbagliate');
 assert.ok(!hinted.has('tab-users'), 'tab-users porta per errore l\'hint di admin non scoped');
 

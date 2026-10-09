@@ -435,7 +435,7 @@ def get_fleet_versions(current_user = Depends(require_unscoped_admin)):
             continue
         v = s.get("agent_version") or ""
         agents.append({
-            "site_id": s["id"], "name": s.get("name", ""),
+            "probe_id": s["id"], "name": s.get("name", ""),
             "version": v, "commit": s.get("agent_commit", ""),
             "branch": s.get("agent_branch", ""),
             "dirty": bool(s.get("agent_dirty")),

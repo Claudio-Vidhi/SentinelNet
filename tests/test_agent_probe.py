@@ -79,13 +79,13 @@ class RemoteProbeE2E(unittest.TestCase):
 
     # --- helper ---
     def _create_agent_probe(self, name):
-        r = self.client.post("/api/sites",
+        r = self.client.post("/api/probes",
                              json={"name": name, "mode": "agent",
                                    "subnets": ["10.9.0.0/24"]},
                              headers=self.admin_h)
         self.assertEqual(r.status_code, 200, r.text)
         body = r.json()
-        return body["site"]["id"], body["token"]
+        return body["probe"]["id"], body["token"]
 
     @staticmethod
     def _agent_headers(probe_id, token):
@@ -105,7 +105,7 @@ class RemoteProbeE2E(unittest.TestCase):
         body = r.json()
         self.assertEqual(body["central"]["version"], __version__)
         self.assertIn(body["install_kind"], ("git", "exe", "source"))
-        agent = next(a for a in body["agents"] if a["site_id"] == sid)
+        agent = next(a for a in body["agents"] if a["probe_id"] == sid)
         self.assertEqual(agent["version"], "0.25.0")
         # Il senso del pannello: un agente indietro rispetto al centrale si vede.
         self.assertTrue(agent["behind"])
@@ -201,7 +201,7 @@ class RemoteProbeE2E(unittest.TestCase):
         self.assertEqual(cm[0]["switch_ip"], "10.9.0.2")
 
         # 5. l'admin accoda un comando CLI per il device della sede
-        r = self.client.post(f"/api/sites/{sid}/command", headers=self.admin_h,
+        r = self.client.post(f"/api/probes/{sid}/command", headers=self.admin_h,
                             json={"ip": "10.9.0.2", "command": "show version"})
         self.assertEqual(r.status_code, 200, r.text)
         job_id = r.json()["job_id"]
@@ -249,10 +249,10 @@ class RemoteProbeE2E(unittest.TestCase):
         self.assertEqual(probe_manager.get_probe(sid)["backup_interval"], 900)
 
     def test_csv_import_assigns_the_probe(self):
-        """La colonna Site veniva letta e buttata via: un inventario esportato
+        """La colonna Probe veniva letta e buttata via: un inventario esportato
         e reimportato perdeva l'assegnazione alle sedi con agente."""
         sid, _token = self._create_agent_probe("Bologna-Remota")
-        csv = ("IP,Username,Password,Enable Secret,Hostname,Group,Site,Vendor\n"
+        csv = ("IP,Username,Password,Enable Secret,Hostname,Group,Probe,Vendor\n"
                f"192.0.2.77,admin,Pw1!,,sw-bologna,Generale,{sid},cisco\n")
         r = self.client.post("/api/import-csv", headers=self.admin_h,
                              json={"csv_data": csv})
@@ -268,7 +268,7 @@ class RemoteProbeE2E(unittest.TestCase):
     def test_csv_import_refuses_an_unknown_probe(self):
         """Una sede si inventa con modalita' e token: crearla al volo qui
         produrrebbe un apparato che nessun agente raccogliera' mai."""
-        csv = ("IP,Hostname,Group,Site,Vendor\n"
+        csv = ("IP,Hostname,Group,Probe,Vendor\n"
                "192.0.2.78,sw-fantasma,Generale,sede-inesistente,cisco\n")
         r = self.client.post("/api/import-csv", headers=self.admin_h,
                              json={"csv_data": csv})
@@ -284,7 +284,7 @@ class RemoteProbeE2E(unittest.TestCase):
     def test_relay_blocks_dangerous_command(self):
         sid, token = self._create_agent_probe("Roma-Remota")
         # L'admin BYPASSA la blacklist (M-1): il comando viene accodato.
-        r = self.client.post(f"/api/sites/{sid}/command", headers=self.admin_h,
+        r = self.client.post(f"/api/probes/{sid}/command", headers=self.admin_h,
                             json={"ip": "10.9.0.9", "command": "write erase"})
         self.assertEqual(r.status_code, 200, r.text)
         # Un operatore (con blacklist attiva, default) viene invece bloccato.
@@ -304,7 +304,7 @@ class RemoteProbeE2E(unittest.TestCase):
             r = self.client.post("/api/auth/login",
                                 json={"username": "op_relay", "password": "operatorpw2"})
             op_h = {"Authorization": "Bearer " + r.json()["access_token"]}
-        r = self.client.post(f"/api/sites/{sid}/command", headers=op_h,
+        r = self.client.post(f"/api/probes/{sid}/command", headers=op_h,
                             json={"ip": "10.9.0.9", "command": "write erase"})
         self.assertEqual(r.status_code, 400, r.text)
         self.assertIn("blacklist", r.json()["detail"].lower())
@@ -365,7 +365,7 @@ class RemoteProbeE2E(unittest.TestCase):
         sid_a, tok_a = self._create_agent_probe("SedeA")
         sid_b, tok_b = self._create_agent_probe("SedeB")
         # job per SedeA
-        r = self.client.post(f"/api/sites/{sid_a}/command", headers=self.admin_h,
+        r = self.client.post(f"/api/probes/{sid_a}/command", headers=self.admin_h,
                             json={"ip": "10.9.0.5", "command": "show clock"})
         job_id = r.json()["job_id"]
         # SedeB tenta di chiuderlo col PROPRIO token -> 404 (non è suo)
@@ -375,7 +375,7 @@ class RemoteProbeE2E(unittest.TestCase):
         self.assertEqual(r.status_code, 404)
 
     def test_central_probe_has_no_relay(self):
-        r = self.client.post("/api/sites/central/command", headers=self.admin_h,
+        r = self.client.post("/api/probes/central/command", headers=self.admin_h,
                             json={"ip": "10.9.0.2", "command": "show version"})
         self.assertEqual(r.status_code, 400)
         self.assertIn("agent", r.json()["detail"].lower())
@@ -465,11 +465,11 @@ class RemoteProbeE2E(unittest.TestCase):
         probe_id = probe_obj["id"]
 
         # Enqueue self update & restart endpoints
-        res_up = self.client.post(f"/api/sites/{probe_id}/agent/update", headers=self.admin_h)
+        res_up = self.client.post(f"/api/probes/{probe_id}/agent/update", headers=self.admin_h)
         self.assertEqual(res_up.status_code, 200)
         self.assertEqual(res_up.json()["status"], "queued")
 
-        res_rst = self.client.post(f"/api/sites/{probe_id}/agent/restart", headers=self.admin_h)
+        res_rst = self.client.post(f"/api/probes/{probe_id}/agent/restart", headers=self.admin_h)
         self.assertEqual(res_rst.status_code, 200)
         self.assertEqual(res_rst.json()["status"], "queued")
 
@@ -482,10 +482,10 @@ class RemoteProbeE2E(unittest.TestCase):
         self.assertIn("git pull", rpc_out["result"])
 
         # Enqueue inventory get & save endpoints
-        res_inv_get = self.client.post(f"/api/sites/{probe_id}/agent/inventory/get", headers=self.admin_h)
+        res_inv_get = self.client.post(f"/api/probes/{probe_id}/agent/inventory/get", headers=self.admin_h)
         self.assertEqual(res_inv_get.status_code, 200)
 
-        res_inv_save = self.client.post(f"/api/sites/{probe_id}/agent/inventory/save", json={"content": "IP,Vendor\n10.0.1.1,cisco"}, headers=self.admin_h)
+        res_inv_save = self.client.post(f"/api/probes/{probe_id}/agent/inventory/save", json={"content": "IP,Vendor\n10.0.1.1,cisco"}, headers=self.admin_h)
         self.assertEqual(res_inv_save.status_code, 200)
 
         # Test agent _agent_get_inventory and _agent_save_inventory RPC handlers
@@ -533,7 +533,7 @@ class RemoteProbeE2E(unittest.TestCase):
         from services import probe_manager
         probe_obj, _ = probe_manager.create_probe("Validazione Sede", "agent")
         res = self.client.post(
-            f"/api/sites/{probe_obj['id']}/agent/inventory/save",
+            f"/api/probes/{probe_obj['id']}/agent/inventory/save",
             json={"content": "Nome,Vendor\nswitch-01,cisco"}, headers=self.admin_h)
         self.assertEqual(400, res.status_code)
         self.assertIn("IP", res.json()["detail"])
@@ -577,8 +577,8 @@ class RemoteProbeE2E(unittest.TestCase):
             inventory_manager.get_detected_versions()["10.9.0.22"]["vendor"], "fortinet")
 
     def test_agent_status_push_cannot_touch_another_probes_device(self):
-        # One site's token must never write another site's state: the agent
-        # job feed is already over-broad (docs/remote-sites.md), and the
+        # One probe's token must never write another probe's state: the agent
+        # job feed is already over-broad (docs/probes.md), and the
         # write path must not inherit that.
         sid_a, token_a = self._create_agent_probe("Status-A")
         sid_b, token_b = self._create_agent_probe("Status-B")
@@ -724,11 +724,11 @@ class RemoteProbeE2E(unittest.TestCase):
     def test_an_admin_relaying_a_blacklisted_command_carries_the_bypass(self):
         """S4: the central authorises the bypass once, and the job records it.
         Without this the agent re-derived the decision and refused, so the
-        same admin and the same command behaved differently at an agent site
+        same admin and the same command behaved differently at an agent probe
         than at the central."""
         from services import probe_manager
         sid, _token = self._create_agent_probe("Bypass-Relay-A")
-        r = self.client.post(f"/api/sites/{sid}/command",
+        r = self.client.post(f"/api/probes/{sid}/command",
                              json={"ip": "10.9.0.63", "command": "reload"},
                              headers=self.admin_h)
         self.assertEqual(r.status_code, 200, r.text)
@@ -738,7 +738,7 @@ class RemoteProbeE2E(unittest.TestCase):
     def test_a_harmless_relayed_command_carries_no_bypass(self):
         from services import probe_manager
         sid, _token = self._create_agent_probe("Bypass-Relay-B")
-        r = self.client.post(f"/api/sites/{sid}/command",
+        r = self.client.post(f"/api/probes/{sid}/command",
                              json={"ip": "10.9.0.64", "command": "show version"},
                              headers=self.admin_h)
         self.assertEqual(r.status_code, 200, r.text)
@@ -774,7 +774,7 @@ class RemoteProbeE2E(unittest.TestCase):
 
 
     def test_ping_check_does_not_overwrite_the_status_the_agent_just_pushed(self):
-        # has_direct_path is False for an agent site, so ping_check's own
+        # has_direct_path is False for an agent probe, so ping_check's own
         # probe returns None (not measurable). Writing "unknown" over that
         # would erase the real online/offline the agent pushed moments ago.
         sid, token = self._create_agent_probe("Ping-No-Overwrite")
@@ -867,12 +867,12 @@ class RemoteProbeE2E(unittest.TestCase):
 
 
 class CentralDoesNotTouchAgentProbeDevices(unittest.TestCase):
-    """Mode B promises the central needs no path to the site. It did anyway.
+    """Mode B promises the central needs no path to the probe. It did anyway.
 
     The agent mirrors its inventory into the central so the dashboard can show
     it, and every central-side prober then read those rows as its own devices.
     On a routed lab that is denied ICMP and denied SSH from the central in the
-    customer's firewall log; on a real NAT'd site it is a device permanently
+    customer's firewall log; on a real NAT'd probe it is a device permanently
     reported "offline" because the probe cannot arrive.
     """
 
@@ -894,7 +894,7 @@ class CentralDoesNotTouchAgentProbeDevices(unittest.TestCase):
 
     def test_a_probe_the_central_does_not_know_keeps_its_direct_path(self):
         # This is what keeps the AGENT itself working: it runs the same code
-        # over its local inventory, whose Site column names a site absent from
+        # over its local inventory, whose Probe column names a probe absent from
         # its own probes.json. Return False here and the agent would refuse to
         # reach the very devices it exists to manage.
         from unittest import mock
@@ -904,7 +904,7 @@ class CentralDoesNotTouchAgentProbeDevices(unittest.TestCase):
             self.assertFalse(probe_manager.is_agent_probe("milan"))
 
     def test_is_agent_probe_separates_agent_from_jump(self):
-        # Both lack a direct path, but only the jump site is still operated BY
+        # Both lack a direct path, but only the bastion probe is still operated BY
         # the central (tunnelled through the bastion), so the two cannot share
         # one predicate.
         from unittest import mock
@@ -936,7 +936,7 @@ class CentralDoesNotTouchAgentProbeDevices(unittest.TestCase):
     def test_triage_refuses_a_fortigate_at_an_agent_probe_before_dialling_it(self):
         # The FortiGate branch dispatches BEFORE the agent-probe refusal used
         # to run, so the central still opened a REST/SSH connection to a
-        # FortiGate at an agent site -- the exact thing this mode exists to
+        # FortiGate at an agent probe -- the exact thing this mode exists to
         # prevent. The refusal must fire first, with nothing above it that
         # could have opened a connection.
         from unittest import mock
@@ -968,7 +968,7 @@ class CentralDoesNotTouchAgentProbeDevices(unittest.TestCase):
 
 
 class CentralManagedDevicePush(unittest.TestCase):
-    """With the flag on, the central owns the site's device list and hands it
+    """With the flag on, the central owns the probe's device list and hands it
     to the agent on the heartbeat it already makes."""
 
     @classmethod
@@ -992,13 +992,13 @@ class CentralManagedDevicePush(unittest.TestCase):
 
     def _probe_with_device(self, name, managed):
         from services import inventory_manager
-        rr = self.client.post("/api/sites", headers=self.admin_h,
+        rr = self.client.post("/api/probes", headers=self.admin_h,
                               json={"name": name, "mode": "agent",
                                     "subnets": ["10.9.0.0/24"]})
         assert rr.status_code == 200, rr.text
-        sid, token = rr.json()["site"]["id"], rr.json()["token"]
+        sid, token = rr.json()["probe"]["id"], rr.json()["token"]
         if managed:
-            rr = self.client.post("/api/sites/update", headers=self.admin_h,
+            rr = self.client.post("/api/probes/update", headers=self.admin_h,
                                   json={"id": sid, "central_manages_devices": True})
             assert rr.status_code == 200, rr.text
         inventory_manager.add_or_update_device(
@@ -1228,7 +1228,7 @@ class AgentConfigFileWins(unittest.TestCase):
 
 
 class AgentPushesItsOwnPingResults(unittest.TestCase):
-    """The central does not reach an agent site's devices, so the agent's own
+    """The central does not reach an agent probe's devices, so the agent's own
     ping is the only source of up/down for them."""
 
     def _agent(self):

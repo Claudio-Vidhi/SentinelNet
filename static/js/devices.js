@@ -92,7 +92,7 @@
 
     // KPI row sopra la tabella inventario: conteggi sull'intera flotta (non filtrati
     // da ricerca/tenant), stessa mappatura stato->led usata per le righe della tabella.
-    // A jump-site device has no ICMP, but the SSH triage does reach it through
+    // A bastion-probe device has no ICMP, but the SSH triage does reach it through
     // the bastion and its outcome is persisted (detected_versions, written by
     // update_version_inventory). So "not measurable" applies only until that
     // outcome exists: showing the em dash regardless threw the triage result
@@ -108,8 +108,8 @@
     function inventoryStatusBucket(d) {
         // A manual device is never probed: "not measurable", never offline.
         if (d.manual) return 'unknown';
-        // Jump site: same "not measurable" bucket as the row's pill (icmp_reachable is
-        // set per-device by /api/local-devices). Without this a jump-site device never
+        // Bastion probe: same "not measurable" bucket as the row's pill (icmp_reachable is
+        // set per-device by /api/local-devices). Without this a bastion-probe device never
         // triaged falls into offline and the "Offline: N" tab contradicts the row.
         if (jumpStatusIsUnmeasurable(d)) return 'unknown';
         const st = (globalVersions[d.IP] || {}).status;
@@ -199,11 +199,11 @@
     function renderDeviceTable() {
         updateInventoryKpis();
 
-        // The Sede column needs the site list, and every caller of this
+        // The Probe column needs the probe list, and every caller of this
         // function is synchronous. Fetch it once in the background and repaint
-        // when it lands; until then each row offers only its own site, so the
+        // when it lands; until then each row offers only its own probe, so the
         // table is never blocked on the request.
-        if (_sitesCache === null) loadDeviceSites().then(renderDeviceTable);
+        if (_probesCache === null) loadDeviceProbes().then(renderDeviceTable);
 
         const filterSelect  = document.getElementById('filterGroupSelect');
         const selectedGroup = filterSelect ? filterSelect.value : 'all';
@@ -224,12 +224,12 @@
 
             // Barra di ricerca: filtra su IP, hostname, vendor, gruppo, versione, stato
             if (term) {
-                const haystack = [d.IP, d.Hostname, d.Vendor, d.Group, d.Site, scan.version, scan.status]
+                const haystack = [d.IP, d.Hostname, d.Vendor, d.Group, d.Probe, scan.version, scan.status]
                     .map(x => (x || '').toString().toLowerCase()).join(' ');
                 if (!haystack.includes(term)) return;
             }
 
-            // Jump site: ICMP cannot cross the bastion tunnel, so "offline" there would
+            // Bastion probe: ICMP cannot cross the bastion tunnel, so "offline" there would
             // be a ping that never ran, not a real down: the bucket says "not measurable".
             const info = homeStatusInfo(d.manual ? 'manual' : bucket);
             const pillTitle = d.manual
@@ -239,7 +239,7 @@
             const selected = selectedDeviceIps.has(d.IP);
             const ipAttr = escapeHtml(d.IP);
 
-            const siteOptions = (current) => (_sitesCache || []).map(st => {
+            const probeOptions = (current) => (_probesCache || []).map(st => {
                 const mode = st.mode === 'jump' ? ' [bastion]' : (st.mode === 'agent' ? ' [agent]' : '');
                 return `<option value="${escapeHtml(st.id)}" ${st.id === current ? 'selected' : ''}>${
                     escapeHtml(st.name || st.id)}${escapeHtml(mode)}</option>`;
@@ -256,15 +256,15 @@
                 if (versionText === 'Non Rilevata') versionText = 'Not Detected';
             }
 
-            // Tenant and site sit under the hostname: plain text for a viewer,
+            // Tenant and probe sit under the hostname: plain text for a viewer,
             // inline selects for whoever may move the device.
             const where = isViewer
-                ? `<span id="badge_${safeIp}">${escapeHtml(orgLabel(d.Group))}</span><span aria-hidden="true">·</span><span>${escapeHtml(d.Site || 'central')}</span>`
+                ? `<span id="badge_${safeIp}">${escapeHtml(orgLabel(d.Group))}</span><span aria-hidden="true">·</span><span>${escapeHtml(d.Probe || 'central')}</span>`
                 : `<select id="grpsel_${safeIp}" class="inv-inline-select" data-action="reassign-device" data-ip="${ipAttr}"
                       title="${tr('devMoveToAnotherTenant')}" aria-label="${tr('devMoveToAnotherTenant')}">${groupOptions}</select>
                    <span aria-hidden="true">·</span>
-                   <select class="inv-inline-select" data-action="reassign-device-site" data-ip="${ipAttr}"
-                      title="${tr('devMoveToAnotherSite')}" aria-label="${tr('devMoveToAnotherSite')}">${siteOptions(d.Site || 'central')}</select>`;
+                   <select class="inv-inline-select" data-action="reassign-device-probe" data-ip="${ipAttr}"
+                      title="${tr('devMoveToAnotherProbe')}" aria-label="${tr('devMoveToAnotherProbe')}">${probeOptions(d.Probe || 'central')}</select>`;
 
             const iconBtn = (action, icon, title, extra = '') =>
                 `<button type="button" class="inv-icon-btn${extra}" data-action="${action}" data-ip="${ipAttr}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}"><i class="fa-solid ${icon}"></i></button>`;
@@ -340,9 +340,9 @@
     });
 
     document.getElementById('deviceTableBody')?.addEventListener('change', (e) => {
-        const siteSel = e.target.closest('select[data-action="reassign-device-site"]');
-        if (siteSel && siteSel.dataset.ip) {
-            reassignDeviceSite(siteSel.dataset.ip, siteSel.value, siteSel);
+        const probeSel = e.target.closest('select[data-action="reassign-device-probe"]');
+        if (probeSel && probeSel.dataset.ip) {
+            reassignDeviceProbe(probeSel.dataset.ip, probeSel.value, probeSel);
             return;
         }
         const sel = e.target.closest('select[data-action="reassign-device"]');
@@ -465,7 +465,7 @@
     }
 
     document.getElementById('btnSaveDevice').addEventListener('click', async () => {
-        const siteSel = document.getElementById('devSiteSelect');
+        const probeSel = document.getElementById('devProbeSelect');
         const payload = {
             ip: document.getElementById('devIp').value.trim(),
             vendor: document.getElementById('devVendor').value,
@@ -474,7 +474,7 @@
             password: document.getElementById('devPass').value,
             enable_secret: document.getElementById('devSecret').value,
             group: document.getElementById('devGroupSelect').value,
-            site: (siteSel && siteSel.value) ? siteSel.value : 'central',
+            probe: (probeSel && probeSel.value) ? probeSel.value : 'central',
             transports: readTransportsForm()
         };
 
@@ -521,12 +521,12 @@
         await switchTab('tab-provisioning');
 
         document.getElementById('devGroupSelect').value = dev.Group || 'Generale';
-        const siteSel = document.getElementById('devSiteSelect');
-        if (siteSel) {
-            if (typeof populateSiteOptions === 'function') {
-                await populateSiteOptions(dev.Site || 'central');
+        const probeSel = document.getElementById('devProbeSelect');
+        if (probeSel) {
+            if (typeof populateProbeOptions === 'function') {
+                await populateProbeOptions(dev.Probe || 'central');
             } else {
-                siteSel.value = dev.Site || 'central';
+                probeSel.value = dev.Probe || 'central';
             }
         }
         const ipInput = document.getElementById('devIp');
@@ -592,8 +592,8 @@
         ipInput.readOnly = false;
         ipInput.style.opacity = '';
         document.getElementById('devProfile').value = 'default';
-        const siteSelReset = document.getElementById('devSiteSelect');
-        if (siteSelReset) siteSelReset.value = 'central';
+        const probeSelReset = document.getElementById('devProbeSelect');
+        if (probeSelReset) probeSelReset.value = 'central';
         setTransportsForm(null, 22);
         document.getElementById('customCredsForm').style.display = 'none';
         document.getElementById('devUser').value = '';
@@ -812,11 +812,11 @@
             closeTriageScopeModal();
             startTriageStatusPolling();
             const body = await res.json();
-            // A group made entirely of agent-site devices queues jobs and
+            // A group made entirely of agent-probe devices queues jobs and
             // runs zero direct triages: without this the progress box just
             // completes at 0/0 with no explanation.
             if (body.queued > 0) {
-                showToast(tr('triageQueuedForAgentSites', { n: body.queued }), 'info');
+                showToast(tr('triageQueuedForAgentProbes', { n: body.queued }), 'info');
             }
         }
     }
@@ -1610,7 +1610,7 @@
             if (status) status.textContent = L.lblExportLoading || 'Caricamento...';
             const qs = new URLSearchParams({
                 groups: checkedValues('exportFilterGroups').join(','),
-                sites: checkedValues('exportFilterSites').join(','),
+                probes: checkedValues('exportFilterProbes').join(','),
                 vendors: checkedValues('exportFilterVendors').join(','),
                 redundancy: checkedValues('exportFilterRedundancy').join(','),
                 columns: cols.join(','),
@@ -1652,7 +1652,7 @@
             .sort().map(v => ({ value: v, label: v }));
 
         renderCheckList('exportFilterGroups', uniq('Group'), prefs.groups);
-        renderCheckList('exportFilterSites', uniq('Site'), prefs.sites);
+        renderCheckList('exportFilterProbes', uniq('Probe'), prefs.probes);
         renderCheckList('exportFilterVendors', uniq('Vendor'), prefs.vendors);
         renderCheckList('exportFilterRedundancy', [
             { value: 'standalone', label: 'standalone' },
@@ -1671,7 +1671,7 @@
     async function exportDeviceCsv() {
         const prefs = {
             groups: checkedValues('exportFilterGroups'),
-            sites: checkedValues('exportFilterSites'),
+            probes: checkedValues('exportFilterProbes'),
             vendors: checkedValues('exportFilterVendors'),
             redundancy: checkedValues('exportFilterRedundancy'),
             columns: checkedValues('exportColumnList'),
@@ -1703,33 +1703,34 @@
 
     // Modello scaricabile: il riquadro di esempio andava ricopiato a mano, ed
     // e' li' che nascevano le intestazioni sbagliate.
-    // 'Site' e' nel modello anche se opzionale: Group (tenant) e Site (sede
-    // fisica) sono due cose diverse, e vederle affiancate con valori diversi
-    // le distingue meglio di qualunque nota. Omessa, Site vale 'central'.
+    // 'Probe' is in the template although optional: Group (tenant) and Probe
+    // (how the device is reached) are different things, and seeing them side
+    // by side with different values explains it better than any note.
+    // Omitted, Probe is 'central'.
     const CSV_TEMPLATE = [
-        'IP,Username,Password,Enable Secret,Hostname,Group,Site,Vendor',
+        'IP,Username,Password,Enable Secret,Hostname,Group,Probe,Vendor',
         '192.0.2.1,admin,Mypass123!,enablepass,switch-01,Tenant_Milano,central,cisco',
-        '198.51.100.1,manager,Pwd456!,secret,switch-02,Tenant_Roma,sede-roma,hpe',
+        '198.51.100.1,manager,Pwd456!,secret,switch-02,Tenant_Roma,probe-roma,hpe',
         ''
     ].join('\n');
 
-    // The Site column has to carry the site id, not its name, and that id is a
+    // The Probe column has to carry the probe id, not its name, and that id is a
     // slug the operator never typed. Showing the real ones next to the rule
-    // saves a trip to the Sites tab. If the call fails the row stays hidden and
+    // saves a trip to the Probes tab. If the call fails the row stays hidden and
     // the written rule above still stands.
-    async function loadImportSiteIds() {
-        const box = document.getElementById('importSiteIds');
-        const list = document.getElementById('importSiteIdsList');
+    async function loadImportProbeIds() {
+        const box = document.getElementById('importProbeIds');
+        const list = document.getElementById('importProbeIdsList');
         if (!box || !list) return;
-        const res = await apiFetch('/api/sites');
+        const res = await apiFetch('/api/probes');
         if (!res || !res.ok) return;
-        const sites = (await res.json()).sites || [];
-        if (!sites.length) return;
-        list.innerHTML = sites.map(s =>
+        const probes = (await res.json()).probes || [];
+        if (!probes.length) return;
+        list.innerHTML = probes.map(s =>
             `<code style="margin-right:6px;">${escapeHtml(s.id)}</code>`).join('');
         box.style.display = 'block';
     }
-    window.loadImportSiteIds = loadImportSiteIds;
+    window.loadImportProbeIds = loadImportProbeIds;
 
     const btnTemplate = document.getElementById('btnDownloadCsvTemplate');
     if (btnTemplate) {
@@ -1841,32 +1842,32 @@
         reader.readAsText(file);
     });
 
-    // Sites for the inventory's Sede column. Cached: the list changes only when
-    // an admin edits it in the Sedi tab, and renderDevices runs on every poll.
-    let _sitesCache = null;
+    // Probes for the inventory's Probe column. Cached: the list changes only when
+    // an admin edits it in the Probes tab, and renderDevices runs on every poll.
+    let _probesCache = null;
 
-    async function loadDeviceSites() {
-        if (_sitesCache) return _sitesCache;
-        const res = await apiFetch('/api/sites');
-        _sitesCache = (res && res.ok) ? (await res.json()).sites || [] : [];
-        return _sitesCache;
+    async function loadDeviceProbes() {
+        if (_probesCache) return _probesCache;
+        const res = await apiFetch('/api/probes');
+        _probesCache = (res && res.ok) ? (await res.json()).probes || [] : [];
+        return _probesCache;
     }
 
-    async function reassignDeviceSite(ip, newSite, selectEl) {
+    async function reassignDeviceProbe(ip, newProbe, selectEl) {
         const dev = globalDevices.find(d => d.IP === ip);
-        if (!dev || newSite === (dev.Site || 'central')) return;
-        const previous = dev.Site || 'central';
+        if (!dev || newProbe === (dev.Probe || 'central')) return;
+        const previous = dev.Probe || 'central';
         selectEl.disabled = true;
         try {
-            const res = await apiFetch('/api/reassign-device-site', {
+            const res = await apiFetch('/api/reassign-device-probe', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ip, new_site: newSite })
+                body: JSON.stringify({ ip, new_probe: newProbe })
             });
             if (res && res.ok) {
-                dev.Site = newSite;
-                // The site decides HOW the device is reached, so the row's
-                // reachability semantics change with it: a jump site has no
+                dev.Probe = newProbe;
+                // The probe decides HOW the device is reached, so the row's
+                // reachability semantics change with it: a bastion probe has no
                 // ICMP. Re-fetch rather than guess the new state here.
                 refreshInventory();
             } else {
@@ -1945,7 +1946,7 @@
             const res = await apiFetch(`/api/ping/${ip}`);
             if (res && res.ok) {
                 const data = await res.json();
-                // null = not measurable (jump site: ICMP cannot cross the bastion
+                // null = not measurable (bastion probe: ICMP cannot cross the bastion
                 // tunnel, see routers/triage.py's ping_single), never a false OFFLINE.
                 setDeviceStatus(ip, data.reachable === null ? "unknown" : (data.reachable ? "online" : "offline"));
             }
@@ -2013,7 +2014,7 @@
     }
 
     function applyPingResultsToTable(results) {
-        // null = not measurable (jump site: ICMP cannot cross the bastion tunnel,
+        // null = not measurable (bastion probe: ICMP cannot cross the bastion tunnel,
         // see routers/triage.py's ping_check), never a false OFFLINE.
         Object.entries(results || {}).forEach(([ip, alive]) => {
             setDeviceStatus(ip, alive === null ? "unknown" : (alive ? "online" : "offline"));
@@ -2092,7 +2093,7 @@
         updateMemberHint();
         updateDeviceExportPreview();
     });
-    ['exportFilterGroups', 'exportFilterSites', 'exportFilterVendors', 'exportFilterRedundancy'].forEach(id => {
+    ['exportFilterGroups', 'exportFilterProbes', 'exportFilterVendors', 'exportFilterRedundancy'].forEach(id => {
         document.getElementById(id)?.addEventListener('change', updateDeviceExportPreview);
     });
     document.getElementById('btnExportColsToggle')?.addEventListener('click', () => {
@@ -2112,7 +2113,7 @@
         applyDeviceColumnPreset(['hostname', 'ip', 'vendor', 'model', 'serial', 'version', 'member_index', 'member_role', 'member_serial', 'member_model']);
     });
     document.getElementById('btnExportPresetDevNet')?.addEventListener('click', () => {
-        applyDeviceColumnPreset(['hostname', 'ip', 'group', 'site', 'ssh_port', 'transports', 'status', 'redundancy_type', 'redundancy_health']);
+        applyDeviceColumnPreset(['hostname', 'ip', 'group', 'probe', 'ssh_port', 'transports', 'status', 'redundancy_type', 'redundancy_health']);
     });
     document.getElementById('deviceExportModal')?.addEventListener('click', (e) => {
         if (e.target.id === 'deviceExportModal' || e.target.closest('#btnCloseDeviceExport')) {

@@ -34,7 +34,7 @@ function renderBastionPanel(devices) {
         return `<tr>
             <td>${host}</td>
             <td><code>${escapeHtml(d.IP || '')}</code></td>
-            <td><span class="badge">${escapeHtml(d.Site || 'central')}</span></td>
+            <td><span class="badge">${escapeHtml(d.Probe || 'central')}</span></td>
             <td><span class="status ${info.cls}"><span class="led ${info.led}"></span>${escapeHtml(label)}</span></td>
         </tr>`;
     }).join('');
@@ -43,7 +43,7 @@ function renderBastionPanel(devices) {
 function homeStatusInfo(status) {
     if (status === 'online')      return { cls: 'ok',   led: 'led-success', key: 'homeStOnline' };
     if (status === 'auth_failed') return { cls: 'warn', led: 'led-warning', key: 'homeStAuth' };
-    // A jump-site device: the SSH bastion tunnel carries no ICMP, so this is
+    // A bastion-probe device: the SSH bastion tunnel carries no ICMP, so this is
     // not measurable, never a confirmed down. Reusing led-discovered (the
     // existing "not confirmed" grey/dashed lamp) rather than the red fault lamp.
     if (status === 'unknown')     return { cls: 'idle', led: 'led-discovered', key: 'homeStUnknown' };
@@ -77,11 +77,11 @@ async function loadHome() {
                 pm.devices.forEach(d => {
                     if (!globalVersions[d.ip]) globalVersions[d.ip] = {};
                     // d.status is the tri-state the ping monitor already computed
-                    // server-side: for a jump-site device (bastion tunnel, no ICMP)
+                    // server-side: for a bastion-probe device (bastion tunnel, no ICMP)
                     // d.up is null and d.status is 'unknown' — never collapse that
                     // to 'offline', it would report a false down.
                     // 'unknown' from the monitor means "I could not measure
-                    // this" (jump site: no ICMP through the bastion), not "the
+                    // this" (bastion probe: no ICMP through the bastion), not "the
                     // state is unknown". Writing it over a status the SSH
                     // triage established would erase a real result with a
                     // non-result, which is what made a triaged jump device go
@@ -113,9 +113,9 @@ async function loadHome() {
     devs.forEach(d => {
         const scan = globalVersions[d.IP] || {};
         // Uploaded by hand, never probed: outside both counters, like a
-        // jump-site device, but not listed as "via bastion".
+        // bastion-probe device, but not listed as "via bastion".
         if (d.manual || scan.status === 'manual') { notMeasurable++; return; }
-        // A jump-site device has no measurable reachability: the bastion tunnel
+        // A bastion-probe device has no measurable reachability: the bastion tunnel
         // carries no ICMP. It is neither online nor something to act on, so it
         // stays out of both counters and out of the percentage's denominator.
         // Without this a customer whose whole estate sits behind one bastion
@@ -372,7 +372,7 @@ function renderFleetOneline(devs) {
         b.total++;
         const st = (globalVersions[d.IP] || {}).status;
         if (!st) b.idle++;                                   // mai interrogato
-        // 'unknown': jump-site device, no ICMP through the bastion — not
+        // 'unknown': bastion-probe device, no ICMP through the bastion — not
         // measurable, NOT a confirmed down. Its own bucket, not merged into
         // 'down' (that painted a bastion-only tenant's bay red as an outage).
         else if (st === 'unknown') b.unknown++;

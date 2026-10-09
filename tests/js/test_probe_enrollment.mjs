@@ -15,7 +15,7 @@ const enrollmentText = new Function('window', body + '; return enrollmentText;')
 
 const { cfg, cmds } = enrollmentText('milano', 'TOK-EN-123');
 const parsed = JSON.parse(cfg);
-assert.strictEqual(parsed.site_id, 'milano');
+assert.strictEqual(parsed.probe_id, 'milano');
 assert.strictEqual(parsed.token, 'TOK-EN-123');
 assert.strictEqual(parsed.central_url, 'https://192.0.2.10:8000');
 assert.strictEqual(parsed.verify_tls, true, 'su https la verifica TLS resta accesa');

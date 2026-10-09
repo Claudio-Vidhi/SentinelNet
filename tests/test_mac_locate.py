@@ -41,7 +41,7 @@ def _sighting(tenant, switch_ip, interface, last_seen, is_uplink=0, **extra):
         "mac": MAC, "oui_vendor": "Example Corp", "vlan": "10",
         "switch_ip": switch_ip, "switch_name": f"switch-{switch_ip[-1]}",
         "interface": interface, "port_channel": "", "is_uplink": is_uplink,
-        "uplink_to": "", "tenant": tenant, "site": "central",
+        "uplink_to": "", "tenant": tenant, "probe": "central",
         "first_seen": last_seen, "last_seen": last_seen, "seen_count": 1,
     }
     row.update(extra)

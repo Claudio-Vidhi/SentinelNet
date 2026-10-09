@@ -147,7 +147,7 @@ class TestRbacScope(unittest.TestCase):
                      json={"old_name": "tenant-nuovo-test", "new_name": "tenant-rinominato"}
                      ).status_code, 403, "admin deve poter rinominare")
 
-    def test_site_relay_command_is_device_scoped(self):
+    def test_probe_relay_command_is_device_scoped(self):
         # Il relay CLI verso una sede agent è `require_operator`: senza scoping
         # sul device, un operator limitato a sede-a pilota gli apparati di
         # sede-c. Il ruolo da solo non basta (CONTRIBUTING.md §4).
@@ -159,18 +159,18 @@ class TestRbacScope(unittest.TestCase):
         c.headers.update({"X-Requested-With": "XMLHttpRequest"})
         body = {"command": "show version"}
 
-        out_of_scope = c.post(f"/api/sites/{sid}/command",
+        out_of_scope = c.post(f"/api/probes/{sid}/command",
                               json={**body, "ip": "10.3.0.1"})   # sede-c
         self.assertEqual(out_of_scope.status_code, 403,
                          "device di altra sede accodabile dal relay")
 
-        in_scope = c.post(f"/api/sites/{sid}/command",
+        in_scope = c.post(f"/api/probes/{sid}/command",
                           json={**body, "ip": "10.1.0.1"})       # sede-a
         self.assertNotEqual(in_scope.status_code, 403,
                             "device della propria sede negato")
 
         # Un device sconosciuto non è autorizzabile: si nega.
-        unknown = c.post(f"/api/sites/{sid}/command",
+        unknown = c.post(f"/api/probes/{sid}/command",
                          json={**body, "ip": "10.9.9.9"})
         self.assertEqual(unknown.status_code, 403)
 
@@ -178,7 +178,7 @@ class TestRbacScope(unittest.TestCase):
         adm = self._client("adm")
         adm.headers.update({"X-Requested-With": "XMLHttpRequest"})
         self.assertNotEqual(
-            adm.post(f"/api/sites/{sid}/command",
+            adm.post(f"/api/probes/{sid}/command",
                      json={**body, "ip": "10.3.0.1"}).status_code, 403)
 
     def test_command_job_lookup_is_scoped(self):
@@ -196,14 +196,14 @@ class TestRbacScope(unittest.TestCase):
         self.assertEqual(c.get("/api/command-jobs/inesistente").status_code, 404)
 
         # L'elenco per sede espone solo i job dei device consentiti.
-        listed = c.get(f"/api/sites/{sid}/command-jobs")
+        listed = c.get(f"/api/probes/{sid}/command-jobs")
         self.assertEqual(listed.status_code, 200)
         ips = {j["device_ip"] for j in listed.json()["jobs"]}
         self.assertEqual(ips, {"10.1.0.1"}, f"lista non filtrata: {ips}")
 
         # Admin vede entrambi.
         adm_ips = {j["device_ip"] for j in
-                   self._client("adm").get(f"/api/sites/{sid}/command-jobs").json()["jobs"]}
+                   self._client("adm").get(f"/api/probes/{sid}/command-jobs").json()["jobs"]}
         self.assertEqual(adm_ips, {"10.1.0.1", "10.3.0.1"})
 
     def test_no_scalar_user_group_in_routers(self):

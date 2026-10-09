@@ -87,7 +87,7 @@ def _pos_candidates(entries: list, l2rows: list, prefer_ip=None) -> list:
             continue
         seen.add(t)
         out.append({
-            "tenant": t, "site": e.get("probe"),
+            "tenant": t, "probe": e.get("probe"),
             "mac": e.get("mac"), "ip": e.get("ip"),
             "client_type": e.get("client_type"),
             "switch_ip": e.get("switch_ip"), "switch_name": e.get("switch_name"),
@@ -106,7 +106,7 @@ def _pos_candidates(entries: list, l2rows: list, prefer_ip=None) -> list:
             continue
         seen.add(t)
         out.append({
-            "tenant": t, "site": r.get("probe"),
+            "tenant": t, "probe": r.get("probe"),
             "mac": r.get("mac"), "ip": None, "client_type": None,
             "switch_ip": r.get("switch_ip"), "switch_name": r.get("switch_name"),
             "switch_port": r.get("interface"), "port_vlan": r.get("vlan"),
@@ -201,7 +201,7 @@ def _position(client: str, is_mac: bool, tenants, gateway_override: Optional[str
         # candidati portano 'port_last_seen' e uno 'switch_name' che può essere
         # vuoto. Senza questa riscrittura data e nome escono in bianco.
         out["tenants_available"] = [{
-            "tenant": c["tenant"], "site": c["site"], "ip": c["ip"],
+            "tenant": c["tenant"], "probe": c["probe"], "ip": c["ip"],
             "mac": c["mac"], "switch_name": c["switch_name"] or c["switch_ip"],
             "switch_port": c["switch_port"], "last_seen": c["port_last_seen"],
             "l2_only": c["l2_only"],
@@ -713,7 +713,7 @@ def _l2_health(position: dict, search_ip: Optional[str] = None) -> dict:
 # --- Di quale sede e' questo indirizzo, e chi lo fronteggia ------------------
 
 def resolve_endpoint(ip: str, tenants=None) -> dict:
-    """{tenant, site, gateway_ip, gateway_type} per un indirizzo qualsiasi.
+    """{tenant, probe, gateway_ip, gateway_type} per un indirizzo qualsiasi.
 
     Due livelli, in quest'ordine:
 
@@ -738,7 +738,7 @@ def resolve_endpoint(ip: str, tenants=None) -> dict:
         if e.get("ip") != ip:
             continue
         return {"known": True, "derived": "observed-arp",
-                "tenant": e.get("tenant"), "site": e.get("probe"),
+                "tenant": e.get("tenant"), "probe": e.get("probe"),
                 "gateway_ip": e.get("source_ip"),
                 "gateway_type": e.get("source_type")}
 
@@ -758,7 +758,7 @@ def resolve_endpoint(ip: str, tenants=None) -> dict:
                 continue
             if addr in net:
                 return {"known": True, "derived": "declared-subnet",
-                        "tenant": None, "site": probe.get("id"),
+                        "tenant": None, "probe": probe.get("id"),
                         "subnet": str(net), "gateway_ip": None,
                         "gateway_type": None}
 
@@ -915,7 +915,7 @@ def _firewall(client: str, position: dict, dest, dest_port, protocol,
     probe_id = (fgt["device"].get("Probe") or "central")
     if _is_agent_probe(probe_id):
         out = {"known": False, "fortigate": fgt["ip"],
-               "resolved_by": fgt["resolved_by"], "site": probe_id,
+               "resolved_by": fgt["resolved_by"], "probe": probe_id,
                "reason": f"sede '{probe_id}' in modalita' agent: il centrale non "
                          "raggiunge questo apparato in REST diretta"}
         if dest and target:
@@ -944,7 +944,7 @@ def _across_probes(position: dict, dest: str, dest_port, protocol,
     from services import fortigate_service
 
     src = {"known": True, "tenant": position.get("tenant"),
-           "site": position.get("site"),
+           "probe": position.get("probe"),
            "gateway_ip": position.get("gateway_ip"),
            "gateway_type": position.get("gateway_type")} \
         if position.get("known") else {"known": False}
@@ -952,13 +952,13 @@ def _across_probes(position: dict, dest: str, dest_port, protocol,
 
     out: dict = {"known": True, "source": src, "destination": dst}
     if not (src.get("known") and dst.get("known")):
-        out["same_site"] = None
+        out["same_probe"] = None
         out["note"] = ("una delle due estremita' non e' collocabile: il "
                        "confronto fra sedi non e' possibile")
         return out
 
-    same = (src.get("site") or "") == (dst.get("site") or "")
-    out["same_site"] = same
+    same = (src.get("probe") or "") == (dst.get("probe") or "")
+    out["same_probe"] = same
     if same:
         out["note"] = "sorgente e destinazione nella stessa sede"
         return out
@@ -1301,7 +1301,7 @@ def diagnose(client: str, dest: Optional[str] = None,
     _section(result, "firewall", _firewall, client, position, dest,
              dest_port, protocol, tenants)
     if dest:
-        _section(result, "across_sites", _across_probes, position, dest,
+        _section(result, "across_probes", _across_probes, position, dest,
                  dest_port, protocol, tenants)
     _section(result, "denies", _denies, position, client, dest, tenants)
 

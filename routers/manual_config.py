@@ -35,7 +35,7 @@ class ManualImportSchema(BaseModel):
     ip: str
     vendor: str
     group: str
-    site: str = "central"
+    probe: str = "central"
     hostname: str = ""
     category: str = ""
     subcategory: str = ""
@@ -58,14 +58,14 @@ def _row(ip: str, group: str):
 
 @router.get("/api/manual-config/guide", dependencies=[Depends(require_tab(*_TABS))])
 def manual_config_guide(current_user=Depends(require_operator)):
-    # Categories and sites ride along: the review form needs them, and their
+    # Categories and probes ride along: the review form needs them, and their
     # own routes belong to tabs this user may not hold.
     cats = inventory_manager.get_device_categories()["categories"]
     return {
         "vendors": manual_config.guide(),
         "categories": {k: {"label": v["label"], "subcategories": v["subcategories"]}
                        for k, v in cats.items()},
-        "sites": [{"id": s["id"], "name": s.get("name") or s["id"]}
+        "probes": [{"id": s["id"], "name": s.get("name") or s["id"]}
                   for s in probe_manager.list_probes()],
     }
 
@@ -90,8 +90,8 @@ def manual_config_import(payload: ManualImportSchema, current_user=Depends(requi
             assert_group_allowed(current_user, d.get("Group") or "Generale")
     if payload.group not in inventory_manager.get_all_groups():
         raise HTTPException(status_code=400, detail=f"Tenant '{payload.group}' inesistente.")
-    if payload.site not in {s["id"] for s in probe_manager.list_probes()}:
-        raise HTTPException(status_code=400, detail=f"Sede '{payload.site}' inesistente.")
+    if payload.probe not in {s["id"] for s in probe_manager.list_probes()}:
+        raise HTTPException(status_code=400, detail=f"Sonda '{payload.probe}' inesistente.")
     vendor = inventory_manager.normalize_vendor(payload.vendor)
     if vendor not in manual_config.GUIDE_VENDORS:
         raise HTTPException(status_code=400, detail=f"Vendor '{payload.vendor}' non supportato.")
@@ -105,7 +105,7 @@ def manual_config_import(payload: ManualImportSchema, current_user=Depends(requi
     try:
         inventory_manager.add_or_update_device(
             payload.ip, vendor, "", "", "", "", payload.group,
-            probe=payload.site, transports={"manual": None})
+            probe=payload.probe, transports={"manual": None})
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     device = _row(payload.ip, payload.group)

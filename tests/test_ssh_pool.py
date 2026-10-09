@@ -51,7 +51,7 @@ class TestRoutesAreAsync(unittest.TestCase):
         from routers.triage import triage_single_device
         from routers.arp import arp_scan
         from routers.mac import mac_scan
-        from routers.sites import test_bastion_ep
+        from routers.probes import test_bastion_ep
         for route in (triage_single_device, arp_scan, mac_scan, test_bastion_ep):
             self.assertTrue(inspect.iscoroutinefunction(route), route.__name__)
 

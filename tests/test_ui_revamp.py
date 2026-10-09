@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from core import data_config  # noqa: E402
 data_config.DATA_DIR = _TMP
 import app_server  # noqa: E402
-import routers.inventory, routers.topology, routers.catalog, routers.mac, routers.analyzer, routers.backup, routers.sites, routers.mcp
+import routers.inventory, routers.topology, routers.catalog, routers.mac, routers.analyzer, routers.backup, routers.probes, routers.mcp
 from tests.test_helpers_frontend import frontend_source  # noqa: E402
 from tests.routes import iter_routes  # noqa: E402
 
@@ -113,7 +113,7 @@ TAB_IDS_IN_DOC_ORDER = [
     "tab-home", "tab-devices", "tab-groups", "tab-map", "tab-map-interactive",
     "tab-categories", "tab-security", "tab-endpoint", "tab-flows",
     "tab-config", "tab-ai", "tab-provisioner", "tab-import", "tab-users",
-    "tab-sites", "tab-mcp", "tab-settings",
+    "tab-probes", "tab-mcp", "tab-settings",
 ]
 
 # #tab-endpoint used to be four sibling tabs (#tab-mac, #tab-clientmap,
@@ -325,7 +325,7 @@ class TestSidebarIA(unittest.TestCase):
         for tab in ("tab-devices", "tab-endpoint", "tab-flows",
                     "tab-map", "tab-map-interactive", "tab-categories", "tab-security",
                     "tab-config", "tab-ai", "tab-provisioner", "tab-import", "tab-groups",
-                    "tab-users", "tab-sites", "tab-mcp", "tab-settings"):
+                    "tab-users", "tab-probes", "tab-mcp", "tab-settings"):
             self.assertTrue(
                 f'data-tab="{tab}"' in html or f'data-switch-tab="{tab}"' in html,
                 f"nessun controllo apre piu' {tab}")
@@ -1207,7 +1207,7 @@ class TestProvisionerTabRestyle(unittest.TestCase):
 
     def test_endpoint_contract_present(self):
         # provCollectPayload/fgtCollectPayload/provInitToggles' fetch call
-        # sites: moved to static/js/provisioning.js.
+        # probes: moved to static/js/provisioning.js.
         html = frontend_source()
         # Both vendor bases are chosen by provPayloadAndBase(); the four verbs
         # are then reached as `${base}/<verb>` template literals, so assert the
@@ -1310,7 +1310,7 @@ class TestImportTabRestyle(unittest.TestCase):
         tab = self._tab(html)
         self.assertIn('class="page-head"', tab)
         # prepare-the-file step + upload step + manual-config entry, beside the
-        # Group/Site reference.
+        # Group/Probe reference.
         self.assertEqual(tab.count('<section class="panel">'), 3)
         self.assertIn('class="panel import-aside"', tab)
 
@@ -1330,7 +1330,7 @@ class TestUsersTabRestyle(unittest.TestCase):
 
     def _tab(self, html):
         start = html.index('<div id="tab-users"')
-        end = html.index('<div id="tab-sites"')
+        end = html.index('<div id="tab-probes"')
         return html[start:end]
 
     def test_preserve_ids(self):
@@ -1407,60 +1407,60 @@ class TestUsersTabRestyle(unittest.TestCase):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
 
-class TestSitesTabRestyle(unittest.TestCase):
-    """Task 17: #tab-sites (Multi-site locations) restyle guard -- ENGLISH RELABEL.
+class TestProbesTabRestyle(unittest.TestCase):
+    """Task 17: #tab-probes (Multi-site locations) restyle guard -- ENGLISH RELABEL.
 
-    Admin-only tab: sites table (mode badge, last-contact, per-site
-    regenerate-token/delete actions) + a create-site form. Before this task,
+    Admin-only tab: probes table (mode badge, last-contact, per-probe
+    regenerate-token/delete actions) + a create-probe form. Before this task,
     "Rigenera token" / "Elimina" / "predefinita" were hardcoded Italian
-    literals baked straight into renderSitesTable()'s template string, with
+    literals baked straight into renderProbesTable()'s template string, with
     NO data-i18n mechanism at all -- the relabel converts them to i18n keys
     (EN copy canonical, IT retained) looked up via the file's established
     `const L = i18n[currentLang];` render-fn pattern.
     """
 
     def _tab(self, html):
-        start = html.index('<div id="tab-sites"')
+        start = html.index('<div id="tab-probes"')
         end = html.index('<div id="tab-mcp"')
         return html[start:end]
 
     def test_preserve_ids(self):
         html = _html()
-        # sitesTableBody + the site wizard fields read by saveSiteWizard().
-        for _id in ('sitesTableBody', 'swName', 'swSubnets', 'btnNewSite'):
+        # probesTableBody + the probe wizard fields read by saveProbeWizard().
+        for _id in ('probesTableBody', 'swName', 'swSubnets', 'btnNewProbe'):
             self.assertIn(f'id="{_id}"', html, f"lost preserve-ID {_id}")
 
     def test_endpoint_contract_present(self):
-        # loadSites()/createSite()/etc. moved to static/js/settings.js.
+        # loadProbes()/createProbe()/etc. moved to static/js/settings.js.
         html = frontend_source()
-        # GET /api/sites (list) and POST /api/sites (create) share one literal.
-        self.assertIn("apiFetch('/api/sites')", html)
-        self.assertIn("'/api/sites/update' : '/api/sites'", html)
-        for endpoint in ('/api/sites/delete', '/api/sites/regenerate-token'):
+        # GET /api/probes (list) and POST /api/probes (create) share one literal.
+        self.assertIn("apiFetch('/api/probes')", html)
+        self.assertIn("'/api/probes/update' : '/api/probes'", html)
+        for endpoint in ('/api/probes/delete', '/api/probes/regenerate-token'):
             self.assertIn(endpoint, html)
-        # Brief also lists POST /api/sites/update, POST /api/sites/{id}/command
-        # and GET /api/sites/{id}/command-jobs. Traced app_server.py (routes
-        # exist: update_site_ep, site_command_ep, list_site_command_jobs_ep)
-        # AND dashboard.html (grepped for updateSite/editSite/site command
+        # Brief also lists POST /api/probes/update, POST /api/probes/{id}/command
+        # and GET /api/probes/{id}/command-jobs. Traced app_server.py (routes
+        # exist: update_probe_ep, probe_command_ep, list_probe_command_jobs_ep)
+        # AND dashboard.html (grepped for updateProbe/editProbe/probe command
         # runner/command-jobs poller): there is NO JS caller for any of the
-        # three anywhere in the file -- no edit-site form, no per-site CLI
+        # three anywhere in the file -- no edit-probe form, no per-probe CLI
         # command runner, no command-jobs poller. Per shared per-tab rules
         # ("do NOT fabricate UI"), this is reported rather than invented;
         # relaxed to asserting the real routes exist server-side by handler
         # name, and asserting no fabricated hook was added for them.
         import app_server as _app_server  # noqa: F401 (deliberate side-effect import)
-        for fn in ('update_site_ep', 'site_command_ep', 'list_site_command_jobs_ep'):
-            self.assertTrue(hasattr(routers.sites, fn), f"expected server route {fn} to exist")
-        for hook in ('updateSite(', 'editSite(', 'runSiteCommand(', 'siteCommand(', 'commandJobs('):
+        for fn in ('update_probe_ep', 'probe_command_ep', 'list_probe_command_jobs_ep'):
+            self.assertTrue(hasattr(routers.probes, fn), f"expected server route {fn} to exist")
+        for hook in ('updateProbe(', 'editProbe(', 'runProbeCommand(', 'probeCommand(', 'commandJobs('):
             self.assertNotIn(hook, html)
 
     def test_admin_gated_functions_untouched(self):
-        # loadSites() and friends moved to static/js/settings.js.
+        # loadProbes() and friends moved to static/js/settings.js.
         html = frontend_source()
-        # loadSites() and all mutating handlers must survive byte-for-byte.
-        self.assertIn("async function loadSites()", html)
+        # loadProbes() and all mutating handlers must survive byte-for-byte.
+        self.assertIn("async function loadProbes()", html)
         self.assertIn("if (!isAdminRole(currentRole)) return;", html)
-        for hook in ('saveSiteWizard()', 'regenSiteToken(', 'deleteSite('):
+        for hook in ('saveProbeWizard()', 'regenProbeToken(', 'deleteProbe('):
             self.assertIn(hook, html)
 
     def test_rbac_preserved(self):
@@ -1468,7 +1468,7 @@ class TestSitesTabRestyle(unittest.TestCase):
         # Precedent from Task 14-16: the tab is gated at the nav entry, so the
         # tab body itself carries no requires-admin gate.
         self.assertIn(
-            "class=\"nav-item requires-admin\" data-tab=\"tab-sites\"",
+            "class=\"nav-item requires-admin\" data-tab=\"tab-probes\"",
             html)
         tab = self._tab(html)
         self.assertNotIn('requires-admin', tab)
@@ -1478,18 +1478,18 @@ class TestSitesTabRestyle(unittest.TestCase):
         tab = self._tab(html)
         for cls in ('class="page-head"', 'class="table-wrap"'):
             self.assertIn(cls, tab)
-        # sites table only; creation and editing live in the siteWizard side panel.
+        # probes table only; creation and editing live in the probeWizard side panel.
         self.assertEqual(tab.count('class="panel'), 1)
-        self.assertIn('id="btnNewSite"', tab)
-        self.assertIn('id="siteWizard"', html)
+        self.assertIn('id="btnNewProbe"', tab)
+        self.assertIn('id="probeWizard"', html)
         self.assertNotIn('table-container', tab)
 
     def test_i18n_keys_both_langs(self):
         html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
-        for key in ('sitesEyebrow:', 'titleSites:', 'descSites:', 'lblSiteName:',
-                    'lblSiteMode:', 'thSiteLastContact:', 'titleNewSite:',
-                    'lblSiteSubnets:', 'btnSaveSite:', 'btnRegenSiteToken:',
-                    'btnDeleteSite:', 'lblSiteDefault:'):
+        for key in ('probesEyebrow:', 'titleProbes:', 'descProbes:', 'lblProbeName:',
+                    'lblProbeMode:', 'thProbeLastContact:', 'titleNewProbe:',
+                    'lblProbeSubnets:', 'btnSaveProbe:', 'btnRegenProbeToken:',
+                    'btnDeleteProbe:', 'lblProbeDefault:'):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
     def test_relabel_keys_english_default(self):
@@ -1497,19 +1497,19 @@ class TestSitesTabRestyle(unittest.TestCase):
         html = frontend_source()
         # The three previously-unlocalized strings: EN copy is now the map's
         # canonical/default value, IT retained for the it map.
-        self.assertIn('btnRegenSiteToken: "Regenerate token"', html)
-        self.assertIn('btnDeleteSite: "Delete"', html)
-        self.assertIn('lblSiteDefault: "Default"', html)
-        self.assertIn('btnRegenSiteToken: "Rigenera token"', html)
-        self.assertIn('btnDeleteSite: "Elimina"', html)
-        self.assertIn('lblSiteDefault: "predefinita"', html)
-        # renderSitesTable() looks these up via the established i18n[currentLang]
-        # render-fn pattern (const L = i18n[currentLang]; ... L.btnDeleteSite),
+        self.assertIn('btnRegenProbeToken: "Regenerate token"', html)
+        self.assertIn('btnDeleteProbe: "Delete"', html)
+        self.assertIn('lblProbeDefault: "Default"', html)
+        self.assertIn('btnRegenProbeToken: "Rigenera token"', html)
+        self.assertIn('btnDeleteProbe: "Elimina"', html)
+        self.assertIn('lblProbeDefault: "predefinita"', html)
+        # renderProbesTable() looks these up via the established i18n[currentLang]
+        # render-fn pattern (const L = i18n[currentLang]; ... L.btnDeleteProbe),
         # not a newly-invented mechanism.
         self.assertIn('const L = i18n[currentLang];', html)
-        self.assertIn('L.btnRegenSiteToken', html)
-        self.assertIn('L.btnDeleteSite', html)
-        self.assertIn('L.lblSiteDefault', html)
+        self.assertIn('L.btnRegenProbeToken', html)
+        self.assertIn('L.btnDeleteProbe', html)
+        self.assertIn('L.lblProbeDefault', html)
 
 
 class TestMcpTabRestyle(unittest.TestCase):
@@ -2510,7 +2510,7 @@ class TestSidebarRail(unittest.TestCase):
         for tab, gate in (('tab-provisioner', 'requires-write'),
                           ('tab-import', 'requires-write'),
                           ('tab-users', 'requires-admin'),
-                          ('tab-sites', 'requires-admin'),
+                          ('tab-probes', 'requires-admin'),
                           ('tab-mcp', 'requires-admin'),
                           ('tab-settings', 'requires-admin')):
             # Il gate RBAC vive sulla voce di nav che apre il tab: direttamente
@@ -2808,7 +2808,7 @@ class TestBackupAgeLabelShared(unittest.TestCase):
         # Oltre una settimana il dato non descrive piu' la rete di adesso.
         self.assertIn("var(--warning)", fn)
 
-    def test_both_call_sites_use_it_and_no_copy_survives(self):
+    def test_both_callers_use_it_and_no_copy_survives(self):
         # assertTrue e non assertIn: su un fallimento assertIn stamperebbe
         # l'intero sorgente frontend concatenato (oltre 1 MB).
         js = frontend_source()
@@ -2976,7 +2976,7 @@ class TestDelegatedListenersBindRealIds(unittest.TestCase):
 
     CONTAINERS = {
         "core.js": "identitiesTableBody",
-        "site-agent.js": "agentControlBody",
+        "probe-agent.js": "agentControlBody",
         "fortigate-management.js": "fgtMgrTableBody",
         "audit_checklist.js": "auditSectionAccordion",
     }

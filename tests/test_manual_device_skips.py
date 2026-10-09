@@ -80,21 +80,21 @@ class CredentialGuard(unittest.TestCase):
 
 class AgentPaths(unittest.TestCase):
     NORMAL = {"IP": "192.0.2.51", "Vendor": "linux", "Group": "Generale",
-              "Probe": "site-a", "Transports": ""}
+              "Probe": "probe-a", "Transports": ""}
 
     def test_agent_inventory_omits_manual(self):
         from routers import agent
-        manual = dict(MANUAL, Probe="site-a")
+        manual = dict(MANUAL, Probe="probe-a")
         with mock.patch(DEVICES, return_value=[manual, self.NORMAL]):
-            out = agent._devices_for_probe("site-a", with_credentials=False)
+            out = agent._devices_for_probe("probe-a", with_credentials=False)
         self.assertEqual([d["ip"] for d in out], ["192.0.2.51"])
 
     def test_agent_inventory_with_credentials_does_not_raise(self):
         from routers import agent
-        manual = dict(MANUAL, Probe="site-a")
+        manual = dict(MANUAL, Probe="probe-a")
         with mock.patch(DEVICES, return_value=[manual, self.NORMAL]),              mock.patch("core.device_credentials.get_device_credentials",
                         return_value=("u", "p", "")):
-            out = agent._devices_for_probe("site-a", with_credentials=True)
+            out = agent._devices_for_probe("probe-a", with_credentials=True)
         self.assertEqual([d["ip"] for d in out], ["192.0.2.51"])
 
     def test_push_mac_skips_manual(self):

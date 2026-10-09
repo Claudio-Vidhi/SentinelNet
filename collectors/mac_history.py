@@ -986,7 +986,7 @@ def endpoint_inventory(tenants=None, probe: Optional[str] = None,
         results.append({
             "mac": mac, "tenant": tenant,
             "oui_vendor": next((s["oui_vendor"] for s in grp if s.get("oui_vendor")), ""),
-            "site": grp[0].get("probe") or "",
+            "probe": grp[0].get("probe") or "",
             "ips": ips,
             "switch_ip": best.get("switch_ip", ""),
             "switch_name": best.get("switch_name", ""),
