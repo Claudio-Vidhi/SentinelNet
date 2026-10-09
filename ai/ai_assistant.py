@@ -229,7 +229,7 @@ def build_tenant_context(tenant: str, *, devices=None, group_info=None, probe=No
                           mac_stats=None, mac_recent=None, scan_summary=None,
                           max_devices=100, max_recent=15) -> str:
     """Builds a compact context block (markdown) with the relevant information
-    for a SINGLE tenant/site, to be used as a system message injected into the
+    for a SINGLE tenant, to be used as a system message injected into the
     AI request.
 
     The scope is strictly limited to the given tenant: the caller must have
@@ -238,7 +238,7 @@ def build_tenant_context(tenant: str, *, devices=None, group_info=None, probe=No
     it only formats).
 
     - ``devices``: list of inventory dicts (IP/Hostname/Vendor/Group/Probe).
-    - ``group_info``: dict with the group/site 'description' (from groups.json).
+    - ``group_info``: dict with the group/tenant 'description' (from groups.json).
     - ``probe``: dict from probes.json (mode/subnets/last_seen), or a list of such
       dicts if the tenant covers multiple VPN sites.
     - ``mac_stats``: dict {sightings, unique_macs, switches, retention_days}.

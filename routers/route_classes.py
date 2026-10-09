@@ -8,7 +8,7 @@ Every /api/* route (HTTP and WebSocket) belongs to exactly one class:
   route_tabs() below finds it), scoped to whichever tab owns it.
 - BASE: global admin/operator/viewer routes with no single owning tab.
 - PUBLIC: reachable without authentication (login, health checks, ...).
-- MACHINE: agent/site-to-site or other non-interactive callers.
+- MACHINE: agent, site-to-site or other non-interactive callers.
 
 BASE_ROUTES, PUBLIC_ROUTES and MACHINE_ROUTES are explicit; TAB routes need
 no explicit list here, they are discovered via route_tabs().

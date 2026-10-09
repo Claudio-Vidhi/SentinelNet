@@ -103,11 +103,11 @@ class TestPanosEnvelope(unittest.TestCase):
 
     def test_vpn(self):
         rows = {r["name"]: r for r in _rows(self.env, "vpn_ipsec")}
-        self.assertEqual(rows["GW-SITE2"]["kind"], "ike-gateway")
-        self.assertEqual(rows["GW-SITE2"]["peer"], "198.51.100.1")
-        self.assertEqual(rows["TUN-SITE2"]["kind"], "ipsec-tunnel")
-        self.assertEqual(rows["TUN-SITE2"]["peer"], "GW-SITE2")
-        self.assertEqual(rows["TUN-SITE2"]["interface"], "tunnel.1")
+        self.assertEqual(rows["GW-BRANCH2"]["kind"], "ike-gateway")
+        self.assertEqual(rows["GW-BRANCH2"]["peer"], "198.51.100.1")
+        self.assertEqual(rows["TUN-BRANCH2"]["kind"], "ipsec-tunnel")
+        self.assertEqual(rows["TUN-BRANCH2"]["peer"], "GW-BRANCH2")
+        self.assertEqual(rows["TUN-BRANCH2"]["interface"], "tunnel.1")
 
     def test_administrators(self):
         rows = {r["name"]: r for r in _rows(self.env, "administrators")}

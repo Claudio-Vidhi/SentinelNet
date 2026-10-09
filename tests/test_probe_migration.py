@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
-"""One-shot rename of persisted 'site' names to 'probe'."""
+"""One-shot rename of the persisted pre-0.52 names to 'probe'."""
 import csv
 import json
 import os

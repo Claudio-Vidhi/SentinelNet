@@ -57,7 +57,7 @@ _WELL_KNOWN = {
 # stdlib sono tutti "non globali", ma per un ingegnere di rete non sono la
 # stessa cosa. Ordine significativo: si prende il primo che contiene.
 _SPECIAL_NETWORKS = (
-    ("100.64.0.0/10", "cgnat", "site"),
+    ("100.64.0.0/10", "cgnat", "local"),
     ("192.0.2.0/24", "documentation", "global"),
     ("198.51.100.0/24", "documentation", "global"),
     ("203.0.113.0/24", "documentation", "global"),
@@ -105,7 +105,7 @@ def classify(address: Optional[str]) -> Optional[dict]:
                 break
         else:
             if ip.is_private:
-                category, scope = "private", "site"
+                category, scope = "private", "local"
             else:
                 category, scope = "public", "global"
 

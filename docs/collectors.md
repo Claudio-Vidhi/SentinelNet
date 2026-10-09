@@ -371,7 +371,7 @@ changes: `normalize._from_api_observations` already projects them into
   reading zero would stay silent exactly where it isn't looking.
 - **No sudo.** Every metric here is readable by an unprivileged account, so the
   session never calls `enable()`. The privileged tier exists only in triage.
-- **Direct-mode probes only.** Hosts behind a probe agent in `mode == 'agent'` are not
+- **Direct (central server) probes only.** Hosts behind a probe agent in `mode == 'agent'` are not
   polled; supporting them means adding the round to `services/probe_agent.py`.
 
 ### Windows hosts

@@ -172,7 +172,7 @@ _CSV_ALIASES: Dict[str, str] = {
     #   Group  = tenant, the RBAC boundary: who sees what.
     #   Probe  = how the device is reached: 'central', an agent probe or a
     #            bastion probe.
-    # 'site' is the column's name before the rename: an old export must
+    # The pre-0.52 spelling is the column's name before the rename: an old export must
     # reimport onto the same probes. 'sede' is reserved for Location.
     "group": "Group", "gruppo": "Group", "tenant": "Group",
     "probe": "Probe", "sonda": "Probe", "site": "Probe",  # check-site-name: ok
@@ -653,7 +653,7 @@ def _akey(tenant, node_id: str) -> str:
 
 
 def tenant_for_node(node_id: str) -> str:
-    """The site a node belongs to, from inventory. A node that is not a managed
+    """The tenant a node belongs to, from inventory. A node that is not a managed
     device (discovered via CDP/LLDP and never promoted) has no site of its own
     and lands in 'Generale'."""
     d = next((d for d in get_all_devices() if d['IP'] == node_id), None)

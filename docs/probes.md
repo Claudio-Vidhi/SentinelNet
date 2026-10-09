@@ -15,7 +15,7 @@ devices:
 
 | Mode | How it works | When to use it |
 |---|---|---|
-| **Direct mode** (Mode A, central server) | Central opens SSH connections directly to remote devices through site-to-site VPN routing. No extra process. | Stable site-to-site VPN, remote subnets directly reachable from central. |
+| **Direct (central server)** (Mode A) | Central opens SSH connections directly to remote devices through site-to-site VPN routing. No extra process. | Stable site-to-site VPN, remote subnets directly reachable from central. |
 | **Agent probe** (Mode B) | A lightweight process (`services/probe_agent.py`) runs on a server or VM inside the site and connects **outbound** to central over HTTPS. It pushes inventory, MAC tables and status; CLI commands travel through a job queue. | NAT or firewalls that block inbound connections to the site, an unstable VPN, or a requirement to keep credentials inside the site. |
 | **Bastion probe** (Mode C) | Central opens one SSH connection to a bastion host inside the customer's network and tunnels every device SSH session through it (`core/net_ssh.py`, `direct-tcpip` channel). Nothing is installed at the site beyond the bastion's own `sshd`. | Customer refuses any installed agent or software, and grants only SSH access to a single Linux host that can reach the managed devices. |
 
@@ -37,7 +37,7 @@ there. Central being on Windows says nothing about the probes: their agents
 still need Linux.
 
 A probe whose only available host is Windows is a **bastion probe** (Mode C) or a
-direct-mode probe (Mode A, central server), not an agent probe.
+Direct (central server) probe (Mode A), not an agent probe.
 
 ---
 
@@ -136,7 +136,7 @@ Key principles:
 > so no probe can write another's *record* — but `detected_versions.json` and
 > the hostname store are keyed by IP alone across the whole product, so the
 > second probe's device resolves to the first one's row. This predates the
-> agent relay and applies equally to a direct-mode probe; it is an inventory
+> agent relay and applies equally to a Direct (central server) probe; it is an inventory
 > keying limitation, not an authentication one.
 
 ---

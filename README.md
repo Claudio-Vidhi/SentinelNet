@@ -149,7 +149,7 @@ Docker image ships 3.11; development happens on 3.14.
 The **probe agent is Linux-only, and a Windows agent is not planned** — its
 remote management (log tail, restart) is built on systemd and has no
 equivalent elsewhere. A site with no Linux host connects through a bastion probe (Mode C) or in
-direct mode (Mode A, central server) instead; see
+**Direct (central server)** (Mode A) instead; see
 [docs/probes.md](docs/probes.md).
 
 Key dependencies:
@@ -360,7 +360,7 @@ Observability listener variables (`SENTINELNET_OBS_*`) are documented in
 ## Remote sites (multi-site)
 
 SentinelNet manages multiple sites over VPN from a single central server, in
-**direct mode** (Mode A, central server, SSH over VPN) or **probe agent** mode (a remote
+**Direct (central server)** (Mode A, SSH over VPN) or **probe agent** mode (a remote
 agent that connects outbound and receives commands from a queue). The agent
 requires a Linux host; central does not. Full deployment guide:
 [docs/probes.md](docs/probes.md).

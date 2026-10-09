@@ -39,15 +39,15 @@ class TestClassification(unittest.TestCase):
 
     def test_categories_cover_the_special_ranges(self):
         cases = {
-            "10.1.0.5": ("private", "site"),
-            "192.168.1.1": ("private", "site"),
-            "172.16.0.1": ("private", "site"),
+            "10.1.0.5": ("private", "local"),
+            "192.168.1.1": ("private", "local"),
+            "172.16.0.1": ("private", "local"),
             "8.8.8.8": ("public", "global"),
             "127.0.0.1": ("loopback", "host"),
             "169.254.10.3": ("link_local", "link-local"),
             "255.255.255.255": ("broadcast", "link-local"),
             "0.0.0.0": ("unspecified", "host"),
-            "100.64.0.1": ("cgnat", "site"),
+            "100.64.0.1": ("cgnat", "local"),
             "203.0.113.7": ("documentation", "global"),
             "198.18.0.1": ("benchmark", "global"),
             "240.0.0.1": ("reserved", "global"),

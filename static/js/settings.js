@@ -44,7 +44,7 @@
                 : '<span class="status ok"><span class="led led-success"></span>CENTRAL POLL</span>';
             const last = s.last_seen ? new Date(s.last_seen * 1000).toLocaleString() : '—';
             const subnets = (s.subnets || []).map(escapeHtml).join(', ') || '—';
-            // Solo una sede con agente puo' essere offline: il central poll non
+            // Solo una sonda con agente puo' essere offline: il modo direct (central server) non
             // ha un processo remoto che riporta heartbeat. Soglia legata
             // all'intervallo configurato dell'agente, non fissa: con un
             // intervallo lungo un agente sano risulterebbe sempre offline.
