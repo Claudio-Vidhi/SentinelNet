@@ -29,6 +29,11 @@ class TestGetDevicePort(unittest.TestCase):
 
 
 class TestInventorySshPortRoundTrip(unittest.TestCase):
+    def setUp(self):
+        from services import location_manager
+        loc = location_manager.list_locations("Generale")
+        self.loc_id = loc[0]["id"] if loc else location_manager.create_location("Generale", "Sede Generale")["id"]
+
     def test_round_trip_and_legacy_default(self):
         from services import inventory_manager
         with tempfile.TemporaryDirectory() as td:
@@ -36,7 +41,7 @@ class TestInventorySshPortRoundTrip(unittest.TestCase):
             with mock.patch.object(inventory_manager, 'HOSTS_CSV', csv_path):
                 inventory_manager.add_or_update_device(
                     '10.9.9.9', 'cisco', 'custom', 'u', 'p', 's', 'Generale',
-                    ssh_port=2222)
+                    ssh_port=2222, location=self.loc_id)
                 dev = inventory_manager.get_all_devices()[0]
                 self.assertEqual(dev['SSH Port'], '2222')
                 # Aggiornamento senza ssh_port: la porta esistente si preserva.
@@ -57,7 +62,7 @@ class TestInventorySshPortRoundTrip(unittest.TestCase):
             csv_path = os.path.join(td, 'hosts.csv')
             with mock.patch.object(inventory_manager, 'HOSTS_CSV', csv_path):
                 inventory_manager.add_or_update_device(
-                    '10.9.9.7', 'cisco', 'custom', 'u1', 'p1', 's1', 'Generale')
+                    '10.9.9.7', 'cisco', 'custom', 'u1', 'p1', 's1', 'Generale', location=self.loc_id)
                 inventory_manager.add_or_update_device(
                     '10.9.9.7', 'cisco', 'custom', '', '', '', 'Generale')
                 dev = inventory_manager.get_all_devices()[0]
@@ -72,7 +77,7 @@ class TestInventorySshPortRoundTrip(unittest.TestCase):
             csv_path = os.path.join(td, 'hosts.csv')
             with mock.patch.object(inventory_manager, 'HOSTS_CSV', csv_path):
                 inventory_manager.add_or_update_device(
-                    '10.9.9.6', 'cisco', 'custom', 'u1', 'p1', 's1', 'Generale')
+                    '10.9.9.6', 'cisco', 'custom', 'u1', 'p1', 's1', 'Generale', location=self.loc_id)
                 inventory_manager.add_or_update_device(
                     '10.9.9.6', 'cisco', 'custom', 'u2', 'p2', 's2', 'Generale')
                 dev = inventory_manager.get_all_devices()[0]
@@ -89,7 +94,7 @@ class TestInventorySshPortRoundTrip(unittest.TestCase):
             csv_path = os.path.join(td, 'hosts.csv')
             with mock.patch.object(inventory_manager, 'HOSTS_CSV', csv_path):
                 inventory_manager.add_or_update_device(
-                    '10.9.9.5', 'cisco', 'custom', '', '', '', 'Generale')
+                    '10.9.9.5', 'cisco', 'custom', '', '', '', 'Generale', location=self.loc_id)
                 dev = inventory_manager.get_all_devices()[0]
                 self.assertEqual(dev['IP'], '10.9.9.5')
                 self.assertEqual(dev['Username'], '')
@@ -99,7 +104,7 @@ class TestInventorySshPortRoundTrip(unittest.TestCase):
         with self.assertRaises(ValueError):
             inventory_manager.add_or_update_device(
                 '10.9.9.8', 'cisco', 'custom', 'u', 'p', 's', 'Generale',
-                ssh_port=70000)
+                ssh_port=70000, location=self.loc_id)
 
 
 class TestUnredactedGate(unittest.TestCase):

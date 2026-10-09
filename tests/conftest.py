@@ -60,3 +60,12 @@ from services import inventory_manager      # noqa: E402,F401  hosts/groups/vers
 from services import location_manager       # noqa: E402,F401  LOCATIONS_JSON
 from services import probe_manager           # noqa: E402,F401  PROBES_JSON, JOBS_DB
 from services import vlan_routing           # noqa: E402,F401  VLAN_ROUTING_JSON
+
+
+def make_location(org: str = "Generale", name: str = "Sede", probe: str = "central") -> str:
+    """Helper for tests adding new devices: creates a location in the org."""
+    if org not in inventory_manager.get_all_groups():
+        inventory_manager.add_group(org)
+    loc = location_manager.create_location(org, name, probe=probe)
+    return loc["id"]
+

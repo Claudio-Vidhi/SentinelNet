@@ -85,6 +85,8 @@ class RemoteProbeE2E(unittest.TestCase):
                              headers=self.admin_h)
         self.assertEqual(r.status_code, 200, r.text)
         body = r.json()
+        from services import location_manager
+        location_manager.create_location("Generale", f"Loc-{name}", probe=body["probe"]["id"])
         return body["probe"]["id"], body["token"]
 
     @staticmethod
@@ -252,8 +254,10 @@ class RemoteProbeE2E(unittest.TestCase):
         """La colonna Probe veniva letta e buttata via: un inventario esportato
         e reimportato perdeva l'assegnazione alle sedi con agente."""
         sid, _token = self._create_agent_probe("Bologna-Remota")
-        csv = ("IP,Username,Password,Enable Secret,Hostname,Group,Probe,Vendor\n"
-               f"192.0.2.77,admin,Pw1!,,sw-bologna,Generale,{sid},cisco\n")
+        from services import location_manager
+        loc = location_manager.list_locations("Generale")[-1]
+        csv = ("IP,Username,Password,Enable Secret,Hostname,Group,Probe,Vendor,Location\n"
+               f"192.0.2.77,admin,Pw1!,,sw-bologna,Generale,{sid},cisco,{loc['id']}\n")
         r = self.client.post("/api/import-csv", headers=self.admin_h,
                              json={"csv_data": csv})
         self.assertEqual(r.status_code, 200, r.text)
@@ -268,8 +272,10 @@ class RemoteProbeE2E(unittest.TestCase):
     def test_csv_import_refuses_an_unknown_probe(self):
         """Una sede si inventa con modalita' e token: crearla al volo qui
         produrrebbe un apparato che nessun agente raccogliera' mai."""
-        csv = ("IP,Hostname,Group,Probe,Vendor\n"
-               "192.0.2.78,sw-fantasma,Generale,sede-inesistente,cisco\n")
+        from services import location_manager
+        loc = location_manager.list_locations("Generale")[-1]
+        csv = ("IP,Hostname,Group,Probe,Vendor,Location\n"
+               f"192.0.2.78,sw-fantasma,Generale,sede-inesistente,cisco,{loc['id']}\n")
         r = self.client.post("/api/import-csv", headers=self.admin_h,
                              json={"csv_data": csv})
         self.assertEqual(r.status_code, 200, r.text)
@@ -991,7 +997,7 @@ class CentralManagedDevicePush(unittest.TestCase):
         cls.admin_h = {"Authorization": "Bearer " + r.json()["access_token"]}
 
     def _probe_with_device(self, name, managed):
-        from services import inventory_manager
+        from services import inventory_manager, location_manager
         rr = self.client.post("/api/probes", headers=self.admin_h,
                               json={"name": name, "mode": "agent",
                                     "subnets": ["10.9.0.0/24"]})
@@ -1001,9 +1007,10 @@ class CentralManagedDevicePush(unittest.TestCase):
             rr = self.client.post("/api/probes/update", headers=self.admin_h,
                                   json={"id": sid, "central_manages_devices": True})
             assert rr.status_code == 200, rr.text
+        loc = location_manager.create_location("Generale", f"Loc-{name}", probe=sid)
         inventory_manager.add_or_update_device(
             "10.9.0.90", "cisco", "custom", "admin", "s3cret", "", "Generale",
-            probe=sid, ssh_port=22)
+            probe=sid, ssh_port=22, location=loc["id"])
         return sid, token
 
     def test_the_flag_off_pushes_nothing(self):
@@ -1047,10 +1054,11 @@ class CentralManagedDevicePush(unittest.TestCase):
     def test_another_probes_devices_are_never_included(self):
         sid_a, token_a = self._probe_with_device("Push-A", managed=True)
         sid_b, _tok_b = self._probe_with_device("Push-B", managed=True)
-        from services import inventory_manager
+        from services import inventory_manager, location_manager
+        loc_b = location_manager.create_location("Generale", "Loc-B-extra", probe=sid_b)
         inventory_manager.add_or_update_device(
             "10.9.0.91", "cisco", "custom", "u", "p", "", "Generale",
-            probe=sid_b, ssh_port=22)
+            probe=sid_b, ssh_port=22, location=loc_b["id"])
         r = self.client.post("/api/agent/heartbeat",
                          headers={"X-Probe-Id": sid_a, "X-Probe-Token": token_a})
         ips = [d["ip"] for d in r.json()["devices"]]

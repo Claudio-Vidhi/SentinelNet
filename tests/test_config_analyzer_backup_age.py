@@ -27,7 +27,7 @@ IOS_BACKUP = """\
 hostname switch-01
 !
 interface Vlan10
- ip address 192.0.2.10 255.255.255.0
+ ip address 192.0.2.210 255.255.255.0
 !
 ip route 0.0.0.0 0.0.0.0 192.0.2.1
 """
@@ -36,7 +36,7 @@ ip route 0.0.0.0 0.0.0.0 192.0.2.1
 class TestBackupAgeExposed(unittest.TestCase):
 
     def setUp(self):
-        self.ip = "192.0.2.10"
+        self.ip = "192.0.2.210"
         folder = os.path.join(core_engine.BACKUP_FOLDER, "tenant-a")
         os.makedirs(folder, exist_ok=True)
         self.path = os.path.join(folder, f"switch-01-{self.ip}.txt")

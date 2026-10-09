@@ -38,10 +38,13 @@ class _Base(unittest.TestCase):
         # un gruppo che non esiste, e il test misurerebbe quel fallback.
         inventory_manager.add_group("sede-a")
         inventory_manager.add_group("sede-b")
+        from services import location_manager
+        loc_a = location_manager.create_location("sede-a", "Loc Sede A")["id"]
+        loc_b = location_manager.create_location("sede-b", "Loc Sede B")["id"]
         inventory_manager.add_or_update_device(
-            "192.0.2.50", "cisco", "custom", "u", "p", "", "sede-a")
+            "192.0.2.50", "cisco", "custom", "u", "p", "", "sede-a", location=loc_a)
         inventory_manager.add_or_update_device(
-            "198.51.100.50", "cisco", "custom", "u", "p", "", "sede-b")
+            "198.51.100.50", "cisco", "custom", "u", "p", "", "sede-b", location=loc_b)
 
     def _assignments(self):
         return inventory_manager.get_category_assignments()

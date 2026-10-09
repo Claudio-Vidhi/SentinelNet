@@ -81,6 +81,8 @@ class TestDeviceProbeGui(unittest.TestCase):
             jump_identity="id-fake",
         )
         sid = "branch-probe"
+        from services import location_manager
+        loc = location_manager.create_location("Generale", "Branch Loc", probe=sid)
 
         # Add device targeting this probe
         payload = {
@@ -90,6 +92,7 @@ class TestDeviceProbeGui(unittest.TestCase):
             "group": "Generale",
             "probe": sid,
             "ssh_port": 22,
+            "location": loc["id"],
         }
         r = self.client.post("/api/add-device", headers=self.op_h, json=payload)
         self.assertEqual(r.status_code, 200)
@@ -100,6 +103,9 @@ class TestDeviceProbeGui(unittest.TestCase):
         self.assertEqual(dev.get("Probe"), sid)
 
     def test_add_device_rejects_invalid_probe(self):
+        from services import location_manager
+        loc = location_manager.list_locations("Generale")
+        loc_id = loc[0]["id"] if loc else location_manager.create_location("Generale", "Loc-General")["id"]
         payload = {
             "ip": "192.0.2.56",
             "vendor": "cisco",
@@ -107,6 +113,7 @@ class TestDeviceProbeGui(unittest.TestCase):
             "group": "Generale",
             "probe": "nonexistent-probe-id",
             "ssh_port": 22,
+            "location": loc_id,
         }
         r = self.client.post("/api/add-device", headers=self.op_h, json=payload)
         self.assertEqual(r.status_code, 400)

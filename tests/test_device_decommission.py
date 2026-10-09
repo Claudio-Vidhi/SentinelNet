@@ -30,16 +30,21 @@ class _Base(unittest.TestCase):
         self.csv = os.path.join(tmp, "network_hosts.csv")
         self.log = os.path.join(tmp, "device_history.jsonl")
         groups = os.path.join(tmp, "groups.json")
+        from services import location_manager
+        loc_file = os.path.join(tmp, "locations.json")
         for p in (patch.object(inventory_manager, "get_hosts_csv", lambda: self.csv),
                   patch.object(inventory_manager, "get_groups_json", lambda: groups),
+                  patch.object(location_manager, "LOCATIONS_JSON", loc_file),
                   patch.object(device_history, "_path", lambda: self.log),
                   patch.object(device_history, "_audit_lines", lambda: [])):
             p.start()
             self.addCleanup(p.stop)
         inventory_manager.save_groups({"tenant-a": {"description": ""},
                                        "tenant-b": {"description": ""}})
+        self.loc_a = location_manager.create_location("tenant-a", "Sede A")["id"]
         inventory_manager.safe_write_hosts_csv(
-            [_row("192.0.2.1"), _row("192.0.2.2"), _row("192.0.2.1", group="tenant-b")])
+            [_row("192.0.2.1", Location=self.loc_a), _row("192.0.2.2", Location=self.loc_a),
+             _row("192.0.2.1", group="tenant-b", Location=self.loc_a)])
 
     def active(self):
         return sorted(inventory_manager.device_pair(d) for d in inventory_manager.get_all_devices())
@@ -91,7 +96,7 @@ class TestGuard(_Base):
         inventory_manager.decommission([A1], "op")
         with self.assertRaisesRegex(ValueError, "192.0.2.1"):
             inventory_manager.add_or_update_device("192.0.2.1", "cisco", "ios", "u", "p", "",
-                                                   "tenant-a")
+                                                   "tenant-a", location=self.loc_a)
         self.assertEqual(self.decom(), [A1])
         self.assertNotIn(A1, self.active())
 

@@ -48,6 +48,11 @@ class ManualConfigApi(unittest.TestCase):
             cls.addClassCleanup(p.stop)
         inventory_manager.add_group("tenant-a")
         inventory_manager.add_group("tenant-b")
+        from services import location_manager
+        loc_a = location_manager.create_location("tenant-a", "Sede A")
+        cls.loc_a_id = loc_a["id"]
+        loc_b = location_manager.create_location("tenant-b", "Sede B")
+        cls.loc_b_id = loc_b["id"]
         cls.client = TestClient(app_server.app)
 
     def _as(self, role, groups=()):
@@ -62,7 +67,7 @@ class ManualConfigApi(unittest.TestCase):
 
     def _import(self, **overrides):
         body = {"text": IOS_LOG, "ip": "192.0.2.10", "vendor": "cisco",
-                "group": "tenant-a", "probe": "central"}
+                "group": "tenant-a", "probe": "central", "location": self.loc_a_id}
         body.update(overrides)
         return self.client.post("/api/manual-config/import", json=body)
 
@@ -121,7 +126,7 @@ class ManualConfigApi(unittest.TestCase):
     def test_reachable_device_is_409(self):
         from services import inventory_manager
         inventory_manager.add_or_update_device("192.0.2.20", "cisco", "", "admin", "x", "",
-                                               "tenant-a")
+                                               "tenant-a", location=self.loc_a_id)
         self._as("operator")
         self.assertEqual(self._import(ip="192.0.2.20").status_code, 409)
 
@@ -129,7 +134,7 @@ class ManualConfigApi(unittest.TestCase):
         """Review focus 5: identity is (tenant, IP)."""
         from services import inventory_manager
         inventory_manager.add_or_update_device("192.0.2.21", "cisco", "", "admin", "x", "",
-                                               "tenant-b")
+                                               "tenant-b", location=self.loc_b_id)
         self._as("operator")
         self.assertEqual(self._import(ip="192.0.2.21").status_code, 200)
 
@@ -138,10 +143,10 @@ class ManualConfigApi(unittest.TestCase):
         not reach tenant-a's device through the same address."""
         from services import inventory_manager
         inventory_manager.add_or_update_device("192.0.2.22", "cisco", "", "admin", "x", "",
-                                               "tenant-a")
+                                               "tenant-a", location=self.loc_a_id)
         inventory_manager.update_version_inventory("192.0.2.22", "cisco", "1.0", "online")
         self._as("operator", ["tenant-b"])
-        self.assertEqual(self._import(ip="192.0.2.22", group="tenant-b").status_code, 403)
+        self.assertEqual(self._import(ip="192.0.2.22", group="tenant-b", location=self.loc_b_id).status_code, 403)
         entry = inventory_manager.get_detected_versions()["192.0.2.22"]
         self.assertEqual((entry["version"], entry["status"]), ("1.0", "online"))
         self.assertFalse(any(d["IP"] == "192.0.2.22" and d["Group"] == "tenant-b"

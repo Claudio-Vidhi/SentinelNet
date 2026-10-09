@@ -54,6 +54,7 @@ def _default_probes() -> dict:
             "token_hash": None,
             "created": time.time(),
             "last_seen": None,
+            "unlocated_devices": 0,
         }
     }
 
@@ -102,7 +103,17 @@ def _public(probe: dict) -> dict:
     # Subnets belong to locations now; a probe's are those of the locations
     # whose default probe it is (spec 2026-10-09 organizations-locations).
     d["subnets"] = location_manager.probe_subnets(probe.get("id"))
+    d["unlocated_devices"] = int(probe.get("unlocated_devices", 0))
     return d
+
+
+def record_unlocated_device(probe_id: str, count: int = 1) -> None:
+    with _lock:
+        data = _load()
+        probe = data.get(probe_id)
+        if probe:
+            probe["unlocated_devices"] = int(probe.get("unlocated_devices", 0)) + count
+            _save(data)
 
 
 def _validate_jump(values: dict) -> dict:

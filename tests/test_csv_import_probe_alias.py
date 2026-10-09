@@ -13,6 +13,6 @@ class TestProbeAlias(unittest.TestCase):
             with self.subTest(header=header):
                 self.assertEqual(inventory_manager._canonical_header(header), "Probe")
 
-    def test_sede_is_not_a_probe(self):
-        # Reserved for the Location column of sub-project 1.
-        self.assertIsNone(inventory_manager._canonical_header("sede"))
+    def test_sede_maps_to_location(self):
+        # Sub-project 1: 'sede' maps to Location.
+        self.assertEqual(inventory_manager._canonical_header("sede"), "Location")

@@ -436,7 +436,8 @@ class Agent:
                     ip, it.get("vendor") or "cisco", "custom",
                     it.get("username") or "", it.get("password") or "",
                     it.get("enable_secret") or "", group,
-                    probe=self.cfg["probe_id"], ssh_port=it.get("ssh_port"))
+                    probe=self.cfg["probe_id"], ssh_port=it.get("ssh_port"),
+                    require_location=False)
                 if it.get("hostname"):
                     inventory_manager.update_device_hostname(ip, it["hostname"])
                 applied += 1

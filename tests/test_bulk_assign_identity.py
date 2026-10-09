@@ -36,9 +36,12 @@ class TestBulkAssignProfileService(unittest.TestCase):
             os.remove(self.csv_path)
 
     def _seed(self, ips):
+        from services import location_manager
+        loc = location_manager.list_locations("Generale")
+        loc_id = loc[0]["id"] if loc else location_manager.create_location("Generale", "Sede Generale")["id"]
         for ip in ips:
             inventory_manager.add_or_update_device(
-                ip, "cisco", "default", "u", "p", "s", "Generale")
+                ip, "cisco", "default", "u", "p", "s", "Generale", location=loc_id)
 
     def test_assign_multiple(self):
         self._seed(["192.0.2.1", "192.0.2.2", "192.0.2.3"])
@@ -94,8 +97,11 @@ class TestBulkAssignEndpoint(unittest.TestCase):
                 os.remove(p)
 
     def _seed(self, ip, group="Generale"):
+        from services import location_manager
+        locs = location_manager.list_locations(group)
+        loc_id = locs[0]["id"] if locs else location_manager.create_location(group, f"Loc-{group}")["id"]
         inventory_manager.add_or_update_device(
-            ip, "cisco", "default", "u", "p", "s", group)
+            ip, "cisco", "default", "u", "p", "s", group, location=loc_id)
 
     def test_assign_success(self):
         self._seed("192.0.2.50")

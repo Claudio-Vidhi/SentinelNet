@@ -112,6 +112,7 @@ def _validate_transports(transports):
 # condivisi (CSV inventario e JSON versioni/gruppi). Necessario perché il triage
 # e la scansione subnet eseguono fino a 50 worker concorrenti che altrimenti
 # sovrascriverebbero gli aggiornamenti reciproci (lost update).
+AGENT_MODE = False
 _io_lock = threading.RLock()
 
 def safe_json_write(filepath: str, data: dict):
@@ -176,6 +177,7 @@ _CSV_ALIASES: Dict[str, str] = {
     # reimport onto the same probes. 'sede' is reserved for Location.
     "group": "Group", "gruppo": "Group", "tenant": "Group",
     "probe": "Probe", "sonda": "Probe", "site": "Probe",  # check-site-name: ok
+    "location": "Location", "sede": "Location",
     "vendor": "Vendor", "marca": "Vendor", "produttore": "Vendor",
     "brand": "Vendor",
     # Colonne canoniche restanti: senza questi alias un round-trip
@@ -256,7 +258,7 @@ _hosts_csv_lock = threading.RLock()
 
 
 _HOSTS_FIELDS = ['IP', 'Vendor', 'Profile', 'Username', 'Password', 'Enable Secret', 'Group',
-                 'Hostname', 'Probe', 'SSH Port', 'Transports', 'SNMP Community', 'SNMP Disabled']
+                 'Hostname', 'Probe', 'Location', 'SSH Port', 'Transports', 'SNMP Community', 'SNMP Disabled']
 
 
 def safe_write_hosts_csv(devices, exempt=frozenset(), relabel=None):
@@ -440,7 +442,7 @@ def _same_device(row: dict, ip: str, group: str) -> bool:
     return row.get("IP") == ip and (row.get("Group") or "Generale") == (group or "Generale")
 
 
-def add_or_update_device(ip, vendor, profile, username, password, enable_secret, group, probe=None, ssh_port=None, transports=None, snmp_community=None, snmp_disabled=None):
+def add_or_update_device(ip, vendor, profile, username, password, enable_secret, group, probe=None, ssh_port=None, transports=None, snmp_community=None, snmp_disabled=None, location=None, require_location=True):
     # Validazione IP robusta
     match = IP_PATTERN.match(ip)
     if not match or not all(0 <= int(octet) <= 255 for octet in match.groups()):
@@ -461,6 +463,17 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
         resolved_group = group if group in get_all_groups() else 'Generale'
         # Preserva l'hostname già rilevato sul dispositivo esistente
         existing = next((d for d in devices if _same_device(d, ip, resolved_group)), None)
+
+        if require_location:
+            from services import location_manager
+            resolved_location = location if location is not None else (existing.get('Location') if existing else None)
+            if not resolved_location:
+                raise ValueError("La sede è obbligatoria per un nuovo dispositivo.")
+            loc_obj = location_manager.get_location(resolved_location)
+            if not loc_obj or loc_obj.get("org") != resolved_group:
+                raise ValueError(f"Sede '{resolved_location}' inesistente o non appartenente al gruppo '{resolved_group}'.")
+        else:
+            resolved_location = location if location is not None else (existing.get('Location') if existing else "")
 
         # Credenziali: su un dispositivo GIÀ ESISTENTE un valore vuoto vuole
         # dire "lascia quelle che ci sono", non "cancellale" — stessa regola
@@ -521,6 +534,7 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
             'Username': username, 'Password': enc_password, 'Enable Secret': enc_secret,
             'Group': resolved_group,
             'Probe': resolved_probe,
+            'Location': resolved_location,
             'SSH Port': str(ssh_mirror),
             'Transports': json.dumps(resolved_transports, separators=(',', ':')),
             'SNMP Community': enc_community,
@@ -1260,6 +1274,10 @@ def delete_group(group_name: str) -> bool:
         if group_name not in groups or any(d.get('Group') == group_name for d in
                                            get_all_devices() + get_decommissioned_devices()):
             return False
+        from services import location_manager
+        locs = location_manager.list_locations(group_name)
+        if locs:
+            raise ValueError(f"L'organizzazione contiene {len(locs)} sedi: eliminale o spostale prima.")
         groups.pop(group_name)
         save_groups(groups)
         return True
