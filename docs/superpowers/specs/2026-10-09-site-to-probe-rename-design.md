@@ -31,6 +31,7 @@ shim.
 | Device lookup | `get_device_by_ip(...)["site"]` | `["probe"]` |
 | Helpers | `is_agent_site`, `has_direct_path(site_id)`, `DEFAULT_SITE_ID` | `is_agent_probe`, `has_direct_path(probe_id)`, `DEFAULT_PROBE_ID` (value stays `"central"`) |
 | Frontend | `static/js/site-agent.js`, `tab-sites`, ids/i18n keys with `site`/`Site` | `probe-agent.js`, `tab-probes`, `probe`/`Probe` |
+| Audit engagements | `audit_engagements.site_id` (a customer *location*, not a probe) | `location_id` (observability schema v15) |
 | Docs | `docs/remote-sites.md`, mentions in ADRs, architecture, operations | `docs/probes.md`, mentions updated |
 
 **Not renamed:** "agent" — it is the software (`/api/agent/*` endpoints, the
