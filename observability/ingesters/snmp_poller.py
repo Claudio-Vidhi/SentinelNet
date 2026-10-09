@@ -374,7 +374,7 @@ def _snmp_devices() -> list:
     for device in inventory_manager.get_all_devices():
         if inventory_manager.is_manual(device):
             continue
-        tenant = device.get("Group") or "Generale"
+        tenant = device.get("Group") or ""
         if not is_telemetry_enabled(tenant, "snmp"):
             continue
         community = resolve_snmp_community(device)

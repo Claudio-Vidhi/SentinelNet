@@ -531,7 +531,7 @@ def _run_backup_and_triage(device):
                 from redundancy import service as redundancy_service
                 group_type, redundancy_members = parse_device_redundancy(config_out, vendor)
                 redundancy_service.upsert_redundancy_from_cli(
-                    device.get("Group", "Generale"), ip, sys_name,
+                    device.get("Group") or "", ip, sys_name,
                     redundancy_members, group_type,
                 )
             except Exception as stack_err:
@@ -1840,10 +1840,10 @@ def _get_portchannel_report(group_filter=None) -> list:
             if dev is None:
                 # Backup of a device no longer in inventory: without this
                 # filter it would reappear as a duplicate of the same switch at an
-                # old IP, with data from weeks ago and tenant 'Generale' —
-                # therefore not even hideable with the tenant filter.
+                # old IP, with data from weeks ago — therefore not even hideable with
+                # the tenant filter.
                 continue
-            group = dev.get('Group', 'Generale')
+            group = dev.get('Group') or ""
             if group_filter and group_filter != "all" and group != group_filter:
                 continue
             try:
@@ -2119,7 +2119,7 @@ def _generate_network_map(group_filter=None) -> dict:
             from services import ap_store
             _aps = extract_ap_serials_from_config(_content)
             if _aps:
-                _group = ip_to_device.get(_ip, {}).get('Group', 'Generale')
+                _group = ip_to_device.get(_ip, {}).get('Group') or ""
                 ap_store.record_aps(_ip, _group, _aps)
         except Exception:
             logging.warning(f"AP serial harvest failed for {_ip}", exc_info=True)
@@ -2156,7 +2156,7 @@ def _generate_network_map(group_filter=None) -> dict:
         nodes_map[ip] = {
             "id":          ip,
             "label":       label,
-            "group":       d.get('Group', 'Generale'),
+            "group":       d.get('Group') or "",
             "status":      status,
             "device_type": apply_category(ip, auto_type, d.get('Group')),
             "vendor":      vendor,
@@ -2236,14 +2236,14 @@ def _generate_network_map(group_filter=None) -> dict:
                 auto_type = classify_device_type(
                     base_neigh_id, neigh_desc or "", neigh_plat or "", neigh_caps or ""
                 )
-                source_group = ip_to_device.get(ip, {}).get('Group', 'Generale')
+                source_group = ip_to_device.get(ip, {}).get('Group') or ""
                 nodes_map[target_ip] = {
                     "id":          target_ip,
                     "label":       base_neigh_id,
                     "group":       source_group,
                     "status":      "discovered",
                     # Not the neighbour's site: a discovered node is not in
-                    # inventory, so tenant_for_node() files it under 'Generale'
+                    # inventory, so tenant_for_node() files it under empty tenant
                     # and it must be read back from there. It acquires a site
                     # when it is promoted, and migrate_assignment moves it.
                     "device_type": apply_category(target_ip, auto_type),
@@ -2382,7 +2382,7 @@ def _generate_network_map(group_filter=None) -> dict:
     # they must be reflected on the map node so that, e.g., the vendor used
     # by the EUVD query is the real one and not the device hostname.
     # Keyed by (tenant, node) like apply_category: a node outside inventory is
-    # filed under 'Generale'.
+    # filed under empty tenant.
     from services.inventory_manager import _akey
     for node_id, node in nodes_map.items():
         tenant = ip_to_device[node_id].get('Group') if node_id in ip_to_device else None

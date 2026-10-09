@@ -426,9 +426,9 @@ class Agent:
             ip = (it.get("ip") or "").strip()
             if not ip:
                 continue
-            group = it.get("group") or "Generale"
-            # Il gruppo dev'esistere localmente o add_or_update_device fa
-            # cadere il dispositivo in 'Generale', perdendo il tenant.
+            group = (it.get("group") or "").strip()
+            if not group:
+                continue
             if group not in inventory_manager.get_all_groups():
                 inventory_manager.add_group(group)
             try:

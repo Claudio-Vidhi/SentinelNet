@@ -32,7 +32,7 @@ def _now() -> str:
 
 def _device_dir(device: dict) -> str:
     from core import core_engine
-    return core_engine.group_backup_dir(device.get("Group") or "Generale",
+    return core_engine.group_backup_dir(device.get("Group") or "",
                                         device.get("Vendor") or "")
 
 

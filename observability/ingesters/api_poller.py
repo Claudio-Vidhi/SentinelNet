@@ -75,7 +75,7 @@ def poll_once() -> int:
         ip = device.get("IP")
         if ip not in tokened or inventory_manager.is_manual(device):
             continue
-        tenant = device.get("Group") or "Generale"
+        tenant = device.get("Group") or ""
         if not is_telemetry_enabled(tenant, "api"):
             continue
         for kind, summary in _poll_device(device):

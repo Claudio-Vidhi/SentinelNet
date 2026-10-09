@@ -51,13 +51,13 @@ def get_tenant_community(tenant: str) -> str:
     nessuna risposta HTTP.
     """
     with _lock:
-        entry = _load().get(tenant or "Generale") or {}
+        entry = _load().get(tenant or "") or {}
     return decrypt_password(entry.get("community_enc", "")) or ""
 
 
 def set_tenant_community(tenant: str, community: str) -> None:
     """Imposta o rimuove ("" rimuove) il default del tenant."""
-    key = tenant or "Generale"
+    key = tenant or ""
     with _lock:
         tenants = _load()
         if community:
@@ -89,4 +89,4 @@ def resolve_snmp_community(device: dict) -> str:
     own = decrypt_password(device.get("SNMP Community") or "") or ""
     if own:
         return own
-    return get_tenant_community(device.get("Group") or "Generale")
+    return get_tenant_community(device.get("Group") or "")

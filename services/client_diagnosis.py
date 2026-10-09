@@ -257,7 +257,7 @@ def get_tenant_gateway_candidates(tenant: Optional[str] = None, tenants=None) ->
     devices = inventory_manager.get_all_devices()
     for d in devices:
         d_ip = d.get("IP")
-        d_tenant = d.get("Group") or d.get("tenant") or "Generale"
+        d_tenant = d.get("Group") or d.get("tenant") or ""
         if scope_keys is not None and _tenant_key(d_tenant) not in scope_keys:
             continue
         if allowed_probes is not None:
@@ -770,14 +770,8 @@ def resolve_endpoint(ip: str, tenants=None) -> dict:
 # --- L3: quale firewall, quale policy, quanti blocchi ------------------------
 
 def _tenant_key(value) -> str:
-    """Chiave di confronto fra tenant.
-
-    Le due raccolte scrivono il tenant vuoto in modi diversi — ``arp_collector``
-    mette ``""``, ``mac_collector`` mette ``"Generale"`` — quindi un'installazione
-    senza gruppi produce due etichette per la stessa rete. Qui finiscono nella
-    stessa, altrimenti il confronto fallirebbe proprio nel caso più comune.
-    """
-    return (value or "").strip() or "Generale"
+    """Chiave di confronto fra tenant."""
+    return (value or "").strip()
 
 
 def _resolve_fortigate(position: dict, tenants=None) -> dict:

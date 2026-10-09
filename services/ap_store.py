@@ -105,7 +105,7 @@ def lookup_in(store: dict, ap_name: str, tenant: Optional[str] = None, ip: Optio
         if tenant is None:
             return True
         ent_t = ent.get("tenant")
-        if ent_t == tenant or ent_t in ("Generale", "", None) or tenant in ("Generale", "", None):
+        if ent_t == tenant or ent_t in ("", None) or tenant in ("", None):
             return True
         return False
 

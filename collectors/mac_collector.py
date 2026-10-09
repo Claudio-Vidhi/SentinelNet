@@ -814,7 +814,7 @@ def collect_all(devices: list, transport=None) -> dict:
             continue
         summ = mac_history.record_sightings(
             res["rows"], switch_ip=ip, switch_name=d.get("Hostname", ""),
-            tenant=d.get("Group") or "Generale",
+            tenant=d.get("Group") or "",
             probe=d.get("Probe") or "central",
         )
         if res.get("if_macs"):

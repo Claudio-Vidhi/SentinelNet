@@ -75,7 +75,7 @@ def snapshot_path(device: dict) -> str:
     come gia' fa l'indice della history.
     """
     from core import core_engine
-    folder = core_engine.group_backup_dir(device.get("Group") or "Generale",
+    folder = core_engine.group_backup_dir(device.get("Group") or "",
                                           device.get("Vendor") or "")
     return os.path.join(folder, f"{device['IP']}{SNAPSHOT_SUFFIX}")
 
@@ -338,7 +338,7 @@ def refresh(device: dict, version_text: str = "", version_seen_at: str = "") -> 
                         title=f"Nuova CVE {c.get('id')} per {device.get('IP')}: {c.get('summary', '')[:100]}",
                         ctx={"cve_id": c.get("id"), "device_ip": device.get("IP"), "cvss": c.get("cvss")},
                         dedup_key=f"cve:{device.get('IP')}:{c.get('id')}",
-                        tenant=device.get("Group") or "Generale",
+                        tenant=device.get("Group") or "",
                     )
                 except Exception:
                     log.warning("CVE notification failed for %s", device.get("IP"), exc_info=True)
@@ -444,7 +444,7 @@ def summary(devices: list) -> list:
     detected = inventory_manager.get_detected_versions()
     tenants: "dict[str, dict]" = {}
     for device in devices:
-        tenant = device.get("Group") or "Generale"
+        tenant = device.get("Group") or ""
         if tenant not in tenants:
             tenants[tenant] = {
                 "tenant": tenant, "devices": 0, "with_version": 0, "exact_cpe": 0,

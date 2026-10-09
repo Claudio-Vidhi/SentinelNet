@@ -185,7 +185,7 @@ def _linux_devices() -> list:
         if inventory_manager.normalize_vendor(device.get("Vendor")) not in ("linux", "windows"):
             continue
         out.append({"ip": device.get("IP"),
-                    "tenant": device.get("Group") or "Generale",
+                    "tenant": device.get("Group") or "",
                     "device": device})
     return out
 

@@ -233,7 +233,7 @@ def discover_fgcp(device: dict) -> Optional[int]:
     from redundancy.parsers.fortios import parse_ha_status
     from security.security_manager import log_audit
 
-    group_name = device.get("Group", "Generale")
+    group_name = device.get("Group") or ""
     try:
         ha_status = fortigate_service.get_ha_status(device)
     except Exception:

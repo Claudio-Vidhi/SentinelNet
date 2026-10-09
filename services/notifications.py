@@ -375,7 +375,7 @@ def emit(kind: str, device_ip: str | None, severity: str | int | float,
     # another customer's operator.
     grp = tenant
     if grp is None and device_ip:
-        groups = {d.get("Group") or "Generale"
+        groups = {d.get("Group") or ""
                   for d in inventory_manager.get_all_devices() if d.get("IP") == device_ip}
         if len(groups) == 1:
             grp = groups.pop()
