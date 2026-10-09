@@ -133,7 +133,7 @@ def is_unscoped_admin(current_user) -> bool:
 
 
 def require_unscoped_admin(current_user=Depends(require_admin)):
-    """Global admin routes (settings, sites, tenants, ...): their effect crosses
+    """Global admin routes (settings, probes, tenants, ...): their effect crosses
     tenants, so a tenant-scoped admin must not reach them."""
     if not is_unscoped_admin(current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,

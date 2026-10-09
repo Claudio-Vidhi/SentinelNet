@@ -959,7 +959,7 @@ def _tool_call(params):
         err_msg = str(e)
         hint = ""
         if "HTTP 404" in err_msg:
-            hint = " [Hint: check target device IP, site parameter, or resource path]"
+            hint = " [Hint: check target device IP, tenant parameter, or resource path]"
         elif "HTTP 403" in err_msg:
             hint = " [Hint: action unauthorized for current account permissions]"
         elif "HTTP 422" in err_msg:

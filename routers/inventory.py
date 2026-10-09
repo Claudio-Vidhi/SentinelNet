@@ -548,10 +548,10 @@ def reassign_device_probe(payload: DeviceProbeSchema, current_user = Depends(req
     inventory_manager.safe_write_hosts_csv(devices)
 
     log_audit(
-        f"Dispositivo '{payload.ip}' spostato dalla sede '{old_probe}' "
-        f"alla sede '{payload.new_probe}' dall'utente '{current_user.get('sub')}'."
+        f"Dispositivo '{payload.ip}' spostato dalla sonda '{old_probe}' "
+        f"alla sonda '{payload.new_probe}' dall'utente '{current_user.get('sub')}'."
     )
-    return {"status": "success", "message": f"Dispositivo spostato nella sede '{payload.new_probe}'"}
+    return {"status": "success", "message": f"Dispositivo spostato nella sonda '{payload.new_probe}'"}
 
 
 @router.get("/api/device-history", dependencies=[Depends(require_tab("tab-devices", "tab-device-history"))])

@@ -67,6 +67,16 @@ class DeviceHistoryTest(unittest.TestCase):
         self.assertEqual(ev[2]["changes"], {})   # same vendor/site: fields unknown
         self.assertEqual(ev[0]["actor"], "admin")
 
+    def test_backfill_reads_both_reassign_wordings(self):
+        # The move line says "sede" in logs written before the rename and
+        # "sonda" since: the rebuilt history must understand both.
+        for word in ("sede", "sonda"):
+            line = (1.0, f"Dispositivo '192.0.2.1' spostato dalla {word} 'central' "
+                         f"alla {word} 'branch' dall'utente 'op'.")
+            ev = device_history.backfill_from_audit([line], [_row("192.0.2.1")], [])
+            moved = [e for e in ev if e["source"] == "audit"]
+            self.assertEqual(moved[0]["changes"], {"Probe": ["central", "branch"]}, word)
+
     def test_backfill_merges_once_in_time_order(self):
         with open(self.log, "w", encoding="utf-8") as fh:
             fh.write('{"event":"added","ts":5000,"tenant":"tenant-a","device":{"IP":"192.0.2.3"},"id":"x","actor":"a"}\n')

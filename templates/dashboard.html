@@ -2867,7 +2867,7 @@
       <div class="page-head">
         <div class="page-head-text">
           <h2 data-i18n="titleProbes">Sonde</h2>
-          <p data-i18n="descProbes">Gestisci le sonde con cui il centrale raggiunge i dispositivi. <strong>Central poll</strong>: il centrale raggiunge i dispositivi direttamente tramite il routing VPN. <strong>Sonda agente</strong>: un agente remoto si connette in uscita al centrale e vi spinge inventario/MAC; i comandi CLI sono inoltrati tramite coda.</p>
+          <p data-i18n="descProbes">Gestisci le sonde con cui il centrale raggiunge i dispositivi. <strong>Diretto (server centrale)</strong>: il centrale raggiunge i dispositivi direttamente tramite il routing VPN. <strong>Sonda agente</strong>: un agente remoto si connette in uscita al centrale e vi spinge inventario/MAC; i comandi CLI sono inoltrati tramite coda.</p>
         </div>
         <div class="page-head-actions">
           <button type="button" class="btn btn-primary" id="btnNewProbe"><i class="fa-solid fa-plus"></i> <span data-i18n="titleNewProbe">Nuova sonda</span></button>
@@ -5376,7 +5376,7 @@
   </div>
 
   <!-- Probe wizard: create, edit and agent enrollment in one side panel
-       (ui-wizard.js). Spec: docs/superpowers/specs/2026-09-23-site-wizard-design.md -->
+       (ui-wizard.js). Spec: docs/superpowers/specs/2026-09-23-site-wizard-design.md  check-site-name: ok -->
   <div class="modal-overlay sheet-overlay" id="probeWizard">
     <div class="modal sheet" aria-labelledby="probeWizardTitle">
       <div class="modal-header">
@@ -5390,7 +5390,7 @@
             <legend id="swModeLegend" data-i18n="swModeLegend">Come raggiunge i dispositivi il centrale?</legend>
             <label class="choice-card">
               <input type="radio" name="swMode" value="central">
-              <span class="choice-title" data-i18n="swModeCentral">Central poll</span>
+              <span class="choice-title" data-i18n="swModeCentral">Diretto (server centrale)</span>
               <span class="choice-desc" data-i18n="swModeCentralDesc">Il centrale raggiunge i dispositivi direttamente, via routing VPN.</span>
               <ul>
                 <li class="pro" data-i18n="swModeCentralPro1">Ping, SNMP, syslog e flow diretti</li>

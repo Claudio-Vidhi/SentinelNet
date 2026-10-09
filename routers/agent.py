@@ -181,7 +181,7 @@ def agent_push_inventory(payload: AgentInventorySchema, probe = Depends(get_agen
         if d.hostname:
             inventory_manager.update_device_hostname(d.ip, d.hostname)
         n += 1
-    log_audit(f"Agente sede '{probe_id}': inventario aggiornato ({n} dispositivi).")
+    log_audit(f"Agente sonda '{probe_id}': inventario aggiornato ({n} dispositivi).")
     return {"status": "success", "updated": n}
 
 @router.post("/api/agent/mac")
@@ -197,7 +197,7 @@ def agent_push_mac(payload: AgentMacSchema, probe = Depends(get_agent_probe)):
             tenant=groups_by_ip.get(col.switch_ip) or "Generale", probe=probe_id)
         total += summ.get("new", 0) + summ.get("updated", 0)
     pruned = mac_history.prune()
-    log_audit(f"Agente sede '{probe_id}': {len(payload.collections)} MAC-table ricevute "
+    log_audit(f"Agente sonda '{probe_id}': {len(payload.collections)} MAC-table ricevute "
               f"({total} avvistamenti, pruned {pruned}).")
     return {"status": "success", "recorded": total, "pruned": pruned}
 
@@ -218,7 +218,7 @@ def agent_push_arp(payload: AgentArpSchema, probe = Depends(get_agent_probe)):
             # autenticato — mai un valore scelto dall'agente stesso.
             tenant=groups_by_ip.get(col.source_ip) or "Generale", probe=probe_id)
         total += summ.get("new", 0) + summ.get("updated", 0)
-    log_audit(f"Agente sede '{probe_id}': {len(payload.collections)} tabelle ARP "
+    log_audit(f"Agente sonda '{probe_id}': {len(payload.collections)} tabelle ARP "
               f"ricevute ({total} binding).")
     return {"status": "success", "recorded": total}
 
@@ -263,7 +263,7 @@ def agent_push_backup(payload: AgentBackupSchema, probe = Depends(get_agent_prob
     if device is None:
         raise HTTPException(
             status_code=404,
-            detail=f"Dispositivo {payload.ip} non appartiene alla sede '{probe_id}'.")
+            detail=f"Dispositivo {payload.ip} non appartiene alla sonda '{probe_id}'.")
     if len(payload.config.encode("utf-8")) > MAX_CONFIG_BYTES:
         raise HTTPException(
             status_code=413,
@@ -288,7 +288,7 @@ def agent_push_backup(payload: AgentBackupSchema, probe = Depends(get_agent_prob
         model=payload.model or None, serial=payload.serial or None)
     if payload.hostname:
         inventory_manager.update_device_hostname(payload.ip, payload.hostname)
-    log_audit(f"Agente sede '{probe_id}': backup ricevuto per {payload.ip} "
+    log_audit(f"Agente sonda '{probe_id}': backup ricevuto per {payload.ip} "
               f"({len(payload.config)} caratteri).")
     return {"status": "success", "file": file_path}
 
@@ -301,7 +301,7 @@ def agent_poll_jobs(probe = Depends(get_agent_probe)):
 def agent_post_job_result(job_id: str, payload: AgentJobResultSchema,
                           probe = Depends(get_agent_probe)):
     if not probe_manager.complete_job(job_id, probe["id"], payload.status, payload.result):
-        raise HTTPException(status_code=404, detail="Job non trovato per questa sede.")
+        raise HTTPException(status_code=404, detail="Job non trovato per questa sonda.")
     return {"status": "success"}
 
 @router.post("/api/agent/syslog")

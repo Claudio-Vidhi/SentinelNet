@@ -109,13 +109,13 @@ def create_probe_ep(payload: ProbeCreateSchema, current_user = Depends(require_u
             device_identity=payload.device_identity)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    log_audit(f"Sede '{probe['id']}' (mode: {payload.mode}) creata da '{who}'.")
+    log_audit(f"Sonda '{probe['id']}' (mode: {payload.mode}) creata da '{who}'.")
     if fp:
         probe_manager.mark_bastion_verified(probe["id"])
         probe = probe_manager.get_probe(probe["id"]) or probe
-        log_audit(f"Sede '{probe['id']}': impronta del bastione {fp} confermata da '{who}'.")
+        log_audit(f"Sonda '{probe['id']}': impronta del bastione {fp} confermata da '{who}'.")
     elif payload.mode == "jump":
-        log_audit(f"Sede '{probe['id']}' salvata con bastione non verificato da '{who}'.")
+        log_audit(f"Sonda '{probe['id']}' salvata con bastione non verificato da '{who}'.")
     # Il token in chiaro è restituito UNA SOLA VOLTA (poi solo hash su disco).
     return {"status": "success", "probe": probe, "token": token}
 
@@ -149,7 +149,7 @@ def update_probe_ep(payload: ProbeUpdateSchema, current_user = Depends(require_u
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if not ok:
-        raise HTTPException(status_code=404, detail="Sede non trovata.")
+        raise HTTPException(status_code=404, detail="Sonda non trovata.")
     # An edited bastion login must take effect now. The transport cached for
     # this probe was authenticated with the previous credentials and keeps
     # working, so without this the change only applies once that session dies.
@@ -163,10 +163,10 @@ def update_probe_ep(payload: ProbeUpdateSchema, current_user = Depends(require_u
                           for k in ("jump_host", "jump_port", "jump_identity"))
     if fp and existing:
         probe_manager.mark_bastion_verified(payload.id)
-        log_audit(f"Sede '{payload.id}': impronta del bastione {fp} confermata da '{who}'.")
+        log_audit(f"Sonda '{payload.id}': impronta del bastione {fp} confermata da '{who}'.")
     elif bastion_changed:
-        log_audit(f"Sede '{payload.id}': bastione modificato senza verifica da '{who}'.")
-    log_audit(f"Sede '{payload.id}' aggiornata da '{current_user.get('sub')}'.")
+        log_audit(f"Sonda '{payload.id}': bastione modificato senza verifica da '{who}'.")
+    log_audit(f"Sonda '{payload.id}' aggiornata da '{current_user.get('sub')}'.")
     out: Dict[str, Any] = {"status": "success"}
     # Passare a 'agent' senza token lascia una sede inservibile: update_probe
     # cambia la modalita' e non ne emette uno, quindi l'agente non ha con cosa
@@ -178,7 +178,7 @@ def update_probe_ep(payload: ProbeUpdateSchema, current_user = Depends(require_u
         token = probe_manager.regenerate_token(payload.id)
         if token:
             out["token"] = token       # in chiaro UNA SOLA VOLTA, come alla creazione
-            log_audit(f"Token emesso per la sede '{payload.id}' passata in modalità "
+            log_audit(f"Token emesso per la sonda '{payload.id}' passata in modalità "
                       f"agent da '{current_user.get('sub')}'.")
     return out
 
@@ -186,7 +186,7 @@ def update_probe_ep(payload: ProbeUpdateSchema, current_user = Depends(require_u
 def delete_probe_ep(payload: ProbeIdSchema, current_user = Depends(require_unscoped_admin)):
     if not probe_manager.delete_probe(payload.id):
         raise HTTPException(status_code=400, detail="Sonda non eliminabile o inesistente.")
-    log_audit(f"Sede '{payload.id}' eliminata da '{current_user.get('sub')}'.")
+    log_audit(f"Sonda '{payload.id}' eliminata da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
 @router.post("/api/probes/test-bastion", dependencies=[Depends(require_tab("tab-probes"))])
@@ -199,24 +199,24 @@ async def test_bastion_ep(payload: ProbeIdSchema, current_user = Depends(require
     from core.ssh_pool import run_ssh
     probe = probe_manager.get_probe(payload.id)
     if not probe:
-        raise HTTPException(status_code=404, detail="Sede non trovata.")
+        raise HTTPException(status_code=404, detail="Sonda non trovata.")
     if probe.get("mode") != "jump":
-        raise HTTPException(status_code=400, detail="La sede non e' in modalita' jump.")
+        raise HTTPException(status_code=400, detail="La sonda non e' in modalita' jump.")
     who = current_user.get('sub')
     try:
         # WP11: il probe SSH del bastione gira sul pool dedicato.
         fp = await run_ssh(net_ssh.probe_bastion, probe)
     except net_ssh.BastionAuthError as e:
-        log_audit(f"Test bastione sede '{payload.id}' da '{who}': credenziali rifiutate.")
+        log_audit(f"Test bastione sonda '{payload.id}' da '{who}': credenziali rifiutate.")
         return {"status": "auth_failed", "message": str(e)}
     except net_ssh.BastionHostKeyError as e:
-        log_audit(f"Test bastione sede '{payload.id}' da '{who}': chiave host diversa.")
+        log_audit(f"Test bastione sonda '{payload.id}' da '{who}': chiave host diversa.")
         return {"status": "host_key_mismatch", "message": str(e)}
     except Exception as e:
-        log_audit(f"Test bastione sede '{payload.id}' da '{who}': irraggiungibile.")
+        log_audit(f"Test bastione sonda '{payload.id}' da '{who}': irraggiungibile.")
         return {"status": "unreachable", "message": str(e)}
     probe_manager.mark_bastion_verified(payload.id)
-    log_audit(f"Test bastione sede '{payload.id}' da '{who}': OK.")
+    log_audit(f"Test bastione sonda '{payload.id}' da '{who}': OK.")
     return {"status": "success", "fingerprint": fp}
 
 
@@ -254,7 +254,7 @@ def regenerate_probe_token_ep(payload: ProbeIdSchema, current_user = Depends(req
     token = probe_manager.regenerate_token(payload.id)
     if token is None:
         raise HTTPException(status_code=400, detail="Sonda inesistente o non in modalità agent.")
-    log_audit(f"Token della sede '{payload.id}' rigenerato da '{current_user.get('sub')}'.")
+    log_audit(f"Token della sonda '{payload.id}' rigenerato da '{current_user.get('sub')}'.")
     return {"status": "success", "token": token}
 
 @router.post("/api/probes/{probe_id}/command", dependencies=[Depends(require_tab("tab-probes"))])
@@ -264,29 +264,29 @@ def probe_command_ep(probe_id: str, payload: ProbeCommandSchema,
     preleverà in polling, lo eseguirà localmente e ne posterà il risultato."""
     probe = probe_manager.get_probe(probe_id)
     if not probe:
-        raise HTTPException(status_code=404, detail="Sede non trovata.")
+        raise HTTPException(status_code=404, detail="Sonda non trovata.")
     if probe.get("mode") != "agent":
         raise HTTPException(status_code=400, detail="Il relay comandi è disponibile solo per sedi in modalità agent.")
     if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", payload.ip):
         raise HTTPException(status_code=400, detail="IP non valido.")
     if not _device_in_scope(current_user, payload.ip):
-        log_audit(f"Relay comando negato (fuori scope) su '{payload.ip}' sede "
+        log_audit(f"Relay comando negato (fuori scope) su '{payload.ip}' sonda "
                   f"'{probe_id}' a '{current_user.get('sub')}'.")
         raise HTTPException(
             status_code=403,
             detail=f"Dispositivo '{payload.ip}' non fra le sedi consentite.")
     if not command_allowed(payload.command, current_user):
         log_audit(f"Relay comando bloccato (blacklist) '{payload.command}' su '{payload.ip}' "
-                  f"sede '{probe_id}' da '{current_user.get('sub')}'.")
+                  f"sonda '{probe_id}' da '{current_user.get('sub')}'.")
         raise HTTPException(status_code=400, detail="Comando non consentito per motivi di sicurezza (in blacklist).")
     blacklist_bypass = not is_command_safe(payload.command)
     if blacklist_bypass:
-        log_audit(f"Relay comando in blacklist '{payload.command}' su '{payload.ip}' sede '{probe_id}' "
+        log_audit(f"Relay comando in blacklist '{payload.command}' su '{payload.ip}' sonda '{probe_id}' "
                   f"consentito a '{current_user.get('sub')}' {_bypass_note(current_user)}.")
     job = probe_manager.enqueue_job(probe_id, payload.ip, payload.command,
                                    requested_by=current_user.get("sub"),
                                    blacklist_bypass=blacklist_bypass)
-    log_audit(f"Comando CLI accodato per sede agent '{probe_id}' su '{payload.ip}' "
+    log_audit(f"Comando CLI accodato per sonda agent '{probe_id}' su '{payload.ip}' "
               f"da '{current_user.get('sub')}' (job {job['id']}).")
     return {"status": "queued", "job_id": job["id"]}
 
@@ -327,11 +327,11 @@ def agent_self_update_ep(probe_id: str, current_user = Depends(require_unscoped_
     """Accoda un comando RPC di self-update (git pull) per l'agente remoto."""
     probe = probe_manager.get_probe(probe_id)
     if not probe:
-        raise HTTPException(status_code=404, detail="Sede non trovata.")
+        raise HTTPException(status_code=404, detail="Sonda non trovata.")
     if probe.get("mode") != "agent":
         raise HTTPException(status_code=400, detail="Gestione agente disponibile solo per sedi in modalità agent.")
     job = probe_manager.enqueue_job(probe_id, "127.0.0.1", "_agent_self_update", requested_by=current_user.get("sub"))
-    log_audit(f"Self-update agent (git pull) accodato per sede '{probe_id}' da '{current_user.get('sub')}' (job {job['id']}).")
+    log_audit(f"Self-update agent (git pull) accodato per sonda '{probe_id}' da '{current_user.get('sub')}' (job {job['id']}).")
     return {"status": "queued", "job_id": job["id"]}
 
 
@@ -340,11 +340,11 @@ def agent_restart_ep(probe_id: str, current_user = Depends(require_unscoped_admi
     """Accoda un comando RPC di restart per l'agente remoto (systemctl auto-restart)."""
     probe = probe_manager.get_probe(probe_id)
     if not probe:
-        raise HTTPException(status_code=404, detail="Sede non trovata.")
+        raise HTTPException(status_code=404, detail="Sonda non trovata.")
     if probe.get("mode") != "agent":
         raise HTTPException(status_code=400, detail="Gestione agente disponibile solo per sedi in modalità agent.")
     job = probe_manager.enqueue_job(probe_id, "127.0.0.1", "_agent_restart", requested_by=current_user.get("sub"))
-    log_audit(f"Restart agent accodato per sede '{probe_id}' da '{current_user.get('sub')}' (job {job['id']}).")
+    log_audit(f"Restart agent accodato per sonda '{probe_id}' da '{current_user.get('sub')}' (job {job['id']}).")
     return {"status": "queued", "job_id": job["id"]}
 
 
@@ -353,11 +353,11 @@ def agent_logs_ep(probe_id: str, current_user = Depends(require_unscoped_admin))
     """Accoda un comando RPC che riporta le ultime righe di journal dell'agente."""
     probe = probe_manager.get_probe(probe_id)
     if not probe:
-        raise HTTPException(status_code=404, detail="Sede non trovata.")
+        raise HTTPException(status_code=404, detail="Sonda non trovata.")
     if probe.get("mode") != "agent":
         raise HTTPException(status_code=400, detail="Gestione agente disponibile solo per sedi in modalità agent.")
     job = probe_manager.enqueue_job(probe_id, "127.0.0.1", "_agent_logs", requested_by=current_user.get("sub"))
-    log_audit(f"Lettura log agent accodata per sede '{probe_id}' da '{current_user.get('sub')}' (job {job['id']}).")
+    log_audit(f"Lettura log agent accodata per sonda '{probe_id}' da '{current_user.get('sub')}' (job {job['id']}).")
     return {"status": "queued", "job_id": job["id"]}
 
 
@@ -366,13 +366,13 @@ def agent_config_update_ep(probe_id: str, payload: AgentConfigUpdateSchema, curr
     """Accoda un comando RPC per aggiornare i parametri di configurazione dell'agente remoto."""
     probe = probe_manager.get_probe(probe_id)
     if not probe:
-        raise HTTPException(status_code=404, detail="Sede non trovata.")
+        raise HTTPException(status_code=404, detail="Sonda non trovata.")
     if probe.get("mode") != "agent":
         raise HTTPException(status_code=400, detail="Gestione agente disponibile solo per sedi in modalità agent.")
     cfg_json = payload.model_dump_json(exclude_none=True)
     cmd = f"_agent_config {cfg_json}"
     job = probe_manager.enqueue_job(probe_id, "127.0.0.1", cmd, requested_by=current_user.get("sub"))
-    log_audit(f"Aggiornamento config agent accodato per sede '{probe_id}' da '{current_user.get('sub')}' (job {job['id']}).")
+    log_audit(f"Aggiornamento config agent accodato per sonda '{probe_id}' da '{current_user.get('sub')}' (job {job['id']}).")
     return {"status": "queued", "job_id": job["id"]}
 
 
@@ -385,11 +385,11 @@ def agent_get_inventory_ep(probe_id: str, current_user = Depends(require_unscope
     """Accoda un comando RPC per leggere l'inventario locale network_hosts.csv dell'agente."""
     probe = probe_manager.get_probe(probe_id)
     if not probe:
-        raise HTTPException(status_code=404, detail="Sede non trovata.")
+        raise HTTPException(status_code=404, detail="Sonda non trovata.")
     if probe.get("mode") != "agent":
         raise HTTPException(status_code=400, detail="Gestione agente disponibile solo per sedi in modalità agent.")
     job = probe_manager.enqueue_job(probe_id, "127.0.0.1", "_agent_get_inventory", requested_by=current_user.get("sub"))
-    log_audit(f"Lettura inventario agent accodato per sede '{probe_id}' da '{current_user.get('sub')}' (job {job['id']}).")
+    log_audit(f"Lettura inventario agent accodato per sonda '{probe_id}' da '{current_user.get('sub')}' (job {job['id']}).")
     return {"status": "queued", "job_id": job["id"]}
 
 
@@ -398,7 +398,7 @@ def agent_save_inventory_ep(probe_id: str, payload: AgentInventorySaveSchema, cu
     """Accoda un comando RPC per salvare l'inventario locale network_hosts.csv dell'agente."""
     probe = probe_manager.get_probe(probe_id)
     if not probe:
-        raise HTTPException(status_code=404, detail="Sede non trovata.")
+        raise HTTPException(status_code=404, detail="Sonda non trovata.")
     if probe.get("mode") != "agent":
         raise HTTPException(status_code=400, detail="Gestione agente disponibile solo per sedi in modalità agent.")
     # Il CSV lo scriverà l'agente, ma se è illeggibile va detto adesso: dopo
@@ -410,7 +410,7 @@ def agent_save_inventory_ep(probe_id: str, payload: AgentInventorySaveSchema, cu
         raise HTTPException(status_code=400, detail=str(e))
     cmd = f"_agent_save_inventory {payload.content}"
     job = probe_manager.enqueue_job(probe_id, "127.0.0.1", cmd, requested_by=current_user.get("sub"))
-    log_audit(f"Salvataggio inventario agent accodato per sede '{probe_id}' da '{current_user.get('sub')}' (job {job['id']}).")
+    log_audit(f"Salvataggio inventario agent accodato per sonda '{probe_id}' da '{current_user.get('sub')}' (job {job['id']}).")
     return {"status": "queued", "job_id": job["id"]}
 
 
@@ -423,14 +423,14 @@ def agent_flow_control_ep(probe_id: str, payload: FlowControlSchema, current_use
     """Mette in pausa o riprende l'ingestione / streaming dati per la sede agent."""
     probe = probe_manager.get_probe(probe_id)
     if not probe:
-        raise HTTPException(status_code=404, detail="Sede non trovata.")
+        raise HTTPException(status_code=404, detail="Sonda non trovata.")
     if probe.get("mode") != "agent":
         raise HTTPException(status_code=400, detail="Gestione flusso disponibile solo per sedi in modalità agent.")
     probe_manager.set_probe_flow_status(probe_id, payload.active)
     cmd = "_agent_flow_start" if payload.active else "_agent_flow_stop"
     job = probe_manager.enqueue_job(probe_id, "127.0.0.1", cmd, requested_by=current_user.get("sub"))
     status_str = "riavviato" if payload.active else "interrotto (pausa)"
-    log_audit(f"Flusso dati agente {status_str} per sede '{probe_id}' da '{current_user.get('sub')}' (job {job['id']}).")
+    log_audit(f"Flusso dati agente {status_str} per sonda '{probe_id}' da '{current_user.get('sub')}' (job {job['id']}).")
     return {"status": "success", "flow_active": payload.active, "job_id": job["id"]}
 
 

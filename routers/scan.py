@@ -37,7 +37,7 @@ _scan_jobs_lock = threading.Lock()
 
 
 def _probe_for_network(hosts: list[str]):
-    """Return the site whose declared subnet contains this scan's targets, or
+    """Return the probe whose declared subnet contains this scan's targets, or
     None. Uses the first host as a proxy for the whole requested range."""
     if not hosts:
         return None

@@ -104,7 +104,7 @@ _A_UPSERT = re.compile(r"^Dispositivo '([^']+)' \(vendor: '([^']*)', gruppo: '([
                        r"aggiunto/aggiornato dall'utente '([^']*)'")
 _A_DELETE = re.compile(r"^Dispositivo '([^']+)' eliminato dall'inventario dall'utente '([^']*)'")
 _A_GROUP = re.compile(r"^Dispositivo '([^']+)' spostato dal gruppo '([^']*)' al gruppo '([^']*)' dall'utente '([^']*)'")
-_A_PROBE = re.compile(r"^Dispositivo '([^']+)' spostato dalla sede '([^']*)' alla sede '([^']*)' dall'utente '([^']*)'")
+_A_PROBE = re.compile(r"^Dispositivo '([^']+)' spostato dalla (?:sede|sonda) '([^']*)' alla (?:sede|sonda) '([^']*)' dall'utente '([^']*)'")
 _A_PROMOTE = re.compile(r"^Dispositivo scoperto '([^']*)' promosso a gestito \(IP ([0-9.]+), vendor ([^,]*), sede ([^)]*)\) da '([^']*)'")
 _backfilled: "set[str]" = set()  # log paths already merged in this process
 
