@@ -1427,7 +1427,7 @@ class TestProbesTabRestyle(unittest.TestCase):
     def test_preserve_ids(self):
         html = _html()
         # probesTableBody + the probe wizard fields read by saveProbeWizard().
-        for _id in ('probesTableBody', 'swName', 'swSubnets', 'btnNewProbe'):
+        for _id in ('probesTableBody', 'swName', 'btnNewProbe'):
             self.assertIn(f'id="{_id}"', html, f"lost preserve-ID {_id}")
 
     def test_endpoint_contract_present(self):

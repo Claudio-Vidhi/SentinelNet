@@ -74,9 +74,99 @@
                 <td>${currentRole === 'viewer'
                     ? '<span style="color:var(--text-muted)">—</span>'
                     : `${renameBtn}<button data-action="delete-group" data-g="${escapeHtml(g)}" style="color:var(--danger); background:none; border:none; cursor:pointer;">${btnText}</button>`}</td>
-            </tr>`;
+            </tr>
+            <tr class="org-locations"><td colspan="4">${renderOrgLocations(g)}</td></tr>`;
         });
     }
+
+    const LOCATION_ROLE_KEYS = {
+        hq: 'locRole_hq', branch: 'locRole_branch', datacenter: 'locRole_datacenter',
+        warehouse: 'locRole_warehouse', other: 'locRole_other',
+    };
+
+    // The locations of one organization, under its row in the Organizations tab.
+    function renderOrgLocations(org) {
+        const canEdit = isAdminRole(currentRole);
+        const probeName = id => ((_probesCache || []).find(p => p.id === id) || {}).name || id;
+        const rows = globalLocations.filter(l => l.org === org).map(l => `<tr>
+            <td><strong>${escapeHtml(l.name)}</strong></td>
+            <td>${escapeHtml(tr(LOCATION_ROLE_KEYS[l.role] || 'locRole_other'))}</td>
+            <td style="font-size:12px;">${(l.subnets || []).map(escapeHtml).join(', ') || '—'}</td>
+            <td>${escapeHtml(probeName(l.probe))}</td>
+            <td>${l.devices || 0}</td>
+            <td style="white-space:nowrap;">${canEdit
+                ? `<button type="button" class="inv-icon-btn" data-action="edit-location" data-loc="${escapeHtml(l.id)}" title="${escapeHtml(tr('btnEditLocation'))}" aria-label="${escapeHtml(tr('btnEditLocation'))}"><i class="fa-solid fa-pen"></i></button>
+                   <button type="button" class="inv-icon-btn danger" data-action="delete-location" data-loc="${escapeHtml(l.id)}" title="${escapeHtml(tr('btnDeleteLocation'))}" aria-label="${escapeHtml(tr('btnDeleteLocation'))}"><i class="fa-solid fa-trash-can"></i></button>`
+                : ''}</td>
+        </tr>`).join('');
+        return `<table class="org-loc-table">
+            <thead><tr><th>${escapeHtml(tr('thLocation'))}</th><th>${escapeHtml(tr('lblLocationRole'))}</th><th>${escapeHtml(tr('thLocationSubnets'))}</th>
+                <th>${escapeHtml(tr('lblLocationProbe'))}</th><th>${escapeHtml(tr('thLocationDevices'))}</th><th></th></tr></thead>
+            <tbody>${rows || `<tr><td colspan="6" class="inv-muted">${escapeHtml(tr('noLocations'))}</td></tr>`}</tbody>
+        </table>${canEdit ? `<button type="button" class="btn btn-secondary btn-small" data-action="new-location" data-g="${escapeHtml(org)}" style="width:auto; margin-top:6px;"><i class="fa-solid fa-plus"></i> ${escapeHtml(tr('btnNewLocation'))}</button>` : ''}`;
+    }
+
+    let editingLocation = null;   // location being edited; null when creating
+    let locationModalOrg = '';
+
+    async function openLocationModal(org, locId) {
+        const loc = locId ? locationById(locId) : null;
+        editingLocation = loc;
+        locationModalOrg = loc ? loc.org : org;
+        document.getElementById('locationModalTitle').textContent = tr(loc ? 'btnEditLocation' : 'btnNewLocation');
+        document.getElementById('locOrgName').textContent = orgLabel(locationModalOrg);
+        document.getElementById('locName').value = loc ? loc.name : '';
+        document.getElementById('locRole').value = loc ? loc.role : 'branch';
+        document.getElementById('locSubnets').value = loc ? (loc.subnets || []).join('\n') : '';
+        _probesCache = null;   // a probe created meanwhile must be offered
+        const probes = await loadDeviceProbes();
+        const current = loc ? loc.probe : 'central';
+        document.getElementById('locProbe').innerHTML = probes.map(p =>
+            `<option value="${escapeHtml(p.id)}"${p.id === current ? ' selected' : ''}>${escapeHtml(p.name || p.id)}</option>`).join('');
+        document.getElementById('locApplyWrap').hidden = !loc;
+        document.getElementById('locApplyProbe').checked = false;
+        document.getElementById('locSaveError').textContent = '';
+        openModal('locationModal');
+    }
+
+    async function saveLocation() {
+        const body = {
+            name: document.getElementById('locName').value.trim(),
+            role: document.getElementById('locRole').value,
+            subnets: document.getElementById('locSubnets').value.split(/[\s,]+/).filter(Boolean),
+            probe: document.getElementById('locProbe').value,
+        };
+        if (editingLocation) {
+            body.id = editingLocation.id;
+            body.apply_probe_to_devices = document.getElementById('locApplyProbe').checked;
+        } else {
+            body.org = locationModalOrg;
+        }
+        const res = await apiFetch(editingLocation ? '/api/locations/update' : '/api/locations', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        });
+        if (res && res.ok) {
+            closeModal('locationModal');
+            refreshInventory();
+            return;
+        }
+        const err = res ? await res.json().catch(() => ({})) : {};
+        document.getElementById('locSaveError').textContent = err.detail || tr('uiError');
+    }
+
+    async function deleteLocation(locId) {
+        const loc = locationById(locId);
+        if (!loc || !confirm(tr('confirmDeleteLocation', { name: loc.name }))) return;
+        const res = await apiFetch('/api/locations/delete', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: locId }),
+        });
+        if (res && res.ok) { refreshInventory(); return; }
+        // The server's refusal carries the device count: show it as is.
+        const err = res ? await res.json().catch(() => ({})) : {};
+        alert(err.detail || tr('uiError'));
+    }
+
+    document.getElementById('btnSaveLocation')?.addEventListener('click', saveLocation);
 
     document.getElementById('groupsTableBody')?.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-action]');
@@ -86,6 +176,9 @@
         if (action === 'rename-group') renameGroup(g);
         else if (action === 'set-tenant-snmp') setTenantSnmp(g);
         else if (action === 'delete-group') deleteGroup(g);
+        else if (action === 'new-location') openLocationModal(g, null);
+        else if (action === 'edit-location') openLocationModal('', btn.dataset.loc);
+        else if (action === 'delete-location') deleteLocation(btn.dataset.loc);
     });
 
     // KPI row sopra la tabella inventario: conteggi sull'intera flotta (non filtrati
@@ -221,7 +314,7 @@
     function renderDecommissionedRows(devBody, selectedGroup, term, isViewer) {
         (_decomCache || []).forEach(d => {
             if (selectedGroup !== 'all' && d.Group !== selectedGroup) return;
-            if (term && ![d.IP, d.Hostname, d.Vendor, d.Group, d.Probe, d['Decommissioned By']]
+            if (term && ![d.IP, d.Hostname, d.Vendor, d.Group, locationLabel(d.Location), d.Probe, d['Decommissioned By']]
                 .some(x => (x || '').toString().toLowerCase().includes(term))) return;
             const key = selKey(d);
             const selected = selectedDevices.has(key);
@@ -233,7 +326,7 @@
                 <td><span class="status" title="${escapeHtml(by)}">${escapeHtml(tr('invDecomStatus'))}</span></td>
                 <td><div class="inv-host">
                     <span class="inv-host-name">${d.Hostname ? escapeHtml(d.Hostname) : '<span class="inv-muted">—</span>'}</span>
-                    <span class="inv-host-where">${escapeHtml(orgLabel(d.Group))} · ${escapeHtml(d.Probe || 'central')}</span>
+                    <span class="inv-host-where">${escapeHtml(orgLabel(d.Group))} · ${escapeHtml(locationLabel(d.Location))} · ${escapeHtml(d.Probe || 'central')}</span>
                 </div></td>
                 <td><strong>${escapeHtml(d.IP)}</strong></td>
                 <td>${escapeHtml((d.Vendor || '').toUpperCase())}</td>
@@ -282,7 +375,7 @@
 
             // Barra di ricerca: filtra su IP, hostname, vendor, gruppo, versione, stato
             if (term) {
-                const haystack = [d.IP, d.Hostname, d.Vendor, d.Group, d.Probe, scan.version, scan.status]
+                const haystack = [d.IP, d.Hostname, d.Vendor, d.Group, locationLabel(d.Location), d.Probe, scan.version, scan.status]
                     .map(x => (x || '').toString().toLowerCase()).join(' ');
                 if (!haystack.includes(term)) return;
             }
@@ -303,9 +396,11 @@
                     escapeHtml(st.name || st.id)}${escapeHtml(mode)}</option>`;
             }).join('') || `<option value="${escapeHtml(current)}" selected>${escapeHtml(current)}</option>`;
 
-            const groupOptions = Object.keys(globalGroups).map(g =>
-                `<option value="${escapeHtml(g)}" ${g === d.Group ? "selected" : ""}>${escapeHtml(orgLabel(g))}</option>`
-            ).join("");
+            // Every location in scope, grouped by organization: picking one in
+            // another organization moves the device there too.
+            const locationOptions = (d.Location && locationById(d.Location) ? ''
+                : `<option value="" selected>${escapeHtml(tr('optNoLocation'))}</option>`)
+                + locationOptionsHtml(d.Location || '', null);
             const safeIp = d.IP.replace(/\./g, "_");
 
             let versionText = scan.version;
@@ -314,12 +409,14 @@
                 if (versionText === 'Non Rilevata') versionText = 'Not Detected';
             }
 
-            // Tenant and probe sit under the hostname: plain text for a viewer,
-            // inline selects for whoever may move the device.
+            // Organization · location · probe under the hostname: plain text for
+            // a viewer, inline selects for whoever may move the device.
             const where = isViewer
-                ? `<span id="badge_${safeIp}">${escapeHtml(orgLabel(d.Group))}</span><span aria-hidden="true">·</span><span>${escapeHtml(d.Probe || 'central')}</span>`
-                : `<select id="grpsel_${safeIp}" class="inv-inline-select" data-action="reassign-device" data-ip="${ipAttr}"
-                      title="${tr('devMoveToAnotherTenant')}" aria-label="${tr('devMoveToAnotherTenant')}">${groupOptions}</select>
+                ? `<span id="badge_${safeIp}">${escapeHtml(orgLabel(d.Group))}</span><span aria-hidden="true">·</span><span>${escapeHtml(locationLabel(d.Location))}</span><span aria-hidden="true">·</span><span>${escapeHtml(d.Probe || 'central')}</span>`
+                : `<span id="badge_${safeIp}">${escapeHtml(orgLabel(d.Group))}</span>
+                   <span aria-hidden="true">·</span>
+                   <select id="grpsel_${safeIp}" class="inv-inline-select" data-action="reassign-device" data-ip="${ipAttr}"
+                      title="${tr('devMoveToAnotherLocation')}" aria-label="${tr('devMoveToAnotherLocation')}">${locationOptions}</select>
                    <span aria-hidden="true">·</span>
                    <select class="inv-inline-select" data-action="reassign-device-probe" data-ip="${ipAttr}"
                       title="${tr('devMoveToAnotherProbe')}" aria-label="${tr('devMoveToAnotherProbe')}">${probeOptions(d.Probe || 'central')}</select>`;
@@ -532,6 +629,7 @@
             password: document.getElementById('devPass').value,
             enable_secret: document.getElementById('devSecret').value,
             group: document.getElementById('devGroupSelect').value,
+            location: document.getElementById('devLocationSelect').value,
             probe: (probeSel && probeSel.value) ? probeSel.value : 'central',
             transports: readTransportsForm()
         };
@@ -547,6 +645,7 @@
         if (snmpDisabled) payload.snmp_disabled = snmpDisabled.checked;
 
         if(!payload.ip) { alert(tr('alertEnterIp')); return; }
+        if (!payload.location) { alert(tr('alertSelectLocation')); return; }
 
         // In modifica i campi credenziali vuoti significano "invariate":
         // add_or_update_device preserva quelle già salvate. Si compilano solo
@@ -579,6 +678,7 @@
         await switchTab('tab-provisioning');
 
         document.getElementById('devGroupSelect').value = dev.Group || '';
+        populateDevLocationOptions(dev.Location || '');
         const probeSel = document.getElementById('devProbeSelect');
         if (probeSel) {
             if (typeof populateProbeOptions === 'function') {
@@ -650,6 +750,7 @@
         ipInput.readOnly = false;
         ipInput.style.opacity = '';
         document.getElementById('devProfile').value = 'default';
+        populateDevLocationOptions('');
         const probeSelReset = document.getElementById('devProbeSelect');
         if (probeSelReset) probeSelReset.value = 'central';
         setTransportsForm(null, 22);
@@ -1568,6 +1669,8 @@
         const vendorSel = document.getElementById('scanVerifyVendorSelect').value;
         const identityId = document.getElementById('scanIdentitySelect').value;
         const ips = selectedScanIps();
+        const location = await pickLocation(group);
+        if (!location) return;
 
         for (const ip of ips) {
             // Vendor and identity are both what the user picked in this modal:
@@ -1584,7 +1687,7 @@
                 ip,
                 vendor: vendorSel,
                 profile: identityId ? `identity:${identityId}` : 'default',
-                username: '', password: '', enable_secret: '', group,
+                username: '', password: '', enable_secret: '', group, location,
             };
             await apiFetch('/api/add-device', {
                 method: 'POST',
@@ -1821,9 +1924,9 @@
     // by side with different values explains it better than any note.
     // Omitted, Probe is 'central'.
     const CSV_TEMPLATE = [
-        'IP,Username,Password,Enable Secret,Hostname,Group,Probe,Vendor',
-        '192.0.2.1,admin,Mypass123!,enablepass,switch-01,Tenant_Milano,central,cisco',
-        '198.51.100.1,manager,Pwd456!,secret,switch-02,Tenant_Roma,probe-roma,hpe',
+        'IP,Username,Password,Enable Secret,Hostname,Group,Location,Probe,Vendor',
+        '192.0.2.1,admin,Mypass123!,enablepass,switch-01,Tenant_Milano,Milano,central,cisco',
+        '198.51.100.1,manager,Pwd456!,secret,switch-02,Tenant_Roma,Roma,probe-roma,hpe',
         ''
     ].join('\n');
 
@@ -1993,44 +2096,31 @@
         }
     }
 
-    async function reassignDevice(ip, newGroup, selectEl) {
+    // The inline select picks a location; its organization comes with it.
+    async function reassignDevice(ip, newLocation, selectEl) {
         const dev = globalDevices.find(d => d.IP === ip);
-        const originalGroup = dev?.Group;
-        if (!dev || newGroup === originalGroup) return;
+        const loc = locationById(newLocation);
+        const original = dev?.Location || '';
+        if (!dev || !loc || newLocation === original) return;
 
         selectEl.disabled = true;
-        const safeIp = ip.replace(/\./g, "_");
-
         try {
             const res = await apiFetch("/api/reassign-device", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ ip, new_group: newGroup })
+                body: JSON.stringify({ ip, new_group: loc.org, new_location: loc.id })
             });
-
             if (res && res.ok) {
-                dev.Group = newGroup;
-                const badge = document.getElementById(`badge_${safeIp}`);
-                if (badge) badge.textContent = orgLabel(newGroup);
-                const filterSelect = document.getElementById("filterGroupSelect");
-                const selectedGroup = filterSelect ? filterSelect.value : "all";
-                if (selectedGroup !== "all" && newGroup !== selectedGroup) {
-                    const row = selectEl.closest("tr");
-                    if (row) {
-                        row.style.transition = "opacity 0.4s";
-                        row.style.opacity = "0";
-                        setTimeout(() => row.remove(), 400);
-                    }
-                }
+                refreshInventory();
             } else {
                 const err = res ? await res.json() : null;
                 const errDetail = err?.detail || (tr('devUnknownError'));
                 alert(`${tr('alertReassignmentError')}${errDetail}`);
-                selectEl.value = originalGroup;
+                selectEl.value = original;
             }
         } catch (err) {
             alert(tr('alertNetworkReassignmentError'));
-            selectEl.value = originalGroup;
+            selectEl.value = original;
         }
         selectEl.disabled = false;
     }

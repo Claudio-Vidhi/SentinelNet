@@ -4005,7 +4005,10 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
 .choice-card .con::before { content: "\2717  "; color: var(--lamp-fault-ink); }
 
 .form-hint { color: var(--text-muted); font-size: var(--font-size-sm); margin: 4px 0 0; }
-.subnet-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+/* Locations listed under their organization (Organizations tab). */
+.org-locations > td { padding: 4px 12px 14px 32px; background: var(--surface-2); }
+.org-loc-table { width: 100%; font-size: 12px; }
+.org-loc-table th, .org-loc-table td { padding: 4px 8px; }
 .chip.is-bad { border-color: var(--lamp-fault); color: var(--lamp-fault-ink); }
 .chip.is-warn { border-color: var(--lamp-warn); color: var(--lamp-warn-ink); background: var(--lamp-warn-wash); }
 

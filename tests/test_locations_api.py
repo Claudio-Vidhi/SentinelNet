@@ -148,9 +148,12 @@ class TestLocationsApi(_IsolatedLocationsApi):
         self.assertTrue(app_settings.get_app_settings().get("locations_review_pending"))
 
         h_super = self._login("super_adm")
+        # The home banner reads the flag from the list.
+        self.assertTrue(self.client.get("/api/locations", headers=h_super).json()["review_pending"])
         r = self.client.post("/api/locations/dismiss-review", headers=h_super)
         self.assertEqual(r.status_code, 200)
         self.assertFalse(app_settings.get_app_settings().get("locations_review_pending"))
+        self.assertFalse(self.client.get("/api/locations", headers=h_super).json()["review_pending"])
 
 
 if __name__ == "__main__":

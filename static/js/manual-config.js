@@ -112,6 +112,7 @@
                 ...row, ...fields,
                 ip: mc.fixed?.ip || fields.candidates[0] || '',
                 group: mc.fixed?.group || '',
+                location: mc.fixed?.location || '',
                 probe: mc.fixed?.probe || 'central',
                 category: '',
                 edited: new Set(),
@@ -124,13 +125,22 @@
         wizard.refresh();
     }
 
-    function groupItems() { return Object.keys(globalGroups || {}).map((g) => [g, g]); }
+    // The location carries its organization: picking one sets both, and
+    // prefills the probe with the location's default.
+    const locationSelect = (attrs, current, blankLabel) =>
+        `<select ${attrs}><option value="">${escapeHtml(blankLabel)}</option>${locationOptionsHtml(current, null)}</select>`;
+    function setLocation(row, locId) {
+        const loc = locationById(locId);
+        row.location = locId;
+        row.group = loc ? loc.org : '';
+        if (loc) row.probe = loc.probe;
+    }
     function probeItems() { return (mc.guide?.probes || []).map((s) => [s.id, s.name]); }
     function categoryItems() { return Object.entries(mc.guide?.categories || {}).map(([k, c]) => [k, c.label]); }
 
     function fillApplyAll() {
         $('mcApplyAll').hidden = !!mc.fixed;
-        $('mcAllGroup').innerHTML = optionsHtml(groupItems(), '', tr('mcAllNone'));
+        $('mcAllLocation').innerHTML = `<option value="">${escapeHtml(tr('mcAllNone'))}</option>${locationOptionsHtml('', null)}`;
         $('mcAllProbe').innerHTML = optionsHtml(probeItems(), '', tr('mcAllNone'));
         $('mcAllCategory').innerHTML = optionsHtml(categoryItems(), '', tr('mcAllNone'));
     }
@@ -147,7 +157,7 @@
               <label>${escapeHtml(tr('mcLblHostname'))}<input data-field="hostname" value="${escapeHtml(r.hostname)}"${lock}></label>
               <label>IP<input data-field="ip" list="mcIps${i}" value="${escapeHtml(r.ip)}" inputmode="decimal"${lock}></label>
               <datalist id="mcIps${i}">${r.candidates.map((c) => `<option value="${escapeHtml(c)}"></option>`).join('')}</datalist>
-              <label>${escapeHtml(tr('mcLblTenant'))}<select data-field="group"${lock}>${optionsHtml(groupItems(), r.group, '')}</select></label>
+              <label>${escapeHtml(tr('mcLblLocation'))}${locationSelect(`data-field="location"${lock}`, r.location, '')}</label>
               <label>${escapeHtml(tr('mcLblProbe'))}<select data-field="probe"${lock}>${optionsHtml(probeItems(), r.probe)}</select></label>
               <label>${escapeHtml(tr('mcLblCategory'))}<select data-field="category">${optionsHtml(categoryItems(), r.category, tr('mcCategoryAuto'))}</select></label>
               <label>${escapeHtml(tr('mcLblVersion'))}<input data-field="version" value="${escapeHtml(r.version)}"></label>
@@ -160,8 +170,12 @@
 
     function applyAll() {
         const read = (id) => { const el = $(id); return el instanceof HTMLSelectElement ? el.value : ''; };
-        const values = { group: read('mcAllGroup'), probe: read('mcAllProbe'), category: read('mcAllCategory') };
-        mc.rows.forEach((r) => { for (const [k, v] of Object.entries(values)) if (v) r[k] = v; });
+        const location = read('mcAllLocation');
+        const values = { probe: read('mcAllProbe'), category: read('mcAllCategory') };
+        mc.rows.forEach((r) => {
+            if (location) setLocation(r, location);
+            for (const [k, v] of Object.entries(values)) if (v) r[k] = v;
+        });
         renderReview();
         wizard.refresh();
     }
@@ -177,7 +191,7 @@
                 const res = await apiFetch('/api/manual-config/import', {
                     method: 'POST',
                     body: JSON.stringify({
-                        text: r.text, vendor: r.vendor, ip: r.ip.trim(), group: r.group,
+                        text: r.text, vendor: r.vendor, ip: r.ip.trim(), group: r.group, location: r.location,
                         probe: r.probe, hostname: r.hostname.trim(), category: r.category,
                         version: r.version.trim(), model: r.model,
                     }),
@@ -219,7 +233,7 @@
             { id: 'files', label: 'mcStepFiles', skip: () => !!mc.results,
               validate: () => mc.files.length > 0 },
             { id: 'review', label: 'mcStepReview', skip: () => !!mc.results, onEnter: enterReview,
-              validate: () => mc.rows.length > 0 && mc.rows.every((r) => r.ip.trim() && r.group && !r.error),
+              validate: () => mc.rows.length > 0 && mc.rows.every((r) => r.ip.trim() && r.location && !r.error),
               finishLabel: 'mcBtnImport' },
             { id: 'result', label: 'mcStepResult', skip: () => !mc.results,
               onEnter: renderResult, finishLabel: 'btnClose' },
@@ -240,7 +254,7 @@
         if (ip) {
             const d = (globalDevices || []).find((x) => x.IP === ip && x.manual);
             if (d) {
-                mc.fixed = { ip: d.IP, group: d.Group, probe: d.Probe || 'central', hostname: d.Hostname || '' };
+                mc.fixed = { ip: d.IP, group: d.Group, location: d.Location || '', probe: d.Probe || 'central', hostname: d.Hostname || '' };
                 const sel = $('mcVendor');
                 // An unknown vendor leaves the first option selected: the guide step must stay usable.
                 if (sel instanceof HTMLSelectElement && d.Vendor) {
@@ -309,6 +323,11 @@
         if (!(card instanceof HTMLElement) || !t.dataset.field) return;
         const i = Number(card.dataset.row);
         const field = t.dataset.field;
+        if (field === 'location') {
+            setLocation(mc.rows[i], t.value);
+            if (e.type === 'change') { renderReview(); wizard.refresh(); }
+            return;
+        }
         mc.rows[i][field] = t.value;
         // A select fires both input and change: re-read the file once, on change.
         if (field === 'vendor') { if (e.type === 'change') repreview(i); }

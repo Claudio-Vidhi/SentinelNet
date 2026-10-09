@@ -36,7 +36,11 @@ class LocationDeleteSchema(BaseModel):
     id: str
 
 
-@router.get("/api/locations", dependencies=[Depends(require_tab("tab-groups", "tab-devices", "tab-import", "tab-provisioning", "tab-provisioner"))])
+# Read by every screen that adds or moves a device (the map tabs promote a
+# discovered node), and by the home banner while the migration awaits review.
+@router.get("/api/locations", dependencies=[Depends(require_tab(
+    "tab-home", "tab-groups", "tab-devices", "tab-import", "tab-provisioning",
+    "tab-provisioner", "tab-map", "tab-map-interactive", "tab-categories"))])
 def list_locations_ep(org: Optional[str] = Query(None), current_user = Depends(get_current_user)):
     scope = user_group_scope(current_user)
     if org is not None and scope is not None and org not in scope:
@@ -48,7 +52,8 @@ def list_locations_ep(org: Optional[str] = Query(None), current_user = Depends(g
 
     for loc in locs:
         loc["devices"] = location_manager.devices_in(loc["id"])
-    return {"locations": locs}
+    pending = bool(app_settings.get_app_settings().get("locations_review_pending"))
+    return {"locations": locs, "review_pending": pending}
 
 
 @router.post("/api/locations", dependencies=[Depends(require_tab("tab-groups"))])

@@ -356,7 +356,7 @@
           <span class="nav-left" data-i18n="tabUsers"><i class="fa-solid fa-users-gear"></i> Utenti</span>
         </button>
         <button class="nav-item requires-admin" data-tab="tab-groups" role="tab" aria-controls="tab-groups" aria-selected="false" tabindex="-1">
-          <span class="nav-left" data-i18n="tabGroups"><i class="fa-solid fa-folder-open"></i> Gestione Tenant</span>
+          <span class="nav-left" data-i18n="tabGroups"><i class="fa-solid fa-folder-open"></i> Organizzazioni</span>
         </button>
         <button class="nav-item requires-admin" data-tab="tab-probes" role="tab" aria-controls="tab-probes" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabProbes"><i class="fa-solid fa-building"></i> Sonde</span>
@@ -446,6 +446,13 @@
           <button class="btn btn-secondary" data-switch-tab="tab-devices" data-i18n="homeOpenInventory"><i class="fa-solid fa-list-check"></i> Apri inventario</button>
           <button class="btn btn-primary requires-write" id="btnHomeRunTriage" data-i18n="homeRunTriage"><i class="fa-solid fa-bolt-lightning"></i> Avvia triage globale</button>
         </div>
+      </div>
+
+      <!-- Shown after the locations migration until an admin confirms the result. -->
+      <div id="homeLocationsBanner" class="set-banner" role="status" hidden>
+        <span id="homeLocationsBannerText"></span>
+        <button type="button" class="btn btn-secondary btn-small" data-switch-tab="tab-groups" data-i18n="btnReviewLocations">Verifica le sedi</button>
+        <button type="button" class="btn btn-secondary btn-small" id="btnDismissLocationsReview" data-i18n="btnLocationsReviewed">Ho verificato</button>
       </div>
 
       <!-- 4 verdicts: reachability, backup, CVE, config drift. Big number first, sentence second. -->
@@ -785,6 +792,14 @@
             </div>
 
             <div class="form-group">
+              <label for="devLocationSelect" data-i18n="lblDeviceLocation">Sede</label>
+              <div class="input-wrapper">
+                <i class="fa-solid fa-map-pin"></i>
+                <select id="devLocationSelect"></select>
+              </div>
+            </div>
+
+            <div class="form-group">
               <label data-i18n="lblDeviceProbe">Sonda</label>
               <div class="input-wrapper">
                 <i class="fa-solid fa-location-dot"></i>
@@ -967,8 +982,8 @@
     <div id="tab-groups" class="tab-content" role="tabpanel" tabindex="0">
       <div class="page-head">
         <div class="page-head-text">
-          <h2 data-i18n="titleGroupsRegistry">Anagrafica Tenant e Clienti</h2>
-          <p data-i18n="descGroupsRegistry">I Tenant organizzano logicamente la topologia dei tuoi asset. L'eliminazione di un Tenant sposta i dispositivi associati nel Tenant Generale.</p>
+          <h2 data-i18n="titleGroupsRegistry">Organizzazioni</h2>
+          <p data-i18n="descGroupsRegistry">Le organizzazioni raggruppano logicamente gli asset e le sedi fisiche della rete.</p>
         </div>
       </div>
 
@@ -977,7 +992,7 @@
           <table>
             <thead>
               <tr>
-                <th data-i18n="thGroupName">Nome Sede / Cliente</th>
+                <th data-i18n="thGroupName">Organizzazione</th>
                 <th data-i18n="thGroupDesc">Descrizione Metadati</th>
                 <th data-i18n="thTenantSnmp"></th>
                 <th data-i18n="thGroupActions">Azioni</th>
@@ -2755,13 +2770,13 @@
                 <i class="fa-solid fa-download"></i> Scarica modello CSV
               </button>
             </div>
-            <div class="template-box">IP,Username,Password,Enable Secret,Hostname,Group,Probe,Vendor
-192.0.2.1,admin,Mypass123!,enablepass,switch-01,Tenant_Milano,central,cisco
-198.51.100.1,manager,Pwd456!,secret,switch-02,Tenant_Roma,probe-roma,hpe</div>
+            <div class="template-box">IP,Username,Password,Enable Secret,Hostname,Group,Location,Probe,Vendor
+192.0.2.1,admin,Mypass123!,enablepass,switch-01,Tenant_Milano,Milano,central,cisco
+198.51.100.1,manager,Pwd456!,secret,switch-02,Tenant_Roma,Roma,probe-roma,hpe</div>
             <p class="set-desc" style="margin:10px 0 0;" data-i18n="importFlexNote">
-          Solo la colonna <code>IP</code> è obbligatoria. Maiuscole, underscore e nomi in italiano
-          (<code>indirizzo</code>, <code>utente</code>, <code>gruppo</code>) sono riconosciuti, così come
-          il punto e virgola come separatore e i file salvati da Excel.
+          Obbligatorie: <code>IP</code>, <code>Group</code> e <code>Location</code> (la sede, per nome o id).
+          Maiuscole, underscore e nomi in italiano (<code>indirizzo</code>, <code>utente</code>, <code>gruppo</code>,
+          <code>sede</code>) sono riconosciuti, così come il punto e virgola come separatore e i file salvati da Excel.
         </p>
           </section>
 
@@ -5484,12 +5499,7 @@
             <label for="swName" data-i18n="lblProbeName">Nome</label>
             <input id="swName" type="text" placeholder="es. Milano" data-i18n-placeholder="phNewProbeName">
           </div>
-          <div class="form-group">
-            <label for="swSubnets" data-i18n="lblProbeSubnets">Subnet (separate da virgola)</label>
-            <input id="swSubnets" type="text" placeholder="es. 10.0.0.0/24, 10.0.1.0/24" data-i18n-placeholder="phNewProbeSubnets" aria-describedby="swSubnetsHint">
-            <p id="swSubnetsHint" class="form-hint" data-i18n="swSubnetsHint">Formato CIDR, separate da virgola.</p>
-            <div id="swSubnetChips" class="subnet-chips"></div>
-          </div>
+          <p class="form-hint" data-i18n="swSubnetsOnLocations">Le subnet si impostano sulle sedi (Organizzazioni): la sonda raggiunge quelle delle sedi che la usano.</p>
           <div id="swJumpFields" hidden>
             <div class="modal-grid">
               <div class="form-group">
@@ -5593,7 +5603,7 @@
           <fieldset id="mcApplyAll" class="mc-card">
             <legend data-i18n="mcApplyAllTitle">Uguale per tutti i file</legend>
             <div class="mc-grid">
-              <label><span data-i18n="mcLblTenant">Tenant</span><select id="mcAllGroup"></select></label>
+              <label><span data-i18n="mcLblLocation">Sede</span><select id="mcAllLocation"></select></label>
               <label><span data-i18n="mcLblProbe">Sonda</span><select id="mcAllProbe"></select></label>
               <label><span data-i18n="mcLblCategory">Categoria</span><select id="mcAllCategory"></select></label>
             </div>
@@ -5612,6 +5622,65 @@
         <button type="button" class="btn btn-secondary" data-wizard-back data-i18n="wizBack">Indietro</button>
         <!-- No data-i18n: ui-wizard.js sets the label per step. -->
         <button type="button" class="btn btn-primary" data-wizard-next></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Organizations tab: create or edit a location (devices.js). -->
+  <div class="modal-overlay" id="locationModal">
+    <div class="modal" style="width: 520px; max-width: 95%;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-map-pin"></i> <span id="locationModalTitle"></span></h3>
+        <button type="button" class="modal-close" data-close-modal="locationModal" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <p style="font-size:13px; color:var(--text-muted); margin:0 0 12px;"><span data-i18n="lblLocationOrg">Organizzazione</span>: <strong id="locOrgName"></strong></p>
+      <div class="form-group">
+        <label for="locName" data-i18n="lblLocationName">Nome</label><input id="locName" type="text" placeholder="es. Milano" data-i18n-placeholder="phLocationName" style="padding-left:12px;">
+      </div>
+      <div class="form-group">
+        <label for="locRole" data-i18n="lblLocationRole">Ruolo</label>
+        <select id="locRole">
+          <option value="hq" data-i18n="locRole_hq">Sede centrale</option>
+          <option value="branch" data-i18n="locRole_branch">Filiale</option>
+          <option value="datacenter" data-i18n="locRole_datacenter">Datacenter</option>
+          <option value="warehouse" data-i18n="locRole_warehouse">Magazzino</option>
+          <option value="other" data-i18n="locRole_other">Altro</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="locSubnets" data-i18n="lblLocationSubnets">Subnet (una per riga, formato CIDR)</label>
+        <textarea id="locSubnets" rows="4" placeholder="10.10.0.0/16" style="width:100%; font-family:var(--font-code); font-size:12px; padding:8px;"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="locProbe" data-i18n="lblLocationProbe">Sonda predefinita</label>
+        <select id="locProbe"></select>
+      </div>
+      <label id="locApplyWrap" style="display:flex; gap:8px; align-items:center; font-size:13px;" hidden>
+        <input type="checkbox" id="locApplyProbe"> <span data-i18n="lblApplyProbeToDevices">Applica la sonda a tutti i device della sede</span>
+      </label>
+      <p id="locSaveError" class="form-hint" role="alert" style="color:var(--danger);"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal="locationModal" data-i18n="uiCancel">Annulla</button>
+        <button type="button" class="btn btn-primary" id="btnSaveLocation" data-i18n="btnSave">Salva</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Which location of an organization (pickLocation, core.js). -->
+  <div class="modal-overlay" id="locationPickModal">
+    <div class="modal" style="width: 420px; max-width: 95%;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-map-pin"></i> <span data-i18n="titlePickLocation">Scegli la sede</span></h3>
+        <button type="button" class="modal-close" data-loc-pick-cancel aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <p style="font-size:13px; color:var(--text-muted); margin:0 0 12px;"><span data-i18n="lblLocationOrg">Organizzazione</span>: <strong id="locPickOrg"></strong></p>
+      <div class="form-group">
+        <label for="locPickSelect" data-i18n="lblDeviceLocation">Sede</label>
+        <select id="locPickSelect"></select>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-loc-pick-cancel data-i18n="uiCancel">Annulla</button>
+        <button type="button" class="btn btn-primary" id="btnLocPickOk" data-i18n="btnConfirm">Conferma</button>
       </div>
     </div>
   </div>

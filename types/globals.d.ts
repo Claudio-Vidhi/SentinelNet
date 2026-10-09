@@ -165,6 +165,8 @@ interface Window {
     _vwLoaded: any;          // threat-intel.js, first-load flag
     webkitAudioContext: any; // legacy Safari fallback in devices.js
     populateProbeOptions: any; // provisioning.js
+    populateDevLocationOptions: any; // provisioning.js, called by devices.js
+    pickLocation: any;       // core.js, asks which location of an organization
     updateTopologyMapNodeStatus: any; // topology.js, called from devices.js
     openTrafficoAnomalies: any; // observability.js, called from home.js
     openIncident: any; // incidents.js, called from observability.js

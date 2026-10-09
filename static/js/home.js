@@ -40,6 +40,26 @@ function renderBastionPanel(devices) {
     }).join('');
 }
 
+// After the locations migration, until an admin confirms the locations it
+// created. An organization still literally named after the old fallback
+// tenant is pointed out with its device count: it is no longer special.
+function renderLocationsBanner(devs) {
+    const banner = document.getElementById('homeLocationsBanner');
+    if (!banner) return;
+    banner.hidden = !(locationsReviewPending && isAdminRole(currentRole));
+    if (banner.hidden) return;
+    const legacy = devs.filter(d => d.Group === 'Generale').length;  // check-generale: ok
+    document.getElementById('homeLocationsBannerText').textContent = tr('homeLocationsReview')
+        + (legacy ? ' ' + tr('homeLegacyOrgDevices', { n: legacy }) : '');
+}
+
+document.getElementById('btnDismissLocationsReview')?.addEventListener('click', async () => {
+    const res = await apiFetch('/api/locations/dismiss-review', { method: 'POST' });
+    if (!res || !res.ok) { showToast(tr('uiError'), 'error'); return; }
+    locationsReviewPending = false;
+    document.getElementById('homeLocationsBanner').hidden = true;
+});
+
 function homeStatusInfo(status) {
     if (status === 'online')      return { cls: 'ok',   led: 'led-success', key: 'homeStOnline' };
     if (status === 'auth_failed') return { cls: 'warn', led: 'led-warning', key: 'homeStAuth' };
@@ -177,6 +197,7 @@ async function loadHome() {
     }
 
     renderBastionPanel(viaBastion);
+    renderLocationsBanner(devs);
 
     if (isAdminRole(currentRole)) loadHomeAnomalies();
     else renderEventStripDenied();

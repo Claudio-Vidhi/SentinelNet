@@ -118,6 +118,16 @@ class TestLocationBoundaries(_Isolated):
         failed_rows = [f["row"] for f in res["failed"]]
         self.assertEqual(failed_rows, [3, 4])
 
+    def test_import_csv_takes_the_location_by_name_and_its_probe(self):
+        probe, _ = probe_manager.create_probe("Lab", "agent")
+        location_manager.update_location(self.loc_acme["id"], probe=probe["id"])
+        adm = self._as("adm")
+        r = adm.post("/api/import-csv", json={"csv_data": "IP,Vendor,Group,Sede\n192.0.2.1,cisco,acme,MILANO\n"})
+        self.assertEqual(r.json()["imported"], ["192.0.2.1"], r.text)
+        dev = inventory_manager.get_all_devices()[0]
+        # A new device without a Probe column takes its location's default.
+        self.assertEqual((dev["Location"], dev["Probe"]), (self.loc_acme["id"], probe["id"]))
+
     def test_agent_push_location_resolution(self):
         probe, token = probe_manager.create_probe("Agent-Lab", "agent")
         client = TestClient(app_server.app)

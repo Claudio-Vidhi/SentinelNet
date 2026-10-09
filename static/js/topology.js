@@ -3971,11 +3971,13 @@
         const vendor = (n.vendor && n.vendor !== 'discovered') ? n.vendor : 'cisco';
         const msg = tr('topoPromoteToManagedIn', {label: n.label, display_ip: n.display_ip, group: n.group});
         if (!confirm(msg)) return;
+        const location = await pickLocation(n.group);
+        if (!location) return;
         const res = await apiFetch("/api/promote-device", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                node_id: nodeId, ip: n.display_ip, vendor, group: n.group,
+                node_id: nodeId, ip: n.display_ip, vendor, group: n.group, location,
                 // Eredita ciò che è già stato scoperto via CDP/LLDP, incluso il
                 // nome eventualmente rinominato.
                 model: n.model || '',
