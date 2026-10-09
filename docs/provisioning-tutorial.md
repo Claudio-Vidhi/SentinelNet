@@ -341,7 +341,7 @@ Switch `#provDeliveryMode` to **Push via SSH** to reveal `#provSshFields`:
 | `#provSshHost`, `#provSshPort` | The address the device answers on **now**, not the one you are about to give it. |
 | `#provSshUser`, `#provSshPass` | Credentials the device has now. |
 | `#provSshSecret` | **Left empty, the login password is used as the enable secret.** |
-| `#provSshSite` | See §6.2. Default "Automatica (da inventario)". |
+| `#provSshProbe` | See §6.2. Default "Automatica (da inventario)". |
 
 Then **Applica via SSH**. What happens on the server:
 
@@ -367,7 +367,7 @@ this order ([core/net_ssh.py](../core/net_ssh.py), pinned by
 1. Look the target IP up in the inventory. If it belongs to a probe in `jump`
    mode, tunnel through that probe's bastion.
 2. Only if the inventory lookup finds **nothing**, use the probe you named in
-   `#provSshSite`.
+   `#provSshProbe`.
 3. Tunnel only if that named probe is in `jump` mode. Naming a `central` or
    `agent` probe changes nothing.
 
@@ -440,7 +440,7 @@ Neither generating nor pushing touches the inventory. Go to the sibling sub-tab,
 
 1. **Tenant** `#devGroupSelect` (`#btnInlineNewTenant` creates one inline).
 2. **Probe** `#devProbeSelect` — for a device behind a bastion, the same
-   bastion probe you named in `#provSshSite`. From now on the probe is resolved from
+   bastion probe you named in `#provSshProbe`. From now on the probe is resolved from
    the inventory and you never name it again.
 3. **IP** `#devIp` — the management address the day-0 config just set.
 4. **Vendor engine** `#devVendor`.
@@ -483,7 +483,7 @@ too.
 Symptom: `status: error` with a connection timeout or "no route", on a device
 you know the bastion can reach.
 
-Cause: `#provSshSite` left on "Automatica (da inventario)". A day-0 device is
+Cause: `#provSshProbe` left on "Automatica (da inventario)". A day-0 device is
 not in the inventory, so there is nothing to resolve and the push is dialled
 directly from central (§6.2).
 

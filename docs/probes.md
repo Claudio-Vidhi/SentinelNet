@@ -15,7 +15,7 @@ devices:
 
 | Mode | How it works | When to use it |
 |---|---|---|
-| **Direct (central server)** (Mode A) | Central opens SSH connections directly to remote devices through site-to-site VPN routing. No extra process. | Stable site-to-site VPN, remote subnets directly reachable from central. |
+| **Direct mode** (Mode A, central server) | Central opens SSH connections directly to remote devices through site-to-site VPN routing. No extra process. | Stable site-to-site VPN, remote subnets directly reachable from central. |
 | **Agent probe** (Mode B) | A lightweight process (`services/probe_agent.py`) runs on a server or VM inside the site and connects **outbound** to central over HTTPS. It pushes inventory, MAC tables and status; CLI commands travel through a job queue. | NAT or firewalls that block inbound connections to the site, an unstable VPN, or a requirement to keep credentials inside the site. |
 | **Bastion probe** (Mode C) | Central opens one SSH connection to a bastion host inside the customer's network and tunnels every device SSH session through it (`core/net_ssh.py`, `direct-tcpip` channel). Nothing is installed at the site beyond the bastion's own `sshd`. | Customer refuses any installed agent or software, and grants only SSH access to a single Linux host that can reach the managed devices. |
 
@@ -36,8 +36,8 @@ see [hardening.md](hardening.md) section 6 for restarting it from the dashboard
 there. Central being on Windows says nothing about the probes: their agents
 still need Linux.
 
-A probe whose only available host is Windows is a **bastion probe** (Mode C) or
-Direct (central server) (Mode A), not an agent probe.
+A probe whose only available host is Windows is a **bastion probe** (Mode C) or a
+direct-mode probe (Mode A, central server), not an agent probe.
 
 ---
 
@@ -87,7 +87,7 @@ Key principles:
    is "not measurable" rather than a guessed "offline" — the same tri-state a
    bastion probe uses. The predicates are
    `probe_manager.has_direct_path()` (false for `jump` **and** `agent`) and
-   `probe_manager.is_agent_site()` (the operation belongs to the agent, not
+   `probe_manager.is_agent_probe()` (the operation belongs to the agent, not
    merely the network path). A probe id central does not know keeps its direct
    path, which is what lets the agent run this same code over its own
    inventory.
@@ -136,7 +136,7 @@ Key principles:
 > so no probe can write another's *record* — but `detected_versions.json` and
 > the hostname store are keyed by IP alone across the whole product, so the
 > second probe's device resolves to the first one's row. This predates the
-> agent relay and applies equally to a Direct (central server) probe; it is an inventory
+> agent relay and applies equally to a direct-mode probe; it is an inventory
 > keying limitation, not an authentication one.
 
 ---
@@ -497,7 +497,7 @@ device" stays broken.
 
 | Capability | Why it works |
 |---|---|
-| CLI collection: inventory, version, config backup (`core/core_engine.py:313,511,555,602`) | netmiko over a `direct-tcpip` channel |
+| CLI collection: inventory, version, config backup (`core/core_engine.py`) | netmiko over a `direct-tcpip` channel |
 | MAC table and ARP collection (`collectors/mac_collector.py`, `collectors/arp_collector.py`) | same |
 | Port actions (`services/port_action.py`) | same |
 | Switch day-0 provisioning via CLI | same, but pick the probe in the **Target probe** selector on the SSH delivery panel: a day-0 device is not in the inventory yet, so the probe cannot be derived from its IP. A FortiGate day-0 config is not pushed by SentinelNet at all, so nothing crosses the bastion |
@@ -510,7 +510,7 @@ connection error if you try):**
 
 | Capability | Why |
 |---|---|
-| ICMP ping monitor (`services/ping_monitor.py:59`, `collectors/network_scanner._ping`) | ICMP is not TCP; an SSH channel cannot carry it |
+| ICMP ping monitor (`services/ping_monitor.py`, `collectors/network_scanner._ping`) | ICMP is not TCP; an SSH channel cannot carry it |
 | Subnet scan and discovery from the central | same, plus it needs broadcast/ARP adjacency |
 | Syslog reception, NetFlow/flow ingestion | inbound UDP from devices to us; the bastion never initiates back |
 | FortiGate REST, and any other `requests`-based vendor API | needs a listening local port, not a channel — not built |

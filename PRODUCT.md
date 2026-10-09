@@ -93,7 +93,7 @@ the cost of the others:
 Deployment: PyInstaller executable (with a Windows setup) and Docker image,
 both built from the same tree; the app opens a browser at `localhost:8000`. First start is a setup wizard
 that creates the local administrator. Devices are reached over SSH, vendor REST
-and SNMP from the management LAN; remote sites via site agents.
+and SNMP from the management LAN; remote sites via probe agents.
 
 ## Capabilities and Constraints
 
@@ -145,7 +145,7 @@ and SNMP from the management LAN; remote sites via site agents.
 ## Evidence on Hand
 
 - Real engineering documentation: `docs/` (architecture, principles, collectors,
-  operations, hardening, remote-sites) and `docs/adr/` for decision rationale.
+  operations, hardening, probes) and `docs/adr/` for decision rationale.
 - Public GitHub repository, MIT-licensed, plus a published Docker image.
 - Working product with real deployments behind it.
 - **Absent — must not be fabricated:** testimonials, named customers, logos,
