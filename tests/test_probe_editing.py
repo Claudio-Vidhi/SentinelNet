@@ -63,15 +63,17 @@ class TestProbeEditingApi(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.text)
         return next(s for s in r.json()["probes"] if s["id"] == probe_id)
 
-    def test_name_and_subnets_change_after_creation(self):
+    def test_name_changes_and_subnets_come_from_locations(self):
+        from services import inventory_manager, location_manager
         sid = self._create("Prima")
         r = self.client.post("/api/probes/update", headers=self.h,
-                             json={"id": sid, "name": "Dopo",
-                                   "subnets": ["10.21.0.0/24", "10.22.0.0/24"]})
+                             json={"id": sid, "name": "Dopo"})
         self.assertEqual(r.status_code, 200, r.text)
-        probe = self._probe(sid)
-        self.assertEqual(probe["name"], "Dopo")
-        self.assertEqual(probe["subnets"], ["10.21.0.0/24", "10.22.0.0/24"])
+        self.assertEqual(self._probe(sid)["name"], "Dopo")
+        inventory_manager.add_group("probeedit-org")
+        location_manager.create_location("probeedit-org", "Sede Dopo", probe=sid,
+                                         subnets=["10.21.0.0/24", "10.22.0.0/24"])
+        self.assertEqual(self._probe(sid)["subnets"], ["10.21.0.0/24", "10.22.0.0/24"])
 
     def test_switching_to_agent_issues_a_token_once(self):
         sid = self._create("Diventa-Agente")
