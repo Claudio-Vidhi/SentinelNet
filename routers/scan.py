@@ -19,7 +19,7 @@ from routers.deps import get_current_user, require_operator, user_group_scope
 from collectors.network_scanner import parse_network, scan_subnet
 from core import core_engine
 from security import crypto_vault, identity_manager
-from services import site_manager
+from services import probe_manager
 
 router = APIRouter(dependencies=[Depends(require_tab("tab-devices"))], tags=["Scan"])
 
@@ -36,20 +36,20 @@ _scan_jobs: dict[str, dict] = {}
 _scan_jobs_lock = threading.Lock()
 
 
-def _site_for_network(hosts: list[str]):
+def _probe_for_network(hosts: list[str]):
     """Return the site whose declared subnet contains this scan's targets, or
     None. Uses the first host as a proxy for the whole requested range."""
     if not hosts:
         return None
     addr = ipaddress.ip_address(hosts[0])
-    for site in site_manager.list_sites():
-        for raw in site.get("subnets") or []:
+    for probe in probe_manager.list_probes():
+        for raw in probe.get("subnets") or []:
             try:
                 net = ipaddress.ip_network(str(raw).strip(), strict=False)
             except ValueError:
                 continue
             if addr in net:
-                return site
+                return probe
     return None
 
 def _run_scan_job(job_id: str, req: SubnetScanRequest):
@@ -83,8 +83,8 @@ def start_subnet_scan(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    site = _site_for_network(hosts)
-    if site and not site_manager.has_direct_path(site["id"]):
+    probe = _probe_for_network(hosts)
+    if probe and not probe_manager.has_direct_path(probe["id"]):
         raise HTTPException(status_code=409,
                             detail="Sito jump: la scansione ICMP non e' possibile.")
 

@@ -225,7 +225,7 @@ def configure_rate_limit(rpm) -> None:
     _rate_limiter.configure(rpm)
 
 
-def build_tenant_context(tenant: str, *, devices=None, group_info=None, site=None,
+def build_tenant_context(tenant: str, *, devices=None, group_info=None, probe=None,
                           mac_stats=None, mac_recent=None, scan_summary=None,
                           max_devices=100, max_recent=15) -> str:
     """Builds a compact context block (markdown) with the relevant information
@@ -237,9 +237,9 @@ def build_tenant_context(tenant: str, *, devices=None, group_info=None, site=Non
     tenant/group before passing them here (this function applies no filtering,
     it only formats).
 
-    - ``devices``: list of inventory dicts (IP/Hostname/Vendor/Group/Site).
+    - ``devices``: list of inventory dicts (IP/Hostname/Vendor/Group/Probe).
     - ``group_info``: dict with the group/site 'description' (from groups.json).
-    - ``site``: dict from sites.json (mode/subnets/last_seen), or a list of such
+    - ``probe``: dict from probes.json (mode/subnets/last_seen), or a list of such
       dicts if the tenant covers multiple VPN sites.
     - ``mac_stats``: dict {sightings, unique_macs, switches, retention_days}.
     - ``mac_recent``: list of recent MAC sightings (already filtered).
@@ -254,8 +254,8 @@ def build_tenant_context(tenant: str, *, devices=None, group_info=None, site=Non
         if desc:
             lines.append(f"Descrizione: {desc}")
 
-    sites = site if isinstance(site, list) else ([site] if site else [])
-    for s in sites:
+    probes = probe if isinstance(probe, list) else ([probe] if probe else [])
+    for s in probes:
         lines.append(
             f"Config sito VPN '{s.get('name', s.get('id', '?'))}': mode={s.get('mode', '?')}, "
             f"subnets={', '.join(s.get('subnets') or []) or '(nessuna)'}, "
@@ -266,7 +266,7 @@ def build_tenant_context(tenant: str, *, devices=None, group_info=None, site=Non
     for d in devices[:max_devices]:
         lines.append(
             f"- {d.get('IP', '?')} | {d.get('Hostname', '') or '(senza hostname)'} | "
-            f"vendor={d.get('Vendor', '?')} | site={d.get('Site', 'central')}"
+            f"vendor={d.get('Vendor', '?')} | probe={d.get('Probe', 'central')}"
         )
     if len(devices) > max_devices:
         lines.append(f"... e altri {len(devices) - max_devices} dispositivi (troncato).")

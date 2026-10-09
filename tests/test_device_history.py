@@ -18,7 +18,7 @@ from services import device_history, inventory_manager
 
 
 def _row(ip, group="tenant-a", **kw):
-    r = {"IP": ip, "Vendor": "cisco", "Profile": "ios", "Group": group, "Site": "central",
+    r = {"IP": ip, "Vendor": "cisco", "Profile": "ios", "Group": group, "Probe": "central",
          "Username": "admin", "Password": crypto_vault.encrypt_password("pw1")}
     r.update(kw)
     return r
@@ -63,7 +63,7 @@ class DeviceHistoryTest(unittest.TestCase):
             # the line at 900 is after the first live event: live owns it
             (100.0, "added", "tenant-b", "198.51.100.7", "baseline"),  # never seen arriving
         ])
-        self.assertEqual(ev[1]["changes"], {"Site": ["central", "branch"]})
+        self.assertEqual(ev[1]["changes"], {"Probe": ["central", "branch"]})
         self.assertEqual(ev[2]["changes"], {})   # same vendor/site: fields unknown
         self.assertEqual(ev[0]["actor"], "admin")
 
@@ -81,10 +81,10 @@ class DeviceHistoryTest(unittest.TestCase):
     def test_diff_added_changed_removed(self):
         old = [_row("192.0.2.1"), _row("192.0.2.2")]
         # Same password re-encrypted: not a change. Site moved: a change.
-        new = [_row("192.0.2.1", Site="branch"), _row("192.0.2.3")]
+        new = [_row("192.0.2.1", Probe="branch"), _row("192.0.2.3")]
         ev = {e["device"]["IP"]: e for e in device_history.diff(old, new)}
         self.assertEqual(ev["192.0.2.1"]["event"], "changed")
-        self.assertEqual(ev["192.0.2.1"]["changes"], {"Site": ["central", "branch"]})
+        self.assertEqual(ev["192.0.2.1"]["changes"], {"Probe": ["central", "branch"]})
         self.assertEqual(ev["192.0.2.2"]["event"], "removed")
         self.assertEqual(ev["192.0.2.3"]["event"], "added")
 

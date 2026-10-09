@@ -40,7 +40,7 @@ class ManualSurvivesOtherWrites(unittest.TestCase):
         im.add_or_update_device("192.0.2.30", "cisco", "", "", "", "", "Generale",
                                 transports={"manual": None})
         im.add_or_update_device("192.0.2.30", "cisco", "", "", "", "", "Generale",
-                                site="central")
+                                probe="central")
         row = next(d for d in im.get_all_devices() if d["IP"] == "192.0.2.30")
         self.assertTrue(im.is_manual(row))
 
@@ -51,9 +51,9 @@ class LocalDevicesFlag(unittest.TestCase):
         import app_server
         from routers.deps import get_current_user
         rows = [{"IP": "192.0.2.31", "Vendor": "cisco", "Group": "Generale",
-                 "Site": "central", "Transports": '{"manual":null}'},
+                 "Probe": "central", "Transports": '{"manual":null}'},
                 {"IP": "192.0.2.32", "Vendor": "cisco", "Group": "Generale",
-                 "Site": "central", "Transports": '{"ssh":22}'}]
+                 "Probe": "central", "Transports": '{"ssh":22}'}]
         app_server.app.dependency_overrides[get_current_user] = \
             lambda: {"sub": "root", "role": "super_admin"}
         self.addCleanup(app_server.app.dependency_overrides.pop, get_current_user, None)

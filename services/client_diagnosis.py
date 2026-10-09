@@ -87,7 +87,7 @@ def _pos_candidates(entries: list, l2rows: list, prefer_ip=None) -> list:
             continue
         seen.add(t)
         out.append({
-            "tenant": t, "site": e.get("site"),
+            "tenant": t, "site": e.get("probe"),
             "mac": e.get("mac"), "ip": e.get("ip"),
             "client_type": e.get("client_type"),
             "switch_ip": e.get("switch_ip"), "switch_name": e.get("switch_name"),
@@ -106,7 +106,7 @@ def _pos_candidates(entries: list, l2rows: list, prefer_ip=None) -> list:
             continue
         seen.add(t)
         out.append({
-            "tenant": t, "site": r.get("site"),
+            "tenant": t, "site": r.get("probe"),
             "mac": r.get("mac"), "ip": None, "client_type": None,
             "switch_ip": r.get("switch_ip"), "switch_name": r.get("switch_name"),
             "switch_port": r.get("interface"), "port_vlan": r.get("vlan"),
@@ -228,7 +228,7 @@ def _position(client: str, is_mac: bool, tenants, gateway_override: Optional[str
 def get_tenant_gateway_candidates(tenant: Optional[str] = None, tenants=None) -> list:
     """Gateway e host L3 candidati per un tenant (o scope utente)."""
     from collectors import mac_history
-    from services import inventory_manager, site_manager
+    from services import inventory_manager, probe_manager
 
     out = []
     seen = set()
@@ -252,7 +252,7 @@ def get_tenant_gateway_candidates(tenant: Optional[str] = None, tenants=None) ->
 
     # Le sedi non portano un tenant: quelle visibili sono quelle dove il
     # chiamante ha almeno un apparato, quindi si raccolgono qui.
-    allowed_sites = set() if scope_keys is not None else None
+    allowed_probes = set() if scope_keys is not None else None
 
     devices = inventory_manager.get_all_devices()
     for d in devices:
@@ -260,8 +260,8 @@ def get_tenant_gateway_candidates(tenant: Optional[str] = None, tenants=None) ->
         d_tenant = d.get("Group") or d.get("tenant") or "Generale"
         if scope_keys is not None and _tenant_key(d_tenant) not in scope_keys:
             continue
-        if allowed_sites is not None:
-            allowed_sites.add(d.get("Site") or "central")
+        if allowed_probes is not None:
+            allowed_probes.add(d.get("Probe") or "central")
         if d_ip and d_ip not in seen:
             seen.add(d_ip)
             out.append({
@@ -272,10 +272,10 @@ def get_tenant_gateway_candidates(tenant: Optional[str] = None, tenants=None) ->
                 "source": "inventory",
             })
 
-    for site in site_manager.list_sites():
-        if allowed_sites is not None and site.get("id") not in allowed_sites:
+    for probe in probe_manager.list_probes():
+        if allowed_probes is not None and probe.get("id") not in allowed_probes:
             continue
-        for sub in site.get("subnets") or []:
+        for sub in probe.get("subnets") or []:
             try:
                 import ipaddress
                 net = ipaddress.IPv4Network(str(sub).strip(), strict=False)
@@ -286,9 +286,9 @@ def get_tenant_gateway_candidates(tenant: Optional[str] = None, tenants=None) ->
                         seen.add(first_ip)
                         out.append({
                             "ip": first_ip,
-                            "name": f"Subnet Gateway ({site.get('name') or site.get('id')})",
+                            "name": f"Subnet Gateway ({probe.get('name') or probe.get('id')})",
                             "type": "Subnet GW",
-                            "tenant": site.get("id"),
+                            "tenant": probe.get("id"),
                             "source": "subnet",
                         })
             except ValueError:
@@ -738,7 +738,7 @@ def resolve_endpoint(ip: str, tenants=None) -> dict:
         if e.get("ip") != ip:
             continue
         return {"known": True, "derived": "observed-arp",
-                "tenant": e.get("tenant"), "site": e.get("site"),
+                "tenant": e.get("tenant"), "site": e.get("probe"),
                 "gateway_ip": e.get("source_ip"),
                 "gateway_type": e.get("source_type")}
 
@@ -747,9 +747,9 @@ def resolve_endpoint(ip: str, tenants=None) -> dict:
     except ValueError:
         return {"known": False, "reason": f"'{ip}' non e' un indirizzo IP"}
 
-    from services import site_manager
-    for site in site_manager.list_sites():
-        for raw in site.get("subnets") or []:
+    from services import probe_manager
+    for probe in probe_manager.list_probes():
+        for raw in probe.get("subnets") or []:
             try:
                 net = ipaddress.ip_network(str(raw).strip(), strict=False)
             except ValueError:
@@ -758,7 +758,7 @@ def resolve_endpoint(ip: str, tenants=None) -> dict:
                 continue
             if addr in net:
                 return {"known": True, "derived": "declared-subnet",
-                        "tenant": None, "site": site.get("id"),
+                        "tenant": None, "site": probe.get("id"),
                         "subnet": str(net), "gateway_ip": None,
                         "gateway_type": None}
 
@@ -842,15 +842,15 @@ def _resolve_fortigate(position: dict, tenants=None) -> dict:
             "candidates": fortinets}
 
 
-def _is_agent_site(site_id: str) -> bool:
+def _is_agent_probe(probe_id: str) -> bool:
     """La sede è gestita da un agente (il centrale non raggiunge i suoi
     apparati in REST diretta)."""
-    from services import site_manager
-    site = site_manager.get_site(site_id or "central")
-    return bool(site and site.get("mode") == "agent")
+    from services import probe_manager
+    probe = probe_manager.get_probe(probe_id or "central")
+    return bool(probe and probe.get("mode") == "agent")
 
 
-def _relay_policy_lookup(device: dict, site_id: str, src_ip: str, dest: str,
+def _relay_policy_lookup(device: dict, probe_id: str, src_ip: str, dest: str,
                          dest_port, protocol: str) -> dict:
     """Policy lookup su un FortiGate di una sede agent, tramite relay.
 
@@ -862,7 +862,7 @@ def _relay_policy_lookup(device: dict, site_id: str, src_ip: str, dest: str,
     accoda e si torna subito. Il risultato viene raccolto alla chiamata
     successiva — il bottone "Rilancia" del referto esiste per questo.
     """
-    from services import fortigate_service, site_manager
+    from services import fortigate_service, probe_manager
 
     path = "monitor/firewall/policy-lookup"
     # Stessi nomi di parametro della lookup diretta: l'agente inoltra la query
@@ -872,7 +872,7 @@ def _relay_policy_lookup(device: dict, site_id: str, src_ip: str, dest: str,
         src_ip, dest, protocol, dest_port)
     spec = json.dumps({"path": path, "params": params})
 
-    done = site_manager.find_recent_rest_result(site_id, device["IP"], path)
+    done = probe_manager.find_recent_rest_result(probe_id, device["IP"], path)
     if done and done["status"] == "done":
         try:
             data = json.loads(done["result"])
@@ -884,14 +884,14 @@ def _relay_policy_lookup(device: dict, site_id: str, src_ip: str, dest: str,
         return {"known": False, "source": "relay",
                 "reason": f"l'agente ha risposto con un errore: {done['result']}"}
 
-    if not site_manager.has_pending_rest_job(site_id, device["IP"], path):
+    if not probe_manager.has_pending_rest_job(probe_id, device["IP"], path):
         try:
-            site_manager.enqueue_job(site_id, device["IP"], spec,
+            probe_manager.enqueue_job(probe_id, device["IP"], spec,
                                      requested_by="diagnosi client", kind="rest")
         except ValueError as e:
             return {"known": False, "reason": str(e)}
     return {"known": False, "source": "relay", "pending": True,
-            "reason": f"sede '{site_id}' in modalita' agent: richiesta accodata, "
+            "reason": f"sede '{probe_id}' in modalita' agent: richiesta accodata, "
                       "l'agente la eseguira' al prossimo poll (max ~60s). "
                       "Rilancia la diagnosi fra poco."}
 
@@ -912,15 +912,15 @@ def _firewall(client: str, position: dict, dest, dest_port, protocol,
     # Sede agent: il centrale non raggiunge l'apparato. Non si finge di
     # provarci (fallirebbe in timeout): si passa dal relay, che risponde alla
     # domanda che conta davvero — quale policy matcherebbe.
-    site_id = (fgt["device"].get("Site") or "central")
-    if _is_agent_site(site_id):
+    probe_id = (fgt["device"].get("Probe") or "central")
+    if _is_agent_probe(probe_id):
         out = {"known": False, "fortigate": fgt["ip"],
-               "resolved_by": fgt["resolved_by"], "site": site_id,
-               "reason": f"sede '{site_id}' in modalita' agent: il centrale non "
+               "resolved_by": fgt["resolved_by"], "site": probe_id,
+               "reason": f"sede '{probe_id}' in modalita' agent: il centrale non "
                          "raggiunge questo apparato in REST diretta"}
         if dest and target:
             out["policy_lookup"] = _relay_policy_lookup(
-                fgt["device"], site_id, target, dest, dest_port, protocol)
+                fgt["device"], probe_id, target, dest, dest_port, protocol)
         return out
 
     data = fortigate_service.diagnose_client(
@@ -930,7 +930,7 @@ def _firewall(client: str, position: dict, dest, dest_port, protocol,
             "resolved_by": fgt["resolved_by"], **data}
 
 
-def _across_sites(position: dict, dest: str, dest_port, protocol,
+def _across_probes(position: dict, dest: str, dest_port, protocol,
                   tenants) -> dict:
     """Il pezzo che manca quando sorgente e destinazione stanno in due sedi.
 
@@ -1301,7 +1301,7 @@ def diagnose(client: str, dest: Optional[str] = None,
     _section(result, "firewall", _firewall, client, position, dest,
              dest_port, protocol, tenants)
     if dest:
-        _section(result, "across_sites", _across_sites, position, dest,
+        _section(result, "across_sites", _across_probes, position, dest,
                  dest_port, protocol, tenants)
     _section(result, "denies", _denies, position, client, dest, tenants)
 

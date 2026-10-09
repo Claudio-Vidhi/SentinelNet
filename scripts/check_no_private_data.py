@@ -54,7 +54,7 @@ TEXT_SUFFIXES = {
 # per quando una regola del .gitignore sparisce senza che nessuno se ne
 # accorga.
 FORBIDDEN_TRACKED = re.compile(
-    r"(^|/)(network_hosts\.csv|users\.json|sites\.json|identities\.json"
+    r"(^|/)(network_hosts\.csv|users\.json|probes\.json|identities\.json"
     r"|groups\.json|vendors\.json|fortigate_tokens\.json|app_settings\.json"
     r"|login_attempts\.json|tenant_snmp\.json|ap_inventory\.json"
     r"|config_baselines\.json|detected_versions\.json|device_models\.json"

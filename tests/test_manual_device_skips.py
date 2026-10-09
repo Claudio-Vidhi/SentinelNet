@@ -10,7 +10,7 @@ from unittest import mock
 os.environ.setdefault("SENTINELNET_DATA_DIR", tempfile.mkdtemp(prefix="sentinelnet_manualskip_"))
 
 MANUAL = {"IP": "192.0.2.50", "Vendor": "linux", "Group": "Generale",
-          "Site": "central", "Transports": '{"manual":null}'}
+          "Probe": "central", "Transports": '{"manual":null}'}
 DEVICES = "services.inventory_manager.get_all_devices"
 TELEMETRY = "services.tenant_telemetry.is_telemetry_enabled"
 
@@ -80,18 +80,18 @@ class CredentialGuard(unittest.TestCase):
 
 class AgentPaths(unittest.TestCase):
     NORMAL = {"IP": "192.0.2.51", "Vendor": "linux", "Group": "Generale",
-              "Site": "site-a", "Transports": ""}
+              "Probe": "site-a", "Transports": ""}
 
     def test_agent_inventory_omits_manual(self):
         from routers import agent
-        manual = dict(MANUAL, Site="site-a")
+        manual = dict(MANUAL, Probe="site-a")
         with mock.patch(DEVICES, return_value=[manual, self.NORMAL]):
             out = agent._devices_for_site("site-a", with_credentials=False)
         self.assertEqual([d["ip"] for d in out], ["192.0.2.51"])
 
     def test_agent_inventory_with_credentials_does_not_raise(self):
         from routers import agent
-        manual = dict(MANUAL, Site="site-a")
+        manual = dict(MANUAL, Probe="site-a")
         with mock.patch(DEVICES, return_value=[manual, self.NORMAL]),              mock.patch("core.device_credentials.get_device_credentials",
                         return_value=("u", "p", "")):
             out = agent._devices_for_site("site-a", with_credentials=True)

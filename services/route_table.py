@@ -168,7 +168,7 @@ def _row(device, entry: dict) -> dict:
     return {
         "device": device.get("Hostname") or device.get("IP"),
         "device_ip": device.get("IP"),
-        "site": device.get("Site") or "central",
+        "site": device.get("Probe") or "central",
         "group": device.get("Group") or "Generale",
         "vendor": (device.get("Vendor") or "").lower(),
         "network": entry.get("ip_mask") or entry.get("network") or "",
@@ -208,12 +208,12 @@ def routable_devices(devices) -> list:
     return [d for d in devices if route_source(d) and d.get("IP")]
 
 
-def _is_agent_site(site_id: str) -> bool:
+def _is_agent_probe(probe_id: str) -> bool:
     """La sede e' gestita da un agente: il centrale non apre SSH verso i suoi
     apparati, li raggiunge solo attraverso la coda dei job."""
-    from services import site_manager
-    site = site_manager.get_site(site_id or "central")
-    return bool(site and site.get("mode") == "agent")
+    from services import probe_manager
+    probe = probe_manager.get_probe(probe_id or "central")
+    return bool(probe and probe.get("mode") == "agent")
 
 
 # --- Ripiego sul backup ------------------------------------------------------
@@ -316,7 +316,7 @@ def _collect_live(device) -> dict:
         # config, with this line as the reason there is no live table.
         return {"device_ip": ip,
                 "error": "dispositivo manuale: rotte dalla config caricata"}
-    if _is_agent_site(device.get("Site") or "central"):
+    if _is_agent_probe(device.get("Probe") or "central"):
         # Provarci finirebbe in timeout: il centrale non ha una rotta verso
         # gli apparati di una sede agent, e fingere di interrogarli
         # allungherebbe ogni refresh di un minuto per niente.

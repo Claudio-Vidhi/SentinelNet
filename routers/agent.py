@@ -11,7 +11,7 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
-from services import site_manager
+from services import probe_manager
 from services import inventory_manager
 from collectors import mac_history
 from security.security_manager import log_audit
@@ -81,14 +81,14 @@ def get_agent_site(request: Request):
     Ritorna il dict della sede agent. 401 se il token non corrisponde."""
     token = request.headers.get("X-Site-Token") or request.headers.get("x-site-token")
     claimed_id = request.headers.get("X-Site-Id") or request.headers.get("x-site-id")
-    site_id = site_manager.authenticate(token)
-    if not site_id or (claimed_id and claimed_id != site_id):
+    probe_id = probe_manager.authenticate(token)
+    if not probe_id or (claimed_id and claimed_id != probe_id):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Token di sede non valido.")
-    site_manager.touch_last_seen(site_id)
-    return site_manager.get_site(site_id)
+    probe_manager.touch_last_seen(probe_id)
+    return probe_manager.get_probe(probe_id)
 
-def _devices_for_site(site_id: str, with_credentials: bool) -> List[dict]:
+def _devices_for_site(probe_id: str, with_credentials: bool) -> List[dict]:
     """I dispositivi che il centrale gestisce per questa sede.
 
     Solo identita' se ``with_credentials`` e' falso. Le credenziali vengono
@@ -99,7 +99,7 @@ def _devices_for_site(site_id: str, with_credentials: bool) -> List[dict]:
     """
     out = []
     for d in inventory_manager.get_all_devices():
-        if d.get("Site") != site_id:
+        if d.get("Probe") != probe_id:
             continue
         if inventory_manager.is_manual(d):
             continue  # an agent must never be handed a device it cannot dial
@@ -121,9 +121,9 @@ def _devices_for_site(site_id: str, with_credentials: bool) -> List[dict]:
 
 @router.post("/api/agent/heartbeat")
 def agent_heartbeat(request: Request, payload: Optional[dict] = None,
-                    site = Depends(get_agent_site)):
+                    probe = Depends(get_agent_site)):
     if payload and isinstance(payload, dict):
-        site_id = site["id"]
+        probe_id = probe["id"]
         updates = {}
         if "syslog_port" in payload:
             updates["syslog_port"] = payload["syslog_port"]
@@ -146,27 +146,27 @@ def agent_heartbeat(request: Request, payload: Optional[dict] = None,
             if key in payload:
                 updates[f"agent_{key}"] = payload[key]
         if updates:
-            site_manager.update_site(site_id, **updates)
-    resp = {"ok": True, "site_id": site["id"], "name": site["name"],
-            "subnets": site.get("subnets", [])}
+            probe_manager.update_probe(probe_id, **updates)
+    resp = {"ok": True, "site_id": probe["id"], "name": probe["name"],
+            "subnets": probe.get("subnets", [])}
     # Push discendente dell'inventario: opzionale per sede, spento di default,
     # cosi' una installazione esistente non cambia comportamento aggiornando.
-    if site.get("central_manages_devices"):
+    if probe.get("central_manages_devices"):
         # Le credenziali viaggiano in chiaro dentro il corpo della risposta:
         # su HTTP sarebbero password in chiaro sulla rete del cliente, cioe'
         # peggio di non avere affatto la funzione. L'identita' dei dispositivi
         # passa comunque, sono solo i segreti a fermarsi.
         secure = request.url.scheme == "https" or             request.headers.get("x-forwarded-proto", "").lower() == "https"
-        resp["devices"] = _devices_for_site(site["id"], with_credentials=secure)
+        resp["devices"] = _devices_for_site(probe["id"], with_credentials=secure)
         resp["credentials_included"] = secure
     return resp
 
 @router.post("/api/agent/inventory")
-def agent_push_inventory(payload: AgentInventorySchema, site = Depends(get_agent_site)):
+def agent_push_inventory(payload: AgentInventorySchema, probe = Depends(get_agent_site)):
     """L'agente spinge il proprio inventario locale: viene rispecchiato sul
     centrale, taggato con la sede. Le credenziali NON sono replicate (i comandi
     passano dal relay, eseguiti in locale dall'agente)."""
-    site_id = site["id"]
+    probe_id = probe["id"]
     n = 0
     existing_groups = {d.get("IP"): d.get("Group") for d in inventory_manager.get_all_devices()}
     for d in payload.devices:
@@ -176,36 +176,36 @@ def agent_push_inventory(payload: AgentInventorySchema, site = Depends(get_agent
         group = req_group or existing_groups.get(d.ip) or "Generale"
         vendor = inventory_manager.normalize_vendor(d.vendor)
         inventory_manager.add_or_update_device(
-            d.ip, vendor, "custom", "", "", "", group, site=site_id)
+            d.ip, vendor, "custom", "", "", "", group, probe=probe_id)
         if d.hostname:
             inventory_manager.update_device_hostname(d.ip, d.hostname)
         n += 1
-    log_audit(f"Agente sede '{site_id}': inventario aggiornato ({n} dispositivi).")
+    log_audit(f"Agente sede '{probe_id}': inventario aggiornato ({n} dispositivi).")
     return {"status": "success", "updated": n}
 
 @router.post("/api/agent/mac")
-def agent_push_mac(payload: AgentMacSchema, site = Depends(get_agent_site)):
+def agent_push_mac(payload: AgentMacSchema, probe = Depends(get_agent_site)):
     """L'agente spinge le MAC-table raccolte localmente. Vengono storicizzate con
     attribuzione alla sede (site) per il MAC tracker centrale."""
-    site_id = site["id"]
+    probe_id = probe["id"]
     total = 0
     groups_by_ip = {d.get("IP"): d.get("Group") for d in inventory_manager.get_all_devices()}
     for col in payload.collections:
         summ = mac_history.record_sightings(
             col.rows, switch_ip=col.switch_ip, switch_name=col.switch_name,
-            tenant=groups_by_ip.get(col.switch_ip) or "Generale", site=site_id)
+            tenant=groups_by_ip.get(col.switch_ip) or "Generale", probe=probe_id)
         total += summ.get("new", 0) + summ.get("updated", 0)
     pruned = mac_history.prune()
-    log_audit(f"Agente sede '{site_id}': {len(payload.collections)} MAC-table ricevute "
+    log_audit(f"Agente sede '{probe_id}': {len(payload.collections)} MAC-table ricevute "
               f"({total} avvistamenti, pruned {pruned}).")
     return {"status": "success", "recorded": total, "pruned": pruned}
 
 @router.post("/api/agent/arp")
-def agent_push_arp(payload: AgentArpSchema, site = Depends(get_agent_site)):
+def agent_push_arp(payload: AgentArpSchema, probe = Depends(get_agent_site)):
     """L'agente spinge le tabelle ARP raccolte localmente: e' cio' che da' un
     IP ai client della sede remota. Senza, la MAC table dice a quale porta
     stanno ma non chi sono, e ogni vista a valle parte dall'IP."""
-    site_id = site["id"]
+    probe_id = probe["id"]
     groups_by_ip = {d.get("IP"): d.get("Group") for d in inventory_manager.get_all_devices()}
     total = 0
     for col in payload.collections:
@@ -215,22 +215,22 @@ def agent_push_arp(payload: AgentArpSchema, site = Depends(get_agent_site)):
             # Stessa attribuzione della MAC table: il tenant e' quello
             # dell'apparato che ha raccolto, la sede e' quella dell'agente
             # autenticato — mai un valore scelto dall'agente stesso.
-            tenant=groups_by_ip.get(col.source_ip) or "Generale", site=site_id)
+            tenant=groups_by_ip.get(col.source_ip) or "Generale", probe=probe_id)
         total += summ.get("new", 0) + summ.get("updated", 0)
-    log_audit(f"Agente sede '{site_id}': {len(payload.collections)} tabelle ARP "
+    log_audit(f"Agente sede '{probe_id}': {len(payload.collections)} tabelle ARP "
               f"ricevute ({total} binding).")
     return {"status": "success", "recorded": total}
 
 @router.post("/api/agent/status")
-def agent_push_status(payload: AgentStatusSchema, site = Depends(get_agent_site)):
+def agent_push_status(payload: AgentStatusSchema, probe = Depends(get_agent_site)):
     """Esiti del ping che l'agente esegue sui PROPRI dispositivi.
 
     Il centrale non raggiunge i dispositivi di una sede con agente (vedi
-    site_manager.has_direct_path): questo push e' l'unica fonte di stato
+    probe_manager.has_direct_path): questo push e' l'unica fonte di stato
     up/down per quella sede."""
-    site_id = site["id"]
+    probe_id = probe["id"]
     own = {d.get("IP"): d for d in inventory_manager.get_all_devices()
-           if d.get("Site") == site_id}
+           if d.get("Probe") == probe_id}
     known = inventory_manager.get_detected_versions()
     n = 0
     for d in payload.devices:
@@ -250,19 +250,19 @@ def agent_push_status(payload: AgentStatusSchema, site = Depends(get_agent_site)
     return {"status": "success", "updated": n}
 
 @router.post("/api/agent/backup")
-def agent_push_backup(payload: AgentBackupSchema, site = Depends(get_agent_site)):
+def agent_push_backup(payload: AgentBackupSchema, probe = Depends(get_agent_site)):
     """Config e versione raccolte dall'agente sui propri dispositivi.
 
     Passa dalle STESSE funzioni del triage centrale (backup_store.save_backup e
     update_version_inventory), cosi' mappa, config drift e classificazione per
     modello si popolano senza nuovi lettori."""
-    site_id = site["id"]
+    probe_id = probe["id"]
     device = next((d for d in inventory_manager.get_all_devices()
-                   if d.get("IP") == payload.ip and d.get("Site") == site_id), None)
+                   if d.get("IP") == payload.ip and d.get("Probe") == probe_id), None)
     if device is None:
         raise HTTPException(
             status_code=404,
-            detail=f"Dispositivo {payload.ip} non appartiene alla sede '{site_id}'.")
+            detail=f"Dispositivo {payload.ip} non appartiene alla sede '{probe_id}'.")
     if len(payload.config.encode("utf-8")) > MAX_CONFIG_BYTES:
         raise HTTPException(
             status_code=413,
@@ -287,26 +287,26 @@ def agent_push_backup(payload: AgentBackupSchema, site = Depends(get_agent_site)
         model=payload.model or None, serial=payload.serial or None)
     if payload.hostname:
         inventory_manager.update_device_hostname(payload.ip, payload.hostname)
-    log_audit(f"Agente sede '{site_id}': backup ricevuto per {payload.ip} "
+    log_audit(f"Agente sede '{probe_id}': backup ricevuto per {payload.ip} "
               f"({len(payload.config)} caratteri).")
     return {"status": "success", "file": file_path}
 
 @router.get("/api/agent/jobs")
-def agent_poll_jobs(site = Depends(get_agent_site)):
+def agent_poll_jobs(probe = Depends(get_agent_site)):
     """L'agente preleva i job di comando pendenti (marcati 'running')."""
-    return {"jobs": site_manager.claim_pending_jobs(site["id"])}
+    return {"jobs": probe_manager.claim_pending_jobs(probe["id"])}
 
 @router.post("/api/agent/jobs/{job_id}/result")
 def agent_post_job_result(job_id: str, payload: AgentJobResultSchema,
-                          site = Depends(get_agent_site)):
-    if not site_manager.complete_job(job_id, site["id"], payload.status, payload.result):
+                          probe = Depends(get_agent_site)):
+    if not probe_manager.complete_job(job_id, probe["id"], payload.status, payload.result):
         raise HTTPException(status_code=404, detail="Job non trovato per questa sede.")
     return {"status": "success"}
 
 @router.post("/api/agent/syslog")
-def agent_push_syslog(payload: AgentSyslogBatchSchema, site = Depends(get_agent_site)):
+def agent_push_syslog(payload: AgentSyslogBatchSchema, probe = Depends(get_agent_site)):
     """L'agente spinge un batch di eventi syslog raccolti localmente nella sede remota."""
-    site_id = site["id"]
+    probe_id = probe["id"]
     groups_by_ip = {d.get("IP"): d.get("Group") for d in inventory_manager.get_all_devices()}
     count = 0
     from observability.ingesters import syslog as syslog_parser

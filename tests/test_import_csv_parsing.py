@@ -36,14 +36,14 @@ class TestHeaderRecognition(unittest.TestCase):
         self.assertEqual("Group", _canonical_header("Gruppo"))
         self.assertEqual("Vendor", _canonical_header("Marca"))
 
-    def test_tenant_and_site_are_two_columns_not_one(self):
-        """Prima 'Site' e 'Sede' finivano su Group mentre l'export scriveva
+    def test_tenant_and_probe_are_two_columns_not_one(self):
+        """Prima 'site' e 'sede' finivano su Group mentre l'export scriveva
         entrambe le colonne: reimportare un file esportato riscriveva il
         tenant di ogni apparato con il suo id di sede, in silenzio."""
         for spelling in ("Group", "Gruppo", "Tenant"):
             self.assertEqual("Group", _canonical_header(spelling), spelling)
-        for spelling in ("Site", "Sede"):
-            self.assertEqual("Site", _canonical_header(spelling), spelling)
+        for spelling in ("Probe", "Sonda"):
+            self.assertEqual("Probe", _canonical_header(spelling), spelling)
 
     def test_exported_file_round_trips_without_losing_the_tenant(self):
         """Il caso che rompeva l'onboarding multi-sede: esporta, reimporta,
@@ -56,7 +56,7 @@ class TestHeaderRecognition(unittest.TestCase):
         self.assertEqual(1, len(rows))
         _line, rec = rows[0]
         self.assertEqual("Tenant_Milano", rec["Group"])
-        self.assertEqual("sede-milano", rec["Site"])
+        self.assertEqual("sede-milano", rec["Probe"])
 
     def test_unknown_column_is_none_not_an_error(self):
         self.assertIsNone(_canonical_header("Note"))

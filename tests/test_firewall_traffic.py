@@ -24,11 +24,11 @@ from services import firewall_traffic, fortigate_service  # noqa: E402
 PASS = "PasswordSicura1!"
 
 FGT_A = {"IP": "192.0.2.1", "Hostname": "fw-edge", "Vendor": "fortinet",
-         "Group": "sede-a", "Site": "central"}
+         "Group": "sede-a", "Probe": "central"}
 FGT_B = {"IP": "192.0.2.2", "Hostname": "fw-dc", "Vendor": "fortinet",
-         "Group": "sede-b", "Site": "central"}
+         "Group": "sede-b", "Probe": "central"}
 SWITCH = {"IP": "192.0.2.3", "Hostname": "sw-core", "Vendor": "cisco",
-          "Group": "sede-a", "Site": "central"}
+          "Group": "sede-a", "Probe": "central"}
 
 POLICIES_A = [
     {"policyid": 10, "name": "LAN-to-WAN", "status": "enable", "action": "accept",

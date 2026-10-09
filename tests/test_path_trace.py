@@ -27,11 +27,11 @@ from services import fortigate_service, path_trace, route_table  # noqa: E402
 PASS = "PasswordSicura1!"
 
 FW_EDGE = {"IP": "192.0.2.1", "Hostname": "fw-edge", "Vendor": "fortinet",
-           "Group": "sede-a", "Site": "central"}
+           "Group": "sede-a", "Probe": "central"}
 FW_DC = {"IP": "192.0.2.2", "Hostname": "fw-dc", "Vendor": "fortinet",
-         "Group": "sede-a", "Site": "central"}
+         "Group": "sede-a", "Probe": "central"}
 SWITCH = {"IP": "192.0.2.3", "Hostname": "sw-core", "Vendor": "cisco",
-          "Group": "sede-a", "Site": "central"}
+          "Group": "sede-a", "Probe": "central"}
 
 
 def _row(device, network, rtype, gateway="", interface="", distance=None, metric=0):

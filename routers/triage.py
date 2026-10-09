@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from routers.deps import require_tab
 from pydantic import BaseModel, Field
 
-from services import inventory_manager, site_manager, triage_scheduler
+from services import inventory_manager, probe_manager, triage_scheduler
 from core import core_engine
 from core.ssh_pool import run_ssh
 from security.security_manager import log_audit
@@ -161,14 +161,14 @@ def run_triage(payload: TriageRunRequest = TriageRunRequest(),
     for d in devices:
         if inventory_manager.is_manual(d):
             continue  # its config is uploaded by hand; _manual_refusal backs this up
-        if site_manager.is_agent_site(d.get('Site')):
+        if probe_manager.is_agent_probe(d.get('Probe')):
             # Il centrale non apre SSH verso una sede con agente: la
             # richiesta diventa un job che l'agente ritira al prossimo
             # polling. Con l'agente offline la coda crescerebbe senza
             # limite a ogni richiesta: se un job di triage per questo
             # apparato e' gia' pendente, non se ne accoda un altro.
-            if not site_manager.has_pending_triage_job(d['Site'], d['IP']):
-                site_manager.enqueue_job(d['Site'], d['IP'], "",
+            if not probe_manager.has_pending_triage_job(d['Probe'], d['IP']):
+                probe_manager.enqueue_job(d['Probe'], d['IP'], "",
                                          requested_by=current_user.get('sub', ''),
                                          kind="triage")
             queued += 1
@@ -305,7 +305,7 @@ def ping_check(payload: PingCheckRequest, current_user = Depends(require_operato
     results: Dict[str, Optional[bool]] = {}
 
     def _ping(d):
-        if not site_manager.has_direct_path(d.get('Site')):
+        if not probe_manager.has_direct_path(d.get('Probe')):
             results[d['IP']] = None
             return
         from collectors.network_scanner import _ping as icmp_ping
@@ -357,7 +357,7 @@ def ping_single(ip: str, current_user = Depends(require_operator)):
     alive: Optional[bool]
     # A manual device is never probed either: its status stays "manual".
     if _dev is not None and (inventory_manager.is_manual(_dev)
-                             or not site_manager.has_direct_path(_dev.get('Site'))):
+                             or not probe_manager.has_direct_path(_dev.get('Probe'))):
         alive = None
     else:
         from collectors.network_scanner import _ping as icmp_ping

@@ -7,24 +7,24 @@ import pathlib
 import tempfile
 import unittest
 
-_TMP = tempfile.mkdtemp(prefix="sentinelnet_dev_site_")
+_TMP = tempfile.mkdtemp(prefix="sentinelnet_dev_probe_")
 os.environ["SENTINELNET_DATA_DIR"] = _TMP
-os.environ.setdefault("SENTINELNET_JWT_SECRET", "test-secret-dev-site-gui")
+os.environ.setdefault("SENTINELNET_JWT_SECRET", "test-secret-dev-probe-gui")
 
 from fastapi.testclient import TestClient
 import app_server
-from services import inventory_manager, site_manager
+from services import inventory_manager, probe_manager
 from security import user_manager
 import bcrypt
 
-ADMIN = "admin_dev_site"
+ADMIN = "admin_dev_probe"
 ADMIN_PW = "adminpw12345"
-OPERATOR = "op_dev_site"
+OPERATOR = "op_dev_probe"
 OPERATOR_PW = "oppw12345"
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
-class TestDeviceSiteGui(unittest.TestCase):
+class TestDeviceProbeGui(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.client = TestClient(app_server.app)
@@ -44,43 +44,43 @@ class TestDeviceSiteGui(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         try:
-            site_manager.delete_site("branch-site")
+            probe_manager.delete_probe("branch-probe")
         except Exception:
             pass
 
-    def test_list_sites_accessible_by_operator(self):
+    def test_list_probes_accessible_by_operator(self):
         r = self.client.get("/api/sites", headers=self.op_h)
         self.assertEqual(r.status_code, 200)
         data = r.json()
         self.assertIn("sites", data)
-        site_ids = [s["id"] for s in data["sites"]]
-        self.assertIn("central", site_ids)
+        probe_ids = [s["id"] for s in data["sites"]]
+        self.assertIn("central", probe_ids)
 
     def test_operator_does_not_see_bastion_details(self):
         """A dropdown needs id/name/mode; it does not need the bastion address."""
         r = self.client.get("/api/sites", headers=self.op_h)
         self.assertEqual(r.status_code, 200)
-        for site in r.json()["sites"]:
-            self.assertEqual(set(site), {"id", "name", "mode"})
+        for probe in r.json()["sites"]:
+            self.assertEqual(set(probe), {"id", "name", "mode"})
 
-    def test_admin_still_sees_the_full_site_record(self):
+    def test_admin_still_sees_the_full_probe_record(self):
         r = self.client.get("/api/sites", headers=self.admin_h)
         self.assertEqual(r.status_code, 200)
         central = next(s for s in r.json()["sites"] if s["id"] == "central")
         self.assertIn("subnets", central)
         self.assertNotIn("token_hash", central)
 
-    def test_add_device_with_site(self):
+    def test_add_device_with_probe(self):
         # Create a jump site
-        site_manager.create_site(
-            name="Branch Site",
+        probe_manager.create_probe(
+            name="Branch Probe",
             mode="jump",
             subnets=["198.51.100.0/24"],
             jump_host="198.51.100.10",
             jump_port=22,
             jump_identity="id-fake",
         )
-        sid = "branch-site"
+        sid = "branch-probe"
 
         # Add device targeting this site
         payload = {
@@ -97,27 +97,27 @@ class TestDeviceSiteGui(unittest.TestCase):
         # Verify device record has site
         dev = next((d for d in inventory_manager.get_all_devices() if d["IP"] == "203.0.113.55"), None)
         self.assertIsNotNone(dev)
-        self.assertEqual(dev.get("Site"), sid)
+        self.assertEqual(dev.get("Probe"), sid)
 
-    def test_add_device_rejects_invalid_site(self):
+    def test_add_device_rejects_invalid_probe(self):
         payload = {
             "ip": "192.0.2.56",
             "vendor": "cisco",
             "profile": "default",
             "group": "Generale",
-            "site": "nonexistent-site-id",
+            "site": "nonexistent-probe-id",
             "ssh_port": 22,
         }
         r = self.client.post("/api/add-device", headers=self.op_h, json=payload)
         self.assertEqual(r.status_code, 400)
         self.assertIn("inesistente", r.json()["detail"])
 
-    def test_gui_template_has_dev_site_select(self):
+    def test_gui_template_has_dev_probe_select(self):
         html = (ROOT / "templates/dashboard.html").read_text(encoding="utf-8")
         self.assertIn('id="devSiteSelect"', html)
         self.assertIn('data-i18n="lblDeviceSite"', html)
 
-    def test_js_has_populate_site_options(self):
+    def test_js_has_populate_probe_options(self):
         js = (ROOT / "static/js/provisioning.js").read_text(encoding="utf-8")
         self.assertIn("populateSiteOptions", js)
         self.assertIn("devSiteSelect", js)

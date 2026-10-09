@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from security.security_manager import log_audit
 from routers.deps import require_unscoped_admin, require_operator, user_group_scope, is_unscoped_admin
 from routers.commands import command_allowed, is_command_safe, _bypass_note
-from services import inventory_manager, site_manager
+from services import inventory_manager, probe_manager
 
 router = APIRouter(tags=["Sites"])
 
@@ -37,7 +37,7 @@ class SiteSchema(BaseModel):
     name: str
     mode: str = "central"          # "central" | "agent" | "jump"
     subnets: List[str] = []
-    # Bastion fields, required by site_manager only when mode == "jump".
+    # Bastion fields, required by probe_manager only when mode == "jump".
     jump_host: Optional[str] = None
     jump_port: Optional[int] = None
     jump_identity: Optional[str] = None
@@ -81,10 +81,10 @@ def list_sites_ep(current_user = Depends(require_operator)):
     # admins who configure them: a dropdown does not need any of it.
     # (Comment, not a docstring: a docstring here becomes the endpoint's
     # OpenAPI description and changes the contract snapshot.)
-    sites = site_manager.list_sites()
+    probes = probe_manager.list_probes()
     if not is_unscoped_admin(current_user):
-        sites = [{"id": s["id"], "name": s["name"], "mode": s["mode"]} for s in sites]
-    return {"sites": sites}
+        probes = [{"id": s["id"], "name": s["name"], "mode": s["mode"]} for s in probes]
+    return {"sites": probes}
 
 def _pin_or_409(host: str, port: int, fp: str) -> None:
     """Pin the key the draft test saw, or refuse: the confirmation is only
@@ -102,26 +102,26 @@ def create_site_ep(payload: SiteSchema, current_user = Depends(require_unscoped_
     if fp:
         _pin_or_409((payload.jump_host or "").strip(), payload.jump_port or 22, fp)
     try:
-        site, token = site_manager.create_site(
+        probe, token = probe_manager.create_probe(
             payload.name, payload.mode, payload.subnets,
             jump_host=payload.jump_host, jump_port=payload.jump_port,
             jump_identity=payload.jump_identity,
             device_identity=payload.device_identity)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    log_audit(f"Sede '{site['id']}' (mode: {payload.mode}) creata da '{who}'.")
+    log_audit(f"Sede '{probe['id']}' (mode: {payload.mode}) creata da '{who}'.")
     if fp:
-        site_manager.mark_bastion_verified(site["id"])
-        site = site_manager.get_site(site["id"]) or site
-        log_audit(f"Sede '{site['id']}': impronta del bastione {fp} confermata da '{who}'.")
+        probe_manager.mark_bastion_verified(probe["id"])
+        probe = probe_manager.get_probe(probe["id"]) or probe
+        log_audit(f"Sede '{probe['id']}': impronta del bastione {fp} confermata da '{who}'.")
     elif payload.mode == "jump":
-        log_audit(f"Sede '{site['id']}' salvata con bastione non verificato da '{who}'.")
+        log_audit(f"Sede '{probe['id']}' salvata con bastione non verificato da '{who}'.")
     # Il token in chiaro è restituito UNA SOLA VOLTA (poi solo hash su disco).
-    return {"status": "success", "site": site, "token": token}
+    return {"status": "success", "site": probe, "token": token}
 
 @router.post("/api/sites/update", dependencies=[Depends(require_tab("tab-sites"))])
 def update_site_ep(payload: SiteUpdateSchema, current_user = Depends(require_unscoped_admin)):
-    # Only forward jump fields the caller actually supplied: update_site merges
+    # Only forward jump fields the caller actually supplied: update_probe merges
     # kwargs over the stored site before re-validating a jump site (see its
     # docstring), so an explicit None here would clobber an unrelated field
     # (e.g. renaming a jump site) with a blank and make it fail revalidation.
@@ -138,13 +138,13 @@ def update_site_ep(payload: SiteUpdateSchema, current_user = Depends(require_uns
         jump_kwargs["central_manages_devices"] = bool(payload.central_manages_devices)
     who = current_user.get('sub')
     fp = payload.confirmed_fingerprint
-    existing = site_manager.get_site(payload.id)
+    existing = probe_manager.get_probe(payload.id)
     if fp and existing:
         host = (payload.jump_host or existing.get("jump_host") or "").strip()
         port = payload.jump_port or existing.get("jump_port") or 22
         _pin_or_409(host, port, fp)
     try:
-        ok = site_manager.update_site(payload.id, payload.name, payload.mode,
+        ok = probe_manager.update_probe(payload.id, payload.name, payload.mode,
                                       payload.subnets, **jump_kwargs)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -155,27 +155,27 @@ def update_site_ep(payload: SiteUpdateSchema, current_user = Depends(require_uns
     # working, so without this the change only applies once that session dies.
     if any(k in jump_kwargs for k in ("jump_host", "jump_port", "jump_identity")):
         from core import net_ssh
-        net_ssh.invalidate_site(payload.id)
+        net_ssh.invalidate_probe(payload.id)
     # The wizard resends the jump fields on every save: compare the stored
     # bastion before and after, not the presence of the fields.
-    after = site_manager.get_site(payload.id) or {}
+    after = probe_manager.get_probe(payload.id) or {}
     bastion_changed = any((existing or {}).get(k) != after.get(k)
                           for k in ("jump_host", "jump_port", "jump_identity"))
     if fp and existing:
-        site_manager.mark_bastion_verified(payload.id)
+        probe_manager.mark_bastion_verified(payload.id)
         log_audit(f"Sede '{payload.id}': impronta del bastione {fp} confermata da '{who}'.")
     elif bastion_changed:
         log_audit(f"Sede '{payload.id}': bastione modificato senza verifica da '{who}'.")
     log_audit(f"Sede '{payload.id}' aggiornata da '{current_user.get('sub')}'.")
     out: Dict[str, Any] = {"status": "success"}
-    # Passare a 'agent' senza token lascia una sede inservibile: update_site
+    # Passare a 'agent' senza token lascia una sede inservibile: update_probe
     # cambia la modalita' e non ne emette uno, quindi l'agente non ha con cosa
     # autenticarsi e nessuna schermata lo dice. Il token si emette qui, dove
     # il cambio di modalita' e' noto, e non nel browser: cosi' vale anche per
     # chi chiama l'API direttamente.
-    updated = site_manager.get_site(payload.id)
+    updated = probe_manager.get_probe(payload.id)
     if updated and updated.get("mode") == "agent" and not updated.get("has_token"):
-        token = site_manager.regenerate_token(payload.id)
+        token = probe_manager.regenerate_token(payload.id)
         if token:
             out["token"] = token       # in chiaro UNA SOLA VOLTA, come alla creazione
             log_audit(f"Token emesso per la sede '{payload.id}' passata in modalità "
@@ -184,7 +184,7 @@ def update_site_ep(payload: SiteUpdateSchema, current_user = Depends(require_uns
 
 @router.post("/api/sites/delete", dependencies=[Depends(require_tab("tab-sites"))])
 def delete_site_ep(payload: SiteIdSchema, current_user = Depends(require_unscoped_admin)):
-    if not site_manager.delete_site(payload.id):
+    if not probe_manager.delete_probe(payload.id):
         raise HTTPException(status_code=400, detail="Sede non eliminabile o inesistente.")
     log_audit(f"Sede '{payload.id}' eliminata da '{current_user.get('sub')}'.")
     return {"status": "success"}
@@ -197,15 +197,15 @@ async def test_bastion_ep(payload: SiteIdSchema, current_user = Depends(require_
     # rotating the credential on the wrong machine.
     from core import net_ssh
     from core.ssh_pool import run_ssh
-    site = site_manager.get_site(payload.id)
-    if not site:
+    probe = probe_manager.get_probe(payload.id)
+    if not probe:
         raise HTTPException(status_code=404, detail="Sede non trovata.")
-    if site.get("mode") != "jump":
+    if probe.get("mode") != "jump":
         raise HTTPException(status_code=400, detail="La sede non e' in modalita' jump.")
     who = current_user.get('sub')
     try:
         # WP11: il probe SSH del bastione gira sul pool dedicato.
-        fp = await run_ssh(net_ssh.probe_bastion, site)
+        fp = await run_ssh(net_ssh.probe_bastion, probe)
     except net_ssh.BastionAuthError as e:
         log_audit(f"Test bastione sede '{payload.id}' da '{who}': credenziali rifiutate.")
         return {"status": "auth_failed", "message": str(e)}
@@ -215,7 +215,7 @@ async def test_bastion_ep(payload: SiteIdSchema, current_user = Depends(require_
     except Exception as e:
         log_audit(f"Test bastione sede '{payload.id}' da '{who}': irraggiungibile.")
         return {"status": "unreachable", "message": str(e)}
-    site_manager.mark_bastion_verified(payload.id)
+    probe_manager.mark_bastion_verified(payload.id)
     log_audit(f"Test bastione sede '{payload.id}' da '{who}': OK.")
     return {"status": "success", "fingerprint": fp}
 
@@ -251,7 +251,7 @@ async def test_bastion_draft_ep(payload: BastionDraftSchema,
 
 @router.post("/api/sites/regenerate-token", dependencies=[Depends(require_tab("tab-sites"))])
 def regenerate_site_token_ep(payload: SiteIdSchema, current_user = Depends(require_unscoped_admin)):
-    token = site_manager.regenerate_token(payload.id)
+    token = probe_manager.regenerate_token(payload.id)
     if token is None:
         raise HTTPException(status_code=400, detail="Sede inesistente o non in modalità agent.")
     log_audit(f"Token della sede '{payload.id}' rigenerato da '{current_user.get('sub')}'.")
@@ -262,10 +262,10 @@ def site_command_ep(site_id: str, payload: SiteCommandSchema,
                     current_user = Depends(require_operator)):
     """Accoda un comando CLI per un dispositivo di una sede agent. L'agente lo
     preleverà in polling, lo eseguirà localmente e ne posterà il risultato."""
-    site = site_manager.get_site(site_id)
-    if not site:
+    probe = probe_manager.get_probe(site_id)
+    if not probe:
         raise HTTPException(status_code=404, detail="Sede non trovata.")
-    if site.get("mode") != "agent":
+    if probe.get("mode") != "agent":
         raise HTTPException(status_code=400, detail="Il relay comandi è disponibile solo per sedi in modalità agent.")
     if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", payload.ip):
         raise HTTPException(status_code=400, detail="IP non valido.")
@@ -283,7 +283,7 @@ def site_command_ep(site_id: str, payload: SiteCommandSchema,
     if blacklist_bypass:
         log_audit(f"Relay comando in blacklist '{payload.command}' su '{payload.ip}' sede '{site_id}' "
                   f"consentito a '{current_user.get('sub')}' {_bypass_note(current_user)}.")
-    job = site_manager.enqueue_job(site_id, payload.ip, payload.command,
+    job = probe_manager.enqueue_job(site_id, payload.ip, payload.command,
                                    requested_by=current_user.get("sub"),
                                    blacklist_bypass=blacklist_bypass)
     log_audit(f"Comando CLI accodato per sede agent '{site_id}' su '{payload.ip}' "
@@ -292,7 +292,7 @@ def site_command_ep(site_id: str, payload: SiteCommandSchema,
 
 @router.get("/api/command-jobs/{job_id}", dependencies=[Depends(require_tab("tab-sites"))])
 def get_command_job_ep(job_id: str, current_user = Depends(require_operator)):
-    job = site_manager.get_job(job_id)
+    job = probe_manager.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job non trovato.")
     # Job fuori scope: 404 identico al job inesistente, per non confermare
@@ -303,7 +303,7 @@ def get_command_job_ep(job_id: str, current_user = Depends(require_operator)):
 
 @router.get("/api/sites/{site_id}/command-jobs", dependencies=[Depends(require_tab("tab-sites"))])
 def list_site_command_jobs_ep(site_id: str, current_user = Depends(require_operator)):
-    jobs = site_manager.list_jobs(site_id)
+    jobs = probe_manager.list_jobs(site_id)
     scope = user_group_scope(current_user)
     if scope is not None:
         # Filtro, non 403: la lista è la vista dell'utente sulla sede, e deve
@@ -325,12 +325,12 @@ class AgentConfigUpdateSchema(BaseModel):
 @router.post("/api/sites/{site_id}/agent/update", dependencies=[Depends(require_tab("tab-sites"))])
 def agent_self_update_ep(site_id: str, current_user = Depends(require_unscoped_admin)):
     """Accoda un comando RPC di self-update (git pull) per l'agente remoto."""
-    site = site_manager.get_site(site_id)
-    if not site:
+    probe = probe_manager.get_probe(site_id)
+    if not probe:
         raise HTTPException(status_code=404, detail="Sede non trovata.")
-    if site.get("mode") != "agent":
+    if probe.get("mode") != "agent":
         raise HTTPException(status_code=400, detail="Gestione agente disponibile solo per sedi in modalità agent.")
-    job = site_manager.enqueue_job(site_id, "127.0.0.1", "_agent_self_update", requested_by=current_user.get("sub"))
+    job = probe_manager.enqueue_job(site_id, "127.0.0.1", "_agent_self_update", requested_by=current_user.get("sub"))
     log_audit(f"Self-update agent (git pull) accodato per sede '{site_id}' da '{current_user.get('sub')}' (job {job['id']}).")
     return {"status": "queued", "job_id": job["id"]}
 
@@ -338,12 +338,12 @@ def agent_self_update_ep(site_id: str, current_user = Depends(require_unscoped_a
 @router.post("/api/sites/{site_id}/agent/restart", dependencies=[Depends(require_tab("tab-sites"))])
 def agent_restart_ep(site_id: str, current_user = Depends(require_unscoped_admin)):
     """Accoda un comando RPC di restart per l'agente remoto (systemctl auto-restart)."""
-    site = site_manager.get_site(site_id)
-    if not site:
+    probe = probe_manager.get_probe(site_id)
+    if not probe:
         raise HTTPException(status_code=404, detail="Sede non trovata.")
-    if site.get("mode") != "agent":
+    if probe.get("mode") != "agent":
         raise HTTPException(status_code=400, detail="Gestione agente disponibile solo per sedi in modalità agent.")
-    job = site_manager.enqueue_job(site_id, "127.0.0.1", "_agent_restart", requested_by=current_user.get("sub"))
+    job = probe_manager.enqueue_job(site_id, "127.0.0.1", "_agent_restart", requested_by=current_user.get("sub"))
     log_audit(f"Restart agent accodato per sede '{site_id}' da '{current_user.get('sub')}' (job {job['id']}).")
     return {"status": "queued", "job_id": job["id"]}
 
@@ -351,12 +351,12 @@ def agent_restart_ep(site_id: str, current_user = Depends(require_unscoped_admin
 @router.post("/api/sites/{site_id}/agent/logs", dependencies=[Depends(require_tab("tab-sites"))])
 def agent_logs_ep(site_id: str, current_user = Depends(require_unscoped_admin)):
     """Accoda un comando RPC che riporta le ultime righe di journal dell'agente."""
-    site = site_manager.get_site(site_id)
-    if not site:
+    probe = probe_manager.get_probe(site_id)
+    if not probe:
         raise HTTPException(status_code=404, detail="Sede non trovata.")
-    if site.get("mode") != "agent":
+    if probe.get("mode") != "agent":
         raise HTTPException(status_code=400, detail="Gestione agente disponibile solo per sedi in modalità agent.")
-    job = site_manager.enqueue_job(site_id, "127.0.0.1", "_agent_logs", requested_by=current_user.get("sub"))
+    job = probe_manager.enqueue_job(site_id, "127.0.0.1", "_agent_logs", requested_by=current_user.get("sub"))
     log_audit(f"Lettura log agent accodata per sede '{site_id}' da '{current_user.get('sub')}' (job {job['id']}).")
     return {"status": "queued", "job_id": job["id"]}
 
@@ -364,14 +364,14 @@ def agent_logs_ep(site_id: str, current_user = Depends(require_unscoped_admin)):
 @router.post("/api/sites/{site_id}/agent/config", dependencies=[Depends(require_tab("tab-sites"))])
 def agent_config_update_ep(site_id: str, payload: AgentConfigUpdateSchema, current_user = Depends(require_unscoped_admin)):
     """Accoda un comando RPC per aggiornare i parametri di configurazione dell'agente remoto."""
-    site = site_manager.get_site(site_id)
-    if not site:
+    probe = probe_manager.get_probe(site_id)
+    if not probe:
         raise HTTPException(status_code=404, detail="Sede non trovata.")
-    if site.get("mode") != "agent":
+    if probe.get("mode") != "agent":
         raise HTTPException(status_code=400, detail="Gestione agente disponibile solo per sedi in modalità agent.")
     cfg_json = payload.model_dump_json(exclude_none=True)
     cmd = f"_agent_config {cfg_json}"
-    job = site_manager.enqueue_job(site_id, "127.0.0.1", cmd, requested_by=current_user.get("sub"))
+    job = probe_manager.enqueue_job(site_id, "127.0.0.1", cmd, requested_by=current_user.get("sub"))
     log_audit(f"Aggiornamento config agent accodato per sede '{site_id}' da '{current_user.get('sub')}' (job {job['id']}).")
     return {"status": "queued", "job_id": job["id"]}
 
@@ -383,12 +383,12 @@ class AgentInventorySaveSchema(BaseModel):
 @router.post("/api/sites/{site_id}/agent/inventory/get", dependencies=[Depends(require_tab("tab-sites"))])
 def agent_get_inventory_ep(site_id: str, current_user = Depends(require_unscoped_admin)):
     """Accoda un comando RPC per leggere l'inventario locale network_hosts.csv dell'agente."""
-    site = site_manager.get_site(site_id)
-    if not site:
+    probe = probe_manager.get_probe(site_id)
+    if not probe:
         raise HTTPException(status_code=404, detail="Sede non trovata.")
-    if site.get("mode") != "agent":
+    if probe.get("mode") != "agent":
         raise HTTPException(status_code=400, detail="Gestione agente disponibile solo per sedi in modalità agent.")
-    job = site_manager.enqueue_job(site_id, "127.0.0.1", "_agent_get_inventory", requested_by=current_user.get("sub"))
+    job = probe_manager.enqueue_job(site_id, "127.0.0.1", "_agent_get_inventory", requested_by=current_user.get("sub"))
     log_audit(f"Lettura inventario agent accodato per sede '{site_id}' da '{current_user.get('sub')}' (job {job['id']}).")
     return {"status": "queued", "job_id": job["id"]}
 
@@ -396,10 +396,10 @@ def agent_get_inventory_ep(site_id: str, current_user = Depends(require_unscoped
 @router.post("/api/sites/{site_id}/agent/inventory/save", dependencies=[Depends(require_tab("tab-sites"))])
 def agent_save_inventory_ep(site_id: str, payload: AgentInventorySaveSchema, current_user = Depends(require_unscoped_admin)):
     """Accoda un comando RPC per salvare l'inventario locale network_hosts.csv dell'agente."""
-    site = site_manager.get_site(site_id)
-    if not site:
+    probe = probe_manager.get_probe(site_id)
+    if not probe:
         raise HTTPException(status_code=404, detail="Sede non trovata.")
-    if site.get("mode") != "agent":
+    if probe.get("mode") != "agent":
         raise HTTPException(status_code=400, detail="Gestione agente disponibile solo per sedi in modalità agent.")
     # Il CSV lo scriverà l'agente, ma se è illeggibile va detto adesso: dopo
     # l'accodamento l'errore arriverebbe solo al polling successivo, dentro il
@@ -409,7 +409,7 @@ def agent_save_inventory_ep(site_id: str, payload: AgentInventorySaveSchema, cur
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     cmd = f"_agent_save_inventory {payload.content}"
-    job = site_manager.enqueue_job(site_id, "127.0.0.1", cmd, requested_by=current_user.get("sub"))
+    job = probe_manager.enqueue_job(site_id, "127.0.0.1", cmd, requested_by=current_user.get("sub"))
     log_audit(f"Salvataggio inventario agent accodato per sede '{site_id}' da '{current_user.get('sub')}' (job {job['id']}).")
     return {"status": "queued", "job_id": job["id"]}
 
@@ -421,14 +421,14 @@ class FlowControlSchema(BaseModel):
 @router.post("/api/sites/{site_id}/agent/flow-control", dependencies=[Depends(require_tab("tab-sites"))])
 def agent_flow_control_ep(site_id: str, payload: FlowControlSchema, current_user = Depends(require_unscoped_admin)):
     """Mette in pausa o riprende l'ingestione / streaming dati per la sede agent."""
-    site = site_manager.get_site(site_id)
-    if not site:
+    probe = probe_manager.get_probe(site_id)
+    if not probe:
         raise HTTPException(status_code=404, detail="Sede non trovata.")
-    if site.get("mode") != "agent":
+    if probe.get("mode") != "agent":
         raise HTTPException(status_code=400, detail="Gestione flusso disponibile solo per sedi in modalità agent.")
-    site_manager.set_site_flow_status(site_id, payload.active)
+    probe_manager.set_probe_flow_status(site_id, payload.active)
     cmd = "_agent_flow_start" if payload.active else "_agent_flow_stop"
-    job = site_manager.enqueue_job(site_id, "127.0.0.1", cmd, requested_by=current_user.get("sub"))
+    job = probe_manager.enqueue_job(site_id, "127.0.0.1", cmd, requested_by=current_user.get("sub"))
     status_str = "riavviato" if payload.active else "interrotto (pausa)"
     log_audit(f"Flusso dati agente {status_str} per sede '{site_id}' da '{current_user.get('sub')}' (job {job['id']}).")
     return {"status": "success", "flow_active": payload.active, "job_id": job["id"]}

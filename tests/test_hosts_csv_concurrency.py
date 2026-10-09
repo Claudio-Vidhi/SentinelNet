@@ -34,7 +34,7 @@ class HostsCsvSurvivesConcurrentAccess(unittest.TestCase):
         self.addCleanup(patcher.stop)
         self.devices = [
             {"IP": f"192.0.2.{n}", "Vendor": "cisco", "Profile": "default",
-             "Group": "Generale", "Site": "central", "Hostname": f"switch-{n:02d}"}
+             "Group": "Generale", "Probe": "central", "Hostname": f"switch-{n:02d}"}
             for n in range(1, 21)
         ]
         inventory_manager.safe_write_hosts_csv(self.devices)

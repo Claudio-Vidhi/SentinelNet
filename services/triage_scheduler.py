@@ -16,7 +16,7 @@ import time
 from typing import Optional, List, Dict, Any
 
 from core import db
-from services import inventory_manager, site_manager
+from services import inventory_manager, probe_manager
 from security import user_manager
 from security.security_manager import log_audit
 
@@ -361,10 +361,10 @@ def execute_schedule_job(schedule_id: int, requested_by: Optional[str] = None) -
     for d in devices:
         if inventory_manager.is_manual(d):
             continue  # its config is uploaded by hand; _manual_refusal backs this up
-        if site_manager.is_agent_site(d.get("Site")):
-            if not site_manager.has_pending_triage_job(d["Site"], d["IP"]):
-                site_manager.enqueue_job(
-                    d["Site"], d["IP"], "",
+        if probe_manager.is_agent_probe(d.get("Probe")):
+            if not probe_manager.has_pending_triage_job(d["Probe"], d["IP"]):
+                probe_manager.enqueue_job(
+                    d["Probe"], d["IP"], "",
                     requested_by=requested_by or f"schedule:{creator_name}",
                     kind="triage"
                 )

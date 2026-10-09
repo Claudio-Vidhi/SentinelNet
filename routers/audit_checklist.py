@@ -17,7 +17,7 @@ router = APIRouter(dependencies=[Depends(require_tab("tab-netsec-audit"))], pref
 class CreateEngagementRequest(BaseModel):
     customer_name: str
     tenant: Optional[str] = None
-    site_id: Optional[str] = None
+    location_id: Optional[str] = None
     template_id: Optional[int] = None
     assigned_to: Optional[str] = None
     scope_notes: Optional[str] = None
@@ -135,7 +135,7 @@ def create_engagement(req: CreateEngagementRequest, current_user=Depends(require
         return audit_checklist.create_engagement(
             customer_name=req.customer_name,
             tenant=req.tenant,
-            site_id=req.site_id,
+            location_id=req.location_id,
             template_id=req.template_id,
             assigned_to=req.assigned_to,
             scope_notes=req.scope_notes,

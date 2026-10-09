@@ -45,7 +45,7 @@ def probe(ip: str, user: str, password: str, port: int, timeout: int):
     # Il ConnectHandler del PROGETTO, non quello di netmiko: e' lo stesso che
     # usa core_engine, e passa dal bastione quando l'host sta dietro un sito
     # jump. Importare netmiko direttamente proverebbe un trasporto diverso da
-    # quello del triage -- e tests/test_jump_site.py lo vieta per questo.
+    # quello del triage -- e tests/test_bastion_probe.py lo vieta per questo.
     from core.net_ssh import ConnectHandler
 
     driver_cls, netmiko_type = core_engine.resolve_driver("windows")

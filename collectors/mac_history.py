@@ -100,10 +100,10 @@ def init_db():
                 c.execute("ALTER TABLE mac_sightings ADD COLUMN uplink_to TEXT DEFAULT ''")
             except sqlite3.OperationalError:
                 pass
-            # 'site': multi-site origin (default 'central'). Attribution
+            # 'probe': multi-probe origin (default 'central'). Attribution
             # independent of the 'tenant' (group) used for user scoping.
             try:
-                c.execute("ALTER TABLE mac_sightings ADD COLUMN site TEXT DEFAULT 'central'")
+                c.execute("ALTER TABLE mac_sightings ADD COLUMN probe TEXT DEFAULT 'central'")
             except sqlite3.OperationalError:
                 pass
             # A position = (mac, switch, interface, vlan): the upsert key.
@@ -145,7 +145,7 @@ def init_db():
                     source_name TEXT DEFAULT '',
                     source_type TEXT DEFAULT '',
                     tenant      TEXT DEFAULT '',
-                    site        TEXT DEFAULT 'central',
+                    probe       TEXT DEFAULT 'central',
                     first_seen  TEXT NOT NULL,
                     last_seen   TEXT NOT NULL,
                     seen_count  INTEGER DEFAULT 1
@@ -258,7 +258,7 @@ def prune(retention_days: Optional[int] = None) -> int:
 # --- Writing sightings (upsert) ---
 
 def record_sightings(rows, switch_ip: str, switch_name: str = "", tenant: str = "",
-                     site: str = "central") -> dict:
+                     probe: str = "central") -> dict:
     """Records a list of sightings from ONE switch.
 
     rows: iterable of dicts with keys: mac (mandatory), vlan, interface,
@@ -288,16 +288,16 @@ def record_sightings(rows, switch_ip: str, switch_name: str = "", tenant: str = 
             if existing:
                 c.execute("""UPDATE mac_sightings
                              SET last_seen=?, seen_count=seen_count+1, is_uplink=?,
-                                 port_channel=?, oui_vendor=?, switch_name=?, tenant=?, uplink_to=?, site=?
+                                 port_channel=?, oui_vendor=?, switch_name=?, tenant=?, uplink_to=?, probe=?
                              WHERE id=?""",
-                          (now, up, pc, oui, switch_name, tenant, uplink_to, site, existing["id"]))
+                          (now, up, pc, oui, switch_name, tenant, uplink_to, probe, existing["id"]))
                 n_upd += 1
             else:
                 c.execute("""INSERT INTO mac_sightings
                              (mac, oui_vendor, vlan, switch_ip, switch_name, interface,
-                              port_channel, is_uplink, uplink_to, tenant, site, first_seen, last_seen, seen_count)
+                              port_channel, is_uplink, uplink_to, tenant, probe, first_seen, last_seen, seen_count)
                              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)""",
-                          (mac, oui, vlan, switch_ip, switch_name, iface, pc, up, uplink_to, tenant, site, now, now))
+                          (mac, oui, vlan, switch_ip, switch_name, iface, pc, up, uplink_to, tenant, probe, now, now))
                 n_new += 1
     return {"new": n_new, "updated": n_upd, "skipped": n_skip}
 
@@ -371,7 +371,7 @@ def get_switch_if_macs() -> dict:
 
 def record_arp_entries(rows, source_ip: str, source_name: str = "",
                        source_type: str = "", tenant: str = "",
-                       site: str = "central") -> dict:
+                       probe: str = "central") -> dict:
     """Records (upsert) the MAC<->IP bindings read from the ARP table of ONE
     L3 gateway (switch SVI or firewall).
 
@@ -397,18 +397,18 @@ def record_arp_entries(rows, source_ip: str, source_name: str = "",
                 new_tenant = tenant if tenant else (existing["tenant"] or "")
                 c.execute("""UPDATE arp_entries
                              SET last_seen=?, seen_count=seen_count+1, vlan=?,
-                                 interface=?, source_name=?, source_type=?, tenant=?, site=?
+                                 interface=?, source_name=?, source_type=?, tenant=?, probe=?
                              WHERE id=?""",
                           (now, vlan, iface, source_name, source_type, new_tenant,
-                           site, existing["id"]))
+                           probe, existing["id"]))
                 n_upd += 1
             else:
                 c.execute("""INSERT INTO arp_entries
                              (mac, ip, vlan, interface, source_ip, source_name,
-                              source_type, tenant, site, first_seen, last_seen, seen_count)
+                              source_type, tenant, probe, first_seen, last_seen, seen_count)
                              VALUES (?,?,?,?,?,?,?,?,?,?,?,1)""",
                           (mac, ip, vlan, iface, source_ip, source_name,
-                           source_type, tenant, site, now, now))
+                           source_type, tenant, probe, now, now))
                 n_new += 1
     return {"new": n_new, "updated": n_upd, "skipped": n_skip}
 
@@ -823,7 +823,7 @@ def _inventory_stamp() -> tuple:
     return tuple(row) + (inventory_manager.meta_signature(),)
 
 
-def endpoint_inventory(tenants=None, site: Optional[str] = None,
+def endpoint_inventory(tenants=None, probe: Optional[str] = None,
                        switch_ip: Optional[str] = None, vlan: Optional[str] = None,
                        q: Optional[str] = None, stale_days: int = 7,
                        limit: int = 2000,
@@ -858,7 +858,7 @@ def endpoint_inventory(tenants=None, site: Optional[str] = None,
         return empty
 
     cache_key = (tuple(sorted(tenant_list)) if tenant_list is not None else None,
-                 site, switch_ip, vlan, q, stale_days, limit, frm, to, _inventory_stamp())
+                 probe, switch_ip, vlan, q, stale_days, limit, frm, to, _inventory_stamp())
     hit = _INVENTORY_CACHE.get(cache_key)
     if hit is not None:
         return copy.deepcopy(hit)
@@ -867,9 +867,9 @@ def endpoint_inventory(tenants=None, site: Optional[str] = None,
     if tenant_list is not None:
         where.append("tenant IN (%s)" % ",".join("?" * len(tenant_list)))
         args.extend(tenant_list)
-    if site:
-        where.append("site = ?")
-        args.append(site)
+    if probe:
+        where.append("probe = ?")
+        args.append(probe)
     if switch_ip:
         where.append("switch_ip = ?")
         args.append(switch_ip)
@@ -891,7 +891,7 @@ def endpoint_inventory(tenants=None, site: Optional[str] = None,
     with _connect() as c:
         rows = [dict(r) for r in c.execute(
             "SELECT mac, oui_vendor, vlan, switch_ip, switch_name, interface, "
-            "port_channel, is_uplink, uplink_to, tenant, site, first_seen, "
+            "port_channel, is_uplink, uplink_to, tenant, probe, first_seen, "
             "last_seen, seen_count FROM mac_sightings" + clause, args).fetchall()]
         infra = {r["mac"] for r in c.execute(
             "SELECT DISTINCT mac FROM switch_if_macs").fetchall()}
@@ -986,7 +986,7 @@ def endpoint_inventory(tenants=None, site: Optional[str] = None,
         results.append({
             "mac": mac, "tenant": tenant,
             "oui_vendor": next((s["oui_vendor"] for s in grp if s.get("oui_vendor")), ""),
-            "site": grp[0].get("site") or "",
+            "site": grp[0].get("probe") or "",
             "ips": ips,
             "switch_ip": best.get("switch_ip", ""),
             "switch_name": best.get("switch_name", ""),
@@ -1042,7 +1042,7 @@ def _row_to_dict(row) -> dict:
 
 def search(mac: Optional[str] = None, vlan: Optional[str] = None, interface: Optional[str] = None,
            switch_ip: Optional[str] = None, tenants=None, frm: Optional[str] = None, to: Optional[str] = None,
-           limit: int = 500, site: Optional[str] = None) -> list:
+           limit: int = 500, probe: Optional[str] = None) -> list:
     """Search sightings with combinable filters.
 
     - mac: full MAC (exact match) or fragment/OUI (partial search,
@@ -1073,9 +1073,9 @@ def search(mac: Optional[str] = None, vlan: Optional[str] = None, interface: Opt
     if switch_ip:
         q.append("AND switch_ip = ?")
         args.append(switch_ip)
-    if site:
-        q.append("AND site = ?")
-        args.append(site)
+    if probe:
+        q.append("AND probe = ?")
+        args.append(probe)
     if tenants is not None:
         if not tenants:
             return []

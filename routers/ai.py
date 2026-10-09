@@ -23,7 +23,7 @@ from services import fortigate_service
 from ai import ai_assistant
 from ai import config_analyzer
 from collectors import mac_history
-from services import site_manager
+from services import probe_manager
 
 _AI_PROVIDERS = {"anthropic", "openai", "gemini", "ollama"}
 
@@ -229,17 +229,17 @@ def _tenant_context_block(tenant: str, current_user) -> str:
     mac_stats = mac_history.stats(tenants=[tenant])
     mac_recent = mac_history.search(tenants=[tenant], limit=15)
 
-    # Le sedi VPN (site_manager) sono un concetto distinto dai gruppi/tenant ma
-    # sono referenziate dai dispositivi tramite il campo 'Site': recuperiamo la
+    # Le sedi VPN (probe_manager) sono un concetto distinto dai gruppi/tenant ma
+    # sono referenziate dai dispositivi tramite il campo 'Probe': recuperiamo la
     # config di ognuna delle sedi VPN effettivamente usate da questo tenant.
-    site_ids = sorted({d.get('Site', 'central') for d in devices})
-    sites = [s for s in (site_manager.get_site(sid) for sid in site_ids) if s]
+    probe_ids = sorted({d.get('Probe', 'central') for d in devices})
+    probes = [s for s in (probe_manager.get_probe(sid) for sid in probe_ids) if s]
 
     return ai_assistant.build_tenant_context(
         tenant,
         devices=devices,
         group_info=groups.get(tenant),
-        site=sites,
+        probe=probes,
         mac_stats=mac_stats,
         mac_recent=mac_recent,
     )

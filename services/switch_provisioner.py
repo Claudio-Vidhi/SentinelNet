@@ -401,7 +401,7 @@ def _push_result(output: str) -> dict:
 
 def push_via_ssh(host: str, username: str, password: str, secret: str,
                   config_text: str, port: int = 22, save: bool = True,
-                  device_type: str = "cisco_ios", site: str = "") -> dict:
+                  device_type: str = "cisco_ios", probe: str = "") -> dict:
     """Applica la config generata via SSH (Netmiko) su un apparato
     raggiungibile e opzionalmente esegue 'write memory'.
 
@@ -434,7 +434,7 @@ def push_via_ssh(host: str, username: str, password: str, secret: str,
         "banner_timeout": 15,
     }
     try:
-        with ConnectHandler(site_id=site or None, **device_params) as conn:
+        with ConnectHandler(probe_id=probe or None, **device_params) as conn:
             conn.enable()
             # Rollback net. This config rewrites the access VLAN of the range
             # we may be connected through, applies bpduguard, and replaces the

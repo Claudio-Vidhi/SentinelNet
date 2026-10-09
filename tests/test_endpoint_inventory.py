@@ -61,17 +61,17 @@ class _Base(unittest.TestCase):
 
     def _sighting(self, mac=MAC_A, tenant="sede-a", switch_ip="192.0.2.1",
                   interface="GigabitEthernet1/0/4", vlan="10", is_uplink=0,
-                  first_days=10, last_days=0, site="central",
+                  first_days=10, last_days=0, probe="central",
                   switch_name="switch-01", oui="Example Corp"):
         with mac_history._lock, mac_history._connect() as c:
             c.execute(
                 """INSERT INTO mac_sightings
                    (mac, oui_vendor, vlan, switch_ip, switch_name, interface,
-                    port_channel, is_uplink, uplink_to, tenant, site,
+                    port_channel, is_uplink, uplink_to, tenant, probe,
                     first_seen, last_seen, seen_count)
                    VALUES (?,?,?,?,?,?,'',?,'',?,?,?,?,1)""",
                 (mac, oui, vlan, switch_ip, switch_name, interface, is_uplink,
-                 tenant, site, _iso(first_days), _iso(last_days)))
+                 tenant, probe, _iso(first_days), _iso(last_days)))
 
     def _arp(self, mac=MAC_A, ip="192.0.2.10", tenant="sede-a",
              source_ip="192.0.2.254", first_days=10, last_days=0,
@@ -85,7 +85,7 @@ class _Base(unittest.TestCase):
             c.execute(
                 """INSERT INTO arp_entries
                    (mac, ip, vlan, interface, source_ip, source_name,
-                    source_type, tenant, site, first_seen, last_seen, seen_count)
+                    source_type, tenant, probe, first_seen, last_seen, seen_count)
                    VALUES (?,?,'','',?,'gw','firewall',?,'central',?,?,1)""",
                 (mac, ip, source_ip, tenant, _iso(first_days), ts_last))
 

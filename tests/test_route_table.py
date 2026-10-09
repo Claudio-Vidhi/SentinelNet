@@ -30,11 +30,11 @@ from services import fortigate_service, route_table  # noqa: E402
 PASS = "PasswordSicura1!"
 
 FGT_A = {"IP": "192.0.2.1", "Hostname": "fw-edge", "Vendor": "fortinet",
-         "Group": "sede-a", "Site": "central"}
+         "Group": "sede-a", "Probe": "central"}
 FGT_B = {"IP": "192.0.2.2", "Hostname": "fw-dc", "Vendor": "fortinet",
-         "Group": "sede-b", "Site": "central"}
+         "Group": "sede-b", "Probe": "central"}
 SWITCH = {"IP": "192.0.2.3", "Hostname": "sw-core", "Vendor": "cisco",
-          "Group": "sede-a", "Site": "central"}
+          "Group": "sede-a", "Probe": "central"}
 
 ROUTES_A = [
     {"ip_mask": "10.0.0.0/16", "gateway": "192.0.2.254", "interface": "port1",
@@ -347,7 +347,7 @@ class CliCollection(unittest.TestCase):
             sent["cmd"] = command
             return {"status": "success", "output": IOS_OUTPUT}
 
-        with mock.patch.object(route_table, "_is_agent_site", return_value=False),              mock.patch("core.core_engine.send_custom_command", side_effect=spy):
+        with mock.patch.object(route_table, "_is_agent_probe", return_value=False),              mock.patch("core.core_engine.send_custom_command", side_effect=spy):
             out = route_table.collect_for(SWITCH)
         self.assertEqual(sent["cmd"], "show ip route")
         self.assertEqual(len(out["rows"]), 7)
@@ -356,7 +356,7 @@ class CliCollection(unittest.TestCase):
     def test_an_agent_site_is_not_dialled_at_all(self):
         # Il centrale non ha una rotta verso gli apparati di una sede agent:
         # provarci allunga ogni refresh di un timeout per niente.
-        with mock.patch.object(route_table, "_is_agent_site", return_value=True),              mock.patch("core.core_engine.send_custom_command") as ssh:
+        with mock.patch.object(route_table, "_is_agent_probe", return_value=True),              mock.patch("core.core_engine.send_custom_command") as ssh:
             out = route_table.collect_for(SWITCH)
         ssh.assert_not_called()
         self.assertIn("agent", out["error"])
@@ -364,14 +364,14 @@ class CliCollection(unittest.TestCase):
     def test_a_switch_without_routing_says_so(self):
         # Sessione riuscita e zero rotte: dirlo evita che l'assenza si legga
         # come un parser rotto.
-        with mock.patch.object(route_table, "_is_agent_site", return_value=False),              mock.patch("core.core_engine.send_custom_command",
+        with mock.patch.object(route_table, "_is_agent_probe", return_value=False),              mock.patch("core.core_engine.send_custom_command",
                         return_value={"status": "success", "output": ""}):
             out = route_table.collect_for(SWITCH)
         self.assertNotIn("rows", out)
         self.assertIn("nessuna rotta", out["error"])
 
     def test_a_failed_session_is_an_error_row(self):
-        with mock.patch.object(route_table, "_is_agent_site", return_value=False),              mock.patch("core.core_engine.send_custom_command",
+        with mock.patch.object(route_table, "_is_agent_probe", return_value=False),              mock.patch("core.core_engine.send_custom_command",
                         return_value={"status": "error", "message": "auth fallita"}):
             out = route_table.collect_for(SWITCH)
         self.assertIn("auth fallita", out["error"])
@@ -572,7 +572,7 @@ class RouteApi(unittest.TestCase):
             qs = (qs + "&" if qs else "?") + "device=" + picked
         with mock.patch("services.inventory_manager.get_all_devices",
                         return_value=inventory), \
-             mock.patch.object(route_table, "_is_agent_site", return_value=False), \
+             mock.patch.object(route_table, "_is_agent_probe", return_value=False), \
              mock.patch("core.core_engine.send_custom_command", return_value=cli), \
              mock.patch.object(fortigate_service, "get_routes", side_effect=fake):
             r = self._client(user).get("/api/routes" + qs)

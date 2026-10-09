@@ -35,7 +35,7 @@ from core import data_config
 
 logger = logging.getLogger("sentinelnet.db")
 
-SCHEMA_VERSION = 14         # schema version supported by this code (v14: on-demand interface counter reads)
+SCHEMA_VERSION = 15         # schema version supported by this code (v15: audit_engagements.location_id)
 QUEUE_MAX = 10_000          # max payloads in the write queue
 BATCH_SIZE = 500            # max payloads per single commit
 MAX_WRITER_RESTARTS = 5     # writer restarts allowed before fail-open
@@ -230,6 +230,12 @@ def migrate() -> None:
             conn.execute(
                 "UPDATE incidents SET resolved_ts = COALESCE(closed_ts, opened_ts) "
                 "WHERE status = 'resolved' AND resolved_ts IS NULL")
+        # v15: an engagement's place is a location, not a probe.
+        ae_cols = {r["name"] for r in conn.execute(
+            "PRAGMA table_info(audit_engagements)").fetchall()}
+        if "site_id" in ae_cols:  # check-site-name: ok
+            conn.execute("ALTER TABLE audit_engagements "
+                         "RENAME COLUMN site_id TO location_id")  # check-site-name: ok
         if current < SCHEMA_VERSION:
             conn.execute("DELETE FROM schema_version")
             conn.execute("INSERT INTO schema_version(version) VALUES (?)", (SCHEMA_VERSION,))

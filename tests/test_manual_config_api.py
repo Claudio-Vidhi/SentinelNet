@@ -33,7 +33,7 @@ IOS_LOG = (
 class ManualConfigApi(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # Same isolation as tests/test_remote_site.py: DATA_DIR is a global
+        # Same isolation as tests/test_agent_probe.py: DATA_DIR is a global
         # another module on this xdist worker may have moved.
         from core import data_config
         from services import inventory_manager

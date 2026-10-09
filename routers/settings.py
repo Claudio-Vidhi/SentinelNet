@@ -232,7 +232,7 @@ def ping_monitor_status(current_user = Depends(get_current_user)):
             if (d.get("Group") or "Generale") in scope
         }
         status["devices"] = [d for d in status["devices"] if d["ip"] in ips_in_scope]
-        # Tri-state: "up" is None for a jump-site device (not measurable, see
+        # Tri-state: "up" is None for a bastion-probe device (not measurable, see
         # services/ping_monitor.py), which must not be counted as "down".
         up_count = sum(1 for d in status["devices"] if d["up"] is True)
         down_count = sum(1 for d in status["devices"] if d["up"] is False)
@@ -427,10 +427,10 @@ def get_fleet_versions(current_user = Depends(require_unscoped_admin)):
 
     Risponde senza SSH alla domanda "l'aggiornamento e' arrivato ovunque?"."""
     from core.version import __version__
-    from services import site_manager
+    from services import probe_manager
     kind = self_update.install_kind()
     agents = []
-    for s in site_manager.list_sites():
+    for s in probe_manager.list_probes():
         if s.get("mode") != "agent":
             continue
         v = s.get("agent_version") or ""

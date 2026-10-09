@@ -154,13 +154,13 @@ class TestScopedAdminOnTenantData(_PrivateUsers):
         self.assertEqual(r.status_code, 403, r.text)
 
     def test_site_details_only_for_unscoped_admin(self):
-        from services import site_manager
-        site = site_manager.create_site("scope-site", "central", ["192.0.2.0/24"])[0]
-        self.addCleanup(site_manager.delete_site, site["id"])
+        from services import probe_manager
+        probe = probe_manager.create_probe("scope-site", "central", ["192.0.2.0/24"])[0]
+        self.addCleanup(probe_manager.delete_probe, probe["id"])
         for name, full in (("sadm", False), ("adm", True)):
             with self.subTest(user=name):
-                sites = self._as(name).get("/api/sites").json()["sites"]
-                created = next((s for s in sites if s["id"] == site["id"]), None)
+                probes = self._as(name).get("/api/sites").json()["sites"]
+                created = next((s for s in probes if s["id"] == probe["id"]), None)
                 self.assertIsNotNone(created)
                 self.assertEqual("subnets" in created, full)
 

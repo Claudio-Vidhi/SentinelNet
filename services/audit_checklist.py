@@ -832,7 +832,7 @@ def delete_template_item(template_id: int, ref: str) -> Dict[str, Any]:
 def create_engagement(
     customer_name: str,
     tenant: Optional[str] = None,
-    site_id: Optional[str] = None,
+    location_id: Optional[str] = None,
     template_id: Optional[int] = None,
     assigned_to: Optional[str] = None,
     scope_notes: Optional[str] = None,
@@ -854,13 +854,13 @@ def create_engagement(
         cursor = conn.cursor()
         cursor.execute(
             """INSERT INTO audit_engagements
-               (customer_name, tenant, site_id, template_id, status, created_ts, updated_ts,
+               (customer_name, tenant, location_id, template_id, status, created_ts, updated_ts,
                 created_by, assigned_to, scope_notes, onsite_or_remote, interviewee)
                VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)""",
             (
                 customer_name,
                 tenant,
-                site_id,
+                location_id,
                 template_id,
                 now,
                 now,

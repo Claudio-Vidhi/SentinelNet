@@ -78,12 +78,12 @@ def poll_device(device: dict) -> list:
     """[(kind, summary_json)] for one host. Empty list when it does not answer."""
     from core.net_ssh import ConnectHandler
     from core import core_engine
-    from services import site_manager
+    from services import probe_manager
 
     ip = str(device.get("IP") or "")
     cli_kind, port = core_engine.get_cli_transport(device)
-    # A jump-site host is reached only through the bastion tunnel (core.net_ssh).
-    if site_manager.has_direct_path(device.get("Site")) and not core_engine.is_reachable(ip, port):
+    # A bastion-probe host is reached only through the bastion tunnel (core.net_ssh).
+    if probe_manager.has_direct_path(device.get("Probe")) and not core_engine.is_reachable(ip, port):
         return []
     username, password, _ = core_engine.get_device_credentials(device)
     try:

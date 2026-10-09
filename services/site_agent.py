@@ -433,7 +433,7 @@ class Agent:
                     ip, it.get("vendor") or "cisco", "custom",
                     it.get("username") or "", it.get("password") or "",
                     it.get("enable_secret") or "", group,
-                    site=self.cfg["site_id"], ssh_port=it.get("ssh_port"))
+                    probe=self.cfg["site_id"], ssh_port=it.get("ssh_port"))
                 if it.get("hostname"):
                     inventory_manager.update_device_hostname(ip, it["hostname"])
                 applied += 1
@@ -577,7 +577,7 @@ class Agent:
                         content = f.read()
                 else:
                     content = ("IP,Vendor,Profile,Username,Password,Enable Secret,"
-                               "Group,Hostname,Site,SSH Port,Transports,SNMP Community,"
+                               "Group,Hostname,Probe,SSH Port,Transports,SNMP Community,"
                                "SNMP Disabled\n")
                 return {"status": "done", "result": content}
             except Exception as e:
@@ -669,13 +669,13 @@ class Agent:
         compromesso, e accettare qualunque percorso arrivi dal centrale
         annullerebbe proprio quella garanzia.
         """
-        from services import fortigate_service, site_manager
+        from services import fortigate_service, probe_manager
         try:
             spec = json.loads(spec_json)
         except (TypeError, ValueError):
             return {"status": "error", "result": "Job REST malformato."}
         path = spec.get("path", "")
-        if not site_manager.rest_path_allowed(path):
+        if not probe_manager.rest_path_allowed(path):
             print(f"[job] percorso REST rifiutato dall'agente: {path!r}")
             return {"status": "error",
                     "result": f"Percorso REST non consentito: {path!r}"}

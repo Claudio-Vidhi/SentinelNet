@@ -150,7 +150,7 @@ class TestOnelineBayOpensFilteredInventory(unittest.TestCase):
         # e 'down' solo se tutti gli apparati della bay sono giù.
         # (jump-host-sites Task 4 round 2: 'warn' now also covers a mix that
         # includes not-measurable devices, alongside down/warn — see
-        # tests/test_jump_site.py::FleetOnelineBayIsNotPaintedDownForUnmeasurable.)
+        # tests/test_bastion_probe.py::FleetOnelineBayIsNotPaintedDownForUnmeasurable.)
         self.assertIn("(b.down === b.total) ? 'down'", self.src)
         self.assertIn("(b.down > 0 || b.warn > 0 || b.unknown > 0) ? 'warn'", self.src)
 

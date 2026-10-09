@@ -449,8 +449,8 @@ TOOLS = {
         lambda a: api("POST", "/api/send-command",
                       body={"ip": a["ip"], "command": a["command"]}),
     ),
-    "list_sites": (
-        "List the configured sites (central + remote) with mode "
+    "list_probes": (
+        "List the configured probes (central + remote) with mode "
         "(central-poll/agent), subnets and last-seen time.",
         _obj(),
         lambda a: api("GET", "/api/sites"),

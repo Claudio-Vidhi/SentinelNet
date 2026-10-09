@@ -1,8 +1,8 @@
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Gestione delle SEDI (siti) multi-sede su VPN.
+"""Gestione delle SONDE (come si raggiunge un dispositivo): centrale, agente, bastion.
 
-Ogni sito ha una modalità:
+Ogni sonda ha una modalità:
   - "central": il SentinelNet centrale raggiunge i dispositivi remoti
     direttamente tramite il routing VPN esistente (nessun processo remoto).
   - "agent":   un processo agente leggero gira nella sede remota, si connette
@@ -12,8 +12,8 @@ Ogni sito ha una modalità:
   #   (jump_host/jump_port/jump_identity below); no token, no agent process.
   #   The tunnel itself is built on top of this data model in a later task.
 
-I siti sono persistiti in sites.json (come user_manager/inventory_manager).
-Il token per-sede è generato una sola volta e memorizzato SOLO come hash
+Le sonde sono persistite in probes.json (come user_manager/inventory_manager).
+Il token per-sonda è generato una sola volta e memorizzato SOLO come hash
 SHA-256: il valore in chiaro è mostrato all'admin al momento della creazione /
 rigenerazione e non è più recuperabile.
 
@@ -32,10 +32,10 @@ from typing import Optional
 
 from core import data_config
 
-SITES_JSON = data_config.get_path("sites.json")
+PROBES_JSON = data_config.get_path("probes.json")
 JOBS_DB = data_config.get_path("agent_jobs.db")
 
-DEFAULT_SITE_ID = "central"
+DEFAULT_PROBE_ID = "central"
 VALID_MODES = ("central", "agent", "jump")
 
 _lock = threading.RLock()
@@ -43,12 +43,12 @@ _jobs_lock = threading.Lock()
 _jobs_init_done = False
 
 
-# --- Persistenza sites.json ---
+# --- Persistenza probes.json ---
 
-def _default_sites() -> dict:
+def _default_probes() -> dict:
     return {
-        DEFAULT_SITE_ID: {
-            "id": DEFAULT_SITE_ID,
+        DEFAULT_PROBE_ID: {
+            "id": DEFAULT_PROBE_ID,
             "name": "Central",
             "mode": "central",
             "subnets": [],
@@ -60,29 +60,29 @@ def _default_sites() -> dict:
 
 
 def _load() -> dict:
-    if not os.path.exists(SITES_JSON):
-        data = _default_sites()
+    if not os.path.exists(PROBES_JSON):
+        data = _default_probes()
         _save(data)
         return data
     try:
-        with open(SITES_JSON, "r", encoding="utf-8") as f:
+        with open(PROBES_JSON, "r", encoding="utf-8") as f:
             data = json.load(f)
         if not isinstance(data, dict):
             raise ValueError("formato non valido")
     except Exception:
-        data = _default_sites()
+        data = _default_probes()
         _save(data)
         return data
     # Il sito di default 'central' deve esistere sempre.
-    if DEFAULT_SITE_ID not in data:
-        data[DEFAULT_SITE_ID] = _default_sites()[DEFAULT_SITE_ID]
+    if DEFAULT_PROBE_ID not in data:
+        data[DEFAULT_PROBE_ID] = _default_probes()[DEFAULT_PROBE_ID]
     return data
 
 
 def _save(data: dict) -> None:
-    # Holds the agent site token hashes: restrict=True tightens the temp copy
+    # Holds the agent probe token hashes: restrict=True tightens the temp copy
     # before the rename, same order as the key store and users.json.
-    data_config.atomic_write(SITES_JSON, data, restrict=True)
+    data_config.atomic_write(PROBES_JSON, data, restrict=True)
 
 
 def _hash_token(token: str) -> str:
@@ -92,18 +92,18 @@ def _hash_token(token: str) -> str:
 def _slugify(name: str) -> str:
     import re
     slug = re.sub(r"[^a-z0-9]+", "-", (name or "").strip().lower()).strip("-")
-    return slug or "site"
+    return slug or "probe"
 
 
-def _public(site: dict) -> dict:
+def _public(probe: dict) -> dict:
     """Copia del sito senza l'hash del token (aggiunge has_token)."""
-    d = {k: v for k, v in site.items() if k != "token_hash"}
-    d["has_token"] = bool(site.get("token_hash"))
+    d = {k: v for k, v in probe.items() if k != "token_hash"}
+    d["has_token"] = bool(probe.get("token_hash"))
     return d
 
 
 def _validate_jump(values: dict) -> dict:
-    """Normalize and check the bastion fields of a 'jump' site."""
+    """Normalize and check the bastion fields of a 'jump' probe."""
     host = (values.get("jump_host") or "").strip()
     if not host:
         raise ValueError("Un sito 'jump' richiede jump_host.")
@@ -122,7 +122,7 @@ def _validate_jump(values: dict) -> dict:
         raise ValueError("jump_port non valida.")
     # Default identity for the DEVICES behind the bastion, distinct from the
     # bastion's own login. Optional: a device row may still name its own
-    # identity, which wins. Empty means "no site default", and the caller
+    # identity, which wins. Empty means "no probe default", and the caller
     # falls back to the global admin credentials.
     device_identity = (values.get("device_identity") or "").strip()
     return {"jump_host": host, "jump_port": port, "jump_identity": identity,
@@ -131,61 +131,61 @@ def _validate_jump(values: dict) -> dict:
 
 # --- CRUD siti ---
 
-def list_sites() -> list:
+def list_probes() -> list:
     with _lock:
         return [_public(s) for s in _load().values()]
 
 
-def get_site(site_id: str):
+def get_probe(probe_id: str):
     with _lock:
-        s = _load().get(site_id)
+        s = _load().get(probe_id)
         return _public(s) if s else None
 
 
-def has_direct_path(site_id: Optional[str]) -> bool:
-    """True when the central has a direct IP path to this site's devices.
+def has_direct_path(probe_id: Optional[str]) -> bool:
+    """True when the central has a direct IP path to this probe's devices.
 
     False for the two modes where the central is not meant to touch the
     devices itself:
 
     * 'jump' — reached exclusively through an SSH tunnel we initiate, so
       neither ICMP nor a raw TCP connect from the central arrives;
-    * 'agent' — the site agent owns the devices and connects outbound to the
+    * 'agent' — the probe agent owns the devices and connects outbound to the
       central. A direct probe contradicts the mode's whole premise (no
-      inbound path required, credentials kept at the site) and, wherever the
+      inbound path required, credentials kept at the probe) and, wherever the
       network happens to route anyway, it lands on the customer's firewall as
       denied ICMP/SSH coming from the central.
 
     Callers use it to SKIP a direct probe, never to report the device as
-    down: the state is "not measurable". For an agent site the real status
+    down: the state is "not measurable". For an agent probe the real status
     arrives from the agent's own pushes.
 
-    A site id the central does not know returns True, and that is what keeps
+    A probe id the central does not know returns True, and that is what keeps
     the agent itself working: the agent runs this same code over its local
-    inventory, and its own sites.json has no entry for the site it serves.
+    inventory, and its own probes.json has no entry for the probe it serves.
     """
-    site = get_site(site_id or "")
-    return not (site and site.get("mode") in ("jump", "agent"))
+    probe = get_probe(probe_id or "")
+    return not (probe and probe.get("mode") in ("jump", "agent"))
 
 
-def is_agent_site(site_id: Optional[str]) -> bool:
-    """True when this site's devices belong to a site agent.
+def is_agent_probe(probe_id: Optional[str]) -> bool:
+    """True when this probe's devices belong to a probe agent.
 
-    Distinct from ``not has_direct_path``: for a jump site the central still
+    Distinct from ``not has_direct_path``: for a jump probe the central still
     performs the operation, tunnelled through the bastion, so callers there
-    only skip the pre-probe. For an agent site the central must not perform
+    only skip the pre-probe. For an agent probe the central must not perform
     it at all — the agent does, and the job queue is how the request reaches
-    it. Same "unknown site means no" rule as above, so the agent's own local
+    it. Same "unknown probe means no" rule as above, so the agent's own local
     runs are unaffected.
     """
-    site = get_site(site_id or "")
-    return bool(site and site.get("mode") == "agent")
+    probe = get_probe(probe_id or "")
+    return bool(probe and probe.get("mode") == "agent")
 
 
-def create_site(name: str, mode: str, subnets=None, **kwargs):
-    """Crea un sito. Ritorna (site_pubblico, token_in_chiaro|None).
+def create_probe(name: str, mode: str, subnets=None, **kwargs):
+    """Crea una sonda. Ritorna (probe_pubblico, token_in_chiaro|None).
     Per i siti in modalità 'agent' viene generato un token (mostrato una volta).
-    # For 'jump' sites, kwargs carries jump_host/jump_port/jump_identity
+    # For 'jump' probes, kwargs carries jump_host/jump_port/jump_identity
     # (validated by _validate_jump) and no token is generated."""
     name = (name or "").strip()
     if not name:
@@ -197,16 +197,16 @@ def create_site(name: str, mode: str, subnets=None, **kwargs):
     with _lock:
         data = _load()
         base = _slugify(name)
-        site_id = base
-        while site_id in data:
-            site_id = f"{base}-{uuid.uuid4().hex[:4]}"
+        probe_id = base
+        while probe_id in data:
+            probe_id = f"{base}-{uuid.uuid4().hex[:4]}"
         token_plain = None
         token_hash = None
         if mode == "agent":
             token_plain = secrets.token_urlsafe(32)
             token_hash = _hash_token(token_plain)
-        data[site_id] = {
-            "id": site_id,
+        data[probe_id] = {
+            "id": probe_id,
             "name": name,
             "mode": mode,
             "subnets": subnets,
@@ -217,16 +217,16 @@ def create_site(name: str, mode: str, subnets=None, **kwargs):
             **jump_fields,
         }
         _save(data)
-        return _public(data[site_id]), token_plain
+        return _public(data[probe_id]), token_plain
 
 
-def set_site_flow_status(site_id: str, active: bool) -> bool:
+def set_probe_flow_status(probe_id: str, active: bool) -> bool:
     with _lock:
         data = _load()
-        site = data.get(site_id)
-        if not site:
+        probe = data.get(probe_id)
+        if not probe:
             return False
-        site["flow_active"] = bool(active)
+        probe["flow_active"] = bool(active)
         _save(data)
         return True
 
@@ -234,11 +234,11 @@ def set_site_flow_status(site_id: str, active: bool) -> bool:
 _BASTION_LINK = ("jump_host", "jump_port", "jump_identity")
 
 
-def update_site(site_id: str, name=None, mode=None, subnets=None, **kwargs) -> bool:
+def update_probe(probe_id: str, name=None, mode=None, subnets=None, **kwargs) -> bool:
     with _lock:
         data = _load()
-        site = data.get(site_id)
-        if not site:
+        probe = data.get(probe_id)
+        if not probe:
             return False
         if isinstance(name, dict):
             kwargs.update(name)
@@ -246,77 +246,77 @@ def update_site(site_id: str, name=None, mode=None, subnets=None, **kwargs) -> b
             mode = kwargs.pop("mode", mode)
             subnets = kwargs.pop("subnets", subnets)
         if name is not None and isinstance(name, str) and name.strip():
-            site["name"] = name.strip()
+            probe["name"] = name.strip()
         if mode is not None:
             if mode not in VALID_MODES:
                 raise ValueError(f"Modalità non valida: {mode}")
-            site["mode"] = mode
+            probe["mode"] = mode
             # Passando a 'central' il token non serve più.
             if mode == "central":
-                site["token_hash"] = None
+                probe["token_hash"] = None
         if subnets is not None:
-            site["subnets"] = [s.strip() for s in subnets if isinstance(s, str) and s.strip()]
+            probe["subnets"] = [s.strip() for s in subnets if isinstance(s, str) and s.strip()]
         # If the resulting mode is 'jump', validate the bastion fields (existing
         # values merged with any incoming kwargs) before the generic passthrough
-        # below can write an invalid jump site.
-        if site["mode"] == "jump":
-            before = tuple(site.get(k) for k in _BASTION_LINK)
-            site.update(_validate_jump({**site, **kwargs}))
-            # A verification vouches for one bastion: pointing the site at
+        # below can write an invalid jump probe.
+        if probe["mode"] == "jump":
+            before = tuple(probe.get(k) for k in _BASTION_LINK)
+            probe.update(_validate_jump({**probe, **kwargs}))
+            # A verification vouches for one bastion: pointing the probe at
             # another host, port or login makes it unverified again.
-            if tuple(site.get(k) for k in _BASTION_LINK) != before:
-                site["bastion_verified_ts"] = None
+            if tuple(probe.get(k) for k in _BASTION_LINK) != before:
+                probe["bastion_verified_ts"] = None
             kwargs = {k: v for k, v in kwargs.items()
                       if k not in ("jump_host", "jump_port", "jump_identity",
                                    "device_identity")}
         for k, v in kwargs.items():
-            site[k] = v
+            probe[k] = v
         _save(data)
         return True
 
 
-def delete_site(site_id: str) -> bool:
-    if site_id == DEFAULT_SITE_ID:
+def delete_probe(probe_id: str) -> bool:
+    if probe_id == DEFAULT_PROBE_ID:
         return False
     with _lock:
         data = _load()
-        if site_id not in data:
+        if probe_id not in data:
             return False
-        del data[site_id]
+        del data[probe_id]
         _save(data)
         return True
 
 
-def regenerate_token(site_id: str):
+def regenerate_token(probe_id: str):
     """Rigenera il token di un sito agent. Ritorna il token in chiaro o None."""
     with _lock:
         data = _load()
-        site = data.get(site_id)
-        if not site or site.get("mode") != "agent":
+        probe = data.get(probe_id)
+        if not probe or probe.get("mode") != "agent":
             return None
         token_plain = secrets.token_urlsafe(32)
-        site["token_hash"] = _hash_token(token_plain)
+        probe["token_hash"] = _hash_token(token_plain)
         _save(data)
         return token_plain
 
 
-def touch_last_seen(site_id: str) -> None:
+def touch_last_seen(probe_id: str) -> None:
     with _lock:
         data = _load()
-        site = data.get(site_id)
-        if site:
-            site["last_seen"] = time.time()
+        probe = data.get(probe_id)
+        if probe:
+            probe["last_seen"] = time.time()
             _save(data)
 
 
-def mark_bastion_verified(site_id: str) -> bool:
-    """Record that the site's bastion answered a test with a confirmed key."""
+def mark_bastion_verified(probe_id: str) -> bool:
+    """Record that the probe's bastion answered a test with a confirmed key."""
     with _lock:
         data = _load()
-        site = data.get(site_id)
-        if not site:
+        probe = data.get(probe_id)
+        if not probe:
             return False
-        site["bastion_verified_ts"] = time.time()
+        probe["bastion_verified_ts"] = time.time()
         _save(data)
         return True
 
@@ -329,10 +329,10 @@ def authenticate(token: Optional[str] = None) -> Optional[str]:
         return None
     h = _hash_token(token)
     with _lock:
-        for site in _load().values():
-            if site.get("mode") == "agent" and site.get("token_hash") \
-                    and secrets.compare_digest(site["token_hash"], h):
-                return site["id"]
+        for probe in _load().values():
+            if probe.get("mode") == "agent" and probe.get("token_hash") \
+                    and secrets.compare_digest(probe["token_hash"], h):
+                return probe["id"]
     return None
 
 
@@ -399,7 +399,7 @@ def _init_jobs():
             c.execute("""
                 CREATE TABLE IF NOT EXISTS command_jobs (
                     id           TEXT PRIMARY KEY,
-                    site_id      TEXT NOT NULL,
+                    probe_id      TEXT NOT NULL,
                     device_ip    TEXT NOT NULL,
                     command      TEXT NOT NULL,
                     status       TEXT NOT NULL DEFAULT 'pending',
@@ -409,7 +409,7 @@ def _init_jobs():
                     updated      REAL NOT NULL
                 )
             """)
-            c.execute("CREATE INDEX IF NOT EXISTS ix_jobs_site ON command_jobs(site_id, status)")
+            c.execute("CREATE INDEX IF NOT EXISTS ix_jobs_probe ON command_jobs(probe_id, status)")
             # Migrazione in avanti: i job esistenti sono tutti CLI, ed è il
             # default giusto — un agente vecchio che riceve solo 'cli' continua
             # a funzionare senza sapere che 'rest' esiste.
@@ -426,7 +426,7 @@ def _init_jobs():
         _jobs_init_done = True
 
 
-def enqueue_job(site_id: str, device_ip: str, command: str,
+def enqueue_job(probe_id: str, device_ip: str, command: str,
                 requested_by: str = "", kind: str = "cli",
                 blacklist_bypass: bool = False) -> dict:
     """Accoda un lavoro per l'agente della sede.
@@ -455,10 +455,10 @@ def enqueue_job(site_id: str, device_ip: str, command: str,
     now = time.time()
     with _jobs_lock, _connect() as c:
         c.execute("""INSERT INTO command_jobs
-                     (id, site_id, device_ip, command, kind, blacklist_bypass,
+                     (id, probe_id, device_ip, command, kind, blacklist_bypass,
                       status, result, requested_by, created, updated)
                      VALUES (?,?,?,?,?,?, 'pending', '', ?, ?, ?)""",
-                   (job_id, site_id, device_ip, command, kind,
+                   (job_id, probe_id, device_ip, command, kind,
                     1 if blacklist_bypass else 0, requested_by, now, now))
     res = get_job(job_id)
     return res if res is not None else {}
@@ -471,15 +471,15 @@ def get_job(job_id: str):
     return dict(row) if row else None
 
 
-def claim_pending_jobs(site_id: str, limit: int = 20) -> list:
+def claim_pending_jobs(probe_id: str, limit: int = 20) -> list:
     """Restituisce i job 'pending' del sito marcandoli 'running' (chiamata
     dall'agente in polling). Operazione atomica sotto lock."""
     _init_jobs()
     now = time.time()
     with _jobs_lock, _connect() as c:
         rows = c.execute(
-            "SELECT * FROM command_jobs WHERE site_id=? AND status='pending' "
-            "ORDER BY created ASC LIMIT ?", (site_id, limit)).fetchall()
+            "SELECT * FROM command_jobs WHERE probe_id=? AND status='pending' "
+            "ORDER BY created ASC LIMIT ?", (probe_id, limit)).fetchall()
         jobs = [dict(r) for r in rows]
         for j in jobs:
             c.execute("UPDATE command_jobs SET status='running', updated=? WHERE id=?",
@@ -488,7 +488,7 @@ def claim_pending_jobs(site_id: str, limit: int = 20) -> list:
     return jobs
 
 
-def complete_job(job_id: str, site_id: str, status: str, result: str) -> bool:
+def complete_job(job_id: str, probe_id: str, status: str, result: str) -> bool:
     """Registra l'esito di un job (chiamata dall'agente). Verifica che il job
     appartenga al sito che lo dichiara concluso."""
     _init_jobs()
@@ -497,12 +497,12 @@ def complete_job(job_id: str, site_id: str, status: str, result: str) -> bool:
     now = time.time()
     with _jobs_lock, _connect() as c:
         cur = c.execute(
-            "UPDATE command_jobs SET status=?, result=?, updated=? WHERE id=? AND site_id=?",
-            (status, result or "", now, job_id, site_id))
+            "UPDATE command_jobs SET status=?, result=?, updated=? WHERE id=? AND probe_id=?",
+            (status, result or "", now, job_id, probe_id))
         return cur.rowcount > 0
 
 
-def find_recent_rest_result(site_id: str, device_ip: str, path: str,
+def find_recent_rest_result(probe_id: str, device_ip: str, path: str,
                             max_age_s: int = 300):
     """Ultimo job REST concluso per quell'apparato e quel percorso, se recente.
 
@@ -518,10 +518,10 @@ def find_recent_rest_result(site_id: str, device_ip: str, path: str,
     with _jobs_lock, _connect() as c:
         rows = c.execute(
             """SELECT * FROM command_jobs
-               WHERE site_id=? AND device_ip=? AND kind='rest'
+               WHERE probe_id=? AND device_ip=? AND kind='rest'
                  AND status IN ('done','error') AND updated >= ?
                ORDER BY updated DESC LIMIT 20""",
-            (site_id, device_ip, cutoff)).fetchall()
+            (probe_id, device_ip, cutoff)).fetchall()
     for row in rows:
         try:
             if json.loads(row["command"]).get("path") == path:
@@ -531,16 +531,16 @@ def find_recent_rest_result(site_id: str, device_ip: str, path: str,
     return None
 
 
-def has_pending_rest_job(site_id: str, device_ip: str, path: str) -> bool:
+def has_pending_rest_job(probe_id: str, device_ip: str, path: str) -> bool:
     """Un job identico è già in coda o in esecuzione: non se ne accoda un
     altro a ogni apertura del referto."""
     _init_jobs()
     with _jobs_lock, _connect() as c:
         rows = c.execute(
             """SELECT command FROM command_jobs
-               WHERE site_id=? AND device_ip=? AND kind='rest'
+               WHERE probe_id=? AND device_ip=? AND kind='rest'
                  AND status IN ('pending','running')""",
-            (site_id, device_ip)).fetchall()
+            (probe_id, device_ip)).fetchall()
     for row in rows:
         try:
             if json.loads(row["command"]).get("path") == path:
@@ -550,7 +550,7 @@ def has_pending_rest_job(site_id: str, device_ip: str, path: str) -> bool:
     return False
 
 
-def has_pending_triage_job(site_id: str, device_ip: str) -> bool:
+def has_pending_triage_job(probe_id: str, device_ip: str) -> bool:
     """Un job di triage per questo apparato e' gia' in coda o in esecuzione.
 
     Senza, un agente offline vede la coda crescere senza limite a ogni
@@ -560,18 +560,18 @@ def has_pending_triage_job(site_id: str, device_ip: str) -> bool:
     with _jobs_lock, _connect() as c:
         row = c.execute(
             """SELECT 1 FROM command_jobs
-               WHERE site_id=? AND device_ip=? AND kind='triage'
+               WHERE probe_id=? AND device_ip=? AND kind='triage'
                  AND status IN ('pending','running') LIMIT 1""",
-            (site_id, device_ip)).fetchone()
+            (probe_id, device_ip)).fetchone()
     return row is not None
 
 
-def list_jobs(site_id: Optional[str] = None, limit: int = 100) -> list:
+def list_jobs(probe_id: Optional[str] = None, limit: int = 100) -> list:
     _init_jobs()
     with _jobs_lock, _connect() as c:
-        if site_id:
-            rows = c.execute("SELECT * FROM command_jobs WHERE site_id=? "
-                             "ORDER BY created DESC LIMIT ?", (site_id, limit)).fetchall()
+        if probe_id:
+            rows = c.execute("SELECT * FROM command_jobs WHERE probe_id=? "
+                             "ORDER BY created DESC LIMIT ?", (probe_id, limit)).fetchall()
         else:
             rows = c.execute("SELECT * FROM command_jobs ORDER BY created DESC LIMIT ?",
                              (limit,)).fetchall()

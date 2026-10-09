@@ -12,7 +12,7 @@ every other device this is netmiko unchanged.
 One transport is kept per site and reused by all its devices; a dead transport
 is rebuilt on the next call.
 
-Locking is per-site, not global: a black-holed bastion (firewall silently
+Locking is per-probe, not global: a black-holed bastion (firewall silently
 dropping SYN, or accepting the TCP connection but never speaking SSH) must
 only stall the threads dialling THAT site, not every jump-mode connection in
 the process. The registry lock below only ever guards a dict lookup, never
@@ -87,18 +87,18 @@ class BastionAuthError(Exception):
 
 
 _transports: "dict[str, paramiko.Transport]" = {}
-_site_locks: "dict[str, threading.Lock]" = {}
-_registry_lock = threading.Lock()  # guards _site_locks/_transports lookups only, never I/O
+_probe_locks: "dict[str, threading.Lock]" = {}
+_registry_lock = threading.Lock()  # guards _probe_locks/_transports lookups only, never I/O
 
 
-def _lock_for(site_id: str) -> threading.Lock:
-    """Return the per-site lock, creating it if needed. Two different sites
+def _lock_for(probe_id: str) -> threading.Lock:
+    """Return the per-probe lock, creating it if needed. Two different sites
     never wait on each other here; two threads for the same site do."""
     with _registry_lock:
-        lock = _site_locks.get(site_id)
+        lock = _probe_locks.get(probe_id)
         if lock is None:
             lock = threading.Lock()
-            _site_locks[site_id] = lock
+            _probe_locks[probe_id] = lock
         return lock
 
 
@@ -177,20 +177,20 @@ def _pin_host_key(host: str, port: int, key, scope: "str | None" = None) -> None
     keys.save(path)
 
 
-def _dial(site: dict, pin: bool = True) -> paramiko.Transport:
+def _dial(probe: dict, pin: bool = True) -> paramiko.Transport:
     """Open and authenticate one transport to the site's bastion. No caching.
 
     pin=False is the site wizard's draft test: the key is shown to the
     operator first and pinned only by pin_confirmed().
     """
     from security import identity_manager
-    site_id = site["id"]
-    creds = identity_manager.get_identity_credentials(site["jump_identity"])
+    probe_id = probe["id"]
+    creds = identity_manager.get_identity_credentials(probe["jump_identity"])
     if not creds:
-        raise ValueError(f"Identita' {site['jump_identity']} non trovata.")
+        raise ValueError(f"Identita' {probe['jump_identity']} non trovata.")
     username, password = creds[0], creds[1]
-    host = site["jump_host"]
-    port = int(site.get("jump_port") or 22)
+    host = probe["jump_host"]
+    port = int(probe.get("jump_port") or 22)
     sock = socket.create_connection((host, port), timeout=CONNECT_TIMEOUT)
     # Trust on first use, like the WS terminal: paramiko.Transport has no
     # policy hook, so the pinned key is handed to connect() (which then
@@ -217,11 +217,11 @@ def _dial(site: dict, pin: bool = True) -> paramiko.Transport:
         if isinstance(e, paramiko.AuthenticationException):
             raise BastionAuthError(
                 f"Il bastione {host} della sede "
-                f"'{site_id}' ha rifiutato l'utente '{username}': "
+                f"'{probe_id}' ha rifiutato l'utente '{username}': "
                 f"credenziali del bastione, non del dispositivo.") from e
         if pinned is not None and isinstance(e, paramiko.SSHException) and                 "host key" in str(e).lower():
             raise BastionHostKeyError(
-                f"Il bastione {host} della sede '{site_id}' presenta una "
+                f"Il bastione {host} della sede '{probe_id}' presenta una "
                 f"chiave host diversa da quella registrata. Se il bastione e' "
                 f"stato reinstallato, rimuovere la riga "
                 f"'{_host_key_id(host, port)}' da ssh_known_hosts; "
@@ -232,23 +232,23 @@ def _dial(site: dict, pin: bool = True) -> paramiko.Transport:
     return tr
 
 
-def _transport(site: dict) -> paramiko.Transport:
+def _transport(probe: dict) -> paramiko.Transport:
     """Return a live SSH transport to the site's bastion, opening it if needed."""
-    site_id = site["id"]
-    with _lock_for(site_id):
-        tr = _transports.get(site_id)
+    probe_id = probe["id"]
+    with _lock_for(probe_id):
+        tr = _transports.get(probe_id)
         if tr is not None and tr.is_active():
             return tr
         try:
-            tr = _dial(site)
+            tr = _dial(probe)
         except Exception:
-            _transports.pop(site_id, None)
+            _transports.pop(probe_id, None)
             raise
-        _transports[site_id] = tr
+        _transports[probe_id] = tr
         return tr
 
 
-def invalidate_site(site_id: str) -> None:
+def invalidate_probe(probe_id: str) -> None:
     """Drop the cached transport for a site so the next call re-authenticates.
 
     One transport per site is kept and reused. It was opened with the bastion
@@ -257,8 +257,8 @@ def invalidate_site(site_id: str) -> None:
     session: the old login kept working until the transport happened to die.
     Called whenever the bastion address, port or identity is edited.
     """
-    with _lock_for(site_id):
-        tr = _transports.pop(site_id, None)
+    with _lock_for(probe_id):
+        tr = _transports.pop(probe_id, None)
     if tr is not None:
         try:
             tr.close()
@@ -268,7 +268,7 @@ def invalidate_site(site_id: str) -> None:
             pass
 
 
-def probe_bastion(site: dict) -> str:
+def probe_bastion(probe: dict) -> str:
     """Dial the bastion with the site's current identity and hang up.
 
     Deliberately does NOT go through _transport: the point is to test the
@@ -277,7 +277,7 @@ def probe_bastion(site: dict) -> str:
     Raises BastionAuthError on a refused login, or the underlying socket/SSH
     error otherwise.
     """
-    tr = _dial(site)
+    tr = _dial(probe)
     try:
         return fingerprint(tr.get_remote_server_key())
     finally:
@@ -391,35 +391,35 @@ def _persist_device_key(host: "str | None", port: int, conn,
               f"registrata al primo uso (TOFU).")
 
 
-def jump_channel(site: dict, host: str, port: int) -> paramiko.Channel:
+def jump_channel(probe: dict, host: str, port: int) -> paramiko.Channel:
     """Open a direct-tcpip channel from the bastion to host:port."""
-    return _transport(site).open_channel(
+    return _transport(probe).open_channel(
         "direct-tcpip", (host, int(port)), ("127.0.0.1", 0))
 
 
-def jump_site_for(host: str, tenant: "str | None" = None):
+def bastion_probe_for(host: str, tenant: "str | None" = None):
     """Return the jump site owning this device IP, or None.
 
-    get_device_by_ip's cache entry carries "site" (lowercase — see
+    get_device_by_ip's cache entry carries "probe" (lowercase — see
     services/inventory_manager.py:get_device_by_ip), not the raw CSV row's
-    "Site" column. The collision sentinel {"collision": True} has no "site"
+    "Probe" column. The collision sentinel {"collision": True} has no "probe"
     key, so a duplicated IP without tenant falls through here to a direct connection
     rather than risking a tunnel to the wrong customer.
     """
-    from services import inventory_manager, site_manager
+    from services import inventory_manager, probe_manager
     device = inventory_manager.get_device_by_ip(host, tenant=tenant)
     if not device:
         return None
-    site = site_manager.get_site(device.get("site") or "")
-    return site if site and site.get("mode") == "jump" else None
+    probe = probe_manager.get_probe(device.get("probe") or "")
+    return probe if probe and probe.get("mode") == "jump" else None
 
 
-def ConnectHandler(site_id: "str | None" = None, tenant: "str | None" = None, **params):
+def ConnectHandler(probe_id: "str | None" = None, tenant: "str | None" = None, **params):
     """netmiko.ConnectHandler, tunnelled when the device sits behind a bastion.
 
-    site_id names the site explicitly, for callers whose target is not in the
+    probe_id names the probe explicitly, for callers whose target is not in the
     inventory yet (day-0 provisioning): the default path is still the
-    inventory lookup, and site_id is only consulted when that finds nothing.
+    inventory lookup, and probe_id is only consulted when that finds nothing.
 
     The whole dial is one ssh.connect span: handshake, authentication and
     netmiko's prompt discovery, which is where a slow device spends its time.
@@ -429,28 +429,28 @@ def ConnectHandler(site_id: "str | None" = None, tenant: "str | None" = None, **
              "server.port": int(params.get("port") or 22),
              "netmiko.device_type": str(params.get("device_type") or "")}
     with _tracer.start_as_current_span("ssh.connect", attributes=attrs):
-        return _connect(site_id, tenant, **params)
+        return _connect(probe_id, tenant, **params)
 
 
-def _connect(site_id: "str | None", tenant: "str | None", **params):
+def _connect(probe_id: "str | None", tenant: "str | None", **params):
     host = params.get("host") or params.get("ip")
-    site = jump_site_for(host, tenant=tenant) if host else None
-    if site is None and site_id:
-        from services import site_manager
-        candidate = site_manager.get_site(site_id)
-        site = candidate if candidate and candidate.get("mode") == "jump" else None
-    if site:
-        trace.get_current_span().set_attribute("sentinelnet.bastion_site",
-                                               str(site.get("id") or ""))
+    probe = bastion_probe_for(host, tenant=tenant) if host else None
+    if probe is None and probe_id:
+        from services import probe_manager
+        candidate = probe_manager.get_probe(probe_id)
+        probe = candidate if candidate and candidate.get("mode") == "jump" else None
+    if probe:
+        trace.get_current_span().set_attribute("sentinelnet.bastion_probe",
+                                               str(probe.get("id") or ""))
     port = int(params.get("port") or 22)
     # Host keys of devices behind a bastion are pinned in that bastion's own
     # file: private IPs are only unique within their site.
-    scope = (_host_key_id(site.get("jump_host") or "", int(site.get("jump_port") or 22))
-             if site else None)
+    scope = (_host_key_id(probe.get("jump_host") or "", int(probe.get("jump_port") or 22))
+             if probe else None)
     if host:
         params = _device_ssh_params(params, scope)
     caller_disabled = params.pop("disabled_algorithms", None)
-    if not (host and site):
+    if not (host and probe):
         def direct(extra):
             return _netmiko_connect(
                 **params, **_disabled_kw(ssh_legacy.merged(caller_disabled, extra)))
@@ -466,12 +466,12 @@ def _connect(site_id: "str | None", tenant: "str | None", **params):
     def tunnelled(extra):
         # One channel per attempt: a refused handshake leaves its channel
         # unusable, so the fallback cannot reuse it.
-        chan = jump_channel(site, host, port)
+        chan = jump_channel(probe, host, port)
         try:
             return _netmiko_connect(
                 sock=chan, **params, **_disabled_kw(ssh_legacy.merged(caller_disabled, extra)))
         except Exception:
-            # The channel lives on the shared, long-lived per-site transport, so
+            # The channel lives on the shared, long-lived per-probe transport, so
             # nothing reclaims it on failure: `with ConnectHandler(...)` at the
             # call sites cannot help, because the context manager never binds
             # when the constructor raises. Without this, a site polled on a

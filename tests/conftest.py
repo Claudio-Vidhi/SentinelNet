@@ -4,7 +4,7 @@
 """Pin the shared-at-import paths before any test module can claim them.
 
 Nineteen module-level constants resolve `data_config.get_path(...)` at import
-(`USERS_JSON`, `KEY_FILE`, `DB_PATH`, `SITES_JSON`, `TENANT_SNMP_JSON`,
+(`USERS_JSON`, `KEY_FILE`, `DB_PATH`, `PROBES_JSON`, `TENANT_SNMP_JSON`,
 `BACKUP_FOLDER`, ...). Eighty-one test modules each set their own
 `SENTINELNET_DATA_DIR` at *their* import and reasonably believe they are
 isolated. Only the first import of each production module wins, so in practice
@@ -57,5 +57,5 @@ from security import snmp_defaults          # noqa: E402,F401  TENANT_SNMP_JSON
 from security import user_manager           # noqa: E402,F401  USERS_JSON
 from services import fortigate_service      # noqa: E402,F401  TOKENS_FILE
 from services import inventory_manager      # noqa: E402,F401  hosts/groups/versions/vendors/categories/models
-from services import site_manager           # noqa: E402,F401  SITES_JSON, JOBS_DB
+from services import probe_manager           # noqa: E402,F401  PROBES_JSON, JOBS_DB
 from services import vlan_routing           # noqa: E402,F401  VLAN_ROUTING_JSON

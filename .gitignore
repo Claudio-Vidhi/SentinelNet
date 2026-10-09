@@ -28,7 +28,7 @@ agent.json
 # invece che da una data dir (installazioni vecchie, esecuzioni a mano).
 network_hosts.csv
 users.json
-sites.json
+probes.json
 groups.json
 identities.json
 vendors.json

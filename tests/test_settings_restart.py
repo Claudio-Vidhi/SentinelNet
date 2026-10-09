@@ -4,7 +4,7 @@
 """Riavvio dell'applicazione e generazione del certificato self-signed dalla GUI.
 
 Isola SENTINELNET_DATA_DIR in una dir temporanea PRIMA degli import, come
-tests/test_remote_site.py, cosi' non tocca i dati reali.
+tests/test_agent_probe.py, cosi' non tocca i dati reali.
 """
 import os
 import subprocess

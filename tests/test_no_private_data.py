@@ -33,7 +33,7 @@ class TrackedTreeIsClean(unittest.TestCase):
         # Un file di stato assente oggi ma NON ignorato torna tracciabile al
         # primo `git add -A` dopo che lo strumento ha girato sulla rete di un
         # cliente. La domanda giusta e' "git lo ignorerebbe?", non "c'e'?".
-        for name in ("data/sites.json", "data/users.json", "network_hosts.csv",
+        for name in ("data/probes.json", "data/users.json", "network_hosts.csv",
                      "data/mac_history.db", "data/identities.json",
                      "agent-data/network_hosts.csv", "data/security/x.md"):
             r = subprocess.run(["git", "check-ignore", "-q", name],

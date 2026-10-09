@@ -144,7 +144,7 @@ class ConnectFallbackTest(unittest.TestCase):
                 raise effect
             return effect
         with patch.object(net_ssh, "_netmiko_connect", side_effect=fake), \
-             patch.object(net_ssh, "jump_site_for", return_value=None), \
+             patch.object(net_ssh, "bastion_probe_for", return_value=None), \
              patch.object(net_ssh, "_device_ssh_params", side_effect=lambda p, s=None: p), \
              patch.object(net_ssh, "_persist_device_key"), \
              patch.object(net_ssh, "_pinned_host_key", return_value=None):

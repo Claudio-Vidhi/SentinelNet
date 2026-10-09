@@ -40,7 +40,7 @@ def maybe_enable(net_connect, netmiko_type: str, secret: str) -> None:
 from drivers.registry import (  # noqa: F401 (reimport contract)
     DRIVER_REGISTRY, VENDOR_DRIVER_DEFAULTS, resolve_driver,
 )
-from services import site_manager
+from services import probe_manager
 from security.security_manager import log_audit
 from core import data_config
 
@@ -365,7 +365,7 @@ def _run_tagged(net_connect, cmds, read_timeout=None, prefix_hostname=False):
 # selection, agent). Past 4-5 simultaneous SSH logins, AAA servers and device
 # login throttles (login block-for, TACACS/RADIUS rate limits) start refusing
 # valid credentials, which surfaced as a wall of 'auth failed'. The rest wait.
-# ponytail: one global limit; per-site or per-AAA-server slots if a large fleet
+# ponytail: one global limit; per-location or per-AAA-server slots if a large fleet
 # spread across independent sites needs more throughput.
 TRIAGE_MAX_CONCURRENT = 3
 _TRIAGE_SLOTS = threading.BoundedSemaphore(TRIAGE_MAX_CONCURRENT)
@@ -374,7 +374,7 @@ _TRIAGE_SLOTS = threading.BoundedSemaphore(TRIAGE_MAX_CONCURRENT)
 def _manual_refusal(device):
     """The error result for a manual device, None for any other.
 
-    Same shape as the agent-site refusal, returned before anything resolves
+    Same shape as the agent-probe refusal, returned before anything resolves
     credentials or dials the device."""
     if not is_manual(device):
         return None
@@ -408,13 +408,13 @@ def _run_backup_and_triage(device):
     ip     = device['IP']
     vendor = device['Vendor'].lower()
 
-    # An agent-site device is not the central's to reach: the agent runs this
+    # An agent-probe device is not the central's to reach: the agent runs this
     # same triage locally and pushes the result. This MUST run before the
     # FortiGate dispatch below: that branch opens a REST/SSH connection of
     # its own, so a check placed after it would still let the central dial
     # a FortiGate at an agent site over HTTPS -- the exact thing this mode
     # exists to prevent.
-    if site_manager.is_agent_site(device.get('Site')):
+    if probe_manager.is_agent_probe(device.get('Probe')):
         return {"status": "error",
                 "message": (f"Il dispositivo {ip} appartiene a una sede con agente: "
                             "il triage viene eseguito dall'agente e inviato al "
@@ -426,10 +426,10 @@ def _run_backup_and_triage(device):
         return _fortigate_backup_and_triage(device)
 
     cli_kind, ssh_port = get_cli_transport(device)
-    # A jump-site device has no direct route from the central by design: the
+    # A bastion-probe device has no direct route from the central by design: the
     # session is tunnelled through the bastion by core.net_ssh. Probing the
     # direct path here would always fail and persist a false "offline".
-    if site_manager.has_direct_path(device.get('Site')) and not is_reachable(ip, ssh_port):
+    if probe_manager.has_direct_path(device.get('Probe')) and not is_reachable(ip, ssh_port):
         update_version_inventory(ip, vendor, "Non Rilevata", "offline")
         log_audit(f"Triage fallito per dispositivo '{ip}': non raggiungibile sulla porta {ssh_port} ({cli_kind.upper()}).")
         return {"status": "error", "message": f"Device {ip} non raggiungibile sulla porta {ssh_port} ({cli_kind.upper()})"}
@@ -664,15 +664,15 @@ def run_bulk_command(device, commands, config_mode=False, save_after=False):
         return refusal
     ip = device['IP']
     cli_kind, ssh_port = get_cli_transport(device)
-    # See run_backup_and_triage: an agent-site device is reached by its agent,
+    # See run_backup_and_triage: an agent-probe device is reached by its agent,
     # through the job queue, never by an SSH session opened here.
-    if site_manager.is_agent_site(device.get('Site')):
+    if probe_manager.is_agent_probe(device.get('Probe')):
         return {"status": "error",
                 "message": (f"Il dispositivo {ip} appartiene a una sede con agente: "
                             "i comandi passano dalla coda job dell'agente, non da "
                             "una sessione SSH aperta dal centrale.")}
     # See run_backup_and_triage: no direct probe for a bastion-only site.
-    if site_manager.has_direct_path(device.get('Site')) and not is_reachable(ip, ssh_port):
+    if probe_manager.has_direct_path(device.get('Probe')) and not is_reachable(ip, ssh_port):
         return {"status": "error", "message": f"Device {ip} non raggiungibile sulla porta {ssh_port} ({cli_kind.upper()})"}
 
     vendor = device['Vendor'].lower()
@@ -1973,7 +1973,7 @@ def _enrich_map_with_redundancy(data: dict) -> dict:
         # Live status: continuous ping monitor is authoritative when available,
         # otherwise detected_versions, otherwise preserve discovered/parsed status.
         if nid in pm_devices:
-            # Tri-state: "up" is None for a jump-site device (bastion tunnel,
+            # Tri-state: "up" is None for a bastion-probe device (bastion tunnel,
             # no ICMP) — not measurable, must not render as a false "offline".
             pm_up = pm_devices[nid].get("up")
             node_copy["status"] = "online" if pm_up is True else "offline" if pm_up is False else "unknown"

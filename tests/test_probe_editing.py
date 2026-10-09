@@ -3,12 +3,12 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """G1-G3 — una sede si modifica dopo la creazione.
 
-``update_site`` accettava nome, subnet, modalita' e campi del bastione dal
+``update_probe`` accettava nome, subnet, modalita' e campi del bastione dal
 primo giorno; l'unica schermata che li scriveva era il form di creazione.
 Cambiare l'indirizzo di un bastione voleva dire una chiamata API a mano.
 
 Il pezzo che NON e' UI: passare a 'agent' lasciava la sede senza token, e
-quindi inservibile, perche' ``update_site`` cambia la modalita' e non ne
+quindi inservibile, perche' ``update_probe`` cambia la modalita' e non ne
 emette uno. Il token ora si emette nella rotta, non nel browser: cosi' vale
 anche per chi chiama l'API direttamente.
 """
@@ -19,15 +19,15 @@ import subprocess
 import tempfile
 import unittest
 
-_TMP = tempfile.mkdtemp(prefix="sentinelnet_test_siteedit_")
+_TMP = tempfile.mkdtemp(prefix="sentinelnet_test_probeedit_")
 os.environ["SENTINELNET_DATA_DIR"] = _TMP
-os.environ.setdefault("SENTINELNET_JWT_SECRET", "test-secret-site-editing")
+os.environ.setdefault("SENTINELNET_JWT_SECRET", "test-secret-probe-editing")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
 import app_server  # noqa: E402
 
-ADMIN, ADMIN_PW = "siteedit_admin", "PasswordSicura1!"
+ADMIN, ADMIN_PW = "probeedit_admin", "PasswordSicura1!"
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -36,7 +36,7 @@ def _read(*parts) -> str:
         return f.read()
 
 
-class TestSiteEditingApi(unittest.TestCase):
+class TestProbeEditingApi(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         from security import user_manager
@@ -58,10 +58,10 @@ class TestSiteEditingApi(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.text)
         return r.json()["site"]["id"]
 
-    def _site(self, site_id):
+    def _probe(self, probe_id):
         r = self.client.get("/api/sites", headers=self.h)
         self.assertEqual(r.status_code, 200, r.text)
-        return next(s for s in r.json()["sites"] if s["id"] == site_id)
+        return next(s for s in r.json()["sites"] if s["id"] == probe_id)
 
     def test_name_and_subnets_change_after_creation(self):
         sid = self._create("Prima")
@@ -69,19 +69,19 @@ class TestSiteEditingApi(unittest.TestCase):
                              json={"id": sid, "name": "Dopo",
                                    "subnets": ["10.21.0.0/24", "10.22.0.0/24"]})
         self.assertEqual(r.status_code, 200, r.text)
-        site = self._site(sid)
-        self.assertEqual(site["name"], "Dopo")
-        self.assertEqual(site["subnets"], ["10.21.0.0/24", "10.22.0.0/24"])
+        probe = self._probe(sid)
+        self.assertEqual(probe["name"], "Dopo")
+        self.assertEqual(probe["subnets"], ["10.21.0.0/24", "10.22.0.0/24"])
 
     def test_switching_to_agent_issues_a_token_once(self):
         sid = self._create("Diventa-Agente")
-        self.assertFalse(self._site(sid)["has_token"])
+        self.assertFalse(self._probe(sid)["has_token"])
         r = self.client.post("/api/sites/update", headers=self.h,
                              json={"id": sid, "mode": "agent"})
         self.assertEqual(r.status_code, 200, r.text)
         token = r.json().get("token")
         self.assertTrue(token, "nessun token emesso: la sede resta inservibile")
-        self.assertTrue(self._site(sid)["has_token"])
+        self.assertTrue(self._probe(sid)["has_token"])
         # Mostrato una volta sola: un salvataggio successivo non lo ripete.
         r2 = self.client.post("/api/sites/update", headers=self.h,
                               json={"id": sid, "name": "Diventa-Agente-2"})
@@ -102,21 +102,21 @@ class TestSiteEditingApi(unittest.TestCase):
         sid = self._create("Torna-Central")
         self.client.post("/api/sites/update", headers=self.h,
                          json={"id": sid, "mode": "agent"})
-        self.assertTrue(self._site(sid)["has_token"])
+        self.assertTrue(self._probe(sid)["has_token"])
         r = self.client.post("/api/sites/update", headers=self.h,
                              json={"id": sid, "mode": "central"})
         self.assertEqual(r.status_code, 200, r.text)
-        self.assertFalse(self._site(sid)["has_token"])
+        self.assertFalse(self._probe(sid)["has_token"])
 
-    def test_a_jump_site_without_a_bastion_is_refused(self):
+    def test_a_jump_probe_without_a_bastion_is_refused(self):
         sid = self._create("Jump-Incompleto")
         r = self.client.post("/api/sites/update", headers=self.h,
                              json={"id": sid, "mode": "jump"})
         self.assertEqual(r.status_code, 400, r.text)
-        self.assertEqual(self._site(sid)["mode"], "central")
+        self.assertEqual(self._probe(sid)["mode"], "central")
 
 
-class TestSiteEditingUi(unittest.TestCase):
+class TestProbeEditingUi(unittest.TestCase):
     """Il modale e i suoi controlli: id che esistono, azioni delegate, nessun
     handler inline."""
 
@@ -154,7 +154,7 @@ class TestSiteEditingUi(unittest.TestCase):
 
 
 
-class TestSiteEnrollment(unittest.TestCase):
+class TestProbeEnrollment(unittest.TestCase):
     """G5 — il token esce insieme al file e ai comandi che lo usano.
 
     Prima era una stringa nuda in un prompt(): chi installava l'agente doveva
@@ -176,9 +176,9 @@ class TestSiteEnrollment(unittest.TestCase):
         self.assertNotIn("prompt(tr('setNewTokenShownOnly')", self.js)
         # Token-issuing paths: the wizard save (creation AND switch to agent,
         # both answer with data.token) and the regeneration.
-        call_sites = (self.js.count("showSiteEnrollment(")
+        call_probes = (self.js.count("showSiteEnrollment(")
                       - self.js.count("function showSiteEnrollment("))
-        self.assertEqual(2, call_sites,
+        self.assertEqual(2, call_probes,
                          "a token-issuing path does not go through the panel")
 
     def test_the_token_is_written_as_text_not_markup(self):

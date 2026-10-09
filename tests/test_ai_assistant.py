@@ -246,9 +246,9 @@ class TestBuildTenantContext(unittest.TestCase):
     def test_includes_only_given_tenant_data(self):
         text = ai_assistant.build_tenant_context(
             "SedeA",
-            devices=[{"IP": "10.0.0.1", "Hostname": "sw1", "Vendor": "cisco", "Site": "central"}],
+            devices=[{"IP": "10.0.0.1", "Hostname": "sw1", "Vendor": "cisco", "Probe": "central"}],
             group_info={"description": "Sede di test"},
-            site=[{"name": "central", "mode": "central", "subnets": ["10.0.0.0/24"], "last_seen": None}],
+            probe=[{"name": "central", "mode": "central", "subnets": ["10.0.0.0/24"], "last_seen": None}],
             mac_stats={"sightings": 5, "unique_macs": 3, "switches": 1, "retention_days": 30},
             mac_recent=[{"mac": "aa:bb:cc:dd:ee:ff", "switch_ip": "10.0.0.1",
                          "interface": "Gi1/0/1", "vlan": "10", "last_seen": "2026-01-01"}],
