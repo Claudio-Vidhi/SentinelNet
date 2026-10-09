@@ -121,6 +121,13 @@ def remove_group(payload: GroupDeleteSchema, current_user = Depends(require_unsc
     if count:
         raise HTTPException(status_code=400, detail=(
             f"Il gruppo contiene {count} apparati: spostali o eliminali prima di eliminarlo."))
+    # Decommissioned devices keep their credentials: a tenant created later
+    # under the same key would inherit them.
+    parked = sum(1 for d in inventory_manager.get_decommissioned_devices()
+                 if d.get('Group') == group_name)
+    if parked:
+        raise HTTPException(status_code=400, detail=(
+            f"Il gruppo ha {parked} apparati dismessi: riattivali o eliminali prima di eliminarlo."))
     if inventory_manager.delete_group(group_name):
         log_audit(f"Gruppo '{group_name}' eliminato dall'utente '{current_user.get('sub')}'.")
         return {"status": "success"}
