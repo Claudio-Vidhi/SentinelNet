@@ -40,6 +40,7 @@ class TestDeviceProbeGui(unittest.TestCase):
 
         r_op = cls.client.post("/api/auth/login", json={"username": OPERATOR, "password": OPERATOR_PW})
         cls.op_h = {"Authorization": "Bearer " + r_op.json()["access_token"]}
+        inventory_manager.add_group("Generale")
 
     @classmethod
     def tearDownClass(cls):

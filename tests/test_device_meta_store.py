@@ -102,7 +102,7 @@ class TestClassificationReadsTheSavedAssignment(unittest.TestCase):
     def test_manual_fields_reach_the_tab(self):
         from routers import catalog
         im.set_device_meta("192.0.2.1", tenant="sede-a", category="switch", subcategory="core")
-        im.set_device_meta("discovered_ap-01", tenant="Generale", category="ap", ha_group="ha-1")
+        im.set_device_meta("discovered_ap-01", tenant="", category="ap", ha_group="ha-1")
         with mock.patch("core.core_engine.generate_network_map", return_value=self.MAP):
             nodes = {n["id"]: n for n in catalog.assemble_classification(None)["nodes"]}
         self.assertTrue(nodes["192.0.2.1"]["is_manual"])
@@ -159,7 +159,7 @@ class TestChosenNameClosesTheConflict(unittest.TestCase):
 
     def test_conflict_is_open_until_a_name_is_saved(self):
         self.assertEqual(len(self._node()["name_options"]), 2)
-        im.set_device_meta("discovered_sw-12", tenant="Generale", name="sw-12")
+        im.set_device_meta("discovered_sw-12", tenant="", name="sw-12")
         self.assertEqual(self._node()["name_options"], [])
 
 

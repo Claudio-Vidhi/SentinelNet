@@ -1432,7 +1432,7 @@
     function tidyLayeredTree() {
         const pos = networkInstance.getPositions(), ids = Object.keys(pos), adj = {}, kids = {}, isKid = {}, parentOf = {};
         const nodesDs = networkInstance.body.data.nodes;
-        const tenantOf = id => { const nd = nodesDs.get(id); return (nd && nd.nodeDataVal && nd.nodeDataVal.group) || 'Generale'; };
+        const tenantOf = id => { const nd = nodesDs.get(id); return (nd && nd.nodeDataVal && nd.nodeDataVal.group) || ''; };
         networkInstance.body.data.edges.forEach(e => {
             (adj[e.from] || (adj[e.from] = [])).push(e.to);
             (adj[e.to] || (adj[e.to] = [])).push(e.from);
@@ -1569,7 +1569,7 @@
         networkInstance.body.data.nodes.forEach(nd => {
             const bb = networkInstance.getBoundingBox(nd.id);
             if (!bb || !pos[nd.id]) return;
-            const g = (nd.nodeDataVal && nd.nodeDataVal.group) || 'Generale';
+            const g = (nd.nodeDataVal && nd.nodeDataVal.group) || '';
             const s = tenants[g] || (tenants[g] = { x0: Infinity, x1: -Infinity, nodes: [] });
             s.x0 = Math.min(s.x0, bb.left); s.x1 = Math.max(s.x1, bb.right); s.nodes.push(nd);
             top = Math.min(top, bb.top); bottom = Math.max(bottom, bb.bottom);
@@ -1667,7 +1667,7 @@
         const pos = networkInstance.getPositions();
         const bb = id => networkInstance.getBoundingBox(id);
         const nodesDs = networkInstance.body.data.nodes;
-        const tenantOf = id => { const nd = nodesDs.get(id); return (nd && nd.nodeDataVal && nd.nodeDataVal.group) || 'Generale'; };
+        const tenantOf = id => { const nd = nodesDs.get(id); return (nd && nd.nodeDataVal && nd.nodeDataVal.group) || ''; };
         const edges = networkInstance.body.data.edges.get().filter(e => e.lnk && pos[e.from] && pos[e.to]);
         const muted = hexToRgba(cssVar('--text-muted', '#94a3b8'), 0.55);
         // Org-chart wiring: each parent drops ONE trunk to a bus that spans its
@@ -2425,7 +2425,7 @@
         // circonferenza e i suoi nodi partono da lì (la fisica mantiene i cluster).
         // vis.js non supporta i riquadri tratteggiati di raggruppamento: si
         // approssima con la sola vicinanza spaziale.
-        const groups = [...new Set(nodeData.map(n => n.group || 'Generale'))];
+        const groups = [...new Set(nodeData.map(n => n.group || ''))];
         const groupCenter = {};
         groups.forEach((g, i) => {
             const angle = (2 * Math.PI * i) / groups.length;
@@ -2471,7 +2471,7 @@
             const border = showVtpDomain && n.vtp_domain ? vtpDomainColor(n.vtp_domain) : S.node.borderColor;
 
             // Posizione iniziale: attorno al centro del proprio gruppo/Sede.
-            const c = groupCenter[n.group || 'Generale'] || { x: 0, y: 0 };
+            const c = groupCenter[n.group || ''] || { x: 0, y: 0 };
             const jitter = 180;
 
             return {
@@ -2535,7 +2535,7 @@
         // Info raggruppamento per Sede/Gruppo (contenitore tratteggiato nell'overlay).
         const groupsInfo = groups.map(g => ({
             group: g,
-            ids: nodeData.filter(n => (n.group || 'Generale') === g).map(n => n.id)
+            ids: nodeData.filter(n => (n.group || '') === g).map(n => n.id)
         })).filter(gi => gi.ids.length > 0);
 
         const bundles = [];

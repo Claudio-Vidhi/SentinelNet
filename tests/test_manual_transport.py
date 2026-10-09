@@ -35,7 +35,8 @@ class ManualSurvivesOtherWrites(unittest.TestCase):
         p = mock.patch.object(im, "get_hosts_csv", return_value=self.hosts)
         p.start()
         self.addCleanup(p.stop)
-        from services import location_manager
+        from services import inventory_manager, location_manager
+        inventory_manager.add_group("Generale")
         loc = location_manager.create_location("Generale", "Sede Manual")
         self.loc_id = loc["id"]
 

@@ -130,12 +130,11 @@ class TestPrecedenza(_Base):
                 _device(group="sede-b", community="")), "")
 
     def test_tenant_mancante_sul_device(self):
-        """Group vuoto = 'Generale', come ovunque nell'inventario."""
+        """No Group means no tenant: it inherits no tenant's default."""
         snmp_defaults.set_tenant_community("Generale", "del-tenant")
 
         self.assertEqual(
-            snmp_defaults.resolve_snmp_community({"IP": "192.0.2.1"}),
-            "del-tenant")
+            snmp_defaults.resolve_snmp_community({"IP": "192.0.2.1"}), "")
 
 
 class TestPollerUsaLaRisoluzione(_Base):

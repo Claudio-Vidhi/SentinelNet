@@ -182,8 +182,8 @@
             <textarea id="agentInventoryTextarea" placeholder="IP,Vendor,Profile,Username,Password,Enable Secret,Group,Hostname,Probe,SSH Port,Transports,SNMP Community&#10;192.0.2.1,fortigate,custom,admin,,,Tenant_Milano,fw-01,milano,22,,&#10;192.0.2.2,cisco,custom,admin,,,Tenant_Milano,switch-01,milano,22,," style="width:100%; height:100px; font-family:var(--font-code); font-size:11px; padding:8px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); resize:vertical;"></textarea>
             <div style="margin-top:6px; font-size:11px; color:var(--text-muted); line-height:1.5;">
                 Serve almeno la colonna <code>IP</code>; il separatore può essere <code>,</code> o <code>;</code> e le altre
-                colonne sono opzionali. Il tenant è la colonna <strong>Group</strong> (non "Tenant"): con un nome diverso
-                l'apparato finisce in "Generale". Al salvataggio il file viene riscritto nelle colonne canoniche qui sopra,
+                colonne sono opzionali. Il tenant è la colonna <strong>Group</strong> (non "Tenant").
+                Al salvataggio il file viene riscritto nelle colonne canoniche qui sopra,
                 quindi eventuali colonne aggiuntive vengono scartate.
                 <br><strong style="color:var(--warning);">Password e Enable Secret</strong> vengono scritte così come sono:
                 l'agente le attende cifrate con la propria chiave Fernet, e un valore in chiaro viene ignorato in favore

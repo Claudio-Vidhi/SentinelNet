@@ -24,7 +24,7 @@ const windowStub = { addEventListener: (name, fn) => { handlers[name] = fn; } };
 const DEVICES = [
     { IP: '192.0.2.10', Hostname: 'switch-01', Vendor: 'cisco', Group: 'sede-a' },
     { IP: '192.0.2.20', Hostname: 'fw-01', Vendor: 'fortinet', Group: 'sede-b' },
-    { IP: '192.0.2.30', Hostname: 'srv-01', Vendor: 'windows' },   // no Group -> Generale
+    { IP: '192.0.2.30', Hostname: 'srv-01', Vendor: 'windows', Group: 'sede-c' },
 ];
 const apiFetch = async (url) => ({
     ok: url === '/api/local-devices',
@@ -49,6 +49,6 @@ async function optionsFor(tenant) {
 assert.deepEqual(await optionsFor('all'),
     ['value="192.0.2.10"', 'value="192.0.2.20"', 'value="192.0.2.30"']);
 assert.deepEqual(await optionsFor('sede-a'), ['value="192.0.2.10"']);
-assert.deepEqual(await optionsFor('Generale'), ['value="192.0.2.30"']);
+assert.deepEqual(await optionsFor('sede-c'), ['value="192.0.2.30"']);
 
 console.log('ok');

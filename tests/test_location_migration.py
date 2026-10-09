@@ -95,6 +95,28 @@ class TestLocationMigration(unittest.TestCase):
         self.assertIn(row["Location"], self._r("locations.json"))
         self.assertEqual(row["Decommissioned By"], "op")
 
+    def test_discovered_node_classification_moves_off_the_fallback_tenant(self):
+        import sqlite3
+        self._w("groups.json", {"Generale": {}})  # check-generale: ok
+        self._w("network_hosts.csv", HDR + "192.0.2.1,cisco,Generale,sw-01,central\n")  # check-generale: ok
+        conn = sqlite3.connect(os.path.join(self.d, "device_meta.db"))
+        conn.execute("CREATE TABLE assignments (tenant TEXT, node_id TEXT, name TEXT, "
+                     "PRIMARY KEY (tenant, node_id))")
+        conn.executemany("INSERT INTO assignments VALUES (?, ?, ?)", [
+            ("Generale", "192.0.2.1", "managed"),  # check-generale: ok
+            ("Generale", "discovered_ap-01", "ap"),  # check-generale: ok
+            ("acme", "192.0.2.5", "other"),
+        ])
+        conn.commit()
+        conn.close()
+        location_migration.migrate(self.d)
+        conn = sqlite3.connect(os.path.join(self.d, "device_meta.db"))
+        rows = sorted(conn.execute("SELECT tenant, node_id FROM assignments"))
+        conn.close()
+        self.assertEqual(rows, [("", "discovered_ap-01"),
+                                ("Generale", "192.0.2.1"),  # check-generale: ok
+                                ("acme", "192.0.2.5")])
+
     def test_legacy_rows_without_probe_use_central(self):
         self._w("groups.json", {"acme": {}})
         self._w("network_hosts.csv", "IP,Vendor,Group\n192.0.2.1,cisco,acme\n")

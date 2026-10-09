@@ -29,7 +29,7 @@ async function populateIdentTenantOptions(selected) {
     } catch (e) { /* fallback */ }
     const fromGlobal = Object.keys(globalGroups || {});
     const fromDevs = (globalDevices || []).map(d => d.Group).filter(Boolean);
-    const allTenants = [...new Set(['Generale', ...fromGlobal, ...fromDevs])].sort();
+    const allTenants = [...new Set([...fromGlobal, ...fromDevs])].sort();
     if (typeof window.populateGenCfgTenants === 'function') window.populateGenCfgTenants();
 
     // Single select options
@@ -578,7 +578,7 @@ async function loadProvisioningTab() {
 function assignIdentityToDevices(identityId) {
     const ident = (window._tenantIdentities || []).find(x => x.id === identityId);
     if (!ident) return;
-    const currentTenant = document.getElementById('devGroupSelect')?.value || 'Generale';
+    const currentTenant = document.getElementById('devGroupSelect')?.value || '';
     const L = i18n[currentLang];
 
     // Se l'identità è legata a tenant specifici, vengono elencati SOLO i device di quei tenant.

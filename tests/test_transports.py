@@ -50,6 +50,7 @@ class TestUpsertRoundTrip(unittest.TestCase):
         inventory_manager.HOSTS_CSV = self.csv_path
         inventory_manager.invalidate_device_ip_cache()
         from services import location_manager
+        inventory_manager.add_group("Generale")
         loc = location_manager.list_locations("Generale")
         self.loc_id = loc[0]["id"] if loc else location_manager.create_location("Generale", "Sede Generale")["id"]
 
@@ -159,6 +160,7 @@ class TestAddDeviceEndpoint(unittest.TestCase):
         self._log = inventory_router.log_audit
         inventory_router.log_audit = lambda msg: self.audits.append(msg)
         from services import location_manager
+        inventory_manager.add_group("Generale")
         loc = location_manager.list_locations("Generale")
         self.loc_id = loc[0]["id"] if loc else location_manager.create_location("Generale", "Sede Generale")["id"]
 
@@ -170,7 +172,7 @@ class TestAddDeviceEndpoint(unittest.TestCase):
 
     def test_telnet_enable_is_audited(self):
         dev = inventory_router.DeviceSchema(
-            ip="10.0.0.20", vendor="cisco", profile="default",
+            ip="10.0.0.20", vendor="cisco", profile="default", group="Generale",
             transports={"ssh": 22, "telnet": 23}, location=self.loc_id)
         inventory_router.add_device(dev, current_user=ADMIN)
         self.assertTrue(any("Telnet" in a for a in self.audits),
@@ -178,7 +180,7 @@ class TestAddDeviceEndpoint(unittest.TestCase):
 
     def test_invalid_protocol_returns_400_italian(self):
         dev = inventory_router.DeviceSchema(
-            ip="10.0.0.21", vendor="cisco", profile="default",
+            ip="10.0.0.21", vendor="cisco", profile="default", group="Generale",
             transports={"gopher": 70})
         with self.assertRaises(HTTPException) as ctx:
             inventory_router.add_device(dev, current_user=ADMIN)
@@ -187,7 +189,7 @@ class TestAddDeviceEndpoint(unittest.TestCase):
 
     def test_invalid_port_returns_400_italian(self):
         dev = inventory_router.DeviceSchema(
-            ip="10.0.0.22", vendor="cisco", profile="default",
+            ip="10.0.0.22", vendor="cisco", profile="default", group="Generale",
             transports={"ssh": 99999})
         with self.assertRaises(HTTPException) as ctx:
             inventory_router.add_device(dev, current_user=ADMIN)

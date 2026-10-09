@@ -4,10 +4,7 @@
 """«Generale» fallback removal ratchet (spec 2026-10-09 organizations-locations).
 Every device row belongs to an organization; no organization is special.
 A line that must keep it (the migration's empty-Group rule only) carries
-'check-generale: ok'.
-
-PENDING lists files not cleaned up yet. It only shrinks: a listed file that no
-longer offends fails too, so the list cannot go stale."""
+'check-generale: ok'."""
 import re
 import subprocess
 import unittest
@@ -17,20 +14,6 @@ ROOT = Path(__file__).resolve().parent.parent
 MARK = "check-generale: ok"
 SCANNED = re.compile(r"\.(py|js|mjs|html)$")
 QUOTED = re.compile(r"""['"]Generale['"]""")
-
-PENDING = frozenset({
-    "static/js/ai.js",
-    "static/js/client-map.js",
-    "static/js/devices.js",
-    "static/js/i18n.js",
-    "static/js/netsec-audit.js",
-    "static/js/policy-test.js",
-    "static/js/probe-agent.js",
-    "static/js/provisioning.js",
-    "static/js/topology.js",
-    "static/js/wlc.js",
-    "templates/dashboard.html",
-})
 
 
 def offending(text: str):
@@ -64,14 +47,9 @@ class TestNoGeneraleFallback(unittest.TestCase):
                 found[rel] = hits
         return found
 
-    def test_no_new_offenders(self):
+    def test_no_generale_fallback_in_codebase(self):
         offenders = self._offenders()
-        new = {p: h[:3] for p, h in offenders.items() if p not in PENDING}
-        self.assertEqual(new, {}, "remove Generale fallback, or mark with " + MARK)
-
-    def test_pending_only_shrinks(self):
-        stale = sorted(PENDING - set(self._offenders()))
-        self.assertEqual(stale, [], "remove these from PENDING: they are clean")
+        self.assertEqual(offenders, {}, "remove Generale fallback, or mark with " + MARK)
 
 
 if __name__ == "__main__":

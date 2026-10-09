@@ -143,6 +143,7 @@ class JumpChannelRealDeviceLookup(unittest.TestCase):
     def test_connect_handler_finds_jump_probe_via_real_device_lookup(self):
         from core import net_ssh
         from services import location_manager
+        inventory_manager.add_group("Generale")
         loc = location_manager.list_locations("Generale")
         loc_id = loc[0]["id"] if loc else location_manager.create_location("Generale", "Centrale")["id"]
         inventory_manager.add_or_update_device(
