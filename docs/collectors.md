@@ -22,7 +22,7 @@ No collector is enabled by default. Configuration and exposure:
 | SNMP v2c | outbound UDP 161 | — | [ingesters/snmp_poller.py](../observability/ingesters/snmp_poller.py) | `api_observations` |
 | Linux health | outbound SSH | 22 | [ingesters/linux_poller.py](../observability/ingesters/linux_poller.py) | `api_observations` |
 | Windows health | outbound SSH | 22 | [ingesters/windows_poller.py](../observability/ingesters/windows_poller.py) | `api_observations` |
-| Site agent | inbound HTTPS | 8000 | [services/site_agent.py](../services/site_agent.py) | inventory, MAC, syslog |
+| Probe agent | inbound HTTPS | 8000 | [services/probe_agent.py](../services/probe_agent.py) | inventory, MAC, syslog |
 | ARP / MAC tables | SSH · NETCONF · RESTCONF | — | [collectors/](../collectors/) | `mac_history.db`, `arp_entries` |
 
 The first four are **passive**: devices send, SentinelNet listens. The rest are
@@ -172,7 +172,7 @@ inventory (§2.1). Two conditions, both on the sending side:
 2. **It sends UDP to the configured port** (default 5514). The listener is UDP
    only: TCP or TLS syslog is not accepted. UDP loses messages under load and
    travels in clear, so keep it on a management network; for a server at a
-   remote site use the site agent, not UDP over the VPN.
+   remote site use the probe agent, not UDP over the VPN.
 
 Enable the listener first: Settings → Observability, syslog on.
 
@@ -371,8 +371,8 @@ changes: `normalize._from_api_observations` already projects them into
   reading zero would stay silent exactly where it isn't looking.
 - **No sudo.** Every metric here is readable by an unprivileged account, so the
   session never calls `enable()`. The privileged tier exists only in triage.
-- **Central sites only.** Hosts behind a site agent in `mode == 'agent'` are not
-  polled; supporting them means adding the round to `services/site_agent.py`.
+- **Direct (central server) probes only.** Hosts behind a probe agent in `mode == 'agent'` are not
+  polled; supporting them means adding the round to `services/probe_agent.py`.
 
 ### Windows hosts
 
@@ -393,15 +393,15 @@ one PowerShell command over SSH, `kind` `windows_health`, event `source`
 
 ---
 
-## 8. Site agents
+## 8. Probe agents
 
-For sites in *site agent* mode, the agent collects locally and pushes outbound
+For probes in *Agent probe* mode, the agent collects locally and pushes outbound
 over HTTPS to central: inventory, MAC tables, batched syslog
-(`POST /api/agent/syslog`, stored tagged by site and tenant), and CLI job
+(`POST /api/agent/syslog`, stored tagged by probe and tenant), and CLI job
 results.
 
 Device credentials stay in the agent's data directory; only metadata goes to
-central. Full guide: [remote-sites.md](remote-sites.md).
+central. Full guide: [probes.md](probes.md).
 
 ---
 
@@ -418,7 +418,7 @@ IP plugged in".
 - [mac_history.py](../collectors/mac_history.py) — sighting history,
   reclassification, uplink detection, manual overrides.
 
-Both are pushed by remote site agents too (`POST /api/agent/mac`,
+Both are pushed by remote probe agents too (`POST /api/agent/mac`,
 `POST /api/agent/arp`). ARP in particular is not optional at a remote site:
 `arp_entries` holds the only MAC↔IP binding, so without it a remote client has
 a switch port but no address — and Client Map, flow path and client diagnosis
@@ -426,7 +426,7 @@ all start from the IP.
 
 **Both are collected on demand, not on a schedule.** Nothing in
 `listener_manager` triggers them; they run from the ARP/MAC scan buttons or
-from a site agent's cycle. Anything reading this data should surface
+from a probe agent's cycle. Anything reading this data should surface
 `last_seen` / `port_last_seen` rather than presenting a three-week-old port as
 current — which is why the client diagnosis carries both dates into its report.
 

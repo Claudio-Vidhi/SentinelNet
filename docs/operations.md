@@ -26,9 +26,9 @@ for `data/` next to *that*. First thing to check when "the data disappeared".
 | `observability.db` (+ `-wal`, `-shm`) | Flows, syslog, events, evidence, incidents |
 | `mac_history.db` | MAC position history, ARP |
 | `redundancy.db` | HA group state |
-| `device_meta.db` | Manual device classification (category, name, vendor, model, HA group per site) and the per-vendor model catalogue. Replaces `device_categories.json` / `device_models.json`, imported once and left as `*.migrated` |
+| `device_meta.db` | Manual device classification (category, name, vendor, model, HA group per probe) and the per-vendor model catalogue. Replaces `device_categories.json` / `device_models.json`, imported once and left as `*.migrated` |
 | `users.json` | Local accounts, bcrypt |
-| `groups.json` / `sites.json` | Groups and sites |
+| `groups.json` / `probes.json` | Groups and probes |
 | `app_settings.json` | GUI configuration (observability, rule thresholds, suppressions, preview flags) |
 | `fortigate_tokens.json` | FortiGate API tokens, encrypted |
 | `secret.key` / `jwt_secret.key` | Local cryptographic keys |
@@ -37,7 +37,7 @@ for `data/` next to *that*. First thing to check when "the data disappeared".
 | `error_log.txt` | SSH engine exceptions |
 | `backup-config/<group>/<vendor>/` | Device running-configs |
 
-`secret.key`, `jwt_secret.key`, `users.json`, `sites.json` and `mac_history.db`
+`secret.key`, `jwt_secret.key`, `users.json`, `probes.json` and `mac_history.db`
 get restrictive ACLs at creation (best effort: `icacls` on Windows, `chmod 600`
 elsewhere).
 
@@ -225,8 +225,8 @@ tenant. The schedule's history shows totals, successes and errors per run.
 
 ### "A CLI command stays `queued` forever"
 
-Agent-mode site with the agent stopped, or an IP missing from the agent's
-**local** inventory. See [remote-sites.md](remote-sites.md) §5.
+Agent-mode probe with the agent stopped, or an IP missing from the agent's
+**local** inventory. See [probes.md](probes.md) §5.
 
 ### "A device refuses every connection after a reinstall (`DeviceHostKeyError`)"
 
@@ -405,7 +405,7 @@ backing that key up separately, offline.
 ### Unreachable devices (manual config)
 
 A device SentinelNet cannot reach - neither over SSH from the central server
-nor through a site agent - is added by uploading its config: *CSV Import -> Upload
+nor through a probe agent - is added by uploading its config: *CSV Import -> Upload
 config*. For the chosen vendor the wizard shows the command that turns paging
 off and the list of commands to run (the same ones the triage runs by itself).
 With session logging enabled in the SSH client, run the commands and upload the

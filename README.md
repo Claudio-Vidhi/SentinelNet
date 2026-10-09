@@ -112,7 +112,7 @@ Full index: [docs/README.md](docs/README.md).
 | Data sources (NetFlow, IPFIX, sFlow, syslog, SNMP, REST) | [docs/collectors.md](docs/collectors.md) |
 | Operations runbook (logs, diagnostics, retention, backup) | [docs/operations.md](docs/operations.md) |
 | Secure exposure (TLS, reverse proxy), roles and permissions | [docs/hardening.md](docs/hardening.md) |
-| Multi-site deployment | [docs/remote-sites.md](docs/remote-sites.md) |
+| Multi-site deployment | [docs/probes.md](docs/probes.md) |
 | Layout, tests, build | [docs/development.md](docs/development.md) |
 | Architecture decisions and their rationale | [docs/adr/](docs/adr/) |
 
@@ -130,7 +130,7 @@ multi-group scope): [CONTRIBUTING.md](CONTRIBUTING.md).
 | `observability/` | Ingest → events → rules → evidence → incidents pipeline |
 | `collectors/` | ARP, MAC tables, MAC history, subnet scanner |
 | `routers/` | One FastAPI router per functional area |
-| `services/` | FortiGate, WLC, inventory, provisioners, sites, site agent, notifications, scheduled triage |
+| `services/` | FortiGate, WLC, inventory, provisioners, probes, probe agent, notifications, scheduled triage |
 | `security/` | JWT/RBAC/audit, credential encryption, keystore, redaction |
 | `ai/` | LLM assistant, config analyzer, MCP server and client |
 | `drivers/` | One driver per vendor, `BaseDriver` as the contract |
@@ -146,11 +146,11 @@ Python **3.11+** (`requires-python` in `pyproject.toml` is authoritative). The
 Docker image ships 3.11; development happens on 3.14.
 
 **Operating systems.** The central server runs on Linux, Windows or Docker.
-The **site agent is Linux-only, and a Windows agent is not planned** — its
+The **probe agent is Linux-only, and a Windows agent is not planned** — its
 remote management (log tail, restart) is built on systemd and has no
-equivalent elsewhere. A site with no Linux host connects as a jump site or by
-central poll instead; see
-[docs/remote-sites.md](docs/remote-sites.md).
+equivalent elsewhere. A site with no Linux host connects through a bastion probe, or in
+Direct (central server) mode, instead; see
+[docs/probes.md](docs/probes.md).
 
 Key dependencies:
 `netmiko` for SSH
@@ -243,7 +243,7 @@ and sign-in address — never the password.
 | Role | Can |
 |---|---|
 | `super_admin` | Everything, including creating and managing admin accounts. The first account, and every admin that existed before 0.40.0, is a super_admin; at least one must stay active |
-| `admin` | Manage operators and viewers — only inside its own tenants when it is limited to some. Global settings (SMTP, SSO, certificates, updates, tenants, sites, cloud backup, MCP) need an admin with no tenant limit |
+| `admin` | Manage operators and viewers — only inside its own tenants when it is limited to some. Global settings (SMTP, SSO, certificates, updates, tenants, probes, cloud backup, MCP) need an admin with no tenant limit |
 | `operator` | Network operations: backup, triage, CLI commands, scans |
 | `viewer` | Read only |
 
@@ -360,10 +360,10 @@ Observability listener variables (`SENTINELNET_OBS_*`) are documented in
 ## Remote sites (multi-site)
 
 SentinelNet manages multiple sites over VPN from a single central server, in
-**central poll** mode (direct SSH over VPN) or **site agent** mode (a remote
+**Direct (central server)** mode (direct SSH over VPN) or **probe agent** mode (a remote
 agent that connects outbound and receives commands from a queue). The agent
 requires a Linux host; central does not. Full deployment guide:
-[docs/remote-sites.md](docs/remote-sites.md).
+[docs/probes.md](docs/probes.md).
 
 ---
 
@@ -489,7 +489,7 @@ Available tools, by area:
 | Area | Tools |
 |---|---|
 | **Diagnosis** | `diagnose_client` — the L2+L3 report for one client; prefer it over the per-device tools when the question is about a client rather than about one box |
-| Inventory & topology | `list_devices`, `get_network_map`, `get_port_channels`, `list_sites` |
+| Inventory & topology | `list_devices`, `get_network_map`, `get_port_channels`, `list_probes` |
 | Identity & location | `locate_mac`, `search_mac`, `mac_to_ip`, `client_map`, `arp_scan` |
 | FortiGate | `fortigate_status`, `_interfaces`, `_arp`, `_dhcp_leases`, `_device_inventory`, `_policies`, `_policy_stats`, `_firewall_addresses`, `_firewall_policy_objects`, `_firewall_services`, `_policy_lookup`, `_sessions`, `_routes`, `_traffic_logs`, `_wifi_clients`, `_managed_aps`, `_full_config`, `_diagnose_client` |
 | Cisco WLC | `wlc_status`, `_ap_summary`, `_client_summary`, `_client_detail`, `_wlan_summary`, `_rogue_aps`, `wlc_diagnose_client` |

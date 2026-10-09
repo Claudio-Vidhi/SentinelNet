@@ -278,7 +278,7 @@ the risk this section is about. Decide per tool, not per bridge.
 
 | Tier | Tools | Why |
 |---|---|---|
-| **Read-only, safe to enable** | `list_devices`, `get_network_map`, `get_port_channels`, `locate_mac`, `search_mac`, `mac_to_ip`, `client_map`, `endpoint_inventory`, `analyze_config`, `get_triage_status`, `list_sites`, every `fortigate_*` and `wlc_*` read, `diagnose_client`, `policy_trace`, `policy_findings`, `list_incidents`, `get_incident`, `cve_priority`, `cve_for_device`, `search_vulnerabilities`, `drift_summary`, `drift_versions`, `drift_diff`, `interface_errors`, `interface_errors_port`, `get_routes`, `trace_route`, `get_device_classification` | They read what the panel already shows to that user. The worst case is a model summarising data the user could open in two clicks. The three `drift_*` tools need an operator account, like the drift tab; `get_routes` runs read-only `show` commands on the devices it is given |
+| **Read-only, safe to enable** | `list_devices`, `get_network_map`, `get_port_channels`, `locate_mac`, `search_mac`, `mac_to_ip`, `client_map`, `endpoint_inventory`, `analyze_config`, `get_triage_status`, `list_probes`, every `fortigate_*` and `wlc_*` read, `diagnose_client`, `policy_trace`, `policy_findings`, `list_incidents`, `get_incident`, `cve_priority`, `cve_for_device`, `search_vulnerabilities`, `drift_summary`, `drift_versions`, `drift_diff`, `interface_errors`, `interface_errors_port`, `get_routes`, `trace_route`, `get_device_classification` | They read what the panel already shows to that user. The worst case is a model summarising data the user could open in two clicks. The three `drift_*` tools need an operator account, like the drift tab; `get_routes` runs read-only `show` commands on the devices it is given |
 | **Touches devices — enable deliberately** | `send_cli_command`, `arp_scan`, `generate_fortigate_config`, `generate_switch_config` | `send_cli_command` opens an SSH session and runs a string: the CLI blacklist still applies (admins bypass it, audited — see §M-1 in the code), but a model chooses the command. `arp_scan` interrogates gateways. The two generators produce configuration that someone may paste without reading |
 | **Disabled by default** | `get_top_talkers`, `get_anomalies`, `linux_health` | `routers/mcp.py:_MCP_DEFAULT_DISABLED`. They stay off until an admin saves an explicit MCP setting: absent settings mean off, not "all on" |
 
@@ -316,7 +316,7 @@ Four roles, ranked `viewer` < `operator` < `admin` < `super_admin`
   none is.
 - **`admin`** manages operators and viewers. An admin can be limited to some
   tenants, and then manages only users inside them. Global settings — SMTP,
-  SSO, public URL, certificates, updates, tenants, sites, cloud backup, MCP —
+  SSO, public URL, certificates, updates, tenants, probes, cloud backup, MCP —
   need an admin with no tenant limit (`is_unscoped_admin`).
 - **Tenant scope** (`user_group_scope`) filters every list and
   `assert_device_allowed` guards every device route: a device outside the
