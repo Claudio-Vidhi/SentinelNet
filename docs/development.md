@@ -174,7 +174,7 @@ Jaeger UI: <http://localhost:16686>. What arrives:
 |---|---|---|
 | `GET /api/...` | fastapi, every request | route, status code |
 | `triage.device` | `core_engine.run_backup_and_triage` | device IP, vendor |
-| `ssh.connect` | `core.net_ssh.ConnectHandler` | device IP, port, device type, bastion site |
+| `ssh.connect` | `core.net_ssh.ConnectHandler` | device IP, port, device type, bastion probe |
 | `ssh.command` | every netmiko `send_command*`/`send_config_set` | first 3 words of the command, or the line count of a config set |
 | `snmp.round` / `snmp.poll` | `snmp_poller.poll_once` | device count / device IP, `snmp.silent` |
 | `snmp.read_error_counters` | on-demand interface error read | device IP |
