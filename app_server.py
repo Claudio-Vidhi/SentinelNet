@@ -234,8 +234,10 @@ app.include_router(_firewall_traffic_router.router)
 app.include_router(_manual_config_router.router)
 from routers import notifications as _notifications_router
 from routers import interface_errors as _interface_errors_router
+from routers import locations as _locations_router
 app.include_router(_notifications_router.router)
 app.include_router(_interface_errors_router.router)
+app.include_router(_locations_router.router)
 
 _default_origins = f"http://localhost:{effective_port()},http://127.0.0.1:{effective_port()}"
 ALLOWED_ORIGINS = [

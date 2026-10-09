@@ -152,7 +152,7 @@ class TestRbacScope(unittest.TestCase):
         # sul device, un operator limitato a sede-a pilota gli apparati di
         # sede-c. Il ruolo da solo non basta (CONTRIBUTING.md §4).
         from services import probe_manager
-        sid = probe_manager.create_probe("relay-scope-test", "agent", [])[0]["id"]
+        sid = probe_manager.create_probe("relay-scope-test", "agent")[0]["id"]
         c = self._client("single")           # solo sede-a
         # Le POST autenticate via cookie richiedono l'header anti-CSRF: senza,
         # si otterrebbe 403 per un motivo che non c'entra con lo scoping.
@@ -185,7 +185,7 @@ class TestRbacScope(unittest.TestCase):
         # Job di un'altra sede: 404 identico al job inesistente, per non
         # confermarne l'esistenza (stessa politica di /anomalies).
         from services import probe_manager
-        sid = probe_manager.create_probe("job-scope-test", "agent", [])[0]["id"]
+        sid = probe_manager.create_probe("job-scope-test", "agent")[0]["id"]
         job_a = probe_manager.enqueue_job(sid, "10.1.0.1", "show version")
         job_c = probe_manager.enqueue_job(sid, "10.3.0.1", "show version")
 

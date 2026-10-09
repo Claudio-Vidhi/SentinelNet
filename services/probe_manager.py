@@ -196,7 +196,7 @@ def is_agent_probe(probe_id: Optional[str]) -> bool:
     return bool(probe and probe.get("mode") == "agent")
 
 
-def create_probe(name: str, mode: str, subnets=None, **kwargs):
+def create_probe(name: str, mode: str, **kwargs):
     """Crea una sonda. Ritorna (probe_pubblico, token_in_chiaro|None).
     Per i siti in modalità 'agent' viene generato un token (mostrato una volta).
     # For 'jump' probes, kwargs carries jump_host/jump_port/jump_identity
@@ -246,7 +246,7 @@ def set_probe_flow_status(probe_id: str, active: bool) -> bool:
 _BASTION_LINK = ("jump_host", "jump_port", "jump_identity")
 
 
-def update_probe(probe_id: str, name=None, mode=None, subnets=None, **kwargs) -> bool:
+def update_probe(probe_id: str, name=None, mode=None, **kwargs) -> bool:
     with _lock:
         data = _load()
         probe = data.get(probe_id)
@@ -256,7 +256,7 @@ def update_probe(probe_id: str, name=None, mode=None, subnets=None, **kwargs) ->
             kwargs.update(name)
             name = kwargs.pop("name", None)
             mode = kwargs.pop("mode", mode)
-            subnets = kwargs.pop("subnets", subnets)
+            kwargs.pop("subnets", None)
         if name is not None and isinstance(name, str) and name.strip():
             probe["name"] = name.strip()
         if mode is not None:

@@ -36,7 +36,6 @@ def _device_in_scope(current_user, device_ip: str) -> bool:
 class ProbeCreateSchema(BaseModel):
     name: str
     mode: str = "central"          # "central" | "agent" | "jump"
-    subnets: List[str] = []
     # Bastion fields, required by probe_manager only when mode == "jump".
     jump_host: Optional[str] = None
     jump_port: Optional[int] = None
@@ -50,7 +49,6 @@ class ProbeUpdateSchema(BaseModel):
     id: str
     name: Optional[str] = None
     mode: Optional[str] = None
-    subnets: Optional[List[str]] = None
     jump_host: Optional[str] = None
     jump_port: Optional[int] = None
     jump_identity: Optional[str] = None
@@ -103,7 +101,7 @@ def create_probe_ep(payload: ProbeCreateSchema, current_user = Depends(require_u
         _pin_or_409((payload.jump_host or "").strip(), payload.jump_port or 22, fp)
     try:
         probe, token = probe_manager.create_probe(
-            payload.name, payload.mode, payload.subnets,
+            payload.name, payload.mode,
             jump_host=payload.jump_host, jump_port=payload.jump_port,
             jump_identity=payload.jump_identity,
             device_identity=payload.device_identity)
@@ -145,7 +143,7 @@ def update_probe_ep(payload: ProbeUpdateSchema, current_user = Depends(require_u
         _pin_or_409(host, port, fp)
     try:
         ok = probe_manager.update_probe(payload.id, payload.name, payload.mode,
-                                      payload.subnets, **jump_kwargs)
+                                      **jump_kwargs)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if not ok:

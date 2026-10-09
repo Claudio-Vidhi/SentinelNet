@@ -155,7 +155,7 @@ class TestScopedAdminOnTenantData(_PrivateUsers):
 
     def test_probe_details_only_for_unscoped_admin(self):
         from services import probe_manager
-        probe = probe_manager.create_probe("scope-probe", "central", ["192.0.2.0/24"])[0]
+        probe = probe_manager.create_probe("scope-probe", "central")[0]
         self.addCleanup(probe_manager.delete_probe, probe["id"])
         for name, full in (("sadm", False), ("adm", True)):
             with self.subTest(user=name):
