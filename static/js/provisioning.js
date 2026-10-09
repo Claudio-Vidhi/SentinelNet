@@ -13,7 +13,22 @@
 // dalla tab Devices (editDevice) e dalla tab Groups (btnCreateGroup,
 // loadVendors), ancora inline in dashboard.html.
 
-document.getElementById('devGroupSelect').addEventListener('change', async () => { await refreshIdentityOptions(); renderIdentitiesPanel(); });
+document.getElementById('devGroupSelect').addEventListener('change', async () => { populateDevLocationOptions(''); await refreshIdentityOptions(); renderIdentitiesPanel(); });
+// Picking a location prefills the probe with its default; the user may still change it.
+document.getElementById('devLocationSelect').addEventListener('change', (e) => {
+    const loc = locationById(e.target.value);
+    const probeSel = document.getElementById('devProbeSelect');
+    if (loc && probeSel && Array.from(probeSel.options).some(o => o.value === loc.probe)) probeSel.value = loc.probe;
+});
+
+// The device form's locations: those of the organization picked above it.
+function populateDevLocationOptions(selected) {
+    const sel = document.getElementById('devLocationSelect');
+    if (!sel) return;
+    const org = document.getElementById('devGroupSelect')?.value || '';
+    sel.innerHTML = `<option value="">${escapeHtml(tr('optSelectLocation'))}</option>` + locationOptionsHtml(selected, org);
+}
+window.populateDevLocationOptions = populateDevLocationOptions;
 
 // --- IDENTITIES CRUD (pannello destro della tab Provisioning) ---
 
@@ -552,6 +567,7 @@ function populateProvisioningFormSelects() {
         ).join('');
         if (prevGroup in globalGroups) groupSelect.value = prevGroup;
     }
+    populateDevLocationOptions(document.getElementById('devLocationSelect')?.value || '');
     populateProbeOptions();
     if (typeof window.populateGenCfgTenants === 'function') {
         window.populateGenCfgTenants();

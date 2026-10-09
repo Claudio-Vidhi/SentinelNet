@@ -500,13 +500,17 @@ def import_csv(payload: CSVImportRequest, current_user = Depends(require_operato
             from services import location_manager
             loc_obj = location_manager.get_location(location_name)
             if not loc_obj or loc_obj.get("org") != group_name:
+                # A CSV is written by hand: the location's name works as well as its id.
+                loc_obj = next((l for l in location_manager.list_locations(group_name)
+                                if l["name"].casefold() == location_name.casefold()), None)
+            if not loc_obj:
                 raise ValueError(f"Sede '{location_name}' inesistente o non appartenente al gruppo '{group_name}'")
 
             inventory_manager.add_or_update_device(
                 ip, vendor, "custom",
                 username, password, enable_secret,
                 group_name, probe=probe_name or None,
-                location=location_name,
+                location=loc_obj["id"],
             )
             # L'hostname del CSV veniva letto e buttato via: chi compilava la
             # colonna vedeva l'inventario restare senza nomi e non capiva
@@ -613,7 +617,8 @@ def reassign_device(payload: DeviceReassignSchema, current_user = Depends(requir
 
     log_audit(
         f"Dispositivo '{payload.ip}' spostato dal gruppo '{old_group}' "
-        f"al gruppo '{payload.new_group}' dall'utente '{current_user.get('sub')}'."
+        f"al gruppo '{payload.new_group}' (sede '{payload.new_location.strip()}') "
+        f"dall'utente '{current_user.get('sub')}'."
     )
     return {"status": "success", "message": f"Dispositivo spostato in '{payload.new_group}'"}
 

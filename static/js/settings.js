@@ -43,7 +43,10 @@
                 ? '<span class="chip">JUMP (BASTION)</span>'
                 : '<span class="status ok"><span class="led led-success"></span>CENTRAL POLL</span>';
             const last = s.last_seen ? new Date(s.last_seen * 1000).toLocaleString() : '—';
+            // Derived from the locations whose default probe this is: read-only here.
             const subnets = (s.subnets || []).map(escapeHtml).join(', ') || '—';
+            const unlocated = s.unlocated_devices
+                ? `<br><span class="chip is-warn">${escapeHtml(tr('chipUnlocatedDevices', { n: s.unlocated_devices }))}</span>` : '';
             // Solo una sonda con agente puo' essere offline: il modo direct (central server) non
             // ha un processo remoto che riporta heartbeat. Soglia legata
             // all'intervallo configurato dell'agente, non fissa: con un
@@ -94,7 +97,7 @@
                 actions = editBtn + actions;
             } else {
                 // La sede predefinita non si elimina e non cambia modalita',
-                // ma nome e subnet sono suoi come di ogni altra.
+                // ma il nome e' suo come di ogni altra.
                 actions = editBtn + `<span class="chip">${L.lblProbeDefault}</span>`;
             }
             return `<tr>
@@ -102,7 +105,7 @@
                 <td>${escapeHtml(s.name)}</td>
                 <td>${modeBadge}</td>
                 <td>${statusCell}</td>
-                <td style="font-size:12px;">${subnets}</td>
+                <td style="font-size:12px;">${subnets}${unlocated}</td>
                 <td style="font-size:12px; color:var(--text-muted);">${last}</td>
                 <td style="white-space:nowrap;">${actions}</td>
             </tr>`;
@@ -127,11 +130,6 @@
     // --- Probe wizard (docs/superpowers/specs/2026-09-23-site-wizard-design.md) --- // check-site-name: ok
     // One side panel for create, edit and agent enrollment:
     // Mode → Details → Connection (jump only) → Summary → Enrollment (new token).
-    const CIDR_RE = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/;
-    function isCidr(s) {
-        const m = CIDR_RE.exec(s);
-        return !!m && m.slice(1, 5).every((o) => +o <= 255) && +m[5] <= 32;
-    }
     const sw = {
         editing: null,     // probe being edited; null when creating
         test: null,        // last draft-test answer for the current bastion fields
@@ -142,7 +140,6 @@
     };
     const swEl = (id) => document.getElementById(id);
     const swMode = () => document.querySelector('input[name="swMode"]:checked')?.value || '';
-    const swSubnets = () => swEl('swSubnets').value.split(',').map((x) => x.trim()).filter(Boolean);
     function swJumpFields() {
         return {
             jump_host: swEl('swJumpHost').value.trim(),
@@ -169,7 +166,7 @@
             { id: 'mode', label: 'swStepMode', skip: () => !!sw.token, validate: () => !!swMode() },
             { id: 'details', label: 'swStepDetails', onEnter: onSwDetailsEnter, skip: () => !!sw.token,
               validate: () => {
-                  if (!swEl('swName').value.trim() || !swSubnets().every(isCidr)) return false;
+                  if (!swEl('swName').value.trim()) return false;
                   if (swMode() !== 'jump') return true;
                   const j = swJumpFields();
                   return !!j.jump_host && !!j.jump_identity && j.jump_port >= 1 && j.jump_port <= 65535;
@@ -193,7 +190,6 @@
         Object.assign(sw, { editing: null, test: null, token: null, probeId: null, keepDraft: false });
         swEl('probeWizardForm').reset();
         swInvalidateTest();
-        swEl('swSubnetChips').replaceChildren();
         swEl('swSaveError').textContent = '';
         document.querySelectorAll('input[name="swMode"]').forEach((r) => { r.disabled = false; });
         swEl('probeWizardTitle').textContent = tr('titleNewProbe');
@@ -227,7 +223,6 @@
             r.disabled = probe.id === 'central';
         });
         swEl('swName').value = probe.name || '';
-        swEl('swSubnets').value = (probe.subnets || []).join(', ');
         swEl('swJumpHost').value = probe.jump_host || '';
         swEl('swJumpPort').value = probe.jump_port || 22;
         await populateSwIdentitySelects(probe.jump_identity || '', probe.device_identity || '');
@@ -263,19 +258,7 @@
         const jump = swMode() === 'jump';
         swEl('swJumpFields').hidden = !jump;
         if (jump) await populateSwIdentitySelects(swEl('swJumpIdentity').value, swEl('swDeviceIdentity').value);
-        renderSwSubnetChips();
         probeWizard.refresh();
-    }
-
-    function renderSwSubnetChips() {
-        swEl('swSubnetChips').replaceChildren(...swSubnets().map((s) => {
-            const chip = document.createElement('span');
-            const ok = isCidr(s);
-            chip.className = 'chip' + (ok ? '' : ' is-bad');
-            chip.textContent = s;
-            if (!ok) chip.title = tr('swSubnetInvalid');
-            return chip;
-        }));
     }
 
     // A test vouches for the exact host/port/identity it ran against.
@@ -337,7 +320,6 @@
         const rows = [
             ['lblProbeName', swEl('swName').value.trim()],
             ['lblProbeMode', tr(modeLabel)],
-            ['lblProbeSubnets', swSubnets().join(', ') || '—'],
         ];
         if (mode === 'jump') {
             const j = swJumpFields();
@@ -364,7 +346,7 @@
     async function saveProbeWizard() {
         const mode = swMode();
         const editing = sw.editing;
-        const body = { name: swEl('swName').value.trim(), subnets: swSubnets() };
+        const body = { name: swEl('swName').value.trim() };
         if (mode === 'jump') {
             Object.assign(body, swJumpFields(), { device_identity: swEl('swDeviceIdentity').value });
             if (swJumpChanged() && swTestPassed()) body.confirmed_fingerprint = sw.test.fingerprint;
@@ -2284,7 +2266,6 @@
         else if (e.target.closest('[data-action="sw-new-identity"]')) goCreateIdentity();
     });
     document.getElementById('probeWizard')?.addEventListener('input', (e) => {
-        if (e.target.id === 'swSubnets') renderSwSubnetChips();
         if (['swJumpHost', 'swJumpPort'].includes(e.target.id)) swInvalidateTest();
     });
     document.getElementById('probeWizard')?.addEventListener('change', (e) => {

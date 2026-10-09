@@ -181,6 +181,67 @@ function orgLabel(id) {
     return (globalGroups && globalGroups[id] && globalGroups[id].name) || id;
 }
 window.orgLabel = orgLabel;
+// Physical locations of the organizations in scope (/api/locations), each
+// {id, org, name, role, subnets, probe, devices}. Reloaded with the inventory.
+let globalLocations = [];
+let locationsReviewPending = false;
+
+async function loadLocations() {
+    const res = await apiFetch('/api/locations');
+    if (!res || !res.ok) return;
+    const data = await res.json();
+    globalLocations = data.locations || [];
+    locationsReviewPending = !!data.review_pending;
+}
+
+function locationById(id) {
+    return globalLocations.find(l => l.id === id) || null;
+}
+
+function locationLabel(id) {
+    const loc = locationById(id);
+    return loc ? loc.name : (id || '—');
+}
+
+// <option>s for a location select: the locations of `org`, or every location
+// grouped by organization when `org` is null (one pick moves both).
+function locationOptionsHtml(selected, org) {
+    const opt = l => `<option value="${escapeHtml(l.id)}"${l.id === selected ? ' selected' : ''}>${escapeHtml(l.name)}</option>`;
+    if (org !== null) return globalLocations.filter(l => l.org === org).map(opt).join('');
+    const orgs = [...new Set(globalLocations.map(l => l.org))].sort();
+    return orgs.map(o => `<optgroup label="${escapeHtml(orgLabel(o))}">${
+        globalLocations.filter(l => l.org === o).map(opt).join('')}</optgroup>`).join('');
+}
+
+// Asks which location of `org` to use: the only one without asking, none =
+// null after telling the user to create one. Resolves to the id or null.
+function pickLocation(org) {
+    const locs = globalLocations.filter(l => l.org === org);
+    if (locs.length === 1) return Promise.resolve(locs[0].id);
+    if (!locs.length) {
+        alert(tr('alertOrgHasNoLocations', { org: orgLabel(org) }));
+        return Promise.resolve(null);
+    }
+    const sel = document.getElementById('locPickSelect');
+    sel.innerHTML = locationOptionsHtml('', org);
+    document.getElementById('locPickOrg').textContent = orgLabel(org);
+    const modal = document.getElementById('locationPickModal');
+    return new Promise(resolve => {
+        const done = value => {
+            modal.removeEventListener('click', onClick);
+            closeModal(modal);
+            resolve(value);
+        };
+        const onClick = e => {
+            if (e.target.closest('#btnLocPickOk')) done(sel.value || null);
+            else if (e.target.closest('[data-loc-pick-cancel]')) done(null);
+        };
+        modal.addEventListener('click', onClick);
+        // Esc and the backdrop go through onClose: same answer as Cancel.
+        openModal(modal, () => done(null));
+    });
+}
+window.pickLocation = pickLocation;
 let globalVendors = {};
 let globalVersions = {}; // Cache globale per lo stato delle scansioni (ottimizzazione UI)
 let currentRole = 'viewer';   // ruolo dell'utente loggato (admin/operator/viewer)
@@ -1493,7 +1554,7 @@ document.getElementById('btnLogout')?.addEventListener('click', (e) => {
 // Ritorna false se l'inventario non e' arrivato, cosi' il chiamante sa che
 // i globali NON sono stati aggiornati e non ridisegna su dati vecchi.
 async function refreshInventory() {
-    const res = await apiFetch('/api/local-devices');
+    const [res] = await Promise.all([apiFetch('/api/local-devices'), loadLocations()]);
     if (!res || !res.ok) return false;
     const data = await res.json();
 

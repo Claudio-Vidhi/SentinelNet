@@ -460,6 +460,7 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
         # Preserva l'hostname già rilevato sul dispositivo esistente
         existing = next((d for d in devices if _same_device(d, ip, resolved_group)), None)
 
+        location_probe = None
         if require_location:
             from services import location_manager
             resolved_location = location if location is not None else (existing.get('Location') if existing else None)
@@ -468,6 +469,7 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
             loc_obj = location_manager.get_location(resolved_location)
             if not loc_obj or loc_obj.get("org") != resolved_group:
                 raise ValueError(f"Sede '{resolved_location}' inesistente o non appartenente al gruppo '{resolved_group}'.")
+            location_probe = loc_obj.get("probe")
         else:
             resolved_location = location if location is not None else (existing.get('Location') if existing else "")
 
@@ -494,7 +496,8 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
             enc_secret = crypto_vault.encrypt_password(enable_secret)
         existing_hostname = existing.get('Hostname') if existing else None
         # Preserva la sede esistente se non ne viene indicata una nuova.
-        resolved_probe = probe or (existing.get('Probe') if existing else None) or 'central'
+        # A new device without an explicit probe takes its location's default.
+        resolved_probe = probe or (existing.get('Probe') if existing else None) or location_probe or 'central'
         resolved_port = ssh_port if ssh_port is not None else \
             ((existing.get('SSH Port') if existing else None) or 22)
         # Trasporti: esplicito > esistente (se già migrato) > sintesi ssh-only.

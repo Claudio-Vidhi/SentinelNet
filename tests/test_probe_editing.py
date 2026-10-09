@@ -128,7 +128,7 @@ class TestProbeEditingUi(unittest.TestCase):
         cls.js = _read("static", "js", "settings.js")
 
     def test_the_panel_and_its_controls_exist(self):
-        for el in ('id="probeWizard"', 'id="swName"', 'id="swSubnets"',
+        for el in ('id="probeWizard"', 'id="swName"',
                    'name="swMode"', 'id="swJumpHost"', 'id="swJumpPort"'):
             self.assertIn(el, self.html, el)
 
