@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 import app_server
 from routers.deps import CSRF_HEADER
 from security import security_manager, user_manager
-from services import inventory_manager
+from services import inventory_manager, probe_manager
 
 H = {CSRF_HEADER: "1"}
 PW = "PasswordSicura1!"
@@ -126,6 +126,39 @@ class TestGuardOverHttp(_Isolated):
         body = r.json()
         self.assertEqual(body["imported"], ["192.0.2.30"])
         self.assertEqual([f["ip"] for f in body["failed"]], ["192.0.2.10"])
+
+
+class TestOtherWriters(_Isolated):
+    def test_agent_push_skips_decommissioned_devices(self):
+        # The agent never deletes local rows: it keeps pushing a device the
+        # operator decommissioned. That must not 500 the whole push, nor bring
+        # the device back (also not under Generale when the agent sends no group).
+        d = tempfile.mkdtemp(prefix="decom_agent_")
+        p = patch.object(probe_manager, "PROBES_JSON", os.path.join(d, "probes.json"))
+        p.start()
+        self.addCleanup(p.stop)
+        probe, token = probe_manager.create_probe("Lab", "agent")
+        self._as("adm").post("/api/devices/decommission", json={"devices": [A10]})
+        devices = [{"ip": "192.0.2.10", "group": "tenant-a"},
+                   {"ip": "192.0.2.10", "group": ""},
+                   {"ip": "192.0.2.40", "group": "tenant-a"}]
+        c = TestClient(app_server.app, raise_server_exceptions=False)
+        r = c.post("/api/agent/inventory", json={"devices": devices},
+                   headers={"X-Probe-Id": probe["id"], "X-Probe-Token": token})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["updated"], 1)
+        active = self.active()
+        self.assertNotIn(("tenant-a", "192.0.2.10"), active)
+        self.assertNotIn(("Generale", "192.0.2.10"), active)
+        self.assertIn(("tenant-a", "192.0.2.40"), active)
+
+    def test_tenant_with_decommissioned_devices_cannot_be_deleted(self):
+        adm = self._as("adm")
+        adm.post("/api/devices/decommission", json={"devices": [B20]})
+        r = adm.post("/api/groups/delete", json={"name": "tenant-b"})
+        self.assertEqual(r.status_code, 400, r.text)
+        self.assertIn("tenant-b", inventory_manager.get_all_groups())
+        self.assertFalse(inventory_manager.delete_group("tenant-b"))
 
 
 if __name__ == "__main__":

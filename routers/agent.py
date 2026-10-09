@@ -170,14 +170,22 @@ def agent_push_inventory(payload: AgentInventorySchema, probe = Depends(get_agen
     probe_id = probe["id"]
     n = 0
     existing_groups = {d.get("IP"): d.get("Group") for d in inventory_manager.get_all_devices()}
+    # The agent never deletes its local rows, so it keeps pushing devices the
+    # operator decommissioned: skip them, without failing the rest of the push.
+    decommissioned_ips = {d.get("IP") for d in inventory_manager.get_decommissioned_devices()}
     for d in payload.devices:
         if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", d.ip):
             continue
         req_group = (d.group or "").strip()
+        if not req_group and d.ip not in existing_groups and d.ip in decommissioned_ips:
+            continue  # would come back under Generale, a tenant it never had
         group = req_group or existing_groups.get(d.ip) or "Generale"
         vendor = inventory_manager.normalize_vendor(d.vendor)
-        inventory_manager.add_or_update_device(
-            d.ip, vendor, "custom", "", "", "", group, probe=probe_id)
+        try:
+            inventory_manager.add_or_update_device(
+                d.ip, vendor, "custom", "", "", "", group, probe=probe_id)
+        except ValueError:
+            continue  # decommissioned in this tenant (or invalid): not ours to revive
         if d.hostname:
             inventory_manager.update_device_hostname(d.ip, d.hostname)
         n += 1

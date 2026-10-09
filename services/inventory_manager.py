@@ -1257,7 +1257,8 @@ def delete_group(group_name: str) -> bool:
         return False
     with _io_lock:
         groups = get_all_groups()
-        if group_name not in groups or any(d.get('Group') == group_name for d in get_all_devices()):
+        if group_name not in groups or any(d.get('Group') == group_name for d in
+                                           get_all_devices() + get_decommissioned_devices()):
             return False
         groups.pop(group_name)
         save_groups(groups)
