@@ -5,6 +5,7 @@ import logging
 import os
 import subprocess
 import sys
+import time
 
 # Read the data directory from the environment (e.g. '/app/data' in Docker).
 # Without the variable, state files are confined to ./data
@@ -356,4 +357,33 @@ def _migrate_legacy_files():
             restrict_permissions(dst)
 
 
+FACTORY_RESET_MARKER = "factory-reset.pending"
+
+
+def _apply_pending_factory_reset():
+    """Archive the data directory when a factory reset was requested (spec
+    2026-10-09 factory-reset); returns the archive path, or None.
+
+    Runs at import, before any module opens a file in the directory: on
+    Windows an open file cannot be moved, which is why the request itself only
+    leaves the marker. stdlib only, logging is not configured yet. The rename
+    is all-or-nothing: if it fails the app starts on the old data and the
+    marker is retried at the next start."""
+    data_dir = os.getenv("SENTINELNET_DATA_DIR") or DATA_DIR
+    if not data_dir or not os.path.isfile(os.path.join(data_dir, FACTORY_RESET_MARKER)):
+        return None
+    archive = f"{data_dir}.wiped-{time.strftime('%Y%m%dT%H%M%S')}"
+    try:
+        os.replace(data_dir, archive)
+    except OSError as e:
+        print(f"[SentinelNet] Reset di fabbrica non applicato: {e}. "
+              f"Nuovo tentativo al prossimo avvio.", file=sys.stderr)
+        return None
+    os.makedirs(data_dir, exist_ok=True)
+    print(f"[SentinelNet] Reset di fabbrica: data directory archiviata in {archive}",
+          file=sys.stderr)
+    return archive
+
+
+_apply_pending_factory_reset()
 _migrate_legacy_files()

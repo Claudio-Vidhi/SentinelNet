@@ -1420,6 +1420,7 @@
 
     async function loadAppSettings() {
         if (!isAdminRole(currentRole)) return;
+        loadFactoryResetState();
         const box = document.getElementById('netSettingsBody');
         if (!box) return;
         const res = await apiFetch('/api/settings/network');
@@ -1828,6 +1829,76 @@
         say('msgRestartNotBack');
     }
 
+    // Factory reset (spec 2026-10-09): the request only leaves a marker; the
+    // next start archives the data directory before opening anything in it.
+    async function loadFactoryResetState() {
+        if (currentRole !== 'super_admin') return;
+        const res = await apiFetch('/api/settings/factory-reset');
+        if (!res || !res.ok) return;
+        const d = await res.json();
+        const path = document.getElementById('frArchivePath');
+        if (path) path.textContent = `${d.data_dir}.wiped-…`;
+        const cancel = document.getElementById('btnCancelFactoryReset');
+        if (cancel) cancel.hidden = !d.pending;
+        const status = document.getElementById('factoryResetStatus');
+        if (status) status.textContent = d.pending ? tr('frPending', { user: d.requested_by || '—' }) : '';
+    }
+
+    const _frInput = id => /** @type {HTMLInputElement} */ (document.getElementById(id));
+
+    function syncFactoryResetConfirm() {
+        const btn = /** @type {HTMLButtonElement} */ (document.getElementById('btnFrConfirm'));
+        btn.disabled = !(_frInput('frConfirm').value.trim() === 'RESET' && _frInput('frPassword').value);
+    }
+
+    function openFactoryResetModal() {
+        _frInput('frPassword').value = '';
+        _frInput('frConfirm').value = '';
+        const err = document.getElementById('frError');
+        if (err) err.textContent = '';
+        syncFactoryResetConfirm();
+        openModal('factoryResetModal');
+    }
+
+    async function confirmFactoryReset() {
+        const res = await apiFetch('/api/settings/factory-reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: _frInput('frPassword').value, confirm: _frInput('frConfirm').value.trim() }),
+        });
+        const d = res ? await res.json().catch(() => ({})) : {};
+        if (!res || !res.ok) {
+            const err = document.getElementById('frError');
+            if (err) err.textContent = typeof d.detail === 'string' ? d.detail : tr('uiError');
+            return;
+        }
+        closeModal('factoryResetModal');
+        if (d.status === 'restarting') watchFactoryReset();
+        else loadFactoryResetState();
+    }
+
+    // Same phases as watchRestart, but what comes back is a fresh install:
+    // reload, and the first-run wizard takes over.
+    async function watchFactoryReset() {
+        const status = document.getElementById('factoryResetStatus');
+        if (status) status.textContent = tr('frRestarting');
+        const start = Date.now();
+        let wentDown = false;
+        while (Date.now() - start < 5 * 60 * 1000) {
+            await new Promise(r => setTimeout(r, 2000));
+            let up = false;
+            try { up = (await fetch('/api/version', { cache: 'no-store' })).ok; } catch (e) { /* down */ }
+            if (!up) { wentDown = true; continue; }
+            if (wentDown) { location.reload(); return; }
+        }
+        if (status) status.textContent = tr('msgRestartNotBack');
+    }
+
+    async function cancelFactoryReset() {
+        await apiFetch('/api/settings/factory-reset', { method: 'DELETE' });
+        loadFactoryResetState();
+    }
+
     async function restartApplication() {
         if (!confirm(tr('msgConfirmRestartApp'))) return;
         const statusEl = document.getElementById('restartAppStatus');
@@ -2177,6 +2248,12 @@
     document.getElementById('btnSavePingMonitor')?.addEventListener('click', savePingMonitorSettings);
     document.getElementById('btnSaveSessionSettings')?.addEventListener('click', saveSessionSettings);
     document.getElementById('btnRestartApp')?.addEventListener('click', restartApplication);
+    document.getElementById('btnFactoryReset')?.addEventListener('click', openFactoryResetModal);
+    document.getElementById('btnCancelFactoryReset')?.addEventListener('click', cancelFactoryReset);
+    document.getElementById('btnFrConfirm')?.addEventListener('click', confirmFactoryReset);
+    document.getElementById('btnFrCancel')?.addEventListener('click', () => closeModal('factoryResetModal'));
+    document.getElementById('btnCloseFactoryReset')?.addEventListener('click', () => closeModal('factoryResetModal'));
+    ['frPassword', 'frConfirm'].forEach(id => document.getElementById(id)?.addEventListener('input', syncFactoryResetConfirm));
     document.getElementById('btnUpdateApp')?.addEventListener('click', updateApplication);
     document.getElementById('btnGenerateSelfSigned')?.addEventListener('click', generateSelfSignedCert);
 

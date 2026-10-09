@@ -1716,10 +1716,10 @@ class TestSettingsTabRestyle(unittest.TestCase):
         # Twelve one-concern sections: ui variant, network exposure, command
         # safety, self-signed certificate, application restart, fleet versions,
         # ping monitor, observability, tenant telemetry, application (general), cloud backup,
-        # SMTP, single sign-on, session lifetime -- each with an entry in the
-        # settings index.
-        self.assertEqual(tab.count('class="panel '), 14)
-        self.assertEqual(tab.count('data-settings-jump='), 14)
+        # SMTP, single sign-on, session lifetime, factory reset -- each with an
+        # entry in the settings index.
+        self.assertEqual(tab.count('class="panel '), 15)
+        self.assertEqual(tab.count('data-settings-jump='), 15)
         for sec in re.findall(r'data-settings-jump="([^"]+)"', tab):
             self.assertIn(f'id="{sec}"', tab)
 

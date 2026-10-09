@@ -4,7 +4,10 @@
 """Router Settings. Estratto da app_server.py (fase 6.6): percorsi, metodi,
 parametri e risposte identici al monolite."""
 
+import json
 import os
+import sys
+import time
 
 from fastapi import APIRouter, Depends, HTTPException
 from routers.deps import require_tab
@@ -12,11 +15,12 @@ from pydantic import BaseModel, Field
 
 from core.app_settings import get_app_settings, save_app_settings, effective_port, list_local_ips, PORT
 from core import core_engine
-from security import crypto_vault
+from security import crypto_vault, user_manager
 from security.security_manager import (
     log_audit, session_settings, SESSION_IDLE_LIMITS, SESSION_MAX_HOURS_LIMIT,
 )
 from routers.deps import require_admin, require_unscoped_admin, get_current_user, user_group_scope
+from routers.deps import require_super_admin
 from core import data_config
 from services import cert_manager, self_update
 
@@ -513,6 +517,64 @@ def update_application(current_user = Depends(require_unscoped_admin)):
         log_audit(f"Aggiornamento dell'applicazione eseguito da '{who}' "
                   f"(supervisore: {result['supervisor']}).")
     return result
+
+
+class FactoryResetSchema(BaseModel):
+    password: str
+    confirm: str = ""
+
+
+def _reset_marker() -> str:
+    return data_config.get_path(data_config.FACTORY_RESET_MARKER)
+
+
+@router.get("/api/settings/factory-reset", dependencies=[Depends(require_tab("tab-settings"))])
+def factory_reset_status(current_user = Depends(require_super_admin)):
+    path = _reset_marker()
+    info = {}
+    if os.path.isfile(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                info = json.load(f)
+        except (OSError, ValueError):
+            info = {}
+    return {"pending": os.path.isfile(path), "requested_by": info.get("requested_by"),
+            "requested_at": info.get("requested_at"), "data_dir": os.path.dirname(path)}
+
+
+@router.post("/api/settings/factory-reset", dependencies=[Depends(require_tab("tab-settings"))])
+def request_factory_reset(payload: FactoryResetSchema, current_user = Depends(require_super_admin)):
+    """Leave the marker and restart: the next start archives the data
+    directory before opening anything in it (core.data_config)."""
+    if payload.confirm != "RESET":
+        raise HTTPException(status_code=400, detail="Scrivere RESET per confermare.")
+    user = current_user.get("sub")
+    if not user_manager.verify_user(user, payload.password):
+        raise HTTPException(status_code=403, detail="Password errata.")
+    data_config.atomic_write(_reset_marker(), {
+        "requested_by": user,
+        "requested_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+    msg = (f"Reset di fabbrica richiesto da '{user}': la data directory sara' "
+           f"archiviata al prossimo avvio.")
+    log_audit(msg)
+    # The audit log itself moves into the archive: say it where it survives.
+    print(f"[SentinelNet] {msg}", file=sys.stderr)
+    if not self_update.supervisor():
+        return {"status": "pending-restart"}
+    try:
+        self_update.restart()
+    except self_update.SelfUpdateError as e:
+        return {"status": "pending-restart", "detail": str(e)}
+    return {"status": "restarting"}
+
+
+@router.delete("/api/settings/factory-reset", dependencies=[Depends(require_tab("tab-settings"))])
+def cancel_factory_reset(current_user = Depends(require_super_admin)):
+    path = _reset_marker()
+    if os.path.isfile(path):
+        os.remove(path)
+        log_audit(f"Reset di fabbrica annullato da '{current_user.get('sub')}'.")
+    return {"status": "cancelled"}
 
 
 class SelfSignedCertSchema(BaseModel):
