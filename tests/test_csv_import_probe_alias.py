@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
-"""An export made before the rename (column 'Site') reimports onto Probe."""
+"""An export made before the rename (column 'Site') reimports onto Probe."""  # check-site-name: ok
 import unittest
 
 from services import inventory_manager

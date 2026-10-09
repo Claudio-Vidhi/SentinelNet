@@ -4786,7 +4786,7 @@
     },
     "/api/agent/mac": {
       "post": {
-        "description": "L'agente spinge le MAC-table raccolte localmente. Vengono storicizzate con\nattribuzione alla sede (site) per il MAC tracker centrale.",
+        "description": "L'agente spinge le MAC-table raccolte localmente. Vengono storicizzate con\nattribuzione alla sonda (probe) per il MAC tracker centrale.",
         "operationId": "agent_push_mac_api_agent_mac_post",
         "requestBody": {
           "content": {

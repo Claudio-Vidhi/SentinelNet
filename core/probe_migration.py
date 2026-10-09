@@ -8,6 +8,7 @@ on its own: an install that never wrote the registry file still gets its CSV
 header renamed, and a crash half-way finishes on the next start."""
 import csv
 import io
+import json
 import os
 import shutil
 import sqlite3
@@ -50,6 +51,35 @@ def _hosts_header(d: str) -> list:
     return ["network_hosts.csv: colonna " + OLD.capitalize() + " -> Probe"]
 
 
+def _device_history(d: str) -> list:
+    """Events carry the field name inside the device snapshot and, for a
+    change, as a key of the diff. Values are left alone."""
+    path = os.path.join(d, "device_history.jsonl")
+    if not os.path.exists(path):
+        return []
+    field = OLD.capitalize()
+    with open(path, encoding="utf-8") as f:
+        lines = f.read().splitlines()
+    out, renamed = [], False
+    for line in lines:
+        if f'"{field}"' in line:  # cheap prefilter; values may match too
+            e = json.loads(line)
+            for key in ("device", "changes"):
+                if field in e.get(key, {}):
+                    e[key] = {("Probe" if k == field else k): v for k, v in e[key].items()}
+                    renamed = True
+            line = json.dumps(e, separators=(",", ":"))
+        out.append(line)
+    if not renamed:
+        return []
+    _backup(path)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8", newline="") as f:
+        f.write("\n".join(out) + "\n")
+    os.replace(tmp, path)
+    return ["device_history.jsonl: campo " + field + " -> Probe"]
+
+
 def _columns(db: str, table: str) -> list:
     with sqlite3.connect(db) as c:
         return [r[1] for r in c.execute(f"PRAGMA table_info({table})")]
@@ -88,6 +118,6 @@ def _user_tabs() -> list:
 def migrate(data_dir: str) -> list:
     """Run every pending step; returns what was done ([] = nothing)."""
     steps = []
-    for step in (_registry, _hosts_header, _mac_history, _jobs):
+    for step in (_registry, _hosts_header, _device_history, _mac_history, _jobs):
         steps += step(data_dir)
     return steps + _user_tabs()

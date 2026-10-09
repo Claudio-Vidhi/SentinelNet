@@ -76,19 +76,20 @@ class AgentBackupSchema(BaseModel):
     serial: str = ""
     config: str
 
-def get_agent_site(request: Request):
-    """Autentica un agente tramite header X-Site-Token (+ opzionale X-Site-Id).
-    Ritorna il dict della sede agent. 401 se il token non corrisponde."""
-    token = request.headers.get("X-Site-Token") or request.headers.get("x-site-token")
-    claimed_id = request.headers.get("X-Site-Id") or request.headers.get("x-site-id")
+def get_agent_probe(request: Request):
+    """Authenticate a probe agent by X-Probe-Token (+ optional X-Probe-Id).
+    Header lookup is case-insensitive in Starlette."""
+    token = request.headers.get("X-Probe-Token")
+    claimed_id = request.headers.get("X-Probe-Id")
     probe_id = probe_manager.authenticate(token)
     if not probe_id or (claimed_id and claimed_id != probe_id):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Token di sede non valido.")
+                            detail="Token di sonda non valido. Un agente installato prima "
+                                   "della 0.52 va reinstallato (reinstall the probe agent).")
     probe_manager.touch_last_seen(probe_id)
     return probe_manager.get_probe(probe_id)
 
-def _devices_for_site(probe_id: str, with_credentials: bool) -> List[dict]:
+def _devices_for_probe(probe_id: str, with_credentials: bool) -> List[dict]:
     """I dispositivi che il centrale gestisce per questa sede.
 
     Solo identita' se ``with_credentials`` e' falso. Le credenziali vengono
@@ -121,7 +122,7 @@ def _devices_for_site(probe_id: str, with_credentials: bool) -> List[dict]:
 
 @router.post("/api/agent/heartbeat")
 def agent_heartbeat(request: Request, payload: Optional[dict] = None,
-                    probe = Depends(get_agent_site)):
+                    probe = Depends(get_agent_probe)):
     if payload and isinstance(payload, dict):
         probe_id = probe["id"]
         updates = {}
@@ -147,7 +148,7 @@ def agent_heartbeat(request: Request, payload: Optional[dict] = None,
                 updates[f"agent_{key}"] = payload[key]
         if updates:
             probe_manager.update_probe(probe_id, **updates)
-    resp = {"ok": True, "site_id": probe["id"], "name": probe["name"],
+    resp = {"ok": True, "probe_id": probe["id"], "name": probe["name"],
             "subnets": probe.get("subnets", [])}
     # Push discendente dell'inventario: opzionale per sede, spento di default,
     # cosi' una installazione esistente non cambia comportamento aggiornando.
@@ -157,12 +158,12 @@ def agent_heartbeat(request: Request, payload: Optional[dict] = None,
         # peggio di non avere affatto la funzione. L'identita' dei dispositivi
         # passa comunque, sono solo i segreti a fermarsi.
         secure = request.url.scheme == "https" or             request.headers.get("x-forwarded-proto", "").lower() == "https"
-        resp["devices"] = _devices_for_site(probe["id"], with_credentials=secure)
+        resp["devices"] = _devices_for_probe(probe["id"], with_credentials=secure)
         resp["credentials_included"] = secure
     return resp
 
 @router.post("/api/agent/inventory")
-def agent_push_inventory(payload: AgentInventorySchema, probe = Depends(get_agent_site)):
+def agent_push_inventory(payload: AgentInventorySchema, probe = Depends(get_agent_probe)):
     """L'agente spinge il proprio inventario locale: viene rispecchiato sul
     centrale, taggato con la sede. Le credenziali NON sono replicate (i comandi
     passano dal relay, eseguiti in locale dall'agente)."""
@@ -184,9 +185,9 @@ def agent_push_inventory(payload: AgentInventorySchema, probe = Depends(get_agen
     return {"status": "success", "updated": n}
 
 @router.post("/api/agent/mac")
-def agent_push_mac(payload: AgentMacSchema, probe = Depends(get_agent_site)):
+def agent_push_mac(payload: AgentMacSchema, probe = Depends(get_agent_probe)):
     """L'agente spinge le MAC-table raccolte localmente. Vengono storicizzate con
-    attribuzione alla sede (site) per il MAC tracker centrale."""
+    attribuzione alla sonda (probe) per il MAC tracker centrale."""
     probe_id = probe["id"]
     total = 0
     groups_by_ip = {d.get("IP"): d.get("Group") for d in inventory_manager.get_all_devices()}
@@ -201,7 +202,7 @@ def agent_push_mac(payload: AgentMacSchema, probe = Depends(get_agent_site)):
     return {"status": "success", "recorded": total, "pruned": pruned}
 
 @router.post("/api/agent/arp")
-def agent_push_arp(payload: AgentArpSchema, probe = Depends(get_agent_site)):
+def agent_push_arp(payload: AgentArpSchema, probe = Depends(get_agent_probe)):
     """L'agente spinge le tabelle ARP raccolte localmente: e' cio' che da' un
     IP ai client della sede remota. Senza, la MAC table dice a quale porta
     stanno ma non chi sono, e ogni vista a valle parte dall'IP."""
@@ -222,7 +223,7 @@ def agent_push_arp(payload: AgentArpSchema, probe = Depends(get_agent_site)):
     return {"status": "success", "recorded": total}
 
 @router.post("/api/agent/status")
-def agent_push_status(payload: AgentStatusSchema, probe = Depends(get_agent_site)):
+def agent_push_status(payload: AgentStatusSchema, probe = Depends(get_agent_probe)):
     """Esiti del ping che l'agente esegue sui PROPRI dispositivi.
 
     Il centrale non raggiunge i dispositivi di una sede con agente (vedi
@@ -250,7 +251,7 @@ def agent_push_status(payload: AgentStatusSchema, probe = Depends(get_agent_site
     return {"status": "success", "updated": n}
 
 @router.post("/api/agent/backup")
-def agent_push_backup(payload: AgentBackupSchema, probe = Depends(get_agent_site)):
+def agent_push_backup(payload: AgentBackupSchema, probe = Depends(get_agent_probe)):
     """Config e versione raccolte dall'agente sui propri dispositivi.
 
     Passa dalle STESSE funzioni del triage centrale (backup_store.save_backup e
@@ -292,19 +293,19 @@ def agent_push_backup(payload: AgentBackupSchema, probe = Depends(get_agent_site
     return {"status": "success", "file": file_path}
 
 @router.get("/api/agent/jobs")
-def agent_poll_jobs(probe = Depends(get_agent_site)):
+def agent_poll_jobs(probe = Depends(get_agent_probe)):
     """L'agente preleva i job di comando pendenti (marcati 'running')."""
     return {"jobs": probe_manager.claim_pending_jobs(probe["id"])}
 
 @router.post("/api/agent/jobs/{job_id}/result")
 def agent_post_job_result(job_id: str, payload: AgentJobResultSchema,
-                          probe = Depends(get_agent_site)):
+                          probe = Depends(get_agent_probe)):
     if not probe_manager.complete_job(job_id, probe["id"], payload.status, payload.result):
         raise HTTPException(status_code=404, detail="Job non trovato per questa sede.")
     return {"status": "success"}
 
 @router.post("/api/agent/syslog")
-def agent_push_syslog(payload: AgentSyslogBatchSchema, probe = Depends(get_agent_site)):
+def agent_push_syslog(payload: AgentSyslogBatchSchema, probe = Depends(get_agent_probe)):
     """L'agente spinge un batch di eventi syslog raccolti localmente nella sede remota."""
     probe_id = probe["id"]
     groups_by_ip = {d.get("IP"): d.get("Group") for d in inventory_manager.get_all_devices()}

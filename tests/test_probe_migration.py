@@ -81,6 +81,42 @@ class TestProbeMigration(unittest.TestCase):
         probe_migration.migrate(self.d)
         self.assertEqual(user_manager.get_allowed_tabs("op"), ["tab-devices", "tab-probes"])
 
+    def test_device_history_old_key_renamed_in_snapshot_and_changes(self):
+        old = "Si" + "te"  # check-site-name: ok
+        added = {"event": "added", "id": "1", "ts": 1.0, "tenant": "acme",
+                 "device": {"IP": "192.0.2.1", "Group": "acme", old: "central"}}
+        changed = {"event": "changed", "id": "2", "ts": 2.0, "tenant": "acme",
+                   "device": {"IP": "192.0.2.1", "Group": "acme", old: "lab"},
+                   "changes": {old: ["central", "lab"]}}
+        path = os.path.join(self.d, "device_history.jsonl")
+        self._write("device_history.jsonl",
+                    "".join(json.dumps(e, separators=(",", ":")) + "\n" for e in (added, changed)))
+        self.assertTrue(probe_migration.migrate(self.d))
+        with open(path, encoding="utf-8") as f:
+            events = [json.loads(line) for line in f]
+        self.assertEqual(events[0]["device"]["Probe"], "central")
+        self.assertEqual(events[1]["device"]["Probe"], "lab")
+        self.assertEqual(events[1]["changes"], {"Probe": ["central", "lab"]})
+        self.assertNotIn(old, json.dumps(events))
+        self.assertTrue(os.path.exists(path + ".pre-probe"))
+        with open(path, encoding="utf-8") as f:
+            before = f.read()
+        self.assertEqual(probe_migration.migrate(self.d), [])
+        with open(path, encoding="utf-8") as f:
+            self.assertEqual(f.read(), before)
+
+    def test_agent_startup_renames_its_own_csv_header(self):
+        import sys
+        from services import probe_agent
+        self._write("network_hosts.csv", HEADER_OLD + "192.0.2.1,cisco,acme,sw-01,central\n")
+        cfg = os.path.join(self.d, "agent.json")
+        with open(cfg, "w", encoding="utf-8") as f:
+            json.dump({"central_url": "https://central.example", "probe_id": "lab",
+                       "token": "t", "data_dir": self.d}, f)
+        with patch.dict(os.environ, {}), patch.object(sys, "argv", ["probe_agent.py", "--config", cfg]):
+            probe_agent.load_config()
+        self.assertEqual(self._hosts_header()[-1], "Probe")
+
     def test_second_run_is_a_noop(self):
         self._write("sites.json", "{}")  # check-site-name: ok
         self._write("network_hosts.csv", HEADER_OLD)
