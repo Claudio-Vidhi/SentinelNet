@@ -23,7 +23,8 @@ TOKEN = re.compile(r"[A-Za-z0-9_-]*[Ss][Ii][Tt][Ee][A-Za-z0-9_-]*")
 QUOTED = re.compile(r"""['"]Sites?['"]|/sites\b""")
 # Words that merely contain the letters; each was reviewed.
 WORDS = ("site-to-site", "prerequisite", "opposite", "offsite", "onsite",
-         "composite", "website", "requisite", "parasite", "visited", "on-site")
+         "composite", "website", "requisite", "parasite", "visited", "on-site",
+         "samesite", "sitemap", "statusitem")
 
 PENDING = frozenset({
     "ai/ai_assistant.py",
@@ -64,7 +65,6 @@ PENDING = frozenset({
     "services/site_manager.py",
     "services/switch_provisioner.py",
     "services/triage_scheduler.py",
-    "static/js/client-map.js",
     "static/js/core.js",
     "static/js/device-history.js",
     "static/js/devices.js",
@@ -88,7 +88,6 @@ PENDING = frozenset({
     "tests/test_admin_tenant_scope.py",
     "tests/test_agent_syslog_toggle.py",
     "tests/test_ai_assistant.py",
-    "tests/test_auth_cookie.py",
     "tests/test_bugfix_batch.py",
     "tests/test_category_tenant_scope.py",
     "tests/test_classification_assist.py",
