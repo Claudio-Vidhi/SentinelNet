@@ -652,9 +652,9 @@
           </div>
           <!-- Tenant-wide actions, grouped: they act on the tenant in the filter, not on the selection. -->
           <details class="inv-actions requires-write">
-            <summary class="btn btn-secondary"><i class="fa-solid fa-bolt"></i> <span data-i18n="invSiteActions">Azioni tenant</span> <i class="fa-solid fa-chevron-down inv-actions-caret"></i></summary>
+            <summary class="btn btn-secondary"><i class="fa-solid fa-bolt"></i> <span data-i18n="invTenantActions">Azioni tenant</span> <i class="fa-solid fa-chevron-down inv-actions-caret"></i></summary>
             <div class="inv-actions-menu">
-              <button type="button" class="inv-menu-item" id="btnTriageSite" data-i18n="btnTriageSite"><i class="fa-solid fa-bolt"></i> Triage Tenant</button>
+              <button type="button" class="inv-menu-item" id="btnTriageTenant" data-i18n="btnTriageTenant"><i class="fa-solid fa-bolt"></i> Triage Tenant</button>
               <button type="button" class="inv-menu-item" id="btnPingCheck" data-i18n="btnPingCheck"><i class="fa-solid fa-wifi"></i> Ping Tenant</button>
               <button type="button" class="inv-menu-item" id="btnSubnetScan" data-i18n="btnSubnetScan"><i class="fa-solid fa-magnifying-glass-location"></i> Scansione Subnet</button>
               <button type="button" class="inv-menu-item" id="btnBulkCommand" data-i18n="btnBulkCommand"><i class="fa-solid fa-terminal"></i> Invio Comandi</button>
@@ -1026,7 +1026,7 @@
         <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
           <!-- Nessun Tenant preselezionato: il report si carica su scelta esplicita -->
           <select id="topologyGroupSelect" aria-label="Tenant della topologia" data-i18n-aria-label="ariaTopologyTenant">
-            <option value="" data-i18n="optSelectSite">Scegli un Tenant…</option>
+            <option value="" data-i18n="optSelectTenant">Scegli un Tenant…</option>
             <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
           </select>
           <button class="btn btn-danger btn-small" id="btnResetPortchannels" style="width: auto; margin: 0;" data-i18n="btnResetTopology">
@@ -1054,7 +1054,7 @@
         <div style="display:flex; align-items:center; gap: 15px; flex-wrap: wrap;">
           <!-- Nessuna Sede preselezionata: la mappa si disegna solo su scelta esplicita -->
           <select id="interactiveGroupSelect" aria-label="Tenant della mappa interattiva" data-i18n-aria-label="ariaInteractiveTenant">
-            <option value="" data-i18n="optSelectSite">Scegli un Tenant…</option>
+            <option value="" data-i18n="optSelectTenant">Scegli un Tenant…</option>
             <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
           </select>
 
@@ -1193,7 +1193,7 @@
                 <div class="drawer-kpi"><span class="kpi-label">Vendor / Model</span><strong id="drawerNodeModel">—</strong></div>
                 <div class="drawer-kpi"><span class="kpi-label">Stato</span><span id="drawerNodeStatus" class="badge">—</span></div>
                 <div class="drawer-kpi"><span class="kpi-label">Uptime / Backup</span><strong id="drawerNodeUptime">—</strong></div>
-                <div class="drawer-kpi"><span class="kpi-label" data-i18n="lblDrawerSite">Sede / Tipo</span><strong id="drawerNodeSite">—</strong></div>
+                <div class="drawer-kpi"><span class="kpi-label" data-i18n="lblDrawerTenant">Sede / Tipo</span><strong id="drawerNodeTenant">—</strong></div>
                 <div class="drawer-kpi"><span class="kpi-label" data-i18n="lblDrawerSerial">Seriale / MAC</span><strong id="drawerNodeSerial">—</strong></div>
                 <div class="drawer-kpi"><span class="kpi-label" data-i18n="lblDrawerSoftware">Software</span><strong id="drawerNodeSoftware">—</strong></div>
                 <div class="drawer-kpi"><span class="kpi-label" data-i18n="lblDrawerMgmtVlan">VLAN Mgmt / VTP</span><strong id="drawerNodeMgmtVlan">—</strong></div>
@@ -1884,7 +1884,7 @@
         <div class="hero-card">
           <h2 data-i18n="titleFlows">Traffic</h2>
           <p data-i18n="descFlows">
-            Aggregated network flows (IPFIX/NetFlow/sFlow) per site: overview, flow detail, event search and correlated anomalies. The window and tenant apply to all four views. Listeners are configured in Settings → Observability.
+            Aggregated network flows (IPFIX/NetFlow/sFlow) per tenant: overview, flow detail, event search and correlated anomalies. The window and tenant apply to all four views. Listeners are configured in Settings → Observability.
           </p>
         </div>
       </div>
@@ -5668,7 +5668,7 @@
         Seleziona una singola sede da analizzare oppure esegui il triage su tutte le sedi.
       </p>
       <button class="btn btn-primary" id="btnStartGroupTriageAll"
-              style="margin-bottom: 12px; background: var(--cta); color: var(--cta-text);" data-i18n="btnTriageAllSites">
+              style="margin-bottom: 12px; background: var(--cta); color: var(--cta-text);" data-i18n="btnTriageAllTenants">
         <i class="fa-solid fa-globe"></i> Scansiona tutte le sedi
       </button>
       <div id="triageScopeList" style="display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto;"></div>

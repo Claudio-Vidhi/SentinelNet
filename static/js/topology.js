@@ -1428,17 +1428,17 @@
     // and a parent sits centred over its children. Sites stay side by side.
     // ponytail: one pitch for every card; a narrower leaf cluster only
     // leaves extra room.
-    const LAYERED_SITE_GAP = 160;
+    const LAYERED_TENANT_GAP = 160;
     function tidyLayeredTree() {
         const pos = networkInstance.getPositions(), ids = Object.keys(pos), adj = {}, kids = {}, isKid = {}, parentOf = {};
         const nodesDs = networkInstance.body.data.nodes;
-        const site = id => { const nd = nodesDs.get(id); return (nd && nd.nodeDataVal && nd.nodeDataVal.group) || 'Generale'; };
+        const tenantOf = id => { const nd = nodesDs.get(id); return (nd && nd.nodeDataVal && nd.nodeDataVal.group) || 'Generale'; };
         networkInstance.body.data.edges.forEach(e => {
             (adj[e.from] || (adj[e.from] = [])).push(e.to);
             (adj[e.to] || (adj[e.to] = [])).push(e.from);
         });
         ids.sort((a, b) => pos[a].x - pos[b].x).forEach(id => {
-            const ups = (adj[id] || []).filter(n => pos[n] && pos[n].y < pos[id].y - 1 && site(n) === site(id))
+            const ups = (adj[id] || []).filter(n => pos[n] && pos[n].y < pos[id].y - 1 && tenantOf(n) === tenantOf(id))
                 .sort((a, b) => (pos[b].y - pos[a].y) || (Math.abs(pos[a].x - pos[id].x) - Math.abs(pos[b].x - pos[id].x)));
             if (!ups.length) return;
             (kids[ups[0]] || (kids[ups[0]] = [])).push(id);
@@ -1480,12 +1480,12 @@
             ks.forEach(k => { place(k, l); l += span(k); });
             pos[id].x = ks.length ? (pos[ks[0]].x + pos[ks[ks.length - 1]].x) / 2 : left + span(id) / 2;
         };
-        let left = 0, prevSite = null;
+        let left = 0, prevTenant = null;
         ids.filter(id => !isKid[id] && !beside.includes(id))
-            .sort((a, b) => site(a).localeCompare(site(b)) || (pos[a].x - pos[b].x))
+            .sort((a, b) => tenantOf(a).localeCompare(tenantOf(b)) || (pos[a].x - pos[b].x))
             .forEach(id => {
-                if (prevSite !== null && site(id) !== prevSite) left += LAYERED_SITE_GAP;
-                prevSite = site(id);
+                if (prevTenant !== null && tenantOf(id) !== prevTenant) left += LAYERED_TENANT_GAP;
+                prevTenant = tenantOf(id);
                 place(id, left);
                 const block = [id].concat(satOf[id] || []), half = (block.length - 1) / 2 * LAYERED_PITCH;
                 if (block.length > 1) {
@@ -1564,13 +1564,13 @@
         if (!networkInstance) return;
         drawDotGrid(ctx);
         const pos = networkInstance.getPositions();
-        const sites = {}, rows = {};
+        const tenants = {}, rows = {};
         let top = Infinity, bottom = -Infinity;
         networkInstance.body.data.nodes.forEach(nd => {
             const bb = networkInstance.getBoundingBox(nd.id);
             if (!bb || !pos[nd.id]) return;
             const g = (nd.nodeDataVal && nd.nodeDataVal.group) || 'Generale';
-            const s = sites[g] || (sites[g] = { x0: Infinity, x1: -Infinity, nodes: [] });
+            const s = tenants[g] || (tenants[g] = { x0: Infinity, x1: -Infinity, nodes: [] });
             s.x0 = Math.min(s.x0, bb.left); s.x1 = Math.max(s.x1, bb.right); s.nodes.push(nd);
             top = Math.min(top, bb.top); bottom = Math.max(bottom, bb.bottom);
             const lv = layeredAssigned[nd.id] || 0;
@@ -1585,8 +1585,8 @@
         const y0 = top - 64, y1 = bottom + 30;
         const border = cssVar('--border', '#233245');
         ctx.save();
-        Object.keys(sites).forEach(g => {
-            const s = sites[g], x0 = s.x0 - 30, x1 = s.x1 + 30;
+        Object.keys(tenants).forEach(g => {
+            const s = tenants[g], x0 = s.x0 - 30, x1 = s.x1 + 30;
             roundRectPath(ctx, x0, y0, x1 - x0, y1 - y0, 14);
             ctx.globalAlpha = 0.4;
             ctx.fillStyle = cssVar('--surface-3', '#1d2a3b');
@@ -1667,7 +1667,7 @@
         const pos = networkInstance.getPositions();
         const bb = id => networkInstance.getBoundingBox(id);
         const nodesDs = networkInstance.body.data.nodes;
-        const site = id => { const nd = nodesDs.get(id); return (nd && nd.nodeDataVal && nd.nodeDataVal.group) || 'Generale'; };
+        const tenantOf = id => { const nd = nodesDs.get(id); return (nd && nd.nodeDataVal && nd.nodeDataVal.group) || 'Generale'; };
         const edges = networkInstance.body.data.edges.get().filter(e => e.lnk && pos[e.from] && pos[e.to]);
         const muted = hexToRgba(cssVar('--text-muted', '#94a3b8'), 0.55);
         // Org-chart wiring: each parent drops ONE trunk to a bus that spans its
@@ -1757,7 +1757,7 @@
                 : kind === 'link' ? { ports: plain(fromSide ? l.local_port : l.remote_port) } : null;
             ctx.strokeStyle = kind === 'pc' ? PC_COPPER : (kind === 'ha' ? '#f9a825' : muted);
             ctx.lineWidth = kind === 'pc' ? 2 : 1.5;
-            ctx.setLineDash(kind === 'group' || kind === 'ha' ? [4, 4] : (site(e.from) !== site(e.to) ? [7, 4] : []));
+            ctx.setLineDash(kind === 'group' || kind === 'ha' ? [4, 4] : (tenantOf(e.from) !== tenantOf(e.to) ? [7, 4] : []));
             const a = pos[e.from], b = pos[e.to];
             ctx.beginPath();
             if (Math.abs(a.y - b.y) < 1) {
@@ -1845,7 +1845,7 @@
         // visto l'ultima volta, e va detto che viene da lì.
         const uptime = dev.Uptime || (dev.LastBackup ? backupAgeLabel(dev.LastBackup) : '')
             || wlcSeenLabel(topNode.wlc_seen_at) || '—';
-        const site = dev.Group || topNode.group || '—';
+        const tenant = dev.Group || topNode.group || '—';
         // Il seriale di un AP lo sa solo il controller che l'ha adottato: arriva
         // dal backend insieme al MAC, che per un apparato senza IP è l'unico
         // identificativo stabile.
@@ -1874,8 +1874,8 @@
         // backupAgeLabel() restituisce markup (già con contenuto escapato): con
         // textContent il riquadro mostrava i tag invece dell'età del backup.
         if (uptimeEl) uptimeEl.innerHTML = uptime.startsWith('<') ? uptime : escapeHtml(uptime);
-        const siteEl = document.getElementById('drawerNodeSite');
-        if (siteEl) siteEl.textContent = `${site} · ${deviceTypeLabel(topNode.device_type)}`;
+        const tenantEl = document.getElementById('drawerNodeTenant');
+        if (tenantEl) tenantEl.textContent = `${tenant} · ${deviceTypeLabel(topNode.device_type)}`;
         const serialEl = document.getElementById('drawerNodeSerial');
         if (serialEl) serialEl.textContent = serial;
         const swEl = document.getElementById('drawerNodeSoftware');

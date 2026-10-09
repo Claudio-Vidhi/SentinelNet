@@ -1222,7 +1222,7 @@ const i18n = {
         invHeroSubtitle: "Elenco completo degli apparati monitorati: stato in tempo reale, filtri per tenant e azioni rapide di triage, ping e scansione.",
         invTabAll: "Tutti",
         invAddDevice: '<i class="fa-solid fa-plus"></i> Aggiungi apparato',
-        invSiteActions: "Azioni tenant",
+        invTenantActions: "Azioni tenant",
         invSelectedCount: "{n} selezionati",
         invSelTriage: '<i class="fa-solid fa-bolt-lightning"></i> Triage',
         invSelPing: '<i class="fa-solid fa-wifi"></i> Ping',
@@ -1239,12 +1239,12 @@ const i18n = {
         titleInventoryTable: "Dispositivi di Rete Sotto Monitoraggio",
         toastModuleLoadError: "Errore di caricamento modulo",
         optFilterAll: "Filtra per Tenant: Tutti",
-        optSelectSite: "Scegli un Tenant…",
+        optSelectTenant: "Scegli un Tenant…",
         btnRunTriage: '<i class="fa-solid fa-bolt-lightning"></i> Avvia Triage Globale',
-        btnTriageSite: '<i class="fa-solid fa-bolt"></i> Triage Tenant',
+        btnTriageTenant: '<i class="fa-solid fa-bolt"></i> Triage Tenant',
         titleTriageScope: '<i class="fa-solid fa-bolt-lightning" style="color: var(--warning);"></i> Scegli il Tenant per il Triage',
         descTriageScope: "Seleziona un singolo Tenant da analizzare oppure esegui il triage su tutti i Tenant.",
-        btnTriageAllSites: '<i class="fa-solid fa-globe"></i> Scansiona tutti i Tenant',
+        btnTriageAllTenants: '<i class="fa-solid fa-globe"></i> Scansiona tutti i Tenant',
         btnPingCheck: '<i class="fa-solid fa-wifi"></i> Ping Tenant',
         btnSubnetScan: '<i class="fa-solid fa-magnifying-glass-location"></i> Scansione Subnet',
         btnScheduledTriage: '<i class="fa-solid fa-clock"></i> Pianificazione Triage',
@@ -2248,7 +2248,7 @@ const i18n = {
         alertSaveDeviceError: "Impossibile salvare il dispositivo",
         alertTopologyResetError: "Errore durante il reset della topologia.",
         alertPingError: "Errore durante il ping check.",
-        allSites: "tutti i tenant",
+        allTenants: "tutti i tenant",
         pingingBtnText: "Ping {group}...",
         emptyInventory: 'Nessun dispositivo in inventario. Aggiungi un apparato dalla barra laterale oppure avvia una <strong>Scansione Subnet</strong>.',
         emptyInventoryFiltered: "Nessun dispositivo in questo tenant."
@@ -2569,7 +2569,7 @@ const i18n = {
         lblDrawerPortChannels: "Port-Channel & Interfacce",
         lblDrawerVlans: "VLAN Attive",
         lblDrawerNeighbors: "Vicini & Collegamenti",
-        lblDrawerSite: "Sede / Tipo",
+        lblDrawerTenant: "Sede / Tipo",
         lblDrawerSerial: "Seriale / MAC",
         lblDrawerSoftware: "Software",
         lblDrawerMgmtVlan: "VLAN Mgmt / VTP",
@@ -3907,7 +3907,7 @@ const i18n = {
         assignIdentityTitle: "Assign identity",
         assignIdentityDesc: "Select the devices to assign this identity to:",
         lblRestrictSpecificTenant: "Restrict to specific tenants",
-        assignIdentityScopeSpecific: "Identity bound to tenants <strong>{tenant}</strong>. Only devices in these sites are listed.",
+        assignIdentityScopeSpecific: "Identity bound to tenants <strong>{tenant}</strong>. Only devices in these tenants are listed.",
         assignIdentityScopeGlobal: "Global identity: selectable across current tenant devices.",
         btnConfirmAssign: "Assign",
         assignSuccess: "Identity assigned to {n} devices.",
@@ -5003,7 +5003,7 @@ const i18n = {
         invHeroSubtitle: "Full list of monitored devices: real-time status, per-tenant filtering, and quick triage, ping, and scan actions.",
         invTabAll: "All",
         invAddDevice: '<i class="fa-solid fa-plus"></i> Add device',
-        invSiteActions: "Tenant actions",
+        invTenantActions: "Tenant actions",
         invSelectedCount: "{n} selected",
         invSelTriage: '<i class="fa-solid fa-bolt-lightning"></i> Triage',
         invSelPing: '<i class="fa-solid fa-wifi"></i> Ping',
@@ -5020,12 +5020,12 @@ const i18n = {
         titleInventoryTable: "Monitored Network Devices",
         toastModuleLoadError: "Module loading error",
         optFilterAll: "Filter by Tenant: All",
-        optSelectSite: "Choose a Tenant…",
+        optSelectTenant: "Choose a Tenant…",
         btnRunTriage: '<i class="fa-solid fa-bolt-lightning"></i> Run Global Triage',
-        btnTriageSite: '<i class="fa-solid fa-bolt"></i> Triage Tenant',
+        btnTriageTenant: '<i class="fa-solid fa-bolt"></i> Triage Tenant',
         titleTriageScope: '<i class="fa-solid fa-bolt-lightning" style="color: var(--warning);"></i> Choose tenant for Triage',
         descTriageScope: "Select a single tenant to analyze, or run triage on all tenants.",
-        btnTriageAllSites: '<i class="fa-solid fa-globe"></i> Scan all tenants',
+        btnTriageAllTenants: '<i class="fa-solid fa-globe"></i> Scan all tenants',
         btnPingCheck: '<i class="fa-solid fa-wifi"></i> Ping Tenant',
         btnSubnetScan: '<i class="fa-solid fa-magnifying-glass-location"></i> Subnet Scan',
         btnScheduledTriage: '<i class="fa-solid fa-clock"></i> Scheduled Triage',
@@ -5035,7 +5035,7 @@ const i18n = {
         titleNewSchedule: "New Schedule",
         titleEditSchedule: "Edit Schedule",
         lblSchedName: "Schedule Name",
-        lblSchedTenant: "Tenant / Site",
+        lblSchedTenant: "Tenant",
         lblSchedInterval: "Interval Frequency",
         lblSchedDeviceScope: "Device Scope",
         optSchedScopeAll: "All devices",
@@ -5309,7 +5309,7 @@ const i18n = {
         lblAiDevSelected: "selected",
         phAiChatInput: "Type a message...",
         msgAiNoDevices: "No devices",
-        descFlows: "Aggregated network flows (IPFIX/NetFlow/sFlow) per site: overview, flow detail, event search and correlated anomalies. The window and tenant apply to all four views. Listeners are configured in Settings → Observability.",
+        descFlows: "Aggregated network flows (IPFIX/NetFlow/sFlow) per tenant: overview, flow detail, event search and correlated anomalies. The window and tenant apply to all four views. Listeners are configured in Settings → Observability.",
         optWin15m: "Last 15 minutes",
         optWin1h: "Last hour",
         optWin24h: "Last 24 hours",
@@ -5604,7 +5604,7 @@ const i18n = {
         lblArpFilterGateway: "Gateway",
         optArpAllTenants: "All tenants",
         chipAllSources: "All sources",
-        thFlTenant: "Site",
+        thFlTenant: "Tenant",
         thFlSrc: "Source",
         thFlDst: "Destination",
         thFlProto: "Proto/Port",
@@ -5717,10 +5717,10 @@ const i18n = {
         setNavPing: "Ping monitor",
         setNavObs: "Telemetry",
         setNavTenantTelemetry: "Per-tenant telemetry",
-        titleTenantTelemetry: "Per-Tenant / Site Telemetry",
-        descTenantTelemetry: "Turn telemetry services (ICMP ping, SNMP polling, REST API polling and scheduled CLI triage) on or off for each tenant / site.",
+        titleTenantTelemetry: "Per-Tenant Telemetry",
+        descTenantTelemetry: "Turn telemetry services (ICMP ping, SNMP polling, REST API polling and scheduled CLI triage) on or off for each tenant.",
         ttNoTenants: "No tenants found.",
-        ttColTenant: "Tenant / Site",
+        ttColTenant: "Tenant",
         ttColPing: "ICMP ping",
         ttColSnmp: "SNMP polling",
         ttColApi: "REST API polling",
@@ -5902,7 +5902,7 @@ const i18n = {
         tiTabWatch: '<i class="fa-solid fa-satellite-dish"></i> Vendor Watch',
         tiTabPriority: '<i class="fa-solid fa-list-ol"></i> Priority',
         tiTabReport: '<i class="fa-solid fa-chart-pie"></i> Report',
-        cveLblTenant: "Site:",
+        cveLblTenant: "Tenant:",
         cveThDevice: "Device",
         cveThConfidence: "Confidence",
         cveThService: "Service",
@@ -6027,7 +6027,7 @@ const i18n = {
         alertSaveDeviceError: "Unable to save device",
         alertTopologyResetError: "Error resetting topology.",
         alertPingError: "Error during ping check.",
-        allSites: "all tenants",
+        allTenants: "all tenants",
         pingingBtnText: "Ping {group}...",
         emptyInventory: 'No devices in inventory. Add a device from the sidebar or run a <strong>Subnet Scan</strong>.',
         emptyInventoryFiltered: "No devices in this tenant."
@@ -6584,7 +6584,7 @@ const i18n = {
         lblDrawerPortChannels: "Port-Channels & Interfaces",
         lblDrawerVlans: "Active VLANs",
         lblDrawerNeighbors: "Neighbors & Links",
-        lblDrawerSite: "Site / Type",
+        lblDrawerTenant: "Tenant / Type",
         lblDrawerSerial: "Serial / MAC",
         lblDrawerSoftware: "Software",
         lblDrawerMgmtVlan: "Mgmt VLAN / VTP",
@@ -7029,7 +7029,7 @@ const i18n = {
         diagNoGatewayHopDetected: "No gateway hop detected.",
         diagNoIp: "no IP",
         diagNoMacKnownFor: "No MAC known for this client: the controller is queried by MAC.",
-        diagNoReportWasProduced: "No report was produced: each site is its own network, and diagnosing the wrong one would be wrong in silence. Pick the site.",
+        diagNoReportWasProduced: "No report was produced: each tenant is its own network, and diagnosing the wrong one would be wrong in silence. Pick the tenant.",
         diagNoRoute: "NO ROUTE",
         diagNotKnown: "not known",
         diagNotYetValidatedAgainst: "Not yet validated against real hardware. Results may be incomplete.",
@@ -7252,7 +7252,7 @@ const i18n = {
         trafHostSearchPl: "Filter by IP address",
         trafHostColIp: "IP address",
         trafHostColName: "Hostname",
-        trafHostColTenant: "Site",
+        trafHostColTenant: "Tenant",
         trafHostColIn: "In",
         trafHostColOut: "Out",
         trafHostColTotal: "Total",
@@ -7658,7 +7658,7 @@ function changeLanguage(lang) {
         if (topoSelect) {
             // options[0] è il segnaposto "nessun Tenant scelto", options[1] "Tutti".
             const prev = topoSelect.value;
-            topoSelect.options[0].text = i18n[lang].optSelectSite;
+            topoSelect.options[0].text = i18n[lang].optSelectTenant;
             if (topoSelect.options[1]) topoSelect.options[1].text = i18n[lang].optFilterAll;
             topoSelect.value = prev;
         }
@@ -7666,7 +7666,7 @@ function changeLanguage(lang) {
         if (interSelect) {
             // options[0] è il segnaposto "nessuna Sede scelta", options[1] è "Tutte".
             const prev = interSelect.value;
-            interSelect.options[0].text = i18n[lang].optSelectSite;
+            interSelect.options[0].text = i18n[lang].optSelectTenant;
             if (interSelect.options[1]) interSelect.options[1].text = i18n[lang].optFilterAll;
             interSelect.value = prev;
         }

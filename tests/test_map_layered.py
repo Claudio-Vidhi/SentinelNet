@@ -37,7 +37,7 @@ class TestLayeredMapView(unittest.TestCase):
         # su un segnaposto senza valore e il renderer esce subito.
         select = self.html[self.html.index('id="interactiveGroupSelect"'):]
         select = select[:select.index("</select>")]
-        self.assertIn('<option value="" data-i18n="optSelectSite"', select)
+        self.assertIn('<option value="" data-i18n="optSelectTenant"', select)
         self.assertLess(select.index('value=""'), select.index('value="all"'))
         self.assertIn("if (!selectedGroup) { showMapPlaceholder(); return; }", self.src)
         # ...e la tendina non torna su "all" quando viene ripopolata.
@@ -144,7 +144,7 @@ class TestLayeredMapView(unittest.TestCase):
         # nessuna sede preselezionata, nessuna chiamata al backend.
         select = self.html[self.html.index('id="topologyGroupSelect"'):]
         select = select[:select.index("</select>")]
-        self.assertIn('<option value="" data-i18n="optSelectSite"', select)
+        self.assertIn('<option value="" data-i18n="optSelectTenant"', select)
         self.assertLess(select.index('value=""'), select.index('value="all"'))
         block = self.src[self.src.index("async function loadPortchannelReport("):]
         block = block[:block.index("try {")]
@@ -159,7 +159,7 @@ class TestLayeredMapView(unittest.TestCase):
         # Il pannello mostrava "—" quasi ovunque: i campi che il backend gia'
         # manda (sede, seriale, versione, VLAN mgmt, vicini) devono esserci
         # nel template E venire popolati, altrimenti restano riquadri vuoti.
-        for element_id in ("drawerNodeSite", "drawerNodeSerial", "drawerNodeSoftware",
+        for element_id in ("drawerNodeTenant", "drawerNodeSerial", "drawerNodeSoftware",
                            "drawerNodeMgmtVlan", "drawerStackInfo", "drawerNeighborList"):
             self.assertIn(f'id="{element_id}"', self.html)
             self.assertIn(f"getElementById('{element_id}')", self.src)
@@ -254,8 +254,8 @@ class TestMapNodeEnrichment(unittest.TestCase):
         # che l'ha adottato, e quel dato e' gia' nello store degli AP.
         entry = {"serial": "FGL0000A0AA", "model": "<model>", "ip": "192.0.2.50",
                  "mac": "AA:BB:CC:DD:EE:FF", "wlc_ip": "192.0.2.5",
-                 "tenant": "site-a", "seen_at": "2026-08-24T10:00:00Z"}
-        nodes = [{"id": "discovered_ap-01", "label": "ap-01", "group": "site-a",
+                 "tenant": "tenant-a", "seen_at": "2026-08-24T10:00:00Z"}
+        nodes = [{"id": "discovered_ap-01", "label": "ap-01", "group": "tenant-a",
                   "status": "discovered", "reported_ip": ""}]
         out = self._enrich(nodes, {}, {"ap-01": entry, "ip:192.0.2.50": entry})
         self.assertEqual("FGL0000A0AA", out[0]["serial"])
@@ -268,9 +268,9 @@ class TestMapNodeEnrichment(unittest.TestCase):
         # si e' agganciato e quando l'ha visto: il pannello lo dice come dato
         # del WLC, non come dato dell'apparato.
         entry = {"serial": "FGL0000A0AA", "ip": "192.0.2.50", "mac": "",
-                 "wlc_ip": "192.0.2.5", "tenant": "site-a",
+                 "wlc_ip": "192.0.2.5", "tenant": "tenant-a",
                  "seen_at": "2026-08-24T10:00:00+00:00"}
-        nodes = [{"id": "discovered_ap-01", "label": "ap-01", "group": "site-a",
+        nodes = [{"id": "discovered_ap-01", "label": "ap-01", "group": "tenant-a",
                   "status": "discovered", "reported_ip": ""}]
         out = self._enrich(nodes, {}, {"ap-01": entry})
         self.assertEqual("192.0.2.5", out[0]["wlc_ip"])
@@ -279,8 +279,8 @@ class TestMapNodeEnrichment(unittest.TestCase):
     def test_scan_serial_wins_over_the_ap_store(self):
         # Il seriale letto dall'apparato stesso e' piu' affidabile di quello
         # riferito dal controller.
-        entry = {"serial": "FROM-WLC", "ip": "", "mac": "", "tenant": "site-a"}
-        nodes = [{"id": "192.0.2.20", "label": "switch-02", "group": "site-a",
+        entry = {"serial": "FROM-WLC", "ip": "", "mac": "", "tenant": "tenant-a"}
+        nodes = [{"id": "192.0.2.20", "label": "switch-02", "group": "tenant-a",
                   "status": "online"}]
         out = self._enrich(nodes, {"192.0.2.20": {"serial": "FROM-DEVICE"}},
                            {"switch-02": entry})
