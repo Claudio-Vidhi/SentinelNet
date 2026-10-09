@@ -62,7 +62,7 @@ class ManualConfigApi(unittest.TestCase):
 
     def _import(self, **overrides):
         body = {"text": IOS_LOG, "ip": "192.0.2.10", "vendor": "cisco",
-                "group": "tenant-a", "site": "central"}
+                "group": "tenant-a", "probe": "central"}
         body.update(overrides)
         return self.client.post("/api/manual-config/import", json=body)
 
@@ -157,7 +157,7 @@ class ManualConfigApi(unittest.TestCase):
         self.assertEqual(p.json()["vendor"], "cisco")
         g = self.client.get("/api/manual-config/guide")
         self.assertEqual(g.status_code, 200, g.text)
-        self.assertIn("central", [s["id"] for s in g.json()["sites"]])
+        self.assertIn("central", [s["id"] for s in g.json()["probes"]])
         self.assertIn("switch", g.json()["categories"])
         self.assertIn("cisco", [v["vendor"] for v in g.json()["vendors"]])
 

@@ -168,7 +168,7 @@ def _row(device, entry: dict) -> dict:
     return {
         "device": device.get("Hostname") or device.get("IP"),
         "device_ip": device.get("IP"),
-        "site": device.get("Probe") or "central",
+        "probe": device.get("Probe") or "central",
         "group": device.get("Group") or "Generale",
         "vendor": (device.get("Vendor") or "").lower(),
         "network": entry.get("ip_mask") or entry.get("network") or "",

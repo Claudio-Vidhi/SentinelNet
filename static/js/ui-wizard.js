@@ -3,7 +3,7 @@
 //
 // Step-by-step panel on top of the modal manager (ui-modal.js): a rail of
 // steps, one visible section at a time, Next gated by the step's validate().
-// Shared by the site, device and provisioning flows.
+// Shared by the probe, device and provisioning flows.
 //
 // Markup contract inside the panel: [data-wizard-rail] (an <ol>),
 // [data-wizard-back], [data-wizard-next], and one [data-step="<id>"] per step.

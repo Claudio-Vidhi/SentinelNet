@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Site wizard API: test an unsaved bastion, save with a confirmed key.
+"""Probe wizard API: test an unsaved bastion, save with a confirmed key.
 
 net_ssh is mocked at the function boundary: the dial itself is covered by
 tests/test_bastion_fingerprint.py.
@@ -12,16 +12,16 @@ import tempfile
 import unittest
 from unittest import mock
 
-_TMP = tempfile.mkdtemp(prefix="sentinelnet_test_sitewizard_")
+_TMP = tempfile.mkdtemp(prefix="sentinelnet_test_probewizard_")
 os.environ["SENTINELNET_DATA_DIR"] = _TMP
-os.environ.setdefault("SENTINELNET_JWT_SECRET", "test-secret-site-wizard")
+os.environ.setdefault("SENTINELNET_JWT_SECRET", "test-secret-probe-wizard")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
 import app_server  # noqa: E402
 from core import net_ssh  # noqa: E402
 
-ADMIN, SCOPED, PW = "sitewiz_admin", "sitewiz_scoped", "PasswordSicura1!"
+ADMIN, SCOPED, PW = "probewiz_admin", "probewiz_scoped", "PasswordSicura1!"
 DRAFT = {"jump_host": "198.51.100.70", "jump_port": 22, "jump_identity": "id-hk"}
 FP = "SHA256:" + "A" * 43
 
@@ -32,7 +32,7 @@ def _login(client, user):
     return {"Authorization": "Bearer " + r.json()["access_token"]}
 
 
-class SiteWizardApi(unittest.TestCase):
+class ProbeWizardApi(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         from security import user_manager
@@ -46,13 +46,13 @@ class SiteWizardApi(unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(_TMP, ignore_errors=True)
 
-    def _site(self, sid):
-        probes = self.client.get("/api/sites", headers=self.h).json()["sites"]
+    def _probe(self, sid):
+        probes = self.client.get("/api/probes", headers=self.h).json()["probes"]
         return next(s for s in probes if s["id"] == sid)
 
     def _draft(self, **patch):
         with mock.patch.object(net_ssh, "probe_bastion_draft", **patch):
-            return self.client.post("/api/sites/test-bastion/draft", headers=self.h, json=DRAFT)
+            return self.client.post("/api/probes/test-bastion/draft", headers=self.h, json=DRAFT)
 
     def test_draft_statuses(self):
         ok = self._draft(return_value={"fingerprint": FP, "key_type": "ssh-ed25519", "known": False})
@@ -69,7 +69,7 @@ class SiteWizardApi(unittest.TestCase):
                 self.assertIn(str(exc), r.json()["message"])
 
     def test_draft_rejects_a_bad_port(self):
-        r = self.client.post("/api/sites/test-bastion/draft", headers=self.h,
+        r = self.client.post("/api/probes/test-bastion/draft", headers=self.h,
                              json={**DRAFT, "jump_port": 70000})
         self.assertEqual(r.status_code, 400)
 
@@ -81,76 +81,76 @@ class SiteWizardApi(unittest.TestCase):
         self.assertIn("non trovata", r.json()["detail"])
 
     def test_resaving_an_unchanged_bastion_is_not_audited_as_a_change(self):
-        # The wizard sends the jump fields on every save of a jump site.
-        r = self.client.post("/api/sites", headers=self.h, json={
+        # The wizard sends the jump fields on every save of a bastion probe.
+        r = self.client.post("/api/probes", headers=self.h, json={
             "name": "wiz-rename", "mode": "jump", **DRAFT})
-        sid = r.json()["site"]["id"]
-        with mock.patch("routers.sites.log_audit") as audit:
-            r = self.client.post("/api/sites/update", headers=self.h,
+        sid = r.json()["probe"]["id"]
+        with mock.patch("routers.probes.log_audit") as audit:
+            r = self.client.post("/api/probes/update", headers=self.h,
                                  json={"id": sid, "name": "wiz-renamed", **DRAFT})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertFalse(any("senza verifica" in c.args[0] for c in audit.call_args_list))
 
     def test_scoped_admin_is_refused(self):
-        r = self.client.post("/api/sites/test-bastion/draft", headers=self.hs, json=DRAFT)
+        r = self.client.post("/api/probes/test-bastion/draft", headers=self.hs, json=DRAFT)
         self.assertEqual(r.status_code, 403)
 
     def test_confirmed_fingerprint_pins_and_verifies(self):
         with mock.patch.object(net_ssh, "pin_confirmed", return_value=True) as pin, \
-             mock.patch("routers.sites.log_audit") as audit:
-            r = self.client.post("/api/sites", headers=self.h, json={
+             mock.patch("routers.probes.log_audit") as audit:
+            r = self.client.post("/api/probes", headers=self.h, json={
                 "name": "wiz-verified", "mode": "jump", **DRAFT,
                 "confirmed_fingerprint": FP})
         self.assertEqual(r.status_code, 200, r.text)
         pin.assert_called_once_with("198.51.100.70", 22, FP)
-        self.assertIsNotNone(self._site(r.json()["site"]["id"])["bastion_verified_ts"])
+        self.assertIsNotNone(self._probe(r.json()["probe"]["id"])["bastion_verified_ts"])
         self.assertTrue(any("impronta" in c.args[0] for c in audit.call_args_list))
 
     def test_stale_fingerprint_is_409(self):
         with mock.patch.object(net_ssh, "pin_confirmed", return_value=False):
-            r = self.client.post("/api/sites", headers=self.h, json={
+            r = self.client.post("/api/probes", headers=self.h, json={
                 "name": "wiz-stale", "mode": "jump", **DRAFT,
                 "confirmed_fingerprint": FP})
         self.assertEqual(r.status_code, 409)
-        probes = self.client.get("/api/sites", headers=self.h).json()["sites"]
+        probes = self.client.get("/api/probes", headers=self.h).json()["probes"]
         self.assertFalse(any(s["name"] == "wiz-stale" for s in probes))
 
     def test_unverified_save_is_allowed_and_audited(self):
-        with mock.patch("routers.sites.log_audit") as audit:
-            r = self.client.post("/api/sites", headers=self.h, json={
+        with mock.patch("routers.probes.log_audit") as audit:
+            r = self.client.post("/api/probes", headers=self.h, json={
                 "name": "wiz-unverified", "mode": "jump", **DRAFT})
         self.assertEqual(r.status_code, 200, r.text)
-        self.assertIsNone(self._site(r.json()["site"]["id"])["bastion_verified_ts"])
+        self.assertIsNone(self._probe(r.json()["probe"]["id"])["bastion_verified_ts"])
         self.assertTrue(any("non verificato" in c.args[0] for c in audit.call_args_list))
 
     def test_update_with_new_host_needs_a_confirmation_to_stay_verified(self):
-        r = self.client.post("/api/sites", headers=self.h, json={
+        r = self.client.post("/api/probes", headers=self.h, json={
             "name": "wiz-move", "mode": "jump", **DRAFT})
-        sid = r.json()["site"]["id"]
+        sid = r.json()["probe"]["id"]
         from services import probe_manager
         probe_manager.mark_bastion_verified(sid)
-        r = self.client.post("/api/sites/update", headers=self.h,
+        r = self.client.post("/api/probes/update", headers=self.h,
                              json={"id": sid, "jump_host": "198.51.100.71"})
         self.assertEqual(r.status_code, 200, r.text)
-        self.assertIsNone(self._site(sid)["bastion_verified_ts"])
+        self.assertIsNone(self._probe(sid)["bastion_verified_ts"])
         with mock.patch.object(net_ssh, "pin_confirmed", return_value=True) as pin:
-            r = self.client.post("/api/sites/update", headers=self.h, json={
+            r = self.client.post("/api/probes/update", headers=self.h, json={
                 "id": sid, "jump_host": "198.51.100.72", "confirmed_fingerprint": FP})
         self.assertEqual(r.status_code, 200, r.text)
         pin.assert_called_once_with("198.51.100.72", 22, FP)
-        self.assertIsNotNone(self._site(sid)["bastion_verified_ts"])
+        self.assertIsNotNone(self._probe(sid)["bastion_verified_ts"])
 
-    def test_saved_site_test_marks_verified_and_returns_fingerprint(self):
-        r = self.client.post("/api/sites", headers=self.h, json={
+    def test_saved_probe_test_marks_verified_and_returns_fingerprint(self):
+        r = self.client.post("/api/probes", headers=self.h, json={
             "name": "wiz-table", "mode": "jump", **DRAFT})
-        sid = r.json()["site"]["id"]
+        sid = r.json()["probe"]["id"]
         with mock.patch.object(net_ssh, "probe_bastion", return_value=FP):
-            r = self.client.post("/api/sites/test-bastion", headers=self.h, json={"id": sid})
+            r = self.client.post("/api/probes/test-bastion", headers=self.h, json={"id": sid})
         self.assertEqual(r.json(), {"status": "success", "fingerprint": FP})
-        self.assertIsNotNone(self._site(sid)["bastion_verified_ts"])
+        self.assertIsNotNone(self._probe(sid)["bastion_verified_ts"])
         with mock.patch.object(net_ssh, "probe_bastion",
                                side_effect=net_ssh.BastionHostKeyError("changed")):
-            r = self.client.post("/api/sites/test-bastion", headers=self.h, json={"id": sid})
+            r = self.client.post("/api/probes/test-bastion", headers=self.h, json={"id": sid})
         self.assertEqual(r.json()["status"], "host_key_mismatch")
 
 

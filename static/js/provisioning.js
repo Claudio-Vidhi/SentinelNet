@@ -105,7 +105,7 @@ async function deleteIdentity(id) {
         return;
     }
     await refreshIdentityOptions(); renderIdentitiesPanel();
-    if (window.refreshSiteIdentitySelects) await window.refreshSiteIdentitySelects();
+    if (window.refreshProbeIdentitySelects) await window.refreshProbeIdentitySelects();
 }
 
 document.getElementById('btnNewIdentity').addEventListener('click', async () => {
@@ -156,10 +156,10 @@ document.getElementById('btnSaveIdentity').addEventListener('click', async () =>
         if (secretEl) secretEl.value = '';
         document.getElementById('identityForm').style.display = 'none';
         await refreshIdentityOptions(); renderIdentitiesPanel();
-        // settings.js caches the identity list for the site/bastion form and
+        // settings.js caches the identity list for the probe/bastion form and
         // populates its selects once per page: without this the identity just
         // created is invisible there until a reload.
-        if (window.refreshSiteIdentitySelects) await window.refreshSiteIdentitySelects();
+        if (window.refreshProbeIdentitySelects) await window.refreshProbeIdentitySelects();
     } else if (res) {
         const err = await res.json();
         alert(err.detail || 'Errore');
@@ -378,19 +378,19 @@ function provInitToggles() {
     document.getElementById('provDeliveryMode').addEventListener('change', (e) => {
         document.getElementById('provSshFields').style.display = e.target.value === 'ssh' ? 'grid' : 'none';
         document.getElementById('provSerialFields').style.display = e.target.value === 'serial' ? 'grid' : 'none';
-        if (e.target.value === 'ssh') populateProvSiteSelect();
+        if (e.target.value === 'ssh') populateProvProbeSelect();
     });
 
     // A day-0 device is not in the inventory yet, so the server cannot resolve
-    // its site from the target IP: inside a jump site the push would be dialled
-    // directly instead of through the bastion. The operator names the site here.
-    async function populateProvSiteSelect() {
-        const sel = document.getElementById('provSshSite');
+    // its probe from the target IP: inside a bastion probe the push would be dialled
+    // directly instead of through the bastion. The operator names the probe here.
+    async function populateProvProbeSelect() {
+        const sel = document.getElementById('provSshProbe');
         if (!sel || sel.dataset.loaded) return;
-        const res = await apiFetch('/api/sites');
+        const res = await apiFetch('/api/probes');
         if (!res || !res.ok) return;
-        const sites = (await res.json()).sites || [];
-        sel.insertAdjacentHTML('beforeend', sites.map(st =>
+        const probes = (await res.json()).probes || [];
+        sel.insertAdjacentHTML('beforeend', probes.map(st =>
             `<option value="${escapeHtml(st.id)}">${escapeHtml(st.name)}</option>`).join(''));
         sel.dataset.loaded = '1';
     }
@@ -428,7 +428,7 @@ function provInitToggles() {
             ssh_port: parseInt(document.getElementById('provSshPort').value, 10) || 22,
             ssh_username: document.getElementById('provSshUser').value.trim(),
             ssh_password: document.getElementById('provSshPass').value,
-            ssh_site: document.getElementById('provSshSite').value,
+            ssh_probe: document.getElementById('provSshProbe').value,
         });
         payload.ssh_secret = document.getElementById('provSshSecret').value;
         payload.save_after = true;
@@ -510,30 +510,30 @@ function updateDevSecretField() {
     if (hint) hint.style.display = vendor === 'linux' ? 'block' : 'none';
 }
 
-async function populateSiteOptions(preserve) {
-    const siteSelect = document.getElementById('devSiteSelect');
-    if (!siteSelect) return;
-    const current = preserve || siteSelect.value || 'central';
-    let sites = [];
+async function populateProbeOptions(preserve) {
+    const probeSelect = document.getElementById('devProbeSelect');
+    if (!probeSelect) return;
+    const current = preserve || probeSelect.value || 'central';
+    let probes = [];
     try {
-        const res = await apiFetch('/api/sites');
+        const res = await apiFetch('/api/probes');
         if (res && res.ok) {
-            sites = (await res.json()).sites || [];
+            probes = (await res.json()).probes || [];
         }
     } catch (e) {}
-    if (!sites.length) {
-        sites = [{ id: 'central', name: 'Central', mode: 'central' }];
+    if (!probes.length) {
+        probes = [{ id: 'central', name: 'Central', mode: 'central' }];
     }
-    siteSelect.innerHTML = sites.map(s => {
+    probeSelect.innerHTML = probes.map(s => {
         const modeLabel = s.mode === 'jump' ? ' [Jump/Bastion]' : (s.mode === 'agent' ? ' [Agent]' : '');
         return `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name || s.id)}${escapeHtml(modeLabel)} (${escapeHtml(s.id)})</option>`;
     }).join('');
-    siteSelect.value = Array.from(siteSelect.options).some(o => o.value === current) ? current : 'central';
+    probeSelect.value = Array.from(probeSelect.options).some(o => o.value === current) ? current : 'central';
 }
-window.populateSiteOptions = populateSiteOptions;
+window.populateProbeOptions = populateProbeOptions;
 
 // Popola le select del form di Provisioning Apparato (devVendor,
-// scanVerifyVendorSelect, devGroupSelect, devSiteSelect). Estratto da appInit() perché ora
+// scanVerifyVendorSelect, devGroupSelect, devProbeSelect). Estratto da appInit() perché ora
 // serve anche quando si apre la tab dedicata tab-provisioning senza passare da
 // un reload completo.
 function populateProvisioningFormSelects() {
@@ -552,7 +552,7 @@ function populateProvisioningFormSelects() {
         ).join('');
         if (prevGroup in globalGroups) groupSelect.value = prevGroup;
     }
-    populateSiteOptions();
+    populateProbeOptions();
     if (typeof window.populateGenCfgTenants === 'function') {
         window.populateGenCfgTenants();
     }
@@ -567,7 +567,7 @@ async function loadProvisioningTab() {
         }
     } catch (e) {}
     populateProvisioningFormSelects();
-    await populateSiteOptions();
+    await populateProbeOptions();
     await refreshIdentityOptions();
     renderIdentitiesPanel();
 }

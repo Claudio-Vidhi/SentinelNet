@@ -4,7 +4,7 @@
 """Tenant scope applies to admins (admin-permissions Task 3, spec D3).
 
 A tenant-scoped admin sees and acts only on its tenants' devices, and every
-global admin route (settings, SSO/SMTP, sites, tenants, MCP, cloud backup,
+global admin route (settings, SSO/SMTP, probes, tenants, MCP, cloud backup,
 incident rule parameters) needs an admin with no tenant restriction."""
 import os
 import re
@@ -41,9 +41,9 @@ MUST_BE_GLOBAL = {
     ("GET", "/api/settings/update/check"),
     ("POST", "/api/groups/rename"),
     ("POST", "/api/groups/delete"),
-    ("POST", "/api/sites"),
-    ("POST", "/api/sites/delete"),
-    ("POST", "/api/sites/regenerate-token"),
+    ("POST", "/api/probes"),
+    ("POST", "/api/probes/delete"),
+    ("POST", "/api/probes/regenerate-token"),
     ("PUT", "/api/cloud-backup/settings"),
     ("POST", "/api/mcp/settings"),
     ("POST", "/api/incidents/rules/{rule_id}/parameters"),
@@ -153,13 +153,13 @@ class TestScopedAdminOnTenantData(_PrivateUsers):
         r = self._as("sadm").put("/api/drift/baseline/tenant-b", json={"text": ""})
         self.assertEqual(r.status_code, 403, r.text)
 
-    def test_site_details_only_for_unscoped_admin(self):
+    def test_probe_details_only_for_unscoped_admin(self):
         from services import probe_manager
-        probe = probe_manager.create_probe("scope-site", "central", ["192.0.2.0/24"])[0]
+        probe = probe_manager.create_probe("scope-probe", "central", ["192.0.2.0/24"])[0]
         self.addCleanup(probe_manager.delete_probe, probe["id"])
         for name, full in (("sadm", False), ("adm", True)):
             with self.subTest(user=name):
-                probes = self._as(name).get("/api/sites").json()["sites"]
+                probes = self._as(name).get("/api/probes").json()["probes"]
                 created = next((s for s in probes if s["id"] == probe["id"]), None)
                 self.assertIsNotNone(created)
                 self.assertEqual("subnets" in created, full)

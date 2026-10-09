@@ -104,7 +104,7 @@ class SwitchProvisionSSHSchema(SwitchProvisionSchema):
     # Site id of the target. A day-0 device is not in the inventory yet, so
     # core.net_ssh cannot resolve its site: without this a switch inside a
     # jump site would be dialled directly instead of through the bastion.
-    ssh_site: str = ""
+    ssh_probe: str = ""
 
 class SwitchProvisionSerialSchema(SwitchProvisionSchema):
     com_port: str
@@ -234,7 +234,7 @@ def provisioner_push_ssh(payload: SwitchProvisionSSHSchema, current_user = Depen
         config_text=config_text,
         port=payload.ssh_port,
         save=payload.save_after,
-        probe=payload.ssh_site,
+        probe=payload.ssh_probe,
     )
     log_audit(
         f"Push SSH config day-0 su '{payload.ssh_host}' (hostname target: "
@@ -287,7 +287,7 @@ class IdentitySchema(BaseModel):
     password: str = ""
     enable_secret: str = ""
 
-@router.get("/api/identities", dependencies=[Depends(require_tab("tab-devices", "tab-provisioning", "tab-provisioner", "tab-sites"))])
+@router.get("/api/identities", dependencies=[Depends(require_tab("tab-devices", "tab-provisioning", "tab-provisioner", "tab-probes"))])
 def identities_list(tenant: Optional[str] = None, current_user = Depends(require_operator)):
     """Lista identita' (senza segreti), opzionalmente filtrate per tenant."""
     return {"identities": identity_manager.get_identities(tenant=tenant)}

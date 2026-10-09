@@ -9,7 +9,7 @@ not send M to tab X, then opening tab X cold leaves every control on it dead:
 getElementById(...)?.addEventListener finds nothing, raises nothing, and the
 button silently does nothing.
 
-That is what happened to the Sites tab: its whole CRUD lives in settings.js,
+That is what happened to the Probes tab: its whole CRUD lives in settings.js,
 which the map only loaded for the Settings tab.
 """
 import functools
@@ -114,8 +114,8 @@ class LazyTabScripts(unittest.TestCase):
     def test_every_per_tab_loader_switchtab_calls_is_reachable_from_that_tab(self):
         """switchTab calls a loader per tab; cold, that is a ReferenceError.
 
-        The other half of the same bug: core.js:871 called loadSites() for
-        tab-sites while loadSites lived in a module the map never loaded there.
+        The other half of the same bug: core.js:871 called loadProbes() for
+        tab-probes while loadProbes lived in a module the map never loaded there.
         """
         core = (ROOT / "static/js/core.js").read_text(encoding="utf-8")
         body = core[core.index("async function switchTab("):]

@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """The files holding secrets must not be readable by whoever the directory is.
 
-users.json carries every password hash and probes.json every agent site-token
+users.json carries every password hash and probes.json every agent probe-token
 hash, and neither tightened its permissions at all -- not on the temp copy, not
 on the final name. On a shared data directory that is offline hash cracking.
 
@@ -62,7 +62,7 @@ class TestSecretFilePermissions(unittest.TestCase):
             self._assert_tmp_then_final(spy, target)
             self.assertTrue(os.path.exists(target))
 
-    def test_sites_json_is_restricted(self):
+    def test_probes_json_is_restricted(self):
         spy = _Spy()
         with tempfile.TemporaryDirectory() as d:
             target = os.path.join(d, "probes.json")

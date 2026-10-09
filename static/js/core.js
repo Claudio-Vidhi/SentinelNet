@@ -1677,7 +1677,7 @@ const LAZY_TAB_SCRIPTS = {
     // settings.js owns the CRUD of four tabs, not just Settings: opening any of
     // the other three cold left every control on it dead and its table empty.
     'tab-settings': ['/static/js/settings.js', '/static/js/observability.js', '/static/js/cloud-backup.js'],
-    'tab-sites': ['/static/js/settings.js'],
+    'tab-probes': ['/static/js/settings.js'],
     'tab-users': ['/static/js/settings.js'],
     'tab-mcp': ['/static/js/settings.js'],
     'tab-incidents': ['/static/js/incidents.js'],
@@ -1848,9 +1848,9 @@ async function switchTab(tabId, clickedBtn, opts = {}) {
     else if (tabId === 'tab-endpoint') locSwitchView(_locView);
     else if (tabId === 'tab-config') loadConfigAnalyzer();
     else if (tabId === 'tab-ai') loadAiTab();
-    else if (tabId === 'tab-import' && typeof loadImportSiteIds === 'function') loadImportSiteIds();
+    else if (tabId === 'tab-import' && typeof loadImportProbeIds === 'function') loadImportProbeIds();
     else if (tabId === 'tab-users') loadUsers();
-    else if (tabId === 'tab-sites') loadSites();
+    else if (tabId === 'tab-probes') loadProbes();
     else if (tabId === 'tab-mcp') loadMcpTab();
     else if (tabId === 'tab-fortigate') loadFgtTab();
     else if (tabId === 'tab-wlc' && typeof loadWlcTab === 'function') loadWlcTab();
@@ -2461,7 +2461,7 @@ function buildCommandPaletteItems(query = '') {
         { id: 'tab-import', title: tr('coreCsvImport'), desc: tr('coreBulkImportDevicesFrom'), group: tr('coreViews') },
         { id: 'tab-users', title: tr('coreUsers'), desc: tr('coreManageLocalUserAccounts'), group: tr('coreViews') },
         { id: 'tab-groups', title: tr('coreTenantManagement'), desc: tr('coreConfigureTenantsAndSnmp'), group: tr('coreViews') },
-        { id: 'tab-sites', title: tr('coreSites'), desc: tr('corePhysicalSitesAndSite'), group: tr('coreViews') },
+        { id: 'tab-probes', title: tr('coreProbes'), desc: tr('coreProbesAndAgents'), group: tr('coreViews') },
         { id: 'tab-mcp', title: tr('coreIntegrationsMcp'), desc: tr('coreMcpServersAndExternal'), group: tr('coreViews') },
         { id: 'tab-settings', title: tr('coreSettings'), desc: tr('coreAppSettingsPingMonitor'), group: tr('coreViews') },
     ];
@@ -2490,7 +2490,7 @@ function buildCommandPaletteItems(query = '') {
             items.push({
                 type: 'device',
                 title: `${d.Hostname || d.IP} (${d.IP})`,
-                desc: `Tenant: ${d.Group ? orgLabel(d.Group) : '—'} · ${d.Site || 'central'}`,
+                desc: `Tenant: ${d.Group ? orgLabel(d.Group) : '—'} · ${d.Probe || 'central'}`,
                 group: tr('coreDevices'),
                 icon: 'fa-server',
                 action: () => {

@@ -358,8 +358,8 @@
         <button class="nav-item requires-admin" data-tab="tab-groups" role="tab" aria-controls="tab-groups" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabGroups"><i class="fa-solid fa-folder-open"></i> Gestione Tenant</span>
         </button>
-        <button class="nav-item requires-admin" data-tab="tab-sites" role="tab" aria-controls="tab-sites" aria-selected="false" tabindex="-1">
-          <span class="nav-left" data-i18n="tabSites"><i class="fa-solid fa-building"></i> Sedi</span>
+        <button class="nav-item requires-admin" data-tab="tab-probes" role="tab" aria-controls="tab-probes" aria-selected="false" tabindex="-1">
+          <span class="nav-left" data-i18n="tabProbes"><i class="fa-solid fa-building"></i> Sonde</span>
           <span class="preview-badge">preview</span>
         </button>
         <button class="nav-item requires-admin" data-tab="tab-mcp" role="tab" aria-controls="tab-mcp" aria-selected="false" tabindex="-1">
@@ -575,7 +575,7 @@
         </div>
       </div>
 
-      <!-- Jump-site devices sit outside the two counters above (no ICMP through
+      <!-- Bastion-probe devices sit outside the two counters above (no ICMP through
            the bastion), so without a panel of their own they were simply absent
            from Home. Here they are listed with the outcome of the last thing
            that DID reach them: the SSH triage. -->
@@ -591,7 +591,7 @@
               <tr>
                 <th data-i18n="homeColHost">Hostname</th>
                 <th data-i18n="homeColIp">Indirizzo IP</th>
-                <th data-i18n="homeColSite">Sede</th>
+                <th data-i18n="homeColProbe">Sonda</th>
                 <th data-i18n="homeBastionColTriage">Ultimo triage SSH</th>
               </tr>
             </thead>
@@ -781,10 +781,10 @@
             </div>
 
             <div class="form-group">
-              <label data-i18n="lblDeviceSite">Sede fisica</label>
+              <label data-i18n="lblDeviceProbe">Sonda</label>
               <div class="input-wrapper">
                 <i class="fa-solid fa-location-dot"></i>
-                <select id="devSiteSelect" aria-label="Sede fisica del dispositivo" data-i18n-aria-label="ariaDevSite"></select>
+                <select id="devProbeSelect" aria-label="Sonda del dispositivo" data-i18n-aria-label="ariaDevProbe"></select>
               </div>
             </div>
 
@@ -2700,8 +2700,8 @@
         <div class="form-group"><label for="provSshUser">Username</label><input id="provSshUser" type="text" placeholder="admin" style="padding-left:12px;"></div>
         <div class="form-group"><label for="provSshPass">Password</label><input id="provSshPass" type="password" style="padding-left:12px;"></div>
         <div class="form-group"><label for="provSshSecret">Enable secret</label><input id="provSshSecret" type="password" style="padding-left:12px;"></div>
-        <div class="form-group"><label for="provSshSite" data-i18n="lblProvSshSite">Sede del target</label><select id="provSshSite">
-            <option value="" data-i18n="optProvSshSiteAuto">Automatica (da inventario)</option>
+        <div class="form-group"><label for="provSshProbe" data-i18n="lblProvSshProbe">Sonda del target</label><select id="provSshProbe">
+            <option value="" data-i18n="optProvSshProbeAuto">Automatica (da inventario)</option>
           </select>
         </div>
         <div style="align-self:end;"><button class="btn btn-primary" id="btnProvPushSsh"><i class="fa-solid fa-paper-plane"></i> Applica via SSH</button></div>
@@ -2751,9 +2751,9 @@
                 <i class="fa-solid fa-download"></i> Scarica modello CSV
               </button>
             </div>
-            <div class="template-box">IP,Username,Password,Enable Secret,Hostname,Group,Site,Vendor
+            <div class="template-box">IP,Username,Password,Enable Secret,Hostname,Group,Probe,Vendor
 192.0.2.1,admin,Mypass123!,enablepass,switch-01,Tenant_Milano,central,cisco
-198.51.100.1,manager,Pwd456!,secret,switch-02,Tenant_Roma,sede-roma,hpe</div>
+198.51.100.1,manager,Pwd456!,secret,switch-02,Tenant_Roma,probe-roma,hpe</div>
             <p class="set-desc" style="margin:10px 0 0;" data-i18n="importFlexNote">
           Solo la colonna <code>IP</code> è obbligatoria. Maiuscole, underscore e nomi in italiano
           (<code>indirizzo</code>, <code>utente</code>, <code>gruppo</code>) sono riconosciuti, così come
@@ -2797,31 +2797,31 @@
 
         <div class="panel import-aside">
           <div class="panel-head">
-            <h3><span data-i18n="importTenantVsSiteTitle">Group e Site sono due cose diverse</span></h3>
+            <h3><span data-i18n="importTenantVsProbeTitle">Group e Probe sono due cose diverse</span></h3>
           </div>
-          <div class="import-aside-text" data-i18n="importTenantVsSiteBody">
+          <div class="import-aside-text" data-i18n="importTenantVsProbeBody">
             <b>Group</b> è il <b>tenant</b>: il confine di visibilità. Decide chi vede l'apparato
             e filtra ogni scheda, ed è il valore che accompagna ogni riga di osservabilità.
             Alias riconosciuti: <code>group</code>, <code>gruppo</code>, <code>tenant</code>.<br>
-            <b>Site</b> è la <b>sede fisica</b>: da dove l'apparato viene raggiunto —
-            <code>central</code> (il server lo interroga direttamente), oppure l'id di una sede
-            con agente o di una sede <b>jump</b> (raggiunta via bastion SSH). Alias:
-            <code>site</code>, <code>sede</code>. Se la ometti vale <code>central</code>.<br>
-            Un tenant può contenere più sedi, e una sede può ospitare apparati di tenant diversi:
+            <b>Probe</b> è la <b>sonda</b>: da dove l'apparato viene raggiunto —
+            <code>central</code> (il server lo interroga direttamente), oppure l'id di una sonda
+            agente o di una sonda <b>bastion</b> (raggiunta via bastion SSH). Alias:
+            <code>probe</code>, <code>sonda</code>. Se la ometti vale <code>central</code>.<br>
+            Un tenant può usare più sonde, e una sonda può raggiungere apparati di tenant diversi:
             per questo sono due colonne e non una.
           </div>
-          <!-- The device form has a Site selector; in the CSV the same value is
+          <!-- The device form has a Probe selector; in the CSV the same value is
                free text, so the id has to be copied exactly. -->
-          <div class="import-aside-text import-aside-sep" data-i18n="importSiteIdsNote">
-            La sede si assegna dal modulo di provisioning con la tendina <b>Sede fisica</b>,
-            oppure qui con la colonna <code>Site</code>. Nel CSV il valore deve corrispondere
-            <b>esattamente</b> all'id della sede (non al nome), altrimenti la riga viene
-            scartata con «Sede inesistente». Le credenziali del CSV sono quelle degli
-            apparati, non quelle del bastion di una sede jump.
+          <div class="import-aside-text import-aside-sep" data-i18n="importProbeIdsNote">
+            La sonda si assegna dal modulo di provisioning con la tendina <b>Sonda</b>,
+            oppure qui con la colonna <code>Probe</code>. Nel CSV il valore deve corrispondere
+            <b>esattamente</b> all'id della sonda (non al nome), altrimenti la riga viene
+            scartata con «Sonda inesistente». Le credenziali del CSV sono quelle degli
+            apparati, non quelle del bastion di una sonda bastion.
           </div>
-          <div id="importSiteIds" style="display:none; margin-top:10px; font-size:12px;">
-            <span style="color:var(--text-muted);" data-i18n="importSiteIdsAvailable">Id sede disponibili:</span>
-            <span id="importSiteIdsList"></span>
+          <div id="importProbeIds" style="display:none; margin-top:10px; font-size:12px;">
+            <span style="color:var(--text-muted);" data-i18n="importProbeIdsAvailable">Id sonda disponibili:</span>
+            <span id="importProbeIdsList"></span>
           </div>
         </div>
       </div>
@@ -2863,14 +2863,14 @@
       </div>
     </div>
 
-    <div id="tab-sites" class="tab-content" role="tabpanel" tabindex="0">
+    <div id="tab-probes" class="tab-content" role="tabpanel" tabindex="0">
       <div class="page-head">
         <div class="page-head-text">
-          <h2 data-i18n="titleSites">Sedi multi-sito</h2>
-          <p data-i18n="descSites">Gestisci le sedi remote su VPN. <strong>Central poll</strong>: il centrale raggiunge i dispositivi direttamente tramite il routing VPN. <strong>Site agent</strong>: un agente remoto si connette in uscita al centrale e vi spinge inventario/MAC; i comandi CLI sono inoltrati tramite coda.</p>
+          <h2 data-i18n="titleProbes">Sonde</h2>
+          <p data-i18n="descProbes">Gestisci le sonde con cui il centrale raggiunge i dispositivi. <strong>Central poll</strong>: il centrale raggiunge i dispositivi direttamente tramite il routing VPN. <strong>Sonda agente</strong>: un agente remoto si connette in uscita al centrale e vi spinge inventario/MAC; i comandi CLI sono inoltrati tramite coda.</p>
         </div>
         <div class="page-head-actions">
-          <button type="button" class="btn btn-primary" id="btnNewSite"><i class="fa-solid fa-plus"></i> <span data-i18n="titleNewSite">Nuova sede</span></button>
+          <button type="button" class="btn btn-primary" id="btnNewProbe"><i class="fa-solid fa-plus"></i> <span data-i18n="titleNewProbe">Nuova sonda</span></button>
         </div>
       </div>
 
@@ -2879,10 +2879,10 @@
           <table>
             <thead>
               <tr>
-                <th>ID</th><th data-i18n="lblSiteName">Nome</th><th data-i18n="lblSiteMode">Modalità</th><th data-i18n="thSiteStatus">Stato agente</th><th>Subnet</th><th data-i18n="thSiteLastContact">Ultimo contatto</th><th data-i18n="thActions">Azioni</th>
+                <th>ID</th><th data-i18n="lblProbeName">Nome</th><th data-i18n="lblProbeMode">Modalità</th><th data-i18n="thProbeStatus">Stato agente</th><th>Subnet</th><th data-i18n="thProbeLastContact">Ultimo contatto</th><th data-i18n="thActions">Azioni</th>
               </tr>
             </thead>
-            <tbody id="sitesTableBody"></tbody>
+            <tbody id="probesTableBody"></tbody>
           </table>
         </div>
       </div>
@@ -4098,7 +4098,7 @@
         <div class="panel-head">
           <div>
             <h3><span data-i18n="titleFleetVersions">Versioni della flotta</span></h3>
-            <p class="panel-head-desc" data-i18n="descFleetVersions">Cosa sta girando in ogni pezzo: il centrale e ogni sede con agente. Serve a rispondere "l'aggiornamento e' arrivato ovunque?" senza aprire una shell.</p>
+            <p class="panel-head-desc" data-i18n="descFleetVersions">Cosa sta girando in ogni pezzo: il centrale e ogni sonda agente. Serve a rispondere "l'aggiornamento e' arrivato ovunque?" senza aprire una shell.</p>
           </div>
         </div>
         <div class="table-wrap">
@@ -5288,7 +5288,7 @@
               <ul>
                 <li class="pro" data-i18n="uwOperatorPro1">Tutto quello che vede un viewer, più Config Drift e cronologia apparati</li>
                 <li class="pro" data-i18n="uwOperatorPro2">Triage, comandi CLI, backup, provisioning e import CSV</li>
-                <li class="con" data-i18n="uwOperatorCon1">Non gestisce utenti, tenant, sedi né impostazioni</li>
+                <li class="con" data-i18n="uwOperatorCon1">Non gestisce utenti, tenant, sonde né impostazioni</li>
                 <li class="con" data-i18n="uwOperatorCon2">Non vede Incidenti né FortiGate Management</li>
               </ul>
             </label>
@@ -5299,7 +5299,7 @@
               <ul>
                 <li class="pro" data-i18n="uwAdminPro1">Tutto quello che fa un operator, più Incidenti e FortiGate</li>
                 <li class="pro" data-i18n="uwAdminPro2">Gestisce utenti, baseline di drift e impostazioni</li>
-                <li class="con" data-i18n="uwAdminCon1">Se limitato a dei tenant: niente impostazioni globali, sedi né MCP</li>
+                <li class="con" data-i18n="uwAdminCon1">Se limitato a dei tenant: niente impostazioni globali, sonde né MCP</li>
               </ul>
             </label>
             <label class="choice-card">
@@ -5375,16 +5375,16 @@
     </div>
   </div>
 
-  <!-- Site wizard: create, edit and agent enrollment in one side panel
+  <!-- Probe wizard: create, edit and agent enrollment in one side panel
        (ui-wizard.js). Spec: docs/superpowers/specs/2026-09-23-site-wizard-design.md -->
-  <div class="modal-overlay sheet-overlay" id="siteWizard">
-    <div class="modal sheet" aria-labelledby="siteWizardTitle">
+  <div class="modal-overlay sheet-overlay" id="probeWizard">
+    <div class="modal sheet" aria-labelledby="probeWizardTitle">
       <div class="modal-header">
-        <h3 id="siteWizardTitle" data-i18n="titleNewSite">Nuova sede</h3>
-        <button type="button" class="modal-close" data-close-modal="siteWizard" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+        <h3 id="probeWizardTitle" data-i18n="titleNewProbe">Nuova sonda</h3>
+        <button type="button" class="modal-close" data-close-modal="probeWizard" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <ol class="wizard-rail" data-wizard-rail aria-label="Passi" data-i18n-aria-label="swRailLabel"></ol>
-      <form id="siteWizardForm" class="sheet-body" novalidate>
+      <form id="probeWizardForm" class="sheet-body" novalidate>
         <section data-step="mode">
           <fieldset class="choice-group" role="radiogroup" aria-labelledby="swModeLegend">
             <legend id="swModeLegend" data-i18n="swModeLegend">Come raggiunge i dispositivi il centrale?</legend>
@@ -5400,7 +5400,7 @@
             </label>
             <label class="choice-card">
               <input type="radio" name="swMode" value="agent">
-              <span class="choice-title" data-i18n="swModeAgent">Site agent</span>
+              <span class="choice-title" data-i18n="swModeAgent">Sonda agente</span>
               <span class="choice-desc" data-i18n="swModeAgentDesc">Un agente in sede si collega in uscita al centrale e gli spinge i dati.</span>
               <ul>
                 <li class="pro" data-i18n="swModeAgentPro1">Nessun accesso in ingresso alla sede</li>
@@ -5410,7 +5410,7 @@
             </label>
             <label class="choice-card">
               <input type="radio" name="swMode" value="jump">
-              <span class="choice-title" data-i18n="optSiteJump">Jump (bastione SSH)</span>
+              <span class="choice-title" data-i18n="optProbeJump">Sonda bastion (SSH)</span>
               <span class="choice-desc" data-i18n="swModeJumpDesc">Il centrale entra in sede via SSH attraverso un bastione.</span>
               <ul>
                 <li class="pro" data-i18n="jumpLimitsWorks">Funzionano: inventario, backup config, MAC/ARP, comandi CLI, audit.</li>
@@ -5425,12 +5425,12 @@
 
         <section data-step="details" hidden>
           <div class="form-group">
-            <label for="swName" data-i18n="lblSiteName">Nome</label>
-            <input id="swName" type="text" placeholder="es. Milano" data-i18n-placeholder="phNewSiteName">
+            <label for="swName" data-i18n="lblProbeName">Nome</label>
+            <input id="swName" type="text" placeholder="es. Milano" data-i18n-placeholder="phNewProbeName">
           </div>
           <div class="form-group">
-            <label for="swSubnets" data-i18n="lblSiteSubnets">Subnet (separate da virgola)</label>
-            <input id="swSubnets" type="text" placeholder="es. 10.0.0.0/24, 10.0.1.0/24" data-i18n-placeholder="phNewSiteSubnets" aria-describedby="swSubnetsHint">
+            <label for="swSubnets" data-i18n="lblProbeSubnets">Subnet (separate da virgola)</label>
+            <input id="swSubnets" type="text" placeholder="es. 10.0.0.0/24, 10.0.1.0/24" data-i18n-placeholder="phNewProbeSubnets" aria-describedby="swSubnetsHint">
             <p id="swSubnetsHint" class="form-hint" data-i18n="swSubnetsHint">Formato CIDR, separate da virgola.</p>
             <div id="swSubnetChips" class="subnet-chips"></div>
           </div>
@@ -5438,7 +5438,7 @@
             <div class="modal-grid">
               <div class="form-group">
                 <label for="swJumpHost" data-i18n="lblJumpHost">Host bastione (IP/hostname)</label>
-                <input id="swJumpHost" type="text" placeholder="es. 198.51.100.10" data-i18n-placeholder="phNewSiteJumpHost">
+                <input id="swJumpHost" type="text" placeholder="es. 198.51.100.10" data-i18n-placeholder="phNewProbeJumpHost">
               </div>
               <div class="form-group">
                 <label for="swJumpPort" data-i18n="lblJumpPort">Porta SSH bastione</label>
@@ -5470,7 +5470,7 @@
             <input type="checkbox" id="swSkipVerify">
             <span data-i18n="swSkipVerify">Salva senza verificare</span>
           </label>
-          <p class="form-hint" data-i18n="swSkipWarn">La sede sarà segnata come non verificata e la chiave verrà accettata al primo collegamento.</p>
+          <p class="form-hint" data-i18n="swSkipWarn">La sonda sarà segnata come non verificata e la chiave verrà accettata al primo collegamento.</p>
         </section>
 
         <section data-step="summary" hidden>
@@ -5480,12 +5480,12 @@
         </section>
 
         <section data-step="enroll" hidden>
-          <p data-i18n="descSiteEnroll">Il token e' mostrato una sola volta: copialo adesso. Chiudendo questa finestra non e' piu' recuperabile (si puo' solo rigenerare).</p>
+          <p data-i18n="descProbeEnroll">Il token e' mostrato una sola volta: copialo adesso. Chiudendo questa finestra non e' piu' recuperabile (si puo' solo rigenerare).</p>
           <h4><code>agent.json</code></h4>
-          <pre id="siteEnrollConfig" class="enroll-block"></pre>
-          <h4 data-i18n="lblSiteEnrollCommands">Comandi di installazione</h4>
-          <pre id="siteEnrollCommands" class="enroll-block"></pre>
-          <button type="button" class="btn btn-secondary" data-action="copy-site-enroll" data-i18n="btnCopySiteEnroll"><i class="fa-solid fa-copy"></i> Copia tutto</button>
+          <pre id="probeEnrollConfig" class="enroll-block"></pre>
+          <h4 data-i18n="lblProbeEnrollCommands">Comandi di installazione</h4>
+          <pre id="probeEnrollCommands" class="enroll-block"></pre>
+          <button type="button" class="btn btn-secondary" data-action="copy-probe-enroll" data-i18n="btnCopyProbeEnroll"><i class="fa-solid fa-copy"></i> Copia tutto</button>
           <div id="swHeartbeat" class="heartbeat" role="status" aria-live="polite">
             <span id="swHeartbeatLed" class="led led-warning"></span>
             <span id="swHeartbeatText" data-i18n="swEnrollWaiting">In attesa del primo contatto dell'agente…</span>
@@ -5493,7 +5493,7 @@
         </section>
       </form>
       <div class="modal-actions">
-        <button type="button" class="btn btn-secondary" data-close-modal="siteWizard" data-i18n="uiCancel">Annulla</button>
+        <button type="button" class="btn btn-secondary" data-close-modal="probeWizard" data-i18n="uiCancel">Annulla</button>
         <button type="button" class="btn btn-secondary" data-wizard-back data-i18n="wizBack">Indietro</button>
         <!-- No data-i18n: ui-wizard.js sets the label per step (Next / Save). -->
         <button type="button" class="btn btn-primary" data-wizard-next></button>
@@ -5521,7 +5521,7 @@
           <pre id="mcPaging" class="enroll-block"></pre>
           <h4 data-i18n="mcLblCommands">Comandi</h4>
           <pre id="mcCommands" class="enroll-block"></pre>
-          <button type="button" class="btn btn-secondary" data-action="mc-copy" data-i18n="btnCopySiteEnroll"><i class="fa-solid fa-copy"></i> Copia tutto</button>
+          <button type="button" class="btn btn-secondary" data-action="mc-copy" data-i18n="btnCopyProbeEnroll"><i class="fa-solid fa-copy"></i> Copia tutto</button>
           <ul id="mcNotes" class="mc-notes"></ul>
         </section>
         <section data-step="files" hidden>
@@ -5538,7 +5538,7 @@
             <legend data-i18n="mcApplyAllTitle">Uguale per tutti i file</legend>
             <div class="mc-grid">
               <label><span data-i18n="mcLblTenant">Tenant</span><select id="mcAllGroup"></select></label>
-              <label><span data-i18n="mcLblSite">Sede</span><select id="mcAllSite"></select></label>
+              <label><span data-i18n="mcLblProbe">Sonda</span><select id="mcAllProbe"></select></label>
               <label><span data-i18n="mcLblCategory">Categoria</span><select id="mcAllCategory"></select></label>
             </div>
             <div class="mc-apply-row">
@@ -5871,8 +5871,8 @@
                 <div id="exportFilterGroups" style="max-height:130px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
               </div>
               <div>
-                <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="lblExportSites">Sede</div>
-                <div id="exportFilterSites" style="max-height:130px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+                <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="lblExportProbes">Sonda</div>
+                <div id="exportFilterProbes" style="max-height:130px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
               </div>
               <div>
                 <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="thVendor">Vendor</div>
@@ -5894,7 +5894,7 @@
               <button class="btn btn-secondary btn-small" id="btnExportPresetDevDefault" style="width:auto; margin:0; font-size:10px; padding:2px 6px;" data-i18n="btnPresetDefault">Predefinito</button>
               <button class="btn btn-secondary btn-small" id="btnExportPresetDevAll" style="width:auto; margin:0; font-size:10px; padding:2px 6px;" data-i18n="btnPresetAll">Tutte</button>
               <button class="btn btn-secondary btn-small" id="btnExportPresetDevHw" style="width:auto; margin:0; font-size:10px; padding:2px 6px;" data-i18n="btnPresetHardware">Hardware &amp; Seriali</button>
-              <button class="btn btn-secondary btn-small" id="btnExportPresetDevNet" style="width:auto; margin:0; font-size:10px; padding:2px 6px;" data-i18n="btnPresetNetwork">Rete &amp; Sede</button>
+              <button class="btn btn-secondary btn-small" id="btnExportPresetDevNet" style="width:auto; margin:0; font-size:10px; padding:2px 6px;" data-i18n="btnPresetNetwork">Rete &amp; Sonda</button>
             </div>
             <div id="exportColumnList" style="max-height:260px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
           </div>
@@ -6047,7 +6047,7 @@
       <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
         <h3 id="agentControlTitle" style="margin:0; font-size:17px; display:flex; align-items:center; gap:8px;">
           <i class="fa-solid fa-gears" style="color:var(--primary);"></i>
-          <span data-i18n="titleAgentControlModal">Gestione Remota Agente di Sede</span>
+          <span data-i18n="titleAgentControlModal">Gestione Remota Agente Sonda</span>
         </h3>
         <button data-action="close-agent-control-modal" style="border:none; background:transparent; color:var(--text-muted); font-size:17px; cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
       </div>
@@ -6388,7 +6388,7 @@
   <script src="/static/js/client-map.js"></script>
   <script src="/static/js/diagnosi.js"></script>
   <script src="/static/js/endpoint-inventory.js"></script>
-  <script src="/static/js/site-agent.js"></script>
+  <script src="/static/js/probe-agent.js"></script>
   <script src="/static/js/home.js"></script>
   <script src="/static/js/cli-modal.js"></script>
   <script src="/static/js/bulk-command.js"></script>

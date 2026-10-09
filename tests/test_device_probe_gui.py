@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Test device site selection in GUI and /api/add-device endpoint."""
+"""Test device probe selection in GUI and /api/add-device endpoint."""
 import os
 import pathlib
 import tempfile
@@ -49,29 +49,29 @@ class TestDeviceProbeGui(unittest.TestCase):
             pass
 
     def test_list_probes_accessible_by_operator(self):
-        r = self.client.get("/api/sites", headers=self.op_h)
+        r = self.client.get("/api/probes", headers=self.op_h)
         self.assertEqual(r.status_code, 200)
         data = r.json()
-        self.assertIn("sites", data)
-        probe_ids = [s["id"] for s in data["sites"]]
+        self.assertIn("probes", data)
+        probe_ids = [s["id"] for s in data["probes"]]
         self.assertIn("central", probe_ids)
 
     def test_operator_does_not_see_bastion_details(self):
         """A dropdown needs id/name/mode; it does not need the bastion address."""
-        r = self.client.get("/api/sites", headers=self.op_h)
+        r = self.client.get("/api/probes", headers=self.op_h)
         self.assertEqual(r.status_code, 200)
-        for probe in r.json()["sites"]:
+        for probe in r.json()["probes"]:
             self.assertEqual(set(probe), {"id", "name", "mode"})
 
     def test_admin_still_sees_the_full_probe_record(self):
-        r = self.client.get("/api/sites", headers=self.admin_h)
+        r = self.client.get("/api/probes", headers=self.admin_h)
         self.assertEqual(r.status_code, 200)
-        central = next(s for s in r.json()["sites"] if s["id"] == "central")
+        central = next(s for s in r.json()["probes"] if s["id"] == "central")
         self.assertIn("subnets", central)
         self.assertNotIn("token_hash", central)
 
     def test_add_device_with_probe(self):
-        # Create a jump site
+        # Create a bastion probe
         probe_manager.create_probe(
             name="Branch Probe",
             mode="jump",
@@ -82,19 +82,19 @@ class TestDeviceProbeGui(unittest.TestCase):
         )
         sid = "branch-probe"
 
-        # Add device targeting this site
+        # Add device targeting this probe
         payload = {
             "ip": "203.0.113.55",
             "vendor": "cisco",
             "profile": "default",
             "group": "Generale",
-            "site": sid,
+            "probe": sid,
             "ssh_port": 22,
         }
         r = self.client.post("/api/add-device", headers=self.op_h, json=payload)
         self.assertEqual(r.status_code, 200)
 
-        # Verify device record has site
+        # Verify device record has probe
         dev = next((d for d in inventory_manager.get_all_devices() if d["IP"] == "203.0.113.55"), None)
         self.assertIsNotNone(dev)
         self.assertEqual(dev.get("Probe"), sid)
@@ -105,7 +105,7 @@ class TestDeviceProbeGui(unittest.TestCase):
             "vendor": "cisco",
             "profile": "default",
             "group": "Generale",
-            "site": "nonexistent-probe-id",
+            "probe": "nonexistent-probe-id",
             "ssh_port": 22,
         }
         r = self.client.post("/api/add-device", headers=self.op_h, json=payload)
@@ -114,13 +114,13 @@ class TestDeviceProbeGui(unittest.TestCase):
 
     def test_gui_template_has_dev_probe_select(self):
         html = (ROOT / "templates/dashboard.html").read_text(encoding="utf-8")
-        self.assertIn('id="devSiteSelect"', html)
-        self.assertIn('data-i18n="lblDeviceSite"', html)
+        self.assertIn('id="devProbeSelect"', html)
+        self.assertIn('data-i18n="lblDeviceProbe"', html)
 
     def test_js_has_populate_probe_options(self):
         js = (ROOT / "static/js/provisioning.js").read_text(encoding="utf-8")
-        self.assertIn("populateSiteOptions", js)
-        self.assertIn("devSiteSelect", js)
+        self.assertIn("populateProbeOptions", js)
+        self.assertIn("devProbeSelect", js)
 
 
 if __name__ == "__main__":

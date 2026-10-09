@@ -115,7 +115,7 @@ function endpointsRender(d) {
             <i class="fa-solid fa-chevron-right ep-chevron" style="color:var(--text-muted); font-size:10px; margin-right:8px; transition:transform 0.18s ease; display:inline-block;"></i>${escapeHtml(r.mac)}
         </td>
         <td style="font-size:12px;">${escapeHtml(r.oui_vendor || '—')}</td>
-        <td style="font-size:12px;">${escapeHtml(r.tenant || '—')} <span style="color:var(--text-muted);">/ ${escapeHtml(r.site || '—')}</span></td>
+        <td style="font-size:12px;">${escapeHtml(r.tenant || '—')} <span style="color:var(--text-muted);">/ ${escapeHtml(r.probe || '—')}</span></td>
         <td style="font-family:var(--font-code); font-size:11px;">${escapeHtml((r.ips || []).join(', ') || '—')}</td>
         <td style="font-size:12px;">${escapeHtml(r.switch_name || r.switch_ip || '—')} <span style="color:var(--text-muted);">${escapeHtml(r.interface || '')}</span></td>
         <td style="font-size:12px;">${escapeHtml(r.vlan || '—')}</td>
@@ -172,7 +172,7 @@ function _epTime(iso) {
 // Export lato client, come exportCategoriesCsv() in topology.js: il file si
 // costruisce da cio' che la tabella mostra. Una rotta di export sarebbe un
 // secondo formattatore, e i due ordini di colonne divergerebbero.
-const _EP_COLS = ['mac', 'oui_vendor', 'tenant', 'site', 'ips', 'switch_ip',
+const _EP_COLS = ['mac', 'oui_vendor', 'tenant', 'probe', 'ips', 'switch_ip',
                   'switch_name', 'interface', 'vlan', 'client_type',
                   'first_seen', 'last_seen', 'seen_count', 'access_port_count',
                   'flags'];
@@ -248,8 +248,8 @@ function _renderEndpointDetailRow(r) {
                     <div style="font-family:var(--font-code); font-size:11px;">${escapeHtml((r.ips || []).join(', ') || '—')}</div>
                 </div>
                 <div style="background:var(--surface-1); padding:8px 12px; border-radius:0; border:1px solid var(--border);">
-                    <div style="color:var(--text-muted); font-size:11px; margin-bottom:2px;"><i class="fa-solid fa-building" style="margin-right:4px;"></i>${escapeHtml(L.epDetailTenantSite)}</div>
-                    <div>${escapeHtml(r.tenant || '—')} <span style="color:var(--text-muted);">/ ${escapeHtml(r.site || '—')}</span></div>
+                    <div style="color:var(--text-muted); font-size:11px; margin-bottom:2px;"><i class="fa-solid fa-building" style="margin-right:4px;"></i>${escapeHtml(L.epDetailTenantProbe)}</div>
+                    <div>${escapeHtml(r.tenant || '—')} <span style="color:var(--text-muted);">/ ${escapeHtml(r.probe || '—')}</span></div>
                 </div>
                 <div style="background:var(--surface-1); padding:8px 12px; border-radius:0; border:1px solid var(--border);">
                     <div style="color:var(--text-muted); font-size:11px; margin-bottom:2px;"><i class="fa-solid fa-server" style="margin-right:4px;"></i>${escapeHtml(L.epDetailSwitchPort)}</div>

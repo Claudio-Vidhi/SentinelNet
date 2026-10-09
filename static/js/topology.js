@@ -698,7 +698,7 @@
         if (status === 'offline')     return { ...lamp('fault'), text: 'OFFLINE',  problem: true };
         if (status === 'auth_failed') return { ...lamp('warn'),  text: 'AUTH ERR', problem: true };
         if (status === 'discovered')  return { ...lamp('idle'),  text: tr('topoDiscovered'), problem: false };
-        // Jump-site device: the SSH bastion tunnel carries no ICMP, so
+        // Bastion-probe device: the SSH bastion tunnel carries no ICMP, so
         // reachability is not measurable — never paint it as the red
         // "offline" fault lamp, that would be a false down.
         if (status === 'manual')      return { ...lamp('idle'),  text: tr('devStManual'), problem: false };
@@ -969,7 +969,7 @@
                     pm.devices.forEach(d => {
                         if (!globalVersions[d.ip]) globalVersions[d.ip] = {};
                         // d.status is the tri-state the ping monitor already computed
-                        // server-side: for a jump-site device (bastion tunnel, no ICMP)
+                        // server-side: for a bastion-probe device (bastion tunnel, no ICMP)
                         // d.up is null and d.status is 'unknown' — never collapse that
                         // to 'offline', it would paint the map with a false down.
                         globalVersions[d.ip].status = d.status === 'unknown' ? 'unknown' : (d.up ? 'online' : 'offline');

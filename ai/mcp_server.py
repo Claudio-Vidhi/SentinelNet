@@ -453,7 +453,7 @@ TOOLS = {
         "List the configured probes (central + remote) with mode "
         "(central-poll/agent), subnets and last-seen time.",
         _obj(),
-        lambda a: api("GET", "/api/sites"),
+        lambda a: api("GET", "/api/probes"),
     ),
     "fortigate_status": (
         "Get live system status of a FortiGate firewall (version, HA, uptime, "

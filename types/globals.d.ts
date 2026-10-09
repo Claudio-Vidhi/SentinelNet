@@ -115,9 +115,9 @@ declare var openCreateRedundancyModal: any;
 declare var submitCreateRedundancyGroup: any;
 
 // settings.js
-declare var refreshSiteIdentitySelects: any;
+declare var refreshProbeIdentitySelects: any;
 
-// site-agent.js
+// probe-agent.js
 declare var closeAgentControlModal: any;
 declare var fetchAgentInventory: any;
 declare var openAgentControlModal: any;
@@ -164,7 +164,7 @@ interface Window {
     trafState: any;          // observability.js, read by flow-analytics.js
     _vwLoaded: any;          // threat-intel.js, first-load flag
     webkitAudioContext: any; // legacy Safari fallback in devices.js
-    populateSiteOptions: any; // provisioning.js
+    populateProbeOptions: any; // provisioning.js
     updateTopologyMapNodeStatus: any; // topology.js, called from devices.js
     openTrafficoAnomalies: any; // observability.js, called from home.js
     openIncident: any; // incidents.js, called from observability.js

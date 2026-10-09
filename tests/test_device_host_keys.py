@@ -135,10 +135,10 @@ class TestDeviceHostKeys(unittest.TestCase):
         ip = "192.0.2.20"
         key_a = paramiko.RSAKey.generate(2048)
         key_b = paramiko.RSAKey.generate(2048)
-        site_a = {"mode": "jump", "jump_host": "203.0.113.1", "jump_port": 22}
-        site_b = {"mode": "jump", "jump_host": "203.0.113.2", "jump_port": 22}
+        probe_a = {"mode": "jump", "jump_host": "203.0.113.1", "jump_port": 22}
+        probe_b = {"mode": "jump", "jump_host": "203.0.113.2", "jump_port": 22}
 
-        for probe, key in ((site_a, key_a), (site_b, key_b)):
+        for probe, key in ((probe_a, key_a), (probe_b, key_b)):
             with mock.patch.object(net_ssh, "bastion_probe_for", return_value=probe),                  mock.patch.object(net_ssh, "jump_channel",
                                    return_value=mock.MagicMock()),                  mock.patch.object(net_ssh, "_netmiko_connect",
                                    return_value=self._fake_conn(key)):

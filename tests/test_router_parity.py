@@ -85,7 +85,7 @@ class TestRouterParity(unittest.TestCase):
         self.assertEqual(missing, [], f"endpoint spariti dal refactor: {missing}")
 
     # Percorsi NUOVI legittimi (funzionalità aggiunte dopo lo snapshot golden).
-    ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/flow-siem", "/api/arp", "/api/ai", "/api/provisioner", "/api/mcp", "/api/sites", "/api/command-jobs", "/api/agent", "/api/fortigate/{ip}/firewall", "/api/fortigate/targets", "/api/identities", "/api/config-analyzer/convert", "/api/redundancy", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/diagnose", "/api/fortigate/{ip}/system", "/api/fortigate/{ip}/vpn", "/api/fortigate/{ip}/sdwan", "/api/endpoints", "/api/settings/snmp-defaults", "/api/settings/ping-monitor", "/api/ping-monitor", "/api/settings/ui-variant", "/api/mac/port-control", "/api/wlc", "/api/scan-verify", "/api/version", "/api/reassign-device-site", "/api/policy-test", "/api/export/devices/columns", "/api/export/devices/preview", "/api/drift",
+    ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/flow-siem", "/api/arp", "/api/ai", "/api/provisioner", "/api/mcp", "/api/probes", "/api/command-jobs", "/api/agent", "/api/fortigate/{ip}/firewall", "/api/fortigate/targets", "/api/identities", "/api/config-analyzer/convert", "/api/redundancy", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/diagnose", "/api/fortigate/{ip}/system", "/api/fortigate/{ip}/vpn", "/api/fortigate/{ip}/sdwan", "/api/endpoints", "/api/settings/snmp-defaults", "/api/settings/ping-monitor", "/api/ping-monitor", "/api/settings/ui-variant", "/api/mac/port-control", "/api/wlc", "/api/scan-verify", "/api/version", "/api/reassign-device-probe", "/api/policy-test", "/api/export/devices/columns", "/api/export/devices/preview", "/api/drift",
                           # Classification export (serial + neighbour columns), shipped in 0.12.0.
                           "/api/export/classification",
                           # Offsite SFTP backup mirror (cloud-backup plan).
@@ -167,7 +167,7 @@ class TestRouterParity(unittest.TestCase):
         ("post", "/api/groups/rename"),
         ("post", "/api/groups/delete"),
         ("get", "/api/mac/locate"),
-        # Inventory export: optional query params (groups, sites, vendors,
+        # Inventory export: optional query params (groups, probes, vendors,
         # redundancy, columns) plus the column registry served alongside it.
         # Purely additive -- omitting them all yields the historic six-column
         # export -- but the operation's parameters change. Covered by
@@ -244,7 +244,7 @@ class TestFullParity(unittest.TestCase):
     # NEW_PREFIXES filtra entrambi i lati del confronto, quindi copre anche
     # i percorsi RIMOSSI: /api/settings/fortigate-preview era il flag della
     # tab FortiGate in anteprima, sparito quando la tab è diventata normale.
-    NEW_PREFIXES = ("/api/mcp/authorize", "/api/mcp/token", "/api/mcp/session", "/api/mcp/grants", "/api/mcp/my-grants", "/api/redundancy", "/api/agent/syslog", "/api/observability/protocol-distribution", "/api/sites/{site_id}/agent", "/api/sites/test-bastion", "/api/reassign-device-site", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/settings/fortigate-preview", "/api/flow-siem", "/api/wlc/{ip}/diagnose-client", "/api/ws-token", "/api/wlc/{ip}/wlan-summary", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/observability/events", "/api/ai/conversations", "/api/diagnose", "/api/agent/arp",
+    NEW_PREFIXES = ("/api/mcp/authorize", "/api/mcp/token", "/api/mcp/session", "/api/mcp/grants", "/api/mcp/my-grants", "/api/redundancy", "/api/agent/syslog", "/api/observability/protocol-distribution", "/api/probes/{probe_id}/agent", "/api/probes/test-bastion", "/api/reassign-device-probe", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/settings/fortigate-preview", "/api/flow-siem", "/api/wlc/{ip}/diagnose-client", "/api/ws-token", "/api/wlc/{ip}/wlan-summary", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/observability/events", "/api/ai/conversations", "/api/diagnose", "/api/agent/arp",
                     "/api/routes", "/api/firewall-traffic",
                     "/api/observability/hosts",
                     "/api/observability/host-series",
@@ -316,7 +316,7 @@ class TestFullParity(unittest.TestCase):
                     "/api/manual-config")
     # Come NEW_PREFIXES, filtra entrambi i lati: copre anche FortigatePreviewSchema,
     # rimosso insieme al flag di preview /api/settings/fortigate-preview.
-    NEW_SCHEMAS = ("DeviceSiteSchema", "GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "ReportPdfSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection", "AgentBackupSchema", "AgentStatusItemSchema", "AgentStatusSchema", "FortigatePreviewSchema",
+    NEW_SCHEMAS = ("DeviceProbeSchema", "GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "ReportPdfSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection", "AgentBackupSchema", "AgentStatusItemSchema", "AgentStatusSchema", "FortigatePreviewSchema",
                     # Schemi delle notifiche email (regole admin e preferenze).
                     "UserPrefsSchema", "RuleSchema",
                     # Proposte AI nel tab Dispositivi.
@@ -379,8 +379,8 @@ class TestFullParity(unittest.TestCase):
                     "UserNameSchema", "ProfileEmailSchema", "VerifyEmailSchema",
                     # Configurazione SSO (rotta gia' in NEW_PREFIXES).
                     "SsoSettingsSchema",
-                    # Site wizard (2026-09-23): body of the draft bastion test,
-                    # POST /api/sites/test-bastion/draft (already in NEW_PREFIXES).
+                    # Probe wizard (2026-09-23): body of the draft bastion test,
+                    # POST /api/probes/test-bastion/draft (already in NEW_PREFIXES).
                     "BastionDraftSchema")
     # v7: /anomalies ora restituisce INCIDENTI invece di singoli eventi
     # correlati. Parametri e forma della risposta restano quelli storici (li
@@ -463,11 +463,11 @@ class TestFullParity(unittest.TestCase):
     # SubnetScanRequest: la scansione e' diventata solo scoperta (ping + porte
     # TCP configurabili): vendor, group, auto_add e use_default_creds sono
     # rimossi, il login vive in /api/scan-verify con un'identita' esplicita.
-    # SiteSchema/SiteUpdateSchema: jump-host-sites Task 5 adds jump_host,
-    # jump_port, jump_identity (all optional) so /api/sites can create and
-    # update bastion-mode sites; no existing field removed or retyped.
-    # SwitchProvisionSSHSchema: jump-host-sites adds ssh_site (optional,
-    # defaults to ""), the site id of a day-0 target that is not in the
+    # ProbeCreateSchema/ProbeUpdateSchema: the jump-host plan, Task 5, adds jump_host,
+    # jump_port, jump_identity (all optional) so /api/probes can create and
+    # update bastion-mode probes; no existing field removed or retyped.
+    # SwitchProvisionSSHSchema: the jump-host plan adds ssh_probe (optional,
+    # defaults to ""), the probe id of a day-0 target that is not in the
     # inventory yet, so the push can be tunnelled through a bastion; no
     # existing field removed or retyped.
     # FortiGateProvisionSchema: admin_user/admin_password became mandatory
@@ -477,7 +477,7 @@ class TestFullParity(unittest.TestCase):
                                # Optional 'ips' (default None = whole group): the
                                # inventory's bulk selection. Additive, no field retyped.
                                "PingCheckRequest", "TriageRunRequest",
-                               "SiteSchema", "SiteUpdateSchema",
+                               "ProbeCreateSchema", "ProbeUpdateSchema",
                                "SwitchProvisionSSHSchema", "FortiGateProvisionSchema",
                                # Campo 'email' opzionale (default ""): indirizzo
                                # di recupero password. Puramente additivo, un

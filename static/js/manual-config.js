@@ -112,7 +112,7 @@
                 ...row, ...fields,
                 ip: mc.fixed?.ip || fields.candidates[0] || '',
                 group: mc.fixed?.group || '',
-                site: mc.fixed?.site || 'central',
+                probe: mc.fixed?.probe || 'central',
                 category: '',
                 edited: new Set(),
             });
@@ -125,13 +125,13 @@
     }
 
     function groupItems() { return Object.keys(globalGroups || {}).map((g) => [g, g]); }
-    function siteItems() { return (mc.guide?.sites || []).map((s) => [s.id, s.name]); }
+    function probeItems() { return (mc.guide?.probes || []).map((s) => [s.id, s.name]); }
     function categoryItems() { return Object.entries(mc.guide?.categories || {}).map(([k, c]) => [k, c.label]); }
 
     function fillApplyAll() {
         $('mcApplyAll').hidden = !!mc.fixed;
         $('mcAllGroup').innerHTML = optionsHtml(groupItems(), '', tr('mcAllNone'));
-        $('mcAllSite').innerHTML = optionsHtml(siteItems(), '', tr('mcAllNone'));
+        $('mcAllProbe').innerHTML = optionsHtml(probeItems(), '', tr('mcAllNone'));
         $('mcAllCategory').innerHTML = optionsHtml(categoryItems(), '', tr('mcAllNone'));
     }
 
@@ -148,7 +148,7 @@
               <label>IP<input data-field="ip" list="mcIps${i}" value="${escapeHtml(r.ip)}" inputmode="decimal"${lock}></label>
               <datalist id="mcIps${i}">${r.candidates.map((c) => `<option value="${escapeHtml(c)}"></option>`).join('')}</datalist>
               <label>${escapeHtml(tr('mcLblTenant'))}<select data-field="group"${lock}>${optionsHtml(groupItems(), r.group, '')}</select></label>
-              <label>${escapeHtml(tr('mcLblSite'))}<select data-field="site"${lock}>${optionsHtml(siteItems(), r.site)}</select></label>
+              <label>${escapeHtml(tr('mcLblProbe'))}<select data-field="probe"${lock}>${optionsHtml(probeItems(), r.probe)}</select></label>
               <label>${escapeHtml(tr('mcLblCategory'))}<select data-field="category">${optionsHtml(categoryItems(), r.category, tr('mcCategoryAuto'))}</select></label>
               <label>${escapeHtml(tr('mcLblVersion'))}<input data-field="version" value="${escapeHtml(r.version)}"></label>
             </div>
@@ -160,7 +160,7 @@
 
     function applyAll() {
         const read = (id) => { const el = $(id); return el instanceof HTMLSelectElement ? el.value : ''; };
-        const values = { group: read('mcAllGroup'), site: read('mcAllSite'), category: read('mcAllCategory') };
+        const values = { group: read('mcAllGroup'), probe: read('mcAllProbe'), category: read('mcAllCategory') };
         mc.rows.forEach((r) => { for (const [k, v] of Object.entries(values)) if (v) r[k] = v; });
         renderReview();
         wizard.refresh();
@@ -178,7 +178,7 @@
                     method: 'POST',
                     body: JSON.stringify({
                         text: r.text, vendor: r.vendor, ip: r.ip.trim(), group: r.group,
-                        site: r.site, hostname: r.hostname.trim(), category: r.category,
+                        probe: r.probe, hostname: r.hostname.trim(), category: r.category,
                         version: r.version.trim(), model: r.model,
                     }),
                 });
@@ -240,7 +240,7 @@
         if (ip) {
             const d = (globalDevices || []).find((x) => x.IP === ip && x.manual);
             if (d) {
-                mc.fixed = { ip: d.IP, group: d.Group, site: d.Site || 'central', hostname: d.Hostname || '' };
+                mc.fixed = { ip: d.IP, group: d.Group, probe: d.Probe || 'central', hostname: d.Hostname || '' };
                 const sel = $('mcVendor');
                 // An unknown vendor leaves the first option selected: the guide step must stay usable.
                 if (sel instanceof HTMLSelectElement && d.Vendor) {

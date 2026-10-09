@@ -1701,7 +1701,7 @@
     "title": "PromoteDeviceSchema",
     "type": "object"
    },
-   "SiteCommandSchema": {
+   "ProbeCommandSchema": {
     "properties": {
      "command": {
       "title": "Command",
@@ -1716,10 +1716,10 @@
      "ip",
      "command"
     ],
-    "title": "SiteCommandSchema",
+    "title": "ProbeCommandSchema",
     "type": "object"
    },
-   "SiteIdSchema": {
+   "ProbeIdSchema": {
     "properties": {
      "id": {
       "title": "Id",
@@ -1729,10 +1729,10 @@
     "required": [
      "id"
     ],
-    "title": "SiteIdSchema",
+    "title": "ProbeIdSchema",
     "type": "object"
    },
-   "SiteSchema": {
+   "ProbeCreateSchema": {
     "properties": {
      "mode": {
       "default": "central",
@@ -1755,10 +1755,10 @@
     "required": [
      "name"
     ],
-    "title": "SiteSchema",
+    "title": "ProbeCreateSchema",
     "type": "object"
    },
-   "SiteUpdateSchema": {
+   "ProbeUpdateSchema": {
     "properties": {
      "id": {
       "title": "Id",
@@ -1804,7 +1804,7 @@
     "required": [
      "id"
     ],
-    "title": "SiteUpdateSchema",
+    "title": "ProbeUpdateSchema",
     "type": "object"
    },
    "SubcategoryDeleteSchema": {
@@ -6984,9 +6984,9 @@
     "summary": "Set Network Settings"
    }
   },
-  "/api/sites": {
+  "/api/probes": {
    "get": {
-    "operationId": "list_sites_ep_api_sites_get",
+    "operationId": "list_probes_ep_api_probes_get",
     "responses": {
      "200": {
       "content": {
@@ -7002,15 +7002,15 @@
       "HTTPBearer": []
      }
     ],
-    "summary": "List Sites Ep"
+    "summary": "List Probes Ep"
    },
    "post": {
-    "operationId": "create_site_ep_api_sites_post",
+    "operationId": "create_probe_ep_api_probes_post",
     "requestBody": {
      "content": {
       "application/json": {
        "schema": {
-        "$ref": "#/components/schemas/SiteSchema"
+        "$ref": "#/components/schemas/ProbeCreateSchema"
        }
       }
      },
@@ -7041,17 +7041,17 @@
       "HTTPBearer": []
      }
     ],
-    "summary": "Create Site Ep"
+    "summary": "Create Probe Ep"
    }
   },
-  "/api/sites/delete": {
+  "/api/probes/delete": {
    "post": {
-    "operationId": "delete_site_ep_api_sites_delete_post",
+    "operationId": "delete_probe_ep_api_probes_delete_post",
     "requestBody": {
      "content": {
       "application/json": {
        "schema": {
-        "$ref": "#/components/schemas/SiteIdSchema"
+        "$ref": "#/components/schemas/ProbeIdSchema"
        }
       }
      },
@@ -7082,17 +7082,17 @@
       "HTTPBearer": []
      }
     ],
-    "summary": "Delete Site Ep"
+    "summary": "Delete Probe Ep"
    }
   },
-  "/api/sites/regenerate-token": {
+  "/api/probes/regenerate-token": {
    "post": {
-    "operationId": "regenerate_site_token_ep_api_sites_regenerate_token_post",
+    "operationId": "regenerate_probe_token_ep_api_probes_regenerate_token_post",
     "requestBody": {
      "content": {
       "application/json": {
        "schema": {
-        "$ref": "#/components/schemas/SiteIdSchema"
+        "$ref": "#/components/schemas/ProbeIdSchema"
        }
       }
      },
@@ -7123,17 +7123,17 @@
       "HTTPBearer": []
      }
     ],
-    "summary": "Regenerate Site Token Ep"
+    "summary": "Regenerate Probe Token Ep"
    }
   },
-  "/api/sites/update": {
+  "/api/probes/update": {
    "post": {
-    "operationId": "update_site_ep_api_sites_update_post",
+    "operationId": "update_probe_ep_api_probes_update_post",
     "requestBody": {
      "content": {
       "application/json": {
        "schema": {
-        "$ref": "#/components/schemas/SiteUpdateSchema"
+        "$ref": "#/components/schemas/ProbeUpdateSchema"
        }
       }
      },
@@ -7164,20 +7164,20 @@
       "HTTPBearer": []
      }
     ],
-    "summary": "Update Site Ep"
+    "summary": "Update Probe Ep"
    }
   },
-  "/api/sites/{site_id}/command": {
+  "/api/probes/{probe_id}/command": {
    "post": {
     "description": "Accoda un comando CLI per un dispositivo di una sede agent. L'agente lo\nprelever\u00e0 in polling, lo eseguir\u00e0 localmente e ne poster\u00e0 il risultato.",
-    "operationId": "site_command_ep_api_sites__site_id__command_post",
+    "operationId": "probe_command_ep_api_probes__probe_id__command_post",
     "parameters": [
      {
       "in": "path",
-      "name": "site_id",
+      "name": "probe_id",
       "required": true,
       "schema": {
-       "title": "Site Id",
+       "title": "Probe Id",
        "type": "string"
       }
      }
@@ -7186,7 +7186,7 @@
      "content": {
       "application/json": {
        "schema": {
-        "$ref": "#/components/schemas/SiteCommandSchema"
+        "$ref": "#/components/schemas/ProbeCommandSchema"
        }
       }
      },
@@ -7217,19 +7217,19 @@
       "HTTPBearer": []
      }
     ],
-    "summary": "Site Command Ep"
+    "summary": "Probe Command Ep"
    }
   },
-  "/api/sites/{site_id}/command-jobs": {
+  "/api/probes/{probe_id}/command-jobs": {
    "get": {
-    "operationId": "list_site_command_jobs_ep_api_sites__site_id__command_jobs_get",
+    "operationId": "list_probe_command_jobs_ep_api_probes__probe_id__command_jobs_get",
     "parameters": [
      {
       "in": "path",
-      "name": "site_id",
+      "name": "probe_id",
       "required": true,
       "schema": {
-       "title": "Site Id",
+       "title": "Probe Id",
        "type": "string"
       }
      }
@@ -7259,7 +7259,7 @@
       "HTTPBearer": []
      }
     ],
-    "summary": "List Site Command Jobs Ep"
+    "summary": "List Probe Command Jobs Ep"
    }
   },
   "/api/topology": {

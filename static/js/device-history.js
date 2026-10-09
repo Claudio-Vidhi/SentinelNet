@@ -12,7 +12,7 @@ let dhLoaded = false;
 // Inventory fields in the order an engineer reads a device, with their labels.
 const DH_FIELDS = [
     ['Hostname', 'dhFHostname'], ['IP', 'dhFIp'], ['Vendor', 'dhFVendor'],
-    ['Profile', 'dhFProfile'], ['Group', 'dhFTenant'], ['Site', 'dhFSite'],
+    ['Profile', 'dhFProfile'], ['Group', 'dhFTenant'], ['Probe', 'dhFProbe'],
     ['Username', 'dhFUsername'], ['Transports', 'dhFTransports'],
     ['SSH Port', 'dhFSshPort'], ['SNMP Disabled', 'dhFSnmpDisabled'],
     ['Password', 'dhFPassword'], ['Enable Secret', 'dhFEnable'],

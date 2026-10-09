@@ -62,7 +62,7 @@ _bulk_jobs_lock = threading.Lock()
 
 # Dangerous-command policy: lists and matchers live in ONE module
 # (security/command_policy.py, WP5). The old names stay as aliases because
-# routers/sites.py and the WS terminal import them.
+# routers/probes.py and the WS terminal import them.
 from security.command_policy import (
     INTERACTIVE_PATTERNS as COMMAND_BLACKLIST,
     BULK_ALWAYS_PATTERNS as BULK_DESTRUCTIVE_BLACKLIST,
