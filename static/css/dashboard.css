@@ -2647,6 +2647,11 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   padding: 0 8px;
   border-bottom: var(--seam) solid var(--border);
 }
+.inv-decommissioned td { opacity: .6; }
+/* .btn sets display, which would beat [hidden]. */
+.inv-selection .btn[hidden] { display: none; }
+.inv-bulk-list { max-height: 260px; overflow: auto; margin: 8px 0 0; padding-left: 18px; }
+
 .inv-tab {
   display: inline-flex; align-items: center; gap: 8px;
   height: 42px; padding: 0 14px; margin-bottom: -1px;
@@ -2709,6 +2714,7 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   position: relative; z-index: 1;
 }
 .dh-node[data-ev="added"] { background-color: var(--text); }
+.dh-node[data-ev="reactivated"] { background-color: var(--text); }
 .dh-node[data-ev="changed"] {
   width: 8px; height: 8px; margin: 3px;
   background-color: var(--text-muted); border-color: var(--text-muted);

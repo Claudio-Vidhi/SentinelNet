@@ -473,9 +473,9 @@ class TestDevicesTabRestyle(unittest.TestCase):
             self.assertIn(f'id="{_id}"', html)
         with open(os.path.join("static", "js", "devices.js"), encoding="utf-8") as f:
             devices = f.read()
-        self.assertIn("startGroupTriage('all', [...selectedDeviceIps])", devices)
-        self.assertIn("runPingCheck([...selectedDeviceIps])", devices)
-        self.assertIn("openBulkCommandModal([...selectedDeviceIps])", devices)
+        self.assertIn("startGroupTriage('all', selectedIps())", devices)
+        self.assertIn("runPingCheck(selectedIps())", devices)
+        self.assertIn("openBulkCommandModal(selectedIps())", devices)
         # rows are re-rendered from state: patching cells by index broke every
         # time a column moved, and this redesign moved all of them
         self.assertNotIn("cells[", devices)
