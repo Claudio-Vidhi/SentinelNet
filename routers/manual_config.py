@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Manual config upload for devices SentinelNet cannot reach.
 
-The same ingest as the site agent's POST /api/agent/backup (routers/agent.py),
+The same ingest as the probe agent's POST /api/agent/backup (routers/agent.py),
 with an operator instead of an agent as the source. One device per call: the
 UI posts the rows one after another and shows each outcome as it lands.
 Spec: docs/superpowers/specs/2026-10-08-manual-config-repository-design.md
