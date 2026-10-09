@@ -2193,6 +2193,7 @@ details.mac-switch > summary:hover,
 
 body.role-viewer .requires-write { display: none !important; }
 body:not(.role-admin) .requires-admin { display: none !important; }
+body:not(.role-super_admin) .requires-super-admin { display: none !important; }
 
 /* ---------------------------------------------------------------
    21. ADATTAMENTO
@@ -2649,7 +2650,7 @@ body:not(.role-admin) .requires-admin { display: none !important; }
 }
 .inv-decommissioned td { opacity: .6; }
 /* .btn sets display, which would beat [hidden]. */
-.inv-selection .btn[hidden] { display: none; }
+.btn[hidden] { display: none; }
 .inv-bulk-list { max-height: 260px; overflow: auto; margin: 8px 0 0; padding-left: 18px; }
 
 .inv-tab {

@@ -3721,6 +3721,7 @@
           <button type="button" data-settings-jump="setSecApp"><span data-i18n="setNavApp">Applicazione</span></button>
           <button type="button" data-settings-jump="cloudBackupPanel"><span data-i18n="setNavBackup">Copia offsite</span></button>
           <button type="button" data-settings-jump="setSecRestart"><span data-i18n="setNavRestart">Riavvio</span></button>
+          <button type="button" class="requires-super-admin" data-settings-jump="setSecFactoryReset"><span data-i18n="setNavFactoryReset">Reset di fabbrica</span></button>
           <button type="button" data-settings-jump="setSecFleet"><span data-i18n="setNavFleet">Versioni</span></button>
         </nav>
 
@@ -4095,6 +4096,17 @@
         <div id="updateAvailable" class="set-status"></div>
         <div id="restartAppHint" class="set-status"></div>
         <div id="restartAppStatus" class="set-status"></div>
+      </section>
+
+      <!-- Ambito: reset di fabbrica (solo super-admin) -->
+      <section class="panel requires-super-admin set-section" id="setSecFactoryReset">
+        <div class="panel-head"><h3><span data-i18n="titleFactoryReset">Zona pericolosa</span></h3></div>
+        <p class="set-desc" data-i18n="descFactoryReset">Riporta l'installazione allo stato del primo avvio. I dati attuali non vengono cancellati: la data directory viene archiviata accanto a quella nuova.</p>
+        <div class="set-actions">
+          <button type="button" id="btnFactoryReset" class="btn btn-danger btn-small" style="width:auto;" data-i18n="btnFactoryReset">Reset di fabbrica</button>
+          <button type="button" id="btnCancelFactoryReset" class="btn btn-secondary btn-small" style="width:auto;" data-i18n="btnCancelFactoryReset" hidden>Annulla il reset</button>
+        </div>
+        <div id="factoryResetStatus" class="set-status"></div>
       </section>
 
       <!-- Ambito: versioni della flotta (centrale + agenti) -->
@@ -5061,6 +5073,31 @@
 
   <!-- Subnet Scanner Modal -->
   <!-- Catalogo modelli: unioni di doppioni proposte dall'AI, una per una. -->
+  <div class="modal-overlay" id="factoryResetModal">
+    <div class="modal" style="width: 560px; max-width: 96%;">
+      <div class="modal-header">
+        <h3 data-i18n="frModalTitle">Reset di fabbrica</h3>
+        <i class="fa-solid fa-xmark modal-close" id="btnCloseFactoryReset"></i>
+      </div>
+      <p data-i18n="frModalLost">Si perdono inventario, organizzazioni, utenti, credenziali e chiavi, storico, backup di configurazione e impostazioni. Le sonde agente vanno reinstallate.</p>
+      <p><span data-i18n="frModalArchive">I dati vengono spostati in:</span> <code id="frArchivePath"></code></p>
+      <p data-i18n="frModalTls">L'HTTPS configurato dall'interfaccia si perde con le impostazioni; quello impostato con le variabili SENTINELNET_SSL_* resta.</p>
+      <div class="form-group">
+        <label for="frPassword" data-i18n="frLblPassword">La tua password</label>
+        <input id="frPassword" type="password" autocomplete="current-password">
+      </div>
+      <div class="form-group">
+        <label for="frConfirm" data-i18n="frLblConfirm">Scrivi RESET per confermare</label>
+        <input id="frConfirm" type="text" autocomplete="off" spellcheck="false">
+      </div>
+      <div id="frError" class="set-status"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" id="btnFrCancel" data-i18n="btnCancel">Annulla</button>
+        <button type="button" class="btn btn-danger" id="btnFrConfirm" data-i18n="frBtnConfirm" disabled>Archivia e riavvia</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="invBulkModal">
     <div class="modal" style="width: 560px; max-width: 96%;">
       <div class="modal-header">

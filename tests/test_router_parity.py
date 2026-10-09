@@ -144,7 +144,9 @@ class TestRouterParity(unittest.TestCase):
                     # Manual config upload for unreachable devices.
                     "/api/manual-config",
                     # Bulk decommission / reactivate / delete.
-                    "/api/devices/")
+                    "/api/devices/",
+                    # Factory reset, archived at the next start.
+                    "/api/settings/factory-reset")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
@@ -317,7 +319,9 @@ class TestFullParity(unittest.TestCase):
                     # Manual config upload for unreachable devices.
                     "/api/manual-config",
                     # Bulk decommission / reactivate / delete.
-                    "/api/devices/")
+                    "/api/devices/",
+                    # Factory reset, archived at the next start.
+                    "/api/settings/factory-reset")
     # Come NEW_PREFIXES, filtra entrambi i lati: copre anche FortigatePreviewSchema,
     # rimosso insieme al flag di preview /api/settings/fortigate-preview.
     NEW_SCHEMAS = ("DeviceProbeSchema", "GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "ReportPdfSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection", "AgentBackupSchema", "AgentStatusItemSchema", "AgentStatusSchema", "FortigatePreviewSchema",
@@ -325,6 +329,8 @@ class TestFullParity(unittest.TestCase):
                     "UserPrefsSchema", "RuleSchema",
                     # Bulk decommission / reactivate / delete.
                     "DevicePair", "DeviceBulkSchema",
+                    # Factory reset.
+                    "FactoryResetSchema",
                     # Proposte AI nel tab Dispositivi.
                     "AiSuggestSchema", "AiModelsSchema", "ModelMergeSchema",
                     # Triage automatico programmato.

@@ -38,7 +38,7 @@ class TestDecommissionUi(unittest.TestCase):
         # .btn sets display, which beats the [hidden] attribute's UA style:
         # without this rule «Riattiva» showed on the active tabs.
         css = (ROOT / "static" / "css" / "dashboard.css").read_text(encoding="utf-8")
-        self.assertIn(".inv-selection .btn[hidden] { display: none; }", css)
+        self.assertIn(".btn[hidden] { display: none; }", css)
 
     def test_one_device_reads_singular(self):
         i18n = (ROOT / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
