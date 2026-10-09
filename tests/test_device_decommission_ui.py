@@ -40,6 +40,15 @@ class TestDecommissionUi(unittest.TestCase):
         css = (ROOT / "static" / "css" / "dashboard.css").read_text(encoding="utf-8")
         self.assertIn(".inv-selection .btn[hidden] { display: none; }", css)
 
+    def test_one_device_reads_singular(self):
+        i18n = (ROOT / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
+        for line in ('invBulkReactTitle1: "Riattivare 1 apparato?"',
+                     'invBulkReactTitle1: "Reactivate 1 device?"',
+                     'invBulkDone1: "Fatto: 1 apparato."'):
+            with self.subTest(line=line):
+                self.assertIn(line, i18n)
+        self.assertIn("selectedDevices.size === 1 ? '1' : ''", JS)
+
     def test_history_knows_the_new_kinds(self):
         for kind in ("decommissioned", "reactivated"):
             with self.subTest(kind=kind):

@@ -687,7 +687,9 @@
         const m = LIFECYCLE[action];
         const pool = invStatusFilter === 'decommissioned' ? (_decomCache || []) : globalDevices;
         const byKey = new Map(pool.map(d => [selKey(d), d]));
-        _el('invBulkTitle').textContent = tr(m.title, { n: selectedDevices.size });
+        // One device reads singular («1 apparato»): the key has a "1" variant.
+        const one = selectedDevices.size === 1 ? '1' : '';
+        _el('invBulkTitle').textContent = tr(m.title + one, { n: selectedDevices.size });
         _el('invBulkText').textContent = tr(m.text);
         _el('invBulkList').innerHTML = [...selectedDevices].map(k => {
             const [tenant, ip] = JSON.parse(k);
@@ -717,7 +719,7 @@
                 return;
             }
             closeModal('invBulkModal');
-            showToast(tr('invBulkDone', { n: data.count }));
+            showToast(tr(data.count === 1 ? 'invBulkDone1' : 'invBulkDone', { n: data.count }));
             selectedDevices.clear();
             _decomCache = null;
             await refreshInventory();
