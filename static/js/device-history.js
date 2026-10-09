@@ -233,7 +233,7 @@ function dhFillTenants() {
     const inv = /** @type {HTMLSelectElement|null} */ (document.getElementById('filterGroupSelect'));
     const keep = sel.value || inv?.value || 'all';
     sel.innerHTML = `<option value="all">${escapeHtml(tr('dhAllTenants'))}</option>`
-        + names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+        + names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(orgLabel(n))}</option>`).join('');
     sel.value = names.includes(keep) ? keep : 'all';
 }
 

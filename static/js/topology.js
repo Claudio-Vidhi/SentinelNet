@@ -3408,7 +3408,7 @@
             const cur = gsel.value;
             const groups = Object.keys(categoriesData.counts_by_group).sort();
             gsel.innerHTML = `<option value="all">${tr('topoFilterByTenantAll')}</option>` +
-                groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join("");
+                groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(orgLabel(g))}</option>`).join("");
             gsel.value = tenantSelectSeed(cur, groups, "all");
         }
         const dl = document.getElementById("catKeyList");

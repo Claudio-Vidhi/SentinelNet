@@ -170,7 +170,7 @@ async function loadHome() {
                     <td><span class="status ${info.cls}"><span class="led ${info.led}"></span>${escapeHtml(label)}</span></td>
                     <td>${host}</td>
                     <td><code>${escapeHtml(d.IP || '')}</code></td>
-                    <td><span class="badge" style="cursor:pointer;" data-action="open-inventory-tenant" data-tenant="${escapeHtml(d.Group || '')}" title="${escapeHtml(d.Group || '')}">${escapeHtml(d.Group || '')}</span></td>
+                    <td><span class="badge" style="cursor:pointer;" data-action="open-inventory-tenant" data-tenant="${escapeHtml(d.Group || '')}" title="${escapeHtml(d.Group || '')}">${escapeHtml(orgLabel(d.Group || ''))}</span></td>
                 </tr>`;
             }).join('');
         }

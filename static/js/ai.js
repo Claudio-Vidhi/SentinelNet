@@ -68,7 +68,7 @@
         if (tenantSel) {
             const curTenant = tenantSel.value;
             const tenantOpts = Object.keys(globalGroups || {}).map(g =>
-                `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`
+                `<option value="${escapeHtml(g)}">${escapeHtml(orgLabel(g))}</option>`
             ).join('');
             tenantSel.innerHTML = `<option value="">${tr('optAiNoTenant')}</option>` + tenantOpts;
             tenantSel.value = [...tenantSel.options].some(o => o.value === curTenant) ? curTenant : '';
@@ -245,7 +245,7 @@
         const allTenants = [...new Set(['Generale', ...fromGlobal, ...fromDevs])].sort();
 
         sel.innerHTML = allTenants.map(g =>
-            `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`
+            `<option value="${escapeHtml(g)}">${escapeHtml(orgLabel(g))}</option>`
         ).join('');
         if (cur && [...sel.options].some(o => o.value === cur)) {
             sel.value = cur;

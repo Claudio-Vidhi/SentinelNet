@@ -70,7 +70,7 @@
                     : ''}</td>`;
 
             groupBody.innerHTML += `<tr>
-                <td><strong>${escapeHtml(g)}</strong></td>
+                <td><strong>${escapeHtml(orgLabel(g))}</strong>${orgLabel(g) !== g ? ` <small style="color:var(--text-muted);">(${escapeHtml(g)})</small>` : ""}</td>
                 <td><span style="color:var(--text-muted); font-size:13px;">${escapeHtml(desc)}</span></td>
                 ${snmpCell}
                 <td>${currentRole === 'viewer'
@@ -246,7 +246,7 @@
             }).join('') || `<option value="${escapeHtml(current)}" selected>${escapeHtml(current)}</option>`;
 
             const groupOptions = Object.keys(globalGroups).map(g =>
-                `<option value="${escapeHtml(g)}" ${g === d.Group ? "selected" : ""}>${escapeHtml(g)}</option>`
+                `<option value="${escapeHtml(g)}" ${g === d.Group ? "selected" : ""}>${escapeHtml(orgLabel(g))}</option>`
             ).join("");
             const safeIp = d.IP.replace(/\./g, "_");
 
@@ -259,7 +259,7 @@
             // Tenant and site sit under the hostname: plain text for a viewer,
             // inline selects for whoever may move the device.
             const where = isViewer
-                ? `<span id="badge_${safeIp}">${escapeHtml(d.Group)}</span><span aria-hidden="true">·</span><span>${escapeHtml(d.Site || 'central')}</span>`
+                ? `<span id="badge_${safeIp}">${escapeHtml(orgLabel(d.Group))}</span><span aria-hidden="true">·</span><span>${escapeHtml(d.Site || 'central')}</span>`
                 : `<select id="grpsel_${safeIp}" class="inv-inline-select" data-action="reassign-device" data-ip="${ipAttr}"
                       title="${tr('devMoveToAnotherTenant')}" aria-label="${tr('devMoveToAnotherTenant')}">${groupOptions}</select>
                    <span aria-hidden="true">·</span>
@@ -679,7 +679,7 @@
     });
 
     async function deleteGroup(name) {
-        if(confirm(tr('confirmDeleteGroup').replace("{name}", name))) {
+        if(confirm(tr('confirmDeleteGroup').replace("{name}", orgLabel(name)))) {
             const res = await apiFetch('/api/groups/delete', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -688,16 +688,19 @@
             if(res && res.ok) {
                 refreshInventory().then(loadSnmpDefaults);
             } else if (res) {
-                alert(tr('alertGroupDeleteError'));
+                const e = await res.json().catch(() => ({}));
+                alert(e.detail || tr('alertGroupDeleteError'));
             }
         }
     }
 
     async function renameGroup(oldName) {
-        const newName = prompt(tr('devNewNameForTenant', {oldName: oldName}), oldName);
+        // oldName is the key and stays the key: only the display name changes.
+        const current = orgLabel(oldName);
+        const newName = prompt(tr('devNewNameForTenant', {oldName: current}), current);
         if (newName === null) return;
         const trimmed = newName.trim();
-        if (!trimmed || trimmed === oldName) return;
+        if (!trimmed || trimmed === current) return;
         const res = await apiFetch('/api/groups/rename', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -782,7 +785,7 @@
         list.innerHTML = Object.keys(globalGroups).map(g =>
             `<button class="btn btn-secondary" data-action="triage-scope-group" data-g="${escapeHtml(g)}"
                  style="justify-content:flex-start; gap:10px;">
-               <i class="fa-solid fa-location-dot" style="color:var(--primary);"></i> ${escapeHtml(g)}
+               <i class="fa-solid fa-location-dot" style="color:var(--primary);"></i> ${escapeHtml(orgLabel(g))}
              </button>`).join('');
         openModal('triageScopeModal');
     }
@@ -1894,7 +1897,7 @@
             if (res && res.ok) {
                 dev.Group = newGroup;
                 const badge = document.getElementById(`badge_${safeIp}`);
-                if (badge) badge.textContent = newGroup;
+                if (badge) badge.textContent = orgLabel(newGroup);
                 const filterSelect = document.getElementById("filterGroupSelect");
                 const selectedGroup = filterSelect ? filterSelect.value : "all";
                 if (selectedGroup !== "all" && newGroup !== selectedGroup) {
@@ -2245,7 +2248,7 @@
             row.style.cssText = 'display:flex; align-items:center; gap:8px; font-size:12px; padding:3px 6px; border-radius:4px; cursor:pointer; background:var(--bg-card);';
             row.innerHTML = `
                 <input type="checkbox" value="${escapeHtml(d.IP)}" ${isChecked ? 'checked' : ''} data-sched-dev-ip="1">
-                <span><strong>${escapeHtml(d.IP)}</strong> &mdash; ${escapeHtml(d.Hostname || '')} <small style="color:var(--text-muted);">(${escapeHtml(d.Group || '')})</small></span>
+                <span><strong>${escapeHtml(d.IP)}</strong> &mdash; ${escapeHtml(d.Hostname || '')} <small style="color:var(--text-muted);">(${escapeHtml(orgLabel(d.Group || ''))})</small></span>
             `;
             list.appendChild(row);
         });

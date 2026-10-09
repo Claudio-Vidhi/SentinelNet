@@ -27,7 +27,7 @@
         // usual `|| {}` fallback hides it. Read the bare identifier.
         const groups = Object.keys(globalGroups || {});
         sel.innerHTML = `<option value="">${escapeHtml(L.ptChooseTenant)}</option>` +
-            groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+            groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(orgLabel(g))}</option>`).join('');
         sel.value = tenantSelectSeed(cur, groups, '');
     }
 

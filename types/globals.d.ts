@@ -149,6 +149,7 @@ interface Window {
     createWizard: any;       // ui-wizard.js
     globalSelectedTenant: any; // core.js
     tenantSelectSeed: any;   // core.js, used by every panel tenant select
+    orgLabel: any;           // core.js, display name of a tenant key
     redundancyTenantChanged: any; // redundancy.js, called by applyGlobalTenant
     globalDeviceContext: any; // core.js
     setGlobalDeviceContext: any; // core.js

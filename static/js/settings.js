@@ -1003,13 +1003,13 @@
             } else {
                 const summary = scope.length === 0
                     ? `<span style="color:var(--success);">${tr('uiAllTenants')}</span>`
-                    : `<span style="color:var(--primary);">${scope.map(escapeHtml).join(', ')}</span>`;
+                    : `<span style="color:var(--primary);">${scope.map(g => escapeHtml(orgLabel(g))).join(', ')}</span>`;
                 const checks = allGroups.map(g =>
                     `<label style="display:flex; align-items:center; gap:6px; padding:3px 4px; font-size:12px; cursor:pointer;">
                        <input type="checkbox" class="scope-box" value="${escapeHtml(g)}" ${scope.includes(g) ? 'checked' : ''}
                               data-action="save-user-groups" data-username="${escapeHtml(u.username)}"
                               style="accent-color:var(--primary); cursor:pointer;">
-                       ${escapeHtml(g)}
+                       ${escapeHtml(orgLabel(g))}
                      </label>`).join('');
                 scopeCell = `<details data-u="${escapeHtml(u.username)}" style="position:relative;">
                     <summary style="cursor:pointer; list-style:none; font-size:12px; padding:2px 0;">
@@ -1245,7 +1245,7 @@
         const tenants = uwActorScoped() ? currentUserGroups : Object.keys(globalGroups);
         const keepT = new Set(uwChecked('uwTenantList'));
         uwEl('uwTenantList').innerHTML = tenants.map(g =>
-            `<label><input type="checkbox" value="${escapeHtml(g)}" ${keepT.has(g) ? 'checked' : ''}> ${escapeHtml(g)}</label>`).join('')
+            `<label><input type="checkbox" value="${escapeHtml(g)}" ${keepT.has(g) ? 'checked' : ''}> ${escapeHtml(orgLabel(g))}</label>`).join('')
             || `<span class="form-hint">${escapeHtml(tr('setNoTenants'))}</span>`;
         // Only tabs this role can open are offered: a viewer is never offered
         // Config Drift, an operator never an admin panel.

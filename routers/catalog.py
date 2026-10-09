@@ -88,12 +88,11 @@ def create_group(group: GroupSchema, current_user = Depends(require_operator)):
 
 @router.post("/api/groups/rename", dependencies=[Depends(require_tab("tab-groups"))])
 def rename_group(payload: GroupRenameSchema, current_user = Depends(require_unscoped_admin)):
-    """Rinomina un tenant e riassegna i relativi apparati. 'Generale' non è
-    rinominabile.
+    """Rename a tenant: `old_name` is its key, which never changes; `new_name`
+    becomes its display name. 'Generale' is not renameable.
 
-    Solo admin: rinominare un tenant riscrive l'assegnazione di TUTTI i suoi
-    apparati e cambia lo scope RBAC di chi vi è limitato. La creazione resta
-    operator (serve durante il provisioning, tab Provisioning)."""
+    Admin only, as before: what the tenant is called is what every user who
+    can see it reads. Creation stays operator (needed in Provisioning)."""
     old = payload.old_name.strip()
     new = payload.new_name.strip()
     if not old or not new:
@@ -104,7 +103,9 @@ def rename_group(payload: GroupRenameSchema, current_user = Depends(require_unsc
     groups = inventory_manager.get_all_groups()
     if old not in groups:
         raise HTTPException(status_code=404, detail="Gruppo non trovato.")
-    if new != old and new in groups:
+    # A name another tenant answers to, as key or as display name, would make
+    # the CSV import and every picker ambiguous.
+    if inventory_manager.resolve_group(new) not in (None, old):
         raise HTTPException(status_code=400, detail=f"Esiste già un gruppo '{new}'.")
     if not inventory_manager.update_group(old, new, payload.description):
         raise HTTPException(status_code=400, detail="Rinomina non riuscita.")
@@ -116,10 +117,12 @@ def remove_group(payload: GroupDeleteSchema, current_user = Depends(require_unsc
     """Elimina un tenant. Solo admin: e' distruttivo e tocca lo scope RBAC."""
     group_name = payload.name
     assert_group_allowed(current_user, group_name)
-    groups = inventory_manager.get_all_groups()
-    if group_name in groups and group_name != "Generale":
-        inventory_manager.delete_group(group_name)
-        log_audit(f"Gruppo '{group_name}' eliminato dall'utente '{current_user.get('sub')}'. Tutti i relativi apparati sono riassegnati a 'Generale'.")
+    count = sum(1 for d in inventory_manager.get_all_devices() if d.get('Group') == group_name)
+    if count:
+        raise HTTPException(status_code=400, detail=(
+            f"Il gruppo contiene {count} apparati: spostali o eliminali prima di eliminarlo."))
+    if inventory_manager.delete_group(group_name):
+        log_audit(f"Gruppo '{group_name}' eliminato dall'utente '{current_user.get('sub')}'.")
         return {"status": "success"}
     raise HTTPException(status_code=400, detail="Impossibile eliminare il gruppo")
 
