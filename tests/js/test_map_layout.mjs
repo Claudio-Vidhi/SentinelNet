@@ -48,7 +48,7 @@ const networkInstance = {
                              top: pos[id].y - CARD_H / 2, bottom: pos[id].y + CARD_H / 2 }),
     moveNode: (id, x, y) => { pos[id] = { x, y }; },
     body: { data: {
-        nodes: { get: () => ({ nodeDataVal: { group: 'site' } }) },
+        nodes: { get: () => ({ nodeDataVal: { group: 'tenant-a' } }) },
         edges: { forEach: f => edges.forEach(f), get: () => edges },
     } },
 };
@@ -61,7 +61,7 @@ Object.assign(globalThis, { networkInstance, document, cssVar, hexToRgba, drawEn
 
 const { tidyLayeredTree, drawLayeredLinks, LAYERED_PITCH } = (0, eval)(`(function () {
     ${line('const LAYERED_PITCH =')}
-    ${line('const LAYERED_SITE_GAP =')}
+    ${line('const LAYERED_TENANT_GAP =')}
     ${line('const PC_COPPER =')}
     ${extract('function shortIface(')}
     ${extract('function pcEnds(')}

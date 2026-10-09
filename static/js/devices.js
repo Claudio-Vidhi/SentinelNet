@@ -769,7 +769,7 @@
     });
 
     // Triage Sede: analizza la sede attualmente filtrata; se "tutte", apre il selettore
-    function triageCurrentSite() {
+    function triageCurrentTenant() {
         const g = document.getElementById('filterGroupSelect')?.value || 'all';
         if (g === 'all') {
             const groups = Object.keys(globalGroups);
@@ -1987,7 +1987,7 @@
         const btn = document.getElementById("btnPingCheck");
         const filterSelect = document.getElementById("filterGroupSelect");
         const group = Array.isArray(ips) ? "all" : (filterSelect ? filterSelect.value : "all");
-        const groupLabel = group === "all" ? tr('allSites') : group;
+        const groupLabel = group === "all" ? tr('allTenants') : group;
 
         btn.disabled = true;
         btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${tr('pingingBtnText').replace("{group}", groupLabel)}`;
@@ -2036,7 +2036,7 @@
 
     document.getElementById('filterGroupSelect')?.addEventListener('change', renderDeviceTable);
     document.getElementById('deviceSearch')?.addEventListener('input', renderDeviceTable);
-    document.getElementById('btnTriageSite')?.addEventListener('click', triageCurrentSite);
+    document.getElementById('btnTriageTenant')?.addEventListener('click', triageCurrentTenant);
     document.getElementById('btnPingCheck')?.addEventListener('click', () => runPingCheck());
     document.getElementById('btnSubnetScan')?.addEventListener('click', openSubnetScanModal);
     document.getElementById('btnBulkCommand')?.addEventListener('click', () => {

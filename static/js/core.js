@@ -1527,7 +1527,7 @@ async function refreshInventory() {
         // Default = nessuna scelta: il report Port-Channel resta vuoto
         // finché l'utente non indica un Tenant.
         const prevTopoFilter = topoSelect.value || '';
-        topoSelect.innerHTML = `<option value="">${tr('optSelectSite')}</option>` +
+        topoSelect.innerHTML = `<option value="">${tr('optSelectTenant')}</option>` +
             `<option value="all">${tr('optFilterAll')}</option>` +
             Object.keys(globalGroups).map(g =>
                 `<option value="${escapeHtml(g)}">${escapeHtml(orgLabel(g))}</option>`).join('');
@@ -1541,7 +1541,7 @@ async function refreshInventory() {
         // Default = nessuna scelta: la mappa interattiva non disegna nulla
         // finché l'utente non indica una Sede.
         const prevInterFilter = interSelect.value || '';
-        interSelect.innerHTML = `<option value="">${tr('optSelectSite')}</option>` +
+        interSelect.innerHTML = `<option value="">${tr('optSelectTenant')}</option>` +
             `<option value="all">${tr('optFilterAll')}</option>` +
             Object.keys(globalGroups).map(g =>
                 `<option value="${escapeHtml(g)}">${escapeHtml(orgLabel(g))}</option>`).join('');

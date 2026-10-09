@@ -437,7 +437,7 @@ class TestDevicesTabRestyle(unittest.TestCase):
     def test_preserve_ids_and_bulk_actions(self):
         html = _html()
         for _id in ('deviceTableBody', 'deviceSearch', 'filterGroupSelect',
-                    'btnRunTriage', 'btnTriageSite', 'btnPingCheck',
+                    'btnRunTriage', 'btnTriageTenant', 'btnPingCheck',
                     'btnSubnetScan', 'btnBulkCommand', 'btnExportDevices'):
             self.assertIn(f'id="{_id}"', html)
         # bulk-action controls wired via addEventListener in static/js/devices.js
@@ -1408,7 +1408,7 @@ class TestUsersTabRestyle(unittest.TestCase):
 
 
 class TestProbesTabRestyle(unittest.TestCase):
-    """Task 17: #tab-probes (Multi-site locations) restyle guard -- ENGLISH RELABEL.
+    """Task 17: #tab-probes (Multi-probe locations) restyle guard -- ENGLISH RELABEL.
 
     Admin-only tab: probes table (mode badge, last-contact, per-probe
     regenerate-token/delete actions) + a create-probe form. Before this task,
