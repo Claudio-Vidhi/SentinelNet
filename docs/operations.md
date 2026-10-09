@@ -421,6 +421,21 @@ ever started towards it, and its status is "manual", never offline. To update
 it, upload a new config from its row in *Devices*; every upload is a version in
 Config drift.
 
+### Decommissioning and bulk delete
+
+Tick devices in the inventory and use the selection bar:
+
+- **Decommission** moves them to the *Decommissioned* tab. They leave
+  polling, triage, ping, backups, alerts, probe-agent sync and the AI tools,
+  and keep their credentials. They are stored in
+  `decommissioned_hosts.csv` next to `network_hosts.csv`.
+- **Reactivate** (in the *Decommissioned* tab) puts them back unchanged.
+- **Delete** removes them permanently, active or decommissioned.
+
+A decommissioned IP cannot be added again to the same tenant (by hand, CSV
+import, promotion or move) until it is reactivated or deleted. Every action
+is in the audit log and in Device History.
+
 ---
 
 ## 8. Limits to know before scaling
