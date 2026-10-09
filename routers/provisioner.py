@@ -363,7 +363,7 @@ def identities_bulk_assign(identity_id: str, payload: BulkAssignIdentitySchema,
         if d is None:
             skipped.append({"ip": ip, "reason": "not_found"})
             continue
-        if scope is not None and d.get('Group', 'Generale') not in scope:
+        if scope is not None and d.get('Group', '') not in scope:
             skipped.append({"ip": ip, "reason": "forbidden"})
             continue
         allowed_ips.append(ip)

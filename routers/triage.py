@@ -265,7 +265,7 @@ async def triage_single_device(ip: str, current_user = Depends(require_operator)
     device = next((d for d in devices if d["IP"] == ip), None)
     if not device:
         raise HTTPException(status_code=404, detail=f"Dispositivo {ip} non trovato in inventario.")
-    assert_group_allowed(current_user, device.get('Group', 'Generale'))
+    assert_group_allowed(current_user, device.get('Group', ''))
     # WP11: la sessione SSH (15-90s) gira sul pool dedicato, non sul threadpool
     # condiviso delle rotte sync.
     result = await run_ssh(core_engine.run_backup_and_triage, device)
@@ -351,7 +351,7 @@ def ping_single(ip: str, current_user = Depends(require_operator)):
     # Scoping: se il dispositivo è in inventario, deve essere in una sede consentita
     _dev = next((d for d in inventory_manager.get_all_devices() if d['IP'] == ip), None)
     if _dev is not None:
-        assert_group_allowed(current_user, _dev.get('Group', 'Generale'))
+        assert_group_allowed(current_user, _dev.get('Group', ''))
     # None = not measurable (jump site: ICMP cannot cross the bastion tunnel),
     # same tri-state as ping_check above / services.ping_monitor.
     alive: Optional[bool]

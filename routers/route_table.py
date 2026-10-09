@@ -37,7 +37,7 @@ def list_routable_devices(current_user = Depends(get_current_user)):
     fra quelli scegliibili."""
     return {"devices": [
         {"ip": d.get("IP"), "hostname": d.get("Hostname") or d.get("IP"),
-         "group": d.get("Group") or "Generale",
+         "group": d.get("Group") or "",
          "vendor": d.get("Vendor") or ""}
         for d in route_table.routable_devices(devices_in_scope(current_user))]}
 
@@ -140,8 +140,8 @@ async def _collect_selection(current_user, device: str):
     for dev in targets:
         clash = seen.setdefault(str(dev.get("IP")), dev)
         if clash is not dev:
-            tenants = ", ".join(sorted({clash.get("Group") or "Generale",
-                                        dev.get("Group") or "Generale"}))
+            tenants = ", ".join(sorted({clash.get("Group") or "",
+                                        dev.get("Group") or ""}))
             raise HTTPException(
                 status_code=409,
                 detail=f"{dev.get('IP')} esiste in piu' tenant ({tenants}): "

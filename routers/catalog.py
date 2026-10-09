@@ -89,7 +89,7 @@ def create_group(group: GroupSchema, current_user = Depends(require_operator)):
 @router.post("/api/groups/rename", dependencies=[Depends(require_tab("tab-groups"))])
 def rename_group(payload: GroupRenameSchema, current_user = Depends(require_unscoped_admin)):
     """Rename a tenant: `old_name` is its key, which never changes; `new_name`
-    becomes its display name. 'Generale' is not renameable.
+    becomes its display name.
 
     Admin only, as before: what the tenant is called is what every user who
     can see it reads. Creation stays operator (needed in Provisioning)."""
@@ -97,8 +97,6 @@ def rename_group(payload: GroupRenameSchema, current_user = Depends(require_unsc
     new = payload.new_name.strip()
     if not old or not new:
         raise HTTPException(status_code=400, detail="Nomi gruppo obbligatori.")
-    if old == "Generale":
-        raise HTTPException(status_code=400, detail="Il gruppo 'Generale' non è rinominabile.")
     assert_group_allowed(current_user, old)
     groups = inventory_manager.get_all_groups()
     if old not in groups:
@@ -179,10 +177,9 @@ def assemble_classification(scope):
     for n in data["nodes"]:
         red = n.get("redundancy") or {}
         dtype = n.get("device_type", "switch")
-        group = n.get("group", "Generale")
+        group = n.get("group", "")
         discovered = n.get("status") == "discovered"
-        # Same key the save path writes: a discovered node has no site of its
-        # own and is filed under 'Generale' (see tenant_for_node).
+        # Same key the save path writes: a discovered node has no site of its own
         a = assignments.get(inventory_manager._akey(None if discovered else group, n["id"]), {})
         # IP mostrato in tabella: per i nodi scoperti l'IP annunciato (CDP/LLDP),
         # non l'id sintetico "discovered_<hostname>".
@@ -542,10 +539,9 @@ def assign_device_category(payload: DeviceCategorySchema, current_user = Depends
         "ver": payload.version,
     }.items() if v is not None}
     # Scope before writing: the assignment key carries the tenant, so resolve it
-    # from the device the caller may see. A node outside inventory lives in
-    # 'Generale', and the caller needs that group.
+    # from the device the caller may see.
     device = assert_device_allowed(current_user, payload.node_id)
-    tenant = (device.get("Group") or "Generale") if device else "Generale"
+    tenant = (device.get("Group") or "") if device else ""
     assert_group_allowed(current_user, tenant)
     if not inventory_manager.set_device_meta(payload.node_id, tenant=tenant, **fields):
         raise HTTPException(status_code=400, detail="Aggiornamento non valido.")

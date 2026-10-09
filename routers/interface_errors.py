@@ -51,7 +51,7 @@ async def _build(current_user, span_s: int, device: Optional[dict]) -> dict:
     extra, extra_params = "", ()
     if device:
         extra = " AND device_ip = ? AND tenant = ?"
-        extra_params = (device["IP"], device.get("Group") or "Generale")
+        extra_params = (device["IP"], device.get("Group") or "")
     now = int(time.time())
     rows = await db.read(
         f"""SELECT tenant, device_ip, interface, ts, metrics_json FROM events
@@ -160,7 +160,7 @@ async def read_interface_errors(payload: InterfaceErrorsReadSchema, current_user
     from security.snmp_defaults import resolve_snmp_community
 
     device = await asyncio.to_thread(_device, current_user, payload.device, payload.tenant)
-    ip, tenant = device["IP"], device.get("Group") or "Generale"
+    ip, tenant = device["IP"], device.get("Group") or ""
     interval = ie.READ_INTERVAL_S
     source, before, after, elapsed = None, {}, {}, interval
 

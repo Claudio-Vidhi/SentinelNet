@@ -29,7 +29,7 @@ def list_policy_devices(current_user = Depends(get_current_user)):
     apparati esistono era interrogarli tutti e guardare le righe tornate."""
     return {"devices": [
         {"ip": d.get("IP"), "hostname": d.get("Hostname") or d.get("IP"),
-         "group": d.get("Group") or "Generale"}
+         "group": d.get("Group") or ""}
         for d in firewall_traffic.policy_devices(devices_in_scope(current_user))]}
 
 

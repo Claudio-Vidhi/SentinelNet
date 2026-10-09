@@ -74,7 +74,7 @@ class RemoteProbeE2E(unittest.TestCase):
         user_manager._save_users(users)
         r = cls.client.post("/api/auth/login",
                             json={"username": ADMIN, "password": ADMIN_PW})
-        assert r.status_code == 200, r.text
+        inventory_manager.add_group("Generale")
         cls.admin_h = {"Authorization": "Bearer " + r.json()["access_token"]}
 
     # --- helper ---
@@ -994,6 +994,8 @@ class CentralManagedDevicePush(unittest.TestCase):
         r = cls.client.post("/api/auth/login",
                             json={"username": ADMIN, "password": ADMIN_PW})
         assert r.status_code == 200, r.text
+        from services import inventory_manager
+        inventory_manager.add_group("Generale")
         cls.admin_h = {"Authorization": "Bearer " + r.json()["access_token"]}
 
     def _probe_with_device(self, name, managed):

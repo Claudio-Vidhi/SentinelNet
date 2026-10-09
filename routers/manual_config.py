@@ -54,7 +54,7 @@ def _check_text(text: str) -> None:
 
 def _row(ip: str, group: str):
     return next((d for d in inventory_manager.get_all_devices()
-                 if d.get("IP") == ip and (d.get("Group") or "Generale") == group), None)
+                 if d.get("IP") == ip and (d.get("Group") or "") == group), None)
 
 
 @router.get("/api/manual-config/guide", dependencies=[Depends(require_tab(*_TABS))])
@@ -88,7 +88,7 @@ def manual_config_import(payload: ManualImportSchema, current_user=Depends(requi
     # belongs to a tenant this user may not touch (same gate as /api/add-device).
     for d in inventory_manager.get_all_devices():
         if d.get("IP") == payload.ip:
-            assert_group_allowed(current_user, d.get("Group") or "Generale")
+            assert_group_allowed(current_user, d.get("Group") or "")
     if payload.group not in inventory_manager.get_all_groups():
         raise HTTPException(status_code=400, detail=f"Tenant '{payload.group}' inesistente.")
     if payload.probe not in {s["id"] for s in probe_manager.list_probes()}:

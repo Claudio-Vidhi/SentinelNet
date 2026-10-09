@@ -107,7 +107,7 @@ def _devices_for_probe(probe_id: str, with_credentials: bool) -> List[dict]:
         item = {
             "ip": d.get("IP"),
             "vendor": d.get("Vendor", "cisco"),
-            "group": d.get("Group", "Generale"),
+            "group": d.get("Group") or "",
             "hostname": d.get("Hostname", "") or "",
             "ssh_port": d.get("SSH Port") or 22,
         }
@@ -171,7 +171,7 @@ def agent_push_inventory(payload: AgentInventorySchema, probe = Depends(get_agen
     probe_id = probe["id"]
     n = 0
     all_devices = inventory_manager.get_all_devices()
-    existing_map = {(d.get("Group") or "Generale", d.get("IP")): d for d in all_devices}
+    existing_map = {(d.get("Group") or "", d.get("IP")): d for d in all_devices}
     existing_groups = {d.get("IP"): d.get("Group") for d in all_devices}
     # The agent never deletes its local rows, so it keeps pushing devices the
     # operator decommissioned: skip them, without failing the rest of the push.
@@ -181,19 +181,28 @@ def agent_push_inventory(payload: AgentInventorySchema, probe = Depends(get_agen
             continue
         req_group = (d.group or "").strip()
         if not req_group and d.ip not in existing_groups and d.ip in decommissioned_ips:
-            continue  # would come back under Generale, a tenant it never had
-        group = req_group or existing_groups.get(d.ip) or "Generale"
+            continue
+        group = req_group or existing_groups.get(d.ip) or ""
         vendor = inventory_manager.normalize_vendor(d.vendor)
-        existing = existing_map.get((group, d.ip))
-        if existing is not None:
-            loc = existing.get("Location")
+        if group:
+            existing = existing_map.get((group, d.ip))
+            if existing is not None:
+                loc = existing.get("Location")
+            else:
+                candidates = [l for l in location_manager.list_locations(group) if l.get("probe") == probe_id]
+                if len(candidates) != 1:
+                    log_audit(f"Agente sonda '{probe_id}': dispositivo '{d.ip}' scartato ({len(candidates)} sedi candidate nel gruppo '{group}').")
+                    probe_manager.record_unlocated_device(probe_id)
+                    continue
+                loc = candidates[0]["id"]
         else:
-            candidates = [l for l in location_manager.list_locations(group) if l.get("probe") == probe_id]
+            candidates = [l for l in location_manager.list_locations() if l.get("probe") == probe_id]
             if len(candidates) != 1:
-                log_audit(f"Agente sonda '{probe_id}': dispositivo '{d.ip}' scartato ({len(candidates)} sedi candidate nel gruppo '{group}').")
+                log_audit(f"Agente sonda '{probe_id}': dispositivo '{d.ip}' scartato ({len(candidates)} sedi candidate).")
                 probe_manager.record_unlocated_device(probe_id)
                 continue
             loc = candidates[0]["id"]
+            group = candidates[0]["org"]
         try:
             inventory_manager.add_or_update_device(
                 d.ip, vendor, "custom", "", "", "", group, probe=probe_id, location=loc)
@@ -215,7 +224,7 @@ def agent_push_mac(payload: AgentMacSchema, probe = Depends(get_agent_probe)):
     for col in payload.collections:
         summ = mac_history.record_sightings(
             col.rows, switch_ip=col.switch_ip, switch_name=col.switch_name,
-            tenant=groups_by_ip.get(col.switch_ip) or "Generale", probe=probe_id)
+            tenant=groups_by_ip.get(col.switch_ip) or "", probe=probe_id)
         total += summ.get("new", 0) + summ.get("updated", 0)
     pruned = mac_history.prune()
     log_audit(f"Agente sonda '{probe_id}': {len(payload.collections)} MAC-table ricevute "
@@ -237,7 +246,7 @@ def agent_push_arp(payload: AgentArpSchema, probe = Depends(get_agent_probe)):
             # Stessa attribuzione della MAC table: il tenant e' quello
             # dell'apparato che ha raccolto, la sede e' quella dell'agente
             # autenticato — mai un valore scelto dall'agente stesso.
-            tenant=groups_by_ip.get(col.source_ip) or "Generale", probe=probe_id)
+            tenant=groups_by_ip.get(col.source_ip) or "", probe=probe_id)
         total += summ.get("new", 0) + summ.get("updated", 0)
     log_audit(f"Agente sonda '{probe_id}': {len(payload.collections)} tabelle ARP "
               f"ricevute ({total} binding).")
@@ -337,7 +346,7 @@ def agent_push_syslog(payload: AgentSyslogBatchSchema, probe = Depends(get_agent
         raw_bytes = item.raw.encode("utf-8", errors="replace")
         parsed_list = syslog_parser.parse(raw_bytes, item.src_ip)
         for ev in parsed_list:
-            tenant = groups_by_ip.get(item.src_ip) or "Generale"
+            tenant = groups_by_ip.get(item.src_ip) or ""
             ts_val = item.ts if item.ts > 0 else int(time.time())
             db.enqueue_write(
                 "INSERT INTO syslog_events (ts, tenant, device_ip, severity, action, message, exporter_ip) VALUES (?, ?, ?, ?, ?, ?, ?)",

@@ -163,12 +163,12 @@ def _device_inventory_summary(current_user) -> str:
     scope = user_group_scope(current_user)
     devices = inventory_manager.get_all_devices()
     if scope is not None:
-        devices = [d for d in devices if d.get('Group', 'Generale') in scope]
+        devices = [d for d in devices if d.get('Group', '') in scope]
     lines = [f"Inventario dispositivi ({len(devices)} totali):"]
     for d in devices[:200]:  # limite di sicurezza per non gonfiare il contesto
         lines.append(
             f"- {d.get('IP', '?')} | {d.get('Hostname', '') or '(senza hostname)'} | "
-            f"vendor={d.get('Vendor', '?')} | sede={d.get('Group', 'Generale')}"
+            f"vendor={d.get('Vendor', '?')} | sede={d.get('Group', '')}"
         )
     if len(devices) > 200:
         lines.append(f"... e altri {len(devices) - 200} dispositivi (troncato).")
@@ -224,7 +224,7 @@ def _tenant_context_block(tenant: str, current_user) -> str:
     if tenant not in groups:
         raise HTTPException(status_code=404, detail=f"Sede/tenant '{tenant}' non trovata.")
 
-    devices = [d for d in inventory_manager.get_all_devices() if d.get('Group', 'Generale') == tenant]
+    devices = [d for d in inventory_manager.get_all_devices() if d.get('Group', '') == tenant]
 
     mac_stats = mac_history.stats(tenants=[tenant])
     mac_recent = mac_history.search(tenants=[tenant], limit=15)
@@ -653,7 +653,7 @@ def _tenant_common_parameters(tenant: str, current_user) -> str:
     analizzati. Blocco compatto, pensato per il budget di contesto AI."""
     import re
     devices = [d for d in inventory_manager.get_all_devices()
-               if d.get('Group', 'Generale') == tenant]
+               if d.get('Group', '') == tenant]
     line_counts: Dict[str, int] = {}
     vlans: Dict[str, str] = {}
     mgmt_subnets = set()

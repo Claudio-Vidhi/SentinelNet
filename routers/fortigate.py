@@ -102,7 +102,7 @@ def _shared_with_other_tenant(ip: str, current_user) -> bool:
     belongs to a device outside its scope is another tenant's token too."""
     scope = user_group_scope(current_user)
     return scope is not None and any(
-        d.get("IP") == ip and (d.get("Group") or "Generale") not in scope
+        d.get("IP") == ip and (d.get("Group") or "") not in scope
         for d in inventory_manager.get_all_devices())
 
 
@@ -165,7 +165,7 @@ def fgt_list_targets(current_user = Depends(require_admin)):
             continue
         # Un target senza corrispondenza in inventario resta visibile: e'
         # configurato, e nasconderlo lo renderebbe solo irraggiungibile.
-        t["group"] = (dev.get("Group") or "Generale") if dev else ""
+        t["group"] = (dev.get("Group") or "") if dev else ""
         targets.append(t)
     return targets
 

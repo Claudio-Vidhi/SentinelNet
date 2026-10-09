@@ -33,7 +33,7 @@ class DeviceSchema(BaseModel):
     username: str = ""
     password: str = ""
     enable_secret: str = ""
-    group: str = "Generale"
+    group: str
     location: str = ""
     probe: str = "central"
     ssh_port: int = Field(22, ge=1, le=65535)
@@ -68,7 +68,7 @@ class PromoteDeviceSchema(BaseModel):
     node_id: str
     ip: str = Field(..., pattern=r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
     vendor: str = "cisco"
-    group: str = "Generale"
+    group: str
     location: str
     # Dati ereditati da CDP/LLDP da preservare sul dispositivo promosso.
     model: Optional[str] = None
@@ -78,7 +78,7 @@ class PromoteDeviceSchema(BaseModel):
 
 class DevicePair(BaseModel):
     ip: str = Field(..., pattern=r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
-    tenant: str = "Generale"
+    tenant: str
 
 class DeviceBulkSchema(BaseModel):
     devices: list[DevicePair] = Field(..., min_length=1, max_length=1000)
@@ -124,7 +124,7 @@ def get_devices_and_versions(current_user = Depends(get_current_user)):
         dev_copy["redundancy"] = badges.get(d["IP"])
         dev_copy["position"] = positions.get(d["IP"])
         dev_copy["backup_ts"] = backup_ts.get(
-            (backup_store.sanitize_filename(d.get("Group") or "Generale"), d["IP"]))
+            (backup_store.sanitize_filename(d.get("Group") or ""), d["IP"]))
         # ICMP cannot cross the bastion tunnel of a bastion probe: the inventory
         # table's status cell must not paint one of its devices "offline" from
         # a ping it never actually ran (see services.probe_manager.has_direct_path).
@@ -138,7 +138,7 @@ def get_devices_and_versions(current_user = Depends(get_current_user)):
         own = bool(dev_copy.pop("SNMP Community", ""))
         disabled = str(dev_copy.get("SNMP Disabled") or "").strip() in ("1", "true", "True")
         inherited = (not own) and (not disabled) and \
-            (d.get("Group") or "Generale") in _snmp_default_tenants
+            (d.get("Group") or "") in _snmp_default_tenants
         dev_copy["snmp_enabled"] = (own or inherited) and not disabled
         dev_copy["snmp_inherited"] = inherited
         v_info = versions.get(d["IP"], {})
@@ -338,7 +338,7 @@ def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
     # Impedisce di modificare un dispositivo esistente in una sede non consentita
     existing = next((d for d in inventory_manager.get_all_devices() if d['IP'] == device.ip), None)
     if existing:
-        assert_group_allowed(current_user, existing.get('Group', 'Generale'))
+        assert_group_allowed(current_user, existing.get('Group', ''))
 
     probe_val = (device.probe or 'central').strip()
     all_probes = {s['id'] for s in probe_manager.list_probes()}
@@ -396,7 +396,7 @@ def list_decommissioned(current_user = Depends(get_current_user)):
     scope = user_group_scope(current_user)
     out = []
     for d in inventory_manager.get_decommissioned_devices():
-        if scope is not None and (d.get('Group') or 'Generale') not in scope:
+        if scope is not None and (d.get('Group') or '') not in scope:
             continue
         for secret in ("Password", "Enable Secret", "SNMP Community"):
             d.pop(secret, None)
@@ -465,15 +465,14 @@ def import_csv(payload: CSVImportRequest, current_user = Depends(require_operato
             ip = ip.strip()
 
             # Se il campo Group è presente e non vuoto, chiama immediatamente inventory_manager.add_group(row['Group'])
-            # The column may hold a renamed tenant's display name: resolve it
-            # to the key, or the import would create a duplicate tenant.
-            raw_group = (row.get('Group') or '').strip() or 'Generale'
+            raw_group = (row.get('Group') or '').strip()
+            if not raw_group:
+                raise ValueError("Gruppo / Organizzazione obbligatorio.")
             group_name = inventory_manager.resolve_group(raw_group) or raw_group
             # Scoping: un operatore limitato non può importare in sedi non consentite
             if scope is not None and group_name not in scope:
                 raise ValueError(f"Sede '{group_name}' non consentita per il tuo profilo")
-            if group_name != 'Generale':
-                inventory_manager.add_group(group_name)
+            inventory_manager.add_group(group_name)
 
             username = (row.get('Username') or '').strip()
             password = (row.get('Password') or '').strip()
@@ -549,8 +548,8 @@ def promote_device(payload: PromoteDeviceSchema, current_user = Depends(require_
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     # Trasferisce l'eventuale classificazione manuale dal nodo scoperto all'IP.
-    # Il nodo scoperto sta sotto 'Generale' (non era in inventario, quindi non
-    # aveva una sede); da qui in poi appartiene alla sede in cui è stato promosso.
+    # Il nodo scoperto non era in inventario; da qui in poi appartiene al gruppo
+    # in cui è stato promosso.
     inventory_manager.migrate_assignment(payload.node_id, payload.ip,
                                          new_tenant=payload.group)
     # Eredita ciò che è già stato scoperto via CDP/LLDP: categoria, modello,
@@ -601,10 +600,10 @@ def reassign_device(payload: DeviceReassignSchema, current_user = Depends(requir
         raise HTTPException(status_code=400, detail=f"Sede '{payload.new_location}' inesistente o non appartenente al gruppo '{payload.new_group}'.")
 
     # Scoping: la sede di origine e quella di destinazione devono essere consentite
-    assert_group_allowed(current_user, target.get('Group', 'Generale'))
+    assert_group_allowed(current_user, target.get('Group', ''))
     assert_group_allowed(current_user, payload.new_group)
 
-    old_group = target.get('Group', 'Generale')
+    old_group = target.get('Group', '')
     target['Group'] = payload.new_group
     target['Location'] = payload.new_location.strip()
     try:
@@ -637,7 +636,7 @@ def reassign_device_probe(payload: DeviceProbeSchema, current_user = Depends(req
         raise HTTPException(status_code=404, detail="Dispositivo non trovato in inventario.")
     # Il tenant resta il confine di scoping: chi non puo' gestire il tenant del
     # dispositivo non ne cambia nemmeno la sede.
-    assert_group_allowed(current_user, target.get('Group', 'Generale'))
+    assert_group_allowed(current_user, target.get('Group', ''))
 
     old_probe = target.get('Probe', 'central')
     target['Probe'] = payload.new_probe

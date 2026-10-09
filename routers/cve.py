@@ -36,7 +36,7 @@ def _device_view(device: dict) -> dict:
     services = cve_intel.device_services(device)
     return {
         "device": device.get("IP"),
-        "tenant": device.get("Group") or "Generale",
+        "tenant": device.get("Group") or "",
         "fetched_at": snapshot.get("fetched_at", ""),
         "version_seen_at": snapshot.get("version_seen_at", ""),
         "query": snapshot.get("query") or {},
@@ -54,7 +54,7 @@ def _scoped_devices(current_user, tenant: str) -> list:
     """
     devices = devices_in_scope(current_user)
     if tenant and tenant != "all":
-        return [d for d in devices if (d.get("Group") or "Generale") == tenant]
+        return [d for d in devices if (d.get("Group") or "") == tenant]
     return devices
 
 
@@ -82,7 +82,7 @@ def cve_priority(tenant: str = "", limit: int = 200,
         if not services:
             not_evaluated.add("service_state")
         for row in cve_intel.score_rows(snapshot, services):
-            row["tenant"] = device.get("Group") or "Generale"
+            row["tenant"] = device.get("Group") or ""
             rows.append(row)
 
     rows.sort(key=lambda r: r["score"], reverse=True)
