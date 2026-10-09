@@ -105,6 +105,19 @@ class TestProbeMigration(unittest.TestCase):
         with open(path, encoding="utf-8") as f:
             self.assertEqual(f.read(), before)
 
+    def test_device_history_torn_line_is_kept_verbatim(self):
+        old = "Si" + "te"  # check-site-name: ok
+        good = json.dumps({"event": "added", "device": {"IP": "192.0.2.1", old: "central"}},
+                          separators=(",", ":"))
+        torn = '{"event":"changed","device":{"IP":"192.0.2.1","' + old + '":"cen'
+        path = os.path.join(self.d, "device_history.jsonl")
+        self._write("device_history.jsonl", good + "\n" + torn)
+        probe_migration.migrate(self.d)
+        with open(path, encoding="utf-8", newline="") as f:
+            lines = f.read().split("\n")
+        self.assertEqual(json.loads(lines[0])["device"]["Probe"], "central")
+        self.assertEqual(lines[1], torn)
+
     def test_agent_startup_renames_its_own_csv_header(self):
         import sys
         from services import probe_agent
