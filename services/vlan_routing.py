@@ -28,14 +28,8 @@ VLAN_ROUTING_JSON = data_config.get_path("vlan_routing.json")
 
 
 def tenant_key(value) -> str:
-    """Chiave di confronto fra tenant.
-
-    ``arp_collector`` scrive ``""`` per un apparato senza ``Group`` e
-    ``analyze_all`` legge ``"Generale"``: sono la stessa rete e devono
-    coincidere, altrimenti il caso piu' comune (installazione senza gruppi)
-    smetterebbe di trovare il proprio gateway.
-    """
-    return (value or "").strip() or "Generale"
+    """Chiave di confronto fra tenant."""
+    return (value or "").strip()
 
 
 def _svi_candidates(analysis, vlan: str) -> Optional[str]:

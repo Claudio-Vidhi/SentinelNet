@@ -36,12 +36,12 @@ def _path() -> str:
 
 
 def _key(row: dict) -> tuple:
-    return (row.get("Group") or "Generale", row.get("IP") or "")
+    return (row.get("Group") or "", row.get("IP") or "")
 
 
 def _snapshot(row: dict) -> dict:
     snap = {f: row.get(f) or "" for f in _FIELDS}
-    snap["Group"] = snap["Group"] or "Generale"
+    snap["Group"] = snap["Group"] or ""
     for s in _SECRETS:
         snap[s] = "set" if row.get(s) else ""
     return snap
@@ -142,7 +142,7 @@ def backfill_from_audit(lines: list, inventory: list, live: list) -> list:
     out = []
     known = {}    # (tenant, ip) -> snapshot, as far as the log tells
     tenant_of = {}  # ip -> last tenant seen, for lines that do not name one
-    current = {(r.get("Group") or "Generale", r.get("IP")): r for r in inventory}
+    current = {(r.get("Group") or "", r.get("IP")): r for r in inventory}
 
     def snap(ip, tenant, vendor="", probe=""):
         cur = current.get((tenant, ip), {})
@@ -161,7 +161,7 @@ def backfill_from_audit(lines: list, inventory: list, live: list) -> list:
             break
         if m := _A_UPSERT.match(msg):
             ip, vendor, tenant, probe, actor = m.groups()
-            tenant = tenant or "Generale"
+            tenant = tenant or ""
             prev = known.get((tenant, ip))
             new = snap(ip, tenant, vendor.lower(), probe or (prev or {}).get("Probe", ""))
             if prev is None:
@@ -173,7 +173,7 @@ def backfill_from_audit(lines: list, inventory: list, live: list) -> list:
             tenant_of[ip] = tenant
         elif m := _A_DELETE.match(msg):
             ip, actor = m.groups()
-            tenant = tenant_of.pop(ip, None) or next((t for t, i in current if i == ip), "Generale")
+            tenant = tenant_of.pop(ip, None) or next((t for t, i in current if i == ip), "")
             emit("removed", ts, actor, known.pop((tenant, ip), None) or snap(ip, tenant))
         elif m := _A_GROUP.match(msg):
             ip, old_t, new_t, actor = m.groups()
@@ -185,14 +185,14 @@ def backfill_from_audit(lines: list, inventory: list, live: list) -> list:
             tenant_of[ip] = new_t
         elif m := _A_PROBE.match(msg):
             ip, old_s, new_s, actor = m.groups()
-            tenant = tenant_of.get(ip) or next((t for t, i in current if i == ip), "Generale")
+            tenant = tenant_of.get(ip) or next((t for t, i in current if i == ip), "")
             prev = known.get((tenant, ip)) or snap(ip, tenant, probe=old_s)
             new = dict(prev, Probe=new_s)
             emit("changed", ts, actor, new, {"Probe": [old_s, new_s]})
             known[(tenant, ip)] = new
         elif m := _A_PROMOTE.match(msg):
             name, ip, vendor, probe, actor = m.groups()
-            tenant = next((t for t, i in current if i == ip), "Generale")
+            tenant = next((t for t, i in current if i == ip), "")
             new = dict(snap(ip, tenant, vendor.lower(), probe), Hostname=snap(ip, tenant)["Hostname"] or name)
             emit("added", ts, actor, new)
             known[(tenant, ip)] = new

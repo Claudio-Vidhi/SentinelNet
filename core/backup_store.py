@@ -29,7 +29,7 @@ def sanitize_filename(filename: str) -> str:
 def group_backup_dir(group: str, vendor: Optional[str] = None) -> str:
     """Backup folder dedicated to a group/tenant, with subfolder per
     vendor (backup-config/<group>/<vendor>/), created if absent."""
-    path = os.path.join(BACKUP_FOLDER, sanitize_filename(group or "Generale"))
+    path = os.path.join(BACKUP_FOLDER, sanitize_filename(group or "unknown"))
     if vendor:
         path = os.path.join(path, sanitize_filename(vendor.lower()))
     os.makedirs(path, exist_ok=True)
@@ -40,7 +40,7 @@ def save_backup(device, sys_name: str, config_out: str) -> str:
     """Saves the text backup in backup-config/<group>/<vendor>/<name>-<ip>.txt,
     moving first any residual copies of the same IP elsewhere within the tenant."""
     ip = device['IP']
-    tenant = device.get('Group', 'Generale')
+    tenant = device.get('Group') or ""
     group_dir = group_backup_dir(tenant, device.get('Vendor', ''))
     target_name = f"{sanitize_filename(sys_name)}-{ip}.txt"
     remove_stale_backups(ip, new_dir=group_dir, keep=target_name, tenant=tenant)
@@ -87,7 +87,7 @@ def remove_stale_backups(ip: str, new_dir: Optional[str] = None, keep: Optional[
     if not os.path.exists(BACKUP_FOLDER):
         return
     if tenant is not None:
-        walk_root = os.path.join(BACKUP_FOLDER, sanitize_filename(tenant or "Generale"))
+        walk_root = os.path.join(BACKUP_FOLDER, sanitize_filename(tenant or "unknown"))
         if not os.path.exists(walk_root):
             return
     else:

@@ -353,7 +353,7 @@ def execute_schedule_job(schedule_id: int, requested_by: Optional[str] = None) -
         devices = [d for d in devices if d["IP"] in wanted_ips]
 
     from services.tenant_telemetry import is_telemetry_enabled
-    devices = [d for d in devices if is_telemetry_enabled(d.get("Group") or "Generale", "triage")]
+    devices = [d for d in devices if is_telemetry_enabled(d.get("Group") or "", "triage")]
 
     # Partiziona tra sedi con agente e sedi dirette
     direct_devices = []

@@ -169,7 +169,7 @@ def _row(device, entry: dict) -> dict:
         "device": device.get("Hostname") or device.get("IP"),
         "device_ip": device.get("IP"),
         "probe": device.get("Probe") or "central",
-        "group": device.get("Group") or "Generale",
+        "group": device.get("Group") or "",
         "vendor": (device.get("Vendor") or "").lower(),
         "network": entry.get("ip_mask") or entry.get("network") or "",
         # La VRF ha una colonna sua: senza, le rotte di una VRF si leggevano
@@ -250,7 +250,7 @@ def routes_from_backup(device) -> "dict | None":
     # Il tenant fa parte della chiave: due clienti possono avere lo stesso IP, e
     # i backup stanno in cartelle separate proprio per questo.
     analysis = config_analyzer.analyze_device(device.get("IP"),
-                                              device.get("Group") or "Generale")
+                                              device.get("Group") or "")
     if not analysis:
         return None
     entries = []

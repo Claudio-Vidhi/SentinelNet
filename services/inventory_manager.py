@@ -127,9 +127,7 @@ def safe_json_write(filepath: str, data: dict):
 def get_all_groups():
     groups_json = get_groups_json()
     if not os.path.exists(groups_json):
-        default_groups = {"Generale": {"description": "Sede Principale predefinita"}}
-        save_groups(default_groups)
-        return default_groups
+        return {}
     with open(groups_json, "r", encoding="utf-8") as f:
         try:
             data = json.load(f)
@@ -137,14 +135,12 @@ def get_all_groups():
                 # Convert legacy list to dictionary format
                 new_dict = {}
                 for g in data:
-                    new_dict[g] = {"description": "Sede Principale predefinita" if g == "Generale" else f"Sede secondaria {g}"}
+                    new_dict[g] = {"description": f"Sede {g}"}
                 save_groups(new_dict)
                 return new_dict
             return data
         except Exception:
-            default_groups = {"Generale": {"description": "Sede Principale predefinita"}}
-            save_groups(default_groups)
-            return default_groups
+            return {}
 
 def save_groups(groups_dict):
     safe_json_write(get_groups_json(), groups_dict)
@@ -413,7 +409,7 @@ def get_device_by_ip(ip: str, tenant: Optional[str] = None):
                 key = d.get('IP')
                 if not key:
                     continue
-                tenant_val = d.get('Group') or 'Generale'
+                tenant_val = d.get('Group') or ""
                 dev_entry = {
                     "ip": key,
                     "hostname": d.get('Hostname') or "",
@@ -430,7 +426,7 @@ def get_device_by_ip(ip: str, tenant: Optional[str] = None):
             _device_tenant_ip_cache = tenant_ip_cache
 
         if tenant is not None:
-            return _device_tenant_ip_cache.get((tenant or "Generale", ip))
+            return _device_tenant_ip_cache.get((tenant, ip))
         return _device_ip_cache.get(ip)
 
 def _same_device(row: dict, ip: str, group: str) -> bool:
@@ -439,7 +435,7 @@ def _same_device(row: dict, ip: str, group: str) -> bool:
     Two customers each running 192.168.1.0/24 is ordinary. Keying on IP alone
     meant adding the second tenant's device deleted the first tenant's row.
     """
-    return row.get("IP") == ip and (row.get("Group") or "Generale") == (group or "Generale")
+    return row.get("IP") == ip and row.get("Group") == group
 
 
 def add_or_update_device(ip, vendor, profile, username, password, enable_secret, group, probe=None, ssh_port=None, transports=None, snmp_community=None, snmp_disabled=None, location=None, require_location=True):
@@ -460,7 +456,7 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
 
     with _io_lock:
         devices = get_all_devices()
-        resolved_group = group if group in get_all_groups() else 'Generale'
+        resolved_group = group
         # Preserva l'hostname già rilevato sul dispositivo esistente
         existing = next((d for d in devices if _same_device(d, ip, resolved_group)), None)
 
@@ -567,7 +563,7 @@ _DECOM_COLS = ['Decommissioned', 'Decommissioned By']
 
 def device_pair(row: dict) -> tuple:
     """Inventory identity: (tenant, IP)."""
-    return (row.get("Group") or "Generale", row.get("IP"))
+    return (row.get("Group"), row.get("IP"))
 
 
 def get_decommissioned_csv() -> str:
@@ -763,10 +759,7 @@ def _norm_cat_key(key: str) -> str:
     return re.sub(r'[^a-z0-9_-]', '', (key or '').strip().lower().replace(' ', '-'))
 
 def _tenant_key(value) -> str:
-    """Same normalization used by the diagnosis join: empty tenant is
-    'Generale', so an installation without groups produces one label and not
-    two for the same network."""
-    return (value or "").strip() or "Generale"
+    return (value or "").strip()
 
 
 def _akey(tenant, node_id: str) -> str:
@@ -781,8 +774,7 @@ def _akey(tenant, node_id: str) -> str:
 
 def tenant_for_node(node_id: str) -> str:
     """The tenant a node belongs to, from inventory. A node that is not a managed
-    device (discovered via CDP/LLDP and never promoted) has no site of its own
-    and lands in 'Generale'."""
+    device (discovered via CDP/LLDP and never promoted) has no site of its own."""
     d = next((d for d in get_all_devices() if d['IP'] == node_id), None)
     return _tenant_key(d.get('Group') if d else None)
 
@@ -995,10 +987,7 @@ def delete_subcategory(category: str, subcategory: str) -> bool:
 
 def migrate_assignment(old_id: str, new_id: str, old_tenant=None, new_tenant=None):
     """Sposta l'assegnazione manuale da un id-nodo a un altro (es. quando un
-    dispositivo scoperto viene promosso a gestito e cambia id in IP).
-
-    Il nodo scoperto non ha una sede propria, quindi di norma parte da
-    'Generale' e arriva nella sede in cui il dispositivo viene promosso."""
+    dispositivo scoperto viene promosso a gestito e cambia id in IP)."""
     with closing(_meta_connect()) as conn, conn:
         conn.execute("UPDATE OR REPLACE assignments SET tenant = ?, node_id = ? "
                      "WHERE tenant = ? AND node_id = ?",
@@ -1250,7 +1239,7 @@ def update_group(group_id: str, new_name: str, description: str = "") -> bool:
     them, and the old code rewrote only hosts.csv."""
     group_id = group_id.strip()
     new_name = new_name.strip()
-    if not group_id or not new_name or group_id == "Generale":
+    if not group_id or not new_name:
         return False
     with _io_lock:
         groups = get_all_groups()
@@ -1267,7 +1256,7 @@ def delete_group(group_name: str) -> bool:
     """Remove a tenant with no devices. One with devices is left alone: moving
     them to another tenant silently changed who could see them."""
     group_name = group_name.strip()
-    if not group_name or group_name == "Generale":
+    if not group_name:
         return False
     with _io_lock:
         groups = get_all_groups()

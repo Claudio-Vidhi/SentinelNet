@@ -80,7 +80,7 @@ def _run_cycle() -> None:
     for d in devices:
         if inventory_manager.is_manual(d):
             continue  # never reachable by design: a ping would only paint it red
-        tenant = d.get("Group") or d.get("tenant") or "Generale"
+        tenant = d.get("Group") or d.get("tenant") or ""
         if not is_telemetry_enabled(tenant, "ping"):
             continue
         ip = (d.get("IP") or "").strip()

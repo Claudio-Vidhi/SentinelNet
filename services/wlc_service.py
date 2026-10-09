@@ -439,7 +439,7 @@ def overview(device: dict) -> dict:
             client["wlan"] = f"{client['wlan']} - {ssid}"
 
     from services import ap_store
-    ap_store.record_aps(device["IP"], device.get("Group", "Generale"), aps)
+    ap_store.record_aps(device["IP"], device.get("Group", ""), aps)
 
     return {"platform": platform, "version": version, "uptime": uptime,
             "ap_count": len(aps), "client_count": len(clients),

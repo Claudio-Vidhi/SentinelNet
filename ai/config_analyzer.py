@@ -1483,7 +1483,7 @@ def analyze_all(group_filter=None, allowed_groups=None):
         ip = dev.get('IP')
         if not ip:
             continue
-        group = dev.get('Group', 'Generale') or 'Generale'
+        group = dev.get('Group') or ""
         if allowed_groups is not None and group not in allowed_groups:
             continue
         if group_filter and group_filter != 'all' and group != group_filter:

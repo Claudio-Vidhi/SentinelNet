@@ -49,7 +49,7 @@ def _row(device, entry: dict) -> dict:
     return {
         "device": device.get("Hostname") or device.get("IP"),
         "device_ip": device.get("IP"),
-        "group": device.get("Group") or "Generale",
+        "group": device.get("Group") or "",
         "policyid": entry.get("policyid"),
         "name": entry.get("name") or "",
         "srcaddr": _joined(entry.get("srcaddr")),
