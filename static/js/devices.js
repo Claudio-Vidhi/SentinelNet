@@ -56,9 +56,7 @@
             }
             const btnText = tr('devIClassFaSolid');
             const renameText = tr('devIClassFaSolid2');
-            const reservedText = tr('devSystemReserved');
-            const renameBtn = (g !== 'Generale')
-                ? `<button data-action="rename-group" data-g="${escapeHtml(g)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:12px;">${renameText}</button>` : '';
+            const renameBtn = `<button data-action="rename-group" data-g="${escapeHtml(g)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:12px;">${renameText}</button>`;
 
             const hasSnmp = snmpDefaultTenants.includes(g);
             const snmpCell = `<td>
@@ -75,7 +73,7 @@
                 ${snmpCell}
                 <td>${currentRole === 'viewer'
                     ? '<span style="color:var(--text-muted)">—</span>'
-                    : (g !== 'Generale' ? `${renameBtn}<button data-action="delete-group" data-g="${escapeHtml(g)}" style="color:var(--danger); background:none; border:none; cursor:pointer;">${btnText}</button>` : reservedText)}</td>
+                    : `${renameBtn}<button data-action="delete-group" data-g="${escapeHtml(g)}" style="color:var(--danger); background:none; border:none; cursor:pointer;">${btnText}</button>`}</td>
             </tr>`;
         });
     }
@@ -133,7 +131,7 @@
     // Keyed by tenant + IP: two tenants may own the same address, and the
     // lifecycle actions (decommission, reactivate, delete) act on one of them.
     const selectedDevices = new Set();
-    const selKey = d => JSON.stringify([d.Group || 'Generale', d.IP]);
+    const selKey = d => JSON.stringify([d.Group || '', d.IP]);
     const selectedIps = () => [...new Set([...selectedDevices].map(k => JSON.parse(k)[1]))];
     const selectedPairs = () => [...selectedDevices].map(k => {
         const [tenant, ip] = JSON.parse(k);
@@ -580,7 +578,7 @@
         // precompilarla assicurati che sia quella visibile.
         await switchTab('tab-provisioning');
 
-        document.getElementById('devGroupSelect').value = dev.Group || 'Generale';
+        document.getElementById('devGroupSelect').value = dev.Group || '';
         const probeSel = document.getElementById('devProbeSelect');
         if (probeSel) {
             if (typeof populateProbeOptions === 'function') {
@@ -1137,7 +1135,6 @@
                 const opt = document.createElement('option');
                 opt.value = g;
                 opt.textContent = g;
-                if (g === 'Generale') opt.selected = true;
                 sel.appendChild(opt);
             });
         }

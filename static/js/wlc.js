@@ -29,7 +29,7 @@ async function loadWlcTab() {
 
         // Only tenants that own at least one WLC: picking an empty one would be
         // a dead end.
-        const tenants = [...new Set(wlcInventory.map(d => d.Group || 'Generale'))].sort();
+        const tenants = [...new Set(wlcInventory.map(d => d.Group || ''))].sort();
         const curTenant = tenantSel.value;
         tenantSel.innerHTML = `<option value="">${tr('wlcOptTenant')}</option>` +
             tenants.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
@@ -48,7 +48,7 @@ function onWlcTenantChanged() {
     if (!tenantSel || !select) return;
 
     const tenant = tenantSel.value;
-    const devs = tenant ? wlcInventory.filter(d => (d.Group || 'Generale') === tenant) : [];
+    const devs = tenant ? wlcInventory.filter(d => (d.Group || '') === tenant) : [];
     select.disabled = !tenant;
     select.innerHTML = `<option value="">${tenant ? tr('wlcOptTarget') : tr('wlcOptTargetFirst')}</option>` +
         devs.map(d => `<option value="${escapeHtml(d.IP)}">${escapeHtml(d.Hostname || d.IP)} (${escapeHtml(d.IP)}) - ${escapeHtml(d.Vendor)}</option>`).join('');

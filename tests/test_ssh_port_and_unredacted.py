@@ -30,7 +30,8 @@ class TestGetDevicePort(unittest.TestCase):
 
 class TestInventorySshPortRoundTrip(unittest.TestCase):
     def setUp(self):
-        from services import location_manager
+        from services import inventory_manager, location_manager
+        inventory_manager.add_group("Generale")
         loc = location_manager.list_locations("Generale")
         self.loc_id = loc[0]["id"] if loc else location_manager.create_location("Generale", "Sede Generale")["id"]
 

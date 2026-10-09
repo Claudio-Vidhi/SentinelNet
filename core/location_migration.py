@@ -15,6 +15,7 @@ import json
 import os
 import re
 import shutil
+import sqlite3
 
 _CSVS = ("network_hosts.csv", "decommissioned_hosts.csv")
 
@@ -126,6 +127,27 @@ def migrate(data_dir: str) -> list:
         settings["locations_review_pending"] = True
         _write_json(settings_path, settings)
         steps.insert(0, f"{len(locations)} sedi create dalle coppie organizzazione-sonda")
+
+    # Manual classification of nodes outside the inventory (discovered via
+    # CDP/LLDP) was filed under the fallback tenant; with no fallback left it
+    # is read under the empty tenant, so re-key it or it silently disappears.
+    meta_db = os.path.join(data_dir, "device_meta.db")
+    if os.path.exists(meta_db):
+        _backup(meta_db)
+        managed = {r.get("IP") for _, rows in tables.values() for r in rows
+                   if r["Group"] == "Generale"}  # check-generale: ok
+        conn = sqlite3.connect(meta_db)
+        try:
+            ids = [(nid,) for (nid,) in conn.execute(
+                "SELECT node_id FROM assignments WHERE tenant = 'Generale'")  # check-generale: ok
+                if nid not in managed]
+            conn.executemany("UPDATE OR IGNORE assignments SET tenant = '' "
+                             "WHERE tenant = 'Generale' AND node_id = ?", ids)  # check-generale: ok
+            conn.commit()
+        finally:
+            conn.close()
+        if ids:
+            steps.append(f"device_meta.db: {len(ids)} classificazioni di nodi scoperti")
 
     _write_json(loc_path, locations)
     return steps

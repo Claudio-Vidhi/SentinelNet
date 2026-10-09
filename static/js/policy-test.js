@@ -68,7 +68,7 @@
         }
 
         const inTenant = (globalDevices || []).filter(
-            d => (d.Group || 'Generale') === tenant);
+            d => (d.Group || '') === tenant);
         const devices = inTenant.filter(d => !ptIsFirewall(d));
         const hiddenFirewalls = inTenant.length - devices.length;
         sel.disabled = devices.length === 0;
@@ -126,7 +126,7 @@
         const dev = ptSelectedIp
             ? (globalDevices || []).find(d => d.IP === ptSelectedIp) : null;
         if (!dev) { metaEl.innerHTML = ''; return; }
-        const group = dev.Group || 'Generale';
+        const group = dev.Group || '';
         const vendor = (dev.Vendor || dev.Type || 'cisco').toUpperCase();
         metaEl.innerHTML = `<span class="badge">${escapeHtml(tr('ptTenantLabel'))}: ${escapeHtml(group)}</span> <span class="badge">Vendor: ${escapeHtml(vendor)}</span>`;
     }

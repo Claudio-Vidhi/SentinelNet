@@ -67,8 +67,8 @@ class TestTenantIsABoundary(_Base):
         self.assertEqual(out["device_ip"], "192.0.2.20")
 
     def test_tenant_key_folds_the_empty_forms_together(self):
-        self.assertEqual(vlan_routing.tenant_key(""), "Generale")
-        self.assertEqual(vlan_routing.tenant_key("  "), "Generale")
+        self.assertEqual(vlan_routing.tenant_key(""), "")
+        self.assertEqual(vlan_routing.tenant_key("  "), "")
         self.assertEqual(vlan_routing.tenant_key("sede-a"), "sede-a")
 
 

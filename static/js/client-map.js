@@ -302,7 +302,7 @@ function locTenantChanged() {
     function arpFilteredDevices() {
         const group = locTenant();
         let devs = globalDevices || [];
-        if (group && group !== 'all') devs = devs.filter(d => (d.Group || 'Generale') === group);
+        if (group && group !== 'all') devs = devs.filter(d => (d.Group || '') === group);
         return devs;
     }
 

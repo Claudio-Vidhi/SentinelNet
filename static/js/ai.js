@@ -17,7 +17,7 @@
         // Multi-selezione: preserva gli IP già selezionati che restano visibili.
         const cur = new Set(getAiAttachDeviceIps());
         const devices = (globalDevices || []).filter(d =>
-            !tenant || (d.Group || 'Generale') === tenant);
+            !tenant || (d.Group || '') === tenant);
         box.innerHTML = devices.length ? devices.map(d =>
             `<label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:4px 8px;">
                 <input type="checkbox" class="ai-attach-device" value="${escapeHtml(d.IP)}"${cur.has(d.IP) ? ' checked' : ''} style="accent-color:var(--primary);">
@@ -242,7 +242,7 @@
         const cur = sel.value;
         const fromGlobal = Object.keys(globalGroups || {});
         const fromDevs = (globalDevices || []).map(d => d.Group).filter(Boolean);
-        const allTenants = [...new Set(['Generale', ...fromGlobal, ...fromDevs])].sort();
+        const allTenants = [...new Set([...fromGlobal, ...fromDevs])].sort();
 
         sel.innerHTML = allTenants.map(g =>
             `<option value="${escapeHtml(g)}">${escapeHtml(orgLabel(g))}</option>`
@@ -261,7 +261,7 @@
         if (!sel) return;
         const tenant = document.getElementById('genCfgTenant')?.value || '';
         const cur = sel.value;
-        const devices = (globalDevices || []).filter(d => (d.Group || 'Generale') === tenant);
+        const devices = (globalDevices || []).filter(d => (d.Group || '') === tenant);
         sel.innerHTML = `<option value="">${tr('optGenCfgNoTemplate') || '-- usa parametri comuni del tenant --'}</option>` +
             devices.map(d =>
                 `<option value="${escapeHtml(d.IP)}">${escapeHtml(d.Hostname || d.IP)} (${escapeHtml(d.IP)})</option>`

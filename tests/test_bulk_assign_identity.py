@@ -36,7 +36,8 @@ class TestBulkAssignProfileService(unittest.TestCase):
             os.remove(self.csv_path)
 
     def _seed(self, ips):
-        from services import location_manager
+        from services import inventory_manager, location_manager
+        inventory_manager.add_group("Generale")
         loc = location_manager.list_locations("Generale")
         loc_id = loc[0]["id"] if loc else location_manager.create_location("Generale", "Sede Generale")["id"]
         for ip in ips:

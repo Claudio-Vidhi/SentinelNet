@@ -670,10 +670,9 @@ class TestFortigateResolution(unittest.TestCase):
         self.assertEqual(fgt["ip"], "192.0.2.1")
 
     def test_an_installation_without_tenants_still_works(self):
-        """Il caso comune: nessun Group impostato da nessuna parte. Le due
-        raccolte scrivono il tenant vuoto in modi diversi ('' da ARP,
-        'Generale' da MAC), quindi vanno considerati lo stesso tenant."""
-        for client_tenant in ("", "Generale", None):
+        """No Group set anywhere: the empty tenant, written as '' or None,
+        is one and the same tenant."""
+        for client_tenant in ("", None):
             with self.subTest(tenant=client_tenant):
                 with patch("services.fortigate_service.list_targets",
                            return_value=[{"ip": "192.0.2.1"}]), \

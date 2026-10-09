@@ -64,7 +64,7 @@
             // The global tenant selector scopes this list like every other tab.
             const tenant = window.globalSelectedTenant;
             const devices = ((data && data.devices) || []).filter(d =>
-                !tenant || tenant === 'all' || (d.Group || 'Generale') === tenant);
+                !tenant || tenant === 'all' || (d.Group || '') === tenant);
 
             if (!devices.length) {
                 sel.innerHTML = allOption
