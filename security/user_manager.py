@@ -457,3 +457,19 @@ def migrate_admins_to_super_admin() -> list:
         if promoted:
             _save_users(users)
     return sorted(promoted)
+
+
+def rename_allowed_tab(old: str, new: str) -> list:
+    """Rename a tab id inside every user's allowed-tab list (one-shot
+    migrations). Returns the usernames changed."""
+    changed = []
+    with _users_lock:
+        users = get_users()
+        for name, d in users.items():
+            tabs = d.get("allowed_tabs") or []
+            if old in tabs:
+                d["allowed_tabs"] = [new if t == old else t for t in tabs]
+                changed.append(name)
+        if changed:
+            _save_users(users)
+    return sorted(changed)
