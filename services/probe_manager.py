@@ -51,7 +51,6 @@ def _default_probes() -> dict:
             "id": DEFAULT_PROBE_ID,
             "name": "Central",
             "mode": "central",
-            "subnets": [],
             "token_hash": None,
             "created": time.time(),
             "last_seen": None,
@@ -97,8 +96,12 @@ def _slugify(name: str) -> str:
 
 def _public(probe: dict) -> dict:
     """Copia del sito senza l'hash del token (aggiunge has_token)."""
+    from services import location_manager  # local: location_manager imports us
     d = {k: v for k, v in probe.items() if k != "token_hash"}
     d["has_token"] = bool(probe.get("token_hash"))
+    # Subnets belong to locations now; a probe's are those of the locations
+    # whose default probe it is (spec 2026-10-09 organizations-locations).
+    d["subnets"] = location_manager.probe_subnets(probe.get("id"))
     return d
 
 
@@ -192,7 +195,6 @@ def create_probe(name: str, mode: str, subnets=None, **kwargs):
         raise ValueError("Il nome del sito è obbligatorio.")
     if mode not in VALID_MODES:
         raise ValueError(f"Modalità non valida: {mode}")
-    subnets = [s.strip() for s in (subnets or []) if s and s.strip()]
     jump_fields = _validate_jump(kwargs) if mode == "jump" else {}
     with _lock:
         data = _load()
@@ -209,7 +211,6 @@ def create_probe(name: str, mode: str, subnets=None, **kwargs):
             "id": probe_id,
             "name": name,
             "mode": mode,
-            "subnets": subnets,
             "token_hash": token_hash,
             "created": time.time(),
             "last_seen": None,
@@ -254,8 +255,6 @@ def update_probe(probe_id: str, name=None, mode=None, subnets=None, **kwargs) ->
             # Passando a 'central' il token non serve più.
             if mode == "central":
                 probe["token_hash"] = None
-        if subnets is not None:
-            probe["subnets"] = [s.strip() for s in subnets if isinstance(s, str) and s.strip()]
         # If the resulting mode is 'jump', validate the bastion fields (existing
         # values merged with any incoming kwargs) before the generic passthrough
         # below can write an invalid jump probe.

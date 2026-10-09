@@ -82,9 +82,13 @@ spec uses those names.
 Idempotent; runs when `locations.json` does not exist. Backs up `groups.json`,
 `probes.json`, `network_hosts.csv` next to themselves first; one audit entry.
 
-1. If `groups.json` has «Generale» **and** hosts.csv has devices in it: stop,
-   log and show an error naming the device count. Never invent a tenant.
-   Otherwise drop «Generale».
+1. Rows with an empty `Group` are written as «Generale» (the value every
+   reader already defaulted to). «Generale» is then migrated like any other
+   organization: it gets its locations and stops being special — no code falls
+   back to it any more. The post-migration banner names the devices still in
+   it so the admin renames or empties it. (Decided 2026-10-09: stopping the
+   migration instead would leave the install with no way to move devices out,
+   since every move needs a location.)
 2. For each distinct `(Group, Probe or 'central')` in hosts.csv: create a
    location in `Group`, named after the probe, `probe` = that `Probe`,
    `subnets` copied from the probe. A probe serving two organizations yields

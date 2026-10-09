@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-09-organizations-locations-design.md`
 
-## Decision needed before Task 2 (spec conflict)
+## Decision before Task 2 (spec conflict) — decided: A
 
 The spec says: if «Generale» has devices, the migration **stops**. But while it
 is stopped `locations.json` does not exist, every boundary of Task 3 refuses
