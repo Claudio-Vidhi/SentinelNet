@@ -1,11 +1,11 @@
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
-"""SentinelNet - Agente di sede (Mode B).
+"""SentinelNet - Agente di sonda (Mode B).
 
 LINUX SOLTANTO. Un agente Windows non e' in roadmap: la sua gestione remota
 dalla dashboard (lettura log, riavvio) e' costruita su systemd e journalctl,
 che altrove non esistono. Il centrale, al contrario, gira anche su Windows.
-Vedi docs/remote-sites.md, sezione "Supported platforms".
+Vedi docs/probes.md, sezione "Supported platforms".
 
 Processo leggero da eseguire nella sede remota. Si connette IN USCITA verso il
 SentinelNet centrale (HTTPS su VPN) autenticandosi con il token per-sede, e
@@ -22,13 +22,13 @@ network_hosts.csv nella sua data dir (SENTINELNET_DATA_DIR), gestito con gli
 stessi strumenti/CLI del centrale.
 
 Uso:
-    python site_agent.py --central-url https://central:8000 \
-                         --site-id milano --token <TOKEN> [--interval 60]
+    python probe_agent.py --central-url https://central:8000 \
+                          --probe-id milano --token <TOKEN> [--interval 60]
 oppure:
-    python site_agent.py --config agent.json
+    python probe_agent.py --config agent.json
 
 agent.json:
-    {"central_url": "...", "site_id": "...", "token": "...", "interval": 60,
+    {"central_url": "...", "probe_id": "...", "token": "...", "interval": 60,
      "verify_tls": true, "data_dir": "./agent-data"}
 """
 import os
@@ -48,7 +48,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from services import inventory_manager
-from core import core_engine
+from core import core_engine, probe_migration
 from collectors import arp_collector, mac_collector
 
 
@@ -121,7 +121,7 @@ def load_config():
     p = argparse.ArgumentParser(description="SentinelNet - Agente di sede")
     p.add_argument("--config", help="File JSON di configurazione")
     p.add_argument("--central-url", help="URL base del SentinelNet centrale")
-    p.add_argument("--site-id", help="Id della sede (X-Site-Id)")
+    p.add_argument("--probe-id", help="Id della sonda (X-Probe-Id)")
     p.add_argument("--token", help="Token per-sede")
     # default=None, like every other option here, and NOT 60: the flags below
     # are applied with "if args.X", which asks "did the user pass it?". With a
@@ -145,8 +145,8 @@ def load_config():
         cfg["config_file"] = os.path.abspath(args.config)
     if args.central_url:
         cfg["central_url"] = args.central_url
-    if args.site_id:
-        cfg["site_id"] = args.site_id
+    if args.probe_id:
+        cfg["probe_id"] = args.probe_id
     if args.token:
         cfg["token"] = args.token
     if args.data_dir:
@@ -160,7 +160,7 @@ def load_config():
     if args.no_syslog:
         cfg["syslog_enabled"] = False
 
-    for key in ("central_url", "site_id", "token"):
+    for key in ("central_url", "probe_id", "token"):
         if not cfg.get(key):
             p.error(f"Parametro obbligatorio mancante: {key}")
 
@@ -178,6 +178,9 @@ def load_config():
     cfg.setdefault("syslog_port", 5514)
     if cfg.get("data_dir"):
         os.environ["SENTINELNET_DATA_DIR"] = cfg["data_dir"]
+        # The agent never runs the central's lifespan, so its own inventory
+        # keeps the pre-rename header column after a self-update.
+        probe_migration._hosts_header(cfg["data_dir"])
     return cfg
 
 
@@ -195,8 +198,8 @@ class Agent:
         self.base = cfg["central_url"].rstrip("/")
         self.verify = cfg.get("verify_tls", True)
         self.headers = {
-            "X-Site-Id": cfg["site_id"],
-            "X-Site-Token": cfg["token"],
+            "X-Probe-Id": cfg["probe_id"],
+            "X-Probe-Token": cfg["token"],
             "Content-Type": "application/json",
         }
         self.syslog_collector = None
@@ -433,7 +436,7 @@ class Agent:
                     ip, it.get("vendor") or "cisco", "custom",
                     it.get("username") or "", it.get("password") or "",
                     it.get("enable_secret") or "", group,
-                    probe=self.cfg["site_id"], ssh_port=it.get("ssh_port"))
+                    probe=self.cfg["probe_id"], ssh_port=it.get("ssh_port"))
                 if it.get("hostname"):
                     inventory_manager.update_device_hostname(ip, it["hostname"])
                 applied += 1
@@ -502,7 +505,7 @@ class Agent:
         legge il journal con journalctl e _agent_restart esce dal processo
         contando su systemd per riavviarlo. Su un host senza systemd il primo
         darebbe errore e il secondo lascerebbe la sede senza agente. Vedi
-        docs/remote-sites.md, "Supported platforms"."""
+        docs/probes.md, "Supported platforms"."""
         import subprocess
         parts = cmd.split(maxsplit=1)
         action = parts[0]
@@ -595,7 +598,7 @@ class Agent:
                 # ponytail: Password/Enable Secret/SNMP Community restano come
                 # arrivano. Cifrarle richiederebbe la chiave Fernet dell'agente,
                 # che la centrale non ha; un valore in chiaro viene ignorato da
-                # get_device_credentials. Documentato in docs/remote-sites.md.
+                # get_device_credentials. Documentato in docs/probes.md.
                 rows = [rec for _, rec in inventory_manager._read_inventory_csv(arg)]
                 os.makedirs(os.path.dirname(inventory_manager.get_hosts_csv()), exist_ok=True)
                 inventory_manager.safe_write_hosts_csv(rows)
@@ -757,7 +760,7 @@ class Agent:
         except Exception as e:
             print(f"[devices] errore: {e}")
         devices = inventory_manager.get_all_devices()
-        print(f"[heartbeat] sede '{info.get('site_id')}' ok, {len(devices)} dispositivi locali")
+        print(f"[heartbeat] sonda '{info.get('probe_id')}' ok, {len(devices)} dispositivi locali")
         try:
             self.push_inventory(devices)
         except Exception as e:
@@ -795,7 +798,7 @@ class Agent:
         print("[agent] arrestato con successo.")
 
     def run(self):
-        print(f"[agent] avviato: centrale={self.base} sede={self.cfg['site_id']}")
+        print(f"[agent] avviato: centrale={self.base} sonda={self.cfg['probe_id']}")
         try:
             while True:
                 try:

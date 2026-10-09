@@ -27,7 +27,7 @@ os.environ.setdefault("SENTINELNET_JWT_SECRET", "test-secret-syslog-toggle")
 from fastapi.testclient import TestClient  # noqa: E402
 
 import app_server  # noqa: E402
-from services import site_agent  # noqa: E402
+from services import probe_agent  # noqa: E402
 
 ADMIN, ADMIN_PW = "syslogtoggle_admin", "PasswordSicura1!"
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -44,8 +44,8 @@ class TestAgentHonoursTheToggle(unittest.TestCase):
     listener, non solo scrivere la chiave in memoria."""
 
     def _agent(self, with_collector=True):
-        agent = site_agent.Agent.__new__(site_agent.Agent)
-        agent.cfg = {"site_id": "milan", "syslog_port": 5514,
+        agent = probe_agent.Agent.__new__(probe_agent.Agent)
+        agent.cfg = {"probe_id": "milan", "syslog_port": 5514,
                      "syslog_enabled": True, "data_dir": _TMP}
         agent.syslog_worker_running = True
         agent.syslog_collector = None
@@ -67,7 +67,7 @@ class TestAgentHonoursTheToggle(unittest.TestCase):
 
     def test_turning_it_on_starts_a_listener(self):
         agent = self._agent(with_collector=False)
-        with mock.patch.object(site_agent, "SyslogCollector") as SC:
+        with mock.patch.object(probe_agent, "SyslogCollector") as SC:
             out = agent._execute_agent_rpc('_agent_config {"syslog_enabled": true}')
         self.assertEqual(out["status"], "done", out)
         SC.assert_called_once_with(port=5514)
@@ -76,7 +76,7 @@ class TestAgentHonoursTheToggle(unittest.TestCase):
     def test_turning_it_on_twice_does_not_start_a_second_listener(self):
         agent = self._agent()
         first = agent.syslog_collector
-        with mock.patch.object(site_agent, "SyslogCollector") as SC:
+        with mock.patch.object(probe_agent, "SyslogCollector") as SC:
             agent._execute_agent_rpc('_agent_config {"syslog_enabled": true}')
         SC.assert_not_called()
         self.assertIs(agent.syslog_collector, first)
@@ -84,7 +84,7 @@ class TestAgentHonoursTheToggle(unittest.TestCase):
     def test_a_port_change_still_rebinds(self):
         agent = self._agent()
         old = agent.syslog_collector
-        with mock.patch.object(site_agent, "SyslogCollector") as SC:
+        with mock.patch.object(probe_agent, "SyslogCollector") as SC:
             agent._execute_agent_rpc('_agent_config {"syslog_port": 5515}')
         self.assertFalse(old.running)
         SC.assert_called_once_with(port=5515)
@@ -129,7 +129,7 @@ class TestCentralStoresWhatTheAgentReports(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.text)
         sid, token = r.json()["site"]["id"], r.json()["token"]
         hb = self.client.post("/api/agent/heartbeat",
-                              headers={"X-Site-Id": sid, "X-Site-Token": token},
+                              headers={"X-Probe-Id": sid, "X-Probe-Token": token},
                               json={"version": "0.0.0", "syslog_enabled": False,
                                     "data_dir": "/opt/sentinelnet/agent-data"})
         self.assertEqual(hb.status_code, 200, hb.text)

@@ -26,7 +26,7 @@ solo nel triage, dove l'operatore ha dichiarato la password sudo.
 SOLO SEDI CENTRALI: il processo centrale non apre sessioni SSH verso i device
 di una sede in ``mode == 'agent'`` (routers/commands.py). Gli host Linux dietro
 un site agent non vengono interrogati; supportarli significa aggiungere il giro
-a ``services/site_agent.py``.
+a ``services/probe_agent.py``.
 """
 
 import asyncio

@@ -151,7 +151,7 @@ def save_groups(groups_dict):
 # --- Lettura tollerante di un CSV di inventario ---
 # Vive qui e non nel router perché la usano due chiamanti: l'import CSV di
 # central (routers/inventory.py) e il salvataggio dell'inventario remoto
-# dell'agente di sede (services/site_agent.py), che gira senza FastAPI.
+# dell'agente di sede (services/probe_agent.py), che gira senza FastAPI.
 
 # Intestazioni accettate per ciascun campo. Un CSV di inventario viene quasi
 # sempre da un foglio di calcolo passato di mano in mano, e arriva con

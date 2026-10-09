@@ -86,7 +86,7 @@ class AgentPaths(unittest.TestCase):
         from routers import agent
         manual = dict(MANUAL, Probe="site-a")
         with mock.patch(DEVICES, return_value=[manual, self.NORMAL]):
-            out = agent._devices_for_site("site-a", with_credentials=False)
+            out = agent._devices_for_probe("site-a", with_credentials=False)
         self.assertEqual([d["ip"] for d in out], ["192.0.2.51"])
 
     def test_agent_inventory_with_credentials_does_not_raise(self):
@@ -94,14 +94,14 @@ class AgentPaths(unittest.TestCase):
         manual = dict(MANUAL, Probe="site-a")
         with mock.patch(DEVICES, return_value=[manual, self.NORMAL]),              mock.patch("core.device_credentials.get_device_credentials",
                         return_value=("u", "p", "")):
-            out = agent._devices_for_site("site-a", with_credentials=True)
+            out = agent._devices_for_probe("site-a", with_credentials=True)
         self.assertEqual([d["ip"] for d in out], ["192.0.2.51"])
 
     def test_push_mac_skips_manual(self):
-        from services import site_agent
+        from services import probe_agent
         from collectors import mac_collector
-        agent_obj = site_agent.Agent.__new__(site_agent.Agent)
-        with mock.patch.object(site_agent.core_engine, "get_device_credentials") as creds,              mock.patch.object(mac_collector, "collect_mac_table") as collect:
+        agent_obj = probe_agent.Agent.__new__(probe_agent.Agent)
+        with mock.patch.object(probe_agent.core_engine, "get_device_credentials") as creds,              mock.patch.object(mac_collector, "collect_mac_table") as collect:
             out = agent_obj.push_mac([MANUAL])
         creds.assert_not_called()
         collect.assert_not_called()

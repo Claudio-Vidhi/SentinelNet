@@ -67,7 +67,7 @@ PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset({
     ("POST", "/api/mcp/session"),
 })
 
-# MACHINE: site agents, authenticated by X-Site-Token.
+# MACHINE: probe agents, authenticated by X-Probe-Token.
 MACHINE_ROUTES: frozenset[tuple[str, str]] = frozenset({
     ("POST", "/api/agent/heartbeat"),
     ("POST", "/api/agent/inventory"),

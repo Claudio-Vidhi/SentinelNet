@@ -6,7 +6,7 @@ centrale reale, via FastAPI TestClient (nessun processo o rete esterni).
 
 Copre l'intero protocollo agente:
   1. l'admin crea una sede 'agent' e ottiene il token (mostrato una volta);
-  2. l'agente si autentica col token (X-Site-Token) e manda un heartbeat;
+  2. l'agente si autentica col token (X-Probe-Token) e manda un heartbeat;
   3. l'agente spinge il proprio inventario locale -> compare nel centrale,
      taggato con la sede;
   4. l'agente spinge una MAC-table -> storicizzata con attribuzione alla sede;
@@ -89,7 +89,7 @@ class RemoteProbeE2E(unittest.TestCase):
 
     @staticmethod
     def _agent_headers(probe_id, token):
-        return {"X-Site-Id": probe_id, "X-Site-Token": token}
+        return {"X-Probe-Id": probe_id, "X-Probe-Token": token}
 
     # --- test ---
 
@@ -154,7 +154,7 @@ class RemoteProbeE2E(unittest.TestCase):
         # 2. heartbeat
         r = self.client.post("/api/agent/heartbeat", headers=ah)
         self.assertEqual(r.status_code, 200, r.text)
-        self.assertEqual(r.json()["site_id"], sid)
+        self.assertEqual(r.json()["probe_id"], sid)
 
         # 3. push inventario locale
         r = self.client.post("/api/agent/inventory", headers=ah, json={"devices": [
@@ -278,7 +278,7 @@ class RemoteProbeE2E(unittest.TestCase):
 
     def test_bad_probe_token_rejected(self):
         r = self.client.post("/api/agent/heartbeat",
-                            headers={"X-Site-Token": "token-inesistente"})
+                            headers={"X-Probe-Token": "token-inesistente"})
         self.assertEqual(r.status_code, 401)
 
     def test_relay_blocks_dangerous_command(self):
@@ -354,7 +354,7 @@ class RemoteProbeE2E(unittest.TestCase):
         """Doppio controllo voluto: le credenziali restano nella sede anche se
         il centrale e' compromesso, quindi l'agente non si fida di cio' che
         gli viene dettato."""
-        from services.site_agent import Agent
+        from services.probe_agent import Agent
         agent = Agent.__new__(Agent)   # nessuna connessione, nessuna config
         out = agent._execute_rest_job({"IP": "10.9.0.3"},
                                       '{"path": "cmdb/system/admin"}')
@@ -389,7 +389,7 @@ class RemoteProbeE2E(unittest.TestCase):
         # Test setup subcommand logic
         args_setup = type("Args", (), {
             "central_url": "http://127.0.0.1:8000",
-            "site_id": "vm-test-probe",
+            "probe_id": "vm-test-probe",
             "token": "dummy-token-123",
             "interval": 10,
             "no_verify_tls": True,
@@ -409,7 +409,7 @@ class RemoteProbeE2E(unittest.TestCase):
             "username": "admin",
             "password": "pw",
             "secret": "sec",
-            "site_id": "vm-test-probe",
+            "probe_id": "vm-test-probe",
             "data_dir": data_dir,
         })()
 
@@ -430,7 +430,7 @@ class RemoteProbeE2E(unittest.TestCase):
         from services import probe_manager
         probe_obj, token = probe_manager.create_probe("Syslog Sede", "agent")
         probe_id = probe_obj["id"]
-        headers = {"X-Site-Token": token, "X-Site-Id": probe_id}
+        headers = {"X-Probe-Token": token, "X-Probe-Id": probe_id}
 
         # Test POST /api/agent/syslog
         payload = {
@@ -448,7 +448,7 @@ class RemoteProbeE2E(unittest.TestCase):
         self.assertGreaterEqual(res.json()["ingested"], 1)
 
         # Test SyslogCollector UDP listener
-        from services.site_agent import SyslogCollector
+        from services.probe_agent import SyslogCollector
         import socket, time
         collector = SyslogCollector(port=15514)
         collector.start()
@@ -474,8 +474,8 @@ class RemoteProbeE2E(unittest.TestCase):
         self.assertEqual(res_rst.json()["status"], "queued")
 
         # Test agent _execute_agent_rpc handler
-        from services.site_agent import Agent
-        cfg = {"central_url": "http://127.0.0.1:8000", "site_id": probe_id, "token": token, "syslog_enabled": False}
+        from services.probe_agent import Agent
+        cfg = {"central_url": "http://127.0.0.1:8000", "probe_id": probe_id, "token": token, "syslog_enabled": False}
         agent_inst = Agent(cfg)
         rpc_out = agent_inst._execute_agent_rpc("_agent_self_update")
         self.assertIn("status", rpc_out)
@@ -502,11 +502,11 @@ class RemoteProbeE2E(unittest.TestCase):
         ogni apparato nel gruppo sbagliato o a far esplodere get_all_devices()
         con KeyError: 'IP'."""
         from services import inventory_manager, probe_manager
-        from services.site_agent import Agent
+        from services.probe_agent import Agent
 
         probe_obj, token = probe_manager.create_probe("Conformita Sede", "agent")
         agent_inst = Agent({"central_url": "http://127.0.0.1:8000",
-                            "site_id": probe_obj["id"], "token": token,
+                            "probe_id": probe_obj["id"], "token": token,
                             "syslog_enabled": False})
 
         out = agent_inst._execute_agent_rpc(
@@ -1009,14 +1009,14 @@ class CentralManagedDevicePush(unittest.TestCase):
     def test_the_flag_off_pushes_nothing(self):
         sid, token = self._probe_with_device("Push-Off", managed=False)
         r = self.client.post("/api/agent/heartbeat",
-                         headers={"X-Site-Id": sid, "X-Site-Token": token})
+                         headers={"X-Probe-Id": sid, "X-Probe-Token": token})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertNotIn("devices", r.json())
 
     def test_the_flag_on_pushes_the_probes_devices(self):
         sid, token = self._probe_with_device("Push-On", managed=True)
         r = self.client.post("/api/agent/heartbeat",
-                         headers={"X-Site-Id": sid, "X-Site-Token": token})
+                         headers={"X-Probe-Id": sid, "X-Probe-Token": token})
         self.assertEqual(r.status_code, 200, r.text)
         ips = [d["ip"] for d in r.json()["devices"]]
         self.assertIn("10.9.0.90", ips)
@@ -1027,7 +1027,7 @@ class CentralManagedDevicePush(unittest.TestCase):
         # feature. Identity still travels.
         sid, token = self._probe_with_device("Push-Http", managed=True)
         r = self.client.post("/api/agent/heartbeat",
-                         headers={"X-Site-Id": sid, "X-Site-Token": token})
+                         headers={"X-Probe-Id": sid, "X-Probe-Token": token})
         body = r.json()
         self.assertFalse(body["credentials_included"])
         dev = next(d for d in body["devices"] if d["ip"] == "10.9.0.90")
@@ -1037,7 +1037,7 @@ class CentralManagedDevicePush(unittest.TestCase):
     def test_credentials_travel_when_the_request_is_https(self):
         sid, token = self._probe_with_device("Push-Https", managed=True)
         r = self.client.post("/api/agent/heartbeat",
-                         headers={"X-Site-Id": sid, "X-Site-Token": token,
+                         headers={"X-Probe-Id": sid, "X-Probe-Token": token,
                                   "X-Forwarded-Proto": "https"})
         body = r.json()
         self.assertTrue(body["credentials_included"])
@@ -1052,7 +1052,7 @@ class CentralManagedDevicePush(unittest.TestCase):
             "10.9.0.91", "cisco", "custom", "u", "p", "", "Generale",
             probe=sid_b, ssh_port=22)
         r = self.client.post("/api/agent/heartbeat",
-                         headers={"X-Site-Id": sid_a, "X-Site-Token": token_a})
+                         headers={"X-Probe-Id": sid_a, "X-Probe-Token": token_a})
         ips = [d["ip"] for d in r.json()["devices"]]
         self.assertNotIn("10.9.0.91", ips)
 
@@ -1061,9 +1061,9 @@ class AgentAppliesCentralDevices(unittest.TestCase):
     """The agent side of the push: add and update, never delete."""
 
     def _agent(self):
-        from services import site_agent
-        agent = site_agent.Agent.__new__(site_agent.Agent)
-        agent.cfg = {"site_id": "milan", "interval": 60}
+        from services import probe_agent
+        agent = probe_agent.Agent.__new__(probe_agent.Agent)
+        agent.cfg = {"probe_id": "milan", "interval": 60}
         return agent
 
     def test_a_pushed_device_is_created_locally(self):
@@ -1137,9 +1137,9 @@ class AgentL2Cadence(unittest.TestCase):
 
     def _agent(self, l2_interval=300):
         from unittest import mock
-        from services import site_agent
-        agent = site_agent.Agent.__new__(site_agent.Agent)
-        agent.cfg = {"site_id": "milan", "interval": 10, "l2_interval": l2_interval}
+        from services import probe_agent
+        agent = probe_agent.Agent.__new__(probe_agent.Agent)
+        agent.cfg = {"probe_id": "milan", "interval": 10, "l2_interval": l2_interval}
         agent._last_l2 = 0.0
         agent.push_mac = mock.MagicMock()
         agent.push_arp = mock.MagicMock()
@@ -1177,14 +1177,14 @@ class AgentL2Cadence(unittest.TestCase):
     def test_the_default_is_five_minutes(self):
         import sys, json as _json, tempfile as _tf
         from unittest import mock
-        from services import site_agent
+        from services import probe_agent
         d = _tf.mkdtemp(prefix="sentinelnet_l2cfg_")
         path = os.path.join(d, "agent.json")
         with open(path, "w", encoding="utf-8") as f:
             _json.dump({"central_url": "https://192.0.2.10:8000",
-                        "site_id": "milan", "token": "tok"}, f)
-        with mock.patch.object(sys, "argv", ["site_agent.py", "--config", path]):
-            self.assertEqual(site_agent.load_config()["l2_interval"], 300)
+                        "probe_id": "milan", "token": "tok"}, f)
+        with mock.patch.object(sys, "argv", ["probe_agent.py", "--config", path]):
+            self.assertEqual(probe_agent.load_config()["l2_interval"], 300)
 
 
 class AgentConfigFileWins(unittest.TestCase):
@@ -1197,7 +1197,7 @@ class AgentConfigFileWins(unittest.TestCase):
     flag nobody had typed.
     """
 
-    BASE = {"central_url": "http://192.0.2.10:8000", "site_id": "test-probe",
+    BASE = {"central_url": "http://192.0.2.10:8000", "probe_id": "test-probe",
             "token": "tok"}
 
     def _load(self, argv, cfg):
@@ -1205,14 +1205,14 @@ class AgentConfigFileWins(unittest.TestCase):
         import sys
         import tempfile as _tf
         from unittest import mock
-        from services import site_agent
+        from services import probe_agent
 
         d = _tf.mkdtemp(prefix="sentinelnet_agentcfg_")
         path = os.path.join(d, "agent.json")
         with open(path, "w", encoding="utf-8") as f:
             _json.dump(cfg, f)
-        with mock.patch.object(sys, "argv", ["site_agent.py", "--config", path] + argv):
-            return site_agent.load_config()
+        with mock.patch.object(sys, "argv", ["probe_agent.py", "--config", path] + argv):
+            return probe_agent.load_config()
 
     def test_the_interval_in_the_config_file_survives(self):
         out = self._load([], dict(self.BASE, interval=5))
@@ -1233,9 +1233,9 @@ class AgentPushesItsOwnPingResults(unittest.TestCase):
 
     def _agent(self):
         from unittest import mock
-        from services import site_agent
-        agent = site_agent.Agent.__new__(site_agent.Agent)
-        agent.cfg = {"site_id": "milan", "interval": 60}
+        from services import probe_agent
+        agent = probe_agent.Agent.__new__(probe_agent.Agent)
+        agent.cfg = {"probe_id": "milan", "interval": 60}
         agent._post = mock.MagicMock()
         agent._post.return_value.json.return_value = {"status": "success",
                                                       "updated": 2}
@@ -1271,9 +1271,9 @@ class AgentScheduledBackup(unittest.TestCase):
 
     def _agent(self, backup_interval=3600):
         from unittest import mock
-        from services import site_agent
-        agent = site_agent.Agent.__new__(site_agent.Agent)
-        agent.cfg = {"site_id": "milan", "interval": 60,
+        from services import probe_agent
+        agent = probe_agent.Agent.__new__(probe_agent.Agent)
+        agent.cfg = {"probe_id": "milan", "interval": 60,
                      "backup_interval": backup_interval}
         agent._last_backup = 0.0
         agent._post = mock.MagicMock()
@@ -1401,15 +1401,15 @@ class AgentReportsItsRealVersion(unittest.TestCase):
         # una domanda senza risposta dalla dashboard.
         import pathlib
         src = (pathlib.Path(__file__).resolve().parents[1]
-               / "services" / "site_agent.py").read_text(encoding="utf-8")
+               / "services" / "probe_agent.py").read_text(encoding="utf-8")
         self.assertNotIn('"2.6.0"', src)
 
     def test_the_payload_carries_the_real_version_and_git_identity(self):
         from unittest import mock
         from core.version import __version__
-        from services import site_agent
-        agent = site_agent.Agent.__new__(site_agent.Agent)
-        agent.cfg = {"site_id": "milan", "interval": 60, "syslog_port": 5514}
+        from services import probe_agent
+        agent = probe_agent.Agent.__new__(probe_agent.Agent)
+        agent.cfg = {"probe_id": "milan", "interval": 60, "syslog_port": 5514}
         # L'heartbeat riporta lo stato REALE del listener, quindi guarda il
         # collector: un Agent costruito con __new__ deve darglielo.
         agent.syslog_collector = None
@@ -1432,16 +1432,16 @@ class AgentSelfUpdateRestarts(unittest.TestCase):
     esattamente la shell che questa funzione esiste per evitare."""
 
     def _agent(self):
-        from services import site_agent
-        agent = site_agent.Agent.__new__(site_agent.Agent)
-        agent.cfg = {"site_id": "milan"}
+        from services import probe_agent
+        agent = probe_agent.Agent.__new__(probe_agent.Agent)
+        agent.cfg = {"probe_id": "milan"}
         return agent
 
     def test_a_pull_that_changed_something_restarts_the_agent(self):
         from unittest import mock
-        from services import site_agent
+        from services import probe_agent
         agent = self._agent()
-        with mock.patch("subprocess.run") as run,              mock.patch.object(site_agent.threading, "Thread") as thread:
+        with mock.patch("subprocess.run") as run,              mock.patch.object(probe_agent.threading, "Thread") as thread:
             run.return_value = mock.MagicMock(
                 returncode=0, stdout="Updating 1234567..89abcde\n 3 files changed\n",
                 stderr="")
@@ -1456,7 +1456,7 @@ class AgentSelfUpdateRestarts(unittest.TestCase):
         # nuovo import fallisce, e la sede resta senza agente. L'ordine
         # (installa, poi riavvia) e' il punto del test.
         from unittest import mock
-        from services import site_agent
+        from services import probe_agent
         agent = self._agent()
         calls = []
 
@@ -1464,7 +1464,7 @@ class AgentSelfUpdateRestarts(unittest.TestCase):
             calls.append(argv)
             return mock.MagicMock(returncode=0, stdout="3 files changed", stderr="")
 
-        with mock.patch("subprocess.run", side_effect=_run),              mock.patch.object(site_agent.threading, "Thread") as thread:
+        with mock.patch("subprocess.run", side_effect=_run),              mock.patch.object(probe_agent.threading, "Thread") as thread:
             out = agent._execute_agent_rpc("_agent_self_update")
         self.assertEqual(out["status"], "done")
         self.assertEqual(calls[0][:2], ["git", "pull"])
@@ -1477,7 +1477,7 @@ class AgentSelfUpdateRestarts(unittest.TestCase):
         # Riavviare dopo un'installazione fallita e' esattamente il crash-loop
         # che si vuole evitare: meglio restare sul codice vecchio, che gira.
         from unittest import mock
-        from services import site_agent
+        from services import probe_agent
         agent = self._agent()
 
         def _run(argv, **kw):
@@ -1485,7 +1485,7 @@ class AgentSelfUpdateRestarts(unittest.TestCase):
                 return mock.MagicMock(returncode=0, stdout="3 files changed", stderr="")
             return mock.MagicMock(returncode=1, stdout="", stderr="No matching distribution")
 
-        with mock.patch("subprocess.run", side_effect=_run),              mock.patch.object(site_agent.threading, "Thread") as thread:
+        with mock.patch("subprocess.run", side_effect=_run),              mock.patch.object(probe_agent.threading, "Thread") as thread:
             out = agent._execute_agent_rpc("_agent_self_update")
         self.assertEqual(out["status"], "error")
         self.assertIn("dipendenze", out["result"].lower())
@@ -1494,9 +1494,9 @@ class AgentSelfUpdateRestarts(unittest.TestCase):
     def test_an_up_to_date_pull_does_not_restart(self):
         # Riavviare a vuoto interrompe i job in corso per niente.
         from unittest import mock
-        from services import site_agent
+        from services import probe_agent
         agent = self._agent()
-        with mock.patch("subprocess.run") as run,              mock.patch.object(site_agent.threading, "Thread") as thread:
+        with mock.patch("subprocess.run") as run,              mock.patch.object(probe_agent.threading, "Thread") as thread:
             run.return_value = mock.MagicMock(
                 returncode=0, stdout="Already up to date.\n", stderr="")
             out = agent._execute_agent_rpc("_agent_self_update")
@@ -1506,9 +1506,9 @@ class AgentSelfUpdateRestarts(unittest.TestCase):
 
     def test_a_failed_pull_does_not_restart(self):
         from unittest import mock
-        from services import site_agent
+        from services import probe_agent
         agent = self._agent()
-        with mock.patch("subprocess.run") as run,              mock.patch.object(site_agent.threading, "Thread") as thread:
+        with mock.patch("subprocess.run") as run,              mock.patch.object(probe_agent.threading, "Thread") as thread:
             run.return_value = mock.MagicMock(
                 returncode=1, stdout="", stderr="error: cannot pull\n")
             out = agent._execute_agent_rpc("_agent_self_update")
@@ -1520,9 +1520,9 @@ class AgentSelfUpdateRestarts(unittest.TestCase):
 class AgentLogTail(unittest.TestCase):
     def test_the_log_tail_rpc_returns_bounded_output(self):
         from unittest import mock
-        from services import site_agent
-        agent = site_agent.Agent.__new__(site_agent.Agent)
-        agent.cfg = {"site_id": "milan"}
+        from services import probe_agent
+        agent = probe_agent.Agent.__new__(probe_agent.Agent)
+        agent.cfg = {"probe_id": "milan"}
         fake = chr(10).join(f"line {i}" for i in range(1000))
         with mock.patch("subprocess.run") as run:
             run.return_value = mock.MagicMock(returncode=0, stdout=fake, stderr="")
@@ -1545,9 +1545,9 @@ class RelayCarriesTheBlacklistDecision(unittest.TestCase):
     """
 
     def _agent(self):
-        from services import site_agent
-        agent = site_agent.Agent.__new__(site_agent.Agent)
-        agent.cfg = {"site_id": "milan", "interval": 60}
+        from services import probe_agent
+        agent = probe_agent.Agent.__new__(probe_agent.Agent)
+        agent.cfg = {"probe_id": "milan", "interval": 60}
         return agent
 
     def test_the_queued_job_records_the_bypass_the_central_authorised(self):
@@ -1565,7 +1565,7 @@ class RelayCarriesTheBlacklistDecision(unittest.TestCase):
 
     def test_the_agent_honours_the_bypass_the_central_authorised(self):
         from unittest import mock
-        from services import site_agent
+        from services import probe_agent
         agent = self._agent()
         seen = {}
 
@@ -1573,7 +1573,7 @@ class RelayCarriesTheBlacklistDecision(unittest.TestCase):
             seen["bypass"] = bypass_blacklist
             return {"status": "success", "output": "ok"}
 
-        with mock.patch.object(site_agent.core_engine, "send_custom_command", spy),              mock.patch.object(agent, "_get") as get,              mock.patch.object(agent, "_post") as post:
+        with mock.patch.object(probe_agent.core_engine, "send_custom_command", spy),              mock.patch.object(agent, "_get") as get,              mock.patch.object(agent, "_post") as post:
             get.return_value = mock.MagicMock(
                 json=lambda: {"jobs": [{"id": "j1", "device_ip": "10.9.0.62",
                                         "command": "reload", "kind": "cli",
@@ -1584,7 +1584,7 @@ class RelayCarriesTheBlacklistDecision(unittest.TestCase):
 
     def test_without_the_flag_the_agent_still_applies_the_blacklist(self):
         from unittest import mock
-        from services import site_agent
+        from services import probe_agent
         agent = self._agent()
         seen = {}
 
@@ -1592,7 +1592,7 @@ class RelayCarriesTheBlacklistDecision(unittest.TestCase):
             seen["bypass"] = bypass_blacklist
             return {"status": "success", "output": "ok"}
 
-        with mock.patch.object(site_agent.core_engine, "send_custom_command", spy),              mock.patch.object(agent, "_get") as get,              mock.patch.object(agent, "_post"):
+        with mock.patch.object(probe_agent.core_engine, "send_custom_command", spy),              mock.patch.object(agent, "_get") as get,              mock.patch.object(agent, "_post"):
             get.return_value = mock.MagicMock(
                 json=lambda: {"jobs": [{"id": "j2", "device_ip": "10.9.0.62",
                                         "command": "reload", "kind": "cli"}]})
@@ -1602,7 +1602,7 @@ class RelayCarriesTheBlacklistDecision(unittest.TestCase):
     def test_the_flag_does_not_widen_the_rest_allowlist(self):
         import json as _json
         from unittest import mock
-        from services import site_agent
+        from services import probe_agent
         agent = self._agent()
         spec = _json.dumps({"path": "cmdb/system/admin", "params": {}})
         with mock.patch.object(agent, "_get") as get,              mock.patch.object(agent, "_post") as post:

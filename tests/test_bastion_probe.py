@@ -748,8 +748,8 @@ class NoDirectNetmikoImports(unittest.TestCase):
     """Every SSH call site must go through core.net_ssh, otherwise a jump site
     silently bypasses the tunnel and tries to reach the device directly."""
 
-    # site_agent.py runs inside the remote network: it must NOT tunnel.
-    ALLOWED = {"core/net_ssh.py", "services/site_agent.py"}
+    # probe_agent.py runs inside the remote network: it must NOT tunnel.
+    ALLOWED = {"core/net_ssh.py", "services/probe_agent.py"}
 
     def test_no_module_imports_connecthandler_from_netmiko(self):
         import pathlib

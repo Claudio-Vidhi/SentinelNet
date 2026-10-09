@@ -374,8 +374,8 @@ class AgentIsLinuxOnlyAndSaysSo(unittest.TestCase):
     def test_the_agent_module_says_it_in_its_own_docstring(self):
         # Chi apre il file per portarlo su Windows deve leggerlo li', non
         # scoprirlo dal primo journalctl che fallisce.
-        from services import site_agent
-        self.assertIn("LINUX SOLTANTO", site_agent.__doc__ or "")
+        from services import probe_agent
+        self.assertIn("LINUX SOLTANTO", probe_agent.__doc__ or "")
 
 
 if __name__ == "__main__":

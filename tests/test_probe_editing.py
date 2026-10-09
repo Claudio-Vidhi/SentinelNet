@@ -94,7 +94,7 @@ class TestProbeEditingApi(unittest.TestCase):
                              json={"id": sid, "mode": "agent"})
         token = r.json()["token"]
         hb = self.client.post("/api/agent/heartbeat",
-                              headers={"X-Site-Id": sid, "X-Site-Token": token},
+                              headers={"X-Probe-Id": sid, "X-Probe-Token": token},
                               json={"version": "0.0.0"})
         self.assertEqual(hb.status_code, 200, hb.text)
 

@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """SentinelNet - VM Agent Test Helper
 
-Script di supporto per testare e configurare l'agente di sede (site_agent.py)
+Script di supporto per testare e configurare l'agente di sonda (probe_agent.py)
 in un ambiente di Virtual Machine (VM).
 
 Caratteristiche:
@@ -15,7 +15,7 @@ Caratteristiche:
 Uso:
   # Inizializza configurazione e inventario locale sulla VM:
   python scripts/vm_agent_test_helper.py setup --central-url http://192.168.1.100:8000 \
-                                                --site-id vm-lab \
+                                                --probe-id vm-lab \
                                                 --token <TOKEN_MOSTRATO_SU_CENTRALE>
 
   # Aggiungi un apparato di test all'inventario locale della VM:
@@ -56,7 +56,7 @@ def setup_agent(args):
 
     config_content = {
         "central_url": args.central_url.rstrip("/"),
-        "site_id": args.site_id,
+        "probe_id": args.probe_id,
         "token": args.token,
         "interval": args.interval,
         "verify_tls": not args.no_verify_tls,
@@ -77,7 +77,7 @@ def setup_agent(args):
     print(f"[OK] Directory dati pronta: {data_dir}")
     print(f"[OK] Inventario locale: {csv_path}")
     print("\nPer avviare l'agente:")
-    print(f"  python services/site_agent.py --config {config_path}")
+    print(f"  python services/probe_agent.py --config {config_path}")
 
 
 def add_device(args):
@@ -96,7 +96,7 @@ def add_device(args):
 
     new_row = [
         args.ip, args.vendor, "custom", args.username, args.password,
-        args.secret, args.site_id, args.hostname, args.site_id, "22", "", ""
+        args.secret, args.probe_id, args.hostname, args.probe_id, "22", "", ""
     ]
 
     with open(csv_path, "w", encoding="utf-8", newline="") as f:
@@ -118,18 +118,18 @@ def check_agent(args):
         cfg = json.load(f)
 
     central_url = cfg.get("central_url", "").rstrip("/")
-    site_id = cfg.get("site_id", "")
+    probe_id = cfg.get("probe_id", "")
     token = cfg.get("token", "")
     verify_tls = cfg.get("verify_tls", True)
 
     print(f"--- DIAGNOSTICA AGENTE VM ---")
     print(f"Centrale URL : {central_url}")
-    print(f"Site ID      : {site_id}")
+    print(f"Probe ID     : {probe_id}")
     print(f"Verify TLS   : {verify_tls}")
 
     headers = {
-        "X-Site-Id": site_id,
-        "X-Site-Token": token,
+        "X-Probe-Id": probe_id,
+        "X-Probe-Token": token,
         "Content-Type": "application/json",
     }
 
@@ -139,7 +139,7 @@ def check_agent(args):
         if r.status_code == 200:
             print(f"[OK] Heartbeat riuscito! Risposta: {r.json()}")
         elif r.status_code == 401:
-            print(f"[ERRORE 401] Autenticazione fallita: Token o Site ID non validi per la sede '{site_id}'.")
+            print(f"[ERRORE 401] Autenticazione fallita: Token o Probe ID non validi per la sonda '{probe_id}'.")
         else:
             print(f"[ERRORE {r.status_code}] Risposta inattesa: {r.text}")
     except Exception as e:
@@ -153,7 +153,7 @@ def main():
     # Subcommand: setup
     p_setup = subparsers.add_parser("setup", help="Crea agent.json e inizializza directory dati")
     p_setup.add_argument("--central-url", required=True, help="URL base del centrale (es. http://192.168.1.100:8000)")
-    p_setup.add_argument("--site-id", required=True, help="ID della sede (es. milano-vm)")
+    p_setup.add_argument("--probe-id", required=True, help="ID della sede (es. milano-vm)")
     p_setup.add_argument("--token", required=True, help="Token per-sede ottenuto dal centrale")
     p_setup.add_argument("--interval", type=int, default=15, help="Intervallo polling in secondi")
     p_setup.add_argument("--data-dir", default="./agent-data", help="Directory per inventario locale")
@@ -168,7 +168,7 @@ def main():
     p_add.add_argument("--username", default="admin", help="Username SSH")
     p_add.add_argument("--password", default="adminpw", help="Password SSH")
     p_add.add_argument("--secret", default="", help="Password enable/secret")
-    p_add.add_argument("--site-id", default="milano-vm", help="ID della sede")
+    p_add.add_argument("--probe-id", default="milano-vm", help="ID della sede")
     p_add.add_argument("--data-dir", default="./agent-data", help="Directory per inventario locale")
 
     # Subcommand: check
