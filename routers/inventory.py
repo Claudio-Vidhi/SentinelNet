@@ -73,6 +73,13 @@ class PromoteDeviceSchema(BaseModel):
     device_type: Optional[str] = None
     hostname: Optional[str] = None
 
+class DevicePair(BaseModel):
+    ip: str = Field(..., pattern=r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
+    tenant: str = "Generale"
+
+class DeviceBulkSchema(BaseModel):
+    devices: list[DevicePair] = Field(..., min_length=1, max_length=1000)
+
 # --- ROTTE DISPOSITIVI (INVENTARIO) ---
 
 @router.get("/api/local-devices")
@@ -359,6 +366,64 @@ def delete_device(payload: DeviceDelete, current_user = Depends(require_operator
     log_audit(f"Dispositivo '{payload.ip}' eliminato dall'inventario dall'utente '{current_user.get('sub')}'.")
     return {"status": "success"}
 
+
+def _bulk_pairs(payload: DeviceBulkSchema, current_user, rows: list) -> list:
+    """Every pair in scope and present in ``rows``, checked before anything is
+    written: one bad pair fails the whole request with nothing changed."""
+    known = {inventory_manager.device_pair(r) for r in rows}
+    pairs = []
+    for d in payload.devices:
+        assert_group_allowed(current_user, d.tenant)
+        if (d.tenant, d.ip) not in known:
+            raise HTTPException(status_code=404,
+                                detail=f"Dispositivo {d.ip} non trovato nel tenant '{d.tenant}'.")
+        pairs.append((d.tenant, d.ip))
+    return pairs
+
+
+def _audit_each(pairs: list, verb: str, current_user) -> None:
+    user = current_user.get('sub')
+    for tenant, ip in pairs:
+        log_audit(f"Dispositivo '{ip}' (gruppo '{tenant}') {verb} dall'utente '{user}'.")
+
+
+@router.get("/api/devices/decommissioned", dependencies=[Depends(require_tab("tab-devices"))])
+def list_decommissioned(current_user = Depends(get_current_user)):
+    scope = user_group_scope(current_user)
+    out = []
+    for d in inventory_manager.get_decommissioned_devices():
+        if scope is not None and (d.get('Group') or 'Generale') not in scope:
+            continue
+        for secret in ("Password", "Enable Secret", "SNMP Community"):
+            d.pop(secret, None)
+        out.append(d)
+    return {"devices": out}
+
+
+@router.post("/api/devices/decommission", dependencies=[Depends(require_tab("tab-devices"))])
+def decommission_devices(payload: DeviceBulkSchema, current_user = Depends(require_operator)):
+    pairs = _bulk_pairs(payload, current_user, inventory_manager.get_all_devices())
+    n = inventory_manager.decommission(pairs, current_user.get('sub'))
+    _audit_each(pairs, "dismesso", current_user)
+    return {"status": "success", "count": n}
+
+
+@router.post("/api/devices/reactivate", dependencies=[Depends(require_tab("tab-devices"))])
+def reactivate_devices(payload: DeviceBulkSchema, current_user = Depends(require_operator)):
+    pairs = _bulk_pairs(payload, current_user, inventory_manager.get_decommissioned_devices())
+    n = inventory_manager.reactivate(pairs)
+    _audit_each(pairs, "riattivato", current_user)
+    return {"status": "success", "count": n}
+
+
+@router.post("/api/devices/delete", dependencies=[Depends(require_tab("tab-devices"))])
+def delete_devices(payload: DeviceBulkSchema, current_user = Depends(require_operator)):
+    rows = inventory_manager.get_all_devices() + inventory_manager.get_decommissioned_devices()
+    pairs = _bulk_pairs(payload, current_user, rows)
+    n = inventory_manager.delete_devices(pairs)
+    _audit_each(pairs, "eliminato", current_user)
+    return {"status": "success", "count": n}
+
 @router.post("/api/rename-device", dependencies=[Depends(require_tab("tab-devices"))])
 def rename_device(payload: DeviceRenameSchema, current_user = Depends(require_operator)):
     """Rinomina un dispositivo gestito impostandone manualmente l'hostname (il
@@ -459,9 +524,12 @@ def promote_device(payload: PromoteDeviceSchema, current_user = Depends(require_
     existing = next((d for d in inventory_manager.get_all_devices() if d['IP'] == payload.ip), None)
     if existing:
         raise HTTPException(status_code=400, detail=f"Dispositivo {payload.ip} già in inventario.")
-    inventory_manager.add_or_update_device(
-        payload.ip, payload.vendor, "custom", "", "", "", payload.group
-    )
+    try:
+        inventory_manager.add_or_update_device(
+            payload.ip, payload.vendor, "custom", "", "", "", payload.group
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
     # Trasferisce l'eventuale classificazione manuale dal nodo scoperto all'IP.
     # Il nodo scoperto sta sotto 'Generale' (non era in inventario, quindi non
     # aveva una sede); da qui in poi appartiene alla sede in cui è stato promosso.
@@ -514,7 +582,10 @@ def reassign_device(payload: DeviceReassignSchema, current_user = Depends(requir
 
     old_group = target.get('Group', 'Generale')
     target['Group'] = payload.new_group
-    inventory_manager.safe_write_hosts_csv(devices)
+    try:
+        inventory_manager.safe_write_hosts_csv(devices)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
 
     log_audit(
         f"Dispositivo '{payload.ip}' spostato dal gruppo '{old_group}' "
