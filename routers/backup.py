@@ -92,7 +92,7 @@ def download_backup(ip_or_filename: str, current_user = Depends(require_operator
         devices = inventory_manager.get_all_devices()
         for ip_guess in (found or [ip_or_filename]):
             dev = next((d for d in devices if d['IP'] == ip_guess), None)
-            if dev is None or dev.get('Group', 'Generale') not in scope:
+            if dev is None or dev.get('Group', '') not in scope:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Backup non consentito per il tuo profilo."

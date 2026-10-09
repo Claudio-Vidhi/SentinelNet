@@ -233,7 +233,7 @@ def ping_monitor_status(current_user = Depends(get_current_user)):
         ips_in_scope = {
             (d.get("IP") or "").strip()
             for d in inventory_manager.get_all_devices()
-            if (d.get("Group") or "Generale") in scope
+            if (d.get("Group") or "") in scope
         }
         status["devices"] = [d for d in status["devices"] if d["ip"] in ips_in_scope]
         # Tri-state: "up" is None for a bastion-probe device (not measurable, see
@@ -636,8 +636,6 @@ def get_tenant_telemetry_settings(current_user = Depends(require_unscoped_admin)
     from services.inventory_manager import get_all_groups
     raw_groups = get_all_groups()
     groups = [g["name"] if isinstance(g, dict) else str(g) for g in raw_groups]
-    if "Generale" not in groups:
-        groups.insert(0, "Generale")
     return {g: get_tenant_telemetry(g) for g in groups}
 
 
@@ -646,7 +644,7 @@ def set_tenant_telemetry_settings(tenant_name: str, payload: TenantTelemetrySche
     """Aggiorna le impostazioni di telemetria per uno specifico tenant."""
     from services.tenant_telemetry import save_tenant_telemetry
     from services.inventory_manager import get_all_groups
-    if tenant_name != "Generale" and tenant_name not in get_all_groups():
+    if tenant_name not in get_all_groups():
         raise HTTPException(status_code=404, detail="Tenant non trovato.")
     return save_tenant_telemetry(tenant_name, payload.model_dump(), current_user.get("sub", "admin"))
 

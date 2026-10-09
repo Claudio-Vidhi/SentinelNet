@@ -119,7 +119,7 @@ async def mac_scan(payload: MacScanSchema, current_user = Depends(require_operat
         want_ips.add(payload.ip)
 
     def allowed(d):
-        g = d.get("Group") or "Generale"
+        g = d.get("Group") or ""
         if scope is not None and g not in scope:
             return False
         if payload.group and payload.group != "all" and g != payload.group:
@@ -231,7 +231,7 @@ def mac_list_overrides(current_user = Depends(get_current_user)):
     if scope is not None:
         # Filter, not 403: same view as the other scoped lists.
         allowed = {d["IP"] for d in inventory_manager.get_all_devices()
-                   if (d.get("Group") or "Generale") in scope}
+                   if (d.get("Group") or "") in scope}
         overrides = [o for o in overrides if o["switch_ip"] in allowed]
     return {"overrides": overrides}
 

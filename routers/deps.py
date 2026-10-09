@@ -147,7 +147,7 @@ def devices_in_scope(current_user) -> list:
     scope = user_group_scope(current_user)
     if scope is None:
         return devices
-    return [d for d in devices if (d.get("Group") or "Generale") in scope]
+    return [d for d in devices if d.get("Group") in scope]
 
 
 def assert_group_allowed(current_user, group):
@@ -173,14 +173,14 @@ def assert_device_allowed(current_user, ip, tenant=None):
 
     scope = user_group_scope(current_user)
     if scope is not None:
-        scope_matches = [d for d in all_matches if (d.get("Group") or "Generale") in scope]
+        scope_matches = [d for d in all_matches if d.get("Group") in scope]
         if not scope_matches:
             # Device exists in inventory but outside user's scope -> 403
-            assert_group_allowed(current_user, all_matches[0].get("Group", "Generale"))
+            assert_group_allowed(current_user, all_matches[0].get("Group"))
         if tenant:
-            scope_matches = [d for d in scope_matches if (d.get("Group") or "Generale") == tenant]
+            scope_matches = [d for d in scope_matches if d.get("Group") == tenant]
         if len(scope_matches) > 1:
-            tenants = ", ".join(sorted(m.get("Group", "Generale") for m in scope_matches))
+            tenants = ", ".join(sorted(m.get("Group", "") for m in scope_matches))
             raise HTTPException(
                 status_code=409,
                 detail=f"{ip} esiste in piu' tenant ({tenants}). Specificare il tenant."
@@ -188,18 +188,18 @@ def assert_device_allowed(current_user, ip, tenant=None):
         if not scope_matches:
             return None
         device = scope_matches[0]
-        assert_group_allowed(current_user, device.get("Group", "Generale"))
+        assert_group_allowed(current_user, device.get("Group"))
         return device
 
     # Unscoped user (admin)
     if tenant:
-        matches = [d for d in all_matches if (d.get("Group") or "Generale") == tenant]
+        matches = [d for d in all_matches if d.get("Group") == tenant]
         if not matches:
             return None
         return matches[0]
 
     if len(all_matches) > 1:
-        tenants = ", ".join(sorted(m.get("Group", "Generale") for m in all_matches))
+        tenants = ", ".join(sorted(m.get("Group", "") for m in all_matches))
         raise HTTPException(
             status_code=409,
             detail=f"{ip} esiste in piu' tenant ({tenants}). Specificare il tenant."

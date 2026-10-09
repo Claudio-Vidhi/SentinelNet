@@ -154,7 +154,7 @@ async def send_command(payload: CommandRequest, current_user = Depends(require_o
     devices = await asyncio.to_thread(inventory_manager.get_all_devices)
     target_device = next((d for d in devices if d['IP'] == payload.ip), None)
     if target_device:
-        assert_group_allowed(current_user, target_device.get('Group', 'Generale'))
+        assert_group_allowed(current_user, target_device.get('Group', ''))
         log_audit(f"Comando CLI '{payload.command}' richiesto su dispositivo '{payload.ip}' dall'utente '{current_user.get('sub')}' (One-Shot API).")
         # Dispositivo di una sede agent: il centrale non lo raggiunge via SSH.
         # Il comando passa dalla coda di relay e si attende (breve) l'esito
@@ -218,7 +218,7 @@ def start_bulk_command(payload: BulkCommandRequest, current_user = Depends(requi
         by_ip = {d['IP']: d for d in inventory_manager.get_all_devices()}
         for ip in payload.ips:
             dev = by_ip.get(ip)
-            if dev is not None and dev.get('Group', 'Generale') not in scope:
+            if dev is not None and dev.get('Group', '') not in scope:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail=f"Dispositivo '{ip}' in una sede non consentita per il tuo profilo."
@@ -366,7 +366,7 @@ async def ws_terminal(websocket: WebSocket, ip: str):
     # Scoping: l'utente del token OTP deve poter gestire la sede del dispositivo
     _scope = user_group_scope({"sub": username_from_otp, "role": _role})
     if _scope is not None:
-        if device.get('Group', 'Generale') not in _scope:
+        if device.get('Group', '') not in _scope:
             await websocket.send_text("[Accesso Negato] Sede non consentita per il tuo profilo.\r\n")
             await websocket.close(code=1008)
             return

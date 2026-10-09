@@ -67,10 +67,10 @@ class TestScopingPerSede(_Base):
         inventory_manager.set_device_meta("192.0.2.50", category="pc")
         self.assertIn("sede-a|192.0.2.50", self._assignments())
 
-    def test_a_node_outside_inventory_lands_in_generale(self):
+    def test_a_node_outside_inventory_lands_without_tenant(self):
         # Nodo scoperto via CDP/LLDP e mai promosso: non ha una sede propria.
         inventory_manager.set_device_meta("203.0.113.9", category="pc")
-        self.assertIn("Generale|203.0.113.9", self._assignments())
+        self.assertIn("|203.0.113.9", self._assignments())
 
     def test_clearing_one_tenant_leaves_the_other_alone(self):
         inventory_manager.set_device_meta("10.0.0.1", tenant="sede-a", category="pc")
@@ -81,12 +81,12 @@ class TestScopingPerSede(_Base):
         self.assertEqual(a["sede-b|10.0.0.1"]["category"], "pc")
 
     def test_promotion_moves_the_label_into_the_new_tenant(self):
-        # Il nodo scoperto sta sotto 'Generale'; promosso, appartiene alla sede.
+        # Il nodo scoperto non ha tenant; promosso, appartiene alla sede.
         inventory_manager.set_device_meta("203.0.113.9", category="pc")
         inventory_manager.migrate_assignment("203.0.113.9", "192.0.2.50",
                                              new_tenant="sede-a")
         a = self._assignments()
-        self.assertNotIn("Generale|203.0.113.9", a)
+        self.assertNotIn("|203.0.113.9", a)
         self.assertEqual(a["sede-a|192.0.2.50"]["category"], "pc")
 
 
@@ -108,9 +108,9 @@ class TestMigrazioneChiaviVecchie(_Base):
         a = self._assignments()
         self.assertEqual(a, {"sede-a|192.0.2.50": {"category": "pc"}})
 
-    def test_a_bare_key_with_no_device_falls_back_to_generale(self):
+    def test_a_bare_key_with_no_device_falls_back_to_empty_tenant(self):
         self._write_legacy({"203.0.113.9": {"category": "pc"}})
-        self.assertIn("Generale|203.0.113.9", self._assignments())
+        self.assertIn("|203.0.113.9", self._assignments())
 
     def test_the_import_runs_once_and_keeps_the_old_file(self):
         self._write_legacy({"192.0.2.50": {"category": "pc"}})
@@ -132,7 +132,7 @@ class TestMigrazioneChiaviVecchie(_Base):
         self.assertEqual(len(a), 3)
         self.assertEqual(a["sede-a|192.0.2.50"]["name"], "sw-a")
         self.assertEqual(a["sede-b|198.51.100.50"]["category"], "phone")
-        self.assertEqual(a["Generale|203.0.113.9"]["category"], "camera")
+        self.assertEqual(a["|203.0.113.9"]["category"], "camera")
 
 
 if __name__ == "__main__":

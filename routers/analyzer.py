@@ -75,7 +75,7 @@ def config_analyzer_device(ip: str, current_user = Depends(get_current_user)):
     # reads the freshest backup off disk regardless of inventory, and backups
     # outlive the device row. Same answer download_backup already gives.
     if scope is not None and (device is None
-                              or device.get('Group', 'Generale') not in scope):
+                              or device.get('Group', '') not in scope):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Dispositivo non consentito per il tuo profilo.")
@@ -83,7 +83,7 @@ def config_analyzer_device(ip: str, current_user = Depends(get_current_user)):
     # backup si cerca per solo IP in tutto l'albero e due clienti con lo
     # stesso indirizzo si leggerebbero la configurazione a vicenda.
     result = config_analyzer.analyze_device(
-        ip, device.get('Group', 'Generale') if device else None)
+        ip, device.get('Group') if device else None)
     if result is None:
         raise HTTPException(status_code=404, detail=f"Nessun backup trovato per {ip}.")
     return result

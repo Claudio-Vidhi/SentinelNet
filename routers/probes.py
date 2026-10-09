@@ -31,7 +31,7 @@ def _device_in_scope(current_user, device_ip: str) -> bool:
         return True
     device = next((d for d in inventory_manager.get_all_devices()
                    if d["IP"] == device_ip), None)
-    return device is not None and device.get("Group", "Generale") in scope
+    return device is not None and device.get("Group", "") in scope
 
 class ProbeCreateSchema(BaseModel):
     name: str
@@ -307,7 +307,7 @@ def list_probe_command_jobs_ep(probe_id: str, current_user = Depends(require_ope
         # Filtro, non 403: la lista è la vista dell'utente sulla sede, e deve
         # contenere ciò che gli è consentito vedere e nient'altro.
         allowed = {d["IP"] for d in inventory_manager.get_all_devices()
-                   if d.get("Group", "Generale") in scope}
+                   if d.get("Group", "") in scope}
         jobs = [j for j in jobs if j.get("device_ip") in allowed]
     return {"jobs": jobs}
 

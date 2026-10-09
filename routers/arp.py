@@ -36,7 +36,7 @@ async def arp_scan(payload: MacScanSchema, current_user = Depends(require_operat
         want_ips.add(payload.ip)
 
     def allowed(d):
-        g = d.get("Group") or "Generale"
+        g = d.get("Group") or ""
         if scope is not None and g not in scope:
             return False
         if payload.group and payload.group != "all" and g != payload.group:
