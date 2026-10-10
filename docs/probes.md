@@ -149,8 +149,10 @@ From the dashboard (**admin** account): **Probes** tab → *New probe*.
    *Note: all non-alphanumeric characters including spaces and underscores (`_`)
    are converted to hyphens (`-`). For example, `test_ub_agent` produces id `test-ub-agent`.*
 2. **Mode** — select `Agent probe`.
-3. **Subnets** — the probe's networks, e.g. `192.168.56.0/24` (for reference and
-   documentation).
+3. **Subnets** are not set here: they belong to locations (see
+   [organizations-locations.md](organizations-locations.md)). A probe reaches the
+   subnets of the locations whose default probe it is, and the Probes tab shows
+   them read-only.
 
 > **Important:** for **agent** probes, the agent authentication token (e.g.
 > `agent_tok_...`) is shown **exactly once**, at creation. Copy it immediately.
@@ -168,7 +170,7 @@ TOKEN=$(curl -s -X POST http://<CENTRAL_IP>:8000/api/auth/login \
 curl -X POST http://<CENTRAL_IP>:8000/api/probes \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name": "Milan-VM", "mode": "agent", "subnets": ["192.168.56.0/24"]}'
+  -d '{"name": "Milan-VM", "mode": "agent"}'
 ```
 
 ---
@@ -482,7 +484,7 @@ IDENTITY_ID=$(curl -s -X POST http://<CENTRAL_IP>:8000/api/identities \
 # 2. Create the bastion probe, referencing the identity by id
 curl -X POST http://<CENTRAL_IP>:8000/api/probes \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d "{\"name\": \"Customer A\", \"mode\": \"jump\", \"subnets\": [\"192.0.2.0/24\"], \
+  -d "{\"name\": \"Customer A\", \"mode\": \"jump\", \
        \"jump_host\": \"198.51.100.10\", \"jump_port\": 22, \"jump_identity\": \"$IDENTITY_ID\", \
        \"device_identity\": \"$DEVICE_IDENTITY_ID\"}"
 ```
