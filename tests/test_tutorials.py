@@ -63,7 +63,7 @@ class TestTutorialsAndOnboarding(unittest.TestCase):
                 self.assertTrue(f'id="{t}"' in self.html, f"#{t} not in dashboard.html")
 
     def test_probe_and_history_tours_exist(self):
-        for tour in ("probes:", "device_history:"):
+        for tour in ("probes:", "device_history:", "organizations:"):
             with self.subTest(tour=tour):
                 self.assertIn(tour, self.js)
         self.assertIn("tab: 'tab-probes'", self.js)

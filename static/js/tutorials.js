@@ -196,6 +196,37 @@
                 }
             ]
         },
+        organizations: {
+            id: 'organizations',
+            titleKey: 'tutHubOrgTitle',
+            descKey: 'tutHubOrgDesc',
+            badgeKey: 'tutBadgeOrg',
+            duration: 2,
+            icon: 'fa-folder-open',
+            steps: [
+                {
+                    tab: 'tab-groups',
+                    target: '#tab-groups',
+                    badgeKey: 'tutBadgeOrg',
+                    titleKey: 'tutOrgS1Title',
+                    textKey: 'tutOrgS1Text'
+                },
+                {
+                    tab: 'tab-groups',
+                    target: '#groupsTableBody',
+                    badgeKey: 'tutBadgeOrg',
+                    titleKey: 'tutOrgS2Title',
+                    textKey: 'tutOrgS2Text'
+                },
+                {
+                    tab: 'tab-provisioning',
+                    target: '#devLocationSelect',
+                    badgeKey: 'tutBadgeOrg',
+                    titleKey: 'tutOrgS3Title',
+                    textKey: 'tutOrgS3Text'
+                }
+            ]
+        },
         device_history: {
             id: 'device_history',
             titleKey: 'tutHubHistTitle',
