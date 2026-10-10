@@ -21,7 +21,7 @@ anteprima*.
 
 | Question | Decision |
 |---|---|
-| Storage | Hosts, decommissioned hosts, organizations, locations → SQLite in `device_meta.db` (already owned by `inventory_manager`, synchronous connection). Not `observability.db`: its asynchronous write queue (ADR-0004) breaks read-your-write. |
+| Storage | Hosts, decommissioned hosts, organizations, locations → a new SQLite file `inventory.db` next to the hosts path (synchronous connection, like `device_meta.db`). Its own file because its path follows `get_hosts_csv()`'s directory, which the agent and ~170 test files already pin. Not `observability.db`: its asynchronous write queue (ADR-0004) breaks read-your-write. |
 | `probes.json` | Stays JSON: it holds tokens and agent configuration. |
 | Public API | `inventory_manager` and `location_manager` keep their functions and return shapes; callers do not change. |
 | CSV | Exchange format only: user import, export, template, agent-inventory RPC payload. Never state. |
@@ -34,7 +34,7 @@ anteprima*.
 
 ## Storage
 
-Tables in `device_meta.db` (WAL, `foreign_keys = ON`, `busy_timeout`):
+Tables in `inventory.db` (WAL, `foreign_keys = ON`, `busy_timeout`). Host columns keep the CSV names, quoted, so a row read from the database is the same dict a row read from the CSV was:
 
 ```sql
 CREATE TABLE organizations (key TEXT PRIMARY KEY, name TEXT, description TEXT NOT NULL DEFAULT '');
@@ -43,21 +43,21 @@ CREATE TABLE locations (
   name TEXT NOT NULL, role TEXT NOT NULL, subnets TEXT NOT NULL DEFAULT '[]',
   probe TEXT NOT NULL DEFAULT 'central');
 CREATE TABLE hosts (
-  ip TEXT NOT NULL, grp TEXT NOT NULL,
-  location TEXT REFERENCES locations(id) ON DELETE RESTRICT,
-  vendor, profile, username, password, enable_secret, hostname, probe,
-  ssh_port, transports, snmp_community, snmp_disabled,   -- TEXT, as in the CSV
-  PRIMARY KEY (ip, grp));
+  "IP" TEXT NOT NULL, "Group" TEXT NOT NULL,
+  "Location" TEXT REFERENCES locations(id),          -- NULL when empty
+  "Vendor", "Profile", "Username", "Password", "Enable Secret", "Hostname",
+  "Probe", "SSH Port", "Transports", "SNMP Community", "SNMP Disabled",  -- TEXT
+  PRIMARY KEY ("IP", "Group"));
 CREATE TABLE decommissioned_hosts (
-  -- same columns as hosts plus today's decommission columns
-  location TEXT REFERENCES locations(id) ON DELETE RESTRICT);
+  -- same columns as hosts plus "Decommissioned", "Decommissioned By"
+);
 ```
 
-- `(ip, grp)` is today's identity (`_same_device`).
-- `hosts.location` is nullable at schema level: agent databases have no
+- `("IP", "Group")` is today's identity (`_same_device`).
+- `hosts."Location"` is nullable at schema level: agent databases have no
   locations. The "every new or moved device needs a location" rule stays in
   the boundaries, as today.
-- `hosts.grp` has no foreign key for the same reason (agent databases have no
+- `hosts."Group"` has no foreign key for the same reason (agent databases have no
   organization registry). Deleting an organization with devices stays refused
   by code, with the count.
 - Passwords stay encrypted with `crypto_vault`, as in the CSV.
@@ -67,17 +67,22 @@ CREATE TABLE decommissioned_hosts (
 
 ## Migration (one shot, at startup, central and agent)
 
-Runs when the tables are empty and the old files exist. Order: after
+Runs when `inventory.db` does not exist and at least one old file does. Order: after
 `probe_migration` and `location_migration`.
 
-1. Back up `groups.json`, `locations.json`, `network_hosts.csv`,
-   `decommissioned_hosts.csv` as `*.pre-sqlite`.
-2. In one transaction: organizations, locations, hosts, decommissioned hosts.
-   A row whose `Location` does not exist is a migration error. It is not
-   dropped: the migration stops and logs it, and the files stay
-   authoritative.
-3. Commit, then rename the old files to `*.migrated`.
-4. A second start finds the tables populated and does nothing.
+1. Read `groups.json`, `locations.json`, `network_hosts.csv`,
+   `decommissioned_hosts.csv`.
+2. Build the database in a temporary file, in one transaction:
+   organizations, locations, hosts, decommissioned hosts. A row whose
+   `Location` does not exist is a migration error. It is not
+   dropped: the migration stops, the old files stay untouched, and the
+   server refuses to start with a message naming the rows (running on an
+   empty inventory would be worse). Rows repeating an `(IP, Group)` keep
+   the last one, and the count is logged.
+3. Rename the database into place, then rename each source to
+   `*.pre-sqlite`: that file is both the backup and the sign it was
+   consumed. A crash between the two renames is finished at the next start.
+4. A second start finds `inventory.db` and does nothing.
 
 `data_config._STATE_FILES`, the factory reset, `check_no_private_data` and the
 `location_migration` / `probe_migration` readers are updated to the new
@@ -111,10 +116,12 @@ Rules, in order:
      `move` to it;
    - inside no location → `warning` «fuori dalle subnet della sede»; the row
      keeps its status.
-7. Same `(ip, org)` in inventory → `update` with `changes` (empty =
+7. Same `(ip, org)` among decommissioned devices → `error` «apparato
+   dismesso: riattivalo o eliminalo prima».
+8. Same `(ip, org)` in inventory → `update` with `changes` (empty =
    «nessuna modifica»); else `new`. Empty cells keep existing values, as
    `add_or_update_device` already does.
-8. `credentials_note`: own credentials › the probe's `device_identity` › the
+9. `credentials_note`: own credentials › the probe's `device_identity` › the
    global account › «nessuna: la connessione fallirà finché non assegni
    un'identità» (same chain as `core/device_credentials.py`).
 
