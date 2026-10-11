@@ -23,13 +23,11 @@ class _Isolated(unittest.TestCase):
         tmp = tempfile.mkdtemp(prefix="loc_bound_")
         for const, name in (
             ("HOSTS_CSV", "network_hosts.csv"),
-            ("GROUPS_JSON", "groups.json"),
         ):
             p = patch.object(inventory_manager, const, os.path.join(tmp, name))
             p.start()
             self.addCleanup(p.stop)
         for mod, const, name in (
-            (location_manager, "LOCATIONS_JSON", "locations.json"),
             (probe_manager, "PROBES_JSON", "probes.json"),
             (user_manager, "USERS_JSON", "users.json"),
         ):

@@ -12,16 +12,15 @@ from contextlib import closing
 from typing import Any, Dict, Optional, Tuple
 from security import crypto_vault
 from core import data_config
+from services import inventory_store
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_HOSTS_CSV = data_config.get_path("network_hosts.csv")
-_DEFAULT_GROUPS_JSON = data_config.get_path("groups.json")
 _DEFAULT_VERSION_DATA_FILE = data_config.get_path("detected_versions.json")
 _DEFAULT_VENDORS_FILE = data_config.get_path("vendors.json")
 
 HOSTS_CSV = _DEFAULT_HOSTS_CSV
-GROUPS_JSON = _DEFAULT_GROUPS_JSON
 VERSION_DATA_FILE = _DEFAULT_VERSION_DATA_FILE
 VENDORS_FILE = _DEFAULT_VENDORS_FILE
 
@@ -30,10 +29,15 @@ def get_hosts_csv() -> str:
         return HOSTS_CSV
     return data_config.get_path("network_hosts.csv")
 
-def get_groups_json() -> str:
-    if GROUPS_JSON != _DEFAULT_GROUPS_JSON:
-        return GROUPS_JSON
-    return data_config.get_path("groups.json")
+def inventory_db_path() -> str:
+    # ponytail: derived from the hosts path instead of its own constant. The
+    # agent and ~170 test files already pin get_hosts_csv() to a directory;
+    # they get their own database there without a second thing to patch.
+    return os.path.join(os.path.dirname(get_hosts_csv()), "inventory.db")
+
+
+def _db():
+    return closing(inventory_store.connect(inventory_db_path()))
 
 def get_vendors_file() -> str:
     if VENDORS_FILE != _DEFAULT_VENDORS_FILE:
@@ -125,25 +129,12 @@ def safe_json_write(filepath: str, data: dict):
     data_config.atomic_write(filepath, data, indent=4)
 
 def get_all_groups():
-    groups_json = get_groups_json()
-    if not os.path.exists(groups_json):
-        return {}
-    with open(groups_json, "r", encoding="utf-8") as f:
-        try:
-            data = json.load(f)
-            if isinstance(data, list):
-                # Convert legacy list to dictionary format
-                new_dict = {}
-                for g in data:
-                    new_dict[g] = {"description": f"Sede {g}"}
-                save_groups(new_dict)
-                return new_dict
-            return data
-        except Exception:
-            return {}
+    with _db() as conn:
+        return inventory_store.read_orgs(conn)
 
 def save_groups(groups_dict):
-    safe_json_write(get_groups_json(), groups_dict)
+    with _db() as conn:
+        inventory_store.write_orgs(conn, groups_dict)
 
 # --- Lettura tollerante di un CSV di inventario ---
 # Vive qui e non nel router perché la usano due chiamanti: l'import CSV di

@@ -29,12 +29,8 @@ class _Base(unittest.TestCase):
         tmp = tempfile.mkdtemp(prefix="decom_")
         self.csv = os.path.join(tmp, "network_hosts.csv")
         self.log = os.path.join(tmp, "device_history.jsonl")
-        groups = os.path.join(tmp, "groups.json")
         from services import location_manager
-        loc_file = os.path.join(tmp, "locations.json")
         for p in (patch.object(inventory_manager, "get_hosts_csv", lambda: self.csv),
-                  patch.object(inventory_manager, "get_groups_json", lambda: groups),
-                  patch.object(location_manager, "LOCATIONS_JSON", loc_file),
                   patch.object(device_history, "_path", lambda: self.log),
                   patch.object(device_history, "_audit_lines", lambda: [])):
             p.start()

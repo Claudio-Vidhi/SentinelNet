@@ -28,13 +28,12 @@ PW = "PasswordSicura1!"
 class _Isolated(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.mkdtemp(prefix="group_identity_")
-        for const, name in (("HOSTS_CSV", "network_hosts.csv"), ("GROUPS_JSON", "groups.json")):
+        for const, name in (("HOSTS_CSV", "network_hosts.csv"),):
             p = patch.object(inventory_manager, const, os.path.join(tmp, name))
             p.start()
             self.addCleanup(p.stop)
         from services import location_manager
-        for p in (patch.object(user_manager, "USERS_JSON", os.path.join(tmp, "users.json")),
-                  patch.object(location_manager, "LOCATIONS_JSON", os.path.join(tmp, "locations.json"))):
+        for p in (patch.object(user_manager, "USERS_JSON", os.path.join(tmp, "users.json")),):
             p.start()
             self.addCleanup(p.stop)
         security_manager._failed_attempts.clear()

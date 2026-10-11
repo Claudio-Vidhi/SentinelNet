@@ -14,9 +14,7 @@ class _Base(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.mkdtemp(prefix="loc_")
         for p in (
-            patch.object(location_manager, "LOCATIONS_JSON", os.path.join(tmp, "locations.json")),
             patch.object(inventory_manager, "HOSTS_CSV", os.path.join(tmp, "network_hosts.csv")),
-            patch.object(inventory_manager, "GROUPS_JSON", os.path.join(tmp, "groups.json")),
             patch.object(probe_manager, "PROBES_JSON", os.path.join(tmp, "probes.json")),
         ):
             p.start()

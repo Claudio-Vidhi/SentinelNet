@@ -24,7 +24,7 @@ B20 = {"ip": "192.0.2.20", "tenant": "tenant-b"}
 class _Isolated(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.mkdtemp(prefix="decom_api_")
-        for const, name in (("HOSTS_CSV", "network_hosts.csv"), ("GROUPS_JSON", "groups.json")):
+        for const, name in (("HOSTS_CSV", "network_hosts.csv"),):
             p = patch.object(inventory_manager, const, os.path.join(tmp, name))
             p.start()
             self.addCleanup(p.stop)
@@ -32,9 +32,6 @@ class _Isolated(unittest.TestCase):
         p.start()
         self.addCleanup(p.stop)
         from services import location_manager
-        p = patch.object(location_manager, "LOCATIONS_JSON", os.path.join(tmp, "locations.json"))
-        p.start()
-        self.addCleanup(p.stop)
         security_manager._failed_attempts.clear()
         inventory_manager.save_groups({"tenant-a": {"description": ""},
                                        "tenant-b": {"description": ""}})

@@ -24,9 +24,7 @@ class _IsolatedLocationsApi(unittest.TestCase):
         self._patches = [
             patch.object(data_config, "DATA_DIR", self.tmp),
             patch.object(user_manager, "USERS_JSON", os.path.join(self.tmp, "users.json")),
-            patch.object(location_manager, "LOCATIONS_JSON", os.path.join(self.tmp, "locations.json")),
             patch.object(inventory_manager, "HOSTS_CSV", os.path.join(self.tmp, "network_hosts.csv")),
-            patch.object(inventory_manager, "GROUPS_JSON", os.path.join(self.tmp, "groups.json")),
             patch.object(probe_manager, "PROBES_JSON", os.path.join(self.tmp, "probes.json")),
         ]
         for p in self._patches:
