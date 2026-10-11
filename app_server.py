@@ -255,6 +255,8 @@ from routers import locations as _locations_router
 app.include_router(_notifications_router.router)
 app.include_router(_interface_errors_router.router)
 app.include_router(_locations_router.router)
+from routers import blueprint as _blueprint_router
+app.include_router(_blueprint_router.router)
 
 _default_origins = f"http://localhost:{effective_port()},http://127.0.0.1:{effective_port()}"
 ALLOWED_ORIGINS = [
