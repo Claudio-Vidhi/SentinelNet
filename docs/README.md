@@ -42,6 +42,7 @@ for user-facing strings, logs and comments, English for identifiers — see
 | [live-flows-and-siem.md](live-flows-and-siem.md) | The two flow tabs in depth: ingest, endpoints, frontend, past mistakes |
 | [probes.md](probes.md) | Multi-site: Direct (central server) and probe agent, deployment, CLI relay |
 | [organizations-locations.md](organizations-locations.md) | Organizations and their physical locations: vocabulary, where subnets live, `inventory.db` storage, boundaries, upgrade migrations, per-location CSV import |
+| [network-blueprint.md](network-blueprint.md) | Network Blueprint: expected network per organization (locations, links, gateways), drafts, revisions and restore, presets, deterministic checks against observed routes, ARP and IPsec tunnels |
 
 ### Operations
 

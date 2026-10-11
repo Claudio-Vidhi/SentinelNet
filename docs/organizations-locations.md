@@ -164,3 +164,5 @@ is assigned.
 `POST /api/import-csv` (same body) imports `new` + `update` rows in **one
 inventory write** and returns `{imported, updated, skipped, failed}`; it writes
 one audit entry with the counts. Both routes need the Import tab permission.
+
+Links between locations, each location's gateway and the checks against the observed network live in the [Network Blueprint](network-blueprint.md).
