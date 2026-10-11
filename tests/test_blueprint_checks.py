@@ -114,3 +114,75 @@ class TestSubnetChecks(_Proposals):
         v = view({"milano": loc("Milano", "hq", ["10.10.0.0/16"]), "roma": loc("Roma", subnets=["10.10.5.0/24"])})
         sev = [f["severity"] for f in bc.run(v, obs())]
         self.assertEqual(sev, sorted(sev, key=lambda s: bc.SEVERITY_ORDER[s]))
+
+
+def routes(*rows, backup=False, error=""):
+    return {"rows": [{"network": n, "interface": i, "gateway": ""} for n, i in rows],
+            "error": error, "from_backup": backup}
+
+
+class TestRoutingChecks(_Proposals):
+    def setUp(self):
+        self.v = view({"milano": loc("Milano", "hq", ["10.10.0.0/16"], gateway="10.10.0.1"),
+                       "roma": loc("Roma", subnets=["10.20.0.0/16"], gateway="10.20.0.1")},
+                      link("milano", "roma"))
+
+    def test_route_present_both_ways(self):
+        r = {"10.10.0.1": routes(("10.20.0.0/16", "vpn-roma")), "10.20.0.1": routes(("10.0.0.0/8", "vpn-mi"))}
+        self.assertEqual(found(bc.run(self.v, obs(routes=r)), "link_no_route"), [])
+
+    def test_missing_live_is_error_backup_is_warning_default_is_warning(self):
+        r = {"10.10.0.1": routes(("10.99.0.0/16", "port1")), "10.20.0.1": routes(("10.10.0.0/16", "x"))}
+        f = found(bc.run(self.v, obs(routes=r)), "link_no_route")
+        self.assertEqual([(x["severity"], x["params"]["src"]) for x in f], [("error", "Milano")])
+        r["10.10.0.1"] = routes(("10.99.0.0/16", "port1"), backup=True)
+        f = found(bc.run(self.v, obs(routes=r)), "link_no_route")[0]
+        self.assertEqual((f["severity"], f["params"]["backup_only"]), ("warning", True))
+        r["10.10.0.1"] = routes(("0.0.0.0/0", "wan1"))
+        f = found(bc.run(self.v, obs(routes=r)), "link_no_route")[0]
+        self.assertEqual((f["severity"], f["params"]["via"]), ("warning", "default"))
+
+    def test_unknown_without_routes_or_gateway(self):
+        f = found(bc.run(self.v, obs()), "link_no_route")
+        self.assertEqual({x["severity"] for x in f}, {"unknown"})
+        self.assertEqual(len(f), 2)
+
+    def test_route_without_link_proposes_once_per_pair(self):
+        v = view(self.v["locations"])                             # no links
+        r = {"10.10.0.1": routes(("10.20.0.0/16", "vpn-roma")), "10.20.0.1": routes(("10.10.0.0/16", "wan1"))}
+        t = {"10.10.0.1": {"tunnels": [{"name": "vpn-roma", "remote_gw": "", "up": True, "dst": []}], "error": ""}}
+        fs = found(bc.run(v, obs(routes=r, tunnels=t)), "route_without_link")
+        self.assertEqual(len(fs), 1)
+        self.assertEqual(fs[0]["proposal"][0]["kind"], "vpn")
+        self.assertProposalsApply(v, fs)
+
+
+class TestVpnChecks(_Proposals):
+    def setUp(self):
+        self.v = view({"milano": loc("Milano", "hq", ["10.10.0.0/16"], gateway="10.10.0.1"),
+                       "roma": loc("Roma", subnets=["10.20.0.0/16"], gateway="10.20.0.1")},
+                      link("milano", "roma"))
+        self.devs = [dev("10.10.0.1", "milano", "fortinet"), dev("10.20.0.1", "roma", "cisco")]
+
+    def tunnels(self, *ts):
+        return {"10.10.0.1": {"tunnels": list(ts), "error": ""}}
+
+    def test_up_by_selector(self):
+        t = self.tunnels({"name": "to-roma", "remote_gw": "198.51.100.7", "up": True, "dst": ["10.20.0.0/16"]})
+        self.assertEqual(found(bc.run(self.v, obs(devices=self.devs, tunnels=t)), "vpn_link_down"), [])
+
+    def test_down_missing_unknown(self):
+        t = self.tunnels({"name": "to-roma", "remote_gw": "", "up": False, "dst": ["10.20.0.0/16"]})
+        f = found(bc.run(self.v, obs(devices=self.devs, tunnels=t)), "vpn_link_down")
+        self.assertEqual([(x["severity"], x["params"]["state"]) for x in f], [("error", "down")])
+        f = found(bc.run(self.v, obs(devices=self.devs, tunnels=self.tunnels())), "vpn_link_down")
+        self.assertEqual([x["params"]["state"] for x in f], ["missing"])
+        f = found(bc.run(self.v, obs(devices=self.devs)), "vpn_link_down")
+        self.assertEqual([(x["severity"], x["params"]["state"]) for x in f], [("unknown", "unknown")])
+
+    def test_tunnel_without_link(self):
+        v = view(self.v["locations"])
+        t = self.tunnels({"name": "to-roma", "remote_gw": "", "up": True, "dst": ["10.20.0.0/24"]})
+        fs = found(bc.run(v, obs(devices=self.devs, tunnels=t)), "tunnel_without_link")
+        self.assertEqual(fs[0]["proposal"], [{"op": "add_link", "a": "milano", "b": "roma", "kind": "vpn", "note": ""}])
+        self.assertProposalsApply(v, fs)

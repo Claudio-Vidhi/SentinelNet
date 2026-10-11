@@ -135,8 +135,126 @@ def _subnet_checks(locs: dict, devices: list, arp: list) -> list:
     return out
 
 
+def _route_nets(entry) -> list:
+    return [(n, row) for n, row in ((_net(r.get("network")), r) for r in entry.get("rows") or []) if n is not None]
+
+
+def _routing_checks(locs: dict, links: dict, routes: dict, tunnels: dict) -> list:
+    out = []
+    for lkid, k in sorted(links.items()):
+        for src, dst in ((k["a"], k["b"]), (k["b"], k["a"])):
+            gw = locs[src].get("gateway")
+            entry = routes.get(gw) if gw else None
+            names = {"src": locs[src]["name"], "dst": locs[dst]["name"]}
+            if not entry or not entry.get("rows"):
+                out.append(_f("link_no_route", "unknown", {"link": lkid},
+                              reason="no_gateway" if not gw else "no_routes", **names))
+                continue
+            nets = _route_nets(entry)
+            for s in _nets(locs[dst]["subnets"]):
+                if any(n.version == s.version and n.prefixlen > 0 and s.subnet_of(n) for n, _ in nets):
+                    continue
+                if any(n.version == s.version and n.prefixlen == 0 for n, _ in nets):
+                    sev, via = "warning", "default"
+                else:
+                    # The backup only has static routes: a dynamic route may
+                    # well exist, so a gap there is a warning, not an error.
+                    sev, via = ("warning" if entry.get("from_backup") else "error"), ""
+                out.append(_f("link_no_route", sev, {"link": lkid}, subnet=str(s), via=via,
+                              backup_only=bool(entry.get("from_backup")), **names))
+
+    linked = {frozenset((k["a"], k["b"])) for k in links.values()}
+    proposed = set()
+    for src, l in sorted(locs.items()):
+        gw = l.get("gateway")
+        entry = routes.get(gw) if gw else None
+        if not entry:
+            continue
+        tnames = {t["name"] for t in (tunnels.get(gw) or {}).get("tunnels") or []}
+        nets = _route_nets(entry)
+        for dst, m in sorted(locs.items()):
+            pair = frozenset((src, dst))
+            if dst == src or pair in linked or pair in proposed:
+                continue
+            dnets = _nets(m["subnets"])
+            hit = next((row for n, row in nets if n.prefixlen > 0
+                        and any(n.version == s.version and n.overlaps(s) for s in dnets)), None)
+            if hit:
+                proposed.add(pair)
+                kind = "vpn" if hit.get("interface") in tnames else "wan"
+                out.append(_f("route_without_link", "info", {"location": src},
+                              [{"op": "add_link", "a": src, "b": dst, "kind": kind, "note": ""}],
+                              src=l["name"], dst=m["name"], network=hit.get("network") or "",
+                              interface=hit.get("interface") or ""))
+    return out
+
+
+def _tunnel_matches(t: dict, other: dict) -> bool:
+    gw = other.get("gateway") or ""
+    if gw and t.get("remote_gw") == gw:
+        return True
+    dnets = _nets(other["subnets"])
+    return any(any(n.version == s.version and n.overlaps(s) for s in dnets) for n in _nets(t.get("dst")))
+
+
+def _vpn_checks(locs: dict, links: dict, tunnels: dict, devices: list) -> list:
+    out = []
+    vendor = {d.get("IP"): (d.get("Vendor") or "").lower() for d in devices}
+
+    def side_tunnels(loc_id):
+        """The location's gateway tunnels, or None when they are not known
+        (no FortiGate gateway, or never collected)."""
+        gw = locs[loc_id].get("gateway")
+        data = tunnels.get(gw) if gw else None
+        if not gw or vendor.get(gw) != "fortinet" or data is None:
+            return None
+        if data.get("error") and not data.get("tunnels"):
+            return None
+        return data.get("tunnels") or []
+
+    for lkid, k in sorted(links.items()):
+        if k["kind"] != "vpn":
+            continue
+        known = False
+        for side, other in ((k["a"], k["b"]), (k["b"], k["a"])):
+            ts = side_tunnels(side)
+            if ts is None:
+                continue
+            known = True
+            match = [t for t in ts if _tunnel_matches(t, locs[other])]
+            names = {"side": locs[side]["name"], "other": locs[other]["name"]}
+            if not match:
+                out.append(_f("vpn_link_down", "error", {"link": lkid}, state="missing", tunnel="", **names))
+            elif not any(t.get("up") for t in match):
+                out.append(_f("vpn_link_down", "error", {"link": lkid}, state="down",
+                              tunnel=match[0].get("name") or "", **names))
+        if not known:
+            out.append(_f("vpn_link_down", "unknown", {"link": lkid}, state="unknown", tunnel="",
+                          side=locs[k["a"]]["name"], other=locs[k["b"]]["name"]))
+
+    linked = {frozenset((k["a"], k["b"])) for k in links.values() if k["kind"] == "vpn"}
+    proposed = set()
+    for src, l in sorted(locs.items()):
+        for t in side_tunnels(src) or []:
+            if not t.get("up"):
+                continue
+            for dst, m in sorted(locs.items()):
+                pair = frozenset((src, dst))
+                if dst == src or pair in linked or pair in proposed or not _tunnel_matches(t, m):
+                    continue
+                proposed.add(pair)
+                out.append(_f("tunnel_without_link", "info", {"location": src},
+                              [{"op": "add_link", "a": src, "b": dst, "kind": "vpn", "note": ""}],
+                              src=l["name"], dst=m["name"], tunnel=t.get("name") or ""))
+    return out
+
+
 def run(view: dict, observed: dict) -> list:
     locs, links = view["locations"], view["links"]
     devices = observed.get("devices") or []
-    findings = _model_checks(locs, links, devices) + _subnet_checks(locs, devices, observed.get("arp") or [])
+    routes, tunnels = observed.get("routes") or {}, observed.get("tunnels") or {}
+    findings = (_model_checks(locs, links, devices)
+                + _subnet_checks(locs, devices, observed.get("arp") or [])
+                + _routing_checks(locs, links, routes, tunnels)
+                + _vpn_checks(locs, links, tunnels, devices))
     return sorted(findings, key=lambda f: (SEVERITY_ORDER[f["severity"]], f["code"]))
