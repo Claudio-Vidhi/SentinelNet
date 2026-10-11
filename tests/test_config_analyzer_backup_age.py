@@ -132,7 +132,7 @@ class TestInventoryWriteInvalidatesTheAnalysisCache(unittest.TestCase):
              patch.object(config_analyzer, "_backup_mtime", lambda ip: 111):
             config_analyzer.analyze_device_cached("192.0.2.20")
             self.assertEqual(config_analyzer._analyze_device_at.cache_info().currsize, 1)
-            inventory_manager.safe_write_hosts_csv([{"IP": "192.0.2.20"}])
+            inventory_manager.write_devices([{"IP": "192.0.2.20"}])
         self.assertEqual(config_analyzer._analyze_device_at.cache_info().currsize, 0)
 
 

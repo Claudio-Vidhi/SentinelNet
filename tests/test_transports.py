@@ -10,7 +10,6 @@ Telnet, rifiuto di porta/protocollo non validi con 400 in italiano.
 Eseguibile come script: `python test_transports.py`.
 """
 
-import csv
 import os
 import tempfile
 import unittest
@@ -21,6 +20,7 @@ from services import inventory_manager  # noqa: E402
 from collectors import mac_collector      # noqa: E402
 from routers import inventory as inventory_router  # noqa: E402         # noqa: E402
 from fastapi import HTTPException  # noqa: E402
+from tests.conftest import seed_inventory  # noqa: E402
 
 ADMIN = {"sub": "tester", "role": "admin"}
 
@@ -85,10 +85,7 @@ class TestUpsertRoundTrip(unittest.TestCase):
 
     def test_lazy_migration_of_legacy_csv(self):
         # Scrive a mano una riga legacy priva di 'Transports', poi la rilegge.
-        with open(self.csv_path, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=["IP", "Vendor", "SSH Port"])
-            w.writeheader()
-            w.writerow({"IP": "10.0.0.7", "Vendor": "cisco", "SSH Port": "22"})
+        seed_inventory(hosts=[{"IP": "10.0.0.7", "Vendor": "cisco", "SSH Port": "22"}])
         dev = next(d for d in inventory_manager.get_all_devices() if d["IP"] == "10.0.0.7")
         self.assertEqual(inventory_manager.parse_transports(dev), {"ssh": 22})
 

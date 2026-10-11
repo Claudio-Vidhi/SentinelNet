@@ -4,7 +4,7 @@
 """hosts.csv is read and written concurrently, and on Windows that raced.
 
 A triage runs up to 10 devices in parallel and each one writes the inventory
-back through safe_write_hosts_csv, while the dashboard polls
+back through write_devices, while the dashboard polls
 /api/local-devices, which reads it. Both the os.replace and its in-place
 Windows fallback leave the file briefly unopenable or truncated, so a reader
 landing in that window got a PermissionError (a 500 on /api/local-devices) or
@@ -37,7 +37,7 @@ class HostsCsvSurvivesConcurrentAccess(unittest.TestCase):
              "Group": "Generale", "Probe": "central", "Hostname": f"switch-{n:02d}"}
             for n in range(1, 21)
         ]
-        inventory_manager.safe_write_hosts_csv(self.devices)
+        inventory_manager.write_devices(self.devices)
 
     def test_readers_never_see_the_file_mid_write(self):
         errors = []
@@ -45,7 +45,7 @@ class HostsCsvSurvivesConcurrentAccess(unittest.TestCase):
         def write():
             for _ in range(40):
                 try:
-                    inventory_manager.safe_write_hosts_csv(self.devices)
+                    inventory_manager.write_devices(self.devices)
                 except Exception as e:  # noqa: BLE001 - the failure is the finding
                     errors.append(f"write: {e!r}")
 

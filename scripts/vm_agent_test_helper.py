@@ -40,7 +40,7 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-# Colonne canoniche: le stesse di inventory_manager.safe_write_hosts_csv.
+# Colonne canoniche: le stesse di inventory_manager.write_devices.
 # Le colonne inventate (Model, Driver, Tenant, Notes...) venivano scartate al
 # primo salvataggio dell'inventario e l'apparato finiva nel gruppo sbagliato.
 CSV_HEADERS = [

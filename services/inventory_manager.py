@@ -233,138 +233,64 @@ def _read_inventory_csv(raw: str):
     return out
 
 
-# hosts.csv has readers (every dashboard poll) and writers (triage runs up to
-# 10 devices in parallel, each calling update_version_inventory) with nothing
-# between them. On Windows both the os.replace below and its in-place fallback
-# make the file briefly unopenable, and a reader landing in that window dies
-# with PermissionError - a 500 on /api/local-devices, i.e. the whole inventory
-# blank. One lock over read and write closes it.
-# ponytail: in-process lock only. If a second process ever writes this file
-# (a stray Excel, two app instances on one data dir), move to a file lock.
+# Serializes inventory reads and writes in this process: a read-modify-write
+# (write_devices diffing against the rows it just read) must not interleave
+# with another writer.
 _hosts_csv_lock = threading.RLock()
 
 
-_HOSTS_FIELDS = ['IP', 'Vendor', 'Profile', 'Username', 'Password', 'Enable Secret', 'Group',
-                 'Hostname', 'Probe', 'Location', 'SSH Port', 'Transports', 'SNMP Community', 'SNMP Disabled']
+_HOSTS_FIELDS = inventory_store.HOST_FIELDS
+
+_version = 0
 
 
-def safe_write_hosts_csv(devices, exempt=frozenset(), relabel=None):
-    invalidate_device_ip_cache()  # l'inventario cambia: la cache IP→device decade
-    _invalidate_rows_cache()  # idem per le righe: due scritture nello stesso
-    # tick di clock, di pari dimensione, avrebbero la stessa firma di stat.
+def inventory_version() -> int:
+    """Changes on every inventory write; a cache signature for readers that
+    join against the inventory (core_engine's netmap)."""
+    return _version
+
+
+def write_devices(devices, exempt=frozenset(), relabel=None):
+    global _version
+    invalidate_device_ip_cache()
     from ai import config_analyzer
-    # idem: Vendor/tenant/hostname dell'inventario pilotano analyze_device, e
-    # la chiave del memo e' solo (ip, mtime del backup) — un Vendor corretto
-    # qui non la farebbe decadere da sola. Import locale per evitare un ciclo.
     config_analyzer._analyze_device_at.cache_clear()
-    hosts_csv = get_hosts_csv()
-    temp_filename = hosts_csv + ".tmp"
-    # 'Probe' identifica la sede multi-sede (default 'central'); 'extrasaction=ignore'
-    # tollera dizionari con chiavi extra (retrocompatibilità).
-    _fieldnames = _HOSTS_FIELDS
     with _hosts_csv_lock:
-        old_rows = _read_hosts_csv(hosts_csv) if os.path.exists(hosts_csv) else []
+        old_rows = get_all_devices()
         _refuse_decommissioned(devices, old_rows, exempt)
-        try:
-            with open(temp_filename, mode='w', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=_fieldnames, extrasaction='ignore')
-                writer.writeheader()
-                for d in devices:
-                    writer.writerow(d)
-            try:
-                os.replace(temp_filename, hosts_csv)
-            except PermissionError:
-                # Fallback per sistemi Windows
-                with open(hosts_csv, mode='w', newline='', encoding='utf-8') as f:
-                    writer = csv.DictWriter(f, fieldnames=_fieldnames, extrasaction='ignore')
-                    writer.writeheader()
-                    for d in devices:
-                        writer.writerow(d)
-                if os.path.exists(temp_filename):
-                    try:
-                        os.remove(temp_filename)
-                    except OSError:
-                        pass
-        except Exception as e:
-            if os.path.exists(temp_filename):
-                try:
-                    os.remove(temp_filename)
-                except OSError:
-                    pass
-            raise e
-        # The inventory is already on disk: a failing history append must
-        # not turn a saved device into an error for the caller. Diffed against
-        # the file as re-read, so both sides carry the same read defaults.
+        with _db() as conn:
+            inventory_store.write_hosts(conn, "hosts", old_rows, devices)
+        _rows_cache.pop(inventory_db_path(), None)
+        _version += 1
+        # Diffed against the rows as re-read, so both sides carry the same
+        # read defaults. The inventory is already saved: a failing history
+        # append must not turn it into an error for the caller.
         try:
             from services import device_history
-            device_history.record(old_rows, _read_hosts_csv(hosts_csv), relabel)
+            device_history.record(old_rows, get_all_devices(), relabel)
         except Exception:
             logger.exception("Storico dispositivi non aggiornato")
 
-# Righe gia' analizzate, con la firma del file da cui vengono. 64 chiamanti
-# rileggevano e ri-parsavano lo stesso CSV, alcuni dentro cicli e uno
-# (routers/deps.py) a ogni rotta con un IP. Misurato: 1.4x a 200 apparati,
-# 4.6x a 1000 -- il guadagno cresce con l'inventario, che e' dove serve.
-#
-# La chiave e' (mtime_ns, size) da un os.stat, non un flag da invalidare a
-# mano: cosi' decade anche per una scrittura che non passa da qui - l'agente
-# di sede, un Excel aperto sul file - che nessun invalidatore vedrebbe.
-_rows_cache_key = None
-_rows_cache: "list | None" = None
 
-
-def _read_hosts_csv(hosts_csv) -> list:
-    rows = []
-    with open(hosts_csv, mode='r', encoding='utf-8') as f:
-        for row in csv.DictReader(f):
-            # Inventari legacy senza colonna 'Probe': default alla sede centrale.
-            if not row.get('Probe'):
-                row['Probe'] = 'central'
-            # Inventari legacy senza colonna 'SSH Port': default 22.
-            if not row.get('SSH Port'):
-                row['SSH Port'] = '22'
-            rows.append(row)
-    return rows
-
-
-def _invalidate_rows_cache():
-    global _rows_cache_key, _rows_cache
-    _rows_cache_key = None
-    _rows_cache = None
+# ponytail: in-process cache invalidated by write_devices. A second process
+# writing the same inventory.db (none today: central and each agent own
+# theirs) would need PRAGMA data_version here.
+_rows_cache: dict = {}
 
 
 def get_all_devices():
-    """L'inventario come lista di dict, uno per apparato.
-
-    Torna sempre dict NUOVI: i chiamanti li modificano prima di riscriverli
-    (routers/inventory.py) e una riga condivisa con la cache la avvelenerebbe.
-    Copiare 1000 righe costa 0.2 ms contro i 2.8 di rileggere il file."""
-    global _rows_cache_key, _rows_cache
-    hosts_csv = get_hosts_csv()
+    """L'inventario come lista di dict, uno per apparato. Always new dicts:
+    callers modify them before writing back."""
+    path = inventory_db_path()
     with _hosts_csv_lock:
-        try:
-            st = os.stat(hosts_csv)
-        except OSError:
-            return []
-        # Una firma appena timbrata non e' affidabile. Il filesystem data i
-        # file con la SUA granularita': 100ns su NTFS, ma un secondo intero su
-        # ext3 e FAT. Due scritture di pari dimensione dentro lo stesso tick
-        # lasciano (mtime, size) identici, e la cache resterebbe stantia per
-        # sempre -- non per un secondo. Sotto la soglia si rilegge e non si
-        # memorizza; la soglia e' quindi tarata sul filesystem piu' grezzo su
-        # cui giriamo, non sul piu' fine.
-        # ponytail: 1.1s fisso. Misurare la granularita' vera all'avvio si puo'
-        # fare, ma costa una scrittura di prova per ogni data dir e il tetto
-        # dei filesystem in circolazione e' noto e fermo a un secondo.
-        if time.time_ns() - st.st_mtime_ns < 1_100_000_000:
-            return _read_hosts_csv(hosts_csv)
-        key = (hosts_csv, st.st_mtime_ns, st.st_size)
-        if key != _rows_cache_key:
-            _rows_cache_key, _rows_cache = key, _read_hosts_csv(hosts_csv)
-        return [dict(r) for r in _rows_cache]
+        rows = _rows_cache.get(path)
+        if rows is None:
+            with _db() as conn:
+                rows = _rows_cache[path] = inventory_store.read_hosts(conn, "hosts")
+        return [dict(r) for r in rows]
 
 # --- Cache IP → device per l'attribuzione tenant all'ingest (fase 3.5) ---
-# Invalidata a ogni scrittura dell'inventario (safe_write_hosts_csv).
+# Invalidata a ogni scrittura dell'inventario (write_devices).
 
 _device_ip_cache = None
 _device_tenant_ip_cache = None
@@ -533,7 +459,7 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
         if existing_hostname:
             new_device['Hostname'] = existing_hostname
         devices.append(new_device)
-        safe_write_hosts_csv(devices)
+        write_devices(devices)
 
 def delete_device(ip: str, group: Optional[str] = None):
     with _io_lock:
@@ -542,17 +468,16 @@ def delete_device(ip: str, group: Optional[str] = None):
             devices = [d for d in devices if not _same_device(d, ip, group)]
         else:
             devices = [d for d in devices if d.get('IP') != ip]
-        safe_write_hosts_csv(devices)
+        write_devices(devices)
 
 
 # --- Decommissioned devices -------------------------------------------------
-# A decommissioned device leaves network_hosts.csv for its own file next to
-# it, so the ~75 readers of get_all_devices() and every read-rewrite path stop
-# seeing it without a filter any of them could forget (spec 2026-10-09
+# A decommissioned device leaves the hosts table for its own table, so the
+# ~75 readers of get_all_devices() and every read-rewrite path stop seeing it without a filter any of them could forget (spec 2026-10-09
 # device-decommission). Moves write the copy first and remove second: an
 # interrupted move leaves the row in both files, never in neither. They hold
 # _io_lock like every other read-modify-write of the inventory.
-_DECOM_COLS = ['Decommissioned', 'Decommissioned By']
+_DECOM_COLS = inventory_store.DECOM_FIELDS
 
 
 def device_pair(row: dict) -> tuple:
@@ -560,27 +485,17 @@ def device_pair(row: dict) -> tuple:
     return (row.get("Group"), row.get("IP"))
 
 
-def get_decommissioned_csv() -> str:
-    return os.path.join(os.path.dirname(get_hosts_csv()), "decommissioned_hosts.csv")
-
-
 def get_decommissioned_devices() -> list:
-    path = get_decommissioned_csv()
-    with _hosts_csv_lock:
-        if not os.path.exists(path):
-            return []
-        return _read_hosts_csv(path)
+    with _hosts_csv_lock, _db() as conn:
+        return inventory_store.read_hosts(conn, "decommissioned_hosts")
 
 
 def _write_decommissioned(rows: list) -> None:
-    path = get_decommissioned_csv()
-    tmp = path + ".tmp"
-    with _hosts_csv_lock:
-        with open(tmp, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=_HOSTS_FIELDS + _DECOM_COLS, extrasaction="ignore")
-            w.writeheader()
-            w.writerows(rows)
-        os.replace(tmp, path)
+    global _version
+    with _hosts_csv_lock, _db() as conn:
+        current = inventory_store.read_hosts(conn, "decommissioned_hosts")
+        inventory_store.write_hosts(conn, "decommissioned_hosts", current, rows)
+        _version += 1
 
 
 def _refuse_decommissioned(devices, old_rows, exempt) -> None:
@@ -610,8 +525,8 @@ def decommission(pairs, actor: str) -> int:
         _write_decommissioned(kept + [dict(d, **{"Decommissioned": stamp,
                                                  "Decommissioned By": actor})
                                       for d in moving])
-        safe_write_hosts_csv([d for d in active if device_pair(d) not in want],
-                             relabel={"removed": "decommissioned"})
+        write_devices([d for d in active if device_pair(d) not in want],
+                      relabel={"removed": "decommissioned"})
     return len(moving)
 
 
@@ -627,9 +542,9 @@ def reactivate(pairs) -> int:
         restored = [{k: v for k, v in r.items() if k not in _DECOM_COLS}
                     for r in back if device_pair(r) not in have]
         if restored:
-            safe_write_hosts_csv(active + restored,
-                                 exempt={device_pair(r) for r in restored},
-                                 relabel={"added": "reactivated"})
+            write_devices(active + restored,
+                          exempt={device_pair(r) for r in restored},
+                          relabel={"added": "reactivated"})
         _write_decommissioned([r for r in dec if device_pair(r) not in want])
     return len(back)
 
@@ -640,7 +555,7 @@ def delete_devices(pairs) -> int:
         active = get_all_devices()
         n = sum(1 for d in active if device_pair(d) in want)
         if n:
-            safe_write_hosts_csv([d for d in active if device_pair(d) not in want])
+            write_devices([d for d in active if device_pair(d) not in want])
         dec = get_decommissioned_devices()
         gone = [r for r in dec if device_pair(r) in want]
         if gone:
@@ -1178,7 +1093,7 @@ def update_device_hostname(ip: str, hostname: str, group: Optional[str] = None):
                         changed = True
                     break
         if changed:
-            safe_write_hosts_csv(devices)
+            write_devices(devices)
 
 def bulk_assign_profile(ips: list, profile: str):
     """Assegna il valore Profile (es. 'identity:<id>' o 'default') a più
@@ -1197,7 +1112,7 @@ def bulk_assign_profile(ips: list, profile: str):
             d['Profile'] = profile
             assigned.append(ip)
         if assigned:
-            safe_write_hosts_csv(devices)
+            write_devices(devices)
     return assigned, not_found
 
 # --- UTILITIES GESTIONE GRUPPI (CRUD) ---

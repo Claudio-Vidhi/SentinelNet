@@ -145,5 +145,5 @@ def apply_probe_to_devices(loc_id: str) -> int:
                 d["Probe"] = loc["probe"]
                 n += 1
         if n:
-            inventory_manager.safe_write_hosts_csv(rows)
+            inventory_manager.write_devices(rows)
     return n

@@ -1253,7 +1253,7 @@ class DeviceProbeIsEditableFromInventory(unittest.TestCase):
         with mock.patch("services.probe_manager.get_probe",
                         return_value=probe),\
              mock.patch.object(inventory_manager, "get_all_devices", return_value=devices),\
-             mock.patch.object(inventory_manager, "safe_write_hosts_csv") as write,\
+             mock.patch.object(inventory_manager, "write_devices") as write,\
              mock.patch("routers.inventory.assert_group_allowed"),\
              mock.patch("routers.inventory.log_audit"):
             res = inv_router.reassign_device_probe(

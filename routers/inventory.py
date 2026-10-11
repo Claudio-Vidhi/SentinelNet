@@ -611,7 +611,7 @@ def reassign_device(payload: DeviceReassignSchema, current_user = Depends(requir
     target['Group'] = payload.new_group
     target['Location'] = payload.new_location.strip()
     try:
-        inventory_manager.safe_write_hosts_csv(devices)
+        inventory_manager.write_devices(devices)
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
 
@@ -645,7 +645,7 @@ def reassign_device_probe(payload: DeviceProbeSchema, current_user = Depends(req
 
     old_probe = target.get('Probe', 'central')
     target['Probe'] = payload.new_probe
-    inventory_manager.safe_write_hosts_csv(devices)
+    inventory_manager.write_devices(devices)
 
     log_audit(
         f"Dispositivo '{payload.ip}' spostato dalla sonda '{old_probe}' "

@@ -69,3 +69,31 @@ def make_location(org: str = "Generale", name: str = "Sede", probe: str = "centr
     loc = location_manager.create_location(org, name, probe=probe)
     return loc["id"]
 
+
+
+def seed_inventory(hosts=(), decommissioned=(), orgs=(), locations=None):
+    """Write rows straight into the inventory database under the current
+    get_hosts_csv() directory. Organizations named by rows or `orgs`, and
+    locations named by rows, are created; `locations` overrides their data."""
+    from services import inventory_store
+    rows = [dict({f: "" for f in inventory_store.HOST_FIELDS}, **h) for h in hosts]
+    dec = [dict({f: "" for f in inventory_store.HOST_FIELDS + inventory_store.DECOM_FIELDS}, **h)
+           for h in decommissioned]
+    with inventory_manager._db() as conn:
+        groups = inventory_store.read_orgs(conn)
+        for g in set(orgs) | {r["Group"] for r in rows + dec if r["Group"]} | \
+                {v["org"] for v in (locations or {}).values()}:
+            groups.setdefault(g, {"description": ""})
+        inventory_store.write_orgs(conn, groups)
+        locs = inventory_store.read_locations(conn)
+        locs.update(locations or {})
+        for r in rows + dec:
+            if r["Location"] and r["Location"] not in locs:
+                locs[r["Location"]] = {"org": r["Group"], "name": r["Location"],
+                                       "role": "branch", "subnets": [], "probe": "central"}
+        inventory_store.write_locations(conn, locs)
+        inventory_store.write_hosts(conn, "hosts", inventory_store.read_hosts(conn, "hosts"), rows)
+        inventory_store.write_hosts(conn, "decommissioned_hosts",
+                                    inventory_store.read_hosts(conn, "decommissioned_hosts"), dec)
+    inventory_manager._rows_cache.clear()
+    inventory_manager.invalidate_device_ip_cache()

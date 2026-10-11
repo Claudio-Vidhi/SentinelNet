@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Decommissioned devices live in their own file (spec 2026-10-09
+"""Decommissioned devices live in their own table (spec 2026-10-09
 device-decommission): every reader of the inventory stops seeing them, and
 no inventory write can lose them."""
 import os
@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 from security import crypto_vault
-from services import device_history, inventory_manager
+from services import device_history, inventory_manager, inventory_store
 
 A1 = ("tenant-a", "192.0.2.1")
 A2 = ("tenant-a", "192.0.2.2")
@@ -38,7 +38,7 @@ class _Base(unittest.TestCase):
         inventory_manager.save_groups({"tenant-a": {"description": ""},
                                        "tenant-b": {"description": ""}})
         self.loc_a = location_manager.create_location("tenant-a", "Sede A")["id"]
-        inventory_manager.safe_write_hosts_csv(
+        inventory_manager.write_devices(
             [_row("192.0.2.1", Location=self.loc_a), _row("192.0.2.2", Location=self.loc_a),
              _row("192.0.2.1", group="tenant-b", Location=self.loc_a)])
 
@@ -63,9 +63,13 @@ class TestMoves(_Base):
         self.assertEqual(d["Decommissioned By"], "op")
         self.assertRegex(d["Decommissioned"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
 
-    def test_file_sits_next_to_the_inventory(self):
-        self.assertEqual(os.path.dirname(inventory_manager.get_decommissioned_csv()),
+    def test_table_sits_in_the_inventory_database(self):
+        self.assertEqual(os.path.dirname(inventory_manager.inventory_db_path()),
                          os.path.dirname(self.csv))
+        inventory_manager.decommission([A1], "op")
+        with inventory_manager._db() as conn:
+            rows = inventory_store.read_hosts(conn, "decommissioned_hosts")
+        self.assertEqual([inventory_manager.device_pair(r) for r in rows], [A1])
 
     def test_reactivate_restores_the_identical_row(self):
         before = self.row(A1)
@@ -98,11 +102,9 @@ class TestGuard(_Base):
 
     def test_unrelated_write_keeps_the_decommissioned_file(self):
         inventory_manager.decommission([A1], "op")
-        with open(inventory_manager.get_decommissioned_csv(), encoding="utf-8") as f:
-            before = f.read()
+        before = inventory_manager.get_decommissioned_devices()
         inventory_manager.update_device_hostname("192.0.2.2", "sw-02", "tenant-a")
-        with open(inventory_manager.get_decommissioned_csv(), encoding="utf-8") as f:
-            self.assertEqual(f.read(), before)
+        self.assertEqual(inventory_manager.get_decommissioned_devices(), before)
 
     def test_late_triage_write_does_not_bring_it_back(self):
         inventory_manager.decommission([A1], "op")
@@ -110,7 +112,7 @@ class TestGuard(_Base):
         self.assertNotIn(A1, self.active())
 
     def test_interrupted_decommission_blocks_nothing_and_completes(self):
-        # Crash after the first write: the row is in both files.
+        # Crash after the first write: the row is in both tables.
         inventory_manager._write_decommissioned(
             [dict(self.row(A1), **{"Decommissioned": "2026-10-09T12:00:00Z",
                                    "Decommissioned By": "op"})])
@@ -123,8 +125,8 @@ class TestGuard(_Base):
         inventory_manager.decommission([A1], "op")
         row = {k: v for k, v in inventory_manager.get_decommissioned_devices()[0].items()
                if k not in ("Decommissioned", "Decommissioned By")}
-        inventory_manager.safe_write_hosts_csv(inventory_manager.get_all_devices() + [row],
-                                               exempt={A1})
+        inventory_manager.write_devices(inventory_manager.get_all_devices() + [row],
+                                        exempt={A1})
         self.assertEqual(inventory_manager.reactivate([A1]), 1)
         self.assertEqual(self.active(), [A1, A2, B1])
         self.assertEqual(self.decom(), [])
