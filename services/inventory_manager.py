@@ -188,7 +188,7 @@ def _delimiter(header_line: str) -> str:
     # Sniffer di csv: comodo ma sbaglia sui file a colonna singola. Qui si
     # sceglie il separatore piu' presente nell'intestazione, che e' la riga in
     # cui i separatori ci sono per definizione.
-    delimiter = max((",", ";", "	", "|"), key=header_line.count)
+    delimiter = max((",", ";", "\t", "|"), key=header_line.count)
     return delimiter if header_line.count(delimiter) else ","
 
 
