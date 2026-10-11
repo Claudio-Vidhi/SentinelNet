@@ -5,9 +5,10 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from routers.deps import assert_group_allowed, get_current_user, require_admin, require_tab
+from security import user_manager
 from security.security_manager import log_audit
 from services import blueprint, blueprint_assistant, inventory_manager
 
@@ -45,6 +46,11 @@ class InstructionsSchema(BaseModel):
     text: str
 
 
+class AssistantDraftSchema(BaseModel):
+    ops: List[dict]
+    note: str = Field(default="", max_length=500)
+
+
 def _org(org: str, user) -> None:
     assert_group_allowed(user, org)
     if org not in inventory_manager.get_all_groups():
@@ -60,6 +66,17 @@ def _call(fn, *args):
         raise HTTPException(status_code=404, detail={"message": str(e)})
     except ValueError as e:
         raise HTTPException(status_code=422, detail={"message": str(e), "index": getattr(e, "index", None)})
+
+
+def _drafter(current_user=Depends(get_current_user)):
+    """An admin session, or a read-only MCP session lent «bpd» (spec
+    2026-10-11 blueprint-assistant). The role is read from disk, not from the
+    token: a user demoted after the session opened loses the right at once."""
+    if not user_manager.is_admin(user_manager.get_role(current_user.get("sub"))) or \
+            (current_user.get("ro") and not current_user.get("bpd")):
+        raise HTTPException(status_code=403, detail="Serve un amministratore, o un client MCP autorizzato "
+                                                    "a proporre bozze del Blueprint.")
+    return current_user
 
 
 @router.get("/api/blueprint/{org}", dependencies=_TAB)
@@ -175,3 +192,16 @@ def instructions_ep(org: str, payload: InstructionsSchema, current_user=Depends(
     text = _call(blueprint_assistant.set_instructions, org, payload.text)
     log_audit(f"Blueprint '{org}': istruzioni dell'assistente aggiornate dall'utente '{current_user.get('sub')}'.")
     return {"instructions": text}
+
+
+@router.post("/api/blueprint/{org}/assistant-draft", dependencies=_TAB)
+def assistant_draft_ep(org: str, payload: AssistantDraftSchema, current_user=Depends(_drafter)):
+    """Append-only door for MCP clients: no preset, restore, apply, discard,
+    align. The source is always «assistant»."""
+    _org(org, current_user)
+    who = current_user.get("sub")
+    out = _call(blueprint.add_ops, org, payload.ops, "assistant", who)
+    note = " ".join(payload.note.split())
+    log_audit(f"Blueprint '{org}': {len(payload.ops)} modifiche proposte via MCP dall'utente '{who}'"
+              + (f" — nota: {note}" if note else "") + ".")
+    return out

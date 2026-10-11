@@ -68,16 +68,18 @@ def challenge_for(verifier: str) -> str:
     return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
 
 
-def create_code(username: str, challenge: str, label: str, read_only: bool) -> str:
+def create_code(username: str, challenge: str, label: str, read_only: bool, bp_draft: bool = False) -> str:
     """``label`` names the client on the grant list; ``read_only`` makes every
-    session of the grant a viewer session whatever the user's role."""
+    session of the grant a viewer session whatever the user's role;
+    ``bp_draft`` lets a read-only session append Blueprint draft operations
+    (spec 2026-10-11 blueprint-assistant)."""
     code = secrets.token_urlsafe(32)
     now = time.time()
     with _lock:
         for k in [k for k, v in _codes.items() if v["exp"] <= now]:
             _codes.pop(k, None)
         _codes[code] = {"user": username, "challenge": challenge, "label": label[:80],
-                        "read_only": read_only, "exp": now + CODE_TTL_SECONDS}
+                        "read_only": read_only, "bp_draft": bp_draft, "exp": now + CODE_TTL_SECONDS}
     return code
 
 
@@ -99,6 +101,7 @@ def redeem_code(code: str, verifier: str) -> Optional[dict]:
             "hash": _hash(token),
             "label": entry["label"],
             "read_only": entry["read_only"],
+            "bp_draft": entry["bp_draft"],
             "sep": user_manager.session_epoch(username),
             "created": int(time.time()),
             "last_used": None,
@@ -108,7 +111,7 @@ def redeem_code(code: str, verifier: str) -> Optional[dict]:
 
 
 def user_for_grant(token: str) -> Optional[dict]:
-    """``{"user", "read_only"}`` the grant token speaks for, or None if it
+    """``{"user", "read_only", "bp_draft"}`` the grant token speaks for, or None if it
     no longer does."""
     if not token.startswith(TOKEN_PREFIX):
         return None
@@ -127,7 +130,7 @@ def user_for_grant(token: str) -> Optional[dict]:
             return None
         g["last_used"] = int(time.time())
         _save(grants)
-    return {"user": user, "read_only": bool(g.get("read_only"))}
+    return {"user": user, "read_only": bool(g.get("read_only")), "bp_draft": bool(g.get("bp_draft"))}
 
 
 def list_grants(user: Optional[str] = None) -> list:

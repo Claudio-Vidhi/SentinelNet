@@ -4,8 +4,10 @@
 """/api/blueprint assistant routes (spec 2026-10-11 blueprint-assistant)."""
 import json
 import os
+import pathlib
 import tempfile
 import unittest
+from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -13,7 +15,8 @@ from fastapi.testclient import TestClient
 import app_server
 from ai import config_analyzer
 from routers.deps import CSRF_HEADER
-from security import security_manager, user_manager
+from security import mcp_grants, security_manager, user_manager
+from security.security_manager import verify_access_token
 from services import blueprint_observe, blueprint_store, inventory_manager, probe_manager
 from tests.conftest import seed_inventory
 
@@ -23,6 +26,9 @@ LOCS = {"milano": {"org": "acme", "name": "Milano", "role": "hq", "subnets": ["1
         "roma": {"org": "acme", "name": "Roma", "role": "branch", "subnets": [], "probe": "central"}}
 EMPTY_OBS = {"devices": [], "arp": [], "routes": {}, "tunnels": {}, "observed_at": None}
 SUBNET = [{"op": "add_subnet", "id": "roma", "subnet": "10.20.1.0/24"}]
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+VERIFIER = "v" * 64
+CHALLENGE = mcp_grants.challenge_for(VERIFIER)
 
 
 class _Api(unittest.TestCase):
@@ -114,3 +120,101 @@ class TestInstructions(_Api):
         self.assertEqual(self.c.put("/api/blueprint/acme/instructions", json={"text": "x" * 4001}).status_code, 422)
         self.assertEqual(self._as("view").put("/api/blueprint/acme/instructions", json={"text": "y"}).status_code, 403)
         self.assertEqual(self._as("admbeta").put("/api/blueprint/acme/instructions", json={"text": "y"}).status_code, 403)
+
+
+class _Mcp(_Api):
+    def setUp(self):
+        super().setUp()
+        p = patch.object(mcp_grants, "_path", return_value=os.path.join(self.tmp, "mcp_grants.json"))
+        p.start()
+        self.addCleanup(p.stop)
+        user_manager.create_user("oper", PW, role="operator")
+
+    def grant(self, client, **extra):
+        r = client.post("/api/mcp/authorize", json={"port": 38461, "state": "state-123", "challenge": CHALLENGE,
+                                                    "client": "Claude Desktop", **extra})
+        self.assertEqual(r.status_code, 200, r.text)
+        code = parse_qs(urlparse(r.json()["redirect"]).query)["code"][0]
+        r = TestClient(app_server.app).post("/api/mcp/token", json={"code": code, "verifier": VERIFIER})
+        self.assertEqual(r.status_code, 200, r.text)
+        return r.json()["token"]
+
+    def session(self, grant):
+        r = TestClient(app_server.app).post("/api/mcp/session", json={"token": grant})
+        self.assertEqual(r.status_code, 200, r.text)
+        return r.json()["access_token"]
+
+    def claims(self, client, **extra):
+        return verify_access_token(self.session(self.grant(client, **extra)))
+
+    def bearer(self, client, **extra):
+        c = TestClient(app_server.app, raise_server_exceptions=False)
+        c.headers["Authorization"] = "Bearer " + self.session(self.grant(client, **extra))
+        return c
+
+    def propose(self, c, org="acme", ops=SUBNET):
+        return c.post(f"/api/blueprint/{org}/assistant-draft", json={"ops": ops, "note": "da\nClaude"})
+
+
+class TestGrantPermission(_Mcp):
+    def test_bpd_only_for_read_only_admin_grants(self):
+        claims = self.claims(self.c, read_only=True, bp_draft=True)
+        self.assertEqual((claims.get("ro"), claims.get("bpd")), (True, True))
+        self.assertNotIn("bpd", self.claims(self.c, read_only=True))
+        self.assertNotIn("bpd", self.claims(self.c, read_only=False, bp_draft=True))   # full grant: not needed
+        self.assertNotIn("bpd", self.claims(self._as("oper"), read_only=True, bp_draft=True))
+        oper_grants = mcp_grants.list_grants("oper")
+        self.assertTrue(oper_grants)
+        self.assertFalse(any(mcp_grants._load()[g["id"]].get("bp_draft") for g in oper_grants))
+
+    def test_user_demoted_before_the_session_gets_no_bpd(self):
+        grant = self.grant(self.c, read_only=True, bp_draft=True)
+        user_manager.set_role("adm", "operator")
+        claims = verify_access_token(self.session(grant))
+        self.assertTrue(claims["ro"])
+        self.assertNotIn("bpd", claims)
+
+    def test_consent_offers_it_to_admins_only(self):
+        self.assertTrue(self.c.get("/api/mcp/authorize/info").json()["can_bp_draft"])
+        self.assertFalse(self._as("oper").get("/api/mcp/authorize/info").json()["can_bp_draft"])
+        html = (ROOT / "templates/mcp_authorize.html").read_text(encoding="utf-8")
+        js = (ROOT / "static/js/mcp-authorize.js").read_text(encoding="utf-8")
+        self.assertIn('id="mcpcBpDraft"', html)
+        self.assertIn('id="mcpcBpBox"', html)
+        self.assertIn("bp_draft:", js)
+
+
+class TestAssistantDraft(_Mcp):
+    def test_admin_session_appends_with_source_assistant(self):
+        with patch("routers.blueprint.log_audit") as audit:
+            r = self.propose(self.c)
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["draft"]["ops"][0]["source"], "assistant")
+        self.assertIn("da Claude", audit.call_args.args[0])
+        self.assertIn("1 modifiche", audit.call_args.args[0])
+
+    def test_read_only_grant_with_bp_draft_appends_and_nothing_else(self):
+        c = self.bearer(self.c, read_only=True, bp_draft=True)
+        self.assertEqual(self.propose(c).status_code, 200)
+        self.assertEqual(c.get("/api/auth/me").json()["role"], "viewer")
+        self.assertEqual(c.post("/api/blueprint/acme/draft", json={"ops": SUBNET}).status_code, 403)
+        self.assertEqual(c.post("/api/blueprint/acme/draft/apply", json={}).status_code, 403)
+        self.assertEqual(c.post("/api/blueprint/acme/assistant/describe", json={"text": "x"}).status_code, 403)
+
+    def test_read_only_grant_without_bp_draft_is_refused(self):
+        self.assertEqual(self.propose(self.bearer(self.c, read_only=True)).status_code, 403)
+
+    def test_demoted_user_loses_it_at_once(self):
+        c = self.bearer(self.c, read_only=True, bp_draft=True)
+        user_manager.set_role("adm", "operator")
+        self.assertEqual(self.propose(c).status_code, 403)
+
+    def test_other_tenant_viewer_and_operator_are_refused(self):
+        for who in ("admbeta", "view", "oper"):
+            with self.subTest(who=who):
+                self.assertEqual(self.propose(self._as(who)).status_code, 403)
+
+    def test_invalid_op_is_422_with_its_index(self):
+        r = self.propose(self.c, ops=[{"op": "add_link", "a": "roma", "b": "roma", "kind": "vpn"}])
+        self.assertEqual(r.status_code, 422)
+        self.assertEqual(r.json()["detail"]["index"], 0)
