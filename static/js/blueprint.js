@@ -503,7 +503,7 @@
             const res = await send(path, 'POST', body);
             if (!res || !res.ok) { $('bpAssistError').textContent = await errorText(res); return; }
             const out = await res.json();
-            showToast(tr('bpAddedToDraft', { n: out.added }), 'success');
+            if (out.added) showToast(tr('bpAddedToDraft', { n: out.added }), 'success');
             $('bpAssistNotes').textContent = out.notes || '';
             $('bpAssistNotes').hidden = !out.notes;
             await reloadBlueprint();
