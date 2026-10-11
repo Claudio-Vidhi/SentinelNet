@@ -57,7 +57,7 @@ from security import snmp_defaults          # noqa: E402,F401  TENANT_SNMP_JSON
 from security import user_manager           # noqa: E402,F401  USERS_JSON
 from services import fortigate_service      # noqa: E402,F401  TOKENS_FILE
 from services import inventory_manager      # noqa: E402,F401  hosts/groups/versions/vendors/categories/models
-from services import location_manager       # noqa: E402,F401  LOCATIONS_JSON
+from services import location_manager       # noqa: E402,F401  isolates via HOSTS_CSV
 from services import probe_manager           # noqa: E402,F401  PROBES_JSON, JOBS_DB
 from services import vlan_routing           # noqa: E402,F401  VLAN_ROUTING_JSON
 

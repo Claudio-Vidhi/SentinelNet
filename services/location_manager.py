@@ -11,22 +11,20 @@ import threading
 
 from core import data_config
 
-LOCATIONS_JSON = data_config.get_path("locations.json")
-
 ROLES = ("hq", "branch", "datacenter", "warehouse", "other")
 _lock = threading.RLock()
 
 
 def _load() -> dict:
-    try:
-        with open(LOCATIONS_JSON, encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
+    from services import inventory_manager, inventory_store
+    with inventory_manager._db() as conn:
+        return inventory_store.read_locations(conn)
 
 
 def _save(data: dict) -> None:
-    data_config.atomic_write(LOCATIONS_JSON, data)
+    from services import inventory_manager, inventory_store
+    with inventory_manager._db() as conn:
+        inventory_store.write_locations(conn, data)
 
 
 def _clean_subnets(subnets) -> list:

@@ -40,12 +40,10 @@ class ManualConfigApi(unittest.TestCase):
         prev = data_config.DATA_DIR
         data_config.DATA_DIR = _TMP
         cls.addClassCleanup(setattr, data_config, "DATA_DIR", prev)
-        for name, filename in (("get_hosts_csv", "network_hosts.csv"),
-                               ("get_groups_json", "groups.json")):
-            p = mock.patch.object(inventory_manager, name,
-                                  return_value=os.path.join(_TMP, filename))
-            p.start()
-            cls.addClassCleanup(p.stop)
+        p = mock.patch.object(inventory_manager, "get_hosts_csv",
+                              return_value=os.path.join(_TMP, "network_hosts.csv"))
+        p.start()
+        cls.addClassCleanup(p.stop)
         inventory_manager.add_group("tenant-a")
         inventory_manager.add_group("tenant-b")
         from services import location_manager

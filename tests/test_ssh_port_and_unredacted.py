@@ -31,6 +31,10 @@ class TestGetDevicePort(unittest.TestCase):
 class TestInventorySshPortRoundTrip(unittest.TestCase):
     def setUp(self):
         from services import inventory_manager, location_manager
+        p = mock.patch.object(inventory_manager, 'HOSTS_CSV',
+                              os.path.join(tempfile.mkdtemp(), 'hosts.csv'))
+        p.start()
+        self.addCleanup(p.stop)
         inventory_manager.add_group("Generale")
         loc = location_manager.list_locations("Generale")
         self.loc_id = loc[0]["id"] if loc else location_manager.create_location("Generale", "Sede Generale")["id"]
@@ -38,7 +42,7 @@ class TestInventorySshPortRoundTrip(unittest.TestCase):
     def test_round_trip_and_legacy_default(self):
         from services import inventory_manager
         with tempfile.TemporaryDirectory() as td:
-            csv_path = os.path.join(td, 'hosts.csv')
+            csv_path = inventory_manager.HOSTS_CSV  # the database lives next to it
             with mock.patch.object(inventory_manager, 'HOSTS_CSV', csv_path):
                 inventory_manager.add_or_update_device(
                     '10.9.9.9', 'cisco', 'custom', 'u', 'p', 's', 'Generale',
@@ -60,7 +64,7 @@ class TestInventorySshPortRoundTrip(unittest.TestCase):
         from services import inventory_manager
         from security import crypto_vault
         with tempfile.TemporaryDirectory() as td:
-            csv_path = os.path.join(td, 'hosts.csv')
+            csv_path = inventory_manager.HOSTS_CSV  # the database lives next to it
             with mock.patch.object(inventory_manager, 'HOSTS_CSV', csv_path):
                 inventory_manager.add_or_update_device(
                     '10.9.9.7', 'cisco', 'custom', 'u1', 'p1', 's1', 'Generale', location=self.loc_id)
@@ -75,7 +79,7 @@ class TestInventorySshPortRoundTrip(unittest.TestCase):
         from services import inventory_manager
         from security import crypto_vault
         with tempfile.TemporaryDirectory() as td:
-            csv_path = os.path.join(td, 'hosts.csv')
+            csv_path = inventory_manager.HOSTS_CSV  # the database lives next to it
             with mock.patch.object(inventory_manager, 'HOSTS_CSV', csv_path):
                 inventory_manager.add_or_update_device(
                     '10.9.9.6', 'cisco', 'custom', 'u1', 'p1', 's1', 'Generale', location=self.loc_id)
@@ -92,7 +96,7 @@ class TestInventorySshPortRoundTrip(unittest.TestCase):
         # get_device_credentials, che ricade sui default.
         from services import inventory_manager
         with tempfile.TemporaryDirectory() as td:
-            csv_path = os.path.join(td, 'hosts.csv')
+            csv_path = inventory_manager.HOSTS_CSV  # the database lives next to it
             with mock.patch.object(inventory_manager, 'HOSTS_CSV', csv_path):
                 inventory_manager.add_or_update_device(
                     '10.9.9.5', 'cisco', 'custom', '', '', '', 'Generale', location=self.loc_id)

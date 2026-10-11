@@ -74,13 +74,8 @@ class TestBulkAssignEndpoint(unittest.TestCase):
         fd, self.csv_path = tempfile.mkstemp(suffix=".csv")
         os.close(fd)
         os.remove(self.csv_path)
-        fd2, self.groups_path = tempfile.mkstemp(suffix=".json")
-        os.close(fd2)
-        os.remove(self.groups_path)
         self._orig_csv = inventory_manager.HOSTS_CSV
-        self._orig_groups = inventory_manager.GROUPS_JSON
         inventory_manager.HOSTS_CSV = self.csv_path
-        inventory_manager.GROUPS_JSON = self.groups_path
         inventory_manager.invalidate_device_ip_cache()
         # Patch identity_manager usato dal router
         self._orig_get_creds = provisioner_router.identity_manager.get_identity_credentials
@@ -90,10 +85,9 @@ class TestBulkAssignEndpoint(unittest.TestCase):
 
     def tearDown(self):
         inventory_manager.HOSTS_CSV = self._orig_csv
-        inventory_manager.GROUPS_JSON = self._orig_groups
         provisioner_router.identity_manager.get_identity_credentials = self._orig_get_creds
         provisioner_router.log_audit = self._orig_log
-        for p in (self.csv_path, self.groups_path):
+        for p in (self.csv_path,):
             if os.path.exists(p):
                 os.remove(p)
 
