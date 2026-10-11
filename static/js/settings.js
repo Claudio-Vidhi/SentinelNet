@@ -904,7 +904,7 @@
     // row (they gate the admin panels themselves). tab-incidents and
     // tab-fortigate are also requires-admin but are ordinary operational
     // tabs, not part of the admin-management group, so they stay excluded.
-    const ADMIN_GROUP_TABS = ['tab-users', 'tab-groups', 'tab-probes', 'tab-mcp', 'tab-settings'];
+    const ADMIN_GROUP_TABS = ['tab-users', 'tab-groups', 'tab-blueprint', 'tab-probes', 'tab-mcp', 'tab-settings'];
 
     // Of ADMIN_GROUP_TABS, only these route to endpoints gated by
     // require_unscoped_admin (spec D5): tab-users' own routes (create,

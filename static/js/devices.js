@@ -73,7 +73,7 @@
                 ${snmpCell}
                 <td>${currentRole === 'viewer'
                     ? '<span style="color:var(--text-muted)">—</span>'
-                    : `${renameBtn}<button data-action="delete-group" data-g="${escapeHtml(g)}" style="color:var(--danger); background:none; border:none; cursor:pointer;">${btnText}</button>`}</td>
+                    : `${canOpenTab('tab-blueprint') ? `<button data-action="open-blueprint" data-g="${escapeHtml(g)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:12px;">${escapeHtml(tr('btnOpenBlueprint'))}</button>` : ''}${renameBtn}<button data-action="delete-group" data-g="${escapeHtml(g)}" style="color:var(--danger); background:none; border:none; cursor:pointer;">${btnText}</button>`}</td>
             </tr>
             <tr class="org-locations"><td colspan="4">${renderOrgLocations(g)}</td></tr>`;
         });
@@ -181,6 +181,7 @@
         else if (action === 'edit-location') openLocationModal('', btn.dataset.loc);
         else if (action === 'delete-location') deleteLocation(btn.dataset.loc);
         else if (action === 'loc-import') openImportFor(btn.dataset.org, btn.dataset.loc);
+        else if (action === 'open-blueprint') { window.bpPendingOrg = g; switchTab('tab-blueprint'); }
     });
 
     // KPI row sopra la tabella inventario: conteggi sull'intera flotta (non filtrati

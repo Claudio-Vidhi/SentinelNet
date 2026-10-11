@@ -92,6 +92,7 @@ declare var toggleAuditSaveNameInput: any;
 
 // config-drift.js
 declare var loadConfigDriftTab: any;
+declare var loadBlueprintTab: any;
 declare var loadRoutesTab: any;
 declare var rtModel: any;
 
@@ -144,6 +145,8 @@ declare var resetTutorialsOnboarding: any;
 // also re-exposed on window: only the 'window' half belongs here, otherwise the
 // identifier is declared twice.
 interface Window {
+    loadBlueprintTab: any;   // blueprint.js, called by switchTab
+    bpPendingOrg: any;       // devices.js -> blueprint.js: organization to open
     openManualConfigWizard: any; // manual-config.js, opened from devices.js rows
     loadAssetOnce: any;      // core.js
     createWizard: any;       // ui-wizard.js
