@@ -23,29 +23,35 @@ class MigrationError(RuntimeError):
 def _rows(path, fields):
     if not os.path.exists(path):
         return []
-    with open(path, encoding="utf-8", newline="") as f:
+    with open(path, encoding="utf-8-sig", newline="") as f:
         return [{k: (r.get(k) or "") for k in fields} for r in csv.DictReader(f)]
 
 
 def _json(path):
     if not os.path.exists(path):
         return {}
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8-sig") as f:
         return json.load(f)
 
 
-def _consume(data_dir):
+def _consume(data_dir) -> list:
+    steps = []
     for name in _SOURCES:
         src = os.path.join(data_dir, name)
-        if os.path.exists(src):
+        if not os.path.exists(src):
+            continue
+        if os.path.exists(src + ".pre-sqlite"):
+            # Never overwrite a backup: the source stays where it is.
+            steps.append(f"{name} non importato: esiste già {name}.pre-sqlite, file lasciato al suo posto")
+        else:
             os.replace(src, src + ".pre-sqlite")
+    return steps
 
 
 def migrate(data_dir: str) -> list:
     db = os.path.join(data_dir, "inventory.db")
     if os.path.exists(db):
-        _consume(data_dir)   # a crash between the two renames left sources behind
-        return []
+        return _consume(data_dir)   # a crash between the two renames left sources behind
     if not any(os.path.exists(os.path.join(data_dir, n)) for n in _SOURCES):
         return []
     groups = _json(os.path.join(data_dir, "groups.json"))
@@ -69,9 +75,10 @@ def migrate(data_dir: str) -> list:
     if orphans:
         raise MigrationError("Migrazione inventario interrotta: righe con sede inesistente: "
                              + "; ".join(orphans))
-    dupes = len(hosts) - len({(r["IP"], r["Group"]) for r in hosts})
-    if dupes:
-        steps.append(f"network_hosts.csv: {dupes} righe duplicate (IP, organizzazione), tenuta l'ultima")
+    for name, rows in (("network_hosts.csv", hosts), ("decommissioned_hosts.csv", dec)):
+        dupes = len(rows) - len({(r["IP"], r["Group"]) for r in rows})
+        if dupes:
+            steps.append(f"{name}: {dupes} righe duplicate (IP, organizzazione), tenuta l'ultima")
     for v in locations.values():
         groups.setdefault(v["org"], {"description": ""})
     tmp = db + ".tmp"
@@ -90,7 +97,7 @@ def migrate(data_dir: str) -> list:
         conn.close()
     inventory_store._ready.discard(tmp)
     os.replace(tmp, db)
-    _consume(data_dir)
+    steps += _consume(data_dir)
     steps.insert(0, f"inventario su SQLite: {len(groups)} organizzazioni, {len(locations)} sedi, "
                     f"{len(hosts)} apparati, {len(dec)} dismessi")
     return steps

@@ -183,7 +183,8 @@ def load_config():
         # The agent never runs the central's lifespan, so its own inventory
         # keeps the pre-rename header column after a self-update.
         probe_migration._hosts_header(cfg["data_dir"])
-        inventory_migration.migrate(cfg["data_dir"])
+        for step in inventory_migration.migrate(cfg["data_dir"]):
+            print(f"[inventory] migrazione: {step}")
     return cfg
 
 

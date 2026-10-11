@@ -129,6 +129,15 @@ class TestClassify(unittest.TestCase):
                 self.assertEqual((r["vendor"], r["location"], r["probe"]),
                                  (d["Vendor"], d["Location"], d["Probe"]))
 
+    def test_update_keeps_profile(self):
+        seed_inventory(hosts=[{"IP": "10.20.1.12", "Group": "acme", "Location": "roma",
+                               "Vendor": "hp", "Profile": "identity:abc", "Probe": "central"}])
+        text = "ip,hostname\n10.20.1.12,rm-sw-03\n"
+        self.assertEqual(self.row(text)["changes"], {"Hostname": ["", "rm-sw-03"]})
+        csv_import.apply(text, "acme", "roma", {}, None)
+        d = next(d for d in im.get_all_devices() if d["IP"] == "10.20.1.12")
+        self.assertEqual((d["Profile"], d["Hostname"]), ("identity:abc", "rm-sw-03"))
+
     def test_apply_is_one_write(self):
         text = "ip\n" + "".join(f"10.20.{i // 250 + 10}.{i % 250 + 1}\n" for i in range(2000))
         with patch.object(im, "write_devices", wraps=im.write_devices) as w:

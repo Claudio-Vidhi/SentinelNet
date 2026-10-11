@@ -52,6 +52,19 @@ class TestHostsOnSqlite(unittest.TestCase):
         im._rows_cache.clear()
         self.assertEqual(im.get_all_devices(), [])
 
+    def test_duplicate_pair_refused_and_table_untouched(self):
+        im.add_group("beta")
+        beta_loc = make_location("beta", "Bologna")
+        self._add("192.0.2.10")
+        im.add_or_update_device("192.0.2.10", "hp", "custom", "u", "p", "", "beta", location=beta_loc)
+        devices = im.get_all_devices()
+        devices[0]["Group"], devices[0]["Location"] = "beta", beta_loc   # reassign acme's copy to beta
+        with self.assertRaisesRegex(ValueError, r"192\.0\.2\.10.*beta"):
+            im.write_devices(devices)
+        im._rows_cache.clear()
+        self.assertEqual(sorted((d["Group"], d["Vendor"]) for d in im.get_all_devices()),
+                         [("acme", "cisco"), ("beta", "hp")])
+
     def test_location_referenced_by_decommissioned_device_cannot_go(self):
         seed_inventory(decommissioned=[{"IP": "192.0.2.9", "Group": "acme", "Location": self.loc,
                                         "Decommissioned": "x", "Decommissioned By": "a"}])
