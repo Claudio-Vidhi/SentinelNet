@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from routers.deps import assert_group_allowed, get_current_user, require_admin, require_tab
 from security.security_manager import log_audit
-from services import blueprint, inventory_manager
+from services import blueprint, blueprint_assistant, inventory_manager
 
 router = APIRouter(tags=["Blueprint"])
 _TAB = [Depends(require_tab("tab-blueprint"))]
@@ -31,6 +31,18 @@ class DraftReplaceSchema(BaseModel):
 
 class ApplySchema(BaseModel):
     note: str = ""
+
+
+class AssistantDescribeSchema(BaseModel):
+    text: str
+
+
+class AssistantDeriveSchema(BaseModel):
+    use_ai: bool = False
+
+
+class InstructionsSchema(BaseModel):
+    text: str
 
 
 def _org(org: str, user) -> None:
@@ -132,3 +144,34 @@ def revision_ep(org: str, rev: int, current_user=Depends(get_current_user)):
 def diff_ep(org: str, a: int, b: int, current_user=Depends(get_current_user)):
     _org(org, current_user)
     return _call(blueprint.diff, org, a, b)
+
+
+# --- Assistant (spec 2026-10-11 blueprint-assistant) ------------------------
+# Every route below only appends to the draft; applying stays a human action.
+
+@router.post("/api/blueprint/{org}/assistant/describe", dependencies=_TAB)
+def assistant_describe_ep(org: str, payload: AssistantDescribeSchema, current_user=Depends(require_admin)):
+    _org(org, current_user)
+    who = current_user.get("sub")
+    out = _call(blueprint_assistant.describe, org, payload.text, who)
+    log_audit(f"Blueprint '{org}': {out['added']} modifiche proposte dall'assistente (descrizione) "
+              f"per l'utente '{who}'.")
+    return out
+
+
+@router.post("/api/blueprint/{org}/assistant/derive", dependencies=_TAB)
+def assistant_derive_ep(org: str, payload: AssistantDeriveSchema, current_user=Depends(require_admin)):
+    _org(org, current_user)
+    who = current_user.get("sub")
+    out = _call(blueprint_assistant.derive, org, who, payload.use_ai)
+    log_audit(f"Blueprint '{org}': {out['added']} modifiche ricavate dalle configurazioni "
+              f"per l'utente '{who}'.")
+    return out
+
+
+@router.put("/api/blueprint/{org}/instructions", dependencies=_TAB)
+def instructions_ep(org: str, payload: InstructionsSchema, current_user=Depends(require_admin)):
+    _org(org, current_user)
+    text = _call(blueprint_assistant.set_instructions, org, payload.text)
+    log_audit(f"Blueprint '{org}': istruzioni dell'assistente aggiornate dall'utente '{current_user.get('sub')}'.")
+    return {"instructions": text}
