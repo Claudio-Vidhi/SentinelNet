@@ -106,7 +106,8 @@ def _renames(st: dict, derived: list) -> list:
     data = classification_assist._extract_json(answer) or {}
     out = []
     for op in data.get("ops") if isinstance(data.get("ops"), list) else []:
-        if not isinstance(op, dict) or op.get("op") != "update_location" or op.get("id") not in view["locations"]:
+        if (not isinstance(op, dict) or op.get("op") != "update_location" or not isinstance(op.get("id"), str)
+                or op.get("id") not in view["locations"]):
             continue
         fields = op.get("fields") if isinstance(op.get("fields"), dict) else {}
         fields = {k: v for k, v in fields.items() if k in ("name", "role")}

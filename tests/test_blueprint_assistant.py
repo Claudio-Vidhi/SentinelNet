@@ -162,6 +162,7 @@ class TestDerive(_Base):
                          {"op": "update_location", "id": "milano", "fields": {"role": "datacenter"}},
                          {"op": "add_subnet", "id": "roma", "subnet": "10.99.0.0/16"},
                          {"op": "update_location", "id": "zara", "fields": {"name": "Zara"}},
+                         {"op": "update_location", "id": ["roma"], "fields": {"name": "X"}},
                          "rinomina tutto"]))
         out = blueprint_assistant.derive("acme", "adm", use_ai=True)
         self.assertEqual(out["added"], 4)
