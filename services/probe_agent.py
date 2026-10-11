@@ -50,7 +50,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from services import inventory_manager
-from core import core_engine, probe_migration
+from core import core_engine, inventory_migration, probe_migration
 from collectors import arp_collector, mac_collector
 
 
@@ -183,6 +183,7 @@ def load_config():
         # The agent never runs the central's lifespan, so its own inventory
         # keeps the pre-rename header column after a self-update.
         probe_migration._hosts_header(cfg["data_dir"])
+        inventory_migration.migrate(cfg["data_dir"])
     return cfg
 
 

@@ -27,12 +27,12 @@ _STATE_FILES = [
     "redundancy.db-wal", "secret.key", "probes.json", "users.json",
     "vendors.json", "detected_versions.json", "device_models.json",
     "device_categories.json", "network_hosts.csv", "decommissioned_hosts.csv",
-    "locations.json",
+    "locations.json", "inventory.db", "inventory.db-wal", "inventory.db-shm",
 ]
 
 # Sensitive files to protect with restrictive ACLs.
 _SENSITIVE_FILES = {"secret.key", "jwt_secret.key", "users.json",
-                    "probes.json", "mac_history.db"}
+                    "probes.json", "mac_history.db", "inventory.db"}
 
 
 # Well-known SIDs, not account names. Granting by %USERNAME% worked from
