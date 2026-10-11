@@ -724,13 +724,18 @@ def analyze_fortios_config(content):
                 "distance": _forti_set1(n, 'distance'),
             })
 
-    # --- IPsec VPN (phase 1 / phase 2 names) ---
+    # --- IPsec VPN (phase 1 / phase 2 names; phase-1 peers) ---
     phase1 = []
     phase2 = []
+    # The peer of each phase 1, for the Blueprint assistant (spec 2026-10-11
+    # blueprint-assistant); phase1 stays the list of names its readers expect.
+    peers = []
     for sec in ('vpn ipsec phase1-interface', 'vpn ipsec phase1'):
         node = _forti_get(root, sec)
         if node:
             phase1.extend(node["children"].keys())
+            peers.extend({"name": name, "remote_gw": _forti_set1(n, 'remote-gw')}
+                         for name, n in node["children"].items())
     for sec in ('vpn ipsec phase2-interface', 'vpn ipsec phase2'):
         node = _forti_get(root, sec)
         if node:
@@ -806,7 +811,7 @@ def analyze_fortios_config(content):
         "service_groups": service_groups,
         "vips": vips,
         "routing": {"static": static_routes},
-        "vpn": {"phase1": phase1, "phase2": phase2},
+        "vpn": {"phase1": phase1, "phase2": phase2, "peers": peers},
         "validation": {
             "policy_findings": policy_findings(content, 'fortios'),
             "any_any_policies": any_any,

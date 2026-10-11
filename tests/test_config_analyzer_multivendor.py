@@ -343,5 +343,25 @@ class AnalyzerFailureIsNotACleanConfig(unittest.TestCase):
         self.assertNotIn("error", fortios.analyze(FORTIOS))
 
 
+class TestFortiosPhase1Peers(unittest.TestCase):
+    """Blueprint assistant (spec 2026-10-11): the peer of each phase 1."""
+
+    CFG = ('config vpn ipsec phase1-interface\n'
+           '    edit "to-roma"\n'
+           '        set interface "wan1"\n'
+           '        set remote-gw 198.51.100.2\n'
+           '    next\n'
+           '    edit "dialup"\n'
+           '        set type dynamic\n'
+           '    next\n'
+           'end\n')
+
+    def test_remote_gw_per_phase1(self):
+        r = ca.analyze_fortios_config(self.CFG)
+        self.assertEqual(r["vpn"]["peers"], [{"name": "to-roma", "remote_gw": "198.51.100.2"},
+                                             {"name": "dialup", "remote_gw": ""}])
+        self.assertEqual(r["vpn"]["phase1"], ["to-roma", "dialup"])
+
+
 if __name__ == "__main__":
     unittest.main()
