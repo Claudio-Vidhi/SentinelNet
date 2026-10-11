@@ -94,7 +94,7 @@
             <td style="font-size:12px;">${(l.subnets || []).map(escapeHtml).join(', ') || '—'}</td>
             <td>${escapeHtml(probeName(l.probe))}</td>
             <td>${l.devices || 0}</td>
-            <td style="white-space:nowrap;">${currentRole !== 'viewer'
+            <td style="white-space:nowrap;">${currentRole !== 'viewer' && canOpenTab('tab-import')
                 ? `<button type="button" class="inv-icon-btn" data-action="loc-import" data-org="${escapeHtml(l.org)}" data-loc="${escapeHtml(l.id)}" title="${escapeHtml(tr('locImportDevices'))}" aria-label="${escapeHtml(tr('locImportDevices'))}"><i class="fa-solid fa-file-import"></i></button>` : ''}${canEdit
                 ? `<button type="button" class="inv-icon-btn" data-action="edit-location" data-loc="${escapeHtml(l.id)}" title="${escapeHtml(tr('btnEditLocation'))}" aria-label="${escapeHtml(tr('btnEditLocation'))}"><i class="fa-solid fa-pen"></i></button>
                    <button type="button" class="inv-icon-btn danger" data-action="delete-location" data-loc="${escapeHtml(l.id)}" title="${escapeHtml(tr('btnDeleteLocation'))}" aria-label="${escapeHtml(tr('btnDeleteLocation'))}"><i class="fa-solid fa-trash-can"></i></button>`
@@ -1977,6 +1977,7 @@
 
     // text: the file; decisions: per-row answers to the preview's action buttons.
     const importState = { text: '', decisions: {}, filter: 'all', preview: null };
+    let importPreviewSeq = 0;   // only the newest preview response may render
 
     function showCsvFile(file) {
         if (!csvDropText) return;
@@ -2085,20 +2086,28 @@
 
     async function runImportPreview() {
         if (!importState.text) return;
-        const res = await apiFetch('/api/import-csv/preview', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: importBody()
-        });
-        if (!res) return;
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            importState.preview = null;
+        const seq = ++importPreviewSeq;
+        try {
+            const res = await apiFetch('/api/import-csv/preview', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: importBody()
+            });
+            if (!res || seq !== importPreviewSeq) return;
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                if (seq !== importPreviewSeq) return;
+                importState.preview = null;
+                renderImportPreview();
+                renderCsvImportResult(null, err.detail || tr('alertImportCsvError'));
+                return;
+            }
+            const data = await res.json();
+            if (seq !== importPreviewSeq) return;
+            importState.preview = data;
+            document.getElementById('csvImportResult').style.display = 'none';
             renderImportPreview();
-            renderCsvImportResult(null, err.detail || tr('alertImportCsvError'));
-            return;
+        } catch (err) {
+            if (seq === importPreviewSeq) renderCsvImportResult(null, `${tr('alertError')}${err}`);
         }
-        importState.preview = await res.json();
-        document.getElementById('csvImportResult').style.display = 'none';
-        renderImportPreview();
     }
 
     function loadImportFile(file) {
@@ -2137,10 +2146,11 @@
         };
     }
 
-    importOrgSelect?.addEventListener('change', () => { fillImportLocations(); runImportPreview(); });
+    importOrgSelect?.addEventListener('change', () => { fillImportLocations(); importState.decisions = {}; runImportPreview(); });
     importLocationSelect?.addEventListener('change', () => {
         const loc = locationById(importLocationSelect.value);
         if (loc && !importOrgSelect.value) importOrgSelect.value = loc.org;
+        importState.decisions = {};
         renderImportChips();
         runImportPreview();
     });
@@ -2179,7 +2189,7 @@
             </tr>`).join('');
         box.innerHTML = `
             <div style="padding:12px 14px; border-radius:0; border:1px solid ${failed.length ? 'var(--warning)' : 'var(--success)'}; background:${failed.length ? 'color-mix(in srgb, var(--warning) 10%, transparent)' : 'color-mix(in srgb, var(--success) 10%, transparent)'}; font-size:13px;">
-                ${escapeHtml(tr('importResult', { imported: (result.imported || []).length, updated: (result.updated || []).length, skipped: (result.skipped || []).length }))}${failed.length ? ` · <strong>${failed.length}</strong> ${tr('devRowsSkipped')}` : ''}
+                ${escapeHtml(tr('importResult', { imported: (result.imported || []).length, updated: (result.updated || []).length, skipped: (result.skipped || []).length, failed: failed.length }))}
             </div>
             ${failed.length ? `
             <div class="table-container" style="margin-top:10px;">

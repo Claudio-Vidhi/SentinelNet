@@ -34,6 +34,7 @@ class TestImportUi(unittest.TestCase):
         self.assertIn("window.openImportFor =", DEVICES)
         self.assertIn("openImportFor", GLOBALS)
         self.assertIn('data-action="loc-import"', DEVICES)
+        self.assertIn("canOpenTab('tab-import')", DEVICES)
 
     def test_every_key_in_both_dictionaries(self):
         keys = set(re.findall(r"tr\('((?:import[A-Za-z_]*|btnImportDevices|locImportDevices))'", DEVICES))

@@ -1290,8 +1290,9 @@ class TestImportTabRestyle(unittest.TestCase):
         # concatenates dashboard.html + all static js/css.
         html = frontend_source()
         # The click handler (addEventListener, not onclick) and its reporting
-        # path must survive byte-for-byte -- restyle must not touch JS here.
+        # path must stay wired to the preview state (importState) and the same endpoint.
         self.assertIn("btnUploadCsv.addEventListener('click'", html)
+        self.assertIn("apiFetch('/api/import-csv', {", html)
         self.assertIn("document.getElementById('csvFileInput')", html)
         self.assertIn('csv_data: importState.text', html)
 
