@@ -296,7 +296,8 @@
     // `id` set: the location exists and saving yields update_location with
     // the fields that changed. `op` prefills from a proposal or a draft op.
     function openLocationModal(id, op, onSave) {
-        const base = id ? bpState.locations[id] : { name: '', role: 'branch', subnets: [], probe: 'central', gateway: '' };
+        // Diff against the preview: what applies after the ops already in the draft.
+        const base = id ? (model().locations[id] || bpState.locations[id]) : { name: '', role: 'branch', subnets: [], probe: 'central', gateway: '' };
         const v = Object.assign({}, base, { subnets: [...(base.subnets || [])] });
         if (op && op.op === 'create_location') Object.assign(v, op);
         if (op && op.op === 'update_location') Object.assign(v, op.fields);
@@ -336,6 +337,9 @@
         const out = Object.entries(bpState.locations).map(([id, l]) => [id, l.name]);
         draftOps().filter((o) => o.op === 'create_location' && o.ref)
             .forEach((o) => out.push([o.ref, `${o.name} (${tr('bpInDraft')})`]));
+        // Proposals may name a location only the preview has (its slug, not a ref).
+        Object.entries(model().locations).filter(([id]) => !(id in bpState.locations))
+            .forEach(([id, l]) => out.push([id, `${l.name} (${tr('bpInDraft')})`]));
         return out;
     }
 
@@ -388,7 +392,10 @@
 
     async function showConflict() {
         await reloadBlueprint();
-        const res = await apiFetch(api(`/diff?a=${bpState.draft.base_rev}&b=${bpState.rev}`));
+        // Draft discarded elsewhere: nothing left to apply.
+        if (!bpState.draft) { closeModal('bpDraftModal'); return; }
+        const res = bpState.draft.base_rev
+            ? await apiFetch(api(`/diff?a=${bpState.draft.base_rev}&b=${bpState.rev}`)) : null;
         $('bpConflictDiff').innerHTML = res && res.ok ? renderDiff(await res.json()) : '';
         $('bpConflict').hidden = false;
     }
@@ -531,7 +538,8 @@
         const ops = draftOps().slice();
         if (b.dataset.action === 'bp-op-remove') {
             ops.splice(i, 1);
-            replaceOps(ops).then(renderDraftOps);
+            // PUT [] deletes the draft server-side: nothing left to review.
+            replaceOps(ops).then(() => { if (draftOps().length) renderDraftOps(); else closeModal('bpDraftModal'); });
         } else if (b.dataset.action === 'bp-op-edit') {
             // One modal at a time: the draft list reopens after the edit.
             closeModal('bpDraftModal');
