@@ -232,19 +232,21 @@ python3 scripts/vm_agent_test_helper.py setup \
 mkdir -p agent-data
 
 cat << 'EOF' > agent-data/network_hosts.csv
-IP,Vendor,Profile,Username,Password,Enable Secret,Group,Hostname,Probe,SSH Port,Transports,SNMP Community,SNMP Disabled
-192.0.2.10,cisco,custom,admin,,,Tenant_Milano,switch-01,milan-vm,22,,,
+IP,Vendor,Profile,Username,Password,Enable Secret,Group,Hostname,Probe,Location,SSH Port,Transports,SNMP Community,SNMP Disabled
+192.0.2.10,cisco,custom,admin,,,Tenant_Milano,switch-01,milan-vm,,22,,,
 EOF
 ```
 
-These thirteen columns are the canonical schema — the same ones
-`inventory_manager.write_devices` writes. Unrecognised columns are
+These fourteen columns are the canonical schema — the same ones
+`inventory_store.HOST_FIELDS` defines. `Location` stays empty on an agent,
+which keeps no locations. Unrecognised columns are
 dropped the first time the inventory is rewritten.
 
 The agent's local inventory is `inventory.db` (SQLite), the same store central
 uses. At agent start, an existing `network_hosts.csv` is migrated into it and
 renamed `network_hosts.csv.pre-sqlite`; the seed file above is therefore only
-read once. The get/save inventory RPC between central and agent still carries
+read once. The migration's summary (and any duplicate or blanked rows) is
+printed to the agent console as `[inventory] migrazione: ...`. The get/save inventory RPC between central and agent still carries
 CSV text (the agent converts at its edge), so an updated central and an older
 agent, or the reverse, keep syncing. The agent database has no locations: a
 save whose CSV names a non-empty `Location` fails as a job error.

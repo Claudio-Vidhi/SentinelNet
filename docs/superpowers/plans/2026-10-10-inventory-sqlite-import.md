@@ -1440,6 +1440,12 @@ def import_csv(payload: CSVImportRequest, current_user = Depends(require_operato
 - [ ] Upgrade check on a **copy** of a real data dir (run by the user): the server starts; device, organization and location counts equal before/after; `*.pre-sqlite` files present; second start logs nothing; one updated agent and one old agent both still sync.
 - [ ] Commit `git commit -m "docs(inventory): SQLite storage and per-location import"`.
 
+### Measured
+
+Synthetic data, final review run: 10,000 rows — preview 0.09 s, new import
+0.57 s, update import 0.60 s; single add on a 10k inventory 0.34 s; cached
+`get_all_devices` 3 ms.
+
 ---
 
 ## After this plan
