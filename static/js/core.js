@@ -1909,7 +1909,7 @@ async function switchTab(tabId, clickedBtn, opts = {}) {
     else if (tabId === 'tab-endpoint') locSwitchView(_locView);
     else if (tabId === 'tab-config') loadConfigAnalyzer();
     else if (tabId === 'tab-ai') loadAiTab();
-    else if (tabId === 'tab-import' && typeof loadImportProbeIds === 'function') loadImportProbeIds();
+    else if (tabId === 'tab-import' && typeof loadImportProbeIds === 'function') { loadImportProbeIds(); loadImportDestinations(); }
     else if (tabId === 'tab-users') loadUsers();
     else if (tabId === 'tab-probes') loadProbes();
     else if (tabId === 'tab-mcp') loadMcpTab();

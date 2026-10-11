@@ -1291,9 +1291,9 @@ class TestImportTabRestyle(unittest.TestCase):
         html = frontend_source()
         # The click handler (addEventListener, not onclick) and its reporting
         # path must survive byte-for-byte -- restyle must not touch JS here.
-        self.assertIn("document.getElementById('btnUploadCsv').addEventListener('click'", html)
+        self.assertIn("btnUploadCsv.addEventListener('click'", html)
         self.assertIn("document.getElementById('csvFileInput')", html)
-        self.assertIn('body: JSON.stringify({ csv_data: text })', html)
+        self.assertIn('csv_data: importState.text', html)
 
     def test_rbac_preserved(self):
         html = _html()
@@ -1309,9 +1309,9 @@ class TestImportTabRestyle(unittest.TestCase):
         html = _html()
         tab = self._tab(html)
         self.assertIn('class="page-head"', tab)
-        # prepare-the-file step + upload step + manual-config entry, beside the
-        # Group/Probe reference.
-        self.assertEqual(tab.count('<section class="panel">'), 3)
+        # prepare-the-file step + destination + upload step + manual-config
+        # entry, beside the Group/Probe reference.
+        self.assertEqual(tab.count('<section class="panel">'), 4)
         self.assertIn('class="panel import-aside"', tab)
 
     def test_i18n_keys_both_langs(self):

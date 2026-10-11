@@ -2771,13 +2771,26 @@
               </button>
             </div>
             <div class="template-box">IP,Username,Password,Enable Secret,Hostname,Group,Location,Probe,Vendor
-192.0.2.1,admin,Mypass123!,enablepass,switch-01,Tenant_Milano,Milano,central,cisco
-198.51.100.1,manager,Pwd456!,secret,switch-02,Tenant_Roma,Roma,probe-roma,hpe</div>
+192.0.2.1,admin,Mypass123!,enablepass,switch-01,acme,roma,central,cisco
+198.51.100.1,manager,Pwd456!,secret,switch-02,acme,roma,probe-roma,hpe</div>
             <p class="set-desc" style="margin:10px 0 0;" data-i18n="importFlexNote">
           Obbligatorie: <code>IP</code>, <code>Group</code> e <code>Location</code> (la sede, per nome o id).
           Maiuscole, underscore e nomi in italiano (<code>indirizzo</code>, <code>utente</code>, <code>gruppo</code>,
           <code>sede</code>) sono riconosciuti, così come il punto e virgola come separatore e i file salvati da Excel.
         </p>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3 data-i18n="importDestTitle">Destinazione</h3>
+            </div>
+            <div class="mc-grid">
+              <label for="importOrgSelect" data-i18n="importOrgLabel">Organizzazione</label>
+              <select id="importOrgSelect"></select>
+              <label for="importLocationSelect" data-i18n="importLocationLabel">Sede</label>
+              <select id="importLocationSelect"></select>
+            </div>
+            <div id="importDestChips" class="import-chips"></div>
           </section>
 
           <section class="panel">
@@ -2794,9 +2807,22 @@
                 <span data-i18n="importDropText">Trascina qui il file CSV o clicca per selezionarlo</span>
               </div>
             </div>
-            <div class="set-actions" style="justify-content:flex-end; margin-top:14px;">
-              <button class="btn btn-primary" id="btnUploadCsv" style="width:auto;" data-i18n="btnUploadCsv">
-                <i class="fa-solid fa-cloud-arrow-up"></i> Elabora e Importa
+            <div id="importColumns" class="import-chips"></div>
+            <div id="importFilterTabs" class="import-tabs" role="tablist" hidden>
+              <button type="button" class="chip-choice" role="tab" data-filter="all" aria-selected="true"></button>
+              <button type="button" class="chip-choice" role="tab" data-filter="new" aria-selected="false"></button>
+              <button type="button" class="chip-choice" role="tab" data-filter="update" aria-selected="false"></button>
+              <button type="button" class="chip-choice" role="tab" data-filter="error" aria-selected="false"></button>
+            </div>
+            <div class="table-container" style="margin-top:10px;">
+              <table style="font-size:12px;">
+                <tbody id="importPreviewBody"></tbody>
+              </table>
+            </div>
+            <div class="set-actions" style="justify-content:space-between; align-items:center; margin-top:14px;">
+              <span id="importSummary" class="set-desc" style="margin:0;"></span>
+              <button class="btn btn-primary" id="btnUploadCsv" style="width:auto;" disabled>
+                <i class="fa-solid fa-cloud-arrow-up"></i>
               </button>
             </div>
             <!-- Esito in pagina invece che in un alert(): l'elenco delle righe

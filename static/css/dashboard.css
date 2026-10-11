@@ -4374,6 +4374,10 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
 .import-aside { position: sticky; top: 68px; }
 .import-aside-text { font-size: 12.5px; line-height: 1.6; color: var(--text-muted); }
 .import-aside-sep { margin-top: 12px; padding-top: 12px; border-top: var(--seam) solid var(--border); }
+.import-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.import-chips:empty { display: none; }
+.import-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.import-tabs .active { color: var(--text); border-color: var(--primary); }
 .dropzone { padding: 28px 22px; text-align: center; cursor: pointer; background-color: var(--surface-2); border: 2px dashed var(--border); transition: border-color var(--transition); }
 .dropzone:hover { border-color: var(--border-strong); }
 .dropzone-text { font-size: 13px; color: var(--text-muted); }
