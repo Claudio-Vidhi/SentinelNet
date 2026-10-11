@@ -1426,7 +1426,11 @@ const i18n = {
         importActionSkip: "Salta",
         importSummary: "{n} apparati pronti · {m} righe saltate se importi ora",
         btnImportDevices: "Importa {n} apparati",
-        importResult: "{imported} nuovi · {updated} aggiornati · {skipped} saltati",
+        importResult: "{imported} nuovi · {updated} aggiornati · {skipped} saltati · {failed} errori",
+        importThRow: "#",
+        importThDevice: "Apparato",
+        importThStatus: "Stato",
+        importThNotes: "Note",
         locImportDevices: "Importa apparati",
         lblSelectCsv: "Seleziona file CSV",
         importFlexNote: "Obbligatorie: <code>IP</code>, <code>Group</code> e <code>Location</code> (la sede, per nome o id). Maiuscole, underscore e nomi in italiano (<code>indirizzo</code>, <code>utente</code>, <code>gruppo</code>, <code>sede</code>) sono riconosciuti, così come il punto e virgola come separatore e i file salvati da Excel.",
@@ -3299,7 +3303,6 @@ const i18n = {
         coreTrafficObservability: "Traffico & Osservabilità",
         coreUsers: "Utenti",
         coreViews: "Viste",
-        devDevicesImported: "dispositivi importati",
         devReason: "Motivo",
         devRow: "Riga",
         devRowsSkipped: "righe scartate",
@@ -5328,7 +5331,11 @@ const i18n = {
         importActionSkip: "Skip",
         importSummary: "{n} devices ready · {m} rows skipped if you import now",
         btnImportDevices: "Import {n} devices",
-        importResult: "{imported} new · {updated} updated · {skipped} skipped",
+        importResult: "{imported} new · {updated} updated · {skipped} skipped · {failed} errors",
+        importThRow: "#",
+        importThDevice: "Device",
+        importThStatus: "Status",
+        importThNotes: "Notes",
         locImportDevices: "Import devices",
         lblSelectCsv: "Select CSV file",
         importFlexNote: "Required: <code>IP</code>, <code>Group</code> and <code>Location</code> (the location, by name or id). Capitalisation, underscores and Italian column names (<code>indirizzo</code>, <code>utente</code>, <code>gruppo</code>, <code>sede</code>) are recognised, as are the semicolon separator and files saved by Excel.",
@@ -7199,7 +7206,6 @@ const i18n = {
         coreTrafficObservability: "Traffic / Observability",
         coreUsers: "Users",
         coreViews: "Views",
-        devDevicesImported: "devices imported",
         devReason: "Reason",
         devRow: "Row",
         devRowsSkipped: "rows skipped",
@@ -7916,6 +7922,7 @@ function changeLanguage(lang) {
         renderDeviceTable();
         renderGroupsTable();
         renderVendorTable();
+        if (typeof loadImportDestinations === 'function') { loadImportDestinations(); renderImportPreview(); }
     }
     if (typeof loadRuleCatalog === 'function') {
         loadRuleCatalog();
