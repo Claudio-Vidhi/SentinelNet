@@ -81,6 +81,7 @@ existing tables.
 {"op": "update_location", "id": "roma", "fields": {"subnets": ["10.20.0.0/24"]}}
 {"op": "delete_location", "id": "roma"}
 {"op": "set_gateway", "id": "roma", "ip": "10.20.0.1"}
+{"op": "add_subnet", "id": "roma", "subnet": "10.20.1.0/24"}
 {"op": "add_link", "a": "milano", "b": "new-1", "kind": "vpn", "note": ""}
 {"op": "remove_link", "id": "milano--roma--vpn"}
 ```
@@ -152,8 +153,8 @@ A check that lacks the data it needs returns `unknown`, never `ok` nor
 | | `location_isolated` | branch/warehouse with no path of links to an `hq` or `datacenter` (warning) | `add_link` vpn to the HQ (first `hq`, else first `datacenter`) |
 | | `location_no_gateway` | no gateway (warning) | `set_gateway` if exactly one device of the location is a FortiGate or a router with routes/backup; several → listed, no proposal |
 | | `gateway_not_in_location` | gateway IP not a device of that location (error) | none |
-| Subnets | `device_outside_subnets` | device IP not in its location's subnets (warning) | move it to the location covering the IP if one exists, else add its /24 to its location |
-| | `arp_uncovered` | /24 seen in ARP by a location's gateway, covered by no location (warning) | `update_location` adding it to that location |
+| Subnets | `device_outside_subnets` | device IP not in its location's subnets (warning) | none when another location covers the IP (the message names it: moving a device is an inventory write); else `add_subnet` with its /24 |
+| | `arp_uncovered` | /24 seen in ARP by a location's gateway, covered by no location (warning) | `add_subnet` to that location |
 | | `subnet_unused` | declared subnet with no device nor ARP entry (info) | none |
 | Routing | `link_no_route` | gateway of A has no route covering a subnet of B, or vice versa (error); a covering default route → warning «via default» | none |
 | | `route_without_link` | route from A's gateway towards B's subnets, no link A↔B (info) | `add_link` (`vpn` if the egress interface is a tunnel, else `wan`) |
@@ -171,8 +172,8 @@ sub-project; other vendors' VPN links are `unknown`.
 - «Primi passi» panel, shown until complete, derived from model and findings
   (no stored state): locations defined → every location has subnets → every
   non-HQ location is linked → every location has a gateway → gateway snapshot
-  collected → no `error` finding. Each item links to its action. The Home
-  checklist gains the item «Disegna il Blueprint di un'organizzazione».
+  collected → no `error` finding. Each item links to its action.
+  (The Home checklist the earlier draft mentioned no longer exists.)
 - Left: Locations list (name, role, subnets, gateway, probe) and Links list
   (A, B, kind). Edits open modals (`openModal`) and become draft operations.
 - Right: vis-network diagram. Nodes = locations (shape by role), edges = links

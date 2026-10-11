@@ -38,7 +38,26 @@ _SCHEMA = "\n".join([
     "CREATE TABLE IF NOT EXISTS locations (id TEXT PRIMARY KEY, "
     "org TEXT NOT NULL REFERENCES organizations(key), name TEXT NOT NULL, "
     "role TEXT NOT NULL, subnets TEXT NOT NULL DEFAULT '[]', "
-    "probe TEXT NOT NULL DEFAULT 'central');",
+    "probe TEXT NOT NULL DEFAULT 'central', gateway TEXT);",
+    # Links between two locations of one organization (spec 2026-10-11
+    # network-blueprint). Stored ordered, so A-B and B-A are one row; a deleted
+    # location takes its links with it.
+    "CREATE TABLE IF NOT EXISTS links (id TEXT PRIMARY KEY, "
+    "org TEXT NOT NULL REFERENCES organizations(key), "
+    "a TEXT NOT NULL REFERENCES locations(id) ON DELETE CASCADE, "
+    "b TEXT NOT NULL REFERENCES locations(id) ON DELETE CASCADE, "
+    "kind TEXT NOT NULL CHECK (kind IN ('vpn', 'wan', 'mpls', 'lan')), "
+    "note TEXT NOT NULL DEFAULT '', CHECK (a < b), UNIQUE (a, b, kind));",
+    "CREATE TABLE IF NOT EXISTS blueprint_drafts (org TEXT PRIMARY KEY "
+    "REFERENCES organizations(key) ON DELETE CASCADE, base_rev INTEGER NOT NULL, "
+    "source TEXT NOT NULL, ops TEXT NOT NULL, updated_by TEXT NOT NULL DEFAULT '', "
+    "updated_at TEXT NOT NULL);",
+    # No foreign key: the history of an organization outlives it.
+    "CREATE TABLE IF NOT EXISTS blueprint_revisions (org TEXT NOT NULL, rev INTEGER NOT NULL, "
+    "at TEXT NOT NULL, by TEXT NOT NULL DEFAULT '', source TEXT NOT NULL, "
+    "note TEXT NOT NULL DEFAULT '', snapshot TEXT NOT NULL, PRIMARY KEY (org, rev));",
+    "CREATE TABLE IF NOT EXISTS blueprint_observations (org TEXT PRIMARY KEY "
+    "REFERENCES organizations(key) ON DELETE CASCADE, at TEXT NOT NULL, data TEXT NOT NULL);",
     _host_table("hosts", _FIELDS["hosts"]),
     _host_table("decommissioned_hosts", _FIELDS["decommissioned_hosts"]),
 ])
@@ -55,6 +74,10 @@ def connect(path: str) -> sqlite3.Connection:
         if path not in _ready or not existed:
             conn.execute("PRAGMA journal_mode = WAL")
             conn.executescript(_SCHEMA)
+            # Databases created before the Blueprint lack the column;
+            # CREATE TABLE IF NOT EXISTS does not add it.
+            if "gateway" not in {r["name"] for r in conn.execute("PRAGMA table_info(locations)")}:
+                conn.execute("ALTER TABLE locations ADD COLUMN gateway TEXT")
             _ready.add(path)
     return conn
 
@@ -125,17 +148,45 @@ def write_orgs(conn, groups: dict) -> None:
 
 def read_locations(conn) -> dict:
     return {r["id"]: {"org": r["org"], "name": r["name"], "role": r["role"],
-                      "subnets": json.loads(r["subnets"]), "probe": r["probe"]}
+                      "subnets": json.loads(r["subnets"]), "probe": r["probe"],
+                      "gateway": r["gateway"] or ""}
             for r in conn.execute("SELECT * FROM locations ORDER BY id")}
 
 
-def write_locations(conn, data: dict) -> None:
+def put_locations(conn, data: dict) -> None:
+    """write_locations inside the caller's transaction."""
     keep = list(data)
+    conn.execute(f"DELETE FROM locations WHERE id NOT IN ({', '.join('?' * len(keep))})", keep)
+    conn.executemany(
+        "INSERT INTO locations (id, org, name, role, subnets, probe, gateway) VALUES (?, ?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT (id) DO UPDATE SET org = excluded.org, name = excluded.name, "
+        "role = excluded.role, subnets = excluded.subnets, probe = excluded.probe, "
+        "gateway = excluded.gateway",
+        [(k, v["org"], v["name"], v["role"], json.dumps(v.get("subnets") or []),
+          v.get("probe") or "central", v.get("gateway") or None) for k, v in data.items()])
+
+
+def write_locations(conn, data: dict) -> None:
     with conn:
-        conn.execute(f"DELETE FROM locations WHERE id NOT IN ({', '.join('?' * len(keep))})", keep)
-        conn.executemany(
-            "INSERT INTO locations (id, org, name, role, subnets, probe) VALUES (?, ?, ?, ?, ?, ?) "
-            "ON CONFLICT (id) DO UPDATE SET org = excluded.org, name = excluded.name, "
-            "role = excluded.role, subnets = excluded.subnets, probe = excluded.probe",
-            [(k, v["org"], v["name"], v["role"], json.dumps(v.get("subnets") or []),
-              v.get("probe") or "central") for k, v in data.items()])
+        put_locations(conn, data)
+
+
+def read_links(conn) -> dict:
+    return {r["id"]: {"org": r["org"], "a": r["a"], "b": r["b"], "kind": r["kind"], "note": r["note"]}
+            for r in conn.execute("SELECT * FROM links ORDER BY id")}
+
+
+def put_links(conn, links: dict) -> None:
+    """Replace the links table with ``links``, inside the caller's transaction."""
+    keep = list(links)
+    conn.execute(f"DELETE FROM links WHERE id NOT IN ({', '.join('?' * len(keep))})", keep)
+    conn.executemany(
+        "INSERT INTO links (id, org, a, b, kind, note) VALUES (?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT (id) DO UPDATE SET org = excluded.org, a = excluded.a, b = excluded.b, "
+        "kind = excluded.kind, note = excluded.note",
+        [(k, v["org"], v["a"], v["b"], v["kind"], v.get("note") or "") for k, v in links.items()])
+
+
+def write_links(conn, links: dict) -> None:
+    with conn:
+        put_links(conn, links)
