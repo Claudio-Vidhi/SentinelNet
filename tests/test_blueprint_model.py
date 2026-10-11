@@ -85,3 +85,79 @@ class TestApplyOps(unittest.TestCase):
     def test_org_view(self):
         view = bm.org_view(LOCS, LINKS, "beta")
         self.assertEqual((list(view["locations"]), view["links"]), (["zurigo"], {}))
+
+
+class TestDiff(unittest.TestCase):
+    def test_added_removed_changed(self):
+        old = bm.org_view(LOCS, LINKS, "acme")
+        locs, links, _ = apply([{"op": "delete_location", "id": "roma"},
+                                {"op": "create_location", "ref": "+1", "name": "Torino"},
+                                {"op": "set_gateway", "id": "milano", "ip": "10.10.0.1"}])
+        d = bm.diff(old, bm.org_view(locs, links, "acme"))
+        self.assertEqual([x["id"] for x in d["locations"]["added"]], ["torino"])
+        self.assertEqual([x["id"] for x in d["locations"]["removed"]], ["roma"])
+        self.assertEqual(d["locations"]["changed"],
+                         [{"id": "milano", "label": "Milano", "fields": {"gateway": ["", "10.10.0.1"]}}])
+        self.assertEqual([x["id"] for x in d["links"]["removed"]], ["milano--roma--vpn"])
+
+
+class TestRestore(unittest.TestCase):
+    def test_round_trip_back_to_the_target(self):
+        target = bm.org_view(LOCS, LINKS, "acme")
+        locs, links, _ = apply([{"op": "delete_location", "id": "roma"},
+                                {"op": "create_location", "ref": "+1", "name": "Torino"},
+                                {"op": "add_link", "a": "+1", "b": "milano", "kind": "wan"},
+                                {"op": "update_location", "id": "milano", "fields": {"name": "HQ"}}])
+        ops = bm.restore_ops(bm.org_view(locs, links, "acme"), target)
+        back, back_links, _ = bm.apply_ops("acme", locs, links, ops, PROBES)
+        self.assertEqual(bm.org_view(back, back_links, "acme"), target)
+
+    def test_taken_id_comes_back_suffixed_with_its_links(self):
+        target = bm.org_view(LOCS, LINKS, "acme")
+        locs, links, _ = apply([{"op": "delete_location", "id": "roma"}])
+        locs["roma"] = loc("Roma", org="beta")                # another org took the id meanwhile
+        ops = bm.restore_ops(bm.org_view(locs, links, "acme"), target)
+        back, back_links, refs = bm.apply_ops("acme", locs, links, ops, PROBES)
+        self.assertEqual(refs["+roma"], "roma-2")
+        self.assertIn("milano--roma-2--vpn", back_links)
+
+    def test_nothing_to_do(self):
+        view = bm.org_view(LOCS, LINKS, "acme")
+        self.assertEqual(bm.restore_ops(view, view), [])
+
+
+class TestPresets(unittest.TestCase):
+    EMPTY = {"locations": {}, "links": {}}
+
+    def run_preset(self, kind, n, view=None):
+        view = view or self.EMPTY
+        ops = bm.preset_ops(kind, n, view)
+        locs, links, _ = bm.apply_ops("acme", dict(view["locations"]), dict(view["links"]), ops, PROBES)
+        return locs, links
+
+    def test_single(self):
+        locs, _ = self.run_preset("single", 1)
+        self.assertEqual([l["role"] for l in locs.values()], ["hq"])
+        self.assertEqual(bm.preset_ops("single", 1, bm.org_view(LOCS, LINKS, "acme")), [])
+
+    def test_hub_spoke_reuses_the_existing_hq(self):
+        locs, links = self.run_preset("hub_spoke", 2, bm.org_view(LOCS, LINKS, "acme"))
+        self.assertEqual(sum(1 for l in locs.values() if l["role"] == "hq"), 1)
+        self.assertIn("filiale-2", locs)                       # Roma is branch 1
+        self.assertEqual(set(links), {"milano--roma--vpn", "filiale-2--milano--vpn", "filiale-3--milano--vpn"})
+
+    def test_hub_spoke_dc(self):
+        locs, links = self.run_preset("hub_spoke_dc", 2)
+        self.assertEqual(sorted(l["role"] for l in locs.values()), ["branch", "branch", "datacenter", "hq"])
+        self.assertEqual(len(links), 1 + 2 * 2)
+
+    def test_full_mesh(self):
+        locs, links = self.run_preset("full_mesh", 4)
+        self.assertEqual(len(locs), 4)
+        self.assertEqual(len(links), 6)
+        self.assertEqual(sum(1 for l in locs.values() if l["role"] == "hq"), 1)
+
+    def test_bounds_and_unknown(self):
+        for kind, n in (("hub_spoke", 0), ("hub_spoke", bm.MAX_PRESET + 1), ("ring", 3)):
+            with self.subTest(kind=kind, n=n), self.assertRaises(ValueError):
+                bm.preset_ops(kind, n, self.EMPTY)
