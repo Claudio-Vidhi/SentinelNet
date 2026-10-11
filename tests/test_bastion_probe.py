@@ -127,9 +127,8 @@ class JumpChannelRealDeviceLookup(unittest.TestCase):
     imported with a resolved path by the time this test runs)."""
 
     def setUp(self):
-        fd, self.csv_path = tempfile.mkstemp(suffix=".csv")
-        os.close(fd)
-        os.remove(self.csv_path)
+        # Own dir: inventory.db sits next to HOSTS_CSV, a shared tmp dir would share it.
+        self.csv_path = os.path.join(tempfile.mkdtemp(), "network_hosts.csv")
         self._orig_csv = inventory_manager.HOSTS_CSV
         inventory_manager.HOSTS_CSV = self.csv_path
         inventory_manager.invalidate_device_ip_cache()
