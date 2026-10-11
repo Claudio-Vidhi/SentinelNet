@@ -94,7 +94,8 @@
             <td style="font-size:12px;">${(l.subnets || []).map(escapeHtml).join(', ') || '—'}</td>
             <td>${escapeHtml(probeName(l.probe))}</td>
             <td>${l.devices || 0}</td>
-            <td style="white-space:nowrap;">${canEdit
+            <td style="white-space:nowrap;">${currentRole !== 'viewer'
+                ? `<button type="button" class="inv-icon-btn" data-action="loc-import" data-org="${escapeHtml(l.org)}" data-loc="${escapeHtml(l.id)}" title="${escapeHtml(tr('locImportDevices'))}" aria-label="${escapeHtml(tr('locImportDevices'))}"><i class="fa-solid fa-file-import"></i></button>` : ''}${canEdit
                 ? `<button type="button" class="inv-icon-btn" data-action="edit-location" data-loc="${escapeHtml(l.id)}" title="${escapeHtml(tr('btnEditLocation'))}" aria-label="${escapeHtml(tr('btnEditLocation'))}"><i class="fa-solid fa-pen"></i></button>
                    <button type="button" class="inv-icon-btn danger" data-action="delete-location" data-loc="${escapeHtml(l.id)}" title="${escapeHtml(tr('btnDeleteLocation'))}" aria-label="${escapeHtml(tr('btnDeleteLocation'))}"><i class="fa-solid fa-trash-can"></i></button>`
                 : ''}</td>
@@ -179,6 +180,7 @@
         else if (action === 'new-location') openLocationModal(g, null);
         else if (action === 'edit-location') openLocationModal('', btn.dataset.loc);
         else if (action === 'delete-location') deleteLocation(btn.dataset.loc);
+        else if (action === 'loc-import') openImportFor(btn.dataset.org, btn.dataset.loc);
     });
 
     // KPI row sopra la tabella inventario: conteggi sull'intera flotta (non filtrati
@@ -1925,8 +1927,8 @@
     // Omitted, Probe is 'central'.
     const CSV_TEMPLATE = [
         'IP,Username,Password,Enable Secret,Hostname,Group,Location,Probe,Vendor',
-        '192.0.2.1,admin,Mypass123!,enablepass,switch-01,Tenant_Milano,Milano,central,cisco',
-        '198.51.100.1,manager,Pwd456!,secret,switch-02,Tenant_Roma,Roma,probe-roma,hpe',
+        '192.0.2.1,admin,Mypass123!,enablepass,switch-01,acme,roma,central,cisco',
+        '198.51.100.1,manager,Pwd456!,secret,switch-02,acme,roma,probe-roma,hpe',
         ''
     ].join('\n');
 
@@ -1966,6 +1968,15 @@
     const csvZone = document.getElementById('csvDropZone');
     const csvInput = document.getElementById('csvFileInput');
     const csvDropText = document.getElementById('csvDropText');
+    const csvDropHtml = csvDropText ? csvDropText.innerHTML : '';
+    const importOrgSelect = document.getElementById('importOrgSelect');
+    const importLocationSelect = document.getElementById('importLocationSelect');
+    const importPreviewBody = document.getElementById('importPreviewBody');
+    const importFilterTabs = document.getElementById('importFilterTabs');
+    const btnUploadCsv = document.getElementById('btnUploadCsv');
+
+    // text: the file; decisions: per-row answers to the preview's action buttons.
+    const importState = { text: '', decisions: {}, filter: 'all', preview: null };
 
     function showCsvFile(file) {
         if (!csvDropText) return;
@@ -1974,6 +1985,144 @@
             <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">${Math.max(1, Math.round(file.size / 1024))} KB</div>`;
     }
 
+    const importChip = html => `<span class="chip">${html}</span>`;
+
+    function renderImportChips() {
+        const loc = locationById(importLocationSelect.value);
+        document.getElementById('importDestChips').innerHTML = loc
+            ? importChip(`<i class="fa-solid fa-tower-broadcast"></i> ${escapeHtml(loc.probe || 'central')}`)
+              + (loc.subnets || []).map(n => importChip(escapeHtml(n))).join('')
+            : '';
+    }
+
+    function fillImportLocations() {
+        const org = importOrgSelect.value;
+        const keep = importLocationSelect.value;
+        importLocationSelect.innerHTML = `<option value="">${escapeHtml(tr('importPickDestination'))}</option>`
+            + locationOptionsHtml(keep, org || null);
+        renderImportChips();
+    }
+
+    // Organizations and locations come from the globals the inventory already
+    // loads (/api/groups, /api/locations), so the selects add no request.
+    function loadImportDestinations() {
+        if (!importOrgSelect) return;
+        const keep = importOrgSelect.value;
+        importOrgSelect.innerHTML = `<option value="">${escapeHtml(tr('importPickDestination'))}</option>`
+            + Object.keys(globalGroups).map(g =>
+                `<option value="${escapeHtml(g)}"${g === keep ? ' selected' : ''}>${escapeHtml(orgLabel(g))}</option>`).join('');
+        fillImportLocations();
+    }
+    window.loadImportDestinations = loadImportDestinations;
+
+    const importBody = () => JSON.stringify({
+        csv_data: importState.text,
+        org: importOrgSelect.value || null,
+        location: importLocationSelect.value || null,
+        decisions: importState.decisions,
+    });
+
+    const IMPORT_STATUS_KEYS = { new: 'importStNew', update: 'importStUpdate', error: 'importStError', skipped: 'importStSkipped' };
+    const IMPORT_STATUS_COLOR = { new: 'var(--success)', update: 'var(--primary)', error: 'var(--danger)', skipped: 'var(--text-muted)' };
+
+    function importNotes(r) {
+        const notes = [];
+        if (r.reason) notes.push(r.reason);
+        const fields = Object.keys(r.changes || {});
+        fields.forEach(f => {
+            const [oldV, newV] = r.changes[f];
+            notes.push(newV === 'changed' ? `${f}: ${tr('importPwdChanged')}` : `${f}: ${oldV} → ${newV}`);
+        });
+        if (r.status === 'update' && !fields.length) notes.push(tr('importNoChanges'));
+        (r.warnings || []).forEach(w => notes.push(w));
+        if (r.credentials_note) notes.push(r.credentials_note);
+        return notes.map(n => `<div>${escapeHtml(n)}</div>`).join('');
+    }
+
+    function importActionButton(r) {
+        const a = r.action;
+        if (!a) return '';
+        if (a.kind === 'move') {
+            return `<button type="button" class="btn btn-secondary btn-small" style="width:auto;" data-action="import-move" data-row="${escapeHtml(String(r.row))}" data-location="${escapeHtml(a.location)}">${escapeHtml(tr('importActionMove', { name: locationLabel(a.location) }))}</button>`;
+        }
+        return `<button type="button" class="btn btn-secondary btn-small" style="width:auto;" data-action="import-skip" data-row="${escapeHtml(String(r.row))}">${escapeHtml(tr('importActionSkip'))}</button>`;
+    }
+
+    function renderImportPreview() {
+        const p = importState.preview;
+        const counts = p ? p.counts : { new: 0, update: 0, error: 0, skipped: 0 };
+        document.getElementById('importColumns').innerHTML = p
+            ? p.columns.map(c => importChip(c.field
+                ? `${escapeHtml(c.header)} → <strong>${escapeHtml(c.field)}</strong>`
+                : `${escapeHtml(c.header)} · ${escapeHtml(tr('importColIgnored'))}`)).join('')
+            : '';
+        importFilterTabs.hidden = !p;
+        const total = counts.new + counts.update + counts.error + counts.skipped;
+        const tabs = { all: ['importTabAll', total], new: ['importTabNew', counts.new],
+                       update: ['importTabUpdate', counts.update], error: ['importTabError', counts.error + counts.skipped] };
+        importFilterTabs.querySelectorAll('[data-filter]').forEach(b => {
+            const [key, n] = tabs[b.dataset.filter];
+            b.textContent = `${tr(key)} (${n})`;
+            b.setAttribute('aria-selected', String(b.dataset.filter === importState.filter));
+            b.classList.toggle('active', b.dataset.filter === importState.filter);
+        });
+        const shown = p ? p.rows.filter(r => {
+            const f = importState.filter;
+            return f === 'all' || r.status === f || (f === 'error' && r.status === 'skipped');
+        }) : [];
+        importPreviewBody.innerHTML = shown.map(r => `<tr>
+            <td style="color:var(--text-muted);">${escapeHtml(String(r.row))}</td>
+            <td style="font-family:var(--font-code);">${escapeHtml(r.ip || '')}<div>${escapeHtml(r.hostname || '')}</div></td>
+            <td><span style="color:${IMPORT_STATUS_COLOR[r.status]};">${escapeHtml(tr(IMPORT_STATUS_KEYS[r.status]))}</span></td>
+            <td>${importNotes(r)}</td>
+            <td>${importActionButton(r)}</td></tr>`).join('');
+        const ready = counts.new + counts.update;
+        document.getElementById('importSummary').textContent = p
+            ? tr('importSummary', { n: ready, m: counts.error + counts.skipped }) : '';
+        btnUploadCsv.disabled = ready === 0;
+        btnUploadCsv.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> ${escapeHtml(tr('btnImportDevices', { n: ready }))}`;
+    }
+
+    async function runImportPreview() {
+        if (!importState.text) return;
+        const res = await apiFetch('/api/import-csv/preview', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: importBody()
+        });
+        if (!res) return;
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            importState.preview = null;
+            renderImportPreview();
+            renderCsvImportResult(null, err.detail || tr('alertImportCsvError'));
+            return;
+        }
+        importState.preview = await res.json();
+        document.getElementById('csvImportResult').style.display = 'none';
+        renderImportPreview();
+    }
+
+    function loadImportFile(file) {
+        showCsvFile(file);
+        const reader = new FileReader();
+        reader.onload = e => {
+            importState.text = String(e.target.result);
+            importState.decisions = {};
+            runImportPreview();
+        };
+        reader.readAsText(file);
+    }
+
+    function openImportFor(org, loc) {
+        switchTab('tab-import');
+        loadImportDestinations();
+        importOrgSelect.value = org;
+        fillImportLocations();
+        importLocationSelect.value = loc;
+        renderImportChips();
+        runImportPreview();
+    }
+    window.openImportFor = openImportFor;
+
     if (csvZone && csvInput) {
         csvZone.onclick = () => csvInput.click();
         csvZone.ondragover = e => { e.preventDefault(); csvZone.style.borderColor = 'var(--primary)'; };
@@ -1981,27 +2130,46 @@
         csvZone.ondrop = e => {
             e.preventDefault();
             csvZone.style.borderColor = 'var(--border)';
-            if (e.dataTransfer.files.length) {
-                csvInput.files = e.dataTransfer.files;
-                showCsvFile(e.dataTransfer.files[0]);
-            }
+            if (e.dataTransfer.files.length) loadImportFile(e.dataTransfer.files[0]);
         };
         csvInput.onchange = () => {
-            if (csvInput.files.length) showCsvFile(csvInput.files[0]);
+            if (csvInput.files.length) loadImportFile(csvInput.files[0]);
         };
     }
+
+    importOrgSelect?.addEventListener('change', () => { fillImportLocations(); runImportPreview(); });
+    importLocationSelect?.addEventListener('change', () => {
+        const loc = locationById(importLocationSelect.value);
+        if (loc && !importOrgSelect.value) importOrgSelect.value = loc.org;
+        renderImportChips();
+        runImportPreview();
+    });
+    importFilterTabs?.addEventListener('click', e => {
+        const b = e.target.closest('[data-filter]');
+        if (!b) return;
+        importState.filter = b.dataset.filter;
+        renderImportPreview();
+    });
+    importPreviewBody?.addEventListener('click', e => {
+        const b = e.target.closest('[data-action]');
+        if (!b) return;
+        if (b.dataset.action === 'import-move') importState.decisions[b.dataset.row] = { location: b.dataset.location };
+        else if (b.dataset.action === 'import-skip') importState.decisions[b.dataset.row] = { skip: true };
+        else return;
+        runImportPreview();
+    });
+    renderImportPreview();
 
     function renderCsvImportResult(result, errorDetail) {
         const box = document.getElementById('csvImportResult');
         if (!box) return;
-        
+
         box.style.display = '';
         if (errorDetail) {
             box.innerHTML = `<div style="padding:12px 14px; border-radius:0; border:1px solid var(--danger); background:color-mix(in srgb, var(--danger) 10%, transparent); font-size:13px; color:var(--danger);">
                 <i class="fa-solid fa-circle-exclamation"></i> ${escapeHtml(errorDetail)}</div>`;
             return;
         }
-        const ok = (result.imported || []).length;
         const failed = result.failed || [];
         const rowsHtml = failed.map(f => `
             <tr style="border-top:1px solid var(--border);">
@@ -2011,7 +2179,7 @@
             </tr>`).join('');
         box.innerHTML = `
             <div style="padding:12px 14px; border-radius:0; border:1px solid ${failed.length ? 'var(--warning)' : 'var(--success)'}; background:${failed.length ? 'color-mix(in srgb, var(--warning) 10%, transparent)' : 'color-mix(in srgb, var(--success) 10%, transparent)'}; font-size:13px;">
-                <strong>${ok}</strong> ${tr('devDevicesImported')}${failed.length ? ` · <strong>${failed.length}</strong> ${tr('devRowsSkipped')}` : ''}
+                ${escapeHtml(tr('importResult', { imported: (result.imported || []).length, updated: (result.updated || []).length, skipped: (result.skipped || []).length }))}${failed.length ? ` · <strong>${failed.length}</strong> ${tr('devRowsSkipped')}` : ''}
             </div>
             ${failed.length ? `
             <div class="table-container" style="margin-top:10px;">
@@ -2024,38 +2192,30 @@
             </div>` : ''}`;
     }
 
-    document.getElementById('btnUploadCsv').addEventListener('click', async () => {
-        const fileInput = document.getElementById('csvFileInput');
-        if (fileInput.files.length === 0) { alert(tr('alertSelectCsv')); return; }
-
-        const file = fileInput.files[0];
-        const reader = new FileReader();
-        reader.onload = async function(e) {
-            const text = e.target.result;
-            try {
-                const res = await apiFetch('/api/import-csv', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ csv_data: text })
-                });
-                if (res && res.ok) {
-                    const result = await res.json();
-                    renderCsvImportResult(result, null);
-                    fileInput.value = "";
-                    refreshInventory();
-                    // Non si cambia piu' tab automaticamente: l'elenco delle
-                    // righe scartate e' proprio qui, e passare all'inventario
-                    // lo faceva sparire prima che qualcuno lo leggesse.
-                } else if (res) {
-                    let detail = '';
-                    try { const err = await res.json(); detail = err && err.detail; } catch (e2) {}
-                    renderCsvImportResult(null, detail || tr('alertImportCsvError'));
-                }
-            } catch (err) {
-                renderCsvImportResult(null, `${tr('alertError')}${err}`);
+    btnUploadCsv.addEventListener('click', async () => {
+        if (!importState.text) { alert(tr('alertSelectCsv')); return; }
+        try {
+            const res = await apiFetch('/api/import-csv', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: importBody()
+            });
+            if (res && res.ok) {
+                renderCsvImportResult(await res.json(), null);
+                importState.text = '';
+                importState.decisions = {};
+                importState.preview = null;
+                csvInput.value = '';
+                if (csvDropText) csvDropText.innerHTML = csvDropHtml;
+                renderImportPreview();
+                refreshInventory();
+                // The tab is not switched: the skipped/failed rows are listed
+                // right here, and the inventory would hide them.
+            } else if (res) {
+                const err = await res.json().catch(() => ({}));
+                renderCsvImportResult(null, err.detail || tr('alertImportCsvError'));
             }
-        };
-        reader.readAsText(file);
+        } catch (err) {
+            renderCsvImportResult(null, `${tr('alertError')}${err}`);
+        }
     });
 
     // Probes for the inventory's Probe column. Cached: the list changes only when

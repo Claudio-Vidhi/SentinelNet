@@ -172,5 +172,7 @@ interface Window {
     openIncident: any; // incidents.js, called from observability.js
     renderCheckList: any; // devices.js, called from topology.js
     switchMcpPane: any;   // settings.js
+    openImportFor: any;   // devices.js, opened from the Organizations tab
+    loadImportDestinations: any; // devices.js, called by switchTab
 }
 
