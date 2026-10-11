@@ -163,6 +163,7 @@ _CSV_ALIASES: Dict[str, str] = {
     # The pre-0.52 spelling is the column's name before the rename: an old export must
     # reimport onto the same probes. 'sede' is reserved for Location.
     "group": "Group", "gruppo": "Group", "tenant": "Group",
+    "organization": "Group", "organizzazione": "Group", "org": "Group",
     "probe": "Probe", "sonda": "Probe", "site": "Probe",  # check-site-name: ok
     "location": "Location", "sede": "Location",
     "vendor": "Vendor", "marca": "Vendor", "produttore": "Vendor",
@@ -181,6 +182,25 @@ def _canonical_header(name: str) -> "str | None":
     """Nome canonico della colonna, o ``None`` se non riconosciuta."""
     key = "".join(ch for ch in (name or "").lower() if ch.isalnum())
     return _CSV_ALIASES.get(key)
+
+
+def _delimiter(header_line: str) -> str:
+    # Sniffer di csv: comodo ma sbaglia sui file a colonna singola. Qui si
+    # sceglie il separatore piu' presente nell'intestazione, che e' la riga in
+    # cui i separatori ci sono per definizione.
+    delimiter = max((",", ";", "	", "|"), key=header_line.count)
+    return delimiter if header_line.count(delimiter) else ","
+
+
+def _csv_columns(raw: str) -> list:
+    """Headers as written, with the canonical field each maps to (None =
+    ignored): what the import preview shows as «colonne riconosciute»."""
+    text = (raw or "").lstrip("﻿").strip()
+    if not text:
+        return []
+    header_line = text.splitlines()[0]
+    headers = next(csv.reader([header_line], delimiter=_delimiter(header_line)))
+    return [(h.strip(), _canonical_header(h)) for h in headers]
 
 
 def _read_inventory_csv(raw: str):
@@ -202,14 +222,7 @@ def _read_inventory_csv(raw: str):
         raise ValueError("File CSV vuoto.")
 
     header_line = text.splitlines()[0]
-    # Sniffer di csv: comodo ma sbaglia sui file a colonna singola. Qui si
-    # sceglie il separatore piu' presente nell'intestazione, che e' la riga in
-    # cui i separatori ci sono per definizione.
-    delimiter = max((",", ";", "\t", "|"), key=header_line.count)
-    if header_line.count(delimiter) == 0:
-        delimiter = ","
-
-    reader = csv.reader(text.splitlines(), delimiter=delimiter)
+    reader = csv.reader(text.splitlines(), delimiter=_delimiter(header_line))
     rows = list(reader)
     if not rows:
         raise ValueError("File CSV vuoto.")
@@ -362,7 +375,9 @@ def _same_device(row: dict, ip: str, group: str) -> bool:
     return row.get("IP") == ip and row.get("Group") == group
 
 
-def add_or_update_device(ip, vendor, profile, username, password, enable_secret, group, probe=None, ssh_port=None, transports=None, snmp_community=None, snmp_disabled=None, location=None, require_location=True):
+def _merged_row(devices, ip, vendor, profile, username, password, enable_secret, group,
+                probe=None, ssh_port=None, transports=None, snmp_community=None,
+                snmp_disabled=None, location=None, require_location=True, hostname=None) -> dict:
     # Validazione IP robusta
     match = IP_PATTERN.match(ip)
     if not match or not all(0 <= int(octet) <= 255 for octet in match.groups()):
@@ -378,95 +393,112 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
     # Mappa trasporti esplicita (§11.6): validata; None = deriva da esistente/legacy.
     transports = _validate_transports(transports)
 
+    resolved_group = group
+    # Preserva l'hostname già rilevato sul dispositivo esistente
+    existing = next((d for d in devices if _same_device(d, ip, resolved_group)), None)
+
+    location_probe = None
+    if require_location:
+        from services import location_manager
+        resolved_location = location if location is not None else (existing.get('Location') if existing else None)
+        if not resolved_location:
+            raise ValueError("La sede è obbligatoria per un nuovo dispositivo.")
+        loc_obj = location_manager.get_location(resolved_location)
+        if not loc_obj or loc_obj.get("org") != resolved_group:
+            raise ValueError(f"Sede '{resolved_location}' inesistente o non appartenente al gruppo '{resolved_group}'.")
+        location_probe = loc_obj.get("probe")
+    else:
+        resolved_location = location if location is not None else (existing.get('Location') if existing else "")
+
+    # Credenziali: su un dispositivo GIÀ ESISTENTE un valore vuoto vuole
+    # dire "lascia quelle che ci sono", non "cancellale" — stessa regola
+    # della community SNMP qui sotto. Senza, ogni salvataggio parziale le
+    # azzerava: la modifica da UI obbligava a ridigitare la password per
+    # non perderla, e ogni sync dell'agente di sede (routers/agent.py, che
+    # le credenziali non le conosce e manda stringhe vuote) riportava ai
+    # default i dispositivi che annunciava.
+    # In creazione si scrive quello che arriva: il vuoto è già gestito a
+    # valle da get_device_credentials, che ricade sui default.
+    # ponytail: non c'è modo esplicito di SVUOTARE un enable secret. Se
+    # servisse, la strada è la spunta dedicata che la community SNMP ha
+    # già, non un sentinel diverso da queste due.
+    if existing is not None:
+        username = username or existing.get('Username') or ''
+        enc_password = crypto_vault.encrypt_password(password) if password \
+            else (existing.get('Password') or '')
+        enc_secret = crypto_vault.encrypt_password(enable_secret) if enable_secret \
+            else (existing.get('Enable Secret') or '')
+    else:
+        enc_password = crypto_vault.encrypt_password(password)
+        enc_secret = crypto_vault.encrypt_password(enable_secret)
+    existing_hostname = hostname or (existing.get('Hostname') if existing else None)
+    # Preserva la sede esistente se non ne viene indicata una nuova.
+    # A new device without an explicit probe takes its location's default.
+    resolved_probe = probe or (existing.get('Probe') if existing else None) or location_probe or 'central'
+    resolved_port = ssh_port if ssh_port is not None else \
+        ((existing.get('SSH Port') if existing else None) or 22)
+    # Trasporti: esplicito > esistente (se già migrato) > sintesi ssh-only.
+    if transports is not None:
+        resolved_transports = transports
+    elif existing is not None and existing.get('Transports'):
+        resolved_transports = parse_transports(existing)
+    else:
+        resolved_transports = {"ssh": int(resolved_port)}
+    # Rispecchia la porta SSH nella colonna legacy 'SSH Port' per
+    # retrocompatibilità di lettura (get_device_port, is_reachable).
+    ssh_mirror = resolved_transports.get('ssh')
+    if ssh_mirror is None:
+        ssh_mirror = resolved_port
+    # Community SNMP: None = preserva quella esistente (i moduli che
+    # aggiornano un device per altri motivi non devono cancellarla),
+    # stringa vuota = rimuovila. Cifrata nel vault come le altre credenziali.
+    if snmp_community is None:
+        enc_community = (existing.get('SNMP Community') if existing else '') or ''
+    else:
+        enc_community = crypto_vault.encrypt_password(snmp_community) \
+            if snmp_community else ''
+    # Esclusione SNMP: None = lascia com'e' (i moduli che aggiornano un
+    # device per altri motivi non devono cambiarla), come per la community.
+    if snmp_disabled is None:
+        disabled_val = (existing.get('SNMP Disabled') if existing else '') or ''
+    else:
+        disabled_val = '1' if snmp_disabled else ''
+    new_device = {
+        'IP': ip, 'Vendor': vendor.lower(), 'Profile': profile,
+        'Username': username, 'Password': enc_password, 'Enable Secret': enc_secret,
+        'Group': resolved_group,
+        'Probe': resolved_probe,
+        'Location': resolved_location,
+        'SSH Port': str(ssh_mirror),
+        'Transports': json.dumps(resolved_transports, separators=(',', ':')),
+        'SNMP Community': enc_community,
+        'SNMP Disabled': disabled_val,
+    }
+    if existing_hostname:
+        new_device['Hostname'] = existing_hostname
+    return new_device
+
+def upsert_devices(entries: list) -> None:
+    """Add or update many devices with one inventory write: an import of N rows
+    used to rewrite the whole inventory N times. Every entry is validated
+    before anything is written."""
     with _io_lock:
         devices = get_all_devices()
-        resolved_group = group
-        # Preserva l'hostname già rilevato sul dispositivo esistente
-        existing = next((d for d in devices if _same_device(d, ip, resolved_group)), None)
-
-        location_probe = None
-        if require_location:
-            from services import location_manager
-            resolved_location = location if location is not None else (existing.get('Location') if existing else None)
-            if not resolved_location:
-                raise ValueError("La sede è obbligatoria per un nuovo dispositivo.")
-            loc_obj = location_manager.get_location(resolved_location)
-            if not loc_obj or loc_obj.get("org") != resolved_group:
-                raise ValueError(f"Sede '{resolved_location}' inesistente o non appartenente al gruppo '{resolved_group}'.")
-            location_probe = loc_obj.get("probe")
-        else:
-            resolved_location = location if location is not None else (existing.get('Location') if existing else "")
-
-        # Credenziali: su un dispositivo GIÀ ESISTENTE un valore vuoto vuole
-        # dire "lascia quelle che ci sono", non "cancellale" — stessa regola
-        # della community SNMP qui sotto. Senza, ogni salvataggio parziale le
-        # azzerava: la modifica da UI obbligava a ridigitare la password per
-        # non perderla, e ogni sync dell'agente di sede (routers/agent.py, che
-        # le credenziali non le conosce e manda stringhe vuote) riportava ai
-        # default i dispositivi che annunciava.
-        # In creazione si scrive quello che arriva: il vuoto è già gestito a
-        # valle da get_device_credentials, che ricade sui default.
-        # ponytail: non c'è modo esplicito di SVUOTARE un enable secret. Se
-        # servisse, la strada è la spunta dedicata che la community SNMP ha
-        # già, non un sentinel diverso da queste due.
-        if existing is not None:
-            username = username or existing.get('Username') or ''
-            enc_password = crypto_vault.encrypt_password(password) if password \
-                else (existing.get('Password') or '')
-            enc_secret = crypto_vault.encrypt_password(enable_secret) if enable_secret \
-                else (existing.get('Enable Secret') or '')
-        else:
-            enc_password = crypto_vault.encrypt_password(password)
-            enc_secret = crypto_vault.encrypt_password(enable_secret)
-        existing_hostname = existing.get('Hostname') if existing else None
-        # Preserva la sede esistente se non ne viene indicata una nuova.
-        # A new device without an explicit probe takes its location's default.
-        resolved_probe = probe or (existing.get('Probe') if existing else None) or location_probe or 'central'
-        resolved_port = ssh_port if ssh_port is not None else \
-            ((existing.get('SSH Port') if existing else None) or 22)
-        # Trasporti: esplicito > esistente (se già migrato) > sintesi ssh-only.
-        if transports is not None:
-            resolved_transports = transports
-        elif existing is not None and existing.get('Transports'):
-            resolved_transports = parse_transports(existing)
-        else:
-            resolved_transports = {"ssh": int(resolved_port)}
-        # Rispecchia la porta SSH nella colonna legacy 'SSH Port' per
-        # retrocompatibilità di lettura (get_device_port, is_reachable).
-        ssh_mirror = resolved_transports.get('ssh')
-        if ssh_mirror is None:
-            ssh_mirror = resolved_port
-        # Community SNMP: None = preserva quella esistente (i moduli che
-        # aggiornano un device per altri motivi non devono cancellarla),
-        # stringa vuota = rimuovila. Cifrata nel vault come le altre credenziali.
-        if snmp_community is None:
-            enc_community = (existing.get('SNMP Community') if existing else '') or ''
-        else:
-            enc_community = crypto_vault.encrypt_password(snmp_community) \
-                if snmp_community else ''
-        # Esclusione SNMP: None = lascia com'e' (i moduli che aggiornano un
-        # device per altri motivi non devono cambiarla), come per la community.
-        if snmp_disabled is None:
-            disabled_val = (existing.get('SNMP Disabled') if existing else '') or ''
-        else:
-            disabled_val = '1' if snmp_disabled else ''
-        devices = [d for d in devices if not _same_device(d, ip, resolved_group)]
-
-        new_device = {
-            'IP': ip, 'Vendor': vendor.lower(), 'Profile': profile,
-            'Username': username, 'Password': enc_password, 'Enable Secret': enc_secret,
-            'Group': resolved_group,
-            'Probe': resolved_probe,
-            'Location': resolved_location,
-            'SSH Port': str(ssh_mirror),
-            'Transports': json.dumps(resolved_transports, separators=(',', ':')),
-            'SNMP Community': enc_community,
-            'SNMP Disabled': disabled_val,
-        }
-        if existing_hostname:
-            new_device['Hostname'] = existing_hostname
-        devices.append(new_device)
+        for e in entries:
+            row = _merged_row(devices, **e)
+            devices = [d for d in devices if not _same_device(d, row["IP"], row["Group"])]
+            devices.append(row)
         write_devices(devices)
+
+
+def add_or_update_device(ip, vendor, profile, username, password, enable_secret, group,
+                         probe=None, ssh_port=None, transports=None, snmp_community=None,
+                         snmp_disabled=None, location=None, require_location=True):
+    upsert_devices([dict(ip=ip, vendor=vendor, profile=profile, username=username,
+                         password=password, enable_secret=enable_secret, group=group,
+                         probe=probe, ssh_port=ssh_port, transports=transports,
+                         snmp_community=snmp_community, snmp_disabled=snmp_disabled,
+                         location=location, require_location=require_location)])
 
 def delete_device(ip: str, group: Optional[str] = None):
     with _io_lock:
