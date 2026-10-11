@@ -435,7 +435,10 @@ SentinelNet"), shows who is signing in, and lists what the client will be
 able to do. Sign in there (password or SSO), then **Authorize** or
 **Cancel**; cancelling stops the bridge at once. An operator or admin can
 tick **Read-only** (on by default): the client then acts as a viewer whatever
-the user's role, so the model cannot run commands. The page counts down the
+the user's role, so the model cannot run commands. An admin who keeps **Read-only** can also
+tick **Allow proposing Blueprint drafts**: the client may then call
+`blueprint_propose`, which only appends operations to an organization's
+Blueprint draft for an admin to review. The page counts down the
 five minutes the bridge waits and says so when the request has expired.
 
 The bridge keeps the resulting revocable grant in the OS keychain (Windows

@@ -103,6 +103,39 @@ reachable from the central server and are reported as errors. Locations without 
 gateway are skipped (and raise `location_no_gateway`). The snapshot age is shown
 in the top bar; one snapshot per organization, replaced by each refresh.
 
+## Assistant
+
+Three ways to fill the draft without typing every operation. All three only
+**append to the draft**, with source `assistant` (shown as «assistente» in
+«Rivedi»): applying stays the admin's «Applica».
+
+- **«Descrivi la rete»** (button «Assistente»): write the network in a sentence —
+  «sede centrale a Milano con 10.10.0.0/16, filiali a Roma e Torino in VPN» — and
+  «Genera bozza». The active AI profile (AI tab) turns it into operations; an
+  answer that does not validate is sent back once with the error, then refused.
+  Needs an active AI profile; with Ollama nothing leaves the server.
+- **«Ricava dalle configurazioni»**: reads the latest backup of every device of
+  the organization, no AI needed. It proposes each private interface network
+  (not /31–/32, not loopbacks, not shut down) that no location covers yet, to the
+  device's location; the gateway of a location without one when exactly one of
+  its devices has a static default route (outside VRFs); a `vpn` link when a
+  FortiGate phase 1 points (`remote-gw`) at a device of another location. Devices
+  without a location or a backup are listed in the notes. «Usa l'AI per nomi e
+  ruoli» adds a second, optional pass that may only rename locations or change
+  their role; if it fails, the derived operations stay.
+- **MCP** (`blueprint_get`, `blueprint_propose`): an external client can read the
+  model with its checks and propose operations. It needs an admin account, or a
+  read-only sign-in where the admin ticked «Consenti di proporre bozze del
+  Blueprint» on the consent page; the right ends when the user stops being an
+  admin.
+
+**«Istruzioni assistente»** holds the organization's conventions (location
+names, addressing plan, roles), up to 4000 characters, sent with every
+«Descrivi» and AI pass. They are not part of the revisions.
+
+The description, the model and the instructions reach the AI provider only when
+you press a button, through the active profile, as in the AI tab.
+
 ## Primi passi
 
 A panel at the top, shown until complete, derived from the model and the checks
