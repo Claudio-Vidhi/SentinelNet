@@ -128,7 +128,11 @@ def _subnet_checks(locs: dict, devices: list, arp: list) -> list:
                       name=locs[lid]["name"], subnet=net, count=count))
 
     used = [a for a in (_addr(x) for x in [d.get("IP") for d in devices] + [e.get("ip") for e in arp]) if a]
+    arp_sources = {e.get("source_ip") for e in arp}
     for lid, ns in sorted(nets.items()):
+        # No verdict without data: only a location whose gateway reports ARP.
+        if not locs[lid].get("gateway") or locs[lid]["gateway"] not in arp_sources:
+            continue
         for n in ns:
             if not any(a.version == n.version and a in n for a in used):
                 out.append(_f("subnet_unused", "info", {"location": lid}, name=locs[lid]["name"], subnet=str(n)))

@@ -107,8 +107,14 @@ class TestSubnetChecks(_Proposals):
         self.assertEqual(locs["roma"]["subnets"], ["10.20.0.0/16", "10.30.1.0/24", "10.31.0.0/24"])
 
     def test_subnet_unused(self):
-        fs = found(bc.run(self.v, obs(devices=[dev("10.10.0.1", "milano")])), "subnet_unused")
+        arp = [{"ip": "10.10.0.9", "source_ip": "10.10.0.1"}, {"ip": "10.10.0.8", "source_ip": "10.20.0.1"}]
+        fs = found(bc.run(self.v, obs(devices=[dev("10.10.0.1", "milano")], arp=arp)), "subnet_unused")
         self.assertEqual([f["params"]["subnet"] for f in fs], ["10.20.0.0/16"])
+
+    def test_subnet_unused_needs_arp_from_the_gateway(self):
+        self.assertEqual(found(bc.run(self.v, obs()), "subnet_unused"), [])
+        arp = [{"ip": "10.10.0.9", "source_ip": "10.10.0.1"}]          # only milano reports
+        self.assertEqual(found(bc.run(self.v, obs(arp=arp)), "subnet_unused"), [])
 
     def test_sorted_by_severity(self):
         v = view({"milano": loc("Milano", "hq", ["10.10.0.0/16"]), "roma": loc("Roma", subnets=["10.10.5.0/24"])})

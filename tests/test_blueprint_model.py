@@ -79,6 +79,22 @@ class TestApplyOps(unittest.TestCase):
                 self.assertEqual(cm.exception.index, 1)
                 self.assertTrue(str(cm.exception).startswith("Modifica 2: "))
 
+    def test_malformed_ops_are_op_errors(self):
+        for op in ("set_gateway", ["op"], {"op": "add_link", "a": ["x"], "b": "roma", "kind": "vpn"},
+                   {"op": "update_location", "id": ["roma"], "fields": {"name": "X"}}):
+            with self.subTest(op=op):
+                with self.assertRaises(bm.OpError) as cm:
+                    apply([{"op": "set_gateway", "id": "milano", "ip": "10.10.0.1"}, op])
+                self.assertEqual(cm.exception.index, 1)
+
+    def test_client_id_must_be_a_slug(self):
+        for wanted in ("a--b", "+x", "<img>", "Roma"):
+            with self.subTest(id=wanted):
+                with self.assertRaises(bm.OpError):
+                    apply([{"op": "create_location", "name": "X", "id": wanted}])
+        locs, _, refs = apply([{"op": "create_location", "ref": "+napoli", "name": "Napoli", "id": "napoli-2"}])
+        self.assertEqual(refs, {"+napoli": "napoli-2"})
+
     def test_link_id_is_ordered(self):
         self.assertEqual(bm.link_id("roma", "milano", "vpn"), "milano--roma--vpn")
 

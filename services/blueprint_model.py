@@ -83,8 +83,10 @@ def apply_ops(org: str, locations: dict, links: dict, ops: list, probes=None):
         return lid
 
     for i, op in enumerate(ops):
-        kind = op.get("op")
         try:
+            if not isinstance(op, dict):
+                raise ValueError("operazione malformata")
+            kind = op.get("op")
             if kind == "create_location":
                 fields = _clean_fields({"name": op.get("name"), "role": op.get("role") or "branch",
                                         "subnets": op.get("subnets") or [],
@@ -94,6 +96,8 @@ def apply_ops(org: str, locations: dict, links: dict, ops: list, probes=None):
                 if ref is not None and (not str(ref).startswith("+") or ref in refs):
                     raise ValueError(f"riferimento non valido: {ref}")
                 wanted = op.get("id")
+                if wanted and wanted != _slugify(wanted):
+                    raise ValueError(f"id non valido: {wanted}")
                 lid = wanted if wanted and wanted not in locs else _free_id(wanted or _slugify(fields["name"]), locs)
                 locs[lid] = dict(fields, org=org)
                 if ref:
@@ -135,6 +139,8 @@ def apply_ops(org: str, locations: dict, links: dict, ops: list, probes=None):
             raise
         except ValueError as e:
             raise OpError(i, str(e))
+        except (TypeError, AttributeError) as e:
+            raise OpError(i, f"operazione malformata: {e}")
     return locs, lnks, refs
 
 

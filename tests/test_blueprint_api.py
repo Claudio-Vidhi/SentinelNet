@@ -62,6 +62,15 @@ class TestAccess(_Api):
         self.assertEqual(self._as("view").post("/api/blueprint/acme/draft", json={"ops": []}).status_code, 403)
         self.assertEqual(self.c.get("/api/blueprint/nobody").status_code, 404)
 
+    def test_scoped_admin_cannot_write_another_org(self):
+        beta = self._as("admbeta")
+        for method, path, body in (("post", "/draft", {"ops": []}), ("put", "/draft", {"ops": []}),
+                                   ("post", "/draft/apply", {}), ("post", "/draft/discard", None),
+                                   ("post", "/draft/align", None), ("post", "/observe", None)):
+            with self.subTest(path=path, method=method):
+                r = getattr(beta, method)(f"/api/blueprint/acme{path}", json=body)
+                self.assertEqual(r.status_code, 403, r.text)
+
 
 class TestDraftFlow(_Api):
     def test_preset_apply_revisions_diff(self):
@@ -83,6 +92,11 @@ class TestDraftFlow(_Api):
         self.assertEqual(r.status_code, 422)
         self.assertEqual(r.json()["detail"]["index"], 1)
         self.assertIsNone(self.c.get("/api/blueprint/acme").json()["draft"])
+
+    def test_malformed_op_is_422_not_500(self):
+        r = self.draft({"ops": [{"op": "add_link", "a": ["x"], "b": "roma", "kind": "vpn"}]})
+        self.assertEqual(r.status_code, 422, r.text)
+        self.assertEqual(r.json()["detail"]["index"], 0)
 
     def test_replace_and_discard(self):
         self.draft({"ops": [{"op": "set_gateway", "id": "roma", "ip": "10.20.0.1"},
@@ -131,3 +145,9 @@ class TestDraftFlow(_Api):
             r = self.c.post("/api/blueprint/acme/observe")
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(obs.call_args.args[0], "acme")
+
+    def test_observe_collects_from_the_draft_gateways(self):
+        self.draft({"ops": [{"op": "set_gateway", "id": "roma", "ip": "10.20.0.1"}]})
+        with patch.object(blueprint_observe, "observe", return_value={"at": "now", "gateways": {}}) as obs:
+            self.c.post("/api/blueprint/acme/observe")
+        self.assertEqual(obs.call_args.args[1]["locations"]["roma"]["gateway"], "10.20.0.1")

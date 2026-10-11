@@ -78,7 +78,7 @@ are not remembered: they come back while their cause persists.
 | `gateway_not_in_location` | gateway IP is not a device of that location (error) | never |
 | `device_outside_subnets` | device IP outside its location's subnets (warning) | never |
 | `arp_uncovered` | /24 seen in ARP by a gateway that no location covers (warning) | no finding without ARP data |
-| `subnet_unused` | declared subnet with no device and no ARP entry (info) | no finding without ARP data |
+| `subnet_unused` | declared subnet with no device and no ARP entry (info) | no finding unless the location's gateway reports ARP |
 | `link_no_route` | gateway of A has no route to a subnet of B, or vice versa (error; warning via a default route, or when only backup static routes are known) | a location has no gateway, or no routes are known for it |
 | `route_without_link` | route from A's gateway towards B's subnets with no link A-B (info) | no finding without routes |
 | `vpn_link_down` | `vpn` link with no up tunnel between the two gateways (error) | neither side has FortiGate tunnel data (one known side decides) |
