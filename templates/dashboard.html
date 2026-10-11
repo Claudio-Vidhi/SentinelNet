@@ -358,6 +358,9 @@
         <button class="nav-item requires-admin" data-tab="tab-groups" role="tab" aria-controls="tab-groups" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabGroups"><i class="fa-solid fa-folder-open"></i> Organizzazioni</span>
         </button>
+        <button id="navBlueprint" class="nav-item requires-admin" data-tab="tab-blueprint" role="tab" aria-controls="tab-blueprint" aria-selected="false" tabindex="-1">
+          <span class="nav-left"><i class="fa-solid fa-diagram-project"></i> <span data-i18n="tabBlueprint">Blueprint di rete</span></span>
+        </button>
         <button class="nav-item requires-admin" data-tab="tab-probes" role="tab" aria-controls="tab-probes" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabProbes"><i class="fa-solid fa-building"></i> Sonde</span>
           <span class="preview-badge">preview</span>
@@ -1026,6 +1029,83 @@
         </div>
       </section>
     </div>
+
+    <div id="tab-blueprint" class="tab-content" role="tabpanel" tabindex="0">
+      <div class="page-head">
+        <div class="page-head-text">
+          <h2 data-i18n="tabBlueprint">Blueprint di rete</h2>
+          <p data-i18n="descBlueprint">La rete come deve essere, confrontata con quella che SentinelNet osserva.</p>
+        </div>
+      </div>
+
+      <div class="panel bp-bar">
+        <label for="bpOrgSelect" data-i18n="lblBpOrg">Organizzazione</label>
+        <select id="bpOrgSelect"></select>
+        <span id="bpRevInfo" class="bp-meta"></span>
+        <span id="bpObsInfo" class="bp-meta"></span>
+        <span class="bp-bar-actions">
+          <button type="button" class="btn btn-secondary btn-small" id="btnBpCheck" data-i18n="btnBpCheck">Verifica</button>
+          <button type="button" class="btn btn-secondary btn-small" id="btnBpObserve" data-i18n="btnBpObserve">Aggiorna dai gateway</button>
+          <button type="button" class="btn btn-secondary btn-small" id="btnBpPreset" data-i18n="btnBpPreset">Preset…</button>
+          <button type="button" class="btn btn-secondary btn-small" id="btnBpHistory" data-i18n="btnBpHistory">Storico</button>
+        </span>
+      </div>
+
+      <section id="bpSteps" class="panel" hidden>
+        <h3 data-i18n="bpStepsTitle">Primi passi</h3>
+        <ol id="bpStepsList" class="bp-steps"></ol>
+      </section>
+
+      <div id="bpDraftBar" class="panel bp-draft-bar" hidden>
+        <span id="bpDraftInfo"></span>
+        <span class="bp-bar-actions">
+          <button type="button" class="btn btn-secondary btn-small" id="btnBpDraftReview" data-i18n="btnBpDraftReview">Rivedi</button>
+          <button type="button" class="btn btn-primary btn-small" id="btnBpDraftApply" data-i18n="btnBpDraftApply">Applica</button>
+          <button type="button" class="btn btn-secondary btn-small" id="btnBpDraftDiscard" data-i18n="btnBpDraftDiscard">Scarta</button>
+        </span>
+      </div>
+
+      <div class="bp-grid">
+        <section class="panel panel-flush">
+          <div class="panel-head">
+            <h3 data-i18n="bpLocations">Sedi</h3>
+            <button type="button" class="btn btn-secondary btn-small" id="btnBpAddLocation" style="width:auto;"><i class="fa-solid fa-plus"></i> <span data-i18n="btnBpAddLocation">Nuova sede</span></button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th data-i18n="thBpLocName">Sede</th><th data-i18n="thBpRole">Ruolo</th><th data-i18n="thBpSubnets">Subnet</th>
+                <th data-i18n="thBpGateway">Gateway</th><th data-i18n="thBpProbe">Sonda</th><th data-i18n="thBpActions">Azioni</th>
+              </tr></thead>
+              <tbody id="bpLocationsBody"></tbody>
+            </table>
+          </div>
+          <div class="panel-head">
+            <h3 data-i18n="bpLinks">Collegamenti</h3>
+            <button type="button" class="btn btn-secondary btn-small" id="btnBpAddLink" style="width:auto;"><i class="fa-solid fa-plus"></i> <span data-i18n="btnBpAddLink">Nuovo collegamento</span></button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th data-i18n="thBpLinkA">Sede A</th><th data-i18n="thBpLinkB">Sede B</th><th data-i18n="thBpKind">Tipo</th><th data-i18n="thBpActions">Azioni</th>
+              </tr></thead>
+              <tbody id="bpLinksBody"></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="panel">
+          <div id="bpDiagram" class="bp-diagram" role="img" aria-label="Diagramma delle sedi e dei collegamenti" data-i18n-aria-label="bpDiagramAria"></div>
+        </section>
+      </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h3 data-i18n="bpFindingsTitle">Verifiche</h3>
+          <button type="button" class="btn btn-primary btn-small" id="btnBpAcceptSelected" style="width:auto;" data-i18n="btnBpAcceptSelected">Aggiungi alla bozza</button>
+        </div>
+        <div id="bpFindings"></div>
+      </section>
+    </div> <!-- End #tab-blueprint -->
 
     <!-- TAB 3: Port-Channel & Link (la lista adjacency testuale è stata rimossa:
          la topologia si consulta nella mappa interattiva) -->
@@ -5693,6 +5773,130 @@
         <button type="button" class="btn btn-secondary" data-close-modal="locationModal" data-i18n="uiCancel">Annulla</button>
         <button type="button" class="btn btn-primary" id="btnSaveLocation" data-i18n="btnSave">Salva</button>
       </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="bpLocationModal">
+    <div class="modal" style="width: 520px; max-width: 95%;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-map-pin"></i> <span data-i18n="bpLocModalTitle">Sede</span></h3>
+        <button type="button" class="modal-close" data-close-modal="bpLocationModal" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="form-group"><label for="bpLocName" data-i18n="lblBpLocName">Nome</label><input id="bpLocName" type="text" style="padding-left:12px;"></div>
+      <div class="form-group">
+        <label for="bpLocRole" data-i18n="lblBpLocRole">Ruolo</label>
+        <select id="bpLocRole">
+          <option value="hq" data-i18n="locRole_hq">Sede centrale</option>
+          <option value="branch" data-i18n="locRole_branch">Filiale</option>
+          <option value="datacenter" data-i18n="locRole_datacenter">Datacenter</option>
+          <option value="warehouse" data-i18n="locRole_warehouse">Magazzino</option>
+          <option value="other" data-i18n="locRole_other">Altro</option>
+        </select>
+      </div>
+      <div class="form-group"><label for="bpLocSubnets" data-i18n="lblBpLocSubnets">Subnet (una per riga, CIDR)</label><textarea id="bpLocSubnets" rows="4" placeholder="10.10.0.0/16" style="width:100%; font-family:var(--font-code); font-size:12px; padding:8px;"></textarea></div>
+      <div class="form-group"><label for="bpLocProbe" data-i18n="lblBpLocProbe">Sonda predefinita</label><select id="bpLocProbe"></select></div>
+      <div class="form-group"><label for="bpLocGateway" data-i18n="lblBpLocGateway">Gateway (IP di un apparato della sede)</label><input id="bpLocGateway" type="text" placeholder="10.10.0.1" style="padding-left:12px;"></div>
+      <p id="bpLocError" class="form-hint" role="alert" style="color:var(--danger);"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal="bpLocationModal" data-i18n="uiCancel">Annulla</button>
+        <button type="button" class="btn btn-primary" id="btnBpLocSave" data-i18n="btnBpSaveToDraft">Salva nella bozza</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="bpLinkModal">
+    <div class="modal" style="width: 460px; max-width: 95%;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-link"></i> <span data-i18n="bpLinkModalTitle">Collegamento</span></h3>
+        <button type="button" class="modal-close" data-close-modal="bpLinkModal" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="form-group"><label for="bpLinkA" data-i18n="thBpLinkA">Sede A</label><select id="bpLinkA"></select></div>
+      <div class="form-group"><label for="bpLinkB" data-i18n="thBpLinkB">Sede B</label><select id="bpLinkB"></select></div>
+      <div class="form-group">
+        <label for="bpLinkKind" data-i18n="thBpKind">Tipo</label>
+        <select id="bpLinkKind">
+          <option value="vpn" data-i18n="bpKind_vpn">VPN</option>
+          <option value="wan" data-i18n="bpKind_wan">WAN</option>
+          <option value="mpls" data-i18n="bpKind_mpls">MPLS</option>
+          <option value="lan" data-i18n="bpKind_lan">LAN</option>
+        </select>
+      </div>
+      <div class="form-group"><label for="bpLinkNote" data-i18n="lblBpLinkNote">Nota</label><input id="bpLinkNote" type="text" style="padding-left:12px;"></div>
+      <p id="bpLinkError" class="form-hint" role="alert" style="color:var(--danger);"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal="bpLinkModal" data-i18n="uiCancel">Annulla</button>
+        <button type="button" class="btn btn-primary" id="btnBpLinkSave" data-i18n="btnBpSaveToDraft">Salva nella bozza</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="bpPresetModal">
+    <div class="modal" style="width: 480px; max-width: 95%;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-shapes"></i> <span data-i18n="bpPresetModalTitle">Preset</span></h3>
+        <button type="button" class="modal-close" data-close-modal="bpPresetModal" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <p class="form-hint" data-i18n="bpPresetHint">Crea una bozza: le sedi esistenti restano, le subnet si completano con le verifiche.</p>
+      <div class="form-group">
+        <label for="bpPresetKind" data-i18n="lblBpPresetKind">Topologia</label>
+        <select id="bpPresetKind">
+          <option value="single" data-i18n="bpPreset_single">Sede singola</option>
+          <option value="hub_spoke" data-i18n="bpPreset_hub_spoke">Hub-and-spoke (sede centrale + N filiali via VPN)</option>
+          <option value="hub_spoke_dc" data-i18n="bpPreset_hub_spoke_dc">Hub-and-spoke con datacenter</option>
+          <option value="full_mesh" data-i18n="bpPreset_full_mesh">Full mesh (N sedi)</option>
+        </select>
+      </div>
+      <div class="form-group"><label for="bpPresetN" data-i18n="lblBpPresetN">Numero di sedi (1–50)</label><input id="bpPresetN" type="number" min="1" max="50" value="3" style="padding-left:12px;"></div>
+      <p id="bpPresetError" class="form-hint" role="alert" style="color:var(--danger);"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal="bpPresetModal" data-i18n="uiCancel">Annulla</button>
+        <button type="button" class="btn btn-primary" id="btnBpPresetCreate" data-i18n="btnBpPresetCreate">Crea bozza</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="bpDraftModal">
+    <div class="modal" style="width: 640px; max-width: 95%;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-list-check"></i> <span data-i18n="bpDraftModalTitle">Bozza</span></h3>
+        <button type="button" class="modal-close" data-close-modal="bpDraftModal" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <ol id="bpDraftOps" class="bp-ops"></ol>
+      <div id="bpConflict" class="bp-conflict" hidden>
+        <p data-i18n="bpConflict">Il modello è cambiato dopo la creazione della bozza. Ecco cosa è cambiato:</p>
+        <div id="bpConflictDiff"></div>
+        <button type="button" class="btn btn-secondary btn-small" id="btnBpAlign" data-i18n="btnBpAlign">Allinea alla versione attuale</button>
+      </div>
+      <div class="form-group"><label for="bpApplyNote" data-i18n="lblBpApplyNote">Nota della revisione (facoltativa)</label><input id="bpApplyNote" type="text" style="padding-left:12px;"></div>
+      <p id="bpDraftError" class="form-hint" role="alert" style="color:var(--danger);"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal="bpDraftModal" data-i18n="uiCancel">Annulla</button>
+        <button type="button" class="btn btn-primary" id="btnBpDraftApplyConfirm" data-i18n="btnBpDraftApplyConfirm">Applica la bozza</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="bpHistoryModal">
+    <div class="modal" style="width: 760px; max-width: 95%;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-clock-rotate-left"></i> <span data-i18n="bpHistoryModalTitle">Storico revisioni</span></h3>
+        <button type="button" class="modal-close" data-close-modal="bpHistoryModal" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="table-wrap" style="max-height:280px; overflow:auto;">
+        <table>
+          <thead><tr>
+            <th data-i18n="thBpRev">Rev</th><th data-i18n="thBpAt">Quando</th><th data-i18n="thBpBy">Chi</th>
+            <th data-i18n="thBpSource">Origine</th><th data-i18n="thBpNote">Nota</th><th data-i18n="thBpActions">Azioni</th>
+          </tr></thead>
+          <tbody id="bpRevisionsBody"></tbody>
+        </table>
+      </div>
+      <div class="bp-bar" style="margin-top:12px;">
+        <label for="bpDiffA" data-i18n="lblBpDiffA">Da</label><select id="bpDiffA"></select>
+        <label for="bpDiffB" data-i18n="lblBpDiffB">A</label><select id="bpDiffB"></select>
+        <button type="button" class="btn btn-secondary btn-small" id="btnBpDiff" data-i18n="btnBpDiff">Confronta</button>
+      </div>
+      <div id="bpDiffOut"></div>
     </div>
   </div>
 

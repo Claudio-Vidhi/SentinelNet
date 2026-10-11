@@ -1749,6 +1749,7 @@ const LAZY_TAB_SCRIPTS = {
     'tab-netsec-audit': ['/static/vendor/html2pdf/html2pdf.bundle.min.js', '/static/js/netsec-audit.js', '/static/js/audit_checklist.js'],
     'tab-policy-test': ['/static/js/policy-test.js'],
     'tab-config-drift': ['/static/js/config-drift.js'],
+    'tab-blueprint': ['/static/vendor/vis/vis-network.min.js', '/static/js/blueprint.js'],
     'tab-routes': ['/static/js/routes-view.js'],
     'tab-device-history': ['/static/js/device-history.js'],
     'tab-notifications': ['/static/js/notifications.js'],
@@ -1926,6 +1927,7 @@ async function switchTab(tabId, clickedBtn, opts = {}) {
     else if (tabId === 'tab-netsec-audit') loadNetSecAuditTab();
     else if (tabId === 'tab-policy-test') loadPolicyTestTab();
     else if (tabId === 'tab-config-drift') loadConfigDriftTab();
+    else if (tabId === 'tab-blueprint') loadBlueprintTab();
     else if (tabId === 'tab-routes') loadRoutesTab();
     else if (tabId === 'tab-device-history') loadDeviceHistoryTab();
     else if (tabId === 'tab-notifications' && typeof loadNotificationsTab === 'function') loadNotificationsTab();
@@ -2522,6 +2524,7 @@ function buildCommandPaletteItems(query = '') {
         { id: 'tab-import', title: tr('coreCsvImport'), desc: tr('coreBulkImportDevicesFrom'), group: tr('coreViews') },
         { id: 'tab-users', title: tr('coreUsers'), desc: tr('coreManageLocalUserAccounts'), group: tr('coreViews') },
         { id: 'tab-groups', title: tr('coreTenantManagement'), desc: tr('coreConfigureTenantsAndSnmp'), group: tr('coreViews') },
+        { id: 'tab-blueprint', title: tr('tabBlueprint'), desc: tr('descBlueprint'), group: tr('coreViews') },
         { id: 'tab-probes', title: tr('coreProbes'), desc: tr('coreProbesAndAgents'), group: tr('coreViews') },
         { id: 'tab-mcp', title: tr('coreIntegrationsMcp'), desc: tr('coreMcpServersAndExternal'), group: tr('coreViews') },
         { id: 'tab-settings', title: tr('coreSettings'), desc: tr('coreAppSettingsPingMonitor'), group: tr('coreViews') },

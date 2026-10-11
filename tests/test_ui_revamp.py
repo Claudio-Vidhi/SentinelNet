@@ -522,7 +522,7 @@ class TestGroupsTabRestyle(unittest.TestCase):
     def test_groups_tab_uses_component_classes(self):
         html = _html()
         tab_start = html.index('<div id="tab-groups"')
-        tab_end = html.index('<!-- TAB 3:')
+        tab_end = html.index('<div id="tab-blueprint"')
         tab_html = html[tab_start:tab_end]
         self.assertIn('class="page-head"', tab_html)
         # tenants table + vendor registry, both flush tables; adding a vendor
