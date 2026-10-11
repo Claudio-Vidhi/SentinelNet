@@ -45,6 +45,13 @@ class TestHostsOnSqlite(unittest.TestCase):
         im.get_all_devices()[0]["Hostname"] = "poisoned"
         self.assertEqual(im.get_all_devices()[0]["Hostname"], "")
 
+    def test_write_diffs_against_the_table_not_the_cache(self):
+        self._add("192.0.2.1")
+        im._rows_cache[im.inventory_db_path()] = []   # cache diverged from the table
+        im.write_devices([])
+        im._rows_cache.clear()
+        self.assertEqual(im.get_all_devices(), [])
+
     def test_location_referenced_by_decommissioned_device_cannot_go(self):
         seed_inventory(decommissioned=[{"IP": "192.0.2.9", "Group": "acme", "Location": self.loc,
                                         "Decommissioned": "x", "Decommissioned By": "a"}])

@@ -238,7 +238,7 @@ EOF
 ```
 
 These thirteen columns are the canonical schema — the same ones
-`inventory_manager.safe_write_hosts_csv` writes. Unrecognised columns are
+`inventory_manager.write_devices` writes. Unrecognised columns are
 dropped the first time the inventory is rewritten.
 
 **`Group` and `Probe` are two different things, and conflating them is the
