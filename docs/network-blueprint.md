@@ -45,24 +45,27 @@ says so).
 
 ## Presets
 
-«Preset…» creates a draft from a fixed skeleton. N is 1 to 50.
+«Preset…» creates a draft from a fixed skeleton. N is 1 to 50 (ignored by
+Sede singola).
 
 | Preset | Result |
 |---|---|
-| Sede singola | one location |
-| Hub-and-spoke | HQ plus N branches, each linked to the HQ by VPN |
-| Hub-and-spoke con DC | HQ, datacenter and N branches, each linked to both |
-| Full mesh | N locations, every pair linked |
+| Sede singola | one `hq` «Sede principale», only if the organization has no locations |
+| Hub-and-spoke | the existing `hq` as hub (else a new «Sede centrale», `hq`) plus N branches «Filiale k», each linked to the hub by VPN |
+| Hub-and-spoke con DC | as above, plus the existing datacenter (else a new «Datacenter»), linked to the hub as `wan`; each branch is linked by VPN to both |
+| Full mesh | N new locations «Sede N» (the first is the `hq` if none exists, otherwise all are branches), with every pair of locations, old and new, linked by VPN |
 
-Existing locations are kept: a preset only adds, and an existing `hq` is reused
-as the hub. New locations get placeholder names («Filiale 1…N») and their role;
-their subnets are left empty for you to fill in (or to accept from the checks).
+Existing locations are kept: a preset only adds. Branch numbering continues
+after the branches already there. Subnets are left empty for you to fill in (or
+to accept from the checks).
 
 ## Checks
 
 «Verifica» runs the checks on the model with the open draft applied in memory,
-so a proposal already in the draft disappears. A check without the data it needs
-answers **sconosciuto**, never «ok». A finding with a proposal has a checkbox and
+so a proposal already in the draft disappears. A routing or VPN check on an existing link without the data it needs
+answers **sconosciuto**, never «ok». The discovery checks (`arp_uncovered`,
+`subnet_unused`, `route_without_link`, `tunnel_without_link`) only propose, so
+without their data they simply produce no finding. A finding with a proposal has a checkbox and
 «modifica»; «Aggiungi alla bozza» adds the selected proposals. Rejected proposals
 are not remembered: they come back while their cause persists.
 
@@ -74,19 +77,19 @@ are not remembered: they come back while their cause persists.
 | `location_no_gateway` | location without a gateway (warning) | never |
 | `gateway_not_in_location` | gateway IP is not a device of that location (error) | never |
 | `device_outside_subnets` | device IP outside its location's subnets (warning) | never |
-| `arp_uncovered` | /24 seen in ARP by a gateway that no location covers (warning) | no ARP data |
-| `subnet_unused` | declared subnet with no device and no ARP entry (info) | no ARP data |
-| `link_no_route` | gateway of A has no route to a subnet of B, or vice versa (error; via a default route: warning) | no routes for the gateway |
-| `route_without_link` | route from A's gateway towards B's subnets with no link A-B (info) | no routes for the gateway |
-| `vpn_link_down` | `vpn` link with no up tunnel between the two gateways (error) | no tunnel data for the gateway |
-| `tunnel_without_link` | up tunnel between two gateways with no link (info) | no tunnel data |
+| `arp_uncovered` | /24 seen in ARP by a gateway that no location covers (warning) | no finding without ARP data |
+| `subnet_unused` | declared subnet with no device and no ARP entry (info) | no finding without ARP data |
+| `link_no_route` | gateway of A has no route to a subnet of B, or vice versa (error; warning via a default route, or when only backup static routes are known) | a location has no gateway, or no routes are known for it |
+| `route_without_link` | route from A's gateway towards B's subnets with no link A-B (info) | no finding without routes |
+| `vpn_link_down` | `vpn` link with no up tunnel between the two gateways (error) | neither side has FortiGate tunnel data (one known side decides) |
+| `tunnel_without_link` | up tunnel between two gateways with no link (info) | no finding without tunnel data |
 
 Caveats:
 
 - **Routes** come from the latest **backup** of each gateway until you press
   «Aggiorna dai gateway», and a backup holds static routes only. Dynamic routes
   (BGP, OSPF) appear only after a live refresh, so without one `link_no_route`
-  may report a route as missing that exists in the running table.
+  is only a warning: the route may exist in the running table.
 - **Tunnels** are read from FortiGate gateways only. A `vpn` link whose gateway
   is another vendor stays **sconosciuto**.
 
