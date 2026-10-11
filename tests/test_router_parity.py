@@ -395,7 +395,9 @@ class TestFullParity(unittest.TestCase):
                     # POST /api/probes/test-bastion/draft (already in NEW_PREFIXES).
                     "BastionDraftSchema",
                     "LocationCreateSchema", "LocationUpdateSchema", "LocationDeleteSchema",
-                    "DraftAddSchema", "DraftReplaceSchema", "ApplySchema")
+                    "DraftAddSchema", "DraftReplaceSchema", "ApplySchema",
+                    # Blueprint assistant (spec 2026-10-11, routes under /api/blueprint).
+                    "AssistantDescribeSchema", "AssistantDeriveSchema", "InstructionsSchema")
     # v7: /anomalies ora restituisce INCIDENTI invece di singoli eventi
     # correlati. Parametri e forma della risposta restano quelli storici (li
     # consumano il tab Flussi e il tool MCP), è cambiata la descrizione.
