@@ -44,6 +44,11 @@ class TestImportUi(unittest.TestCase):
             with self.subTest(key=key):
                 self.assertEqual(len(re.findall(rf"^\s+{key}:", I18N, re.M)), 2)
 
+    def test_preview_has_location_column(self):
+        self.assertIn('data-i18n="importThLocation"', HTML)
+        self.assertIn("locationLabel(r.location)", DEVICES)
+        self.assertEqual(len(re.findall(r"^\s+importThLocation:", I18N, re.M)), 2)
+
     def test_accessibility(self):
         self.assertRegex(HTML, r'id="importFilterTabs"[^>]*role="tablist"')
         for sel in ("importOrgSelect", "importLocationSelect"):

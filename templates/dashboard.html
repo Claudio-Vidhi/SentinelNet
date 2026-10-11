@@ -2774,7 +2774,7 @@
 192.0.2.1,admin,Mypass123!,enablepass,switch-01,acme,roma,central,cisco
 198.51.100.1,manager,Pwd456!,secret,switch-02,acme,roma,probe-roma,hpe</div>
             <p class="set-desc" style="margin:10px 0 0;" data-i18n="importFlexNote">
-          Obbligatorie: <code>IP</code>, <code>Group</code> e <code>Location</code> (la sede, per nome o id).
+          Obbligatoria solo <code>IP</code>: <code>Group</code> e <code>Location</code> (la sede, per nome o id) prevalgono sulla destinazione scelta, che vale per le righe senza.
           Maiuscole, underscore e nomi in italiano (<code>indirizzo</code>, <code>utente</code>, <code>gruppo</code>,
           <code>sede</code>) sono riconosciuti, così come il punto e virgola come separatore e i file salvati da Excel.
         </p>
@@ -2818,7 +2818,7 @@
               <table style="font-size:12px;">
                 <thead><tr>
                   <th data-i18n="importThRow">#</th><th data-i18n="importThDevice">Apparato</th>
-                  <th data-i18n="importThStatus">Stato</th><th data-i18n="importThNotes">Note</th><th></th>
+                  <th data-i18n="importThLocation">Sede</th><th data-i18n="importThStatus">Stato</th><th data-i18n="importThNotes">Note</th><th></th>
                 </tr></thead>
                 <tbody id="importPreviewBody"></tbody>
               </table>

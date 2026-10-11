@@ -25,7 +25,7 @@ SQLite, WAL, `foreign_keys = ON`). Implementation: `services/inventory_store.py`
 | Table | Key | Notes |
 |---|---|---|
 | `organizations` | `key` | `name`, `description` |
-| `locations` | `id` | `org` references `organizations(key)` (`ON DELETE RESTRICT`); `name`, `role`, `subnets` (JSON list), `probe` |
+| `locations` | `id` | `org` references `organizations(key)` (plain `REFERENCES`, i.e. `NO ACTION`: deleting a referenced organization fails); `name`, `role`, `subnets` (JSON list), `probe` |
 | `hosts` | `("IP", "Group")` | CSV column names kept; `"Location"` references `locations(id)`, NULL when empty |
 | `decommissioned_hosts` | same | the same columns plus `"Decommissioned"`, `"Decommissioned By"` |
 
@@ -87,7 +87,8 @@ API (Organizations tab permission; writes need an admin in scope):
 ### 1. Locations
 
 Runs once at startup when `locations.json` does not exist
-(`core/location_migration.py`). It backs up `groups.json`, `probes.json`,
+(`core/location_migration.py`), and is skipped once `inventory.db` exists:
+after the SQLite migration `locations.json` is gone by design. It backs up `groups.json`, `probes.json`,
 `network_hosts.csv`, `decommissioned_hosts.csv` and `device_meta.db` next to
 themselves (`*.pre-locations`), then:
 
@@ -115,10 +116,13 @@ locations migration, which still reads the old files.
 1. It reads `groups.json`, `locations.json`, `network_hosts.csv` and
    `decommissioned_hosts.csv`, and builds the database in a temporary file in
    one transaction.
-2. Rows repeating an `(IP, Group)` keep the last one; the count is logged.
+2. Rows repeating an `(IP, Group)` keep the last one; the count is logged
+   (central: audit log; agent: printed to its console as `[inventory] migrazione: ...`).
 3. The database is renamed into place, then each source is renamed to
    `*.pre-sqlite`. That file is the backup and the sign it was consumed; a
-   crash between the two renames is finished at the next start.
+   crash between the two renames is finished at the next start. An existing
+   `*.pre-sqlite` is never overwritten: the source stays in place and the
+   start logs a warning naming it.
 4. A second start finds `inventory.db` and does nothing.
 
 A row whose `Location` names a location missing from `locations.json` is an

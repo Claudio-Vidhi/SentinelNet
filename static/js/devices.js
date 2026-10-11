@@ -2074,6 +2074,7 @@
         importPreviewBody.innerHTML = shown.map(r => `<tr>
             <td style="color:var(--text-muted);">${escapeHtml(String(r.row))}</td>
             <td style="font-family:var(--font-code);">${escapeHtml(r.ip || '')}<div>${escapeHtml(r.hostname || '')}</div></td>
+            <td>${escapeHtml(r.location ? locationLabel(r.location) : '')}</td>
             <td><span style="color:${IMPORT_STATUS_COLOR[r.status]};">${escapeHtml(tr(IMPORT_STATUS_KEYS[r.status]))}</span></td>
             <td>${importNotes(r)}</td>
             <td>${importActionButton(r)}</td></tr>`).join('');
