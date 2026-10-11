@@ -93,6 +93,13 @@ async def lifespan(app: "FastAPI"):
         print(f"ERRORE: {e}", file=sys.stderr)
         raise
 
+    # Revision 1 of every organization's Blueprint (spec 2026-10-11): the
+    # history starts from the model as it is at the first start with it.
+    # Idempotent: nothing is recorded when nothing changed.
+    from services import blueprint_store, inventory_manager as _inv
+    with _inv._db() as _conn, _conn:
+        blueprint_store.record_revisions(_conn, "", "migration")
+
     # Prima di tutto il resto: ripara le ACL dei file che contengono segreti.
     # Sotto il servizio Windows l'irrigidimento falliva (icacls 1332, account
     # macchina non risolvibile) e secret.key restava leggibile da qualunque
