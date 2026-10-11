@@ -23,6 +23,7 @@ class OpError(ValueError):
     def __init__(self, index: int, message: str):
         super().__init__(f"Modifica {index + 1}: {message}")
         self.index = index
+        self.reason = message
 
 
 def link_id(a: str, b: str, kind: str) -> str:

@@ -21,6 +21,13 @@ def _tables(conn):
     return inventory_store.read_locations(conn), inventory_store.read_links(conn)
 
 
+def _ai_available() -> bool:
+    # Imported here: the AI profiles live in the AI router, which imports half
+    # the application.
+    from routers.ai import _get_active_ai_profile
+    return _get_active_ai_profile() is not None
+
+
 def _preview(org, locs, links, draft):
     if not draft:
         return None, ""
@@ -36,12 +43,14 @@ def state(org: str) -> dict:
         locs, links = _tables(conn)
         draft = blueprint_store.get_draft(conn, org)
         revs = blueprint_store.revisions(conn, org)
+        instructions = inventory_store.read_instructions(conn, org)
     preview, error = _preview(org, locs, links, draft)
     view = blueprint_model.org_view(locs, links, org)
     return {"org": org, "locations": view["locations"], "links": view["links"],
             "rev": revs[0]["rev"] if revs else 0, "rev_info": revs[0] if revs else None,
             "draft": draft, "preview": preview, "draft_error": error,
-            "probes": [{"id": p["id"], "name": p.get("name") or p["id"]} for p in probe_manager.list_probes()]}
+            "probes": [{"id": p["id"], "name": p.get("name") or p["id"]} for p in probe_manager.list_probes()],
+            "instructions": instructions, "ai_available": _ai_available()}
 
 
 def checks(org: str) -> dict:
