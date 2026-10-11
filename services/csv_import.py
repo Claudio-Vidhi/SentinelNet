@@ -119,6 +119,7 @@ def classify(csv_text, default_org, default_location, decisions, scope) -> dict:
         username, password = rec.get("Username", ""), rec.get("Password", "")
         if existing:
             r["status"] = "update"
+            r["_profile"] = existing.get("Profile", "")   # the file has no Profile column: keep it
             incoming = {"Hostname": r["hostname"], "Vendor": r["vendor"] if rec.get("Vendor") else "",
                         "Username": username, "Password": password,
                         "Enable Secret": rec.get("Enable Secret", ""), "Probe": probe,
@@ -155,7 +156,7 @@ def apply(csv_text, default_org, default_location, decisions, scope) -> dict:
     entries = []
     for r in todo:
         rec = r["_rec"]
-        entries.append(dict(ip=r["ip"], vendor=r["vendor"], profile="custom",
+        entries.append(dict(ip=r["ip"], vendor=r["vendor"], profile=r.get("_profile", "custom"),
                             username=rec.get("Username", ""), password=rec.get("Password", ""),
                             enable_secret=rec.get("Enable Secret", ""), group=r["org"],
                             probe=(rec.get("Probe") or "").strip() or None,

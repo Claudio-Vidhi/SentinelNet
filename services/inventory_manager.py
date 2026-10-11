@@ -266,6 +266,14 @@ def inventory_version() -> int:
 
 def write_devices(devices, exempt=frozenset(), relabel=None):
     global _version
+    # Two rows with one (IP, organization) would collapse into one in the
+    # table: refuse the write instead of silently losing a device.
+    seen, dupes = set(), set()
+    for d in devices:
+        (dupes if device_pair(d) in seen else seen).add(device_pair(d))
+    if dupes:
+        raise ValueError("; ".join(f"{ip} è già presente nell'organizzazione {org}"
+                                   for org, ip in sorted(dupes)))
     # The inventory changes on every write: the IP -> device cache goes stale.
     invalidate_device_ip_cache()
     # Same for analyze_device's memo: inventory Vendor/tenant/hostname drive

@@ -106,6 +106,36 @@ class TestInventoryMigration(unittest.TestCase):
         with self._db() as c:
             self.assertEqual(st.read_hosts(c, "hosts")[0]["Location"], "")
 
+    def test_existing_backup_never_overwritten(self):
+        mig.migrate(self.d)
+        bak = os.path.join(self.d, "network_hosts.csv.pre-sqlite")
+        with open(bak, encoding="utf-8") as f:
+            original = f.read()
+        src = os.path.join(self.d, "network_hosts.csv")
+        _csv(src, [{"IP": "192.0.2.77", "Group": "acme", "Location": "roma"}])
+        steps = mig.migrate(self.d)
+        self.assertTrue(any("network_hosts.csv.pre-sqlite" in s for s in steps), steps)
+        self.assertTrue(os.path.exists(src))
+        with open(bak, encoding="utf-8") as f:
+            self.assertEqual(f.read(), original)
+
+    def test_bom_csv(self):
+        path = os.path.join(self.d, "network_hosts.csv")
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        with open(path, "w", encoding="utf-8-sig", newline="") as f:
+            f.write(text)
+        mig.migrate(self.d)
+        with self._db() as c:
+            self.assertEqual([r["IP"] for r in st.read_hosts(c, "hosts")], ["192.0.2.1", "192.0.2.2"])
+
+    def test_duplicate_decommissioned_reported(self):
+        row = {"IP": "192.0.2.9", "Group": "acme", "Location": "roma",
+               "Decommissioned": "x", "Decommissioned By": "a"}
+        _csv(os.path.join(self.d, "decommissioned_hosts.csv"), [row, row], extra=st.DECOM_FIELDS)
+        steps = mig.migrate(self.d)
+        self.assertTrue(any(s.startswith("decommissioned_hosts.csv: 1 righe duplicate") for s in steps), steps)
+
     def test_fresh_install_does_nothing(self):
         d = tempfile.mkdtemp()
         self.assertEqual(mig.migrate(d), [])

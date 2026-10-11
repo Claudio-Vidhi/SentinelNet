@@ -126,8 +126,13 @@ class TestProbeMigration(unittest.TestCase):
         with open(cfg, "w", encoding="utf-8") as f:
             json.dump({"central_url": "https://central.example", "probe_id": "lab",
                        "token": "t", "data_dir": self.d}, f)
-        with patch.dict(os.environ, {}), patch.object(sys, "argv", ["probe_agent.py", "--config", cfg]):
+        import contextlib
+        import io
+        out = io.StringIO()
+        with patch.dict(os.environ, {}), patch.object(sys, "argv", ["probe_agent.py", "--config", cfg]), \
+                contextlib.redirect_stdout(out):
             probe_agent.load_config()
+        self.assertIn("[inventory] migrazione: inventario su SQLite", out.getvalue())
         # The SQLite migration then consumes the CSV: the probe value reaching
         # inventory.db proves the header was renamed first.
         from services import inventory_store
