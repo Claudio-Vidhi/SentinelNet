@@ -614,7 +614,7 @@ Each needs its own brainstorming → spec → plan, and builds on the `Location`
 
 | # | Sub-project | Depends on | First questions to settle |
 |---|---|---|---|
-| 2 | Per-location CSV import with preview (dry-run) | 1 | preview granularity (row / location); what «apply» does on conflicts |
+| 2 | Inventory on SQLite and per-location CSV import with preview: done, see `2026-10-10-inventory-sqlite-import.md` | 1 | — |
 | 3 | Network Blueprint wizard (presets, canvas, deterministic checks, «Primi passi») | 1, 2 | which presets; canvas on the existing vis-network or not; what the checks verify |
 | 4 | Assistant: «Descrivi la rete», «Ricava dalle configurazioni», draft-only MCP tool | 3 | output is always a Blueprint draft, never a direct write |
 | 5 | Maps and routing per location | 1 (3 for links) | map grouping by location; source of inter-location links (Blueprint vs discovered) |

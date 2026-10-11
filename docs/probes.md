@@ -48,7 +48,7 @@ Direct (central server) probe (Mode A), not an agent probe.
 │         CENTRAL SENTINELNET             │               │            REMOTE SITE (VM / AGENT)          │
 │                                         │  HTTPS (443)  │                                              │
 │  - Web dashboard & API                  │ ◄───────────  │  - probe_agent.py                            │
-│  - Probe registry & token hash          │  Outbound     │  - Local inventory (network_hosts.csv)       │
+│  - Probe registry & token hash          │  Outbound     │  - Local inventory (inventory.db)            │
 │  - Job queue (SQLite)                   │  polling      │  - Credentials stored locally                │
 │  - Consolidated inventory & MAC tracker │               │  - Direct local SSH to switches/firewalls    │
 └─────────────────────────────────────────┘               └──────────────────────┬───────────────────────┘
@@ -64,7 +64,7 @@ Key principles:
 1. **Outbound-only connection.** The agent connects from the site up to central.
    No inbound port is opened at the remote site.
 2. **Credential isolation.** SSH and enable passwords for remote devices live
-   exclusively in the agent's local data directory (`network_hosts.csv`). Only
+   exclusively in the agent's local data directory (`inventory.db`). Only
    metadata (IP, hostname, vendor, MAC table) is sent to central. This limits
    credential exfiltration from a compromised central server.
 3. **CLI command relay.** When an administrator sends a CLI command from the
@@ -240,6 +240,14 @@ EOF
 These thirteen columns are the canonical schema — the same ones
 `inventory_manager.write_devices` writes. Unrecognised columns are
 dropped the first time the inventory is rewritten.
+
+The agent's local inventory is `inventory.db` (SQLite), the same store central
+uses. At agent start, an existing `network_hosts.csv` is migrated into it and
+renamed `network_hosts.csv.pre-sqlite`; the seed file above is therefore only
+read once. The get/save inventory RPC between central and agent still carries
+CSV text (the agent converts at its edge), so an updated central and an older
+agent, or the reverse, keep syncing. The agent database has no locations: a
+save whose CSV names a non-empty `Location` fails as a job error.
 
 **`Group` and `Probe` are two different things, and conflating them is the
 classic multi-site mistake.** `Group` is the **tenant**: the visibility
@@ -556,6 +564,6 @@ agent probes.
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | **HTTP 401 (heartbeat failed)** | Wrong token or probe id | Check `agent.json`. If the token is lost, use **Regenerate token** in the dashboard and update `agent.json`. |
-| **Devices don't appear on central** | `network_hosts.csv` empty or wrong on the remote host | Verify that `data_dir` in `agent.json` points at the folder containing `network_hosts.csv`. |
+| **Devices don't appear on central** | inventory empty or wrong on the remote host | Verify that `data_dir` in `agent.json` points at the folder containing `inventory.db` (or the `network_hosts.csv` to migrate). |
 | **CLI command stuck in `queued`** | Agent not running, or the device IP is missing from the agent's *local* inventory | Confirm `probe_agent.py` is running and that the requested IP exists in the agent's local inventory. |
 | **TLS certificate error** | Self-signed certificate on central | Set `"verify_tls": false` in `agent.json` (test/lab only), or import the CA into the remote host's trust store. |

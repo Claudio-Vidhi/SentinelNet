@@ -7,17 +7,40 @@ Every device belongs to an **organization** and to one of its physical
 
 | Concept | Code / storage | UI (it) | UI (en) |
 |---|---|---|---|
-| Tenant | `Group` column, `groups.json`, `tenant` in SQLite | Organizzazione | Organization |
-| Physical location | `Location` column, `locations.json` | Sede | Location |
+| Tenant | `Group` column, `organizations` table in `inventory.db`, `tenant` in SQLite | Organizzazione | Organization |
+| Physical location | `Location` column, `locations` table in `inventory.db` | Sede | Location |
 | How a device is reached | `Probe` column, `probes.json` | Sonda | Probe |
 
 An organization is the permission boundary: a scoped admin sees and manages
 only the organizations, and their locations, in scope. None is special and
 there is no default organization.
 
+## Storage
+
+Hosts, decommissioned hosts, organizations and locations live in
+`inventory.db`, next to the hosts path in the data directory (never tracked;
+SQLite, WAL, `foreign_keys = ON`). Implementation: `services/inventory_store.py`;
+`inventory_manager` and `location_manager` keep their public functions.
+
+| Table | Key | Notes |
+|---|---|---|
+| `organizations` | `key` | `name`, `description` |
+| `locations` | `id` | `org` references `organizations(key)` (`ON DELETE RESTRICT`); `name`, `role`, `subnets` (JSON list), `probe` |
+| `hosts` | `("IP", "Group")` | CSV column names kept; `"Location"` references `locations(id)`, NULL when empty |
+| `decommissioned_hosts` | same | the same columns plus `"Decommissioned"`, `"Decommissioned By"` |
+
+`hosts."Group"` has no foreign key and `"Location"` is nullable: an agent's
+database has no organization or location registry. "Every new or moved device
+needs a location" and "an organization with devices cannot be deleted" stay
+rules of the code (see Boundaries). Passwords stay encrypted with
+`crypto_vault`.
+
+Stays JSON: `probes.json` (tokens and agent configuration). CSV is an
+exchange format only: import, export, template and the agent inventory RPC.
+
 ## Locations
 
-`locations.json` (under the data directory, never tracked):
+A location row, shown as JSON by `GET /api/locations`:
 
 ```json
 {"milano": {"org": "acme", "name": "Milano", "role": "hq",
@@ -61,6 +84,8 @@ API (Organizations tab permission; writes need an admin in scope):
 
 ## Upgrade migration
 
+### 1. Locations
+
 Runs once at startup when `locations.json` does not exist
 (`core/location_migration.py`). It backs up `groups.json`, `probes.json`,
 `network_hosts.csv`, `decommissioned_hosts.csv` and `device_meta.db` next to
@@ -80,3 +105,58 @@ themselves (`*.pre-locations`), then:
 
 `locations.json` is written last, so a crash half-way reruns the whole
 migration at the next start; a second start does nothing.
+
+### 2. SQLite
+
+Runs once at startup (central and agent) when `inventory.db` does not exist
+and at least one old file does (`core/inventory_migration.py`), after the
+locations migration, which still reads the old files.
+
+1. It reads `groups.json`, `locations.json`, `network_hosts.csv` and
+   `decommissioned_hosts.csv`, and builds the database in a temporary file in
+   one transaction.
+2. Rows repeating an `(IP, Group)` keep the last one; the count is logged.
+3. The database is renamed into place, then each source is renamed to
+   `*.pre-sqlite`. That file is the backup and the sign it was consumed; a
+   crash between the two renames is finished at the next start.
+4. A second start finds `inventory.db` and does nothing.
+
+A row whose `Location` names a location missing from `locations.json` is an
+orphan. On central the migration stops, leaves every file untouched and the
+server refuses to start with a message naming the rows (an empty inventory
+would be worse): fix or remove those rows and restart. In an agent's data
+directory there is no `locations.json`, so such `Location` values are blanked
+and their count is logged instead.
+
+## Import per location
+
+The Import tab takes a default destination: an organization, then one of its
+locations. Each location in the Organizations tab links to the tab with both
+preselected. Import **never creates** organizations or locations.
+
+Choosing a file runs a preview (`POST /api/import-csv/preview`), which
+classifies every row against the inventory, the locations and the probes and
+writes nothing. Outcomes:
+
+- `new` / `update`: will be imported. `update` lists the changed fields
+  (credentials only as "changed"); empty cells keep the existing value.
+- `error`: IP missing or invalid, organization or location missing, unknown or
+  out of scope, unknown probe, IP repeated in the file, IP outside the
+  location's subnets but inside another location of the same organization, or
+  a **decommissioned** IP (reactivate or delete it first). The other rows
+  still import.
+- `skipped`: the row was set aside by the user.
+- A warning, not an error: IP outside the subnets of every location.
+
+Row actions on an error row: **Sposta in …** (the other location whose subnets
+contain the IP) and **Salta**. They are sent back as `decisions`, so preview
+and import stay stateless and run the same classification.
+
+Missing credentials are not an error. Each row shows a credentials note: the
+fallback that will apply (own credentials, the probe's identity, the global
+account) or that none exists and the connection will fail until an identity
+is assigned.
+
+`POST /api/import-csv` (same body) imports `new` + `update` rows in **one
+inventory write** and returns `{imported, updated, skipped, failed}`; it writes
+one audit entry with the counts. Both routes need the Import tab permission.
