@@ -103,7 +103,7 @@ Operations are validated when added (shape, enums, subnets via the existing
   (`source=migration`) with its current snapshot. Idempotent.
 - Apply: one transaction. If the organization's latest revision is not the
   draft's `base_rev`, apply is refused with `409` and the UI reruns the checks
-  on the new model; the draft stays, rebased by the user («Ribasa» sets
+  on the new model; the draft stays, and the user realigns it («Allinea alla versione attuale» sets
   `base_rev` to the current one after showing what changed in between).
 - Deleting a location that still has devices (active or decommissioned) is
   refused with the count, as today; the whole draft is not applied.
@@ -184,7 +184,7 @@ sub-project; other vendors' VPN links are `unknown`.
 - Draft bar, sticky while a draft exists: «Bozza · N modifiche · da rev M»,
   «Rivedi» (operations list, each editable or removable), «Applica» (optional
   note), «Scarta». On `409`: «Il modello è cambiato» with the in-between diff
-  and «Ribasa».
+  and «Allinea alla versione attuale» (en: «Align to current version»).
 - Storico: revisions (n, when, who, source, note); pick two → diff; «Ripristina
   questa revisione» opens a `restore` draft.
 - Presets modal: Sede singola; Hub-and-spoke (HQ + N filiali, vpn); Hub-and-spoke
@@ -213,7 +213,7 @@ Writes also `require_admin`, like the locations routes.
 | PUT | `/api/blueprint/{org}/draft` | `{ops}` replaces the list (edit/remove) |
 | POST | `/api/blueprint/{org}/draft/apply` | `{note}` → `{rev}`; `409` on stale base, `422` on an invalid op (which one, why) |
 | POST | `/api/blueprint/{org}/draft/discard` | |
-| POST | `/api/blueprint/{org}/draft/rebase` | sets `base_rev` to the current one |
+| POST | `/api/blueprint/{org}/draft/align` | sets `base_rev` to the current one |
 | GET | `/api/blueprint/{org}/revisions` · `/revisions/{n}` · `/diff?a=&b=` | |
 
 `/api/locations` keeps working and writes through the revisioned `_save`.
@@ -235,7 +235,7 @@ Writes also `require_admin`, like the locations routes.
 - Store: links schema (ordering, uniqueness, `a<>b`, foreign keys); revisions
   appended per changed organization only; startup revision 1 idempotent.
 - Drafts: add/replace/discard; `ref` resolution; apply all-or-nothing; stale
-  base → 409; rebase; delete with devices refused with count.
+  base → 409; align; delete with devices refused with count.
 - Restore: round trip (apply changes, restore rev N, apply → snapshot equals N);
   id clash gets a suffix.
 - Diff between revisions.
