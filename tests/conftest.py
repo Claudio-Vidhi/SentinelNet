@@ -72,8 +72,9 @@ def make_location(org: str = "Generale", name: str = "Sede", probe: str = "centr
 
 
 def seed_inventory(hosts=(), decommissioned=(), orgs=(), locations=None):
-    """Write rows straight into the inventory database under the current
-    get_hosts_csv() directory. Organizations named by rows or `orgs`, and
+    """Replace the hosts and decommissioned_hosts tables of the inventory
+    database under the current get_hosts_csv() directory with the given rows
+    (straight to the store, no write_devices checks). Organizations named by rows or `orgs`, and
     locations named by rows, are created; `locations` overrides their data."""
     from services import inventory_store
     rows = [dict({f: "" for f in inventory_store.HOST_FIELDS}, **h) for h in hosts]

@@ -252,13 +252,20 @@ def inventory_version() -> int:
 
 def write_devices(devices, exempt=frozenset(), relabel=None):
     global _version
+    # The inventory changes on every write: the IP -> device cache goes stale.
     invalidate_device_ip_cache()
+    # Same for analyze_device's memo: inventory Vendor/tenant/hostname drive
+    # it, but its key is only (ip, backup mtime), so a corrected Vendor would
+    # not expire it on its own. Local import to avoid an import cycle.
     from ai import config_analyzer
     config_analyzer._analyze_device_at.cache_clear()
     with _hosts_csv_lock:
-        old_rows = get_all_devices()
-        _refuse_decommissioned(devices, old_rows, exempt)
+        # Diffed against the table itself, not _rows_cache: write_hosts only
+        # touches rows that differ from `old`, so a cache that diverged from
+        # the table would make the divergence permanent.
         with _db() as conn:
+            old_rows = inventory_store.read_hosts(conn, "hosts")
+            _refuse_decommissioned(devices, old_rows, exempt)
             inventory_store.write_hosts(conn, "hosts", old_rows, devices)
         _rows_cache.pop(inventory_db_path(), None)
         _version += 1
