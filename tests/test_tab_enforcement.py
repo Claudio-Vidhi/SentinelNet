@@ -118,6 +118,7 @@ TAB_GET_ROUTES = [
     ("/api/ping/not-an-ip", "tab-devices"),
     ("/api/wlc/192.0.2.254/status", "tab-wlc"),
     ("/api/redundancy/groups", "tab-redundancy"),
+    ("/api/blueprint/acme", "tab-blueprint"),
 ]
 
 TAB_DENIED = "Funzionalita' non abilitata per questo utente."
