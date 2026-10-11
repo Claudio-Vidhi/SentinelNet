@@ -1048,6 +1048,8 @@
           <button type="button" class="btn btn-secondary btn-small" id="btnBpObserve" data-i18n="btnBpObserve">Aggiorna dai gateway</button>
           <button type="button" class="btn btn-secondary btn-small" id="btnBpPreset" data-i18n="btnBpPreset">Preset…</button>
           <button type="button" class="btn btn-secondary btn-small" id="btnBpHistory" data-i18n="btnBpHistory">Storico</button>
+          <button type="button" class="btn btn-secondary btn-small" id="btnBpAssistant"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> <span data-i18n="btnBpAssistant">Assistente</span></button>
+          <button type="button" class="btn btn-secondary btn-small" id="btnBpInstructions" data-i18n="btnBpInstructions">Istruzioni assistente</button>
         </span>
       </div>
 
@@ -5897,6 +5899,57 @@
         <button type="button" class="btn btn-secondary btn-small" id="btnBpDiff" data-i18n="btnBpDiff">Confronta</button>
       </div>
       <div id="bpDiffOut"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="bpAssistantModal">
+    <div class="modal" style="width: 620px; max-width: 95%;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-wand-magic-sparkles"></i> <span data-i18n="bpAssistModalTitle">Assistente Blueprint</span></h3>
+        <button type="button" class="modal-close" data-close-modal="bpAssistantModal" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <p class="form-hint" data-i18n="bpAssistHint">Le proposte finiscono nella bozza: nulla cambia finché non la applichi.</p>
+      <section class="bp-assist-pane">
+        <h4 data-i18n="bpAssistDescribeTitle">Descrivi la rete</h4>
+        <div class="form-group">
+          <label for="bpAssistText" data-i18n="lblBpAssistText">Descrizione (massimo 4000 caratteri)</label>
+          <textarea id="bpAssistText" rows="5" maxlength="4000" data-i18n-placeholder="bpAssistTextPh" placeholder="Sede centrale a Milano con 10.10.0.0/16, filiali a Roma e Torino collegate in VPN" style="width:100%; font-size:13px; padding:8px;"></textarea>
+        </div>
+        <button type="button" class="btn btn-primary btn-small" id="btnBpAssistDescribe" data-i18n="btnBpAssistDescribe">Genera bozza</button>
+      </section>
+      <section class="bp-assist-pane">
+        <h4 data-i18n="bpAssistDeriveTitle">Dalle configurazioni</h4>
+        <p class="form-hint" data-i18n="bpAssistDeriveHint">Legge i backup degli apparati: subnet delle interfacce, gateway con la rotta di default, VPN IPsec FortiGate tra sedi.</p>
+        <div class="form-group">
+          <input type="checkbox" id="bpAssistUseAi">
+          <label for="bpAssistUseAi" data-i18n="lblBpAssistUseAi">Usa l'AI per nomi e ruoli</label>
+        </div>
+        <button type="button" class="btn btn-primary btn-small" id="btnBpAssistDerive" data-i18n="btnBpAssistDerive">Ricava</button>
+      </section>
+      <p id="bpAssistError" class="form-hint" role="alert" style="color:var(--danger);"></p>
+      <pre id="bpAssistNotes" class="bp-assist-notes" hidden></pre>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal="bpAssistantModal" data-i18n="btnClose">Chiudi</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="bpInstructionsModal">
+    <div class="modal" style="width: 560px; max-width: 95%;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-book"></i> <span data-i18n="bpInstrModalTitle">Istruzioni assistente</span></h3>
+        <button type="button" class="modal-close" data-close-modal="bpInstructionsModal" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <p class="form-hint" data-i18n="bpInstrHint">Convenzioni di questa organizzazione che l'assistente segue: nomi delle sedi, piano di indirizzamento, ruoli.</p>
+      <div class="form-group">
+        <label for="bpInstrText" data-i18n="lblBpInstrText">Istruzioni (massimo 4000 caratteri)</label>
+        <textarea id="bpInstrText" rows="8" maxlength="4000" style="width:100%; font-size:13px; padding:8px;"></textarea>
+      </div>
+      <p id="bpInstrError" class="form-hint" role="alert" style="color:var(--danger);"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal="bpInstructionsModal" data-i18n="uiCancel">Annulla</button>
+        <button type="button" class="btn btn-primary" id="btnBpInstrSave" data-i18n="uiSave">Salva</button>
+      </div>
     </div>
   </div>
 
