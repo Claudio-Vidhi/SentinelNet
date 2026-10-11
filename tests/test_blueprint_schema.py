@@ -82,3 +82,50 @@ class TestLinks(_Base):
                             ("blueprint_revisions", 1)):   # history outlives the organization
             with self.subTest(table=table):
                 self.assertEqual(self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], left)
+
+
+class TestAssistantInstructions(_Base):
+    def test_round_trip(self):
+        self.assertEqual(inventory_store.read_instructions(self.conn, "acme"), "")
+        inventory_store.write_instructions(self.conn, "acme", "Sedi: nome della città.")
+        self.assertEqual(inventory_store.read_instructions(self.conn, "acme"), "Sedi: nome della città.")
+        self.assertEqual(inventory_store.read_instructions(self.conn, "nobody"), "")
+
+    def test_survive_every_org_write(self):
+        inventory_store.write_instructions(self.conn, "acme", "Sedi: nome della città.")
+        orgs = inventory_store.read_orgs(self.conn)
+        orgs["acme"]["name"] = "ACME S.p.A."          # what a rename writes
+        orgs["beta"] = {"description": ""}             # what a create writes
+        inventory_store.write_orgs(self.conn, orgs)
+        self.assertEqual(inventory_store.read_instructions(self.conn, "acme"), "Sedi: nome della città.")
+        self.assertNotIn("assistant_instructions", inventory_store.read_orgs(self.conn)["acme"])
+
+    def test_database_from_before_gets_the_column(self):
+        path = os.path.join(tempfile.mkdtemp(prefix="bp_old_org_"), "inventory.db")
+        raw = sqlite3.connect(path)
+        raw.executescript(
+            "CREATE TABLE organizations (key TEXT PRIMARY KEY, name TEXT, description TEXT NOT NULL DEFAULT '');"
+            "INSERT INTO organizations VALUES ('acme', NULL, '');")
+        raw.commit()
+        raw.close()
+        conn = inventory_store.connect(path)
+        self.addCleanup(conn.close)
+        self.assertEqual(inventory_store.read_instructions(conn, "acme"), "")
+        inventory_store.write_instructions(conn, "acme", "x")
+        self.assertEqual(inventory_store.read_instructions(conn, "acme"), "x")
+
+
+class TestInstructionsThroughTheManager(unittest.TestCase):
+    def test_rename_through_update_group_keeps_them(self):
+        from unittest.mock import patch
+        from services import inventory_manager
+        tmp = tempfile.mkdtemp(prefix="bp_instr_mgr_")
+        p = patch.object(inventory_manager, "HOSTS_CSV", os.path.join(tmp, "network_hosts.csv"))
+        p.start()
+        self.addCleanup(p.stop)
+        inventory_manager.save_groups({"acme": {"description": ""}})
+        with inventory_manager._db() as conn:
+            inventory_store.write_instructions(conn, "acme", "Ruoli: hq solo Milano.")
+        self.assertTrue(inventory_manager.update_group("acme", "ACME", "cliente"))
+        with inventory_manager._db() as conn:
+            self.assertEqual(inventory_store.read_instructions(conn, "acme"), "Ruoli: hq solo Milano.")

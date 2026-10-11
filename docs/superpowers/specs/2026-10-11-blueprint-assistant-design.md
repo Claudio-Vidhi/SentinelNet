@@ -41,11 +41,12 @@ anything else.
     operator's text.
 - Parse: the first JSON object in the reply (code fences tolerated). Not JSON,
   no `ops` list, or an `OpError` from `add_ops` → one retry, appending the
-  assistant reply and a user message with the error (operation index and
+  assistant reply and a user message with the error (operation index within the reply, and
   message). Second failure → `ValueError` (422) carrying the last error.
 - Success → `add_ops(org, ops, "assistant", by)`; returns
   `{"added": n, "notes": str, "state": state(org)}`.
 - Text limit 4000 characters; empty text → 422.
+- Route: `POST /api/blueprint/{org}/assistant/describe` `{text}` (admin).
 
 ## «Ricava dalle configurazioni» — `blueprint_derive.derive(view, devices, analyses)`
 
@@ -55,14 +56,14 @@ result (or `None` when there is no backup). Output `(ops, notes)`.
 - `add_subnet`: each interface address with a mask (IOS and FortiOS parsers
   already give it), RFC 1918, prefix shorter than /31, not a loopback, whose
   network no location of the organization covers yet → its network goes to the
-  device's location. One op per (location, network).
+  device's location. One op per (location, network). Interfaces administratively down are skipped; a network that overlaps a location subnet counts as covered; a network seen in two locations goes to the first location by id. IPv4 only.
 - `set_gateway`: a location with no gateway where exactly one of its devices
-  has a static default route (`0.0.0.0/0`) in its backup → that device.
+  has a static default route (`0.0.0.0/0`, outside any VRF) in its backup → that device; more than one candidate → a note, no op.
 - `add_link vpn`: a FortiOS `vpn ipsec phase1-interface` whose `remote-gw` is
-  the IP of a device in another location of the same organization, the two
+  the inventory IP, or an interface address in the backup, of a device in another location of the same organization, the two
   locations not already linked by a `vpn` link. One op per pair.
   `config_analyzer` today records only phase-1 names; it gains
-  `{"name", "remote_gw"}` per phase 1 (FortiOS only).
+  `vpn.peers`, one `{"name", "remote_gw"}` per phase 1 (FortiOS only); `vpn.phase1` stays the list of names its readers expect.
 - Skipped and counted in `notes`: devices without a location, without a
   backup, with an unparsable backup.
 - Optional LLM pass (checkbox «Usa l'AI per nomi e ruoli», only when an AI
@@ -73,6 +74,7 @@ result (or `None` when there is no backup). Output `(ops, notes)`.
 - `blueprint_assistant.derive(org, by, use_ai)` reads devices and analyses,
   calls the pure function, appends, returns `{"added", "notes", "state"}`. No
   ops → 422 «Nessuna proposta dalle configurazioni» with the notes.
+- Route: `POST /api/blueprint/{org}/assistant/derive` `{use_ai}` (admin).
 
 ## Organization instructions
 
@@ -89,6 +91,7 @@ result (or `None` when there is no backup). Output `(ops, notes)`.
   (`security/mcp_grants`) stores `bp_draft: bool` next to `read_only`.
 - `/api/mcp/session`: a read-only grant with `bp_draft` whose user is **still**
   an admin at session time gets claim `bpd: true` besides `ro`.
+- `assistant-draft` re-reads the user's role at every call: a user demoted after the session opened is refused at once.
 - `POST /api/blueprint/{org}/assistant-draft` `{ops, note}`:
   `require_tab("tab-blueprint")`, `assert_group_allowed`, and the caller is
   either an admin session or a session with `ro` + `bpd`. Source forced to
@@ -114,9 +117,7 @@ result (or `None` when there is no backup). Output `(ops, notes)`.
 
 ## Errors and privacy
 
-- No active AI profile → 503 «Nessun profilo AI attivo» (describe; the AI pass
-  of derive is just skipped). Provider errors → 503 with the
-  `AiAssistantError` message.
+- No active AI profile (or no API key) → 400, provider errors → 502 with the `AiAssistantError` message, rate limit → 429: the codes `routers/ai.chat_with_active_profile` already returns to the AI tab and the classification assistant. For derive, the AI pass is just skipped.
 - Network data reaches the LLM only on an explicit action, through the active
   profile, as in the AI tab today; with Ollama it stays local.
 - Audit: each describe/derive/assistant-draft call, with the op count.

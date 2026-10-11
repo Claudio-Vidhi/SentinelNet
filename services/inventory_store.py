@@ -34,7 +34,7 @@ def _host_table(name: str, fields: list) -> str:
 
 _SCHEMA = "\n".join([
     "CREATE TABLE IF NOT EXISTS organizations (key TEXT PRIMARY KEY, name TEXT, "
-    "description TEXT NOT NULL DEFAULT '');",
+    "description TEXT NOT NULL DEFAULT '', assistant_instructions TEXT NOT NULL DEFAULT '');",
     "CREATE TABLE IF NOT EXISTS locations (id TEXT PRIMARY KEY, "
     "org TEXT NOT NULL REFERENCES organizations(key), name TEXT NOT NULL, "
     "role TEXT NOT NULL, subnets TEXT NOT NULL DEFAULT '[]', "
@@ -78,6 +78,10 @@ def connect(path: str) -> sqlite3.Connection:
             # CREATE TABLE IF NOT EXISTS does not add it.
             if "gateway" not in {r["name"] for r in conn.execute("PRAGMA table_info(locations)")}:
                 conn.execute("ALTER TABLE locations ADD COLUMN gateway TEXT")
+            # Same for the Blueprint assistant's per-organization instructions
+            # (spec 2026-10-11 blueprint-assistant).
+            if "assistant_instructions" not in {r["name"] for r in conn.execute("PRAGMA table_info(organizations)")}:
+                conn.execute("ALTER TABLE organizations ADD COLUMN assistant_instructions TEXT NOT NULL DEFAULT ''")
             _ready.add(path)
     return conn
 
@@ -144,6 +148,18 @@ def write_orgs(conn, groups: dict) -> None:
             "INSERT INTO organizations (key, name, description) VALUES (?, ?, ?) "
             "ON CONFLICT (key) DO UPDATE SET name = excluded.name, description = excluded.description",
             [(k, v.get("name"), v.get("description") or "") for k, v in groups.items()])
+
+
+# Not in read_orgs/write_orgs on purpose: write_orgs upserts only name and
+# description, so every organization write (create, rename) keeps them.
+def read_instructions(conn, org: str) -> str:
+    r = conn.execute("SELECT assistant_instructions FROM organizations WHERE key = ?", (org,)).fetchone()
+    return r[0] if r else ""
+
+
+def write_instructions(conn, org: str, text: str) -> None:
+    with conn:
+        conn.execute("UPDATE organizations SET assistant_instructions = ? WHERE key = ?", (text, org))
 
 
 def read_locations(conn) -> dict:
