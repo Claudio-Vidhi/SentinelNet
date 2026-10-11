@@ -43,9 +43,8 @@ class TestLegacySynthesis(unittest.TestCase):
 class TestUpsertRoundTrip(unittest.TestCase):
     def setUp(self):
         # Isola l'inventario in un CSV temporaneo per ogni test.
-        fd, self.csv_path = tempfile.mkstemp(suffix=".csv")
-        os.close(fd)
-        os.remove(self.csv_path)
+        # Own dir: inventory.db sits next to HOSTS_CSV, a shared tmp dir would share it.
+        self.csv_path = os.path.join(tempfile.mkdtemp(), "network_hosts.csv")
         self._orig = inventory_manager.HOSTS_CSV
         inventory_manager.HOSTS_CSV = self.csv_path
         inventory_manager.invalidate_device_ip_cache()
@@ -147,9 +146,8 @@ class TestCollectorGating(unittest.TestCase):
 
 class TestAddDeviceEndpoint(unittest.TestCase):
     def setUp(self):
-        fd, self.csv_path = tempfile.mkstemp(suffix=".csv")
-        os.close(fd)
-        os.remove(self.csv_path)
+        # Own dir: inventory.db sits next to HOSTS_CSV, a shared tmp dir would share it.
+        self.csv_path = os.path.join(tempfile.mkdtemp(), "network_hosts.csv")
         self._orig = inventory_manager.HOSTS_CSV
         inventory_manager.HOSTS_CSV = self.csv_path
         inventory_manager.invalidate_device_ip_cache()

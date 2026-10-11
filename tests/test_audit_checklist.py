@@ -23,6 +23,7 @@ class TestAuditChecklist(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         cls.tmp_db.close()
+        cls._env = {k: os.environ.get(k) for k in ("SENTINELNET_DATA_DIR", "SENTINELNET_DB_PATH")}
         os.environ["SENTINELNET_DATA_DIR"] = os.path.dirname(cls.tmp_db.name)
         os.environ["SENTINELNET_DB_PATH"] = cls.tmp_db.name
 
@@ -31,6 +32,12 @@ class TestAuditChecklist(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        # Restore: later tests in this worker must not inherit the shared tmp dir.
+        for k, v in cls._env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
         try:
             os.remove(cls.tmp_db.name)
         except OSError:

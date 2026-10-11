@@ -23,9 +23,8 @@ OPERATOR_T1 = {"sub": "op1", "role": "operator"}
 
 class TestBulkAssignProfileService(unittest.TestCase):
     def setUp(self):
-        fd, self.csv_path = tempfile.mkstemp(suffix=".csv")
-        os.close(fd)
-        os.remove(self.csv_path)
+        # Own dir: inventory.db sits next to HOSTS_CSV, a shared tmp dir would share it.
+        self.csv_path = os.path.join(tempfile.mkdtemp(), "network_hosts.csv")
         self._orig = inventory_manager.HOSTS_CSV
         inventory_manager.HOSTS_CSV = self.csv_path
         inventory_manager.invalidate_device_ip_cache()
@@ -71,9 +70,8 @@ class TestBulkAssignProfileService(unittest.TestCase):
 
 class TestBulkAssignEndpoint(unittest.TestCase):
     def setUp(self):
-        fd, self.csv_path = tempfile.mkstemp(suffix=".csv")
-        os.close(fd)
-        os.remove(self.csv_path)
+        # Own dir: inventory.db sits next to HOSTS_CSV, a shared tmp dir would share it.
+        self.csv_path = os.path.join(tempfile.mkdtemp(), "network_hosts.csv")
         self._orig_csv = inventory_manager.HOSTS_CSV
         inventory_manager.HOSTS_CSV = self.csv_path
         inventory_manager.invalidate_device_ip_cache()
@@ -93,6 +91,7 @@ class TestBulkAssignEndpoint(unittest.TestCase):
 
     def _seed(self, ip, group="Generale"):
         from services import location_manager
+        inventory_manager.add_group(group)
         locs = location_manager.list_locations(group)
         loc_id = locs[0]["id"] if locs else location_manager.create_location(group, f"Loc-{group}")["id"]
         inventory_manager.add_or_update_device(
