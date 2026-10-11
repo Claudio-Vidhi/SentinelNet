@@ -47,7 +47,7 @@ import threading
 import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 
 import requests
 from typing import Any, Dict, List, Optional
@@ -871,6 +871,34 @@ TOOLS = {
         "is manual or inferred; plus the category list and counts.",
         _obj(),
         lambda a: api("GET", "/api/device-classification"),
+    ),
+    # Network Blueprint (spec 2026-10-11 blueprint-assistant). Proposing only
+    # appends to the draft: an admin reviews and applies it in the Blueprint tab.
+    "blueprint_get": (
+        "Network Blueprint of an organization: expected locations (role, subnets, "
+        "gateway), links between them, the open draft and its preview, plus the "
+        "deterministic checks comparing it with the observed network.",
+        _obj({"org": {**_S, "description": "Organization (tenant) key"}}, ["org"]),
+        lambda a: {"blueprint": api("GET", f"/api/blueprint/{quote(a['org'], safe='')}"),
+                   "checks": api("GET", f"/api/blueprint/{quote(a['org'], safe='')}/checks")},
+    ),
+    "blueprint_propose": (
+        "Propose changes to an organization's Network Blueprint. They are appended "
+        "to its draft and never applied: an admin reviews and applies them. "
+        "Operations: create_location {ref:'+1', name, role: hq|branch|datacenter|"
+        "warehouse|other, subnets:[CIDR], gateway}, update_location {id, fields}, "
+        "add_subnet {id, subnet}, set_gateway {id, ip}, delete_location {id}, "
+        "add_link {a, b, kind: vpn|wan|mpls|lan, note}, remove_link {id}. Ids come "
+        "from blueprint_get; a '+ref' names a location created earlier in the same "
+        "list. Needs an admin account, or a read-only sign-in where 'propose "
+        "Blueprint drafts' was allowed.",
+        _obj({"org": {**_S, "description": "Organization (tenant) key"},
+              "ops": {"type": "array", "items": {"type": "object"},
+                      "description": "Draft operations, applied in order"},
+              "note": {**_S, "description": "Why, for the audit log (optional)"}},
+             ["org", "ops"]),
+        lambda a: api("POST", f"/api/blueprint/{quote(a['org'], safe='')}/assistant-draft",
+                      body={"ops": a["ops"], "note": a.get("note", "")}),
     ),
 }
 
