@@ -21,10 +21,14 @@ def _load() -> dict:
         return inventory_store.read_locations(conn)
 
 
-def _save(data: dict) -> None:
-    from services import inventory_manager, inventory_store
-    with inventory_manager._db() as conn:
-        inventory_store.write_locations(conn, data)
+def _save(data: dict, by: str = "", source: str = "locations") -> None:
+    from services import blueprint_store, inventory_manager, inventory_store
+    # The write and its revision commit together (spec 2026-10-11
+    # network-blueprint): a revision that could miss a write would make the
+    # history lie about what was applied.
+    with inventory_manager._db() as conn, conn:
+        inventory_store.put_locations(conn, data)
+        blueprint_store.record_revisions(conn, by, source)
 
 
 def _clean_subnets(subnets) -> list:
@@ -64,7 +68,7 @@ def get_location(loc_id: str):
     return dict(v, id=loc_id) if v else None
 
 
-def create_location(org, name, role="branch", subnets=None, probe="central") -> dict:
+def create_location(org, name, role="branch", subnets=None, probe="central", by="") -> dict:
     from services.probe_manager import _slugify
     name = (name or "").strip()
     if not name:
@@ -78,12 +82,12 @@ def create_location(org, name, role="branch", subnets=None, probe="central") -> 
         while loc_id in data:
             loc_id, n = f"{base}-{n}", n + 1
         data[loc_id] = {"org": org, "name": name, "role": role,
-                        "subnets": clean, "probe": probe}
-        _save(data)
+                        "subnets": clean, "probe": probe, "gateway": ""}
+        _save(data, by=by)
     return dict(data[loc_id], id=loc_id)
 
 
-def update_location(loc_id, name=None, role=None, subnets=None, probe=None) -> dict:
+def update_location(loc_id, name=None, role=None, subnets=None, probe=None, by="") -> dict:
     _check(role=role, probe=probe)
     clean = _clean_subnets(subnets) if subnets is not None else None
     with _lock:
@@ -101,7 +105,7 @@ def update_location(loc_id, name=None, role=None, subnets=None, probe=None) -> d
             loc["subnets"] = clean
         if probe is not None:
             loc["probe"] = probe
-        _save(data)
+        _save(data, by=by)
     return dict(loc, id=loc_id)
 
 
@@ -113,14 +117,14 @@ def devices_in(loc_id: str) -> int:
     return sum(1 for d in rows if d.get("Location") == loc_id)
 
 
-def delete_location(loc_id: str) -> None:
+def delete_location(loc_id: str, by: str = "") -> None:
     n = devices_in(loc_id)
     if n:
         raise ValueError(f"La sede contiene {n} apparati: spostali o eliminali prima.")
     with _lock:
         data = _load()
         data.pop(loc_id, None)
-        _save(data)
+        _save(data, by=by)
 
 
 def probe_subnets(probe_id) -> list:

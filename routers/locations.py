@@ -63,7 +63,7 @@ def create_location_ep(payload: LocationCreateSchema, current_user = Depends(req
     try:
         loc = location_manager.create_location(
             payload.org, payload.name, role=payload.role,
-            subnets=payload.subnets, probe=payload.probe,
+            subnets=payload.subnets, probe=payload.probe, by=who,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -81,7 +81,7 @@ def update_location_ep(payload: LocationUpdateSchema, current_user = Depends(req
     try:
         updated = location_manager.update_location(
             payload.id, name=payload.name, role=payload.role,
-            subnets=payload.subnets, probe=payload.probe,
+            subnets=payload.subnets, probe=payload.probe, by=who,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -102,7 +102,7 @@ def delete_location_ep(payload: LocationDeleteSchema, current_user = Depends(req
         raise HTTPException(status_code=404, detail="Sede non trovata.")
     assert_group_allowed(current_user, loc["org"])
     try:
-        location_manager.delete_location(payload.id)
+        location_manager.delete_location(payload.id, by=who)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     log_audit(f"Sede '{payload.id}' (organizzazione: '{loc['org']}') eliminata dall'utente '{who}'.")
