@@ -127,6 +127,33 @@ class TestAccountPostureWarning(unittest.TestCase):
             self.assertEqual(err.getvalue(), "")
 
 
+class TestBlueprintTools(unittest.TestCase):
+    OPS = [{"op": "add_subnet", "id": "roma", "subnet": "10.20.1.0/24"}]
+
+    def test_get_reads_model_and_checks(self):
+        _desc, schema, fn = mcp_server.TOOLS["blueprint_get"]
+        self.assertEqual(schema["required"], ["org"])
+        with patch("ai.mcp_server.api", return_value={"x": 1}) as mock_api:
+            out = fn({"org": "acme"})
+        self.assertEqual([c.args for c in mock_api.call_args_list],
+                         [("GET", "/api/blueprint/acme"), ("GET", "/api/blueprint/acme/checks")])
+        self.assertEqual(out, {"blueprint": {"x": 1}, "checks": {"x": 1}})
+
+    def test_propose_posts_to_the_assistant_draft_route(self):
+        _desc, schema, fn = mcp_server.TOOLS["blueprint_propose"]
+        self.assertEqual(schema["required"], ["org", "ops"])
+        with patch("ai.mcp_server.api") as mock_api:
+            fn({"org": "acme", "ops": self.OPS})
+        mock_api.assert_called_once_with("POST", "/api/blueprint/acme/assistant-draft",
+                                         body={"ops": self.OPS, "note": ""})
+
+    def test_org_is_escaped_in_the_path(self):
+        _desc, _schema, fn = mcp_server.TOOLS["blueprint_propose"]
+        with patch("ai.mcp_server.api") as mock_api:
+            fn({"org": "a b/c", "ops": [], "note": "n"})
+        self.assertEqual(mock_api.call_args.args[1], "/api/blueprint/a%20b%2Fc/assistant-draft")
+
+
 if __name__ == "__main__":
     unittest.main()
 
