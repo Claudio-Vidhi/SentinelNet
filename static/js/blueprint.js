@@ -384,6 +384,7 @@
 
     function renderDraftOps() {
         $('bpDraftOps').innerHTML = draftOps().map((op, i) => `<li>${describeOp(op)}
+            ${op.source === 'assistant' ? `<span class="bp-draft-tag">${escapeHtml(tr('bpOpFromAssistant'))}</span>` : ''}
             ${EDITABLE.includes(op.op) ? `<button type="button" class="bp-link-btn" data-action="bp-op-edit" data-i="${i}">${escapeHtml(tr('btnBpEditOp'))}</button>` : ''}
             <button type="button" class="bp-link-btn danger" data-action="bp-op-remove" data-i="${i}">${escapeHtml(tr('btnBpRemoveOp'))}</button></li>`).join('');
     }
@@ -483,6 +484,48 @@
         openModal('bpPresetModal');
     }
 
+    // ---- assistant (spec 2026-10-11 blueprint-assistant) ---------------------
+    // Both entry points only append to the draft; the draft bar takes it from there.
+
+    function openAssistant() {
+        $('bpAssistError').textContent = '';
+        $('bpAssistNotes').hidden = true;
+        $('bpAssistUseAi').disabled = !bpState.ai_available;
+        if (!bpState.ai_available) $('bpAssistUseAi').checked = false;
+        openModal('bpAssistantModal');
+    }
+
+    async function runAssistant(path, body, btn) {
+        btn.disabled = true;
+        $('bpAssistError').textContent = '';
+        $('bpAssistNotes').hidden = true;
+        try {
+            const res = await send(path, 'POST', body);
+            if (!res || !res.ok) { $('bpAssistError').textContent = await errorText(res); return; }
+            const out = await res.json();
+            showToast(tr('bpAddedToDraft', { n: out.added }), 'success');
+            $('bpAssistNotes').textContent = out.notes || '';
+            $('bpAssistNotes').hidden = !out.notes;
+            await reloadBlueprint();
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    function openInstructions() {
+        $('bpInstrText').value = bpState.instructions || '';
+        $('bpInstrError').textContent = '';
+        openModal('bpInstructionsModal');
+    }
+
+    async function saveInstructions() {
+        const res = await send('/instructions', 'PUT', { text: $('bpInstrText').value });
+        if (!res || !res.ok) { $('bpInstrError').textContent = await errorText(res); return; }
+        bpState.instructions = (await res.json()).instructions;
+        closeModal('bpInstructionsModal');
+        showToast(tr('bpInstrSaved'), 'success');
+    }
+
     // ---- bindings (the module loads once, with its tab) ----------------------
 
     $('bpOrgSelect').addEventListener('change', () => { bpOrg = $('bpOrgSelect').value; reloadBlueprint(); });
@@ -507,6 +550,13 @@
     $('btnBpLinkSave').addEventListener('click', () => bpLinkSave && bpLinkSave());
     $('btnBpPresetCreate').addEventListener('click', createPreset);
     $('btnBpDiff').addEventListener('click', compare);
+    $('btnBpAssistant').addEventListener('click', openAssistant);
+    $('btnBpInstructions').addEventListener('click', openInstructions);
+    $('btnBpAssistDescribe').addEventListener('click', () =>
+        runAssistant('/assistant/describe', { text: $('bpAssistText').value }, $('btnBpAssistDescribe')));
+    $('btnBpAssistDerive').addEventListener('click', () =>
+        runAssistant('/assistant/derive', { use_ai: $('bpAssistUseAi').checked }, $('btnBpAssistDerive')));
+    $('btnBpInstrSave').addEventListener('click', saveInstructions);
 
     $('bpSteps').addEventListener('click', (e) => {
         const b = e.target.closest('[data-bp-step]');
