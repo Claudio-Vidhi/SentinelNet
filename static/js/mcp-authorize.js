@@ -68,6 +68,8 @@ function mcpcTick() {
 
 function mcpcRenderPerms() {
     const ro = !mcpcInfo.can_choose || mcpcEl('mcpcReadOnly').checked;
+    // Read-only grants of an admin may also propose Blueprint drafts.
+    mcpcEl('mcpcBpBox').hidden = !(mcpcInfo.can_bp_draft && ro);
     const ul = mcpcEl('mcpcPerms');
     ul.textContent = '';
     let actions = false;
@@ -162,6 +164,7 @@ mcpcEl('btnMcpcApprove').addEventListener('click', async () => {
             port: mcpcReq.port, state: mcpcReq.state, challenge: mcpcReq.challenge,
             client: mcpcReq.client, host: mcpcReq.host,
             read_only: !mcpcInfo.can_choose || mcpcEl('mcpcReadOnly').checked,
+            bp_draft: !mcpcEl('mcpcBpBox').hidden && mcpcEl('mcpcBpDraft').checked,
         }),
     }).catch(() => null);
     const data = res ? await res.json().catch(() => ({})) : {};

@@ -82,6 +82,7 @@ class McpAuthorizeSchema(BaseModel):
     client: str = Field(default="", max_length=60, pattern=r"^[^\x00-\x1f]*$")
     host: str = Field(default="", max_length=64, pattern=r"^[^\x00-\x1f]*$")
     read_only: bool = True
+    bp_draft: bool = False
 
 class McpTokenSchema(BaseModel):
     code: str = Field(max_length=128)
@@ -119,6 +120,7 @@ def mcp_authorize_info(current_user = Depends(get_current_user)):
     role = current_user.get("role", "viewer")
     return {"username": current_user.get("sub"), "role": role,
             "can_choose": _ROLE_RANK.get(role, 0) > 0,
+            "can_bp_draft": user_manager.is_admin(role),
             "permissions": _consent_permissions(role)}
 
 @router.post("/api/mcp/authorize")
@@ -126,10 +128,15 @@ def authorize_mcp_client(payload: McpAuthorizeSchema, current_user = Depends(get
     """The signed-in operator approves a bridge waiting on its loopback port."""
     user = current_user.get("sub")
     read_only = payload.read_only or _ROLE_RANK.get(current_user.get("role"), 0) == 0
+    # The one write a read-only grant may carry, and only an admin can lend it
+    # (spec 2026-10-11 blueprint-assistant). A full grant reaches the normal
+    # draft routes anyway.
+    bp_draft = payload.bp_draft and read_only and user_manager.is_admin(current_user.get("role"))
     label = " · ".join(x for x in (payload.client or "Client MCP", payload.host) if x)
-    code = mcp_grants.create_code(user, payload.challenge, label, read_only)
+    code = mcp_grants.create_code(user, payload.challenge, label, read_only, bp_draft)
     log_audit(f"Client MCP '{label}' autorizzato da '{user}' "
-              f"({'sola lettura' if read_only else 'permessi del ruolo'}).")
+              f"({'sola lettura' if read_only else 'permessi del ruolo'}"
+              f"{' + bozze Blueprint' if bp_draft else ''}).")
     query = urlencode({"code": code, "state": payload.state})
     return {"redirect": f"http://127.0.0.1:{payload.port}/callback?{query}"}
 
@@ -153,6 +160,10 @@ def open_mcp_session(payload: McpSessionSchema):
               "sep": user_manager.session_epoch(user)}
     if grant["read_only"]:
         claims["ro"] = True    # get_current_user turns it into a viewer session
+        # Next to «ro», never instead of it: the session stays a viewer
+        # everywhere but POST /api/blueprint/{org}/assistant-draft.
+        if grant["bp_draft"] and user_manager.is_admin(claims["role"]):
+            claims["bpd"] = True
     token = create_access_token(data=claims)
     return {"access_token": token, "token_type": "bearer"}
 
