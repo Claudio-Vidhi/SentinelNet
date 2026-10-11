@@ -85,7 +85,7 @@ class TestRouterParity(unittest.TestCase):
         self.assertEqual(missing, [], f"endpoint spariti dal refactor: {missing}")
 
     # Percorsi NUOVI legittimi (funzionalità aggiunte dopo lo snapshot golden).
-    ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/flow-siem", "/api/arp", "/api/ai", "/api/provisioner", "/api/mcp", "/api/probes", "/api/command-jobs", "/api/agent", "/api/fortigate/{ip}/firewall", "/api/fortigate/targets", "/api/identities", "/api/config-analyzer/convert", "/api/redundancy", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/diagnose", "/api/fortigate/{ip}/system", "/api/fortigate/{ip}/vpn", "/api/fortigate/{ip}/sdwan", "/api/endpoints", "/api/settings/snmp-defaults", "/api/settings/ping-monitor", "/api/ping-monitor", "/api/settings/ui-variant", "/api/mac/port-control", "/api/wlc", "/api/scan-verify", "/api/version", "/api/reassign-device-probe", "/api/policy-test", "/api/export/devices/columns", "/api/export/devices/preview", "/api/drift", "/api/locations",
+    ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/flow-siem", "/api/arp", "/api/ai", "/api/provisioner", "/api/mcp", "/api/probes", "/api/command-jobs", "/api/agent", "/api/fortigate/{ip}/firewall", "/api/fortigate/targets", "/api/identities", "/api/config-analyzer/convert", "/api/redundancy", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/diagnose", "/api/fortigate/{ip}/system", "/api/fortigate/{ip}/vpn", "/api/fortigate/{ip}/sdwan", "/api/endpoints", "/api/settings/snmp-defaults", "/api/settings/ping-monitor", "/api/ping-monitor", "/api/settings/ui-variant", "/api/mac/port-control", "/api/wlc", "/api/scan-verify", "/api/version", "/api/reassign-device-probe", "/api/policy-test", "/api/export/devices/columns", "/api/export/devices/preview", "/api/import-csv/preview", "/api/drift", "/api/locations",
                           # Classification export (serial + neighbour columns), shipped in 0.12.0.
                           "/api/export/classification",
                           # Offsite SFTP backup mirror (cloud-backup plan).
@@ -215,7 +215,7 @@ class TestRouterParity(unittest.TestCase):
     # trasportava, quindi la categoria di log era irraggiungibile via HTTP.
     # Aggiunta puramente additiva (campi opzionali con i default storici):
     # nessun client esistente cambia comportamento.
-    ALLOWED_CHANGED_SCHEMAS = ("FgtTokenSchema", "AgentDeviceSchema", "DeviceSchema",
+    ALLOWED_CHANGED_SCHEMAS = ("CSVImportRequest", "FgtTokenSchema", "AgentDeviceSchema", "DeviceSchema",
                                "FgtLogQuerySchema")
 
     def test_migrated_schemas_identical(self):
@@ -265,7 +265,7 @@ class TestFullParity(unittest.TestCase):
                     # La scansione non tenta piu' il login: l'autenticazione e'
                     # diventata un passo esplicito e opzionale, su un endpoint suo.
                     "/api/scan-verify", "/api/version", "/api/policy-test",
-                    "/api/export/devices/columns", "/api/export/devices/preview", "/api/drift",
+                    "/api/export/devices/columns", "/api/export/devices/preview", "/api/import-csv/preview", "/api/drift",
                     # Classification export (serial + neighbour columns), shipped in 0.12.0.
                     "/api/export/classification",
                     # Offsite SFTP backup mirror (cloud-backup plan).
@@ -485,7 +485,7 @@ class TestFullParity(unittest.TestCase):
     # existing field removed or retyped.
     # FortiGateProvisionSchema: admin_user/admin_password became mandatory
     # (validator, not a field change) when the day-0 defaults were removed.
-    ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema", "DeviceReassignSchema", "PromoteDeviceSchema",
+    ALLOWED_CHANGED_SCHEMAS = ("CSVImportRequest", "AgentDeviceSchema", "DeviceSchema", "DeviceReassignSchema", "PromoteDeviceSchema",
                                "FgtLogQuerySchema", "IdentitySchema",
                                "SubnetScanRequest", "AiGenerateConfigSchema",
                                # Optional 'ips' (default None = whole group): the

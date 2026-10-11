@@ -6,13 +6,13 @@ import/export CSV, promozione da scoperta, riassegnazione sede). Estratto da
 app_server.py (fase 6.6): percorsi, metodi, parametri e risposte identici al
 monolite."""
 
-from typing import Optional, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from routers.deps import require_tab
 from pydantic import BaseModel, Field
 
-from services import device_history, inventory_manager, probe_manager
+from services import csv_import, device_history, inventory_manager, probe_manager
 from security.security_manager import log_audit
 from core.csv_safe import csv_cell as _csv_cell
 from routers.deps import (
@@ -54,6 +54,9 @@ class DeviceRenameSchema(BaseModel):
 
 class CSVImportRequest(BaseModel):
     csv_data: str
+    org: Optional[str] = None
+    location: Optional[str] = None
+    decisions: Dict[str, Dict[str, Any]] = {}
 
 class DeviceReassignSchema(BaseModel):
     ip: str
@@ -447,87 +450,27 @@ _canonical_header = inventory_manager._canonical_header
 _read_inventory_csv = inventory_manager._read_inventory_csv
 
 
+@router.post("/api/import-csv/preview", dependencies=[Depends(require_tab("tab-import"))])
+def import_csv_preview(payload: CSVImportRequest, current_user = Depends(require_operator)):
+    try:
+        result = csv_import.classify(payload.csv_data, payload.org, payload.location,
+                                     payload.decisions, user_group_scope(current_user))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return csv_import.public(result)
+
+
 @router.post("/api/import-csv", dependencies=[Depends(require_tab("tab-import"))])
 def import_csv(payload: CSVImportRequest, current_user = Depends(require_operator)):
     try:
-        parsed = _read_inventory_csv(payload.csv_data)
+        out = csv_import.apply(payload.csv_data, payload.org, payload.location,
+                               payload.decisions, user_group_scope(current_user))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-    results = {"imported": [], "failed": []}
-    scope = user_group_scope(current_user)
-
-    for i, row in parsed:
-        try:
-            ip = row.get('IP')
-            if not ip or not ip.strip():
-                raise ValueError("IP mancante o vuoto")
-            ip = ip.strip()
-
-            # Se il campo Group è presente e non vuoto, chiama immediatamente inventory_manager.add_group(row['Group'])
-            raw_group = (row.get('Group') or '').strip()
-            if not raw_group:
-                raise ValueError("Gruppo / Organizzazione obbligatorio.")
-            group_name = inventory_manager.resolve_group(raw_group) or raw_group
-            # Scoping: un operatore limitato non può importare in sedi non consentite
-            if scope is not None and group_name not in scope:
-                raise ValueError(f"Sede '{group_name}' non consentita per il tuo profilo")
-            inventory_manager.add_group(group_name)
-
-            username = (row.get('Username') or '').strip()
-            password = (row.get('Password') or '').strip()
-            enable_secret = (row.get('Enable Secret') or '').strip()
-
-            hostname = (row.get('Hostname') or '').strip()
-
-            vendor = (row.get('Vendor') or '').strip() or 'cisco'
-
-            # Probe (come si raggiunge) è cosa diversa da Group (tenant): la colonna
-            # veniva letta e buttata via, quindi un inventario esportato e
-            # reimportato perdeva l'assegnazione alle sedi con agente.
-            # Non si crea al volo come si fa con il tenant: una sede ha una
-            # modalità e un token, inventarla qui produrrebbe un apparato che
-            # nessun agente raccoglierà mai. Meglio un errore sulla riga.
-            probe_name = (row.get('Probe') or '').strip()
-            if probe_name and probe_name not in {s['id'] for s in probe_manager.list_probes()}:
-                raise ValueError(f"Sonda '{probe_name}' inesistente: creala nella "
-                                 f"scheda Sonde prima di importare")
-
-            # Rimozione Profile: passa forzatamente il valore "custom" come parametro profile
-            location_name = (row.get('Location') or '').strip()
-            if not location_name:
-                raise ValueError("Sede mancante o vuota")
-            from services import location_manager
-            loc_obj = location_manager.get_location(location_name)
-            if not loc_obj or loc_obj.get("org") != group_name:
-                # A CSV is written by hand: the location's name works as well as its id.
-                loc_obj = next((l for l in location_manager.list_locations(group_name)
-                                if l["name"].casefold() == location_name.casefold()), None)
-            if not loc_obj:
-                raise ValueError(f"Sede '{location_name}' inesistente o non appartenente al gruppo '{group_name}'")
-
-            inventory_manager.add_or_update_device(
-                ip, vendor, "custom",
-                username, password, enable_secret,
-                group_name, probe=probe_name or None,
-                location=loc_obj["id"],
-            )
-            # L'hostname del CSV veniva letto e buttato via: chi compilava la
-            # colonna vedeva l'inventario restare senza nomi e non capiva
-            # perche'. Si scrive dopo perche' add_or_update_device non ha il
-            # parametro, e sovrascriverlo li' cambierebbe la firma per tutti.
-            if hostname:
-                inventory_manager.update_device_hostname(ip, hostname)
-            results["imported"].append(ip)
-        except Exception as e:
-            results["failed"].append({
-                "row": i,
-                "ip": (row.get('IP') or '?').strip() or '?',
-                "error": str(e)
-            })
-
-    log_audit(f"Importazione massiva da CSV completata dall'utente '{current_user.get('sub')}'. Importati: {len(results['imported'])}, Falliti: {len(results['failed'])}.")
-    return results
+    log_audit(f"Importazione CSV da '{current_user.get('sub')}': {len(out['imported'])} nuovi, "
+              f"{len(out['updated'])} aggiornati, {len(out['skipped'])} saltati, "
+              f"{len(out['failed'])} con errori.")
+    return out
 
 @router.post("/api/promote-device", dependencies=[Depends(require_tab("tab-map", "tab-map-interactive", "tab-categories"))])
 def promote_device(payload: PromoteDeviceSchema, current_user = Depends(require_operator)):
