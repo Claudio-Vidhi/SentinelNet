@@ -93,6 +93,7 @@ class TestClassify(unittest.TestCase):
         self.assertEqual(self.row("ip\n10.20.1.11\n")["changes"], {})
 
     def test_update_without_vendor_keeps_vendor(self):
+        self.assertEqual(self.row("ip,hostname\n10.20.1.11,x\n")["vendor"], "hp")
         csv_import.apply("ip,hostname\n10.20.1.11,x\n", "acme", "roma", {}, None)
         self.assertEqual(im.get_all_devices()[0]["Vendor"], "hp")
 
@@ -121,6 +122,12 @@ class TestClassify(unittest.TestCase):
         out = csv_import.apply(text, "acme", "roma", {}, None)
         self.assertEqual(out["imported"], [r["ip"] for r in pre["rows"] if r["status"] == "new"])
         self.assertEqual(out["updated"], [r["ip"] for r in pre["rows"] if r["status"] == "update"])
+        stored = {d["IP"]: d for d in im.get_all_devices()}
+        for r in pre["rows"]:
+            if r["status"] in ("new", "update"):
+                d = stored[r["ip"]]
+                self.assertEqual((r["vendor"], r["location"], r["probe"]),
+                                 (d["Vendor"], d["Location"], d["Probe"]))
 
     def test_apply_is_one_write(self):
         text = "ip\n" + "".join(f"10.20.{i // 250 + 10}.{i % 250 + 1}\n" for i in range(2000))

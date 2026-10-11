@@ -59,11 +59,11 @@ def classify(csv_text, default_org, default_location, decisions, scope) -> dict:
     for line, rec in parsed:
         dec = (decisions or {}).get(str(line)) or {}
         ip = (rec.get("IP") or "").strip()
-        r: dict = {"row": line, "ip": ip, "hostname": rec.get("Hostname", ""),
+        r: dict = {"row": line, "ip": ip, "hostname": (rec.get("Hostname") or "").strip(),
              "vendor": inventory_manager.normalize_vendor(rec.get("Vendor") or "cisco"),
              "org": None, "location": None, "probe": None, "status": "new", "changes": {},
              "reason": "", "warnings": [], "action": None, "credentials_note": "",
-             "_rec": rec, "_existing_vendor": None}
+             "_rec": rec}
         rows.append(r)
 
         def fail(reason, action=None):
@@ -119,7 +119,6 @@ def classify(csv_text, default_org, default_location, decisions, scope) -> dict:
         username, password = rec.get("Username", ""), rec.get("Password", "")
         if existing:
             r["status"] = "update"
-            r["_existing_vendor"] = existing.get("Vendor")
             incoming = {"Hostname": r["hostname"], "Vendor": r["vendor"] if rec.get("Vendor") else "",
                         "Username": username, "Password": password,
                         "Enable Secret": rec.get("Enable Secret", ""), "Probe": probe,
@@ -132,6 +131,10 @@ def classify(csv_text, default_org, default_location, decisions, scope) -> dict:
                     r["changes"][f] = ["", "changed"]
                 elif new != existing.get(f, ""):
                     r["changes"][f] = [existing.get(f, ""), new]
+            # What apply will write: an empty cell keeps the stored value.
+            if not rec.get("Vendor"):
+                r["vendor"] = existing["Vendor"]
+            r["probe"] = probe or existing.get("Probe") or locs[loc_id]["probe"]
             username = username or existing.get("Username", "")
             password = password or existing.get("Password", "")
         r["credentials_note"] = _credentials_note(username, password, r["probe"], get_probe)
@@ -152,10 +155,7 @@ def apply(csv_text, default_org, default_location, decisions, scope) -> dict:
     entries = []
     for r in todo:
         rec = r["_rec"]
-        # An update without a Vendor column keeps the stored vendor; only a
-        # new device falls back to today's default.
-        vendor = r["vendor"] if (rec.get("Vendor") or r["status"] == "new") else r["_existing_vendor"]
-        entries.append(dict(ip=r["ip"], vendor=vendor, profile="custom",
+        entries.append(dict(ip=r["ip"], vendor=r["vendor"], profile="custom",
                             username=rec.get("Username", ""), password=rec.get("Password", ""),
                             enable_secret=rec.get("Enable Secret", ""), group=r["org"],
                             probe=(rec.get("Probe") or "").strip() or None,
