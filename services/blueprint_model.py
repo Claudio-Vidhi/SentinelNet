@@ -136,3 +136,94 @@ def apply_ops(org: str, locations: dict, links: dict, ops: list, probes=None):
         except ValueError as e:
             raise OpError(i, str(e))
     return locs, lnks, refs
+
+
+def diff(old: dict, new: dict) -> dict:
+    def part(a, b, label):
+        changed = []
+        for k in sorted(set(a) & set(b)):
+            fields = {f: [a[k].get(f), b[k].get(f)] for f in sorted(set(a[k]) | set(b[k]))
+                      if f != "org" and a[k].get(f) != b[k].get(f)}
+            if fields:
+                changed.append({"id": k, "label": b[k].get(label) or k, "fields": fields})
+        return {"added": [dict(b[k], id=k) for k in sorted(set(b) - set(a))],
+                "removed": [dict(a[k], id=k) for k in sorted(set(a) - set(b))],
+                "changed": changed}
+    return {"locations": part(old["locations"], new["locations"], "name"),
+            "links": part(old["links"], new["links"], "kind")}
+
+
+def restore_ops(current: dict, target: dict) -> list:
+    """The operations that turn ``current`` back into ``target``. A location
+    deleted since asks for its old id; if another organization took it, it
+    gets a suffix and its links follow it through the ref."""
+    cur_l, tgt_l = current["locations"], target["locations"]
+    cur_k, tgt_k = current["links"], target["links"]
+    ops = [{"op": "remove_link", "id": k} for k in sorted(cur_k) if cur_k[k] != tgt_k.get(k)]
+    ops += [{"op": "delete_location", "id": lid} for lid in sorted(set(cur_l) - set(tgt_l))]
+    created = {}
+    for lid in sorted(set(tgt_l) - set(cur_l)):
+        created[lid] = "+" + lid
+        ops.append(dict({f: tgt_l[lid].get(f, "") for f in FIELDS},
+                        op="create_location", ref="+" + lid, id=lid))
+    for lid in sorted(set(cur_l) & set(tgt_l)):
+        fields = {f: tgt_l[lid].get(f, "") for f in FIELDS if cur_l[lid].get(f, "") != tgt_l[lid].get(f, "")}
+        if fields:
+            ops.append({"op": "update_location", "id": lid, "fields": fields})
+    for k in sorted(tgt_k):
+        if cur_k.get(k) != tgt_k[k]:
+            t = tgt_k[k]
+            ops.append({"op": "add_link", "a": created.get(t["a"], t["a"]), "b": created.get(t["b"], t["b"]),
+                        "kind": t["kind"], "note": t.get("note") or ""})
+    return ops
+
+
+def preset_ops(kind: str, n: int, view: dict) -> list:
+    """Topological skeleton as draft operations. Existing locations stay: an
+    existing hq is the hub, an existing datacenter the DC; subnets are left
+    empty for the checks to fill in."""
+    if kind not in PRESETS:
+        raise ValueError(f"Preset sconosciuto: {kind}")
+    if kind != "single" and not 1 <= n <= MAX_PRESET:
+        raise ValueError(f"Il numero di sedi va da 1 a {MAX_PRESET}.")
+    locs, links = view["locations"], view["links"]
+    ops = []
+
+    def first(role):
+        return next((lid for lid, l in sorted(locs.items()) if l["role"] == role), None)
+
+    def new(name, role):
+        ref = f"+{sum(1 for o in ops if o['op'] == 'create_location') + 1}"
+        ops.append({"op": "create_location", "ref": ref, "name": name, "role": role,
+                    "subnets": [], "probe": "central"})
+        return ref
+
+    def link(a, b, kind_):
+        if not (a.startswith("+") or b.startswith("+")) and link_id(a, b, kind_) in links:
+            return
+        ops.append({"op": "add_link", "a": a, "b": b, "kind": kind_, "note": ""})
+
+    if kind == "single":
+        if not locs:
+            new("Sede principale", "hq")
+        return ops
+    if kind == "full_mesh":
+        members = sorted(locs)
+        for i in range(n):
+            members.append(new(f"Sede {len(locs) + i + 1}",
+                               "hq" if i == 0 and first("hq") is None else "branch"))
+        for a, b in combinations(members, 2):
+            link(a, b, "vpn")
+        return ops
+    hub = first("hq") or new("Sede centrale", "hq")
+    dc = None
+    if kind == "hub_spoke_dc":
+        dc = first("datacenter") or new("Datacenter", "datacenter")
+        link(hub, dc, "wan")
+    start = sum(1 for l in locs.values() if l["role"] == "branch")
+    for i in range(n):
+        b = new(f"Filiale {start + i + 1}", "branch")
+        link(hub, b, "vpn")
+        if dc:
+            link(dc, b, "vpn")
+    return ops
