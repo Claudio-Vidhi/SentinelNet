@@ -79,6 +79,8 @@ def describe(org: str, text: str, by: str) -> dict:
         answer = _chat(messages)
         try:
             ops, notes = _parse(answer)
+            if not ops:
+                return {"added": 0, "notes": notes, "state": st}
             return {"added": len(ops), "notes": notes, "state": blueprint.add_ops(org, ops, "assistant", by)}
         except blueprint_model.OpError as e:
             # apply_ops numbers the whole draft; the LLM knows only its own ops.
