@@ -115,8 +115,8 @@ class DeviceHistoryTest(unittest.TestCase):
         self.assertEqual(e["changes"], {"Password": ["set", "set"]})
 
     def test_write_records_and_never_stores_secrets(self):
-        inventory_manager.safe_write_hosts_csv([_row("192.0.2.1"), _row("198.51.100.1", group="tenant-b")])
-        inventory_manager.safe_write_hosts_csv([_row("198.51.100.1", group="tenant-b")])
+        inventory_manager.write_devices([_row("192.0.2.1"), _row("198.51.100.1", group="tenant-b")])
+        inventory_manager.write_devices([_row("198.51.100.1", group="tenant-b")])
         with open(self.log, encoding="utf-8") as fh:
             raw = fh.read()
         self.assertNotIn("gAAAA", raw)  # Fernet token prefix

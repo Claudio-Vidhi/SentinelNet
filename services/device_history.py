@@ -4,7 +4,7 @@
 """Lifecycle log of the inventory: which device was added, changed or removed
 in which tenant, by whom, and what it looked like at that moment.
 
-Fed from ``inventory_manager.safe_write_hosts_csv``, the single place every
+Fed from ``inventory_manager.write_devices``, the single place every
 inventory write goes through (UI, CSV import, probe-agent sync, rename,
 reassign, promote), by diffing the rows before and after the write. The
 running-config itself is not copied here: Config Drift already archives every

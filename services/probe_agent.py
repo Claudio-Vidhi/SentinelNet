@@ -31,6 +31,8 @@ agent.json:
     {"central_url": "...", "probe_id": "...", "token": "...", "interval": 60,
      "verify_tls": true, "data_dir": "./agent-data"}
 """
+import csv
+import io
 import os
 import sys
 import json
@@ -575,15 +577,12 @@ class Agent:
         elif action == "_agent_get_inventory":
             try:
                 from services import inventory_manager
-                hosts_csv = inventory_manager.get_hosts_csv()
-                if os.path.exists(hosts_csv):
-                    with open(hosts_csv, "r", encoding="utf-8") as f:
-                        content = f.read()
-                else:
-                    content = ("IP,Vendor,Profile,Username,Password,Enable Secret,"
-                               "Group,Hostname,Probe,SSH Port,Transports,SNMP Community,"
-                               "SNMP Disabled\n")
-                return {"status": "done", "result": content}
+                buf = io.StringIO()
+                w = csv.DictWriter(buf, fieldnames=inventory_manager._HOSTS_FIELDS,
+                                   extrasaction="ignore", lineterminator="\n")
+                w.writeheader()
+                w.writerows(inventory_manager.get_all_devices())
+                return {"status": "done", "result": buf.getvalue()}
             except Exception as e:
                 return {"status": "error", "result": f"Errore lettura inventario locale: {e}"}
 
@@ -601,8 +600,8 @@ class Agent:
                 # che la centrale non ha; un valore in chiaro viene ignorato da
                 # get_device_credentials. Documentato in docs/probes.md.
                 rows = [rec for _, rec in inventory_manager._read_inventory_csv(arg)]
-                os.makedirs(os.path.dirname(inventory_manager.get_hosts_csv()), exist_ok=True)
-                inventory_manager.safe_write_hosts_csv(rows)
+                os.makedirs(os.path.dirname(inventory_manager.inventory_db_path()), exist_ok=True)
+                inventory_manager.write_devices(rows)
                 return {"status": "done",
                         "result": f"Inventario locale salvato con successo ({len(rows)} apparati)."}
             except ValueError as e:

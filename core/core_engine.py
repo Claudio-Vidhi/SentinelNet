@@ -1940,12 +1940,8 @@ def _netmap_signature():
     # The inventory belongs in the signature too: both cached reports join the
     # backups against it for group and hostname, so adding or removing a device
     # changes the answer without any backup file changing.
-    from services.inventory_manager import get_hosts_csv
-    try:
-        st = os.stat(get_hosts_csv())
-        inv = (st.st_mtime, st.st_size)
-    except OSError:
-        inv = (0.0, 0)
+    from services.inventory_manager import inventory_version
+    inv = inventory_version()
     sig = (count, max_mtime, cat_mtime, inv)
     _netmap_cache["last_sig"] = sig
     _netmap_cache["sig_ts"] = now
