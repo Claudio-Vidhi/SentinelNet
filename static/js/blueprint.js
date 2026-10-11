@@ -323,10 +323,16 @@
                     const was = k === 'subnets' ? (base.subnets || []) : (base[k] || '');
                     if (JSON.stringify(val[k]) !== JSON.stringify(was)) fields[k] = val[k];
                 });
+                // Editing a draft op: the preview already holds its changes, so
+                // the diff above misses them. Keep every field the op touched.
+                const kept = !op ? [] : op.op === 'update_location' ? Object.keys(op.fields || {})
+                    : op.op === 'set_gateway' ? ['gateway'] : op.op === 'add_subnet' ? ['subnets'] : [];
+                kept.forEach((k) => { fields[k] = val[k]; });
                 if (!Object.keys(fields).length) { closeModal('bpLocationModal'); return; }
                 next = { op: 'update_location', id, fields };
             } else {
-                next = Object.assign({ op: 'create_location', ref: (op && op.ref) || '+1' }, val);
+                next = Object.assign({ op: 'create_location', ref: (op && op.ref) || '+1' },
+                    op && op.id ? { id: op.id } : {}, val);
             }
             if (await onSave(next)) closeModal('bpLocationModal');
         };

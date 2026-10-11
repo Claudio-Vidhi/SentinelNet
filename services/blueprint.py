@@ -60,14 +60,15 @@ def _with_unique_refs(existing: list, new: list) -> list:
     mapping = {}
     for o in new:
         r = o.get("ref")
-        if not r:
+        if not r or not isinstance(r, str):
             continue
         fresh, n = r, 2
         while fresh in used:
             fresh, n = f"{r}.{n}", n + 1
         used.add(fresh)
         mapping[r] = fresh
-    return [dict(o, **{k: mapping.get(o[k], o[k]) for k in ("ref", "id", "a", "b") if k in o}) for o in new]
+    return [dict(o, **{k: mapping.get(o[k], o[k]) for k in ("ref", "id", "a", "b") if isinstance(o.get(k), str)})
+            for o in new]
 
 
 def add_ops(org: str, ops: list, source: str, by: str) -> dict:
@@ -137,7 +138,10 @@ def apply(org: str, by: str, note: str) -> dict:
             blueprint_store.record_revisions(conn, by, source, note)
             blueprint_store.delete_draft(conn, org)
         rev = blueprint_store.latest_rev(conn, org)
-    renamed = {r[1:]: lid for r, lid in refs.items() if source == "restore" and r[1:] != lid}
+    # Only a create that asked for an id can come out renamed.
+    wanted = {o["ref"]: o["id"] for o in draft["ops"]
+              if o.get("op") == "create_location" and o.get("ref") and o.get("id")}
+    renamed = {wanted[r]: lid for r, lid in refs.items() if source == "restore" and r in wanted and wanted[r] != lid}
     return {"rev": rev, "renamed": renamed}
 
 
@@ -191,4 +195,4 @@ def revision(org: str, rev: int) -> dict:
 
 def observe(org: str) -> dict:
     st = state(org)
-    return blueprint_observe.observe(org, {"locations": st["locations"], "links": st["links"]})
+    return blueprint_observe.observe(org, st["preview"] or {"locations": st["locations"], "links": st["links"]})
