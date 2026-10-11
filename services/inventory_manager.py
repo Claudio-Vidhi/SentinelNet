@@ -1,5 +1,6 @@
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
+import functools
 import json
 import logging
 import os
@@ -375,7 +376,7 @@ def _same_device(row: dict, ip: str, group: str) -> bool:
     return row.get("IP") == ip and row.get("Group") == group
 
 
-def _merged_row(devices, ip, vendor, profile, username, password, enable_secret, group,
+def _merged_row(devices, get_location, ip, vendor, profile, username, password, enable_secret, group,
                 probe=None, ssh_port=None, transports=None, snmp_community=None,
                 snmp_disabled=None, location=None, require_location=True, hostname=None) -> dict:
     # Validazione IP robusta
@@ -395,15 +396,14 @@ def _merged_row(devices, ip, vendor, profile, username, password, enable_secret,
 
     resolved_group = group
     # Preserva l'hostname già rilevato sul dispositivo esistente
-    existing = next((d for d in devices if _same_device(d, ip, resolved_group)), None)
+    existing = devices.get((resolved_group, ip))
 
     location_probe = None
     if require_location:
-        from services import location_manager
         resolved_location = location if location is not None else (existing.get('Location') if existing else None)
         if not resolved_location:
             raise ValueError("La sede è obbligatoria per un nuovo dispositivo.")
-        loc_obj = location_manager.get_location(resolved_location)
+        loc_obj = get_location(resolved_location)
         if not loc_obj or loc_obj.get("org") != resolved_group:
             raise ValueError(f"Sede '{resolved_location}' inesistente o non appartenente al gruppo '{resolved_group}'.")
         location_probe = loc_obj.get("probe")
@@ -482,13 +482,17 @@ def upsert_devices(entries: list) -> None:
     """Add or update many devices with one inventory write: an import of N rows
     used to rewrite the whole inventory N times. Every entry is validated
     before anything is written."""
+    from services import location_manager
+    # Each distinct location is read once per call, not once per entry.
+    get_location = functools.cache(location_manager.get_location)
     with _io_lock:
-        devices = get_all_devices()
+        # (Group, IP) is the hosts table's primary key: no duplicates to lose.
+        devices = {device_pair(d): d for d in get_all_devices()}
         for e in entries:
-            row = _merged_row(devices, **e)
-            devices = [d for d in devices if not _same_device(d, row["IP"], row["Group"])]
-            devices.append(row)
-        write_devices(devices)
+            row = _merged_row(devices, get_location, **e)
+            devices.pop(device_pair(row), None)   # an updated row moves to the end, as before
+            devices[device_pair(row)] = row
+        write_devices(list(devices.values()))
 
 
 def add_or_update_device(ip, vendor, profile, username, password, enable_secret, group,
