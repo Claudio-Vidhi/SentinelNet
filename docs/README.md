@@ -41,7 +41,7 @@ for user-facing strings, logs and comments, English for identifiers — see
 | [windows-collection.md](windows-collection.md) | Windows hosts over SSH: why not WinRM, why the artefact is pipe-delimited, what each section feeds |
 | [live-flows-and-siem.md](live-flows-and-siem.md) | The two flow tabs in depth: ingest, endpoints, frontend, past mistakes |
 | [probes.md](probes.md) | Multi-site: Direct (central server) and probe agent, deployment, CLI relay |
-| [organizations-locations.md](organizations-locations.md) | Organizations and their physical locations: vocabulary, where subnets live, boundaries, upgrade migration |
+| [organizations-locations.md](organizations-locations.md) | Organizations and their physical locations: vocabulary, where subnets live, `inventory.db` storage, boundaries, upgrade migrations, per-location CSV import |
 
 ### Operations
 
