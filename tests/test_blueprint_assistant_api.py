@@ -218,3 +218,13 @@ class TestAssistantDraft(_Mcp):
         r = self.propose(self.c, ops=[{"op": "add_link", "a": "roma", "b": "roma", "kind": "vpn"}])
         self.assertEqual(r.status_code, 422)
         self.assertEqual(r.json()["detail"]["index"], 0)
+
+    def test_too_many_ops_is_422(self):
+        self.assertEqual(self.propose(self.c, ops=SUBNET * 201).status_code, 422)
+
+    def test_error_index_counts_only_the_posted_ops(self):
+        self.assertEqual(self.propose(self.c).status_code, 200)
+        r = self.propose(self.c, ops=[{"op": "add_link", "a": "roma", "b": "roma", "kind": "vpn"}])
+        self.assertEqual(r.status_code, 422)
+        self.assertEqual(r.json()["detail"]["index"], 0)
+        self.assertIn("Modifica 1:", r.json()["detail"]["message"])

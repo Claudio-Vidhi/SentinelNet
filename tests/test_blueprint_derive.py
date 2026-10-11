@@ -154,6 +154,15 @@ class TestVpnLinks(unittest.TestCase):
         self.assertEqual(derive(linked, self.DEVICES, self.ANALYSES)[0], [])
 
 
+class TestOwnerMap(unittest.TestCase):
+    def test_management_ip_beats_an_interface_address_of_an_earlier_device(self):
+        devices = [dev("10.10.0.1", "milano"), dev("10.20.0.1", "roma"), dev("10.30.0.1", "torino")]
+        analyses = {"10.10.0.1": an([("x", "10.20.0.1/24")]), "10.20.0.1": an(),
+                    "10.30.0.1": an(peers=[("to-roma", "10.20.0.1")])}
+        ops, _ = derive(VIEW, devices, analyses)
+        self.assertIn({"op": "add_link", "a": "torino", "b": "roma", "kind": "vpn", "note": "to-roma"}, ops)
+
+
 class TestSkippedDevices(unittest.TestCase):
     def test_counted_in_the_notes(self):
         devices = [dev("10.30.0.1", ""), dev("10.30.0.2", "nowhere"), dev("10.20.0.1", "roma"), dev("10.20.0.2", "roma")]

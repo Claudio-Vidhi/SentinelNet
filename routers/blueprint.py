@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from routers.deps import assert_group_allowed, get_current_user, require_admin, require_tab
 from security import user_manager
 from security.security_manager import log_audit
-from services import blueprint, blueprint_assistant, inventory_manager
+from services import blueprint, blueprint_assistant, blueprint_model, inventory_manager
 
 router = APIRouter(tags=["Blueprint"])
 _TAB = [Depends(require_tab("tab-blueprint"))]
@@ -47,7 +47,7 @@ class InstructionsSchema(BaseModel):
 
 
 class AssistantDraftSchema(BaseModel):
-    ops: List[dict]
+    ops: List[dict] = Field(min_length=1, max_length=200)
     note: str = Field(default="", max_length=500)
 
 
@@ -200,7 +200,22 @@ def assistant_draft_ep(org: str, payload: AssistantDraftSchema, current_user=Dep
     align. The source is always «assistant»."""
     _org(org, current_user)
     who = current_user.get("sub")
-    out = _call(blueprint.add_ops, org, payload.ops, "assistant", who)
+    st = blueprint.state(org)
+    before = len(st["draft"]["ops"]) if st["draft"] else 0
+    try:
+        out = blueprint.add_ops(org, payload.ops, "assistant", who)
+    except blueprint_model.OpError as e:
+        # add_ops numbers the whole draft; the caller knows only the ops it posted.
+        k = e.index - before
+        if k < 0:
+            raise HTTPException(status_code=422, detail={"message": str(e), "index": e.index})
+        raise HTTPException(status_code=422, detail={"message": f"Modifica {k + 1}: {e.reason}", "index": k})
+    except blueprint.Conflict as e:
+        raise HTTPException(status_code=409, detail={"message": str(e)})
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail={"message": str(e)})
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail={"message": str(e), "index": None})
     note = " ".join(payload.note.split())
     log_audit(f"Blueprint '{org}': {len(payload.ops)} modifiche proposte via MCP dall'utente '{who}'"
               + (f" — nota: {note}" if note else "") + ".")

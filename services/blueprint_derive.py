@@ -39,13 +39,18 @@ def derive(view: dict, devices: list, analyses: dict):
     taken = [n for n in (ipaddress.ip_network(s, strict=False)
                          for l in locs.values() for s in l.get("subnets") or []) if n.version == 4]
     no_loc = no_backup = unreadable = unknown = 0
-    placed, owner = [], {}          # owner: address -> location of the device holding it
-    for d in sorted(devices, key=lambda d: (d.get("Location") or "", d.get("IP") or "")):
+    placed = []
+    # owner: address -> location of the device holding it; management IPs win over interface addresses.
+    owner = {}
+    by_place = sorted(devices, key=lambda d: (d.get("Location") or "", d.get("IP") or ""))
+    for d in by_place:
+        if d.get("Location") in locs:
+            owner.setdefault(d.get("IP") or "", d["Location"])
+    for d in by_place:
         lid, ip = d.get("Location") or "", d.get("IP") or ""
         if lid not in locs:
             no_loc += 1
             continue
-        owner.setdefault(ip, lid)
         a = analyses.get(ip)
         if a is None:
             no_backup += 1

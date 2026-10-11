@@ -108,6 +108,12 @@ class TestDescribe(_Base):
             blueprint_assistant.describe("acme", "Il gateway di Zara è 10.20.0.1", "adm")
         self.assertIn("operazione 1: sede 'zara' inesistente", str(cm.exception))
 
+    def test_empty_ops_keep_the_notes_without_retry(self):
+        chat = self.chat(reply([], "Niente da cambiare."))
+        out = blueprint_assistant.describe("acme", "Roma è già a posto", "adm")
+        self.assertEqual((chat.call_count, out["added"], out["notes"]), (1, 0, "Niente da cambiare."))
+        self.assertEqual(self.draft_ops(), [])
+
     def test_text_limits_never_reach_the_llm(self):
         chat = self.chat()
         for text in ("", "   ", "x" * (blueprint_assistant.MAX_TEXT + 1)):
