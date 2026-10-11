@@ -90,5 +90,16 @@ class TestInventoryStore(unittest.TestCase):
             st.write_orgs(self.conn, {})
 
 
+    def test_connect_recreates_schema_after_file_deleted(self):
+        path = os.path.join(self.dir, "fresh.db")
+        st.connect(path).close()
+        for suffix in ("", "-wal", "-shm"):
+            if os.path.exists(path + suffix):
+                os.remove(path + suffix)
+        conn = st.connect(path)
+        self.addCleanup(conn.close)
+        self.assertEqual(st.read_orgs(conn), {})
+
+
 if __name__ == "__main__":
     unittest.main()

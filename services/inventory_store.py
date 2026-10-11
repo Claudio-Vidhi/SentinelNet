@@ -8,6 +8,7 @@ Host rows keep the CSV-era shape — dicts keyed by the column names below — s
 callers of inventory_manager read what they always read. stdlib only and no
 data paths at import: the startup migration imports it before any service."""
 import json
+import os
 import sqlite3
 import threading
 
@@ -46,11 +47,12 @@ _ready_lock = threading.Lock()
 
 
 def connect(path: str) -> sqlite3.Connection:
+    existed = os.path.exists(path)
     conn = sqlite3.connect(path, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     with _ready_lock:
-        if path not in _ready:
+        if path not in _ready or not existed:
             conn.execute("PRAGMA journal_mode = WAL")
             conn.executescript(_SCHEMA)
             _ready.add(path)
