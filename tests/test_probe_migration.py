@@ -121,14 +121,18 @@ class TestProbeMigration(unittest.TestCase):
     def test_agent_startup_renames_its_own_csv_header(self):
         import sys
         from services import probe_agent
-        self._write("network_hosts.csv", HEADER_OLD + "192.0.2.1,cisco,acme,sw-01,central\n")
-        cfg = os.path.join(self.d, "agent.json")
+        self._write("network_hosts.csv", HEADER_OLD + "192.0.2.1,cisco,acme,sw-01,lab\n")
+        cfg =os.path.join(self.d, "agent.json")
         with open(cfg, "w", encoding="utf-8") as f:
             json.dump({"central_url": "https://central.example", "probe_id": "lab",
                        "token": "t", "data_dir": self.d}, f)
         with patch.dict(os.environ, {}), patch.object(sys, "argv", ["probe_agent.py", "--config", cfg]):
             probe_agent.load_config()
-        self.assertEqual(self._hosts_header()[-1], "Probe")
+        # The SQLite migration then consumes the CSV: the probe value reaching
+        # inventory.db proves the header was renamed first.
+        from services import inventory_store
+        with inventory_store.connect(os.path.join(self.d, "inventory.db")) as c:
+            self.assertEqual(inventory_store.read_hosts(c, "hosts")[0]["Probe"], "lab")
 
     def test_second_run_is_a_noop(self):
         self._write("sites.json", "{}")  # check-site-name: ok

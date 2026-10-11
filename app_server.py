@@ -82,6 +82,16 @@ async def lifespan(app: "FastAPI"):
     from core import location_migration
     for step in location_migration.migrate(data_dir):
         log_audit(f"Migrazione sedi: {step}.")
+    # Inventory, organizations and locations to SQLite (spec 2026-10-10);
+    # reads the files the two migrations above just wrote. An orphan row stops
+    # the server: running on an empty inventory would be worse.
+    from core import inventory_migration
+    try:
+        for step in inventory_migration.migrate(data_dir):
+            log_audit(f"Migrazione inventario: {step}.")
+    except inventory_migration.MigrationError as e:
+        print(f"ERRORE: {e}", file=sys.stderr)
+        raise
 
     # Prima di tutto il resto: ripara le ACL dei file che contengono segreti.
     # Sotto il servizio Windows l'irrigidimento falliva (icacls 1332, account

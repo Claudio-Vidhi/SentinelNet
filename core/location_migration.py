@@ -63,6 +63,10 @@ def _slug(name: str) -> str:
 def migrate(data_dir: str) -> list:
     """Run the migration if `locations.json` is missing; returns the steps
     done ([] = nothing to do, a fresh install included)."""
+    # After the SQLite migration (spec 2026-10-10) locations.json is gone by
+    # design; without this guard its absence would rerun this migration.
+    if os.path.exists(os.path.join(data_dir, "inventory.db")):
+        return []
     loc_path = os.path.join(data_dir, "locations.json")
     if os.path.exists(loc_path):
         return []
