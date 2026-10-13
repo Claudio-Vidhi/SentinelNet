@@ -248,7 +248,9 @@ def log_audit(message: str):
     tag = _client_tag.get()
     if tag:
         message = f"{message} [client dichiarato: {tag}]"
-    audit_logger.info(message)
+    # One record, one physical line: messages quote user input (CLI commands,
+    # names), and a raw newline in it would forge an extra, untagged audit line.
+    audit_logger.info(message.replace("\r", "\\r").replace("\n", "\\n"))
 
 # --- JWT AUTHENTICATION ---
 

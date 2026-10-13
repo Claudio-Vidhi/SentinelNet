@@ -16,10 +16,10 @@ from pydantic import BaseModel, Field
 
 from security.security_manager import log_audit
 from routers.deps import get_current_user, require_operator, user_group_scope
-from collectors.network_scanner import parse_network, scan_subnet
+from collectors.network_scanner import parse_ipv4_network, scan_subnet
 from core import core_engine
 from security import crypto_vault, identity_manager
-from services import probe_manager
+from services import location_manager, probe_manager
 
 router = APIRouter(dependencies=[Depends(require_tab("tab-devices"))], tags=["Scan"])
 
@@ -52,6 +52,22 @@ def _probe_for_network(hosts: list[str]):
                 return probe
     return None
 
+def _declared_by(network: ipaddress.IPv4Network, scope) -> bool:
+    """True if ``network`` lies inside a subnet declared on a location of one
+    of the caller's tenants. A tenant-scoped user scans only ranges their tenants
+    claim; an undeclared range could be anyone's."""
+    for org in scope:
+        for loc in location_manager.list_locations(org):
+            for raw in loc.get("subnets") or []:
+                try:
+                    declared = ipaddress.ip_network(str(raw).strip(), strict=False)
+                except ValueError:
+                    continue
+                if declared.version == 4 and network.subnet_of(declared):
+                    return True
+    return False
+
+
 def _run_scan_job(job_id: str, req: SubnetScanRequest):
     def _progress(done: int, total: int):
         with _scan_jobs_lock:
@@ -79,9 +95,16 @@ def start_subnet_scan(
     current_user = Depends(require_operator),
 ):
     try:
-        hosts = parse_network(payload.network)
+        network = parse_ipv4_network(payload.network)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    scope = user_group_scope(current_user)
+    if scope is not None and not _declared_by(network, scope):
+        raise HTTPException(
+            status_code=403,
+            detail="Rete non dichiarata su una sede delle tue organizzazioni: "
+                   "aggiungi la subnet alla sede prima di scansionarla.")
+    hosts = [str(ip) for ip in network.hosts()]
 
     probe = _probe_for_network(hosts)
     if probe and not probe_manager.has_direct_path(probe["id"]):

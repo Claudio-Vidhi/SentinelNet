@@ -72,7 +72,9 @@ from security.command_policy import (
 
 class CommandRequest(BaseModel):
     ip: str
-    command: str
+    # One command, one line: a newline smuggled several CLI lines past a check
+    # that only reads the first. Multi-line runs go through bulk-command.
+    command: str = Field(pattern=r"^[^\r\n]*$", max_length=1000)
 
 class BulkCommandRequest(BaseModel):
     ips: List[str]

@@ -16,6 +16,7 @@ from core import core_engine
 from core.ssh_pool import run_ssh
 from collectors import mac_collector
 from collectors import mac_history
+from security import command_policy
 from security.security_manager import log_audit
 from routers.deps import get_current_user, require_operator, require_admin, require_unscoped_admin, user_group_scope, assert_group_allowed, assert_device_allowed
 
@@ -239,6 +240,11 @@ def mac_list_overrides(current_user = Depends(get_current_user)):
 def mac_set_override(payload: MacOverrideSchema, current_user = Depends(require_operator)):
     if payload.fmt not in mac_collector.CLI_FORMATS:
         raise HTTPException(status_code=400, detail="Formato di parsing non valido.")
+    # The collector runs this unattended, in enable mode, on every pass: only
+    # a read command may be stored (security review 2026-10-12).
+    if not command_policy.is_read_only(payload.command):
+        raise HTTPException(status_code=400,
+                            detail="Il comando deve essere di sola lettura (show/display/get).")
     assert_device_allowed(current_user, payload.ip)
     if not mac_history.set_override(payload.ip, payload.command, payload.fmt):
         raise HTTPException(status_code=400, detail="IP e comando obbligatori.")

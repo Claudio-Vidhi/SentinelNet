@@ -101,7 +101,10 @@ def derive(view: dict, devices: list, analyses: dict):
             if other == lid or k in links or k in proposed:
                 continue
             proposed.add(k)
-            ops.append({"op": "add_link", "a": lid, "b": other, "kind": "vpn", "note": p.get("name") or ""})
+            # The phase-1 name comes from a device config and reaches the LLM
+            # in the rename pass: a short label, not free text.
+            ops.append({"op": "add_link", "a": lid, "b": other, "kind": "vpn",
+                        "note": str(p.get("name") or "")[:64]})
 
     notes = [text for n, text in ((no_loc, f"{no_loc} apparati senza sede: ignorati."),
                                   (no_backup, f"{no_backup} apparati senza backup della configurazione."),

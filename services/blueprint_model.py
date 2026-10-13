@@ -15,6 +15,12 @@ KINDS = ("vpn", "wan", "mpls", "lan")
 FIELDS = ("name", "role", "subnets", "probe", "gateway")
 PRESETS = ("single", "hub_spoke", "hub_spoke_dc", "full_mesh")
 MAX_PRESET = 50
+# Every draft write re-applies the whole draft on a deep copy of the tables, so
+# its size is the cost of each request. A full mesh of MAX_PRESET locations is
+# 1275 ops; the cap leaves room above that and stops an MCP loop growing it.
+MAX_DRAFT_OPS = 2000
+MAX_NAME = 100
+MAX_NOTE = 500
 
 
 class OpError(ValueError):
@@ -52,6 +58,8 @@ def _clean_fields(fields: dict, probes) -> dict:
             v = str(v or "").strip()
             if not v:
                 raise ValueError("il nome della sede è obbligatorio")
+            if len(v) > MAX_NAME:
+                raise ValueError(f"nome della sede troppo lungo: massimo {MAX_NAME} caratteri")
         elif k == "role" and v not in ROLES:
             raise ValueError(f"ruolo non valido: {v}")
         elif k == "subnets":
@@ -75,6 +83,8 @@ def apply_ops(org: str, locations: dict, links: dict, ops: list, probes=None):
     organization). Returns (locations, links, refs); refs maps the «+…» ref
     of each created location to the id it got."""
     from services.probe_manager import _slugify
+    if len(ops) > MAX_DRAFT_OPS:
+        raise ValueError(f"Bozza troppo grande: massimo {MAX_DRAFT_OPS} operazioni.")
     locs, lnks, refs = copy.deepcopy(locations), copy.deepcopy(links), {}
 
     def loc_id(i, x):
@@ -128,7 +138,7 @@ def apply_ops(org: str, locations: dict, links: dict, ops: list, probes=None):
                 if k in lnks:
                     raise ValueError("collegamento già presente")
                 a, b = sorted((a, b))
-                lnks[k] = {"org": org, "a": a, "b": b, "kind": op["kind"], "note": str(op.get("note") or "")}
+                lnks[k] = {"org": org, "a": a, "b": b, "kind": op["kind"], "note": str(op.get("note") or "")[:MAX_NOTE]}
             elif kind == "remove_link":
                 k = op.get("id")
                 if k not in lnks or lnks[k]["org"] != org:

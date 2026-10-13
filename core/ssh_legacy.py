@@ -22,6 +22,7 @@ tuples, RSAKey.HASHES). tests/test_ssh_legacy_algorithms.py fails the day a
 paramiko release moves them, which is why pyproject pins the major version.
 """
 import logging
+import time
 from hashlib import sha1
 from typing import Any
 
@@ -134,14 +135,16 @@ def describe_offer(offer: dict) -> str:
 
 # Hosts that refused the modern list once. Without it every session to such a
 # device costs a refused handshake, and paramiko logs a traceback for each.
-# ponytail: process memory only - a restart re-learns it with one refusal, and
-# a device upgraded in place stays on the fallback list until then.
-_needs_legacy: "set[str]" = set()
+# ponytail: process memory only - a restart re-learns it with one refusal.
+# Entries expire, so a device upgraded in place (or a refusal forged once by
+# someone on the path) does not keep SHA-1 on offer for the process lifetime.
+LEGACY_TTL = 24 * 3600
+_needs_legacy: "dict[str, float]" = {}
 
 
 def with_fallback(attempt, host: str = ""):
     """attempt(extra_disabled) -> connection. Modern first, SHA-1 on refusal."""
-    if host not in _needs_legacy:
+    if time.time() - _needs_legacy.get(host, 0) > LEGACY_TTL:
         try:
             return attempt(MODERN_ONLY)
         except Exception as e:
@@ -150,7 +153,7 @@ def with_fallback(attempt, host: str = ""):
         logger.warning("SSH %s: no modern algorithm in common, retrying with SHA-1 "
                        "key exchange / ssh-rsa host key", host)
         if host:
-            _needs_legacy.add(host)
+            _needs_legacy[host] = time.time()
     return attempt(None)
 
 

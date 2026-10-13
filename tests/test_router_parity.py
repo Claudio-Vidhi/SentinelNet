@@ -500,7 +500,11 @@ class TestFullParity(unittest.TestCase):
                                # di recupero password. Puramente additivo, un
                                # client che lo omette crea l'utente come prima.
                                "UserCreateSchema",
-                               "VendorSchema")
+                               "VendorSchema",
+                               # 'command' gained pattern (one line) and maxLength:
+                               # a newline smuggled extra CLI lines past the
+                               # blacklist (security review 2026-10-12, M1).
+                               "CommandRequest", "ProbeCommandSchema")
 
     @classmethod
     def setUpClass(cls):

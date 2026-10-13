@@ -42,6 +42,14 @@ def list_routable_devices(current_user = Depends(get_current_user)):
         for d in route_table.routable_devices(devices_in_scope(current_user))]}
 
 
+def _audit_read(current_user, targets) -> None:
+    """Who opened the SSH sessions: send_custom_command logs the command and
+    the device, not the user who asked (security review 2026-10-12, L2)."""
+    if targets:
+        log_audit(f"Tabelle di routing lette via SSH da '{current_user.get('sub')}' su: "
+                  f"{', '.join(str(d.get('IP')) for d in targets)}.")
+
+
 @router.get("/api/routes")
 async def list_routes(
     device: str = Query("", max_length=2000),
@@ -60,6 +68,7 @@ async def list_routes(
     wanted = {p.strip() for p in device.split(",") if p.strip()}
     targets = [d for d in route_table.routable_devices(devices_in_scope(current_user))
                if d.get("IP") in wanted]
+    _audit_read(current_user, targets)
 
     sem = asyncio.Semaphore(MAX_CONCURRENT_DEVICES)
 
@@ -132,6 +141,7 @@ async def _collect_selection(current_user, device: str):
     wanted = {p.strip() for p in device.split(",") if p.strip()}
     targets = [d for d in route_table.routable_devices(devices_in_scope(current_user))
                if d.get("IP") in wanted]
+    _audit_read(current_user, targets)
 
     # Due clienti possono avere lo stesso IP. Qui le tabelle si indicizzano per
     # indirizzo, quindi una selezione ambigua non darebbe un percorso sbagliato

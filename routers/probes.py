@@ -8,7 +8,7 @@ from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from routers.deps import require_tab
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from security.security_manager import log_audit
 from routers.deps import require_unscoped_admin, require_operator, user_group_scope, is_unscoped_admin
@@ -69,7 +69,8 @@ class BastionDraftSchema(BaseModel):
 
 class ProbeCommandSchema(BaseModel):
     ip: str
-    command: str
+    # One line, as on /api/send-command: see CommandRequest.
+    command: str = Field(pattern=r"^[^\r\n]*$", max_length=1000)
 
 @router.get("/api/probes", dependencies=[Depends(require_tab("tab-devices", "tab-import", "tab-provisioning", "tab-provisioner", "tab-probes"))])
 def list_probes_ep(current_user = Depends(require_operator)):

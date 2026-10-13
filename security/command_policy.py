@@ -28,21 +28,28 @@ can defeat any blacklist. The durable answer remains a per-vendor allowlist.
 import re
 from typing import Optional
 
+def _abbrev(word: str, shortest: int) -> str:
+    """The word and every prefix of it down to ``shortest`` letters: IOS takes
+    any unambiguous abbreviation, so 'rel' is reload and 'del' is delete."""
+    return r"\b(?:%s)\b" % "|".join(word[:n] for n in range(len(word), shortest - 1, -1))
+
+
 # Tier 1 — interactive (one-shot API + WS terminal). Vendor config-mode,
 # reboot and erase-class commands. 'show/get/display' never match.
 INTERACTIVE_PATTERNS = [
-    r"\breload\b",
-    r"\berase\b",
-    r"\bdelete\b",
-    r"\bformat\b",
+    _abbrev("reload", 3),
+    _abbrev("erase", 3),
+    _abbrev("delete", 3),
+    _abbrev("format", 4),
     r"\breboot\b",
-    r"\bconf\s+t\b",
-    r"\bconfigure\s+terminal\b",
+    # Config mode in any spelling: 'conf t', 'config term', 'configure',
+    # FortiOS 'config system ...'. Anchored, so 'show configuration' passes.
+    r"^conf\w*\b",
+    r"\bconf\w*\s+t\w*\b",
     r"\bcopy\s+.*?startup-config\b",
     # Hardening aggiuntivo (denylist): altri comandi distruttivi/di riavvio o di
     # scrittura config sui vari vendor. Restano fuori i comandi 'show/get/display'.
-    r"\bwr\b",                       # 'wr', 'wr mem', 'wr erase'
-    r"\bwrite\b",                    # 'write memory', 'write erase'
+    _abbrev("write", 2),             # 'wr', 'wri mem', 'write erase'
     r"\bboot\s+system\b",
     r"\bfactory[-\s]?reset\b",
     r"\brequest\s+system\b",         # Junos: reboot/halt/zeroize/software
@@ -90,6 +97,21 @@ def matches_interactive(command: str) -> Optional[str]:
 def matches_bulk(command: str) -> Optional[str]:
     """First bulk-tier pattern matched, or None."""
     return _first_match(command, BULK_ALWAYS_PATTERNS)
+
+
+READ_ONLY_VERBS = ("show", "display", "get")
+
+
+def is_read_only(command: str) -> bool:
+    """One line starting with a read verb (IOS/NX-OS 'show', Comware/Huawei
+    'display', FortiOS 'get'). For commands stored now and run unattended
+    later, where a denylist is the wrong tool."""
+    parts = command.strip().lower().split()
+    if "\n" in command or "\r" in command or not parts:
+        return False
+    verb = parts[0]
+    # 'sh' / 'sho' are the usual IOS spellings of show.
+    return verb in READ_ONLY_VERBS or (len(verb) >= 2 and "show".startswith(verb))
 
 
 def matches_system(command: str) -> Optional[str]:

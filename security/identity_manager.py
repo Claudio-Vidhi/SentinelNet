@@ -138,6 +138,26 @@ def identity_visible_to(identity_id: str, tenants) -> bool:
     return any(_matches_tenant(row.get("tenant"), t) for t in tenants)
 
 
+def tenant_within(tenant, tenants) -> bool:
+    """True if every tenant named by ``tenant`` is in ``tenants`` (None = unrestricted).
+    A global identity ('all') reaches every tenant, so only an unrestricted
+    caller may create or change one."""
+    if tenants is None:
+        return True
+    norm = _normalize_tenant(tenant)
+    if norm == "all":
+        return False
+    return set([norm] if isinstance(norm, str) else norm) <= set(tenants)
+
+
+def identity_owned_by(identity_id: str, tenants) -> bool:
+    """True if a caller whose allowed tenants are ``tenants`` may modify this
+    identity: visible is not enough, a global one is shared by every tenant."""
+    with _lock:
+        row = next((r for r in _load() if r["id"] == identity_id), None)
+    return row is not None and tenant_within(row.get("tenant"), tenants)
+
+
 def add_identity(name: str, tenant, username: str,
                  password: str, secret: str) -> dict:
     ident = {

@@ -78,7 +78,7 @@ class TestScanWritesNothingToInventory(unittest.TestCase):
     scrive nell'inventario, quindi non c'e' piu' un group da difendere qui.
     Il controllo di sede vive su /api/add-device (test_rbac_scope)."""
 
-    def _scan(self, body):
+    def _scan(self, body, declared=("192.0.2.0/24",)):
         from fastapi.testclient import TestClient
         import app_server
         from routers.deps import get_current_user
@@ -88,7 +88,8 @@ class TestScanWritesNothingToInventory(unittest.TestCase):
         try:
             with patch("routers.deps.user_manager.get_user_groups",
                        return_value=["sede-a"]), \
-                 patch("routers.scan._run_scan_job"):
+                 patch("routers.scan.location_manager.list_locations",
+                       return_value=[{"org": "sede-a", "subnets": list(declared)}]),                  patch("routers.scan._run_scan_job"):
                 return TestClient(app_server.app).post("/api/scan-subnet", json=body)
         finally:
             app_server.app.dependency_overrides.pop(get_current_user, None)
@@ -99,6 +100,18 @@ class TestScanWritesNothingToInventory(unittest.TestCase):
         r = self._scan({"network": "192.0.2.0/29", "vendor": "linux",
                         "group": "sede-b", "auto_add": True})
         self.assertEqual(r.status_code, 200)
+
+    def test_scoped_user_scans_only_declared_subnets(self):
+        # Security review 2026-10-12, H1: a tenant-scoped operator swept any range.
+        self.assertEqual(self._scan({"network": "192.0.2.8/29"}).status_code, 200)
+        self.assertEqual(self._scan({"network": "198.51.100.0/24"}).status_code, 403)
+        # Wider than what the site declares: refused too.
+        self.assertEqual(self._scan({"network": "192.0.0.0/22"}).status_code, 403)
+
+    def test_oversized_and_special_ranges_are_refused(self):
+        for net in ("0.0.0.0/0", "10.0.0.0/8", "127.0.0.0/24", "169.254.0.0/24", "224.0.0.0/24"):
+            with self.subTest(net=net):
+                self.assertEqual(self._scan({"network": net}, declared=("0.0.0.0/0",)).status_code, 400)
 
     def test_router_has_no_inventory_access(self):
         # Strutturale: se il modulo non nomina inventory_manager non esiste

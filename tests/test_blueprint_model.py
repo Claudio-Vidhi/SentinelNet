@@ -22,6 +22,19 @@ def apply(ops, locs=LOCS, links=LINKS):
 
 
 class TestApplyOps(unittest.TestCase):
+    def test_draft_and_names_are_bounded(self):
+        # Security review 2026-10-12, A-M2: an MCP loop grew the draft forever.
+        too_many = [{"op": "set_gateway", "id": "roma", "ip": "192.0.2.1"}] * (bm.MAX_DRAFT_OPS + 1)
+        with self.assertRaises(ValueError):
+            apply(too_many)
+        with self.assertRaises(ValueError):
+            apply([{"op": "create_location", "name": "x" * (bm.MAX_NAME + 1)}])
+        _, links, _ = apply([{"op": "add_link", "a": "milano", "b": "roma", "kind": "wan", "note": "n" * 5000}])
+        self.assertEqual(len(links["milano--roma--wan"]["note"]), bm.MAX_NOTE)
+
+    def test_full_mesh_preset_fits_the_cap(self):
+        self.assertLessEqual(bm.MAX_PRESET + bm.MAX_PRESET * (bm.MAX_PRESET - 1) // 2, bm.MAX_DRAFT_OPS)
+
     def test_create_with_ref_then_link_to_it(self):
         locs, links, refs = apply([
             {"op": "create_location", "ref": "+1", "name": "Torino"},

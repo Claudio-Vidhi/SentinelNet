@@ -77,6 +77,9 @@ class TestBulkAssignEndpoint(unittest.TestCase):
         inventory_manager.invalidate_device_ip_cache()
         # Patch identity_manager usato dal router
         self._orig_get_creds = provisioner_router.identity_manager.get_identity_credentials
+        # These tests use fake ids; visibility has its own tests below.
+        self._orig_visible = provisioner_router.identity_manager.identity_visible_to
+        provisioner_router.identity_manager.identity_visible_to = lambda iid, scope: True
         self.audits = []
         self._orig_log = provisioner_router.log_audit
         provisioner_router.log_audit = lambda msg: self.audits.append(msg)
@@ -84,6 +87,7 @@ class TestBulkAssignEndpoint(unittest.TestCase):
     def tearDown(self):
         inventory_manager.HOSTS_CSV = self._orig_csv
         provisioner_router.identity_manager.get_identity_credentials = self._orig_get_creds
+        provisioner_router.identity_manager.identity_visible_to = self._orig_visible
         provisioner_router.log_audit = self._orig_log
         for p in (self.csv_path,):
             if os.path.exists(p):
@@ -164,6 +168,63 @@ class TestBulkAssignEndpoint(unittest.TestCase):
         self.assertEqual(res["assigned"], ["192.0.2.90"])
         reasons = {s["ip"]: s["reason"] for s in res["skipped"]}
         self.assertEqual(reasons.get("192.0.2.200"), "not_found")
+
+
+class TestIdentityTenantScope(unittest.TestCase):
+    """A tenant-scoped operator must not use, list, change or delete another
+    tenant's identity (security review 2026-10-12, H2)."""
+
+    def setUp(self):
+        from security import identity_manager
+        self.im = identity_manager
+        self.own = identity_manager.add_identity("own", "Sede_A", "u", "p", "")["id"]
+        self.other = identity_manager.add_identity("other", "Sede_B", "u", "p", "")["id"]
+        self.glob = identity_manager.add_identity("glob", "all", "u", "p", "")["id"]
+        self.scope = mock.patch("routers.deps.user_group_scope", return_value={"Sede_A"})
+        self.scope.start()
+        self._orig_log = provisioner_router.log_audit
+        provisioner_router.log_audit = lambda msg: None
+
+    def tearDown(self):
+        self.scope.stop()
+        provisioner_router.log_audit = self._orig_log
+        for iid in (self.own, self.other, self.glob):
+            self.im.delete_identity(iid)
+
+    def _assert_404(self, fn, *args):
+        with self.assertRaises(HTTPException) as ctx:
+            fn(*args, current_user=OPERATOR_T1)
+        self.assertEqual(ctx.exception.status_code, 404)
+
+    def test_assign_of_another_tenants_identity_is_refused(self):
+        payload = provisioner_router.BulkAssignIdentitySchema(identity_id=self.other, ips=["192.0.2.1"])
+        self._assert_404(provisioner_router.identities_bulk_assign, self.other, payload)
+
+    def test_list_hides_other_tenants(self):
+        ids = {r["id"] for r in provisioner_router.identities_list(tenant="Sede_B", current_user=OPERATOR_T1)["identities"]}
+        self.assertNotIn(self.other, ids)
+        self.assertIn(self.glob, ids)
+
+    def test_update_and_delete_need_ownership(self):
+        body = provisioner_router.IdentitySchema(name="x", tenant="Sede_A", username="u")
+        self._assert_404(provisioner_router.identities_update, self.other, body)
+        self._assert_404(provisioner_router.identities_update, self.glob, body)
+        self._assert_404(provisioner_router.identities_delete, self.other)
+
+    def test_cannot_move_or_create_outside_scope(self):
+        for tenant in ("Sede_B", "all"):
+            with self.subTest(tenant=tenant):
+                body = provisioner_router.IdentitySchema(name="x", tenant=tenant, username="u", password="p")
+                with self.assertRaises(HTTPException) as ctx:
+                    provisioner_router.identities_update(self.own, body, current_user=OPERATOR_T1)
+                self.assertEqual(ctx.exception.status_code, 403)
+                with self.assertRaises(HTTPException) as ctx:
+                    provisioner_router.identities_create(body, current_user=OPERATOR_T1)
+                self.assertEqual(ctx.exception.status_code, 403)
+
+    def test_own_identity_still_editable(self):
+        body = provisioner_router.IdentitySchema(name="renamed", tenant="Sede_A", username="u")
+        self.assertEqual(provisioner_router.identities_update(self.own, body, current_user=OPERATOR_T1)["status"], "success")
 
 
 if __name__ == "__main__":

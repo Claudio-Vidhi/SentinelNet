@@ -420,6 +420,11 @@ def collect_via_cli(host, username, password, secret="", device_type="cisco_ios"
         from core.net_ssh import ConnectHandler
     except ImportError:
         return None
+    from security.command_policy import is_read_only
+    if command and not is_read_only(command):
+        # Stored before the API checked it: never run it.
+        log.warning("MAC override on %s ignored: not a read-only command", host)
+        command = None
     cmd = command or "show mac address-table"
     parser = CLI_FORMATS.get((fmt or "").lower(), parse_cli_mac_table)
     params = {'device_type': device_type, 'host': host, 'username': username,

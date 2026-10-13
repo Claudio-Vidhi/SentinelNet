@@ -54,6 +54,20 @@ class TheTabIsWired(unittest.TestCase):
                 self.assertRegex(it, rf"\n\s+{key}:")
                 self.assertRegex(en, rf"\n\s+{key}:")
 
+    def test_bar_buttons_wait_for_an_organization(self):
+        # Their handlers read bpState, which is null until an organization loads.
+        for button in ("btnBpCheck", "btnBpObserve", "btnBpPreset", "btnBpHistory", "btnBpAssistant",
+                       "btnBpInstructions"):
+            self.assertIn(f'id="{button}" disabled', self.html, button)
+        self.assertIn("document.querySelectorAll('.bp-bar button').forEach((b) => { b.disabled = false; });", self.js)
+
+    def test_review_shows_every_field_of_a_new_location(self):
+        # Security review 2026-10-12, A-M1: subnets and gateway were hidden.
+        start = self.js.index("case 'create_location': return tr('bpOpCreate'")
+        body = self.js[start:self.js.index("case 'update_location'", start)]
+        for needle in ("op.subnets", "op.gateway", "op.probe"):
+            self.assertIn(needle, body)
+
     def test_no_inline_handlers_in_the_new_markup(self):
         start = self.html.index('id="tab-blueprint"')
         self.assertNotRegex(self.html[start:self.html.index("<!-- End #tab-blueprint -->")], r"\bon[a-z]+=")

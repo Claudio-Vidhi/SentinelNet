@@ -134,6 +134,12 @@ class ConnectFallbackTest(unittest.TestCase):
         calls, _ = self._run([object()])
         self.assertEqual(calls, [None])
 
+    def test_the_legacy_memory_expires(self):
+        # Security review 2026-10-12, L1: one refusal kept SHA-1 on offer forever.
+        ssh_legacy._needs_legacy["192.0.2.10"] = 0.0
+        calls, _ = self._run([object()])
+        self.assertEqual(calls, [ssh_legacy.MODERN_ONLY])
+
     def _run(self, side_effect):
         calls = []
 
