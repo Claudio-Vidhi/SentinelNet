@@ -103,8 +103,9 @@ def _fortigate_addresses(device) -> list:
             net = ipaddress.ip_network(f"{ip}/{mask}", strict=False)
         except (TypeError, ValueError):
             net = ipaddress.ip_network(f"{ip}/32")
+        # The alias ("wan1" for port1) is what the Routing Monitor shows.
         out.append({"iface": entry.get("name") or "", "ip": str(ip),
-                    "network": str(net)})
+                    "network": str(net), "alias": entry.get("alias") or ""})
     return out
 
 

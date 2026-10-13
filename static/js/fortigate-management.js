@@ -107,7 +107,7 @@ const FGT_DATASETS = {
                                    dest: _fgtVal('fgtDiagDst') || null,
                                    dest_port: parseInt(_fgtVal('fgtDiagPort')) || 443,
                                    protocol: _fgtVal('fgtDiagProto') || 'TCP' }),
-                    pick: (_data, body) => _fgtSectionRows(body),
+                    pick: (_data, body) => body,
                     requires: 'fgtDiagClient',
                     cols: [['section','colFgtDiagSection'], ['outcome','colFgtDiagOutcome','badge'],
                            ['detail','colFgtDiagDetail']] },
@@ -324,6 +324,7 @@ function renderFgtDataset(key) {
           </details>`;
         return;
     }
+    if (key === 'clientDiagnosis') { renderFgtClientDiagnosis(host, st, head); return; }
     if (!st.rows.length) { host.innerHTML = head + _fgtEmpty(L.msgFgtObjEmpty || (tr('fgtNoData'))); return; }
 
     // Le risorse sono serie storiche, non un dict piatto: hanno un renderer
@@ -352,29 +353,6 @@ function _fgtCell(v) {
     if (v === null || v === undefined || v === '') return '—';
     if (typeof v === 'object') return JSON.stringify(v);
     return String(v);
-}
-
-// Una diagnosi risponde a sezioni best-effort: ognuna può portare dati o il
-// proprio errore. Qui diventa una riga per sezione — quale ha risposto e con
-// cosa — invece di un blob JSON. I dati per esteso hanno già la loro vista
-// nella tab (ARP, sessioni, log, inventario): questa dice se sono arrivati.
-function _fgtSectionRows(body) {
-    const sections = (body || {}).sections || {};
-    return Object.entries(sections).map(([name, raw]) => {
-        const s = raw || {};
-        let detail;
-        if (s.error) {
-            detail = s.error;
-        } else if (Array.isArray(s.data)) {
-            detail = `${s.data.length}` + (s.source ? ` (${s.source})` : '');
-        } else {
-            // Oggetto singolo (policy lookup, route): si mostra, ma troncato —
-            // una config intera nel DOM di una cella non serve a nessuno.
-            detail = _fgtCell(s.data === undefined ? s : s.data);
-            if (detail.length > 300) detail = detail.slice(0, 300) + '…';
-        }
-        return { section: name, outcome: s.error ? 'error' : 'ok', detail };
-    });
 }
 
 // --- Formattatori di colonna -----------------------------------------------
@@ -620,14 +598,29 @@ function renderFgtPolicyLookup(host, st, head, L) {
     const data = st.raw || {};
     const sent = st.sent || {};
     const v = _fgtLookupVerdict(data, (fgtDatasetRows.policies || {}).rows);
+    host.innerHTML = head + _fgtVerdictHtml(v, {
+        src: sent.src_ip, dest: sent.dest, port: sent.dest_port, protocol: sent.protocol,
+        srcintf: st.srcintf, derived: !!st.srcintf && !sent.srcintf }) + `
+      <details>
+        <summary style="cursor:pointer; font-size:12px; color:var(--text-muted); margin-bottom:8px;">
+          ${escapeHtml(tr('fgtLookupRawAnswer'))}</summary>
+        ${_fgtKvTable(data, st.errors)}
+      </details>`;
+}
+
+// Verdict banner plus the flow it answers for. Shared by the Policy lookup
+// pill and the client diagnosis: the same question gets the same answer.
+// `flow` is optional: without one (no destination asked) only the banner.
+function _fgtVerdictHtml(v, flow) {
     const dash = '<span style="color:var(--text-muted);">—</span>';
-    const port = sent.dest_port ? ':' + escapeHtml(String(sent.dest_port)) : '';
     const policyLine = (v.policyId === undefined || v.policyId === null)
         ? ''
         : `<div style="font-size:13px; opacity:.85;">${escapeHtml(tr('fgtLookupPolicyN', { n: v.policyId }))}${
               v.policyName ? ' · ' + escapeHtml(v.policyName) : ''}</div>`;
-
-    host.innerHTML = head + `
+    const f = flow || null;
+    // ICMP has no port: showing ':443' next to it read as part of the question.
+    const port = f && f.port && String(f.protocol).toUpperCase() !== 'ICMP' ? ':' + escapeHtml(String(f.port)) : '';
+    return `
       <div style="border:1px solid ${v.color};
                   background:color-mix(in srgb, ${v.color} 8%, transparent);
                   padding:14px 16px; margin-bottom:12px;">
@@ -638,25 +631,134 @@ function renderFgtPolicyLookup(host, st, head, L) {
         </div>
         ${v.note ? `<div style="margin-top:6px; font-size:12px; color:var(--text-muted);">${escapeHtml(v.note)}</div>` : ''}
       </div>
-
+      ${f ? `
       <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;
                   font-family:var(--font-code); font-size:13px; background:var(--surface-2);
                   border:1px solid var(--border); padding:10px 14px; margin-bottom:12px;">
-        <strong>${sent.src_ip ? escapeHtml(sent.src_ip) : dash}</strong>
+        <strong>${f.src ? escapeHtml(f.src) : dash}</strong>
         <i class="fa-solid fa-arrow-right" style="color:var(--text-muted);" aria-hidden="true"></i>
-        <strong>${sent.dest ? escapeHtml(sent.dest) + port : dash}</strong>
-        <span class="badge">${escapeHtml(sent.protocol || 'TCP')}</span>
+        <strong>${f.dest ? escapeHtml(f.dest) + port : dash}</strong>
+        <span class="badge">${escapeHtml(f.protocol || 'TCP')}</span>
         <span style="color:var(--text-muted); font-family:var(--font-main, sans-serif); font-size:12px;">
-          ${escapeHtml(tr('fgtLookupIngress'))}: ${st.srcintf ? escapeHtml(st.srcintf) : dash}${
-            st.srcintf && !sent.srcintf ? ' <em>(' + escapeHtml(tr('fgtLookupIngressDerived')) + ')</em>' : ''}
+          ${escapeHtml(tr('fgtLookupIngress'))}: ${f.srcintf ? escapeHtml(f.srcintf) : dash}${
+            f.derived ? ' <em>(' + escapeHtml(tr('fgtLookupIngressDerived')) + ')</em>' : ''}
         </span>
-      </div>
+      </div>` : ''}`;
+}
 
-      <details>
+// --- Client diagnosis ---------------------------------------------------------
+// The operator asks two things: does the firewall see this client, and does
+// its traffic to the destination pass. The verdict answers the second first;
+// each row below says what one source knows about THIS client. The old view
+// printed "OK" when the API answered and the size of the whole ARP/DHCP table,
+// which read as "the client is fine" whatever the truth was.
+
+const _FGT_DIAG_IP = ['ip', 'ipv4_address', 'ip_address', 'ip_addr'];
+const _FGT_DIAG_MAC = ['mac', 'mac_address', 'macaddr'];
+const _fgtMacKey = (s) => String(s || '').toLowerCase().replace(/[^0-9a-f]/g, '');
+const _FGT_DIAG_DENY = ['deny', 'block', 'blocked', 'dropped', 'ip-conn'];
+
+function _fgtDiagRows(body, sent) {
+    const secs = body.sections || {};
+    const isMac = body.client_type === 'mac';
+    const ip = isMac ? body.resolved_ip : body.client;
+    const mac = isMac ? _fgtMacKey(body.client) : '';
+    const isClient = (e) => !!e && typeof e === 'object' && (
+        (!!ip && _FGT_DIAG_IP.some(k => String(e[k] || '') === ip)) ||
+        (!!mac && _FGT_DIAG_MAC.some(k => _fgtMacKey(e[k]) === mac)));
+    // CLI text (SSH fallback): whole-token search, so 10.0.1.2 is not 10.0.1.20.
+    const needle = String(ip || body.client || '');
+    const inText = (t) => !!needle && new RegExp(
+        `(^|[^0-9a-f.:])${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^0-9a-f])`, 'i').test(t);
+    const names = {
+        device_inventory: tr('fgtDiagSecInventory'), arp: tr('fgtDiagSecArp'),
+        dhcp_leases: tr('fgtDiagSecDhcp'), sessions: tr('fgtDiagSecSessions'),
+        traffic_logs: tr('fgtDiagSecLogs'), wifi_clients: tr('fgtDiagSecWifi'),
+    };
+    const rows = [];
+    const row = (name, kind, outcome, detail) =>
+        rows.push({ label: names[name] || name, kind, outcome, detail: detail || '' });
+
+    for (const [name, raw] of Object.entries(secs)) {
+        if (name === 'policy_lookup') continue;          // it is the verdict
+        const s = raw || {};
+        const data = s.data;
+        if (s.error) { row(name, 'bad', tr('fgtDiagError'), s.error); continue; }
+        if (name === 'sessions') {
+            let n = null;
+            if (Array.isArray(data)) n = data.length;
+            else if (data && Array.isArray(data.details)) n = data.details.length;
+            else if (typeof data === 'string') {
+                const m = data.match(/total session[s]?\s*:?\s*(\d+)/i);
+                n = m ? Number(m[1]) : null;
+            }
+            if (n === null) row(name, 'warn', '—', _fgtCell(data).slice(0, 300));
+            else if (n > 0) row(name, 'ok', tr('fgtDiagSessions', { n }));
+            else row(name, 'warn', tr('fgtDiagNoSessions'), tr('fgtDiagNoSessionsNote'));
+        } else if (name === 'traffic_logs') {
+            const logs = Array.isArray(data) ? data : [];
+            if (!logs.length) { row(name, 'warn', tr('fgtDiagNoLogs')); continue; }
+            const deny = logs.filter(l => _FGT_DIAG_DENY.includes(String(l.action || '').toLowerCase())).length;
+            const toDest = sent.dest ? logs.filter(l => String(l.dstip || '') === sent.dest).length : 0;
+            row(name, deny ? 'warn' : 'ok', String(logs.length),
+                tr('fgtDiagLogs', { n: logs.length, deny }) +
+                (sent.dest ? ' · ' + tr('fgtDiagLogsToDest', { n: toDest, dest: sent.dest }) : ''));
+        } else if (Array.isArray(data)) {
+            const hit = data.find(isClient);
+            if (hit) {
+                const parts = [isMac ? (hit.ip || hit.ipv4_address) : (hit.mac || hit.mac_address),
+                               hit.hostname || hit.host, hit.interface || hit.detected_interface,
+                               hit.ssid, hit.os_name];
+                row(name, 'ok', tr('fgtDiagFound'), parts.filter(Boolean).map(String).join(' · '));
+            } else {
+                row(name, 'warn', tr('fgtDiagNotFound'), tr('fgtDiagNotInTable', { n: data.length }));
+            }
+        } else if (typeof data === 'string') {
+            const hit = inText(data);
+            row(name, hit ? 'ok' : 'warn', hit ? tr('fgtDiagFound') : tr('fgtDiagNotFound'), tr('fgtDiagCliText'));
+        } else {
+            row(name, 'warn', '—', _fgtCell(data).slice(0, 300));
+        }
+    }
+    return rows;
+}
+
+function renderFgtClientDiagnosis(host, st, head) {
+    const body = st.raw || {};
+    const sent = st.sent || {};
+    const secs = body.sections || {};
+    const ip = body.client_type === 'mac' ? body.resolved_ip : body.client;
+    const pl = secs.policy_lookup;
+    const info = { color: 'var(--text-muted)', icon: 'fa-circle-info' };
+    let verdict;
+    if (!sent.dest) {
+        verdict = _fgtVerdictHtml({ ...info, label: tr('fgtDiagNoDestTitle'), note: tr('fgtDiagNoDest') });
+    } else if (!ip) {
+        verdict = _fgtVerdictHtml({ ...info, label: tr('fgtDiagNoIpTitle'), note: tr('fgtDiagNoIp') });
+    } else if (!pl || pl.error) {
+        verdict = _fgtVerdictHtml({ color: 'var(--warning)', icon: 'fa-triangle-exclamation',
+                                    label: tr('fgtDiagLookupFailed'), note: (pl && pl.error) || '' });
+    } else {
+        verdict = _fgtVerdictHtml(_fgtLookupVerdict(pl.data, (fgtDatasetRows.policies || {}).rows), {
+            src: ip, dest: sent.dest, port: sent.dest_port, protocol: sent.protocol,
+            srcintf: pl.srcintf, derived: !!pl.srcintf });
+    }
+    const rows = _fgtDiagRows(body, sent).map(r => `<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:8px 12px; font-weight:600; width:24%;">${escapeHtml(r.label)}</td>
+        <td style="padding:8px 12px; width:16%;"><span class="status ${r.kind}">${escapeHtml(r.outcome)}</span></td>
+        <td style="padding:8px 12px; font-size:12px;">${escapeHtml(r.detail)}</td></tr>`).join('');
+    host.innerHTML = head + verdict + `
+      <div class="table-wrap" style="margin-top:0;"><table style="width:100%; font-size:13px; border-collapse:collapse;">
+        <thead><tr>
+          <th style="text-align:left; padding:8px 12px;">${escapeHtml(tr('colFgtDiagSection'))}</th>
+          <th style="text-align:left; padding:8px 12px;">${escapeHtml(tr('colFgtDiagOutcome'))}</th>
+          <th style="text-align:left; padding:8px 12px;">${escapeHtml(tr('colFgtDiagDetail'))}</th>
+        </tr></thead><tbody>${rows}</tbody></table></div>
+      ${pl && !pl.error ? `<details style="margin-top:12px;">
         <summary style="cursor:pointer; font-size:12px; color:var(--text-muted); margin-bottom:8px;">
           ${escapeHtml(tr('fgtLookupRawAnswer'))}</summary>
-        ${_fgtKvTable(data, st.errors)}
-      </details>`;
+        ${_fgtKvTable(pl.data || {}, null)}
+      </details>` : ''}`;
 }
 
 function _fgtKvTable(obj, errors) {
@@ -1381,6 +1483,11 @@ document.getElementById('btnFgtSessLoad')?.addEventListener('click', () => loadF
 document.getElementById('btnFgtSessionKill')?.addEventListener('click', fgtKillSessions);
 document.getElementById('btnFgtLogLoad')?.addEventListener('click', () => loadFgtDataset('logs'));
 document.getElementById('btnFgtDiagRun')?.addEventListener('click', () => loadFgtDataset('clientDiagnosis'));
+// ICMP has no port: a live 443 next to it looked like part of the question.
+document.getElementById('fgtDiagProto')?.addEventListener('change', (e) => {
+    const port = /** @type {HTMLInputElement|null} */ (document.getElementById('fgtDiagPort'));
+    if (port) port.disabled = /** @type {HTMLSelectElement} */ (e.target).value === 'ICMP';
+});
 document.getElementById('btnFgtTokenSave')?.addEventListener('click', saveFgtPrevToken);
 document.getElementById('btnFgtTokenRemove')?.addEventListener('click', removeFgtPrevToken);
 document.getElementById('btnFgtTokenTest')?.addEventListener('click', testFgtPrevToken);

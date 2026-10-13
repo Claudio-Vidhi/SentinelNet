@@ -155,6 +155,9 @@ assert.equal(rtQuery('10.0.0.0/').kind, 'text');
     assert.deepEqual(resolve(fw[0]).to, 'B', 'the tunnel leads to B');
     assert.equal(resolve(fw[1]).label, 'vpn-other', 'an unknown tunnel stays its interface name');
     assert.equal(resolve(r('A', '10.0.0.0/8', { gateway: '0.0.0.0' })).label, 'DIRECT', '0.0.0.0 is no gateway');
+    assert.equal(resolve(fw[2]).label, 'DIRECT · internal', 'a connected network is no hop: the interface is where it lives');
+    assert.equal(resolve(r('A', '0.0.0.0/0', { gateway: '192.0.2.1', interface: 'wan1' })).label, '192.0.2.1 · wan1',
+                 'a gateway carries its exit interface');
     const gf = rtBuildSankey(fw, devs, { ...opts, cap: 12, resolve });
     const tl = gf.links.find(x => x.target === 'd|B');
     assert.ok(tl && tl.tunnel === 'vpn-b' && tl.down === true, 'ribbon into a down tunnel is marked');
@@ -198,6 +201,29 @@ assert.equal(rtQuery('10.0.0.0/').kind, 'text');
     assert.ok(!rtPolicyMatches(prs[0], rtQuery('192.0.2.7')));
     assert.ok(rtPolicyMatches(prs[1], rtQuery('192.0.2.7')), 'any matches every address');
     assert.ok(rtPolicyMatches(prs[0], rtQuery('wan2')), 'free text reads the output interface');
+}
+
+// --- Rings: the FortiGate Routing Monitor summary, alias names included.
+{
+    const { rtIfaceName, rtRingData } = windowStub.rtModel;
+    const ctx = { A: { addresses: [{ iface: 'port1', ip: '192.0.2.1', network: '192.0.2.0/24', alias: 'wan1' },
+                                   { iface: 'port2', ip: '10.0.1.1', network: '10.0.1.0/24', alias: '' }] } };
+    assert.equal(rtIfaceName(ctx, 'A', 'port1'), 'wan1 (port1)', 'alias first, as the Routing Monitor');
+    assert.equal(rtIfaceName(ctx, 'A', 'port2'), 'port2', 'no alias: the bare name');
+    assert.equal(rtIfaceName({}, 'B', 'Gi0/1'), 'Gi0/1', 'no context at all');
+    const rows = [r('A', '0.0.0.0/0', { gateway: '192.0.2.2', interface: 'port1' }),
+                  r('A', '192.0.2.0/24', { type: 'connected', interface: 'port1' }),
+                  r('A', '10.0.1.0/24', { type: 'connected', interface: 'port2' })];
+    const [ring] = rtRingData(rows, [{ value: 'A', label: 'fw' }, { value: 'B', label: 'silent' }]);
+    assert.equal(ring.total, 3, 'connected count, as on the firewall');
+    assert.deepEqual(ring.types, [['connected', 2], ['static', 1]], 'types in RT_TYPE_ORDER');
+    assert.deepEqual(ring.ifaces, [['port1', 2], ['port2', 1]], 'busiest interface first');
+    assert.equal(rtRingData(rows, [{ value: 'B', label: 'silent' }]).length, 0, 'a device with no routes draws no card');
+    const { rtMonitorRows } = windowStub.rtModel;
+    assert.deepEqual(rtMonitorRows(rows, 'A', new Set(), '').map(x => x.network),
+                     ['0.0.0.0/0', '10.0.1.0/24', '192.0.2.0/24'], 'numeric order, as the Routing Monitor');
+    assert.deepEqual(rtMonitorRows(rows, 'A', new Set(['connected']), 'port1').map(x => x.network),
+                     ['192.0.2.0/24'], 'ring filters narrow it');
 }
 
 console.log('ok');

@@ -120,5 +120,27 @@ class PolicyLookupIsAnAnswerNotADict(unittest.TestCase):
         self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
 
 
+class ClientDiagnosisAnswersAboutTheClient(unittest.TestCase):
+    """The diagnosis printed "OK" when the API answered and the size of the
+    whole ARP/DHCP table: it never said whether the client was there or its
+    traffic passed. Verdict first, then per-client rows."""
+
+    _ROOT = PolicyLookupIsAnAnswerNotADict._ROOT
+
+    def test_the_diagnosis_has_its_own_view_with_the_verdict(self):
+        src = open(os.path.join(self._ROOT, "static", "js",
+                                "fortigate-management.js"), encoding="utf-8").read()
+        self.assertIn("if (key === 'clientDiagnosis') { renderFgtClientDiagnosis(", src)
+        body = src[src.index("function renderFgtClientDiagnosis"):]
+        self.assertIn("_fgtLookupVerdict(pl.data", body)
+
+    @unittest.skipUnless(shutil.which("node"), "node non disponibile")
+    def test_the_rows_run_for_real(self):
+        harness = os.path.join(self._ROOT, "tests", "js", "test_client_diagnosis_rows.mjs")
+        proc = subprocess.run([shutil.which("node"), harness],
+                              capture_output=True, text=True, cwd=self._ROOT)
+        self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
