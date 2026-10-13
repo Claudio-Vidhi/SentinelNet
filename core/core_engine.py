@@ -1505,6 +1505,7 @@ def parse_cdp_lldp_neighbors(content: str) -> list:
             port_id_m    = re.search(r'Port id:\s*([^\n\r]+)',          block, re.IGNORECASE)
             port_desc_m  = re.search(r'Port Description:\s*([^\n\r]+)', block, re.IGNORECASE)
             sys_name_m   = re.search(r'System Name:\s*([^\n\r]+)',      block, re.IGNORECASE)
+            chassis_m    = re.search(r'Chassis id:\s*([^\n\r]+)',       block, re.IGNORECASE)
 
             # Management IP: indented IOS-XE or alternative formats
             ip_m = (
@@ -1538,6 +1539,8 @@ def parse_cdp_lldp_neighbors(content: str) -> list:
                 "remote_port": remote_port,
                 "version":     extract_version(version_str or "") or version_str,
                 "description": version_str,
+                # Often the neighbour's MAC; some devices put their name here.
+                "chassis_id":  chassis_m.group(1).strip() if chassis_m else None,
             })
 
     # ------------------------------------------------------------------
@@ -1559,7 +1562,7 @@ def parse_cdp_lldp_neighbors(content: str) -> list:
                 existing["neighbor_ip"] = n["neighbor_ip"]
             if n.get("version") and not existing.get("version"):
                 existing["version"] = n["version"]
-            for fld in ("platform", "capabilities", "vtp_domain", "description"):
+            for fld in ("platform", "capabilities", "vtp_domain", "description", "chassis_id"):
                 if n.get(fld) and not existing.get(fld):
                     existing[fld] = n[fld]
             if (n.get("remote_port") and n["remote_port"] != "Unknown"
@@ -1676,6 +1679,80 @@ def _normalize_iface(name: str) -> str:
         return name.lower().replace(' ', '')
     prefix = m.group(1).lower().replace('-', '')
     return f"{_IFACE_ALIASES.get(prefix, prefix)}{m.group(2)}"
+
+
+def _pick_same_name(candidates, source_ip, ports, neigh_ip, devices_by_ip,
+                    port_macs, own_macs):
+    """Which of several inventoried devices sharing a hostname a CDP/LLDP
+    neighbour is. Two switches called SW01 in two locations are two devices;
+    the name alone linked every SW01 neighbour to whichever was read first.
+
+    In order: the announced IP is one of them; the MAC table of the
+    announcing switch shows, on the local port (or its Port-channel), a MAC
+    that belongs to exactly one of them (its own interfaces, or its address
+    in a gateway's ARP table); the one in the announcer's location, then in
+    its tenant. None when every candidate's MACs are known and none of them
+    is on that port: the neighbour is a third device, drawn as discovered.
+    ``port_macs(switch_ip, iface)`` and ``own_macs(ip)`` return sets.
+    """
+    if neigh_ip in candidates:
+        return neigh_ip
+    seen = set()
+    for port in ports:
+        seen |= port_macs(source_ip, port)
+    if seen:
+        mine = {c: own_macs(c) for c in candidates}
+        hits = [c for c in candidates if mine[c] & seen]
+        if len(hits) == 1:
+            return hits[0]
+        if not hits and all(mine.values()):
+            return None
+    src = devices_by_ip.get(source_ip, {})
+    for key in ("Location", "Group"):
+        same = [c for c in candidates if src.get(key) and devices_by_ip.get(c, {}).get(key) == src.get(key)]
+        if len(same) == 1:
+            return same[0]
+    return candidates[0]
+
+
+def port_mac_table(switch_ip: str) -> dict:
+    """The MACs the MAC tracker saw on each port of a switch, keyed by the
+    normalized interface name (a Port-channel counts as a port too)."""
+    from collectors import mac_history
+    mac_history.init_db()
+    by_port: dict = {}
+    with mac_history._connect() as c:
+        for r in c.execute("SELECT mac, interface, port_channel FROM mac_sightings WHERE switch_ip = ?",
+                           (switch_ip,)):
+            for port in (r["interface"], r["port_channel"]):
+                if port:
+                    by_port.setdefault(_normalize_iface(port), set()).add(r["mac"])
+    return by_port
+
+
+def _mac_key(value) -> str:
+    """12 lowercase hex digits when ``value`` is a MAC in any notation, else ''."""
+    value = (value or '').strip()
+    hexes = re.sub(r'[^0-9a-fA-F]', '', value)
+    return hexes.lower() if len(hexes) == 12 and re.fullmatch(r'[0-9A-Fa-f.:\-]+', value) else ''
+
+
+def _same_discovered(a: dict, b: dict, port_macs) -> bool:
+    """Are two announcements of the same unmanaged neighbour name one device?
+    ``a``/``b``: {loc, chassis, seen: (switch_ip, local_port)}.
+
+    The name alone merged two identical boxes in two sites (same model, same
+    factory name, even the same factory IP) into one node cabled to both. A
+    MAC answers it when there is one: an LLDP chassis id that is a MAC, else
+    the MAC tables of the two local ports. Without MACs, the location does.
+    """
+    ca, cb = _mac_key(a["chassis"]), _mac_key(b["chassis"])
+    if ca and cb:
+        return ca == cb
+    ma, mb = port_macs(*a["seen"]), port_macs(*b["seen"])
+    if ma and mb:
+        return bool(ma & mb)
+    return a["loc"] == b["loc"]
 
 
 def parse_channel_groups(config: str) -> dict:
@@ -1942,7 +2019,10 @@ def _netmap_signature():
     # changes the answer without any backup file changing.
     from services.inventory_manager import inventory_version
     inv = inventory_version()
-    sig = (count, max_mtime, cat_mtime, inv)
+    # MAC data too: it tells apart devices sharing a name, so a MAC scan has
+    # to redraw the map.
+    from collectors import mac_history
+    sig = (count, max_mtime, cat_mtime, inv, mac_history.data_version())
     _netmap_cache["last_sig"] = sig
     _netmap_cache["sig_ts"] = now
     return sig
@@ -2182,12 +2262,40 @@ def _generate_network_map(group_filter=None) -> dict:
     for hn_key in list(hostname_to_ip.keys()):
         hostname_to_ip.setdefault(hn_key.split('.')[0], hostname_to_ip[hn_key])
 
+    # Every device answering to a name, not just the first: a hostname reused
+    # in two locations needs _pick_same_name to tell the two apart.
+    name_candidates: dict = {}
+    def _add_name(name, dev_ip):
+        for key in {name.lower(), name.split('.')[0].lower()}:
+            lst = name_candidates.setdefault(key, [])
+            if dev_ip not in lst:
+                lst.append(dev_ip)
+    for dev_ip, pinfo in parsed_devices.items():
+        _add_name(pinfo["hostname"], dev_ip)
+    for dev_ip, d in ip_to_device.items():
+        if (d.get('Hostname') or '').strip():
+            _add_name(d['Hostname'].strip(), dev_ip)
+
+    # MAC data, read only for an ambiguous name and once per device.
+    _port_mac_cache: dict = {}
+    _own_mac_cache: dict = {}
+    def _port_macs(switch_ip, iface):
+        if switch_ip not in _port_mac_cache:
+            _port_mac_cache[switch_ip] = port_mac_table(switch_ip)
+        return _port_mac_cache[switch_ip].get(_normalize_iface(iface), set())
+    def _own_macs(dev_ip):
+        if dev_ip not in _own_mac_cache:
+            from collectors import mac_history
+            _own_mac_cache[dev_ip] = mac_history.own_macs(dev_ip)
+        return _own_mac_cache[dev_ip]
+
     # Links + discovered nodes. Links are accumulated per node pair so as to
     # collapse the physical members of an aggregate (Port-Channel/LACP) into a single
     # logical link: CDP/LLDP announces the member interfaces (Et0/1, Et0/2),
     # not the Port-channel interface, so the aggregate is recognized only
     # by cross-referencing the config (channel-group) and/or the presence of multiple physical links.
     link_acc: Dict[Tuple[str, str], Any] = {}
+    disc_meta: dict = {}   # discovered node id -> where its name was first seen
     for ip, info in parsed_devices.items():
         iface_pc_local = info.get("iface_pc", {})
 
@@ -2211,6 +2319,13 @@ def _generate_network_map(group_filter=None) -> dict:
             #    would create a duplicate node with the wrong address.
             target_ip = (hostname_to_ip.get(neigh_id.lower())
                          or hostname_to_ip.get(base_neigh_id.lower()))
+            same_name = [c for c in (name_candidates.get(neigh_id.lower())
+                                     or name_candidates.get(base_neigh_id.lower()) or [])
+                         if c != ip]
+            if len(same_name) > 1:
+                po = iface_pc_local.get(_normalize_iface(local_port))
+                target_ip = _pick_same_name(same_name, ip, [p for p in (local_port, po) if p],
+                                            neigh_ip, ip_to_device, _port_macs, _own_macs)
 
             # 2. Announced IP, only if it matches an already-known real node.
             if not target_ip and neigh_ip and neigh_ip in nodes_map:
@@ -2222,6 +2337,16 @@ def _generate_network_map(group_filter=None) -> dict:
             if not target_ip:
                 if base_neigh_id and not _looks_like_ip(base_neigh_id):
                     target_ip = f"discovered_{sanitize_filename(base_neigh_id)}"
+                    # The same name seen from another site is another device
+                    # unless the MACs say it is the same one.
+                    here = {"loc": ip_to_device.get(ip, {}).get('Location') or '',
+                            "chassis": neigh.get("chassis_id") or '', "seen": (ip, local_port)}
+                    key, n = target_ip, 1
+                    while key in disc_meta and not _same_discovered(disc_meta[key], here, _port_macs):
+                        n += 1
+                        key = f"{target_ip}~{n}"
+                    disc_meta.setdefault(key, here)
+                    target_ip = key
                 else:
                     target_ip = neigh_ip or f"discovered_{sanitize_filename(base_neigh_id)}"
 

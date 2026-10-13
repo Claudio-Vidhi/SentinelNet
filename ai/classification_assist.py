@@ -86,13 +86,25 @@ def build_messages(queue: List[dict], examples: Dict[str, List[dict]],
         "partner's ha_group when it already has one, otherwise the shared part "
         "of the names (e.g. FW-CORE for FW-COREA/FW-COREB). Leave ha_group empty "
         "when there is no clear partner. ha_group uses the same characters as a "
-        "hostname.\n\n"
+        "hostname. For a device marked classified=true leave category, "
+        "subcategory, vendor, model and name empty: a human already confirmed "
+        "them.\n"
+        "Also say whether each device with has_address=true should be added to "
+        "the managed inventory (polled over SSH/API for config backups, "
+        "interfaces and vulnerabilities): manage=true for network "
+        "infrastructure such as switches, routers, firewalls, wireless "
+        "controllers and standalone access points; manage=false for endpoints "
+        "(IP phones, cameras, printers, PCs, servers' NICs) and for access "
+        "points run by a controller, which is managed instead. "
+        "manage is always false when has_address=false. manage_reason is one "
+        "short sentence.\n\n"
         "Categories:\n" + "\n".join(cat_lines) + "\n\n"
         "Answer with ONE JSON object and nothing else:\n"
         '{"conventions": {"<tenant>": "<one sentence describing the pattern>"},\n'
         ' "suggestions": [{"id": "<device id>", "category": "<key>", '
         '"subcategory": "", "vendor": "", "model": "", "name": "", "ha_group": "", '
-        '"confidence": 0-100, "reason": "<one short sentence>"}]}\n'
+        '"confidence": 0-100, "reason": "<one short sentence>", '
+        '"manage": false, "manage_reason": ""}]}\n'
         f"Write conventions and reasons in {_LANG_NAMES.get(lang, 'Italian')}."
     )
     payload = {
@@ -152,8 +164,11 @@ def parse_suggestions(text: str, queue_ids, categories: Dict[str, dict]
             "ha_group": ha_group,
             "confidence": confidence,
             "reason": _clip(item.get("reason"), 300),
+            # Only a literal true: "false", "no" or a missing key mean no.
+            "manage": item.get("manage") is True,
+            "manage_reason": _clip(item.get("manage_reason"), 300),
         }
-        if any(suggestion[k] for k in ("category", "vendor", "model", "name", "ha_group")):
+        if any(suggestion[k] for k in ("category", "vendor", "model", "name", "ha_group", "manage")):
             out[dev_id] = suggestion
     conventions = {
         _clip(t, 80): _clip(c, 300)

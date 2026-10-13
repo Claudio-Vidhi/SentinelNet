@@ -413,6 +413,24 @@ def record_arp_entries(rows, source_ip: str, source_name: str = "",
     return {"new": n_new, "updated": n_upd, "skipped": n_skip}
 
 
+def data_version() -> tuple:
+    """Changes whenever a MAC table, interface MAC or ARP entry is written."""
+    init_db()
+    with _connect() as c:
+        return tuple(c.execute(f"SELECT COUNT(*), MAX(last_seen) FROM {t}").fetchone()[:]
+                     for t in ("mac_sightings", "switch_if_macs", "arp_entries"))
+
+
+def own_macs(ip: str) -> set:
+    """MACs that belong to the device at ``ip``: its own interfaces (from its
+    MAC table collection) and its address in any gateway's ARP table."""
+    init_db()
+    with _connect() as c:
+        own = {r["mac"] for r in c.execute("SELECT mac FROM switch_if_macs WHERE switch_ip = ?", (ip,))}
+        own |= {r["mac"] for r in c.execute("SELECT mac FROM arp_entries WHERE ip = ?", (ip,))}
+    return own
+
+
 def search_arp(mac: Optional[str] = None, ip: Optional[str] = None, source_ip: Optional[str] = None,
                tenants=None, frm: Optional[str] = None, to: Optional[str] = None,
                limit: int = 500) -> list:

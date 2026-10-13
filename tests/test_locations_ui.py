@@ -67,7 +67,7 @@ class TestLocationsUi(unittest.TestCase):
         self.assertIn("location: document.getElementById('devLocationSelect').value", JS["devices.js"])
         self.assertIn("new_location: loc.id", JS["devices.js"])
         self.assertIn("group, location,", JS["devices.js"])            # subnet scan add
-        self.assertIn("group: n.group, location,", JS["topology.js"])  # promote
+        self.assertIn("group: n.group, location: locs.get(n.group)", JS["topology.js"])  # promote
         self.assertIn("location: r.location", JS["manual-config.js"])
 
     def test_probe_wizard_no_longer_edits_subnets(self):

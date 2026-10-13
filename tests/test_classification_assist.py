@@ -71,6 +71,23 @@ class TestParseSuggestions(unittest.TestCase):
         self.assertIn("ha_group", msgs[0]["content"])
         self.assertIn('"ha_group": "FW"', msgs[1]["content"])
 
+    def test_manage_is_a_literal_true_and_alone_is_a_proposal(self):
+        reply = json.dumps({"suggestions": [
+            {"id": "d1", "manage": True, "manage_reason": "switch di accesso"},
+            {"id": "d2", "category": "switch", "manage": "true"},
+            {"id": "d3", "manage": False},
+        ]})
+        out, _ = ca.parse_suggestions(reply, ["d1", "d2", "d3"], CATS)
+        self.assertTrue(out["d1"]["manage"])
+        self.assertEqual(out["d1"]["manage_reason"], "switch di accesso")
+        self.assertFalse(out["d2"]["manage"])            # a string is not a yes
+        self.assertNotIn("d3", out)                      # nothing to propose
+
+    def test_prompt_asks_whether_to_manage(self):
+        msgs = ca.build_messages([], {}, CATS)
+        self.assertIn("manage", msgs[0]["content"])
+        self.assertIn("has_address", msgs[0]["content"])
+
     def test_non_json_reply_yields_nothing(self):
         self.assertEqual(ca.parse_suggestions("Non so.", ["d1"], CATS), ({}, {}))
 
@@ -104,7 +121,11 @@ def _node(i, group="tenant-a", discovered=True, manual=False, dtype="switch"):
 
 FAKE_DATA = {
     "categories": CATS,
-    "nodes": [_node("disc-1"), _node("disc-2"), _node("MI-SW-CORE-01", discovered=False)],
+    "nodes": [_node("disc-1"), _node("disc-2"), _node("MI-SW-CORE-01", discovered=False),
+              # Classified by a human but still not managed: asked only "manage?".
+              dict(_node("disc-3", manual=True), display_ip="192.0.2.30"),
+              # Classified and without an address: nothing left to ask.
+              _node("disc-4", manual=True)],
     "links": [{"source": "MI-SW-CORE-01", "target": "disc-1",
                "local_port": "Gi1/0/1", "remote_port": "Gi0/1"}],
     "counts_by_category": {}, "counts_by_group": {"tenant-a": 3},
@@ -152,8 +173,11 @@ class TestEndpoints(unittest.TestCase):
             self.assertIn("disc-2", sent)
             self.assertNotIn('"id": "MI-SW-CORE-01"', sent)   # classified: example, not queue
             self.assertIn('"own_port": "Gi0/1"', sent)       # its own port, not the neighbour's
+            self.assertIn('"id": "disc-3"', sent)            # classified, has an address
+            self.assertNotIn('"id": "disc-4"', sent)         # classified, no address
+            self.assertNotIn("192.0.2.30", sent)             # the address itself never leaves
             body = r.json()
-            self.assertEqual(body["requested"], 2)
+            self.assertEqual(body["requested"], 3)
             self.assertEqual(body["suggestions"]["disc-1"]["name"], "MI-SW-ACC-02")
 
             saved = c.get("/api/device-classification/ai-suggestions").json()

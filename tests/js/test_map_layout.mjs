@@ -60,6 +60,7 @@ const drawEndTag = () => {};
 Object.assign(globalThis, { networkInstance, document, cssVar, hexToRgba, drawEndTag });
 
 const { tidyLayeredTree, drawLayeredLinks, LAYERED_PITCH } = (0, eval)(`(function () {
+    const topoZone = n => ({ key: n.group || '' });
     ${line('const LAYERED_PITCH =')}
     ${line('const LAYERED_TENANT_GAP =')}
     ${line('const PC_COPPER =')}
