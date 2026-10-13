@@ -14,9 +14,9 @@ os.environ.setdefault("SENTINELNET_DATA_DIR", tempfile.mkdtemp(prefix="sentineln
 from core.core_engine import _pick_same_name  # noqa: E402
 
 DEVICES = {
-    "192.0.2.10": {"Location": "site-a", "Group": "t"},   # announcer
-    "192.0.2.1": {"Location": "site-a", "Group": "t"},    # SW01 in site A
-    "198.51.100.1": {"Location": "site-b", "Group": "t"},  # SW01 in site B
+    "192.0.2.10": {"Location": "loc-a", "Group": "t"},   # announcer
+    "192.0.2.1": {"Location": "loc-a", "Group": "t"},    # SW01 in site A
+    "198.51.100.1": {"Location": "loc-b", "Group": "t"},  # SW01 in site B
 }
 CANDS = ["198.51.100.1", "192.0.2.1"]
 MAC_A, MAC_B = "aa:bb:cc:00:00:01", "aa:bb:cc:00:00:02"
