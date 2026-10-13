@@ -224,37 +224,53 @@
         redrawInteractiveMap();
     }
 
-    // Core scelto a mano per Sede: {"<gruppo>": "<id>"}. La deduzione automatica
-    // parte dal confine (firewall/router) o dal nodo piu' connesso: dove non
-    // coincide con la realta' del rack, l'utente indica il core e i piani si
-    // ricalcolano da li'.
+    // Cores chosen by hand, one per location: {"<tenant>": {"<zone>": "<id>"}}.
+    // The deduction starts from the border (firewall/router) or the best
+    // connected device; where that is not the real core of a site, the user
+    // names it and that site's levels are redone from there. A tenant with two
+    // sites has two cores: one choice per tenant left the other site flat.
     let layeredRoots = {};
     try { layeredRoots = JSON.parse(localStorage.getItem('layeredRoots') || '{}'); } catch (e) { layeredRoots = {}; }
-    function setLayeredRoot(group, id) {
+    // Saved before cores were per location: a bare id, kept for its own site.
+    const rootsOf = group => {
+        const r = layeredRoots[group];
+        return typeof r === 'string' ? { [zoneKeyOf(r) || '']: r } : (r || {});
+    };
+    function setLayeredRoot(group, zone, id) {
+        const roots = rootsOf(group);
         if (id) {
-            layeredRoots[group] = id;
+            roots[zone] = id;
             // Un piano riassegnato a mano su questo nodo vincerebbe sul suo
             // ruolo di radice, lasciandolo a meta' mappa.
             if (layeredLevels[group]) { delete layeredLevels[group][id]; saveLayeredLevels(); }
         } else {
-            delete layeredRoots[group];
+            delete roots[zone];
         }
+        layeredRoots[group] = roots;
         localStorage.setItem('layeredRoots', JSON.stringify(layeredRoots));
         redrawInteractiveMap();
     }
 
-    // Tendina "Core" nella barra della vista a livelli: gli apparati della mappa
-    // corrente, con quello scelto selezionato.
+    // "Core" in the hierarchy toolbar: one select per location on the map,
+    // each listing that location's switches and routers.
     function fillLayeredCoreSelect(nodesData, group) {
-        const sel = document.getElementById('layeredCoreSelect');
-        if (!sel) return;
-        const chosen = layeredRoots[group] || '';
-        const auto = tr('topoCoreAuto');
-        sel.innerHTML = `<option value="">${escapeHtml(auto)}</option>` + nodesData
-            .filter(n => n.device_type === 'switch' || n.device_type === 'router')
-            .map(n => `<option value="${attrEsc(n.id)}">${escapeHtml(n.label || n.id)}</option>`)
-            .join('');
-        sel.value = chosen;
+        const box = document.getElementById('layeredCoreWrap');
+        if (!box) return;
+        const roots = rootsOf(group), zones = new Map();
+        nodesData.filter(n => n.device_type === 'switch' || n.device_type === 'router').forEach(n => {
+            const z = mapZones[n.id] || { key: '', label: '' };
+            if (!zones.has(z.key)) zones.set(z.key, { label: z.label, nodes: [] });
+            zones.get(z.key).nodes.push(n);
+        });
+        const many = zones.size > 1;
+        box.innerHTML = [...zones.entries()].map(([key, z]) => {
+            const name = many ? tr('topoCoreFor', { zone: z.label }) : tr('topoCoreAuto');
+            const auto = many ? `${z.label}: ${tr('topoCoreAutoShort')}` : tr('topoCoreAuto');
+            return `<select class="layered-core" data-zone="${attrEsc(key)}" title="${attrEsc(name)}" aria-label="${attrEsc(name)}">
+                <option value="">${escapeHtml(auto)}</option>${
+                z.nodes.map(n => `<option value="${attrEsc(n.id)}"${roots[key] === n.id ? ' selected' : ''}>${
+                    escapeHtml(many ? `${z.label}: ${n.label || n.id}` : (n.label || n.id))}</option>`).join('')}</select>`;
+        }).join('');
     }
 
     // ===== Vista "A livelli": raggruppamento delle foglie =====
@@ -553,35 +569,50 @@
         const adj = new Map();
         nodesData.forEach(n => adj.set(n.id, []));
         linksData.forEach(l => {
-            if (adj.has(l.source) && adj.has(l.target)) {
+            // A cable between two locations (a WAN uplink, a discovered device
+            // seen from both sides) does not make one site hang off the other.
+            if (adj.has(l.source) && adj.has(l.target) && zoneKeyOf(l.source) === zoneKeyOf(l.target)) {
                 adj.get(l.source).push(l.target);
                 adj.get(l.target).push(l.source);
             }
         });
-        let roots = [];
-        // Il core indicato a mano vince sulla deduzione: e' l'unica radice.
-        const chosenRoot = layeredRoots[group];
-        if (chosenRoot && adj.has(chosenRoot)) roots = [chosenRoot];
-        for (const t of ROOT_TYPES) {
-            if (roots.length) break;
-            roots = nodesData.filter(n => n.device_type === t).map(n => n.id);
-        }
-        if (!roots.length && nodesData.length) {
-            const best = nodesData.slice().sort((a, b) => adj.get(b.id).length - adj.get(a.id).length)[0];
-            roots = [best.id];
-        }
+        // Cores chosen by hand, one per location (a bare id: saved before that).
+        const chosen = layeredRoots[group];
+        const picked = new Set(typeof chosen === 'string' ? [chosen] : Object.values(chosen || {}));
         const depth = new Map();
-        let frontier = roots;
-        let d = 0;
-        while (frontier.length) {
-            const next = [];
-            frontier.forEach(id => {
-                if (depth.has(id)) return;
-                depth.set(id, d);
-                adj.get(id).forEach(nb => { if (!depth.has(nb)) next.push(nb); });
-            });
-            frontier = next;
-            d++;
+        const walk = start => {
+            let frontier = start, d = 0;
+            while (frontier.length) {
+                const next = [];
+                frontier.forEach(id => {
+                    if (depth.has(id)) return;
+                    depth.set(id, d);
+                    adj.get(id).forEach(nb => { if (!depth.has(nb)) next.push(nb); });
+                });
+                frontier = next;
+                d++;
+            }
+        };
+        // Every connected part (a location, once the cables between locations
+        // are set aside) gets its own root: the core chosen by hand for it,
+        // else its border devices (firewall/router), else its best connected
+        // one. A lone device keeps its per-type tier.
+        for (const n of nodesData) {
+            if (depth.has(n.id) || !adj.get(n.id).length) continue;
+            const part = [], seen = new Set([n.id]), stack = [n.id];
+            while (stack.length) {
+                const id = stack.pop();
+                part.push(id);
+                adj.get(id).forEach(nb => { if (!seen.has(nb)) { seen.add(nb); stack.push(nb); } });
+            }
+            const typeOf = new Map(nodesData.map(x => [x.id, x.device_type]));
+            let r = part.filter(id => picked.has(id));
+            for (const t of ROOT_TYPES) {
+                if (r.length) break;
+                r = part.filter(id => typeOf.get(id) === t);
+            }
+            if (!r.length) r = [part.slice().sort((a, b) => adj.get(b).length - adj.get(a).length)[0]];
+            walk(r);
         }
         const overrides = layeredLevels[group] || {};
         const levels = {};
@@ -1012,6 +1043,7 @@
         // Mantieni solo i link i cui due estremi sono ancora visibili
         const validNodeIds = new Set(filteredNodesData.map(n => n.id));
         let filteredLinksData = data.links.filter(l => validNodeIds.has(l.source) && validNodeIds.has(l.target));
+        mapZones = assignZones(filteredNodesData, filteredLinksData, selectedGroup === 'all');
 
         // La nuova mappa minimalista riusa gli STESSI dati e filtri: cambia solo la
         // resa grafica. I Port-Channel qui sono visibili di default (etichetta
@@ -1041,6 +1073,7 @@
             const grouped = groupLayeredLeaves(filteredNodesData, filteredLinksData, selectedGroup);
             layeredGroupOfChild = grouped.groupOfChild;
             grouped.nodes.forEach(n => {
+                if (n.is_group) mapZones[n.id] = topoZone(n);
                 if (n.is_group) {
                     layeredAssigned[n.id] = Math.min(...n.members.map(m => layeredAssigned[m.id] || 0));
                 }
@@ -1405,10 +1438,10 @@
                 }
                 const free = layeredFree && layeredFreePos[layeredGroup];
                 if (free) Object.keys(free).forEach(id => { if (nodes.some(nd => nd.id === id)) networkInstance.moveNode(id, free[id].x, free[id].y); });
-                if (!allKnown) {
-                    networkInstance.fit();
-                    networkInstance.moveTo({ scale: networkInstance.getScale() * 0.85 });
-                }
+                // Always: a fresh instance has no zoom of the user's to keep,
+                // and vis.js centred the cards before the tidy pass moved them.
+                networkInstance.fit();
+                networkInstance.moveTo({ scale: networkInstance.getScale() * 0.85 });
             });
         }
         networkInstance.once('stabilizationIterationsDone', freezeLayout);
@@ -1432,7 +1465,8 @@
     function tidyLayeredTree() {
         const pos = networkInstance.getPositions(), ids = Object.keys(pos), adj = {}, kids = {}, isKid = {}, parentOf = {};
         const nodesDs = networkInstance.body.data.nodes;
-        const tenantOf = id => { const nd = nodesDs.get(id); return (nd && nd.nodeDataVal && nd.nodeDataVal.group) || ''; };
+        // Blocks side by side per location (the zone), not per tenant.
+        const tenantOf = id => { const nd = nodesDs.get(id); return nd && nd.nodeDataVal ? topoZone(nd.nodeDataVal).key : ''; };
         networkInstance.body.data.edges.forEach(e => {
             (adj[e.from] || (adj[e.from] = [])).push(e.to);
             (adj[e.to] || (adj[e.to] = [])).push(e.from);
@@ -1533,6 +1567,66 @@
         ctx.restore();
     }
 
+    // --- Map zones: one per location, not per tenant -------------------------
+    const ip4n = ip => {
+        const p = String(ip || '').split('.');
+        if (p.length !== 4 || p.some(x => !/^\d{1,3}$/.test(x) || +x > 255)) return null;
+        return ((+p[0] << 24) >>> 0) + (+p[1] << 16) + (+p[2] << 8) + +p[3];
+    };
+    const inCidr = (a, cidr) => {
+        const [net, len] = String(cidr).split('/');
+        const n = ip4n(net), l = Number(len);
+        if (n === null || !(l >= 0 && l <= 32)) return false;
+        const mask = l ? (0xFFFFFFFF << (32 - l)) >>> 0 : 0;
+        return ((a & mask) >>> 0) === ((n & mask) >>> 0);
+    };
+    /** The location a map node sits in: a managed device's own, else the
+     *  location of its tenant whose subnets hold its address (a discovered
+     *  switch), else the tenant itself. Keyed by id: two locations of one
+     *  tenant may share a name. `withOrg` prefixes the tenant, for the
+     *  all-tenants view where "HQ" alone would be ambiguous. */
+    function topoZoneOwn(n, withOrg) {
+        const ip = n.display_ip || n.id;
+        const dev = globalDevices.find(d => d.IP === ip);
+        let loc = dev && dev.Location ? locationById(dev.Location) : null;
+        const a = ip4n(ip);
+        if (!loc && a !== null) {
+            loc = globalLocations.find(l => l.org === n.group && (l.subnets || []).some(c => inCidr(a, c))) || null;
+        }
+        if (!loc) return null;
+        return { key: loc.id, label: withOrg ? `${n.group} · ${loc.name}` : loc.name };
+    }
+
+    // Zone of every node on the current map, set by loadInteractiveMap. A
+    // device with no location of its own (a discovered switch outside every
+    // declared subnet) takes the zone of the nearest located device it is
+    // cabled to: it hangs off that site. Only with no located neighbour at
+    // all does it fall back to its tenant.
+    let mapZones = {};
+    function assignZones(nodesData, linksData, withOrg) {
+        const out = {}, adj = {};
+        nodesData.forEach(n => { const z = topoZoneOwn(n, withOrg); if (z) out[n.id] = z; });
+        linksData.forEach(l => {
+            (adj[l.source] || (adj[l.source] = [])).push(l.target);
+            (adj[l.target] || (adj[l.target] = [])).push(l.source);
+        });
+        let frontier = Object.keys(out);
+        while (frontier.length) {
+            const next = [];
+            frontier.forEach(id => (adj[id] || []).forEach(nb => {
+                if (!out[nb]) { out[nb] = out[id]; next.push(nb); }
+            }));
+            frontier = next;
+        }
+        nodesData.forEach(n => { if (!out[n.id]) out[n.id] = { key: 'org|' + (n.group || ''), label: n.group || '' }; });
+        return out;
+    }
+    function topoZone(n) {
+        if (n.is_group && (n.members || []).length) return topoZone(n.members[0]);
+        return mapZones[n.id] || { key: 'org|' + (n.group || ''), label: n.group || '' };
+    }
+    const zoneKeyOf = id => (mapZones[id] || {}).key;
+
     // Site panel header: name on the left, device count and offline count on
     // the right. A collapsed group counts as its members.
     function drawZoneHeader(ctx, name, nds, x0, x1, y0) {
@@ -1569,8 +1663,8 @@
         networkInstance.body.data.nodes.forEach(nd => {
             const bb = networkInstance.getBoundingBox(nd.id);
             if (!bb || !pos[nd.id]) return;
-            const g = (nd.nodeDataVal && nd.nodeDataVal.group) || '';
-            const s = tenants[g] || (tenants[g] = { x0: Infinity, x1: -Infinity, nodes: [] });
+            const z = topoZone(nd.nodeDataVal || {});
+            const s = tenants[z.key] || (tenants[z.key] = { label: z.label, x0: Infinity, x1: -Infinity, nodes: [] });
             s.x0 = Math.min(s.x0, bb.left); s.x1 = Math.max(s.x1, bb.right); s.nodes.push(nd);
             top = Math.min(top, bb.top); bottom = Math.max(bottom, bb.bottom);
             const lv = layeredAssigned[nd.id] || 0;
@@ -1595,7 +1689,7 @@
             ctx.strokeStyle = border;
             ctx.lineWidth = 1;
             ctx.stroke();
-            drawZoneHeader(ctx, g, s.nodes, x0, x1, y0);
+            drawZoneHeader(ctx, s.label, s.nodes, x0, x1, y0);
             ctx.strokeStyle = border;
             ctx.setLineDash([2, 5]);
             ctx.beginPath();
@@ -1861,6 +1955,15 @@
 
         const hostEl = document.getElementById('drawerNodeHostname');
         if (hostEl) hostEl.textContent = hostname;
+        const twinEl = document.getElementById('drawerTwinWarn');
+        if (twinEl) {
+            const twins = nameTwins(nodeId);
+            twinEl.hidden = !twins.length;
+            twinEl.innerHTML = twins.length ? `<i class="fa-solid fa-clone" aria-hidden="true"></i> ${
+                escapeHtml(tr('twinBadgeTitle', { list: twins.map(t => `${t.IP} (${locationLabel(t.Location)})`).join(', ') }))}
+                <button type="button" class="btn btn-secondary btn-small" data-action="open-name-twins" data-ip="${attrEsc(nodeId)}">${
+                escapeHtml(tr('twinOpen'))}</button>` : '';
+        }
         const ipEl = document.getElementById('drawerNodeIp');
         if (ipEl) ipEl.textContent = ip;
         const modelEl = document.getElementById('drawerNodeModel');
@@ -1977,12 +2080,13 @@
         if (btnCore) {
             const layered = getMapView() === 'layered';
             btnCore.style.display = layered ? '' : 'none';
-            const isCore = layeredRoots[layeredGroup] === nodeId;
+            const zone = zoneKeyOf(nodeId) || '';
+            const isCore = rootsOf(layeredGroup)[zone] === nodeId;
             btnCore.querySelector('span').textContent = isCore
                 ? (tr('topoClearCore'))
                 : (tr('topoSetAsCore'));
             btnCore.onclick = layered
-                ? () => { closeTopologyNodeDrawer(); setLayeredRoot(layeredGroup, isCore ? null : nodeId); }
+                ? () => { closeTopologyNodeDrawer(); setLayeredRoot(layeredGroup, zone, isCore ? null : nodeId); }
                 : null;
         }
 
@@ -2077,23 +2181,30 @@
     function packSchemaRows() {
         if (!networkInstance) return;
         const ds = networkInstance.body.data.nodes;
-        const box = {}, rows = {};
+        // One block of rows per location, blocks side by side: packed as one
+        // set of rows, two sites' boxes interleaved and their zones overlapped.
+        const zoneOf = nd => topoZone(nd.nodeDataVal || { id: nd.id }).key;
+        const box = {}, zones = {};
         ds.forEach(nd => {
             const b = networkInstance.getBoundingBox(nd.id);
             box[nd.id] = { w: b.right - b.left, h: b.bottom - b.top };
+            const rows = zones[zoneOf(nd)] || (zones[zoneOf(nd)] = {});
             (rows[nd.schemaLevel] || (rows[nd.schemaLevel] = [])).push(nd);
         });
         const adj = {}, wires = {}, same = {};
         (minimalOverlayData ? minimalOverlayData.bundles : []).forEach(b => {
+            const la = ds.get(b.from), lb = ds.get(b.to);
+            if (!la || !lb || zoneOf(la) !== zoneOf(lb)) return;
             (adj[b.from] || (adj[b.from] = [])).push(b.to);
             (adj[b.to] || (adj[b.to] = [])).push(b.from);
-            const la = ds.get(b.from), lb = ds.get(b.to);
-            if (!la || !lb) return;
             const top = Math.min(la.schemaLevel, lb.schemaLevel);
             if (la.schemaLevel !== lb.schemaLevel) wires[top] = (wires[top] || 0) + b.members.length;
             else same[top] = (same[top] || 0) + b.members.length;
         });
         const pos = {};
+        let base = 0;
+        Object.keys(zones).sort().forEach(zk => {
+        const rows = zones[zk];
         let top = 0;
         Object.keys(rows).map(Number).sort((a, b) => a - b).forEach(lv => {
             // Room above the row for cables between its own boxes that run over it.
@@ -2107,7 +2218,7 @@
             let right = -Infinity;
             row.forEach(r => {
                 const bw = box[r.nd.id].w;
-                const x = Math.max(r.w ?? (right === -Infinity ? 0 : right + SCHEMA_GAP + bw / 2), right + SCHEMA_GAP + bw / 2);
+                const x = Math.max(r.w ?? (right === -Infinity ? base + bw / 2 : right + SCHEMA_GAP + bw / 2), right + SCHEMA_GAP + bw / 2);
                 pos[r.nd.id] = { x, y: top + box[r.nd.id].h / 2 };
                 right = x + bw / 2;
             });
@@ -2117,6 +2228,13 @@
             const shift = off.length ? off.reduce((a, b) => a + b, 0) / off.length : 0;
             row.forEach(r => { pos[r.nd.id].x -= shift; });
             top += Math.max(...row.map(r => box[r.nd.id].h)) + 120 + 8 * (wires[lv] || 0);
+        });
+        // Rows were centred under their parents: shift the block so its left
+        // edge starts where the previous site ended, then leave a gap.
+        const ids = [].concat(...Object.values(rows)).map(nd => nd.id);
+        const left = Math.min(...ids.map(id => pos[id].x - box[id].w / 2));
+        ids.forEach(id => { pos[id].x += base - left; });
+        base = Math.max(...ids.map(id => pos[id].x + box[id].w / 2)) + SCHEMA_GAP * 4;
         });
         Object.entries(pos).forEach(([id, p]) => networkInstance.moveNode(id, p.x, p.y));
         saveSchemaPositions();
@@ -2425,7 +2543,9 @@
         // circonferenza e i suoi nodi partono da lì (la fisica mantiene i cluster).
         // vis.js non supporta i riquadri tratteggiati di raggruppamento: si
         // approssima con la sola vicinanza spaziale.
-        const groups = [...new Set(nodeData.map(n => n.group || ''))];
+        const zoneOf = {};
+        nodeData.forEach(n => { zoneOf[n.id] = topoZone(n); });
+        const groups = [...new Set(nodeData.map(n => zoneOf[n.id].key))];
         const groupCenter = {};
         groups.forEach((g, i) => {
             const angle = (2 * Math.PI * i) / groups.length;
@@ -2471,7 +2591,7 @@
             const border = showVtpDomain && n.vtp_domain ? vtpDomainColor(n.vtp_domain) : S.node.borderColor;
 
             // Posizione iniziale: attorno al centro del proprio gruppo/Sede.
-            const c = groupCenter[n.group || ''] || { x: 0, y: 0 };
+            const c = groupCenter[zoneOf[n.id].key] || { x: 0, y: 0 };
             const jitter = 180;
 
             return {
@@ -2533,10 +2653,10 @@
         };
 
         // Info raggruppamento per Sede/Gruppo (contenitore tratteggiato nell'overlay).
-        const groupsInfo = groups.map(g => ({
-            group: g,
-            ids: nodeData.filter(n => (n.group || '') === g).map(n => n.id)
-        })).filter(gi => gi.ids.length > 0);
+        const groupsInfo = groups.map(g => {
+            const ids = nodeData.filter(n => zoneOf[n.id].key === g).map(n => n.id);
+            return { group: ids.length ? zoneOf[ids[0]].label : '', ids };
+        }).filter(gi => gi.ids.length > 0);
 
         const bundles = [];
         // Requisiti di dimensione per nodo: per far stare TUTTE le etichette di porta
@@ -3358,11 +3478,18 @@
     // from the server, which keeps them: reopening the tab costs no request.
     let clsAi = { suggestions: {}, conventions: {} };
     let clsMerges = [];
+    // Rows picked with Ctrl/Cmd+click, for "add these to the managed ones".
+    const clsPicked = new Set();
 
     // A device discovered via CDP/LLDP whose category was only inferred: no
     // human has looked at it yet. That is the queue the view opens on.
     function clsToClassify(n) { return n.discovered && !n.is_manual; }
     function clsHasConflict(n) { return (n.name_options || []).length > 1; }
+    function clsHasTwins(n) { return (n.name_twins || []).length > 0; }
+    // The AI said this discovered device is infrastructure worth managing,
+    // and it announced an address to reach it at.
+    function clsToManage(n) { return n.discovered && !!n.display_ip && !!(clsAi.suggestions[n.id] || {}).manage; }
+    function clsCanPromote(n) { return n.discovered && !!n.display_ip; }
     function clsCanWrite() { return isAdminRole(currentRole) || currentRole === 'operator'; }
 
     function clsScopedNodes() {
@@ -3373,7 +3500,9 @@
     function clsInView(n) {
         if (clsView === 'all') return true;
         if (clsView === 'todo') return clsToClassify(n);
+        if (clsView === 'manage') return clsToManage(n);
         if (clsView === 'conflict') return clsHasConflict(n);
+        if (clsView === 'twins') return clsHasTwins(n);
         const [cat, sub] = clsView.split('/');
         return n.device_type === cat && (sub === undefined || (n.subcategory || '') === sub);
     }
@@ -3417,6 +3546,14 @@
 
         // First open: start on the queue when there is something in it.
         if (!clsViewChosen) clsView = clsScopedNodes().some(clsToClassify) ? 'todo' : 'all';
+        // Sent here by a "same name" badge (Inventory, map): open on that device.
+        const twin = window.clsPendingTwin;
+        window.clsPendingTwin = null;
+        if (twin && categoriesData.nodes.some(n => n.id === twin)) {
+            clsView = 'twins';
+            clsViewChosen = true;
+            clsSelected = twin;
+        }
         clsDirty = false;
         renderCategoriesPanel();
     }
@@ -3424,9 +3561,31 @@
     function renderCategoriesPanel() {
         const visible = clsVisibleNodes();
         if (!visible.some(n => n.id === clsSelected)) clsSelected = visible.length ? visible[0].id : null;
+        const shown = new Set(visible.map(n => n.id));
+        [...clsPicked].forEach(id => { if (!shown.has(id)) clsPicked.delete(id); });
         renderClsRail();
         renderClsList(visible);
+        renderClsBulk();
         renderClsInspector();
+    }
+
+    function renderClsBulk() {
+        const bar = document.getElementById('clsBulkBar');
+        if (!bar) return;
+        bar.hidden = !clsPicked.size;
+        if (!clsPicked.size) return;
+        const ready = clsPickedPromotable();
+        const info = document.getElementById('clsBulkInfo');
+        if (info) info.textContent = tr('clsBulkInfo', { n: clsPicked.size });
+        const btn = /** @type {HTMLButtonElement|null} */ (document.getElementById('btnClsBulkPromote'));
+        if (btn) {
+            btn.disabled = !ready.length;
+            btn.textContent = tr('clsBulkPromote', { n: ready.length });
+        }
+    }
+
+    function clsPickedPromotable() {
+        return categoriesData.nodes.filter(n => clsPicked.has(n.id) && clsCanPromote(n));
     }
 
     function clsSwatch(type) {
@@ -3455,8 +3614,12 @@
         let html = `<div class="cls-rail-h">${escapeHtml(tr('clsQueues'))}</div>`
             + item('todo', tr('clsToClassify'), count(clsToClassify),
                    '<span class="cls-iso warn" aria-hidden="true"></span>', 'queue')
+            + item('manage', tr('clsToManage'), count(clsToManage),
+                   '<i class="fa-solid fa-wand-magic-sparkles cls-rail-ai" aria-hidden="true"></i>', 'queue')
             + item('conflict', tr('clsConflicts'), count(clsHasConflict),
                    '<span class="cls-iso fault" aria-hidden="true"></span>', 'queue')
+            + item('twins', tr('clsTwins'), count(clsHasTwins),
+                   '<i class="fa-solid fa-clone cls-rail-ai" aria-hidden="true"></i>', 'queue')
             + `<div class="cls-rail-h">${escapeHtml(tr('clsCategories'))}</div>`
             + item('all', tr('clsAll'), nodes.length, '<span class="cls-sq all" aria-hidden="true"></span>');
         for (const [k, c] of Object.entries(categoriesData.categories)) {
@@ -3479,12 +3642,19 @@
         const [cat, sub] = clsView.split('/');
         if (title) title.textContent = clsView === 'all' ? tr('clsAll')
             : clsView === 'todo' ? tr('clsToClassify')
+            : clsView === 'manage' ? tr('clsToManage')
             : clsView === 'conflict' ? tr('clsConflicts')
+            : clsView === 'twins' ? tr('clsTwins')
             : clsCatLabel(cat) + (sub !== undefined ? ` / ${sub}` : '');
         if (countEl) countEl.textContent = tr('clsCountN', { n: visible.length });
-        if (hint) hint.hidden = !(clsView === 'todo' && visible.length);
+        if (hint) {
+            hint.hidden = !visible.length;
+            hint.textContent = tr(clsView === 'todo' ? 'clsHintQueue' : clsView === 'manage' ? 'clsHintManage'
+                : clsView === 'twins' ? 'clsHintTwins' : 'clsHintPick');
+        }
         if (!visible.length) {
-            box.innerHTML = `<p class="cls-empty">${escapeHtml(tr(clsView === 'todo' ? 'clsEmptyQueue' : 'clsEmptyList'))}</p>`;
+            box.innerHTML = `<p class="cls-empty">${escapeHtml(tr(clsView === 'todo' ? 'clsEmptyQueue'
+                : clsView === 'manage' ? 'clsEmptyManage' : clsView === 'twins' ? 'clsEmptyTwins' : 'clsEmptyList'))}</p>`;
             return;
         }
         const byGroup = {};
@@ -3497,9 +3667,11 @@
                     + (n.stack && n.stack.health === 'degraded' ? `<span class="cls-iso fault" title="${attrEsc(tr('topoDegradedStack'))}"></span>` : '')
                     + (n.ha_group ? '<span class="cls-flag">HA</span>' : '')
                     + (clsHasConflict(n) ? `<span class="cls-iso fault" title="${attrEsc(tr('topoCdpLldpNameConflict'))}"></span>` : '')
-                    + (clsAi.suggestions[n.id] ? `<span class="cls-flag cls-flag-ai" title="${attrEsc(tr('clsAiFlag'))}">AI</span>` : '');
-                return `<button type="button" class="cls-row" data-action="cls-select" data-node-id="${attrEsc(n.id)}"
-                        aria-current="${n.id === clsSelected}">
+                    + (clsHasTwins(n) ? `<span class="cls-flag" title="${attrEsc(tr('twinBadge'))}"><i class="fa-solid fa-clone" aria-hidden="true"></i></span>` : '')
+                    + (clsAi.suggestions[n.id] ? `<span class="cls-flag cls-flag-ai" title="${attrEsc(tr('clsAiFlag'))}">AI</span>` : '')
+                    + (clsToManage(n) ? `<span class="cls-flag cls-flag-ai" title="${attrEsc(tr('clsManageFlag'))}"><i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i></span>` : '');
+                return `<button type="button" class="cls-row${clsPicked.has(n.id) ? ' cls-picked' : ''}" data-action="cls-select" data-node-id="${attrEsc(n.id)}"
+                        aria-current="${n.id === clsSelected}" aria-pressed="${clsPicked.has(n.id)}">
                     ${clsSwatch(n.device_type)}
                     <span class="cls-id"><span class="cls-name">${escapeHtml(n.label)}</span><span class="cls-vm">${escapeHtml(vm || '—')}</span></span>
                     <span class="cls-ip">${escapeHtml(n.display_ip || '—')}</span>
@@ -3619,8 +3791,56 @@
               <div class="cls-insp-title">${clsSwatch(n.device_type)}<span>${escapeHtml(n.label)}</span></div>
               <div class="cls-insp-sub">${escapeHtml([n.display_ip || '—', n.group, tr(n.discovered ? 'clsDiscoveredVia' : 'clsManaged')].join(' · '))}</div>
             </div>
-            <div class="cls-insp-body">${canWrite ? clsAiBox(n) : ''}${conflict}${fields}${stack}${facts}${actions ? `<div class="cls-actions">${actions}</div>` : ''}</div>
+            <div class="cls-insp-body">${clsTwinBox(n)}${canWrite ? clsAiBox(n) : ''}${conflict}${fields}${stack}${facts}${actions ? `<div class="cls-actions">${actions}</div>` : ''}</div>
             ${foot}`;
+    }
+
+    // The devices sharing this one's name, side by side with what tells them
+    // apart. Renaming is the form below: the normal save path.
+    function clsTwinBox(n) {
+        if (!clsHasTwins(n)) return '';
+        const loc = id => {
+            const d = globalDevices.find(x => x.IP === id);
+            return d ? locationLabel(d.Location) : '—';
+        };
+        const ids = [n.id].concat(n.name_twins);
+        const nodeOf = id => categoriesData.nodes.find(x => x.id === id) || { id, label: id, group: '', macs: [], seen_on: [] };
+        // A list, not a table: the inspector is narrow and a MAC column ran off it.
+        const row = id => {
+            const t = nodeOf(id), seen = t.seen_on || [];
+            // A discovered twin has no location of its own: the switch it hangs off has.
+            const where = globalDevices.some(x => x.IP === id) ? loc(id) : (seen.length ? loc(seen[0].switch) : '—');
+            return `<li${id === n.id ? ' class="cls-twin-me"' : ''}><b>${escapeHtml(t.label)}</b> · ${escapeHtml(t.group)} · ${escapeHtml(where)}
+                <span class="cls-mono">${escapeHtml(t.display_ip || id)}</span>
+                ${(t.macs || []).length ? `<span class="cls-mono cls-twin-mac">MAC ${escapeHtml(t.macs.slice(0, 3).join(', '))}</span>` : ''}
+                ${seen.map(s => `<span class="cls-twin-mac">${escapeHtml(tr('clsTwinSeen', { sw: s.switch_label, port: s.port }))}
+                    <span class="cls-mono">${escapeHtml(s.macs.length ? s.macs.slice(0, 3).join(', ') : tr('clsTwinNoMac'))}</span></span>`).join('')}</li>`;
+        };
+        const switches = [...new Set(ids.flatMap(id => (nodeOf(id).seen_on || []).map(s => s.switch)))];
+        // Reads the whole MAC table of those switches (read-only, the MAC
+        // tracker's own scan): the map then tells the twins apart by MAC.
+        const scan = switches.length && clsCanWrite()
+            ? `<button type="button" class="btn btn-secondary btn-small" data-action="cls-twin-scan" data-ips="${attrEsc(switches.join(','))}">
+                 <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> ${escapeHtml(tr('clsTwinScan', { n: switches.length }))}</button>` : '';
+        return `<div class="cls-twins">
+              <div class="cls-ai-h"><i class="fa-solid fa-clone" aria-hidden="true"></i> ${escapeHtml(tr('clsTwinsTitle'))}</div>
+              <ul class="cls-twin-list">${ids.map(row).join('')}</ul>
+              <p class="cls-ai-why">${escapeHtml(tr('clsTwinsHow'))}</p>${scan}
+            </div>`;
+    }
+
+    async function scanTwinPorts(btn) {
+        const ips = (btn.dataset.ips || '').split(',').filter(Boolean);
+        if (!ips.length) return;
+        /** @type {HTMLButtonElement} */ (btn).disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> ${escapeHtml(tr('clsAiRunning'))}`;
+        const res = await apiFetch('/api/mac/scan', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ips })
+        });
+        const data = res ? await res.json().catch(() => ({})) : {};
+        if (!(res && res.ok)) { showToast(data.detail || tr('clsTwinScanFailed'), 'error'); }
+        else showToast(tr('clsTwinScanDone'), 'info');
+        await loadCategoriesData();
     }
 
     async function loadClsAiSuggestions() {
@@ -3642,7 +3862,10 @@
               <dl>${row('clsFieldName', s.name)}${row('clsFieldCategory', cat)}${row('clsFieldVendor', s.vendor)}${row('clsFieldModel', s.model)}${row('clsFieldHa', s.ha_group)}</dl>
               ${s.reason ? `<p class="cls-ai-why">${escapeHtml(s.reason)}</p>` : ''}
               ${conv ? `<p class="cls-ai-why">${escapeHtml(tr('clsAiConv', { text: conv }))}</p>` : ''}
-              <button type="button" class="btn btn-secondary btn-small" data-action="cls-ai-apply">${escapeHtml(tr('clsAiApply'))}</button>
+              ${s.manage && clsCanPromote(n) ? `<p class="cls-ai-manage"><i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i> ${
+                  escapeHtml(tr('clsAiManage'))}${s.manage_reason ? ` <span class="cls-ai-why">${escapeHtml(s.manage_reason)}</span>` : ''}</p>` : ''}
+              ${(s.category || s.vendor || s.model || s.name || s.ha_group)
+                  ? `<button type="button" class="btn btn-secondary btn-small" data-action="cls-ai-apply">${escapeHtml(tr('clsAiApply'))}</button>` : ''}
             </div>`;
     }
 
@@ -3677,10 +3900,11 @@
             });
             const data = res ? await res.json().catch(() => ({})) : {};
             if (!(res && res.ok)) { showToast(data.detail || tr('clsAiFailed'), 'error'); return; }
+            const manage = Object.values(data.suggestions || {}).filter(s => s.manage).length;
             showToast(tr('clsAiDone', { n: Object.keys(data.suggestions || {}).length,
-                                        req: data.requested, rem: data.remaining }), 'info');
+                                        req: data.requested, rem: data.remaining, m: manage }), 'info');
             await loadClsAiSuggestions();
-            clsView = 'todo';
+            clsView = clsScopedNodes().some(clsToClassify) || !clsScopedNodes().some(clsToManage) ? 'todo' : 'manage';
             clsViewChosen = true;
             renderCategoriesPanel();
         } finally {
@@ -3736,6 +3960,10 @@
         loadCategoriesData();
     }
 
+    document.getElementById('drawerTwinWarn')?.addEventListener('click', (e) => {
+        const el = /** @type {HTMLElement} */ (e.target).closest('[data-action="open-name-twins"]');
+        if (el instanceof HTMLElement && el.dataset.ip) openNameTwins(el.dataset.ip);
+    });
     document.getElementById('btnClsAiSuggest')?.addEventListener('click', runClsAiSuggest);
     document.getElementById('btnClsAiModels')?.addEventListener('click', openClsModels);
     document.getElementById('btnCloseClsModels')?.addEventListener('click', () => closeModal('clsModelsModal'));
@@ -3841,6 +4069,7 @@
             clsDirty = false;
             clsView = el.dataset.view || 'all';
             clsViewChosen = true;
+            clsPicked.clear();
             renderCategoriesPanel();
         } else if (act === 'delete-category' && el.dataset.k) {
             deleteCategory(el.dataset.k);
@@ -3851,7 +4080,35 @@
 
     document.getElementById('categoriesDeviceList')?.addEventListener('click', (e) => {
         const row = /** @type {HTMLElement} */ (e.target).closest('[data-action="cls-select"]');
-        if (row instanceof HTMLElement && row.dataset.nodeId) clsSelect(row.dataset.nodeId, false);
+        if (!(row instanceof HTMLElement) || !row.dataset.nodeId) return;
+        const me = /** @type {MouseEvent} */ (e);
+        if (me.ctrlKey || me.metaKey) {
+            // The row already open counts as the first pick.
+            if (!clsPicked.size && clsSelected) clsPicked.add(clsSelected);
+            const id = row.dataset.nodeId;
+            if (clsPicked.has(id)) clsPicked.delete(id); else clsPicked.add(id);
+            document.querySelectorAll('#categoriesDeviceList .cls-row').forEach(r => {
+                const on = clsPicked.has(r.getAttribute('data-node-id') || '');
+                r.classList.toggle('cls-picked', on);
+                r.setAttribute('aria-pressed', String(on));
+            });
+            renderClsBulk();
+            return;
+        }
+        if (clsPicked.size) {
+            clsPicked.clear();
+            document.querySelectorAll('#categoriesDeviceList .cls-picked').forEach(r => {
+                r.classList.remove('cls-picked');
+                r.setAttribute('aria-pressed', 'false');
+            });
+            renderClsBulk();
+        }
+        clsSelect(row.dataset.nodeId, false);
+    });
+    document.getElementById('btnClsBulkPromote')?.addEventListener('click', promotePicked);
+    document.getElementById('btnClsBulkClear')?.addEventListener('click', () => {
+        clsPicked.clear();
+        renderCategoriesPanel();
     });
 
     document.getElementById('clsInspector')?.addEventListener('click', (e) => {
@@ -3862,6 +4119,7 @@
         else if (act === 'cls-undo') discardCategoryEdits();
         else if (act === 'cls-pick-name') clsPickName(el);
         else if (act === 'cls-ai-apply') clsApplyAi();
+        else if (act === 'cls-twin-scan') scanTwinPorts(el);
         else if (act === 'promote-device') promoteDevice(clsSelected);
         else if (act === 'mark-as-stack') markAsStack(clsSelected);
         else if (act === 'save-stack-members') saveStackMembers(clsSelected);
@@ -3968,38 +4226,64 @@
     async function promoteDevice(nodeId) {
         const n = categoriesData.nodes.find(x => x.id === nodeId);
         if (!n || !n.display_ip) { alert(tr('topoNoAnnouncedIpAvailable')); return; }
-        const vendor = (n.vendor && n.vendor !== 'discovered') ? n.vendor : 'cisco';
         const msg = tr('topoPromoteToManagedIn', {label: n.label, display_ip: n.display_ip, group: n.group});
         if (!confirm(msg)) return;
-        const location = await pickLocation(n.group);
-        if (!location) return;
-        const res = await apiFetch("/api/promote-device", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                node_id: nodeId, ip: n.display_ip, vendor, group: n.group, location,
-                // Eredita ciò che è già stato scoperto via CDP/LLDP, incluso il
-                // nome eventualmente rinominato.
-                model: n.model || '',
-                version: n.version || '',
-                device_type: n.device_type || '',
-                hostname: n.label || ''
-            })
-        });
-        if (res && res.ok) {
-            await loadCategoriesData();
-            // Aggiorna la cache inventario così il nuovo gestito appare nel triage.
-            try {
-                const dres = await apiFetch('/api/local-devices');
-                if (dres && dres.ok) {
-                    const d = await dres.json();
-                    globalDevices = d.devices; globalGroups = d.groups; globalVersions = d.detected_versions;
-                }
-            } catch (e) {}
-        } else {
-            const e = res ? await res.json().catch(()=>({})) : {};
-            alert(e.detail || (tr('topoPromotionFailed')));
+        const failed = await promoteNodes([n]);
+        if (failed && failed.length) alert(failed[0]);
+    }
+
+    async function promotePicked() {
+        const nodes = clsPickedPromotable();
+        if (!nodes.length || !confirm(tr('clsBulkPromoteConfirm', { n: nodes.length }))) return;
+        const failed = await promoteNodes(nodes);
+        if (!failed) return;
+        clsPicked.clear();
+        renderCategoriesPanel();
+        showToast(tr('clsBulkPromoted', { n: nodes.length - failed.length }), failed.length ? 'error' : 'info');
+        if (failed.length) alert(failed.join('\n'));
+    }
+
+    // One location per tenant, asked once even for twenty devices; then one
+    // request each, so a device already in inventory fails alone. null when
+    // the location was not picked (nothing sent), else the failure messages.
+    async function promoteNodes(nodes) {
+        const locs = new Map();
+        for (const g of new Set(nodes.map(n => n.group))) {
+            const loc = await pickLocation(g);
+            if (!loc) return null;
+            locs.set(g, loc);
         }
+        const failed = [];
+        for (const n of nodes) {
+            const vendor = (n.vendor && n.vendor !== 'discovered') ? n.vendor : 'cisco';
+            const res = await apiFetch("/api/promote-device", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    node_id: n.id, ip: n.display_ip, vendor, group: n.group, location: locs.get(n.group),
+                    // Eredita ciò che è già stato scoperto via CDP/LLDP, incluso il
+                    // nome eventualmente rinominato.
+                    model: n.model || '',
+                    version: n.version || '',
+                    device_type: n.device_type || '',
+                    hostname: n.label || ''
+                })
+            });
+            if (!(res && res.ok)) {
+                const e = res ? await res.json().catch(()=>({})) : {};
+                failed.push(`${n.label}: ${e.detail || tr('topoPromotionFailed')}`);
+            }
+        }
+        await loadCategoriesData();
+        // Aggiorna la cache inventario così il nuovo gestito appare nel triage.
+        try {
+            const dres = await apiFetch('/api/local-devices');
+            if (dres && dres.ok) {
+                const d = await dres.json();
+                globalDevices = d.devices; globalGroups = d.groups; globalVersions = d.detected_versions;
+            }
+        } catch (e) {}
+        return failed;
     }
 
     async function createCategory() {
@@ -4410,9 +4694,11 @@
         const g = document.getElementById('interactiveGroupSelect');
         resetLayeredLevels(g ? g.value : 'all');
     });
-    document.getElementById('layeredCoreSelect')?.addEventListener('change', ev => {
+    document.getElementById('layeredCoreWrap')?.addEventListener('change', ev => {
+        const sel = /** @type {HTMLSelectElement} */ (ev.target);
+        if (!sel.matches('select.layered-core')) return;
         const g = document.getElementById('interactiveGroupSelect');
-        setLayeredRoot(g ? g.value : 'all', ev.target.value);
+        setLayeredRoot(g ? g.value : 'all', sel.dataset.zone || '', sel.value);
     });
     // Level names: one field per row of the map, labelled with a few of its
     // devices so it is clear which row is which. Empty fields stay empty.

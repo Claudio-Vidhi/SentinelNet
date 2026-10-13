@@ -198,6 +198,21 @@ function locationById(id) {
     return globalLocations.find(l => l.id === id) || null;
 }
 
+// Other inventoried devices answering to the same hostname as `ip` (SW01 and
+// sw01.lan are one name). Two of them are two devices the map has to tell
+// apart: the badge sends the user to the classification queue to rename one.
+function nameTwins(ip) {
+    const base = h => String(h || '').split('.')[0].toLowerCase();
+    const me = globalDevices.find(d => d.IP === ip);
+    if (!me || !base(me.Hostname)) return [];
+    return globalDevices.filter(d => d.IP !== ip && base(d.Hostname) === base(me.Hostname));
+}
+
+function openNameTwins(ip) {
+    window.clsPendingTwin = ip;
+    switchTab('tab-categories');
+}
+
 function locationLabel(id) {
     const loc = locationById(id);
     return loc ? loc.name : (id || '—');
@@ -625,14 +640,16 @@ function applyColumnWidths(table, widths) {
         th.style.width = widths[Number(th.getAttribute('data-col-orig'))] + 'px';
     });
     table.style.tableLayout = 'fixed';
-    table.style.width = widths.reduce((a, b) => a + b, 0) + 'px';
+    // min-width, not width: saved widths narrower than the container would
+    // otherwise leave the table stuck short of the right edge.
+    table.style.minWidth = widths.reduce((a, b) => a + b, 0) + 'px';
     table.dataset.colResized = '1';
 }
 
 function resetColumnWidths(table) {
     Array.from(table.tHead.rows[0].cells).forEach(th => { th.style.width = ''; });
     table.style.tableLayout = '';
-    table.style.width = '';
+    table.style.minWidth = '';
     delete table.dataset.colResized;
     const key = columnWidthStorageKey(table);
     if (key) { try { localStorage.removeItem(key); } catch (e) { } }

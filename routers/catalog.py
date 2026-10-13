@@ -161,6 +161,19 @@ def delete_vendor(v: VendorDeleteSchema, current_user = Depends(require_operator
     log_audit(f"Vendor '{v.name}' eliminato da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
+def _name_twins(nodes: list) -> dict:
+    """Devices sharing a hostname (``SW01`` and ``sw01.lan`` are one name):
+    id -> the other ids. Managed ones, and discovered ones the map kept apart
+    (the same factory name in two sites). The map tells them apart for
+    CDP/LLDP, but two devices answering to one name stay a trap for whoever
+    reads it."""
+    by_name: dict = {}
+    for n in nodes:
+        if n["label"]:
+            by_name.setdefault(n["label"].split(".")[0].lower(), []).append(n["id"])
+    return {i: [o for o in ids if o != i] for ids in by_name.values() if len(ids) > 1 for i in ids}
+
+
 def assemble_classification(scope):
     """Build the classification rows shared by the tab endpoint and the CSV
     export: network map filtered to scope, merged with manual category
@@ -172,6 +185,7 @@ def assemble_classification(scope):
     assignments = cats["assignments"]
 
     nodes = []
+    ip_set = {d["IP"] for d in inventory_manager.get_all_devices()}
     counts_by_category: dict = {}
     counts_by_group: dict = {}
     for n in data["nodes"]:
@@ -210,6 +224,33 @@ def assemble_classification(scope):
         nodes.append(node)
         counts_by_category[dtype] = counts_by_category.get(dtype, 0) + 1
         counts_by_group[group] = counts_by_group.get(group, 0) + 1
+
+    from collectors import mac_history
+    twins = _name_twins(nodes)
+    label_of = {n["id"]: n["label"] for n in nodes}
+    tables: dict = {}
+    for node in nodes:
+        node["name_twins"] = twins.get(node["id"], [])
+        # Only the twins pay for the lookup: it is what tells them apart.
+        node["macs"] = sorted(mac_history.own_macs(node["id"])) if node["name_twins"] else []
+        # Where each twin is cabled, and the MACs seen on that port: the
+        # evidence a user checks, and the switches a "read MACs" button asks.
+        node["seen_on"] = []
+        if not node["name_twins"]:
+            continue
+        for link in data.get("links", []):
+            if link.get("target") == node["id"]:
+                sw, port = link.get("source"), link.get("local_port")
+            elif link.get("source") == node["id"]:
+                sw, port = link.get("target"), link.get("remote_port")
+            else:
+                continue
+            if sw not in ip_set:
+                continue
+            if sw not in tables:
+                tables[sw] = core_engine.port_mac_table(sw)
+            node["seen_on"].append({"switch": sw, "switch_label": label_of.get(sw, sw), "port": port or "",
+                                    "macs": sorted(tables[sw].get(core_engine._normalize_iface(port or ""), ()))})
 
     return {
         "categories": cats["categories"],
@@ -593,9 +634,11 @@ def _load_ai_suggestions() -> dict:
             "conventions": data.get("conventions") or {}}
 
 
-def _classify_queue(nodes: list, group: str = "all") -> list:
-    """Same rule as the tab's "Da classificare": discovered, never confirmed."""
-    return [n for n in nodes if n["discovered"] and not n["is_manual"]
+def _ai_candidates(nodes: list, group: str = "all") -> list:
+    """What one AI run looks at: the "Da classificare" queue (discovered, never
+    confirmed) plus every discovered device with an address, classified or
+    not, since any of those could be added to the managed inventory."""
+    return [n for n in nodes if n["discovered"] and (not n["is_manual"] or n.get("display_ip"))
             and (group in ("", "all") or n["group"] == group)]
 
 
@@ -604,7 +647,7 @@ def get_ai_classification_suggestions(current_user = Depends(get_current_user)):
     """Saved proposals for devices still in the queue, so reopening the tab
     does not spend another request."""
     data = assemble_classification(user_group_scope(current_user))
-    queue_ids = {n["id"] for n in _classify_queue(data["nodes"])}
+    queue_ids = {n["id"] for n in _ai_candidates(data["nodes"])}
     store = _load_ai_suggestions()
     return {
         "suggestions": {k: v for k, v in store["suggestions"].items() if k in queue_ids},
@@ -615,15 +658,17 @@ def get_ai_classification_suggestions(current_user = Depends(get_current_user)):
 @router.post("/api/device-classification/ai-suggest", dependencies=[Depends(require_tab("tab-categories"))])
 def run_ai_classification_suggest(payload: AiSuggestSchema, current_user = Depends(require_operator)):
     """One AI request for the classification queue: category, subcategory,
-    vendor, model and, where the name breaks the tenant's convention, a name."""
+    vendor, model and, where the name breaks the tenant's convention, a name.
+    For every discovered device with an address it also says whether it is
+    worth adding to the managed inventory."""
     from ai import classification_assist as ca
     from routers.ai import chat_with_active_profile
 
     data = assemble_classification(user_group_scope(current_user))
     nodes = data["nodes"]
-    queue = _classify_queue(nodes, payload.group)
+    queue = _ai_candidates(nodes, payload.group)
     if not queue:
-        raise HTTPException(status_code=400, detail="Nessun dispositivo da classificare.")
+        raise HTTPException(status_code=400, detail="Nessun dispositivo scoperto da analizzare.")
     store = _load_ai_suggestions()
     # Devices without a proposal first; once all have one, a run refreshes them.
     pending = [n for n in queue if n["id"] not in store["suggestions"]] or queue
@@ -647,6 +692,9 @@ def run_ai_classification_suggest(payload: AiSuggestSchema, current_user = Depen
         "id": n["id"], "name": n["label"], "tenant": n["group"],
         "vendor": _vendor(n), "model": n.get("model") or "", "version": n.get("version") or "",
         "neighbours": neighbours.get(n["id"], [])[:ca.MAX_NEIGHBOURS],
+        # Whether a human already confirmed the category, and whether the
+        # device announced an address: without one it cannot be managed.
+        "classified": bool(n["is_manual"]), "has_address": bool(n.get("display_ip")),
     } for n in batch_nodes]
     tenants = {n["group"] for n in batch_nodes}
     examples: dict = {}

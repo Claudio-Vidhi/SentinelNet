@@ -435,7 +435,10 @@
                 </td>
                 <td data-sort-value="${escapeHtml(d.Hostname || '')}">
                   <div class="inv-host">
-                    <span class="inv-host-name">${d.Hostname ? escapeHtml(d.Hostname) : '<span class="inv-muted">—</span>'}${isViewer ? '' : `
+                    <span class="inv-host-name">${d.Hostname ? escapeHtml(d.Hostname) : '<span class="inv-muted">—</span>'}${
+                      nameTwins(d.IP).length ? `<button type="button" class="inv-twin" data-action="open-name-twins" data-ip="${ipAttr}"
+                        title="${escapeHtml(tr('twinBadgeTitle', { list: nameTwins(d.IP).map(t => `${t.IP} (${locationLabel(t.Location)})`).join(', ') }))}"><i class="fa-solid fa-clone" aria-hidden="true"></i> ${
+                        escapeHtml(tr('twinBadge'))}</button>` : ''}${isViewer ? '' : `
                       <button type="button" class="inv-rename" data-action="rename-device" data-ip="${ipAttr}" title="${tr('uiRenameDevice')}" aria-label="${tr('uiRenameDevice')}"><i class="fa-solid fa-pen"></i></button>`}</span>
                     <span class="inv-host-where">${where}</span>
                   </div>
@@ -492,6 +495,7 @@
         else if (action === 'ping-device') pingSingleDevice(ip, btn);
         else if (action === 'triage-device') triageSingleDevice(ip, btn);
         else if (action === 'rename-device') renameDevice(ip);
+        else if (action === 'open-name-twins') openNameTwins(ip);
         else if (action === 'download-backup') downloadBackup(ip);
         else if (action === 'upload-manual-config') window.openManualConfigWizard(ip);
         else if (action === 'open-facet') openDeviceFacet(btn.dataset.facet, ip);

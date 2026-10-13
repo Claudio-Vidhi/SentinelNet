@@ -30,7 +30,8 @@ function constant(name) {
     return src.slice(start, src.indexOf(';', start) + 1);
 }
 
-const build = (overrides, roots = {}) => (0, eval)(`(function () {
+const build = (overrides, roots = {}, zones = {}) => (0, eval)(`(function () {
+    const zoneKeyOf = id => (${JSON.stringify(zones)})[id] || '';
     ${constant('TIER_LEVEL')}
     ${constant('ROOT_TYPES')}
     const layeredLevels = ${JSON.stringify(overrides)};
@@ -100,5 +101,29 @@ assert.equal(levels['192.0.2.1'], 0);
 // A core pointing at a device that left the map falls back to the deduction.
 levels = build({}, { 'tenant-a': '192.0.2.77' })(nodes, links, 'tenant-a');
 assert.equal(levels['192.0.2.1'], 0);
+
+// Two sites with no cable between them: each gets its own root, instead of
+// the second falling back to per-type tiers (every switch on one row).
+{
+    const two = [{ id: 'a-core', device_type: 'switch' }, { id: 'a-acc', device_type: 'switch' },
+                 { id: 'b-core', device_type: 'switch' }, { id: 'b-acc1', device_type: 'switch' },
+                 { id: 'b-acc2', device_type: 'switch' }];
+    const wires = [{ source: 'a-core', target: 'a-acc' },
+                   { source: 'b-core', target: 'b-acc1' }, { source: 'b-core', target: 'b-acc2' }];
+    const lv = build({})(two, wires, 't');
+    assert.equal(lv['b-core'], 0, 'second site has its own root');
+    assert.equal(lv['b-acc1'], 1);
+    // A cable between two locations does not hang one site under the other.
+    const zones = { 'a-core': 'A', 'a-acc': 'A', 'b-core': 'B', 'b-acc1': 'B', 'b-acc2': 'B' };
+    const lz = build({}, {}, zones)(two, wires.concat({ source: 'a-acc', target: 'b-core' }), 't');
+    assert.equal(lz['b-core'], 0, 'cross-site cable ignored for the tree');
+    assert.equal(lz['b-acc2'], 1);
+    // One core chosen by hand per location: each site's tree starts from its own.
+    const lp = build({}, { t: { A: 'a-acc', B: 'b-acc1' } }, zones)(two, wires, 't');
+    assert.equal(lp['a-acc'], 0, 'site A core chosen by hand');
+    assert.equal(lp['a-core'], 1);
+    assert.equal(lp['b-acc1'], 0, 'site B core chosen by hand, independently');
+    assert.equal(lp['b-core'], 1);
+}
 
 console.log('layered_levels: ok');

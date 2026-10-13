@@ -1044,12 +1044,12 @@
         <span id="bpRevInfo" class="bp-meta"></span>
         <span id="bpObsInfo" class="bp-meta"></span>
         <span class="bp-bar-actions">
-          <button type="button" class="btn btn-secondary btn-small" id="btnBpCheck" data-i18n="btnBpCheck">Verifica</button>
-          <button type="button" class="btn btn-secondary btn-small" id="btnBpObserve" data-i18n="btnBpObserve">Aggiorna dai gateway</button>
-          <button type="button" class="btn btn-secondary btn-small" id="btnBpPreset" data-i18n="btnBpPreset">Preset…</button>
-          <button type="button" class="btn btn-secondary btn-small" id="btnBpHistory" data-i18n="btnBpHistory">Storico</button>
-          <button type="button" class="btn btn-secondary btn-small" id="btnBpAssistant"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> <span data-i18n="btnBpAssistant">Assistente</span></button>
-          <button type="button" class="btn btn-secondary btn-small" id="btnBpInstructions" data-i18n="btnBpInstructions">Istruzioni assistente</button>
+          <button type="button" class="btn btn-secondary btn-small" id="btnBpCheck" disabled data-i18n="btnBpCheck">Verifica</button>
+          <button type="button" class="btn btn-secondary btn-small" id="btnBpObserve" disabled data-i18n="btnBpObserve">Aggiorna dai gateway</button>
+          <button type="button" class="btn btn-secondary btn-small" id="btnBpPreset" disabled data-i18n="btnBpPreset">Preset…</button>
+          <button type="button" class="btn btn-secondary btn-small" id="btnBpHistory" disabled data-i18n="btnBpHistory">Storico</button>
+          <button type="button" class="btn btn-secondary btn-small" id="btnBpAssistant" disabled><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> <span data-i18n="btnBpAssistant">Assistente</span></button>
+          <button type="button" class="btn btn-secondary btn-small" id="btnBpInstructions" disabled data-i18n="btnBpInstructions">Istruzioni assistente</button>
         </span>
       </div>
 
@@ -1095,7 +1095,7 @@
             </table>
           </div>
         </section>
-        <section class="panel">
+        <section class="panel bp-diagram-panel">
           <div id="bpDiagram" class="bp-diagram" role="img" aria-label="Diagramma delle sedi e dei collegamenti" data-i18n-aria-label="bpDiagramAria"></div>
         </section>
       </div>
@@ -1203,7 +1203,8 @@
             <span style="font-size:12px; color:var(--text-muted);" data-i18n="lblLayeredHint">Trascina in verticale per cambiare livello · click su un gruppo per aprirlo · apri un apparato per segnarlo come core</span>
             <!-- Il core dedotto (confine o nodo piu' connesso) puo' non essere
                  quello vero: qui l'utente lo indica e i piani si rifanno da li'. -->
-            <select id="layeredCoreSelect" title="Core" style="font-weight:700;" aria-label="Nodo core della mappa a livelli" data-i18n-aria-label="ariaLayeredCore"><option value="">Core: automatico</option></select>
+            <!-- One "Core" select per location, filled by topology.js. -->
+            <span id="layeredCoreWrap" class="layered-core-wrap"></span>
             <button id="layeredCollapseBtn" class="chip" style="width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnLayeredCollapse">Comprimi gruppi</button>
             <button id="layeredResetBtn" class="chip" style="width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnLayeredReset">Azzera livelli</button>
             <button id="layeredNamesBtn" class="chip" style="width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnLayeredNames">Nomi livelli</button>
@@ -1289,6 +1290,8 @@
           <div class="drawer-body">
             <!-- Device Specs -->
             <div class="drawer-section">
+              <!-- Another inventoried device answers to the same name (topology.js). -->
+              <div id="drawerTwinWarn" class="drawer-twin" hidden></div>
               <div class="drawer-kpi-grid">
                 <div class="drawer-kpi"><span class="kpi-label">IP Management</span><strong id="drawerNodeIp">—</strong></div>
                 <div class="drawer-kpi"><span class="kpi-label">Vendor / Model</span><strong id="drawerNodeModel">—</strong></div>
@@ -1388,7 +1391,13 @@
                    data-i18n-placeholder="clsSearch" aria-label="Cerca nome, IP, modello"
                    data-i18n-aria-label="clsSearch" autocomplete="off" spellcheck="false">
           </div>
-          <p id="clsHint" class="cls-hint" hidden data-i18n="clsHintQueue">Scoperti via CDP/LLDP con una categoria solo dedotta. Conferma o correggi a destra; con le frecce su e giu' passi al successivo.</p>
+          <!-- Text set per view by topology.js (queue, AI "to manage", any list). -->
+          <p id="clsHint" class="cls-hint" hidden></p>
+          <div id="clsBulkBar" class="cls-bulk" hidden>
+            <span id="clsBulkInfo"></span>
+            <button type="button" class="btn btn-primary btn-small requires-write" id="btnClsBulkPromote" data-i18n="clsBulkPromoteShort">Aggiungi ai gestiti</button>
+            <button type="button" class="btn btn-secondary btn-small" id="btnClsBulkClear" data-i18n="clsBulkClear">Annulla selezione</button>
+          </div>
           <div id="categoriesDeviceList" class="cls-rows" aria-label="Dispositivi" data-i18n-aria-label="clsListAria"></div>
         </section>
 
@@ -4903,9 +4912,17 @@
       </div>
     </div>
 
-    <!-- Sankey: device -> route type -> next hop, over the matrix's filters. -->
-    <div class="panel rt-sankey-panel" style="margin-bottom:18px;">
-      <h3 data-i18n="rtSkTitle">Flussi delle rotte</h3>
+    <!-- Rings: the FortiGate Routing Monitor's summary, per device. -->
+    <div class="panel rt-rings-panel" style="margin-bottom:18px;">
+      <h3 data-i18n="rtRingsTitle">Riepilogo rotte</h3>
+      <p class="rt-trace-desc" data-i18n="rtRingsDesc">Come il Routing Monitor del FortiGate: le rotte di ogni apparato per tipo e per interfaccia di uscita. Clic su una voce per filtrare la tabella.</p>
+      <div id="rtRings" class="rt-rings"></div>
+    </div>
+
+    <!-- Sankey: device -> route type -> next hop, over the matrix's filters.
+         Collapsed: the rings above are the summary, this is for device chains. -->
+    <details id="rtSkPanel" class="panel rt-sankey-panel" style="margin-bottom:18px;">
+      <summary><h3 data-i18n="rtSkTitle">Flussi delle rotte</h3></summary>
       <p class="rt-trace-desc" data-i18n="rtSkDesc">Quante rotte escono da ogni apparato, di che tipo sono e verso quale next-hop vanno. Segue gli stessi filtri della tabella.</p>
       <!-- Its own switches, labelled: the table's chips below look the same and filter both. -->
       <div class="rt-sk-types-row">
@@ -4915,7 +4932,7 @@
       <p class="form-hint" data-i18n="rtSkHint">Doppio clic (o Invio) su un nodo o su una fascia per vedere le rotte che contiene.</p>
       <div id="rtSankey" class="rt-sankey"></div>
       <div id="rtSkDetail" class="rt-sk-detail" hidden></div>
-    </div>
+    </details>
 
     <div class="panel rt-matrix-panel">
       <h3 data-i18n="rtTableTitle">Rotte per prefisso</h3>

@@ -16,7 +16,6 @@
     let bpLocSave = null;     // save callback of the open location modal
     let bpLinkSave = null;    // save callback of the open link modal
 
-    const ROLE_SHAPES = { hq: 'star', datacenter: 'database', branch: 'dot', warehouse: 'square', other: 'triangle' };
     const KIND_COLORS = { vpn: '--primary', wan: '--text-muted', mpls: '--warning', lan: '--success' };
     const SEV_RANK = { error: 0, warning: 1, unknown: 2, info: 3 };
     const SEV_COLORS = { error: '--danger', warning: '--warning', unknown: '--text-muted', info: '--primary' };
@@ -72,11 +71,20 @@
         sel.replaceChildren(...orgs.map((g) => new Option(orgLabel(g), g)));
         const wanted = window.bpPendingOrg;
         window.bpPendingOrg = null;
-        bpOrg = wanted && orgs.includes(wanted) ? wanted : (orgs.includes(bpOrg) ? bpOrg : (orgs[0] || ''));
+        // The sidebar tenant wins over the last one viewed here: picking it is
+        // the user saying which organization they are working on.
+        const g = window.globalSelectedTenant;
+        const scoped = g && g !== 'all' && orgs.includes(g) ? g : '';
+        bpOrg = wanted && orgs.includes(wanted) ? wanted
+            : scoped || (orgs.includes(bpOrg) ? bpOrg : (orgs[0] || ''));
         sel.value = bpOrg;
         await reloadBlueprint();
     }
     window.loadBlueprintTab = loadBlueprintTab;
+    // The draft lives on the server, so following the sidebar loses nothing.
+    window.addEventListener('globalTenantChanged', () => {
+        if (document.getElementById('tab-blueprint')?.classList.contains('active')) loadBlueprintTab();
+    });
 
     async function reloadBlueprint() {
         if (!bpOrg) return;
@@ -112,6 +120,9 @@
     }
 
     function renderBar() {
+        // The bar's buttons ship disabled: every handler needs bpState, which only
+        // exists once an organization has loaded.
+        document.querySelectorAll('.bp-bar button').forEach((b) => { b.disabled = false; });
         const info = bpState.rev_info;
         $('bpRevInfo').textContent = info ? tr('bpRevInfo', { rev: info.rev, at: info.at, by: info.by || '—' }) : tr('bpRevNone');
         $('bpObsInfo').textContent = bpObservedAt ? tr('bpObsInfo', { at: bpObservedAt }) : tr('bpObsNone');
@@ -184,26 +195,52 @@
         return out;
     }
 
+    // vis 'html' labels only parse <b>/<i>/<code>; & and < still need escaping.
+    const visText = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
     function renderDiagram() {
         if (typeof vis === 'undefined') return;
         const m = model();
         const worstLoc = worstBy('location');
         const worstLink = worstBy('link');
-        const text = cssVar('--text');
-        const nodes = Object.entries(m.locations).map(([id, l]) => ({
-            id, label: l.name, shape: ROLE_SHAPES[l.role] || 'dot', size: 18, borderWidth: 2,
-            color: { background: cssVar(worstLoc[id] ? SEV_COLORS[worstLoc[id]] : '--surface'), border: cssVar('--border') },
-            shapeProperties: { borderDashes: id in bpState.locations ? false : [4, 4] },
-            font: { color: text },
-        }));
+        const text = cssVar('--text'), muted = cssVar('--text-muted'), surface = cssVar('--surface');
+        const font = getComputedStyle(document.body).fontFamily;
+        // Card nodes: name, then role and first subnet; the border carries the worst finding.
+        const nodes = Object.entries(m.locations).map(([id, l]) => {
+            const sub = [roleLabel(l.role), (l.subnets || [])[0]].filter(Boolean).join(' · ');
+            const sev = worstLoc[id];
+            return {
+                id, shape: 'box', label: `<b>${visText(l.name)}</b>
+<i>${visText(sub)}</i>`,
+                margin: { top: 10, bottom: 10, left: 14, right: 14 },
+                borderWidth: sev ? 2 : 1, borderWidthSelected: 2,
+                color: { background: surface, border: cssVar(sev ? SEV_COLORS[sev] : '--border-strong'),
+                    highlight: { background: surface, border: cssVar('--primary') },
+                    hover: { background: surface, border: cssVar('--primary') } },
+                shapeProperties: { borderRadius: 8, borderDashes: id in bpState.locations ? false : [4, 4] },
+                font: { multi: 'html', face: font, color: text, size: 13,
+                    bold: { color: text, size: 14, face: font }, ital: { color: muted, size: 11, face: font } },
+                shadow: { enabled: true, color: 'rgba(0,0,0,0.25)', size: 8, x: 0, y: 2 },
+            };
+        });
         const edges = Object.entries(m.links).map(([id, k]) => ({
-            id, from: k.a, to: k.b, label: trEnum('bpKind_', k.kind), width: 2,
-            color: cssVar(worstLink[id] ? SEV_COLORS[worstLink[id]] : KIND_COLORS[k.kind]),
-            dashes: !(id in bpState.links), font: { color: text, strokeWidth: 0, size: 11 },
+            id, from: k.a, to: k.b, label: trEnum('bpKind_', k.kind), width: 2, hoverWidth: 1,
+            color: { color: cssVar(worstLink[id] ? SEV_COLORS[worstLink[id]] : KIND_COLORS[k.kind]), inherit: false },
+            dashes: !(id in bpState.links),
+            font: { color: muted, size: 10, face: font, background: surface, strokeWidth: 0, align: 'middle' },
         }));
         if (bpNetwork) bpNetwork.destroy();
-        bpNetwork = new vis.Network($('bpDiagram'), { nodes, edges },
-            { physics: { stabilization: { iterations: 150 } }, interaction: { hover: true } });
+        bpNetwork = new vis.Network($('bpDiagram'), { nodes, edges }, {
+            physics: { solver: 'forceAtlas2Based', forceAtlas2Based: { springLength: 160, avoidOverlap: 0.6 },
+                stabilization: { iterations: 200 } },
+            edges: { smooth: { enabled: true, type: 'continuous', roundness: 0.4 } },
+            interaction: { hover: true, tooltipDelay: 150 },
+        });
+        // Freeze once laid out: cards stay where the admin drags them.
+        bpNetwork.once('stabilizationIterationsDone', () => {
+            bpNetwork.setOptions({ physics: false });
+            bpNetwork.fit({ animation: { duration: 300 } });
+        });
         bpNetwork.on('click', (p) => {
             if (p.nodes.length && p.nodes[0] in bpState.locations) editLocation(p.nodes[0]);
             else if (p.edges.length && p.edges[0] in bpState.links) editLink(p.edges[0]);
@@ -234,7 +271,12 @@
     function describeOp(op) {
         const n = (id) => escapeHtml(locName(id));
         switch (op.op) {
-            case 'create_location': return tr('bpOpCreate', { name: escapeHtml(op.name), role: escapeHtml(roleLabel(op.role)) });
+            // Every field the op sets, not just the name: the admin approves what
+            // an assistant or an MCP client proposed, subnets and gateway included.
+            case 'create_location': return tr('bpOpCreate', {
+                name: escapeHtml(op.name), role: escapeHtml(roleLabel(op.role)),
+                subnets: escapeHtml((op.subnets || []).join(', ') || '—'), gateway: escapeHtml(op.gateway || '—'),
+                probe: escapeHtml(probeName(op.probe || 'central')) });
             case 'update_location': return tr('bpOpUpdate', { name: n(op.id), fields: escapeHtml(Object.entries(op.fields || {})
                 .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join('; ')) });
             case 'add_subnet': return tr('bpOpAddSubnet', { name: n(op.id), subnet: escapeHtml(op.subnet) });
@@ -416,7 +458,9 @@
         showToast(tr('bpApplied', { rev: body.rev }), 'success');
         const renamed = Object.entries(body.renamed || {});
         if (renamed.length) showToast(tr('bpRenamed', { list: renamed.map(([a, b]) => `${a} → ${b}`).join(', ') }), 'warning');
-        await reloadBlueprint();
+        // The locations table is the one Organizations shows: without this
+        // the new location only appeared there after a page reload.
+        await Promise.all([reloadBlueprint(), refreshInventory()]);
     }
 
     async function align() {

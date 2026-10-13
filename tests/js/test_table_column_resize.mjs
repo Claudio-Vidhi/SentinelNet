@@ -59,7 +59,7 @@ applyColumnWidths(moved, [60, 300]);
 assert.equal(moved.tHead.rows[0].cells[0].style.width, '300px');
 assert.equal(moved.tHead.rows[0].cells[1].style.width, '60px');
 assert.equal(moved.style.tableLayout, 'fixed');
-assert.equal(moved.style.width, '360px');
+assert.equal(moved.style.minWidth, '360px');
 
 // Save -> fresh table with the same identity -> widths come back.
 saveColumnWidths(moved, [60, 300]);

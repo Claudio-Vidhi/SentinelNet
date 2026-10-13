@@ -529,6 +529,9 @@ main .tab-content, main .panel, main .hero { min-width: 0; }
 /* A native option popup takes the select's background: a transparent select
    (.inv-inline-select) opened a white list with the theme's light text on it. */
 select option { background-color: var(--surface); color: var(--text); }
+/* Same for the group headings (organizations in the location picker): white
+   heading, light text, unreadable. */
+select optgroup { background-color: var(--surface-2); color: var(--text-muted); font-style: normal; font-weight: 600; }
 .tenant-switch select option { background-color: var(--surface); color: var(--text); font-weight: 400; }
 .tenant-switch select option:checked { font-weight: 600; }
 
@@ -1246,6 +1249,14 @@ details[open] > div[id*="Menu"],
 }
 .cls-row:hover { background-color: var(--surface-3); }
 .cls-row[aria-current="true"] { background-color: var(--surface-3); box-shadow: inset 3px 0 0 var(--text); }
+/* Ctrl+click selection: a primary edge, distinct from the open row's. */
+.cls-row.cls-picked { background-color: color-mix(in srgb, var(--primary) 14%, transparent); box-shadow: inset 3px 0 0 var(--primary); }
+.cls-bulk { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; padding: 6px 10px; border: var(--seam) solid var(--primary); border-radius: var(--radius-lg); }
+.cls-bulk[hidden] { display: none; }
+.cls-bulk #clsBulkInfo { font-size: 13px; margin-right: auto; }
+.cls-rail-ai { color: var(--primary); font-size: 11px; width: 12px; }
+.cls-ai-manage { margin: 6px 0; font-size: 13px; color: var(--primary); }
+.cls-ai-manage .cls-ai-why { color: var(--text-muted); }
 .cls-row:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 /* Name over vendor · model: one identity cell, so neither gets truncated
    into a column too narrow to read. */
@@ -2200,8 +2211,6 @@ body:not(.role-super_admin) .requires-super-admin { display: none !important; }
    --------------------------------------------------------------- */
 @media (min-width: 1700px) {
   main .hero { max-width: 1560px; }
-  main .subtab-bar { max-width: 1560px; }
-  main .panel:not(:has(table)) { max-width: 1560px; }
 }
 
 @media (max-width: 1200px) {
@@ -2898,6 +2907,20 @@ body:not(.role-super_admin) .requires-super-admin { display: none !important; }
 }
 .inv-inline-select:hover { color: var(--text); text-decoration: underline dotted; }
 .inv-inline-select:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.inv-twin { border: var(--seam) solid var(--lamp-warn-ink); border-radius: 4px; background: var(--lamp-warn-wash); color: var(--lamp-warn-ink);
+  font-size: 10px; font-weight: 600; padding: 0 5px; cursor: pointer; white-space: nowrap; }
+.inv-twin:hover { filter: brightness(1.15); }
+.drawer-twin { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; padding: 8px 10px; font-size: 12px;
+  border: var(--seam) solid var(--lamp-warn-ink); border-radius: var(--radius-lg); background: var(--lamp-warn-wash); color: var(--text); }
+.drawer-twin[hidden] { display: none; }
+.cls-twins { margin: 0 0 12px; padding: 10px; border: var(--seam) solid var(--lamp-warn-ink); border-radius: var(--radius-lg); }
+.cls-twin-list { margin: 6px 0; padding-left: 16px; font-size: 12px; overflow-wrap: anywhere; }
+.cls-twin-list li { margin: 4px 0; }
+.cls-twin-list .cls-mono { margin-left: 4px; }
+.cls-twin-mac { display: block; color: var(--text-muted); }
+.cls-twin-me { color: var(--text); }
+.cls-twin-me::marker { color: var(--lamp-warn-ink); }
+.cls-mono { font-family: var(--font-code); font-size: 11px; }
 .inv-rename { border: 0; background: none; padding: 0; font-size: 10px; color: var(--text-soft); cursor: pointer; opacity: 0; }
 tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
 .inv-vendor { display: flex; flex-direction: column; gap: 2px; white-space: nowrap; }
@@ -3595,6 +3618,42 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
   color: var(--text-muted);
 }
 .rt-legend:empty { display: none; }
+
+/* Route rings: the FortiGate Routing Monitor summary, one card per device. */
+/* auto-fit: one device takes the whole row, several share it. */
+.rt-rings { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 640px), 1fr)); gap: 14px; }
+.rt-ring-card { container-type: inline-size; border: var(--seam) solid var(--border); border-radius: var(--radius-lg); padding: 12px 14px; background: var(--surface-2); }
+.rt-ring-dev { margin: 0 0 8px; display: flex; align-items: baseline; gap: 8px; }
+.rt-ring-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.rt-ring-block { display: flex; align-items: flex-start; gap: 14px; }
+.rt-ring { width: 120px; height: 120px; flex: none; }
+.rt-ring-seg { fill: none; stroke-width: 16; cursor: pointer; transition: stroke-width 120ms; }
+.rt-ring-seg:hover { stroke-width: 20; }
+.rt-ring-total { fill: var(--text); font-size: 24px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; }
+.rt-ring-sub { fill: var(--text-muted); font-size: 10px; text-anchor: middle; }
+.rt-ring-legend { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rt-ring-legend h4 { margin: 0 0 4px; font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.rt-ring-item { display: flex; align-items: center; gap: 8px; padding: 3px 6px; border: var(--seam) solid transparent; border-radius: 4px; background: none; color: var(--text); font-size: 13px; text-align: left; cursor: pointer; }
+.rt-ring-item:hover { border-color: var(--border); }
+.rt-ring-rest { cursor: default; color: var(--text-muted); }
+.rt-ring-rest:hover { border-color: transparent; }
+.rt-ring-item[aria-pressed="true"] { border-color: var(--primary); }
+.rt-ring-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.rt-ring-n { margin-left: auto; padding-left: 12px; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.rt-monitor { margin-top: 12px; }
+/* Long tables (a core switch) scroll inside the card, header kept in view. */
+.rt-monitor-wrap { min-width: 0; overflow: auto; max-height: 420px; }
+.rt-monitor-wrap .rt-monitor thead th { position: sticky; top: 0; background: var(--surface-2); }
+/* A wide card (big monitor, one device): rings left, the table beside them
+   instead of below, so the row is used and the table needs no scrolling. */
+@container (min-width: 1100px) {
+  .rt-ring-body { display: grid; grid-template-columns: minmax(0, 600px) minmax(0, 1fr); gap: 28px; align-items: start; }
+  .rt-ring-body .rt-monitor { margin-top: 0; }
+}
+.layered-core-wrap { display: inline-flex; flex: 0 1 auto; flex-wrap: nowrap; gap: 6px; }
+.layered-core-wrap select.layered-core { font-weight: 700; width: auto; flex: 0 0 auto; }
+.rt-sankey-panel > summary { cursor: pointer; }
+.rt-sankey-panel > summary h3 { display: inline; }
 
 /* Route-flow Sankey. Ribbons recede; hover brings one forward. */
 .rt-sankey { overflow-x: auto; }
@@ -5160,8 +5219,11 @@ details[open] > summary .mac-caret { transform: rotate(180deg); }
 .bp-meta { font-size: 12px; color: var(--text-muted); }
 .bp-draft-bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-left: 3px solid var(--warning); }
 .bp-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
-@media (max-width: 1100px) { .bp-grid { grid-template-columns: minmax(0, 1fr); } }
-.bp-diagram { height: 440px; }
+@media (max-width: 1400px) { .bp-grid { grid-template-columns: minmax(0, 1fr); } }
+.bp-diagram-panel { position: relative; min-height: 440px; padding: 0; overflow: hidden; }
+/* Out of flow so the canvas never sizes the row: the tables beside it do,
+   and the diagram fills whatever height they leave. Dot grid as backdrop. */
+.bp-diagram { position: absolute; inset: 0; background-image: radial-gradient(var(--border) 1px, transparent 1px); background-size: 20px 20px; }
 .bp-mono { font-family: var(--font-code); font-size: 12px; }
 .bp-steps { margin: 0; padding-left: 20px; }
 .bp-steps li { margin: 4px 0; }
