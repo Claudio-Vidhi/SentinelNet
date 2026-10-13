@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.51.3] - 2026-10-13
+
 ### Added
 
 - **Vicini con lo stesso hostname distinti sulla mappa**: due switch con lo
