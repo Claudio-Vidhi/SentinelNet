@@ -10,6 +10,30 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Vicini con lo stesso hostname distinti sulla mappa**: due switch con lo
+  stesso nome in sedi diverse restano due dispositivi. Il vicino CDP/LLDP viene
+  associato per IP annunciato, poi per i MAC visti sulla porta locale, poi per
+  sede e tenant. Badge "stesso nome" nell'inventario.
+- **Assistente di classificazione**: propone anche quali dispositivi scoperti
+  aggiungere all'inventario gestito, con motivazione.
+- **Diagnosi client FortiGate** a righe per sorgente e alias dell'interfaccia
+  nella vista rotte.
+
+### Security
+
+- Revisione di sicurezza del 2026-10-12: identita' e scansioni limitate ai
+  tenant dell'utente, tetto alla dimensione delle scansioni, comandi su una
+  sola riga, denylist dei comandi con le abbreviazioni IOS, override MAC solo
+  in lettura, pin known_hosts atomico, fallback SSH legacy con scadenza,
+  newline neutralizzati nel log di audit, validazione di `bind`, limiti alle
+  bozze del Blueprint.
+
+### Changed
+
+- Dipendenza di sviluppo `graphifyy` >= 0.9.85.
+
 ## [0.51.2] - 2026-10-08
 
 ### Added
