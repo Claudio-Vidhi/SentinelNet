@@ -579,6 +579,13 @@ class RouteApi(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.text)
         return r.json()
 
+    def test_the_audit_names_who_asked(self):
+        # Security review 2026-10-12, L2: the SSH read was logged without a user.
+        with mock.patch("routers.route_table.log_audit") as audit:
+            self._get("adm_rt")
+        self.assertTrue(any("adm_rt" in c.args[0] and FGT_A["IP"] in c.args[0]
+                            for c in audit.call_args_list))
+
     def test_it_needs_a_session(self):
         self.assertIn(TestClient(app_server.app).get("/api/routes").status_code,
                       (401, 403))

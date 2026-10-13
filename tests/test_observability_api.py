@@ -592,3 +592,20 @@ class TestApiContextTenantScope(_Base):
         r = c.get("/api/observability/api-context", params={"device_ip": "192.0.2.10"})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(len(r.json()["observations"]), 1)
+
+
+class TestObsBindValidation(unittest.TestCase):
+    """Security review 2026-10-12, L3: 'bind' was stored as given."""
+
+    def test_a_non_address_bind_is_refused_before_saving(self):
+        import asyncio
+        from fastapi import HTTPException
+        from routers import observability as obs_router
+        admin = {"sub": "adm", "role": "super_admin"}
+        for bad in (123, "not-an-ip", "0.0.0.0; rm"):
+            with self.subTest(bind=bad), \
+                 patch.object(obs_router, "save_app_settings") as save:
+                with self.assertRaises(HTTPException) as ctx:
+                    asyncio.run(obs_router.obs_set_config({"bind": bad}, current_user=admin))
+                self.assertEqual(ctx.exception.status_code, 400)
+                save.assert_not_called()

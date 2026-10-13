@@ -9,6 +9,7 @@ REGOLA DI SCOPE (CONTRIBUTING.md §4): ogni query filtra
 di stringhe, mai un gruppo scalare. Scope None (admin o utente non limitato)
 = nessun filtro tenant."""
 
+import ipaddress
 import os
 import re
 
@@ -706,6 +707,13 @@ async def obs_set_config(payload: dict, current_user = Depends(require_unscoped_
                 raise HTTPException(status_code=400, detail=f"Invalid value for '{k}'.")
             if k.endswith("_port") and not (1 <= v <= 65535):
                 raise HTTPException(status_code=400, detail=f"Invalid port for '{k}'.")
+        elif k == "bind":
+            # Stored and then fed to every listener: a non-address here broke
+            # obs_config() on each later read (security review 2026-10-12, L3).
+            try:
+                v = str(ipaddress.ip_address(str(v).strip()))
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid value for 'bind'.")
         clean[k] = v
     saved = dict(get_app_settings().get("observability", {}) or {})
     saved.update(clean)

@@ -14,6 +14,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field, model_validator
 
 from security.security_manager import log_audit
+from routers import deps
 from routers.deps import require_operator, require_unscoped_admin
 from services import switch_provisioner
 from services import fortigate_provisioner
@@ -290,12 +291,18 @@ class IdentitySchema(BaseModel):
 @router.get("/api/identities", dependencies=[Depends(require_tab("tab-devices", "tab-provisioning", "tab-provisioner", "tab-probes"))])
 def identities_list(tenant: Optional[str] = None, current_user = Depends(require_operator)):
     """Lista identita' (senza segreti), opzionalmente filtrate per tenant."""
-    return {"identities": identity_manager.get_identities(tenant=tenant)}
+    rows = identity_manager.get_identities(tenant=tenant)
+    scope = deps.user_group_scope(current_user)
+    if scope is not None:
+        rows = [r for r in rows if identity_manager.identity_visible_to(r["id"], scope)]
+    return {"identities": rows}
 
 @router.post("/api/identities", dependencies=[Depends(require_tab("tab-provisioning", "tab-provisioner"))])
 def identities_create(payload: IdentitySchema, current_user = Depends(require_operator)):
     if not payload.name.strip() or not payload.username or not payload.password:
         raise HTTPException(status_code=400, detail="Nome, username e password sono obbligatori per nuove identita'.")
+    if not identity_manager.tenant_within(payload.tenant, deps.user_group_scope(current_user)):
+        raise HTTPException(status_code=403, detail="Tenant fuori dalle sedi consentite.")
     ident = identity_manager.add_identity(payload.name, payload.tenant,
                                           payload.username, payload.password,
                                           payload.enable_secret)
@@ -307,6 +314,12 @@ def identities_update(identity_id: str, payload: IdentitySchema,
                       current_user = Depends(require_operator)):
     if not payload.name.strip() or not payload.username:
         raise HTTPException(status_code=400, detail="Nome e username sono obbligatori.")
+    scope = deps.user_group_scope(current_user)
+    # 404, not 403, on someone else's identity: a 403 would confirm it exists.
+    if not identity_manager.identity_owned_by(identity_id, scope):
+        raise HTTPException(status_code=404, detail="Identita' non trovata.")
+    if not identity_manager.tenant_within(payload.tenant, scope):
+        raise HTTPException(status_code=403, detail="Tenant fuori dalle sedi consentite.")
     if not identity_manager.update_identity(identity_id, payload.name, payload.tenant,
                                             payload.username, payload.password,
                                             payload.enable_secret):
@@ -316,6 +329,8 @@ def identities_update(identity_id: str, payload: IdentitySchema,
 
 @router.delete("/api/identities/{identity_id}", dependencies=[Depends(require_tab("tab-provisioning", "tab-provisioner"))])
 def identities_delete(identity_id: str, current_user = Depends(require_operator)):
+    if not identity_manager.identity_owned_by(identity_id, deps.user_group_scope(current_user)):
+        raise HTTPException(status_code=404, detail="Identita' non trovata.")
     ok, devices = identity_manager.delete_identity(identity_id)
     if not ok:
         raise HTTPException(status_code=409,
@@ -340,10 +355,14 @@ def identities_bulk_assign(identity_id: str, payload: BulkAssignIdentitySchema,
     if identity_id != payload.identity_id:
         raise HTTPException(status_code=400, detail="identity_id nel body e nel percorso non coincidono.")
     from services import inventory_manager
-    from routers.deps import user_group_scope
+    scope = deps.user_group_scope(current_user)
     if identity_id == "default":
         profile = "default"
     else:
+        # Visibility before decryption, as in /api/scan-verify: without it a
+        # scoped operator could put another tenant's identity on their device.
+        if not identity_manager.identity_visible_to(identity_id, scope):
+            raise HTTPException(status_code=404, detail="Identita' non trovata.")
         try:
             creds = identity_manager.get_identity_credentials(identity_id)
         except identity_manager.IdentityDecryptError as e:
@@ -354,7 +373,6 @@ def identities_bulk_assign(identity_id: str, payload: BulkAssignIdentitySchema,
     # Scoping per sede: un operatore limitato non può toccare device fuori
     # dalle proprie sedi. Gli IP non ammessi vengono saltati (non un errore
     # globale: l'azione parziale resta utile).
-    scope = user_group_scope(current_user)
     devices_by_ip = {d['IP']: d for d in inventory_manager.get_all_devices()}
     allowed_ips = []
     skipped = []

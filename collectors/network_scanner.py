@@ -8,6 +8,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from core.core_engine import is_reachable
 
 
+# Largest range one scan may cover (/20). Without a cap, 0.0.0.0/0 became a
+# list of four billion strings inside the request thread.
+MAX_SCAN_HOSTS = 4096
+
+
 def parse_network(address: str) -> list[str]:
     """
     Accepts any of:
@@ -17,6 +22,12 @@ def parse_network(address: str) -> list[str]:
     Returns all usable host IPs (network address and broadcast excluded).
     Raises ValueError with a human-readable message on invalid input.
     """
+    return [str(ip) for ip in parse_ipv4_network(address).hosts()]
+
+
+def parse_ipv4_network(address: str) -> ipaddress.IPv4Network:
+    """The network parse_network enumerates, refused before enumeration when
+    it is too large or not a range a device can live in."""
     address = address.strip()
 
     if ' ' in address and '/' not in address:
@@ -34,8 +45,14 @@ def parse_network(address: str) -> list[str]:
         raise ValueError(
             f"Indirizzo di rete non valido '{address}': {exc}"
         ) from exc
-
-    return [str(ip) for ip in network.hosts()]
+    if network.num_addresses > MAX_SCAN_HOSTS:
+        raise ValueError(
+            f"Rete troppo grande: {network.num_addresses} indirizzi, "
+            f"massimo {MAX_SCAN_HOSTS} (/20) per scansione.")
+    if (network.is_loopback or network.is_link_local or network.is_multicast
+            or network.is_unspecified or network.is_reserved):
+        raise ValueError(f"Intervallo non scansionabile: {network}.")
+    return network
 
 
 def _ping(ip: str) -> bool:

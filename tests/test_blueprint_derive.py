@@ -143,6 +143,12 @@ class TestVpnLinks(unittest.TestCase):
                 "10.20.0.1": an(peers=[("to-milano", "10.10.0.1")]),
                 "10.20.0.2": an(peers=[("to-roma-2", "10.20.0.1")])}
 
+    def test_a_long_peer_name_is_cut(self):
+        # Security review 2026-10-12: config text reaches the LLM rename pass.
+        analyses = {"10.10.0.1": an(peers=[("x" * 500, "10.20.0.1")])}
+        ops, _ = derive(VIEW, self.DEVICES[:2], analyses)
+        self.assertEqual(len(ops[0]["note"]), 64)
+
     def test_one_link_per_pair_by_management_ip(self):
         ops, notes = derive(VIEW, self.DEVICES, self.ANALYSES)
         self.assertEqual(ops, [{"op": "add_link", "a": "milano", "b": "roma", "kind": "vpn", "note": "to-roma"}])

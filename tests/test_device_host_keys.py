@@ -74,6 +74,27 @@ class TestDeviceHostKeys(unittest.TestCase):
         self.assertEqual(kwargs.get("alt_key_file"), self.kh)
         m_pin.assert_called_once_with("192.0.2.10", 22, key, None)
 
+    def test_parallel_pins_are_all_kept(self):
+        # Security review 2026-10-12, M3: unlocked load-add-save lost pins.
+        import threading
+        keys = {f"192.0.2.{i}": paramiko.ECDSAKey.generate() for i in range(30, 50)}
+        threads = [threading.Thread(target=net_ssh._pin_host_key, args=(ip, 22, k))
+                   for ip, k in keys.items()]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        for ip, k in keys.items():
+            self.assertEqual(net_ssh._pinned_host_key(ip, 22), k, ip)
+
+    def test_unreadable_file_is_not_overwritten(self):
+        with open(self.kh, "w") as f:
+            f.write("192.0.2.1 ssh-ed25519 AAAA!!!notbase64\n")
+        with self.assertRaises(Exception):
+            net_ssh._pin_host_key("192.0.2.2", 22, paramiko.ECDSAKey.generate())
+        with open(self.kh) as f:
+            self.assertIn("192.0.2.1", f.read())
+
     def test_direct_connect_does_not_repin_known_host(self):
         key = paramiko.RSAKey.generate(2048)
         net_ssh._pin_host_key("192.0.2.12", 22, key)

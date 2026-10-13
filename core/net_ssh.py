@@ -89,6 +89,7 @@ class BastionAuthError(Exception):
 _transports: "dict[str, paramiko.Transport]" = {}
 _probe_locks: "dict[str, threading.Lock]" = {}
 _registry_lock = threading.Lock()  # guards _probe_locks/_transports lookups only, never I/O
+_pin_lock = threading.Lock()  # serializes writes to the ssh_known_hosts files
 
 
 def _lock_for(probe_id: str) -> threading.Lock:
@@ -170,11 +171,20 @@ def _pinned_host_key(host: str, port: int, scope: "str | None" = None):
 
 
 def _pin_host_key(host: str, port: int, key, scope: "str | None" = None) -> None:
-    """Trust on first use: record the key so a later change is detectable."""
+    """Trust on first use: record the key so a later change is detectable.
+
+    Load-add-save under one lock: parallel triage pins several devices at
+    once, and two unlocked saves dropped one pin. The file is read strictly
+    here: _load_host_keys degrades an unreadable file to empty, and saving
+    that would wipe every existing pin, so an unreadable file raises instead.
+    """
     path = _known_hosts_path(scope)
-    keys = _load_host_keys(scope)
-    keys.add(_host_key_id(host, port), key.get_name(), key)
-    keys.save(path)
+    with _pin_lock:
+        keys = paramiko.HostKeys(path)
+        keys.add(_host_key_id(host, port), key.get_name(), key)
+        tmp = f"{path}.tmp"
+        keys.save(tmp)
+        os.replace(tmp, path)
 
 
 def _dial(probe: dict, pin: bool = True) -> paramiko.Transport:

@@ -39,10 +39,50 @@ class TestInteractiveTier(unittest.TestCase):
                     "delete flash:/old.bin"):
             self.assertFalse(commands_router.is_command_safe(cmd), cmd)
 
+    def test_abbreviations_and_config_variants_are_blocked(self):
+        # Security review 2026-10-12, M1: IOS abbreviations walked past the
+        # whole-word patterns.
+        for cmd in ("rel", "relo in 5", "era startup-config", "del flash:/x.bin",
+                    "form disk0", "config t", "conf term", "configure t", "configure",
+                    "config system interface", "wri mem", "wr"):
+            self.assertFalse(commands_router.is_command_safe(cmd), cmd)
+
+    def test_one_shot_command_is_one_line(self):
+        from pydantic import ValidationError
+        from routers.probes import ProbeCommandSchema
+        for schema in (commands_router.CommandRequest, ProbeCommandSchema):
+            for cmd in ("show clock\nconf t", "show clock\rreload"):
+                with self.assertRaises(ValidationError):
+                    schema(ip="192.0.2.1", command=cmd)
+        commands_router.CommandRequest(ip="192.0.2.1", command="show clock")
+
+    def test_mac_override_must_be_read_only(self):
+        # Security review 2026-10-12: the MAC collector ran any stored override
+        # unattended, in enable mode, with no blacklist at all.
+        from security.command_policy import is_read_only
+        for cmd in ("show mac address-table", "sh bridge-domain", "display mac-address", "get system arp"):
+            self.assertTrue(is_read_only(cmd), cmd)
+        for cmd in ("reload", "delete flash:/x.bin", "conf t", "", "show clock\nreload", "s mac"):
+            self.assertFalse(is_read_only(cmd), cmd)
+        from collectors import mac_collector
+        sent = []
+
+        class Conn:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def enable(self): pass
+            def send_command(self, cmd, read_timeout=30):
+                sent.append(cmd)
+                return ""
+        with mock.patch("core.net_ssh.ConnectHandler", return_value=Conn()):
+            mac_collector.collect_via_cli("192.0.2.1", "u", "p", command="reload")
+        self.assertEqual(sent, ["show mac address-table"])
+
     def test_operational_commands_pass(self):
         for cmd in ("show version", "show ip interface brief",
                     "get system status", "display version",
-                    "show running-config"):
+                    "show running-config", "show configuration",
+                    "show interfaces description", "show logging"):
             self.assertTrue(commands_router.is_command_safe(cmd), cmd)
 
     def test_admin_bypasses_interactive_tier(self):

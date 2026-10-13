@@ -50,6 +50,15 @@ class TestAuditChain(unittest.TestCase):
         self._write("LOGIN: utente 'mario'")
         self.assertRegex(self._lines()[-1], r"\[chain:[0-9a-f]{64}\]$")
 
+    def test_a_newline_in_user_input_cannot_forge_a_line(self):
+        # Security review 2026-10-12, M2: the CLI command is logged verbatim.
+        before = len(self._lines()) if os.path.exists(self._path()) else 0
+        self._write("Comando CLI 'show clock'\n2026-01-01 00:00:00,000 - [AUDIT] - forged\r")
+        lines = self._lines()
+        self.assertEqual(len(lines), before + 1)
+        self.assertIn("\\n2026-01-01", lines[-1])
+        self.assertIsNone(security_manager.verify_audit_chain(self._path()))
+
     def test_an_untouched_log_verifies(self):
         self._write("primo", "secondo", "terzo")
         self.assertIsNone(security_manager.verify_audit_chain(self._path()))

@@ -19,7 +19,7 @@ _CLIENT_SOURCES = ("manual", "checks")
 
 
 class DraftAddSchema(BaseModel):
-    ops: List[dict] = []
+    ops: List[dict] = Field(default=[], max_length=blueprint_model.MAX_DRAFT_OPS)
     source: str = "manual"
     preset: Optional[str] = None
     n: int = 1
@@ -27,7 +27,7 @@ class DraftAddSchema(BaseModel):
 
 
 class DraftReplaceSchema(BaseModel):
-    ops: List[dict]
+    ops: List[dict] = Field(max_length=blueprint_model.MAX_DRAFT_OPS)
 
 
 class ApplySchema(BaseModel):
@@ -35,7 +35,7 @@ class ApplySchema(BaseModel):
 
 
 class AssistantDescribeSchema(BaseModel):
-    text: str
+    text: str = Field(max_length=blueprint_assistant.MAX_TEXT)
 
 
 class AssistantDeriveSchema(BaseModel):
@@ -43,7 +43,7 @@ class AssistantDeriveSchema(BaseModel):
 
 
 class InstructionsSchema(BaseModel):
-    text: str
+    text: str = Field(max_length=blueprint_assistant.MAX_TEXT)
 
 
 class AssistantDraftSchema(BaseModel):
