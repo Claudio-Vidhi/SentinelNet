@@ -24,6 +24,7 @@
     let _rtMatrix = [];
     const _rtTypes = new Set();  // empty = every type
     let _rtDiffOnly = false;
+    let _rtIface = '';           // exit interface picked in the rings; '' = any
     const _rtOpen = new Set();
     // ponytail: rendering cap, a full BGP table would freeze the tab.
     // Paginate if someone really needs to scroll past it.
@@ -49,6 +50,7 @@
         other: '--text-muted',
         unknown: '--text-muted',
     };
+    const RT_ATTACHED = ['connected', 'local'];
     const RT_TYPE_ORDER = ['connected', 'local', 'static', 'ospf', 'bgp', 'policy',
                            'eigrp', 'rip', 'isis', 'other', 'unknown'];
 
@@ -212,14 +214,18 @@
             // whether that link is carrying traffic right now.
             const sdwan = (ctx.sdwan || []).find(m => m.interface === r.interface) || null;
             const gw = r.gateway && r.gateway !== '0.0.0.0' ? r.gateway : '';
-            // The member's name next to the gateway: which link, not only which ISP.
-            if (gw) return { to: owners.get(gw), label: sdwan ? `${gw} · ${sdwan.interface}` : gw, tunnel: null, sdwan };
+            // The exit interface next to the gateway: which link, not only which ISP.
+            if (gw) return { to: owners.get(gw), label: r.interface ? `${gw} · ${r.interface}` : gw, tunnel: null, sdwan };
             const tunnel = (ctx.tunnels || []).find(t => t.name === r.interface);
             if (tunnel) {
                 return { to: owners.get(tunnel.remote_gw), tunnel, sdwan,
                          label: tunnel.remote_gw ? `${tunnel.name} ⇢ ${tunnel.remote_gw}` : tunnel.name };
             }
-            return { to: undefined, label: r.interface || directLabel, tunnel: null, sdwan };
+            // A connected network has no next hop: the interface is where it
+            // lives, not a hop, and the label says so.
+            const attached = r.type === 'connected' || r.type === 'local';
+            const label = attached && r.interface ? `${directLabel} · ${r.interface}` : r.interface || directLabel;
+            return { to: undefined, label, tunnel: null, sdwan };
         };
     }
 
@@ -320,6 +326,43 @@
         return { cols, links: [...links.values()], total: rows.length };
     }
 
+    /** "wan1 (port1)", as the FortiGate Routing Monitor writes it; the bare
+     *  name when the device reported no alias for it. */
+    function rtIfaceName(context, ip, iface) {
+        const a = ((context[ip] || {}).addresses || []).find(x => x.iface === iface && x.alias);
+        return a ? `${a.alias} (${iface})` : iface;
+    }
+
+    /** The Routing Monitor's two rings, per device: its routes by type and by
+     *  exit interface, connected included (the firewall counts them too). */
+    function rtRingData(rows, devices) {
+        const tally = (own, key) => {
+            const m = new Map();
+            for (const r of own) m.set(key(r), (m.get(key(r)) || 0) + 1);
+            return [...m.entries()];
+        };
+        const typeRank = t => (RT_TYPE_ORDER.indexOf(t) + 100) % 100;
+        return devices.map(d => {
+            const own = rows.filter(r => r.device_ip === d.value);
+            return {
+                device: d, total: own.length,
+                types: tally(own, r => r.type || 'unknown').sort((a, b) => typeRank(a[0]) - typeRank(b[0])),
+                // Ties in natural order: Vlan2 before Vlan10.
+                ifaces: tally(own, r => r.interface || '').sort((a, b) => b[1] - a[1]
+                    || a[0].localeCompare(b[0], undefined, { numeric: true })),
+            };
+        }).filter(x => x.total);
+    }
+
+    /** One device's rows as the Routing Monitor lists them: sorted by network
+     *  address then prefix length, narrowed by the ring filters. */
+    function rtMonitorRows(rows, ip, types, iface) {
+        const key = r => { const n = parseNet(r.network); return n ? [n.net, n.len] : [Infinity, 0]; };
+        return rows.filter(r => r.device_ip === ip && (!types.size || types.has(r.type))
+                                && (!iface || r.interface === iface))
+            .sort((a, b) => { const x = key(a), y = key(b); return x[0] - y[0] || x[1] - y[1]; });
+    }
+
     /** FortiGate policy routes as pseudo-rows for the graph only: one per
      *  enabled 'permit' policy route, type 'policy'. They are matched before
      *  the routing table, so leaving them out draws a path traffic may not
@@ -397,6 +440,7 @@
         const chosen = pickerSelected('rtDeviceFilter');
         _rtOpen.clear();
         _skSel = '';
+        _rtIface = '';
         if (!chosen.length) {
             // Nessun apparato scelto: nessuna sessione aperta.
             _rtRows = []; _rtErrors = []; _rtLoaded = []; _rtMatrix = []; _rtContext = {};
@@ -456,6 +500,7 @@
         return _rtMatrix.filter(e =>
             (!_rtDiffOnly || e.missing > 0)
             && (!_rtTypes.size || Object.values(e.cells).some(rs => rs.some(r => _rtTypes.has(r.type))))
+            && (!_rtIface || Object.values(e.cells).some(rs => rs.some(r => r.interface === _rtIface)))
             && rtMatches(e, q));
     }
 
@@ -471,6 +516,7 @@
         const q = rtQuery(rtSearchValue());
         const devs = _rtLoaded;
         renderRtTally();
+        renderRtRings();
         renderRtChips();
         renderRtLegend();
 
@@ -540,7 +586,8 @@
             const win = winners.has(d.value + '|' + e.vrf + '|' + e.network);
             const more = own.length > 1 ? `<span class="rt-more">+${own.length - 1}</span>` : '';
             // FortiOS writes 0.0.0.0 for "no gateway": the interface is the hop.
-            const hop = (r.gateway && r.gateway !== '0.0.0.0' ? r.gateway : '') || r.interface;
+            const hop = (r.gateway && r.gateway !== '0.0.0.0' ? r.gateway : '')
+                || (r.interface && rtIfaceName(_rtContext, d.value, r.interface));
             return `<td class="rt-cell${win ? ' win' : ''}"${win ? ` title="${escapeHtml(tr('rtMxWins'))}"` : ''}>${
                 rtKind(r.type)}<span class="visually-hidden">${escapeHtml(r.type)} </span>${
                 hop ? escapeHtml(hop) : '&mdash;'}${more}</td>`;
@@ -563,7 +610,7 @@
             <td>${escapeHtml(d.label)}</td>
             <td>${rtKind(r.type)}${escapeHtml(r.raw_type || r.type || '')}</td>
             <td>${r.gateway ? escapeHtml(r.gateway) : dash}</td>
-            <td>${r.interface ? escapeHtml(r.interface) : dash}</td>
+            <td>${r.interface ? escapeHtml(rtIfaceName(_rtContext, d.value, r.interface)) : dash}</td>
             <td class="rt-num">${r.distance == null ? dash : escapeHtml(String(r.distance))}</td>
             <td class="rt-num">${r.metric == null ? dash : escapeHtml(String(r.metric))}</td>
           </tr>`)).join('');
@@ -578,12 +625,111 @@
             </tr></thead><tbody>${lines}</tbody></table></td></tr>`;
     }
 
+    // Interface colours: the conductor hues, never a status lamp; past five
+    // they repeat, the legend still names each one.
+    const RT_IFACE_COLORS = ['--cond-a', '--cond-b', '--cond-c', '--cond-d', '--cond-trace'];
+
+    function rtRingSvg(segs, total, label) {
+        const R = 42, C = 2 * Math.PI * R;
+        let off = 0;
+        const arcs = segs.map(sg => {
+            const len = C * sg.n / total;
+            const arc = `<circle class="rt-ring-seg" cx="60" cy="60" r="${R}" stroke="${sg.color}"
+                stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-off}"
+                ${sg.action ? `data-action="${sg.action}" ${sg.attr}` : ''}><title>${escapeHtml(sg.label)}: ${sg.n}</title></circle>`;
+            off += len;
+            return arc;
+        }).join('');
+        return `<svg class="rt-ring" viewBox="0 0 120 120" role="img" aria-label="${escapeHtml(label)}">
+            <g transform="rotate(-90 60 60)">${arcs}</g>
+            <text x="60" y="58" class="rt-ring-total">${total}</text>
+            <text x="60" y="78" class="rt-ring-sub">${escapeHtml(tr('rtRingTotal'))}</text></svg>`;
+    }
+
+    function rtRingBlock(title, segs, total) {
+        const label = `${title}: ` + segs.map(sg => `${sg.label} ${sg.n}`).join(', ');
+        return `<div class="rt-ring-block">${rtRingSvg(segs, total, label)}
+            <div class="rt-ring-legend"><h4>${escapeHtml(title)}</h4>${segs.map(sg => {
+                const inner = `<span class="rt-ring-dot" style="background:${sg.color}" aria-hidden="true"></span>${
+                    escapeHtml(sg.label)}<span class="rt-ring-n">${sg.n}</span>`;
+                // Not a filter (no interface, or the folded rest): plain text.
+                return sg.action
+                    ? `<button type="button" class="rt-ring-item" data-action="${sg.action}" ${sg.attr} aria-pressed="${sg.on}">${inner}</button>`
+                    : `<span class="rt-ring-item rt-ring-rest">${inner}</span>`;
+            }).join('')}</div></div>`;
+    }
+
+    // ponytail: past a handful of slices a ring stops being readable (a
+    // switch with 40 VLANs); the smallest fold into one "N more", which the
+    // table and the search box still reach one by one.
+    const RT_RING_MAX = 8;
+    function rtRingFold(segs) {
+        if (segs.length <= RT_RING_MAX) return segs;
+        const rest = segs.slice(RT_RING_MAX - 1);
+        return segs.slice(0, RT_RING_MAX - 1).concat({
+            n: rest.reduce((s, x) => s + x.n, 0), label: tr('rtRingOthers', { n: rest.length }),
+            color: 'var(--text-soft)', on: false, action: '', attr: '' });
+    }
+
+    function renderRtRings() {
+        const box = document.getElementById('rtRings');
+        if (!box) return;
+        const data = rtRingData(_rtRows, _rtLoaded);
+        if (!data.length) {
+            box.innerHTML = `<p class="rt-mx-empty">${escapeHtml(tr(_rtLoaded.length ? 'rtEmpty' : 'rtPickDevices'))}</p>`;
+            return;
+        }
+        const ifaceColor = new Map();
+        box.innerHTML = data.map(x => {
+            const types = x.types.map(([t, n]) => ({
+                n, label: t, color: rtTypeColor(t), on: _rtTypes.has(t),
+                action: 'rt-ring-type', attr: `data-type="${escapeHtml(t)}"` }));
+            const ifaces = x.ifaces.map(([i, n]) => {
+                if (!ifaceColor.has(i)) ifaceColor.set(i, `var(${RT_IFACE_COLORS[ifaceColor.size % RT_IFACE_COLORS.length]})`);
+                return { n, label: i ? rtIfaceName(_rtContext, x.device.value, i) : tr('rtRingNoIface'),
+                         color: ifaceColor.get(i), on: !!i && _rtIface === i,
+                         action: i ? 'rt-ring-iface' : '', attr: `data-iface="${escapeHtml(i)}"` };
+            });
+            return `<section class="rt-ring-card"><h4 class="rt-ring-dev">${escapeHtml(x.device.label)}
+                <span class="rt-col-ip">${escapeHtml(x.device.value)}</span></h4>
+                <div class="rt-ring-body"><div class="rt-ring-pair">${rtRingBlock(tr('rtRingType'), rtRingFold(types), x.total)}${
+                    rtRingBlock(tr('rtRingIfaces'), rtRingFold(ifaces), x.total)}</div><div class="rt-monitor-wrap">${rtMonitorTable(x.device)}</div></div></section>`;
+        }).join('');
+    }
+
+    // ponytail: a card lists this many; the table below holds the rest.
+    const RT_MONITOR_MAX = 50;
+
+    // The Routing Monitor's own table. The gateway is shown as the device
+    // wrote it: FortiOS says 0.0.0.0 for a network on the interface itself.
+    function rtMonitorTable(device) {
+        const rows = rtMonitorRows(_rtRows, device.value, _rtTypes, _rtIface);
+        const dash = '&mdash;';
+        const body = rows.slice(0, RT_MONITOR_MAX).map(r => `<tr>
+            <td>${escapeHtml(r.network)}</td>
+            <td>${r.gateway ? escapeHtml(r.gateway) : dash}</td>
+            <td>${r.interface ? escapeHtml(rtIfaceName(_rtContext, device.value, r.interface)) : dash}</td>
+            <td class="rt-num">${r.distance == null ? dash : escapeHtml(String(r.distance))}</td>
+            <td>${rtKind(r.type)}${escapeHtml(r.raw_type || r.type || '')}</td></tr>`).join('');
+        const more = rows.length > RT_MONITOR_MAX
+            ? `<p class="rt-mx-empty">${escapeHtml(tr('rtRingMore', { n: rows.length - RT_MONITOR_MAX }))}</p>` : '';
+        return `<table class="rt-cand rt-monitor" data-no-colpicker><thead><tr>
+              <th data-no-sort="1">${escapeHtml(tr('rtColNetwork'))}</th>
+              <th data-no-sort="1">${escapeHtml(tr('rtRingGateway'))}</th>
+              <th data-no-sort="1">${escapeHtml(tr('rtRingIfaces'))}</th>
+              <th data-no-sort="1" class="rt-num">${escapeHtml(tr('rtColDistance'))}</th>
+              <th data-no-sort="1">${escapeHtml(tr('rtRingType'))}</th>
+            </tr></thead><tbody>${body}</tbody></table>${more}`;
+    }
+
     // ponytail: hand-rolled Sankey (fixed stage columns, no crossing
     // minimisation beyond ordering), enough for device -> type -> next hop
     // chains. A vendor lib only if it ever needs free-form graphs.
     const RT_SK_MAX_HOPS = 12;
     const RT_SK_DETAIL_MAX = 300;
-    const _skHidden = new Set();   // route types switched off in the graph
+    // Route types switched off in the graph. Directly attached networks start
+    // off: they are not routes to anywhere, and drown the ones that are.
+    const _skHidden = new Set(RT_ATTACHED);
     let _sk = null;                // last graph drawn, for the detail view
     let _skSel = '';               // 'n|<node id>' or 'l|<link index>'
 
@@ -778,7 +924,8 @@
         const answered = new Set(_rtRows.map(r => r.device_ip)).size;
         const item = (label, n) => `<span>${escapeHtml(label)} <b>${n}</b></span>`;
         box.innerHTML = item(tr('rtTallyDevices'), `${answered}/${_rtLoaded.length}`)
-            + item(tr('rtTallyRoutes'), _rtRows.length)
+            + item(tr('rtTallyRoutes'), _rtRows.filter(r => !RT_ATTACHED.includes(r.type)).length)
+            + item(tr('rtTallyConnected'), _rtRows.filter(r => RT_ATTACHED.includes(r.type)).length)
             + item(tr('rtTallyPrefixes'), _rtMatrix.length)
             + item(tr('rtTallyGaps'), gaps)
             + item(tr('rtTallyHoles'), holes);
@@ -1182,6 +1329,21 @@
         /** @type {HTMLElement|null} */ (document.querySelector(
             `#rtTypeChips [data-type="${CSS.escape(t)}"]`))?.focus();
     });
+    // Rings: a type is the same filter as its chip; an interface is its own,
+    // exact (a search for "port1" would also match port10).
+    document.getElementById('rtRings')?.addEventListener('click', e => {
+        const el = /** @type {Element} */ (e.target).closest('[data-action^="rt-ring-"]');
+        if (!el) return;
+        const t = el.getAttribute('data-type');
+        if (t !== null) { if (_rtTypes.has(t)) _rtTypes.delete(t); else _rtTypes.add(t); }
+        const i = el.getAttribute('data-iface');
+        if (i) _rtIface = _rtIface === i ? '' : i;
+        renderRtMatrix();
+    });
+    // Collapsed by default: drawn at its real width once opened.
+    document.getElementById('rtSkPanel')?.addEventListener('toggle', e => {
+        if (/** @type {HTMLDetailsElement} */ (e.currentTarget).open) renderRtSankey(rtVisible(rtQuery(rtSearchValue())));
+    });
     // Sankey: its own type switches (the table keeps its chips), and the
     // routes behind a node or ribbon on double click / Enter.
     document.getElementById('rtSkTypes')?.addEventListener('click', e => {
@@ -1247,6 +1409,7 @@
     window.addEventListener('globalTenantChanged', () => {
         _rtRows = []; _rtErrors = []; _rtLoaded = []; _rtMatrix = []; _rtContext = {};
         _rtOpen.clear();
+        _rtIface = '';
         routesTabShown();
     });
 
@@ -1254,5 +1417,5 @@
     // The pure model, for tests/js/test_routes_matrix.mjs.
     window.rtModel = { ip4, parseNet, rtLpm, rtBuildMatrix, rtQuery, rtMatches,
                        rtBuildSankey, rtDeviceOwners, rtDeviceDepths, rtHopResolver,
-                       rtPolicyRows, rtPolicyMatches };
+                       rtPolicyRows, rtPolicyMatches, rtIfaceName, rtRingData, rtMonitorRows };
 })();

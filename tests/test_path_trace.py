@@ -124,13 +124,15 @@ class InterfaceAddresses(unittest.TestCase):
     def test_a_fortigate_is_asked_for_its_interfaces(self):
         answer = {"source": "api", "data": {
             "port2": {"name": "port2", "ip": "10.10.0.1", "mask": 16},
-            "port1": {"name": "port1", "ip": "203.0.113.2", "mask": 30},
+            "port1": {"name": "port1", "alias": "wan1", "ip": "203.0.113.2", "mask": 30},
         }}
         with mock.patch.object(fortigate_service, "get_interfaces", return_value=answer):
             addrs = path_trace.addresses_for(FW_EDGE, ROWS_EDGE)
         by_ip = {a["ip"]: a for a in addrs}
         self.assertEqual(by_ip["10.10.0.1"]["network"], "10.10.0.0/16")
         self.assertEqual(by_ip["203.0.113.2"]["network"], "203.0.113.0/30")
+        self.assertEqual(by_ip["203.0.113.2"]["alias"], "wan1")
+        self.assertEqual(by_ip["10.10.0.1"]["alias"], "")
 
     def test_a_firewall_that_does_not_answer_leaves_no_addresses(self):
         # Meglio un percorso che si ferma di un salto attribuito all'apparato
