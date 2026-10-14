@@ -10,6 +10,13 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Switch Cisco CBS / Catalyst 1200-1300 senza `ip ssh password-auth`**:
+  login richiesto dentro la shell invece che via SSH, ora gestito.
+- **Traceroute verso dispositivi lenti**: timeout di lettura di netmiko (10s)
+  troppo corto, causava "Pattern not detected" sugli hop lenti.
+
 ## [0.51.3] - 2026-10-13
 
 ### Added
