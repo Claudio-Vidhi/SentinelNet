@@ -53,9 +53,11 @@ Endpoint   Porte   Diagnosi   Raccolta
 ### 1. Shell
 
 - `page-head` (same component as `#tab-wlc`): fixed title, one-line
-  description, action **Raccogli ora** (`requires-write`) that runs MAC scan and
-  then ARP collection on the current tenant's devices, using the existing
-  `runMacScan` / `runArpScan` with all devices selected.
+  description, action **Raccogli ora** (`requires-write`). It opens a small
+  popover listing the tenant's locations (sedi) as checkboxes, each with its
+  switch/gateway count, all checked by default; **Avvia MAC + ARP** runs the
+  existing `runMacScan` then `runArpScan` on the devices of the checked
+  locations.
 - **Search** (`#locSearch`, `type="search"`, labelled). Enter:
   - calls `/api/endpoints/list?q=…` with the current tenant;
   - exactly one result → open the drawer for it (and show Endpoint view with
@@ -66,11 +68,11 @@ Endpoint   Porte   Diagnosi   Raccolta
 - **Sub-tabs**: `role="tablist"` underline tabs replacing `#locPills` /
   `ca-pill`. Ids `locTab-endpoint|porte|diagnosi|raccolta`, panes
   `locPane-<view>`. Arrow-key navigation as in other tablists.
-- Deep link: `#tab-endpoint/<view>` selects the view. The legacy aliases in
-  `core.js` (`tab-mac`, `tab-clientmap`, `tab-diagnosi`, `tab-endpoints`) map
-  to the matching view (`tab-mac`/`tab-endpoints`/`tab-clientmap` → endpoint,
-  `tab-diagnosi` → diagnosi). Command palette entries "Run MAC scan" / "Run ARP
-  collection" open **Raccolta**.
+- No URL deep link: the app has no hash routing anywhere, and adding one for
+  this tab alone is out of scope. The legacy permission aliases in
+  `normalizeAllowedTabs` (`tab-mac`, … → `tab-endpoint`) stay as they are.
+  Command palette entries "Run MAC scan" / "Run ARP collection" open
+  **Raccolta**.
 - `LOC_HEADINGS` and the title rewrite in `locSwitchView` go away.
 
 ### 2. View: Endpoint
@@ -78,8 +80,10 @@ Endpoint   Porte   Diagnosi   Raccolta
 - **KPI strip**, one row (`oneline-foot` pattern): endpoint, switch, VLAN,
   stale, nuovi, senza IP — from `counts` of `/api/endpoints/list`. Plain text;
   no click-to-filter (no such client-side filter exists today).
-- **Toolbar** (one row, wraps on narrow screens): selects Switch, VLAN,
-  Visto ultimi N giorni (`stale_days`), Periodo da/a (`frm`/`to`), Probe; reset;
+- **Toolbar** (one row, wraps on narrow screens): Switch select (the tenant's
+  devices), VLAN text input (exact match, as the API filters), Probe select
+  (distinct `Probe` of the tenant's devices), Stale dopo N giorni
+  (`stale_days`), Periodo da/a (`frm`/`to`); reset;
   overflow menu "Esporta" with CSV and JSON (existing `endpointsExport`).
   The active `q` from the search shows as a removable chip.
 - **Table**: MAC (+ vendor under it, muted), IP, Switch, Porta, VLAN, Ultimo
@@ -93,9 +97,10 @@ Endpoint   Porte   Diagnosi   Raccolta
 
 A right-side panel inside the tab (not a modal backdrop), width ~420px,
 full-height, list stays usable and scrollable beside it; below ~900px it
-overlays the list. Generalise the topology `.drawer-*` classes
-(`.drawer-header`, `.drawer-body`, `.drawer-section`, `.drawer-kpi-grid`) into
-a shared `.side-drawer` container; topology keeps working on the same classes.
+overlays the list. The inner parts reuse the topology's `.drawer-header`,
+`.drawer-body`, `.drawer-section`, `.drawer-section-title`, `.drawer-kpi-grid`
+classes as they are (they carry no topology-specific positioning); only the
+container `.ep-drawer` and its host are new.
 
 Opening: from an Endpoint row, from a Porte endpoint cell, or from the search.
 Data: `/api/mac/locate?mac=&tenant=` (+ the row already in hand for IP/vendor).
@@ -107,12 +112,13 @@ Port errors section: `/api/interface-errors/port?…`, loaded lazily.
 | Posizione | switch name + IP, port, VLAN, origin type, device type | locate `origin*` |
 | IP | ARP bindings with source gateway and last seen | row |
 | Percorso | transit sightings / uplinks (what the modal shows today) | locate `transit` |
-| Porta | errors in window with class badges, port config (collapsible, copy), "Leggi errori ora" | interface-errors + existing `_epLoadPortErrors` / port cfg |
+| Porta | errors in window (`ifaceErrorsBadge`), "Leggi errori ora" | interface-errors + existing `_epLoadPortErrors` / `_epReadErrors` |
 | Storico | first seen, last seen, seen count | row |
 
 Header actions: **Diagnosi** (switch to Diagnosi view, prefill client = MAC,
 run — existing `endpointsDiagnose` / `diagnoseClientInTab`), **Config porta**
-(existing `show-port-config` behaviour), close.
+(existing `showPortConfig` modal, which already shows and copies the port
+configuration — the drawer does not duplicate it), close.
 
 Accessibility: `role="dialog"` with `aria-labelledby` on the title, Esc closes,
 focus moves into the drawer on open and back to the originating row on close.
@@ -131,11 +137,14 @@ Deleted: the `macLocate` modal, `_renderEndpointDetailRow`,
   (`requires-write`, needs a switch).
 - **Table**: Porta, Stato (uplink → neighbour / occupata / libera), Endpoint
   (one MAC → clickable, opens drawer; more → expandable list as `macCell`
-  today), VLAN, Errori (count + class badges), Config (expandable, copy).
+  today), Errori (`ifaceErrorsBadge`, always visible), Config (expandable,
+  copy). No VLAN column: `/api/endpoints/ports` does not return one.
 - Legend: `<details id="peLegend">` becomes a "?" button next to the Errori
   header opening a popover with the same `dl` content and i18n keys.
-- Reuses `endpointsPorts` / `endpointsPortsRender` and the interface-errors
-  fetch currently driving `#peResults`; the two renderers merge into one.
+- One host `#ptResults`, two render paths kept as they are today: a chosen
+  switch renders the occupancy table (`endpointsPorts` /
+  `endpointsPortsRender`), "Tutti" renders the cross-device error list (today's
+  `loadPortErrorsPane`). They answer different questions and share no rows.
 
 ### 5. View: Diagnosi
 
@@ -151,9 +160,26 @@ Deleted: the `macLocate` modal, `_renderEndpointDetailRow`,
 MAC stats line on top (sightings, unique MACs, switches, retention), then three
 stacked blocks with the same markup pattern:
 
-1. **Scansione MAC** — device picker (`mac-dev-menu`), transport, Avvia.
-2. **ARP dai gateway L3** — device picker, Raccogli; `#arpScanSummary`
-   renders inside this block.
+1. **Scansione MAC** — device picker (switches), transport, Avvia.
+2. **ARP dai gateway L3** — device picker (gateways), Raccogli;
+   `#arpScanSummary` renders inside this block.
+
+**Device picker** (replaces `mac-dev-menu`, one shared component for both
+blocks): a `<details>` popover with multi-select **grouped by location**
+(the device's `Location` field; devices without one under "Senza sede").
+
+- Each location header is a tri-state checkbox (all / some / none) with a
+  `n/m` count; each device row is a checkbox with name and IP.
+- A row of location chips on top: clicking one selects **only** that location.
+- A filter input (name, IP, location) and footer "Tutti" / "Nessuno".
+- Summary in the closed state: "Tutti (N) · K sedi", "Sede A, Sede B · N", or
+  "n di N · K sedi".
+- Run result lines report per location (e.g. "Sede A: 3 switch, 33 MAC").
+- Empty selection disables the run with an inline message.
+- Both pickers list every device of the tenant, as today: the inventory has
+  no reliable switch/gateway role, and an ARP read on a device that is not a
+  gateway already reports itself as `empty` per device.
+- Default: everything selected. Changing tenant resets to everything.
 3. **Comandi ad-hoc** — form + overrides list.
 
 Footer: **Retention** (admin).
@@ -194,8 +220,8 @@ zero.
 ## Code
 
 - `templates/dashboard.html`: rewrite the `#tab-endpoint` markup only.
-- `static/css/dashboard.css`: one endpoint-location block; generalise
-  `.drawer-*` under `.side-drawer`. No inline styles in the new markup.
+- `static/css/dashboard.css`: one endpoint-location block (`#tab-endpoint`
+  scoped). No inline styles in the new markup.
 - `static/js/client-map.js`: shell (search, tabs, deep link, Raccogli ora) +
   Raccolta. MAC result rendering and locate modal removed.
 - `static/js/endpoint-inventory.js`: Endpoint view, drawer, Porte view
