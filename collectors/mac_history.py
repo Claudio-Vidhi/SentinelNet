@@ -13,6 +13,7 @@ The storage layer is independent of the transport used to collect the data
 (NETCONF/RESTCONF/CLI): it simply receives a list of sightings.
 """
 import copy
+import ipaddress
 import os
 import re
 import sqlite3
@@ -895,9 +896,28 @@ def endpoint_inventory(tenants=None, probe: Optional[str] = None,
         where.append("vlan = ?")
         args.append(vlan)
     if q:
-        where.append("(mac LIKE ? OR oui_vendor LIKE ? OR switch_name LIKE ? "
-                     "OR interface LIKE ?)")
-        args.extend(["%" + q + "%"] * 4)
+        try:
+            ipaddress.ip_address(q)
+            is_ip = True
+        except ValueError:
+            is_ip = False
+        if is_ip:
+            # The IP lives in arp_entries, joined after this query: resolve it
+            # to MACs first, in the same tenant scope.
+            arp_sql, arp_args = "SELECT DISTINCT mac FROM arp_entries WHERE ip = ?", [q]
+            if tenant_list is not None:
+                arp_sql += " AND tenant IN (%s)" % ",".join("?" * len(tenant_list))
+                arp_args.extend(tenant_list)
+            with _connect() as c:
+                macs = [r[0] for r in c.execute(arp_sql, arp_args).fetchall()]
+            if not macs:
+                return copy.deepcopy(empty)
+            where.append("mac IN (%s)" % ",".join("?" * len(macs)))
+            args.extend(macs)
+        else:
+            where.append("(mac LIKE ? OR oui_vendor LIKE ? OR switch_name LIKE ? "
+                         "OR interface LIKE ?)")
+            args.extend(["%" + q + "%"] * 4)
     if frm:
         where.append("last_seen >= ?")
         args.append(frm)
