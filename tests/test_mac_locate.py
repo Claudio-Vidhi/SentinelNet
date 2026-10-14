@@ -255,11 +255,11 @@ class TestMacLocateFrontend(unittest.TestCase):
     def test_la_chiamata_porta_il_tenant_in_query(self):
         self.assertIn("'&tenant=' + encodeURIComponent(tenant)", self.src)
 
-    def test_un_solo_renderer_del_modale(self):
-        """Una sezione per tenant si ottiene ciclando lo stesso renderer. Due
-        renderer sarebbero due copie da tenere allineate."""
-        self.assertEqual(self.src.count("const entrySection = (g) =>"), 1)
-        self.assertEqual(self.src.count("ov.id = 'macLocateModal'"), 1)
+    def test_un_solo_renderer_del_dettaglio(self):
+        """One detail view for an endpoint, the drawer: the locate modal and
+        the inline detail row were two copies to keep aligned."""
+        self.assertEqual(self.src.count("function _epDrawerHtml("), 1)
+        self.assertNotIn("macLocateModal", self.src)
 
     def test_niente_riscansione_consigliata_per_il_multi_tenant(self):
         """Il consiglio di rifare una MAC Scan vale per l'ambiguita' DENTRO una

@@ -110,7 +110,7 @@ function endpointsRender(d) {
              <i class="fa-solid ${icon}"></i></button>`
         : `<span style="color:var(--text-muted); font-size:12px; margin-right:8px; opacity:0.35;"><i class="fa-solid ${icon}"></i></span>`;
 
-    const body = _epRows.map(r => `<tr data-action="ep-row-toggle" data-mac="${escapeHtml(r.mac)}" data-tenant="${escapeHtml(r.tenant || '')}" tabindex="0" role="button" aria-expanded="false" style="cursor:pointer;">
+    const body = _epRows.map(r => `<tr class="ep-row" data-action="ep-open" data-mac="${escapeHtml(r.mac)}" data-tenant="${escapeHtml(r.tenant || '')}" tabindex="0">
         <td style="font-family:var(--font-code); font-size:12px; white-space:nowrap;">
             <i class="fa-solid fa-chevron-right ep-chevron" style="color:var(--text-muted); font-size:10px; margin-right:8px; transition:transform 0.18s ease; display:inline-block;"></i>${escapeHtml(r.mac)}
         </td>
@@ -124,8 +124,6 @@ function endpointsRender(d) {
         <td>${(r.flags || []).map(_epFlag).join(' ')}</td>
         <td style="white-space:nowrap;">${
             act('fa-stethoscope', L.epActDiagnose, 'ep-diagnose',
-                `data-mac="${escapeHtml(r.mac)}" data-tenant="${escapeHtml(r.tenant || '')}"`, true) +
-            act('fa-magnifying-glass-location', L.epActLocate, 'ep-locate',
                 `data-mac="${escapeHtml(r.mac)}" data-tenant="${escapeHtml(r.tenant || '')}"`, true) +
             act('fa-file-lines', L.epActPortCfg, 'ep-portcfg',
                 `data-switch-ip="${escapeHtml(r.switch_ip || '')}" data-switch-port="${escapeHtml(r.interface || '')}" data-switch-name="${escapeHtml(r.switch_name || '')}"`,
@@ -201,137 +199,6 @@ function endpointsExport(format) {
     a.download = name;
     a.click();
     URL.revokeObjectURL(a.href);
-}
-
-function _renderEndpointDetailRow(r) {
-    const L = i18n[currentLang];
-    return `
-        <td colspan="10" style="padding:16px 20px; background:var(--surface-2); box-shadow:inset 0 2px 4px rgba(0,0,0,0.03);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:12px; flex-wrap:wrap; border-bottom:1px solid var(--border); padding-bottom:10px;">
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <span style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:0; background:color-mix(in srgb, var(--primary) 15%, transparent); color:var(--primary); font-size:14px;">
-                        <i class="fa-solid fa-network-wired"></i>
-                    </span>
-                    <div>
-                        <div style="font-weight:700; font-size:14px; color:var(--text); font-family:var(--font-code);">${escapeHtml(r.mac)}</div>
-                        ${r.oui_vendor ? `<div style="font-size:11px; color:var(--text-muted);">${escapeHtml(r.oui_vendor)}</div>` : ''}
-                    </div>
-                </div>
-                <div style="display:flex; gap:8px; align-items:center;">
-                    <button data-action="ep-diagnose" data-mac="${escapeHtml(r.mac)}" data-tenant="${escapeHtml(r.tenant || '')}" class="btn btn-primary btn-small" style="width:auto; margin:0; display:flex; align-items:center; gap:6px;" title="${escapeHtml(L.epActDiagnose)}">
-                        <i class="fa-solid fa-stethoscope"></i> ${escapeHtml(L.tabDiagnosi)}
-                    </button>
-                    <button data-action="ep-locate" data-mac="${escapeHtml(r.mac)}" data-tenant="${escapeHtml(r.tenant || '')}" class="btn btn-secondary btn-small" style="width:auto; margin:0; display:flex; align-items:center; gap:6px;" title="${escapeHtml(L.epActLocate)}">
-                        <i class="fa-solid fa-magnifying-glass-location"></i> ${escapeHtml(L.epThWhere)}
-                    </button>
-                    ${(r.switch_ip && r.interface) ? `
-                    <button data-action="ep-portcfg" data-switch-ip="${escapeHtml(r.switch_ip)}" data-switch-port="${escapeHtml(r.interface)}" data-switch-name="${escapeHtml(r.switch_name || '')}" class="btn btn-secondary btn-small" style="width:auto; margin:0; display:flex; align-items:center; gap:6px;" title="${escapeHtml(L.epActPortCfg)}">
-                        <i class="fa-solid fa-file-lines"></i> ${escapeHtml(L.epThConfig)}
-                    </button>` : ''}
-                </div>
-            </div>
-            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:10px; font-size:12px;">
-                <div style="background:var(--surface-1); padding:8px 12px; border-radius:0; border:1px solid var(--border);">
-                    <div style="color:var(--text-muted); font-size:11px; margin-bottom:2px;"><i class="fa-solid fa-cube" style="margin-right:4px;"></i>${escapeHtml(L.epDetailClientType)}</div>
-                    <div><b>${escapeHtml(r.client_type || '—')}</b></div>
-                </div>
-                <div style="background:var(--surface-1); padding:8px 12px; border-radius:0; border:1px solid var(--border);">
-                    <div style="color:var(--text-muted); font-size:11px; margin-bottom:2px;" title="${escapeHtml(tr('epDetailSeenCountHint'))}"><i class="fa-solid fa-eye" style="margin-right:4px;"></i>${escapeHtml(L.epDetailSeenCount)}</div>
-                    <div><b>${escapeHtml(String(r.seen_count ?? 1))}</b></div>
-                </div>
-                <div style="background:var(--surface-1); padding:8px 12px; border-radius:0; border:1px solid var(--border);">
-                    <div style="color:var(--text-muted); font-size:11px; margin-bottom:2px;" title="${escapeHtml(tr('epDetailAccessPortsHint'))}"><i class="fa-solid fa-ethernet" style="margin-right:4px;"></i>${escapeHtml(L.epDetailAccessPorts)}</div>
-                    <div><b>${escapeHtml(String(r.access_port_count ?? 1))}</b></div>
-                </div>
-                <div style="background:var(--surface-1); padding:8px 12px; border-radius:0; border:1px solid var(--border);">
-                    <div style="color:var(--text-muted); font-size:11px; margin-bottom:2px;"><i class="fa-solid fa-globe" style="margin-right:4px;"></i>${escapeHtml(L.epDetailIps)}</div>
-                    <div style="font-family:var(--font-code); font-size:11px;">${escapeHtml((r.ips || []).join(', ') || '—')}</div>
-                </div>
-                <div style="background:var(--surface-1); padding:8px 12px; border-radius:0; border:1px solid var(--border);">
-                    <div style="color:var(--text-muted); font-size:11px; margin-bottom:2px;"><i class="fa-solid fa-building" style="margin-right:4px;"></i>${escapeHtml(L.epDetailTenantProbe)}</div>
-                    <div>${escapeHtml(r.tenant || '—')} <span style="color:var(--text-muted);">/ ${escapeHtml(r.probe || '—')}</span></div>
-                </div>
-                <div style="background:var(--surface-1); padding:8px 12px; border-radius:0; border:1px solid var(--border);">
-                    <div style="color:var(--text-muted); font-size:11px; margin-bottom:2px;"><i class="fa-solid fa-server" style="margin-right:4px;"></i>${escapeHtml(L.epDetailSwitchPort)}</div>
-                    <div>${escapeHtml(r.switch_name || r.switch_ip || '—')} <span style="color:var(--primary); font-weight:600; font-family:var(--font-code);">${escapeHtml(r.interface || '')}</span></div>
-                </div>
-                <div style="background:var(--surface-1); padding:8px 12px; border-radius:0; border:1px solid var(--border);">
-                    <div style="color:var(--text-muted); font-size:11px; margin-bottom:2px;"><i class="fa-solid fa-tag" style="margin-right:4px;"></i>${escapeHtml(L.epDetailVlan)}</div>
-                    <div>${escapeHtml(r.vlan || '—')}</div>
-                </div>
-                <div style="background:var(--surface-1); padding:8px 12px; border-radius:0; border:1px solid var(--border);">
-                    <div style="color:var(--text-muted); font-size:11px; margin-bottom:2px;"><i class="fa-regular fa-clock" style="margin-right:4px;"></i>${escapeHtml(L.epDetailFirstSeen)}</div>
-                    <div style="font-size:11px;">${escapeHtml(_epTime(r.first_seen))}</div>
-                </div>
-                <div style="background:var(--surface-1); padding:8px 12px; border-radius:0; border:1px solid var(--border);">
-                    <div style="color:var(--text-muted); font-size:11px; margin-bottom:2px;"><i class="fa-solid fa-clock-rotate-left" style="margin-right:4px;"></i>${escapeHtml(L.epDetailLastSeen)}</div>
-                    <div style="font-size:11px;">${escapeHtml(_epTime(r.last_seen))}</div>
-                </div>
-                ${(r.switch_ip && r.interface) ? `
-                <div style="grid-column:1/-1; background:var(--surface-1); padding:8px 12px; border-radius:0; border:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-                    <div>
-                        <div style="color:var(--text-muted); font-size:11px; margin-bottom:4px;"><i class="fa-solid fa-heart-pulse" style="margin-right:4px;"></i>${escapeHtml(tr('epDetailPortErrors'))}</div>
-                        <div class="ep-err-slot" style="font-size:12px;">${escapeHtml(tr('epErrLoading'))}</div>
-                    </div>
-                    <button type="button" class="btn btn-secondary btn-small requires-write" style="width:auto; margin:0;" data-action="ep-err-read"
-                        data-device="${escapeHtml(r.switch_ip)}" data-port="${escapeHtml(r.interface)}" data-tenant="${escapeHtml(r.tenant || '')}">
-                        <i class="fa-solid fa-stethoscope"></i> ${escapeHtml(tr('epErrReadNow'))}</button>
-                </div>` : ''}
-                <div style="grid-column:1/-1; background:var(--surface-1); padding:8px 12px; border-radius:0; border:1px solid var(--border);">
-                    <div style="color:var(--text-muted); font-size:11px; margin-bottom:4px;">${escapeHtml(L.epDetailFlags)}</div>
-                    <div>${(r.flags || []).length ? (r.flags || []).map(_epFlag).join(' ') : '—'}</div>
-                </div>
-            </div>
-        </td>
-    `;
-}
-
-function _toggleEndpointDetail(row) {
-    const tbody = row.parentNode;
-    if (!tbody) return;
-    const next = row.nextElementSibling;
-    const currentChevron = row.querySelector('.ep-chevron');
-    if (next && next.classList.contains('ep-detail-row')) {
-        next.remove();
-        row.setAttribute('aria-expanded', 'false');
-        row.style.background = '';
-        if (currentChevron) {
-            currentChevron.style.transform = '';
-            currentChevron.style.color = '';
-        }
-        return;
-    }
-    tbody.querySelectorAll('.ep-detail-row').forEach(dr => {
-        const prevRow = dr.previousElementSibling;
-        if (prevRow) {
-            prevRow.setAttribute('aria-expanded', 'false');
-            prevRow.style.background = '';
-            const ch = prevRow.querySelector('.ep-chevron');
-            if (ch) { ch.style.transform = ''; ch.style.color = ''; }
-        }
-        dr.remove();
-    });
-    const mac = row.dataset.mac;
-    const tenant = row.dataset.tenant || '';
-    const r = _epRows.find(item => item.mac === mac && (item.tenant || '') === tenant)
-           || _epRows.find(item => item.mac === mac);
-    if (!r) return;
-
-    const detailTr = document.createElement('tr');
-    detailTr.className = 'ep-detail-row';
-    detailTr.dataset.detailFor = mac;
-    detailTr.style.background = 'var(--surface-2)';
-    detailTr.innerHTML = _renderEndpointDetailRow(r);
-    row.after(detailTr);
-    if (r.switch_ip && r.interface) {
-        _epLoadPortErrors(detailTr.querySelector('.ep-err-slot'), r.switch_ip, r.interface, r.tenant || '');
-    }
-    row.setAttribute('aria-expanded', 'true');
-    row.style.background = 'color-mix(in srgb, var(--primary) 6%, transparent)';
-    if (currentChevron) {
-        currentChevron.style.transform = 'rotate(90deg)';
-        currentChevron.style.color = 'var(--primary)';
-    }
 }
 
 // La riga conosce gia' il proprio tenant — la chiave e' (MAC, tenant) — quindi
@@ -609,27 +476,9 @@ document.getElementById('epResults')?.addEventListener('click', (e) => {
         endpointsDiagnose(diagBtn.dataset.mac, diagBtn.dataset.tenant || '');
         return;
     }
-    const locBtn = e.target.closest('[data-action="ep-locate"]');
-    if (locBtn) {
-        macLocate(locBtn.dataset.mac, locBtn.dataset.tenant || '');
-        return;
-    }
     const portBtn = e.target.closest('[data-action="ep-portcfg"]');
     if (portBtn) {
         showPortConfig(portBtn.dataset.switchIp, portBtn.dataset.switchPort, portBtn.dataset.switchName);
-        return;
-    }
-    const errReadBtn = e.target.closest('[data-action="ep-err-read"]');
-    if (errReadBtn) {
-        const slot = errReadBtn.closest('td')?.querySelector('.ep-err-slot');
-        if (slot) slot.textContent = tr('epErrLoading');
-        _epReadErrors(errReadBtn).then(read => {
-            if (!slot) return;
-            const want = expandIface(errReadBtn.dataset.port).toLowerCase();
-            const p = read && (read.ports || []).find(x => expandIface(x.interface).toLowerCase() === want);
-            if (p) slot.innerHTML = ifaceErrorsBadge(_epReadRow(p, read));
-            else _epLoadPortErrors(slot, errReadBtn.dataset.device, errReadBtn.dataset.port, errReadBtn.dataset.tenant);
-        });
         return;
     }
     const switchReadBtn = e.target.closest('[data-action="ep-err-read-switch"]');
@@ -671,19 +520,19 @@ document.getElementById('epResults')?.addEventListener('click', (e) => {
         toggleCfgBtn.setAttribute('aria-expanded', open ? 'false' : 'true');
         return;
     }
-    const row = e.target.closest('tr[data-action="ep-row-toggle"]');
-    if (row && !e.target.closest('button, a, input, select')) {
-        _toggleEndpointDetail(row);
+    const openRow = e.target.closest('tr[data-action="ep-open"]');
+    if (openRow && !e.target.closest('button, a, input, select')) {
+        openEpDrawer(openRow.dataset.mac, openRow.dataset.tenant || '', openRow);
     }
 });
 
 // Delegated keydown on #epResults for accessibility
 document.getElementById('epResults')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
-        const row = e.target.closest('tr[data-action="ep-row-toggle"]');
+        const row = e.target.closest('tr[data-action="ep-open"]');
         if (row && e.target === row) {
             e.preventDefault();
-            _toggleEndpointDetail(row);
+            openEpDrawer(row.dataset.mac, row.dataset.tenant || '', row);
         }
     }
 });
@@ -830,3 +679,166 @@ document.getElementById('peReadNow')?.addEventListener('click', async (e) => {
         loadPortErrorsPane();
     }
 });
+
+// ===== Endpoint drawer =====
+// Docked beside the list on wide screens, so the next row is one click away;
+// a modal sheet on narrow ones, through the modal manager.
+const _EP_NARROW = '(max-width: 900px)';
+let _epDrawer = null;      // { mac, tenant, opener }
+
+async function openEpDrawer(mac, tenant, opener) {
+    const host = document.getElementById('epDrawerHost');
+    const box = document.getElementById('epDrawer');
+    if (!host || !box) return;
+    _epDrawer = { mac, tenant, opener: opener || document.activeElement };
+    const row = _epRows.find(r => r.mac === mac && (r.tenant || '') === tenant)
+             || _epRows.find(r => r.mac === mac) || { mac, tenant };
+    document.querySelectorAll('#epResults tr.ep-row.is-selected').forEach(tr => tr.classList.remove('is-selected'));
+    document.querySelector(`#epResults tr.ep-row[data-mac="${CSS.escape(mac)}"]`)?.classList.add('is-selected');
+    box.innerHTML = `<div class="drawer-body"><div class="drawer-section">${escapeHtml(tr('epiLoading'))}</div></div>`;
+    _epShowDrawer(host);
+
+    let loc = null;
+    try {
+        const q = '/api/mac/locate?mac=' + encodeURIComponent(mac) + (tenant ? '&tenant=' + encodeURIComponent(tenant) : '');
+        const res = await apiFetch(q);
+        loc = res && res.ok ? await res.json() : null;
+    } catch (_) { loc = null; }
+    if (!_epDrawer || _epDrawer.mac !== mac) return;     // closed, or another row opened meanwhile
+    box.innerHTML = _epDrawerHtml(row, loc);
+    if (row.switch_ip && row.interface) {
+        _epLoadPortErrors(box.querySelector('.ep-err-slot'), row.switch_ip, row.interface, row.tenant || '');
+    }
+    /** @type {HTMLElement|null} */ (box.querySelector('[data-action="ep-drawer-close"]'))?.focus({ preventScroll: true });
+}
+
+function _epShowDrawer(host) {
+    host.style.display = '';
+    host.hidden = false;
+    if (window.matchMedia(_EP_NARROW).matches) {
+        openModal('epDrawerHost', closeEpDrawer);
+    } else {
+        document.getElementById('locBody')?.classList.add('has-drawer');
+    }
+}
+
+function closeEpDrawer() {
+    const host = document.getElementById('epDrawerHost');
+    if (!host || host.hidden) { _epDrawer = null; return; }
+    const opener = _epDrawer && _epDrawer.opener;
+    _epDrawer = null;
+    if (isModalOpen('epDrawerHost')) closeModal('epDrawerHost');
+    host.hidden = true;
+    document.getElementById('locBody')?.classList.remove('has-drawer');
+    document.querySelectorAll('#epResults tr.ep-row.is-selected').forEach(tr => tr.classList.remove('is-selected'));
+    if (opener && document.contains(opener)) opener.focus({ preventScroll: true });
+}
+
+const _EP_STATUS_TAG = {
+    resolved: ['iferr-ok', 'epDrStatusResolved'],
+    ambiguous: ['iferr-warn', 'epDrStatusAmbiguous'],
+    transit_only: ['iferr-warn', 'epDrStatusTransit'],
+    not_found: ['iferr-warn', 'epDrStatusNotFound'],
+};
+
+function _epDrawerHtml(r, loc) {
+    const entries = loc ? ((loc.results && loc.results.length) ? loc.results : [loc]) : [];
+    const e = entries[0] || {};
+    const [cls, key] = _EP_STATUS_TAG[e.status] || _EP_STATUS_TAG.not_found;
+    const kv = (k, v) => `<div class="drawer-kpi"><span class="kpi-label">${escapeHtml(k)}</span><strong>${escapeHtml(v || '—')}</strong></div>`;
+    const hop = (s, kind) => `<li class="ep-hop is-${kind}">${escapeHtml(s.switch_name || s.switch_ip)} ${escapeHtml(s.interface || '')}${
+        s.uplink_to ? ' → ' + escapeHtml(s.uplink_to) : ''} <span>· ${escapeHtml(tr(kind === 'access' ? 'epDrAccess' : 'epDrTransit'))} · VLAN ${escapeHtml(s.vlan || '—')}</span></li>`;
+    const origin = entries.flatMap(x => x.origin || []);
+    const transit = entries.flatMap(x => x.transit || []);
+    const ips = (r.ips || []).length
+        ? `<div class="drawer-kpi-grid">${(r.ips || []).map(ip => kv('IP', ip)).join('')}</div>`
+        : `<p class="ep-dr-note">${escapeHtml(tr('epDrNoIp'))}</p>`;
+    const banner = e.status === 'ambiguous'
+        ? `<p class="ep-dr-note is-warn">${escapeHtml(tr('cmapMultiplePossibleAccessPorts', { access_count: e.access_count }))}</p>`
+        : e.status === 'not_found'
+        ? `<p class="ep-dr-note is-warn">${escapeHtml(tr('cmapNotInLatestScan') + (e.last_seen ? ' ' + tr('cmapLastSeenAt', { when: fmtMacTime(e.last_seen) }) : ''))}</p>`
+        : entries.length > 1
+        ? `<p class="ep-dr-note">${escapeHtml(tr('cmapThisMacExistsIn', { length: entries.length }))}</p>`
+        : '';
+    const port = (r.switch_ip && r.interface) ? `
+        <section class="drawer-section">
+          <h4 class="drawer-section-title">${escapeHtml(tr('epDrPort', { port: r.interface }))}</h4>
+          <div class="ep-err-slot">${escapeHtml(tr('epErrLoading'))}</div>
+          <div><button type="button" class="btn btn-secondary btn-small requires-write" data-action="ep-err-read"
+              data-device="${escapeHtml(r.switch_ip)}" data-port="${escapeHtml(r.interface)}" data-tenant="${escapeHtml(r.tenant || '')}">
+              <i class="fa-solid fa-stethoscope"></i> ${escapeHtml(tr('epErrReadNow'))}</button></div>
+        </section>` : '';
+    return `
+      <div class="drawer-header">
+        <div class="drawer-title-wrap">
+          <span class="drawer-eyebrow">${escapeHtml(r.tenant || '')}${r.probe ? ' · ' + escapeHtml(r.probe) : ''}</span>
+          <h3 id="epDrawerTitle" class="drawer-title ep-dr-mac">${escapeHtml(r.mac)}</h3>
+          <span class="ep-dr-vendor">${escapeHtml(r.oui_vendor || '')}</span>
+        </div>
+        <button type="button" class="drawer-close-btn" data-action="ep-drawer-close" aria-label="${escapeHtml(tr('epDrClose'))}"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="drawer-body">
+        <div class="ep-dr-actions">
+          <span class="iferr ${cls}">${escapeHtml(tr(key))}</span>
+          <button type="button" class="btn btn-primary btn-small" data-action="ep-diagnose" data-mac="${escapeHtml(r.mac)}" data-tenant="${escapeHtml(r.tenant || '')}"><i class="fa-solid fa-stethoscope"></i> ${escapeHtml(tr('tabDiagnosi'))}</button>
+          ${(r.switch_ip && r.interface) ? `<button type="button" class="btn btn-secondary btn-small" data-action="ep-portcfg" data-switch-ip="${escapeHtml(r.switch_ip)}" data-switch-port="${escapeHtml(r.interface)}" data-switch-name="${escapeHtml(r.switch_name || '')}"><i class="fa-solid fa-file-lines"></i> ${escapeHtml(tr('epThConfig'))}</button>` : ''}
+          <button type="button" class="btn btn-secondary btn-small" data-action="ep-copy-mac" data-mac="${escapeHtml(r.mac)}" aria-label="${escapeHtml(tr('epDrCopyMac'))}"><i class="fa-regular fa-copy"></i></button>
+        </div>
+        ${banner}
+        <section class="drawer-section">
+          <h4 class="drawer-section-title">${escapeHtml(tr('epDrPosition'))}</h4>
+          <div class="drawer-kpi-grid">${kv(tr('epThSwitch'), r.switch_name || r.switch_ip)}${kv(tr('epThPort'), r.interface)}${kv('VLAN', r.vlan)}${kv(tr('epDetailClientType'), r.client_type)}</div>
+        </section>
+        <section class="drawer-section"><h4 class="drawer-section-title">IP</h4>${ips}</section>
+        <section class="drawer-section">
+          <h4 class="drawer-section-title">${escapeHtml(tr('epDrPath'))}</h4>
+          <ul class="ep-path">${origin.map(s => hop(s, 'access')).join('')}${transit.map(s => hop(s, 'transit')).join('')}</ul>
+          ${transit.length ? '' : `<p class="ep-dr-note">${escapeHtml(tr('epDrNoTransit'))}</p>`}
+        </section>
+        ${port}
+        <section class="drawer-section">
+          <h4 class="drawer-section-title">${escapeHtml(tr('epDrHistory'))}</h4>
+          <div class="drawer-kpi-grid">${kv(tr('epDetailFirstSeen'), _epTime(r.first_seen))}${kv(tr('epDetailLastSeen'), _epTime(r.last_seen))}${kv(tr('epDetailSeenCount'), String(r.seen_count ?? '—'))}</div>
+          <div>${(r.flags || []).map(_epFlag).join(' ')}</div>
+        </section>
+      </div>`;
+}
+
+document.getElementById('epDrawer')?.addEventListener('click', (e) => {
+    const t = /** @type {HTMLElement} */ (e.target);
+    if (t.closest('[data-action="ep-drawer-close"]')) { closeEpDrawer(); return; }
+    const diag = /** @type {HTMLElement|null} */ (t.closest('[data-action="ep-diagnose"]'));
+    if (diag) { closeEpDrawer(); endpointsDiagnose(diag.dataset.mac, diag.dataset.tenant || ''); return; }
+    const cfg = /** @type {HTMLElement|null} */ (t.closest('[data-action="ep-portcfg"]'));
+    if (cfg) { showPortConfig(cfg.dataset.switchIp, cfg.dataset.switchPort, cfg.dataset.switchName); return; }
+    const copy = /** @type {HTMLElement|null} */ (t.closest('[data-action="ep-copy-mac"]'));
+    if (copy) {
+        navigator.clipboard?.writeText(copy.dataset.mac || '').then(
+            () => showToast(tr('epDrCopied'), 'success'), () => showToast(copy.dataset.mac || '', 'info'));
+        return;
+    }
+    const read = /** @type {HTMLButtonElement|null} */ (t.closest('[data-action="ep-err-read"]'));
+    if (read) {
+        const slot = document.querySelector('#epDrawer .ep-err-slot');
+        if (slot) slot.textContent = tr('epErrLoading');
+        _epReadErrors(read).then(res => {
+            if (!slot) return;
+            const want = expandIface(read.dataset.port).toLowerCase();
+            const p = res && (res.ports || []).find(x => expandIface(x.interface).toLowerCase() === want);
+            if (p) slot.innerHTML = ifaceErrorsBadge(_epReadRow(p, res));
+            else _epLoadPortErrors(slot, read.dataset.device, read.dataset.port, read.dataset.tenant);
+        });
+    }
+});
+
+// Esc closes the docked drawer too; the narrow sheet gets Esc from the modal manager.
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && _epDrawer && !isModalOpen('epDrawerHost')) closeEpDrawer();
+});
+
+// A MAC clicked in the CLI terminal opens its endpoint here.
+function locateMacFromTerminal(mac) {
+    switchTab('tab-endpoint');
+    locSwitchView('endpoint');
+    openEpDrawer(mac, '', null);
+}
