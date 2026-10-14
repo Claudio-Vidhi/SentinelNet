@@ -168,5 +168,27 @@ class TestTheTwoCountersAreDistinguishable(unittest.TestCase):
         self.assertIn("MACs seen on switches", src)
 
 
+class TestEndpointView(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.html = _read("templates", "dashboard.html")
+        cls.js = _read("static", "js", "endpoint-inventory.js")
+
+    def test_toolbar_controls(self):
+        for _id in ("epFilterSwitch", "epFilterVlan", "epFilterProbe", "epFilterStale",
+                    "epFilterFrom", "epFilterTo", "btnEpReset", "epExportMenu",
+                    "btnEpExportCsv", "btnEpExportJson", "epQueryChip"):
+            self.assertIn(f'id="{_id}"', self.html)
+        for gone in ("epFilterQ", "btnEpFilter", "btnEpResetTime"):
+            self.assertNotIn(f'id="{gone}"', self.html)
+
+    def test_the_search_drives_the_list(self):
+        self.assertIn("function locSearchSubmit(", self.js)
+        self.assertIn("getElementById('locSearchForm')", self.js)
+        # One hit opens the drawer straight away.
+        body = self.js[self.js.index("function locSearchSubmit("):]
+        self.assertIn("openEpDrawer(", body[:body.index("\n}\n")])
+
+
 if __name__ == "__main__":
     unittest.main()
