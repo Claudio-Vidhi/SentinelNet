@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.51.4] - 2026-10-14
+
 ### Fixed
 
 - **Switch Cisco CBS / Catalyst 1200-1300 senza `ip ssh password-auth`**:
