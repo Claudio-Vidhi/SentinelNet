@@ -4,7 +4,8 @@ import re
 from drivers.base_driver import BaseDriver
 
 class CiscoCbsDriver(BaseDriver):
-    """Cisco Business / Small Business (CBS220/250/350, SG/SF300-500).
+    """Cisco Business / Small Business (CBS220/250/350, SG/SF300-500),
+    and Catalyst 1200/1300, which run the same CLI.
     Uses netmiko's 'cisco_s300' CLI: some of these switches don't respond
     like Catalysts (different prompt, pagination, and SSH algorithms)."""
 

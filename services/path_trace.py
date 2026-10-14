@@ -286,6 +286,8 @@ import re
 # Un traceroute che attraversa mezza rete puo' impiegare parecchio: il numero
 # di salti e' limitato perche' la risposta deve tornare mentre l'utente guarda.
 PROBE_MAX_HOPS = 8
+# Worst case: every hop silent, 2 probes x 2 s each, plus slack for the session.
+PROBE_READ_TIMEOUT = PROBE_MAX_HOPS * 2 * 2 + 20
 
 _HOP_LINE = re.compile(r"^\s*(?P<n>\d{1,2})\s+(?P<rest>.*)$")
 _IP = re.compile(r"\b(?P<ip>\d{1,3}(?:\.\d{1,3}){3})\b")
@@ -297,8 +299,13 @@ def probe_command(device, dst: str) -> str:
     ``dst`` e' gia' stato validato come indirizzo dal chiamante: qui non si
     concatena nient'altro che quello, perche' questa stringa finisce in una
     shell di rete."""
-    if (device.get("Vendor") or "").lower() == "fortinet":
+    vendor = (device.get("Vendor") or "").lower()
+    if vendor == "fortinet":
         return f"execute traceroute {dst}"
+    from drivers.registry import resolve_driver
+    if resolve_driver(vendor)[1] == "cisco_s300":
+        # CBS / Catalyst 1200-1300: own syntax, the IOS keywords are rejected.
+        return f"traceroute ip {dst} ttl {PROBE_MAX_HOPS} count 2 timeout 2"
     return f"traceroute {dst} numeric timeout 2 probe 2 ttl 1 {PROBE_MAX_HOPS}"
 
 
@@ -334,7 +341,8 @@ def probe(device, dst: str) -> dict:
         else:
             from core import core_engine
             answer = core_engine.send_custom_command(device, command,
-                                                     bypass_blacklist=True)
+                                                     bypass_blacklist=True,
+                                                     read_timeout=PROBE_READ_TIMEOUT)
             if answer.get("status") != "success":
                 return {"command": command,
                         "error": answer.get("message") or "sessione non riuscita"}

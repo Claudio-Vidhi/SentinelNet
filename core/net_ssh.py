@@ -22,6 +22,7 @@ import base64
 import hashlib
 import logging
 import os
+import re
 import socket
 import threading
 import time
@@ -29,9 +30,13 @@ import time
 import functools
 
 import paramiko
+from typing import Any
 import netmiko
 from core import ssh_legacy
 from netmiko.base_connection import BaseConnection
+from netmiko.cisco import CiscoS300SSH
+from netmiko.exceptions import NetmikoAuthenticationException
+from netmiko.ssh_dispatcher import CLASS_MAPPER
 from opentelemetry import trace
 
 logger = logging.getLogger("sentinelnet.ssh")
@@ -68,6 +73,48 @@ def _traced_command(method):
 
 for _name in ("send_command", "send_command_timing", "send_config_set"):
     setattr(BaseConnection, _name, _traced_command(getattr(BaseConnection, _name)))
+
+
+class _PasswordThenNoneClient(paramiko.SSHClient):
+    """CBS / Catalyst 1200-1300 without 'ip ssh password-auth' refuse every
+    SSH auth method (allowed types: ['']) and ask "User Name:/Password:" inside
+    the shell instead. On that refusal the same transport retries with 'none'
+    and the in-shell login is left to special_login_handler."""
+
+    def _auth(self, username, *args):
+        try:
+            # Any: _auth is a paramiko internal, absent from its type stubs.
+            base: Any = paramiko.SSHClient
+            return base._auth(self, username, *args)
+        except paramiko.BadAuthenticationType:
+            transport = self.get_transport()
+            assert transport is not None
+            transport.auth_none(username)
+
+
+class CiscoS300InShellLogin(CiscoS300SSH):
+    """cisco_s300 that also handles the switch-side login prompt."""
+
+    def _get_ssh_client_instance(self) -> paramiko.SSHClient:
+        return _PasswordThenNoneClient()
+
+    def special_login_handler(self, delay_factor: float = 1.0) -> None:
+        # Password-auth devices land straight on the prompt: return at once.
+        prompt = r"(?m:[>#]\s*$)"
+        pattern = rf"(?i:user ?name:|ssword:)|{prompt}"
+        for _ in range(4):
+            data = self.read_until_pattern(pattern=pattern, read_timeout=25.0)
+            if re.search(prompt, data):
+                return
+            if re.search(r"(?i)user ?name:", data):
+                self.write_channel(str(self.username) + self.RETURN)
+            else:
+                self.write_channel(str(self.password) + self.RETURN)
+        raise NetmikoAuthenticationException(
+            "Login nella shell dello switch non riuscito: credenziali rifiutate.")
+
+
+CLASS_MAPPER["cisco_s300"] = CiscoS300InShellLogin
 
 # Bounds on connecting to a bastion. Without them, paramiko.Transport handed a
 # bare (host, port) tuple uses a blocking socket with no timeout, and a dead

@@ -317,6 +317,18 @@ class Probe(unittest.TestCase):
         self.assertTrue(path_trace.probe_command(SWITCH, "10.30.0.7")
                         .startswith("traceroute 10.30.0.7"))
 
+    def test_cbs_and_catalyst_1300_get_their_own_syntax(self):
+        cbs = dict(SWITCH, Vendor="cisco_cbs")
+        self.assertTrue(path_trace.probe_command(cbs, "10.30.0.7")
+                        .startswith("traceroute ip 10.30.0.7"))
+
+    def test_the_probe_waits_longer_than_netmiko_default(self):
+        # With netmiko's 10 s a slow traceroute ended in "Pattern not detected".
+        with mock.patch("core.core_engine.send_custom_command",
+                        return_value={"status": "success", "output": ""}) as ssh:
+            path_trace.probe(SWITCH, "10.30.0.7")
+        self.assertGreater(ssh.call_args.kwargs["read_timeout"], 30)
+
     def test_a_failed_session_is_an_error_not_an_exception(self):
         with mock.patch("core.core_engine.send_custom_command",
                         return_value={"status": "error", "message": "SSH fallito"}):
