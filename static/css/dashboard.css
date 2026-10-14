@@ -5345,7 +5345,7 @@ details[open] > summary .mac-caret { transform: rotate(180deg); }
 #tab-endpoint .diag-adv summary { cursor: pointer; color: var(--primary); }
 
 /* Raccolta: blocks and the location-grouped device picker */
-#tab-endpoint .mac-collect { display: grid; gap: 12px; }
+#tab-endpoint .mac-collect { display: grid; gap: 12px; margin-top: 0; padding-top: 0; border-top: 0; }
 #tab-endpoint .mac-block { background: var(--surface); border: var(--seam) solid var(--border); padding: 0 14px 12px; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
 #tab-endpoint .mac-block-title { flex-basis: calc(100% + 28px); margin: 0 -14px; padding: 8px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border);
   font-family: var(--font-legend); font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-muted); }

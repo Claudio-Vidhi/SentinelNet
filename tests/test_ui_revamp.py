@@ -844,9 +844,9 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
 
     def test_i18n_keys_both_langs(self):
         html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
-        for key in ('macEyebrow:', 'titleMacTracker:', 'descMacTracker:',
+        for key in ('locTitle:', 'locDesc:',
                     'macKpiSightingsLabel:', 'macKpiUniqueLabel:', 'macKpiSwitchesLabel:',
-                    'macKpiRetentionLabel:', 'titleMacScanPanel:', 'titleMacSearchPanel:',
+                    'macKpiRetentionLabel:', 'titleMacScanPanel:',
                     # The Client Map search surface is gone; only the ARP
                     # collection panel is still rendered.
                     'titleArpCollectPanel:', 'titleArpScanSummary:'):

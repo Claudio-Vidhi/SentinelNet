@@ -727,7 +727,7 @@ function _epDrawerHtml(r, loc) {
     const [cls, key] = _EP_STATUS_TAG[e.status] || _EP_STATUS_TAG.not_found;
     const kv = (k, v) => `<div class="drawer-kpi"><span class="kpi-label">${escapeHtml(k)}</span><strong>${escapeHtml(v || '—')}</strong></div>`;
     const hop = (s, kind) => `<li class="ep-hop is-${kind}">${escapeHtml(s.switch_name || s.switch_ip)} ${escapeHtml(s.interface || '')}${
-        s.uplink_to ? ' → ' + escapeHtml(s.uplink_to) : ''} <span>· ${escapeHtml(tr(kind === 'access' ? 'epDrAccess' : 'epDrTransit'))} · VLAN ${escapeHtml(s.vlan || '—')}</span></li>`;
+        s.uplink_to ? ' → ' + escapeHtml(s.uplink_to) : ''} <span>· ${escapeHtml(tr(kind === 'access' ? 'epDrAccess' : 'epDrTransit'))} · VLAN&nbsp;${escapeHtml(s.vlan || '—')}</span></li>`;
     const origin = entries.flatMap(x => x.origin || []);
     const transit = entries.flatMap(x => x.transit || []);
     const ips = (r.ips || []).length
