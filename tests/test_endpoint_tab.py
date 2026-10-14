@@ -210,5 +210,17 @@ class TestPortsView(unittest.TestCase):
         self.assertIn("requires-write", tag)
 
 
+class TestDiagnosiForm(unittest.TestCase):
+    def test_ids_kept_inline_styles_gone(self):
+        html = _read("templates", "dashboard.html")
+        start = html.index('id="locPane-diagnosi"')
+        pane = html[start:html.index('id="diagResult"', start)]
+        for _id in ("diagClientInput", "diagDestInput", "diagProtoInput", "diagPortInput",
+                    "diagGatewaySelect", "diagGatewayInput", "btnDiagTraceroute", "btnRunDiagnosi"):
+            self.assertIn(f'id="{_id}"', pane)
+        self.assertNotIn("style=", pane)
+        self.assertIn('class="diag-adv"', pane)
+
+
 if __name__ == "__main__":
     unittest.main()
