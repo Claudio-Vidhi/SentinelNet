@@ -670,9 +670,9 @@ async function openEpDrawer(mac, tenant, opener) {
     const host = document.getElementById('epDrawerHost');
     const box = document.getElementById('epDrawer');
     if (!host || !box) return;
-    _epDrawer = { mac, tenant, opener: opener || document.activeElement };
-    const row = _epRows.find(r => r.mac === mac && (r.tenant || '') === tenant)
-             || _epRows.find(r => r.mac === mac) || { mac, tenant };
+    const tok = _epDrawer = { mac, tenant, opener: opener || document.activeElement };
+    const listRow = _epRows.find(r => r.mac === mac && (r.tenant || '') === tenant)
+                 || _epRows.find(r => r.mac === mac) || { mac, tenant };
     document.querySelectorAll('#epResults tr.ep-row.is-selected').forEach(tr => tr.classList.remove('is-selected'));
     document.querySelector(`#epResults tr.ep-row[data-mac="${CSS.escape(mac)}"]`)?.classList.add('is-selected');
     box.innerHTML = `<div class="drawer-body"><div class="drawer-section">${escapeHtml(tr('epiLoading'))}</div></div>`;
@@ -684,7 +684,8 @@ async function openEpDrawer(mac, tenant, opener) {
         const res = await apiFetch(q);
         loc = res && res.ok ? await res.json() : null;
     } catch (_) { loc = null; }
-    if (!_epDrawer || _epDrawer.mac !== mac) return;     // closed, or another row opened meanwhile
+    if (_epDrawer !== tok) return;       // closed, or another row opened meanwhile
+    const row = _epRowFromLocate(listRow, loc);
     box.innerHTML = _epDrawerHtml(row, loc);
     if (row.switch_ip && row.interface) {
         _epLoadPortErrors(box.querySelector('.ep-err-slot'), row.switch_ip, row.interface, row.tenant || '');
@@ -712,6 +713,18 @@ function closeEpDrawer() {
     document.getElementById('locBody')?.classList.remove('has-drawer');
     document.querySelectorAll('#epResults tr.ep-row.is-selected').forEach(tr => tr.classList.remove('is-selected'));
     if (opener && document.contains(opener)) opener.focus({ preventScroll: true });
+}
+
+// A drawer opened without a list row (from Porte, the terminal, a search on a
+// view never loaded) takes its position from the locate answer: the switch,
+// port and VLAN are there even when the list is not.
+function _epRowFromLocate(row, loc) {
+    if (!loc || row.switch_ip) return row;
+    const e = (loc.results && loc.results.length) ? loc.results[0] : loc;
+    const o = (e.origin || [])[0];
+    if (!o) return row;
+    return { ...row, mac: e.mac || loc.mac || row.mac, tenant: row.tenant || e.tenant || '',
+             switch_ip: o.switch_ip, switch_name: o.switch_name, interface: o.interface, vlan: o.vlan };
 }
 
 const _EP_STATUS_TAG = {
@@ -813,7 +826,8 @@ document.getElementById('epDrawer')?.addEventListener('click', (e) => {
 
 // Esc closes the docked drawer too; the narrow sheet gets Esc from the modal manager.
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && _epDrawer && !isModalOpen('epDrawerHost')) closeEpDrawer();
+    // A modal on top handles its own Esc (and marks it): that press is not for the drawer.
+    if (e.key === 'Escape' && !e.defaultPrevented && _epDrawer && !isModalOpen('epDrawerHost')) closeEpDrawer();
 });
 
 // A MAC clicked in the CLI terminal opens its endpoint here.

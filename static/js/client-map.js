@@ -198,8 +198,10 @@ function renderCollectLocs() {
     if (!box) return;
     const devs = macFilteredDevices();
     const groups = pickerGroups(devs, new Set(), _pickLocLabel);
-    if (_collectLocs === null) _collectLocs = new Set(groups.map(g => g.key));
-    const locs = _collectLocs;
+    // Built once there are devices: an inventory still loading would
+    // otherwise freeze the default on "no location selected".
+    if (_collectLocs === null && groups.length) _collectLocs = new Set(groups.map(g => g.key));
+    const locs = _collectLocs || new Set();
     box.innerHTML = groups.map(g => `<label class="pk-dev pk-dev-loc"><input type="checkbox" data-collect-loc="${escapeHtml(g.key)}"
         ${locs.has(g.key) ? 'checked' : ''}> ${escapeHtml(g.label)} <span>${g.total}</span></label>`).join('')
         || `<div class="pk-empty">${escapeHtml(tr('uiNoDevices'))}</div>`;
@@ -231,6 +233,9 @@ document.getElementById('locCollectGo')?.addEventListener('click', runCollect);
     // --- MAC ADDRESS TRACKER (storico MAC -> switch/porta/vlan) ---
 
     function loadRaccolta() {
+        // The loader reruns after a tenant change or an inventory refresh:
+        // added or removed devices must show up in the pickers too.
+        resetDevPickers();
         fillMacDeviceSelect(document.getElementById('macOvDevice'), false);
         loadMacOverrides();
         refreshMacStats(true);

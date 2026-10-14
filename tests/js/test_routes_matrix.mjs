@@ -264,4 +264,21 @@ assert.equal(rtQuery('10.0.0.0/').kind, 'text');
     assert.equal(d2.fromBackup, true);
 }
 
+// --- address lookup keeps VRFs apart: one answer per (device, VRF)
+{
+    const { rtLookup } = windowStub.rtModel;
+    const rows = [
+        r('A', '0.0.0.0/0', { gateway: '192.0.2.254' }),
+        r('A', '10.1.0.0/16', { vrf: 'CUST', gateway: '198.51.100.9' }),
+        r('A', '0.0.0.0/0', { vrf: 'MGMT', gateway: '203.0.113.254' }),
+    ];
+    const out = rtLookup(rows, [{ value: 'A', label: 'a' }], new Set(), ip4('10.1.2.3'));
+    assert.deepEqual(out.map(x => [x.vrf, x.winners[0].network]),
+        [['', '0.0.0.0/0'], ['CUST', '10.1.0.0/16'], ['MGMT', '0.0.0.0/0']],
+        'global table first, then each VRF, never compared with each other');
+    assert.equal(out[0].decidedBy, 'only', 'the CUST /16 is not a candidate of the global table');
+    const none = rtLookup([r('B', '10.0.0.0/8', { vrf: 'CUST' })], [{ value: 'B', label: 'b' }], new Set(), ip4('192.0.2.1'));
+    assert.deepEqual(none.map(x => [x.vrf, x.kind]), [['', 'none']], 'nothing covers it anywhere: one "none" answer');
+}
+
 console.log('ok');
