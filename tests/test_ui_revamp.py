@@ -754,7 +754,7 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
         # endpoint tab merge), and that in turn by the global tenant selector
         # in the header: the tab has no tenant control of its own any more.
         html = _html()
-        for _id in ('macDeviceMenu', 'macDeviceSummary', 'macDeviceList',
+        for _id in ('macPicker', 'arpPicker',
                     'macScanTransport', 'btnMacScan', 'macRetentionDays',
                     'macOvDevice', 'macOvCommand', 'macOvFmt', 'macOverridesList',
                     'kpiMacSightings', 'kpiMacUniqueMacs', 'kpiMacSwitches', 'kpiMacRetention'):
@@ -779,25 +779,21 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
 
     def test_preserve_ids_clientmap_arp_multiselect(self):
         html = frontend_source()
-        for _id in ('arpDeviceMenu', 'arpDeviceSummary', 'arpDeviceList',
-                    'btnArpScan', 'arpScanSummary'):
+        for _id in ('arpPicker', 'btnArpScan', 'arpScanSummary'):
             self.assertIn(f'id="{_id}"', html)
-        for hook in ('runArpScan', 'populateArpScanDevices'):
+        for hook in ('runArpScan', 'renderDevPicker'):
             self.assertIn(hook, html)
         # RBAC: the scan action stays write-gated
-        self.assertIn('id="btnArpScan"', html)
         scan_start = html.index('id="btnArpScan"')
         scan_tag = html.rindex('<button', 0, scan_start)
         self.assertIn('requires-write', html[scan_tag:scan_start])
         # SAFETY CONSTRAINT: ARP-target selection must remain an EXPLICIT
-        # multi-select (checkbox list the user picks specific gateways from),
-        # never a fire-against-all control. Verify the checkbox-list machinery
-        # (class + per-item onchange + JS helpers) survived the restyle.
-        self.assertIn('class="arp-dev-cb"', html)
-        self.assertIn('id="arpDevAll"', html)
-        self.assertIn('toggleAllArpDevices', html)
-        self.assertIn('function selectedArpDevices()', html)
-        self.assertIn("querySelectorAll('#arpDeviceList .arp-dev-cb:checked')", html)
+        # multi-select (one checkbox per device, grouped by location), never a
+        # fire-against-all control: the selection travels as `ips`, and an
+        # empty one is refused instead of meaning "every device".
+        self.assertIn('data-pick-ip="${escapeHtml(d.ip)}"', html)
+        self.assertIn("runArpScan(pickerSelectedIps('arp')", html)
+        self.assertIn('function pickerSelectedIps(kind)', html)
 
     def test_endpoint_contract_present(self):
         html = frontend_source()  # MAC tracker/Client Map JS moved to static/js/client-map.js

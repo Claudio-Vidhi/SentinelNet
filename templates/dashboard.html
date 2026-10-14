@@ -1595,7 +1595,17 @@
           <h2 data-i18n="locTitle">Localizzazione endpoint</h2>
           <p data-i18n="locDesc">Dove sono attaccati i dispositivi della rete, ricostruito dalle MAC table degli switch e dall'ARP dei gateway.</p>
         </div>
-        <div class="page-head-actions" id="locHeadActions"></div>
+        <div class="page-head-actions" id="locHeadActions">
+          <details id="locCollectPop" class="loc-collect requires-write">
+            <summary class="btn btn-primary"><i class="fa-solid fa-rotate"></i> <span data-i18n="locCollectNow">Raccogli ora</span></summary>
+            <div class="loc-collect-panel">
+              <div class="pk-loc-head" data-i18n="locCollectLocs">Sedi da raccogliere</div>
+              <div id="locCollectLocs" class="pk-list"></div>
+              <div class="pk-foot"><span id="locCollectSum"></span>
+                <button type="button" class="btn btn-primary btn-small" id="locCollectGo" data-i18n="locCollectGo">Avvia MAC + ARP</button></div>
+            </div>
+          </details>
+        </div>
       </div>
 
       <form id="locSearchForm" class="loc-search" role="search">
@@ -1629,17 +1639,10 @@
       <div class="panel mac-console" style="margin-bottom:18px;">
         <!-- MAC and ARP are two halves of the same collection: they sit on one
              row, each with its own device picker. -->
-        <div class="mac-row mac-collect">
-          <div class="mac-group">
-            <span class="mac-legend" data-i18n="titleMacScanPanel">Scansione MAC</span>
-            <details id="macDeviceMenu" class="mac-dev-menu">
-              <summary>
-                <i class="fa-solid fa-list-check" aria-hidden="true"></i>
-                <span id="macDeviceSummary" data-i18n="optMacAllDevices">Tutti i dispositivi</span>
-                <i class="fa-solid fa-chevron-down mac-caret" aria-hidden="true"></i>
-              </summary>
-              <div id="macDeviceList" class="mac-dev-list"></div>
-            </details>
+        <div class="mac-collect">
+          <section class="mac-block">
+            <h3 class="mac-block-title" data-i18n="titleMacScanPanel">Scansione MAC</h3>
+            <div id="macPicker" class="dev-picker" data-picker="mac"></div>
             <select id="macScanTransport" class="mac-transport" title="" aria-label="Trasporto per la raccolta MAC" data-i18n-aria-label="ariaMacTransport">
               <option value="" data-i18n="optMacTransportAuto">Trasporto: Auto</option>
               <option value="netconf">NETCONF</option>
@@ -1649,22 +1652,17 @@
             <button class="btn btn-secondary btn-small requires-write" id="btnMacScan" data-i18n="btnMacScan">
               <i class="fa-solid fa-satellite-dish"></i> Avvia MAC Scan
             </button>
-          </div>
+            <div id="macScanResult" class="mac-result" role="status" hidden></div>
+          </section>
 
-          <div class="mac-group">
-            <span class="mac-legend" data-i18n="titleArpCollectPanel">Raccolta ARP (gateway L3)</span>
-            <details id="arpDeviceMenu" class="mac-dev-menu">
-              <summary>
-                <i class="fa-solid fa-list-check" aria-hidden="true"></i>
-                <span id="arpDeviceSummary" data-i18n="optMacAllDevices">Tutti i dispositivi</span>
-                <i class="fa-solid fa-chevron-down mac-caret" aria-hidden="true"></i>
-              </summary>
-              <div id="arpDeviceList" class="mac-dev-list"></div>
-            </details>
+          <section class="mac-block">
+            <h3 class="mac-block-title" data-i18n="titleArpCollectPanel">Raccolta ARP (gateway L3)</h3>
+            <div id="arpPicker" class="dev-picker" data-picker="arp"></div>
             <button class="btn btn-secondary btn-small requires-write" id="btnArpScan" data-i18n="btnArpScan">
               <i class="fa-solid fa-satellite-dish"></i> Raccogli ARP (gateway L3)
             </button>
-          </div>
+            <div id="arpScanSummary" class="mac-result" role="status" hidden></div>
+          </section>
 
         </div>
 
@@ -1707,7 +1705,6 @@
           </div>
         </div>
 
-        <div id="arpScanSummary" style="display:none; margin-top:12px; font-size:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:12px;"></div>
       </div>
 
       </div>

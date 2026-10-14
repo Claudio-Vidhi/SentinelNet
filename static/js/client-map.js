@@ -30,6 +30,7 @@ function locTenant() {
 
 function locSwitchView(view) {
     if (!document.getElementById('locPane-' + view)) return;
+    if (_collectLocs === null) resetDevPickers();
     _locView = view;
     for (const v of Object.keys(LOC_LOADERS)) {
         const pane = document.getElementById('locPane-' + v);
@@ -49,6 +50,7 @@ function locSwitchView(view) {
 // Tenant change redraws only the pane on screen; the others redraw when opened.
 function locTenantChanged() {
     closeEpDrawer();
+    resetDevPickers();
     for (const v of Object.keys(_locLoaded)) _locLoaded[v] = (v === _locView);
     LOC_LOADERS[_locView]();
 }
@@ -84,11 +86,152 @@ function pickerSummary(groups) {
     return { kind: 'partial', n, total, locations };
 }
 
+// ===== Location-grouped device pickers (Raccolta) =====
+const _pickSel = { mac: new Set(), arp: new Set() };
+const _pickFilter = { mac: '', arp: '' };
+
+function _pickLocLabel(loc) {
+    return loc ? locationLabel(loc) : tr('locNoLocation');
+}
+
+// First load or tenant change: everything selected, the old default.
+function resetDevPickers() {
+    const ips = macFilteredDevices().map(d => d.IP);
+    _pickSel.mac = new Set(ips);
+    _pickSel.arp = new Set(ips);
+    _collectLocs = null;
+    renderDevPicker('mac');
+    renderDevPicker('arp');
+    renderCollectLocs();
+}
+
+function pickerSelectedIps(kind) {
+    return [..._pickSel[kind]];
+}
+
+function renderDevPicker(kind) {
+    const host = document.getElementById(kind + 'Picker');
+    if (!host) return;
+    const wasOpen = !!host.querySelector('details')?.open;
+    const groups = pickerGroups(macFilteredDevices(), _pickSel[kind], _pickLocLabel);
+    const sm = pickerSummary(groups);
+    const summary = sm.kind === 'none' ? tr('pickSumNone')
+        : sm.kind === 'all' ? tr('pickSumAll', { n: String(sm.n), s: String(groups.length) })
+        : sm.kind === 'locations' ? tr('pickSumLocs', { locs: sm.locations.join(', '), n: String(sm.n) })
+        : tr('pickSumPartial', { n: String(sm.n), total: String(sm.total), s: String(sm.locations.length) });
+    const f = _pickFilter[kind].toLowerCase();
+    const list = groups.map(g => {
+        const shown = g.devices.filter(d => !f || (d.name + ' ' + d.ip + ' ' + g.label).toLowerCase().includes(f));
+        if (!shown.length) return '';
+        return `<label class="pk-loc"><input type="checkbox" data-pick-loc="${escapeHtml(g.key)}" ${g.n === g.total ? 'checked' : ''}
+                    ${g.n && g.n < g.total ? 'data-mixed="1"' : ''}> ${escapeHtml(g.label)} <small>${g.n}/${g.total}</small></label>` +
+            shown.map(d => `<label class="pk-dev"><input type="checkbox" data-pick-ip="${escapeHtml(d.ip)}" ${d.checked ? 'checked' : ''}>
+                    ${escapeHtml(d.name)} <span>${escapeHtml(d.ip)}</span></label>`).join('');
+    }).join('') || `<div class="pk-empty">${escapeHtml(tr('uiNoDevices'))}</div>`;
+    const chips = groups.map(g => `<button type="button" class="pk-chip" data-pick-only="${escapeHtml(g.key)}"
+            aria-label="${escapeHtml(tr('pickOnlyLoc', { loc: g.label }))}">${escapeHtml(g.label)}</button>`).join('');
+    host.innerHTML = `<details class="pk" ${wasOpen ? 'open' : ''}>
+        <summary aria-label="${escapeHtml(tr(kind === 'mac' ? 'ariaMacPicker' : 'ariaArpPicker'))}"><span>${escapeHtml(summary)}</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
+        <div class="pk-panel">
+          <div class="pk-chips">${chips}</div>
+          <div class="pk-search"><input type="search" data-pick-filter="1" value="${escapeHtml(_pickFilter[kind])}"
+              placeholder="${escapeHtml(tr('pickFilterPh'))}" aria-label="${escapeHtml(tr('pickFilterPh'))}"></div>
+          <div class="pk-list">${list}</div>
+          <div class="pk-foot"><span>${escapeHtml(tr('pickSelectedN', { n: String(sm.n) }))}</span>
+            <span><button type="button" data-pick-all="1">${escapeHtml(tr('pickAll'))}</button>
+                  <button type="button" data-pick-none="1">${escapeHtml(tr('pickNone'))}</button></span></div>
+        </div></details>`;
+    host.querySelectorAll('[data-mixed]').forEach(cb => { /** @type {HTMLInputElement} */ (cb).indeterminate = true; });
+}
+
+for (const kind of ['mac', 'arp']) {
+    const host = document.getElementById(kind + 'Picker');
+    host?.addEventListener('change', (e) => {
+        const t = /** @type {HTMLInputElement} */ (e.target);
+        if (t.dataset.pickFilter) return;
+        const set = _pickSel[kind];
+        if (t.dataset.pickIp) { if (t.checked) set.add(t.dataset.pickIp); else set.delete(t.dataset.pickIp); }
+        if (t.dataset.pickLoc !== undefined) {
+            macFilteredDevices().filter(d => (d.Location || '') === t.dataset.pickLoc)
+                .forEach(d => { if (t.checked) set.add(d.IP); else set.delete(d.IP); });
+        }
+        renderDevPicker(kind);
+    });
+    host?.addEventListener('input', (e) => {
+        const t = /** @type {HTMLInputElement} */ (e.target);
+        if (!t.dataset.pickFilter) return;
+        _pickFilter[kind] = t.value;
+        const pos = t.selectionStart;
+        renderDevPicker(kind);
+        const again = /** @type {HTMLInputElement|null} */ (host.querySelector('[data-pick-filter]'));
+        again?.focus();
+        if (again && pos !== null) again.setSelectionRange(pos, pos);
+    });
+    host?.addEventListener('click', (e) => {
+        const t = /** @type {HTMLElement} */ (e.target);
+        const devs = macFilteredDevices();
+        if (t.closest('[data-pick-all]')) _pickSel[kind] = new Set(devs.map(d => d.IP));
+        else if (t.closest('[data-pick-none]')) _pickSel[kind] = new Set();
+        else {
+            const only = /** @type {HTMLElement|null} */ (t.closest('[data-pick-only]'));
+            if (!only) return;
+            _pickSel[kind] = new Set(devs.filter(d => (d.Location || '') === only.dataset.pickOnly).map(d => d.IP));
+        }
+        renderDevPicker(kind);
+    });
+}
+
+// An open picker or the collect popover closes on an outside click.
+document.addEventListener('click', (e) => {
+    const t = /** @type {HTMLElement} */ (e.target);
+    document.querySelectorAll('#tab-endpoint details.pk[open], #locCollectPop[open]').forEach(d => {
+        if (!d.contains(t)) /** @type {HTMLDetailsElement} */ (d).open = false;
+    });
+});
+
+// ===== "Raccogli ora": MAC scan then ARP on the chosen locations =====
+/** @type {Set<string>|null} */
+let _collectLocs = null;      // Location ids ('' = no location); null = not built yet (all)
+
+function renderCollectLocs() {
+    const box = document.getElementById('locCollectLocs');
+    if (!box) return;
+    const devs = macFilteredDevices();
+    const groups = pickerGroups(devs, new Set(), _pickLocLabel);
+    if (_collectLocs === null) _collectLocs = new Set(groups.map(g => g.key));
+    const locs = _collectLocs;
+    box.innerHTML = groups.map(g => `<label class="pk-dev pk-dev-loc"><input type="checkbox" data-collect-loc="${escapeHtml(g.key)}"
+        ${locs.has(g.key) ? 'checked' : ''}> ${escapeHtml(g.label)} <span>${g.total}</span></label>`).join('')
+        || `<div class="pk-empty">${escapeHtml(tr('uiNoDevices'))}</div>`;
+    const n = devs.filter(d => locs.has(d.Location || '')).length;
+    const sum = document.getElementById('locCollectSum');
+    if (sum) sum.textContent = tr('locCollectSum', { n: String(n), s: String(locs.size) });
+    const go = /** @type {HTMLButtonElement|null} */ (document.getElementById('locCollectGo'));
+    if (go) go.disabled = !n;
+}
+
+document.getElementById('locCollectLocs')?.addEventListener('change', (e) => {
+    const t = /** @type {HTMLInputElement} */ (e.target);
+    if (t.dataset.collectLoc === undefined || !_collectLocs) return;
+    if (t.checked) _collectLocs.add(t.dataset.collectLoc); else _collectLocs.delete(t.dataset.collectLoc);
+    renderCollectLocs();
+});
+
+async function runCollect() {
+    const locs = _collectLocs || new Set();
+    const ips = macFilteredDevices().filter(d => locs.has(d.Location || '')).map(d => d.IP);
+    const pop = /** @type {HTMLDetailsElement|null} */ (document.getElementById('locCollectPop'));
+    if (pop) pop.open = false;
+    const go = /** @type {HTMLButtonElement|null} */ (document.getElementById('locCollectGo'));
+    await runMacScan(ips, go);
+    await runArpScan(ips, go);
+}
+document.getElementById('locCollectGo')?.addEventListener('click', runCollect);
+
     // --- MAC ADDRESS TRACKER (storico MAC -> switch/porta/vlan) ---
 
     function loadRaccolta() {
-        populateMacScanDevices();
-        populateArpScanDevices();
+        fillMacDeviceSelect(document.getElementById('macOvDevice'), false);
         loadMacOverrides();
         refreshMacStats(true);
     }
@@ -167,49 +310,9 @@ function pickerSummary(groups) {
 
 
 
-    // Popola i selettori dispositivo (scan e ad-hoc) in base al tenant scelto:
-    // così scegliendo un tenant si vedono SOLO i suoi switch, non tutti.
-    // Lo scan usa una multi-selezione a checkbox (più device in un'unica scansione).
-    function populateMacScanDevices() {
-        const box = document.getElementById('macDeviceList');
-        if (box) {
-            const devs = macFilteredDevices();
-            const head = `<label style="display:flex; align-items:center; gap:8px; padding:5px 6px; font-size:12px; cursor:pointer; border-bottom:1px solid var(--border); margin-bottom:4px;">
-                <input type="checkbox" id="macDevAll" data-action="toggle-all-mac-devices" style="accent-color:var(--primary);">
-                <strong>${tr('cmapAllDevices')}</strong></label>`;
-            const items = devs.map(d => {
-                const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
-                return `<label style="display:flex; align-items:center; gap:8px; padding:4px 6px; font-size:12px; cursor:pointer;">
-                    <input type="checkbox" class="mac-dev-cb" value="${escapeHtml(d.IP)}" data-action="update-mac-device-summary" style="accent-color:var(--primary);">
-                    <span style="font-family:var(--font-code);">${escapeHtml(d.IP)}</span>
-                    <span style="color:var(--text-muted);">${name}</span></label>`;
-            }).join('');
-            box.innerHTML = head + (items ||
-                `<div style="font-size:12px; color:var(--text-muted); padding:6px;">${tr('uiNoDevices')}</div>`);
-        }
-        updateMacDeviceSummary();
-        fillMacDeviceSelect(document.getElementById('macOvDevice'), false);
-    }
 
-    function selectedMacDevices() {
-        return [...document.querySelectorAll('#macDeviceList .mac-dev-cb:checked')].map(cb => cb.value);
-    }
 
-    function toggleAllMacDevices(on) {
-        document.querySelectorAll('#macDeviceList .mac-dev-cb').forEach(cb => cb.checked = on);
-        updateMacDeviceSummary();
-    }
 
-    function updateMacDeviceSummary() {
-        const total = document.querySelectorAll('#macDeviceList .mac-dev-cb').length;
-        const sel = selectedMacDevices().length;
-        const all = document.getElementById('macDevAll');
-        if (all) all.checked = (total > 0 && sel === total);
-        const sum = document.getElementById('macDeviceSummary');
-        if (sum) sum.textContent = (sel === 0)
-            ? (tr('cmapAllDevices'))
-            : `${sel} ${tr('cmapSelected')}`;
-    }
 
     async function refreshMacStats(fillRetention) {
         try {
@@ -228,17 +331,17 @@ function pickerSummary(groups) {
         } catch (e) {}
     }
 
-    async function runMacScan() {
-        const btn = document.getElementById('btnMacScan');
-        const val = id => { const el = document.getElementById(id); return el ? el.value : ''; };
-        const group = locTenant();
-        const transport = val('macScanTransport') || '';
-        const ips = selectedMacDevices();
-        const payload = { group, transport };
-        if (ips.length) payload.ips = ips;   // device specifici (multi-selezione)
-        const orig = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${tr('cmapScanning')}`;
+    async function runMacScan(ips, btn) {
+        const result = document.getElementById('macScanResult');
+        if (!ips.length) {
+            if (result) { result.hidden = false; result.textContent = tr('pickEmptyRun'); }
+            return;
+        }
+        const transport = /** @type {HTMLSelectElement|null} */ (document.getElementById('macScanTransport'))?.value || '';
+        const payload = { group: locTenant(), transport };
+        payload.ips = ips;
+        const orig = btn ? btn.innerHTML : '';
+        if (btn) { btn.disabled = true; btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${tr('cmapScanning')}`; }
         try {
             const res = await apiFetch('/api/mac/scan', {
                 method: 'POST', headers: {'Content-Type':'application/json'},
@@ -248,16 +351,18 @@ function pickerSummary(groups) {
                 const d = await res.json();
                 const okc = d.results.filter(r => !r.error).length;
                 const errc = d.results.filter(r => r.error).length;
-                alert(tr('cmapMacScanDoneDevices', {scanned: d.scanned, okc: okc, errc: errc, pruned: d.pruned}));
+                if (result) {
+                    result.hidden = false;
+                    result.textContent = tr('cmapMacScanDoneDevices', {scanned: d.scanned, okc: okc, errc: errc, pruned: d.pruned});
+                }
                 _locLoaded.endpoint = false;   // the list reloads the next time it is opened
                 refreshMacStats(false);
             } else if (res) {
                 const e = await res.json().catch(() => ({}));
-                alert((tr('uiError')) + (e.detail || ''));
+                showToast((tr('uiError')) + (e.detail || ''), 'error');
             }
         } finally {
-            btn.disabled = false;
-            btn.innerHTML = orig;
+            if (btn) { btn.disabled = false; btn.innerHTML = orig; }
         }
     }
 
@@ -276,93 +381,49 @@ function pickerSummary(groups) {
     // Endpoint Inventory and client diagnosis read. loadRaccolta() populates
     // the device picker.
 
-    // Dispositivi filtrati per il tenant selezionato.
-    function arpFilteredDevices() {
-        const group = locTenant();
-        let devs = globalDevices || [];
-        if (group && group !== 'all') devs = devs.filter(d => (d.Group || '') === group);
-        return devs;
-    }
 
-    // Multi-selezione dei gateway da interrogare (stesso pattern del MAC Tracker).
-    function populateArpScanDevices() {
-        const box = document.getElementById('arpDeviceList');
-        if (box) {
-            const L = i18n[currentLang];
-            const devs = arpFilteredDevices();
-            const head = `<label style="display:flex; align-items:center; gap:8px; padding:5px 6px; font-size:12px; cursor:pointer; border-bottom:1px solid var(--border); margin-bottom:4px;">
-                <input type="checkbox" id="arpDevAll" data-action="toggle-all-arp-devices" style="accent-color:var(--primary);">
-                <strong>${L.optMacAllDevices || 'Tutti i dispositivi'}</strong></label>`;
-            const items = devs.map(d => {
-                const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
-                return `<label style="display:flex; align-items:center; gap:8px; padding:4px 6px; font-size:12px; cursor:pointer;">
-                    <input type="checkbox" class="arp-dev-cb" value="${escapeHtml(d.IP)}" data-action="update-arp-device-summary" style="accent-color:var(--primary);">
-                    <span style="font-family:var(--font-code);">${escapeHtml(d.IP)}</span>
-                    <span style="color:var(--text-muted);">${name}</span></label>`;
-            }).join('');
-            box.innerHTML = head + (items ||
-                `<div style="font-size:12px; color:var(--text-muted); padding:6px;">${L.msgAiNoDevices || 'Nessun dispositivo'}</div>`);
+
+
+
+
+    async function runArpScan(ips, btn) {
+        const box = document.getElementById('arpScanSummary');
+        if (!ips.length) {
+            if (box) { box.hidden = false; box.textContent = tr('pickEmptyRun'); }
+            return;
         }
-        updateArpDeviceSummary();
-    }
-
-    function selectedArpDevices() {
-        return [...document.querySelectorAll('#arpDeviceList .arp-dev-cb:checked')].map(cb => cb.value);
-    }
-
-    function toggleAllArpDevices(on) {
-        document.querySelectorAll('#arpDeviceList .arp-dev-cb').forEach(cb => cb.checked = on);
-        updateArpDeviceSummary();
-    }
-
-    function updateArpDeviceSummary() {
-        const total = document.querySelectorAll('#arpDeviceList .arp-dev-cb').length;
-        const sel = selectedArpDevices().length;
-        const all = document.getElementById('arpDevAll');
-        if (all) all.checked = (total > 0 && sel === total);
-        const sum = document.getElementById('arpDeviceSummary');
-        if (sum) sum.textContent = (sel === 0)
-            ? (tr('optMacAllDevices') || 'Tutti i dispositivi')
-            : `${sel} ${tr('lblAiDevSelected') || 'selezionati'}`;
-    }
-
-    async function runArpScan() {
-        const btn = document.getElementById('btnArpScan');
-        btn.disabled = true;
-        const oldHtml = btn.innerHTML;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ...';
+        const oldHtml = btn ? btn.innerHTML : '';
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ...'; }
         try {
             const payload = { group: locTenant() };
-            const ips = selectedArpDevices();
-            if (ips.length) payload.ips = ips;
+            payload.ips = ips;
             const res = await apiFetch('/api/arp/scan', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
             if (!res) return;
-            const box = document.getElementById('arpScanSummary');
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
-                box.style.display = 'block';
+                box.hidden = false;
                 box.innerHTML = `<span style="color:var(--danger);">${escapeHtml(err.detail || (tr('cmapArpScanError')))}</span>`;
                 return;
             }
             const d = await res.json();
+            const locOf = ip => _pickLocLabel((macFilteredDevices().find(x => x.IP === ip) || {}).Location || '');
             const rows = Object.entries(d.devices || {}).map(([ip, r]) => {
                 const color = r.status === 'success' ? 'var(--success, #7bd88f)'
                             : r.status === 'empty' ? 'var(--text-muted)' : 'var(--danger)';
                 const detail = r.status === 'success'
                     ? (tr('cmapEntriesNewUpdated', {entries: r.entries, new: r.new, updated: r.updated}))
                     : escapeHtml(r.message || r.status);
-                return `<div>• <b>${escapeHtml(ip)}</b> — <span style="color:${color};">${r.status}</span>: ${detail}</div>`;
+                return `<div>• <b>${escapeHtml(locOf(ip))} · ${escapeHtml(ip)}</b> — <span style="color:${color};">${r.status}</span>: ${detail}</div>`;
             }).join('');
-            box.style.display = 'block';
+            box.hidden = false;
             box.innerHTML = `<b>${tr('titleArpScanSummary') || 'Esito raccolta ARP'}</b>` +
                 `<div style="margin-top:6px;">${rows || '—'}</div>`;
         } finally {
-            btn.disabled = false;
-            btn.innerHTML = oldHtml;
+            if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
         }
     }
 
@@ -407,29 +468,7 @@ function pickerSummary(groups) {
         }
     });
 
-    document.getElementById('macDeviceList')?.addEventListener('change', (e) => {
-        const allCb = e.target.closest('input[data-action="toggle-all-mac-devices"]');
-        if (allCb) {
-            toggleAllMacDevices(allCb.checked);
-            return;
-        }
-        const devCb = e.target.closest('input[data-action="update-mac-device-summary"]');
-        if (devCb) {
-            updateMacDeviceSummary();
-        }
-    });
 
-    document.getElementById('arpDeviceList')?.addEventListener('change', (e) => {
-        const allCb = e.target.closest('input[data-action="toggle-all-arp-devices"]');
-        if (allCb) {
-            toggleAllArpDevices(allCb.checked);
-            return;
-        }
-        const devCb = e.target.closest('input[data-action="update-arp-device-summary"]');
-        if (devCb) {
-            updateArpDeviceSummary();
-        }
-    });
 
     // Static event listeners for MAC Tracker & Client Map tabs
     document.getElementById('locTabs')?.addEventListener('click', (e) => {
@@ -446,7 +485,9 @@ function pickerSummary(groups) {
         next.focus();
         locSwitchView(next.dataset.locView);
     });
-    document.getElementById('btnMacScan')?.addEventListener('click', runMacScan);
+    document.getElementById('btnMacScan')?.addEventListener('click', (e) =>
+        runMacScan(pickerSelectedIps('mac'), /** @type {HTMLButtonElement} */ (e.currentTarget)));
     document.getElementById('btnSaveMacRetention')?.addEventListener('click', saveMacRetention);
     document.getElementById('btnSaveMacOverride')?.addEventListener('click', saveMacOverride);
-    document.getElementById('btnArpScan')?.addEventListener('click', runArpScan);
+    document.getElementById('btnArpScan')?.addEventListener('click', (e) =>
+        runArpScan(pickerSelectedIps('arp'), /** @type {HTMLButtonElement} */ (e.currentTarget)));
