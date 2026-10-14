@@ -22,6 +22,8 @@
     let _rtContext = {};
     let _rtLoaded = [];          // [{value, label}] devices of the last read
     let _rtMatrix = [];
+    let _rtUnknown = new Set();  // devices whose absence proves nothing (silent / backup only)
+    const _rtLkOpen = new Set(); // lookup rows showing their candidate routes
     const _rtTypes = new Set();  // empty = every type
     let _rtDiffOnly = false;
     let _rtIface = '';           // exit interface picked in the rings; '' = any
@@ -104,6 +106,34 @@
             }
         }
         return best;
+    }
+
+    /** Address lookup, one answer per device: the route that takes `ip`, every
+     *  other route that covers it with why it loses, and which criterion
+     *  decided. `kind`: route | default | none (a live device with nothing
+     *  covering it: dropped) | unknown (silent or backup-only, absence proves
+     *  nothing). `decidedBy` uses the keys of rtRules(), plus 'only'/'ecmp'. */
+    function rtLookup(rows, devices, unknownIps, ip) {
+        return devices.map(d => {
+            const own = rows.filter(r => r.device_ip === d.value);
+            const winners = rtLpm(own, ip);
+            if (!winners.length) {
+                return { device: d, kind: unknownIps.has(d.value) ? 'unknown' : 'none',
+                         winners, candidates: [], decidedBy: '', fromBackup: false };
+            }
+            const wLen = parseNet(winners[0].network).len;
+            const ad = r => (r.distance == null ? 0 : r.distance);
+            const candidates = own.map(r => ({ row: r, n: parseNet(r.network) }))
+                .filter(c => c.n && netContains(c.n, ip))
+                .sort((x, y) => y.n.len - x.n.len || ad(x.row) - ad(y.row) || (x.row.metric || 0) - (y.row.metric || 0))
+                .map(c => ({ row: c.row,
+                             verdict: winners.includes(c.row) ? 'win' : c.n.len < wLen ? 'lose-prefix' : 'lose-distance' }));
+            const decidedBy = winners.length > 1 ? 'ecmp'
+                : candidates.length === 1 ? 'only'
+                : candidates.some(c => c.verdict === 'lose-distance') ? 'distanza' : 'prefisso';
+            return { device: d, kind: wLen === 0 ? 'default' : 'route', winners, candidates, decidedBy,
+                     fromBackup: winners.some(r => r.from_backup) };
+        });
     }
 
     /** One entry per (vrf, prefix). For each device: its rows, or what it
@@ -469,6 +499,7 @@
         // silent, or of which only the backup statics are known, is unknown.
         const live = new Set(_rtRows.filter(r => !r.from_backup).map(r => r.device_ip));
         const unknown = new Set(chosen.map(d => d.value).filter(ip => !live.has(ip)));
+        _rtUnknown = unknown;
         _rtMatrix = rtBuildMatrix(_rtRows, chosen, unknown);
         renderRtErrors();
         renderRtMatrix();
@@ -515,6 +546,7 @@
         if (!head || !body) return;
         const q = rtQuery(rtSearchValue());
         const devs = _rtLoaded;
+        renderRtLookup(q);
         renderRtTally();
         renderRtRings();
         renderRtChips();
@@ -577,6 +609,77 @@
                 escapeHtml(tr('rtMxCapped', { n: RT_MAX_ROWS, total: rows.length }))}</td></tr>`);
         }
         body.innerHTML = html.join('');
+    }
+
+    // Address typed in the search: one sentence per device saying which route
+    // takes it and where it goes; a click opens that device's candidate routes
+    // with the reason each one wins or loses. The matrix below stays as is.
+    function renderRtLookup(q) {
+        const box = document.getElementById('rtLookup');
+        if (!box) return;
+        if (q.kind !== 'ip' || !_rtLoaded.length) { box.hidden = true; box.innerHTML = ''; return; }
+        const hopOf = (r, dev) => (r.gateway && r.gateway !== '0.0.0.0')
+            ? r.gateway : rtIfaceName(_rtContext, dev, r.interface || '?');
+        const rows = rtLookup(_rtRows, _rtLoaded, _rtUnknown, q.ip).map(a => {
+            const dev = a.device.value;
+            const name = `<b class="rt-lk-dev">${escapeHtml(a.device.label)}</b>`;
+            if (a.kind === 'none') {
+                return `<li class="rt-lk-row none"><p>${name}: <span class="rt-lk-bad">${escapeHtml(tr('rtLkNone'))}</span></p></li>`;
+            }
+            if (a.kind === 'unknown') {
+                return `<li class="rt-lk-row unknown"><p>${name}: ${escapeHtml(tr('rtLkUnknown'))}</p></li>`;
+            }
+            const w = a.winners[0];
+            const attached = RT_ATTACHED.includes(w.type) && !(w.gateway && w.gateway !== '0.0.0.0');
+            const say = a.kind === 'default'
+                ? tr('rtLkDefault', { net: w.network, hop: hopOf(w, dev) })
+                : attached ? tr('rtLkConnected', { net: w.network, iface: hopOf(w, dev) })
+                : tr('rtLkRoute', { net: w.network, type: w.raw_type || w.type, hop: hopOf(w, dev) });
+            const ecmp = a.winners.length > 1
+                ? ' ' + tr('rtLkEcmp', { hops: a.winners.slice(1).map(r => hopOf(r, dev)).join(', ') }) : '';
+            const why = a.decidedBy === 'only' ? tr('rtWhyOnly')
+                : a.decidedBy === 'prefisso' ? tr('rtWhyPrefix', { len: parseNet(w.network).len })
+                : a.decidedBy === 'distanza' ? tr('rtWhyDistance') : tr('rtWhyEcmp');
+            const backup = a.fromBackup ? ` <span class="rt-lk-warn">${escapeHtml(tr('rtWhyBackup'))}</span>` : '';
+            const open = _rtLkOpen.has(dev);
+            let detail = '';
+            if (open) {
+                const cand = a.candidates.map(c => {
+                    const r = c.row, win = c.verdict === 'win';
+                    return `<tr class="${win ? 'won' : 'lost'}">
+                        <td class="rt-lead">${rtKind(r.type)}${escapeHtml(r.network)}</td>
+                        <td>${r.gateway && r.gateway !== '0.0.0.0' ? escapeHtml(tr('rtTraceVia', { hop: r.gateway }))
+                                        : escapeHtml(tr('rtTraceOnIface', { iface: hopOf(r, dev) }))}</td>
+                        <td class="rt-num">/${escapeHtml(String(parseNet(r.network).len))}</td>
+                        <td class="rt-num">${escapeHtml(String(r.distance == null ? 0 : r.distance))}</td>
+                        <td class="rt-num">${escapeHtml(String(r.metric || 0))}</td>
+                        <td class="rt-num"><span class="rt-outcome${win ? ' win' : ''}">${
+                            escapeHtml(win ? tr('rtTraceWins') : tr('rtTraceDropped'))}</span></td>
+                      </tr>`;
+                }).join('');
+                const hit = { prefisso: 0, distanza: 1, ecmp: 1, only: 0 }[a.decidedBy];
+                const rules = rtRules().map((rule, i) =>
+                    `<span class="rt-rule-step ${i === hit ? 'hit' : i > hit ? 'moot' : ''}">${escapeHtml(rule.label)}</span>`).join('');
+                detail = `<div class="rt-lk-detail"><table class="rt-cand" data-no-colpicker>
+                    <thead><tr>
+                      <th data-no-sort="1">${escapeHtml(tr('rtColNetwork'))}</th>
+                      <th data-no-sort="1">${escapeHtml(tr('rtColNextHop'))}</th>
+                      <th class="rt-num" data-no-sort="1">${escapeHtml(tr('rtTraceColPrefix'))}</th>
+                      <th class="rt-num" data-no-sort="1">${escapeHtml(tr('rtTraceColAd'))}</th>
+                      <th class="rt-num" data-no-sort="1">${escapeHtml(tr('rtColMetric'))}</th>
+                      <th class="rt-num" data-no-sort="1">${escapeHtml(tr('rtTraceColOutcome'))}</th>
+                    </tr></thead><tbody>${cand}</tbody></table>
+                    <div class="rt-rule">${rules}</div></div>`;
+            }
+            return `<li class="rt-lk-row ${a.kind}">
+                <button type="button" class="rt-lk-toggle" data-action="rt-lk-toggle" data-dev="${escapeHtml(dev)}" aria-expanded="${open}">
+                  <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+                  <span>${name}: ${escapeHtml(say + ecmp)}<span class="rt-lk-why">${escapeHtml(why)}${
+                      a.candidates.length > 1 ? ' ' + escapeHtml(tr('rtLkCandidates', { n: a.candidates.length })) : ''}</span>${backup}</span>
+                </button>${detail}</li>`;
+        }).join('');
+        box.hidden = false;
+        box.innerHTML = `<h3>${escapeHtml(tr('rtLkHead', { ip: q.text }))}</h3><ul class="rt-lk-list">${rows}</ul>`;
     }
 
     function rtCell(e, d, winners) {
@@ -1406,7 +1509,18 @@
     // Cambiare tenant svuota la selezione: gli apparati scelti prima possono
     // non essere piu' in scope, e le righe gia' a schermo sarebbero di un
     // altro cliente.
+    document.getElementById('rtLookup')?.addEventListener('click', e => {
+        const btn = /** @type {HTMLElement|null} */ (/** @type {HTMLElement} */ (e.target).closest('[data-action="rt-lk-toggle"]'));
+        if (!btn) return;
+        const dev = btn.dataset.dev || '';
+        if (_rtLkOpen.has(dev)) _rtLkOpen.delete(dev); else _rtLkOpen.add(dev);
+        renderRtLookup(rtQuery(rtSearchValue()));
+        /** @type {HTMLElement|null} */ (document.querySelector(
+            `#rtLookup [data-dev="${CSS.escape(dev)}"]`))?.focus();
+    });
+
     window.addEventListener('globalTenantChanged', () => {
+        _rtLkOpen.clear(); _rtUnknown = new Set();
         _rtRows = []; _rtErrors = []; _rtLoaded = []; _rtMatrix = []; _rtContext = {};
         _rtOpen.clear();
         _rtIface = '';
@@ -1415,7 +1529,7 @@
 
     window.loadRoutesTab = routesTabShown;
     // The pure model, for tests/js/test_routes_matrix.mjs.
-    window.rtModel = { ip4, parseNet, rtLpm, rtBuildMatrix, rtQuery, rtMatches,
+    window.rtModel = { ip4, parseNet, rtLpm, rtLookup, rtBuildMatrix, rtQuery, rtMatches,
                        rtBuildSankey, rtDeviceOwners, rtDeviceDepths, rtHopResolver,
                        rtPolicyRows, rtPolicyMatches, rtIfaceName, rtRingData, rtMonitorRows };
 })();
