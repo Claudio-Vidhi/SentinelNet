@@ -1590,55 +1590,43 @@
 
     <!-- TAB: Endpoint group — MAC tracker, client map, diagnosi, inventory -->
     <div id="tab-endpoint" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
-        <div class="hero-card">
-          <h2 id="locTitle" data-i18n="titleMacTracker">MAC Address Tracker</h2>
-          <p id="locDesc" data-i18n="descMacTracker"></p>
+      <div class="page-head">
+        <div class="page-head-text">
+          <h2 data-i18n="locTitle">Localizzazione endpoint</h2>
+          <p data-i18n="locDesc">Dove sono attaccati i dispositivi della rete, ricostruito dalle MAC table degli switch e dall'ARP dei gateway.</p>
         </div>
+        <div class="page-head-actions" id="locHeadActions"></div>
       </div>
 
-      <div id="locPills" class="subtab-bar">
-        <button type="button" class="ca-pill active" id="locPill-mac" data-loc-view="mac" data-i18n="tabMacTracker">Tracker MAC</button>
-        <button type="button" class="ca-pill" id="locPill-diagnosi" data-loc-view="diagnosi" data-i18n="tabDiagnosi">Diagnosi Client</button>
-        <button type="button" class="ca-pill" id="locPill-inventory" data-loc-view="inventory" data-i18n="tabEndpoints">Endpoint Inventory</button>
-        <button type="button" class="ca-pill" id="locPill-porterrors" data-loc-view="porterrors" data-i18n="tabPortErrors">Errori porte</button>
+      <form id="locSearchForm" class="loc-search" role="search">
+        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+        <input id="locSearch" type="search" autocomplete="off"
+               placeholder="Cerca MAC, IP, vendor, switch o porta" data-i18n-placeholder="locSearchPh"
+               aria-label="Cerca MAC, IP, vendor, switch o porta" data-i18n-aria-label="locSearchPh">
+        <kbd aria-hidden="true">/</kbd>
+      </form>
+      <div id="locSearchMsg" class="loc-search-msg" role="status"></div>
+
+      <div id="locTabs" class="loc-tabs" role="tablist" aria-label="Viste" data-i18n-aria-label="ariaLocTabs">
+        <button type="button" role="tab" id="locTab-endpoint" data-loc-view="endpoint" aria-controls="locPane-endpoint" aria-selected="true" data-i18n="locTabEndpoint">Endpoint</button>
+        <button type="button" role="tab" id="locTab-porte" data-loc-view="porte" aria-controls="locPane-porte" aria-selected="false" tabindex="-1" data-i18n="locTabPorte">Porte</button>
+        <button type="button" role="tab" id="locTab-diagnosi" data-loc-view="diagnosi" aria-controls="locPane-diagnosi" aria-selected="false" tabindex="-1" data-i18n="locTabDiagnosi">Diagnosi</button>
+        <button type="button" role="tab" id="locTab-raccolta" data-loc-view="raccolta" aria-controls="locPane-raccolta" aria-selected="false" tabindex="-1" data-i18n="locTabRaccolta">Raccolta</button>
       </div>
 
-      <div id="locPane-mac" class="loc-pane">
+      <div id="locBody" class="loc-body">
+      <div id="locMain" class="loc-main">
+      <div id="locPane-raccolta" class="loc-pane" role="tabpanel" aria-labelledby="locTab-raccolta" hidden>
       <div class="oneline-foot" style="margin-bottom:18px;">
         <span><span data-i18n="macKpiSightingsLabel">Avvistamenti</span> <b id="kpiMacSightings">&mdash;</b></span>
-        <span class="kpi-clickable" id="kpiMacUniqueWrap" data-action="focus-mac-results" title="" data-i18n-title="macKpiUniqueHint" role="button" tabindex="0"><span data-i18n="macKpiUniqueLabel">MAC Univoci</span> <i class="fa-solid fa-arrow-down-long kpi-cue"></i> <b id="kpiMacUniqueMacs">&mdash;</b></span>
+        <span><span data-i18n="macKpiUniqueLabel">MAC visti sugli switch</span> <b id="kpiMacUniqueMacs">&mdash;</b></span>
         <span><span data-i18n="macKpiSwitchesLabel">Switch</span> <b id="kpiMacSwitches">&mdash;</b></span>
         <span><span data-i18n="macKpiRetentionLabel">Retention (giorni)</span> <b id="kpiMacRetention">&mdash;</b></span>
       </div>
 
-      <!-- One console: search on top (the daily job), collection underneath
-           (MAC scan, ARP from the L3 gateways, retention, ad-hoc commands).
-           Three stacked panels with their own header strips spent a screen
-           of height on four rows of controls. -->
+      <!-- Collection console: MAC scan, ARP from the L3 gateways, ad-hoc
+           commands, retention. Searching lives in the tab's search box. -->
       <div class="panel mac-console" style="margin-bottom:18px;">
-        <div class="mac-row mac-search">
-          <span class="mac-legend" data-i18n="titleMacSearchPanel">Cerca MAC</span>
-          <div class="mac-field">
-            <label for="macSearchMac" data-i18n="lblMacSearch">MAC (anche parziale / OUI)</label><input id="macSearchMac" class="ui-input" type="text" placeholder="aa:bb:cc / aabb.ccdd.eeff" style="width:210px;">
-          </div>
-          <div class="mac-field">
-            <label for="macSearchVlan" data-i18n="lblMacVlan">VLAN</label><input id="macSearchVlan" class="ui-input" type="text" placeholder="10" style="width:76px;">
-          </div>
-          <div class="mac-field">
-            <label for="macSearchIface" data-i18n="lblMacIface">Interfaccia / Port-channel</label><input id="macSearchIface" class="ui-input" type="text" placeholder="Gi1/0/5, Po1" style="width:160px;">
-          </div>
-          <div class="mac-field">
-            <label for="macSearchSwitch" data-i18n="lblMacSwitch">Switch (IP)</label><select id="macSearchSwitch" class="ui-input" style="width:200px;"></select>
-          </div>
-          <button class="btn btn-primary btn-small" id="btnMacSearch" data-i18n="btnMacSearchGo">
-            <i class="fa-solid fa-magnifying-glass"></i> Cerca
-          </button>
-          <button class="btn btn-secondary btn-small" id="btnMacSearchReset" data-i18n="btnMacReset">
-            <i class="fa-solid fa-rotate-left"></i> Reset
-          </button>
-        </div>
-
         <!-- MAC and ARP are two halves of the same collection: they sit on one
              row, each with its own device picker. -->
         <div class="mac-row mac-collect">
@@ -1722,12 +1710,8 @@
         <div id="arpScanSummary" style="display:none; margin-top:12px; font-size:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:12px;"></div>
       </div>
 
-      <!-- Risultati raggruppati per switch: clic sull'host per espandere i MAC -->
-      <div class="table-wrap">
-        <div id="macResults"></div>
       </div>
-      </div>
-      <div id="locPane-diagnosi" class="loc-pane" style="display:none;">
+      <div id="locPane-diagnosi" class="loc-pane" role="tabpanel" aria-labelledby="locTab-diagnosi" hidden>
       <div class="panel" style="margin-bottom:16px;">
         <h3 style="font-size:15px; margin-bottom:12px;">
           <i class="fa-solid fa-stethoscope" style="color:var(--primary);"></i>
@@ -1778,7 +1762,7 @@
       </div>
       <div id="diagResult"></div>
       </div>
-      <div id="locPane-porterrors" class="loc-pane" style="display:none;">
+      <div id="locPane-porte" class="loc-pane" role="tabpanel" aria-labelledby="locTab-porte" hidden>
         <div class="panel" style="margin-bottom:12px;">
           <div class="if-scope">
             <div class="if-field">
@@ -1827,7 +1811,7 @@
         <div id="peResults"></div>
       </div>
 
-      <div id="locPane-inventory" class="loc-pane" style="display:none;">
+      <div id="locPane-endpoint" class="loc-pane" role="tabpanel" aria-labelledby="locTab-endpoint">
       <div style="display:flex; gap:8px; margin-bottom:12px; align-items:center; flex-wrap:wrap;">
         <button id="epModeListBtn" class="btn btn-secondary btn-small" style="width:auto; margin:0; border-color:var(--primary); color:var(--primary);"
                 data-ep-mode="list" data-i18n="epModeList"></button>
@@ -1873,6 +1857,8 @@
       </div>
       <div id="epResults"></div>
       </div>
+      </div><!-- /locMain -->
+      </div><!-- /locBody -->
     </div>
 
     <!-- TAB: Cisco WLC Live Observability -->

@@ -703,21 +703,17 @@ class TestTabFrontend(unittest.TestCase):
             return fh.read()
 
     def test_la_tab_esiste_ed_e_raggiungibile(self):
-        # #tab-endpoints was folded into the #locPane-inventory pane of the
-        # merged #tab-endpoint; it's reachable via the inventory pill, not
-        # its own switchTab() call any more.
-        self.assertIn('id="locPane-inventory"', self.src)
-        self.assertIn('data-loc-view="inventory"', self.src)
+        # The inventory is the Endpoint view of #tab-endpoint.
+        self.assertIn('id="locPane-endpoint"', self.src)
+        self.assertIn('data-loc-view="endpoint"', self.src)
 
-    def test_e_la_quarta_sorella_del_gruppo_client(self):
-        """Le tre pillole devono stare nello stesso gruppo #locPills."""
+    def test_the_endpoint_view_is_a_tab_of_the_group(self):
         self.assertIn('data-tabs="tab-endpoint"', self.src)
-        pills_start = self.src.index('id="locPills"')
-        pills_end = self.src.index('</div>', pills_start)
-        pills_html = self.src[pills_start:pills_end]
-        for view in ("mac", "diagnosi", "inventory"):
-            self.assertIn(f'id="locPill-{view}"', pills_html)
-            self.assertIn(f'data-loc-view="{view}"', pills_html)
+        start = self.src.index('id="locTabs"')
+        tabs_html = self.src[start:self.src.index('</div>', start)]
+        for view in ("endpoint", "porte", "diagnosi", "raccolta"):
+            self.assertIn(f'id="locTab-{view}"', tabs_html)
+            self.assertIn(f'data-loc-view="{view}"', tabs_html)
 
     def test_lo_script_e_incluso(self):
         self.assertIn('src="/static/js/endpoint-inventory.js"', self.src)
@@ -775,7 +771,7 @@ class TestTabFrontend(unittest.TestCase):
         locTenantChanged(), che ricarica la pane aperta
         (endpointsApplyFilters() per l'Inventario Endpoint)."""
         self.assertIn("locTenantChanged", self.src)
-        self.assertIn("inventory: () => loadEndpointsTab()", self.src)
+        self.assertIn("endpoint: () => loadEndpointsTab()", self.src)
 
     def test_nessun_filtro_scavalca_la_modalita(self):
         """Un controllo di filtro che chiama endpointsSearch() ridipinge

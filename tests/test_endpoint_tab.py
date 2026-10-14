@@ -20,7 +20,7 @@ os.environ.setdefault("SENTINELNET_DATA_DIR",
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-VIEWS = ("mac", "diagnosi", "inventory", "porterrors")
+VIEWS = ("endpoint", "porte", "diagnosi", "raccolta")
 
 
 def _read(*parts):
@@ -35,30 +35,35 @@ class TestEndpointShell(unittest.TestCase):
         cls.js = _read("static", "js", "client-map.js")
 
     def test_the_tab_exists(self):
-        # role="tabpanel"/tabindex si sono aggiunti al tag (pass a11y).
         self.assertRegex(self.html, r'<div id="tab-endpoint" class="tab-content"[^>]*>')
 
-    def test_pills_and_panes_exist(self):
+    def test_page_head_and_search(self):
+        tab = self.html[self.html.index('id="tab-endpoint"'):self.html.index('id="tab-wlc"')]
+        self.assertIn('class="page-head"', tab)
+        self.assertIn('id="locSearch"', tab)
+        self.assertIn('id="locSearchMsg"', tab)
+        self.assertNotIn('class="hero"', tab)
+        self.assertNotIn('id="locPills"', tab)
+
+    def test_tabs_and_panes_exist(self):
+        self.assertIn('id="locTabs" class="loc-tabs" role="tablist"', self.html)
         for v in VIEWS:
-            self.assertIn(f'id="locPill-{v}"', self.html)
+            self.assertIn(f'id="locTab-{v}"', self.html)
+            self.assertIn(f'aria-controls="locPane-{v}"', self.html)
             self.assertIn(f'id="locPane-{v}"', self.html)
 
-    def test_pills_are_wired_to_the_switcher(self):
+    def test_tabs_are_wired_to_the_switcher(self):
         for v in VIEWS:
             self.assertIn(f'data-loc-view="{v}"', self.html)
         self.assertIn("function locSwitchView", self.js)
+        self.assertIn("getElementById('locTabs')", self.js)
 
     def test_no_tenant_select_of_its_own(self):
-        # The tab used to carry its own tenant filter next to the global one in
-        # the header: two controls for one concept, free to disagree. The scope
-        # now comes from the global selector alone.
         self.assertNotIn('id="locTenant"', self.html)
         self.assertIn("window.globalSelectedTenant", self.js)
 
     def test_the_nav_item_points_at_the_merged_tab(self):
         self.assertIn('data-tabs="tab-endpoint"', self.html)
-        # CSP senza 'unsafe-inline': la nav non porta piu' onclick, il click
-        # e' delegato in core.js sull'attributo data-tab.
         self.assertIn('data-tab="tab-endpoint"', self.html)
 
 
@@ -66,18 +71,21 @@ class TestPanesHoldTheContent(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.html = _read("templates", "dashboard.html")
+        cls.js = _read("static", "js", "client-map.js")
 
     def test_the_old_tabs_are_gone(self):
         for old in ("tab-mac", "tab-clientmap", "tab-diagnosi", "tab-endpoints"):
             self.assertNotIn(f'<div id="{old}" class="tab-content">', self.html)
-
-    def test_the_subtab_bar_is_not_duplicated_any_more(self):
-        # The bar was copy-pasted into all four tabs; one pill bar replaces it.
-        # Do NOT count the 'ti-subtab' class globally: Provisioning, Topologia
-        # and Threat Intel share it. Assert instead that no button anywhere
-        # still switches to one of the four merged tabs.
-        for old in ("tab-mac", "tab-clientmap", "tab-diagnosi", "tab-endpoints"):
             self.assertNotIn(f"switchTab('{old}')", self.html)
+
+    def test_the_old_mac_search_is_gone(self):
+        # The inventory lists every endpoint; a second search over the raw
+        # sightings was a second answer to the same question.
+        for old in ("macSearchMac", "macSearchVlan", "macSearchIface",
+                    "macSearchSwitch", "btnMacSearch", "macResults", "kpiMacUniqueWrap"):
+            self.assertNotIn(f'id="{old}"', self.html)
+        for fn in ("function macSearch(", "function renderMacResults(", "function focusMacResults("):
+            self.assertNotIn(fn, self.js)
 
     def _pane(self, view):
         start = self.html.index(f'id="locPane-{view}"')
@@ -85,11 +93,11 @@ class TestPanesHoldTheContent(unittest.TestCase):
         return self.html[start:rest if rest != -1 else len(self.html)]
 
     def test_each_pane_holds_its_own_panels(self):
-        self.assertIn('id="macDeviceMenu"', self._pane("mac"))
-        self.assertIn('id="kpiMacSightings"', self._pane("mac"))
-        self.assertIn('id="arpDeviceMenu"', self._pane("mac"))
+        self.assertIn('id="btnMacScan"', self._pane("raccolta"))
+        self.assertIn('id="kpiMacSightings"', self._pane("raccolta"))
+        self.assertIn('id="btnArpScan"', self._pane("raccolta"))
         self.assertIn('id="diagClientInput"', self._pane("diagnosi"))
-        self.assertIn('id="epFilterQ"', self._pane("inventory"))
+        self.assertIn('id="epResults"', self._pane("endpoint"))
 
 
 class TestOneTenantSelector(unittest.TestCase):
