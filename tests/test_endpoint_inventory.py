@@ -341,6 +341,49 @@ class TestFiltriEScoping(_Base):
         self.assertEqual(mac_history.endpoint_inventory(q="ee:01")["total"], 1)
         self.assertEqual(mac_history.endpoint_inventory(q="Example")["total"], 1)
 
+    def test_search_by_full_ip_goes_through_arp(self):
+        self._sighting(mac=MAC_A)
+        self._sighting(mac=MAC_VM, switch_ip="192.0.2.2")
+        self._arp(mac=MAC_A, ip="192.0.2.10")
+
+        out = mac_history.endpoint_inventory(q="192.0.2.10")
+
+        self.assertEqual([r["mac"] for r in out["results"]], [MAC_A])
+
+    def test_search_by_unknown_ip_finds_nothing(self):
+        self._sighting(mac=MAC_A)
+        self._arp(mac=MAC_A, ip="192.0.2.10")
+
+        self.assertEqual(mac_history.endpoint_inventory(q="192.0.2.99")["total"], 0)
+
+    def test_search_by_ip_returns_every_mac_that_held_it(self):
+        # An address handed to a new device: both owners are facts, the
+        # search must not pick one.
+        self._sighting(mac=MAC_A)
+        self._sighting(mac=MAC_VM, switch_ip="192.0.2.2")
+        self._arp(mac=MAC_A, ip="192.0.2.10", last_days=5)
+        self._arp(mac=MAC_VM, ip="192.0.2.10", source_ip="192.0.2.253")
+
+        out = mac_history.endpoint_inventory(q="192.0.2.10")
+
+        self.assertEqual({r["mac"] for r in out["results"]}, {MAC_A, MAC_VM})
+
+    def test_search_by_ip_respects_the_tenant_scope(self):
+        self._sighting(mac=MAC_A, tenant="sede-a")
+        self._arp(mac=MAC_A, ip="192.0.2.10", tenant="sede-a")
+
+        out = mac_history.endpoint_inventory(tenants=["sede-b"], q="192.0.2.10")
+
+        self.assertEqual(out["total"], 0)
+
+    def test_partial_ip_keeps_the_text_search(self):
+        self._sighting(mac=MAC_A)
+        self._arp(mac=MAC_A, ip="192.0.2.10")
+
+        # "192.0.2" is not an address: it falls back to the LIKE search,
+        # which does not look at IPs.
+        self.assertEqual(mac_history.endpoint_inventory(q="192.0.2")["total"], 0)
+
     def test_limite_dichiarato_non_silenzioso(self):
         """Una tabella HTML non regge decine di migliaia di righe: si taglia e
         lo si DICE, cosi' l'export puo' avvertire che esporta cio' che vede."""
