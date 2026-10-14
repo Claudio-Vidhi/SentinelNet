@@ -34,4 +34,8 @@ assert.deepEqual(
     portCfgSummary('interface GigabitEthernet1/0/4\n switchport access vlan 7\n spanning-tree portfast\n shutdown\n!'),
     { text: 'switchport access vlan 7 · spanning-tree portfast', more: 1, count: 3 });
 
+// Porte: a single-MAC port opens that endpoint's drawer.
+assert.ok(src.includes('function loadPortsView('), 'missing loadPortsView');
+assert.ok(src.includes('data-action="ep-open-mac"'), 'single-MAC port cell must open the drawer');
+
 console.log('endpoint_inventory_ui: ok');

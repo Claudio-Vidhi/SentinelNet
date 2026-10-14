@@ -1763,62 +1763,43 @@
       <div id="diagResult"></div>
       </div>
       <div id="locPane-porte" class="loc-pane" role="tabpanel" aria-labelledby="locTab-porte" hidden>
-        <div class="panel" style="margin-bottom:12px;">
-          <div class="if-scope">
-            <div class="if-field">
-              <label class="if-field-label" for="peDevice" data-i18n="peDevice">Apparato</label>
-              <select id="peDevice" class="if-select"><option value="" data-i18n="peDeviceAll">Tutti gli apparati</option></select>
-            </div>
-            <div class="if-field">
-              <label class="if-field-label" for="peWindow" data-i18n="ifErrWindow">Finestra errori</label>
-              <select id="peWindow" class="if-select">
-                <option value="1h" data-i18n="ifErrWin1h">Ultima ora</option>
-                <option value="24h" selected data-i18n="ifErrWin24h">Ultime 24 ore</option>
-                <option value="7d" data-i18n="ifErrWin7d">Ultimi 7 giorni</option>
-              </select>
-            </div>
-            <div class="if-field">
-              <label class="if-field-label" for="peShow" data-i18n="peShow">Mostra</label>
-              <select id="peShow" class="if-select">
-                <option value="bad" selected data-i18n="peShowBad">Porte con errori o scarti</option>
-                <option value="all" data-i18n="peShowAll">Tutte le porte con contatori</option>
-              </select>
-            </div>
-            <div style="display:flex; gap:8px; margin-left:auto;">
-              <button type="button" id="peRefresh" class="btn btn-secondary btn-small" style="width:auto; margin:0;">
-                <i class="fa-solid fa-rotate"></i> <span data-i18n="ifBtnRefresh">Aggiorna</span></button>
-              <button type="button" id="peReadNow" class="btn btn-secondary btn-small requires-write" style="width:auto; margin:0;" title="Seleziona un apparato e leggi ora i contatori di errore (SNMP, altrimenti SSH)" data-i18n-title="ifBtnReadErrorsTitle">
-                <i class="fa-solid fa-stethoscope"></i> <span data-i18n="ifBtnReadErrors">Leggi errori ora</span></button>
-            </div>
-          </div>
-        </div>
-        <details id="peLegend" class="panel" style="margin-bottom:12px; padding:10px 14px; font-size:12.5px;">
-          <summary style="cursor:pointer; font-weight:600;" data-i18n="peLegendTitle">Legenda: cosa significano gli errori</summary>
-          <p data-i18n="peLegendBadge" style="margin:10px 0; color:var(--text-muted);">Il numero nel riquadro rosso e' quanti errori sono cresciuti nella finestra scelta (scarti esclusi); l'etichetta e' la categoria piu' grave fra quelle cresciute. "Contatori in crescita" elenca ogni contatore col suo incremento: conta la crescita, non il totale accumulato dall'avvio. Un contatore di dettaglio (CRC, simbolo...) e' gia' compreso negli errori in ingresso o in uscita: dice il perche', non si somma.</p>
-          <dl style="display:grid; grid-template-columns:max-content 1fr; gap:6px 12px; margin:0; align-items:start;">
+        <div class="ep-toolbar">
+          <label class="ep-field" for="ptSwitch"><span data-i18n="peDevice">Apparato</span>
+            <select id="ptSwitch"></select></label>
+          <label class="ep-field" for="ptWindow"><span data-i18n="ifErrWindow">Finestra errori</span>
+            <select id="ptWindow">
+              <option value="1h" data-i18n="ifErrWin1h">Ultima ora</option>
+              <option value="24h" selected data-i18n="ifErrWin24h">Ultime 24 ore</option>
+              <option value="7d" data-i18n="ifErrWin7d">Ultimi 7 giorni</option>
+            </select></label>
+          <label class="ep-toggle" for="ptBad"><input type="checkbox" id="ptBad"> <span data-i18n="ptOnlyBad">Solo problemi</span></label>
+          <span class="ep-spacer"></span>
+          <span class="ep-pop">
+            <button type="button" class="btn btn-secondary btn-small" id="ptLegendBtn" aria-expanded="false" aria-controls="ptLegend"
+                    aria-label="Legenda: cosa significano gli errori" data-i18n-aria-label="peLegendTitle">?</button>
+            <div id="ptLegend" class="ep-pop-body" hidden>
+              <p data-i18n="peLegendBadge">Il numero nel riquadro rosso e' quanti errori sono cresciuti nella finestra scelta (scarti esclusi); l'etichetta e' la categoria piu' grave fra quelle cresciute. "Contatori in crescita" elenca ogni contatore col suo incremento: conta la crescita, non il totale accumulato dall'avvio. Un contatore di dettaglio (CRC, simbolo...) e' gia' compreso negli errori in ingresso o in uscita: dice il perche', non si somma.</p>
+              <dl>
             <dt><span class="iferr iferr-bad" data-i18n="ifErrClass_physical">physical</span></dt>
-            <dd data-i18n="peLegend_physical" style="margin:0 0 8px 0; color:var(--text-muted);">CRC/FCS, allineamento/frame, errori di simbolo, runt, giant. Il segnale arriva corrotto: cavo o bretella danneggiati, connettore sporco, ottica/SFP difettosa o fuori specifica, interferenze. Controlla cavo e SFP (show interfaces transceiver: potenza rx/tx) e la porta all'altro capo.</dd>
+            <dd data-i18n="peLegend_physical">CRC/FCS, allineamento/frame, errori di simbolo, runt, giant. Il segnale arriva corrotto: cavo o bretella danneggiati, connettore sporco, ottica/SFP difettosa o fuori specifica, interferenze. Controlla cavo e SFP (show interfaces transceiver: potenza rx/tx) e la porta all'altro capo.</dd>
             <dt><span class="iferr iferr-bad" data-i18n="ifErrClass_duplex">duplex</span></dt>
-            <dd data-i18n="peLegend_duplex" style="margin:0 0 8px 0; color:var(--text-muted);">Collisioni tardive, collisioni eccessive, perdita di carrier. Quasi sempre un duplex mismatch (un lato full, l'altro half): velocita' e duplex vanno impostati uguali ai due capi, entrambi auto o entrambi fissi.</dd>
+            <dd data-i18n="peLegend_duplex">Collisioni tardive, collisioni eccessive, perdita di carrier. Quasi sempre un duplex mismatch (un lato full, l'altro half): velocita' e duplex vanno impostati uguali ai due capi, entrambi auto o entrambi fissi.</dd>
             <dt><span class="iferr iferr-bad" data-i18n="ifErrClass_hardware">hardware</span></dt>
-            <dd data-i18n="peLegend_hardware" style="margin:0 0 8px 0; color:var(--text-muted);">Errori MAC interni in ricezione o trasmissione: li genera la porta stessa, non il cavo. Se continuano dopo aver cambiato cavo, sospetta la porta o la scheda.</dd>
+            <dd data-i18n="peLegend_hardware">Errori MAC interni in ricezione o trasmissione: li genera la porta stessa, non il cavo. Se continuano dopo aver cambiato cavo, sospetta la porta o la scheda.</dd>
             <dt><span class="iferr iferr-bad" data-i18n="ifErrClass_errors">errors</span></dt>
-            <dd data-i18n="peLegend_errors" style="margin:0 0 8px 0; color:var(--text-muted);">Errori in ingresso o in uscita senza un contatore di dettaglio che dica il perche'. Guarda i dettagli sull'apparato (show interfaces).</dd>
+            <dd data-i18n="peLegend_errors">Errori in ingresso o in uscita senza un contatore di dettaglio che dica il perche'. Guarda i dettagli sull'apparato (show interfaces).</dd>
             <dt><span class="iferr iferr-warn" data-i18n="ifErrClass_discards">discards</span></dt>
-            <dd data-i18n="peLegend_discards" style="margin:0 0 8px 0; color:var(--text-muted);">Scarti in ingresso o in uscita: pacchetti validi buttati per code piene (congestione, microburst) o per policy/QoS. Non e' un guasto fisico; se crescono molto, la porta e' un collo di bottiglia.</dd>
+            <dd data-i18n="peLegend_discards">Scarti in ingresso o in uscita: pacchetti validi buttati per code piene (congestione, microburst) o per policy/QoS. Non e' un guasto fisico; se crescono molto, la porta e' un collo di bottiglia.</dd>
           </dl>
-        </details>
-        <div id="peResults"></div>
+            </div>
+          </span>
+          <button type="button" id="ptRefresh" class="btn btn-secondary btn-small"><i class="fa-solid fa-rotate"></i> <span data-i18n="ifBtnRefresh">Aggiorna</span></button>
+          <button type="button" id="ptRead" class="btn btn-secondary btn-small requires-write"><i class="fa-solid fa-stethoscope"></i> <span data-i18n="ifBtnReadErrors">Leggi errori ora</span></button>
+        </div>
+        <div id="ptResults"></div>
       </div>
 
       <div id="locPane-endpoint" class="loc-pane" role="tabpanel" aria-labelledby="locTab-endpoint">
-      <div style="display:flex; gap:8px; margin-bottom:12px; align-items:center; flex-wrap:wrap;">
-        <button id="epModeListBtn" class="btn btn-secondary btn-small" style="width:auto; margin:0; border-color:var(--primary); color:var(--primary);"
-                data-ep-mode="list" data-i18n="epModeList"></button>
-        <button id="epModePortsBtn" class="btn btn-secondary btn-small" style="width:auto; margin:0;"
-                data-ep-mode="ports" data-i18n="epModePorts"></button>
-        <select id="epPortsSwitch" style="display:none;" aria-label="Switch di cui elencare le porte" data-i18n-aria-label="ariaEpSwitch"></select>
-      </div>
       <div id="epKpis" class="oneline-foot ep-kpis"></div>
       <div class="ep-toolbar">
         <span id="epQueryChip"></span>

@@ -50,9 +50,6 @@ function _epFillFilters() {
 // viste diverse sovrapposte.
 async function endpointsApplyFilters() {
     await endpointsSearch();
-    // In modalita' porte l'elenco appena riletto serve a ricostruire il
-    // selettore degli switch: col tenant cambiato, gli switch sono altri.
-    if (_epMode === 'ports') endpointsMode('ports');
 }
 
 function endpointsParams(q) {
@@ -211,64 +208,14 @@ function endpointsDiagnose(mac, tenant) {
     runDiagnosi();
 }
 
-// Seconda modalita' della stessa tab. L'elenco delle interfacce arriva da
-// switch_if_macs, popolata a ogni scansione MAC: e' fresco quanto l'ultima
-// scansione di QUELLO switch, e la sua eta' si mostra sempre.
-let _epMode = 'list';
-
-function endpointsMode(mode) {
-    _epMode = mode;
-    const listBtn = document.getElementById('epModeListBtn');
-    const portsBtn = document.getElementById('epModePortsBtn');
-    const picker = document.getElementById('epPortsSwitch');
-    const active = 'border-color:var(--primary); color:var(--primary);';
-    if (listBtn) listBtn.style.cssText = 'width:auto; margin:0;' + (mode === 'list' ? active : '');
-    if (portsBtn) portsBtn.style.cssText = 'width:auto; margin:0;' + (mode === 'ports' ? active : '');
-    if (picker) picker.style.display = mode === 'ports' ? '' : 'none';
-
-    if (mode === 'list') { endpointsSearch(); return; }
-    // I KPI sono un riassunto dell'INTERO elenco: in modalita' porte non
-    // descrivono piu' cio' che e' a schermo (le porte di un solo switch), e
-    // lasciarli visibili li fa leggere come fatti su quello switch.
-    const kpis = document.getElementById('epKpis');
-    if (kpis) kpis.innerHTML = '';
-    // Gli apparati arrivano dall'INVENTARIO del tenant, non dagli endpoint
-    // caricati. Costruire l'elenco da _epRows mostrava solo gli switch che
-    // erano la posizione di accesso VINCENTE di almeno un endpoint: uno
-    // switch visto meno di recente spariva, e soprattutto uno switch SENZA
-    // endpoint non compariva mai — cioe' proprio quello con piu' porte
-    // libere, che e' la domanda per cui questa vista esiste.
-    // Stesso filtro di macFilteredDevices() in client-map.js.
-    if (picker) {
-        const cur = picker.value;
-        const tenant = locTenant();
-        let devs = globalDevices || [];
-        if (tenant && tenant !== 'all') devs = devs.filter(d => d.Group === tenant);
-        const label = d => d.Hostname || d.IP;
-        picker.innerHTML = devs.slice()
-            .sort((a, b) => label(a).localeCompare(label(b)))
-            .map(d => `<option value="${escapeHtml(d.IP)}">${escapeHtml(label(d))} — ${escapeHtml(d.IP)}</option>`)
-            .join('');
-        // Un apparato senza elenco interfacce risponde comunque, dichiarando
-        // 'elenco porte non disponibile': meglio di non poterlo nemmeno
-        // scegliere.
-        if (devs.some(d => d.IP === cur)) picker.value = cur;
-    }
-    endpointsPorts();
-}
-
 // `lastRead`: the response of an on-demand read just made, laid over what the
 // list returns (the stored read may not be visible yet to the next query).
 async function endpointsPorts(lastRead) {
-    const host = document.getElementById('epResults');
-    const picker = document.getElementById('epPortsSwitch');
-    const L = i18n[currentLang];
+    const host = document.getElementById('ptResults');
+    const picker = /** @type {HTMLSelectElement|null} */ (document.getElementById('ptSwitch'));
     if (!host) return;
     const sw = picker ? picker.value : '';
-    if (!sw) {
-        host.innerHTML = `<div class="panel" style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;">${escapeHtml(L.epPortsPick)}</div>`;
-        return;
-    }
+    if (!sw) return;
     const res = await apiFetch('/api/endpoints/ports?switch=' + encodeURIComponent(sw));
     if (!res || !res.ok) {
         host.innerHTML = `<div class="panel" style="padding:22px; text-align:center; color:var(--danger); font-size:13px;">${escapeHtml(tr('epiCouldNotLoadPort'))}</div>`;
@@ -291,7 +238,7 @@ async function endpointsPorts(lastRead) {
     // picker is what turns it on.
     const portErrors = {};
     const dev = _epDeviceOf(sw);
-    const q = new URLSearchParams({ device: sw, window: '24h' });
+    const q = new URLSearchParams({ device: sw, window: /** @type {HTMLSelectElement|null} */ (document.getElementById('ptWindow'))?.value || '24h' });
     if (dev.Group) q.set('tenant', dev.Group);
     try {
         const er = await apiFetch('/api/interface-errors?' + q.toString());
@@ -373,6 +320,7 @@ function macCell(p, idx) {
     const cur = hist.filter(m => m.status !== 'gone').map(m => m.mac);
     const nNew = hist.filter(m => m.status === 'new').length;
     const nGone = hist.length - cur.length;
+    if (cur.length === 1 && !nGone) return `<button type="button" class="ep-link" data-action="ep-open-mac" data-mac="${escapeHtml(cur[0])}">${escapeHtml(cur[0])}</button>`;
     if (cur.length <= 3 && !nGone) return escapeHtml(cur.join(', ') || (p.uplink_to ? '→ ' + p.uplink_to : '—'));
     const label = tr('epMacExpand').replace('{n}', String(hist.length));
     return `<button type="button" data-action="ep-toggle-macs" data-idx="${idx}" class="ep-cfg-toggle" aria-expanded="false"
@@ -397,7 +345,7 @@ function macHistHtml(hist) {
 }
 
 function endpointsPortsRender(d, ifaceConfigs = {}, portErrors = {}, sw = '') {
-    const host = document.getElementById('epResults');
+    const host = document.getElementById('ptResults');
     const L = i18n[currentLang];
     if (!host) return;
 
@@ -415,8 +363,11 @@ function endpointsPortsRender(d, ifaceConfigs = {}, portErrors = {}, sw = '') {
     const stateColor = { occupied: 'var(--success)', uplink: 'var(--warning)', free: 'var(--text-muted)' };
     const stateLabel = { occupied: L.epStateOccupied, uplink: L.epStateUplink, free: L.epStateFree };
 
-    _epPortHist = (d.ports || []).map(p => p.mac_history || []);
-    const rows = (d.ports || []).map((p, i) => {
+    const onlyBad = /** @type {HTMLInputElement|null} */ (document.getElementById('ptBad'))?.checked;
+    const errOf = p => portErrors[expandIface(p.interface).toLowerCase()];
+    const ports = (d.ports || []).filter(p => !onlyBad || ['erroring', 'discards'].includes((errOf(p) || {}).status));
+    _epPortHist = ports.map(p => p.mac_history || []);
+    const rows = ports.map((p, i) => {
         const raw = ifaceConfigs[expandIface(p.interface).toLowerCase()];
         let cfgHtml;
         if (raw) {
@@ -456,57 +407,16 @@ function endpointsPortsRender(d, ifaceConfigs = {}, portErrors = {}, sw = '') {
             <b>${escapeHtml(String(c.occupied ?? 0))}</b> ${escapeHtml(L.epStateOccupied)} ·
             <b>${escapeHtml(String(c.uplink ?? 0))}</b> ${escapeHtml(L.epStateUplink)}
             <span style="color:var(--text-muted);">/ ${escapeHtml(String(c.total ?? 0))}</span>
-            ${sw ? `<button type="button" class="btn btn-secondary btn-small requires-write" style="width:auto; margin:0 0 0 12px;"
-                data-action="ep-err-read-switch" data-device="${escapeHtml(sw)}" data-tenant="${escapeHtml(_epDeviceOf(sw).Group || '')}">
-                <i class="fa-solid fa-stethoscope"></i> ${escapeHtml(tr('ifBtnReadErrors'))}</button>` : ''}
+
         </div>
         <div class="panel" style="padding:0;"><div class="table-container"><table>
-            <thead><tr><th>${escapeHtml(L.epThWhere)}</th><th>${escapeHtml(tr('epThPortState'))}</th><th>${escapeHtml(L.epThMac)}</th><th data-col-default-hidden="1">${escapeHtml(tr('epThErrors'))}</th><th>${escapeHtml(L.epThConfig)}</th></tr></thead>
+            <thead><tr><th>${escapeHtml(L.epThWhere)}</th><th>${escapeHtml(tr('epThPortState'))}</th><th>${escapeHtml(L.epThMac)}</th><th>${escapeHtml(tr('epThErrors'))}</th><th>${escapeHtml(L.epThConfig)}</th></tr></thead>
             <tbody>${rows}</tbody>
         </table></div></div>`;
 }
 
 // Delegated click listener on #epResults
 document.getElementById('epResults')?.addEventListener('click', (e) => {
-    const switchReadBtn = e.target.closest('[data-action="ep-err-read-switch"]');
-    if (switchReadBtn) {
-        _epReadErrors(switchReadBtn).then(read => { if (read) endpointsPorts(read); });
-        return;
-    }
-    const copyCfgBtn = e.target.closest('[data-action="ep-copy-cfg"]');
-    if (copyCfgBtn) {
-        const raw = copyCfgBtn.dataset.raw || '';
-        if (navigator.clipboard && raw) {
-            navigator.clipboard.writeText(raw).then(() => {
-                const orig = copyCfgBtn.innerHTML;
-                copyCfgBtn.innerHTML = `<i class="fa-solid fa-check" style="color:var(--success);"></i>`;
-                setTimeout(() => { copyCfgBtn.innerHTML = orig; }, 1500);
-            });
-        }
-        return;
-    }
-    const toggleCfgBtn = e.target.closest('[data-action="ep-toggle-cfg"], [data-action="ep-toggle-macs"]');
-    if (toggleCfgBtn) {
-        // The full block opens in a row of its own, full table width: inside the
-        // cell it squeezed a multi-line config into a narrow column.
-        const row = toggleCfgBtn.closest('tr');
-        const next = row?.nextElementSibling;
-        const open = toggleCfgBtn.getAttribute('aria-expanded') === 'true';
-        if (next && next.classList.contains('ep-cfg-row')) next.remove();
-        // MAC and config toggles share the one detail row: the other closes.
-        row?.querySelectorAll('[data-action="ep-toggle-cfg"], [data-action="ep-toggle-macs"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
-        if (row && !open) {
-            const cfgRow = document.createElement('tr');
-            cfgRow.className = 'ep-cfg-row';
-            const body = toggleCfgBtn.dataset.action === 'ep-toggle-macs'
-                ? macHistHtml(_epPortHist[Number(toggleCfgBtn.dataset.idx)] || [])
-                : `<pre class="ep-cfg-full">${escapeHtml(toggleCfgBtn.dataset.raw || '')}</pre>`;
-            cfgRow.innerHTML = `<td colspan="${row.cells.length}">${body}</td>`;
-            row.after(cfgRow);
-        }
-        toggleCfgBtn.setAttribute('aria-expanded', open ? 'false' : 'true');
-        return;
-    }
     const openRow = e.target.closest('tr[data-action="ep-open"]');
     if (openRow && !e.target.closest('button, a, input, select')) {
         openEpDrawer(openRow.dataset.mac, openRow.dataset.tenant || '', openRow);
@@ -525,9 +435,6 @@ document.getElementById('epResults')?.addEventListener('keydown', (e) => {
 });
 
 // Static event listeners for Endpoint Inventory
-document.getElementById('epModeListBtn')?.addEventListener('click', () => endpointsMode('list'));
-document.getElementById('epModePortsBtn')?.addEventListener('click', () => endpointsMode('ports'));
-document.getElementById('epPortsSwitch')?.addEventListener('change', () => endpointsPorts());
 
 document.getElementById('locSearchForm')?.addEventListener('submit', (e) => { e.preventDefault(); locSearchSubmit(); });
 // "/" jumps to the search while the tab is open and nothing else has the keyboard.
@@ -591,33 +498,14 @@ async function locSearchSubmit() {
 // view only answers "which ports, across the tenant, are erroring now".
 
 async function loadPortErrorsPane() {
-    const host = document.getElementById('peResults');
-    const picker = /** @type {HTMLSelectElement|null} */ (document.getElementById('peDevice'));
+    const host = document.getElementById('ptResults');
     if (!host) return;
     const tenant = locTenant();
-    if (picker) {
-        const cur = picker.value;
-        let devs = globalDevices || [];
-        if (tenant && tenant !== 'all') devs = devs.filter(d => d.Group === tenant);
-        const label = d => d.Hostname || d.IP;
-        picker.innerHTML = `<option value="">${escapeHtml(tr('peDeviceAll'))}</option>` + devs.slice()
-            .sort((a, b) => label(a).localeCompare(label(b)))
-            .map(d => `<option value="${escapeHtml(d.IP)}">${escapeHtml(label(d))} — ${escapeHtml(d.IP)}</option>`)
-            .join('');
-        if (devs.some(d => d.IP === cur)) picker.value = cur;
-    }
-    const device = picker ? picker.value : '';
-    const windowVal = /** @type {HTMLSelectElement|null} */ (document.getElementById('peWindow'))?.value || '24h';
-    const show = /** @type {HTMLSelectElement|null} */ (document.getElementById('peShow'))?.value || 'bad';
+    const windowVal = /** @type {HTMLSelectElement|null} */ (document.getElementById('ptWindow'))?.value || '24h';
 
     host.innerHTML = `<div class="panel" style="padding:26px; text-align:center; color:var(--text-muted); font-size:13px;">
         <i class="fa-solid fa-circle-notch fa-spin" style="margin-right:8px;"></i>${escapeHtml(tr('epiLoading'))}</div>`;
     const q = new URLSearchParams({ window: windowVal });
-    if (device) {
-        q.set('device', device);
-        const dev = _epDeviceOf(device);
-        if (dev.Group) q.set('tenant', dev.Group);
-    }
     let data = null;
     try {
         const res = await apiFetch('/api/interface-errors?' + q.toString());
@@ -630,7 +518,7 @@ async function loadPortErrorsPane() {
     // The global tenant selector narrows the view; the server already limits
     // it to the user's own tenants.
     const all = (data.ports || []).filter(p => !tenant || tenant === 'all' || p.tenant === tenant);
-    const rows = show === 'all' ? all : all.filter(p => p.status === 'erroring' || p.status === 'discards');
+    const rows = all.filter(p => p.status === 'erroring' || p.status === 'discards');
     const bad = all.filter(p => p.status === 'erroring').length;
     const disc = all.filter(p => p.status === 'discards').length;
 
@@ -683,24 +571,92 @@ async function loadPortErrorsPane() {
     </table></div></div>`;
 }
 
-document.getElementById('peDevice')?.addEventListener('change', () => loadPortErrorsPane());
-document.getElementById('peWindow')?.addEventListener('change', () => loadPortErrorsPane());
-document.getElementById('peShow')?.addEventListener('change', () => loadPortErrorsPane());
-document.getElementById('peRefresh')?.addEventListener('click', () => loadPortErrorsPane());
-document.getElementById('peResults')?.addEventListener('click', (e) => {
-    const b = /** @type {HTMLElement|null} */ (/** @type {HTMLElement} */ (e.target).closest('[data-action="pe-portcfg"]'));
-    if (b) showPortConfig(b.dataset.ip, b.dataset.port, b.dataset.name);
-});
-document.getElementById('peReadNow')?.addEventListener('click', async (e) => {
+// Porte: a chosen switch shows all its ports (occupancy + errors); "all"
+// shows only the erroring ports across the tenant.
+function loadPortsView() {
+    const picker = /** @type {HTMLSelectElement|null} */ (document.getElementById('ptSwitch'));
+    if (picker) {
+        const cur = picker.value;
+        const tenant = locTenant();
+        let devs = globalDevices || [];
+        if (tenant && tenant !== 'all') devs = devs.filter(d => d.Group === tenant);
+        const label = d => d.Hostname || d.IP;
+        picker.innerHTML = `<option value="">${escapeHtml(tr('ptSwitchAll'))}</option>` + devs.slice()
+            .sort((a, b) => label(a).localeCompare(label(b)))
+            .map(d => `<option value="${escapeHtml(d.IP)}">${escapeHtml(label(d))} — ${escapeHtml(d.IP)}</option>`).join('');
+        picker.value = devs.some(d => d.IP === cur) ? cur : '';
+    }
+    const bad = /** @type {HTMLInputElement|null} */ (document.getElementById('ptBad'));
+    if (bad) bad.disabled = !picker?.value;      // "all" is problems-only by definition
+    if (picker?.value) endpointsPorts(); else loadPortErrorsPane();
+}
+
+for (const id of ['ptSwitch', 'ptWindow', 'ptBad']) document.getElementById(id)?.addEventListener('change', loadPortsView);
+document.getElementById('ptRefresh')?.addEventListener('click', loadPortsView);
+document.getElementById('ptRead')?.addEventListener('click', async (e) => {
     const btn = /** @type {HTMLButtonElement} */ (e.currentTarget);
-    const device = /** @type {HTMLSelectElement|null} */ (document.getElementById('peDevice'))?.value || '';
+    const device = /** @type {HTMLSelectElement|null} */ (document.getElementById('ptSwitch'))?.value || '';
     if (!device) { showToast(tr('ifErrPickDevice'), 'warning'); return; }
     btn.dataset.device = device;
     btn.dataset.tenant = _epDeviceOf(device).Group || '';
     const read = await _epReadErrors(btn);
     if (read) {
         showToast(tr('ifErrReadDone', { device, src: String(read.source || '').toUpperCase(), s: String(read.interval_s) }), 'success');
-        loadPortErrorsPane();
+        endpointsPorts(read);
+    }
+});
+document.getElementById('ptLegendBtn')?.addEventListener('click', (e) => {
+    const btn = /** @type {HTMLElement} */ (e.currentTarget);
+    const box = document.getElementById('ptLegend');
+    if (!box) return;
+    box.hidden = !box.hidden;
+    btn.setAttribute('aria-expanded', box.hidden ? 'false' : 'true');
+});
+document.addEventListener('click', (e) => {
+    const box = document.getElementById('ptLegend');
+    if (box && !box.hidden && !(/** @type {HTMLElement} */ (e.target)).closest('.ep-pop')) {
+        box.hidden = true;
+        document.getElementById('ptLegendBtn')?.setAttribute('aria-expanded', 'false');
+    }
+});
+document.getElementById('ptResults')?.addEventListener('click', (e) => {
+    const open = /** @type {HTMLElement|null} */ (e.target.closest('[data-action="ep-open-mac"]'));
+    if (open) { openEpDrawer(open.dataset.mac || '', locTenant() === 'all' ? '' : locTenant(), open); return; }
+    const pc = /** @type {HTMLElement|null} */ (e.target.closest('[data-action="pe-portcfg"]'));
+    if (pc) { showPortConfig(pc.dataset.ip, pc.dataset.port, pc.dataset.name); return; }
+    const copyCfgBtn = e.target.closest('[data-action="ep-copy-cfg"]');
+    if (copyCfgBtn) {
+        const raw = copyCfgBtn.dataset.raw || '';
+        if (navigator.clipboard && raw) {
+            navigator.clipboard.writeText(raw).then(() => {
+                const orig = copyCfgBtn.innerHTML;
+                copyCfgBtn.innerHTML = `<i class="fa-solid fa-check" style="color:var(--success);"></i>`;
+                setTimeout(() => { copyCfgBtn.innerHTML = orig; }, 1500);
+            });
+        }
+        return;
+    }
+    const toggleCfgBtn = e.target.closest('[data-action="ep-toggle-cfg"], [data-action="ep-toggle-macs"]');
+    if (toggleCfgBtn) {
+        // The full block opens in a row of its own, full table width: inside the
+        // cell it squeezed a multi-line config into a narrow column.
+        const row = toggleCfgBtn.closest('tr');
+        const next = row?.nextElementSibling;
+        const open = toggleCfgBtn.getAttribute('aria-expanded') === 'true';
+        if (next && next.classList.contains('ep-cfg-row')) next.remove();
+        // MAC and config toggles share the one detail row: the other closes.
+        row?.querySelectorAll('[data-action="ep-toggle-cfg"], [data-action="ep-toggle-macs"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+        if (row && !open) {
+            const cfgRow = document.createElement('tr');
+            cfgRow.className = 'ep-cfg-row';
+            const body = toggleCfgBtn.dataset.action === 'ep-toggle-macs'
+                ? macHistHtml(_epPortHist[Number(toggleCfgBtn.dataset.idx)] || [])
+                : `<pre class="ep-cfg-full">${escapeHtml(toggleCfgBtn.dataset.raw || '')}</pre>`;
+            cfgRow.innerHTML = `<td colspan="${row.cells.length}">${body}</td>`;
+            row.after(cfgRow);
+        }
+        toggleCfgBtn.setAttribute('aria-expanded', open ? 'false' : 'true');
+        return;
     }
 });
 

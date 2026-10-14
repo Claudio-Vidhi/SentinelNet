@@ -758,7 +758,7 @@ class TestTabFrontend(unittest.TestCase):
         endpoint non compariva mai, cioe' proprio quello con piu' porte
         libere. La domanda della vista e' 'dove ho spazio', non 'dove ho
         gia' qualcosa'."""
-        body = self._fn("function endpointsMode(mode)")
+        body = self._fn("function loadPortsView(")
         self.assertIn("globalDevices", body)
         self.assertNotIn("_epRows.forEach", body)
 
@@ -784,14 +784,12 @@ class TestTabFrontend(unittest.TestCase):
         # (Task 3) non ha piu' un onchange proprio: passa da locTenantChanged().
         self.assertIn("endpointsApplyFilters", self.src)
 
-    def test_applica_filtri_ridisegna_nella_modalita_corrente(self):
-        """Con il tenant cambiato gli switch sono altri: in modalita' porte il
-        selettore va ricostruito, non lasciato a quello di prima."""
-        body = self._fn("async function endpointsApplyFilters()")
-        self.assertIn("await endpointsSearch()", body)
-        self.assertIn("_epMode === 'ports'", body)
-        self.assertLess(body.index("await endpointsSearch()"),
-                        body.index("_epMode === 'ports'"))
+    def test_la_vista_porte_si_ricarica_col_tenant(self):
+        """With the tenant changed the switches are others: the Porte view
+        is its own loader, so locTenantChanged() rebuilds its picker."""
+        cm = self._file("static/js/client-map.js")
+        self.assertIn("porte: () => loadPortsView()", cm)
+        self.assertIn("globalDevices", self._fn("function loadPortsView("))
 
     def test_il_client_e_impostato_prima_di_lanciare_la_diagnosi(self):
         """runDiagnosi() azzera _diagTenant quando il client cambia: se
@@ -832,12 +830,11 @@ class TestTabFrontend(unittest.TestCase):
         self.assertNotIn("getElementById('locTenant')", self.src)
         self.assertIn("window.globalSelectedTenant", self.src)
 
-    def test_i_kpi_si_svuotano_in_modalita_porte(self):
-        """Sei numeri validi per l'intero inventario non possono restare a
-        schermo sopra la tabella di UN solo switch: leggerebbero come fatti
-        su quello switch."""
-        body = self._fn("function endpointsMode(")
-        self.assertLess(body.index("epKpis"), body.index("endpointsPorts()"))
+    def test_le_porte_non_disegnano_sopra_l_elenco_endpoint(self):
+        """Ports and the endpoint list used to share #epResults and its KPI
+        strip; the Porte view now has a host of its own."""
+        self.assertIn("getElementById('ptResults')", self._fn("function endpointsPortsRender("))
+        self.assertIn("getElementById('ptResults')", self._fn("async function endpointsPorts("))
 
     def test_ports_in_errore_mostra_un_messaggio_non_la_tabella_vecchia(self):
         """Stesso schema di endpointsSearch() per la stessa condizione: un

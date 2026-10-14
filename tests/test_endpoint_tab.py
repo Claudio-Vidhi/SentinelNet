@@ -190,5 +190,25 @@ class TestEndpointView(unittest.TestCase):
         self.assertIn("openEpDrawer(", body[:body.index("\n}\n")])
 
 
+class TestPortsView(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.html = _read("templates", "dashboard.html")
+        cls.js = _read("static", "js", "endpoint-inventory.js")
+
+    def test_one_toolbar_one_host(self):
+        for _id in ("ptSwitch", "ptWindow", "ptBad", "ptRefresh", "ptRead",
+                    "ptLegendBtn", "ptLegend", "ptResults"):
+            self.assertIn(f'id="{_id}"', self.html)
+        for gone in ("peDevice", "peShow", "peResults", "epModeListBtn", "epPortsSwitch"):
+            self.assertNotIn(f'id="{gone}"', self.html)
+        self.assertNotIn("function endpointsMode(", self.js)
+
+    def test_read_now_is_a_write_action(self):
+        start = self.html.index('id="ptRead"')
+        tag = self.html[self.html.rindex("<button", 0, start):self.html.index(">", start)]
+        self.assertIn("requires-write", tag)
+
+
 if __name__ == "__main__":
     unittest.main()

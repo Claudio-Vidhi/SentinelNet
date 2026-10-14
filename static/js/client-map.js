@@ -16,7 +16,7 @@ const _locLoaded = { endpoint: false, porte: false, diagnosi: false, raccolta: f
 
 const LOC_LOADERS = {
     endpoint: () => loadEndpointsTab(),
-    porte: () => loadPortErrorsPane(),
+    porte: () => loadPortsView(),
     diagnosi: () => diagnosiTabShown(),
     raccolta: () => loadRaccolta(),
 };
