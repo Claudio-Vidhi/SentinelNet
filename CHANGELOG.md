@@ -10,6 +10,30 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Changed
+
+- **Localizzazione endpoint ridisegnata**: una ricerca unica (MAC, IP, vendor,
+  switch, porta) in testa al tab, un pannello di dettaglio a destra al posto
+  della modale "Localizza" e della riga espansa, e quattro viste: Endpoint,
+  Porte (occupazione ed errori insieme), Diagnosi, Raccolta.
+- **Scansioni per sede**: i selettori dei dispositivi per MAC scan e ARP sono
+  raggruppati per sede, con selezione di una sede intera o di una sola;
+  "Raccogli ora" lancia MAC + ARP sulle sedi scelte. Una selezione vuota non
+  vale piu' come "tutti i dispositivi".
+
+### Added
+
+- Ricerca degli endpoint per indirizzo IP completo, attraverso i binding ARP.
+- **Tabelle di routing**: scrivendo un indirizzo, un riquadro dice per ogni
+  apparato quale rotta lo prende (o che viene scartato), con un clic per le
+  rotte candidate e il criterio che ha deciso.
+
+### Removed
+
+- La ricerca separata sugli avvistamenti MAC raggruppati per switch: l'elenco
+  Endpoint e il pannello di dettaglio (sezione Percorso) coprono la stessa
+  domanda.
+
 ## [0.51.5] - 2026-10-14
 
 ### Fixed

@@ -862,8 +862,7 @@ class TestTabFrontend(unittest.TestCase):
         """Stessa convenzione del test analogo gia' in questa classe: una
         chiave presente in un solo dizionario darebbe un titolo vuoto
         nell'altra lingua."""
-        for key in ("epThActions", "epActDiagnose", "epActLocate",
-                    "epActPortCfg"):
+        for key in ("epDrClose", "epDrPosition", "epDrPath", "epActPortCfg"):
             self.assertGreaterEqual(self.src.count(key + ":"), 2,
                                     f"chiave {key} assente in una delle lingue")
 
