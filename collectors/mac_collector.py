@@ -201,10 +201,18 @@ def parse_openconfig_fdb_xml(xml_text: str) -> list:
 
 # --- CLI parser: 'show mac address-table' ---
 
-# E.g.:  "  10    aabb.ccdd.eeff    DYNAMIC     Gi1/0/5"
+_MAC_TOK = (r'(?:[0-9a-fA-F]{4}[.:-][0-9a-fA-F]{4}[.:-][0-9a-fA-F]{4}'
+            r'|[0-9a-fA-F]{2}(?:[:-][0-9a-fA-F]{2}){5})')
+
+# IOS layout, e.g.:  "  10    aabb.ccdd.eeff    DYNAMIC     Gi1/0/5"
 _CLI_ROW = re.compile(
-    r'^\s*(?P<vlan>\d+|All)\s+(?P<mac>[0-9a-fA-F]{4}[.:-][0-9a-fA-F]{4}[.:-][0-9a-fA-F]{4})'
+    r'^\s*(?P<vlan>\d+|All)\s+(?P<mac>' + _MAC_TOK + r')'
     r'\s+(?P<type>\w+)\s+(?:\S+\s+)*?(?P<port>\S+)\s*$', re.I)
+# CBS/SG layout: port BEFORE type and colon MACs, e.g.
+#   "     1         aa:bb:cc:dd:ee:ff    gi1/0/48   dynamic"
+# Missing it parsed zero rows and the scan still reported success.
+_CLI_ROW_CBS = re.compile(
+    r'^\s*(?P<vlan>\d+)\s+(?P<mac>' + _MAC_TOK + r')\s+(?P<port>\S+)\s+(?P<type>[A-Za-z]+)\s*$')
 
 
 def parse_cli_mac_table(text: str) -> list:
@@ -212,12 +220,13 @@ def parse_cli_mac_table(text: str) -> list:
     if not text:
         return out
     for line in text.splitlines():
-        m = _CLI_ROW.match(line)
+        m = _CLI_ROW.match(line) or _CLI_ROW_CBS.match(line)
         if not m:
             continue
         port = m.group('port')
-        # Discards system/non-endpoint rows (CPU, Router, Drop, etc.).
-        if port.lower() in ('cpu', 'router', 'drop', 'switch', '-'):
+        # Discards system/non-endpoint rows (CPU, Router, Drop, CBS 'self', etc.).
+        # The CBS 'self' row ("0  self") also fits the IOS regex with columns swapped.
+        if port.lower() in ('cpu', 'router', 'drop', 'switch', '-', 'self') or m.group('type').lower() == 'self':
             continue
         vlan = m.group('vlan')
         out.append({

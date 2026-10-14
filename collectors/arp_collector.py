@@ -51,7 +51,8 @@ def parse_arp_output(text: str) -> list:
         # for Cisco/FortiOS/HP; if wrong the mac<->ip binding still holds).
         tokens = line.split()
         iface = tokens[-1] if tokens and not tokens[-1].isdigit() else ""
-        if iface == mac or iface == ip_m.group(1):
+        # CBS ends the row with the status column ('dynamic'), not the interface.
+        if iface == mac or iface == ip_m.group(1) or iface.lower() in ("dynamic", "static"):
             iface = ""
         out.append({"mac": mac, "ip": ip_m.group(1),
                     "vlan": vlan_m.group(1) if vlan_m else "",
