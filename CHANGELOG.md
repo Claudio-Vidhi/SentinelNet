@@ -10,6 +10,13 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tabella MAC e ARP su Cisco CBS / SG**: il layout con porta prima del tipo
+  e MAC a due punti non veniva riconosciuto, quindi la scansione riportava
+  successo con zero righe. Ignorata anche la riga `self` e la colonna di stato
+  (`dynamic`/`static`) scambiata per interfaccia nell'ARP.
+
 ## [0.51.4] - 2026-10-14
 
 ### Fixed
