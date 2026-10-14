@@ -63,6 +63,37 @@ function locTenantChanged() {
     LOC_LOADERS[_locView]();
 }
 
+// Devices grouped by site (the inventory's Location) for the scan pickers.
+// Devices without a site get their own group, last: dropping them would hide
+// them from every scan.
+function pickerGroups(devs, sel, labelOf) {
+    const byKey = new Map();
+    for (const d of devs) {
+        const key = d.Location || '';
+        if (!byKey.has(key)) byKey.set(key, { key, label: labelOf(key), devices: [], n: 0, total: 0 });
+        const g = byKey.get(key);
+        const checked = sel.has(d.IP);
+        g.devices.push({ ip: d.IP, name: d.Hostname || d.IP, checked });
+        g.total += 1;
+        if (checked) g.n += 1;
+    }
+    return [...byKey.values()].sort((a, b) =>
+        Number(a.key === '') - Number(b.key === '') || a.label.localeCompare(b.label));
+}
+
+// What the closed picker says. "none" is its own state: the old picker read an
+// empty selection as "every device", which is exactly what must not happen.
+function pickerSummary(groups) {
+    const n = groups.reduce((s, g) => s + g.n, 0);
+    const total = groups.reduce((s, g) => s + g.total, 0);
+    const touched = groups.filter(g => g.n);
+    const sites = touched.map(g => g.label);
+    if (!n) return { kind: 'none', n, total, sites };
+    if (n === total) return { kind: 'all', n, total, sites };
+    if (touched.every(g => g.n === g.total)) return { kind: 'sites', n, total, sites };
+    return { kind: 'partial', n, total, sites };
+}
+
     // --- MAC ADDRESS TRACKER (storico MAC -> switch/porta/vlan) ---
 
     function loadMacTracker() {
