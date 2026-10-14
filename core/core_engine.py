@@ -607,7 +607,8 @@ def probe_device(device):
         return {"status": "error", "message": str(e)}
 
 
-def send_custom_command(device, command: str, bypass_blacklist: bool = False):
+def send_custom_command(device, command: str, bypass_blacklist: bool = False,
+                        read_timeout=None):
     refusal = _manual_refusal(device)
     if refusal:
         return refusal
@@ -642,7 +643,10 @@ def send_custom_command(device, command: str, bypass_blacklist: bool = False):
             elif netmiko_type == 'generic':   # windows
                 prepare_windows_session(net_connect)
             maybe_enable(net_connect, netmiko_type, secret)
-            output = net_connect.send_command(command)
+            # read_timeout None keeps netmiko's 10 s: enough for a show, not
+            # for a traceroute, which then dies with "Pattern not detected".
+            kwargs = {"read_timeout": read_timeout} if read_timeout else {}
+            output = net_connect.send_command(command, **kwargs)
             log_audit(f"Comando CLI '{command}' eseguito con successo sul dispositivo '{device['IP']}'.")
             return {"status": "success", "output": output}
     except Exception as e:
