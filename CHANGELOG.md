@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.51.5] - 2026-10-14
+
 ### Fixed
 
 - **Tabella MAC e ARP su Cisco CBS / SG**: il layout con porta prima del tipo
