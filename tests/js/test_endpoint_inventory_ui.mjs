@@ -38,4 +38,38 @@ assert.deepEqual(
 assert.ok(src.includes('function loadPortsView('), 'missing loadPortsView');
 assert.ok(src.includes('data-action="ep-open-mac"'), 'single-MAC port cell must open the drawer');
 
+// Final review fixes.
+// 1. A drawer opened without a list row (Porte, terminal, cold search) takes
+//    its position from the locate answer instead of showing dashes.
+{
+    const start = src.indexOf('function _epRowFromLocate(');
+    assert.ok(start >= 0, 'missing _epRowFromLocate');
+    const fn = (0, eval)(`(${src.slice(start, src.indexOf('\n}\n', start) + 2)})`);
+    const loc = { mac: 'aa:bb:cc:dd:ee:01', tenant: 'sede-a', status: 'resolved',
+                  origin: [{ switch_ip: '192.0.2.11', switch_name: 'switch-01', interface: 'Gi1/0/5', vlan: '10' }] };
+    const r = fn({ mac: 'aabb.ccdd.ee01', tenant: '' }, loc);
+    assert.equal(r.switch_ip, '192.0.2.11');
+    assert.equal(r.interface, 'Gi1/0/5');
+    assert.equal(r.vlan, '10');
+    assert.equal(r.mac, 'aa:bb:cc:dd:ee:01', 'the normalized MAC from the answer');
+    assert.equal(r.tenant, 'sede-a');
+    const full = { mac: 'aa:bb:cc:dd:ee:01', tenant: 'sede-a', switch_ip: '192.0.2.99', interface: 'Gi1/0/9', vlan: '20', ips: ['192.0.2.10'] };
+    assert.deepEqual(fn(full, loc), full, 'a real list row is kept as is');
+    assert.deepEqual(fn({ mac: 'x', tenant: '' }, null), { mac: 'x', tenant: '' }, 'no answer: unchanged');
+}
+// 2. A slower answer for an older open never renders into a newer drawer.
+assert.ok(src.includes('if (_epDrawer !== tok) return;'), 'openEpDrawer must guard with a per-open token');
+// 3. Esc already handled by a modal does not also close the docked drawer.
+assert.ok(/e\.key === 'Escape' && !e\.defaultPrevented/.test(src), 'Esc listener must skip defaultPrevented events');
+// 4. The narrow-mode dialog has a name from the start.
+assert.ok(/id="epDrawerHost"[^>]*aria-labelledby="epDrawerTitle"/.test(html), 'epDrawerHost needs aria-labelledby');
+// 5. The Raccolta loader rebuilds the pickers (inventory refresh resets the
+//    loaders), and an empty inventory never freezes the collect locations.
+{
+    const lr = cm.slice(cm.indexOf('function loadRaccolta('), cm.indexOf('\n    }\n', cm.indexOf('function loadRaccolta(')));
+    assert.ok(lr.includes('resetDevPickers()'), 'loadRaccolta must rebuild the pickers');
+    const rc = cm.slice(cm.indexOf('function renderCollectLocs('), cm.indexOf('\n}\n', cm.indexOf('function renderCollectLocs(')));
+    assert.ok(rc.includes('_collectLocs === null && groups.length'), 'collect locations must wait for devices');
+}
+
 console.log('endpoint_inventory_ui: ok');

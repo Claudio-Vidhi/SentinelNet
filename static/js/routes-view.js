@@ -114,15 +114,14 @@
      *  covering it: dropped) | unknown (silent or backup-only, absence proves
      *  nothing). `decidedBy` uses the keys of rtRules(), plus 'only'/'ecmp'. */
     function rtLookup(rows, devices, unknownIps, ip) {
-        return devices.map(d => {
-            const own = rows.filter(r => r.device_ip === d.value);
+        const ad = r => (r.distance == null ? 0 : r.distance);
+        // Each VRF is a table of its own: comparing a customer VRF's /16 with
+        // the global default would answer a question no packet ever asks.
+        // The global table comes first, then every VRF that covers the address.
+        const answer = (d, vrf, own) => {
             const winners = rtLpm(own, ip);
-            if (!winners.length) {
-                return { device: d, kind: unknownIps.has(d.value) ? 'unknown' : 'none',
-                         winners, candidates: [], decidedBy: '', fromBackup: false };
-            }
+            if (!winners.length) return null;
             const wLen = parseNet(winners[0].network).len;
-            const ad = r => (r.distance == null ? 0 : r.distance);
             const candidates = own.map(r => ({ row: r, n: parseNet(r.network) }))
                 .filter(c => c.n && netContains(c.n, ip))
                 .sort((x, y) => y.n.len - x.n.len || ad(x.row) - ad(y.row) || (x.row.metric || 0) - (y.row.metric || 0))
@@ -131,8 +130,17 @@
             const decidedBy = winners.length > 1 ? 'ecmp'
                 : candidates.length === 1 ? 'only'
                 : candidates.some(c => c.verdict === 'lose-distance') ? 'distanza' : 'prefisso';
-            return { device: d, kind: wLen === 0 ? 'default' : 'route', winners, candidates, decidedBy,
+            return { device: d, vrf, kind: wLen === 0 ? 'default' : 'route', winners, candidates, decidedBy,
                      fromBackup: winners.some(r => r.from_backup) };
+        };
+        return devices.flatMap(d => {
+            const own = rows.filter(r => r.device_ip === d.value);
+            const vrfs = [...new Set(own.map(r => r.vrf || ''))]
+                .sort((x, y) => Number(x !== '') - Number(y !== '') || x.localeCompare(y));
+            const found = vrfs.map(v => answer(d, v, own.filter(r => (r.vrf || '') === v))).filter(Boolean);
+            if (found.length) return found;
+            return [{ device: d, vrf: '', kind: unknownIps.has(d.value) ? 'unknown' : 'none',
+                      winners: [], candidates: [], decidedBy: '', fromBackup: false }];
         });
     }
 
@@ -622,7 +630,8 @@
             ? r.gateway : rtIfaceName(_rtContext, dev, r.interface || '?');
         const rows = rtLookup(_rtRows, _rtLoaded, _rtUnknown, q.ip).map(a => {
             const dev = a.device.value;
-            const name = `<b class="rt-lk-dev">${escapeHtml(a.device.label)}</b>`;
+            const key = dev + '|' + (a.vrf || '');
+            const name = `<b class="rt-lk-dev">${escapeHtml(a.device.label)}${a.vrf ? ' · VRF ' + escapeHtml(a.vrf) : ''}</b>`;
             if (a.kind === 'none') {
                 return `<li class="rt-lk-row none"><p>${name}: <span class="rt-lk-bad">${escapeHtml(tr('rtLkNone'))}</span></p></li>`;
             }
@@ -641,7 +650,7 @@
                 : a.decidedBy === 'prefisso' ? tr('rtWhyPrefix', { len: parseNet(w.network).len })
                 : a.decidedBy === 'distanza' ? tr('rtWhyDistance') : tr('rtWhyEcmp');
             const backup = a.fromBackup ? ` <span class="rt-lk-warn">${escapeHtml(tr('rtWhyBackup'))}</span>` : '';
-            const open = _rtLkOpen.has(dev);
+            const open = _rtLkOpen.has(key);
             let detail = '';
             if (open) {
                 const cand = a.candidates.map(c => {
@@ -672,7 +681,7 @@
                     <div class="rt-rule">${rules}</div></div>`;
             }
             return `<li class="rt-lk-row ${a.kind}">
-                <button type="button" class="rt-lk-toggle" data-action="rt-lk-toggle" data-dev="${escapeHtml(dev)}" aria-expanded="${open}">
+                <button type="button" class="rt-lk-toggle" data-action="rt-lk-toggle" data-dev="${escapeHtml(key)}" aria-expanded="${open}">
                   <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
                   <span>${name}: ${escapeHtml(say + ecmp)}<span class="rt-lk-why">${escapeHtml(why)}${
                       a.candidates.length > 1 ? ' ' + escapeHtml(tr('rtLkCandidates', { n: a.candidates.length })) : ''}</span>${backup}</span>
