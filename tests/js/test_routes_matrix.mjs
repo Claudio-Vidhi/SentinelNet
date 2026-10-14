@@ -226,4 +226,42 @@ assert.equal(rtQuery('10.0.0.0/').kind, 'text');
                      ['192.0.2.0/24'], 'ring filters narrow it');
 }
 
+// --- address lookup: which route takes an IP, per device, and why
+{
+    const { rtLookup } = windowStub.rtModel;
+    const rows = [
+        r('A', '0.0.0.0/0', { gateway: '192.0.2.254' }),
+        r('A', '192.0.2.0/24', { type: 'connected', interface: 'Vlan10', distance: 0 }),
+        r('A', '192.0.2.0/22', { gateway: '198.51.100.1' }),
+        r('B', '10.20.0.0/16', { type: 'ospf', gateway: '198.51.100.10', distance: 110 }),
+        r('B', '10.20.0.0/16', { type: 'ospf', gateway: '198.51.100.11', distance: 110 }),
+        r('B', '10.20.0.0/16', { gateway: '198.51.100.12', distance: 200 }),
+        r('C', '198.51.100.0/24', { type: 'connected', interface: 'Vlan20', distance: 0 }),
+        r('D', '0.0.0.0/0', { gateway: '203.0.113.254', from_backup: true }),
+    ];
+    const devs = ['A', 'B', 'C', 'D', 'E'].map(v => ({ value: v, label: v.toLowerCase() }));
+    const unknown = new Set(['D', 'E']);     // D: backup only, E: did not answer
+
+    const [a, , c, , e] = rtLookup(rows, devs, unknown, ip4('192.0.2.77'));
+    assert.equal(a.kind, 'route');
+    assert.equal(a.winners[0].network, '192.0.2.0/24', 'longest prefix wins');
+    assert.equal(a.decidedBy, 'prefisso');
+    assert.deepEqual(a.candidates.map(x => [x.row.network, x.verdict]),
+        [['192.0.2.0/24', 'win'], ['192.0.2.0/22', 'lose-prefix'], ['0.0.0.0/0', 'lose-prefix']],
+        'every covering route listed, most specific first');
+    assert.equal(c.kind, 'none', 'live device, nothing covers it: dropped');
+    assert.equal(e.kind, 'unknown', 'silent device: absence proves nothing');
+
+    const [, b] = rtLookup(rows, devs, unknown, ip4('10.20.5.9'));
+    assert.equal(b.winners.length, 2, 'ECMP keeps both');
+    assert.equal(b.decidedBy, 'ecmp');
+    assert.equal(b.candidates.find(x => x.row.distance === 200).verdict, 'lose-distance');
+
+    const [a2, , , d2] = rtLookup(rows, devs, unknown, ip4('203.0.113.40'));
+    assert.equal(a2.kind, 'default', 'only the default covers it');
+    assert.equal(a2.decidedBy, 'only');
+    assert.equal(d2.kind, 'default', 'a backup route still answers, flagged');
+    assert.equal(d2.fromBackup, true);
+}
+
 console.log('ok');

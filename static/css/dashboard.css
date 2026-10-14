@@ -5249,3 +5249,23 @@ details[open] > summary .mac-caret { transform: rotate(180deg); }
 .bp-assist-pane { margin: 14px 0 0; padding-top: 10px; border-top: 1px solid var(--border); }
 .bp-assist-pane h4 { margin: 0 0 8px; }
 .bp-assist-notes { white-space: pre-wrap; margin: 10px 0 0; padding: 8px; font-size: 12px; border: 1px solid var(--border); }
+
+/* Routing: address lookup, one sentence per device, candidates on click. */
+.rt-lookup h3 { font-family: var(--font-data); }
+.rt-lk-list { list-style: none; margin: 0; padding: 0; }
+.rt-lk-row { border-bottom: var(--seam) solid var(--border); border-left: 3px solid var(--lamp-up-ink); }
+.rt-lk-row:last-child { border-bottom: 0; }
+.rt-lk-row.default { border-left-color: var(--lamp-warn-ink); }
+.rt-lk-row.none { border-left-color: var(--lamp-fault-ink); }
+.rt-lk-row.unknown { border-left-color: var(--border-strong); }
+.rt-lk-row p { margin: 0; padding: 10px 12px; font-size: 14px; line-height: 1.5; }
+.rt-lk-toggle { display: flex; gap: 10px; align-items: baseline; width: 100%; padding: 10px 12px; border: 0; background: none;
+  color: var(--text); font: inherit; font-size: 14px; line-height: 1.5; text-align: left; cursor: pointer; }
+.rt-lk-toggle:hover { background: var(--surface-2); }
+.rt-lk-toggle > i { font-size: 10px; color: var(--text-muted); transition: transform .15s ease; }
+.rt-lk-toggle[aria-expanded="true"] > i { transform: rotate(90deg); }
+.rt-lk-dev { font-family: var(--font-data); font-weight: 600; }
+.rt-lk-why { display: block; font-size: 12.5px; color: var(--text-muted); }
+.rt-lk-bad { color: var(--lamp-fault-ink); }
+.rt-lk-warn { display: block; font-size: 12.5px; color: var(--lamp-warn-ink); }
+.rt-lk-detail { padding: 4px 12px 12px 32px; overflow-x: auto; }
