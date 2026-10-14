@@ -25,19 +25,19 @@ let g = pickerGroups(devs, new Set(devs.map(d => d.IP)), label);
 assert.deepEqual(g.map(x => x.label), ['Sede A', 'Sede B', 'Senza sede']);
 assert.deepEqual(g.map(x => [x.n, x.total]), [[2, 2], [1, 1], [1, 1]]);
 assert.equal(g[2].devices[0].name, '203.0.113.16', 'no hostname: the IP is the name');
-assert.deepEqual(pickerSummary(g), { kind: 'all', n: 4, total: 4, sites: ['Sede A', 'Sede B', 'Senza sede'] });
+assert.deepEqual(pickerSummary(g), { kind: 'all', n: 4, total: 4, locations: ['Sede A', 'Sede B', 'Senza sede'] });
 
 // Nothing ticked is "none", never "all".
 g = pickerGroups(devs, new Set(), label);
-assert.deepEqual(pickerSummary(g), { kind: 'none', n: 0, total: 4, sites: [] });
+assert.deepEqual(pickerSummary(g), { kind: 'none', n: 0, total: 4, locations: [] });
 
-// Whole sites only.
+// Whole locations only.
 g = pickerGroups(devs, new Set(['192.0.2.11', '192.0.2.12']), label);
-assert.deepEqual(pickerSummary(g), { kind: 'sites', n: 2, total: 4, sites: ['Sede A'] });
+assert.deepEqual(pickerSummary(g), { kind: 'locations', n: 2, total: 4, locations: ['Sede A'] });
 
 // Part of a site.
 g = pickerGroups(devs, new Set(['192.0.2.11', '198.51.100.13']), label);
 assert.equal(g[0].n, 1);
-assert.deepEqual(pickerSummary(g), { kind: 'partial', n: 2, total: 4, sites: ['Sede A', 'Sede B'] });
+assert.deepEqual(pickerSummary(g), { kind: 'partial', n: 2, total: 4, locations: ['Sede A', 'Sede B'] });
 
 console.log('device_picker: ok');

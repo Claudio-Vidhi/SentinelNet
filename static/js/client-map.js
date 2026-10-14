@@ -9,24 +9,16 @@
 // bottoni di riga) vivono in core.js: chiamata cross-modulo a runtime,
 // nessun cambio di comportamento.
 
-// The endpoint group is one tab with three panes: Tracker MAC, Diagnosi, and Inventory.
-// Each pane loads on its first activation, not when the tab opens.
-let _locView = 'mac';
-const _locLoaded = { mac: false, diagnosi: false, inventory: false, porterrors: false };
+// The endpoint group is one tab with four views. Each view loads on its first
+// activation, not when the tab opens.
+let _locView = 'endpoint';
+const _locLoaded = { endpoint: false, porte: false, diagnosi: false, raccolta: false };
 
 const LOC_LOADERS = {
-    mac: () => loadMacTracker(),
+    endpoint: () => loadEndpointsTab(),
+    porte: () => loadPortErrorsPane(),
     diagnosi: () => diagnosiTabShown(),
-    inventory: () => loadEndpointsTab(),
-    porterrors: () => loadPortErrorsPane(),
-};
-
-// Title and description belong to the pane, not to four separate heroes.
-const LOC_HEADINGS = {
-    mac:        ['titleMacTracker', 'descMacTracker'],
-    diagnosi:   ['titleDiagnosi', 'descDiagnosi'],
-    inventory:  ['titleEndpoints', 'descEndpoints'],
-    porterrors: ['titlePortErrors', 'descPortErrors'],
+    raccolta: () => loadRaccolta(),
 };
 
 // One tenant for the whole group, ed e' quello scelto in alto: queste tre viste
@@ -39,18 +31,15 @@ function locTenant() {
 function locSwitchView(view) {
     if (!document.getElementById('locPane-' + view)) return;
     _locView = view;
-    for (const v of ['mac', 'diagnosi', 'inventory', 'porterrors']) {
+    for (const v of Object.keys(LOC_LOADERS)) {
         const pane = document.getElementById('locPane-' + v);
-        const pill = document.getElementById('locPill-' + v);
-        if (pane) pane.style.display = (v === view) ? '' : 'none';
-        if (pill) pill.classList.toggle('active', v === view);
+        const tab = document.getElementById('locTab-' + v);
+        if (pane) pane.hidden = v !== view;
+        if (tab) {
+            tab.setAttribute('aria-selected', v === view ? 'true' : 'false');
+            tab.tabIndex = v === view ? 0 : -1;
+        }
     }
-    const [titleKey, descKey] = LOC_HEADINGS[view] || LOC_HEADINGS.mac;
-    const title = document.getElementById('locTitle');
-    const desc = document.getElementById('locDesc');
-    const L = i18n[currentLang] || {};
-    if (title) { title.setAttribute('data-i18n', titleKey); title.textContent = L[titleKey] || ''; }
-    if (desc) { desc.setAttribute('data-i18n', descKey); desc.textContent = L[descKey] || ''; }
     if (!_locLoaded[view]) {
         _locLoaded[view] = true;
         LOC_LOADERS[view]();
@@ -87,21 +76,20 @@ function pickerSummary(groups) {
     const n = groups.reduce((s, g) => s + g.n, 0);
     const total = groups.reduce((s, g) => s + g.total, 0);
     const touched = groups.filter(g => g.n);
-    const sites = touched.map(g => g.label);
-    if (!n) return { kind: 'none', n, total, sites };
-    if (n === total) return { kind: 'all', n, total, sites };
-    if (touched.every(g => g.n === g.total)) return { kind: 'sites', n, total, sites };
-    return { kind: 'partial', n, total, sites };
+    const locations = touched.map(g => g.label);
+    if (!n) return { kind: 'none', n, total, locations };
+    if (n === total) return { kind: 'all', n, total, locations };
+    if (touched.every(g => g.n === g.total)) return { kind: 'locations', n, total, locations };
+    return { kind: 'partial', n, total, locations };
 }
 
     // --- MAC ADDRESS TRACKER (storico MAC -> switch/porta/vlan) ---
 
-    function loadMacTracker() {
+    function loadRaccolta() {
         populateMacScanDevices();
         populateArpScanDevices();
         loadMacOverrides();
         refreshMacStats(true);
-        macSearch();
     }
 
     // Comandi ad-hoc per apparati non ordinari (override CLI per singolo switch).
@@ -176,28 +164,7 @@ function pickerSummary(groups) {
         if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
     }
 
-    // Popola il filtro "Switch" della ricerca con i soli switch del tenant scelto
-    // (dropdown al posto del vecchio campo IP libero). Voce vuota = tutti gli switch.
-    function fillMacSwitchFilter() {
-        const sel = document.getElementById('macSearchSwitch');
-        if (!sel || sel.tagName !== 'SELECT') return;
-        const cur = sel.value;
-        const allLabel = tr('cmapAllSwitches');
-        sel.innerHTML = `<option value="">${allLabel}</option>` +
-            macFilteredDevices().map(d => {
-                const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
-                return `<option value="${escapeHtml(d.IP)}">${escapeHtml(d.IP)}${name}</option>`;
-            }).join('');
-        sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
-    }
 
-    // Porta l'utente alla tabella dei MAC (clic sul KPI "MAC Univoci"), applicando
-    // i filtri correnti e scorrendo la vista fino ai risultati.
-    function focusMacResults() {
-        macSearch();
-        const el = document.getElementById('macResults');
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
 
     // Popola i selettori dispositivo (scan e ad-hoc) in base al tenant scelto:
     // così scegliendo un tenant si vedono SOLO i suoi switch, non tutti.
@@ -221,7 +188,6 @@ function pickerSummary(groups) {
         }
         updateMacDeviceSummary();
         fillMacDeviceSelect(document.getElementById('macOvDevice'), false);
-        fillMacSwitchFilter();
     }
 
     function selectedMacDevices() {
@@ -282,7 +248,7 @@ function pickerSummary(groups) {
                 const okc = d.results.filter(r => !r.error).length;
                 const errc = d.results.filter(r => r.error).length;
                 alert(tr('cmapMacScanDoneDevices', {scanned: d.scanned, okc: okc, errc: errc, pruned: d.pruned}));
-                macSearch();
+                _locLoaded.endpoint = false;   // the list reloads the next time it is opened
                 refreshMacStats(false);
             } else if (res) {
                 const e = await res.json().catch(() => ({}));
@@ -294,27 +260,7 @@ function pickerSummary(groups) {
         }
     }
 
-    async function macSearch() {
-        const params = new URLSearchParams();
-        const g = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
-        if (g('macSearchMac'))    params.set('mac', g('macSearchMac'));
-        if (g('macSearchVlan'))   params.set('vlan', g('macSearchVlan'));
-        if (g('macSearchIface'))  params.set('interface', g('macSearchIface'));
-        if (g('macSearchSwitch')) params.set('switch', g('macSearchSwitch'));
-        const grp = locTenant();
-        if (grp && grp !== 'all') params.set('tenant', grp);
-        const res = await apiFetch('/api/mac/search?' + params.toString());
-        if (!res || !res.ok) return;
-        const d = await res.json();
-        renderMacResults(d.results || []);
-    }
 
-    function macSearchReset() {
-        ['macSearchMac','macSearchVlan','macSearchIface','macSearchSwitch'].forEach(id => {
-            const el = document.getElementById(id); if (el) el.value = '';
-        });
-        macSearch();
-    }
 
     function fmtMacTime(iso) {
         if (!iso) return '—';
@@ -326,7 +272,7 @@ function pickerSummary(groups) {
     // The Client Map tab that searched and rendered these bindings is gone;
     // Endpoint Inventory covers the lookup. What stays is the collection panel
     // in the MAC Tracker view, which fills the arp_entries history that
-    // Endpoint Inventory and client diagnosis read. loadMacTracker() populates
+    // Endpoint Inventory and client diagnosis read. loadRaccolta() populates
     // the device picker.
 
     // Dispositivi filtrati per il tenant selezionato.
@@ -419,83 +365,6 @@ function pickerSummary(groups) {
         }
     }
 
-    // Risultati raggruppati per switch: ogni host è un accordion collassato;
-    // si clicca sull'host per mostrare i MAC (UX più pulita di righe piatte).
-    function renderMacResults(rows) {
-        const box = document.getElementById('macResults');
-        if (!box) return;
-        if (!rows.length) {
-            box.innerHTML = `<div style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;">
-                <i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${tr('cmapNoMacSightingsRun')}</div>`;
-            return;
-        }
-        const groups = {};
-        rows.forEach(r => {
-            const key = r.switch_ip || '?';
-            if (!groups[key]) groups[key] = { ip: r.switch_ip, name: r.switch_name, tenant: r.tenant, rows: [] };
-            groups[key].rows.push(r);
-        });
-        const keys = Object.keys(groups).sort();
-        const openAll = keys.length === 1;   // un solo switch: aperto di default
-        const L = i18n[currentLang];
-        const colHead = `<thead><tr>
-            <th>${L.thMacAddr}</th><th>${L.thMacPort}</th>
-            <th>${L.thMacVlan}</th><th>${L.thMacOrigin}</th><th>${L.thMacFirst}</th><th>${L.thMacLast}</th></tr></thead>`;
-        box.innerHTML = keys.map(k => {
-            const g = groups[k];
-            const title = g.name
-                ? `${escapeHtml(g.name)} <span style="color:var(--text-muted); font-family:var(--font-code); font-size:12px;">${escapeHtml(g.ip)}</span>`
-                : escapeHtml(g.ip || '—');
-            const tenant = g.tenant ? ` <span class="badge" style="font-size:10px;">${escapeHtml(g.tenant)}</span>` : '';
-            const body = g.rows.map(r => {
-                const port = r.port_channel
-                    ? `${escapeHtml(r.interface||'—')} <span class="badge" style="font-size:10px;">${escapeHtml(r.port_channel)}</span>`
-                    : escapeHtml(r.interface || '—');
-                const uplink = r.is_uplink
-                    ? ` <span title="${tr('cmapSeenOnATrunk')}" style="font-size:10px; color:var(--warning); border:1px solid var(--warning); border-radius:0; padding:0 4px;">uplink</span>`
-                    : '';
-                const originCell = r.is_uplink
-                    ? `<span title="${tr('cmapInTransitOnAn')}" style="font-size:10px; color:var(--warning); border:1px solid var(--warning); border-radius:0; padding:1px 5px;"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${tr('cmapTransit')}${r.uplink_to?` → ${escapeHtml(r.uplink_to)}`:''}</span>`
-                    : `<span title="${tr('cmapAccessPortDeviceAttached')}" style="font-size:10px; color:var(--success); border:1px solid var(--success); border-radius:0; padding:1px 5px;"><i class="fa-solid fa-location-crosshairs"></i> ${tr('cmapAccess')}</span>`;
-                const portCfgBtn = (g.ip && r.interface)
-                    ? `<button data-action="show-port-config" data-switch-ip="${escapeHtml(g.ip)}" data-switch-port="${escapeHtml(r.interface)}" data-switch-name="${escapeHtml(g.name || '')}" title="${escapeHtml(tr('btnPortConfig'))}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-file-lines"></i></button>`
-                    : '';
-                // Il tenant del gruppo viaggia col MAC: si sta guardando UNO
-                // switch di UNA sede, e la risposta deve essere di quella sede.
-                // Senza, il modale univa gli avvistamenti di tutti i tenant
-                // visibili e dichiarava ambigue porte che ambigue non erano.
-                const locateBtn = `<button data-action="mac-locate" data-mac="${escapeHtml(r.mac)}" data-tenant="${escapeHtml(g.tenant || '')}" title="${tr('cmapLocateOriginAcrossSwitches')}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-magnifying-glass-location"></i></button>`;
-                // MAC di un'interfaccia propria dello switch: infrastruttura, non endpoint.
-                const isSwitchIf = (r.origin_type || r.device_type) === 'switch-interface';
-                const swName = r.origin_switch || r.switch_name || r.switch_ip;
-                const swIf = r.origin_interface || '';
-                const switchBadge = isSwitchIf
-                    ? ` <span title="${tr('cmapInterfaceOf', {swName: swName, suffix: swIf ? ` (${swIf})` : ''})}" style="font-size:10px; color:var(--text-muted); border:1px solid var(--border); border-radius:0; padding:0 4px;"><i class="fa-solid fa-microchip"></i> SWITCH</span>`
-                    : '';
-                const rowStyle = isSwitchIf ? ' style="color:var(--text-muted);"' : '';
-                return `<tr${rowStyle}>
-                    <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(r.mac)}${switchBadge}</td>
-                    <td>${port}${uplink}${portCfgBtn}</td>
-                    <td>${escapeHtml(r.vlan || '—')}</td>
-                    <td style="white-space:nowrap;">${originCell}${locateBtn}</td>
-                    <td style="font-size:11px; color:var(--text-muted);">${escapeHtml(fmtMacTime(r.first_seen))}</td>
-                    <td style="font-size:11px; color:var(--text-muted);">${escapeHtml(fmtMacTime(r.last_seen))}</td>
-                </tr>`;
-            }).join('');
-            const macWord = (g.rows.length === 1 ? tr('cmapMacOne') : tr('cmapMacMany'));
-            return `<details class="mac-switch" ${openAll?'open':''} style="margin-bottom:10px; border:1px solid var(--border); border-radius:0; background:var(--surface-2); overflow:hidden;">
-                <summary style="cursor:pointer; padding:12px 14px; font-weight:700; display:flex; align-items:center; gap:8px;">
-                    <i class="fa-solid fa-chevron-right mac-chev"></i>
-                    <i class="fa-solid fa-network-wired" style="color:var(--primary);"></i>
-                    <span>${title}${tenant}</span>
-                    <span style="margin-left:auto; font-size:12px; color:var(--text-muted); font-weight:600;">${g.rows.length} ${macWord}</span>
-                </summary>
-                <div class="table-container" style="border-top:1px solid var(--border);">
-                    <table>${colHead}<tbody>${body}</tbody></table>
-                </div>
-            </details>`;
-        }).join('');
-    }
 
     function closeMacLocateModal() {
         const m = document.getElementById('macLocateModal');
@@ -689,39 +558,22 @@ function pickerSummary(groups) {
         }
     });
 
-    document.getElementById('macResults')?.addEventListener('click', (e) => {
-        const portBtn = e.target.closest('[data-action="show-port-config"]');
-        if (portBtn) {
-            showPortConfig(portBtn.dataset.switchIp, portBtn.dataset.switchPort, portBtn.dataset.switchName);
-            return;
-        }
-        const locBtn = e.target.closest('[data-action="mac-locate"]');
-        if (locBtn) {
-            macLocate(locBtn.dataset.mac, locBtn.dataset.tenant);
-        }
-    });
-
     // Static event listeners for MAC Tracker & Client Map tabs
-    document.getElementById('locPills')?.addEventListener('click', (e) => {
-        const pill = e.target.closest('[data-loc-view]');
-        if (pill && pill.dataset.locView) {
-            locSwitchView(pill.dataset.locView);
-        }
+    document.getElementById('locTabs')?.addEventListener('click', (e) => {
+        const tab = e.target.closest('[data-loc-view]');
+        if (tab) locSwitchView(tab.dataset.locView);
     });
-    const kpiMacWrap = document.getElementById('kpiMacUniqueWrap');
-    if (kpiMacWrap) {
-        kpiMacWrap.addEventListener('click', focusMacResults);
-        kpiMacWrap.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                focusMacResults();
-            }
-        });
-    }
+    // Arrow keys move between the tabs, as in every WAI-ARIA tablist.
+    document.getElementById('locTabs')?.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+        const tabs = [...document.querySelectorAll('#locTabs [role="tab"]')];
+        const i = tabs.indexOf(document.activeElement);
+        if (i < 0) return;
+        const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+        next.focus();
+        locSwitchView(next.dataset.locView);
+    });
     document.getElementById('btnMacScan')?.addEventListener('click', runMacScan);
     document.getElementById('btnSaveMacRetention')?.addEventListener('click', saveMacRetention);
     document.getElementById('btnSaveMacOverride')?.addEventListener('click', saveMacOverride);
-    document.getElementById('macSearchSwitch')?.addEventListener('change', macSearch);
-    document.getElementById('btnMacSearch')?.addEventListener('click', macSearch);
-    document.getElementById('btnMacSearchReset')?.addEventListener('click', macSearchReset);
     document.getElementById('btnArpScan')?.addEventListener('click', runArpScan);

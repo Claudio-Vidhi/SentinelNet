@@ -5269,3 +5269,23 @@ details[open] > summary .mac-caret { transform: rotate(180deg); }
 .rt-lk-bad { color: var(--lamp-fault-ink); }
 .rt-lk-warn { display: block; font-size: 12.5px; color: var(--lamp-warn-ink); }
 .rt-lk-detail { padding: 4px 12px 12px 32px; overflow-x: auto; }
+
+/* Endpoint location: search, tabs, view + drawer grid. */
+#tab-endpoint .loc-search { position: relative; margin-bottom: 6px; }
+#tab-endpoint .loc-search > i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-soft); }
+#tab-endpoint .loc-search input {
+  width: 100%; padding: 12px 44px 12px 40px; font-family: var(--font-data); font-size: 15px;
+  background: var(--surface); color: var(--text); border: var(--seam) solid var(--border-strong); border-radius: 0;
+}
+#tab-endpoint .loc-search input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent); }
+#tab-endpoint .loc-search kbd { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-family: var(--font-data); font-size: 11px; border: 1px solid var(--border); padding: 1px 6px; color: var(--text-soft); }
+#tab-endpoint .loc-search-msg { min-height: 1.2em; font-size: 12.5px; color: var(--text-muted); margin-bottom: 8px; }
+#tab-endpoint .loc-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 14px; overflow-x: auto; }
+#tab-endpoint .loc-tabs [role="tab"] {
+  padding: 10px 14px; border: 0; border-bottom: 2px solid transparent; background: none; cursor: pointer; white-space: nowrap;
+  font-family: var(--font-legend); font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted);
+}
+#tab-endpoint .loc-tabs [role="tab"]:hover { color: var(--text); }
+#tab-endpoint .loc-tabs [aria-selected="true"] { color: var(--text); border-bottom-color: var(--primary); }
+#tab-endpoint .loc-body { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; }
+#tab-endpoint .loc-main { min-width: 0; }

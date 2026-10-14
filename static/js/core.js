@@ -2585,8 +2585,8 @@ function buildCommandPaletteItems(query = '') {
     // 3. Azioni rapide
     const quickActions = [
         { title: tr('coreRunGlobalTriage'), desc: tr('coreExecuteTriageCheckAcross'), icon: 'fa-bolt-lightning', action: () => { const b = document.getElementById('btnHomeRunTriage'); if (b) b.click(); } },
-        { title: tr('coreRunMacScan'), desc: tr('coreCollectMacAddressTable'), icon: 'fa-satellite-dish', action: () => { switchTab('tab-endpoint'); if (typeof locSwitchView === 'function') locSwitchView('mac'); const b = document.getElementById('btnMacScan'); if (b) b.click(); } },
-        { title: tr('coreRunArpCollection'), desc: tr('coreCollectArpBindingsFrom'), icon: 'fa-network-wired', action: () => { switchTab('tab-endpoint'); if (typeof locSwitchView === 'function') locSwitchView('mac'); const b = document.getElementById('btnArpScan'); if (b) b.click(); } },
+        { title: tr('coreRunMacScan'), desc: tr('coreCollectMacAddressTable'), icon: 'fa-satellite-dish', action: () => { switchTab('tab-endpoint'); if (typeof locSwitchView === 'function') locSwitchView('raccolta'); const b = document.getElementById('btnMacScan'); if (b) b.click(); } },
+        { title: tr('coreRunArpCollection'), desc: tr('coreCollectArpBindingsFrom'), icon: 'fa-network-wired', action: () => { switchTab('tab-endpoint'); if (typeof locSwitchView === 'function') locSwitchView('raccolta'); const b = document.getElementById('btnArpScan'); if (b) b.click(); } },
         { title: tr('coreAddNewDevice'), desc: tr('coreOpenProvisioningFormFor'), icon: 'fa-circle-plus', action: () => switchTab('tab-provisioning') },
         { title: tr('coreToggleTheme'), desc: tr('coreSwitchDarkLightTheme'), icon: 'fa-circle-half-stroke', action: () => toggleTheme() },
         { title: tr('cmdOpenTutorials'), desc: tr('cmdOpenTutorialsDesc'), icon: 'fa-graduation-cap', action: () => { if (typeof openTutorialsHub === 'function') openTutorialsHub(); } },

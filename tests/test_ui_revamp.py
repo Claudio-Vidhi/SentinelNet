@@ -123,7 +123,7 @@ TAB_IDS_IN_DOC_ORDER = [
 # another exactly as the Task 14 mutation re-nested #provCiscoSection --
 # these panes get the same three-way guard as the top-level tabs.
 PANE_IDS_IN_DOC_ORDER = [
-    "locPane-mac", "locPane-diagnosi", "locPane-inventory",
+    "locPane-raccolta", "locPane-diagnosi", "locPane-porte", "locPane-endpoint",
 ]
 
 
@@ -757,12 +757,10 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
         for _id in ('macDeviceMenu', 'macDeviceSummary', 'macDeviceList',
                     'macScanTransport', 'btnMacScan', 'macRetentionDays',
                     'macOvDevice', 'macOvCommand', 'macOvFmt', 'macOverridesList',
-                    'macSearchMac', 'macSearchVlan', 'macSearchIface', 'macSearchSwitch',
-                    'macResults',
                     'kpiMacSightings', 'kpiMacUniqueMacs', 'kpiMacSwitches', 'kpiMacRetention'):
             self.assertIn(f'id="{_id}"', html)
         src = frontend_source()
-        for hook in ('runMacScan', 'macSearch', 'macSearchReset', 'saveMacOverride',
+        for hook in ('runMacScan', 'saveMacOverride',
                      'saveMacRetention'):
             self.assertIn(hook, src)
         # RBAC preserved: scan is requires-write, retention is requires-admin
@@ -805,8 +803,8 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
         html = frontend_source()  # MAC tracker/Client Map JS moved to static/js/client-map.js
         # runMacScan() -> apiFetch('/api/mac/scan', {method:'POST', ...})
         self.assertIn('/api/mac/scan', html)
-        # macSearch() -> apiFetch('/api/mac/search?' + ...)
-        self.assertIn('/api/mac/search', html)
+        # /api/mac/search lost its UI caller in the endpoint redesign: the tab's
+        # search goes through /api/endpoints/list. The route stays for MCP.
         # macLocate() -> apiFetch('/api/mac/locate?mac=' + ...). Brief's contract
         # table lists this as POST, but tracing the JS call and app_server.py
         # (@app.get("/api/mac/locate")) shows it is actually a GET -- the literal
@@ -843,11 +841,10 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
         tab_end = html.index('<div id="tab-wlc"')
         tab_html = html[tab_start:tab_end]
         # Search and collection share one console panel (no per-panel filterbar).
-        for cls in ('class="hero"', 'class="hero-card"', 'class="panel mac-console"', 'class="table-wrap"'):
+        for cls in ('class="page-head"', 'class="loc-tabs"', 'class="panel mac-console"'):
             self.assertIn(cls, tab_html)
         self.assertGreaterEqual(tab_html.count('class="oneline-foot"'), 1)
-        self.assertGreaterEqual(tab_html.count('class="panel'), 3)
-        self.assertIn('<div id="locPane-mac"', tab_html)
+        self.assertIn('<div id="locPane-raccolta"', tab_html)
 
     def test_i18n_keys_both_langs(self):
         html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
