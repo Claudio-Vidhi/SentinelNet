@@ -9,9 +9,36 @@
 
 let _epRows = [];          // righe a schermo: sono queste che l'export porta via
 let _epTruncated = false;
+let _epQuery = '';         // term from the tab's search box, '' = none
 
 function loadEndpointsTab() {
+    _epFillFilters();
     endpointsApplyFilters();
+}
+
+// Switch and Probe options come from the tenant's inventory, not from the
+// rows on screen: options built from the results vanish once they filter.
+function _epFillFilters() {
+    const tenant = locTenant();
+    let devs = globalDevices || [];
+    if (tenant && tenant !== 'all') devs = devs.filter(d => d.Group === tenant);
+    const sw = /** @type {HTMLSelectElement|null} */ (document.getElementById('epFilterSwitch'));
+    if (sw) {
+        const cur = sw.value;
+        const label = d => d.Hostname || d.IP;
+        sw.innerHTML = `<option value="">${escapeHtml(tr('epAllSwitches'))}</option>` + devs.slice()
+            .sort((a, b) => label(a).localeCompare(label(b)))
+            .map(d => `<option value="${escapeHtml(d.IP)}">${escapeHtml(label(d))}</option>`).join('');
+        sw.value = devs.some(d => d.IP === cur) ? cur : '';
+    }
+    const pr = /** @type {HTMLSelectElement|null} */ (document.getElementById('epFilterProbe'));
+    if (pr) {
+        const cur = pr.value;
+        const probes = [...new Set(devs.map(d => d.Probe).filter(Boolean))].sort();
+        pr.innerHTML = `<option value="">${escapeHtml(tr('epAllProbes'))}</option>` +
+            probes.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
+        pr.value = probes.includes(cur) ? cur : '';
+    }
 }
 
 // UNICO punto d'ingresso dei filtri: ricarica i dati e poi ridisegna nella
@@ -28,31 +55,30 @@ async function endpointsApplyFilters() {
     if (_epMode === 'ports') endpointsMode('ports');
 }
 
+function endpointsParams(q) {
+    const val = id => ((/** @type {HTMLInputElement|null} */ (document.getElementById(id)) || {}).value || '').trim();
+    const params = new URLSearchParams({ stale_days: String(parseInt(val('epFilterStale'), 10) || 7) });
+    if (q) params.set('q', q);
+    const tenant = locTenant();
+    if (tenant && tenant !== 'all') params.set('tenant', tenant);
+    if (val('epFilterSwitch')) params.set('switch', val('epFilterSwitch'));
+    if (val('epFilterVlan')) params.set('vlan', val('epFilterVlan'));
+    if (val('epFilterProbe')) params.set('probe', val('epFilterProbe'));
+    for (const [id, key] of [['epFilterFrom', 'frm'], ['epFilterTo', 'to']]) {
+        const v = val(id);
+        if (!v) continue;
+        try { params.set(key, new Date(v).toISOString()); } catch (e) { params.set(key, v); }
+    }
+    return params;
+}
+
 async function endpointsSearch() {
     const host = document.getElementById('epResults');
     if (!host) return;
-    const L = i18n[currentLang];
-
-    const q = ((document.getElementById('epFilterQ') || {}).value || '').trim();
-    const tenant = locTenant();
-    const staleDays = parseInt((document.getElementById('epFilterStale') || {}).value, 10) || 7;
-    const fromVal = ((document.getElementById('epFilterFrom') || {}).value || '').trim();
-    const toVal = ((document.getElementById('epFilterTo') || {}).value || '').trim();
-
     host.innerHTML = `<div class="panel" style="padding:26px; text-align:center; color:var(--text-muted); font-size:13px;">
         <i class="fa-solid fa-circle-notch fa-spin" style="margin-right:8px;"></i>${escapeHtml(tr('epiLoading'))}</div>`;
 
-    const params = new URLSearchParams({ stale_days: String(staleDays) });
-    if (q) params.set('q', q);
-    if (tenant && tenant !== 'all') params.set('tenant', tenant);
-    if (fromVal) {
-        try { params.set('frm', new Date(fromVal).toISOString()); } catch (e) { params.set('frm', fromVal); }
-    }
-    if (toVal) {
-        try { params.set('to', new Date(toVal).toISOString()); } catch (e) { params.set('to', toVal); }
-    }
-
-    const res = await apiFetch('/api/endpoints/list?' + params.toString());
+    const res = await apiFetch('/api/endpoints/list?' + endpointsParams(_epQuery).toString());
     if (!res || !res.ok) {
         host.innerHTML = `<div class="panel" style="padding:22px; text-align:center; color:var(--danger); font-size:13px;">${escapeHtml(tr('epiCouldNotLoadThe'))}</div>`;
         return;
@@ -68,18 +94,14 @@ function endpointsRender(d) {
     const kpis = document.getElementById('epKpis');
     if (kpis) {
         const c = d.counts || {};
-        const tile = (label, value, color) => `<div class="kpi">
-            <h4 title="${escapeHtml(label)}">${escapeHtml(label)}</h4>
-            <strong style="color:${color || 'var(--text)'};">${escapeHtml(String(value ?? 0))}</strong>
-        </div>`;
-        kpis.innerHTML =
-            tile(L.epKpiEndpoints, c.endpoints, 'var(--primary)') +
-            tile(L.epKpiSwitches, c.switches) +
-            tile(L.epKpiVlans, c.vlans) +
-            tile(L.epKpiStale, c.stale, c.stale ? 'var(--warning)' : undefined) +
-            tile(L.epKpiNew, c.new) +
-            tile(L.epKpiNoIp, c.no_ip);
+        const item = (label, value) => `<span>${escapeHtml(label)} <b>${escapeHtml(String(value ?? 0))}</b></span>`;
+        kpis.innerHTML = item(L.epKpiEndpoints, c.endpoints) + item(L.epKpiSwitches, c.switches) +
+            item(L.epKpiVlans, c.vlans) + item(L.epKpiStale, c.stale) + item(L.epKpiNew, c.new) + item(L.epKpiNoIp, c.no_ip);
     }
+    const chip = document.getElementById('epQueryChip');
+    if (chip) chip.innerHTML = _epQuery
+        ? `<span class="ep-chip">“${escapeHtml(_epQuery)}”<button type="button" data-action="ep-clear-query" aria-label="${escapeHtml(tr('ariaEpQueryClear'))}">×</button></span>`
+        : '';
 
     const host = document.getElementById('epResults');
     if (!host) return;
@@ -102,51 +124,26 @@ function endpointsRender(d) {
                 L.epTruncated.replace('{shown}', String(_epRows.length)).replace('{total}', String(d.total)))}</div>`
         : '') + retentionBanner;
 
-    // Le tre azioni esistono gia' altrove: qui si rendono solo raggiungibili
-    // dalla riga. stopPropagation non serve piu' grazie alla delegazione.
-    const act = (icon, title, action, dataAttrs, enabled) => enabled
-        ? `<button data-action="${action}" ${dataAttrs} title="${escapeHtml(title)}"
-             style="border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px; margin-right:8px;">
-             <i class="fa-solid ${icon}"></i></button>`
-        : `<span style="color:var(--text-muted); font-size:12px; margin-right:8px; opacity:0.35;"><i class="fa-solid ${icon}"></i></span>`;
-
     const body = _epRows.map(r => `<tr class="ep-row" data-action="ep-open" data-mac="${escapeHtml(r.mac)}" data-tenant="${escapeHtml(r.tenant || '')}" tabindex="0">
-        <td style="font-family:var(--font-code); font-size:12px; white-space:nowrap;">
-            <i class="fa-solid fa-chevron-right ep-chevron" style="color:var(--text-muted); font-size:10px; margin-right:8px; transition:transform 0.18s ease; display:inline-block;"></i>${escapeHtml(r.mac)}
-        </td>
-        <td style="font-size:12px;">${escapeHtml(r.oui_vendor || '—')}</td>
-        <td style="font-size:12px;">${escapeHtml(r.tenant || '—')} <span style="color:var(--text-muted);">/ ${escapeHtml(r.probe || '—')}</span></td>
-        <td style="font-family:var(--font-code); font-size:11px;">${escapeHtml((r.ips || []).join(', ') || '—')}</td>
-        <td style="font-size:12px;">${escapeHtml(r.switch_name || r.switch_ip || '—')} <span style="color:var(--text-muted);">${escapeHtml(r.interface || '')}</span></td>
-        <td style="font-size:12px;">${escapeHtml(r.vlan || '—')}</td>
-        <td style="font-size:11px; color:var(--text-muted);">${escapeHtml(_epTime(r.first_seen))}</td>
-        <td style="font-size:11px; color:var(--text-muted);">${escapeHtml(_epTime(r.last_seen))}</td>
+        <td class="ep-mono">${escapeHtml(r.mac)}<span class="ep-sub">${escapeHtml(r.oui_vendor || '')}</span></td>
+        <td class="ep-mono">${escapeHtml((r.ips || []).join(', ') || '—')}</td>
+        <td>${escapeHtml(r.switch_name || r.switch_ip || '—')}<span class="ep-sub ep-mono">${escapeHtml(r.switch_name ? r.switch_ip || '' : '')}</span></td>
+        <td class="ep-mono">${escapeHtml(r.interface || '—')}</td>
+        <td class="ep-mono">${escapeHtml(r.vlan || '—')}</td>
+        <td>${escapeHtml(_epTime(r.last_seen))}</td>
         <td>${(r.flags || []).map(_epFlag).join(' ')}</td>
-        <td style="white-space:nowrap;">${
-            act('fa-stethoscope', L.epActDiagnose, 'ep-diagnose',
-                `data-mac="${escapeHtml(r.mac)}" data-tenant="${escapeHtml(r.tenant || '')}"`, true) +
-            act('fa-file-lines', L.epActPortCfg, 'ep-portcfg',
-                `data-switch-ip="${escapeHtml(r.switch_ip || '')}" data-switch-port="${escapeHtml(r.interface || '')}" data-switch-name="${escapeHtml(r.switch_name || '')}"`,
-                !!(r.switch_ip && r.interface))
-        }</td>
     </tr>`).join('');
 
     host.innerHTML = `${banner}
-        <div class="panel" style="padding:0;">
-          <div class="table-container">
-            <table>
-              <thead><tr>
-                <th>${escapeHtml(L.epThMac)}</th><th>${escapeHtml(L.epThVendor)}</th>
-                <th>${escapeHtml(L.epThTenant)}</th><th>${escapeHtml(L.epThIps)}</th>
-                <th>${escapeHtml(L.epThWhere)}</th><th>${escapeHtml(L.epThVlan)}</th>
-                <th>${escapeHtml(L.epThFirst)}</th><th>${escapeHtml(L.epThLast)}</th>
-                <th>${escapeHtml(L.epThFlags)}</th>
-                <th>${escapeHtml(L.epThActions)}</th>
-              </tr></thead>
-              <tbody>${body}</tbody>
-            </table>
-          </div>
-        </div>`;
+        <div class="table-wrap ep-table"><table>
+          <thead><tr>
+            <th>${escapeHtml(L.epThMac)}</th><th>IP</th><th>${escapeHtml(tr('epThSwitch'))}</th>
+            <th>${escapeHtml(tr('epThPort'))}</th><th>${escapeHtml(L.epThVlan)}</th>
+            <th>${escapeHtml(L.epThLast)}</th><th>${escapeHtml(L.epThFlags)}</th>
+          </tr></thead>
+          <tbody>${body}</tbody>
+        </table></div>`;
+    if (_epDrawer) document.querySelector(`#epResults tr.ep-row[data-mac="${CSS.escape(_epDrawer.mac)}"]`)?.classList.add('is-selected');
 }
 
 // I flag sono derivati in lettura e dicono una cosa sola ciascuno: nessuno
@@ -471,16 +468,6 @@ function endpointsPortsRender(d, ifaceConfigs = {}, portErrors = {}, sw = '') {
 
 // Delegated click listener on #epResults
 document.getElementById('epResults')?.addEventListener('click', (e) => {
-    const diagBtn = e.target.closest('[data-action="ep-diagnose"]');
-    if (diagBtn) {
-        endpointsDiagnose(diagBtn.dataset.mac, diagBtn.dataset.tenant || '');
-        return;
-    }
-    const portBtn = e.target.closest('[data-action="ep-portcfg"]');
-    if (portBtn) {
-        showPortConfig(portBtn.dataset.switchIp, portBtn.dataset.switchPort, portBtn.dataset.switchName);
-        return;
-    }
     const switchReadBtn = e.target.closest('[data-action="ep-err-read-switch"]');
     if (switchReadBtn) {
         _epReadErrors(switchReadBtn).then(read => { if (read) endpointsPorts(read); });
@@ -542,25 +529,62 @@ document.getElementById('epModeListBtn')?.addEventListener('click', () => endpoi
 document.getElementById('epModePortsBtn')?.addEventListener('click', () => endpointsMode('ports'));
 document.getElementById('epPortsSwitch')?.addEventListener('change', () => endpointsPorts());
 
-document.getElementById('epFilterQ')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') endpointsApplyFilters();
+document.getElementById('locSearchForm')?.addEventListener('submit', (e) => { e.preventDefault(); locSearchSubmit(); });
+// "/" jumps to the search while the tab is open and nothing else has the keyboard.
+document.addEventListener('keydown', (e) => {
+    const t = /** @type {HTMLElement} */ (e.target);
+    if (e.key !== '/' || /INPUT|SELECT|TEXTAREA/.test(t.tagName) || t.isContentEditable) return;
+    if (!document.getElementById('tab-endpoint')?.classList.contains('active')) return;
+    e.preventDefault();
+    document.getElementById('locSearch')?.focus();
 });
-document.getElementById('epFilterStale')?.addEventListener('change', endpointsApplyFilters);
-document.getElementById('epFilterStale')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') endpointsApplyFilters();
-});
-document.getElementById('btnEpFilter')?.addEventListener('click', endpointsApplyFilters);
-document.getElementById('btnEpResetTime')?.addEventListener('click', () => {
-    const f = document.getElementById('epFilterFrom');
-    const t = document.getElementById('epFilterTo');
-    if (f) f.value = '';
-    if (t) t.value = '';
+for (const id of ['epFilterSwitch', 'epFilterVlan', 'epFilterProbe', 'epFilterStale', 'epFilterFrom', 'epFilterTo']) {
+    document.getElementById(id)?.addEventListener('change', endpointsApplyFilters);
+}
+document.getElementById('btnEpReset')?.addEventListener('click', () => {
+    for (const id of ['epFilterSwitch', 'epFilterVlan', 'epFilterProbe', 'epFilterFrom', 'epFilterTo']) {
+        const el = /** @type {HTMLInputElement|null} */ (document.getElementById(id));
+        if (el) el.value = '';
+    }
+    const stale = /** @type {HTMLInputElement|null} */ (document.getElementById('epFilterStale'));
+    if (stale) stale.value = '7';
+    _epQuery = '';
     endpointsApplyFilters();
 });
-document.getElementById('epFilterFrom')?.addEventListener('change', endpointsApplyFilters);
-document.getElementById('epFilterTo')?.addEventListener('change', endpointsApplyFilters);
+document.getElementById('epQueryChip')?.addEventListener('click', (e) => {
+    if (!(/** @type {HTMLElement} */ (e.target)).closest('[data-action="ep-clear-query"]')) return;
+    _epQuery = '';
+    const input = /** @type {HTMLInputElement|null} */ (document.getElementById('locSearch'));
+    if (input) input.value = '';
+    const msg = document.getElementById('locSearchMsg');
+    if (msg) msg.textContent = '';
+    endpointsApplyFilters();
+});
 document.getElementById('btnEpExportCsv')?.addEventListener('click', () => endpointsExport('csv'));
 document.getElementById('btnEpExportJson')?.addEventListener('click', () => endpointsExport('json'));
+
+// The tab's search box. One hit opens that endpoint; several fill the list;
+// none says so and leaves the view where it was.
+async function locSearchSubmit() {
+    const input = /** @type {HTMLInputElement|null} */ (document.getElementById('locSearch'));
+    const msg = document.getElementById('locSearchMsg');
+    if (!input || !msg) return;
+    const term = input.value.trim();
+    msg.textContent = '';
+    if (!term) { _epQuery = ''; _locLoaded.endpoint = true; locSwitchView('endpoint'); endpointsSearch(); return; }
+    const res = await apiFetch('/api/endpoints/list?' + endpointsParams(term).toString());
+    if (!res || !res.ok) { msg.textContent = tr('epiCouldNotLoadThe'); return; }
+    const d = await res.json();
+    if (!d.total) { msg.textContent = tr('locSearchNone', { q: term }); return; }
+    _epQuery = term;
+    const firstTime = !_locLoaded.endpoint;
+    _locLoaded.endpoint = true;          // rendered below: no second fetch
+    locSwitchView('endpoint');
+    if (firstTime) _epFillFilters();
+    endpointsRender(d);
+    msg.textContent = tr('locSearchFound', { n: String(d.total) });
+    if ((d.results || []).length === 1) openEpDrawer(d.results[0].mac, d.results[0].tenant || '', input);
+}
 
 // ===== Sub-tab "Port errors": every device's ports, from /api/interface-errors =====
 // Same data and verdicts as the Interfaces tab and the occupancy column; this

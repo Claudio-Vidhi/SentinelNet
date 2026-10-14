@@ -1819,41 +1819,30 @@
                 data-ep-mode="ports" data-i18n="epModePorts"></button>
         <select id="epPortsSwitch" style="display:none;" aria-label="Switch di cui elencare le porte" data-i18n-aria-label="ariaEpSwitch"></select>
       </div>
-      <div id="epKpis" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:16px;"></div>
-      <div class="panel" style="margin-bottom:16px;">
-        <h3 style="font-size:15px; margin-bottom:12px;">
-          <i class="fa-solid fa-boxes-stacked" style="color:var(--primary);"></i>
-          <span data-i18n="titleEndpoints"></span>
-        </h3>
-        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; align-items:end;">
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="epFilterQ" data-i18n="epFilterQ"></label>
-            <input id="epFilterQ" type="text" style="padding-left:12px; font-size:13px;">
+      <div id="epKpis" class="oneline-foot ep-kpis"></div>
+      <div class="ep-toolbar">
+        <span id="epQueryChip"></span>
+        <label class="ep-field" for="epFilterSwitch"><span data-i18n="epThSwitch">Switch</span>
+          <select id="epFilterSwitch"></select></label>
+        <label class="ep-field" for="epFilterVlan">VLAN
+          <input id="epFilterVlan" type="text" inputmode="numeric" placeholder="10"></label>
+        <label class="ep-field" for="epFilterProbe"><span data-i18n="epFilterProbe">Probe</span>
+          <select id="epFilterProbe"></select></label>
+        <label class="ep-field" for="epFilterStale"><span data-i18n="epFilterStale">Stale dopo (giorni)</span>
+          <input id="epFilterStale" type="number" min="1" max="3650" value="7"></label>
+        <label class="ep-field" for="epFilterFrom"><span data-i18n="epFilterFrom">Da (data/ora)</span>
+          <input id="epFilterFrom" type="datetime-local"></label>
+        <label class="ep-field" for="epFilterTo"><span data-i18n="epFilterTo">A (data/ora)</span>
+          <input id="epFilterTo" type="datetime-local"></label>
+        <span class="ep-spacer"></span>
+        <button type="button" class="btn btn-secondary btn-small" id="btnEpReset" data-i18n="epFilterReset">Reset</button>
+        <details id="epExportMenu" class="ep-menu">
+          <summary class="btn btn-secondary btn-small" data-i18n="epExport">Esporta</summary>
+          <div class="ep-menu-list">
+            <button type="button" id="btnEpExportCsv" data-i18n="epExportCsv">CSV</button>
+            <button type="button" id="btnEpExportJson" data-i18n="epExportJson">JSON</button>
           </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="epFilterStale" data-i18n="epFilterStale"></label>
-            <input id="epFilterStale" type="number" min="1" max="3650" value="7"
-                   style="padding-left:12px; font-size:13px;">
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="epFilterFrom" data-i18n="epFilterFrom">Da (data/ora)</label>
-            <input id="epFilterFrom" type="datetime-local" style="padding:6px 8px; font-size:12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text);">
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="epFilterTo" data-i18n="epFilterTo">A (data/ora)</label>
-            <input id="epFilterTo" type="datetime-local" style="padding:6px 8px; font-size:12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text);">
-          </div>
-          <div style="display:flex; gap:6px;">
-            <button class="btn btn-secondary" id="btnEpFilter" style="width:auto;">
-              <i class="fa-solid fa-magnifying-glass"></i>
-            </button>
-            <button class="btn btn-secondary" id="btnEpResetTime" style="width:auto;" title="Azzera intervallo temporale">
-              <i class="fa-solid fa-rotate-left"></i>
-            </button>
-          </div>
-          <button class="btn btn-secondary" id="btnEpExportCsv" style="width:auto;" data-i18n="epExportCsv"></button>
-          <button class="btn btn-secondary" id="btnEpExportJson" style="width:auto;" data-i18n="epExportJson"></button>
-        </div>
+        </details>
       </div>
       <div id="epResults"></div>
       </div>
