@@ -222,5 +222,34 @@ class TestDiagnosiForm(unittest.TestCase):
         self.assertIn('class="diag-adv"', pane)
 
 
+class TestCollectionView(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.html = _read("templates", "dashboard.html")
+        cls.js = _read("static", "js", "client-map.js")
+
+    def test_location_pickers_replace_the_flat_lists(self):
+        for _id in ("macPicker", "arpPicker", "locCollectPop", "locCollectLocs", "locCollectGo"):
+            self.assertIn(f'id="{_id}"', self.html)
+        for gone in ("macDeviceList", "arpDeviceList", "macDeviceMenu", "arpDeviceMenu"):
+            self.assertNotIn(f'id="{gone}"', self.html)
+            self.assertNotIn(gone, self.js)
+
+    def test_an_empty_selection_never_means_everything(self):
+        # The old pickers sent no "ips" when nothing was ticked, and the
+        # server read that as "every device of the tenant".
+        for fn in ("async function runMacScan(", "async function runArpScan("):
+            start = self.js.index(fn)
+            body = self.js[start:self.js.index("\n    }\n", start)]
+            self.assertIn("if (!ips.length)", body, fn)
+            self.assertIn("payload.ips = ips", body, fn)
+            self.assertNotIn("if (ips.length) payload.ips", body, fn)
+
+    def test_collect_now_is_a_write_action(self):
+        start = self.html.index('id="locCollectPop"')
+        tag = self.html[self.html.rindex("<details", 0, start):self.html.index(">", start)]
+        self.assertIn("requires-write", tag)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1059,9 +1059,6 @@ details[open] > div[id*="Menu"],
   word-break: break-word;
   max-width: 100%;
 }
-.kpi-clickable { cursor: pointer; transition: background var(--transition), border-color var(--transition), transform var(--transition); }
-.kpi-clickable:hover { background: var(--surface-3); border-color: var(--cta); transform: translateY(-2px); }
-.kpi-clickable:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
 .kpi-card {
   padding: 14px 16px;
@@ -4563,29 +4560,17 @@ caption.col-picker-cap { caption-side: top; text-align: right; position: relativ
   display: block; margin-bottom: 4px;
   font-size: 11px; color: var(--text-muted);
 }
-.mac-legend {
-  align-self: center;
-  font-family: var(--font-legend);
-  font-size: 10.5px; font-weight: 600;
-  letter-spacing: 0.14em; text-transform: uppercase;
-  color: var(--text-soft);
-  white-space: nowrap;
-}
-.mac-search > .mac-legend { min-width: 92px; align-self: flex-end; padding-bottom: 9px; }
 .mac-collect {
   align-items: center;
   margin-top: 14px; padding-top: 12px;
   border-top: var(--seam) solid var(--border);
   gap: 10px 26px;
 }
-.mac-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .mac-retention { display: flex; align-items: center; gap: 6px; }
 .mac-retention label { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
 .mac-retention .ui-input { width: 72px; padding: 5px 8px; font-size: 12px; }
 .mac-transport { width: auto; }
 
-.mac-dev-menu { position: relative; }
-.mac-dev-menu > summary,
 .mac-adhoc > summary {
   list-style: none; cursor: pointer;
   display: inline-flex; align-items: center; gap: 7px;
@@ -4595,19 +4580,9 @@ caption.col-picker-cap { caption-side: top; text-align: right; position: relativ
   color: var(--text);
   font-size: 13px;
 }
-.mac-dev-menu > summary::-webkit-details-marker,
 .mac-adhoc > summary::-webkit-details-marker { display: none; }
-.mac-dev-menu > summary > .fa-list-check { color: var(--text-muted); }
 .mac-caret { font-size: 9px; color: var(--text-muted); transition: transform var(--transition); }
 details[open] > summary .mac-caret { transform: rotate(180deg); }
-.mac-dev-list {
-  position: absolute; top: 110%; left: 0; z-index: 60;
-  min-width: 250px; max-height: 300px; overflow: auto;
-  padding: 8px;
-  background-color: var(--surface-2);
-  border: var(--seam) solid var(--border);
-  box-shadow: var(--shadow-float);
-}
 
 .mac-foot { align-items: flex-start; margin-top: 12px; }
 .mac-foot > .mac-retention { margin-left: auto; }
@@ -5368,3 +5343,41 @@ details[open] > summary .mac-caret { transform: rotate(180deg); }
 #tab-endpoint .diag-row > .btn, #tab-endpoint .diag-row-inner > .btn { width: auto; margin: 0; }
 #tab-endpoint .diag-adv { flex-basis: 100%; font-size: 12.5px; }
 #tab-endpoint .diag-adv summary { cursor: pointer; color: var(--primary); }
+
+/* Raccolta: blocks and the location-grouped device picker */
+#tab-endpoint .mac-collect { display: grid; gap: 12px; }
+#tab-endpoint .mac-block { background: var(--surface); border: var(--seam) solid var(--border); padding: 0 14px 12px; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+#tab-endpoint .mac-block-title { flex-basis: calc(100% + 28px); margin: 0 -14px; padding: 8px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border);
+  font-family: var(--font-legend); font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-muted); }
+#tab-endpoint .mac-result { flex-basis: 100%; font-family: var(--font-data); font-size: 12px; padding: 8px 10px; background: var(--surface-2); border: 1px solid var(--border); }
+#tab-endpoint .pk { position: relative; }
+#tab-endpoint .pk > summary { list-style: none; display: flex; justify-content: space-between; gap: 10px; align-items: center; min-width: 260px; cursor: pointer;
+  padding: 7px 9px; font-family: var(--font-data); font-size: 13px; background: var(--surface-2); border: 1px solid var(--border); }
+#tab-endpoint .pk > summary::-webkit-details-marker { display: none; }
+#tab-endpoint .pk[open] > summary { border-color: var(--primary); }
+#tab-endpoint .pk-panel, #tab-endpoint .loc-collect-panel { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; width: min(360px, calc(100vw - 32px));
+  display: grid; background: var(--surface); border: var(--seam) solid var(--border-strong); box-shadow: var(--shadow-float); }
+#tab-endpoint .loc-collect { position: relative; }
+#tab-endpoint .loc-collect > summary { list-style: none; }
+#tab-endpoint .loc-collect > summary::-webkit-details-marker { display: none; }
+#tab-endpoint .loc-collect-panel { left: auto; right: 0; }
+#tab-endpoint .pk-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; border-bottom: 1px solid var(--border); }
+#tab-endpoint .pk-chip { font-family: var(--font-legend); font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 3px 8px; background: var(--surface); color: var(--text-muted); border: 1px solid var(--border); cursor: pointer; }
+#tab-endpoint .pk-chip:hover { border-color: var(--primary); color: var(--primary); }
+#tab-endpoint .pk-search { padding: 8px; border-bottom: 1px solid var(--border); }
+#tab-endpoint .pk-search input { width: 100%; margin: 0; font-family: var(--font-data); font-size: 12.5px; padding: 6px 8px; }
+#tab-endpoint .pk-list { max-height: 300px; overflow: auto; padding: 4px 0; }
+#tab-endpoint .pk-loc, #tab-endpoint .pk-loc-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px 4px; font-family: var(--font-legend);
+  font-size: 11.5px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); }
+#tab-endpoint .pk-loc small { margin-left: auto; font-family: var(--font-data); letter-spacing: 0; color: var(--text-soft); }
+#tab-endpoint .pk-dev { display: flex; align-items: center; gap: 8px; padding: 4px 12px 4px 32px; font-size: 13px; cursor: pointer; }
+#tab-endpoint .pk-dev-loc { padding-left: 12px; }
+#tab-endpoint .pk-dev:hover { background: var(--surface-2); }
+#tab-endpoint .pk-dev span { margin-left: auto; font-family: var(--font-data); font-size: 11.5px; color: var(--text-soft); }
+#tab-endpoint .pk input[type="checkbox"], #tab-endpoint .loc-collect input[type="checkbox"] { accent-color: var(--primary); margin: 0; width: auto; }
+#tab-endpoint .pk-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--border);
+  font-size: 12px; color: var(--text-muted); }
+#tab-endpoint .pk-foot button:not(.btn) { background: none; border: 0; color: var(--primary); cursor: pointer; font-size: 12px; padding: 0 0 0 10px; }
+#tab-endpoint .pk-foot .btn { width: auto; margin: 0; }
+#tab-endpoint .pk-empty { padding: 14px; text-align: center; color: var(--text-muted); font-size: 12.5px; }
