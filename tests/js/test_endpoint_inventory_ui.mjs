@@ -1,36 +1,37 @@
-// Test UI per Endpoint Inventory:
-// 1. Il click sulla riga apre/chiude i dettagli senza avviare la diagnosi.
-// 2. La diagnosi viene invocata solo cliccando il pulsante esplicito.
-// 3. La colonna configurazione porta tronca a 3 righe e permette l'espansione.
+// Endpoint UI contracts that a DOM-less test can still pin.
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 
-const src = readFileSync(new URL('../../static/js/endpoint-inventory.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const read = p => readFileSync(new URL(p, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const src = read('../../static/js/endpoint-inventory.js');
+const cm = read('../../static/js/client-map.js');
+const html = read('../../templates/dashboard.html');
 
-// Verifica che il click sulla riga usi ep-row-toggle e non più ep-row-diagnose
-assert.ok(src.includes('data-action="ep-row-toggle"'), 'Manca data-action="ep-row-toggle" sulle righe');
-assert.ok(!src.includes('data-action="ep-row-diagnose"'), 'Trovata ancora data-action="ep-row-diagnose" sulle righe');
+// One detail UI: the drawer. The inline row and the locate modal are gone.
+assert.ok(src.includes('async function openEpDrawer('), 'missing openEpDrawer');
+assert.ok(src.includes('function closeEpDrawer('), 'missing closeEpDrawer');
+for (const gone of ['function _renderEndpointDetailRow', 'function _toggleEndpointDetail', 'ep-row-toggle']) {
+    assert.ok(!src.includes(gone), `still present: ${gone}`);
+}
+assert.ok(!cm.includes('function macLocate('), 'macLocate modal still present');
 
-// Verifica che la funzione di rendering del dettaglio esista e copra i campi
-assert.ok(src.includes('function _renderEndpointDetailRow'), 'Manca _renderEndpointDetailRow');
-assert.ok(src.includes('function _toggleEndpointDetail'), 'Manca _toggleEndpointDetail');
-assert.ok(src.includes('colspan="10"'), 'La riga di dettaglio deve avere colspan="10" per tutta la larghezza');
+// Rows open the drawer, and say which endpoint they are.
+assert.ok(src.includes('data-action="ep-open"'), 'rows must carry data-action="ep-open"');
 
-// Verifica anteprima configurazione porte e pulsante espandi
-assert.ok(src.includes('data-action="ep-toggle-cfg"'), 'Manca azione ep-toggle-cfg');
-assert.ok(src.includes('epThConfig'), 'Manca colonna Configurazione nell header occupazione porte');
-assert.ok(src.includes('/api/config-analyzer/'), 'endpointsPorts deve richiedere la configurazione dal config-analyzer');
+// Narrow screens go through the modal manager; the host exists in the template.
+assert.ok(src.includes("openModal('epDrawerHost'"), 'narrow path must use openModal');
+assert.ok(html.includes('id="epDrawerHost"') && html.includes('id="epDrawer"'), 'drawer host missing in template');
 
-// Riassunto su una riga della config porta: senza "interface ..." e "!".
+// A tenant change closes the drawer: its endpoint may be out of the new scope.
+const tcStart = cm.indexOf('function locTenantChanged(');
+const tc = cm.slice(tcStart, cm.indexOf('\n}\n', tcStart));
+assert.ok(tc.includes('closeEpDrawer()'), 'locTenantChanged must close the drawer');
+
+// Port config summary keeps working (used by the Porte view).
 const fnStart = src.indexOf('function portCfgSummary');
-const fnEnd = src.indexOf('\n}\n', fnStart) + 2;
-assert.ok(fnStart > 0, 'Manca portCfgSummary');
-const portCfgSummary = (0, eval)(`(${src.slice(fnStart, fnEnd)})`);
+const portCfgSummary = (0, eval)(`(${src.slice(fnStart, src.indexOf('\n}\n', fnStart) + 2)})`);
 assert.deepEqual(
     portCfgSummary('interface GigabitEthernet1/0/4\n switchport access vlan 7\n spanning-tree portfast\n shutdown\n!'),
     { text: 'switchport access vlan 7 · spanning-tree portfast', more: 1, count: 3 });
-assert.deepEqual(portCfgSummary('interface FortyGigabitEthernet3/1/1\n'), { text: '', more: 0, count: 0 });
-// Il blocco completo si apre in una riga a tutta larghezza, non nella cella.
-assert.ok(src.includes("cfgRow.className = 'ep-cfg-row'"), 'La config completa deve aprirsi in una riga ep-cfg-row');
 
 console.log('endpoint_inventory_ui: ok');

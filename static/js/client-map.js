@@ -48,6 +48,7 @@ function locSwitchView(view) {
 
 // Tenant change redraws only the pane on screen; the others redraw when opened.
 function locTenantChanged() {
+    closeEpDrawer();
     for (const v of Object.keys(_locLoaded)) _locLoaded[v] = (v === _locView);
     LOC_LOADERS[_locView]();
 }
@@ -365,134 +366,6 @@ function pickerSummary(groups) {
         }
     }
 
-
-    function closeMacLocateModal() {
-        const m = document.getElementById('macLocateModal');
-        if (m) m.remove();
-    }
-
-    async function macLocate(mac, tenant) {
-        const q = '/api/mac/locate?mac=' + encodeURIComponent(mac)
-            + (tenant ? '&tenant=' + encodeURIComponent(tenant) : '');
-        const res = await apiFetch(q);
-        if (!res || !res.ok) { alert(tr('cmapLocateFailed')); return; }
-        const d = await res.json();
-
-        // Una voce per (MAC, tenant). Con più sedi NON si appiattisce e non si
-        // sceglie: un tenant è una rete a sé, e due posizioni in due sedi sono
-        // entrambe vere. Si mostrano separate, ognuna col suo esito.
-        const entries = (d.results && d.results.length) ? d.results : [d];
-        const macStr = d.mac || (entries[0] && entries[0].mac) || mac;
-        const multi = entries.length > 1;
-
-        // rank: la porta d'accesso più recente è la più probabile (primo elemento).
-        const sightRow = (s, accent, badge) => `
-            <div style="display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border); border-radius:0; margin-bottom:6px; background:var(--surface-2);">
-                <i class="fa-solid fa-network-wired" style="color:${accent};"></i>
-                <div style="flex:1;">
-                    <div style="font-weight:700; font-size:13px;">${escapeHtml(s.switch_name || s.switch_ip)}
-                        <span style="color:var(--text-muted); font-family:var(--font-code); font-size:11px;">${escapeHtml(s.switch_ip)}</span>${badge||''}</div>
-                    <div style="font-size:11px; color:var(--text-muted);">
-                        <i class="fa-solid fa-ethernet"></i> ${escapeHtml(s.interface || '—')}${s.port_channel?` (${escapeHtml(s.port_channel)})`:''}
-                        • VLAN ${escapeHtml(s.vlan || '—')}${s.uplink_to?` • <span style="color:var(--warning);">→ ${escapeHtml(s.uplink_to)}</span>`:''}
-                    </div>
-                </div>
-                <span style="font-size:11px; color:var(--text-muted);">${escapeHtml(fmtMacTime(s.last_seen))}</span>
-            </div>`;
-
-        // Le tinte seguono i token semantici: i letterali rgba di prima erano
-        // di una palette morta e non cambiavano con il tema.
-        const tint = (tok, pct) => `color-mix(in srgb, var(${tok}) ${pct}%, transparent)`;
-
-        const mostRecent = ` <span class="role-pill" style="background:${tint('--success',15)}; color:var(--success); border:1px solid ${tint('--success',35)};">${tr('cmapMostRecent')}</span>`;
-
-        // Una sezione per tenant: stesso renderer, ciclato. Due modali o due
-        // renderer sarebbero due copie da tenere allineate.
-        const entrySection = (g) => {
-            const status = g.status || 'resolved';
-            const origin = g.origin || [];
-
-            const originHtml = origin.length
-                ? origin.map((s, i) => sightRow(s, 'var(--success)', (status==='ambiguous' && i===0) ? mostRecent : '')).join('')
-                : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${tr('cmapNoAccessPortFound')}</div>`;
-
-            // Banner di stato: chiarisce all'utente quanto è affidabile l'origine.
-            let banner = '';
-            // MAC di un'interfaccia propria di uno switch: infrastruttura, non endpoint.
-            const isSwitchIf = (g.origin_type || g.device_type) === 'switch-interface';
-            if (isSwitchIf) {
-                const swName = g.origin_switch || '';
-                const swIf = g.origin_interface || '';
-                banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:${tint('--primary',12)}; border:1px solid ${tint('--primary',35)}; color:var(--primary); font-size:12px; margin-bottom:14px;">
-                    <i class="fa-solid fa-microchip" style="margin-top:2px;"></i>
-                    <span>${escapeHtml(tr('cmapThisMacBelongsTo', {swIf: swIf, swName: swName}))}</span></div>`;
-            } else if (status === 'ambiguous') {
-                // Ambiguo significa più porte plausibili NELLA STESSA rete: qui
-                // una scansione più fresca serve davvero.
-                banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:${tint('--warning',12)}; border:1px solid ${tint('--warning',35)}; color:var(--warning); font-size:12px; margin-bottom:14px;">
-                    <i class="fa-solid fa-triangle-exclamation" style="margin-top:2px;"></i>
-                    <span>${tr('cmapMultiplePossibleAccessPorts', {access_count: g.access_count})}</span></div>`;
-            } else if (status === 'transit_only') {
-                banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:${tint('--warning',12)}; border:1px solid ${tint('--warning',35)}; color:var(--warning); font-size:12px; margin-bottom:14px;">
-                    <i class="fa-solid fa-circle-info" style="margin-top:2px;"></i>
-                    <span>${tr('cmapOnlySeenInTransit')}</span></div>`;
-            } else if (status === 'not_found') {
-                // The server only answers with the switches' latest scans: an
-                // older sighting is history, not a position.
-                const last = g.last_seen ? ' ' + tr('cmapLastSeenAt', {when: fmtMacTime(g.last_seen)}) : '';
-                banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:${tint('--warning',12)}; border:1px solid ${tint('--warning',35)}; color:var(--warning); font-size:12px; margin-bottom:14px;">
-                    <i class="fa-solid fa-clock-rotate-left" style="margin-top:2px;"></i>
-                    <span>${escapeHtml(tr('cmapNotInLatestScan') + last)}</span></div>`;
-            } else if (status === 'resolved' && origin.length) {
-                banner = `<div style="display:flex; gap:8px; align-items:center; padding:10px 12px; border-radius:0; background:${tint('--success',12)}; border:1px solid ${tint('--success',35)}; color:var(--success); font-size:12px; margin-bottom:14px;">
-                    <i class="fa-solid fa-circle-check"></i>
-                    <span>${tr('cmapSingleAccessPortResolved')}</span></div>`;
-            }
-
-            // Intestazione di tenant solo quando ce n'è più d'uno: con una sede
-            // sola sarebbe rumore, e la schermata resta quella di sempre.
-            const head = multi && g.tenant
-                ? `<div style="margin:18px 0 10px; padding-bottom:6px; border-bottom:1px solid var(--border); font-size:13px; font-weight:700; color:var(--primary);">
-                    <i class="fa-solid fa-sitemap" style="margin-right:6px;"></i>${escapeHtml(g.tenant)}</div>`
-                : '';
-
-            return `${head}${banner}
-                <h4 style="font-size:13px; margin-bottom:8px; color:var(--success);"><i class="fa-solid fa-location-crosshairs"></i> ${tr('cmapAccessLocationOrigin')}</h4>
-                ${originHtml}`;
-        };
-
-        // Più sedi: si dice che il MAC esiste in più reti. NON si consiglia una
-        // riscansione — non c'entra niente, e ognuna di queste posizioni è vera.
-        const multiBanner = multi
-            ? `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:${tint('--primary',12)}; border:1px solid ${tint('--primary',35)}; color:var(--primary); font-size:12px; margin-bottom:4px;">
-                <i class="fa-solid fa-layer-group" style="margin-top:2px;"></i>
-                <span>${tr('cmapThisMacExistsIn', {length: entries.length})}</span></div>`
-            : '';
-
-        const sectionsHtml = multiBanner + entries.map(entrySection).join('');
-
-        const ov = document.createElement('div');
-        ov.id = 'macLocateModal';
-        ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:color-mix(in srgb, var(--bg) 82%, transparent); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
-        ov.innerHTML = `
-            <div style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:22px; width:min(560px,94vw); max-height:86vh; overflow:auto; box-shadow:var(--shadow-float);">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                    <h3 style="font-size:17px;"><i class="fa-solid fa-magnifying-glass-location" style="color:var(--primary);"></i> ${tr('cmapMacOrigin')}</h3>
-                    <i class="fa-solid fa-xmark" data-action="close-mac-locate-modal" style="cursor:pointer; color:var(--text-muted); font-size:17px;"></i>
-                </div>
-                <div style="font-family:var(--font-code); font-size:13px; color:var(--primary); margin-bottom:16px;">${escapeHtml(macStr)}</div>
-
-                ${sectionsHtml}
-
-                <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:16px;">
-                    <button data-action="close-mac-locate-modal" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${tr('cmapClose')}</button>
-                </div>
-            </div>`;
-        ov.addEventListener('click', e => {
-            if (e.target === ov || e.target.closest('[data-action="close-mac-locate-modal"]')) closeMacLocateModal();
-        });
-        document.body.appendChild(ov);
-    }
 
     // MOVED to static/js/core.js (showPortConfig / closePortConfigModal / openPortInAnalyzer / expandIface / caFocusIp / caFocusPort)
 

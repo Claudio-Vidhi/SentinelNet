@@ -848,24 +848,17 @@ class TestTabFrontend(unittest.TestCase):
         self.assertIn("!res || !res.ok", body)
 
     def test_la_riga_ha_le_azioni_esplicite(self):
-        """Il click sulla riga diagnosticava gia', ma non lo sapeva nessuno:
-        niente lo diceva. Le tre azioni sono ora visibili come pulsanti."""
-        body = self._fn("function endpointsRender(d)")
-        self.assertIn("ep-diagnose", body)
-        self.assertIn("ep-locate", body)
-        self.assertIn("ep-portcfg", body)
-
-    def test_i_pulsanti_non_fanno_partire_anche_il_click_di_riga(self):
-        """I pulsanti portano data-action dedicate gestite via event delegation."""
-        body = self._fn("function endpointsRender(d)")
-        for icon in ("fa-stethoscope", "fa-magnifying-glass-location",
-                     "fa-file-lines"):
-            self.assertIn(icon, body)
+        """The row opens the drawer; the drawer carries the actions as
+        visible buttons: diagnose, port configuration, copy MAC."""
+        self.assertIn('data-action="ep-open"', self._fn("function endpointsRender(d)"))
+        body = self._fn("function _epDrawerHtml(r, loc)")
+        for action in ("ep-diagnose", "ep-portcfg", "ep-copy-mac"):
+            self.assertIn(action, body)
 
     def test_la_configurazione_porta_si_offre_solo_se_c_e_una_porta(self):
         """Un endpoint TRANSIT-ONLY non ha switch ne' interfaccia: il
         pulsante aprirebbe la configurazione di un'interfaccia vuota."""
-        body = self._fn("function endpointsRender(d)")
+        body = self._fn("function _epDrawerHtml(r, loc)")
         self.assertIn("r.switch_ip && r.interface", body)
 
     def test_le_nuove_chiavi_i18n_esistono_in_entrambe_le_lingue(self):
