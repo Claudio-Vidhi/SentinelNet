@@ -1712,54 +1712,40 @@
 
       </div>
       <div id="locPane-diagnosi" class="loc-pane" role="tabpanel" aria-labelledby="locTab-diagnosi" hidden>
-      <div class="panel" style="margin-bottom:16px;">
-        <h3 style="font-size:15px; margin-bottom:12px;">
-          <i class="fa-solid fa-stethoscope" style="color:var(--primary);"></i>
-          <span data-i18n="titleDiagnosi"></span>
-          <span class="preview-badge" data-i18n-title="titleDiagPreview"
-                title="Non ancora validato su hardware reale. I risultati possono essere incompleti.">preview</span>
-        </h3>
-        <div class="diag-form" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; align-items:end;">
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="diagClientInput" data-i18n="lblDiagClient"></label>
-            <input id="diagClientInput" type="text" placeholder="192.0.2.10 / aa:bb:cc:dd:ee:ff"
-                   style="padding-left:12px; font-size:13px;">
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="diagDestInput" data-i18n="lblDiagDest"></label>
-            <input id="diagDestInput" type="text" style="padding-left:12px; font-size:13px;">
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-              <label for="diagGatewayInput" style="margin-bottom:0; font-size:12px; font-weight:600;">Gateway L3</label>
-              <button class="btn btn-sm btn-secondary" id="btnDiagTraceroute" type="button" style="padding:2px 6px; font-size:10px; width:auto; border-radius:0;" title="Rileva il primo hop tramite traceroute" data-i18n-title="titleDiagTraceroute">
-                <i class="fa-solid fa-route" style="color:var(--primary);"></i> Traceroute
-              </button>
-            </div>
-            <div style="display:flex; gap:6px;">
-              <select id="diagGatewaySelect" style="flex:1;" aria-label="Gateway per la diagnosi" data-i18n-aria-label="ariaDiagGateway">
-                <option value="">Auto (ARP / Subnet)</option>
-              </select>
-              <input id="diagGatewayInput" type="text" placeholder="Es. 192.168.1.1" style="flex:1; padding-left:8px; font-size:12px;">
-            </div>
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="diagProtoInput" data-i18n="lblFgtProto"></label>
-            <select id="diagProtoInput">
-              <option value="TCP">TCP</option>
-              <option value="UDP">UDP</option>
-              <option value="ICMP">ICMP</option>
-            </select>
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="diagPortInput" data-i18n="colFgtSessDport"></label>
-            <input id="diagPortInput" type="number" min="1" max="65535" value="443"
-                   style="padding-left:12px; font-size:13px;">
-          </div>
-          <button class="btn btn-secondary" id="btnRunDiagnosi" style="width:auto;"
-                  data-i18n="btnDiagRun"></button>
+      <form id="diagForm" class="diag-row">
+        <div class="diag-fg diag-grow">
+          <label for="diagClientInput" data-i18n="lblDiagClient"></label>
+          <input id="diagClientInput" type="text" placeholder="192.0.2.10 / aa:bb:cc:dd:ee:ff">
         </div>
-      </div>
+        <div class="diag-fg diag-grow">
+          <label for="diagDestInput" data-i18n="lblDiagDest"></label>
+          <input id="diagDestInput" type="text">
+        </div>
+        <div class="diag-fg">
+          <label for="diagProtoInput" data-i18n="lblFgtProto"></label>
+          <select id="diagProtoInput"><option value="TCP">TCP</option><option value="UDP">UDP</option><option value="ICMP">ICMP</option></select>
+        </div>
+        <div class="diag-fg">
+          <label for="diagPortInput" data-i18n="colFgtSessDport"></label>
+          <input id="diagPortInput" class="diag-port" type="number" min="1" max="65535" value="443">
+        </div>
+        <button class="btn btn-primary" id="btnRunDiagnosi" type="button" data-i18n="btnDiagRun"></button>
+        <span class="preview-badge" data-i18n-title="titleDiagPreview" title="Non ancora validato su hardware reale. I risultati possono essere incompleti.">preview</span>
+        <details class="diag-adv">
+          <summary data-i18n="diagAdvanced">Avanzate: gateway L3</summary>
+          <div class="diag-row diag-row-inner">
+            <div class="diag-fg">
+              <label for="diagGatewaySelect" data-i18n="lblDiagGateway">Gateway L3</label>
+              <select id="diagGatewaySelect"><option value="">Auto (ARP / Subnet)</option></select>
+            </div>
+            <div class="diag-fg">
+              <label for="diagGatewayInput" data-i18n="lblDiagGatewayIp">Oppure IP</label>
+              <input id="diagGatewayInput" type="text" placeholder="192.0.2.1">
+            </div>
+            <button class="btn btn-secondary btn-small" id="btnDiagTraceroute" type="button" title="Rileva il primo hop tramite traceroute" data-i18n-title="titleDiagTraceroute"><i class="fa-solid fa-route"></i> Traceroute</button>
+          </div>
+        </details>
+      </form>
       <div id="diagResult"></div>
       </div>
       <div id="locPane-porte" class="loc-pane" role="tabpanel" aria-labelledby="locTab-porte" hidden>

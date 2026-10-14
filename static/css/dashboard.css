@@ -5355,3 +5355,16 @@ details[open] > summary .mac-caret { transform: rotate(180deg); }
 #tab-endpoint .ep-pop-body dd { margin: 0; }
 #tab-endpoint .ep-link { background: none; border: 0; padding: 0; color: var(--primary); cursor: pointer; font-family: var(--font-data); font-size: 12px; }
 #tab-endpoint .ep-link:hover { text-decoration: underline; }
+
+/* Diagnosi form */
+#tab-endpoint .diag-row { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: flex-end; padding: 12px; margin-bottom: 14px;
+  background: var(--surface); border: var(--seam) solid var(--border); }
+#tab-endpoint .diag-row-inner { border: 0; padding: 10px 0 0; margin: 0; }
+#tab-endpoint .diag-fg { display: grid; gap: 4px; min-width: 0; }
+#tab-endpoint .diag-fg label { font-family: var(--font-legend); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-soft); margin: 0; }
+#tab-endpoint .diag-fg input, #tab-endpoint .diag-fg select { font-family: var(--font-data); font-size: 13px; padding: 7px 9px; margin: 0; }
+#tab-endpoint .diag-grow { flex: 1 1 200px; }
+#tab-endpoint .diag-port { width: 96px; }
+#tab-endpoint .diag-row > .btn, #tab-endpoint .diag-row-inner > .btn { width: auto; margin: 0; }
+#tab-endpoint .diag-adv { flex-basis: 100%; font-size: 12.5px; }
+#tab-endpoint .diag-adv summary { cursor: pointer; color: var(--primary); }
