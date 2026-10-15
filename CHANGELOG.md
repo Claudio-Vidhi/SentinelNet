@@ -43,6 +43,10 @@ happened — `git log --grep="chore(release)"` is the record for those.
   del tenant precedente.
 - Diagnosi: con un tenant selezionato in alto, l'elenco dei gateway L3 e il
   referto mostravano anche gli apparati degli altri tenant.
+- Lo stesso per le altre selezioni di apparati: FortiGate (token e gestione
+  target), palette comandi, allegati e generatore config dell'AI Assistant,
+  nuova pianificazione e filtro tenant della cronologia apparati ora partono
+  dal tenant selezionato in alto e lo seguono quando cambia.
 - Il pannello resta coerente se la finestra attraversa i 900px mentre e'
   aperto.
 - Esc sulla configurazione di porta aperta dal pannello chiudeva il pannello

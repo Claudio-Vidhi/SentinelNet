@@ -71,7 +71,12 @@
                 `<option value="${escapeHtml(g)}">${escapeHtml(orgLabel(g))}</option>`
             ).join('');
             tenantSel.innerHTML = `<option value="">${tr('optAiNoTenant')}</option>` + tenantOpts;
-            tenantSel.value = [...tenantSel.options].some(o => o.value === curTenant) ? curTenant : '';
+            // Untouched by the user: the tenant selected at the top, so the
+            // device list below starts inside it.
+            const groups = Object.keys(globalGroups || {});
+            tenantSel.value = tenantSel.dataset.userSet === '1'
+                ? (groups.includes(curTenant) ? curTenant : '')
+                : tenantSelectSeed(curTenant, groups, '');
             if (tenantSel.value !== curTenant) populateAiAttachDevices();
         }
         if (document.body.classList.contains('role-admin')) {
@@ -250,7 +255,7 @@
         if (cur && [...sel.options].some(o => o.value === cur)) {
             sel.value = cur;
         } else if (sel.options.length > 0) {
-            sel.selectedIndex = 0;
+            sel.value = tenantSelectSeed('', allTenants, allTenants[0]);
         }
         populateGenCfgTemplates();
         populateGenCfgProfiles();
@@ -859,6 +864,12 @@
     document.getElementById('btnAiRenameChat')?.addEventListener('click', renameAiConversation);
     document.getElementById('btnAiDeleteChat')?.addEventListener('click', deleteCurrentAiConversation);
     document.getElementById('aiAttachTenant')?.addEventListener('change', populateAiAttachDevices);
+    // core.js seeds the two tenant fields without a change event (a form's
+    // side effects must not fire): redraw their device lists here.
+    window.addEventListener('globalTenantChanged', () => {
+        populateAiAttachDevices();
+        populateGenCfgTemplates();
+    });
     document.getElementById('aiAttachDeviceBtn')?.addEventListener('click', toggleAiDeviceDropdown);
 
     document.getElementById('aiChatInput')?.addEventListener('keydown', (e) => {

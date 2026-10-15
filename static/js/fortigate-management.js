@@ -855,10 +855,15 @@ function loadFgtTab() {
     });
 }
 
+// Fortinet devices of the inventory, inside the tenant selected at the top.
+function fgtInventoryDevices() {
+    const tenant = window.globalSelectedTenant || 'all';
+    return (globalDevices || []).filter(dev =>
+        (dev.Vendor || '').toLowerCase() === 'fortinet' && (tenant === 'all' || dev.Group === tenant));
+}
+
 function populateFgtPrevDeviceSelects() {
-    const fgtDevices = (typeof globalDevices !== 'undefined' ? globalDevices : []).filter(dev =>
-        (dev.Vendor || '').toLowerCase() === 'fortinet'
-    );
+    const fgtDevices = fgtInventoryDevices();
     const opts = '<option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>' +
         fgtDevices.map(dev =>
             `<option value="${escapeHtml(dev.IP)}" title="${escapeHtml(dev.Hostname || dev.IP)}">${escapeHtml(dev.IP)} (${escapeHtml(dev.Hostname || 'unknown')})</option>`
@@ -1075,9 +1080,7 @@ function closeFgtManageModal() {
 }
 
 function populateFgtMgrDeviceSelect() {
-    const fgtDevices = (typeof globalDevices !== 'undefined' ? globalDevices : []).filter(dev =>
-        (dev.Vendor || '').toLowerCase() === 'fortinet'
-    );
+    const fgtDevices = fgtInventoryDevices();
     const sel = document.getElementById('fgtMgrIp');
     if (!sel) return;
     const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
@@ -1427,6 +1430,8 @@ document.getElementById('fgtTargetSelect')?.addEventListener('change', onFgtTarg
 window.addEventListener('globalTenantChanged', () => {
     fgtConnectedTarget = '';
     renderFgtTargetSelect();
+    populateFgtPrevDeviceSelects();
+    populateFgtMgrDeviceSelect();
 });
 document.getElementById('btnFgtConnect')?.addEventListener('click', connectAndLoadFgt);
 document.getElementById('btnFgtManageTargets')?.addEventListener('click', openFgtManageModal);

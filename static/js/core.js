@@ -2394,7 +2394,7 @@ function applyGlobalTenant(val) {
     for (const sid of ['ptTenantSelect', 'driftTenantSelect',
                        'wlcTenantSelect', 'ifTenantFilter', 'categoriesGroupSelect',
                        'configGroupSelect', 'interactiveGroupSelect',
-                       'bulkGroupFilter']) {
+                       'bulkGroupFilter', 'dhTenant']) {
         const sel = document.getElementById(sid);
         if (sel instanceof HTMLSelectElement && val !== 'all') {
             sel.value = val;
@@ -2564,8 +2564,9 @@ function buildCommandPaletteItems(query = '') {
         }
     });
 
-    // 2. Apparati
-    (globalDevices || []).forEach(d => {
+    // 2. Devices, inside the tenant selected at the top.
+    const scopeTenant = window.globalSelectedTenant || 'all';
+    (globalDevices || []).filter(d => scopeTenant === 'all' || d.Group === scopeTenant).forEach(d => {
         const h = (d.Hostname || '').toLowerCase();
         const ip = (d.IP || '').toLowerCase();
         const t = (d.Group || '').toLowerCase();
