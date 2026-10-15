@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-10-15
+
 ### Changed
 
 - **Localizzazione endpoint ridisegnata**: una ricerca unica (MAC, IP, vendor,
