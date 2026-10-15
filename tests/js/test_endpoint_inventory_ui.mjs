@@ -78,6 +78,12 @@ for (const fn of ['async function endpointsSearch(', 'async function locSearchSu
     assert.ok(body.includes('const seq = ++_epSeq;') && body.includes('seq !== _epSeq'), `${fn} must drop stale answers`);
 }
 assert.ok(tc.includes('_epSeq++'), 'locTenantChanged must invalidate in-flight searches');
+// 8. Search as you type: debounced, and a live search never opens the drawer.
+{
+    assert.ok(/getElementById\('locSearch'\)\?\.addEventListener\('input'/.test(src), 'search box must search while typing');
+    assert.ok(src.includes('setTimeout(() => locSearchSubmit(true), 300)'), 'typing search must be debounced and live');
+    assert.ok(src.includes('if (!live && (d.results || []).length === 1) openEpDrawer('), 'a live search must not open the drawer');
+}
 // 7. Diagnosi: the tenant selected at the top scopes the gateway list and
 //    the report; no call may fall back to every tenant.
 {

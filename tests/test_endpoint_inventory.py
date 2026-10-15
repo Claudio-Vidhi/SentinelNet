@@ -405,13 +405,31 @@ class TestFiltriEScoping(_Base):
         self.assertEqual(row["ip_sources"],
                          [{"ip": "192.0.2.10", "source_ip": "192.0.2.254"}])
 
-    def test_partial_ip_keeps_the_text_search(self):
+    def test_partial_ip_matches_as_a_prefix(self):
+        # Typing narrows the list: "192.0.2" finds every IP starting with it.
         self._sighting(mac=MAC_A)
+        self._sighting(mac=MAC_VM, switch_ip="192.0.2.2")
         self._arp(mac=MAC_A, ip="192.0.2.10")
+        self._arp(mac=MAC_VM, ip="198.51.100.7", source_ip="198.51.100.254")
 
-        # "192.0.2" is not an address: it falls back to the LIKE search,
-        # which does not look at IPs.
-        self.assertEqual(mac_history.endpoint_inventory(q="192.0.2")["total"], 0)
+        for q in ("192", "192.0.2", "192.0.2.1"):
+            out = mac_history.endpoint_inventory(q=q)
+            self.assertEqual([r["mac"] for r in out["results"]], [MAC_A], q)
+        self.assertEqual(mac_history.endpoint_inventory(q="10.9")["total"], 0)
+
+    def test_partial_ip_keeps_the_text_search(self):
+        # A digit-only term still matches the text fields (here the interface).
+        self._sighting(mac=MAC_A, interface="GigabitEthernet1/0/4")
+
+        self.assertEqual(mac_history.endpoint_inventory(q="1")["total"], 1)
+
+    def test_partial_ip_stays_in_scope(self):
+        self._sighting(mac=MAC_A, tenant="sede-a")
+        self._arp(mac=MAC_A, ip="192.0.2.10", tenant="sede-a")
+
+        out = mac_history.endpoint_inventory(tenants=["sede-b"], q="192.0.2")
+
+        self.assertEqual(out["total"], 0)
 
     def test_limite_dichiarato_non_silenzioso(self):
         """Una tabella HTML non regge decine di migliaia di righe: si taglia e
