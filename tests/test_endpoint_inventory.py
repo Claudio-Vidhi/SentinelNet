@@ -376,6 +376,35 @@ class TestFiltriEScoping(_Base):
 
         self.assertEqual(out["total"], 0)
 
+    def test_search_by_ip_stays_in_the_tenant_that_holds_it(self):
+        # Same MAC in two sites, the address bound in one: the other site's
+        # row is not an answer to "who has this IP".
+        self._sighting(mac=MAC_A, tenant="sede-a")
+        self._sighting(mac=MAC_A, tenant="sede-b", switch_ip="198.51.100.1")
+        self._arp(mac=MAC_A, ip="192.0.2.10", tenant="sede-a")
+
+        out = mac_history.endpoint_inventory(q="192.0.2.10")
+
+        self.assertEqual([(r["mac"], r["tenant"]) for r in out["results"]],
+                         [(MAC_A, "sede-a")])
+
+    def test_search_by_ip_applies_the_time_window(self):
+        self._sighting(mac=MAC_A, first_days=60, last_days=0)
+        self._arp(mac=MAC_A, ip="192.0.2.10", first_days=60, last_days=30)
+
+        out = mac_history.endpoint_inventory(q="192.0.2.10", frm=_iso(5))
+
+        self.assertEqual(out["total"], 0)
+
+    def test_each_ip_carries_its_gateway(self):
+        self._sighting(mac=MAC_A)
+        self._arp(mac=MAC_A, ip="192.0.2.10", source_ip="192.0.2.254")
+
+        row = mac_history.endpoint_inventory()["results"][0]
+
+        self.assertEqual(row["ip_sources"],
+                         [{"ip": "192.0.2.10", "source_ip": "192.0.2.254"}])
+
     def test_partial_ip_keeps_the_text_search(self):
         self._sighting(mac=MAC_A)
         self._arp(mac=MAC_A, ip="192.0.2.10")

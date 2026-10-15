@@ -903,17 +903,27 @@ def endpoint_inventory(tenants=None, probe: Optional[str] = None,
             is_ip = False
         if is_ip:
             # The IP lives in arp_entries, joined after this query: resolve it
-            # to MACs first, in the same tenant scope.
-            arp_sql, arp_args = "SELECT DISTINCT mac FROM arp_entries WHERE ip = ?", [q]
+            # to (MAC, tenant) pairs first, in the same scope and time window.
+            # The pair, not the MAC: the same MAC in another site does not
+            # hold this address there.
+            arp_sql = "SELECT DISTINCT mac, COALESCE(tenant, '') FROM arp_entries WHERE ip = ?"
+            arp_args = [q]
             if tenant_list is not None:
                 arp_sql += " AND tenant IN (%s)" % ",".join("?" * len(tenant_list))
                 arp_args.extend(tenant_list)
+            if frm:
+                arp_sql += " AND last_seen >= ?"
+                arp_args.append(frm)
+            if to:
+                arp_sql += " AND first_seen <= ?"
+                arp_args.append(to)
             with _connect() as c:
-                macs = [r[0] for r in c.execute(arp_sql, arp_args).fetchall()]
-            if not macs:
+                pairs = c.execute(arp_sql, arp_args).fetchall()
+            if not pairs:
                 return copy.deepcopy(empty)
-            where.append("mac IN (%s)" % ",".join("?" * len(macs)))
-            args.extend(macs)
+            where.append("(%s)" % " OR ".join(["(mac = ? AND COALESCE(tenant, '') = ?)"] * len(pairs)))
+            for mac, tenant in pairs:
+                args.extend([mac, tenant])
         else:
             where.append("(mac LIKE ? OR oui_vendor LIKE ? OR switch_name LIKE ? "
                          "OR interface LIKE ?)")
@@ -991,7 +1001,13 @@ def endpoint_inventory(tenants=None, probe: Optional[str] = None,
             cur_arp = raw_arp
 
         cur_arp.sort(key=lambda b: (b.get("last_seen") or "", b.get("ip") or ""), reverse=True)
-        ips = list(dict.fromkeys(b["ip"] for b in cur_arp if b.get("ip")))
+        # IP -> the gateway it was read from (newest binding first), for the
+        # detail panel.
+        src_of: dict = {}
+        for b in cur_arp:
+            if b.get("ip") and b["ip"] not in src_of:
+                src_of[b["ip"]] = b.get("source_ip") or ""
+        ips = list(src_of)
         first_seen = min(s["first_seen"] for s in grp)
         last_seen = max(s["last_seen"] for s in grp)
         info = ep_kb.classify_mac(mac) or {}
@@ -1026,6 +1042,7 @@ def endpoint_inventory(tenants=None, probe: Optional[str] = None,
             "oui_vendor": next((s["oui_vendor"] for s in grp if s.get("oui_vendor")), ""),
             "probe": grp[0].get("probe") or "",
             "ips": ips,
+            "ip_sources": [{"ip": ip, "source_ip": s} for ip, s in src_of.items()],
             "switch_ip": best.get("switch_ip", ""),
             "switch_name": best.get("switch_name", ""),
             "interface": best.get("interface", ""),

@@ -2089,7 +2089,7 @@ let caFocusPort = null;
 
 function closePortConfigModal() {
     const m = document.getElementById('portConfigModal');
-    if (m) m.remove();
+    if (m) { closeModal(m); m.remove(); }
 }
 
 async function showPortConfig(switchIp, port, switchName) {
@@ -2132,6 +2132,8 @@ async function showPortConfig(switchIp, port, switchName) {
         }
     });
     document.body.appendChild(ov);
+    // Through the modal manager: Esc closes this popup, not the drawer it was opened from.
+    openModal(ov, closePortConfigModal);
 }
 
 function openPortInAnalyzer(switchIp, port) {
