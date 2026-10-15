@@ -2882,7 +2882,9 @@ class TestRedundancyUi(unittest.TestCase):
         self.assertIn("function _diagTenantChoice", source)
         self.assertIn("tenants_available", source)
         self.assertIn("function diagnosiPickTenant", source)
-        self.assertIn("body.tenant = _diagTenant", source)
+        # The picked tenant wins over the one selected at the top.
+        self.assertIn("return _diagTenant || (top !== 'all' ? top : null);", source)
+        self.assertIn("if (tenant) body.tenant = tenant;", source)
 
     def test_port_bounce_requires_typing_the_port_name(self):
         # Una conferma che si puo' dare col mouse senza leggere non e' una
