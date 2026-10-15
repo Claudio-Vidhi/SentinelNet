@@ -87,7 +87,72 @@ function syncTopbarCrumb() {
     page.textContent = btn.querySelector('.nav-left')?.textContent.trim() || '';
     group.textContent = btn.closest('.nav-group')?.querySelector('.nav-group-label')?.textContent.trim() || '';
     group.parentElement?.classList.toggle('no-group', !group.textContent);
+    renderNavFavorites();
 }
+
+// --- SIDEBAR FAVORITES ---
+// Tabs the user starred, per user on the server (/api/profile/favorites).
+// The entries are plain buttons, not tabs: no data-tab and no role="tab", so
+// every lookup over the real nav items (permissions, active state, the
+// assignable-tab lists) never sees them. A favorite the user can no longer
+// open stays stored and is simply not drawn.
+let navFavorites = [];
+
+function currentNavTab() {
+    return document.querySelector('.sidenav .nav-item.active[data-tab]')?.getAttribute('data-tab') || 'tab-home';
+}
+
+function renderNavFavorites() {
+    const box = document.getElementById('navFavorites');
+    const list = document.getElementById('navFavItems');
+    const star = document.getElementById('btnFavToggle');
+    const cur = currentNavTab();
+    if (star) {
+        const on = navFavorites.includes(cur);
+        star.hidden = cur === 'tab-home';
+        star.setAttribute('aria-pressed', on ? 'true' : 'false');
+        star.querySelector('i')?.classList.replace(on ? 'fa-regular' : 'fa-solid', on ? 'fa-solid' : 'fa-regular');
+    }
+    if (!box || !list) return;
+    list.innerHTML = navFavorites.filter(canOpenTab).map(id => {
+        const src = document.querySelector(`.sidenav .nav-item[data-tab="${CSS.escape(id)}"]`);
+        if (!src) return '';
+        // The label is the nav item's own (already translated) markup.
+        const label = src.querySelector('.nav-left')?.innerHTML || '';
+        const on = id === cur;
+        return `<button type="button" class="nav-item nav-fav${on ? ' is-current' : ''}" data-fav-tab="${escapeHtml(id)}"${
+            on ? ' aria-current="page"' : ''}><span class="nav-left">${label}</span></button>`;
+    }).join('');
+    box.hidden = !list.children.length;
+    syncNavTooltips();
+}
+
+async function loadNavFavorites() {
+    const res = await apiFetch('/api/profile/favorites');
+    if (res && res.ok) navFavorites = (await res.json()).tabs || [];
+    renderNavFavorites();
+}
+
+async function toggleNavFavorite() {
+    const cur = currentNavTab();
+    if (cur === 'tab-home') return;
+    const tabs = navFavorites.includes(cur) ? navFavorites.filter(t => t !== cur) : [...navFavorites, cur];
+    const res = await apiFetch('/api/profile/favorites', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tabs }),
+    });
+    if (res && res.ok) {
+        navFavorites = (await res.json()).tabs || [];
+        renderNavFavorites();
+    } else {
+        showToast(tr('favSaveError'), 'error');
+    }
+}
+
+document.getElementById('btnFavToggle')?.addEventListener('click', toggleNavFavorite);
+document.getElementById('navFavItems')?.addEventListener('click', (e) => {
+    const fav = /** @type {HTMLElement|null} */ (/** @type {HTMLElement} */ (e.target).closest('[data-fav-tab]'));
+    if (fav && fav.dataset.favTab) switchTab(fav.dataset.favTab);
+});
 
 // --- RESA CHIARA / SCURA ---
 // Il quadro esiste in due rese reali: targa incisa e schermo SCADA. Senza
@@ -1665,6 +1730,7 @@ async function appInit() {
         if (me) {
             currentRole = me.role || 'viewer';
             applyRoleUI(me.username, currentRole, me.allowed_tabs || [], me.groups || []);
+            loadNavFavorites();
         }
     } catch (e) { /* non bloccante */ }
 

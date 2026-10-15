@@ -327,6 +327,8 @@ class TestFullParity(unittest.TestCase):
     NEW_SCHEMAS = ("DeviceProbeSchema", "GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "ReportPdfSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection", "AgentBackupSchema", "AgentStatusItemSchema", "AgentStatusSchema", "FortigatePreviewSchema",
                     # Schemi delle notifiche email (regole admin e preferenze).
                     "UserPrefsSchema", "RuleSchema",
+                    # Sidebar favorites (/api/profile/favorites).
+                    "FavoritesSchema",
                     # Bulk decommission / reactivate / delete.
                     "DevicePair", "DeviceBulkSchema",
                     # Factory reset.

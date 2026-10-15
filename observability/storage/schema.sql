@@ -382,6 +382,13 @@ CREATE TABLE IF NOT EXISTS notify_prefs (
     quiet_bypass_critical  INTEGER NOT NULL DEFAULT 1
 );
 
+-- Sidebar favorites, per user: the tab ids in the order they were added.
+-- Additive table, no version bump: older code ignores it.
+CREATE TABLE IF NOT EXISTS ui_favorites (
+    username   TEXT PRIMARY KEY,
+    tabs_json  TEXT NOT NULL DEFAULT '[]'
+);
+
 CREATE TABLE IF NOT EXISTS notify_rules (
     id                     INTEGER PRIMARY KEY AUTOINCREMENT,
     name                   TEXT NOT NULL,
