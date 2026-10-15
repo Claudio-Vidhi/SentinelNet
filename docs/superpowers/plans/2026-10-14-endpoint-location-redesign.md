@@ -2417,3 +2417,37 @@ uv run pyinstaller SentinelNet.spec
 ```
 
 Expected: build completes; report the output path.
+
+---
+
+## Deferred after Task 9 (2026-10-15) — done the same day
+
+Left open by the review of `9303ee0`, all closed in the follow-up commit.
+
+- [x] **Drawer detail:** each IP shows the gateway it was read from
+  (`ip_sources` on `/api/endpoints/list` rows), the switch shows its
+  management IP under the name.
+- [x] **MAC scan result:** one line per site, failed devices listed with
+  their error.
+- [x] **Esc in the browser:** `scripts/dev/check_drawer_browser.py` drives
+  headless Chrome (docked, sheet, Esc over the port config popup, resize).
+  It found a real bug: `showPortConfig` bypassed the modal manager, so Esc
+  closed the drawer under the popup. Fixed with `openModal`.
+- [x] **ECMP in route lookup:** `rtLpm` tie-breaks on metric; `decidedBy`
+  is the criterion that split winner and runner-up, as
+  `services/path_trace.py:decided_by()`; ECMP highlights the metric step.
+- [x] **IP search scope:** resolves the IP to (MAC, tenant) pairs, inside
+  the time window.
+- [x] **Stray comment:** the tenant-change comment moved onto the
+  `globalTenantChanged` listener in `static/js/routes-view.js`.
+- [x] **Tenant switch mid-search:** `_epSeq` drops stale list answers;
+  `locTenantChanged` bumps it.
+- [x] **Resize across 900px with the drawer open:** a `matchMedia` change
+  listener moves it between docked and sheet.
+- [x] **Flaky `test_parallel_pins_are_all_kept`:** not the test — on Windows
+  `os.replace` raised `PermissionError` while another process held the
+  freshly written known_hosts, and that pin was lost. `_pin_host_key` now
+  writes through `data_config.atomic_write`.
+
+Still on disk, untracked: the `sn_verify_*` temp folder and
+`.superpowers/sdd/…` (deletion declined).
