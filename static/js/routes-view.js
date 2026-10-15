@@ -92,16 +92,19 @@
     function netContains(n, ip) { return ((ip & n.bits) >>> 0) === n.net; }
 
     /** The rows of one device that win for `ip`: longest prefix, then lowest
-     *  distance. Several rows on a tie (ECMP). */
+     *  distance, then lowest metric (services/path_trace.py, same order).
+     *  Several rows on a full tie (ECMP). */
     function rtLpm(rows, ip) {
-        let best = [], bestLen = -1, bestAd = Infinity;
+        let best = [], bestLen = -1, bestAd = Infinity, bestMetric = Infinity;
         for (const r of rows) {
             const n = parseNet(r.network);
             if (!n || !netContains(n, ip)) continue;
             const ad = r.distance == null ? 0 : r.distance;
-            if (n.len > bestLen || (n.len === bestLen && ad < bestAd)) {
-                best = [r]; bestLen = n.len; bestAd = ad;
-            } else if (n.len === bestLen && ad === bestAd) {
+            const metric = r.metric || 0;
+            const cmp = (bestLen - n.len) || (ad - bestAd) || (metric - bestMetric);
+            if (cmp < 0) {
+                best = [r]; bestLen = n.len; bestAd = ad; bestMetric = metric;
+            } else if (cmp === 0) {
                 best.push(r);
             }
         }
@@ -126,10 +129,14 @@
                 .filter(c => c.n && netContains(c.n, ip))
                 .sort((x, y) => y.n.len - x.n.len || ad(x.row) - ad(y.row) || (x.row.metric || 0) - (y.row.metric || 0))
                 .map(c => ({ row: c.row,
-                             verdict: winners.includes(c.row) ? 'win' : c.n.len < wLen ? 'lose-prefix' : 'lose-distance' }));
+                             verdict: winners.includes(c.row) ? 'win' : c.n.len < wLen ? 'lose-prefix'
+                                 : ad(c.row) > ad(winners[0]) ? 'lose-distance' : 'lose-metric' }));
+            // The criterion that split the winner from the runner-up, as
+            // decided_by() in services/path_trace.py.
+            const lost = candidates.find(c => c.verdict !== 'win');
             const decidedBy = winners.length > 1 ? 'ecmp'
-                : candidates.length === 1 ? 'only'
-                : candidates.some(c => c.verdict === 'lose-distance') ? 'distanza' : 'prefisso';
+                : !lost ? 'only'
+                : { 'lose-prefix': 'prefisso', 'lose-distance': 'distanza', 'lose-metric': 'metrica' }[lost.verdict];
             return { device: d, vrf, kind: wLen === 0 ? 'default' : 'route', winners, candidates, decidedBy,
                      fromBackup: winners.some(r => r.from_backup) };
         };
@@ -648,7 +655,8 @@
                 ? ' ' + tr('rtLkEcmp', { hops: a.winners.slice(1).map(r => hopOf(r, dev)).join(', ') }) : '';
             const why = a.decidedBy === 'only' ? tr('rtWhyOnly')
                 : a.decidedBy === 'prefisso' ? tr('rtWhyPrefix', { len: parseNet(w.network).len })
-                : a.decidedBy === 'distanza' ? tr('rtWhyDistance') : tr('rtWhyEcmp');
+                : a.decidedBy === 'distanza' ? tr('rtWhyDistance')
+                : a.decidedBy === 'metrica' ? tr('rtWhyMetric') : tr('rtWhyEcmp');
             const backup = a.fromBackup ? ` <span class="rt-lk-warn">${escapeHtml(tr('rtWhyBackup'))}</span>` : '';
             const open = _rtLkOpen.has(key);
             let detail = '';
@@ -666,7 +674,8 @@
                             escapeHtml(win ? tr('rtTraceWins') : tr('rtTraceDropped'))}</span></td>
                       </tr>`;
                 }).join('');
-                const hit = { prefisso: 0, distanza: 1, ecmp: 1, only: 0 }[a.decidedBy];
+                // ECMP: all three criteria tie, the last one checked is where it stops.
+                const hit = { prefisso: 0, distanza: 1, metrica: 2, ecmp: 2, only: 0 }[a.decidedBy];
                 const rules = rtRules().map((rule, i) =>
                     `<span class="rt-rule-step ${i === hit ? 'hit' : i > hit ? 'moot' : ''}">${escapeHtml(rule.label)}</span>`).join('');
                 detail = `<div class="rt-lk-detail"><table class="rt-cand" data-no-colpicker>
@@ -1515,9 +1524,6 @@
     // Leggi tabelle. Ogni apparato in piu' e' una sessione in piu' aperta.
     document.getElementById('btnRtRefresh')?.addEventListener('click', loadRoutesTab);
 
-    // Cambiare tenant svuota la selezione: gli apparati scelti prima possono
-    // non essere piu' in scope, e le righe gia' a schermo sarebbero di un
-    // altro cliente.
     document.getElementById('rtLookup')?.addEventListener('click', e => {
         const btn = /** @type {HTMLElement|null} */ (/** @type {HTMLElement} */ (e.target).closest('[data-action="rt-lk-toggle"]'));
         if (!btn) return;
@@ -1528,6 +1534,9 @@
             `#rtLookup [data-dev="${CSS.escape(dev)}"]`))?.focus();
     });
 
+    // Cambiare tenant svuota la selezione: gli apparati scelti prima possono
+    // non essere piu' in scope, e le righe gia' a schermo sarebbero di un
+    // altro cliente.
     window.addEventListener('globalTenantChanged', () => {
         _rtLkOpen.clear(); _rtUnknown = new Set();
         _rtRows = []; _rtErrors = []; _rtLoaded = []; _rtMatrix = []; _rtContext = {};

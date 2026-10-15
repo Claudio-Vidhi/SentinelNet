@@ -264,6 +264,24 @@ assert.equal(rtQuery('10.0.0.0/').kind, 'text');
     assert.equal(d2.fromBackup, true);
 }
 
+// --- same prefix and distance: the metric decides, it is not ECMP
+{
+    const { rtLookup } = windowStub.rtModel;
+    const rows = [
+        r('A', '10.9.0.0/16', { type: 'ospf', gateway: '198.51.100.1', distance: 110, metric: 20 }),
+        r('A', '10.9.0.0/16', { type: 'ospf', gateway: '198.51.100.2', distance: 110, metric: 10 }),
+    ];
+    assert.equal(rtLpm(rows, ip4('10.9.1.1')).length, 1, 'a lower metric is a single winner');
+    const [a] = rtLookup(rows, [{ value: 'A', label: 'a' }], new Set(), ip4('10.9.1.1'));
+    assert.equal(a.winners[0].gateway, '198.51.100.2');
+    assert.equal(a.decidedBy, 'metrica');
+    assert.deepEqual(a.candidates.map(x => x.verdict), ['win', 'lose-metric']);
+    // A distance loser behind a metric loser: the runner-up decides, as path_trace.decided_by().
+    const [b] = rtLookup([...rows, r('A', '10.9.0.0/16', { gateway: '198.51.100.3', distance: 200 })],
+                         [{ value: 'A', label: 'a' }], new Set(), ip4('10.9.1.1'));
+    assert.equal(b.decidedBy, 'metrica');
+}
+
 // --- address lookup keeps VRFs apart: one answer per (device, VRF)
 {
     const { rtLookup } = windowStub.rtModel;
