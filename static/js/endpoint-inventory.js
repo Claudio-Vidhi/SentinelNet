@@ -10,6 +10,7 @@
 let _epRows = [];          // righe a schermo: sono queste che l'export porta via
 let _epTruncated = false;
 let _epQuery = '';         // term from the tab's search box, '' = none
+let _epSeq = 0;            // newest list request: a slower older answer (another tenant, other filters) is dropped
 
 function loadEndpointsTab() {
     _epFillFilters();
@@ -75,12 +76,15 @@ async function endpointsSearch() {
     host.innerHTML = `<div class="panel" style="padding:26px; text-align:center; color:var(--text-muted); font-size:13px;">
         <i class="fa-solid fa-circle-notch fa-spin" style="margin-right:8px;"></i>${escapeHtml(tr('epiLoading'))}</div>`;
 
+    const seq = ++_epSeq;
     const res = await apiFetch('/api/endpoints/list?' + endpointsParams(_epQuery).toString());
+    if (seq !== _epSeq) return;
     if (!res || !res.ok) {
         host.innerHTML = `<div class="panel" style="padding:22px; text-align:center; color:var(--danger); font-size:13px;">${escapeHtml(tr('epiCouldNotLoadThe'))}</div>`;
         return;
     }
-    endpointsRender(await res.json());
+    const d = await res.json();
+    if (seq === _epSeq) endpointsRender(d);
 }
 
 function endpointsRender(d) {
@@ -479,9 +483,12 @@ async function locSearchSubmit() {
     const term = input.value.trim();
     msg.textContent = '';
     if (!term) { _epQuery = ''; _locLoaded.endpoint = true; locSwitchView('endpoint'); endpointsSearch(); return; }
+    const seq = ++_epSeq;
     const res = await apiFetch('/api/endpoints/list?' + endpointsParams(term).toString());
+    if (seq !== _epSeq) return;
     if (!res || !res.ok) { msg.textContent = tr('epiCouldNotLoadThe'); return; }
     const d = await res.json();
+    if (seq !== _epSeq) return;
     if (!d.total) { msg.textContent = tr('locSearchNone', { q: term }); return; }
     _epQuery = term;
     const firstTime = !_locLoaded.endpoint;
@@ -703,6 +710,15 @@ function _epShowDrawer(host) {
     }
 }
 
+// Crossing 900px with the drawer open moves it between docked and sheet.
+window.matchMedia(_EP_NARROW).addEventListener('change', () => {
+    const host = document.getElementById('epDrawerHost');
+    if (!_epDrawer || !host || host.hidden) return;
+    if (isModalOpen('epDrawerHost')) closeModal('epDrawerHost');
+    else document.getElementById('locBody')?.classList.remove('has-drawer');
+    _epShowDrawer(host);
+});
+
 function closeEpDrawer() {
     const host = document.getElementById('epDrawerHost');
     if (!host || host.hidden) { _epDrawer = null; return; }
@@ -743,8 +759,13 @@ function _epDrawerHtml(r, loc) {
         s.uplink_to ? ' → ' + escapeHtml(s.uplink_to) : ''} <span>· ${escapeHtml(tr(kind === 'access' ? 'epDrAccess' : 'epDrTransit'))} · VLAN&nbsp;${escapeHtml(s.vlan || '—')}</span></li>`;
     const origin = entries.flatMap(x => x.origin || []);
     const transit = entries.flatMap(x => x.transit || []);
-    const ips = (r.ips || []).length
-        ? `<div class="drawer-kpi-grid">${(r.ips || []).map(ip => kv('IP', ip)).join('')}</div>`
+    // The value plus a second line: the switch's management IP, the gateway an IP was read from.
+    const kv2 = (k, v, sub) => `<div class="drawer-kpi"><span class="kpi-label">${escapeHtml(k)}</span><strong>${escapeHtml(v || '—')}</strong>${
+        sub ? `<small class="ep-dr-sub">${escapeHtml(sub)}</small>` : ''}</div>`;
+    const gwOf = ip => { const d = _epDeviceOf(ip); return d.Hostname && d.Hostname !== ip ? `${d.Hostname} (${ip})` : ip; };
+    const srcs = r.ip_sources || (r.ips || []).map(ip => ({ ip, source_ip: '' }));
+    const ips = srcs.length
+        ? `<div class="drawer-kpi-grid">${srcs.map(b => kv2('IP', b.ip, b.source_ip ? tr('epDrViaGateway', { gw: gwOf(b.source_ip) }) : '')).join('')}</div>`
         : `<p class="ep-dr-note">${escapeHtml(tr('epDrNoIp'))}</p>`;
     const banner = e.status === 'ambiguous'
         ? `<p class="ep-dr-note is-warn">${escapeHtml(tr('cmapMultiplePossibleAccessPorts', { access_count: e.access_count }))}</p>`
@@ -780,7 +801,7 @@ function _epDrawerHtml(r, loc) {
         ${banner}
         <section class="drawer-section">
           <h4 class="drawer-section-title">${escapeHtml(tr('epDrPosition'))}</h4>
-          <div class="drawer-kpi-grid">${kv(tr('epThSwitch'), r.switch_name || r.switch_ip)}${kv(tr('epThPort'), r.interface)}${kv('VLAN', r.vlan)}${kv(tr('epDetailClientType'), r.client_type)}</div>
+          <div class="drawer-kpi-grid">${kv2(tr('epThSwitch'), r.switch_name || r.switch_ip, r.switch_name && r.switch_ip !== r.switch_name ? r.switch_ip : '')}${kv(tr('epThPort'), r.interface)}${kv('VLAN', r.vlan)}${kv(tr('epDetailClientType'), r.client_type)}</div>
         </section>
         <section class="drawer-section"><h4 class="drawer-section-title">IP</h4>${ips}</section>
         <section class="drawer-section">

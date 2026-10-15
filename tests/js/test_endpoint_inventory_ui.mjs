@@ -71,5 +71,12 @@ assert.ok(/id="epDrawerHost"[^>]*aria-labelledby="epDrawerTitle"/.test(html), 'e
     const rc = cm.slice(cm.indexOf('function renderCollectLocs('), cm.indexOf('\n}\n', cm.indexOf('function renderCollectLocs(')));
     assert.ok(rc.includes('_collectLocs === null && groups.length'), 'collect locations must wait for devices');
 }
+// 6. A list answer for an older request (tenant switched, filters changed)
+//    never renders: both fetch paths and the tenant change bump one counter.
+for (const fn of ['async function endpointsSearch(', 'async function locSearchSubmit(']) {
+    const body = src.slice(src.indexOf(fn), src.indexOf('\n}\n', src.indexOf(fn)));
+    assert.ok(body.includes('const seq = ++_epSeq;') && body.includes('seq !== _epSeq'), `${fn} must drop stale answers`);
+}
+assert.ok(tc.includes('_epSeq++'), 'locTenantChanged must invalidate in-flight searches');
 
 console.log('endpoint_inventory_ui: ok');

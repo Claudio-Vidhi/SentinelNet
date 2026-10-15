@@ -49,6 +49,7 @@ function locSwitchView(view) {
 
 // Tenant change redraws only the pane on screen; the others redraw when opened.
 function locTenantChanged() {
+    _epSeq++;              // an endpoint search still in flight answers for the old tenant
     closeEpDrawer();
     resetDevPickers();
     for (const v of Object.keys(_locLoaded)) _locLoaded[v] = (v === _locView);
@@ -336,6 +337,11 @@ document.getElementById('locCollectGo')?.addEventListener('click', runCollect);
         } catch (e) {}
     }
 
+    // Location label of a scanned device, for the per-location run summaries.
+    function _scanLocOf(ip) {
+        return _pickLocLabel((macFilteredDevices().find(x => x.IP === ip) || {}).Location || '');
+    }
+
     async function runMacScan(ips, btn) {
         const result = document.getElementById('macScanResult');
         if (!ips.length) {
@@ -357,8 +363,19 @@ document.getElementById('locCollectGo')?.addEventListener('click', runCollect);
                 const okc = d.results.filter(r => !r.error).length;
                 const errc = d.results.filter(r => r.error).length;
                 if (result) {
+                    // One line per location, the way the run was chosen; errors name their device.
+                    const byLoc = new Map();
+                    for (const r of d.results) {
+                        const loc = _scanLocOf(r.ip);
+                        if (!byLoc.has(loc)) byLoc.set(loc, { ok: 0, err: [] });
+                        if (r.error) byLoc.get(loc).err.push(r); else byLoc.get(loc).ok += 1;
+                    }
+                    const locs = [...byLoc.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([loc, s]) =>
+                        `<div>• <b>${escapeHtml(loc)}</b> — ${escapeHtml(tr('cmapMacScanLoc', { okc: s.ok, errc: s.err.length }))}${
+                            s.err.map(r => `<div style="margin-left:14px; color:var(--danger);">${escapeHtml(r.ip)}: ${escapeHtml(r.error)}</div>`).join('')}</div>`).join('');
                     result.hidden = false;
-                    result.textContent = tr('cmapMacScanDoneDevices', {scanned: d.scanned, okc: okc, errc: errc, pruned: d.pruned});
+                    result.innerHTML = escapeHtml(tr('cmapMacScanDoneDevices', {scanned: d.scanned, okc: okc, errc: errc, pruned: d.pruned})) +
+                        `<div style="margin-top:6px;">${locs}</div>`;
                 }
                 _locLoaded.endpoint = false;   // the list reloads the next time it is opened
                 refreshMacStats(false);
@@ -415,7 +432,7 @@ document.getElementById('locCollectGo')?.addEventListener('click', runCollect);
                 return;
             }
             const d = await res.json();
-            const locOf = ip => _pickLocLabel((macFilteredDevices().find(x => x.IP === ip) || {}).Location || '');
+            const locOf = _scanLocOf;
             const rows = Object.entries(d.devices || {}).map(([ip, r]) => {
                 const color = r.status === 'success' ? 'var(--success, #7bd88f)'
                             : r.status === 'empty' ? 'var(--text-muted)' : 'var(--danger)';
