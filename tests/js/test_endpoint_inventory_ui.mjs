@@ -78,5 +78,14 @@ for (const fn of ['async function endpointsSearch(', 'async function locSearchSu
     assert.ok(body.includes('const seq = ++_epSeq;') && body.includes('seq !== _epSeq'), `${fn} must drop stale answers`);
 }
 assert.ok(tc.includes('_epSeq++'), 'locTenantChanged must invalidate in-flight searches');
+// 7. Diagnosi: the tenant selected at the top scopes the gateway list and
+//    the report; no call may fall back to every tenant.
+{
+    const dg = read('../../static/js/diagnosi.js');
+    const calls = dg.match(/loadDiagGatewayCandidates\([^\n;]*\)/g).filter(c => c !== 'loadDiagGatewayCandidates(tenant)');
+    assert.ok(calls.length && calls.every(c => c === 'loadDiagGatewayCandidates(_diagScopeTenant())'),
+              `gateway candidates must use the scope tenant: ${calls}`);
+    assert.ok(dg.includes('const tenant = _diagScopeTenant();'), 'runDiagnosi must send the scope tenant');
+}
 
 console.log('endpoint_inventory_ui: ok');

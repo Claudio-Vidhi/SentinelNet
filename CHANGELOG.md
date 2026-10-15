@@ -41,6 +41,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
   (prima risultava ECMP), come nell'analisi del percorso.
 - Un cambio di tenant durante una ricerca endpoint poteva mostrare le righe
   del tenant precedente.
+- Diagnosi: con un tenant selezionato in alto, l'elenco dei gateway L3 e il
+  referto mostravano anche gli apparati degli altri tenant.
 - Il pannello resta coerente se la finestra attraversa i 900px mentre e'
   aperto.
 - Esc sulla configurazione di porta aperta dal pannello chiudeva il pannello

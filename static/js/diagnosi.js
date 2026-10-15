@@ -18,10 +18,17 @@ let _diagMac = '';         // MAC risolto: il bounce e il WLC lavorano per MAC
 let _diagSwitch = null;    // {ip, port} della porta di accesso trovata
 let _diagTenant = null;    // tenant scelto quando l'indirizzo esiste in piu' sedi
 
+// The tenant picked for an ambiguous address, else the one selected at the
+// top: with a tenant in use, the gateway list and the report stay inside it.
+function _diagScopeTenant() {
+    const top = locTenant();
+    return _diagTenant || (top !== 'all' ? top : null);
+}
+
 function diagnosiTabShown() {
     const el = document.getElementById('diagClientInput');
     if (el) el.focus();
-    loadDiagGatewayCandidates(_diagTenant);
+    loadDiagGatewayCandidates(_diagScopeTenant());
 }
 
 async function loadDiagGatewayCandidates(tenant) {
@@ -87,7 +94,7 @@ function diagnoseClientInTab(client, dest) {
     const d = document.getElementById('diagDestInput');
     if (c) c.value = client || '';
     if (d && dest !== undefined) d.value = dest || '';
-    loadDiagGatewayCandidates();
+    loadDiagGatewayCandidates(_diagScopeTenant());
     runDiagnosi();
 }
 
@@ -112,7 +119,8 @@ async function runDiagnosi() {
     </div>`;
 
     const body = { client: _diagClient };
-    if (_diagTenant) body.tenant = _diagTenant;
+    const tenant = _diagScopeTenant();
+    if (tenant) body.tenant = tenant;
     if (gatewayIp) body.gateway_ip = gatewayIp;
     if (dest) {
         body.dest = dest;
