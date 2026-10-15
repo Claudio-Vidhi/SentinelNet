@@ -921,9 +921,10 @@ def endpoint_inventory(tenants=None, probe: Optional[str] = None,
                 pairs = c.execute(arp_sql, arp_args).fetchall()
             if not pairs:
                 return copy.deepcopy(empty)
-            where.append("(%s)" % " OR ".join(["(mac = ? AND COALESCE(tenant, '') = ?)"] * len(pairs)))
-            for mac, tenant in pairs:
-                args.extend([mac, tenant])
+            # One IN list, not an OR chain: an IP held by thousands of
+            # (MAC, tenant) pairs would exceed SQLite's expression depth.
+            where.append("mac || '|' || COALESCE(tenant, '') IN (%s)" % ",".join("?" * len(pairs)))
+            args.extend(f"{mac}|{tenant}" for mac, tenant in pairs)
         else:
             where.append("(mac LIKE ? OR oui_vendor LIKE ? OR switch_name LIKE ? "
                          "OR interface LIKE ?)")

@@ -439,7 +439,7 @@ document.getElementById('locCollectGo')?.addEventListener('click', runCollect);
                 const detail = r.status === 'success'
                     ? (tr('cmapEntriesNewUpdated', {entries: r.entries, new: r.new, updated: r.updated}))
                     : escapeHtml(r.message || r.status);
-                return `<div>• <b>${escapeHtml(locOf(ip))} · ${escapeHtml(ip)}</b> — <span style="color:${color};">${r.status}</span>: ${detail}</div>`;
+                return `<div>• <b>${escapeHtml(locOf(ip))} · ${escapeHtml(ip)}</b> — <span style="color:${color};">${escapeHtml(r.status)}</span>: ${detail}</div>`;
             }).join('');
             box.hidden = false;
             box.innerHTML = `<b>${tr('titleArpScanSummary') || 'Esito raccolta ARP'}</b>` +
