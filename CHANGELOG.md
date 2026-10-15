@@ -27,6 +27,26 @@ happened — `git log --grep="chore(release)"` is the record for those.
 - **Tabelle di routing**: scrivendo un indirizzo, un riquadro dice per ogni
   apparato quale rotta lo prende (o che viene scartato), con un clic per le
   rotte candidate e il criterio che ha deciso.
+- Il pannello di dettaglio dell'endpoint mostra il gateway da cui e' stato
+  letto ogni IP e l'IP di gestione dello switch.
+- Esito del MAC scan diviso per sede, con l'errore di ogni apparato.
+- `scripts/dev/check_drawer_browser.py`: verifica in Chrome headless di Esc e
+  del cambio di modalita' del pannello a 900px.
+
+### Fixed
+
+- Ricerca per IP: restituiva lo stesso MAC anche nelle sedi dove quell'IP non
+  e' mai stato visto, e ignorava la finestra temporale sui binding ARP.
+- Tabelle di routing: a parita' di prefisso e distanza ora decide la metrica
+  (prima risultava ECMP), come nell'analisi del percorso.
+- Un cambio di tenant durante una ricerca endpoint poteva mostrare le righe
+  del tenant precedente.
+- Il pannello resta coerente se la finestra attraversa i 900px mentre e'
+  aperto.
+- Esc sulla configurazione di porta aperta dal pannello chiudeva il pannello
+  sotto e lasciava aperto il popup: il popup passa ora dal gestore modali.
+- Windows: il pin della chiave SSH di un apparato poteva andare perso quando
+  un antivirus teneva aperto `ssh_known_hosts` durante il salvataggio.
 
 ### Removed
 
