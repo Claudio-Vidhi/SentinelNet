@@ -23,7 +23,9 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Added
 
-- Ricerca degli endpoint per indirizzo IP completo, attraverso i binding ARP.
+- Ricerca degli endpoint per indirizzo IP, attraverso i binding ARP: anche
+  parziale ("10.1.103" trova tutti gli IP che iniziano cosi'), e i risultati
+  si aggiornano mentre si scrive.
 - **Tabelle di routing**: scrivendo un indirizzo, un riquadro dice per ogni
   apparato quale rotta lo prende (o che viene scartato), con un clic per le
   rotte candidate e il criterio che ha deciso.

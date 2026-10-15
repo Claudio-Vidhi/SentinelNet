@@ -440,7 +440,11 @@ document.getElementById('epResults')?.addEventListener('keydown', (e) => {
 
 // Static event listeners for Endpoint Inventory
 
-document.getElementById('locSearchForm')?.addEventListener('submit', (e) => { e.preventDefault(); locSearchSubmit(); });
+document.getElementById('locSearchForm')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    clearTimeout(_locSearchTimer);       // Enter supersedes a pending as-you-type search
+    locSearchSubmit();
+});
 // "/" jumps to the search while the tab is open and nothing else has the keyboard.
 document.addEventListener('keydown', (e) => {
     const t = /** @type {HTMLElement} */ (e.target);
@@ -475,8 +479,9 @@ document.getElementById('btnEpExportCsv')?.addEventListener('click', () => endpo
 document.getElementById('btnEpExportJson')?.addEventListener('click', () => endpointsExport('json'));
 
 // The tab's search box. One hit opens that endpoint; several fill the list;
-// none says so and leaves the view where it was.
-async function locSearchSubmit() {
+// none says so and leaves the view where it was. `live` is typing: the list
+// narrows, but nothing opens on its own.
+async function locSearchSubmit(live = false) {
     const input = /** @type {HTMLInputElement|null} */ (document.getElementById('locSearch'));
     const msg = document.getElementById('locSearchMsg');
     if (!input || !msg) return;
@@ -497,8 +502,17 @@ async function locSearchSubmit() {
     if (firstTime) _epFillFilters();
     endpointsRender(d);
     msg.textContent = tr('locSearchFound', { n: String(d.total) });
-    if ((d.results || []).length === 1) openEpDrawer(d.results[0].mac, d.results[0].tenant || '', input);
+    if (!live && (d.results || []).length === 1) openEpDrawer(d.results[0].mac, d.results[0].tenant || '', input);
 }
+
+// Search as you type, debounced; a single character would match half the network.
+let _locSearchTimer = null;
+document.getElementById('locSearch')?.addEventListener('input', (e) => {
+    const term = /** @type {HTMLInputElement} */ (e.target).value.trim();
+    clearTimeout(_locSearchTimer);
+    if (term.length === 1) return;
+    _locSearchTimer = setTimeout(() => locSearchSubmit(true), 300);
+});
 
 // ===== Sub-tab "Port errors": every device's ports, from /api/interface-errors =====
 // Same data and verdicts as the Interfaces tab and the occupancy column; this

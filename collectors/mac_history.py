@@ -901,34 +901,51 @@ def endpoint_inventory(tenants=None, probe: Optional[str] = None,
             is_ip = True
         except ValueError:
             is_ip = False
-        if is_ip:
-            # The IP lives in arp_entries, joined after this query: resolve it
-            # to (MAC, tenant) pairs first, in the same scope and time window.
-            # The pair, not the MAC: the same MAC in another site does not
-            # hold this address there.
-            arp_sql = "SELECT DISTINCT mac, COALESCE(tenant, '') FROM arp_entries WHERE ip = ?"
-            arp_args = [q]
-            if tenant_list is not None:
-                arp_sql += " AND tenant IN (%s)" % ",".join("?" * len(tenant_list))
-                arp_args.extend(tenant_list)
-            if frm:
-                arp_sql += " AND last_seen >= ?"
-                arp_args.append(frm)
-            if to:
-                arp_sql += " AND first_seen <= ?"
-                arp_args.append(to)
-            with _connect() as c:
-                pairs = c.execute(arp_sql, arp_args).fetchall()
-            if not pairs:
-                return copy.deepcopy(empty)
-            # One IN list, not an OR chain: an IP held by thousands of
-            # (MAC, tenant) pairs would exceed SQLite's expression depth.
-            where.append("mac || '|' || COALESCE(tenant, '') IN (%s)" % ",".join("?" * len(pairs)))
-            args.extend(f"{mac}|{tenant}" for mac, tenant in pairs)
-        else:
-            where.append("(mac LIKE ? OR oui_vendor LIKE ? OR switch_name LIKE ? "
+        # A partial IPv4 ("10.1.103") is a prefix of the bound IPs, so the
+        # list narrows while the operator types; it also keeps the text search.
+        ipv4ish = re.fullmatch(r"[0-9]+(\.[0-9]*){0,3}", q) is not None
+        conds: list = []
+        if not is_ip:
+            conds.append("(mac LIKE ? OR oui_vendor LIKE ? OR switch_name LIKE ? "
                          "OR interface LIKE ?)")
             args.extend(["%" + q + "%"] * 4)
+
+        def arp_sub(ip_cond, ip_arg):
+            # The IP lives in arp_entries: match the (MAC, tenant) pairs that
+            # held it, in the same scope and time window. The pair, not the
+            # MAC: the same MAC in another site does not hold this address
+            # there. A subquery, not a fetched list: a short prefix ("10")
+            # matches more pairs than SQLite accepts as parameters.
+            sql = ("SELECT mac || '|' || COALESCE(tenant, '') FROM arp_entries WHERE "
+                   + ip_cond)
+            sub_args = [ip_arg]
+            if tenant_list is not None:
+                sql += " AND tenant IN (%s)" % ",".join("?" * len(tenant_list))
+                sub_args.extend(tenant_list)
+            if frm:
+                sql += " AND last_seen >= ?"
+                sub_args.append(frm)
+            if to:
+                sql += " AND first_seen <= ?"
+                sub_args.append(to)
+            return sql, sub_args
+
+        sub = None
+        if is_ip:
+            sub = arp_sub("ip = ?", q)
+            with _connect() as c:
+                if c.execute(sub[0] + " LIMIT 1", sub[1]).fetchone() is None:
+                    sub = None
+        # "192.0.2.1" is a complete address and also the way to "192.0.2.10":
+        # the exact binding wins, the prefix answers when there is none.
+        if sub is None and ipv4ish:
+            sub = arp_sub("ip LIKE ?", q + "%")
+        if sub is not None:
+            conds.append("mac || '|' || COALESCE(tenant, '') IN (%s)" % sub[0])
+            args.extend(sub[1])
+        if not conds:
+            return copy.deepcopy(empty)
+        where.append("(%s)" % " OR ".join(conds))
     if frm:
         where.append("last_seen >= ?")
         args.append(frm)
