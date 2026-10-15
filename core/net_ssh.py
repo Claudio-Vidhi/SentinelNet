@@ -224,14 +224,18 @@ def _pin_host_key(host: str, port: int, key, scope: "str | None" = None) -> None
     once, and two unlocked saves dropped one pin. The file is read strictly
     here: _load_host_keys degrades an unreadable file to empty, and saving
     that would wipe every existing pin, so an unreadable file raises instead.
+    The rename goes through atomic_write: on Windows a bare os.replace fails
+    while an antivirus holds the file just written, and that pin was lost.
     """
+    from core import data_config
     path = _known_hosts_path(scope)
     with _pin_lock:
         keys = paramiko.HostKeys(path)
         keys.add(_host_key_id(host, port), key.get_name(), key)
         tmp = f"{path}.tmp"
         keys.save(tmp)
-        os.replace(tmp, path)
+        with open(tmp, "rb") as f:
+            data_config.atomic_write(path, f.read())
 
 
 def _dial(probe: dict, pin: bool = True) -> paramiko.Transport:
