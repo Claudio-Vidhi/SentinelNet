@@ -2586,6 +2586,9 @@
             });
             if (isEdit && sched) {
                 tenantSelect.value = sched.tenant;
+            } else {
+                // A new schedule starts in the tenant selected at the top.
+                tenantSelect.value = tenantSelectSeed('', Object.keys(globalGroups), tenantSelect.value);
             }
         }
 
