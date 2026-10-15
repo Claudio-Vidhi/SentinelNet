@@ -661,6 +661,18 @@ select optgroup { background-color: var(--surface-2); color: var(--text-muted); 
   box-shadow: inset 3px 0 0 var(--primary);
 }
 
+/* Favorites: a static group header (no collapse) and the current tab marked like .active. */
+.nav-favs { padding-bottom: 6px; margin-bottom: 6px; border-bottom: 1px solid var(--border); }
+.nav-favs[hidden] { display: none; }
+.nav-favs-head { cursor: default; }
+.nav-favs-head i { color: var(--primary); transform: none; }
+.nav-item.nav-fav.is-current {
+  color: var(--text);
+  background-color: color-mix(in srgb, var(--primary) 10%, var(--surface));
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+.nav-item.nav-fav.is-current .nav-left i { color: var(--primary); }
+
 .nav-item .nav-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .nav-item .nav-left i { width:16px; text-align: center; color: var(--text-soft); font-size: 13px; }
 .nav-item.active .nav-left i { color: var(--primary); }
@@ -681,6 +693,16 @@ select optgroup { background-color: var(--surface-2); color: var(--text-muted); 
 #topbarCrumbGroup { color: var(--text-soft); }
 #topbarCrumbPage { color: var(--text); font-weight: 600; }
 .topbar-crumb-sep { font-size: 9px; color: var(--border-strong); }
+.topbar-fav {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; padding: 0; margin-left: 2px;
+  border: 0; border-radius: var(--radius); background: transparent;
+  color: var(--text-soft); cursor: pointer;
+}
+.topbar-fav[hidden] { display: none; }
+.topbar-fav:hover { color: var(--primary); background: var(--surface-2); }
+.topbar-fav:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.topbar-fav[aria-pressed="true"] { color: var(--primary); }
 .topbar-crumb.no-group #topbarCrumbGroup,
 .topbar-crumb.no-group .topbar-crumb-sep { display: none; }
 .topbar-actions { display: flex; align-items: center; gap: 6px; }

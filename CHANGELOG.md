@@ -23,6 +23,10 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Added
 
+- **Preferiti nella sidebar**: la stella accanto al titolo di ogni tab la
+  aggiunge al gruppo "Preferiti" in cima alla navigazione. Salvati per utente
+  sul server (`/api/profile/favorites`), quindi uguali su ogni browser; una
+  tab che l'utente non puo' piu' aprire non viene mostrata ma resta salvata.
 - Ricerca degli endpoint per indirizzo IP, attraverso i binding ARP: anche
   parziale ("10.1.103" trova tutti gli IP che iniziano cosi'), e i risultati
   si aggiornano mentre si scrive.

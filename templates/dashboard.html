@@ -258,6 +258,11 @@
     </div>
 
     <nav class="sidenav" role="tablist" aria-orientation="vertical">
+      <!-- Favorites: shortcuts to tabs the user starred, rendered by renderNavFavorites() -->
+      <div id="navFavorites" class="nav-group nav-favs" role="presentation" hidden>
+        <h3><span class="nav-group-toggle nav-favs-head"><span class="nav-group-label" data-i18n="navFavorites">Preferiti</span><i class="fa-solid fa-star" aria-hidden="true"></i></span></h3>
+        <div id="navFavItems" class="nav-group-items" role="presentation"></div>
+      </div>
       <div class="nav-home">
         <button class="nav-item active" data-tab="tab-home" role="tab" aria-controls="tab-home" aria-selected="true">
           <span class="nav-left" data-i18n="tabHome"><i class="fa-solid fa-gauge-high"></i> Situazione</span>
@@ -406,6 +411,10 @@
           <span id="topbarCrumbGroup"></span>
           <i class="fa-solid fa-chevron-right topbar-crumb-sep" aria-hidden="true"></i>
           <span id="topbarCrumbPage"></span>
+          <button type="button" id="btnFavToggle" class="topbar-fav" aria-pressed="false" hidden
+                  title="Preferito" aria-label="Preferito" data-i18n-title="favToggle" data-i18n-aria-label="favToggle">
+            <i class="fa-regular fa-star" aria-hidden="true"></i>
+          </button>
         </div>
 
         <!-- Global Device Context Chip -->

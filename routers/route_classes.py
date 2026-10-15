@@ -27,6 +27,8 @@ BASE_ROUTES: frozenset[tuple[str, str]] = frozenset({
     ("POST", "/api/auth/logout-all"),
     ("GET", "/api/profile"),
     ("POST", "/api/profile/email"),
+    ("GET", "/api/profile/favorites"),
+    ("PUT", "/api/profile/favorites"),
     ("GET", "/api/local-devices"),
     ("GET", "/api/vendors"),
     ("GET", "/api/settings/snmp-defaults"),

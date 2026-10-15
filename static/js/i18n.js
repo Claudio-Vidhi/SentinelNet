@@ -302,6 +302,9 @@ const i18n = {
         // Topbar & Navigation & Shortcuts
         lblGlobalTenant: "Tenant:",
         btnSearchPalette: "Cerca comandi o apparati...",
+        navFavorites: "Preferiti",
+        favToggle: "Preferito: aggiungi o togli questa tab dai preferiti",
+        favSaveError: "Impossibile salvare i preferiti.",
         titleShortcuts: "Scorciatoie da tastiera (?)",
         titleShortcutsModal: "Scorciatoie da tastiera",
         // Operations Home / Situazione
@@ -4414,6 +4417,9 @@ const i18n = {
         // Topbar & Navigation & Shortcuts
         lblGlobalTenant: "Tenant:",
         btnSearchPalette: "Search commands or devices...",
+        navFavorites: "Favorites",
+        favToggle: "Favorite: add or remove this tab from favorites",
+        favSaveError: "Could not save favorites.",
         titleShortcuts: "Keyboard shortcuts (?)",
         titleShortcutsModal: "Keyboard shortcuts",
         // Operations Home / Situazione

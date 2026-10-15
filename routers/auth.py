@@ -263,6 +263,27 @@ def get_profile(current_user = Depends(get_current_user)):
     return user_manager.get_profile(current_user.get("sub"))
 
 
+class FavoritesSchema(BaseModel):
+    tabs: List[str]
+
+
+@router.get("/api/profile/favorites")
+def get_favorites(current_user = Depends(get_current_user)):
+    """The caller's sidebar favorites, tab ids in order."""
+    from services import ui_favorites
+    return {"tabs": ui_favorites.get(current_user.get("sub"))}
+
+
+@router.put("/api/profile/favorites")
+def set_favorites(payload: FavoritesSchema, current_user = Depends(get_current_user)):
+    """Replaces the caller's favorites. Only the caller's own row is written."""
+    from services import ui_favorites
+    try:
+        return {"tabs": ui_favorites.save(current_user.get("sub"), payload.tabs)}
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+
 @router.post("/api/profile/email")
 def change_own_email(payload: ProfileEmailSchema, current_user = Depends(get_current_user)):
     """Changes the caller's recovery address. A new address counts only after
