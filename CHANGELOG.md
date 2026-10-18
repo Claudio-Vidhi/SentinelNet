@@ -10,6 +10,17 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.52.1] - 2026-10-18
+
+### Security
+
+- Due tenant con lo stesso IP non si vedono piu' la configurazione a vicenda:
+  chat AI, Config Analyzer, Policy Test, policy FortiGate e diagnosi client
+  leggono il backup del tenant del dispositivo, e la cache dell'analisi e'
+  separata per tenant. Prima vinceva il backup piu' recente, di chiunque fosse.
+- Il cookie `sn_sso_next` del login SSO ha `Secure` quando la richiesta arriva
+  su HTTPS, come il cookie di sessione.
+
 ## [0.52.0] - 2026-10-15
 
 ### Changed
