@@ -854,7 +854,7 @@ def _sso_next_ok(next_url: str) -> bool:
 
 
 @router.get("/api/auth/sso/login")
-def sso_login(next: str = ""):
+def sso_login(request: Request, next: str = ""):
     """Avvia il flusso authorization code + PKCE verso l'IdP."""
     from core.app_settings import BaseUrlError
     from fastapi.responses import RedirectResponse
@@ -871,7 +871,9 @@ def sso_login(next: str = ""):
     if _sso_next_ok(next):
         # Lax, not strict: the IdP sends the browser back with a cross-site
         # top-level GET, which strict cookies would not ride.
-        response.set_cookie(SSO_NEXT_COOKIE, next, max_age=600, httponly=True,
+        secure = (request.url.scheme == "https"
+                  or request.headers.get("x-forwarded-proto", "").lower() == "https")
+        response.set_cookie(SSO_NEXT_COOKIE, next, max_age=600, httponly=True, secure=secure,
                             samesite="lax", path="/api/auth/sso/callback")
     return response
 

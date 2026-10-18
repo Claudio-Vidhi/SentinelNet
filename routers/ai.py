@@ -180,7 +180,7 @@ def _device_running_config_context(ip: str, current_user) -> str:
     device = assert_device_allowed(current_user, ip)
     if device is None:
         raise HTTPException(status_code=404, detail=f"Dispositivo {ip} non trovato.")
-    path, _tenant = config_analyzer._find_freshest_backup(ip)
+    path, _tenant = config_analyzer._find_freshest_backup(ip, device.get("Group"))
     if not path:
         raise HTTPException(status_code=404, detail=f"Nessun backup trovato per {ip}.")
     try:
@@ -662,7 +662,7 @@ def _tenant_common_parameters(tenant: str, current_user) -> str:
         ip = d.get('IP')
         if not ip:
             continue
-        path, _t = config_analyzer._find_freshest_backup(ip)
+        path, _t = config_analyzer._find_freshest_backup(ip, tenant)
         if not path:
             continue
         try:

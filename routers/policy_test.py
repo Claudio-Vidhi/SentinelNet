@@ -46,7 +46,7 @@ def _load_device_backup(ip: str, current_user) -> Tuple[str, str]:
     if device is None:
         raise HTTPException(status_code=404, detail=f"Dispositivo {ip} non trovato.")
 
-    path, _tenant = config_analyzer._find_freshest_backup(ip)
+    path, _tenant = config_analyzer._find_freshest_backup(ip, device.get("Group"))
     if not path:
         raise HTTPException(status_code=404, detail=f"Nessun backup trovato per {ip}.")
 

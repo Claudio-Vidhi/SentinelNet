@@ -437,7 +437,8 @@ def _interface_health(switch_ip: str, port: str) -> dict:
     return out
 
 
-def _trunk_check(switch_ip: str, vlan, facing: Optional[str] = None) -> dict:
+def _trunk_check(switch_ip: str, vlan, facing: Optional[str] = None,
+                 tenant: Optional[str] = None) -> dict:
     """La VLAN del client passa sui trunk di QUESTO apparato?
 
     È il guasto classico di una topologia con trunk: la porta di accesso è
@@ -455,7 +456,7 @@ def _trunk_check(switch_ip: str, vlan, facing: Optional[str] = None) -> dict:
     from ai import config_analyzer
     from core.core_engine import _normalize_iface
 
-    analysis = config_analyzer.analyze_device(switch_ip)
+    analysis = config_analyzer.analyze_device(switch_ip, tenant)
     if not analysis:
         return {"known": False,
                 "reason": f"nessun backup di configurazione per {switch_ip}"}
@@ -565,7 +566,7 @@ def _trunk_chain_inner(access_switch_ip: str, gateway_ip: Optional[str], vlan,
 
     chain = _hop_path(access_switch_ip, gateway_ip, tenant) if gateway_ip else []
     if not chain:
-        single = _trunk_check(access_switch_ip, vlan)
+        single = _trunk_check(access_switch_ip, vlan, tenant=tenant)
         single["scope"] = (
             "solo i trunk dello switch di accesso: nessun gateway noto per "
             "questo client, quindi non c'è una catena da percorrere"
@@ -581,7 +582,7 @@ def _trunk_chain_inner(access_switch_ip: str, gateway_ip: Optional[str], vlan,
     # trunk verso un salto successivo, quindi non ha un egress da controllare.
     for hop in chain[:-1]:
         device, egress = hop["device"], hop["egress"]
-        res = _trunk_check(device, vlan, facing=egress)
+        res = _trunk_check(device, vlan, facing=egress, tenant=tenant)
         entry = {"device": device, "egress": egress}
         if not res.get("known"):
             entry.update({"verdict": "unknown", "reason": res.get("reason")})

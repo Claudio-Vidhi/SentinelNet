@@ -1450,9 +1450,9 @@ def analyze_device(ip, tenant=None):
     return result
 
 
-def _backup_mtime(ip):
+def _backup_mtime(ip, tenant=None):
     """mtime of the freshest backup, or None. Memo invalidation key."""
-    path, _ = _find_freshest_backup(ip)
+    path, _ = _find_freshest_backup(ip, tenant)
     if not path:
         return None
     try:
@@ -1462,21 +1462,21 @@ def _backup_mtime(ip):
 
 
 @functools.lru_cache(maxsize=128)
-def _analyze_device_at(ip, _mtime):
+def _analyze_device_at(ip, tenant, _mtime):
     # _mtime is not used: it is in the signature so that a new backup produces
     # a new key. The LRU cap is for backup rotation, which otherwise would make
     # the keys grow without end.
-    return analyze_device(ip)
+    return analyze_device(ip, tenant)
 
 
-def analyze_device_cached(ip):
+def analyze_device_cached(ip, tenant=None):
     """``analyze_device`` with memoization on (ip, backup mtime).
 
     A single diagnosis re-reads the same backup at every hop of the chain and
     at every candidate of the gateway derivation: parsing is the expensive
     part, and the file does not change while responding.
     """
-    return _analyze_device_at(ip, _backup_mtime(ip))
+    return _analyze_device_at(ip, tenant, _backup_mtime(ip, tenant))
 
 
 def analyze_all(group_filter=None, allowed_groups=None):
@@ -1494,7 +1494,7 @@ def analyze_all(group_filter=None, allowed_groups=None):
         if group_filter and group_filter != 'all' and group != group_filter:
             continue
         try:
-            res = analyze_device_cached(ip)
+            res = analyze_device_cached(ip, group)
         except Exception:
             res = None
         if res:

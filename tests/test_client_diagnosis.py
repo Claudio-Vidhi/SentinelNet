@@ -504,7 +504,7 @@ class TestTrunkChain(unittest.TestCase):
     def _configs(self, per_device):
         """per_device: {ip: [interfacce] | None}. None = nessun backup."""
         return patch("ai.config_analyzer.analyze_device",
-                     side_effect=lambda ip: (
+                     side_effect=lambda ip, tenant=None: (
                          {"interfaces": per_device[ip]} if per_device.get(ip) else None))
 
     def test_vlan_carried_end_to_end(self):

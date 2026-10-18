@@ -44,7 +44,7 @@ def _load_backup_text(ip: str, current_user, with_show_vlan: bool = False) -> st
     device = assert_device_allowed(current_user, ip)
     if device is None:
         raise HTTPException(status_code=404, detail=f"Dispositivo {ip} non trovato.")
-    path, _tenant = config_analyzer._find_freshest_backup(ip)
+    path, _tenant = config_analyzer._find_freshest_backup(ip, device.get("Group"))
     if not path:
         raise HTTPException(status_code=404, detail=f"Nessun backup trovato per {ip}.")
     try:

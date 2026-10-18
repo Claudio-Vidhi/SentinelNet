@@ -272,7 +272,7 @@ def fgt_firewall_policy_objects(ip: str, current_user = Depends(get_current_user
     """Policy firewall (cmdb) con soli campi rilevanti per l'osservabilità."""
     return _fgt_call(fortigate_service.get_firewall_policy_objects, _fgt_device(ip, current_user))
 
-def _shadow_by_policy_id(ip: str) -> dict:
+def _shadow_by_policy_id(ip: str, tenant: str) -> dict:
     """Difetti statici per policyid, letti dal backup piu' recente.
 
     I contatori dicono che una regola non ha mai colpito; non dicono perche'.
@@ -287,7 +287,7 @@ def _shadow_by_policy_id(ip: str) -> dict:
     invece di dichiarare sane delle regole mai esaminate.
     """
     from ai import config_analyzer
-    path, _tenant = config_analyzer._find_freshest_backup(ip)
+    path, _tenant = config_analyzer._find_freshest_backup(ip, tenant)
     if not path:
         return {}
     try:
@@ -309,9 +309,9 @@ def fgt_firewall_policies_with_stats(ip: str, current_user = Depends(get_current
     difetti statici del backup: una sola richiesta invece di due, le regole mai
     colpite sono gia' marcate, e quelle che non possono scattare per come sono
     scritte lo dicono."""
-    result = _fgt_call(fortigate_service.get_policies_with_stats,
-                       _fgt_device(ip, current_user))
-    shadows = _shadow_by_policy_id(ip)
+    device = _fgt_device(ip, current_user)
+    result = _fgt_call(fortigate_service.get_policies_with_stats, device)
+    shadows = _shadow_by_policy_id(ip, device.get("Group") or "")
     if isinstance(result, dict):
         result["shadow_analysis"] = "backup" if shadows else "unavailable"
         for row in (result.get("policies") or result.get("data") or []):

@@ -90,12 +90,12 @@ class TestAnalyzeDeviceCache(unittest.TestCase):
     def test_second_call_does_not_reparse(self):
         calls = []
 
-        def _fake(ip):
+        def _fake(ip, tenant=None):
             calls.append(ip)
             return {"ip": ip, "vlans": []}
 
         with patch.object(config_analyzer, "analyze_device", _fake), \
-             patch.object(config_analyzer, "_backup_mtime", lambda ip: 111):
+             patch.object(config_analyzer, "_backup_mtime", lambda ip, tenant=None: 111):
             config_analyzer.analyze_device_cached("192.0.2.20")
             config_analyzer.analyze_device_cached("192.0.2.20")
         self.assertEqual(len(calls), 1)
@@ -103,13 +103,13 @@ class TestAnalyzeDeviceCache(unittest.TestCase):
     def test_a_newer_backup_invalidates(self):
         calls = []
 
-        def _fake(ip):
+        def _fake(ip, tenant=None):
             calls.append(ip)
             return {"ip": ip, "vlans": []}
 
         mtime = {"v": 111}
         with patch.object(config_analyzer, "analyze_device", _fake), \
-             patch.object(config_analyzer, "_backup_mtime", lambda ip: mtime["v"]):
+             patch.object(config_analyzer, "_backup_mtime", lambda ip, tenant=None: mtime["v"]):
             config_analyzer.analyze_device_cached("192.0.2.20")
             mtime["v"] = 222
             config_analyzer.analyze_device_cached("192.0.2.20")
@@ -129,7 +129,7 @@ class TestInventoryWriteInvalidatesTheAnalysisCache(unittest.TestCase):
         from services import inventory_manager
         with patch.object(config_analyzer, "analyze_device",
                           return_value={"ip": "192.0.2.20", "vlans": []}), \
-             patch.object(config_analyzer, "_backup_mtime", lambda ip: 111):
+             patch.object(config_analyzer, "_backup_mtime", lambda ip, tenant=None: 111):
             config_analyzer.analyze_device_cached("192.0.2.20")
             self.assertEqual(config_analyzer._analyze_device_at.cache_info().currsize, 1)
             inventory_manager.write_devices([{"IP": "192.0.2.20"}])
