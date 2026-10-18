@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+# Copyright 2026 Claudio Vidhi
+# SPDX-License-Identifier: AGPL-3.0-only
 """Two tenants may own the same IP: every reader of a device's backup must
 stay inside the tenant of the device it resolved, or the newer backup of the
 other customer wins."""
