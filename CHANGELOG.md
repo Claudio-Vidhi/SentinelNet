@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.53.1] - 2026-10-20
+
 ### Fixed
 
 - Raccolta ARP e MAC scan: un login rifiutato (tipico di un server
