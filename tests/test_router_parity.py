@@ -85,7 +85,7 @@ class TestRouterParity(unittest.TestCase):
         self.assertEqual(missing, [], f"endpoint spariti dal refactor: {missing}")
 
     # Percorsi NUOVI legittimi (funzionalità aggiunte dopo lo snapshot golden).
-    ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/flow-siem", "/api/arp", "/api/ai", "/api/provisioner", "/api/mcp", "/api/probes", "/api/command-jobs", "/api/agent", "/api/fortigate/{ip}/firewall", "/api/fortigate/targets", "/api/identities", "/api/config-analyzer/convert", "/api/redundancy", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/diagnose", "/api/fortigate/{ip}/system", "/api/fortigate/{ip}/vpn", "/api/fortigate/{ip}/sdwan", "/api/endpoints", "/api/settings/snmp-defaults", "/api/settings/ping-monitor", "/api/ping-monitor", "/api/settings/ui-variant", "/api/mac/port-control", "/api/wlc", "/api/scan-verify", "/api/version", "/api/reassign-device-probe", "/api/policy-test", "/api/export/devices/columns", "/api/export/devices/preview", "/api/import-csv/preview", "/api/drift", "/api/locations", "/api/blueprint",
+    ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/flow-siem", "/api/arp", "/api/ai", "/api/provisioner", "/api/mcp", "/api/probes", "/api/mac/settings/sequential", "/api/command-jobs", "/api/agent", "/api/fortigate/{ip}/firewall", "/api/fortigate/targets", "/api/identities", "/api/config-analyzer/convert", "/api/redundancy", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/diagnose", "/api/fortigate/{ip}/system", "/api/fortigate/{ip}/vpn", "/api/fortigate/{ip}/sdwan", "/api/endpoints", "/api/settings/snmp-defaults", "/api/settings/ping-monitor", "/api/ping-monitor", "/api/settings/ui-variant", "/api/mac/port-control", "/api/wlc", "/api/scan-verify", "/api/version", "/api/reassign-device-probe", "/api/policy-test", "/api/export/devices/columns", "/api/export/devices/preview", "/api/import-csv/preview", "/api/drift", "/api/locations", "/api/blueprint",
                           # Classification export (serial + neighbour columns), shipped in 0.12.0.
                           "/api/export/classification",
                           # Offsite SFTP backup mirror (cloud-backup plan).
@@ -248,7 +248,7 @@ class TestFullParity(unittest.TestCase):
     # NEW_PREFIXES filtra entrambi i lati del confronto, quindi copre anche
     # i percorsi RIMOSSI: /api/settings/fortigate-preview era il flag della
     # tab FortiGate in anteprima, sparito quando la tab è diventata normale.
-    NEW_PREFIXES = ("/api/mcp/authorize", "/api/mcp/token", "/api/mcp/session", "/api/mcp/grants", "/api/mcp/my-grants", "/api/redundancy", "/api/agent/syslog", "/api/observability/protocol-distribution", "/api/probes/{probe_id}/agent", "/api/probes/test-bastion", "/api/reassign-device-probe", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/settings/fortigate-preview", "/api/flow-siem", "/api/wlc/{ip}/diagnose-client", "/api/ws-token", "/api/wlc/{ip}/wlan-summary", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/observability/events", "/api/ai/conversations", "/api/diagnose", "/api/agent/arp", "/api/locations", "/api/blueprint",
+    NEW_PREFIXES = ("/api/mac/settings/sequential", "/api/mcp/authorize", "/api/mcp/token", "/api/mcp/session", "/api/mcp/grants", "/api/mcp/my-grants", "/api/redundancy", "/api/agent/syslog", "/api/observability/protocol-distribution", "/api/probes/{probe_id}/agent", "/api/probes/test-bastion", "/api/reassign-device-probe", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/settings/fortigate-preview", "/api/flow-siem", "/api/wlc/{ip}/diagnose-client", "/api/ws-token", "/api/wlc/{ip}/wlan-summary", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/observability/events", "/api/ai/conversations", "/api/diagnose", "/api/agent/arp", "/api/locations", "/api/blueprint",
                     "/api/routes", "/api/firewall-traffic",
                     "/api/observability/hosts",
                     "/api/observability/host-series",
@@ -329,6 +329,8 @@ class TestFullParity(unittest.TestCase):
                     "UserPrefsSchema", "RuleSchema",
                     # Sidebar favorites (/api/profile/favorites).
                     "FavoritesSchema",
+                    # ARP/MAC scans one login at a time.
+                    "MacSequentialSchema",
                     # Bulk decommission / reactivate / delete.
                     "DevicePair", "DeviceBulkSchema",
                     # Factory reset.

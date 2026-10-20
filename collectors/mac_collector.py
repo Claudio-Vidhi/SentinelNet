@@ -858,9 +858,9 @@ def collect_all(devices: list, transport=None) -> dict:
     if not devices:
         return {"scanned": 0, "results": [], "pruned": 0}
     worker = partial(collect_one, transport=transport)
-    with ThreadPoolExecutor(max_workers=min(8, len(devices))) as ex:
+    from collectors.arp_collector import pool_size, retry_refused_logins
+    with ThreadPoolExecutor(max_workers=pool_size(len(devices))) as ex:
         collected = list(ex.map(worker, devices))
-    from collectors.arp_collector import retry_refused_logins
     from core.net_ssh import is_auth_failure
     collected = retry_refused_logins(devices, collected, worker,
                                      lambda r: is_auth_failure(r.get("error")))

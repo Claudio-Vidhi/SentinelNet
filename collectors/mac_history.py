@@ -205,6 +205,23 @@ def set_retention_days(days: int) -> int:
     return days
 
 
+def get_sequential_logins() -> bool:
+    """True = ARP/MAC scans log in to one device at a time: slower, but a
+    TACACS/RADIUS server never sees a burst of parallel logins to block."""
+    init_db()
+    with _connect() as c:
+        row = c.execute("SELECT value FROM mac_settings WHERE key='sequential_logins'").fetchone()
+    return bool(row) and row["value"] == "1"
+
+
+def set_sequential_logins(on: bool) -> bool:
+    init_db()
+    with _lock, _connect() as c:
+        c.execute("""INSERT INTO mac_settings(key, value) VALUES('sequential_logins', ?)
+                     ON CONFLICT(key) DO UPDATE SET value=excluded.value""", ("1" if on else "0",))
+    return bool(on)
+
+
 # --- Ad-hoc command override per device ---
 
 def get_override(switch_ip: str):
@@ -1178,7 +1195,8 @@ def stats(tenants=None) -> dict:
     init_db()
     if tenants is not None and not tenants:
         return {"sightings": 0, "unique_macs": 0, "switches": 0,
-                "retention_days": get_retention_days()}
+                "retention_days": get_retention_days(),
+                "sequential_logins": get_sequential_logins()}
     where = ""
     args = []
     if tenants is not None:
@@ -1189,7 +1207,8 @@ def stats(tenants=None) -> dict:
         macs = c.execute("SELECT COUNT(DISTINCT mac) n FROM mac_sightings" + where, args).fetchone()["n"]
         switches = c.execute("SELECT COUNT(DISTINCT switch_ip) n FROM mac_sightings" + where, args).fetchone()["n"]
     return {"sightings": total, "unique_macs": macs, "switches": switches,
-            "retention_days": get_retention_days()}
+            "retention_days": get_retention_days(),
+            "sequential_logins": get_sequential_logins()}
 
 
 # --- Access or transit? -----------------------------------------------

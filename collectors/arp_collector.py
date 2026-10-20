@@ -152,6 +152,13 @@ def retry_refused_logins(devices, collected, collect, refused):
     return collected
 
 
+def pool_size(n_devices: int) -> int:
+    """Parallel logins for a scan: 1 when the operator chose one at a time
+    (mac_history.get_sequential_logins), else up to 8."""
+    from collectors import mac_history
+    return 1 if mac_history.get_sequential_logins() else min(8, n_devices)
+
+
 def collect_all(devices: list) -> dict:
     """Collects ARP from all the listed devices and records them in the DB.
     Returns the per-device summary + totals.
@@ -168,7 +175,7 @@ def collect_all(devices: list) -> dict:
     summary = {"devices": {}, "total_new": 0, "total_updated": 0}
     if not devices:
         return summary
-    with ThreadPoolExecutor(max_workers=min(8, len(devices))) as ex:
+    with ThreadPoolExecutor(max_workers=pool_size(len(devices))) as ex:
         collected = list(ex.map(collect_from_device, devices))
     collected = retry_refused_logins(
         devices, collected, collect_from_device,

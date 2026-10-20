@@ -31,6 +31,9 @@ class MacScanSchema(BaseModel):
 class MacRetentionSchema(BaseModel):
     days: int
 
+class MacSequentialSchema(BaseModel):
+    enabled: bool
+
 class MacOverrideSchema(BaseModel):
     ip: str
     command: str
@@ -224,6 +227,13 @@ def mac_set_settings(payload: MacRetentionSchema, current_user = Depends(require
     days = mac_history.set_retention_days(payload.days)
     log_audit(f"MAC retention impostata a {days} giorni da '{current_user.get('sub')}'.")
     return {"retention_days": days}
+
+@router.post("/api/mac/settings/sequential")
+def mac_set_sequential(payload: MacSequentialSchema, current_user = Depends(require_unscoped_admin)):
+    on = mac_history.set_sequential_logins(payload.enabled)
+    log_audit(f"Login uno alla volta per gli scan ARP/MAC {'attivato' if on else 'disattivato'} "
+              f"da '{current_user.get('sub')}'.")
+    return {"sequential_logins": on}
 
 @router.get("/api/mac/overrides")
 def mac_list_overrides(current_user = Depends(get_current_user)):

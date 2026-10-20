@@ -334,6 +334,8 @@ document.getElementById('locCollectGo')?.addEventListener('click', runCollect);
             const kRet = document.getElementById('kpiMacRetention'); if (kRet) kRet.textContent = s.retention_days;
             const rin = document.getElementById('macRetentionDays');
             if (rin && (fillRetention || !rin.value)) rin.value = s.retention_days;
+            const seq = document.getElementById('macSequentialLogins');
+            if (seq) seq.checked = !!s.sequential_logins;
         } catch (e) {}
     }
 
@@ -519,6 +521,22 @@ document.getElementById('locCollectGo')?.addEventListener('click', runCollect);
     document.getElementById('btnMacScan')?.addEventListener('click', (e) =>
         runMacScan(pickerSelectedIps('mac'), /** @type {HTMLButtonElement} */ (e.currentTarget)));
     document.getElementById('btnSaveMacRetention')?.addEventListener('click', saveMacRetention);
+    document.getElementById('macSequentialLogins')?.addEventListener('change', async (ev) => {
+        const box = ev.target;
+        const res = await apiFetch('/api/mac/settings/sequential', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ enabled: box.checked })
+        });
+        if (res && res.ok) {
+            showToast(tr(box.checked ? 'cmapSequentialOn' : 'cmapSequentialOff'), 'success');
+        } else {
+            box.checked = !box.checked;   // not saved: show what is in effect
+            if (res) {
+                const e = await res.json().catch(() => ({}));
+                showToast((tr('uiError')) + (e.detail || ''), 'error');
+            }
+        }
+    });
     document.getElementById('btnSaveMacOverride')?.addEventListener('click', saveMacOverride);
     document.getElementById('btnArpScan')?.addEventListener('click', (e) =>
         runArpScan(pickerSelectedIps('arp'), /** @type {HTMLButtonElement} */ (e.currentTarget)));

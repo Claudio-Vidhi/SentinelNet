@@ -77,5 +77,44 @@ class MacRetry(unittest.TestCase):
         self.assertIn("Authentication failed", res["error"])
 
 
+
+class SequentialLogins(unittest.TestCase):
+    def test_setting_drives_both_scans(self):
+        from collectors import arp_collector, mac_collector, mac_history
+        seen = []
+
+        class Pool:
+            def __init__(self, max_workers):
+                seen.append(max_workers)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def map(self, fn, items):
+                return [fn(i) for i in items]
+        err = {"status": "error", "message": "timed out"}
+        with mock.patch("concurrent.futures.ThreadPoolExecutor", Pool),                 mock.patch.object(arp_collector, "collect_from_device", return_value=err),                 mock.patch.object(mac_collector, "collect_one",
+                                  side_effect=lambda d, transport=None:
+                                  {"device": d, "error": "timed out", "if_macs": []}),                 mock.patch("collectors.mac_history.prune", return_value=0):
+            for on in (True, False):
+                mac_history.set_sequential_logins(on)
+                arp_collector.collect_all([A, B])
+                mac_collector.collect_all([A, B])
+        mac_history.set_sequential_logins(False)
+        self.assertEqual(seen, [1, 1, 2, 2])
+        self.assertFalse(mac_history.stats()["sequential_logins"])
+
+
+    def test_route_runs_and_requires_login(self):
+        from fastapi.testclient import TestClient
+        import app_server
+        r = TestClient(app_server.app).post("/api/mac/settings/sequential",
+                                            json={"enabled": True})
+        self.assertIn(r.status_code, (401, 403))
+
+
 if __name__ == "__main__":
     unittest.main()
