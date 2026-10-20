@@ -23,6 +23,7 @@ log = logging.getLogger("arp_collector")
 
 # ARP command per driver lives in the drivers layer (plan item 15).
 from drivers.registry import arp_command_for
+from core.net_ssh import is_auth_failure
 
 _MAC_ANY = re.compile(
     r'\b([0-9a-fA-F]{2}([:\-][0-9a-fA-F]{2}){5}|[0-9a-fA-F]{4}(\.[0-9a-fA-F]{4}){2})\b')
@@ -132,6 +133,25 @@ def collect_from_device(device: dict) -> dict:
             "entries": parse_arp_output(output_str)}
 
 
+# Pause before the second try: long enough for an AAA server that refused a
+# burst to drain it, short next to the scan itself.
+RETRY_PAUSE_S = 3
+
+
+def retry_refused_logins(devices, collected, collect, refused):
+    """Second try, after the pooled pass and one at a time, for the devices
+    whose login was refused. Shared with mac_collector.collect_all.
+    ponytail: one retry, no backoff; a real bad password costs one more
+    failed login, not a lockout."""
+    import time
+    todo = [i for i, r in enumerate(collected) if refused(r)]
+    if todo:
+        time.sleep(RETRY_PAUSE_S)
+    for i in todo:
+        collected[i] = dict(collect(devices[i]), retried=True)
+    return collected
+
+
 def collect_all(devices: list) -> dict:
     """Collects ARP from all the listed devices and records them in the DB.
     Returns the per-device summary + totals.
@@ -150,11 +170,15 @@ def collect_all(devices: list) -> dict:
         return summary
     with ThreadPoolExecutor(max_workers=min(8, len(devices))) as ex:
         collected = list(ex.map(collect_from_device, devices))
+    collected = retry_refused_logins(
+        devices, collected, collect_from_device,
+        lambda r: r["status"] == "error" and is_auth_failure(r.get("message")))
     for device, res in zip(devices, collected):
         ip = device.get("IP")
+        retried = {"retried": True} if res.get("retried") else {}
         if res["status"] != "success":
             summary["devices"][ip] = {"status": "error",
-                                      "message": res.get("message", "")}
+                                      "message": res.get("message", ""), **retried}
             continue
         entries = res["entries"]
         if not entries:
@@ -168,7 +192,7 @@ def collect_all(devices: list) -> dict:
             tenant=device.get("Group") or "",
             probe=device.get("Probe") or "central")
         summary["devices"][ip] = {"status": "success",
-                                  "entries": len(entries), **counts}
+                                  "entries": len(entries), **counts, **retried}
         summary["total_new"] += counts["new"]
         summary["total_updated"] += counts["updated"]
     return summary

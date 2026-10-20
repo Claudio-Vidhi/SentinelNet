@@ -450,6 +450,9 @@ def collect_via_cli(host, username, password, secret="", device_type="cisco_ios"
             return parser(out_str)
     except Exception as e:
         log.info("CLI mac-table fallito su %s: %s", host, e)
+        from core.net_ssh import is_auth_failure
+        if is_auth_failure(e):
+            raise  # collect_all retries refused logins: it has to see them
         return None
 
 
@@ -702,8 +705,12 @@ def collect_mac_table(host, username, password, secret="", device_type="cisco_io
         if rows is not None:
             method = "restconf"
     if rows is None and cli_enabled and want in (None, "cli"):
-        rows = collect_via_cli(host, username, password, secret, device_type,
-                               command=cli_command, fmt=cli_format)
+        try:
+            rows = collect_via_cli(host, username, password, secret, device_type,
+                                   command=cli_command, fmt=cli_format)
+        except Exception as e:
+            return {"rows": [], "method": None,
+                    "error": "MAC-table non ottenibile (CLI): %s" % e}
         if rows is not None:
             method = "cli"
     if rows is None:
@@ -853,13 +860,18 @@ def collect_all(devices: list, transport=None) -> dict:
     worker = partial(collect_one, transport=transport)
     with ThreadPoolExecutor(max_workers=min(8, len(devices))) as ex:
         collected = list(ex.map(worker, devices))
+    from collectors.arp_collector import retry_refused_logins
+    from core.net_ssh import is_auth_failure
+    collected = retry_refused_logins(devices, collected, worker,
+                                     lambda r: is_auth_failure(r.get("error")))
 
     results = []
     for res in collected:
         d = res["device"]
         ip = d["IP"]
+        retried = {"retried": True} if res.get("retried") else {}
         if res.get("error"):
-            results.append({"ip": ip, "error": res["error"], "count": 0})
+            results.append({"ip": ip, "error": res["error"], "count": 0, **retried})
             continue
         summ = mac_history.record_sightings(
             res["rows"], switch_ip=ip, switch_name=d.get("Hostname", ""),
@@ -876,6 +888,6 @@ def collect_all(devices: list, transport=None) -> dict:
                 res["if_macs"], switch_ip=ip, switch_name=d.get("Hostname", ""),
             )
         results.append({"ip": ip, "method": res["method"],
-                        "count": len(res["rows"]), **summ})
+                        "count": len(res["rows"]), **summ, **retried})
     return {"scanned": len(devices), "results": results,
             "pruned": mac_history.prune()}

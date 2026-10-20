@@ -367,12 +367,18 @@ document.getElementById('locCollectGo')?.addEventListener('click', runCollect);
                     const byLoc = new Map();
                     for (const r of d.results) {
                         const loc = _scanLocOf(r.ip);
-                        if (!byLoc.has(loc)) byLoc.set(loc, { ok: 0, err: [] });
-                        if (r.error) byLoc.get(loc).err.push(r); else byLoc.get(loc).ok += 1;
+                        if (!byLoc.has(loc)) byLoc.set(loc, { ok: 0, err: [], retried: [] });
+                        if (r.error) byLoc.get(loc).err.push(r);
+                        else {
+                            byLoc.get(loc).ok += 1;
+                            if (r.retried) byLoc.get(loc).retried.push(r);
+                        }
                     }
                     const locs = [...byLoc.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([loc, s]) =>
                         `<div>• <b>${escapeHtml(loc)}</b> — ${escapeHtml(tr('cmapMacScanLoc', { okc: s.ok, errc: s.err.length }))}${
-                            s.err.map(r => `<div style="margin-left:14px; color:var(--danger);">${escapeHtml(r.ip)}: ${escapeHtml(r.error)}</div>`).join('')}</div>`).join('');
+                            s.err.map(r => `<div style="margin-left:14px; color:var(--danger);">${escapeHtml(r.ip)}: ${escapeHtml(r.error)}${
+                            r.retried ? ` — ${escapeHtml(tr('cmapRetryFailed'))}` : ''}</div>`).join('')}${
+                        s.retried.map(r => `<div style="margin-left:14px; color:var(--text-muted);">${escapeHtml(r.ip)}: ${escapeHtml(tr('cmapRetryOk'))}</div>`).join('')}</div>`).join('');
                     result.hidden = false;
                     result.innerHTML = escapeHtml(tr('cmapMacScanDoneDevices', {scanned: d.scanned, okc: okc, errc: errc, pruned: d.pruned})) +
                         `<div style="margin-top:6px;">${locs}</div>`;
@@ -439,7 +445,10 @@ document.getElementById('locCollectGo')?.addEventListener('click', runCollect);
                 const detail = r.status === 'success'
                     ? (tr('cmapEntriesNewUpdated', {entries: r.entries, new: r.new, updated: r.updated}))
                     : escapeHtml(r.message || r.status);
-                return `<div>• <b>${escapeHtml(locOf(ip))} · ${escapeHtml(ip)}</b> — <span style="color:${color};">${escapeHtml(r.status)}</span>: ${detail}</div>`;
+                const retry = r.retried
+                    ? ` <i style="color:var(--text-muted);">(${escapeHtml(tr(r.status === 'error' ? 'cmapRetryFailed' : 'cmapRetryOk'))})</i>`
+                    : '';
+                return `<div>• <b>${escapeHtml(locOf(ip))} · ${escapeHtml(ip)}</b> — <span style="color:${color};">${escapeHtml(r.status)}</span>: ${detail}${retry}</div>`;
             }).join('');
             box.hidden = false;
             box.innerHTML = `<b>${tr('titleArpScanSummary') || 'Esito raccolta ARP'}</b>` +

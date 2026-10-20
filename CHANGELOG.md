@@ -10,6 +10,14 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- Raccolta ARP e MAC scan: un login rifiutato (tipico di un server
+  TACACS/RADIUS sotto una raffica di login paralleli) viene ritentato una
+  volta, alla fine dello scan e uno alla volta. L'esito dice se il secondo
+  tentativo e' riuscito o se vanno verificate le credenziali. La MAC scan
+  mostra l'errore di autenticazione invece di "MAC-table non ottenibile".
+
 ## [0.53.0] - 2026-10-20
 
 ### Added

@@ -168,6 +168,13 @@ class DeviceHostKeyError(Exception):
     """
 
 
+def is_auth_failure(error) -> bool:
+    """A refused login (netmiko/paramiko), not a dead host or a timeout on
+    the TCP connect. A TACACS/RADIUS server hit by a burst of parallel logins
+    refuses some of them: the collectors retry exactly these."""
+    return "authentication" in str(error or "").lower()
+
+
 def _known_hosts_path(scope: "str | None" = None) -> str:
     """The same known_hosts the WS terminal pins to, created if missing.
 
