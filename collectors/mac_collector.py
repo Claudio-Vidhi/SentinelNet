@@ -744,12 +744,46 @@ def uplink_ports_from_backup(ip: str) -> dict:
         return {}
 
 
+WLC_DRIVERS = ("cisco_wlc", "cisco_9800")
+
+
+def is_wlc(device: dict) -> bool:
+    """A WLC has no switch FDB worth reading: on AireOS NETCONF, RESTCONF and
+    'show mac address-table' all fail (each a failed login the controller may
+    count toward its user lockout), on a 9800 the table holds only the wired
+    side. Its endpoints are the wireless clients."""
+    from drivers.registry import driver_name_for
+    return driver_name_for(device.get("Vendor")) in WLC_DRIVERS
+
+
+def collect_wlc(device: dict) -> dict:
+    """Wireless clients as sightings (port = 'AP:<name>') plus the MAC<->IP
+    bindings the controller knows, recorded as ARP by collect_all."""
+    from services import wlc_service
+    try:
+        clients = wlc_service.client_table(device)["clients"]
+    except Exception as e:
+        return {"device": device, "error": str(e), "if_macs": []}
+    rows, arp = [], []
+    for c in clients:
+        if not c.get("mac"):
+            continue
+        port = "AP:" + c["ap_name"] if c.get("ap_name") else ""
+        rows.append(_row_from(c["mac"], "", port, "wireless"))
+        if c.get("ip"):
+            arp.append({"mac": c["mac"], "ip": c["ip"], "vlan": "", "interface": port})
+    return {"device": device, "rows": rows, "method": "wlc", "error": None,
+            "if_macs": [], "arp": arp}
+
+
 def collect_one(device: dict, transport=None) -> dict:
     """MAC-table of ONE device, with uplinks already marked. Writes nothing."""
     from core import core_engine
     from collectors import mac_history
     from services import inventory_manager
 
+    if is_wlc(device):
+        return collect_wlc(device)
     ip = device["IP"]
     vendor = (device.get("Vendor") or "cisco").lower()
     try:
@@ -811,7 +845,8 @@ def collect_all(devices: list, transport=None) -> dict:
     from functools import partial
     from collectors import mac_history
     from services import inventory_manager
-    devices = [d for d in devices if not inventory_manager.is_manual(d)]
+    devices = [d for d in devices
+               if not inventory_manager.is_manual(d)]
 
     if not devices:
         return {"scanned": 0, "results": [], "pruned": 0}
@@ -831,6 +866,11 @@ def collect_all(devices: list, transport=None) -> dict:
             tenant=d.get("Group") or "",
             probe=d.get("Probe") or "central",
         )
+        if res.get("arp"):
+            mac_history.record_arp_entries(
+                res["arp"], source_ip=ip, source_name=d.get("Hostname", ""),
+                source_type="wlc", tenant=d.get("Group") or "",
+                probe=d.get("Probe") or "central")
         if res.get("if_macs"):
             mac_history.record_switch_if_macs(
                 res["if_macs"], switch_ip=ip, switch_name=d.get("Hostname", ""),

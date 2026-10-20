@@ -1627,3 +1627,31 @@ class RelayCarriesTheBlacklistDecision(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AgentWlcClientsTest(unittest.TestCase):
+    """A WLC at an agent site pushes its wireless clients as MAC rows and their
+    MAC<->IP as ARP, like the central scan does."""
+
+    def test_wlc_rows_and_arp_are_pushed(self):
+        from unittest import mock
+        from services import probe_agent
+        from collectors import mac_collector, arp_collector
+        agent = probe_agent.Agent.__new__(probe_agent.Agent)
+        agent._post = mock.MagicMock()
+        wlc = {"IP": "192.0.2.60", "Vendor": "cisco_wlc", "Hostname": "wlc-01"}
+        arp = [{"mac": "aa:bb:cc:11:22:01", "ip": "192.0.2.31",
+                "vlan": "", "interface": "AP:ap-01"}]
+        res = {"rows": [{"mac": "aa:bb:cc:11:22:01", "interface": "AP:ap-01"}],
+               "arp": arp, "error": None}
+        with mock.patch.object(mac_collector, "collect_wlc", return_value=res), \
+                mock.patch.object(arp_collector, "collect_from_device",
+                                  return_value={"status": "error", "message": "x"}):
+            agent.push_mac([wlc])
+            agent.push_arp([wlc])
+        mac_call, arp_call = agent._post.call_args_list
+        self.assertEqual(mac_call.args[0], "/api/agent/mac")
+        self.assertEqual(mac_call.args[1]["collections"][0]["rows"], res["rows"])
+        self.assertEqual(arp_call.args[1]["collections"],
+                         [{"source_ip": "192.0.2.60", "source_name": "wlc-01",
+                           "source_type": "wlc", "entries": arp}])

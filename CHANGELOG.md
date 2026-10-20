@@ -10,6 +10,23 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Client wireless dai WLC nella MAC scan**: su AireOS e 9800 la scansione
+  legge i client associati (`show client summary` /
+  `show wireless client summary`) e li registra con l'AP come porta
+  (`AP:<nome>`). Il legame MAC<->IP finisce nella tabella ARP: sul 9800 da
+  `show wireless device-tracking database ip` in un solo comando, su AireOS da
+  `show client detail` per client entro 30 secondi. Vale anche per i WLC
+  dietro una sonda agente.
+
+### Fixed
+
+- La MAC scan non tenta piu' NETCONF/RESTCONF/`show mac address-table` sui
+  WLC: su AireOS fallivano sempre e ogni tentativo era un login fallito.
+- ARP di AireOS (`show arp switch`): la colonna Type ("Host") non viene piu'
+  mostrata come interfaccia.
+
 ## [0.52.1] - 2026-10-18
 
 ### Security

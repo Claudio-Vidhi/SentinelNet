@@ -476,5 +476,58 @@ class DiagnoseTest(unittest.TestCase):
         self.assertIn("show client detail aa:bb:cc:dd:ee:ff", conn.sent)
 
 
+DEVICE_TRACKING = _table_long_ruler(
+    [("IP", 48), ("VLAN", 6), ("STATE", 19), ("DISCOVERY", 18), ("MAC", 15)],
+    [("192.0.2.31", 10, "Reachable", "Local", "aabb.cc11.2201")])
+
+
+class ClientTableTest(unittest.TestCase):
+    def test_iosxe_ip_from_device_tracking(self):
+        conn = _FakeConn({"show wireless client summary": CLIENT_SUMMARY,
+                          "show wireless device-tracking database ip": DEVICE_TRACKING})
+        with _patch_session("iosxe", conn):
+            out = wlc.client_table(AIREOS)["clients"]
+        self.assertEqual([(c["mac"], c["ap_name"], c.get("ip")) for c in out],
+                         [("aa:bb:cc:11:22:01", "ap-01", "192.0.2.31"),
+                          ("aa:bb:cc:11:22:02", "ap-02", None)])
+        self.assertFalse(any("client mac-address" in c for c in conn.sent))
+
+    def test_aireos_ip_per_client_within_budget(self):
+        conn = _FakeConn({
+            "show client summary": CLIENT_SUMMARY,
+            "show client detail aa:bb:cc:11:22:01":
+                "IP Address....................................... 192.0.2.31\n",
+            "show client detail aa:bb:cc:11:22:02":
+                "IP Address....................................... Unknown\n"})
+        with _patch_session("aireos", conn):
+            out = wlc.client_table(AIREOS)["clients"]
+        self.assertEqual([c.get("ip") for c in out], ["192.0.2.31", None])
+        # Budget spent: no per-client command at all.
+        conn = _FakeConn({"show client summary": CLIENT_SUMMARY})
+        with _patch_session("aireos", conn), \
+                mock.patch.object(wlc, "_CLIENT_IP_BUDGET_S", -1):
+            wlc.client_table(AIREOS)
+        self.assertEqual(conn.sent, ["show client summary"])
+
+    def test_mac_scan_records_clients_and_arp(self):
+        from collectors import mac_collector
+        clients = {"platform": "aireos", "clients": [
+            {"mac": "aa:bb:cc:11:22:01", "ap_name": "ap-01", "ip": "192.0.2.31"},
+            {"mac": "aa:bb:cc:11:22:02", "ap_name": "ap-02"}]}
+        with mock.patch.object(wlc, "client_table", return_value=clients), \
+                mock.patch("collectors.mac_history.record_sightings",
+                           return_value={}) as sight, \
+                mock.patch("collectors.mac_history.record_arp_entries") as arp, \
+                mock.patch("collectors.mac_history.prune", return_value=0):
+            out = mac_collector.collect_all([AIREOS])
+        self.assertEqual(out["results"][0]["method"], "wlc")
+        self.assertEqual([r["interface"] for r in sight.call_args.args[0]],
+                         ["AP:ap-01", "AP:ap-02"])
+        self.assertEqual(arp.call_args.args[0],
+                         [{"mac": "aa:bb:cc:11:22:01", "ip": "192.0.2.31",
+                           "vlan": "", "interface": "AP:ap-01"}])
+        self.assertEqual(arp.call_args.kwargs["source_type"], "wlc")
+
+
 if __name__ == "__main__":
     unittest.main()

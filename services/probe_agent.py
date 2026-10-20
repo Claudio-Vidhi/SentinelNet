@@ -291,11 +291,23 @@ class Agent:
 
     def push_mac(self, devices):
         collections = []
+        self._wlc_arp = {}
         for d in devices:
             if not isinstance(d, dict) or not d.get("IP"):
                 continue
             if inventory_manager.is_manual(d):
                 continue  # no credentials by design: one would abort the whole push
+            if mac_collector.is_wlc(d):
+                res = mac_collector.collect_wlc(d)
+                if res.get("error"):
+                    print(f"[mac] {d['IP']}: {res['error']}")
+                    continue
+                collections.append({"switch_ip": d["IP"],
+                                    "switch_name": d.get("Hostname", ""),
+                                    "rows": res["rows"]})
+                # Client MAC<->IP rides the ARP push: same table, same route.
+                self._wlc_arp[d["IP"]] = res["arp"]
+                continue
             ip = d["IP"]
             vendor = (d.get("Vendor") or "cisco").lower()
             username, password, secret = core_engine.get_device_credentials(d)
@@ -340,6 +352,11 @@ class Agent:
             if not isinstance(d, dict) or not d.get("IP"):
                 continue
             ip = d["IP"]
+            wlc_arp = getattr(self, "_wlc_arp", {}).get(ip)
+            if wlc_arp:
+                collections.append({"source_ip": ip,
+                                    "source_name": d.get("Hostname", ""),
+                                    "source_type": "wlc", "entries": wlc_arp})
             try:
                 res = arp_collector.collect_from_device(d)
             except Exception as e:

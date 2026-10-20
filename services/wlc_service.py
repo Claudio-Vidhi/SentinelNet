@@ -447,6 +447,53 @@ def overview(device: dict) -> dict:
             "raw": raw}
 
 
+# AireOS has no bulk MAC<->IP table: the IP is only in 'show client detail',
+# one command per client. ponytail: fixed wall-clock budget; clients past it
+# keep MAC + AP and get their IP from the next scan or the gateway ARP.
+_CLIENT_IP_BUDGET_S = 30
+_IPV4_RE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
+
+
+def client_table(device: dict) -> dict:
+    """Wireless clients for the MAC scan: [{mac, ap_name, ip?}] in one
+    session. IOS-XE gives MAC<->IP in one table (device-tracking), AireOS
+    only per client, within _CLIENT_IP_BUDGET_S."""
+    import time
+    from collectors.arp_collector import parse_arp_output
+    with _session(device) as (conn, platform, _sysinfo):
+        clients = _table_rows(_send(conn, COMMANDS["client_summary"][platform]),
+                              _CLIENT_FIELDS)
+        if platform == "iosxe":
+            text = _send(conn, "show wireless device-tracking database ip")
+            ips = {}
+            for e in parse_arp_output(text):
+                try:
+                    ips[normalize_mac(e["mac"], platform)] = e["ip"]
+                except WlcError:
+                    continue
+            for c in clients:
+                try:
+                    ip = ips.get(normalize_mac(c.get("mac", ""), platform))
+                except WlcError:
+                    continue
+                if ip:
+                    c["ip"] = ip
+        else:
+            deadline = time.monotonic() + _CLIENT_IP_BUDGET_S
+            for c in clients:
+                if time.monotonic() > deadline:
+                    break
+                try:
+                    cmd = COMMANDS["client_detail"][platform].format(
+                        mac=normalize_mac(c.get("mac", ""), platform))
+                    ip = parse_client_detail(_send(conn, cmd, 10)).get("ip", "")
+                except Exception:
+                    continue
+                if _IPV4_RE.match(ip) and ip != "0.0.0.0":
+                    c["ip"] = ip
+    return {"platform": platform, "clients": clients}
+
+
 def diagnose_wifi_client(device: dict, mac: str) -> dict:
     """Diagnosi aggregata di un client wireless: dettaglio client, stato AP,
     WLAN e rogue AP vicini. Ogni sezione è best-effort (errore riportato
