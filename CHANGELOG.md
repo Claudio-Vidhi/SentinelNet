@@ -10,6 +10,14 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Login uno alla volta (AAA)**: casella accanto alla retention della Client
+  Map. Attiva, gli scan ARP e MAC (manuali, programmati e della diagnosi
+  client) aprono un login alla volta invece di 8 in parallelo: piu' lenti, ma
+  il server TACACS/RADIUS non vede raffiche di login da bloccare. Il
+  secondo tentativo sui login rifiutati resta attivo in entrambe le modalita'.
+
 ## [0.53.1] - 2026-10-20
 
 ### Fixed
