@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.53.2] - 2026-10-20
+
 ### Added
 
 - **Login uno alla volta (AAA)**: casella accanto alla retention della Client
