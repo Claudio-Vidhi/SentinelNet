@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.53.0] - 2026-10-20
+
 ### Added
 
 - **Client wireless dai WLC nella MAC scan**: su AireOS e 9800 la scansione
