@@ -10,6 +10,23 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Config Analyzer, VLAN**: una porta con `switchport mode access` e righe
+  trunk rimaste nella config veniva contata come trunk e spariva dalle porte
+  access della sua VLAN; una porta access senza `access vlan` ora compare
+  sotto la VLAN 1.
+- **Mappa**: una voce CDP/LLDP senza la riga della porta aggiungeva al
+  collegamento un membro "Unknown".
+- **Pannello del dispositivo sulla mappa**: era alto quanto la finestra e le
+  ultime sezioni (Port-Channel, VLAN) restavano tagliate fuori.
+
+### Changed
+
+- **Mappa per sede**: ogni etichetta Port-Channel dice a quale switch
+  appartiene e quanti membri ha (`Po1 · core-01 · ×4`); l'elenco completo
+  delle porte resta nel tooltip del collegamento.
+
 ## [0.53.2] - 2026-10-20
 
 ### Added
