@@ -10,6 +10,21 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Mappa gerarchica, etichette dei collegamenti**: nuovi comandi nella barra.
+  *Etichette* grandi o piccole (un clic su un'etichetta inverte solo quel
+  collegamento); *Forma piccola*: nome abbreviato (senza il prefisso comune
+  ai dispositivi), solo porta, oppure una sola etichetta per collegamento;
+  *Posizione*: sopra la card come prima, di lato al cavo a ogni capo, oppure
+  automatica (il primo posto libero da card, cavi e altre etichette).
+  Un'etichetta si trascina dove si vuole e resta legata al cavo da un
+  tratteggio; *Rimetti etichette* annulla clic e spostamenti.
+- **Port-Channel in rame continuo**: uno switch con figli di entrambi i tipi
+  disegnava una barra grigia con discese rame, e il cavo cambiava colore a
+  metà. Ora i Port-Channel hanno una loro corsia rame dall'inizio alla fine
+  (disattivabile).
+
 ## [0.53.3] - 2026-10-21
 
 ### Fixed
