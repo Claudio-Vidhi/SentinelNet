@@ -298,6 +298,20 @@
     // {"<site>": {"<id>": {x, y}}}. Off, the automatic layout is back;
     // "Riordina mappa" forgets the site's positions.
     let layeredFree = localStorage.getItem('layeredFree') === '1';
+    // Hierarchy-map cable labels: toolbar settings, per-link size flips (a
+    // click on a tag) and hand offsets (a drag). Browser-only conveniences.
+    const loadTagJson = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') || d; } catch (e) { return d; } };
+    let layeredTagCfg = Object.assign({ size: 'big', form: 'abbr', place: 'auto', lane: true }, loadTagJson('layeredTagCfg', {}));
+    let layeredTagFlip = loadTagJson('layeredTagFlip', {});
+    let layeredTagAdjust = loadTagJson('layeredTagAdjust', {});
+    let layeredTagHits = [];   // rebuilt on every draw: {key, link, x, y, w, h}
+    function saveLayeredTags() {
+        try {
+            localStorage.setItem('layeredTagCfg', JSON.stringify(layeredTagCfg));
+            localStorage.setItem('layeredTagFlip', JSON.stringify(layeredTagFlip));
+            localStorage.setItem('layeredTagAdjust', JSON.stringify(layeredTagAdjust));
+        } catch (e) { /* private window: settings last until reload */ }
+    }
     let layeredFreePos = {};
     try { layeredFreePos = JSON.parse(localStorage.getItem('layeredFreePos') || '{}'); } catch (e) { layeredFreePos = {}; }
     function saveLayeredFreePos() { localStorage.setItem('layeredFreePos', JSON.stringify(layeredFreePos)); }
@@ -1720,14 +1734,24 @@
 
     // A cable end's label: a Po shows its name filled in copper with its
     // member ports beside it; a plain link shows the port alone.
-    function drawEndTag(ctx, t, x, y, anchor) {
-        if (!t.ports && !t.po) return;
-        const mono = cssVar('--font-data', 'monospace'), h = 18;
+    function endTagWidths(ctx, t) {
+        const mono = cssVar('--font-data', 'monospace');
         ctx.font = `600 10px ${mono}`;
         const w2 = t.ports ? ctx.measureText(t.ports).width + 14 : 0;
         ctx.font = `700 10px ${mono}`;
         const w1 = t.po ? ctx.measureText(t.po).width + 14 : 0;
-        const w = w1 + w2, X = anchor === 'start' ? x : anchor === 'end' ? x - w : x - w / 2;
+        return { w1, w2, w: w1 + w2 };
+    }
+    // The tag's box for an anchor point: y is its vertical centre.
+    function endTagRect(w, x, y, anchor) {
+        return { x: anchor === 'start' ? x : anchor === 'end' ? x - w : x - w / 2, y: y - 9, w, h: 18 };
+    }
+
+    function drawEndTag(ctx, t, x, y, anchor) {
+        if (!t.ports && !t.po) return;
+        const mono = cssVar('--font-data', 'monospace'), h = 18;
+        const { w1, w2, w } = endTagWidths(ctx, t);
+        const X = endTagRect(w, x, y, anchor).x;
         roundRectPath(ctx, X, y - h / 2, w, h, h / 2);
         ctx.fillStyle = cssVar('--surface-2', '#16202d');
         ctx.fill();
@@ -1806,10 +1830,19 @@
         const buses = {};
         vert.forEach(e => {
             const up = upper(e);
-            const b = buses[up] || (buses[up] = { up, xs: [pos[up].x], pc: true });
-            b.xs.push(corridor[e.id] ?? dropX[e.id]);
-            b.pc = b.pc && !!e.lnk.is_portchannel;
+            const b = buses[up] || (buses[up] = { up, xs: [pos[up].x], pcXs: [], plainXs: [] });
+            const x = corridor[e.id] ?? dropX[e.id];
+            b.xs.push(x);
+            (e.lnk.is_portchannel ? b.pcXs : b.plainXs).push(x);
         });
+        // A parent with both kinds of child drew one grey bus and copper drops
+        // off it: the Po cable changed colour halfway. With the option on, its
+        // Po cables get their own copper lane just below, end to end.
+        Object.values(buses).forEach(b => {
+            b.pc = !b.plainXs.length;
+            b.split = layeredTagCfg.lane && b.pcXs.length > 0 && b.plainXs.length > 0;
+        });
+        const PC_LANE = 5;
         // Buses below the same row get their own lane only where they overlap.
         const busY = {}, laneEnds = {};
         Object.values(buses).sort((a, b) => Math.min(...a.xs) - Math.min(...b.xs)).forEach(b => {
@@ -1821,16 +1854,41 @@
             busY[b.up] = bb(b.up).bottom + 16 + lane * 10;
             b.lo = lo; b.hi = hi;
         });
+        // Where tags must not land (auto placement): cards, buses, cables.
+        const obstacles = ids.map(id => { const o = bb(id); return { x: o.left, y: o.top, w: o.right - o.left, h: o.bottom - o.top }; });
+        const busRun = (up, xs, y, color) => {
+            const lo = Math.min(pos[up].x, ...xs), hi = Math.max(pos[up].x, ...xs);
+            ctx.strokeStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(pos[up].x, bb(up).bottom); ctx.lineTo(pos[up].x, y);
+            ctx.moveTo(lo, y); ctx.lineTo(hi, y);
+            ctx.stroke();
+            obstacles.push({ x: lo - 2, y: y - 3, w: hi - lo + 4, h: 6 });
+        };
         ctx.save();
         ctx.lineWidth = 2;
         Object.values(buses).forEach(b => {
-            ctx.strokeStyle = b.pc ? PC_COPPER : muted;
-            ctx.beginPath();
-            ctx.moveTo(pos[b.up].x, bb(b.up).bottom); ctx.lineTo(pos[b.up].x, busY[b.up]);
-            ctx.moveTo(b.lo, busY[b.up]); ctx.lineTo(b.hi, busY[b.up]);
-            ctx.stroke();
+            if (!b.split) { busRun(b.up, b.xs, busY[b.up], b.pc ? PC_COPPER : muted); return; }
+            busRun(b.up, b.plainXs, busY[b.up], muted);
+            busRun(b.up, b.pcXs, busY[b.up] + PC_LANE, PC_COPPER);
         });
         ctx.restore();
+        // Top of a drop: its own copper lane when the parent's bus is split.
+        const dropTop = e => busY[upper(e)] + (buses[upper(e)].split && e.lnk.is_portchannel ? PC_LANE : 0);
+
+        // Label text. Small labels drop the prefix every device of the view
+        // shares ("abbr"), or the name ("ports"), or become one per link ("one").
+        const labels = nodesDs.get().map(n => (n.nodeDataVal && n.nodeDataVal.label) || '').filter(Boolean);
+        const preCount = {};
+        labels.forEach(lb => {
+            const seen = new Set();
+            for (let i = 0; i < lb.length; i++) if ('-_.'.includes(lb[i])) seen.add(lb.slice(0, i + 1).toLowerCase());
+            seen.forEach(p => { preCount[p] = (preCount[p] || 0) + 1; });
+        });
+        // ponytail: the longest prefix half the view shares; one prefix per tenant if names mix tenants.
+        const namePrefix = Object.keys(preCount).filter(p => preCount[p] >= 2 && preCount[p] * 2 >= labels.length)
+            .sort((a, b) => b.length - a.length)[0] || '';
+        const shortName = n => (namePrefix && n.length > namePrefix.length && n.toLowerCase().startsWith(namePrefix)) ? n.slice(namePrefix.length) : n;
         const plain = p => (p && p !== 'Vicino' && p !== 'Neighbor') ? shortIface(p) : '';
         const tags = [];   // painted after every cable: no cable runs over a tag
         const overLanes = {};   // row y -> last lane used above it
@@ -1849,18 +1907,31 @@
             // Each tag names its own device: two stacked tags with only ports
             // did not say which switch each one belonged to. A bundle shows
             // its member count; the full list is in the link tooltip.
+            // A click on a tag flips its link from the global size.
+            const linkKey = `${e.from}~${e.to}`;
+            const small = (layeredTagCfg.size === 'small') !== !!layeredTagFlip[linkKey];
+            const form = small ? layeredTagCfg.form : 'big';
             const endTag = fromSide => {
                 const nd = nodesDs.get(fromSide ? e.from : e.to);
-                const who = (nd && nd.nodeDataVal && nd.nodeDataVal.label) || '';
+                const full = (nd && nd.nodeDataVal && nd.nodeDataVal.label) || '';
+                const who = form === 'big' ? full : form === 'abbr' ? shortName(full) : '';
+                const sep = form === 'big' ? ' · ' : ' ';
                 if (kind === 'pc') {
                     const ps = fromSide ? lp : rp;
                     return { po: fromSide ? ends.local : ends.remote,
-                             ports: [who, ps.length > 1 ? `×${ps.length}` : ps[0]].filter(Boolean).join(' · ') };
+                             ports: [who, ps.length > 1 ? `×${ps.length}` : ps[0]].filter(Boolean).join(sep) };
                 }
                 if (kind !== 'link') return null;
                 const port = plain(fromSide ? l.local_port : l.remote_port);
-                return { ports: port ? [who, port].filter(Boolean).join(' · ') : '' };
+                return { ports: port ? [who, port].filter(Boolean).join(sep) : '' };
             };
+            // "One per link": a Po shows both ids and its size, a cable a dot.
+            const oneTag = () => kind === 'pc'
+                ? { po: ends.same ? ends.local : `${ends.local}⇄${ends.remote}`, ports: `×${m}` }
+                : kind === 'link' ? { ports: '•' } : null;
+            const one = form === 'one';
+            const push = (part, t, x, y, anchor, extra) => tags.push(Object.assign(
+                { key: `${linkKey}~${part}`, link: linkKey, t, ax: x, ay: y, cands: [{ x, y, anchor }] }, extra || {}));
             ctx.strokeStyle = kind === 'pc' ? PC_COPPER : (kind === 'ha' ? '#f9a825' : muted);
             ctx.lineWidth = kind === 'pc' ? 2 : 1.5;
             ctx.setLineDash(kind === 'group' || kind === 'ha' ? [4, 4] : (tenantOf(e.from) !== tenantOf(e.to) ? [7, 4] : []));
@@ -1883,7 +1954,10 @@
                         ctx.moveTo(lx + o, bb(L).top); ctx.lineTo(lx + o, ly - o); ctx.lineTo(rx - o, ly - o); ctx.lineTo(rx - o, bb(R).top);
                     }
                     ctx.stroke();
-                    tags.push([endTag(fromLeft), lx + 10, ly - 12, 'start'], [endTag(!fromLeft), rx - 10, ly - 12, 'end']);
+                    obstacles.push({ x: lx, y: ly - 4, w: rx - lx, h: 8 });
+                    if (one) { push('o', oneTag(), (lx + rx) / 2, ly - 12, 'middle'); return; }
+                    push('u', endTag(fromLeft), lx + 10, ly - 12, 'start');
+                    push('d', endTag(!fromLeft), rx - 10, ly - 12, 'end');
                     return;
                 }
                 for (let k = 0; k < m; k++) {
@@ -1891,28 +1965,148 @@
                     ctx.moveTo(x1, a.y + o); ctx.lineTo(x2, a.y + o);
                 }
                 ctx.stroke();
-                tags.push([endTag(fromLeft), x1 + 6, a.y - 20, 'start'], [endTag(!fromLeft), x2 - 6, a.y + 20, 'end']);
+                obstacles.push({ x: x1, y: a.y - m * 3 - 2, w: x2 - x1, h: m * 6 + 4 });
+                if (one) { push('o', oneTag(), (x1 + x2) / 2, a.y - 20, 'middle'); return; }
+                push('u', endTag(fromLeft), x1 + 6, a.y - 20, 'start');
+                push('d', endTag(!fromLeft), x2 - 6, a.y + 20, 'end');
                 return;
             }
             const fromUp = a.y < b.y, U = fromUp ? e.from : e.to, D = fromUp ? e.to : e.from;
             const cx = dropX[e.id], cy = bb(D).top, lift = (drops[D].length - 1 - dropIdx[e.id]) * 46;
             // The child's drop from its parent's bus: one line per Po member.
-            const cor = corridor[e.id], jy = cy - 56 - lift;
+            const cor = corridor[e.id], jy = cy - 56 - lift, top = dropTop(e);
             for (let k = 0; k < m; k++) {
                 const o = (k - (m - 1) / 2) * 5;
-                if (cor === undefined) { ctx.moveTo(cx + o, busY[U]); ctx.lineTo(cx + o, cy); continue; }
-                ctx.moveTo(cor + o, busY[U]); ctx.lineTo(cor + o, jy + o); ctx.lineTo(cx + o, jy + o); ctx.lineTo(cx + o, cy);
+                if (cor === undefined) { ctx.moveTo(cx + o, top); ctx.lineTo(cx + o, cy); continue; }
+                ctx.moveTo(cor + o, top); ctx.lineTo(cor + o, jy + o); ctx.lineTo(cx + o, jy + o); ctx.lineTo(cx + o, cy);
             }
             ctx.stroke();
-            // Both ends sit on the lower card's own drop, upper device first:
-            // siblings' tags can never land on each other.
-            // With several parents the pairs stack, the leftmost parent's on top.
-            // Each tag carries its device name, so the two are never alike.
-            tags.push([endTag(fromUp), cx, cy - 38 - lift, 'middle'], [endTag(!fromUp), cx, cy - 15 - lift, 'middle']);
+            const half = (m - 1) * 2.5 + 3;
+            if (cor === undefined) obstacles.push({ x: cx - half, y: top, w: 2 * half, h: cy - top });
+            else obstacles.push({ x: cor - half, y: top, w: 2 * half, h: jy - top },
+                                { x: Math.min(cor, cx) - half, y: jy - half, w: Math.abs(cx - cor) + 2 * half, h: 2 * half },
+                                { x: cx - half, y: jy, w: 2 * half, h: cy - jy });
+            if (layeredTagCfg.place === 'stack') {
+                // Both ends sit on the lower card's own drop, upper device first:
+                // siblings' tags can never land on each other.
+                // With several parents the pairs stack, the leftmost parent's on top.
+                if (one) { push('o', oneTag(), cx, cy - 15 - lift, 'middle'); return; }
+                push('u', endTag(fromUp), cx, cy - 38 - lift, 'middle');
+                push('d', endTag(!fromUp), cx, cy - 15 - lift, 'middle');
+                return;
+            }
+            // Beside the cable, each device's tag at its own end: the upper one
+            // where the drop leaves the bus, the lower one where it reaches the
+            // card, so the cable reads from one device to the other. Auto mode
+            // tries right, left and a few heights for the first free spot.
+            const beside = (x, y, dys) => dys.flatMap(dy => [
+                { x: x + half + 6, y: y + dy, anchor: 'start' }, { x: x - half - 6, y: y + dy, anchor: 'end' }]);
+            const ux = cor ?? cx, uy = top + 16, dy = cy - 14;
+            if (one) {
+                const my = ((cor === undefined ? top : jy) + cy) / 2;
+                push('o', oneTag(), cx, my, 'start', { cands: beside(cx, my, [0, -20, 20, -40, 40]) });
+                return;
+            }
+            push('u', endTag(fromUp), ux, uy, 'start', { cands: beside(ux, uy, [0, 12, 24, 36]) });
+            push('d', endTag(!fromUp), cx, dy, 'start', { cands: beside(cx, dy, [0, -12, -24, -36]) });
         });
         ctx.setLineDash([]);
-        tags.forEach(([t, x, y, anchor]) => { if (t) drawEndTag(ctx, t, x, y, anchor); });
+        // Placement: auto takes the first candidate clear of cards, cables and
+        // tags already placed; a hand drag is added on top in every mode.
+        const free = r => !obstacles.some(o => r.x - 3 < o.x + o.w && o.x < r.x + r.w + 3 && r.y - 3 < o.y + o.h && o.y < r.y + r.h + 3);
+        layeredTagHits = [];
+        const placed = tags.filter(g => g.t && (g.t.ports || g.t.po)).map(g => {
+            const w = endTagWidths(ctx, g.t).w;
+            let c = g.cands[0];
+            if (layeredTagCfg.place === 'auto') c = g.cands.find(k => free(endTagRect(w, k.x, k.y, k.anchor))) || c;
+            const adj = layeredTagAdjust[g.key] || { dx: 0, dy: 0 };
+            const at = { x: c.x + adj.dx, y: c.y + adj.dy, anchor: c.anchor };
+            const r = endTagRect(w, at.x, at.y, at.anchor);
+            obstacles.push(r);
+            return { g, at, r };
+        });
+        // A tag moved off its cable keeps a dotted leader back to it.
+        placed.forEach(({ g, r }) => {
+            const ex = Math.max(r.x, Math.min(g.ax, r.x + r.w)), ey = Math.max(r.y, Math.min(g.ay, r.y + r.h));
+            if (Math.hypot(ex - g.ax, ey - g.ay) <= 3) return;
+            ctx.save();
+            ctx.strokeStyle = g.t.po ? PC_COPPER : muted;
+            ctx.fillStyle = ctx.strokeStyle;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([2, 2]);
+            ctx.beginPath(); ctx.moveTo(g.ax, g.ay); ctx.lineTo(ex, ey); ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.beginPath(); ctx.arc(g.ax, g.ay, 2, 0, 2 * Math.PI); ctx.fill();
+            ctx.restore();
+        });
+        placed.forEach(({ g, at, r }) => {
+            drawEndTag(ctx, g.t, at.x, at.y, at.anchor);
+            layeredTagHits.push(Object.assign({ key: g.key, link: g.link }, r));
+        });
         ctx.restore();
+        initLayeredTagInteraction();
+    }
+
+    // Hierarchy-map tags: a click flips that link between large and small, a
+    // drag moves the tag. Same capture trick as the minimal map's pills: the
+    // container sees the pointer first, so vis.js does not pan the view.
+    let layeredTagDrag = null, layeredTagUiReady = false;
+    function initLayeredTagInteraction() {
+        if (layeredTagUiReady) return;
+        const container = document.getElementById('networkGraphContainer');
+        if (!container) return;
+        layeredTagUiReady = true;
+        const toNet = ev => {
+            const cv = container.querySelector('canvas');
+            const rect = (cv || container).getBoundingClientRect();
+            return networkInstance.DOMtoCanvas({ x: ev.clientX - rect.left, y: ev.clientY - rect.top });
+        };
+        const hitAt = m => {
+            for (let i = layeredTagHits.length - 1; i >= 0; i--) {
+                const h = layeredTagHits[i];
+                if (m.x >= h.x && m.x <= h.x + h.w && m.y >= h.y && m.y <= h.y + h.h) return h;
+            }
+            return null;
+        };
+        const begin = ev => {
+            if (getMapView() !== 'layered' || !networkInstance || (ev.button !== undefined && ev.button !== 0)) return;
+            const h = hitAt(toNet(ev));
+            if (!h) return;
+            ev.preventDefault(); ev.stopPropagation();
+            if (layeredTagDrag) return; // started by the other event type
+            const a = layeredTagAdjust[h.key] || { dx: 0, dy: 0 };
+            layeredTagDrag = { h, start: toNet(ev), orig: { dx: a.dx, dy: a.dy }, moved: false };
+        };
+        container.addEventListener('pointerdown', begin, true);
+        container.addEventListener('mousedown', begin, true);
+        const move = ev => {
+            const d = layeredTagDrag;
+            if (!d || !networkInstance) return;
+            const m = toNet(ev), dx = m.x - d.start.x, dy = m.y - d.start.y;
+            if (!d.moved && Math.hypot(dx, dy) < 3) return;
+            d.moved = true;
+            layeredTagAdjust[d.h.key] = { dx: d.orig.dx + dx, dy: d.orig.dy + dy };
+            networkInstance.redraw();
+        };
+        window.addEventListener('pointermove', move);
+        window.addEventListener('mousemove', move);
+        const end = () => {
+            const d = layeredTagDrag;
+            if (!d) return;
+            layeredTagDrag = null;
+            if (!d.moved) {
+                if (layeredTagFlip[d.h.link]) delete layeredTagFlip[d.h.link];
+                else layeredTagFlip[d.h.link] = 1;
+            }
+            saveLayeredTags();
+            if (networkInstance) networkInstance.redraw();
+        };
+        window.addEventListener('pointerup', end);
+        window.addEventListener('mouseup', end);
+        container.addEventListener('mousemove', ev => {
+            if (layeredTagDrag || getMapView() !== 'layered' || !networkInstance) return;
+            container.style.cursor = hitAt(toNet(ev)) ? 'pointer' : '';
+        });
     }
 
     // "visto dal WLC 3 h fa": età dell'ultimo censimento del controller, con la
@@ -4736,6 +4930,34 @@
         layeredLevelNames[layeredGroup] = names;
         localStorage.setItem('layeredLevelNames', JSON.stringify(layeredLevelNames));
         closeModal('layeredNamesModal');
+        if (networkInstance) networkInstance.redraw();
+    });
+    [['layeredTagSize', 'size'], ['layeredTagForm', 'form'], ['layeredTagPlace', 'place']].forEach(([id, field]) => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        sel.value = layeredTagCfg[field];
+        sel.addEventListener('change', () => {
+            layeredTagCfg[field] = sel.value;
+            // A new global size or form starts every link from it again.
+            if (field !== 'place') layeredTagFlip = {};
+            else layeredTagAdjust = {};
+            saveLayeredTags();
+            if (networkInstance) networkInstance.redraw();
+        });
+    });
+    const pcLaneBox = document.getElementById('toggleLayeredPcLane');
+    if (pcLaneBox) {
+        pcLaneBox.checked = !!layeredTagCfg.lane;
+        pcLaneBox.addEventListener('change', () => {
+            layeredTagCfg.lane = pcLaneBox.checked;
+            saveLayeredTags();
+            if (networkInstance) networkInstance.redraw();
+        });
+    }
+    document.getElementById('layeredTagResetBtn')?.addEventListener('click', () => {
+        layeredTagFlip = {};
+        layeredTagAdjust = {};
+        saveLayeredTags();
         if (networkInstance) networkInstance.redraw();
     });
     document.getElementById('toggleLayeredFree')?.addEventListener('change', e => {

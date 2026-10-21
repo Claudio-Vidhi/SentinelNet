@@ -1223,6 +1223,32 @@
               <span data-i18n="lblLayeredFree">Spostamento libero</span>
             </label>
             <button id="layeredTidyBtn" class="chip" style="display:none; width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnSchemaTidy">Riordina mappa</button>
+            <!-- Cable labels: size, short form, placement (topology.js, layeredTagCfg).
+                 A click on a label flips its size, a drag moves it. -->
+            <span class="layered-tag-opts" title="Clic su un'etichetta: grande/piccola. Trascina per spostarla." data-i18n-title="topoLayeredTagHint">
+              <label for="layeredTagSize" data-i18n="lblLayeredTagSize">Etichette</label>
+              <select id="layeredTagSize">
+                <option value="big" data-i18n="optLayeredTagBig">Grandi</option>
+                <option value="small" data-i18n="optLayeredTagSmall">Piccole</option>
+              </select>
+              <label for="layeredTagForm" data-i18n="lblLayeredTagForm">Forma piccola</label>
+              <select id="layeredTagForm">
+                <option value="abbr" data-i18n="optLayeredTagAbbr">Nome abbreviato</option>
+                <option value="ports" data-i18n="optLayeredTagPorts">Solo porta</option>
+                <option value="one" data-i18n="optLayeredTagOne">Una per collegamento</option>
+              </select>
+              <label for="layeredTagPlace" data-i18n="lblLayeredTagPlace">Posizione</label>
+              <select id="layeredTagPlace">
+                <option value="stack" data-i18n="optLayeredTagStack">Sopra la card</option>
+                <option value="side" data-i18n="optLayeredTagSide">Di lato</option>
+                <option value="auto" data-i18n="optLayeredTagAuto">Automatica</option>
+              </select>
+              <label for="toggleLayeredPcLane" class="layered-tag-check">
+                <input type="checkbox" id="toggleLayeredPcLane">
+                <span data-i18n="lblLayeredPcLane">Port-Channel in rame continuo</span>
+              </label>
+              <button id="layeredTagResetBtn" type="button" class="chip" data-i18n="btnLayeredTagReset">Rimetti etichette</button>
+            </span>
           </span>
 
           <!-- Interruttore tooltip al passaggio del mouse: solo per la nuova mappa,

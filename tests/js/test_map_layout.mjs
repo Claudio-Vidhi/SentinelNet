@@ -48,28 +48,41 @@ const networkInstance = {
                              top: pos[id].y - CARD_H / 2, bottom: pos[id].y + CARD_H / 2 }),
     moveNode: (id, x, y) => { pos[id] = { x, y }; },
     body: { data: {
-        nodes: { get: () => ({ nodeDataVal: { group: 'tenant-a' } }) },
+        nodes: { get: id => id === undefined
+            ? Object.keys(cards).map(k => ({ id: k, nodeDataVal: { group: 'tenant-a', label: `lab-a-${k}` } }))
+            : { nodeDataVal: { group: 'tenant-a', label: `lab-a-${id}` } } },
         edges: { forEach: f => edges.forEach(f), get: () => edges },
     } },
 };
 const document = { createElement: () => ({ getContext: () => ({ font: '', measureText: t => ({ width: t.length * 6 }) }) }) };
 const cssVar = (_, f) => f;
 const hexToRgba = () => 'rgba(0,0,0,0.5)';
-const drawEndTag = () => {};
+const drawn = [];
+const drawEndTag = (_, t) => drawn.push(t);
+const localStorage = { getItem: () => null, setItem: () => {} };
 // Indirect eval runs in the global scope: the stubs have to live there.
-Object.assign(globalThis, { networkInstance, document, cssVar, hexToRgba, drawEndTag });
+Object.assign(globalThis, { networkInstance, document, cssVar, hexToRgba, drawEndTag, localStorage });
 
-const { tidyLayeredTree, drawLayeredLinks, LAYERED_PITCH } = (0, eval)(`(function () {
+const T = (0, eval)(`(function () {
     const topoZone = n => ({ key: n.group || '' });
+    const initLayeredTagInteraction = () => {};
     ${line('const LAYERED_PITCH =')}
     ${line('const LAYERED_TENANT_GAP =')}
     ${line('const PC_COPPER =')}
+    ${line('const loadTagJson =')}
+    ${line('let layeredTagCfg =')}
+    ${line('let layeredTagFlip =')}
+    ${line('let layeredTagAdjust =')}
+    ${line('let layeredTagHits =')}
     ${extract('function shortIface(')}
     ${extract('function pcEnds(')}
+    ${extract('function endTagWidths(')}
+    ${extract('function endTagRect(')}
     ${extract('function tidyLayeredTree(')}
     ${extract('function drawLayeredLinks(')}
-    return { tidyLayeredTree, drawLayeredLinks, LAYERED_PITCH };
+    return { tidyLayeredTree, drawLayeredLinks, LAYERED_PITCH, cfg: layeredTagCfg, hits: () => layeredTagHits };
 })()`);
+const { tidyLayeredTree, drawLayeredLinks, LAYERED_PITCH } = T;
 
 tidyLayeredTree();
 
@@ -89,7 +102,8 @@ assert.equal(Math.abs(pos['fw-a'].x - pos['fw-b'].x), LAYERED_PITCH, 'firewalls 
 
 // One line per configured port: 4 into the WLC, 1 into the one-port Po.
 const ends = [];
-const ctx = new Proxy({}, { get: (_, k) => k === 'lineTo' ? (x, y) => ends.push([x, y]) : (() => {}), set: () => true });
+const ctx = new Proxy({}, { get: (_, k) => k === 'lineTo' ? (x, y) => ends.push([x, y])
+    : k === 'measureText' ? t => ({ width: t.length * 6 }) : (() => {}), set: () => true });
 drawLayeredLinks(ctx);
 const into = id => {
     const b = networkInstance.getBoundingBox(id);
@@ -98,5 +112,23 @@ const into = id => {
 assert.equal(into('wlc'), 4, 'a 4-port Po draws 4 lines');
 assert.equal(into('one'), 1, 'a 1-port Po draws 1 line');
 assert.equal(into('a1'), 2);
+
+// Automatic placement (the default): two tags per link, none on top of another.
+const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+let hits = T.hits();
+assert.equal(hits.length, 2 * edges.length, 'one tag per end');
+hits.forEach((a, i) => hits.slice(i + 1).forEach(b => assert.ok(!overlap(a, b), `${a.key} covers ${b.key}`)));
+assert.ok(drawn.some(t => t.ports.startsWith('lab-a-core · ')), 'large tags carry the full name');
+
+// Small "short name": the prefix every device shares goes.
+drawn.length = 0;
+T.cfg.size = 'small';
+drawLayeredLinks(ctx);
+assert.ok(drawn.some(t => t.ports.startsWith('core ')) && !drawn.some(t => t.ports.includes('lab-a-')), 'prefix dropped');
+
+// Small "one per link": a single tag for each link.
+T.cfg.form = 'one';
+drawLayeredLinks(ctx);
+assert.equal(T.hits().length, edges.length, 'one tag per link');
 
 console.log('ok');

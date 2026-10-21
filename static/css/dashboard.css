@@ -3681,6 +3681,13 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
 }
 .layered-core-wrap { display: inline-flex; flex: 0 1 auto; flex-wrap: nowrap; gap: 6px; }
 .layered-core-wrap select.layered-core { font-weight: 700; width: auto; flex: 0 0 auto; }
+/* Cable-label controls of the hierarchy map, same weight as the chips beside. */
+.layered-tag-opts { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-left: 10px; border-left: 1px solid var(--border); }
+.layered-tag-opts > label { font-size: 12px; font-weight: 700; color: var(--text-muted); margin: 0; }
+.layered-tag-opts select { width: auto; margin: 0; padding: 3px 6px; font-size: 12px; }
+.layered-tag-opts .layered-tag-check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+.layered-tag-opts .layered-tag-check input { width: 16px; height: 16px; margin: 0; accent-color: var(--text-soft); }
+.layered-tag-opts .chip { width: auto; margin: 0; padding: 4px 10px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-muted); font-size: 12px; font-weight: 700; cursor: pointer; }
 .rt-sankey-panel > summary { cursor: pointer; }
 .rt-sankey-panel > summary h3 { display: inline; }
 
