@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.53.3] - 2026-10-21
+
 ### Fixed
 
 - **Config Analyzer, VLAN**: una porta con `switchport mode access` e righe
