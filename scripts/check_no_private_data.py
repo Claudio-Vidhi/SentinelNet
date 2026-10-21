@@ -122,9 +122,65 @@ def tracked_files():
     return [line for line in out.splitlines() if line]
 
 
+# 4. Names taken from the real backups in the local (gitignored) data/:
+# hostnames, VTP domains, ACL/VRF/route-map names, tenant folders. A docstring
+# once carried a customer's VTP domain "as an example": no regex for IPs or
+# secrets sees that, only the list of names actually in use does. The list
+# is built at run time and never written anywhere.
+_NAME_PATTERNS = (
+    re.compile(r"^hostname\s+(\S+)", re.M | re.I),
+    re.compile(r"VTP Domain Name\s*:\s*(\S+)", re.I),
+    re.compile(r"^vtp domain\s+(\S+)", re.M | re.I),
+    re.compile(r"^ip access-list\s+(?:standard|extended)\s+(\S+)", re.M | re.I),
+    re.compile(r"^(?:ip vrf|vrf definition)\s+(\S+)", re.M | re.I),
+    re.compile(r"^route-map\s+(\S+)", re.M | re.I),
+    re.compile(r"^\s*set hostname\s+\"?([^\"\s]+)", re.M | re.I),
+    # Neighbours seen via CDP/LLDP: APs, phones, switches with no backup.
+    re.compile(r"Device ID:\s*(\S+)", re.I),
+    re.compile(r"System Name:\s*(\S+)", re.I),
+)
+# Factory defaults and words every config has: flagging them is noise.
+_GENERIC_NAMES = {"switch", "router", "default", "standard", "extended",
+                  "management", "mgmt-intf", "mgmt-vrf", "fortigate", "huawei"}
+
+
+def real_names(data_dir=None):
+    """Lower-cased names in use on the networks backed up under data/."""
+    root = pathlib.Path(data_dir) if data_dir else ROOT / "data" / "backup-config"
+    names = set()
+    if not root.is_dir():
+        return names
+    for p in root.rglob("*"):
+        if p.is_dir():
+            # Tenant folders only: the level below is the vendor (cisco/...).
+            if p.parent == root:
+                names.add(p.name)
+            continue
+        m = re.match(r"(.+)-\d{1,3}(?:\.\d{1,3}){3}", p.name)
+        if m:
+            names.add(m.group(1))
+        try:
+            text = p.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        for rx in _NAME_PATTERNS:
+            names.update(rx.findall(text))
+    return {n.lower() for n in names
+            if len(n) >= 5 and re.search(r"[a-z]", n, re.I)
+            and n.lower() not in _GENERIC_NAMES and not n.startswith(".")}
+
+
+def _names_regex(names):
+    if not names:
+        return None
+    alt = "|".join(re.escape(str(n)) for n in sorted(names, key=len, reverse=True))
+    return re.compile(rf"(?<![A-Za-z0-9])(?:{alt})(?![A-Za-z0-9])", re.I)
+
+
 def scan():
     """Ritorna [(percorso, riga, spiegazione)]; lista vuota = albero pulito."""
     problems = []
+    names_rx = _names_regex(real_names())
     for rel in tracked_files():
         if FORBIDDEN_TRACKED.search(rel):
             problems.append((rel, 0, "file di stato tracciato"))
@@ -142,6 +198,11 @@ def scan():
             for pattern, what in SECRET_PATTERNS:
                 if pattern.search(line):
                     problems.append((rel, n, what))
+            if names_rx and not rel.startswith("static/vendor/"):
+                # The name itself is not printed: the report may get pasted.
+                if names_rx.search(line):
+                    problems.append((rel, n, "nome preso da un backup reale in "
+                                             "data/: usare switch-01, EXAMPLE-..."))
             if rel.startswith(IP_EXEMPT_PREFIXES) or _SVG_LINE.search(line):
                 continue
             for candidate in _IP_RE.findall(line):

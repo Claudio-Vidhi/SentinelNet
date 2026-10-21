@@ -190,7 +190,8 @@ def _parse_interface(header, body):
     nm = name.lower()
     if nm.startswith('vlan'):
         iface["mode"] = "svi"
-    elif sw_mode == 'trunk' or (iface["trunk_allowed"] or iface["trunk_native"]):
+    # Explicit 'switchport mode access' wins over leftover trunk lines.
+    elif sw_mode == 'trunk' or (sw_mode != 'access' and (iface["trunk_allowed"] or iface["trunk_native"])):
         iface["mode"] = "trunk"
     elif sw_mode == 'access' or iface["access_vlan"] or iface["voice_vlan"]:
         iface["mode"] = "access"
@@ -492,10 +493,12 @@ def analyze_config(content):
     access_by_vlan = {}
     trunk_by_vlan = {}
     for iface in interfaces:
-        if iface["mode"] == "access" and iface["access_vlan"]:
-            access_by_vlan.setdefault(iface["access_vlan"], []).append(iface["name"])
-        for v in _expand_vlan_list(iface["trunk_allowed"]):
-            trunk_by_vlan.setdefault(v, []).append(iface["name"])
+        if iface["mode"] == "access":
+            # No 'switchport access vlan' = IOS default VLAN 1.
+            access_by_vlan.setdefault(iface["access_vlan"] or "1", []).append(iface["name"])
+        elif iface["mode"] == "trunk":
+            for v in _expand_vlan_list(iface["trunk_allowed"]):
+                trunk_by_vlan.setdefault(v, []).append(iface["name"])
     vlans = []
     for vid in sorted(all_vids, key=lambda x: int(x) if x.isdigit() else 0):
         vlans.append({

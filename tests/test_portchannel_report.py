@@ -138,5 +138,37 @@ class TestNetworkMapIgnoresHistory(unittest.TestCase):
         self.assertEqual(node["label"], "switch-01")
 
 
+class TestNetworkMapDropsUnknownPorts(unittest.TestCase):
+    """A CDP block without its Interface line used to add an "Unknown" member
+    to the link, drawn on the map as a port named Unknown."""
+
+    def test_unknown_port_is_not_a_member(self):
+        backup_dir = tempfile.mkdtemp(prefix="netmap_unknown_")
+        vdir = os.path.join(backup_dir, "test_cml", "cisco")
+        os.makedirs(vdir)
+        cfg = ("hostname switch-01\n"
+               "--- SHOW CDP NEIGHBORS DETAIL ---\n"
+               "-------------------------\n"
+               "Device ID: switch-02\n"
+               "Interface: GigabitEthernet1/0/1,  Port ID (outgoing port): GigabitEthernet0/1\n"
+               "-------------------------\n"
+               "Device ID: switch-02\n"
+               "Platform: cisco WS-C2960X,  Capabilities: Switch\n")
+        with open(os.path.join(vdir, "switch-01-192.0.2.7.txt"), "w", encoding="utf-8") as f:
+            f.write(cfg)
+        with open(os.path.join(vdir, "switch-02-192.0.2.8.txt"), "w", encoding="utf-8") as f:
+            f.write("hostname switch-02\n")
+        devices = [{"IP": "192.0.2.7", "Group": "test_cml", "Vendor": "cisco", "Hostname": "switch-01"},
+                   {"IP": "192.0.2.8", "Group": "test_cml", "Vendor": "cisco", "Hostname": "switch-02"}]
+        with patch.object(core_engine, "BACKUP_FOLDER", backup_dir), \
+             patch.object(core_engine, "get_all_devices", return_value=devices), \
+             patch.object(core_engine, "get_detected_versions", return_value={}):
+            links = core_engine._generate_network_map()["links"]
+        self.assertEqual(len(links), 1)
+        ports = links[0]["local_ports"] + links[0]["remote_ports"]
+        self.assertNotIn("Unknown", ports)
+        self.assertEqual(sorted(ports), ["GigabitEthernet0/1", "GigabitEthernet1/0/1"])
+
+
 if __name__ == "__main__":
     unittest.main()

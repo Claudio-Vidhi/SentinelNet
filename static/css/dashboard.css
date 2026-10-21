@@ -2319,6 +2319,10 @@ body:not(.role-super_admin) .requires-super-admin { display: none !important; }
   top: 0;
   right: 0;
   bottom: 0;
+  /* The drawer is an <aside>: the sidebar rule 'aside { height: 100vh }'
+     made it as tall as the window inside the shorter map box, and the
+     overflow:hidden of the box cut off the last sections. */
+  height: auto;
   /* 350px fissi erano stretti per valori monospace tipo un codice modello:
      ogni valore andava a capo e il pannello cresceva in altezza. */
   width: clamp(320px, 26vw, 420px);

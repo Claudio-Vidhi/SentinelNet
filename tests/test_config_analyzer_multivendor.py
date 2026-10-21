@@ -319,6 +319,19 @@ class IosRegressionTest(unittest.TestCase):
             self.assertIn(key, r)
         self.assertEqual(r["interfaces"][0]["access_vlan"], "10")
 
+    def test_vlan_view_lists_every_access_port(self):
+        # Explicit 'mode access' wins over leftover trunk lines, and an access
+        # port without 'access vlan' sits in VLAN 1.
+        cfg = ("vlan 10\n!\n"
+               "interface GigabitEthernet1/0/1\n switchport access vlan 10\n"
+               " switchport trunk allowed vlan 10,20\n switchport mode access\n!\n"
+               "interface GigabitEthernet1/0/2\n switchport mode access\n!\n"
+               "interface Vlan1\n ip address 192.0.2.1 255.255.255.0\n!\n")
+        v = {x["id"]: x for x in ca.analyze_config(cfg)["vlans"]}
+        self.assertEqual(v["10"]["access_ifaces"], ["GigabitEthernet1/0/1"])
+        self.assertEqual(v["10"]["trunk_ifaces"], [])
+        self.assertEqual(v["1"]["access_ifaces"], ["GigabitEthernet1/0/2"])
+
 
 class AnalyzerFailureIsNotACleanConfig(unittest.TestCase):
     """Un parser che esplode deve dirlo: l'envelope vuoto da solo e'

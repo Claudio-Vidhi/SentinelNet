@@ -1846,9 +1846,21 @@
             const m = kind === 'pc' ? Math.max(1, lp.length, rp.length) : 1;
             const ends = kind === 'pc' ? pcEnds(l) : null;
             // fromSide: the end on the link's source device (local_*).
-            const endTag = fromSide => kind === 'pc'
-                ? { po: fromSide ? ends.local : ends.remote, ports: (fromSide ? lp : rp).join(' · ') }
-                : kind === 'link' ? { ports: plain(fromSide ? l.local_port : l.remote_port) } : null;
+            // Each tag names its own device: two stacked tags with only ports
+            // did not say which switch each one belonged to. A bundle shows
+            // its member count; the full list is in the link tooltip.
+            const endTag = fromSide => {
+                const nd = nodesDs.get(fromSide ? e.from : e.to);
+                const who = (nd && nd.nodeDataVal && nd.nodeDataVal.label) || '';
+                if (kind === 'pc') {
+                    const ps = fromSide ? lp : rp;
+                    return { po: fromSide ? ends.local : ends.remote,
+                             ports: [who, ps.length > 1 ? `×${ps.length}` : ps[0]].filter(Boolean).join(' · ') };
+                }
+                if (kind !== 'link') return null;
+                const port = plain(fromSide ? l.local_port : l.remote_port);
+                return { ports: port ? [who, port].filter(Boolean).join(' · ') : '' };
+            };
             ctx.strokeStyle = kind === 'pc' ? PC_COPPER : (kind === 'ha' ? '#f9a825' : muted);
             ctx.lineWidth = kind === 'pc' ? 2 : 1.5;
             ctx.setLineDash(kind === 'group' || kind === 'ha' ? [4, 4] : (tenantOf(e.from) !== tenantOf(e.to) ? [7, 4] : []));
@@ -1895,11 +1907,8 @@
             // Both ends sit on the lower card's own drop, upper device first:
             // siblings' tags can never land on each other.
             // With several parents the pairs stack, the leftmost parent's on top.
-            // Same Po and members on both ends (a symmetric bundle): one tag,
-            // two identical ones only stacked noise on the drop.
-            const tu = endTag(fromUp), td = endTag(!fromUp);
-            if (JSON.stringify(tu) === JSON.stringify(td)) tags.push([td, cx, cy - 15 - lift, 'middle']);
-            else tags.push([tu, cx, cy - 38 - lift, 'middle'], [td, cx, cy - 15 - lift, 'middle']);
+            // Each tag carries its device name, so the two are never alike.
+            tags.push([endTag(fromUp), cx, cy - 38 - lift, 'middle'], [endTag(!fromUp), cx, cy - 15 - lift, 'middle']);
         });
         ctx.setLineDash([]);
         tags.forEach(([t, x, y, anchor]) => { if (t) drawEndTag(ctx, t, x, y, anchor); });

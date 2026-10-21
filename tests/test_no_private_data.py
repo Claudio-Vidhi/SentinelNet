@@ -21,6 +21,29 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import check_no_private_data as checker  # noqa: E402
 
 
+class RealNamesFromBackups(unittest.TestCase):
+    """Names in use on a real network (hostname, VTP domain, ACL...) are
+    flagged wherever they appear, even as a harmless-looking example."""
+
+    def test_names_are_read_from_the_backups_and_matched(self):
+        import tempfile
+        root = pathlib.Path(tempfile.mkdtemp(prefix="names_"))
+        (root / "Tenant_X" / "cisco").mkdir(parents=True)
+        (root / "Tenant_X" / "cisco" / "core-sw-example-192.0.2.1.txt").write_text(
+            "hostname core-sw-example\n"
+            "VTP Domain Name : EXAMPLE-VTPDOM\n"
+            "ip access-list extended ACL-EXAMPLE-NAME\n"
+            "Device ID: ap-example-01\n", encoding="utf-8")
+        names = checker.real_names(root)
+        for n in ("core-sw-example", "example-vtpdom", "acl-example-name",
+                  "ap-example-01", "tenant_x"):
+            self.assertIn(n, names)
+        self.assertNotIn("cisco", names)   # vendor folder, not a name
+        rx = checker._names_regex(names)
+        self.assertTrue(rx.search('{"domain": "EXAMPLE-VTPDOM"}'))
+        self.assertFalse(rx.search("core-sw-example2"))
+
+
 class TrackedTreeIsClean(unittest.TestCase):
     def test_no_private_data_in_the_tracked_tree(self):
         problems = checker.scan()

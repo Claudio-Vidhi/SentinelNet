@@ -2432,15 +2432,19 @@ def _generate_network_map(group_filter=None) -> dict:
                 acc["name_pc"] = True
 
             # Assign the interfaces to the correct side based on who is reporting.
+            # A CDP/LLDP entry without its port line says "Unknown": not a
+            # member, and kept it was drawn on the map as a port of the bundle.
+            mine, guess = (("src_ports", "tgt_guess") if ip == acc["source"]
+                           else ("tgt_ports", "src_guess"))
+            if local_port != "Unknown":
+                acc[mine][ln] = local_port
+            if remote_port != "Unknown":
+                acc[guess][rn] = remote_port
             if ip == acc["source"]:
-                acc["src_ports"][ln] = local_port
-                acc["tgt_guess"][rn] = remote_port
                 # local_pc belongs to the source, remote_pc (estimate) to the target.
                 if local_pc:  acc["src_pc"].add(local_pc)
                 if remote_pc: acc["tgt_pc"].add(remote_pc)
             else:  # ip == acc["target"]
-                acc["tgt_ports"][ln] = local_port
-                acc["src_guess"][rn] = remote_port
                 if local_pc:  acc["tgt_pc"].add(local_pc)
                 if remote_pc: acc["src_pc"].add(remote_pc)
 
