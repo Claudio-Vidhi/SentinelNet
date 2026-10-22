@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.54.0] - 2026-10-22
+
 ### Added
 
 - **Modulo apparato, Verifica connessione**: prova login e lettura
