@@ -2826,7 +2826,7 @@
       <div class="page-head">
         <div class="page-head-text">
           <h2 data-i18n="titleImportCsv">Importa CSV</h2>
-          <p data-i18n="descImportCsv">Il file CSV deve contenere tassativamente l'intestazione specificata di seguito.</p>
+          <p data-i18n="descImportCsv">Aggiungi molti apparati insieme: carica un file CSV oppure incolla gli indirizzi. Prima di importare vedi cosa è nuovo, cosa si aggiorna e cosa va sistemato.</p>
         </div>
       </div>
 
@@ -2866,7 +2866,7 @@
 
           <section class="panel">
             <div class="panel-head">
-              <h3><span data-i18n="importPanelUpload">Carica file CSV</span></h3>
+              <h3><span data-i18n="importPanelUpload">Carica un file o incolla gli indirizzi</span></h3>
             </div>
             <!-- Trascinamento oltre al selettore: il file arriva quasi sempre da
                  una cartella già aperta, e obbligare a passare dal dialogo di
@@ -2878,6 +2878,9 @@
                 <span data-i18n="importDropText">Trascina qui il file CSV o clicca per selezionarlo</span>
               </div>
             </div>
+            <label for="importPasteBox" class="import-paste-label" data-i18n="importPasteLabel">Oppure incolla gli indirizzi: IP singoli, liste, intervalli (192.0.2.10-20) o subnet fino a /24</label>
+            <textarea id="importPasteBox" class="import-paste" rows="4" spellcheck="false" data-i18n-placeholder="importPastePh"></textarea>
+            <div id="importPasteNote" class="set-desc" hidden></div>
             <div id="importColumns" class="import-chips"></div>
             <div id="importFilterTabs" class="import-tabs" role="tablist" hidden>
               <button type="button" class="chip-choice" role="tab" data-filter="all" aria-selected="true"></button>

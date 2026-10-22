@@ -15,6 +15,11 @@ happened — `git log --grep="chore(release)"` is the record for those.
 - **Provisioning, Verifica connessione**: prova login e lettura
   dell'hostname con i dati del modulo, prima di salvare. Parte dal server
   centrale: per un apparato dietro una sonda lo dice invece di provarci.
+- **Importa CSV, incolla indirizzi**: accanto al file si possono incollare
+  IP singoli, liste, intervalli (`192.0.2.10-20`) o subnet fino a /24. Gli
+  indirizzi passano dalla stessa anteprima del CSV (nuovi, aggiornati,
+  errori); quelli non riconosciuti vengono elencati. Un CSV incollato con la
+  sua intestazione viene letto così com'è.
 
 ### Changed
 

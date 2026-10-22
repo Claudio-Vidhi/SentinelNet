@@ -2163,7 +2163,71 @@
         }
     }
 
+    // Pasted addresses -> the one-column CSV the import preview already
+    // understands. A pasted CSV (first line has letters: a header) goes through
+    // unchanged. Accepts IPs, "192.0.2.10-20", "192.0.2.10-192.0.2.20" and
+    // subnets /24../32 (network and broadcast left out).
+    function expandAddressList(text, max = 1024) {
+        const octets = s => {
+            const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s);
+            return m && m.slice(1).every(o => +o <= 255) ? m.slice(1).map(Number) : null;
+        };
+        const ips = [], bad = [], seen = new Set();
+        const add = (p, last) => {
+            const ip = `${p[0]}.${p[1]}.${p[2]}.${last}`;
+            if (!seen.has(ip)) { seen.add(ip); ips.push(ip); }
+        };
+        for (const tok of text.split(/[\s,;]+/).filter(Boolean)) {
+            let m, p;
+            if ((p = octets(tok))) { add(p, p[3]); continue; }
+            if ((m = /^([\d.]+)-([\d.]+)$/.exec(tok)) && (p = octets(m[1]))) {
+                const q = /^\d{1,3}$/.test(m[2]) ? [...p.slice(0, 3), +m[2]] : octets(m[2]);
+                if (q && q.slice(0, 3).join('.') === p.slice(0, 3).join('.') && q[3] >= p[3] && q[3] <= 255) {
+                    for (let i = p[3]; i <= q[3]; i++) add(p, i);
+                    continue;
+                }
+            }
+            if ((m = /^([\d.]+)\/(\d{1,2})$/.exec(tok)) && (p = octets(m[1])) && +m[2] >= 24 && +m[2] <= 32) {
+                const size = 2 ** (32 - +m[2]), base = p[3] - (p[3] % size);
+                const [lo, hi] = size > 2 ? [base + 1, base + size - 2] : [base, base + size - 1];
+                for (let i = lo; i <= hi; i++) add(p, i);
+                continue;
+            }
+            bad.push(tok);
+        }
+        return { ips: ips.slice(0, max), bad, truncated: ips.length > max };
+    }
+
+    const importPasteBox = document.getElementById('importPasteBox');
+    const importPasteNote = document.getElementById('importPasteNote');
+    let importPasteTimer = null;
+    importPasteBox?.addEventListener('input', () => {
+        clearTimeout(importPasteTimer);
+        importPasteTimer = setTimeout(() => {
+            const text = importPasteBox.value.trim();
+            const firstLine = text.split(/\r?\n/, 1)[0] || '';
+            let note = '';
+            if (/[a-z]/i.test(firstLine)) {
+                importState.text = text;
+            } else {
+                const r = expandAddressList(text);
+                importState.text = r.ips.length ? 'IP\n' + r.ips.join('\n') : '';
+                if (r.bad.length) note = tr('importPasteBad', { list: r.bad.slice(0, 5).join(', ') });
+                if (r.truncated) note = (note ? note + ' ' : '') + tr('importPasteTruncated', { n: r.ips.length });
+            }
+            importPasteNote.textContent = note;
+            importPasteNote.hidden = !note;
+            // A paste replaces a previously chosen file.
+            if (csvInput) csvInput.value = '';
+            if (csvDropText) csvDropText.innerHTML = csvDropHtml;
+            importState.decisions = {};
+            importState.preview = null;
+            if (importState.text) runImportPreview(); else renderImportPreview();
+        }, 400);
+    });
+
     function loadImportFile(file) {
+        if (importPasteBox) { importPasteBox.value = ''; importPasteNote.hidden = true; }
         showCsvFile(file);
         const reader = new FileReader();
         reader.onload = e => {
@@ -2268,6 +2332,7 @@
                 importState.preview = null;
                 csvInput.value = '';
                 if (csvDropText) csvDropText.innerHTML = csvDropHtml;
+                if (importPasteBox) { importPasteBox.value = ''; importPasteNote.hidden = true; }
                 renderImportPreview();
                 refreshInventory();
                 // The tab is not switched: the skipped/failed rows are listed

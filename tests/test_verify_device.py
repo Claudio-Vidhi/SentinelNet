@@ -57,8 +57,8 @@ class TestVerifyDevice(unittest.TestCase):
         r, _ = self._verify({"status": "error", "message": "Authentication failed"})
         self.assertEqual(r.json(), {"ok": False, "hostname": None, "error": "Authentication failed"})
 
-    def test_device_behind_a_site_probe_is_refused(self):
-        r, probe = self._verify({"status": "success"}, probe="site-01")
+    def test_device_behind_a_remote_probe_is_refused(self):
+        r, probe = self._verify({"status": "success"}, probe="probe-roma")
         self.assertEqual(r.status_code, 400)
         probe.assert_not_called()
 
