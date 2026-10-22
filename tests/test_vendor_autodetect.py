@@ -61,9 +61,11 @@ class TestAddDevicesPanel(unittest.TestCase):
     def test_every_card_has_a_source_whose_targets_exist(self):
         with open(os.path.join(_REPO_ROOT, "templates", "dashboard.html"), encoding="utf-8") as f:
             html = f.read()
-        with open(os.path.join(_REPO_ROOT, "static", "js", "core.js"), encoding="utf-8") as f:
+        with open(os.path.join(_REPO_ROOT, "static", "js", "add-devices.js"), encoding="utf-8") as f:
             core = f.read()
         block = core[core.index("const ADD_SOURCES = {"):core.index("};", core.index("const ADD_SOURCES = {"))]
+        self.assertIn('data-adw-source="addr"', html)
+        self.assertIn('<script src="/static/js/add-devices.js"></script>', html)
         sources = dict(re.findall(r"(\w+):\s*\{([^}]*)\}", block))
         cards = re.findall(r'data-add-source="(\w+)"', html)
         self.assertEqual(sorted(cards), sorted(sources))

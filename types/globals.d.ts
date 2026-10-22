@@ -149,6 +149,7 @@ interface Window {
     bpPendingOrg: any;       // devices.js -> blueprint.js: organization to open
     clsPendingTwin: any;     // core.js openNameTwins -> topology.js: device to open in the twins queue
     openManualConfigWizard: any; // manual-config.js, opened from devices.js rows
+    openAddDevices: any;     // add-devices.js, opened by the inventory button and the palette
     loadAssetOnce: any;      // core.js
     createWizard: any;       // ui-wizard.js
     globalSelectedTenant: any; // core.js

@@ -2174,41 +2174,8 @@
         }
     }
 
-    // Pasted addresses -> the one-column CSV the import preview already
-    // understands. A pasted CSV (first line has letters: a header) goes through
-    // unchanged. Accepts IPs, "192.0.2.10-20", "192.0.2.10-192.0.2.20" and
-    // subnets /24../32 (network and broadcast left out).
-    function expandAddressList(text, max = 1024) {
-        const octets = s => {
-            const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s);
-            return m && m.slice(1).every(o => +o <= 255) ? m.slice(1).map(Number) : null;
-        };
-        const ips = [], bad = [], seen = new Set();
-        const add = (p, last) => {
-            const ip = `${p[0]}.${p[1]}.${p[2]}.${last}`;
-            if (!seen.has(ip)) { seen.add(ip); ips.push(ip); }
-        };
-        for (const tok of text.split(/[\s,;]+/).filter(Boolean)) {
-            let m, p;
-            if ((p = octets(tok))) { add(p, p[3]); continue; }
-            if ((m = /^([\d.]+)-([\d.]+)$/.exec(tok)) && (p = octets(m[1]))) {
-                const q = /^\d{1,3}$/.test(m[2]) ? [...p.slice(0, 3), +m[2]] : octets(m[2]);
-                if (q && q.slice(0, 3).join('.') === p.slice(0, 3).join('.') && q[3] >= p[3] && q[3] <= 255) {
-                    for (let i = p[3]; i <= q[3]; i++) add(p, i);
-                    continue;
-                }
-            }
-            if ((m = /^([\d.]+)\/(\d{1,2})$/.exec(tok)) && (p = octets(m[1])) && +m[2] >= 24 && +m[2] <= 32) {
-                const size = 2 ** (32 - +m[2]), base = p[3] - (p[3] % size);
-                const [lo, hi] = size > 2 ? [base + 1, base + size - 2] : [base, base + size - 1];
-                for (let i = lo; i <= hi; i++) add(p, i);
-                continue;
-            }
-            bad.push(tok);
-        }
-        return { ips: ips.slice(0, max), bad, truncated: ips.length > max };
-    }
-
+    // Pasted addresses: expandAddressList() lives in core.js, shared with the
+    // "Aggiungi apparati" wizard.
     const importPasteBox = document.getElementById('importPasteBox');
     const importPasteNote = document.getElementById('importPasteNote');
     let importPasteTimer = null;

@@ -2595,38 +2595,40 @@ function canOpenTab(tabId) {
     return true;
 }
 
-// "Aggiungi apparati": one panel for every way a device gets into the
-// inventory. Each card opens the flow that already exists; `gate` is the tab
-// whose visibility decides whether the card is offered (scan and manual
-// config are write actions living on tabs a viewer can open).
-const ADD_SOURCES = {
-    one:    { tab: 'tab-provisioning', focus: 'devIp' },
-    paste:  { tab: 'tab-import', focus: 'importPasteBox' },
-    scan:   { tab: 'tab-devices', click: 'btnSubnetScan', gate: 'tab-import' },
-    nbr:    { tab: 'tab-categories' },
-    manual: { tab: 'tab-import', click: 'btnOpenManualConfig' },
-    ztp:    { tab: 'tab-provisioner' },
-};
-
-function openAddDevices() {
-    document.querySelectorAll('[data-add-source]').forEach(b => {
-        const s = ADD_SOURCES[b.getAttribute('data-add-source')];
-        b.hidden = !canOpenTab(s.gate || s.tab);
-    });
-    openModal('addDevicesModal');
+// Pasted addresses -> list of IPs, for the CSV import paste box (devices.js)
+// and the "Aggiungi apparati" wizard (add-devices.js). Accepts IPs,
+// "192.0.2.10-20", "192.0.2.10-192.0.2.20" and
+// subnets /24../32 (network and broadcast left out).
+function expandAddressList(text, max = 1024) {
+    const octets = s => {
+        const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s);
+        return m && m.slice(1).every(o => +o <= 255) ? m.slice(1).map(Number) : null;
+    };
+    const ips = [], bad = [], seen = new Set();
+    const add = (p, last) => {
+        const ip = `${p[0]}.${p[1]}.${p[2]}.${last}`;
+        if (!seen.has(ip)) { seen.add(ip); ips.push(ip); }
+    };
+    for (const tok of text.split(/[\s,;]+/).filter(Boolean)) {
+        let m, p;
+        if ((p = octets(tok))) { add(p, p[3]); continue; }
+        if ((m = /^([\d.]+)-([\d.]+)$/.exec(tok)) && (p = octets(m[1]))) {
+            const q = /^\d{1,3}$/.test(m[2]) ? [...p.slice(0, 3), +m[2]] : octets(m[2]);
+            if (q && q.slice(0, 3).join('.') === p.slice(0, 3).join('.') && q[3] >= p[3] && q[3] <= 255) {
+                for (let i = p[3]; i <= q[3]; i++) add(p, i);
+                continue;
+            }
+        }
+        if ((m = /^([\d.]+)\/(\d{1,2})$/.exec(tok)) && (p = octets(m[1])) && +m[2] >= 24 && +m[2] <= 32) {
+            const size = 2 ** (32 - +m[2]), base = p[3] - (p[3] % size);
+            const [lo, hi] = size > 2 ? [base + 1, base + size - 2] : [base, base + size - 1];
+            for (let i = lo; i <= hi; i++) add(p, i);
+            continue;
+        }
+        bad.push(tok);
+    }
+    return { ips: ips.slice(0, max), bad, truncated: ips.length > max };
 }
-
-document.getElementById('btnCloseAddDevices')?.addEventListener('click', () => closeModal('addDevicesModal'));
-document.addEventListener('click', async e => {
-    if (e.target.closest('[data-action="open-add-devices"]')) { openAddDevices(); return; }
-    const card = e.target.closest('[data-add-source]');
-    if (!card) return;
-    const s = ADD_SOURCES[card.getAttribute('data-add-source')];
-    closeModal('addDevicesModal');
-    await switchTab(s.tab);
-    if (s.click) document.getElementById(s.click)?.click();
-    if (s.focus) document.getElementById(s.focus)?.focus();
-});
 
 function buildCommandPaletteItems(query = '') {
     const q = query.trim().toLowerCase();
@@ -2707,7 +2709,7 @@ function buildCommandPaletteItems(query = '') {
         { title: tr('coreRunGlobalTriage'), desc: tr('coreExecuteTriageCheckAcross'), icon: 'fa-bolt-lightning', action: () => { const b = document.getElementById('btnHomeRunTriage'); if (b) b.click(); } },
         { title: tr('coreRunMacScan'), desc: tr('coreCollectMacAddressTable'), icon: 'fa-satellite-dish', action: () => { switchTab('tab-endpoint'); if (typeof locSwitchView === 'function') locSwitchView('raccolta'); const b = document.getElementById('btnMacScan'); if (b) b.click(); } },
         { title: tr('coreRunArpCollection'), desc: tr('coreCollectArpBindingsFrom'), icon: 'fa-network-wired', action: () => { switchTab('tab-endpoint'); if (typeof locSwitchView === 'function') locSwitchView('raccolta'); const b = document.getElementById('btnArpScan'); if (b) b.click(); } },
-        { title: tr('coreAddNewDevice'), desc: tr('coreOpenProvisioningFormFor'), icon: 'fa-circle-plus', action: () => openAddDevices() },
+        { title: tr('coreAddNewDevice'), desc: tr('coreOpenProvisioningFormFor'), icon: 'fa-circle-plus', action: () => window.openAddDevices() },
         { title: tr('coreToggleTheme'), desc: tr('coreSwitchDarkLightTheme'), icon: 'fa-circle-half-stroke', action: () => toggleTheme() },
         { title: tr('cmdOpenTutorials'), desc: tr('cmdOpenTutorialsDesc'), icon: 'fa-graduation-cap', action: () => { if (typeof openTutorialsHub === 'function') openTutorialsHub(); } },
     ];

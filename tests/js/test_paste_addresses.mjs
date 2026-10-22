@@ -1,13 +1,14 @@
-// expandAddressList (devices.js): pasted addresses for the CSV import.
+// expandAddressList (core.js): pasted addresses for the CSV import and the
+// "Aggiungi apparati" wizard.
 // Runs the real function, sliced out of the source.
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 
-const src = readFileSync(new URL('../../static/js/devices.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-const start = src.indexOf('    function expandAddressList(');
-const end = src.indexOf('\n    }\n', start);
+const src = readFileSync(new URL('../../static/js/core.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const start = src.indexOf('\nfunction expandAddressList(') + 1;
+const end = src.indexOf('\n}\n', start);
 assert.ok(start > 0 && end > start, 'expandAddressList not found');
-const expand = new Function(src.slice(start, end + 6) + '; return expandAddressList;')();
+const expand = new Function(src.slice(start, end + 2) + '; return expandAddressList;')();
 
 let r = expand('192.0.2.10\n192.0.2.11, 192.0.2.12; 192.0.2.10');
 assert.deepStrictEqual(r.ips, ['192.0.2.10', '192.0.2.11', '192.0.2.12'], 'separators and duplicates');

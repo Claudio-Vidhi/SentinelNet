@@ -5264,22 +5264,64 @@
     </div>
   </div>
 
-  <!-- One entry for every way a device gets into the inventory: each card opens
-       the flow that already exists for it (core.js, ADD_SOURCES). -->
-  <div class="modal-overlay" id="addDevicesModal">
-    <div class="modal" style="width: 680px; max-width: 96%;">
+  <!-- "Aggiungi apparati" (add-devices.js): source -> addresses and destination
+       -> per-row check -> result. The address flow runs here; the other
+       sources open the flow that already exists for them. -->
+  <div class="modal-overlay sheet-overlay" id="addDevicesWizard">
+    <div class="modal sheet adw" aria-labelledby="adwTitle">
       <div class="modal-header">
-        <h3 data-i18n="addDevTitle"><i class="fa-solid fa-plus" style="color: var(--primary);"></i> Aggiungi apparati</h3>
-        <i class="fa-solid fa-xmark modal-close" id="btnCloseAddDevices"></i>
+        <h3 id="adwTitle" data-i18n="addDevTitle"><i class="fa-solid fa-plus" style="color: var(--primary);"></i> Aggiungi apparati</h3>
+        <button type="button" class="modal-close" data-close-modal="addDevicesWizard" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
       </div>
-      <p class="set-desc" data-i18n="addDevIntro">Da dove arrivano gli apparati?</p>
-      <div class="add-sources">
-        <button type="button" class="add-source" data-add-source="one"><i class="fa-solid fa-circle-plus" aria-hidden="true"></i><b data-i18n="addSrcOne">Un apparato</b><span data-i18n="addSrcOneDesc">IP, sede e credenziali, con verifica della connessione prima di salvare</span></button>
-        <button type="button" class="add-source" data-add-source="paste"><i class="fa-solid fa-paste" aria-hidden="true"></i><b data-i18n="addSrcPaste">Più indirizzi o un file</b><span data-i18n="addSrcPasteDesc">Incolla IP, intervalli o subnet, oppure carica un CSV. Anteprima prima di importare</span></button>
-        <button type="button" class="add-source" data-add-source="scan"><i class="fa-solid fa-magnifying-glass-location" aria-hidden="true"></i><b data-i18n="addSrcScan">Scansione rete</b><span data-i18n="addSrcScanDesc">Cerca gli host vivi in una subnet e aggiungi quelli verificati</span></button>
-        <button type="button" class="add-source" data-add-source="nbr"><i class="fa-solid fa-shapes" aria-hidden="true"></i><b data-i18n="addSrcNbr">Vicini scoperti</b><span data-i18n="addSrcNbrDesc">Apparati visti via CDP/LLDP: selezionali e portali in inventario</span></button>
-        <button type="button" class="add-source" data-add-source="manual"><i class="fa-solid fa-file-arrow-up" aria-hidden="true"></i><b data-i18n="addSrcManual">Senza accesso</b><span data-i18n="addSrcManualDesc">Un apparato che SentinelNet non raggiunge: carichi tu la sua config</span></button>
-        <button type="button" class="add-source" data-add-source="ztp"><i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i><b data-i18n="addSrcZtp">Da zero</b><span data-i18n="addSrcZtpDesc">Prima configurazione di uno switch Cisco o di un FortiGate nuovo</span></button>
+      <ol class="wizard-rail" data-wizard-rail aria-label="Passi" data-i18n-aria-label="swRailLabel"></ol>
+      <div class="sheet-body">
+        <section data-step="source">
+          <p class="set-desc" data-i18n="addDevIntro">Da dove arrivano gli apparati?</p>
+          <div class="add-sources">
+            <button type="button" class="add-source is-primary" data-adw-source="addr"><span class="add-source-tag" data-i18n="adwTagHere">Qui</span><i class="fa-solid fa-list-ol" aria-hidden="true"></i><b data-i18n="adwSrcAddr">Indirizzi</b><span data-i18n="adwSrcAddrDesc">Uno o più IP, intervalli o subnet. Verifica riga per riga prima di aggiungere</span></button>
+            <button type="button" class="add-source" data-add-source="csv"><i class="fa-solid fa-file-csv" aria-hidden="true"></i><b data-i18n="adwSrcCsv">File CSV</b><span data-i18n="adwSrcCsvDesc">Con credenziali e sede per riga, anteprima prima di importare</span></button>
+            <button type="button" class="add-source" data-add-source="scan"><i class="fa-solid fa-magnifying-glass-location" aria-hidden="true"></i><b data-i18n="addSrcScan">Scansione rete</b><span data-i18n="addSrcScanDesc">Cerca gli host vivi in una subnet e aggiungi quelli verificati</span></button>
+            <button type="button" class="add-source" data-add-source="nbr"><i class="fa-solid fa-shapes" aria-hidden="true"></i><b data-i18n="addSrcNbr">Vicini scoperti</b><span data-i18n="addSrcNbrDesc">Apparati visti via CDP/LLDP: selezionali e portali in inventario</span></button>
+            <button type="button" class="add-source" data-add-source="manual"><i class="fa-solid fa-file-arrow-up" aria-hidden="true"></i><b data-i18n="addSrcManual">Senza accesso</b><span data-i18n="addSrcManualDesc">Un apparato che SentinelNet non raggiunge: carichi tu la sua config</span></button>
+            <button type="button" class="add-source" data-add-source="ztp"><i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i><b data-i18n="addSrcZtp">Da zero</b><span data-i18n="addSrcZtpDesc">Prima configurazione di uno switch Cisco o di un FortiGate nuovo</span></button>
+          </div>
+        </section>
+        <section data-step="addresses" hidden>
+          <div class="form-group">
+            <label for="adwAddresses" data-i18n="adwAddrLabel">Indirizzi: uno per riga o separati da virgola, intervalli (192.0.2.10-20) o subnet fino a /24</label>
+            <textarea id="adwAddresses" class="import-paste" rows="5" spellcheck="false" data-i18n-placeholder="importPastePh"></textarea>
+            <div id="adwChips" class="import-chips"></div>
+          </div>
+          <div class="adw-dest">
+            <div class="form-group"><label for="adwTenant" data-i18n="adwLblTenant">Tenant</label><select id="adwTenant"></select></div>
+            <div class="form-group"><label for="adwLocation" data-i18n="adwLblLocation">Sede</label><select id="adwLocation"></select></div>
+            <div class="form-group"><label for="adwProfile" data-i18n="adwLblProfile">Credenziali</label><select id="adwProfile"></select></div>
+            <div class="form-group"><label for="adwVendor" data-i18n="adwLblVendor">Vendor</label><select id="adwVendor"></select></div>
+          </div>
+          <p id="adwProbeNote" class="form-hint" hidden></p>
+          <button type="button" class="btn btn-secondary btn-small adw-advanced" data-add-source="one" data-i18n="adwAdvanced"><i class="fa-solid fa-sliders"></i> Protocolli, SNMP o credenziali dedicate: modulo completo</button>
+        </section>
+        <section data-step="verify" hidden>
+          <p id="adwVerifyStatus" class="set-desc" aria-live="polite"></p>
+          <div class="table-container">
+            <table class="adw-table" data-no-resize data-no-reorder data-no-colpicker>
+              <thead><tr>
+                <th><input type="checkbox" id="adwAll" aria-label="Seleziona tutti" data-i18n-aria-label="adwAriaAll"></th>
+                <th data-i18n="adwThIp">IP</th><th data-i18n="adwThHost">Hostname</th><th data-i18n="adwThVendor">Vendor</th><th data-i18n="adwThState">Stato</th><th></th>
+              </tr></thead>
+              <tbody id="adwRows"></tbody>
+            </table>
+          </div>
+        </section>
+        <section data-step="done" hidden>
+          <div id="adwDone" aria-live="polite"></div>
+        </section>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal="addDevicesWizard" data-i18n="uiCancel">Annulla</button>
+        <button type="button" class="btn btn-secondary" data-wizard-back data-i18n="wizBack">Indietro</button>
+        <!-- No data-i18n: ui-wizard.js / add-devices.js set the label per step. -->
+        <button type="button" class="btn btn-primary" data-wizard-next></button>
       </div>
     </div>
   </div>
@@ -6824,6 +6866,7 @@
   <script src="/static/js/ui-modal.js"></script>
   <script src="/static/js/ui-wizard.js"></script>
   <script src="/static/js/core.js"></script>
+  <script src="/static/js/add-devices.js"></script>
   <script src="/static/js/tutorials.js"></script>
   <script src="/static/js/profile.js"></script>
   <script src="/static/js/threat-intel.js"></script>

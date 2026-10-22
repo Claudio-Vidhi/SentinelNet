@@ -20,11 +20,15 @@ happened — `git log --grep="chore(release)"` is the record for those.
   indirizzi passano dalla stessa anteprima del CSV (nuovi, aggiornati,
   errori); quelli non riconosciuti vengono elencati. Un CSV incollato con la
   sua intestazione viene letto così com'è.
-- **Aggiungi apparati**: un pannello unico, dall'inventario e dalla palette
-  comandi, con tutte le strade: un apparato, più indirizzi o un file,
-  scansione rete, vicini scoperti, senza accesso (config caricata a mano) e
-  da zero. Ogni scheda apre il flusso che esisteva già; quelle che il ruolo
-  non può usare non compaiono.
+- **Aggiungi apparati**: un pannello a passi, dall'inventario e dalla palette
+  comandi. *Indirizzi* si fa tutto lì: incolli uno o più IP, intervalli o
+  subnet, scegli una volta tenant, sede, credenziali e vendor (anche
+  "rileva"), ogni riga viene verificata con il suo esito, correggi il vendor
+  o escludi le righe, e alla fine vedi aggiunti, aggiornati e scartati, con
+  il CSV degli scartati. Le altre schede (file CSV, scansione rete, vicini
+  scoperti, senza accesso, da zero) aprono il flusso che esisteva già;
+  quelle che il ruolo non può usare non compaiono. Per una sede dietro una
+  sonda la verifica non parte e il vendor si sceglie in tabella.
 - **Vendor rilevato automaticamente**: nel provisioning e nella scansione
   subnet il vendor può essere "Rileva automaticamente (SSH)". La verifica
   usa il rilevamento SSH di netmiko, passando dalla stessa connessione delle

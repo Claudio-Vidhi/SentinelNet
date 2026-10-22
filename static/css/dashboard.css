@@ -5440,3 +5440,39 @@ details[open] > summary .mac-caret { transform: rotate(180deg); }
 .add-source b { font-size: 13.5px; }
 .add-source span { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
 .add-source[hidden] { display: none; }
+/* "Aggiungi apparati" wizard (add-devices.js). */
+.modal.sheet.adw { width: min(860px, 100vw); }
+.adw-table td { padding: 7px 10px; vertical-align: middle; }
+.adw-table td:nth-child(2) { white-space: nowrap; }
+.adw-table tr.adw-msg td { padding-top: 0; font-family: var(--font-prose, inherit); font-size: 12px; color: var(--lamp-fault-ink); border-bottom: var(--seam) solid var(--border); }
+.adw-table tr.has-msg td { border-bottom: 0; }
+.adw-table td:nth-child(6) .btn { width: auto; margin: 0; white-space: nowrap; }
+.add-source { position: relative; }
+.add-source.is-primary { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+.add-source-tag { position: absolute; top: 8px; right: 8px; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; padding: 2px 6px; color: var(--primary); border: 1px solid var(--primary); }
+.adw-dest { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0 12px; }
+.adw-advanced { width: auto; margin-top: 4px; }
+.chip.chip-bad { color: var(--lamp-fault-ink); border-color: var(--lamp-fault); }
+.adw-table { table-layout: fixed; width: 100%; }
+.adw-table th:nth-child(1) { width: 36px; } .adw-table th:nth-child(2) { width: 120px; }
+.adw-table th:nth-child(4) { width: 150px; } .adw-table th:nth-child(5) { width: 120px; } .adw-table th:nth-child(6) { width: 92px; }
+.adw-table td { overflow: hidden; text-overflow: ellipsis; }
+.adw-table select { width: 100%; }
+.adw-table tr.adw-msg td { white-space: normal; overflow: visible; }
+.adw-state { font-family: var(--font-prose, inherit); font-size: 12px; line-height: 1.4; }
+.adw-state.is-ok { color: var(--lamp-up-ink); }
+.adw-state.is-bad { color: var(--lamp-fault-ink); }
+.adw-state.is-warn { color: var(--lamp-warn-ink); }
+.adw-state.is-run { color: var(--text-muted); }
+.adw-kpis { display: flex; gap: 28px; margin: 4px 0 14px; }
+.adw-kpis div { display: flex; flex-direction: column; }
+.adw-kpis strong { font-size: 28px; font-family: var(--font-display, inherit); font-variant-numeric: tabular-nums; }
+.adw-kpis span { font-size: 12px; color: var(--text-muted); }
+.adw-result { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+.adw-result li { display: flex; gap: 8px; align-items: baseline; padding: 6px 8px; border-left: 3px solid var(--border); background: var(--surface-2); }
+.adw-result li span { margin-left: auto; color: var(--text-muted); }
+.adw-result li.is-ok { border-left-color: var(--lamp-up); }
+.adw-result li.is-bad { border-left-color: var(--lamp-fault); }
+.adw-result li.is-warn { border-left-color: var(--lamp-warn); }
+.adw-done-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.adw-done-actions .btn { width: auto; }
