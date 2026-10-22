@@ -58,21 +58,33 @@ class TestProbeDeviceAuto(unittest.TestCase):
 
 
 class TestAddDevicesPanel(unittest.TestCase):
-    def test_every_card_has_a_source_whose_targets_exist(self):
+    """Every source card is gated, every in-panel source has its input block,
+    and the ids the script binds exist in the template."""
+
+    def setUp(self):
         with open(os.path.join(_REPO_ROOT, "templates", "dashboard.html"), encoding="utf-8") as f:
-            html = f.read()
+            self.html = f.read()
         with open(os.path.join(_REPO_ROOT, "static", "js", "add-devices.js"), encoding="utf-8") as f:
-            core = f.read()
-        block = core[core.index("const ADD_SOURCES = {"):core.index("};", core.index("const ADD_SOURCES = {"))]
-        self.assertIn('data-adw-source="addr"', html)
-        self.assertIn('<script src="/static/js/add-devices.js"></script>', html)
-        sources = dict(re.findall(r"(\w+):\s*\{([^}]*)\}", block))
-        cards = re.findall(r'data-add-source="(\w+)"', html)
-        self.assertEqual(sorted(cards), sorted(sources))
-        for name, body in sources.items():
-            for key, value in re.findall(r"(tab|click|focus|gate): '([\w-]+)'", body):
-                self.assertIn(f'id="{value}"', html, f"{name}.{key} -> #{value} missing")
-        self.assertIn('data-action="open-add-devices"', html)
+            self.js = f.read()
+
+    def test_cards_match_the_gates(self):
+        block = self.js[self.js.index("const SOURCE_GATES = {"):self.js.index("};", self.js.index("const SOURCE_GATES = {"))]
+        gates = dict(re.findall(r"(\w+): \[([^\]]*)\]", block))
+        cards = re.findall(r'data-adw-source="(\w+)"', self.html)
+        self.assertEqual(sorted(cards), sorted(gates))
+        for src, tabs in gates.items():
+            for tab in re.findall(r"'([\w-]+)'", tabs):
+                self.assertIn(f'id="{tab}"', self.html, f"{src} gate {tab} missing")
+
+    def test_in_panel_sources_have_an_input_block(self):
+        for src in ("addr", "csv", "scan", "nbr"):
+            self.assertIn(f'data-adw-for="{src}"', self.html)
+
+    def test_bound_ids_exist(self):
+        for el_id in set(re.findall(r"\$\('(\w+)'\)", self.js)):
+            self.assertIn(f'id="{el_id}"', self.html, f"#{el_id} missing")
+        self.assertIn('<script src="/static/js/add-devices.js"></script>', self.html)
+        self.assertIn('data-action="open-add-devices"', self.html)
 
 
 if __name__ == "__main__":

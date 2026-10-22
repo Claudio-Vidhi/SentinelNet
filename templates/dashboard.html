@@ -5277,29 +5277,42 @@
       <div class="sheet-body">
         <section data-step="source">
           <p class="set-desc" data-i18n="addDevIntro">Da dove arrivano gli apparati?</p>
-          <div class="add-sources">
-            <button type="button" class="add-source is-primary" data-adw-source="addr"><span class="add-source-tag" data-i18n="adwTagHere">Qui</span><i class="fa-solid fa-list-ol" aria-hidden="true"></i><b data-i18n="adwSrcAddr">Indirizzi</b><span data-i18n="adwSrcAddrDesc">Uno o più IP, intervalli o subnet. Verifica riga per riga prima di aggiungere</span></button>
-            <button type="button" class="add-source" data-add-source="csv"><i class="fa-solid fa-file-csv" aria-hidden="true"></i><b data-i18n="adwSrcCsv">File CSV</b><span data-i18n="adwSrcCsvDesc">Con credenziali e sede per riga, anteprima prima di importare</span></button>
-            <button type="button" class="add-source" data-add-source="scan"><i class="fa-solid fa-magnifying-glass-location" aria-hidden="true"></i><b data-i18n="addSrcScan">Scansione rete</b><span data-i18n="addSrcScanDesc">Cerca gli host vivi in una subnet e aggiungi quelli verificati</span></button>
-            <button type="button" class="add-source" data-add-source="nbr"><i class="fa-solid fa-shapes" aria-hidden="true"></i><b data-i18n="addSrcNbr">Vicini scoperti</b><span data-i18n="addSrcNbrDesc">Apparati visti via CDP/LLDP: selezionali e portali in inventario</span></button>
-            <button type="button" class="add-source" data-add-source="manual"><i class="fa-solid fa-file-arrow-up" aria-hidden="true"></i><b data-i18n="addSrcManual">Senza accesso</b><span data-i18n="addSrcManualDesc">Un apparato che SentinelNet non raggiunge: carichi tu la sua config</span></button>
-            <button type="button" class="add-source" data-add-source="ztp"><i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i><b data-i18n="addSrcZtp">Da zero</b><span data-i18n="addSrcZtpDesc">Prima configurazione di uno switch Cisco o di un FortiGate nuovo</span></button>
+          <div class="add-sources" role="radiogroup" aria-labelledby="adwTitle">
+            <button type="button" class="add-source" role="radio" data-adw-source="addr"><i class="fa-solid fa-list-ol" aria-hidden="true"></i><b data-i18n="adwSrcAddr">Indirizzi</b><span data-i18n="adwSrcAddrDesc">Uno o più IP, intervalli o subnet. Verifica riga per riga prima di aggiungere</span></button>
+            <button type="button" class="add-source" role="radio" data-adw-source="csv"><i class="fa-solid fa-file-csv" aria-hidden="true"></i><b data-i18n="adwSrcCsv">File CSV</b><span data-i18n="adwSrcCsvDesc">Con credenziali e sede per riga, anteprima prima di importare</span></button>
+            <button type="button" class="add-source" role="radio" data-adw-source="scan"><i class="fa-solid fa-magnifying-glass-location" aria-hidden="true"></i><b data-i18n="addSrcScan">Scansione rete</b><span data-i18n="addSrcScanDesc">Cerca gli host vivi in una subnet e aggiungi quelli verificati</span></button>
+            <button type="button" class="add-source" role="radio" data-adw-source="nbr"><i class="fa-solid fa-shapes" aria-hidden="true"></i><b data-i18n="addSrcNbr">Vicini scoperti</b><span data-i18n="addSrcNbrDesc">Apparati visti via CDP/LLDP: selezionali e portali in inventario</span></button>
+            <button type="button" class="add-source" role="radio" data-adw-source="manual"><span class="add-source-tag" data-i18n="adwTagOther">Procedura a parte</span><i class="fa-solid fa-file-arrow-up" aria-hidden="true"></i><b data-i18n="addSrcManual">Senza accesso</b><span data-i18n="addSrcManualDesc">Un apparato che SentinelNet non raggiunge: carichi tu la sua config</span></button>
+            <button type="button" class="add-source" role="radio" data-adw-source="ztp"><span class="add-source-tag" data-i18n="adwTagOther">Procedura a parte</span><i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i><b data-i18n="addSrcZtp">Da zero</b><span data-i18n="addSrcZtpDesc">Prima configurazione di uno switch Cisco o di un FortiGate nuovo</span></button>
           </div>
         </section>
         <section data-step="addresses" hidden>
-          <div class="form-group">
+          <div class="form-group" data-adw-for="addr">
             <label for="adwAddresses" data-i18n="adwAddrLabel">Indirizzi: uno per riga o separati da virgola, intervalli (192.0.2.10-20) o subnet fino a /24</label>
             <textarea id="adwAddresses" class="import-paste" rows="5" spellcheck="false" data-i18n-placeholder="importPastePh"></textarea>
             <div id="adwChips" class="import-chips"></div>
           </div>
+          <div class="form-group" data-adw-for="csv">
+            <label for="adwCsvFile" data-i18n="adwCsvLabel">File CSV (obbligatoria solo la colonna IP; Group e Location del file prevalgono sulla destinazione)</label>
+            <input type="file" id="adwCsvFile" accept=".csv,.txt">
+            <p id="adwCsvNote" class="form-hint" hidden></p>
+          </div>
+          <div class="adw-dest" data-adw-for="scan">
+            <div class="form-group"><label for="adwScanNet" data-i18n="lblNetworkAddr">Indirizzo di Rete</label><input id="adwScanNet" type="text" spellcheck="false" placeholder="192.0.2.0/24"></div>
+            <div class="form-group"><label for="adwScanPorts" data-i18n="lblScanPorts">Porte</label><input id="adwScanPorts" type="text" value="22"></div>
+          </div>
+          <div class="form-group" data-adw-for="nbr">
+            <span class="adw-label" data-i18n="adwNbrLabel">Vicini visti via CDP/LLDP e non ancora in inventario, nel tenant scelto</span>
+            <div id="adwNbrList" class="adw-nbr-list"></div>
+          </div>
           <div class="adw-dest">
             <div class="form-group"><label for="adwTenant" data-i18n="adwLblTenant">Tenant</label><select id="adwTenant"></select></div>
             <div class="form-group"><label for="adwLocation" data-i18n="adwLblLocation">Sede</label><select id="adwLocation"></select></div>
-            <div class="form-group"><label for="adwProfile" data-i18n="adwLblProfile">Credenziali</label><select id="adwProfile"></select></div>
-            <div class="form-group"><label for="adwVendor" data-i18n="adwLblVendor">Vendor</label><select id="adwVendor"></select></div>
+            <div class="form-group" data-adw-hide="csv"><label for="adwProfile" data-i18n="adwLblProfile">Credenziali</label><select id="adwProfile"></select></div>
+            <div class="form-group" data-adw-hide="csv"><label for="adwVendor" data-i18n="adwLblVendor">Vendor</label><select id="adwVendor"></select></div>
           </div>
           <p id="adwProbeNote" class="form-hint" hidden></p>
-          <button type="button" class="btn btn-secondary btn-small adw-advanced" data-add-source="one" data-i18n="adwAdvanced"><i class="fa-solid fa-sliders"></i> Protocolli, SNMP o credenziali dedicate: modulo completo</button>
+          <button type="button" class="btn btn-secondary btn-small adw-advanced" data-adw-for="addr" data-add-source="one" data-i18n="adwAdvanced"><i class="fa-solid fa-sliders"></i> Protocolli, SNMP o credenziali dedicate: modulo completo</button>
         </section>
         <section data-step="verify" hidden>
           <p id="adwVerifyStatus" class="set-desc" aria-live="polite"></p>

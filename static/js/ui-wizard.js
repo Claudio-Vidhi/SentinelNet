@@ -7,7 +7,7 @@
 //
 // Markup contract inside the panel: [data-wizard-rail] (an <ol>),
 // [data-wizard-back], [data-wizard-next], and one [data-step="<id>"] per step.
-// A step: { id, label (i18n key), validate?, onEnter?, skip?, finishLabel? }.
+// A step: { id, label (i18n key), validate?, onEnter?, skip?, finishLabel?, noJump? }.
 function createWizard(panelId, { steps, onFinish }) {
     const panel = document.getElementById(panelId);
     const rail = panel.querySelector('[data-wizard-rail]');
@@ -34,7 +34,11 @@ function createWizard(panelId, { steps, onFinish }) {
             li.className = 'wizard-step' + (s === cur ? ' is-current' : i < pos ? ' is-done' : '');
             if (s === cur) li.setAttribute('aria-current', 'step');
             const text = `${i + 1}. ${tr(s.label)}`;
-            if (editable && s !== cur) {
+            // A later step is a jump target only when every step before it
+            // accepts its input; `noJump` keeps a step that acts (an import)
+            // reachable from its own Next button only.
+            const reachable = i < pos || (!s.noJump && list.slice(0, i).every((p) => !p.validate || p.validate()));
+            if (editable && s !== cur && reachable) {
                 const b = document.createElement('button');
                 b.type = 'button';
                 b.textContent = text;
