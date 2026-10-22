@@ -681,6 +681,13 @@
             if (!res) return;
             const data = await res.json().catch(() => ({}));
             if (!res.ok) setDevFormStatus('error', tr('devVerifyFail', { err: data.detail || res.status }));
+            else if (data.ok && payload.vendor === 'auto' && data.vendor) {
+                // The detected vendor replaces "auto", so Save stores a real one.
+                const sel = document.getElementById('devVendor');
+                sel.value = data.vendor;
+                sel.dispatchEvent(new Event('change'));
+                setDevFormStatus('ok', tr('devVerifyOkVendor', { host: data.hostname || payload.ip, vendor: data.vendor.toUpperCase() }));
+            }
             else if (data.ok) setDevFormStatus('ok', tr('devVerifyOk', { host: data.hostname || payload.ip }));
             else setDevFormStatus('error', tr('devVerifyFail', { err: data.error || '' }));
         } finally {
@@ -692,6 +699,7 @@
         const payload = deviceFormPayload();
         if (!payload.ip) { setDevFormStatus('error', tr('alertEnterIp')); return; }
         if (!payload.location) { setDevFormStatus('error', tr('alertSelectLocation')); return; }
+        if (payload.vendor === 'auto') { setDevFormStatus('error', tr('devVendorAutoSave')); return; }
 
         // In modifica i campi credenziali vuoti significano "invariate":
         // add_or_update_device preserva quelle già salvate. Si compilano solo
@@ -995,7 +1003,7 @@
         globalVendors = await res.json();
         renderVendorTable();
         const devVendorSel = document.getElementById('devVendor');
-        if (devVendorSel) devVendorSel.innerHTML = buildVendorOptions(devVendorSel.value || 'cisco');
+        if (devVendorSel) devVendorSel.innerHTML = autoVendorOption(devVendorSel.value) + buildVendorOptions(devVendorSel.value || 'cisco');
         const scanVendorSel = document.getElementById('scanVerifyVendorSelect');
         if (scanVendorSel) scanVendorSel.innerHTML = buildScanVendorOptions(scanVendorSel.value);
     }
@@ -1543,7 +1551,7 @@
             let verifyCell = '<span style="color:var(--text-muted)">—</span>';
             if (r.verify && r.verify.ok) {
                 verifyCell = `<span style="color:var(--primary)">✓ ${
-                    escapeHtml(r.verify.hostname || '')}</span>`;
+                    escapeHtml(r.verify.hostname || '')}${r.verify.vendor ? ' · ' + escapeHtml(r.verify.vendor.toUpperCase()) : ''}</span>`;
             } else if (r.verify) {
                 verifyCell = `<span style="color:var(--danger)" title="${
                     escapeHtml(r.verify.error || '')}">✗ ${
@@ -1737,9 +1745,12 @@
             // credential substituted for an unproven one. The explicit choice
             // wins, and an unresolvable one now fails loudly (see
             // core/device_credentials.py CredentialResolveError).
+            // "auto" is the user choosing detection: each host takes the vendor
+            // its check detected, and one with no detection goes in with none.
+            const detected = _scanRows.find(r => r.ip === ip)?.verify?.vendor || '';
             const body = {
                 ip,
-                vendor: vendorSel,
+                vendor: vendorSel === 'auto' ? detected : vendorSel,
                 profile: identityId ? `identity:${identityId}` : 'default',
                 username: '', password: '', enable_secret: '', group, location,
             };

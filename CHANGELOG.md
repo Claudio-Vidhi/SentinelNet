@@ -20,6 +20,18 @@ happened — `git log --grep="chore(release)"` is the record for those.
   indirizzi passano dalla stessa anteprima del CSV (nuovi, aggiornati,
   errori); quelli non riconosciuti vengono elencati. Un CSV incollato con la
   sua intestazione viene letto così com'è.
+- **Aggiungi apparati**: un pannello unico, dall'inventario e dalla palette
+  comandi, con tutte le strade: un apparato, più indirizzi o un file,
+  scansione rete, vicini scoperti, senza accesso (config caricata a mano) e
+  da zero. Ogni scheda apre il flusso che esisteva già; quelle che il ruolo
+  non può usare non compaiono.
+- **Vendor rilevato automaticamente**: nel provisioning e nella scansione
+  subnet il vendor può essere "Rileva automaticamente (SSH)". La verifica
+  usa il rilevamento SSH di netmiko, passando dalla stessa connessione delle
+  altre sessioni (host key, algoritmi legacy, bastion), e il vendor trovato
+  sostituisce la scelta; nella scansione ogni host prende il suo. Un tipo
+  senza driver in SentinelNet viene segnalato e il vendor resta da
+  scegliere. "Rileva" non viene mai salvato come vendor.
 
 ### Changed
 

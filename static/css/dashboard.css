@@ -5432,3 +5432,11 @@ details[open] > summary .mac-caret { transform: rotate(180deg); }
 #importPasteBox, .import-paste { width: 100%; margin-top: 4px; font-family: var(--font-code); font-size: 12px; resize: vertical; }
 .import-paste-label { display: block; margin-top: 12px; font-size: 12px; color: var(--text-muted); }
 #importPasteNote { margin: 6px 0 0; color: var(--lamp-warn-ink); }
+/* "Aggiungi apparati" panel: one card per source. */
+.add-sources { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-top: 12px; }
+.add-source { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; padding: 12px 14px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text); cursor: pointer; font: inherit; }
+.add-source:hover, .add-source:focus-visible { border-color: var(--primary); }
+.add-source i { color: var(--primary); }
+.add-source b { font-size: 13.5px; }
+.add-source span { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+.add-source[hidden] { display: none; }

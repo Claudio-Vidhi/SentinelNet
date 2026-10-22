@@ -10,6 +10,8 @@ import threading
 from typing import Optional, Any, Dict, List, Tuple
 from opentelemetry import trace
 from core.net_ssh import ConnectHandler
+from netmiko.base_connection import BaseConnection
+from netmiko.ssh_autodetect import SSHDetect
 from services.inventory_manager import (
     update_version_inventory, get_all_devices, get_detected_versions,
     update_device_hostname, get_all_vendors, get_category_assignments,
@@ -605,6 +607,55 @@ def probe_device(device):
         # esito muto. Una riga per host con la 22 aperta, non per host vivo.
         logging.warning("Probe di %s fallito: %s", device['IP'], e)
         return {"status": "error", "message": str(e)}
+
+
+# netmiko autodetect type -> SentinelNet vendor. Only the types a driver here
+# speaks: anything else is reported and the user picks the vendor by hand.
+AUTODETECT_VENDORS = {
+    'cisco_ios': 'cisco', 'cisco_xe': 'cisco',
+    'cisco_wlc': 'cisco_wlc', 'cisco_wlc_85': 'cisco_wlc',
+    'hp_procurve': 'hpe', 'juniper_junos': 'juniper', 'fortinet': 'fortinet',
+    'paloalto_panos': 'paloalto', 'linux': 'linux',
+}
+
+
+class _VendorDetect(SSHDetect):
+    """netmiko's SSHDetect, dialled through core.net_ssh so host-key pinning,
+    legacy algorithms and bastion tunnels apply as on every other session.
+    The body is SSHDetect.__init__ with our ConnectHandler in place of netmiko's."""
+    def __init__(self, **params):
+        self.connection = ConnectHandler(device_type='autodetect', global_cmd_verify=False, **params)
+        time.sleep(3)  # as upstream: let the login banner finish
+        self.initial_buffer = BaseConnection._test_channel_read(self.connection)
+        self.potential_matches = {}
+        self._results_cache = {}
+
+
+def probe_device_auto(device):
+    """probe_device for a device whose vendor is not known yet: netmiko's SSH
+    autodetect names it first. Returns probe_device's result plus 'vendor'.
+    Slower than probe_device: autodetect tries a handful of show commands."""
+    refusal = _manual_refusal(device)
+    if refusal:
+        return refusal
+    username, password, secret = get_device_credentials(device)
+    cli_kind, cli_port = get_cli_transport(device)
+    if cli_kind != 'ssh':
+        return {"status": "error", "message": "Il vendor si rileva solo via SSH: sceglilo a mano."}
+    try:
+        guess = _VendorDetect(host=device['IP'], port=cli_port, username=username,
+                              password=password, secret=secret, timeout=15,
+                              auth_timeout=10, banner_timeout=10).autodetect()
+    except Exception as e:
+        logging.warning("Rilevamento vendor di %s fallito: %s", device['IP'], e)
+        return {"status": "error", "message": str(e)}
+    vendor = AUTODETECT_VENDORS.get(guess or '')
+    if not vendor:
+        detail = f" ({guess})" if guess else ""
+        return {"status": "error", "message": f"Vendor non riconosciuto{detail}: sceglilo a mano."}
+    res = probe_device({**device, 'Vendor': vendor})
+    res['vendor'] = vendor
+    return res
 
 
 def send_custom_command(device, command: str, bypass_blacklist: bool = False,

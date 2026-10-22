@@ -341,6 +341,9 @@ def preview_devices_export(
 @router.post("/api/add-device", dependencies=[Depends(require_tab("tab-devices", "tab-provisioning"))])
 def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
     assert_group_allowed(current_user, device.group)
+    # "auto" is a request to /api/verify-device, never a stored vendor.
+    if device.vendor == 'auto':
+        raise HTTPException(status_code=400, detail="Vendor da rilevare: usa Verifica connessione o sceglilo.")
     # Impedisce di modificare un dispositivo esistente in una sede non consentita
     existing = next((d for d in inventory_manager.get_all_devices() if d['IP'] == device.ip), None)
     if existing:
@@ -403,9 +406,12 @@ def verify_device(device: DeviceSchema, current_user = Depends(require_operator)
     # An authentication attempt on the customer network: it gets an audit line.
     log_audit(f"Verifica connessione verso '{device.ip}' (vendor: '{device.vendor}', "
               f"profilo: '{device.profile}') dall'utente '{current_user.get('sub')}'.")
-    res = core_engine.probe_device(target)
+    # Vendor "auto": netmiko's autodetect names it, and the answer says which.
+    auto = device.vendor == 'auto'
+    res = core_engine.probe_device_auto(target) if auto else core_engine.probe_device(target)
     ok = res.get('status') == 'success'
     return {"ok": ok, "hostname": res.get('hostname') if ok else None,
+            "vendor": res.get('vendor') if auto else device.vendor,
             "error": None if ok else res.get('message')}
 
 

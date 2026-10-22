@@ -553,7 +553,7 @@ window.populateProbeOptions = populateProbeOptions;
 // un reload completo.
 function populateProvisioningFormSelects() {
     const devVendorSel = document.getElementById('devVendor');
-    if (devVendorSel) devVendorSel.innerHTML = buildVendorOptions(devVendorSel.value || 'cisco');
+    if (devVendorSel) devVendorSel.innerHTML = autoVendorOption(devVendorSel.value) + buildVendorOptions(devVendorSel.value || 'cisco');
     const scanVendorSel = document.getElementById('scanVerifyVendorSelect');
     if (scanVendorSel) scanVendorSel.innerHTML = buildScanVendorOptions(scanVendorSel.value);
     updateDevSecretField();

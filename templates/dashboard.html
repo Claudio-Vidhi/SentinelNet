@@ -636,7 +636,7 @@
         </div>
         <div class="page-head-actions">
           <button class="btn btn-secondary" id="btnExportDevices" data-i18n="btnExportCsv"><i class="fa-solid fa-file-csv"></i> Esporta CSV</button>
-          <button class="btn btn-secondary requires-write" data-switch-tab="tab-provisioning" data-i18n="invAddDevice"><i class="fa-solid fa-plus"></i> Aggiungi apparato</button>
+          <button type="button" class="btn btn-secondary requires-write" data-action="open-add-devices" data-i18n="invAddDevice"><i class="fa-solid fa-plus"></i> Aggiungi apparati</button>
           <button class="btn btn-primary requires-write" id="btnRunTriage" data-i18n="btnRunTriage"><i class="fa-solid fa-bolt-lightning"></i> Avvia Triage Globale</button>
         </div>
       </div>
@@ -5261,6 +5261,26 @@
       </div>
       <p class="cls-ai-note" data-i18n="clsAiModelsDesc">Viene inviato solo l'elenco dei modelli, nessun dispositivo. Unire riscrive anche i dispositivi che usano la grafia scartata.</p>
       <div id="clsModelsBody"></div>
+    </div>
+  </div>
+
+  <!-- One entry for every way a device gets into the inventory: each card opens
+       the flow that already exists for it (core.js, ADD_SOURCES). -->
+  <div class="modal-overlay" id="addDevicesModal">
+    <div class="modal" style="width: 680px; max-width: 96%;">
+      <div class="modal-header">
+        <h3 data-i18n="addDevTitle"><i class="fa-solid fa-plus" style="color: var(--primary);"></i> Aggiungi apparati</h3>
+        <i class="fa-solid fa-xmark modal-close" id="btnCloseAddDevices"></i>
+      </div>
+      <p class="set-desc" data-i18n="addDevIntro">Da dove arrivano gli apparati?</p>
+      <div class="add-sources">
+        <button type="button" class="add-source" data-add-source="one"><i class="fa-solid fa-circle-plus" aria-hidden="true"></i><b data-i18n="addSrcOne">Un apparato</b><span data-i18n="addSrcOneDesc">IP, sede e credenziali, con verifica della connessione prima di salvare</span></button>
+        <button type="button" class="add-source" data-add-source="paste"><i class="fa-solid fa-paste" aria-hidden="true"></i><b data-i18n="addSrcPaste">Più indirizzi o un file</b><span data-i18n="addSrcPasteDesc">Incolla IP, intervalli o subnet, oppure carica un CSV. Anteprima prima di importare</span></button>
+        <button type="button" class="add-source" data-add-source="scan"><i class="fa-solid fa-magnifying-glass-location" aria-hidden="true"></i><b data-i18n="addSrcScan">Scansione rete</b><span data-i18n="addSrcScanDesc">Cerca gli host vivi in una subnet e aggiungi quelli verificati</span></button>
+        <button type="button" class="add-source" data-add-source="nbr"><i class="fa-solid fa-shapes" aria-hidden="true"></i><b data-i18n="addSrcNbr">Vicini scoperti</b><span data-i18n="addSrcNbrDesc">Apparati visti via CDP/LLDP: selezionali e portali in inventario</span></button>
+        <button type="button" class="add-source" data-add-source="manual"><i class="fa-solid fa-file-arrow-up" aria-hidden="true"></i><b data-i18n="addSrcManual">Senza accesso</b><span data-i18n="addSrcManualDesc">Un apparato che SentinelNet non raggiunge: carichi tu la sua config</span></button>
+        <button type="button" class="add-source" data-add-source="ztp"><i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i><b data-i18n="addSrcZtp">Da zero</b><span data-i18n="addSrcZtpDesc">Prima configurazione di uno switch Cisco o di un FortiGate nuovo</span></button>
+      </div>
     </div>
   </div>
 

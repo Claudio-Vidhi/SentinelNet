@@ -46,21 +46,37 @@ class TestVerifyDevice(unittest.TestCase):
         return r, probe
 
     def test_success_returns_hostname_and_saves_nothing(self):
+        # Compared before/after: other modules in the same worker share the store.
+        before = inventory_manager.get_all_devices()
         r, probe = self._verify({"status": "success", "hostname": "switch-01"})
+        self.assertEqual(inventory_manager.get_all_devices(), before)
         self.assertEqual(r.status_code, 200, r.text)
-        self.assertEqual(r.json(), {"ok": True, "hostname": "switch-01", "error": None})
+        self.assertEqual(r.json(), {"ok": True, "hostname": "switch-01", "vendor": "cisco", "error": None})
         target = probe.call_args.args[0]
         self.assertEqual(crypto_vault.decrypt_password(target["Password"]), "p")
-        self.assertFalse(any(d["IP"] == "192.0.2.10" for d in inventory_manager.get_all_devices()))
 
     def test_failure_reports_the_reason(self):
         r, _ = self._verify({"status": "error", "message": "Authentication failed"})
-        self.assertEqual(r.json(), {"ok": False, "hostname": None, "error": "Authentication failed"})
+        self.assertEqual(r.json(), {"ok": False, "hostname": None, "vendor": "cisco", "error": "Authentication failed"})
 
     def test_device_behind_a_remote_probe_is_refused(self):
         r, probe = self._verify({"status": "success"}, probe="probe-roma")
         self.assertEqual(r.status_code, 400)
         probe.assert_not_called()
+
+    def test_auto_vendor_returns_the_detected_one(self):
+        with mock.patch.object(core_engine, "probe_device_auto",
+                               return_value={"status": "success", "hostname": "fw-01", "vendor": "fortinet"}) as auto:
+            r = self.client.post("/api/verify-device", json={
+                "ip": "192.0.2.12", "vendor": "auto", "profile": "custom",
+                "username": "u", "password": "p", "group": "Default"})
+        self.assertEqual(r.json(), {"ok": True, "hostname": "fw-01", "vendor": "fortinet", "error": None})
+        auto.assert_called_once()
+
+    def test_auto_is_never_saved(self):
+        r = self.client.post("/api/add-device", json={
+            "ip": "192.0.2.13", "vendor": "auto", "profile": "default", "group": "Default"})
+        self.assertEqual(r.status_code, 400)
 
     def test_existing_device_with_empty_password_uses_the_stored_one(self):
         from tests.conftest import make_location

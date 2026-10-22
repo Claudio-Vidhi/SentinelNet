@@ -2082,7 +2082,13 @@ function buildVendorOptions(selected) {
 function buildScanVendorOptions(selected) {
     const L = (typeof i18n !== "undefined" && i18n[currentLang]) || {};
     return `<option value="">${escapeHtml(L.optScanNoVendor || "— non impostato —")}</option>`
-         + buildVendorOptions(selected);
+         + autoVendorOption(selected) + buildVendorOptions(selected);
+}
+
+// "Detect automatically": only the verify endpoints accept it (netmiko SSH
+// autodetect); /api/add-device refuses it, so it is never stored.
+function autoVendorOption(selected) {
+    return `<option value="auto" ${selected === 'auto' ? 'selected' : ''}>${escapeHtml(tr('optVendorAuto'))}</option>`;
 }
 
 function renderVendorTable() {
@@ -2589,6 +2595,39 @@ function canOpenTab(tabId) {
     return true;
 }
 
+// "Aggiungi apparati": one panel for every way a device gets into the
+// inventory. Each card opens the flow that already exists; `gate` is the tab
+// whose visibility decides whether the card is offered (scan and manual
+// config are write actions living on tabs a viewer can open).
+const ADD_SOURCES = {
+    one:    { tab: 'tab-provisioning', focus: 'devIp' },
+    paste:  { tab: 'tab-import', focus: 'importPasteBox' },
+    scan:   { tab: 'tab-devices', click: 'btnSubnetScan', gate: 'tab-import' },
+    nbr:    { tab: 'tab-categories' },
+    manual: { tab: 'tab-import', click: 'btnOpenManualConfig' },
+    ztp:    { tab: 'tab-provisioner' },
+};
+
+function openAddDevices() {
+    document.querySelectorAll('[data-add-source]').forEach(b => {
+        const s = ADD_SOURCES[b.getAttribute('data-add-source')];
+        b.hidden = !canOpenTab(s.gate || s.tab);
+    });
+    openModal('addDevicesModal');
+}
+
+document.getElementById('btnCloseAddDevices')?.addEventListener('click', () => closeModal('addDevicesModal'));
+document.addEventListener('click', async e => {
+    if (e.target.closest('[data-action="open-add-devices"]')) { openAddDevices(); return; }
+    const card = e.target.closest('[data-add-source]');
+    if (!card) return;
+    const s = ADD_SOURCES[card.getAttribute('data-add-source')];
+    closeModal('addDevicesModal');
+    await switchTab(s.tab);
+    if (s.click) document.getElementById(s.click)?.click();
+    if (s.focus) document.getElementById(s.focus)?.focus();
+});
+
 function buildCommandPaletteItems(query = '') {
     const q = query.trim().toLowerCase();
     const items = [];
@@ -2668,7 +2707,7 @@ function buildCommandPaletteItems(query = '') {
         { title: tr('coreRunGlobalTriage'), desc: tr('coreExecuteTriageCheckAcross'), icon: 'fa-bolt-lightning', action: () => { const b = document.getElementById('btnHomeRunTriage'); if (b) b.click(); } },
         { title: tr('coreRunMacScan'), desc: tr('coreCollectMacAddressTable'), icon: 'fa-satellite-dish', action: () => { switchTab('tab-endpoint'); if (typeof locSwitchView === 'function') locSwitchView('raccolta'); const b = document.getElementById('btnMacScan'); if (b) b.click(); } },
         { title: tr('coreRunArpCollection'), desc: tr('coreCollectArpBindingsFrom'), icon: 'fa-network-wired', action: () => { switchTab('tab-endpoint'); if (typeof locSwitchView === 'function') locSwitchView('raccolta'); const b = document.getElementById('btnArpScan'); if (b) b.click(); } },
-        { title: tr('coreAddNewDevice'), desc: tr('coreOpenProvisioningFormFor'), icon: 'fa-circle-plus', action: () => switchTab('tab-provisioning') },
+        { title: tr('coreAddNewDevice'), desc: tr('coreOpenProvisioningFormFor'), icon: 'fa-circle-plus', action: () => openAddDevices() },
         { title: tr('coreToggleTheme'), desc: tr('coreSwitchDarkLightTheme'), icon: 'fa-circle-half-stroke', action: () => toggleTheme() },
         { title: tr('cmdOpenTutorials'), desc: tr('cmdOpenTutorialsDesc'), icon: 'fa-graduation-cap', action: () => { if (typeof openTutorialsHub === 'function') openTutorialsHub(); } },
     ];

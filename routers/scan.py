@@ -161,11 +161,16 @@ def _run_verify_job(job_id: str, req: ScanVerifyRequest, credentials: tuple):
             'Enable Secret': enc_secret,
             'Group':         'Discovered',
         }
-        res = core_engine.probe_device(device)
+        # Vendor "auto": each host gets its own vendor from netmiko's autodetect.
+        auto = req.vendor == 'auto'
+        res = core_engine.probe_device_auto(device) if auto else core_engine.probe_device(device)
         if res.get('status') != 'success':
             return {"ip": ip, "ok": False, "hostname": None,
                     "error": res.get('message')}
-        return {"ip": ip, "ok": True, "hostname": res.get('hostname'), "error": None}
+        row = {"ip": ip, "ok": True, "hostname": res.get('hostname'), "error": None}
+        if auto:
+            row["vendor"] = res.get('vendor')
+        return row
 
     try:
         rows: list[dict] = []
