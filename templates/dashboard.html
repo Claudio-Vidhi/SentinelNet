@@ -268,46 +268,15 @@
           <span class="nav-left" data-i18n="tabHome"><i class="fa-solid fa-gauge-high"></i> Situazione</span>
         </button>
       </div>
-      <div class="nav-group" data-nav-group="investigate">
-        <h3><button type="button" class="nav-group-toggle" aria-expanded="true" aria-controls="navItems-investigate"><span class="nav-group-label" data-i18n="navInvestigate">Indaga</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button></h3>
-        <div class="nav-group-items" id="navItems-investigate">
+      <div class="nav-group" data-nav-group="monitor">
+        <h3><button type="button" class="nav-group-toggle" aria-expanded="true" aria-controls="navItems-monitor"><span class="nav-group-label" data-i18n="navMonitor">Monitora</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button></h3>
+        <div class="nav-group-items" id="navItems-monitor">
         <button id="navIncidents" class="nav-item requires-admin" data-tab="tab-incidents" role="tab" aria-controls="tab-incidents" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabIncidents"><i class="fa-solid fa-timeline"></i> Incidenti</span>
           <span class="preview-badge">preview</span>
         </button>
         <button class="nav-item" data-tabs="tab-flows" data-tab="tab-flows" role="tab" aria-controls="tab-flows" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabTrafficGroup"><i class="fa-solid fa-wave-square"></i> Traffico</span>
-        </button>
-        <button class="nav-item" data-tabs="tab-endpoint" data-tab="tab-endpoint" role="tab" aria-controls="tab-endpoint" aria-selected="false" tabindex="-1">
-          <span class="nav-left" data-i18n="tabEndpointLoc"><i class="fa-solid fa-map-pin"></i> Localizzazione Endpoint</span>
-        </button>
-        <button class="nav-item" data-tab="tab-ai" role="tab" aria-controls="tab-ai" aria-selected="false" tabindex="-1">
-          <span class="nav-left" data-i18n="tabAiAssistant"><i class="fa-solid fa-robot"></i> AI Assistant</span>
-        </button>
-        </div>
-      </div>
-      <div class="nav-group" data-nav-group="inventory">
-        <h3><button type="button" class="nav-group-toggle" aria-expanded="true" aria-controls="navItems-inventory"><span class="nav-group-label" data-i18n="navInventory">Inventario</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button></h3>
-        <div class="nav-group-items" id="navItems-inventory">
-        <button class="nav-item" data-tabs="tab-devices tab-device-history" data-tab="tab-devices" role="tab" aria-controls="tab-devices" aria-selected="false" tabindex="-1">
-          <span class="nav-left" data-i18n="tabInventory"><i class="fa-solid fa-list-check"></i> Network Inventory</span>
-        </button>
-        <button class="nav-item" data-tabs="tab-map tab-map-interactive" data-tab="tab-map" role="tab" aria-controls="tab-map" aria-selected="false" tabindex="-1">
-          <span class="nav-left" data-i18n="tabTopologyGroup"><i class="fa-solid fa-circle-nodes"></i> Topologia</span>
-        </button>
-        <button class="nav-item" data-tab="tab-categories" role="tab" aria-controls="tab-categories" aria-selected="false" tabindex="-1">
-          <span class="nav-left" data-i18n="tabCategories"><i class="fa-solid fa-shapes"></i> Dispositivi &amp; Categorie</span>
-        </button>
-        </div>
-      </div>
-      <div class="nav-group" data-nav-group="tools">
-        <h3><button type="button" class="nav-group-toggle" aria-expanded="true" aria-controls="navItems-tools"><span class="nav-group-label" data-i18n="navDeviceTools">Strumenti Apparati</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button></h3>
-        <div class="nav-group-items" id="navItems-tools">
-        <button id="navFortigate" class="nav-item requires-admin" data-tab="tab-fortigate" role="tab" aria-controls="tab-fortigate" aria-selected="false" tabindex="-1">
-          <span class="nav-left" data-i18n="tabFgtManagement"><i class="fa-solid fa-shield-halved"></i> Fortigate Management</span>
-        </button>
-        <button id="navWlc" class="nav-item" data-tab="tab-wlc" role="tab" aria-controls="tab-wlc" aria-selected="false" tabindex="-1">
-          <span class="nav-left" data-i18n="tabWlc"><i class="fa-solid fa-wifi"></i> Cisco WLC</span>
         </button>
         <button id="navInterfaces" class="nav-item" data-tab="tab-interfaces" role="tab" aria-controls="tab-interfaces" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabInterfaces"><i class="fa-solid fa-network-wired"></i> Interfacce &amp; Stato Atteso</span>
@@ -317,9 +286,29 @@
         </button>
         </div>
       </div>
-      <div class="nav-group" data-nav-group="assess">
-        <h3><button type="button" class="nav-group-toggle" aria-expanded="true" aria-controls="navItems-assess"><span class="nav-group-label" data-i18n="navAssess">Valuta</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button></h3>
-        <div class="nav-group-items" id="navItems-assess">
+      <div class="nav-group" data-nav-group="network">
+        <h3><button type="button" class="nav-group-toggle" aria-expanded="true" aria-controls="navItems-network"><span class="nav-group-label" data-i18n="navNetwork">Rete</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button></h3>
+        <div class="nav-group-items" id="navItems-network">
+        <button class="nav-item" data-tabs="tab-devices tab-device-history" data-tab="tab-devices" role="tab" aria-controls="tab-devices" aria-selected="false" tabindex="-1">
+          <span class="nav-left" data-i18n="tabInventory"><i class="fa-solid fa-list-check"></i> Network Inventory</span>
+        </button>
+        <button class="nav-item" data-tabs="tab-map tab-map-interactive" data-tab="tab-map" role="tab" aria-controls="tab-map" aria-selected="false" tabindex="-1">
+          <span class="nav-left" data-i18n="tabTopologyGroup"><i class="fa-solid fa-circle-nodes"></i> Topologia</span>
+        </button>
+        <button class="nav-item" data-tabs="tab-endpoint" data-tab="tab-endpoint" role="tab" aria-controls="tab-endpoint" aria-selected="false" tabindex="-1">
+          <span class="nav-left" data-i18n="tabEndpointLoc"><i class="fa-solid fa-map-pin"></i> Localizzazione Endpoint</span>
+        </button>
+        <button class="nav-item" data-tab="tab-categories" role="tab" aria-controls="tab-categories" aria-selected="false" tabindex="-1">
+          <span class="nav-left" data-i18n="tabCategories"><i class="fa-solid fa-shapes"></i> Dispositivi &amp; Categorie</span>
+        </button>
+        <button id="navBlueprint" class="nav-item requires-admin" data-tab="tab-blueprint" role="tab" aria-controls="tab-blueprint" aria-selected="false" tabindex="-1">
+          <span class="nav-left"><i class="fa-solid fa-diagram-project"></i> <span data-i18n="tabBlueprint">Blueprint di rete</span></span>
+        </button>
+        </div>
+      </div>
+      <div class="nav-group" data-nav-group="security">
+        <h3><button type="button" class="nav-group-toggle" aria-expanded="true" aria-controls="navItems-security"><span class="nav-group-label" data-i18n="navSecurity">Sicurezza e conformità</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button></h3>
+        <div class="nav-group-items" id="navItems-security">
         <button class="nav-item" data-tab="tab-security" role="tab" aria-controls="tab-security" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabSecurity"><i class="fa-solid fa-shield-virus"></i> Threat Intel (NVD NIST)</span>
         </button>
@@ -329,28 +318,36 @@
         <button id="navNetSecAudit" class="nav-item" data-tab="tab-netsec-audit" role="tab" aria-controls="tab-netsec-audit" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabNetSecAudit"><i class="fa-solid fa-shield-cat"></i> NetSec Audit</span>
         </button>
-        <button id="navPolicyTest" class="nav-item" data-tab="tab-policy-test" role="tab" aria-controls="tab-policy-test" aria-selected="false" tabindex="-1">
-          <span class="nav-left" data-i18n="tabPolicyTest"><i class="fa-solid fa-route"></i> Validazione Policy &amp; Routing</span>
+        <button id="navRoutes" class="nav-item" data-tabs="tab-routes tab-policy-test" data-tab="tab-routes" role="tab" aria-controls="tab-routes" aria-selected="false" tabindex="-1">
+          <span class="nav-left" data-i18n="tabRoutingPolicy"><i class="fa-solid fa-route"></i> Routing e policy</span>
         </button>
-        <button id="navRoutes" class="nav-item" data-tab="tab-routes" role="tab" aria-controls="tab-routes" aria-selected="false" tabindex="-1">
-          <span class="nav-left" data-i18n="tabRoutes"><i class="fa-solid fa-signs-post"></i> Tabelle di Routing</span>
-        </button>
-        <button id="navConfigDrift" class="nav-item requires-write"data-tab="tab-config-drift" role="tab" aria-controls="tab-config-drift" aria-selected="false" tabindex="-1">
+        <button id="navConfigDrift" class="nav-item requires-write" data-tab="tab-config-drift" role="tab" aria-controls="tab-config-drift" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabConfigDrift"><i class="fa-solid fa-code-compare"></i> Config Drift</span>
-        </button>
-        <button id="navNotifications" class="nav-item" data-tab="tab-notifications" role="tab" aria-controls="tab-notifications" aria-selected="false" tabindex="-1">
-          <span class="nav-left"><i class="fa-solid fa-bell"></i> <span data-i18n="tabNotifications">Notifiche</span></span>
         </button>
         </div>
       </div>
-      <div class="nav-group" data-nav-group="change">
-        <h3><button type="button" class="nav-group-toggle" aria-expanded="true" aria-controls="navItems-change"><span class="nav-group-label" data-i18n="navChange">Modifica</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button></h3>
-        <div class="nav-group-items" id="navItems-change">
+      <div class="nav-group" data-nav-group="devices">
+        <h3><button type="button" class="nav-group-toggle" aria-expanded="true" aria-controls="navItems-devices"><span class="nav-group-label" data-i18n="navDevices">Apparati</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button></h3>
+        <div class="nav-group-items" id="navItems-devices">
+        <button id="navFortigate" class="nav-item requires-admin" data-tab="tab-fortigate" role="tab" aria-controls="tab-fortigate" aria-selected="false" tabindex="-1">
+          <span class="nav-left" data-i18n="tabFgtManagement"><i class="fa-solid fa-shield-halved"></i> Fortigate Management</span>
+        </button>
+        <button id="navWlc" class="nav-item" data-tab="tab-wlc" role="tab" aria-controls="tab-wlc" aria-selected="false" tabindex="-1">
+          <span class="nav-left" data-i18n="tabWlc"><i class="fa-solid fa-wifi"></i> Cisco WLC</span>
+        </button>
+        </div>
+      </div>
+      <div class="nav-group" data-nav-group="operations">
+        <h3><button type="button" class="nav-group-toggle" aria-expanded="true" aria-controls="navItems-operations"><span class="nav-group-label" data-i18n="navOperations">Operazioni</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button></h3>
+        <div class="nav-group-items" id="navItems-operations">
         <button class="nav-item requires-write" data-tabs="tab-provisioning tab-provisioner" data-tab="tab-provisioning" role="tab" aria-controls="tab-provisioning" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabProvGroup"><i class="fa-solid fa-circle-plus"></i> Provisioning</span>
         </button>
         <button class="nav-item requires-write" data-tab="tab-import" role="tab" aria-controls="tab-import" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabImport"><i class="fa-solid fa-file-csv"></i> Importazione CSV</span>
+        </button>
+        <button class="nav-item" data-tab="tab-ai" role="tab" aria-controls="tab-ai" aria-selected="false" tabindex="-1">
+          <span class="nav-left" data-i18n="tabAiAssistant"><i class="fa-solid fa-robot"></i> AI Assistant</span>
         </button>
         </div>
       </div>
@@ -363,12 +360,12 @@
         <button class="nav-item requires-admin" data-tab="tab-groups" role="tab" aria-controls="tab-groups" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabGroups"><i class="fa-solid fa-folder-open"></i> Organizzazioni</span>
         </button>
-        <button id="navBlueprint" class="nav-item requires-admin" data-tab="tab-blueprint" role="tab" aria-controls="tab-blueprint" aria-selected="false" tabindex="-1">
-          <span class="nav-left"><i class="fa-solid fa-diagram-project"></i> <span data-i18n="tabBlueprint">Blueprint di rete</span></span>
-        </button>
         <button class="nav-item requires-admin" data-tab="tab-probes" role="tab" aria-controls="tab-probes" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabProbes"><i class="fa-solid fa-building"></i> Sonde</span>
           <span class="preview-badge">preview</span>
+        </button>
+        <button id="navNotifications" class="nav-item" data-tab="tab-notifications" role="tab" aria-controls="tab-notifications" aria-selected="false" tabindex="-1">
+          <span class="nav-left"><i class="fa-solid fa-bell"></i> <span data-i18n="tabNotifications">Notifiche</span></span>
         </button>
         <button class="nav-item requires-admin" data-tab="tab-mcp" role="tab" aria-controls="tab-mcp" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabIntegrations"><i class="fa-solid fa-plug"></i> Integrazioni</span>
@@ -451,7 +448,7 @@
            guardando e porta il comando primario. -->
       <div class="page-head">
         <div class="page-head-text">
-          <h2 data-i18n="homeTitle">Situazione operativa</h2>
+          <h2 data-i18n="homeTitle">Situazione</h2>
           <p data-i18n="homeSubtitle">Verdetti di postura e stato in tempo reale della flotta di rete. Da qui apri l'inventario o avvia un triage globale.</p>
         </div>
         <div class="page-head-actions">
@@ -634,7 +631,7 @@
     <div id="tab-devices" class="tab-content" role="tabpanel" tabindex="0">
       <div class="page-head">
         <div class="page-head-text">
-          <h2 data-i18n="invHeroTitle">Inventario Dispositivi di Rete</h2>
+          <h2 data-i18n="invHeroTitle">Inventario</h2>
           <p data-i18n="invHeroSubtitle">Elenco completo degli apparati monitorati: stato in tempo reale, filtri per tenant e azioni rapide di triage, ping e scansione.</p>
         </div>
         <div class="page-head-actions">
@@ -1123,7 +1120,7 @@
     <div id="tab-map" class="tab-content" role="tabpanel" tabindex="0">
       <div class="page-head">
         <div class="page-head-text">
-          <h2 data-i18n="titlePortchannels">Port-Channel & Interfacce per Switch</h2>
+          <h2 data-i18n="titlePortchannels">Port-Channel &amp; Link</h2>
           <p data-i18n="descPortchannels">Elenco dei Port-Channel configurati su ogni switch con le interfacce membro.</p>
         </div>
       </div>
@@ -1151,7 +1148,7 @@
     <div id="tab-map-interactive" class="tab-content" role="tabpanel" tabindex="0">
       <div class="page-head">
         <div class="page-head-text">
-          <h2 data-i18n="title2DMap">Topologia Dinamica 2D Interactive</h2>
+          <h2 data-i18n="title2DMap">Mappa Topologia 2D</h2>
         </div>
       </div>
       <div class="subtab-bar">
@@ -1373,7 +1370,7 @@
     <div id="tab-categories" class="tab-content" role="tabpanel" tabindex="0">
       <div class="page-head">
         <div class="page-head-text">
-          <h2 data-i18n="titleCategories">Dispositivi Scoperti &amp; Classificazione</h2>
+          <h2 data-i18n="titleCategories">Dispositivi scoperti</h2>
           <p data-i18n="descCategories">Inventariati e scoperti via CDP/LLDP, per categoria. Scegli una coda o una categoria a sinistra, un dispositivo al centro, e correggilo a destra.</p>
         </div>
         <div class="page-head-actions">
@@ -1444,7 +1441,7 @@
     <div id="tab-redundancy" class="tab-content" role="tabpanel" tabindex="0">
       <div class="page-head">
         <div class="page-head-text">
-          <h2 data-i18n="titleRedundancyHeader">Alta Affidabilità (HA) &amp; Gruppi di Ridondanza</h2>
+          <h2 data-i18n="titleRedundancyHeader">Alta affidabilità</h2>
           <p data-i18n="descRedundancy">Monitoraggio in tempo reale della salute dei cluster e protocolli di failover: HSRP, VRRP, FortiGate HA (FGCP), Cisco StackWise e coppie VPC/MLAG per prevenire scenari di split-brain.</p>
         </div>
       </div>
@@ -1478,7 +1475,7 @@
     <div id="tab-security" class="tab-content" role="tabpanel" tabindex="0">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <h2 data-i18n="titleThreatIntel">Vulnerability Matcher (NIST NVD)</h2>
+          <h2 data-i18n="titleThreatIntel">Vulnerabilità</h2>
           <p data-i18n="descThreatIntel">
             Controlla in tempo reale le vulnerabilità del firmware rilevate sugli apparati attivi confrontandole con il National Vulnerability Database (NVD NIST).
           </p>
@@ -1627,7 +1624,7 @@
     <div id="tab-endpoint" class="tab-content" role="tabpanel" tabindex="0">
       <div class="page-head">
         <div class="page-head-text">
-          <h2 data-i18n="locTitle">Localizzazione endpoint</h2>
+          <h2 data-i18n="locTitle">Endpoint</h2>
           <p data-i18n="locDesc">Dove sono attaccati i dispositivi della rete, ricostruito dalle MAC table degli switch e dall'ARP dei gateway.</p>
         </div>
         <div class="page-head-actions" id="locHeadActions">
@@ -1857,7 +1854,7 @@
     <div id="tab-wlc" class="tab-content" role="tabpanel" tabindex="0">
       <div class="page-head">
         <div class="page-head-text">
-          <h2 data-i18n="wlcPageTitle">Cisco WLC Live Observability</h2>
+          <h2 data-i18n="wlcPageTitle">Cisco WLC</h2>
           <p data-i18n="wlcDesc">Monitoraggio in tempo reale di Access Point Cisco, client wireless associati, WLAN/SSID e rilevamento Rogue AP.</p>
         </div>
         <div class="page-head-actions">
@@ -2313,7 +2310,7 @@
     <div id="tab-config" class="tab-content" role="tabpanel" tabindex="0">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <h2 data-i18n="titleConfigAnalyzer">Config Analyzer</h2>
+          <h2 data-i18n="titleConfigAnalyzer">Analisi config</h2>
           <p data-i18n="descConfigAnalyzer">
             Analisi strutturata delle configurazioni: VLAN, routing, ACL e interfacce per apparato, con controlli incrociati di validazione.
           </p>
@@ -2357,7 +2354,7 @@
     <div id="tab-ai" class="tab-content" role="tabpanel" tabindex="0">
       <div class="page-head">
         <div class="page-head-text">
-          <h2 data-i18n="titleAiAssistant">AI Assistant</h2>
+          <h2 data-i18n="titleAiAssistant">Assistente AI</h2>
           <p data-i18n="descAiAssistant">Chat con un assistente AI (Anthropic Claude, OpenAI ChatGPT, Google Gemini o un LLM locale via Ollama). Puoi allegare l'inventario o la configurazione di un dispositivo come contesto.</p>
         </div>
       </div>
@@ -2823,7 +2820,7 @@
     <div id="tab-import" class="tab-content" role="tabpanel" tabindex="0">
       <div class="page-head">
         <div class="page-head-text">
-          <h2 data-i18n="titleImportCsv">Importazione Massiva da CSV</h2>
+          <h2 data-i18n="titleImportCsv">Importa CSV</h2>
           <p data-i18n="descImportCsv">Il file CSV deve contenere tassativamente l'intestazione specificata di seguito.</p>
         </div>
       </div>
@@ -2952,7 +2949,7 @@
     <div id="tab-users" class="tab-content" role="tabpanel" tabindex="0">
       <div class="page-head">
         <div class="page-head-text">
-          <h2 data-i18n="titleUsers">Gestione Utenti e Privilegi</h2>
+          <h2 data-i18n="titleUsers">Utenti</h2>
           <p data-i18n="descUsers">Crea account con privilegi differenziati. <strong>Admin</strong>: controllo totale e gestione utenti. <strong>Operator</strong>: tutte le operazioni di rete (triage, comandi, inventario). <strong>Viewer</strong>: sola lettura.</p>
         </div>
         <div class="page-head-actions">
@@ -3010,7 +3007,7 @@
       <div class="page-head">
         <div class="page-head-text">
           <div class="page-eyebrow" data-i18n="mcpEyebrow"><i class="fa-solid fa-plug"></i> Integrazioni</div>
-          <h2 data-i18n="titleMcp">MCP Server — client LLM esterni</h2>
+          <h2 data-i18n="titleMcp">Integrazioni</h2>
           <p data-i18n="descMcp">SentinelNet è utilizzabile da client LLM esterni (Claude Desktop, LM Studio, Cline…) tramite il protocollo <strong>MCP</strong> (Model Context Protocol): il ponte <code>mcp_server.py</code> gira sulla macchina del client, si autentica con un account SentinelNet e inoltra le richieste all'API REST. Ruoli, tenant e blacklist comandi restano applicati lato server. Consiglio: crea un account dedicato (<em>viewer</em> per sola lettura, <em>operator</em> se servono i comandi CLI).</p>
         </div>
       </div>
@@ -3173,7 +3170,7 @@
     <div id="tab-fortigate" class="tab-content" role="tabpanel" tabindex="0">
       <div class="page-head">
         <div class="page-head-text">
-          <h2 data-i18n="titleFgtTab">Fortigate Management</h2>
+          <h2 data-i18n="titleFgtTab">FortiGate</h2>
           <p data-i18n="descFgtTab">Stato, rete, policy, traffico e WiFi dei FortiGate in tempo reale. Sola lettura: nessuna modifica viene scritta sul firewall, e i token non vengono mai restituiti al browser.</p>
         </div>
         <!-- Target picker in the header: which firewall the views below read. -->
@@ -3554,7 +3551,7 @@
     <div id="tab-notifications" class="tab-content" role="tabpanel" tabindex="0">
       <div class="page-head">
         <div class="page-head-text">
-          <h2 data-i18n="titleNotifications">Notifiche Email</h2>
+          <h2 data-i18n="titleNotifications">Notifiche</h2>
           <p data-i18n="descNotifications">Configura le preferenze personali di notifica, le regole di invio per gli amministratori e consulta lo storico di consegna.</p>
         </div>
       </div>
@@ -4257,7 +4254,7 @@
     <div id="tab-incidents" class="tab-content" role="tabpanel" tabindex="0">
       <div class="hero" style="margin-bottom:18px;">
         <div class="hero-card" style="flex:1;">
-          <h2 data-i18n="incTitle">Timeline e Ragionamento</h2>
+          <h2 data-i18n="incTitle">Incidenti</h2>
           <p data-i18n="incDesc">Gli eventi correlati che condividono un'entità e una finestra temporale diventano un incidente unico, con causa e confidenza calcolate in modo deterministico e la sequenza di ciò che è successo.</p>
         </div>
       </div>
@@ -4320,7 +4317,7 @@
     <div id="tab-interfaces" class="tab-content" role="tabpanel" tabindex="0">
       <div class="page-head">
         <div class="page-head-text">
-          <h2 data-i18n="ifTabTitle">Monitoraggio Interfacce &amp; Stato Atteso</h2>
+          <h2 data-i18n="ifTabTitle">Interfacce</h2>
           <p data-i18n="ifTabSubtitle">Visione consolidata dello stato dei collegamenti, anomalie di flapping e finestre di manutenzione.</p>
         </div>
         <div class="page-head-actions">
@@ -4469,7 +4466,7 @@
       <div id="netsecSubtabScan">
       <div class="page-head">
         <div class="page-head-text">
-          <h2 data-i18n="nsaTitle">Auditing Configurazione Firewall, Router e Switch</h2>
+          <h2 data-i18n="nsaTitle">Audit di sicurezza</h2>
           <p data-i18n="nsaDesc">Valutazione automatizzata delle policy di sicurezza, regole di accesso, cifrari e hardening degli apparati di rete gestiti.</p>
         </div>
       </div>
@@ -4807,9 +4804,14 @@
   <div id="tab-routes" class="tab-content" role="tabpanel" tabindex="0">
     <div class="hero" style="margin-bottom:18px;">
       <div class="hero-card" style="flex:1;">
-        <h2 data-i18n="rtTitle">Tabelle di Routing</h2>
+        <h2 data-i18n="rtTitle">Tabelle di routing</h2>
         <p data-i18n="rtDesc">Le tabelle di routing di piu' apparati a confronto: un prefisso per riga, un apparato per colonna. Scrivi un indirizzo per vedere quale rotta lo prende su ciascuno. Sola lettura.</p>
       </div>
+    </div>
+
+    <div class="subtab-bar">
+        <button class="btn btn-secondary ti-subtab active" data-switch-tab="tab-routes" data-i18n="tabRoutes"></button>
+        <button class="btn btn-secondary ti-subtab" data-switch-tab="tab-policy-test" data-i18n="tabPolicyTest"></button>
     </div>
 
     <div class="panel rt-board" style="margin-bottom:18px;">
@@ -4934,9 +4936,14 @@
   <div id="tab-policy-test" class="tab-content" role="tabpanel" tabindex="0">
     <div class="hero" style="margin-bottom:18px;">
       <div class="hero-card" style="flex:1;">
-        <h2 data-i18n="ptTitle">Validazione Policy &amp; Routing</h2>
+        <h2 data-i18n="ptTitle">Validazione policy</h2>
         <p data-i18n="ptDesc">Tracciamento offline della raggiungibilità, generatore di flussi di test per regola e analisi difetti statici dai backup di configurazione.</p>
       </div>
+    </div>
+
+    <div class="subtab-bar">
+        <button class="btn btn-secondary ti-subtab" data-switch-tab="tab-routes" data-i18n="tabRoutes"></button>
+        <button class="btn btn-secondary ti-subtab active" data-switch-tab="tab-policy-test" data-i18n="tabPolicyTest"></button>
     </div>
 
     <!-- Selettore Dispositivo Target -->
@@ -5456,8 +5463,8 @@
               <span class="choice-title" data-i18n="roleViewer">Viewer (sola lettura)</span>
               <span class="choice-desc" data-i18n="uwViewerDesc">Consulta la rete senza poterla cambiare.</span>
               <ul>
-                <li class="pro" data-i18n="uwViewerPro1">Vede inventario, mappe, endpoint, traffico e Threat Intel (CVE)</li>
-                <li class="pro" data-i18n="uwViewerPro2">Legge Config Analyzer, NetSec Audit, policy e tabelle di routing</li>
+                <li class="pro" data-i18n="uwViewerPro1">Vede inventario, mappe, endpoint, traffico e vulnerabilità (CVE)</li>
+                <li class="pro" data-i18n="uwViewerPro2">Legge analisi config, audit di sicurezza, policy e tabelle di routing</li>
                 <li class="con" data-i18n="uwViewerCon1">Non lancia triage, comandi CLI, provisioning né import</li>
                 <li class="con" data-i18n="uwViewerCon2">Non vede Config Drift, cronologia apparati né i backup delle configurazioni</li>
               </ul>
@@ -5470,7 +5477,7 @@
                 <li class="pro" data-i18n="uwOperatorPro1">Tutto quello che vede un viewer, più Config Drift e cronologia apparati</li>
                 <li class="pro" data-i18n="uwOperatorPro2">Triage, comandi CLI, backup, provisioning e import CSV</li>
                 <li class="con" data-i18n="uwOperatorCon1">Non gestisce utenti, tenant, sonde né impostazioni</li>
-                <li class="con" data-i18n="uwOperatorCon2">Non vede Incidenti né FortiGate Management</li>
+                <li class="con" data-i18n="uwOperatorCon2">Non vede Incidenti né FortiGate</li>
               </ul>
             </label>
             <label class="choice-card">

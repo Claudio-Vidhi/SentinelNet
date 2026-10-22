@@ -45,7 +45,7 @@ function toggleSidebar() {
 // Only the user's choice is stored; the group holding the open tab is always
 // opened by switchTab, otherwise the active item would be hidden.
 const NAV_GROUPS_KEY = 'navGroupsCollapsed';
-const NAV_GROUPS_DEFAULT = ['tools', 'change', 'admin'];
+const NAV_GROUPS_DEFAULT = ['devices', 'admin'];
 
 function setNavGroupCollapsed(group, collapsed) {
     group.classList.toggle('collapsed', collapsed);
@@ -115,7 +115,9 @@ function renderNavFavorites() {
     }
     if (!box || !list) return;
     list.innerHTML = navFavorites.filter(canOpenTab).map(id => {
-        const src = document.querySelector(`.sidenav .nav-item[data-tab="${CSS.escape(id)}"]`);
+        // A starred secondary panel (e.g. tab-policy-test) borrows its group entry's label.
+        const src = document.querySelector(`.sidenav .nav-item[data-tab="${CSS.escape(id)}"]`)
+            || document.querySelector(`.sidenav .nav-item[data-tabs~="${CSS.escape(id)}"]`);
         if (!src) return '';
         // The label is the nav item's own (already translated) markup.
         const label = src.querySelector('.nav-left')?.innerHTML || '';
@@ -1585,7 +1587,17 @@ function applyRoleUI(username, role, allowedTabs, groups) {
             const tabId = btn.getAttribute('data-tab');
             // tab-home is never in a stored/assignable list (mirrors the
             // server's ALWAYS_GRANTED_TABS): a restricted list must not hide it.
-            if (tabId && tabId !== 'tab-home' && !allowed.includes(tabId)) btn.style.display = 'none';
+            if (!tabId || tabId === 'tab-home') return;
+            // A grouped entry (data-tabs) stays when any of its panels is granted,
+            // and opens on the first granted one.
+            const granted = (btn.getAttribute('data-tabs') || tabId).split(/\s+/).filter(t => allowed.includes(t));
+            if (!granted.length) btn.style.display = 'none';
+            else if (!granted.includes(tabId)) btn.setAttribute('data-tab', granted[0]);
+        });
+        // Sub-tab buttons for panels outside the grant would open on 403s.
+        document.querySelectorAll('.subtab-bar [data-switch-tab]').forEach(b => {
+            const t = b.getAttribute('data-switch-tab');
+            if (document.querySelector(`.nav-item[data-tabs~="${t}"]`) && !allowed.includes(t)) b.style.display = 'none';
         });
     }
     // A tenant-scoped admin's invite would 403 server-side (invite is an
@@ -2587,20 +2599,20 @@ function buildCommandPaletteItems(query = '') {
     // inventory rows. Last in the array they sat below the fold with an
     // empty query, which is the same as not being there.
     const navItems = [
-        { id: 'tab-fortigate', title: 'Fortigate Management', desc: tr('coreFirewallPoliciesAddressObjects'), group: tr('coreDeviceTools') },
+        { id: 'tab-fortigate', title: tr('titleFgtTab'), desc: tr('coreFirewallPoliciesAddressObjects'), group: tr('coreDeviceTools') },
         { id: 'tab-wlc', title: 'Cisco WLC', desc: tr('coreAccessPointsSsidsAnd'), group: tr('coreDeviceTools') },
-        { id: 'tab-redundancy', title: tr('coreHighAvailabilityHa'), desc: tr('coreRedundancyPairsAndFailover'), group: tr('coreDeviceTools') },
+        { id: 'tab-redundancy', title: tr('coreHighAvailabilityHa'), desc: tr('coreRedundancyPairsAndFailover'), group: tr('coreViews') },
         { id: 'tab-home', title: tr('coreOverviewPosture'), desc: tr('coreFleetPostureVerdictsAnd'), group: tr('coreViews') },
         { id: 'tab-incidents', title: tr('coreIncidents'), desc: tr('coreCorrelatedSecurityAndOperational'), group: tr('coreViews') },
         { id: 'tab-flows', title: tr('coreTrafficObservability'), desc: tr('coreTopTalkersAnomaliesAnd'), group: tr('coreViews') },
         { id: 'tab-endpoint', title: tr('coreEndpointInventoryMacTracker'), desc: tr('coreDiscoveredEndpointsMacTracking'), group: tr('coreViews') },
-        { id: 'tab-ai', title: 'AI Assistant', desc: tr('coreNetworkAssistantAndConfig'), group: tr('coreViews') },
-        { id: 'tab-devices', title: 'Network Inventory', desc: tr('coreDeviceListCredentialsAnd'), group: tr('coreViews') },
+        { id: 'tab-ai', title: tr('titleAiAssistant'), desc: tr('coreNetworkAssistantAndConfig'), group: tr('coreViews') },
+        { id: 'tab-devices', title: tr('invHeroTitle'), desc: tr('coreDeviceListCredentialsAnd'), group: tr('coreViews') },
         { id: 'tab-map', title: tr('coreTopology'), desc: tr('coreLLTopologyAnd'), group: tr('coreViews') },
         { id: 'tab-categories', title: tr('coreCategoriesDevices'), desc: tr('coreHardwareModelsRolesAnd'), group: tr('coreViews') },
-        { id: 'tab-security', title: 'Threat Intel (NVD NIST)', desc: tr('coreCveVulnerabilitiesAcrossDevices'), group: tr('coreViews') },
-        { id: 'tab-config', title: 'Config Analyzer', desc: tr('coreConfigurationParsingAndInterface'), group: tr('coreViews') },
-        { id: 'tab-netsec-audit', title: 'NetSec Audit', desc: tr('coreFirewallAndSecurityAudit'), group: tr('coreViews') },
+        { id: 'tab-security', title: tr('titleThreatIntel'), desc: tr('coreCveVulnerabilitiesAcrossDevices'), group: tr('coreViews') },
+        { id: 'tab-config', title: tr('titleConfigAnalyzer'), desc: tr('coreConfigurationParsingAndInterface'), group: tr('coreViews') },
+        { id: 'tab-netsec-audit', title: tr('nsaTitle'), desc: tr('coreFirewallAndSecurityAudit'), group: tr('coreViews') },
         { id: 'tab-policy-test', title: tr('corePolicyRoutingValidation'), desc: tr('corePolicyTraceAndRouting'), group: tr('coreViews') },
         { id: 'tab-config-drift', title: 'Config Drift', desc: tr('coreRunningConfigVsBackup'), group: tr('coreViews') },
         { id: 'tab-routes', title: tr('coreRoutingTables'), desc: tr('coreRoutesAcrossDevices'), group: tr('coreViews') },

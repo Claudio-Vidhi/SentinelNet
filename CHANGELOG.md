@@ -10,6 +10,26 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Changed
+
+- **Sidebar riordinata per argomento**: sei gruppi (*Monitora, Rete,
+  Sicurezza e conformità, Apparati, Operazioni, Amministra*) al posto di
+  *Indaga, Inventario, Strumenti Apparati, Valuta, Modifica*, con nomi più
+  brevi (Inventario, Endpoint, Vulnerabilità, Analisi config, Audit di
+  sicurezza…). Notifiche passa sotto Amministra, Blueprint sotto Rete.
+  I tab sono gli stessi: preferiti, link e permessi già concessi restano
+  validi.
+- **Routing e policy**: *Tabelle di Routing* e *Validazione Policy &
+  Routing* sono una sola voce con due sotto-schede. Un utente con il
+  permesso su una sola delle due continua a vedere la voce, aperta su
+  quella concessa.
+- **Titoli delle pagine allineati alla sidebar**, in italiano e in
+  inglese: ogni pagina si chiama come la sua voce (Vulnerabilità al posto
+  di "Vulnerability Matcher (NIST NVD)", Interfacce al posto di
+  "Monitoraggio Interfacce & Stato Atteso", FortiGate, Analisi config…).
+  Stessi nomi nella palette comandi, nel tutorial e nei testi che
+  rimandano a un'altra pagina.
+
 ## [0.53.4] - 2026-10-22
 
 ### Added

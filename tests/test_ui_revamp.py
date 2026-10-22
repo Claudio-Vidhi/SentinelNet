@@ -312,8 +312,8 @@ class TestSidebarIA(unittest.TestCase):
         # I gruppi sono organizzati per DOMANDA a cui si risponde e le
         # intestazioni seguono il selettore di lingua: si fissano le chiavi
         # i18n, non il testo, che altrimenti fallirebbe in inglese.
-        for key in ("navInvestigate", "navInventory", "navAssess",
-                    "navChange", "navAdminister"):
+        for key in ("navMonitor", "navNetwork", "navSecurity",
+                    "navDevices", "navOperations", "navAdminister"):
             self.assertIn(f'data-i18n="{key}"', html,
                           f"gruppo di nav {key} assente")
         # every existing tab still reachable (tab-home is deferred to Task 3).
@@ -487,7 +487,8 @@ class TestDevicesTabRestyle(unittest.TestCase):
         for key in ('invHeroTitle:', 'invHeroSubtitle:', 'invKpiOnlineLabel:',
                     'invKpiOfflineLabel:', 'invKpiAuthFailedLabel:'):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
-        self.assertIn('Network Device Inventory', html)
+        # The page title matches the sidebar label in both languages.
+        self.assertIn('invHeroTitle: "Inventory"', html)
 
 
 class TestGroupsTabRestyle(unittest.TestCase):

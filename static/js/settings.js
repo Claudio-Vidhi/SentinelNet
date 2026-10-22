@@ -898,6 +898,7 @@
         'tab-map-interactive': 'tabInteractive',
         'tab-provisioner': 'tabProvisioner',
         'tab-device-history': 'dhSubHistory',
+        'tab-policy-test': 'tabPolicyTest',
     };
 
     // The five requires-admin tabs that ARE a concession on an admin-level

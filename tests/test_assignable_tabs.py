@@ -50,5 +50,18 @@ class TestAssignableTabsAreDerived(unittest.TestCase):
         self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
 
 
+class TestNavGroupedGrant(unittest.TestCase):
+    """A grant holding only a grouped entry's secondary panel keeps the entry."""
+
+    def test_grouped_entry_follows_the_grant(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node non disponibile")
+        harness = os.path.join(_REPO_ROOT, "tests", "js", "test_nav_grouped_grant.mjs")
+        proc = subprocess.run([node, harness], capture_output=True, text=True,
+                              cwd=_REPO_ROOT)
+        self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
