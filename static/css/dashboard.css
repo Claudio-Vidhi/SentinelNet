@@ -5420,3 +5420,12 @@ details[open] > summary .mac-caret { transform: rotate(180deg); }
 #tab-endpoint .pk-foot button:not(.btn) { background: none; border: 0; color: var(--primary); cursor: pointer; font-size: 12px; padding: 0 0 0 10px; }
 #tab-endpoint .pk-foot .btn { width: auto; margin: 0; }
 #tab-endpoint .pk-empty { padding: 14px; text-align: center; color: var(--text-muted); font-size: 12.5px; }
+
+/* Provisioning form: edit-only row and the verify/save status line. */
+#devSnmpClearRow[hidden] { display: none !important; }
+.dev-form-status { margin-top: 10px; padding: 8px 10px; font-size: 12.5px; border: 1px solid var(--border); border-left-width: 3px; }
+.dev-form-status[hidden] { display: none; }
+.dev-form-status[data-state="ok"] { border-left-color: var(--lamp-up); color: var(--lamp-up-ink); background: var(--lamp-up-wash); }
+.dev-form-status[data-state="error"] { border-left-color: var(--lamp-fault); color: var(--lamp-fault-ink); background: var(--lamp-fault-wash); }
+.dev-form-status[data-state="info"] { color: var(--text-muted); }
+.dev-form-status .btn { width: auto; margin: 6px 0 0; }

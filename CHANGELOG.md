@@ -10,7 +10,19 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Provisioning, Verifica connessione**: prova login e lettura
+  dell'hostname con i dati del modulo, prima di salvare. Parte dal server
+  centrale: per un apparato dietro una sonda lo dice invece di provarci.
+
 ### Changed
+
+- **Provisioning, messaggi nel modulo**: errori ed esito del salvataggio
+  compaiono sotto il modulo invece che in finestre a comparsa; dopo il
+  salvataggio tenant e sede restano scelti per l'apparato successivo, e il
+  tenant iniziale è quello del selettore globale. "Rimuovi la community"
+  compare solo quando si modifica un apparato.
 
 - **Sidebar riordinata per argomento**: sei gruppi (*Monitora, Rete,
   Sicurezza e conformità, Apparati, Operazioni, Amministra*) al posto di

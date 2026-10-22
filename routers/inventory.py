@@ -6,6 +6,7 @@ import/export CSV, promozione da scoperta, riassegnazione sede). Estratto da
 app_server.py (fase 6.6): percorsi, metodi, parametri e risposte identici al
 monolite."""
 
+import json
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,6 +14,8 @@ from routers.deps import require_tab
 from pydantic import BaseModel, Field
 
 from services import csv_import, device_history, inventory_manager, probe_manager
+from core import core_engine
+from security import crypto_vault, identity_manager
 from security.security_manager import log_audit
 from core.csv_safe import csv_cell as _csv_cell
 from routers.deps import (
@@ -365,6 +368,46 @@ def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
     if device.transports and 'telnet' in device.transports:
         log_audit(f"ATTENZIONE: Telnet (trasmissione in chiaro) abilitato per il dispositivo '{device.ip}' dall'utente '{current_user.get('sub')}'.")
     return {"status": "success", "message": "Dispositivo salvato"}
+
+@router.post("/api/verify-device", dependencies=[Depends(require_tab("tab-devices", "tab-provisioning"))])
+def verify_device(device: DeviceSchema, current_user = Depends(require_operator)):
+    """Login and hostname read with what the provisioning form holds, before
+    anything is saved. Same probe as the subnet scan's verify step."""
+    assert_group_allowed(current_user, device.group)
+    existing = next((d for d in inventory_manager.get_all_devices() if d['IP'] == device.ip), None)
+    if existing:
+        assert_group_allowed(current_user, existing.get('Group', ''))
+    # The probe dials from this server: a device behind a site probe is not
+    # reachable from here, and a failure would blame the credentials.
+    if (device.probe or 'central').strip() != 'central':
+        raise HTTPException(status_code=400,
+                            detail="La verifica parte dal server centrale: un apparato "
+                                   "dietro una sonda si controlla al primo triage.")
+    # Visibility before decryption, as in /api/scan-verify.
+    if device.profile.startswith('identity:') and not identity_manager.identity_visible_to(
+            device.profile[len('identity:'):], user_group_scope(current_user)):
+        raise HTTPException(status_code=404, detail="Identita' non trovata.")
+    # Empty credential fields on an existing device mean "unchanged", as in
+    # add_or_update_device.
+    keep = existing or {}
+    target = {
+        'IP': device.ip, 'Vendor': device.vendor, 'Profile': device.profile,
+        'Username': device.username or keep.get('Username', ''),
+        'Password': crypto_vault.encrypt_password(device.password)
+                    if device.password or not existing else keep.get('Password', ''),
+        'Enable Secret': crypto_vault.encrypt_password(device.enable_secret)
+                         if device.enable_secret or not existing else keep.get('Enable Secret', ''),
+        'SSH Port': str(device.ssh_port),
+        'Transports': json.dumps(device.transports) if device.transports else keep.get('Transports', ''),
+    }
+    # An authentication attempt on the customer network: it gets an audit line.
+    log_audit(f"Verifica connessione verso '{device.ip}' (vendor: '{device.vendor}', "
+              f"profilo: '{device.profile}') dall'utente '{current_user.get('sub')}'.")
+    res = core_engine.probe_device(target)
+    ok = res.get('status') == 'success'
+    return {"ok": ok, "hostname": res.get('hostname') if ok else None,
+            "error": None if ok else res.get('message')}
+
 
 @router.post("/api/delete-device", dependencies=[Depends(require_tab("tab-devices"))])
 def delete_device(payload: DeviceDelete, current_user = Depends(require_operator)):

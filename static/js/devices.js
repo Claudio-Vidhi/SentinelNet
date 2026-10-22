@@ -626,7 +626,20 @@
         document.getElementById('devTransports').open = !isDefaultState;
     }
 
-    document.getElementById('btnSaveDevice').addEventListener('click', async () => {
+    // Status line under the form: replaces the alert() pop-ups. `action` is an
+    // optional { tab, label } that renders a button opening that tab.
+    function setDevFormStatus(state, text, action) {
+        const box = document.getElementById('devFormStatus');
+        if (!box) return;
+        box.hidden = !state;
+        if (!state) return;
+        box.dataset.state = state;
+        box.innerHTML = escapeHtml(text) + (action
+            ? `<br><button type="button" class="btn btn-secondary btn-small" data-switch-tab="${escapeHtml(action.tab)}">${action.label}</button>`
+            : '');
+    }
+
+    function deviceFormPayload() {
         const probeSel = document.getElementById('devProbeSelect');
         const payload = {
             ip: document.getElementById('devIp').value.trim(),
@@ -650,9 +663,35 @@
         else if (snmp && snmp.value) payload.snmp_community = snmp.value;
         const snmpDisabled = document.getElementById('devSnmpDisabled');
         if (snmpDisabled) payload.snmp_disabled = snmpDisabled.checked;
+        return payload;
+    }
 
-        if(!payload.ip) { alert(tr('alertEnterIp')); return; }
-        if (!payload.location) { alert(tr('alertSelectLocation')); return; }
+    document.getElementById('btnVerifyDevice')?.addEventListener('click', async () => {
+        const payload = deviceFormPayload();
+        if (!payload.ip) { setDevFormStatus('error', tr('alertEnterIp')); return; }
+        // The probe dials from the central server (see /api/verify-device).
+        if (payload.probe !== 'central') { setDevFormStatus('info', tr('devVerifyProbe')); return; }
+        const btn = document.getElementById('btnVerifyDevice');
+        btn.disabled = true;
+        setDevFormStatus('info', tr('devVerifyRunning', { ip: payload.ip }));
+        try {
+            const res = await apiFetch('/api/verify-device', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            });
+            if (!res) return;
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) setDevFormStatus('error', tr('devVerifyFail', { err: data.detail || res.status }));
+            else if (data.ok) setDevFormStatus('ok', tr('devVerifyOk', { host: data.hostname || payload.ip }));
+            else setDevFormStatus('error', tr('devVerifyFail', { err: data.error || '' }));
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    document.getElementById('btnSaveDevice').addEventListener('click', async () => {
+        const payload = deviceFormPayload();
+        if (!payload.ip) { setDevFormStatus('error', tr('alertEnterIp')); return; }
+        if (!payload.location) { setDevFormStatus('error', tr('alertSelectLocation')); return; }
 
         // In modifica i campi credenziali vuoti significano "invariate":
         // add_or_update_device preserva quelle già salvate. Si compilano solo
@@ -663,11 +702,15 @@
             body: JSON.stringify(payload)
         });
         if(res && res.ok) {
+            // Tenant and site stay selected, so the next device starts from them.
             resetDeviceForm();
+            populateDevLocationOptions(payload.location);
+            setDevFormStatus('ok', tr('devSavedMsg', { ip: payload.ip }),
+                             { tab: 'tab-devices', label: tr('homeOpenInventory') });
             refreshInventory();
         } else if (res) {
-            const err = await res.json();
-            alert(`${tr('alertFirstSetupError')}${err.detail || tr('alertSaveDeviceError')}`);
+            const err = await res.json().catch(() => ({}));
+            setDevFormStatus('error', `${tr('alertFirstSetupError')}${err.detail || tr('alertSaveDeviceError')}`);
         }
     });
 
@@ -743,6 +786,8 @@
 
         document.getElementById('devFormTitle').innerHTML = tr('titleEditDevice');
         document.getElementById('devEditNotice').style.display = 'block';
+        document.getElementById('devSnmpClearRow').hidden = false;
+        setDevFormStatus(null);
         document.getElementById('btnSaveDevice').innerHTML = tr('btnUpdateDevice');
         document.getElementById('btnCancelEditDevice').style.display = 'block';
 
@@ -771,6 +816,8 @@
         document.getElementById('devSnmp').value = '';
         document.getElementById('devSnmp').placeholder = '—';
         document.getElementById('devSnmpClear').checked = false;
+        document.getElementById('devSnmpClearRow').hidden = true;
+        setDevFormStatus(null);
         const dsdReset = document.getElementById('devSnmpDisabled');
         if (dsdReset) dsdReset.checked = false;
         document.getElementById('devFormTitle').innerHTML = tr('titleProvisioning');

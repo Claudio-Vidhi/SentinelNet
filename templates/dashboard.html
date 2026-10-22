@@ -918,7 +918,8 @@
             <div class="form-group">
               <label for="devSnmp" data-i18n="lblSnmpCommunity">Community SNMP (sola lettura)</label>
               <input id="devSnmp" type="password" autocomplete="off" placeholder="—" style="padding-left:12px;">
-              <label style="display:flex; align-items:center; gap:6px; font-size:11px; margin-top:4px; cursor:pointer;">
+              <!-- Edit-only: a new device has no community to remove. -->
+              <label id="devSnmpClearRow" hidden style="display:flex; align-items:center; gap:6px; font-size:11px; margin-top:4px; cursor:pointer;">
                 <input type="checkbox" id="devSnmpClear" style="accent-color:var(--danger);">
                 <span data-i18n="lblSnmpClear">Rimuovi la community e ferma il polling</span>
               </label>
@@ -931,7 +932,11 @@
               </small>
             </div>
 
-            <button class="btn btn-primary" id="btnSaveDevice" style="margin-top: 10px;" data-i18n="btnSaveDevice">
+            <div id="devFormStatus" class="dev-form-status" role="status" aria-live="polite" hidden></div>
+            <button class="btn btn-secondary" id="btnVerifyDevice" type="button" style="margin-top: 10px;" data-i18n="btnVerifyDevice">
+              <i class="fa-solid fa-plug-circle-check"></i> Verifica connessione
+            </button>
+            <button class="btn btn-primary" id="btnSaveDevice" style="margin-top: 8px;" data-i18n="btnSaveDevice">
               <i class="fa-solid fa-floppy-disk"></i> Salva Apparato
             </button>
             <button class="btn btn-secondary" id="btnCancelEditDevice" style="display:none; margin-top: 8px;" data-i18n="btnCancelEditDevice">

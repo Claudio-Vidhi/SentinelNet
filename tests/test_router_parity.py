@@ -85,7 +85,7 @@ class TestRouterParity(unittest.TestCase):
         self.assertEqual(missing, [], f"endpoint spariti dal refactor: {missing}")
 
     # Percorsi NUOVI legittimi (funzionalità aggiunte dopo lo snapshot golden).
-    ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/flow-siem", "/api/arp", "/api/ai", "/api/provisioner", "/api/mcp", "/api/probes", "/api/mac/settings/sequential", "/api/command-jobs", "/api/agent", "/api/fortigate/{ip}/firewall", "/api/fortigate/targets", "/api/identities", "/api/config-analyzer/convert", "/api/redundancy", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/diagnose", "/api/fortigate/{ip}/system", "/api/fortigate/{ip}/vpn", "/api/fortigate/{ip}/sdwan", "/api/endpoints", "/api/settings/snmp-defaults", "/api/settings/ping-monitor", "/api/ping-monitor", "/api/settings/ui-variant", "/api/mac/port-control", "/api/wlc", "/api/scan-verify", "/api/version", "/api/reassign-device-probe", "/api/policy-test", "/api/export/devices/columns", "/api/export/devices/preview", "/api/import-csv/preview", "/api/drift", "/api/locations", "/api/blueprint",
+    ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/flow-siem", "/api/arp", "/api/ai", "/api/provisioner", "/api/mcp", "/api/probes", "/api/mac/settings/sequential", "/api/command-jobs", "/api/agent", "/api/fortigate/{ip}/firewall", "/api/fortigate/targets", "/api/identities", "/api/config-analyzer/convert", "/api/redundancy", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/diagnose", "/api/fortigate/{ip}/system", "/api/fortigate/{ip}/vpn", "/api/fortigate/{ip}/sdwan", "/api/endpoints", "/api/settings/snmp-defaults", "/api/settings/ping-monitor", "/api/ping-monitor", "/api/settings/ui-variant", "/api/mac/port-control", "/api/wlc", "/api/scan-verify", "/api/verify-device", "/api/version", "/api/reassign-device-probe", "/api/policy-test", "/api/export/devices/columns", "/api/export/devices/preview", "/api/import-csv/preview", "/api/drift", "/api/locations", "/api/blueprint",
                           # Classification export (serial + neighbour columns), shipped in 0.12.0.
                           "/api/export/classification",
                           # Offsite SFTP backup mirror (cloud-backup plan).
@@ -264,7 +264,7 @@ class TestFullParity(unittest.TestCase):
                     "/api/mac/port-control", "/api/wlc/{ip}/ap-summary", "/api/wlc/{ip}/client-summary", "/api/wlc/{ip}/client/{mac}", "/api/wlc/{ip}/rogue-aps", "/api/wlc/{ip}/status", "/api/wlc/{ip}/overview",
                     # La scansione non tenta piu' il login: l'autenticazione e'
                     # diventata un passo esplicito e opzionale, su un endpoint suo.
-                    "/api/scan-verify", "/api/version", "/api/policy-test",
+                    "/api/scan-verify", "/api/verify-device", "/api/version", "/api/policy-test",
                     "/api/export/devices/columns", "/api/export/devices/preview", "/api/import-csv/preview", "/api/drift",
                     # Classification export (serial + neighbour columns), shipped in 0.12.0.
                     "/api/export/classification",

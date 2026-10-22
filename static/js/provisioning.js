@@ -565,7 +565,9 @@ function populateProvisioningFormSelects() {
         groupSelect.innerHTML = Object.keys(globalGroups).map(g =>
             `<option value="${escapeHtml(g)}">${escapeHtml(orgLabel(g))}</option>`
         ).join('');
-        if (prevGroup in globalGroups) groupSelect.value = prevGroup;
+        // First fill: start from the tenant chosen in the global selector.
+        const want = prevGroup || window.globalSelectedTenant;
+        if (want in globalGroups) groupSelect.value = want;
     }
     populateDevLocationOptions(document.getElementById('devLocationSelect')?.value || '');
     populateProbeOptions();
