@@ -52,6 +52,10 @@ def test_tab_ids_exist_in_dashboard():
     known = set(re.findall(r'data-tab="([^"]+)"', html))
     for tabs in re.findall(r'data-tabs="([^"]+)"', html):
         known |= set(tabs.split())
+    # Grants with no page of their own (settings.js PAGELESS_WRITE_TABS).
+    settings = TEMPLATE.parent.parent.joinpath("static", "js", "settings.js").read_text(encoding="utf-8")
+    pageless = settings[settings.index("const PAGELESS_WRITE_TABS"):]
+    known |= set(re.findall(r"id: '([\w-]+)'", pageless[:pageless.index(";")]))
     for method, path, route in _api_routes():
         tabs = rc.route_tabs(route)
         if tabs:

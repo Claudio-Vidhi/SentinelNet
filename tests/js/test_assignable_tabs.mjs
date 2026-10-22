@@ -68,8 +68,9 @@ for (const id of ['tab-users', 'tab-settings', 'tab-probes', 'tab-mcp',
 assert.strictEqual(new Set(ids).size, ids.length, 'id duplicati fra le tab');
 
 // Ogni pannello nel template che non sia requires-admin deve essere
-// concedibile: e' l'invariante che la lista a mano violava.
-const navTabs = new Set();
+// concedibile: e' l'invariante che la lista a mano violava. tab-import is the
+// one grant with no page (the CSV import runs in the "Add devices" wizard).
+const navTabs = new Set(['tab-import']);
 for (const m of html.matchAll(/<button([^>]*\bnav-item\b[^>]*)>/g)) {
     const attrs = m[1];
     if (/requires-admin/.test(attrs)) continue;

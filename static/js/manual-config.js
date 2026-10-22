@@ -270,7 +270,6 @@
     }
     window.openManualConfigWizard = openManualConfigWizard;
 
-    $('btnOpenManualConfig')?.addEventListener('click', () => openManualConfigWizard());
     $('mcVendor')?.addEventListener('change', renderGuide);
 
     const zone = $('mcDropZone');

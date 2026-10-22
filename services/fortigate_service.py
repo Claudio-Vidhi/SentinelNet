@@ -11,7 +11,8 @@ Due trasporti:
     API non è configurato o la chiamata REST fallisce; output testuale.
 
 I token API sono salvati cifrati (crypto_vault) in data/fortigate_tokens.json,
-per IP: {"<ip>": {"token_enc": ..., "port": 443, "verify_tls": false}}.
+per IP: {"<ip>": {"token_enc": ..., "port": 443, "verify_tls": false,
+"keepalive": false}}. ``keepalive`` = sessione persistente (vedi _http).
 
 Le funzioni di alto livello (get_*) accettano il dict `device` dell'inventario
 e ritornano sempre {"source": "api"|"ssh", "data": ...} oppure sollevano
@@ -71,13 +72,14 @@ def _save_tokens(tokens: dict):
 
 
 def set_api_token(ip: str, token: str, port: int = 443, verify_tls: bool = False,
-                  name: str = ""):
+                  name: str = "", keepalive: bool = False):
     """Salva (cifrato) il token API di un FortiGate. Token vuoto = rimozione
     (e, se era il target attivo, azzera anche `_active`)."""
     tokens = _load_tokens()
     if token:
         entry = {"token_enc": encrypt_password(token),
-                 "port": int(port or 443), "verify_tls": bool(verify_tls)}
+                 "port": int(port or 443), "verify_tls": bool(verify_tls),
+                 "keepalive": bool(keepalive)}
         if name:
             entry["name"] = name
         elif isinstance(tokens.get(ip), dict) and tokens[ip].get("name"):
@@ -88,6 +90,7 @@ def set_api_token(ip: str, token: str, port: int = 443, verify_tls: bool = False
         if tokens.get("_active") == ip:
             tokens.pop("_active", None)
     _save_tokens(tokens)
+    _drop_session(ip)
 
 
 def get_api_config(ip: str):
@@ -108,7 +111,8 @@ def token_status() -> dict:
 # --- Multi-target: nome, target attivo, elenco, test connessione ------------
 
 def update_target(ip: str, *, name: Optional[str] = None, port: Optional[int] = None,
-                  verify_tls: Optional[bool] = None, token: Optional[str] = None) -> None:
+                  verify_tls: Optional[bool] = None, token: Optional[str] = None,
+                  keepalive: Optional[bool] = None) -> None:
     """Aggiorna solo i campi forniti di un target FortiGate già configurato
     (usato dal manager multi-target per modifiche parziali: rinomina, cambio
     porta/TLS senza dover reinserire il token). Token omesso o vuoto = il
@@ -126,8 +130,11 @@ def update_target(ip: str, *, name: Optional[str] = None, port: Optional[int] = 
         entry["verify_tls"] = bool(verify_tls)
     if token:
         entry["token_enc"] = encrypt_password(token)
+    if keepalive is not None:
+        entry["keepalive"] = bool(keepalive)
     tokens[ip] = entry
     _save_tokens(tokens)
+    _drop_session(ip)
 
 
 def list_targets() -> list:
@@ -144,6 +151,7 @@ def list_targets() -> list:
             "name": e.get("name", ""),
             "port": int(e.get("port") or 443),
             "verify_tls": bool(e.get("verify_tls")),
+            "keepalive": bool(e.get("keepalive")),
             "active": ip == active,
         })
     return out
@@ -187,6 +195,34 @@ def test_connection(ip: str) -> dict:
 # milliseconds; one that is down should say so straight away.
 CONNECT_TIMEOUT = 4
 
+# Sessione persistente, opzione per FortiGate ("keepalive" nel token store):
+# un requests.Session per apparato tiene aperta la connessione HTTPS e le
+# chiamate successive la riusano invece di rifare TCP + TLS ogni volta. Il
+# token Bearer viaggia comunque a ogni richiesta: la sessione non autentica
+# niente. Cambiare token, porta o TLS la chiude (_drop_session).
+# ponytail: never closed while idle; the FortiGate drops idle connections and
+# urllib3 reconnects transparently, so the cost is one socket per target.
+_sessions: Dict[str, requests.Session] = {}
+
+
+def _http(ip: str):
+    """requests itself, or the persistent Session of a keepalive target."""
+    entry = _load_tokens().get(ip)
+    if not (isinstance(entry, dict) and entry.get("keepalive")):
+        return requests
+    with _lock:
+        session = _sessions.get(ip)
+        if session is None:
+            session = _sessions[ip] = requests.Session()
+    return session
+
+
+def _drop_session(ip: str) -> None:
+    with _lock:
+        session = _sessions.pop(ip, None)
+    if session is not None:
+        session.close()
+
 
 def api_request(ip: str, method: str, path: str, params: Optional[dict] = None,
                 json_body=None, timeout: int = 30):
@@ -207,7 +243,7 @@ def api_request(ip: str, method: str, path: str, params: Optional[dict] = None,
             if not verify:
                 warnings.simplefilter(
                     "ignore", urllib3.exceptions.InsecureRequestWarning)
-            r = requests.request(method, url,
+            r = _http(ip).request(method, url,
                                  headers={"Authorization": f"Bearer {token}"},
                                  params=params or {}, json=json_body,
                                  verify=verify,
@@ -1129,7 +1165,7 @@ def get_full_config(device):
                 if not verify:
                     warnings.simplefilter(
                         "ignore", urllib3.exceptions.InsecureRequestWarning)
-                r = requests.get(
+                r = _http(ip).get(
                     f"https://{ip}:{port}/api/v2/monitor/system/config/backup",
                     headers={"Authorization": f"Bearer {token}"},
                     params={"scope": "global"}, verify=verify, timeout=60)

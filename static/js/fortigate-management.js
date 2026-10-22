@@ -1115,7 +1115,8 @@ function renderFgtMgrTable() {
             ? `<span class="status ok">${escapeHtml(L.badgeFgtTestOk || 'OK')}</span>`
             : `<span class="status warn">off</span>`;
         return `<tr style="border-bottom:1px solid var(--border);" data-ip="${ip}">
-            <td style="padding:8px 12px;">${name || '—'}</td>
+            <td style="padding:8px 12px;">${name || '—'}${t.keepalive
+                ? ` <span class="badge" title="${escapeHtml(tr('lblFgtKeepalive'))}">${escapeHtml(tr('badgeFgtKeepalive'))}</span>` : ''}</td>
             <td style="padding:8px 12px; font-family:var(--font-code);">${ip}</td>
             <td style="padding:8px 12px;">${t.port}</td>
             <td style="padding:8px 12px;">${tlsBadge}</td>
@@ -1141,6 +1142,7 @@ function resetFgtMgrForm() {
     if (ipSel) { ipSel.value = ''; ipSel.disabled = false; }
     document.getElementById('fgtMgrPort').value = '443';
     document.getElementById('fgtMgrVerifyTls').checked = false;
+    document.getElementById('fgtMgrKeepalive').checked = false;
     const tokenInput = document.getElementById('fgtMgrToken');
     const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
     tokenInput.value = '';
@@ -1159,6 +1161,7 @@ function editFgtMgrTarget(ip) {
     if (ipSel) { ipSel.value = t.ip; ipSel.disabled = true; }
     document.getElementById('fgtMgrPort').value = t.port || 443;
     document.getElementById('fgtMgrVerifyTls').checked = !!t.verify_tls;
+    document.getElementById('fgtMgrKeepalive').checked = !!t.keepalive;
     const tokenInput = document.getElementById('fgtMgrToken');
     tokenInput.value = '';
     tokenInput.placeholder = L.phFgtMgrTokenEdit || '•••• invariato';
@@ -1170,6 +1173,7 @@ async function saveFgtMgrTarget() {
     const name = document.getElementById('fgtMgrName').value.trim();
     const port = parseInt(document.getElementById('fgtMgrPort').value) || 443;
     const verifyTls = document.getElementById('fgtMgrVerifyTls').checked;
+    const keepalive = document.getElementById('fgtMgrKeepalive').checked;
     const token = document.getElementById('fgtMgrToken').value;
     const st = document.getElementById('fgtMgrStatus');
     const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
@@ -1183,14 +1187,14 @@ async function saveFgtMgrTarget() {
         // quello già salvato ("•••• invariato" è quindi veritiero).
         res = await apiFetch(`/api/fortigate/targets/${encodeURIComponent(editIp)}`, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, port, verify_tls: verifyTls, token: token || null })
+            body: JSON.stringify({ name, port, verify_tls: verifyTls, keepalive, token: token || null })
         });
     } else {
         // Nuovo target: il token è obbligatorio (flusso esistente di creazione).
         if (!token) { showToast(tr('fgtEnterAToken'), 'warning'); return; }
         res = await apiFetch('/api/fortigate/token', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ip, token, port, verify_tls: verifyTls, name })
+            body: JSON.stringify({ ip, token, port, verify_tls: verifyTls, keepalive, name })
         });
     }
     if (res && res.ok) {

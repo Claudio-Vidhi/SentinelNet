@@ -112,7 +112,7 @@ def _parse(html, watch_ids=()):
 TAB_IDS_IN_DOC_ORDER = [
     "tab-home", "tab-devices", "tab-groups", "tab-map", "tab-map-interactive",
     "tab-categories", "tab-security", "tab-endpoint", "tab-flows",
-    "tab-config", "tab-ai", "tab-provisioner", "tab-import", "tab-users",
+    "tab-config", "tab-ai", "tab-provisioner", "tab-users",
     "tab-probes", "tab-mcp", "tab-settings",
 ]
 
@@ -141,7 +141,7 @@ class TestTabNestingBalance(unittest.TestCase):
     def setUpClass(cls):
         cls.html = _html()
         cls.watch_ids = (set(TAB_IDS_IN_DOC_ORDER) | set(PANE_IDS_IN_DOC_ORDER)
-                          | {"provFgtSection", "provCiscoSection"})
+                          | {"provCiscoSection"})
         cls.parsed = _parse(cls.html, watch_ids=cls.watch_ids)
         # cumulative char offset of the start of each line, for slicing.
         cls.line_offsets = []
@@ -273,25 +273,6 @@ class TestTabNestingBalance(unittest.TestCase):
                     f"#{a} closes at {end_a} but #{b} opens at {start_b} -- "
                     f"#{b} is nested inside #{a} instead of being its sibling")
 
-    def test_prov_fgt_and_cisco_sections_are_siblings(self):
-        # Pins the exact Task 14 mutation target: deleting the </div> that
-        # closes #provFgtSection nests #provCiscoSection inside it. Both
-        # ids are toggled independently at runtime by provVendorIsFgt()'s
-        # style.display swap, so neither may be an ancestor of the other.
-        fgt = self.parsed.spans.get("provFgtSection")
-        cisco = self.parsed.spans.get("provCiscoSection")
-        self.assertIsNotNone(fgt, "#provFgtSection not found in rendered HTML")
-        self.assertIsNotNone(cisco, "#provCiscoSection not found in rendered HTML")
-        self.assertIsNotNone(fgt["end"], "#provFgtSection <div> is never closed")
-        self.assertIsNotNone(cisco["end"], "#provCiscoSection <div> is never closed")
-        nested = (fgt["start"] < cisco["start"] < fgt["end"]) or \
-                 (cisco["start"] < fgt["start"] < cisco["end"])
-        self.assertFalse(
-            nested,
-            "#provFgtSection and #provCiscoSection must be siblings (neither "
-            "an ancestor of the other) -- provVendorIsFgt() sets "
-            "style.display on both independently at runtime")
-
 
 class TestComponentLayer(unittest.TestCase):
     def test_component_classes_present(self):
@@ -324,7 +305,7 @@ class TestSidebarIA(unittest.TestCase):
         # delegato in core.js.
         for tab in ("tab-devices", "tab-endpoint", "tab-flows",
                     "tab-map", "tab-map-interactive", "tab-categories", "tab-security",
-                    "tab-config", "tab-ai", "tab-provisioner", "tab-import", "tab-groups",
+                    "tab-config", "tab-ai", "tab-provisioner", "tab-provisioning", "tab-groups",
                     "tab-users", "tab-probes", "tab-mcp", "tab-settings"):
             self.assertTrue(
                 f'data-tab="{tab}"' in html or f'data-switch-tab="{tab}"' in html,
@@ -1025,7 +1006,7 @@ class TestAiAssistantTabRestyle(unittest.TestCase):
     def test_ai_tab_uses_component_classes(self):
         html = _html()
         tab_start = html.index('<div id="tab-ai"')
-        tab_end = html.index('<!-- TAB: Switch da Zero (Provisioner) -->')
+        tab_end = html.index('<!-- Nuova configurazione (tab-provisioner)')
         tab_html = html[tab_start:tab_end]
         # Header come le altre schede (page-head); il contesto allegato vive
         # nella barra del composer, non piu' in una filterbar separata.
@@ -1058,7 +1039,7 @@ class TestAiAssistantTabRestyle(unittest.TestCase):
         # alta quanto il viewport, sfondando la griglia della chat e spingendo
         # il composer sotto il bordo del panel, dove l'overflow lo taglia via.
         tab = html[html.index('<div id="tab-ai"'):
-                   html.index('<!-- TAB: Switch da Zero (Provisioner) -->')]
+                   html.index('<!-- Nuova configurazione (tab-provisioner)')]
         self.assertNotIn('<aside', tab)
         self.assertIn('<div class="ai-conv-sidebar">', tab)
         js = frontend_source()
@@ -1083,237 +1064,52 @@ class TestAiAssistantTabRestyle(unittest.TestCase):
 
 
 class TestProvisionerTabRestyle(unittest.TestCase):
-    """Task 14 + ZTP W2: #tab-provisioner (Zero-Touch Provisioner) guard.
-
-    The flagship form: two vendor sections toggled at runtime, and dual
-    endpoint families reached through a computed base path.
-
-    W2 restructure: the FortiGate token UI was moved out of the top-level
-    `<details id="fgtTokenPanel">` accordion and into an inline section.
-    That inline section was later removed entirely (it duplicated the
-    dedicated Fortigate Management tab, static/js/fortigate-management.js,
-    which is now the sole owner of the token/live-objects UI). Device Type
-    remains a chip selector skinning the still-authoritative
-    `<select id="provVendor">`. Assertions below pin the current structure;
-    `fgtTokenPanel` and the inline token/objects sections are gone by design.
-    """
+    """#tab-provisioner ("Nuova configurazione"): day-0 config for a Cisco
+    switch, generated and delivered (text, SSH, console). The FortiGate
+    generator was retired in October 2026, and with it the vendor chips:
+    one vendor needs no selector. FortiGate tokens and live objects belong to
+    the FortiGate tab (static/js/fortigate-management.js)."""
 
     def _tab(self, html):
         start = html.index('<div id="tab-provisioner"')
-        end = html.index('<!-- TAB 6: Importazione CSV -->')
-        return html[start:end]
-
-    def test_preserve_ids(self):
-        html = _html()
-        for _id in ('provFgtSection', 'provCiscoSection', 'provVendor', 'provRole',
-                    'btnProvGenerate', 'btnProvDownload', 'provDeliveryMode',
-                    'provSshFields', 'provSerialFields', 'provOutput',
-                    'provVendorChips', 'provCiscoTokenHint'):
-            self.assertIn(f'id="{_id}"', html, f"lost preserve-ID {_id}")
-
-    def test_token_ui_removed_duplicate(self):
-        """The inline FortiGate token/objects UI that used to live in
-        #tab-provisioner was a duplicate of the Fortigate Management
-        tab (static/js/fortigate-management.js) and has been removed. Only
-        the Fortigate Management tab owns that UI now."""
-        html = _html()
-        tab = self._tab(html)
-        self.assertNotIn('id="fgtTokenPanel"', html)
-        self.assertNotIn('id="provFgtTokenSection"', tab)
-        self.assertNotIn('id="provFgtObjectsSection"', tab)
-        self.assertNotIn('id="fgtTokensTable"', tab)
-        self.assertNotIn('id="fgtTokenValue"', tab)
-        src = frontend_source()
-        self.assertNotIn('function initFgtTokenPanel()', src)
-        self.assertNotIn('function toggleFgtTokenReveal()', src)
-
-    def test_vendor_select_remains_source_of_truth(self):
-        html = _html()
-        tab = self._tab(html)
-        # provVendorIsFgt/provSyncVendorChips/provInitVendorChips: moved to
-        # static/js/provisioning.js -- frontend_source() concatenates
-        # dashboard.html + all static/*.js|css.
-        src = frontend_source()
-        # The select is hidden, NOT removed: provVendorIsFgt() still reads it.
-        self.assertIn(
-            '<select id="provVendor" class="visually-hidden" aria-hidden="true" tabindex="-1">',
-            tab,
-        )
-        self.assertIn("document.getElementById('provVendor')?.value === 'fortigate'", src)
-        for value in ('value="cisco"', 'value="fortigate"'):
-            self.assertIn(value, tab)
-        # Chips drive the select and re-fire the real change event rather than
-        # duplicating the vendor wiring.
-        self.assertIn("sel.value = chip.dataset.vendor", src)
-        self.assertIn("sel.dispatchEvent(new Event('change'))", src)
-        # ...and reflect the select's value back (two-way sync).
-        self.assertIn("chip.setAttribute('aria-pressed', String(chip.dataset.vendor === sel.value))", src)
-        self.assertIn('provSyncVendorChips();', src)
-
-    def test_vendor_select_out_of_tab_order(self):
-        """W2 a11y fix: the hidden select is no longer a keyboard trap. Chips
-        are the sole accessible control -- the select must be pulled out of
-        the accessibility tree and the tab order, and no longer carry a
-        `for=` label association that would let a mouse click on the label
-        focus the invisible control."""
-        html = _html()
-        tab = self._tab(html)
-        m_sel = re.search(r'<select id="provVendor" class="visually-hidden"[^>]*>', tab)
-        self.assertIsNotNone(m_sel)
-        select_tag = m_sel.group(0) if m_sel else ""
-        self.assertIn('aria-hidden="true"', select_tag)
-        self.assertIn('tabindex="-1"', select_tag)
-        # The visible label must no longer point `for=` at the hidden select --
-        # it now only labels the chip group via aria-labelledby.
-        self.assertNotIn('for="provVendor"', tab)
-        self.assertIn('<label id="provVendorLabel" data-i18n="lblProvVendor">', tab)
-
-    def test_vendor_chips_expose_selected_state(self):
-        """The chips are the real control: each carries aria-pressed and it is
-        actually flipped (not a static true/false pair) whenever the vendor
-        selection changes."""
-        html = _html()
-        tab = self._tab(html)
-        # Radiogroup-like semantics: one labelled group, real <button>s (not
-        # divs/spans faking a control), each with an aria-pressed state.
-        self.assertIn('id="provVendorChips" role="group" aria-labelledby="provVendorLabel"', tab)
-        self.assertEqual(tab.count('<button type="button" class="chip chip-choice"'), 2,
-                          'both vendor chips must be real, focusable <button>s')
-        self.assertIn('data-vendor="cisco" aria-pressed="true"', tab)
-        self.assertIn('data-vendor="fortigate" aria-pressed="false"', tab)
-        # The state is not static markup: provSyncVendorChips() rewrites
-        # aria-pressed on every chip from the live select value, both on
-        # click and on init, so a re-sync (e.g. programmatic vendor change)
-        # keeps the exposed state correct.
-        # provSyncVendorChips/provInitVendorChips: moved to static/js/provisioning.js.
-        src = frontend_source()
-        self.assertIn(
-            "chip.setAttribute('aria-pressed', String(chip.dataset.vendor === sel.value))",
-            src,
-        )
-        self.assertIn('function provSyncVendorChips()', src)
-        self.assertIn('provSyncVendorChips();', src)  # called from provInitVendorChips()
-        # Visible focus indicator reuses design tokens (var(--primary)), not a
-        # new invented color.
-        # Task 2: this selector lives in static/css/dashboard.css now.
-        self.assertIn('.chip-choice:focus-visible{outline:2px solid var(--focus);outline-offset:2px}',
-                      src)
-
-    def test_endpoint_contract_present(self):
-        # provCollectPayload/fgtCollectPayload/provInitToggles' fetch call
-        # probes: moved to static/js/provisioning.js.
-        html = frontend_source()
-        # Both vendor bases are chosen by provPayloadAndBase(); the four verbs
-        # are then reached as `${base}/<verb>` template literals, so assert the
-        # bases and the suffixes rather than concatenated literals that never
-        # appear in the source.
-        self.assertIn("base: '/api/provisioner/fgt'", html)
-        self.assertIn("base: '/api/provisioner'", html)
-        for suffix in ('generate', 'download', 'push-ssh', 'push-serial'):
-            self.assertIn('apiFetch(`${base}/%s`' % suffix, html,
-                          f"lost the {suffix} call site")
-        self.assertIn("apiFetch('/api/provisioner/serial-ports')", html)
-        # FortiGate token model: now owned solely by static/js/fortigate-management.js.
-        self.assertIn("apiFetch('/api/fortigate/tokens')", html)
-        self.assertIn("apiFetch('/api/fortigate/token'", html)
-
-    def test_vendor_toggle_intact(self):
-        # provVendorIsFgt/provInitToggles: moved to static/js/provisioning.js.
-        html = frontend_source()
-        # Restyling must not break which vendor section is visible.
-        self.assertIn("function provVendorIsFgt()", html)
-        self.assertIn("getElementById('provCiscoSection').style.display = fgt ? 'none' : ''", html)
-        self.assertIn("getElementById('provFgtSection').style.display = fgt ? '' : 'none'", html)
-
-    def test_tab_uses_component_classes(self):
-        html = _html()
-        tab = self._tab(html)
-        # table-wrap left with the removed inline token/objects section -- that
-        # UI now lives solely in #tab-fortigate (Fortigate Management tab).
-        self.assertIn('class="page-head"', tab)
-        # device/params card + generate/deliver card.
-        self.assertGreaterEqual(tab.count('class="panel'), 2)
-        # Device type chips reuse the existing .chip component.
-        self.assertEqual(tab.count('class="chip chip-choice"'), 2)
-        # Task 2: CSS estratto in static/css/dashboard.css, non piu' inline.
-        self.assertIn('.chip-choice[aria-pressed="true"]', frontend_source())
-
-    def test_i18n_keys_both_langs(self):
-        html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
-        for key in ('provisionerEyebrow:', 'provPanelDevice:', 'provPanelDeploy:',
-                    'titleProvisioner:', 'descProvisioner:',
-                    # W2 additions.
-                    'chipVendorCisco:', 'chipVendorFortigate:',
-                    'msgProvCiscoNoToken:'):
-            self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
-
-
-class TestImportTabRestyle(unittest.TestCase):
-    """Task 15: #tab-import (CSV Import) restyle guard.
-
-    Small tab: a single file input + submit button POSTing the parsed CSV
-    text to /api/import-csv, with the result (imported/failed counts, one
-    line per failed row) surfaced via alert() -- there is no "result
-    container" DOM node in this codebase. The brief's preserve-ID list names
-    one, but it does not exist; no results panel is rendered, since a card
-    captioned "Import result" that can never show a result reads as a
-    permanently-empty results area. The restyle is a hero header + one
-    .panel around the existing controls, handler untouched.
-    """
-
-    def _tab(self, html):
-        start = html.index('<div id="tab-import"')
         end = html.index('<!-- TAB 7: Gestione Utenti (solo admin) -->')
         return html[start:end]
 
     def test_preserve_ids(self):
         html = _html()
-        # csvFileInput is read by the click handler; btnUploadCsv is the
-        # element the handler is attached to via addEventListener.
-        for _id in ('csvFileInput', 'btnUploadCsv'):
+        for _id in ('provCiscoSection', 'provRole', 'btnProvGenerate', 'btnProvDownload',
+                    'provDeliveryMode', 'provSshFields', 'provSerialFields', 'provOutput'):
             self.assertIn(f'id="{_id}"', html, f"lost preserve-ID {_id}")
 
+    def test_fortigate_generator_is_gone(self):
+        tab = self._tab(_html())
+        src = frontend_source()
+        for gone in ('provFgtSection', 'provVendorChips', 'id="provVendor"', 'fgtHostname'):
+            self.assertNotIn(gone, tab)
+        for gone in ('fgtCollectPayload', "/api/provisioner/fgt", 'provPayloadAndBase'):
+            self.assertNotIn(gone, src)
+        self.assertNotIn('id="fgtTokenPanel"', _html())
+
     def test_endpoint_contract_present(self):
-        # CSV upload JS moved to static/js/devices.js -- frontend_source()
-        # concatenates dashboard.html + all static js/css.
-        html = frontend_source()
-        self.assertIn("apiFetch('/api/import-csv'", html)
-
-    def test_upload_handler_untouched(self):
-        # CSV upload JS moved to static/js/devices.js -- frontend_source()
-        # concatenates dashboard.html + all static js/css.
-        html = frontend_source()
-        # The click handler (addEventListener, not onclick) and its reporting
-        # path must stay wired to the preview state (importState) and the same endpoint.
-        self.assertIn("btnUploadCsv.addEventListener('click'", html)
-        self.assertIn("apiFetch('/api/import-csv', {", html)
-        self.assertIn("document.getElementById('csvFileInput')", html)
-        self.assertIn('csv_data: importState.text', html)
-
-    def test_rbac_preserved(self):
-        html = _html()
-        # Precedent from Task 14 (provisioner): the tab is gated at the nav
-        # entry (`nav-item requires-write` on the button that opens
-        # tab-import), so the tab body itself carries no write-gate class.
-        # CSP: la nav porta data-tab invece di onclick.
-        self.assertIn(
-            "class=\"nav-item requires-write\" data-tab=\"tab-import\"",
-            html)
+        src = frontend_source()
+        for verb in ('generate', 'push-ssh', 'push-serial'):
+            self.assertIn(f"apiFetch('/api/provisioner/{verb}'", src, f"lost the {verb} call site")
+        self.assertIn("apiFetch('/api/provisioner/serial-ports')", src)
+        # Download is built client-side from the generated text.
+        self.assertNotIn("/api/provisioner/download", src)
+        # FortiGate token model: owned solely by static/js/fortigate-management.js.
+        self.assertIn("apiFetch('/api/fortigate/tokens')", src)
 
     def test_tab_uses_component_classes(self):
-        html = _html()
-        tab = self._tab(html)
+        tab = self._tab(_html())
         self.assertIn('class="page-head"', tab)
-        # prepare-the-file step + destination + upload step + manual-config
-        # entry, beside the Group/Probe reference.
-        self.assertEqual(tab.count('<section class="panel">'), 4)
-        self.assertIn('class="panel import-aside"', tab)
+        # device/params card + generate/deliver card.
+        self.assertGreaterEqual(tab.count('class="panel'), 2)
 
     def test_i18n_keys_both_langs(self):
-        html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
-        for key in ('importEyebrow:', 'titleImportCsv:', 'descImportCsv:',
-                    'importPanelUpload:', 'lblSelectCsv:', 'btnUploadCsv:'):
-            self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
+        src = frontend_source()
+        for key in ('provPanelDevice:', 'provPanelDeploy:', 'titleProvisioner:', 'descProvisioner:'):
+            self.assertGreaterEqual(src.count(key), 2, f"{key} missing from a language map")
 
 
 class TestUsersTabRestyle(unittest.TestCase):
@@ -2503,7 +2299,7 @@ class TestSidebarRail(unittest.TestCase):
     def test_gated_nav_items_keep_their_gate_classes_and_hooks(self):
         # the rail must not have rewritten the nav away from switchTab()
         for tab, gate in (('tab-provisioner', 'requires-write'),
-                          ('tab-import', 'requires-write'),
+                          ('tab-provisioning', 'requires-write'),
                           ('tab-users', 'requires-admin'),
                           ('tab-probes', 'requires-admin'),
                           ('tab-mcp', 'requires-admin'),

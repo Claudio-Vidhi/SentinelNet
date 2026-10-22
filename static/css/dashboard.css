@@ -268,7 +268,7 @@
 }
 
 .panel, .hero-card, .kpi, .vuln-card, .modal, .login-card,
-aside, main, .table-container, .table-wrap, .template-box {
+aside, main, .table-wrap, .table-container {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lift);
 }
@@ -333,7 +333,7 @@ body {
 }
 
 /* Numerali tabulari ovunque compaia una misura */
-.kpi strong, table, .fgt-meter-num, .template-box, .count-badge,
+.kpi strong, table, .fgt-meter-num, .count-badge,
 .mono, code, pre { font-variant-numeric: tabular-nums; }
 
 a {
@@ -1685,18 +1685,6 @@ tr.row-dirty td:first-child { border-left: 2px solid var(--lamp-warn); }
 /* ---------------------------------------------------------------
    17. CARTIGLI SPECIFICI
    --------------------------------------------------------------- */
-.template-box {
-  background-color: var(--surface-2);
-  border: var(--seam) solid var(--border-strong);
-  color: var(--text);
-  font-family: var(--font-data);
-  padding: 14px;
-  border-radius: 0;
-  font-size: 12px;
-  margin-bottom: 14px;
-  overflow-x: auto;
-  line-height: 1.6;
-}
 
 #networkGraphContainer {
   /* Altezza legata alla finestra, non un 600px fisso: il pannello laterale sta
@@ -2236,10 +2224,6 @@ body:not(.role-super_admin) .requires-super-admin { display: none !important; }
   .hero { grid-template-columns: 1fr; }
   #homeVerdicts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .home-split { grid-template-columns: 1fr; }
-}
-
-@media (max-width: 1100px) {
-  .prov-grid { grid-template-columns: 1fr !important; }
 }
 
 @media (min-width: 1001px) {
@@ -4462,17 +4446,8 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
 .head-status:empty { display: none; }
 .traf-kpi-label .led { display: inline-block; width: 8px; height: 8px; margin-right: 4px; vertical-align: middle; }
 
-/* CSV import: numbered steps beside the column reference. */
-.import-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); gap: 16px; align-items: start; }
-.import-steps > .panel { margin-bottom: 16px; }
-.import-steps .panel-head, .import-aside .panel-head { margin-bottom: 14px; }
-.import-aside { position: sticky; top: 68px; }
-.import-aside-text { font-size: 12.5px; line-height: 1.6; color: var(--text-muted); }
-.import-aside-sep { margin-top: 12px; padding-top: 12px; border-top: var(--seam) solid var(--border); }
 .import-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .import-chips:empty { display: none; }
-.import-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
-.import-tabs .active { color: var(--text); border-color: var(--primary); }
 .dropzone { padding: 28px 22px; text-align: center; cursor: pointer; background-color: var(--surface-2); border: 2px dashed var(--border); transition: border-color var(--transition); }
 .dropzone:hover { border-color: var(--border-strong); }
 .dropzone-text { font-size: 13px; color: var(--text-muted); }
@@ -4508,10 +4483,6 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
 .mc-grid input:focus, .mc-grid select:focus { outline: none; border-color: var(--focus); box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25); }
 .mc-apply-row { margin-top: 10px; }
 .mc-analyses { margin: 8px 0 0; font-size: var(--font-size-xs); color: var(--text-muted); }
-@media (max-width: 1100px) {
-  .import-layout { grid-template-columns: minmax(0, 1fr); }
-  .import-aside { position: static; }
-}
 
 /* Column resizing (core.js makeTableResizable). !important beats the inline
    cursor:pointer that makeTableSortable puts on every header. */
@@ -5428,10 +5399,13 @@ details[open] > summary .mac-caret { transform: rotate(180deg); }
 .dev-form-status[data-state="ok"] { border-left-color: var(--lamp-up); color: var(--lamp-up-ink); background: var(--lamp-up-wash); }
 .dev-form-status[data-state="error"] { border-left-color: var(--lamp-fault); color: var(--lamp-fault-ink); background: var(--lamp-fault-wash); }
 .dev-form-status[data-state="info"] { color: var(--text-muted); }
-.dev-form-status .btn { width: auto; margin: 6px 0 0; }
-#importPasteBox, .import-paste { width: 100%; margin-top: 4px; font-family: var(--font-code); font-size: 12px; resize: vertical; }
-.import-paste-label { display: block; margin-top: 12px; font-size: 12px; color: var(--text-muted); }
-#importPasteNote { margin: 6px 0 0; color: var(--lamp-warn-ink); }
+.import-paste { width: 100%; margin-top: 4px; font-family: var(--font-code); font-size: 12px; resize: vertical; }
+#btnDownloadCsvTemplate { width: auto; margin-top: 8px; }
+.adw-csv-help { margin-top: 10px; }
+.adw-tenant-row { display: flex; gap: 8px; }
+.adw-tenant-row select { flex: 1; min-width: 0; }
+.adw-tenant-row .btn { width: auto; flex: 0 0 auto; }
+.adw-csv-help summary { cursor: pointer; font-size: 12px; color: var(--text-muted); }
 /* "Aggiungi apparati" panel: one card per source. */
 .add-sources { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-top: 12px; }
 .add-source { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; padding: 12px 14px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text); cursor: pointer; font: inherit; }
@@ -5483,3 +5457,7 @@ details[open] > summary .mac-caret { transform: rotate(180deg); }
 .adw-result li.is-warn { border-left-color: var(--lamp-warn); }
 .adw-done-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 .adw-done-actions .btn { width: auto; }
+
+/* Location dialog: "apply the probe to every device" is edit-only. A class, not
+   an inline display, so the hidden attribute still hides it. */
+.loc-apply:not([hidden]) { display: flex; gap: 8px; align-items: center; font-size: 13px; }

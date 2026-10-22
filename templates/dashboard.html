@@ -340,11 +340,8 @@
       <div class="nav-group" data-nav-group="operations">
         <h3><button type="button" class="nav-group-toggle" aria-expanded="true" aria-controls="navItems-operations"><span class="nav-group-label" data-i18n="navOperations">Operazioni</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button></h3>
         <div class="nav-group-items" id="navItems-operations">
-        <button class="nav-item requires-write" data-tabs="tab-provisioning tab-provisioner" data-tab="tab-provisioning" role="tab" aria-controls="tab-provisioning" aria-selected="false" tabindex="-1">
-          <span class="nav-left" data-i18n="tabProvGroup"><i class="fa-solid fa-circle-plus"></i> Provisioning</span>
-        </button>
-        <button class="nav-item requires-write" data-tab="tab-import" role="tab" aria-controls="tab-import" aria-selected="false" tabindex="-1">
-          <span class="nav-left" data-i18n="tabImport"><i class="fa-solid fa-file-csv"></i> Importazione CSV</span>
+        <button class="nav-item requires-write" data-tab="tab-provisioner" role="tab" aria-controls="tab-provisioner" aria-selected="false" tabindex="-1">
+          <span class="nav-left" data-i18n="tabProvisioner"><i class="fa-solid fa-screwdriver-wrench"></i> Nuova configurazione</span>
         </button>
         <button class="nav-item" data-tab="tab-ai" role="tab" aria-controls="tab-ai" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabAiAssistant"><i class="fa-solid fa-robot"></i> AI Assistant</span>
@@ -359,6 +356,9 @@
         </button>
         <button class="nav-item requires-admin" data-tab="tab-groups" role="tab" aria-controls="tab-groups" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabGroups"><i class="fa-solid fa-folder-open"></i> Organizzazioni</span>
+        </button>
+        <button class="nav-item requires-write" data-tab="tab-provisioning" role="tab" aria-controls="tab-provisioning" aria-selected="false" tabindex="-1">
+          <span class="nav-left" data-i18n="tabCredentials"><i class="fa-solid fa-id-badge"></i> Credenziali</span>
         </button>
         <button class="nav-item requires-admin" data-tab="tab-probes" role="tab" aria-controls="tab-probes" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabProbes"><i class="fa-solid fa-building"></i> Sonde</span>
@@ -763,233 +763,58 @@
       </div>
     </div>
 
-    <!-- TAB 1b: Provisioning Apparato (estratto da Network Inventory) -->
+    <!-- Credentials (Administer). The id stays tab-provisioning: it is the
+         permission name the add/edit routes check, and users hold it. -->
     <div id="tab-provisioning" class="tab-content" role="tabpanel" tabindex="0">
       <div class="page-head">
         <div class="page-head-text">
-          <h2 data-i18n="provisioningHeroTitle">Provisioning Apparato</h2>
-          <p data-i18n="provisioningHeroSubtitle">Aggiungi o modifica un dispositivo esistente nell'inventario, assegnalo a un tenant e configura protocolli di connessione e credenziali. Crea qui anche nuovi tenant.</p>
+          <h2 data-i18n="credHeroTitle">Credenziali</h2>
+          <p data-i18n="credHeroSubtitle">Le identità con cui SentinelNet accede agli apparati: utente, password ed enable secret, per tutti i tenant o solo per alcuni. Le scegli quando aggiungi o modifichi un apparato.</p>
         </div>
       </div>
-      <div class="subtab-bar">
-        <button class="btn btn-secondary ti-subtab active" data-switch-tab="tab-provisioning" data-i18n="tabProvisioning"></button>
-        <button class="btn btn-secondary ti-subtab" data-switch-tab="tab-provisioner" data-i18n="tabProvisioner"></button>
-      </div>
-
-      <div style="display:grid; grid-template-columns: minmax(380px, 1fr) minmax(420px, 520px); gap:18px; align-items:start;" class="prov-grid">
-        <article class="panel requires-write">
-          <div class="requires-write">
-            <h3 style="margin-bottom: 12px; font-size: 17px;" id="devFormTitle" data-i18n="titleProvisioning"><i class="fa-solid fa-circle-plus"></i> Provisioning Apparato</h3>
-
-            <div id="devEditNotice" style="display:none; margin-bottom:10px; padding:8px 10px; border:1px solid var(--primary); border-radius:0; color:var(--primary); font-size:12px;">
-              <i class="fa-solid fa-pen-to-square"></i> <span data-i18n="msgEditingDevice">Stai modificando un dispositivo esistente. Le credenziali vanno reinserite per confermarle.</span>
-            </div>
-
-            <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin:14px 0 8px; display:flex; align-items:center; gap:6px;">
-              <i class="fa-solid fa-building"></i> <span data-i18n="secTenant">1 · Tenant</span>
-            </h4>
-            <div class="form-group">
-              <label data-i18n="lblGroup">Assegna a Tenant</label>
-              <div style="display:flex; gap:8px; align-items:center;">
-                <select id="devGroupSelect" style="flex:1;" aria-label="Tenant del dispositivo" data-i18n-aria-label="ariaDevTenant"></select>
-                <button class="btn btn-secondary" id="btnInlineNewTenant" type="button" title="Nuovo tenant" data-i18n-title="titleBtnNewTenant" style="white-space:nowrap; width:auto; flex:0 0 auto;"><i class="fa-solid fa-plus"></i></button>
-              </div>
-              <div id="inlineNewTenantRow" style="display:none; margin-top:8px; gap:8px;">
-                <input id="newGroupName" type="text" placeholder="Es. Tenant_Torino" data-i18n-placeholder="phNewTenant" style="flex:1; padding-left:12px;" aria-label="Es. Tenant_Torino" data-i18n-aria-label="phNewTenant">
-                <button class="btn btn-primary" id="btnCreateGroup" style="background:var(--cta); color:var(--cta-text); width:auto; flex:0 0 auto;" data-i18n="btnCreateGroup"><i class="fa-solid fa-folder-plus"></i> Crea Tenant</button>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label for="devLocationSelect" data-i18n="lblDeviceLocation">Sede</label>
-              <div class="input-wrapper">
-                <i class="fa-solid fa-map-pin"></i>
-                <select id="devLocationSelect"></select>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label data-i18n="lblDeviceProbe">Sonda</label>
-              <div class="input-wrapper">
-                <i class="fa-solid fa-location-dot"></i>
-                <select id="devProbeSelect" aria-label="Sonda del dispositivo" data-i18n-aria-label="ariaDevProbe"></select>
-              </div>
-            </div>
-
-            <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin:14px 0 8px; display:flex; align-items:center; gap:6px;">
-              <i class="fa-solid fa-server"></i> <span data-i18n="secDevice">2 · Dispositivo</span>
-            </h4>
-            <div class="form-group">
-              <label data-i18n="lblIp">IP Apparato</label>
-              <div class="input-wrapper">
-                <i class="fa-solid fa-server"></i>
-                <input id="devIp" type="text" placeholder="10.0.0.1" aria-label="Indirizzo IP del dispositivo" data-i18n-aria-label="ariaDevIp">
-              </div>
-              <div id="devIpHint" style="display:none; font-size:12px; margin-top:4px;"></div>
-            </div>
-
-            <div class="form-group">
-              <label data-i18n="lblVendor">Vendor Engine</label>
-              <div class="input-wrapper">
-                <i class="fa-solid fa-gears"></i>
-                <select id="devVendor" aria-label="Vendor del dispositivo" data-i18n-aria-label="ariaDevVendor"></select>
-              </div>
-            </div>
-
-            <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin:14px 0 8px; display:flex; align-items:center; gap:6px;">
-              <i class="fa-solid fa-plug"></i> <span data-i18n="secConnectivity">3 · Connettività</span>
-            </h4>
-            <!-- §11.6: trasporti per-device (checkbox + porta per protocollo).
-                 Collassato di default; il riepilogo mostra i protocolli abilitati
-                 e si espande da solo in modifica se il device non usa i default
-                 (solo SSH:22) -- vedi setTransportsForm(). -->
-            <div class="form-group">
-              <label data-i18n="lblTransports">Protocolli di connessione</label>
-              <details id="devTransports" style="border:1px solid var(--border); border-radius:0; background:var(--surface-2); overflow:hidden;">
-                <summary style="list-style:none; cursor:pointer; padding:8px 10px; font-size:13px; font-weight:700; color:var(--text-muted); display:flex; align-items:center; gap:6px;">
-                  <i class="fa-solid fa-plug"></i>
-                  <span data-i18n="lblTransportsEnabled">Abilitati:</span>
-                  <span id="devTransportsSummary" style="color:var(--text);">SSH:22</span>
-                  <i class="fa-solid fa-caret-down" style="font-size:11px; margin-left:auto;"></i>
-                </summary>
-                <div style="padding:10px; border-top:1px solid var(--border); display:grid; grid-template-columns:auto 90px; gap:6px 8px; align-items:center;">
-                  <div style="display:flex; align-items:center; gap:8px;">
-                    <input type="checkbox" id="trSshEnabled" data-proto="ssh" checked>
-                    <label for="trSshEnabled" style="min-width:80px; margin:0;">SSH</label>
-                  </div>
-                  <input id="trSshPort" type="number" min="1" max="65535" value="22" style="width:90px;" aria-label="Porta SSH" data-i18n-aria-label="ariaSshPort">
-                  <div style="display:flex; align-items:center; gap:8px;">
-                    <input type="checkbox" id="trTelnetEnabled" data-proto="telnet">
-                    <label for="trTelnetEnabled" style="min-width:80px; margin:0;">Telnet</label>
-                  </div>
-                  <input id="trTelnetPort" type="number" min="1" max="65535" value="23" style="width:90px;" aria-label="Porta Telnet" data-i18n-aria-label="ariaTelnetPort">
-                  <div id="trTelnetWarn" data-i18n="lblTelnetWarn" style="grid-column:1 / -1; display:none; color: var(--danger); font-size: 12px;">Attenzione: Telnet trasmette le credenziali in chiaro.</div>
-                  <div style="display:flex; align-items:center; gap:8px;">
-                    <input type="checkbox" id="trNetconfEnabled" data-proto="netconf">
-                    <label for="trNetconfEnabled" style="min-width:80px; margin:0;">NETCONF</label>
-                  </div>
-                  <input id="trNetconfPort" type="number" min="1" max="65535" value="830" style="width:90px;" aria-label="Porta NETCONF" data-i18n-aria-label="ariaNetconfPort">
-                  <div style="display:flex; align-items:center; gap:8px;">
-                    <input type="checkbox" id="trRestconfEnabled" data-proto="restconf">
-                    <label for="trRestconfEnabled" style="min-width:80px; margin:0;">RESTCONF</label>
-                  </div>
-                  <input id="trRestconfPort" type="number" min="1" max="65535" value="443" style="width:90px;" aria-label="Porta RESTCONF" data-i18n-aria-label="ariaRestconfPort">
-                  <div style="display:flex; align-items:center; gap:8px;">
-                    <input type="checkbox" id="trTcpEnabled" data-proto="tcp">
-                    <label for="trTcpEnabled" style="min-width:80px; margin:0;">TCP</label>
-                  </div>
-                  <input id="trTcpPort" type="number" min="1" max="65535" value="" style="width:90px;" aria-label="Porta TCP" data-i18n-aria-label="ariaTcpPort">
-                  <div style="display:flex; align-items:center; gap:8px;">
-                    <input type="checkbox" id="trUdpEnabled" data-proto="udp">
-                    <label for="trUdpEnabled" style="min-width:80px; margin:0;">UDP</label>
-                  </div>
-                  <input id="trUdpPort" type="number" min="1" max="65535" value="" style="width:90px;" aria-label="Porta UDP" data-i18n-aria-label="ariaUdpPort">
-                </div>
-              </details>
-            </div>
-
-            <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin:14px 0 8px; display:flex; align-items:center; gap:6px;">
-              <i class="fa-solid fa-key"></i> <span data-i18n="secCredentials">4 · Credenziali</span>
-            </h4>
-            <div class="form-group">
-              <label data-i18n="lblProfile">Profilo Credenziali</label>
-              <div class="input-wrapper">
-                <i class="fa-solid fa-key"></i>
-                <select id="devProfile" aria-label="Profilo credenziali" data-i18n-aria-label="ariaDevProfile">
-                  <option value="default" data-i18n="optProfileDefault">Profilo Rete Standard</option>
-                  <option value="custom" data-i18n="optProfileCustom">Credenziali dedicate...</option>
-                </select>
-              </div>
-            </div>
-
-            <div id="customCredsForm" style="display:none; border-left: 2px solid var(--primary); padding-left: 10px; margin-bottom: 10px;">
-              <div class="form-group">
-                <label for="devUser" data-i18n="lblUser">Username</label><input id="devUser" type="text" placeholder="Admin" style="padding-left:12px;">
-              </div>
-              <div class="form-group">
-                <label for="devPass" id="devPassLabel" data-i18n="lblPass">Password</label><input id="devPass" type="password" placeholder="admin" style="padding-left:12px;">
-              </div>
-              <div class="form-group" id="devSecretGroup">
-                <label for="devSecret" id="devSecretLabel" data-i18n="lblSecret">Enable Secret</label><input id="devSecret" type="password" placeholder="admin" style="padding-left:12px;">
-                <small id="devSecretHint" style="display:none; color:var(--text-muted); font-size:11px;" data-i18n="hintSecretLinux">Se compilata, il triage esegue anche i comandi che richiedono root. Lasciandola vuota la sessione resta non privilegiata.</small>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label for="devSnmp" data-i18n="lblSnmpCommunity">Community SNMP (sola lettura)</label>
-              <input id="devSnmp" type="password" autocomplete="off" placeholder="—" style="padding-left:12px;">
-              <!-- Edit-only: a new device has no community to remove. -->
-              <label id="devSnmpClearRow" hidden style="display:flex; align-items:center; gap:6px; font-size:11px; margin-top:4px; cursor:pointer;">
-                <input type="checkbox" id="devSnmpClear" style="accent-color:var(--danger);">
-                <span data-i18n="lblSnmpClear">Rimuovi la community e ferma il polling</span>
+      <article class="panel" id="identitiesPanel">
+        <h3 style="font-size:17px; margin-bottom:6px;" data-i18n="titleIdentities"><i class="fa-solid fa-id-badge"></i> Identità del Tenant</h3>
+        <div class="table-wrap">
+          <!-- Four fixed columns: resize/reorder/picker would let a saved
+               width push the actions out of view, which is what happened. -->
+          <table class="ident-table" data-no-resize data-no-reorder data-no-colpicker>
+            <thead>
+              <tr>
+                <th data-i18n="thIdentName">Nome</th>
+                <th data-i18n="thIdentTenant">Tenant</th>
+                <th class="ident-num" data-i18n="thIdentDevices">Device</th>
+                <th class="ident-act" data-i18n="thIdentActions">Azioni</th>
+              </tr>
+            </thead>
+            <tbody id="identitiesTableBody"></tbody>
+          </table>
+        </div>
+        <div id="identityForm" style="display:none; border-left:2px solid var(--primary); padding-left:10px; margin-top:12px;">
+          <input type="hidden" id="identEditId">
+          <div class="form-group"><label for="identName" data-i18n="thIdentName">Nome</label><input id="identName" type="text" style="padding-left:12px;"></div>
+          <div class="form-group">
+            <label data-i18n="thIdentTenant">Tenant / Sede</label>
+            <div style="margin-bottom:6px;">
+              <label style="font-size:12px; font-weight:normal; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+                <input type="checkbox" id="chkIdentSpecificTenant" style="width:auto; margin:0;">
+                <span data-i18n="lblRestrictSpecificTenant">Riserva a tenant specifici</span>
               </label>
-              <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin-top:6px;">
-                <input type="checkbox" id="devSnmpDisabled" style="width:auto; margin:0;">
-                <span data-i18n="lblSnmpDisabled"></span>
-              </label>
-              <small id="devSnmpHint" style="color:var(--text-muted); font-size:11px;" data-i18n="hintSnmpCommunity">
-                Solo v2c e sola lettura: abilita il polling di stato e contatori sugli apparati senza API REST. La community viaggia in chiaro — usare solo su rete di management. Vuoto in modifica = invariata.
-              </small>
             </div>
-
-            <div id="devFormStatus" class="dev-form-status" role="status" aria-live="polite" hidden></div>
-            <button class="btn btn-secondary" id="btnVerifyDevice" type="button" style="margin-top: 10px;" data-i18n="btnVerifyDevice">
-              <i class="fa-solid fa-plug-circle-check"></i> Verifica connessione
-            </button>
-            <button class="btn btn-primary" id="btnSaveDevice" style="margin-top: 8px;" data-i18n="btnSaveDevice">
-              <i class="fa-solid fa-floppy-disk"></i> Salva Apparato
-            </button>
-            <button class="btn btn-secondary" id="btnCancelEditDevice" style="display:none; margin-top: 8px;" data-i18n="btnCancelEditDevice">
-              <i class="fa-solid fa-xmark"></i> Annulla modifica
-            </button>
-          </div>
-        </article>
-
-        <article class="panel requires-write" id="identitiesPanel">
-          <h3 style="font-size:17px; margin-bottom:6px;" data-i18n="titleIdentities"><i class="fa-solid fa-id-badge"></i> Identità del Tenant</h3>
-          <div class="table-wrap">
-            <!-- A side panel, not a schedule: four fixed columns that fit it.
-                 Resize/reorder/picker would let a saved width push the
-                 actions out of view, which is what happened. -->
-            <table class="ident-table" data-no-resize data-no-reorder data-no-colpicker>
-              <thead>
-                <tr>
-                  <th data-i18n="thIdentName">Nome</th>
-                  <th data-i18n="thIdentTenant">Tenant</th>
-                  <th class="ident-num" data-i18n="thIdentDevices">Device</th>
-                  <th class="ident-act" data-i18n="thIdentActions">Azioni</th>
-                </tr>
-              </thead>
-              <tbody id="identitiesTableBody"></tbody>
-            </table>
-          </div>
-          <div id="identityForm" style="display:none; border-left:2px solid var(--primary); padding-left:10px; margin-top:12px;">
-            <input type="hidden" id="identEditId">
-            <div class="form-group"><label for="identName" data-i18n="thIdentName">Nome</label><input id="identName" type="text" style="padding-left:12px;"></div>
-            <div class="form-group">
-              <label data-i18n="thIdentTenant">Tenant / Sede</label>
-              <div style="margin-bottom:6px;">
-                <label style="font-size:12px; font-weight:normal; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
-                  <input type="checkbox" id="chkIdentSpecificTenant" style="width:auto; margin:0;">
-                  <span data-i18n="lblRestrictSpecificTenant">Riserva a tenant specifici</span>
-                </label>
-              </div>
-              <div id="identTenantSingleWrap">
-                <select id="identTenant" aria-label="Tenant riservato all identita" data-i18n-aria-label="ariaIdentityTenant"></select>
-              </div>
-              <div id="identTenantMultiWrap" style="display:none; border:1px solid var(--border); padding:8px; max-height:140px; overflow-y:auto; background:var(--surface-2);">
-                <div id="identTenantCheckboxes" style="display:flex; flex-direction:column; gap:4px;"></div>
-              </div>
+            <div id="identTenantSingleWrap">
+              <select id="identTenant" aria-label="Tenant riservato all identita" data-i18n-aria-label="ariaIdentityTenant"></select>
             </div>
-            <div class="form-group"><label for="identUser">Username</label><input id="identUser" type="text" style="padding-left:12px;"></div>
-            <div class="form-group"><label for="identPass" data-i18n="lblPass">Password</label><input id="identPass" type="password" style="padding-left:12px;"></div>
-            <div class="form-group"><label for="identSecret" data-i18n="lblSecret">Enable Secret</label><input id="identSecret" type="password" style="padding-left:12px;"></div>
-            <button class="btn btn-primary" id="btnSaveIdentity" data-i18n="btnSaveIdentity"><i class="fa-solid fa-floppy-disk"></i> Salva Identità</button>
-            <button class="btn btn-secondary" id="btnCancelIdentity" data-i18n="btnCancelIdentity"><i class="fa-solid fa-xmark"></i> Annulla</button>
+            <div id="identTenantMultiWrap" style="display:none; border:1px solid var(--border); padding:8px; max-height:140px; overflow-y:auto; background:var(--surface-2);">
+              <div id="identTenantCheckboxes" style="display:flex; flex-direction:column; gap:4px;"></div>
+            </div>
           </div>
-          <button class="btn btn-secondary" id="btnNewIdentity" style="margin-top:10px;" data-i18n="btnNewIdentity"><i class="fa-solid fa-plus"></i> Nuova Identità</button>
-        </article>
-      </div>
+          <div class="form-group"><label for="identUser">Username</label><input id="identUser" type="text" style="padding-left:12px;"></div>
+          <div class="form-group"><label for="identPass" data-i18n="lblPass">Password</label><input id="identPass" type="password" style="padding-left:12px;"></div>
+          <div class="form-group"><label for="identSecret" data-i18n="lblSecret">Enable Secret</label><input id="identSecret" type="password" style="padding-left:12px;"></div>
+          <button class="btn btn-primary" id="btnSaveIdentity" data-i18n="btnSaveIdentity"><i class="fa-solid fa-floppy-disk"></i> Salva Identità</button>
+          <button class="btn btn-secondary" id="btnCancelIdentity" data-i18n="btnCancelIdentity"><i class="fa-solid fa-xmark"></i> Annulla</button>
+        </div>
+        <button class="btn btn-secondary" id="btnNewIdentity" style="margin-top:10px;" data-i18n="btnNewIdentity"><i class="fa-solid fa-plus"></i> Nuova Identità</button>
+      </article>
     </div>
 
     <!-- TAB 2: Gestione Tenant -->
@@ -998,6 +823,9 @@
         <div class="page-head-text">
           <h2 data-i18n="titleGroupsRegistry">Organizzazioni</h2>
           <p data-i18n="descGroupsRegistry">Le organizzazioni raggruppano logicamente gli asset e le sedi fisiche della rete.</p>
+        </div>
+        <div class="page-head-actions">
+          <button type="button" class="btn btn-primary" id="btnOpenNewTenant"><i class="fa-solid fa-folder-plus"></i> <span data-i18n="btnNewTenant">Nuova organizzazione</span></button>
         </div>
       </div>
 
@@ -2570,17 +2398,13 @@
       </div>
     </div>
 
-    <!-- TAB: Switch da Zero (Provisioner) -->
+    <!-- Nuova configurazione (tab-provisioner): day-0 config for a Cisco switch -->
     <div id="tab-provisioner" class="tab-content" role="tabpanel" tabindex="0">
       <div class="page-head">
         <div class="page-head-text">
-          <h2 data-i18n="titleProvisioner">Zero-Touch Provisioning (Switch Cisco / Firewall FortiGate)</h2>
-          <p data-i18n="descProvisioner">Genera una configurazione day-0 completa e sicura — IOS/IOS-XE per switch Cisco o FortiOS per firewall FortiGate — seguendo le linee guida di hardening del vendor, poi scegli come consegnarla: testo, SSH o console/seriale.</p>
+          <h2 data-i18n="titleProvisioner">Nuova configurazione: switch Cisco</h2>
+          <p data-i18n="descProvisioner">Genera la configurazione day-0 completa e sicura (IOS/IOS-XE) di uno switch Cisco nuovo, seguendo le linee guida di hardening del vendor, poi scegli come consegnarla: testo, SSH o console/seriale.</p>
         </div>
-      </div>
-      <div class="subtab-bar">
-        <button class="btn btn-secondary ti-subtab" data-switch-tab="tab-provisioning" data-i18n="tabProvisioning"></button>
-        <button class="btn btn-secondary ti-subtab active" data-switch-tab="tab-provisioner" data-i18n="tabProvisioner"></button>
       </div>
 
       <!-- Panel: generazione config per un NUOVO switch (template o parametri comuni tenant) -->
@@ -2636,84 +2460,6 @@
 
       <div class="panel" style="margin-bottom:18px;">
       <h3 style="font-size:15px; margin:0 0 14px;"><i class="fa-solid fa-sliders" style="color:var(--primary); margin-right:8px;"></i><span data-i18n="provPanelDevice">Apparato & parametri</span></h3>
-
-      <!-- Tipo apparato: chip selector. Il <select id="provVendor"> resta la FONTE
-           DI VERITÀ (lo leggono provVendorIsFgt/provPayloadAndBase): è solo nascosto
-           visivamente, non rimosso. I chip ne impostano .value e dispatchano un vero
-           evento 'change', così tutto il wiring vendor esistente resta invariato.
-           I chip sono l'UNICO controllo accessibile: il select è aria-hidden e fuori
-           dal tab order (tabindex="-1"), così un utente da tastiera non finisce mai
-           su un controllo invisibile (WCAG 2.4.7). -->
-      <div class="form-group" style="max-width:560px;">
-        <label id="provVendorLabel" data-i18n="lblProvVendor">Tipo apparato</label>
-        <div id="provVendorChips" role="group" aria-labelledby="provVendorLabel" style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button type="button" class="chip chip-choice" data-vendor="cisco" aria-pressed="true">
-            <i class="fa-solid fa-network-wired"></i><span data-i18n="chipVendorCisco">Switch Cisco (IOS/IOS-XE)</span>
-          </button>
-          <button type="button" class="chip chip-choice" data-vendor="fortigate" aria-pressed="false">
-            <i class="fa-solid fa-shield-halved"></i><span data-i18n="chipVendorFortigate">Firewall FortiGate (FortiOS)</span>
-          </button>
-        </div>
-        <select id="provVendor" class="visually-hidden" aria-hidden="true" tabindex="-1">
-          <option value="cisco">Switch Cisco (IOS/IOS-XE)</option>
-          <option value="fortigate">Firewall FortiGate (FortiOS)</option>
-        </select>
-      </div>
-
-      <!-- Nota statica: gli switch Cisco non usano token API. Visibile solo per Cisco. -->
-      <p id="provCiscoTokenHint" style="display:flex; align-items:center; gap:6px; margin:0 0 16px; font-size:12px; color:var(--text-muted);">
-        <i class="fa-solid fa-circle-info" style="color:var(--primary);"></i><span data-i18n="msgProvCiscoNoToken">Nessun token API richiesto per gli switch Cisco: la consegna avviene via SSH o console/seriale.</span>
-      </p>
-
-      <div id="provFgtSection" style="display:none;">
-        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:14px;">
-          <div class="form-group"><label for="fgtHostname">Hostname</label><input id="fgtHostname" type="text" value="FGT-NEW-01" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtTimezone">Timezone</label><input id="fgtTimezone" type="text" value="Europe/Rome" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtAdminUser" data-i18n="lblProvFgtAdminUser">Admin aggiuntivo (user)</label><input id="fgtAdminUser" type="text" placeholder="netadmin" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtAdminPass" data-i18n="lblProvFgtAdminPass">Admin aggiuntivo (password)</label><input id="fgtAdminPass" type="password" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtMgmtIf" data-i18n="lblProvMgmtIf">Interfaccia MGMT</label><input id="fgtMgmtIf" type="text" placeholder="mgmt / port1" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtMgmtIp">IP MGMT</label><input id="fgtMgmtIp" type="text" placeholder="10.0.0.254" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtMgmtMask">Mask MGMT</label><input id="fgtMgmtMask" type="text" placeholder="255.255.255.0" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtWanIf" data-i18n="lblProvWanIf">Interfaccia WAN</label><input id="fgtWanIf" type="text" placeholder="wan1" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtWanMode" data-i18n="lblProvWanMode">Modalità WAN</label><select id="fgtWanMode">
-              <option value="dhcp">DHCP</option>
-              <option value="static" data-i18n="optProvStatic">Statica</option>
-            </select>
-          </div>
-          <div class="form-group"><label for="fgtWanIp" data-i18n="lblProvWanIpStatic">IP WAN (statica)</label><input id="fgtWanIp" type="text" placeholder="203.0.113.2" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtWanMask">Mask WAN</label><input id="fgtWanMask" type="text" placeholder="255.255.255.252" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtWanGw">Gateway WAN</label><input id="fgtWanGw" type="text" placeholder="203.0.113.1" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtLanIf" data-i18n="lblProvLanIf">Interfaccia LAN</label><input id="fgtLanIf" type="text" placeholder="internal / lan" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtLanIp">IP LAN</label><input id="fgtLanIp" type="text" placeholder="192.168.1.1" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtLanMask">Mask LAN</label><input id="fgtLanMask" type="text" placeholder="255.255.255.0" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtDhcpStart">DHCP range start</label><input id="fgtDhcpStart" type="text" placeholder="192.168.1.100" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtDhcpEnd">DHCP range end</label><input id="fgtDhcpEnd" type="text" placeholder="192.168.1.200" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtDns1" data-i18n="lblProvDns1">DNS primario</label><input id="fgtDns1" type="text" placeholder="1.1.1.1" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtDns2" data-i18n="lblProvDns2">DNS secondario</label><input id="fgtDns2" type="text" placeholder="8.8.8.8" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtNtp">NTP servers (comma)</label><input id="fgtNtp" type="text" placeholder="it.pool.ntp.org" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtSyslog">Syslog server</label><input id="fgtSyslog" type="text" placeholder="192.0.2.50" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtSnmpUser">SNMPv3 user</label><input id="fgtSnmpUser" type="text" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtSnmpAuth">SNMPv3 auth pass</label><input id="fgtSnmpAuth" type="password" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtSnmpPriv">SNMPv3 priv pass</label><input id="fgtSnmpPriv" type="password" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtBanner">Banner post-login</label><input id="fgtBanner" type="text" placeholder="Accesso riservato - uso autorizzato" data-i18n-placeholder="phProvBanner" style="padding-left:12px;"></div>
-          <div class="form-group"><label for="fgtAaaProtocol" data-i18n="lblAaaProtocol">Protocollo AAA</label><select id="fgtAaaProtocol">
-              <option value="none" data-i18n="optAaaNone">Nessuno</option>
-              <option value="radius">RADIUS</option>
-              <option value="tacacs">TACACS+</option>
-            </select>
-          </div>
-          <div class="form-group" id="fgtAaaServerGroup" style="display:none;"><label for="fgtAaaServerIp" data-i18n="lblAaaServer">Server AAA (IP)</label><input id="fgtAaaServerIp" type="text" placeholder="10.0.0.100" style="padding-left:12px;"></div>
-          <div class="form-group" id="fgtAaaKeyGroup" style="display:none;"><label for="fgtAaaKey" data-i18n="lblAaaKey">Chiave condivisa</label><input id="fgtAaaKey" type="password" style="padding-left:12px;"></div>
-        </div>
-        <div id="fgtAaaHint" style="display:none; margin-top:6px; font-size:12px; color:var(--text-muted);" data-i18n="hintAaaFallback">Il local fallback resta sempre attivo in caso di mancata risposta del server AAA.</div>
-        <div style="display:flex; gap:20px; flex-wrap:wrap; margin-top:16px;">
-          <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="fgtDhcpServer"> <span data-i18n="lblFgtDhcpServer">DHCP server su LAN</span></label>
-          <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="fgtLanToWan" checked> <span data-i18n="lblFgtLanToWan">Policy LAN→WAN con NAT</span></label>
-          <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="fgtNoWanAdmin" checked> <span data-i18n="lblFgtNoWanAdmin">Nessun accesso admin dal WAN</span></label>
-          <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="fgtLockout" checked> Admin lockout (anti brute-force)</label>
-          <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="fgtStrongCrypto" checked> Strong-crypto</label>
-        </div>
-      </div>
 
       <div id="provCiscoSection">
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:14px;">
@@ -2818,135 +2564,6 @@
       <div style="margin-top:20px;">
         <label for="provOutput" style="font-size:13px; color:var(--text-muted);">Config generata / esito operazione</label><textarea id="provOutput" readonly style="width:100%; height:320px; margin-top:6px; padding:10px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:var(--font-code); font-size:12px; resize:vertical; outline:none;"></textarea>
       </div>
-      </div>
-    </div>
-
-    <!-- TAB 6: Importazione CSV -->
-    <div id="tab-import" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="page-head">
-        <div class="page-head-text">
-          <h2 data-i18n="titleImportCsv">Importa CSV</h2>
-          <p data-i18n="descImportCsv">Aggiungi molti apparati insieme: carica un file CSV oppure incolla gli indirizzi. Prima di importare vedi cosa è nuovo, cosa si aggiorna e cosa va sistemato.</p>
-        </div>
-      </div>
-
-      <!-- Two numbered steps beside the reference the operator checks while
-           filling the file: prepare it from the template, then drop it in. -->
-      <div class="import-layout">
-        <div class="import-steps">
-          <section class="panel">
-            <div class="panel-head">
-              <h3 data-i18n="importStepPrepare">1 · Prepara il file</h3>
-              <button class="btn btn-secondary btn-small" id="btnDownloadCsvTemplate" style="width:auto;" data-i18n="btnDownloadCsvTemplate">
-                <i class="fa-solid fa-download"></i> Scarica modello CSV
-              </button>
-            </div>
-            <div class="template-box">IP,Username,Password,Enable Secret,Hostname,Group,Location,Probe,Vendor
-192.0.2.1,admin,Mypass123!,enablepass,switch-01,acme,roma,central,cisco
-198.51.100.1,manager,Pwd456!,secret,switch-02,acme,roma,probe-roma,hpe</div>
-            <p class="set-desc" style="margin:10px 0 0;" data-i18n="importFlexNote">
-          Obbligatoria solo <code>IP</code>: <code>Group</code> e <code>Location</code> (la sede, per nome o id) prevalgono sulla destinazione scelta, che vale per le righe senza.
-          Maiuscole, underscore e nomi in italiano (<code>indirizzo</code>, <code>utente</code>, <code>gruppo</code>,
-          <code>sede</code>) sono riconosciuti, così come il punto e virgola come separatore e i file salvati da Excel.
-        </p>
-          </section>
-
-          <section class="panel">
-            <div class="panel-head">
-              <h3 data-i18n="importDestTitle">Destinazione</h3>
-            </div>
-            <div class="mc-grid">
-              <label for="importOrgSelect" data-i18n="importOrgLabel">Organizzazione</label>
-              <select id="importOrgSelect"></select>
-              <label for="importLocationSelect" data-i18n="importLocationLabel">Sede</label>
-              <select id="importLocationSelect"></select>
-            </div>
-            <div id="importDestChips" class="import-chips"></div>
-          </section>
-
-          <section class="panel">
-            <div class="panel-head">
-              <h3><span data-i18n="importPanelUpload">Carica un file o incolla gli indirizzi</span></h3>
-            </div>
-            <!-- Trascinamento oltre al selettore: il file arriva quasi sempre da
-                 una cartella già aperta, e obbligare a passare dal dialogo di
-                 sistema è il passaggio in più che rende l'operazione noiosa. -->
-            <div id="csvDropZone" class="dropzone">
-              <input type="file" id="csvFileInput" accept=".csv,.txt" style="display:none;" aria-label="File CSV da importare" data-i18n-aria-label="ariaCsvFile">
-              <div id="csvDropText" class="dropzone-text">
-                <i class="fa-solid fa-file-csv fa-2x"></i><br>
-                <span data-i18n="importDropText">Trascina qui il file CSV o clicca per selezionarlo</span>
-              </div>
-            </div>
-            <label for="importPasteBox" class="import-paste-label" data-i18n="importPasteLabel">Oppure incolla gli indirizzi: IP singoli, liste, intervalli (192.0.2.10-20) o subnet fino a /24</label>
-            <textarea id="importPasteBox" class="import-paste" rows="4" spellcheck="false" data-i18n-placeholder="importPastePh"></textarea>
-            <div id="importPasteNote" class="set-desc" hidden></div>
-            <div id="importColumns" class="import-chips"></div>
-            <div id="importFilterTabs" class="import-tabs" role="tablist" hidden>
-              <button type="button" class="chip-choice" role="tab" data-filter="all" aria-selected="true"></button>
-              <button type="button" class="chip-choice" role="tab" data-filter="new" aria-selected="false"></button>
-              <button type="button" class="chip-choice" role="tab" data-filter="update" aria-selected="false"></button>
-              <button type="button" class="chip-choice" role="tab" data-filter="error" aria-selected="false"></button>
-            </div>
-            <div class="table-container" style="margin-top:10px;">
-              <table style="font-size:12px;">
-                <thead><tr>
-                  <th data-i18n="importThRow">#</th><th data-i18n="importThDevice">Apparato</th>
-                  <th data-i18n="importThLocation">Sede</th><th data-i18n="importThStatus">Stato</th><th data-i18n="importThNotes">Note</th><th></th>
-                </tr></thead>
-                <tbody id="importPreviewBody"></tbody>
-              </table>
-            </div>
-            <div class="set-actions" style="justify-content:space-between; align-items:center; margin-top:14px;">
-              <span id="importSummary" class="set-desc" style="margin:0;"></span>
-              <button class="btn btn-primary" id="btnUploadCsv" style="width:auto;" disabled>
-                <i class="fa-solid fa-cloud-arrow-up"></i>
-              </button>
-            </div>
-            <!-- Esito in pagina invece che in un alert(): l'elenco delle righe
-                 scartate va letto riga per riga, e un alert lo rende illeggibile
-                 e non copiabile. -->
-            <div id="csvImportResult" style="display:none; margin-top:16px;"></div>
-          </section>
-
-          <section class="panel">
-            <div class="panel-head">
-              <h3 data-i18n="mcPanelTitle">Device non raggiungibili</h3>
-              <button type="button" class="btn btn-secondary btn-small" id="btnOpenManualConfig" style="width:auto;" data-i18n="btnOpenManualConfig"><i class="fa-solid fa-file-arrow-up"></i> Carica config</button>
-            </div>
-            <p class="set-desc" style="margin:0;" data-i18n="mcPanelBody">Per un apparato che SentinelNet non raggiunge, né in SSH né tramite agente: ti dice quali comandi lanciare, carichi il log della sessione e il dispositivo entra in inventario con analisi, drift, audit e CVE come gli altri.</p>
-          </section>
-        </div>
-
-        <div class="panel import-aside">
-          <div class="panel-head">
-            <h3><span data-i18n="importTenantVsProbeTitle">Group e Probe sono due cose diverse</span></h3>
-          </div>
-          <div class="import-aside-text" data-i18n="importTenantVsProbeBody">
-            <b>Group</b> è il <b>tenant</b>: il confine di visibilità. Decide chi vede l'apparato
-            e filtra ogni scheda, ed è il valore che accompagna ogni riga di osservabilità.
-            Alias riconosciuti: <code>group</code>, <code>gruppo</code>, <code>tenant</code>.<br>
-            <b>Probe</b> è la <b>sonda</b>: da dove l'apparato viene raggiunto —
-            <code>central</code> (il server lo interroga direttamente), oppure l'id di una sonda
-            agente o di una sonda <b>bastion</b> (raggiunta via bastion SSH). Alias:
-            <code>probe</code>, <code>sonda</code>. Se la ometti vale <code>central</code>.<br>
-            Un tenant può usare più sonde, e una sonda può raggiungere apparati di tenant diversi:
-            per questo sono due colonne e non una.
-          </div>
-          <!-- The device form has a Probe selector; in the CSV the same value is
-               free text, so the id has to be copied exactly. -->
-          <div class="import-aside-text import-aside-sep" data-i18n="importProbeIdsNote">
-            La sonda si assegna dal modulo di provisioning con la tendina <b>Sonda</b>,
-            oppure qui con la colonna <code>Probe</code>. Nel CSV il valore deve corrispondere
-            <b>esattamente</b> all'id della sonda (non al nome), altrimenti la riga viene
-            scartata con «Sonda inesistente». Le credenziali del CSV sono quelle degli
-            apparati, non quelle del bastion di una sonda bastion.
-          </div>
-          <div id="importProbeIds" style="display:none; margin-top:10px; font-size:12px;">
-            <span style="color:var(--text-muted);" data-i18n="importProbeIdsAvailable">Id sonda disponibili:</span>
-            <span id="importProbeIdsList"></span>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -5264,6 +4881,190 @@
     </div>
   </div>
 
+  <!-- New tenant (devices.js openNewTenant): opened from Organizations, the
+       device form and the "Aggiungi apparati" wizard. -->
+  <div class="modal-overlay" id="newTenantModal">
+    <div class="modal" style="width:440px; max-width:96%;" aria-labelledby="newTenantTitle">
+      <div class="modal-header">
+        <h3 id="newTenantTitle" data-i18n="titleNewTenant"><i class="fa-solid fa-folder-plus" style="color: var(--primary);"></i> Nuova organizzazione</h3>
+        <button type="button" class="modal-close" data-close-modal="newTenantModal" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="form-group">
+        <label for="newGroupName" data-i18n="lblNewTenantName">Nome</label>
+        <input id="newGroupName" type="text" placeholder="Es. Tenant_Torino" data-i18n-placeholder="phNewTenant" style="padding-left:12px;">
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal="newTenantModal" data-i18n="uiCancel">Annulla</button>
+        <button type="button" class="btn btn-primary" id="btnCreateGroup" data-i18n="btnCreateGroup"><i class="fa-solid fa-folder-plus"></i> Crea Tenant</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Device form (devices.js): one device with every option, or the edit of
+       one. Opened by Edit in the inventory and by the wizard's full form. -->
+  <div class="modal-overlay sheet-overlay" id="deviceFormSheet">
+    <div class="modal sheet" aria-labelledby="devFormTitle">
+      <div class="modal-header">
+        <h3 id="devFormTitle" data-i18n="titleProvisioning"><i class="fa-solid fa-circle-plus"></i> Aggiungi apparato</h3>
+        <button type="button" class="modal-close" data-close-modal="deviceFormSheet" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="sheet-body">
+        <div id="devEditNotice" style="display:none; margin-bottom:10px; padding:8px 10px; border:1px solid var(--primary); border-radius:0; color:var(--primary); font-size:12px;">
+          <i class="fa-solid fa-pen-to-square"></i> <span data-i18n="msgEditingDevice">Stai modificando un dispositivo esistente. Le credenziali vanno reinserite per confermarle.</span>
+        </div>
+
+        <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin:14px 0 8px; display:flex; align-items:center; gap:6px;">
+          <i class="fa-solid fa-building"></i> <span data-i18n="secTenant">1 · Tenant</span>
+        </h4>
+        <div class="form-group">
+          <label data-i18n="lblGroup">Assegna a Tenant</label>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <select id="devGroupSelect" style="flex:1;" aria-label="Tenant del dispositivo" data-i18n-aria-label="ariaDevTenant"></select>
+            <button class="btn btn-secondary" id="btnInlineNewTenant" type="button" title="Nuovo tenant" data-i18n-title="titleBtnNewTenant" style="white-space:nowrap; width:auto; flex:0 0 auto;"><i class="fa-solid fa-plus"></i></button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="devLocationSelect" data-i18n="lblDeviceLocation">Sede</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-map-pin"></i>
+            <select id="devLocationSelect"></select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label data-i18n="lblDeviceProbe">Sonda</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-location-dot"></i>
+            <select id="devProbeSelect" aria-label="Sonda del dispositivo" data-i18n-aria-label="ariaDevProbe"></select>
+          </div>
+        </div>
+
+        <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin:14px 0 8px; display:flex; align-items:center; gap:6px;">
+          <i class="fa-solid fa-server"></i> <span data-i18n="secDevice">2 · Dispositivo</span>
+        </h4>
+        <div class="form-group">
+          <label data-i18n="lblIp">IP Apparato</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-server"></i>
+            <input id="devIp" type="text" placeholder="10.0.0.1" aria-label="Indirizzo IP del dispositivo" data-i18n-aria-label="ariaDevIp">
+          </div>
+          <div id="devIpHint" style="display:none; font-size:12px; margin-top:4px;"></div>
+        </div>
+
+        <div class="form-group">
+          <label data-i18n="lblVendor">Vendor Engine</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-gears"></i>
+            <select id="devVendor" aria-label="Vendor del dispositivo" data-i18n-aria-label="ariaDevVendor"></select>
+          </div>
+        </div>
+
+        <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin:14px 0 8px; display:flex; align-items:center; gap:6px;">
+          <i class="fa-solid fa-plug"></i> <span data-i18n="secConnectivity">3 · Connettività</span>
+        </h4>
+        <!-- §11.6: trasporti per-device (checkbox + porta per protocollo).
+             Collassato di default; il riepilogo mostra i protocolli abilitati
+             e si espande da solo in modifica se il device non usa i default
+             (solo SSH:22) -- vedi setTransportsForm(). -->
+        <div class="form-group">
+          <label data-i18n="lblTransports">Protocolli di connessione</label>
+          <details id="devTransports" style="border:1px solid var(--border); border-radius:0; background:var(--surface-2); overflow:hidden;">
+            <summary style="list-style:none; cursor:pointer; padding:8px 10px; font-size:13px; font-weight:700; color:var(--text-muted); display:flex; align-items:center; gap:6px;">
+              <i class="fa-solid fa-plug"></i>
+              <span data-i18n="lblTransportsEnabled">Abilitati:</span>
+              <span id="devTransportsSummary" style="color:var(--text);">SSH:22</span>
+              <i class="fa-solid fa-caret-down" style="font-size:11px; margin-left:auto;"></i>
+            </summary>
+            <div style="padding:10px; border-top:1px solid var(--border); display:grid; grid-template-columns:auto 90px; gap:6px 8px; align-items:center;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <input type="checkbox" id="trSshEnabled" data-proto="ssh" checked>
+                <label for="trSshEnabled" style="min-width:80px; margin:0;">SSH</label>
+              </div>
+              <input id="trSshPort" type="number" min="1" max="65535" value="22" style="width:90px;" aria-label="Porta SSH" data-i18n-aria-label="ariaSshPort">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <input type="checkbox" id="trTelnetEnabled" data-proto="telnet">
+                <label for="trTelnetEnabled" style="min-width:80px; margin:0;">Telnet</label>
+              </div>
+              <input id="trTelnetPort" type="number" min="1" max="65535" value="23" style="width:90px;" aria-label="Porta Telnet" data-i18n-aria-label="ariaTelnetPort">
+              <div id="trTelnetWarn" data-i18n="lblTelnetWarn" style="grid-column:1 / -1; display:none; color: var(--danger); font-size: 12px;">Attenzione: Telnet trasmette le credenziali in chiaro.</div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <input type="checkbox" id="trNetconfEnabled" data-proto="netconf">
+                <label for="trNetconfEnabled" style="min-width:80px; margin:0;">NETCONF</label>
+              </div>
+              <input id="trNetconfPort" type="number" min="1" max="65535" value="830" style="width:90px;" aria-label="Porta NETCONF" data-i18n-aria-label="ariaNetconfPort">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <input type="checkbox" id="trRestconfEnabled" data-proto="restconf">
+                <label for="trRestconfEnabled" style="min-width:80px; margin:0;">RESTCONF</label>
+              </div>
+              <input id="trRestconfPort" type="number" min="1" max="65535" value="443" style="width:90px;" aria-label="Porta RESTCONF" data-i18n-aria-label="ariaRestconfPort">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <input type="checkbox" id="trTcpEnabled" data-proto="tcp">
+                <label for="trTcpEnabled" style="min-width:80px; margin:0;">TCP</label>
+              </div>
+              <input id="trTcpPort" type="number" min="1" max="65535" value="" style="width:90px;" aria-label="Porta TCP" data-i18n-aria-label="ariaTcpPort">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <input type="checkbox" id="trUdpEnabled" data-proto="udp">
+                <label for="trUdpEnabled" style="min-width:80px; margin:0;">UDP</label>
+              </div>
+              <input id="trUdpPort" type="number" min="1" max="65535" value="" style="width:90px;" aria-label="Porta UDP" data-i18n-aria-label="ariaUdpPort">
+            </div>
+          </details>
+        </div>
+
+        <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin:14px 0 8px; display:flex; align-items:center; gap:6px;">
+          <i class="fa-solid fa-key"></i> <span data-i18n="secCredentials">4 · Credenziali</span>
+        </h4>
+        <div class="form-group">
+          <label data-i18n="lblProfile">Profilo Credenziali</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-key"></i>
+            <select id="devProfile" aria-label="Profilo credenziali" data-i18n-aria-label="ariaDevProfile">
+              <option value="default" data-i18n="optProfileDefault">Profilo Rete Standard</option>
+              <option value="custom" data-i18n="optProfileCustom">Credenziali dedicate...</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="customCredsForm" style="display:none; border-left: 2px solid var(--primary); padding-left: 10px; margin-bottom: 10px;">
+          <div class="form-group">
+            <label for="devUser" data-i18n="lblUser">Username</label><input id="devUser" type="text" placeholder="Admin" style="padding-left:12px;">
+          </div>
+          <div class="form-group">
+            <label for="devPass" id="devPassLabel" data-i18n="lblPass">Password</label><input id="devPass" type="password" placeholder="admin" style="padding-left:12px;">
+          </div>
+          <div class="form-group" id="devSecretGroup">
+            <label for="devSecret" id="devSecretLabel" data-i18n="lblSecret">Enable Secret</label><input id="devSecret" type="password" placeholder="admin" style="padding-left:12px;">
+            <small id="devSecretHint" style="display:none; color:var(--text-muted); font-size:11px;" data-i18n="hintSecretLinux">Se compilata, il triage esegue anche i comandi che richiedono root. Lasciandola vuota la sessione resta non privilegiata.</small>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="devSnmp" data-i18n="lblSnmpCommunity">Community SNMP (sola lettura)</label>
+          <input id="devSnmp" type="password" autocomplete="off" placeholder="—" style="padding-left:12px;">
+          <!-- Edit-only: a new device has no community to remove. -->
+          <label id="devSnmpClearRow" hidden style="display:flex; align-items:center; gap:6px; font-size:11px; margin-top:4px; cursor:pointer;">
+            <input type="checkbox" id="devSnmpClear" style="accent-color:var(--danger);">
+            <span data-i18n="lblSnmpClear">Rimuovi la community e ferma il polling</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin-top:6px;">
+            <input type="checkbox" id="devSnmpDisabled" style="width:auto; margin:0;">
+            <span data-i18n="lblSnmpDisabled"></span>
+          </label>
+          <small id="devSnmpHint" style="color:var(--text-muted); font-size:11px;" data-i18n="hintSnmpCommunity">
+            Solo v2c e sola lettura: abilita il polling di stato e contatori sugli apparati senza API REST. La community viaggia in chiaro — usare solo su rete di management. Vuoto in modifica = invariata.
+          </small>
+        </div>
+        <div id="devFormStatus" class="dev-form-status" role="status" aria-live="polite" hidden></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal="deviceFormSheet" data-i18n="uiCancel">Annulla</button>
+        <button type="button" class="btn btn-secondary" id="btnVerifyDevice" data-i18n="btnVerifyDevice"><i class="fa-solid fa-plug-circle-check"></i> Verifica connessione</button>
+        <button type="button" class="btn btn-primary" id="btnSaveDevice" data-i18n="btnSaveDevice"><i class="fa-solid fa-floppy-disk"></i> Salva Apparato</button>
+      </div>
+    </div>
+  </div>
+
   <!-- "Aggiungi apparati" (add-devices.js): source -> addresses and destination
        -> per-row check -> result. The address flow runs here; the other
        sources open the flow that already exists for them. -->
@@ -5283,7 +5084,7 @@
             <button type="button" class="add-source" role="radio" data-adw-source="scan"><i class="fa-solid fa-magnifying-glass-location" aria-hidden="true"></i><b data-i18n="addSrcScan">Scansione rete</b><span data-i18n="addSrcScanDesc">Cerca gli host vivi in una subnet e aggiungi quelli verificati</span></button>
             <button type="button" class="add-source" role="radio" data-adw-source="nbr"><i class="fa-solid fa-shapes" aria-hidden="true"></i><b data-i18n="addSrcNbr">Vicini scoperti</b><span data-i18n="addSrcNbrDesc">Apparati visti via CDP/LLDP: selezionali e portali in inventario</span></button>
             <button type="button" class="add-source" role="radio" data-adw-source="manual"><span class="add-source-tag" data-i18n="adwTagOther">Procedura a parte</span><i class="fa-solid fa-file-arrow-up" aria-hidden="true"></i><b data-i18n="addSrcManual">Senza accesso</b><span data-i18n="addSrcManualDesc">Un apparato che SentinelNet non raggiunge: carichi tu la sua config</span></button>
-            <button type="button" class="add-source" role="radio" data-adw-source="ztp"><span class="add-source-tag" data-i18n="adwTagOther">Procedura a parte</span><i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i><b data-i18n="addSrcZtp">Da zero</b><span data-i18n="addSrcZtpDesc">Prima configurazione di uno switch Cisco o di un FortiGate nuovo</span></button>
+            <button type="button" class="add-source" role="radio" data-adw-source="ztp"><span class="add-source-tag" data-i18n="adwTagOther">Procedura a parte</span><i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i><b data-i18n="addSrcZtp">Nuova configurazione</b><span data-i18n="addSrcZtpDesc">Configurazione day-0 di uno switch Cisco nuovo</span></button>
           </div>
         </section>
         <section data-step="addresses" hidden>
@@ -5296,6 +5097,16 @@
             <label for="adwCsvFile" data-i18n="adwCsvLabel">File CSV (obbligatoria solo la colonna IP; Group e Location del file prevalgono sulla destinazione)</label>
             <input type="file" id="adwCsvFile" accept=".csv,.txt">
             <p id="adwCsvNote" class="form-hint" hidden></p>
+            <button type="button" class="btn btn-secondary btn-small" id="btnDownloadCsvTemplate" data-i18n="btnDownloadCsvTemplate"><i class="fa-solid fa-download"></i> Scarica modello CSV</button>
+            <!-- What the old Import page kept beside the upload: the column rules
+                 and the Group/Probe distinction the file gets wrong most. -->
+            <details class="adw-csv-help">
+              <summary data-i18n="adwCsvHelp">Formato del file</summary>
+              <p class="form-hint" data-i18n="importFlexNote">Obbligatoria solo <code>IP</code>.</p>
+              <p class="form-hint" data-i18n="importTenantVsProbeBody"></p>
+              <p class="form-hint" data-i18n="importProbeIdsNote"></p>
+              <p id="importProbeIds" class="form-hint" hidden><span data-i18n="importProbeIdsAvailable">Id sonda disponibili:</span> <span id="importProbeIdsList"></span></p>
+            </details>
           </div>
           <div class="adw-dest" data-adw-for="scan">
             <div class="form-group"><label for="adwScanNet" data-i18n="lblNetworkAddr">Indirizzo di Rete</label><input id="adwScanNet" type="text" spellcheck="false" placeholder="192.0.2.0/24"></div>
@@ -5306,8 +5117,12 @@
             <div id="adwNbrList" class="adw-nbr-list"></div>
           </div>
           <div class="adw-dest">
-            <div class="form-group"><label for="adwTenant" data-i18n="adwLblTenant">Tenant</label><select id="adwTenant"></select></div>
-            <div class="form-group"><label for="adwLocation" data-i18n="adwLblLocation">Sede</label><select id="adwLocation"></select></div>
+            <div class="form-group"><label for="adwTenant" data-i18n="adwLblTenant">Tenant</label>
+              <div class="adw-tenant-row"><select id="adwTenant"></select><button type="button" class="btn btn-secondary" id="adwNewTenant" title="Nuovo tenant" aria-label="Nuovo tenant" data-i18n-title="titleBtnNewTenant" data-i18n-aria-label="titleBtnNewTenant"><i class="fa-solid fa-plus"></i></button></div>
+            </div>
+            <div class="form-group"><label for="adwLocation" data-i18n="adwLblLocation">Sede</label>
+              <div class="adw-tenant-row"><select id="adwLocation"></select><button type="button" class="btn btn-secondary requires-admin" id="adwNewLocation" title="Nuova sede" aria-label="Nuova sede" data-i18n-title="btnNewLocation" data-i18n-aria-label="btnNewLocation"><i class="fa-solid fa-plus"></i></button></div>
+            </div>
             <div class="form-group" data-adw-hide="csv"><label for="adwProfile" data-i18n="adwLblProfile">Credenziali</label><select id="adwProfile"></select></div>
             <div class="form-group" data-adw-hide="csv"><label for="adwVendor" data-i18n="adwLblVendor">Vendor</label><select id="adwVendor"></select></div>
           </div>
@@ -5485,6 +5300,10 @@
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
           <input type="checkbox" id="fgtMgrVerifyTls" style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
           <label for="fgtMgrVerifyTls" style="font-size:12px; cursor:pointer;" data-i18n="lblFgtTokenVerifyTls">Verifica certificato TLS (disabilitare solo per self-signed)</label>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+          <input type="checkbox" id="fgtMgrKeepalive" style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
+          <label for="fgtMgrKeepalive" style="font-size:12px; cursor:pointer;" data-i18n="lblFgtKeepalive">Sessione persistente: tieni aperta la connessione HTTPS e riusala tra una chiamata e l'altra</label>
         </div>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
           <button class="btn btn-primary" id="btnSaveFgtMgrTarget" style="width:auto;" data-i18n="btnFgtMgrSave">
@@ -5855,7 +5674,7 @@
         <label for="locProbe" data-i18n="lblLocationProbe">Sonda predefinita</label>
         <select id="locProbe"></select>
       </div>
-      <label id="locApplyWrap" style="display:flex; gap:8px; align-items:center; font-size:13px;" hidden>
+      <label id="locApplyWrap" class="loc-apply" hidden>
         <input type="checkbox" id="locApplyProbe"> <span data-i18n="lblApplyProbeToDevices">Applica la sonda a tutti i device della sede</span>
       </label>
       <p id="locSaveError" class="form-hint" role="alert" style="color:var(--danger);"></p>

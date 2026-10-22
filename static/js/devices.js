@@ -110,8 +110,12 @@
     let editingLocation = null;   // location being edited; null when creating
     let locationModalOrg = '';
 
-    async function openLocationModal(org, locId) {
+    // onCreated(locationId): called after a new location is saved (the wizard
+    // selects it).
+    let _onLocationCreated = null;
+    async function openLocationModal(org, locId, onCreated) {
         const loc = locId ? locationById(locId) : null;
+        _onLocationCreated = onCreated || null;
         editingLocation = loc;
         locationModalOrg = loc ? loc.org : org;
         document.getElementById('locationModalTitle').textContent = tr(loc ? 'btnEditLocation' : 'btnNewLocation');
@@ -147,13 +151,16 @@
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
         });
         if (res && res.ok) {
+            const created = editingLocation ? null : ((await res.json().catch(() => ({}))).location || null);
             closeModal('locationModal');
             refreshInventory();
+            if (created && _onLocationCreated) await _onLocationCreated(created.id);
             return;
         }
         const err = res ? await res.json().catch(() => ({})) : {};
         document.getElementById('locSaveError').textContent = err.detail || tr('uiError');
     }
+    window.openNewLocation = (org, onCreated) => openLocationModal(org, null, onCreated);
 
     async function deleteLocation(locId) {
         const loc = locationById(locId);
@@ -180,7 +187,7 @@
         else if (action === 'new-location') openLocationModal(g, null);
         else if (action === 'edit-location') openLocationModal('', btn.dataset.loc);
         else if (action === 'delete-location') deleteLocation(btn.dataset.loc);
-        else if (action === 'loc-import') openImportFor(btn.dataset.org, btn.dataset.loc);
+        else if (action === 'loc-import') window.openAddDevices({ src: 'csv', group: btn.dataset.org, location: btn.dataset.loc });
         else if (action === 'open-blueprint') { window.bpPendingOrg = g; switchTab('tab-blueprint'); }
     });
 
@@ -519,11 +526,12 @@
         document.getElementById('customCredsForm').style.display = e.target.value === 'custom' ? 'block' : 'none';
     });
 
-    // Toggle inline "+ nuovo tenant" row accanto a devGroupSelect.
-    document.getElementById('btnInlineNewTenant').addEventListener('click', () => {
-        const row = document.getElementById('inlineNewTenantRow');
-        row.style.display = row.style.display === 'flex' ? 'none' : 'flex';
-    });
+    // "+" beside the form's tenant: create it and pick it here.
+    document.getElementById('btnInlineNewTenant').addEventListener('click', () => openNewTenant(async (name) => {
+        document.getElementById('devGroupSelect').value = name;
+        populateDevLocationOptions('');
+        await refreshIdentityOptions();
+    }));
 
     // Validazione IP inline + hint duplicato con link rapido a modifica.
     document.getElementById('devIp').addEventListener('input', () => {
@@ -626,17 +634,14 @@
         document.getElementById('devTransports').open = !isDefaultState;
     }
 
-    // Status line under the form: replaces the alert() pop-ups. `action` is an
-    // optional { tab, label } that renders a button opening that tab.
-    function setDevFormStatus(state, text, action) {
+    // Status line under the form: replaces the alert() pop-ups.
+    function setDevFormStatus(state, text) {
         const box = document.getElementById('devFormStatus');
         if (!box) return;
         box.hidden = !state;
         if (!state) return;
         box.dataset.state = state;
-        box.innerHTML = escapeHtml(text) + (action
-            ? `<br><button type="button" class="btn btn-secondary btn-small" data-switch-tab="${escapeHtml(action.tab)}">${action.label}</button>`
-            : '');
+        box.textContent = text;
     }
 
     function deviceFormPayload() {
@@ -710,17 +715,35 @@
             body: JSON.stringify(payload)
         });
         if(res && res.ok) {
-            // Tenant and site stay selected, so the next device starts from them.
-            resetDeviceForm();
-            populateDevLocationOptions(payload.location);
-            setDevFormStatus('ok', tr('devSavedMsg', { ip: payload.ip }),
-                             { tab: 'tab-devices', label: tr('homeOpenInventory') });
+            closeModal('deviceFormSheet');
+            showToast(tr('devSavedMsg', { ip: payload.ip }), 'success');
             refreshInventory();
         } else if (res) {
             const err = await res.json().catch(() => ({}));
             setDevFormStatus('error', `${tr('alertFirstSetupError')}${err.detail || tr('alertSaveDeviceError')}`);
         }
     });
+
+    // The form in "add" mode, optionally prefilled by the wizard's
+    // "full form" link: { group, location, ip }.
+    async function openDeviceForm(prefill = {}) {
+        await loadDeviceForm();
+        resetDeviceForm();
+        const groupSel = document.getElementById('devGroupSelect');
+        if (prefill.group && prefill.group in globalGroups && groupSel.value !== prefill.group) {
+            groupSel.value = prefill.group;
+            populateDevLocationOptions('');
+            await refreshIdentityOptions();
+        }
+        if (prefill.location) {
+            populateDevLocationOptions(prefill.location);
+            document.getElementById('devLocationSelect').dispatchEvent(new Event('change'));
+        }
+        if (prefill.ip) document.getElementById('devIp').value = prefill.ip;
+        openModal('deviceFormSheet');
+        document.getElementById('devIp').focus();
+    }
+    window.openDeviceForm = openDeviceForm;
 
     // Pre-compila il form di provisioning con i dati del dispositivo esistente
     // per la modifica (§11.5b). Password/secret restano vuoti perché il server
@@ -729,11 +752,9 @@
     async function editDevice(ip) {
         const dev = globalDevices.find(d => d.IP === ip);
         if (!dev) return;
+        // Selects first: refilling them afterwards would reset tenant/profile.
+        await loadDeviceForm();
         editingDeviceIp = ip;
-
-        // La form di provisioning ora vive nella sua tab dedicata: prima di
-        // precompilarla assicurati che sia quella visibile.
-        await switchTab('tab-provisioning');
 
         document.getElementById('devGroupSelect').value = dev.Group || '';
         populateDevLocationOptions(dev.Location || '');
@@ -765,12 +786,9 @@
         const dsd = document.getElementById('devSnmpDisabled');
         if (dsd) dsd.checked = !!dev['SNMP Disabled'];
 
-        // switchTab('tab-provisioning') ha già ricaricato le identità per il
-        // tenant precedentemente selezionato (loadProvisioningTab chiama
-        // refreshIdentityOptions/renderIdentitiesPanel): devGroupSelect.value
-        // è stato appena riassegnato sopra ma senza far scattare 'change',
-        // quindi il pannello identità è ancora sul tenant sbagliato -- va
-        // ricaricato esplicitamente per il tenant del device in modifica.
+        // loadDeviceForm() loaded the identities of the previous tenant, and
+        // setting devGroupSelect above fires no 'change': reload them for the
+        // device's own tenant.
         const profileIsIdentity = (dev.Profile || '').startsWith('identity:');
         // Il profilo desiderato va esplicitato come "preserve": 'default' non
         // può contare sul valore residuo della select (potrebbe restare
@@ -779,7 +797,6 @@
         const desiredProfile = profileIsIdentity ? dev.Profile
             : (dev.Profile === 'custom' ? 'custom' : 'default');
         await refreshIdentityOptions(desiredProfile);
-        renderIdentitiesPanel();
         document.getElementById('customCredsForm').style.display =
             document.getElementById('devProfile').value === 'custom' ? 'block' : 'none';
         document.getElementById('devUser').value = dev.Username || '';
@@ -797,9 +814,7 @@
         document.getElementById('devSnmpClearRow').hidden = false;
         setDevFormStatus(null);
         document.getElementById('btnSaveDevice').innerHTML = tr('btnUpdateDevice');
-        document.getElementById('btnCancelEditDevice').style.display = 'block';
-
-        document.getElementById('devFormTitle').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        openModal('deviceFormSheet');
     }
 
     // Riporta il form di provisioning in modalità "aggiunta" (§11.5b).
@@ -831,7 +846,6 @@
         document.getElementById('devFormTitle').innerHTML = tr('titleProvisioning');
         document.getElementById('devEditNotice').style.display = 'none';
         document.getElementById('btnSaveDevice').innerHTML = tr('btnSaveDevice');
-        document.getElementById('btnCancelEditDevice').style.display = 'none';
     }
 
     const LIFECYCLE = {
@@ -925,6 +939,19 @@
 
     // --- GRUPPI CRUD ---
 
+    // One dialog creates a tenant wherever it is asked for (Organizations, the
+    // device form, the wizard); onCreated(name) lets the caller select it.
+    let _onTenantCreated = null;
+    function openNewTenant(onCreated) {
+        _onTenantCreated = onCreated || null;
+        const input = document.getElementById('newGroupName');
+        input.value = '';
+        openModal('newTenantModal');
+        input.focus();
+    }
+    window.openNewTenant = openNewTenant;
+    document.getElementById('btnOpenNewTenant')?.addEventListener('click', () => openNewTenant());
+
     document.getElementById('btnCreateGroup').addEventListener('click', async () => {
         const name = document.getElementById('newGroupName').value.trim();
         if(!name) return;
@@ -937,19 +964,12 @@
             body: JSON.stringify({ name: name, description: description }) 
         });
         if(res && res.ok) {
-            document.getElementById('newGroupName').value = '';
-            document.getElementById('inlineNewTenantRow').style.display = 'none';
+            closeModal('newTenantModal');
             await refreshInventory();
             // Il CRUD dei tenant e' l'unico caso che tocca anche
             // snmpDefaultTenants: refreshInventory() non lo rilegge.
             loadSnmpDefaults();
-            // Seleziona il tenant appena creato nella select del form di provisioning.
-            const groupSelect = document.getElementById('devGroupSelect');
-            if (groupSelect && Array.from(groupSelect.options).some(o => o.value === name)) {
-                groupSelect.value = name;
-            }
-            await refreshIdentityOptions();
-            renderIdentitiesPanel();
+            if (_onTenantCreated) await _onTenantCreated(name);
         } else if (res) {
             alert(tr('alertGroupCreateError'));
         }
@@ -1980,350 +2000,6 @@
         closeModal('deviceExportModal');
     }
 
-    // --- CSV UPLOAD ---
-
-    // Modello scaricabile: il riquadro di esempio andava ricopiato a mano, ed
-    // e' li' che nascevano le intestazioni sbagliate.
-    // 'Probe' is in the template although optional: Group (tenant) and Probe
-    // (how the device is reached) are different things, and seeing them side
-    // by side with different values explains it better than any note.
-    // Omitted, Probe is 'central'.
-    const CSV_TEMPLATE = [
-        'IP,Username,Password,Enable Secret,Hostname,Group,Location,Probe,Vendor',
-        '192.0.2.1,admin,Mypass123!,enablepass,switch-01,acme,roma,central,cisco',
-        '198.51.100.1,manager,Pwd456!,secret,switch-02,acme,roma,probe-roma,hpe',
-        ''
-    ].join('\n');
-
-    // The Probe column has to carry the probe id, not its name, and that id is a
-    // slug the operator never typed. Showing the real ones next to the rule
-    // saves a trip to the Probes tab. If the call fails the row stays hidden and
-    // the written rule above still stands.
-    async function loadImportProbeIds() {
-        const box = document.getElementById('importProbeIds');
-        const list = document.getElementById('importProbeIdsList');
-        if (!box || !list) return;
-        const res = await apiFetch('/api/probes');
-        if (!res || !res.ok) return;
-        const probes = (await res.json()).probes || [];
-        if (!probes.length) return;
-        list.innerHTML = probes.map(s =>
-            `<code style="margin-right:6px;">${escapeHtml(s.id)}</code>`).join('');
-        box.style.display = 'block';
-    }
-    window.loadImportProbeIds = loadImportProbeIds;
-
-    const btnTemplate = document.getElementById('btnDownloadCsvTemplate');
-    if (btnTemplate) {
-        btnTemplate.addEventListener('click', () => {
-            // BOM in testa: senza, Excel apre il file interpretandolo in ANSI e
-            // storpia gli accenti dei nomi di sede.
-            const blob = new Blob(['﻿' + CSV_TEMPLATE],
-                                  { type: 'text/csv;charset=utf-8' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'sentinelnet-inventario-modello.csv';
-            a.click();
-            URL.revokeObjectURL(a.href);
-        });
-    }
-
-    const csvZone = document.getElementById('csvDropZone');
-    const csvInput = document.getElementById('csvFileInput');
-    const csvDropText = document.getElementById('csvDropText');
-    const csvDropHtml = csvDropText ? csvDropText.innerHTML : '';
-    const importOrgSelect = document.getElementById('importOrgSelect');
-    const importLocationSelect = document.getElementById('importLocationSelect');
-    const importPreviewBody = document.getElementById('importPreviewBody');
-    const importFilterTabs = document.getElementById('importFilterTabs');
-    const btnUploadCsv = document.getElementById('btnUploadCsv');
-
-    // text: the file; decisions: per-row answers to the preview's action buttons.
-    const importState = { text: '', decisions: {}, filter: 'all', preview: null };
-    let importPreviewSeq = 0;   // only the newest preview response may render
-
-    function showCsvFile(file) {
-        if (!csvDropText) return;
-        csvDropText.innerHTML = `<i class="fa-solid fa-file-circle-check fa-2x" style="color:var(--success); margin-bottom:8px;"></i><br>
-            <strong>${escapeHtml(file.name)}</strong>
-            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">${Math.max(1, Math.round(file.size / 1024))} KB</div>`;
-    }
-
-    const importChip = html => `<span class="chip">${html}</span>`;
-
-    function renderImportChips() {
-        const loc = locationById(importLocationSelect.value);
-        document.getElementById('importDestChips').innerHTML = loc
-            ? importChip(`<i class="fa-solid fa-tower-broadcast"></i> ${escapeHtml(loc.probe || 'central')}`)
-              + (loc.subnets || []).map(n => importChip(escapeHtml(n))).join('')
-            : '';
-    }
-
-    function fillImportLocations() {
-        const org = importOrgSelect.value;
-        const keep = importLocationSelect.value;
-        importLocationSelect.innerHTML = `<option value="">${escapeHtml(tr('importPickDestination'))}</option>`
-            + locationOptionsHtml(keep, org || null);
-        renderImportChips();
-    }
-
-    // Organizations and locations come from the globals the inventory already
-    // loads (/api/groups, /api/locations), so the selects add no request.
-    function loadImportDestinations() {
-        if (!importOrgSelect) return;
-        const keep = importOrgSelect.value;
-        importOrgSelect.innerHTML = `<option value="">${escapeHtml(tr('importPickDestination'))}</option>`
-            + Object.keys(globalGroups).map(g =>
-                `<option value="${escapeHtml(g)}"${g === keep ? ' selected' : ''}>${escapeHtml(orgLabel(g))}</option>`).join('');
-        fillImportLocations();
-    }
-    window.loadImportDestinations = loadImportDestinations;
-
-    const importBody = () => JSON.stringify({
-        csv_data: importState.text,
-        org: importOrgSelect.value || null,
-        location: importLocationSelect.value || null,
-        decisions: importState.decisions,
-    });
-
-    const IMPORT_STATUS_KEYS = { new: 'importStNew', update: 'importStUpdate', error: 'importStError', skipped: 'importStSkipped' };
-    const IMPORT_STATUS_COLOR = { new: 'var(--success)', update: 'var(--primary)', error: 'var(--danger)', skipped: 'var(--text-muted)' };
-
-    function importNotes(r) {
-        const notes = [];
-        if (r.reason) notes.push(r.reason);
-        const fields = Object.keys(r.changes || {});
-        fields.forEach(f => {
-            const [oldV, newV] = r.changes[f];
-            notes.push(newV === 'changed' ? `${f}: ${tr('importPwdChanged')}` : `${f}: ${oldV} → ${newV}`);
-        });
-        if (r.status === 'update' && !fields.length) notes.push(tr('importNoChanges'));
-        (r.warnings || []).forEach(w => notes.push(w));
-        if (r.credentials_note) notes.push(r.credentials_note);
-        return notes.map(n => `<div>${escapeHtml(n)}</div>`).join('');
-    }
-
-    function importActionButton(r) {
-        const a = r.action;
-        if (!a) return '';
-        if (a.kind === 'move') {
-            return `<button type="button" class="btn btn-secondary btn-small" style="width:auto;" data-action="import-move" data-row="${escapeHtml(String(r.row))}" data-location="${escapeHtml(a.location)}">${escapeHtml(tr('importActionMove', { name: locationLabel(a.location) }))}</button>`;
-        }
-        return `<button type="button" class="btn btn-secondary btn-small" style="width:auto;" data-action="import-skip" data-row="${escapeHtml(String(r.row))}">${escapeHtml(tr('importActionSkip'))}</button>`;
-    }
-
-    function renderImportPreview() {
-        const p = importState.preview;
-        const counts = p ? p.counts : { new: 0, update: 0, error: 0, skipped: 0 };
-        document.getElementById('importColumns').innerHTML = p
-            ? p.columns.map(c => importChip(c.field
-                ? `${escapeHtml(c.header)} → <strong>${escapeHtml(c.field)}</strong>`
-                : `${escapeHtml(c.header)} · ${escapeHtml(tr('importColIgnored'))}`)).join('')
-            : '';
-        importFilterTabs.hidden = !p;
-        const total = counts.new + counts.update + counts.error + counts.skipped;
-        const tabs = { all: ['importTabAll', total], new: ['importTabNew', counts.new],
-                       update: ['importTabUpdate', counts.update], error: ['importTabError', counts.error + counts.skipped] };
-        importFilterTabs.querySelectorAll('[data-filter]').forEach(b => {
-            const [key, n] = tabs[b.dataset.filter];
-            b.textContent = `${tr(key)} (${n})`;
-            b.setAttribute('aria-selected', String(b.dataset.filter === importState.filter));
-            b.classList.toggle('active', b.dataset.filter === importState.filter);
-        });
-        const shown = p ? p.rows.filter(r => {
-            const f = importState.filter;
-            return f === 'all' || r.status === f || (f === 'error' && r.status === 'skipped');
-        }) : [];
-        importPreviewBody.innerHTML = shown.map(r => `<tr>
-            <td style="color:var(--text-muted);">${escapeHtml(String(r.row))}</td>
-            <td style="font-family:var(--font-code);">${escapeHtml(r.ip || '')}<div>${escapeHtml(r.hostname || '')}</div></td>
-            <td>${escapeHtml(r.location ? locationLabel(r.location) : '')}</td>
-            <td><span style="color:${IMPORT_STATUS_COLOR[r.status]};">${escapeHtml(tr(IMPORT_STATUS_KEYS[r.status]))}</span></td>
-            <td>${importNotes(r)}</td>
-            <td>${importActionButton(r)}</td></tr>`).join('');
-        const ready = counts.new + counts.update;
-        document.getElementById('importSummary').textContent = p
-            ? tr('importSummary', { n: ready, m: counts.error + counts.skipped }) : '';
-        btnUploadCsv.disabled = ready === 0;
-        btnUploadCsv.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> ${escapeHtml(tr('btnImportDevices', { n: ready }))}`;
-    }
-
-    async function runImportPreview() {
-        if (!importState.text) return;
-        const seq = ++importPreviewSeq;
-        try {
-            const res = await apiFetch('/api/import-csv/preview', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: importBody()
-            });
-            if (!res || seq !== importPreviewSeq) return;
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                if (seq !== importPreviewSeq) return;
-                importState.preview = null;
-                renderImportPreview();
-                renderCsvImportResult(null, err.detail || tr('alertImportCsvError'));
-                return;
-            }
-            const data = await res.json();
-            if (seq !== importPreviewSeq) return;
-            importState.preview = data;
-            document.getElementById('csvImportResult').style.display = 'none';
-            renderImportPreview();
-        } catch (err) {
-            if (seq === importPreviewSeq) renderCsvImportResult(null, `${tr('alertError')}${err}`);
-        }
-    }
-
-    // Pasted addresses: expandAddressList() lives in core.js, shared with the
-    // "Aggiungi apparati" wizard.
-    const importPasteBox = document.getElementById('importPasteBox');
-    const importPasteNote = document.getElementById('importPasteNote');
-    let importPasteTimer = null;
-    importPasteBox?.addEventListener('input', () => {
-        clearTimeout(importPasteTimer);
-        importPasteTimer = setTimeout(() => {
-            const text = importPasteBox.value.trim();
-            const firstLine = text.split(/\r?\n/, 1)[0] || '';
-            let note = '';
-            if (/[a-z]/i.test(firstLine)) {
-                importState.text = text;
-            } else {
-                const r = expandAddressList(text);
-                importState.text = r.ips.length ? 'IP\n' + r.ips.join('\n') : '';
-                if (r.bad.length) note = tr('importPasteBad', { list: r.bad.slice(0, 5).join(', ') });
-                if (r.truncated) note = (note ? note + ' ' : '') + tr('importPasteTruncated', { n: r.ips.length });
-            }
-            importPasteNote.textContent = note;
-            importPasteNote.hidden = !note;
-            // A paste replaces a previously chosen file.
-            if (csvInput) csvInput.value = '';
-            if (csvDropText) csvDropText.innerHTML = csvDropHtml;
-            importState.decisions = {};
-            importState.preview = null;
-            if (importState.text) runImportPreview(); else renderImportPreview();
-        }, 400);
-    });
-
-    function loadImportFile(file) {
-        if (importPasteBox) { importPasteBox.value = ''; importPasteNote.hidden = true; }
-        showCsvFile(file);
-        const reader = new FileReader();
-        reader.onload = e => {
-            importState.text = String(e.target.result);
-            importState.decisions = {};
-            runImportPreview();
-        };
-        reader.readAsText(file);
-    }
-
-    function openImportFor(org, loc) {
-        switchTab('tab-import');
-        loadImportDestinations();
-        importOrgSelect.value = org;
-        fillImportLocations();
-        importLocationSelect.value = loc;
-        renderImportChips();
-        runImportPreview();
-    }
-    window.openImportFor = openImportFor;
-
-    if (csvZone && csvInput) {
-        csvZone.onclick = () => csvInput.click();
-        csvZone.ondragover = e => { e.preventDefault(); csvZone.style.borderColor = 'var(--primary)'; };
-        csvZone.ondragleave = () => { csvZone.style.borderColor = 'var(--border)'; };
-        csvZone.ondrop = e => {
-            e.preventDefault();
-            csvZone.style.borderColor = 'var(--border)';
-            if (e.dataTransfer.files.length) loadImportFile(e.dataTransfer.files[0]);
-        };
-        csvInput.onchange = () => {
-            if (csvInput.files.length) loadImportFile(csvInput.files[0]);
-        };
-    }
-
-    importOrgSelect?.addEventListener('change', () => { fillImportLocations(); importState.decisions = {}; runImportPreview(); });
-    importLocationSelect?.addEventListener('change', () => {
-        const loc = locationById(importLocationSelect.value);
-        if (loc && !importOrgSelect.value) importOrgSelect.value = loc.org;
-        importState.decisions = {};
-        renderImportChips();
-        runImportPreview();
-    });
-    importFilterTabs?.addEventListener('click', e => {
-        const b = e.target.closest('[data-filter]');
-        if (!b) return;
-        importState.filter = b.dataset.filter;
-        renderImportPreview();
-    });
-    importPreviewBody?.addEventListener('click', e => {
-        const b = e.target.closest('[data-action]');
-        if (!b) return;
-        if (b.dataset.action === 'import-move') importState.decisions[b.dataset.row] = { location: b.dataset.location };
-        else if (b.dataset.action === 'import-skip') importState.decisions[b.dataset.row] = { skip: true };
-        else return;
-        runImportPreview();
-    });
-    renderImportPreview();
-
-    function renderCsvImportResult(result, errorDetail) {
-        const box = document.getElementById('csvImportResult');
-        if (!box) return;
-
-        box.style.display = '';
-        if (errorDetail) {
-            box.innerHTML = `<div style="padding:12px 14px; border-radius:0; border:1px solid var(--danger); background:color-mix(in srgb, var(--danger) 10%, transparent); font-size:13px; color:var(--danger);">
-                <i class="fa-solid fa-circle-exclamation"></i> ${escapeHtml(errorDetail)}</div>`;
-            return;
-        }
-        const failed = result.failed || [];
-        const rowsHtml = failed.map(f => `
-            <tr style="border-top:1px solid var(--border);">
-                <td style="padding:5px 8px; color:var(--text-muted);">${escapeHtml(String(f.row))}</td>
-                <td style="padding:5px 8px; font-family:var(--font-code);">${escapeHtml(String(f.ip))}</td>
-                <td style="padding:5px 8px; color:var(--danger);">${escapeHtml(String(f.error))}</td>
-            </tr>`).join('');
-        box.innerHTML = `
-            <div style="padding:12px 14px; border-radius:0; border:1px solid ${failed.length ? 'var(--warning)' : 'var(--success)'}; background:${failed.length ? 'color-mix(in srgb, var(--warning) 10%, transparent)' : 'color-mix(in srgb, var(--success) 10%, transparent)'}; font-size:13px;">
-                ${escapeHtml(tr('importResult', { imported: (result.imported || []).length, updated: (result.updated || []).length, skipped: (result.skipped || []).length, failed: failed.length }))}
-            </div>
-            ${failed.length ? `
-            <div class="table-container" style="margin-top:10px;">
-                <table style="font-size:12px;">
-                    <thead><tr>
-                        <th>${tr('devRow')}</th><th>IP</th><th>${tr('devReason')}</th>
-                    </tr></thead>
-                    <tbody>${rowsHtml}</tbody>
-                </table>
-            </div>` : ''}`;
-    }
-
-    btnUploadCsv.addEventListener('click', async () => {
-        if (!importState.text) { alert(tr('alertSelectCsv')); return; }
-        try {
-            const res = await apiFetch('/api/import-csv', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: importBody()
-            });
-            if (res && res.ok) {
-                renderCsvImportResult(await res.json(), null);
-                importState.text = '';
-                importState.decisions = {};
-                importState.preview = null;
-                csvInput.value = '';
-                if (csvDropText) csvDropText.innerHTML = csvDropHtml;
-                if (importPasteBox) { importPasteBox.value = ''; importPasteNote.hidden = true; }
-                renderImportPreview();
-                refreshInventory();
-                // The tab is not switched: the skipped/failed rows are listed
-                // right here, and the inventory would hide them.
-            } else if (res) {
-                const err = await res.json().catch(() => ({}));
-                renderCsvImportResult(null, err.detail || tr('alertImportCsvError'));
-            }
-        } catch (err) {
-            renderCsvImportResult(null, `${tr('alertError')}${err}`);
-        }
-    });
-
     // Probes for the inventory's Probe column. Cached: the list changes only when
     // an admin edits it in the Probes tab, and renderDevices runs on every poll.
     let _probesCache = null;
@@ -2598,7 +2274,6 @@
             closeModal('deviceExportModal');
         }
     });
-    document.getElementById('btnCancelEditDevice')?.addEventListener('click', resetDeviceForm);
     document.getElementById('btnAddVendor')?.addEventListener('click', addVendor);
 
     // Subnet Scan modal listeners

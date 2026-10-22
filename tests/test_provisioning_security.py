@@ -17,10 +17,7 @@ from unittest import mock
 from pydantic import ValidationError
 
 from routers import provisioner as prov_router
-from services import fortigate_provisioner, switch_provisioner
-
-FGT_CFG = {"hostname": "fw-01", "admin_user": "netadmin",
-           "admin_password": "S3cret-Passphrase"}
+from services import switch_provisioner
 
 
 def _switch_cfg(**over):
@@ -41,19 +38,13 @@ class NoKnownDefaultCredentialEverReachesADevice(unittest.TestCase):
     field was left empty, so an operator who skipped a box shipped a published
     password to the hardware."""
 
-    def test_the_literal_defaults_are_gone_from_the_generators(self):
+    def test_the_literal_defaults_are_gone_from_the_generator(self):
         """Comments are allowed to name the old defaults — that is how the next
         reader learns why the fallback is not coming back. Code is not."""
-        for module in (switch_provisioner, fortigate_provisioner):
-            with open(module.__file__, encoding="utf-8") as fh:
-                code = "\n".join(line.split("#")[0] for line in fh)
-            for literal in ("changeme", "authpass123", "privpass123"):
-                self.assertNotIn(literal, code, module.__name__)
-
-    def test_fortigate_emits_no_admin_block_without_a_password(self):
-        text = fortigate_provisioner.build_config(dict(FGT_CFG, admin_password=""))
-        self.assertNotIn("changeme", text)
-        self.assertNotIn("config system admin", text)
+        with open(switch_provisioner.__file__, encoding="utf-8") as fh:
+            code = "\n".join(line.split("#")[0] for line in fh)
+        for literal in ("changeme", "authpass123", "privpass123"):
+            self.assertNotIn(literal, code)
 
     def test_no_username_line_without_a_password(self):
         text = switch_provisioner.build_config(
@@ -169,11 +160,6 @@ class APlaceholderConfigSaysSoAboutItself(unittest.TestCase):
         original = "enable secret Sup3r-Enable\n"
         self.assertEqual(original,
                          prov_router._with_placeholder_warning(original, "switch"))
-
-    def test_the_fortios_warning_uses_a_fortios_comment(self):
-        text = prov_router._with_placeholder_warning(
-            'set password "{{VAULT:admin_password}}"\n', "fortigate")
-        self.assertTrue(text.startswith("#"))
 
 
 if __name__ == "__main__":

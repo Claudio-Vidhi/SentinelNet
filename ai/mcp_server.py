@@ -669,25 +669,6 @@ TOOLS = {
              ["ip", "mac"]),
         lambda a: api("GET", f"/api/wlc/{a['ip']}/diagnose-client/{a['mac']}"),
     ),
-    "generate_fortigate_config": (
-        "Generate a hardened day-0 FortiOS configuration for a new FortiGate "
-        "(zero-touch provisioning; does not touch any device). Same parameters "
-        "as the FortiGate ZTP wizard.",
-        _obj({"hostname": _S, "admin_user": _S, "admin_password": _S,
-              "mgmt_interface": _S, "mgmt_ip": _S, "mgmt_mask": _S,
-              "wan_interface": _S, "wan_mode": {**_S, "description": "dhcp | static"},
-              "wan_ip": _S, "wan_mask": _S, "wan_gw": _S,
-              "lan_interface": _S, "lan_ip": _S, "lan_mask": _S,
-              "dhcp_server": {"type": "boolean"}, "dhcp_start": _S, "dhcp_end": _S,
-              "dns_primary": _S, "dns_secondary": _S,
-              "ntp_servers": {"type": "array", "items": _S},
-              "syslog_server": _S,
-              "lan_to_wan_policy": {"type": "boolean"},
-              "disable_wan_admin": {"type": "boolean"},
-              "banner": _S},
-             ["hostname"]),
-        lambda a: api("POST", "/api/provisioner/fgt/generate", body=a),
-    ),
     "generate_switch_config": (
         "Generate a hardened day-0 Cisco IOS/IOS-XE configuration for a new "
         "switch (does not touch any device). Accepts the same parameters as "

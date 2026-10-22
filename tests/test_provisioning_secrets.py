@@ -7,7 +7,6 @@ non sensibili sopravvivono."""
 
 import unittest
 
-from services import fortigate_provisioner
 from services import switch_provisioner
 from security.provisioning_secrets import mask_secrets
 
@@ -24,16 +23,7 @@ SWITCH_CFG = {
     "vlans": [{"id": 10, "name": "MGMT"}],
 }
 
-FGT_CFG = {
-    "hostname": "FGT-TEST-01",
-    "admin_user": "secadmin",
-    "admin_password": "FgtAdminPass1",
-    "snmpv3": {"user": "snmpuser", "auth_pass": "FgtAuthPass", "priv_pass": "FgtPrivPass"},
-    "ha": {"group_name": "HA-GRP", "password": "HaSegreta", "hbdev": "ha1"},
-}
-
 SWITCH_SECRETS = ["EnableSegreto99", "AdminPass123", "AuthP4ss", "PrivP4ss"]
-FGT_SECRETS = ["FgtAdminPass1", "FgtAuthPass", "FgtPrivPass", "HaSegreta"]
 
 
 class TestMaskSecrets(unittest.TestCase):
@@ -50,12 +40,6 @@ class TestMaskSecrets(unittest.TestCase):
         for keep in ("hostname SW-TEST-01", "ip domain-name lab.local",
                      "ip address 10.0.10.2 255.255.255.0", "vlan 10"):
             self.assertIn(keep, text)
-
-    def test_fortigate_config_no_cleartext(self):
-        text = fortigate_provisioner.build_config(mask_secrets(FGT_CFG))
-        for s in FGT_SECRETS:
-            self.assertNotIn(s, text, f"segreto in chiaro: {s}")
-        self.assertIn("VAULT:ha.password", text)
 
     def test_materialized_build_unchanged(self):
         # Il push usa il payload originale: build_config(cfg) resta invariato.

@@ -1993,9 +1993,7 @@ async function switchTab(tabId, clickedBtn, opts = {}) {
     if (tabId === 'tab-devices') {
         renderDeviceTable();
     } else if (tabId === 'tab-provisioning') {
-        // Awaited so editDevice() fills the form after the tab's own reload,
-        // not before: otherwise that reload resets tenant/profile/identities.
-        await loadProvisioningTab();
+        loadProvisioningTab();
     } else if (tabId === 'tab-map') loadTopology();
     else if (tabId === 'tab-map-interactive') loadInteractiveMap();
     else if (tabId === 'tab-categories') loadCategoriesData();
@@ -2005,7 +2003,6 @@ async function switchTab(tabId, clickedBtn, opts = {}) {
     else if (tabId === 'tab-endpoint') locSwitchView(_locView);
     else if (tabId === 'tab-config') loadConfigAnalyzer();
     else if (tabId === 'tab-ai') loadAiTab();
-    else if (tabId === 'tab-import' && typeof loadImportProbeIds === 'function') { loadImportProbeIds(); loadImportDestinations(); }
     else if (tabId === 'tab-users') loadUsers();
     else if (tabId === 'tab-probes') loadProbes();
     else if (tabId === 'tab-mcp') loadMcpTab();
@@ -2061,11 +2058,10 @@ function showToast(msg, kind) {
 
 // --- Shared across tabs (promoted from templates/dashboard.html during
 // static/js/provisioning.js extraction): renderVendorTable/buildVendorOptions
-// are used by the Provisioning tab (populateProvisioningFormSelects) AND by
-// the still-inline Groups tab (loadVendors) AND by changeLanguage() in
-// static/js/i18n.js. refreshIdentityOptions/renderIdentitiesPanel are used by
-// the Provisioning tab AND by the still-inline Devices tab's editDevice() AND
-// by the still-inline Groups tab's btnCreateGroup handler. ---
+// are used by the device form (populateProvisioningFormSelects) AND by
+// the Groups tab (loadVendors) AND by changeLanguage() in static/js/i18n.js.
+// refreshIdentityOptions fills the device form's credentials (devices.js);
+// renderIdentitiesPanel draws the Credentials page (provisioning.js). ---
 
 function buildVendorOptions(selected) {
     const builtins = ["cisco", "hpe"];
@@ -2121,6 +2117,7 @@ document.getElementById('vendorTableBody')?.addEventListener('click', (e) => {
 
 // Carica le identita' del tenant selezionato nella select devProfile,
 // preservando default/custom. Chiamata al load della tab e al cambio tenant.
+// The device form's credential choices, for the tenant picked in the form.
 async function refreshIdentityOptions(preserve) {
     const tenant = document.getElementById('devGroupSelect').value;
     const sel = document.getElementById('devProfile');
@@ -2132,12 +2129,14 @@ async function refreshIdentityOptions(preserve) {
         `<option value="custom">${tr('optProfileCustom').replace(/<[^>]*>/g, '')}</option>`;
     sel.value = Array.from(sel.options).some(o => o.value === keep) ? keep : 'default';
     document.getElementById('customCredsForm').style.display = sel.value === 'custom' ? 'block' : 'none';
-    window._tenantIdentities = idents;
 }
 
-function renderIdentitiesPanel() {
+// The Credentials page: the identities of the tenant chosen top-left ('all' = every one).
+async function renderIdentitiesPanel() {
     const body = document.getElementById('identitiesTableBody');
-    const idents = window._tenantIdentities || [];
+    const res = await apiFetch('/api/identities?tenant=' + encodeURIComponent(window.globalSelectedTenant || 'all'));
+    const idents = res && res.ok ? (await res.json()).identities : [];
+    window._tenantIdentities = idents;
     body.innerHTML = idents.length ? idents.map(i => {
         let tenantLabel = '';
         if (!i.tenant || i.tenant === 'all') {
@@ -2595,10 +2594,9 @@ function canOpenTab(tabId) {
     return true;
 }
 
-// Pasted addresses -> list of IPs, for the CSV import paste box (devices.js)
-// and the "Aggiungi apparati" wizard (add-devices.js). Accepts IPs,
-// "192.0.2.10-20", "192.0.2.10-192.0.2.20" and
-// subnets /24../32 (network and broadcast left out).
+// Pasted addresses -> list of IPs, for the "Aggiungi apparati" wizard
+// (add-devices.js). Accepts IPs, "192.0.2.10-20", "192.0.2.10-192.0.2.20"
+// and subnets /24../32 (network and broadcast left out).
 function expandAddressList(text, max = 1024) {
     const octets = s => {
         const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s);
@@ -2658,8 +2656,8 @@ function buildCommandPaletteItems(query = '') {
         { id: 'tab-config-drift', title: 'Config Drift', desc: tr('coreRunningConfigVsBackup'), group: tr('coreViews') },
         { id: 'tab-routes', title: tr('coreRoutingTables'), desc: tr('coreRoutesAcrossDevices'), group: tr('coreViews') },
         { id: 'tab-device-history', title: tr('dhTitle'), desc: tr('dhSubtitle'), group: tr('coreViews') },
-        { id: 'tab-provisioning', title: 'Provisioning', desc: tr('coreAddNewDevicesAnd'), group: tr('coreViews') },
-        { id: 'tab-import', title: tr('coreCsvImport'), desc: tr('coreBulkImportDevicesFrom'), group: tr('coreViews') },
+        { id: 'tab-provisioning', title: tr('credHeroTitle'), desc: tr('coreCredentialsDesc'), group: tr('coreViews') },
+        { id: 'tab-provisioner', title: tr('coreNewDevice'), desc: tr('coreNewDeviceDesc'), group: tr('coreViews') },
         { id: 'tab-users', title: tr('coreUsers'), desc: tr('coreManageLocalUserAccounts'), group: tr('coreViews') },
         { id: 'tab-groups', title: tr('coreTenantManagement'), desc: tr('coreConfigureTenantsAndSnmp'), group: tr('coreViews') },
         { id: 'tab-blueprint', title: tr('tabBlueprint'), desc: tr('descBlueprint'), group: tr('coreViews') },

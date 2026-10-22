@@ -497,7 +497,7 @@ Available tools, by area:
 | FortiGate | `fortigate_status`, `_interfaces`, `_arp`, `_dhcp_leases`, `_device_inventory`, `_policies`, `_policy_stats`, `_firewall_addresses`, `_firewall_policy_objects`, `_firewall_services`, `_policy_lookup`, `_sessions`, `_routes`, `_traffic_logs`, `_wifi_clients`, `_managed_aps`, `_full_config`, `_diagnose_client` |
 | Cisco WLC | `wlc_status`, `_ap_summary`, `_client_summary`, `_client_detail`, `_wlan_summary`, `_rogue_aps`, `wlc_diagnose_client` |
 | Config & ops | `analyze_config`, `get_triage_status`, `send_cli_command` |
-| Provisioning | `generate_fortigate_config`, `generate_switch_config` |
+| Provisioning | `generate_switch_config` |
 | Incidents & vulnerabilities | `list_incidents`, `get_incident`, `cve_priority`, `cve_for_device`, `search_vulnerabilities` |
 | Config drift | `drift_summary`, `drift_versions`, `drift_diff` — operator account required |
 | Ports & routing | `interface_errors`, `interface_errors_port`, `get_routes`, `trace_route` |

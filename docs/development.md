@@ -70,7 +70,7 @@ pytest is the runner; the tests themselves stay `unittest.TestCase`, which
 pytest executes unchanged. Use it rather than `unittest discover`, which
 collects only `TestCase` methods and therefore silently skips the module-level
 `def test_*()` functions some files use — twelve of them in
-`test_switch_provisioner.py` and `test_fortigate_provisioner.py` went unrun for
+`test_switch_provisioner.py` and the since-retired FortiGate provisioner went unrun for
 exactly that reason. `-n 4` splits the suite across four processes; each worker
 is its own process, so the per-worker `SENTINELNET_DATA_DIR` stays isolated.
 Prefer `-n 4` over `-n auto`: oversubscribing every core is slower here, and it

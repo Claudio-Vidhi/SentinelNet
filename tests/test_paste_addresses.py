@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Pasted addresses in the CSV import: the node harness runs the real parser."""
+"""Pasted addresses in the "Add devices" wizard: the node harness runs the real parser."""
 
 import os
 import shutil
@@ -23,8 +23,8 @@ class TestPasteAddresses(unittest.TestCase):
     def test_paste_box_is_wired(self):
         with open(os.path.join(_REPO_ROOT, "templates", "dashboard.html"), encoding="utf-8") as f:
             html = f.read()
-        self.assertIn('<label for="importPasteBox"', html)
-        self.assertIn('id="importPasteBox"', html)
+        self.assertIn('<label for="adwAddresses"', html)
+        self.assertIn('id="adwAddresses"', html)
 
 
 if __name__ == "__main__":

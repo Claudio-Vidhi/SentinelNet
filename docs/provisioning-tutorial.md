@@ -1,13 +1,14 @@
 # Day-0 provisioning walkthrough
 
-How to take a switch or firewall out of its box and give it a first
-configuration through SentinelNet, with the hardware in front of you.
+How to take a Cisco switch out of its box and give it a first
+configuration through SentinelNet, with the hardware in front of you. The
+page is **Nuova configurazione** (Operazioni) in the sidebar. It used to
+generate FortiGate configs too; that generator was retired in October 2026.
 
 This describes what the code actually does, field by field. The reference for
 *what each generated command means* is the vendor's own hardening guide; the
 reference for *what SentinelNet will send and when* is
-[services/switch_provisioner.py](../services/switch_provisioner.py),
-[services/fortigate_provisioner.py](../services/fortigate_provisioner.py) and
+[services/switch_provisioner.py](../services/switch_provisioner.py) and
 [routers/provisioner.py](../routers/provisioner.py).
 
 Related: [probes.md](probes.md) for what a bastion can and cannot
@@ -21,12 +22,8 @@ carry, [operations.md](operations.md) for where `audit.log` lives.
 |---|---|
 | An **admin** account, to push | `POST /api/provisioner/push-ssh` and `/push-serial` are `require_admin`. Generating, downloading and listing serial ports are `require_operator`. A `viewer` never sees the tab at all — the nav entry is `requires-write`. |
 | A decided IP plan | The wizard validates nothing. The first thing that checks your input is the device. |
-| Physical access **or** a reachable temporary address, for a Cisco push | Serial delivery needs the cable plugged into the machine running the SentinelNet server, not into your laptop (§7). SSH delivery needs the device already answering on some address. |
-| The probe record, if the Cisco switch sits behind a bastion | Create the bastion probe first ([probes.md §6](probes.md)) — a day-0 device cannot be resolved to a probe by IP. |
-
-**SentinelNet delivers a config only to Cisco switches.** For a FortiGate the
-workflow ends at the generated text: you review it, download it and apply it
-yourself (§5.5).
+| Physical access **or** a reachable temporary address, for a push | Serial delivery needs the cable plugged into the machine running the SentinelNet server, not into your laptop (§6). SSH delivery needs the device already answering on some address. |
+| The probe record, if the switch sits behind a bastion | Create the bastion probe first ([probes.md §6](probes.md)) — a day-0 device cannot be resolved to a probe by IP. |
 
 Two things this feature does **not** do, and you should plan around them:
 
@@ -34,21 +31,19 @@ Two things this feature does **not** do, and you should plan around them:
   `configure replace`, no scheduled revert in the switch provisioner. If the
   push half-lands, you go and look.
 - **No inventory write.** A successful push does not add the device to
-  `network_hosts.csv`. That is a separate step (§9).
+  `network_hosts.csv`. That is a separate step (§8).
 
 ---
 
-## 2. The two tabs both called "Provisioning"
+## 2. Where things are
 
-The nav entry opens two sibling sub-tabs. They do different jobs and it is
-worth being sure which one you are on:
-
-| Sub-tab | id | What it is |
+| Page | id | What it is |
 |---|---|---|
-| **Provisioning Apparato** | `#tab-provisioning` | Inventory CRUD: register an *existing* device, assign it to a tenant and a probe, set transports and credentials. Also where tenant credential identities are managed. |
-| **Zero-Touch Provisioning** | `#tab-provisioner` | The day-0 wizard. Generates a full config from scratch and delivers it. |
+| **Nuova configurazione** (Operazioni) | `#tab-provisioner` | The day-0 wizard. Generates a full config from scratch and delivers it. |
+| **Aggiungi apparati** (Inventario button) | `#addDevicesWizard` | Registers devices that already answer: addresses, CSV, scan, neighbors. Its "full form" link and the inventory's *Modifica* open the device form (`#deviceFormSheet`). |
+| **Credenziali** (Amministra) | `#tab-provisioning` | Tenant credential identities. The id is the permission name, kept from when this page also held the device form. |
 
-Everything in §3–§8 is `#tab-provisioner`. §9 goes back to `#tab-provisioning`.
+Everything in §3–§7 is `#tab-provisioner`. §8 registers the device.
 
 ---
 
@@ -56,7 +51,7 @@ Everything in §3–§8 is `#tab-provisioner`. §9 goes back to `#tab-provisioni
 
 **The day-0 wizard has no tenant field.** It generates text from the parameters
 you type; it does not read tenant defaults and does not tag the result. Tenant
-assignment happens later, when you register the device (§9). Two selectors on
+assignment happens later, when you register the device (§8). Two selectors on
 the page do mention a tenant or a probe, and neither is what you might assume:
 
 - `#genCfgTenant` belongs to the **AI config generator** panel at the top
@@ -66,14 +61,9 @@ the page do mention a tenant or a probe, and neither is what you might assume:
   is never pushed. It is a separate path from the deterministic wizard and is
   out of scope here.
 - `#provSshProbe` ("Sonda del target") is on the SSH delivery panel and only
-  affects whether the Cisco push is tunnelled through a bastion. See §6.2.
+  affects whether the Cisco push is tunnelled through a bastion. See §5.2.
 
-**Vendor** is `#provVendorChips` — two chips, Cisco switch or FortiGate
-firewall. The chips are a skin over the hidden `<select id="provVendor">`,
-which stays the source of truth; clicking a chip dispatches a real `change`
-event, which swaps `#provCiscoSection` for `#provFgtSection`. Everything
-downstream (which endpoint is called, which payload is collected) keys off
-`#provVendor`.
+**Vendor** is not a choice: the wizard generates Cisco IOS/IOS-XE only.
 
 ---
 
@@ -194,7 +184,6 @@ named `SNMP-GROUP`.
 
 The same substitution exists for the local admin: `#provAdminUser` filled with
 `#provAdminPass` empty produces `username <user> privilege 15 secret changeme`.
-The FortiGate form has the identical trap (§5).
 
 ### 4.8 AAA
 
@@ -202,7 +191,7 @@ The FortiGate form has the identical trap (§5).
 value reveals `#provAaaServerGroup`, `#provAaaKeyGroup` and the hint.
 
 - The form has room for **one** server, sent only if the IP box is non-empty.
-  (The API schema accepts up to three — see §11.)
+  (The API schema accepts up to three — see §10.)
 - Protocol set but IP blank → the payload carries no server, and
   `build_config` silently falls back to the local-only branch:
   `aaa authentication login default local`. You get a config that looks fine
@@ -223,86 +212,11 @@ Storm-control are on — with all three off, no recovery lines are emitted at al
 Four values have **no UI control** and are fixed by
 [static/js/provisioning.js](../static/js/provisioning.js): VTP mode
 `transparent`, STP mode `rapid-pvst`, `enable_routing` true (only consulted for
-`distribution`), and `save_after` true (§6.1).
+`distribution`), and `save_after` true (§5.1).
 
 ---
 
-## 5. Filling the FortiGate form
-
-### 5.1 MGMT vs WAN vs LAN
-
-Three interface roles, three different meanings. Each block is emitted only
-when its own preconditions are met, and skipped in silence otherwise:
-
-| Block | Emitted when | What it produces |
-|---|---|---|
-| MGMT | `#fgtMgmtIf` **and** `#fgtMgmtIp` are both filled | `set mode static`, the IP, `set allowaccess ping https ssh`, `set alias "MGMT"` |
-| WAN | `#fgtWanIf` filled | `set mode dhcp` (default) or `set mode static` + IP/mask; alias `WAN`, `set role wan` |
-| WAN default route | mode is **static** *and* `#fgtWanGw` filled | `config router static` entry 1 via the WAN interface |
-| LAN | `#fgtLanIf` **and** `#fgtLanIp` both filled | static IP, `set allowaccess ping`, `set role lan`, `set device-identification enable` |
-
-Consequences worth internalising:
-
-- In **DHCP** WAN mode, no static route is generated. The box relies on the
-  DHCP-supplied default gateway. Filling `#fgtWanGw` while mode is DHCP does
-  nothing.
-- `#fgtNoWanAdmin` (ticked by default) sets WAN `allowaccess` to `ping` only.
-  Untick it and you get `ping https ssh` on the internet-facing interface.
-  Think before you do.
-- MGMT `allowaccess` is fixed at `ping https ssh` — the schema field exists but
-  the form does not expose it (§11).
-
-### 5.2 DHCP server and the LAN→WAN policy
-
-`#fgtDhcpServer` needs **four** other things to be true before anything is
-generated: the tick, `#fgtLanIf`, `#fgtLanIp`, `#fgtDhcpStart` **and**
-`#fgtDhcpEnd`. Miss one and the whole block vanishes with no warning.
-
-`#fgtLanToWan` (ticked by default) needs both LAN and WAN interfaces named. The
-policy it writes is deliberately blunt — `all` → `all`, service `ALL`, action
-accept, NAT enable, `logtraffic all`. It is a day-0 "the site has internet"
-policy, not a rule set. Tighten it before the site goes live.
-
-### 5.3 Admin, hardening, AAA
-
-`#fgtAdminUser` creates an **additional** `super_admin` alongside the built-in
-one. As on the switch, a blank password yields the literal `changeme`.
-
-`#fgtLockout` → `admin-lockout-threshold 3` / `admin-lockout-duration 120`.
-`#fgtStrongCrypto` → `set strong-crypto enable`. `admintimeout` is fixed at 10
-minutes with no UI control.
-
-AAA takes a single server. RADIUS writes `config user radius` with `set secret`;
-TACACS+ writes `config user tacacs+` with `set key`. Either way a wildcard
-remote admin (`remote-sentinel-radius` / `remote-sentinel-tacacs`) is created
-with `super_admin` and bound to the `SENTINEL-AAA` user group.
-
-### 5.4 SNMPv3
-
-Same rule as the switch: emitted only when `#fgtSnmpUser` is non-empty, and
-blank auth/priv passwords silently become `authpass123` / `privpass123`.
-Security level `auth-priv`, `auth-proto sha`, `priv-proto aes`.
-
-### 5.5 Applying it: that part is yours
-
-SentinelNet does not deliver a config to a FortiGate. The whole FortiGate
-workflow is: fill the form, **Genera Config**, read the text, **Scarica .txt**,
-then paste or load it onto the box yourself — console, SSH or the FortiGate's
-own upload path, whichever suits the site.
-
-Two consequences:
-
-- The generated text masks every secret as `{{VAULT:<path>}}` (§6). Substitute
-  the real values before you apply it, or generate a materialised copy and
-  treat that file as a credential.
-- The `execute api-user generate-key ...` line in the output is a reminder, not
-  a command SentinelNet runs. Token creation stays manual.
-
-The delivery modes described in §6.1 and §7 apply to the Cisco switch only.
-
----
-
-## 6. Generate and review first
+## 5. Generate and review first
 
 Set `#provDeliveryMode` to **Solo visualizzazione** and click **Genera Config**.
 The text lands in `#provOutput`. **Scarica .txt** downloads the same text as
@@ -318,9 +232,8 @@ validated on the way in.
 > deliberate and pinned by
 > [tests/test_provisioning_secrets.py](../tests/test_provisioning_secrets.py):
 > a config you can paste into a ticket must not carry cleartext credentials.
-> The Cisco push path (§6.1, §7) uses the real values; only the *text* is
-> masked. A FortiGate config, which you apply by hand, therefore needs the
-> placeholders resolved first.
+> The push path (§5.1, §6) uses the real values; only the *text* is
+> masked.
 
 A fully materialised file is still possible, but only by calling the endpoint
 directly with `?materialized=true` — the UI never sets it — and doing so writes
@@ -332,7 +245,7 @@ Empty inputs interact badly with masking: a secret you left blank is not masked
 §4.7 appear in the generated text in the clear. If you see one, you forgot a
 field.
 
-### 6.1 Push via SSH (Cisco switch)
+### 5.1 Push via SSH (Cisco switch)
 
 Switch `#provDeliveryMode` to **Push via SSH** to reveal `#provSshFields`:
 
@@ -341,7 +254,7 @@ Switch `#provDeliveryMode` to **Push via SSH** to reveal `#provSshFields`:
 | `#provSshHost`, `#provSshPort` | The address the device answers on **now**, not the one you are about to give it. |
 | `#provSshUser`, `#provSshPass` | Credentials the device has now. |
 | `#provSshSecret` | **Left empty, the login password is used as the enable secret.** |
-| `#provSshProbe` | See §6.2. Default "Automatica (da inventario)". |
+| `#provSshProbe` | See §5.2. Default "Automatica (da inventario)". |
 
 Then **Applica via SSH**. What happens on the server:
 
@@ -357,7 +270,7 @@ Then **Applica via SSH**. What happens on the server:
 > other rejection. A config where half the lines bounced still reports success.
 > The rejections are in the output text; read them.
 
-### 6.2 Target probe: when you need it
+### 5.2 Target probe: when you need it
 
 `core.net_ssh.ConnectHandler` decides whether to tunnel through a bastion in
 this order ([core/net_ssh.py](../core/net_ssh.py), pinned by
@@ -384,7 +297,7 @@ by IP.
 
 ---
 
-## 7. Push via console / serial (Cisco switch)
+## 6. Push via console / serial (Cisco switch)
 
 This is the real day-0 path: a switch straight out of the box has no IP.
 
@@ -415,10 +328,7 @@ transcript, and it can miss the device's replies entirely.
 
 ---
 
-## 8. Verify
-
-Steps 1 and 3 concern the Cisco push. After applying a FortiGate config by hand
-you have the device's own replies in front of you — read them there.
+## 7. Verify
 
 1. **Read `#provOutput` in full.** Not the `[success]` header — the body. Look
    for `% Invalid input`, `command parse error`, `Command fail`.
@@ -426,17 +336,19 @@ you have the device's own replies in front of you — read them there.
    and confirm the running-config. Nothing in SentinelNet re-reads the device
    afterwards.
 3. **Cisco: confirm it was saved.** A save failure is reported inside a
-   `success` response (§6.1). `show startup-config` is the only real answer.
+   `success` response (§5.1). `show startup-config` is the only real answer.
 4. **Check `audit.log`** (see [operations.md §1](operations.md)). One line is
    written per download, per materialised generation and per Cisco push, naming
    the user, the target host and the resulting status.
 
 ---
 
-## 9. Register the device
+## 8. Register the device
 
-Neither generating nor pushing touches the inventory. Go to the sibling sub-tab,
-**Provisioning Apparato** (`#tab-provisioning`), and add the device:
+Neither generating nor pushing touches the inventory. In **Inventario**, click
+**Aggiungi apparati** and either paste the new management address (the
+wizard checks it before adding), or follow its "full form" link to the device
+form (`#deviceFormSheet`), which has every field below:
 
 1. **Tenant** `#devGroupSelect` (`#btnInlineNewTenant` creates one inline).
 2. **Probe** `#devProbeSelect` — for a device behind a bastion, the same
@@ -451,9 +363,9 @@ Neither generating nor pushing touches the inventory. Go to the sibling sub-tab,
 
 ---
 
-## 10. Troubleshooting
+## 9. Troubleshooting
 
-### 10.1 The push cuts the path it is riding on (Cisco)
+### 9.1 The push cuts the path it is riding on (Cisco)
 
 The single most common way to brick a remote day-0 push. The generated config
 touches, among other things, `interface Vlan<mgmt>` and its IP, `line vty`,
@@ -478,14 +390,14 @@ If you are pushing through a bastion, the same reasoning applies one hop out —
 a change to a route or policy the bastion's path depends on kills the tunnel
 too.
 
-### 10.2 Device behind a bastion: connect timeout
+### 9.2 Device behind a bastion: connect timeout
 
 Symptom: `status: error` with a connection timeout or "no route", on a device
 you know the bastion can reach.
 
 Cause: `#provSshProbe` left on "Automatica (da inventario)". A day-0 device is
 not in the inventory, so there is nothing to resolve and the push is dialled
-directly from central (§6.2).
+directly from central (§5.2).
 
 Fix: pick the bastion probe explicitly. Check that the probe really is in `jump`
 mode — a `central` or `agent` probe in that dropdown is accepted and ignored.
@@ -503,7 +415,7 @@ mean the *bastion* refused you, not the device:
   the path. Remove the stale line from `ssh_known_hosts` in the data directory
   *only if you know why it changed*.
 
-### 10.3 Wrong or missing enable secret (Cisco)
+### 9.3 Wrong or missing enable secret (Cisco)
 
 Two fields are labelled "Enable secret" and they are not the same thing:
 
@@ -520,14 +432,14 @@ That is the benign failure.
 On a second push to the same switch, the credential you need in
 `#provSshSecret` is the one the *first* push installed.
 
-### 10.4 The COM port is not available
+### 9.4 The COM port is not available
 
 `#btnProvRefreshPorts` returning "Nessuna porta seriale rilevata sul server"
 covers several distinct causes, and the code cannot tell them apart:
 `list_serial_ports` swallows every exception and returns an empty list. So an
 empty result means **any** of:
 
-- the adapter is plugged into a different machine than the server (§7),
+- the adapter is plugged into a different machine than the server (§6),
 - `pyserial` is not importable in the server's environment,
 - the USB-serial driver is missing,
 - there genuinely is no port.
@@ -537,7 +449,7 @@ If you type the port name manually and the open fails, you get a proper
 else holds the port: a terminal emulator, a previous session), or no such file.
 Close the other terminal program first; the port is exclusive.
 
-### 10.5 A Cisco push that fails partway
+### 9.5 A Cisco push that fails partway
 
 What you can and cannot learn from the response:
 
@@ -551,13 +463,13 @@ What you can and cannot learn from the response:
 
 There is no retry, no resume and no "apply only what is missing". Re-running
 the push re-sends every line from the top. Whether that is harmless depends on
-the device and the specific commands (§11), so verify the current state before
+the device and the specific commands (§10), so verify the current state before
 you re-run rather than assuming.
 
 A half-applied device leaves no record anywhere except `audit.log` — nothing is
 written to the inventory by a push.
 
-### 10.6 Nothing happens when I click Generate
+### 9.6 Nothing happens when I click Generate
 
 `#btnProvGenerate` and `#btnProvDownload` act only on a `res.ok` response. Any
 other status — 403 for an insufficient role, 422 for a payload the schema
@@ -570,7 +482,7 @@ certainly an `operator` rather than an `admin` — pushes are admin-only.
 
 Open the browser's network tab to see the real status.
 
-### 10.7 Interactive prompts (Cisco)
+### 9.7 Interactive prompts (Cisco)
 
 Neither delivery path answers a question from the device. Serial sends bytes on
 a fixed timer with no prompt matching; SSH uses netmiko's defaults with no
@@ -578,32 +490,27 @@ custom expect strings and no `confirm` handling. Any generated command that
 asks something — `crypto key generate rsa` where keys already exist, and so
 on — is unhandled: the next config line goes into the prompt as the answer.
 
-What the device does in response was **not verified** here — see §11.
+What the device does in response was **not verified** here — see §10.
 
 ---
 
-## 11. Known limits and unverified behaviour
+## 10. Known limits and unverified behaviour
 
 Verified from the code, and worth knowing:
 
 - **The wizard performs no client-side validation.** No required-field check,
   no IP or interface-name syntax check, no cross-field consistency check.
-  `hostname` falls back to `Switch` / `FortiGate` if left blank. The first
+  `hostname` falls back to `Switch` if left blank. The first
   thing that ever validates your input is the device itself.
-- **Fields in the API schema with no form control.** FortiGate:
-  `api_user`, `central_mgmt`, `csf_group`, `netflow_collector`, `ha`,
-  `admin_timeout`, `mgmt_allowaccess`, `rest_api_logging`. Switch:
+- **Fields in the API schema with no form control.**
   `aaa_servers` beyond the first (the schema allows three), `vtp_mode`,
   `stp_mode`, `snmpv3.group`, `aaa_servers[].auth_port` / `acct_port`. These
   are reachable only by calling `POST /api/provisioner/…` directly with your
   own JSON body; the UI can neither set nor display them.
-- **`rest_api_logging` defaults to true**, so every FortiGate config generated
-  from the form carries `config log setting` with `rest-api-set`/`rest-api-get`
-  enabled, with no way to turn it off from the UI.
 
 Not verified, and deliberately not documented as fact:
 
-- **What real hardware does with an interactive prompt** (§10.7). The absence of
+- **What real hardware does with an interactive prompt** (§9.7). The absence of
   prompt handling in SentinelNet is verified; the device's reaction to it was
   not tested and is not described here.
 - **Whether re-running a Cisco push is idempotent.** Re-sending the full line

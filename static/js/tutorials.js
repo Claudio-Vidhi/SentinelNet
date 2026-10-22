@@ -97,8 +97,8 @@
                     textKey: 'tutInvS5Text'
                 },
                 {
-                    tab: 'tab-provisioning',
-                    target: '#tab-provisioning',
+                    tab: 'tab-devices',
+                    target: '#tab-devices [data-action="open-add-devices"]',
                     badgeKey: 'tutBadgeInv',
                     titleKey: 'tutInvS4Title',
                     textKey: 'tutInvS4Text'
@@ -219,8 +219,8 @@
                     textKey: 'tutOrgS2Text'
                 },
                 {
-                    tab: 'tab-provisioning',
-                    target: '#devLocationSelect',
+                    tab: 'tab-devices',
+                    target: '#tab-devices [data-action="open-add-devices"]',
                     badgeKey: 'tutBadgeOrg',
                     titleKey: 'tutOrgS3Title',
                     textKey: 'tutOrgS3Text'

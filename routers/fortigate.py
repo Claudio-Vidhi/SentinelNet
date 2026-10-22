@@ -35,6 +35,7 @@ class FgtTokenSchema(BaseModel):
     # FortiGate è installato un certificato attendibile.
     verify_tls: bool = False
     name: str = ""                  # nome descrittivo (multi-target manager)
+    keepalive: bool = False         # sessione HTTPS persistente (riuso connessione)
 
 class FgtActiveTargetSchema(BaseModel):
     ip: str
@@ -47,6 +48,7 @@ class FgtTargetUpdateSchema(BaseModel):
     port: Optional[int] = None
     verify_tls: Optional[bool] = None
     token: Optional[str] = None
+    keepalive: Optional[bool] = None
 
 class FgtPolicyLookupSchema(BaseModel):
     src_ip: str
@@ -137,7 +139,7 @@ def fgt_set_token(payload: FgtTokenSchema, current_user = Depends(require_admin)
     _assert_not_shared(payload.ip, current_user)
     fortigate_service.set_api_token(payload.ip, payload.token,
                                     port=payload.port, verify_tls=payload.verify_tls,
-                                    name=payload.name)
+                                    name=payload.name, keepalive=payload.keepalive)
     action = "configurato" if payload.token else "rimosso"
     log_audit(f"Token API FortiGate {action} per '{payload.ip}' da '{current_user.get('sub')}'.")
     return {"status": "success"}
@@ -194,7 +196,7 @@ def fgt_update_target(ip: str, payload: FgtTargetUpdateSchema,
     try:
         fortigate_service.update_target(ip, name=payload.name, port=payload.port,
                                         verify_tls=payload.verify_tls,
-                                        token=payload.token)
+                                        token=payload.token, keepalive=payload.keepalive)
     except KeyError:
         raise HTTPException(status_code=404,
                             detail=f"Nessun target FortiGate configurato per {ip}.")

@@ -12,14 +12,9 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Added
 
-- **Provisioning, Verifica connessione**: prova login e lettura
+- **Modulo apparato, Verifica connessione**: prova login e lettura
   dell'hostname con i dati del modulo, prima di salvare. Parte dal server
   centrale: per un apparato dietro una sonda lo dice invece di provarci.
-- **Importa CSV, incolla indirizzi**: accanto al file si possono incollare
-  IP singoli, liste, intervalli (`192.0.2.10-20`) o subnet fino a /24. Gli
-  indirizzi passano dalla stessa anteprima del CSV (nuovi, aggiornati,
-  errori); quelli non riconosciuti vengono elencati. Un CSV incollato con la
-  sua intestazione viene letto così com'è.
 - **Aggiungi apparati**: un pannello a passi (Sorgente → Indirizzi →
   Verifica → Fatto), dall'inventario e dalla palette comandi, con i passi
   cliccabili quando quelli prima sono completi. Indirizzi, file CSV,
@@ -28,7 +23,7 @@ happened — `git log --grep="chore(release)"` is the record for those.
   scansione e vicini ogni riga viene verificata con il suo esito (vendor
   correggibile, riprova, escludi), per il CSV vedi l'anteprima con nuovi,
   aggiornati ed errori; alla fine aggiunti, aggiornati e scartati, con il
-  CSV degli scartati. "Senza accesso" e "Da zero" restano procedure a parte
+  CSV degli scartati. "Senza accesso" e "Nuova configurazione" restano procedure a parte
   e il pannello le apre. Per una sede dietro una sonda la verifica non
   parte e il vendor si sceglie in tabella.
 - **Vendor rilevato automaticamente**: nel provisioning e nella scansione
@@ -39,13 +34,26 @@ happened — `git log --grep="chore(release)"` is the record for those.
   senza driver in SentinelNet viene segnalato e il vendor resta da
   scegliere. "Rileva" non viene mai salvato come vendor.
 
+- **FortiGate, sessione persistente**: nuova opzione per ogni FortiGate,
+  nella sua configurazione accanto a porta e verifica TLS. Attiva, le
+  chiamate REST riusano la stessa connessione HTTPS invece di aprirne una
+  nuova ogni volta (meno handshake TLS, viste più rapide). Il token viaggia
+  comunque con ogni richiesta; cambiare token, porta o TLS chiude la
+  sessione. Spenta di default: i FortiGate già configurati non cambiano.
+- **Nuova organizzazione da più punti**: una sola finestra crea il tenant
+  dal pulsante in intestazione della pagina Organizzazioni, dal "+" accanto
+  al tenant nel pannello Aggiungi apparati e dal "+" del modulo apparato;
+  il tenant creato viene selezionato dove lo si è chiesto.
+- **Aggiungi apparati, nuova sede**: un "+" accanto alla sede (solo admin)
+  la crea senza uscire dal pannello, e dopo un tenant nuovo la finestra
+  della sede si apre da sola: tenant, sede e apparati in un solo percorso.
+
 ### Changed
 
-- **Provisioning, messaggi nel modulo**: errori ed esito del salvataggio
-  compaiono sotto il modulo invece che in finestre a comparsa; dopo il
-  salvataggio tenant e sede restano scelti per l'apparato successivo, e il
-  tenant iniziale è quello del selettore globale. "Rimuovi la community"
-  compare solo quando si modifica un apparato.
+- **Modulo apparato, messaggi nel modulo**: errori ed esito della verifica
+  compaiono sotto il modulo invece che in finestre a comparsa, e il tenant
+  iniziale è quello del selettore globale. "Rimuovi la community" compare
+  solo quando si modifica un apparato.
 
 - **Sidebar riordinata per argomento**: sei gruppi (*Monitora, Rete,
   Sicurezza e conformità, Apparati, Operazioni, Amministra*) al posto di
@@ -64,6 +72,45 @@ happened — `git log --grep="chore(release)"` is the record for those.
   "Monitoraggio Interfacce & Stato Atteso", FortiGate, Analisi config…).
   Stessi nomi nella palette comandi, nel tutorial e nei testi che
   rimandano a un'altra pagina.
+- **Aggiunta apparati da un solo punto**: le voci *Provisioning* e
+  *Importa CSV* escono dalla sidebar, perché "Aggiungi apparati" fa già
+  entrambe le cose.
+  - Il modulo completo di un apparato è un pannello laterale: si apre da
+    *Modifica* nell'inventario e dal link "modulo completo" del pannello
+    Aggiungi apparati, che gli passa tenant, sede e primo indirizzo. Dopo il
+    salvataggio si chiude e un avviso conferma.
+  - Le identità hanno una loro pagina, **Credenziali**, sotto Amministra, e
+    seguono il tenant scelto in alto a sinistra.
+  - **Nuova configurazione** (la configurazione day-0 di uno switch Cisco,
+    prima "Apparato da zero") è una voce di Operazioni.
+  - Il passo CSV del pannello ha il modello da scaricare, le regole delle
+    colonne, gli id delle sonde, gli avvisi per riga e "Sposta in…" quando
+    la sede di una riga non torna. Il pulsante di importazione di una sede,
+    in Organizzazioni, apre il pannello già su quella sede.
+  - Permessi invariati: chi aveva *Provisioning* vede Credenziali e
+    aggiunge o modifica apparati come prima, Nuova configurazione segue il
+    permesso che aveva "Apparato da zero", e *Importa CSV* resta un permesso a sé,
+    assegnabile dalla pagina Utenti.
+
+### Removed
+
+- **Configurazione day-0 FortiGate**: la pagina Nuova configurazione genera
+  solo la config degli switch Cisco. Spariscono il modulo FortiGate,
+  l'endpoint `POST /api/provisioner/fgt/generate` e il tool MCP
+  `generate_fortigate_config`: un client MCP che lo chiamava riceve "tool
+  sconosciuto". La gestione dei FortiGate già in inventario (pagina
+  FortiGate, token, oggetti, policy) non cambia.
+
+### Fixed
+
+- **Finestre aperte da un'altra finestra**: comparivano dietro il pannello
+  laterale da cui erano aperte (nuovo tenant dal pannello Aggiungi
+  apparati). Ora ogni finestra aperta sopra un'altra le sta davanti.
+- **Nuova sede**: l'opzione "Applica la sonda a tutti i device della sede"
+  compariva anche creando una sede, dove non ha senso; ora solo in modifica.
+- **Nuova configurazione, Scarica .txt**: il pulsante chiamava un endpoint
+  rimosso ad agosto e non scaricava niente. Ora genera la config e la
+  scarica dal browser.
 
 ## [0.53.4] - 2026-10-22
 

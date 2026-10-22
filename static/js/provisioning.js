@@ -1,19 +1,18 @@
 // Copyright 2026 Claudio Vidhi
 // SPDX-License-Identifier: AGPL-3.0-only
 // static/js/provisioning.js
-// Estratto da templates/dashboard.html: tab-provisioning (form di provisioning
-// apparato + pannello Identità, parte tab-owned) e tab-provisioner (wizard ZTP
-// switch/FortiGate). La gestione del token API FortiGate e la vista live degli
-// oggetti firewall sono state rimosse da qui: erano un duplicato della tab
-// Fortigate Management (static/js/fortigate-management.js), che ora è
-// l'unica proprietaria di quella UI.
+// The device form's selects (the form itself is a sheet, devices.js), the
+// Credentials page (tab-provisioning: identities CRUD) and tab-provisioner
+// ("Nuova configurazione": day-0 config for Cisco switches; the FortiGate
+// day-0 generator was retired). FortiGate tokens and live objects belong to
+// the FortiGate tab (static/js/fortigate-management.js).
 //
 // refreshIdentityOptions/renderIdentitiesPanel e buildVendorOptions/
 // renderVendorTable sono stati promossi a static/js/core.js perché usati anche
 // dalla tab Devices (editDevice) e dalla tab Groups (btnCreateGroup,
 // loadVendors), ancora inline in dashboard.html.
 
-document.getElementById('devGroupSelect').addEventListener('change', async () => { populateDevLocationOptions(''); await refreshIdentityOptions(); renderIdentitiesPanel(); });
+document.getElementById('devGroupSelect').addEventListener('change', async () => { populateDevLocationOptions(''); await refreshIdentityOptions(); });
 // Picking a location prefills the probe with its default; the user may still change it.
 document.getElementById('devLocationSelect').addEventListener('change', (e) => {
     const loc = locationById(e.target.value);
@@ -30,7 +29,7 @@ function populateDevLocationOptions(selected) {
 }
 window.populateDevLocationOptions = populateDevLocationOptions;
 
-// --- IDENTITIES CRUD (pannello destro della tab Provisioning) ---
+// --- IDENTITIES CRUD (Credentials page) ---
 
 async function populateIdentTenantOptions(selected) {
     const sel = document.getElementById('identTenant');
@@ -119,14 +118,14 @@ async function deleteIdentity(id) {
         alert(tr('alertIdentityInUse') + '\n' + (err.detail.devices || []).join(', '));
         return;
     }
-    await refreshIdentityOptions(); renderIdentitiesPanel();
+    await renderIdentitiesPanel();
     if (window.refreshProbeIdentitySelects) await window.refreshProbeIdentitySelects();
 }
 
 document.getElementById('btnNewIdentity').addEventListener('click', async () => {
     document.getElementById('identEditId').value = '';
     ['identName', 'identUser', 'identPass', 'identSecret'].forEach(i => document.getElementById(i).value = '');
-    await populateIdentTenantOptions(document.getElementById('devGroupSelect').value || 'all');
+    await populateIdentTenantOptions(window.globalSelectedTenant || 'all');
     document.getElementById('identityForm').style.display = 'block';
 });
 document.getElementById('btnCancelIdentity').addEventListener('click', () => {
@@ -170,7 +169,7 @@ document.getElementById('btnSaveIdentity').addEventListener('click', async () =>
         if (passEl) passEl.value = '';
         if (secretEl) secretEl.value = '';
         document.getElementById('identityForm').style.display = 'none';
-        await refreshIdentityOptions(); renderIdentitiesPanel();
+        await renderIdentitiesPanel();
         // settings.js caches the identity list for the probe/bastion form and
         // populates its selects once per page: without this the identity just
         // created is invisible there until a reload.
@@ -256,114 +255,11 @@ function provCollectPayload() {
     return payload;
 }
 
-// Raccolta parametri del wizard ZTP FortiGate (vedi fortigate_provisioner.py).
-function fgtCollectPayload() {
-    const v = id => (document.getElementById(id)?.value || '').trim();
-    const aaaProtocol = document.getElementById('fgtAaaProtocol')?.value || 'none';
-    const payload = {
-        hostname: v('fgtHostname') || 'FortiGate',
-        timezone: v('fgtTimezone') || 'Europe/Rome',
-        admin_user: v('fgtAdminUser'),
-        admin_password: document.getElementById('fgtAdminPass').value,
-        lockout: document.getElementById('fgtLockout').checked,
-        strong_crypto: document.getElementById('fgtStrongCrypto').checked,
-        mgmt_interface: v('fgtMgmtIf'),
-        mgmt_ip: v('fgtMgmtIp'),
-        mgmt_mask: v('fgtMgmtMask'),
-        wan_interface: v('fgtWanIf'),
-        wan_mode: document.getElementById('fgtWanMode').value,
-        wan_ip: v('fgtWanIp'),
-        wan_mask: v('fgtWanMask'),
-        wan_gw: v('fgtWanGw'),
-        lan_interface: v('fgtLanIf'),
-        lan_ip: v('fgtLanIp'),
-        lan_mask: v('fgtLanMask'),
-        dhcp_server: document.getElementById('fgtDhcpServer').checked,
-        dhcp_start: v('fgtDhcpStart'),
-        dhcp_end: v('fgtDhcpEnd'),
-        dns_primary: v('fgtDns1'),
-        dns_secondary: v('fgtDns2'),
-        ntp_servers: v('fgtNtp').split(',').map(s => s.trim()).filter(Boolean),
-        syslog_server: v('fgtSyslog'),
-        snmpv3: v('fgtSnmpUser') ? {
-            user: v('fgtSnmpUser'),
-            auth_pass: document.getElementById('fgtSnmpAuth').value,
-            priv_pass: document.getElementById('fgtSnmpPriv').value,
-        } : {},
-        lan_to_wan_policy: document.getElementById('fgtLanToWan').checked,
-        disable_wan_admin: document.getElementById('fgtNoWanAdmin').checked,
-        banner: v('fgtBanner'),
-        aaa_protocol: aaaProtocol,
-    };
-    if (aaaProtocol !== 'none') {
-        payload.aaa_server_ip = v('fgtAaaServerIp');
-        payload.aaa_key = document.getElementById('fgtAaaKey').value;
-    }
-    return payload;
-}
-function provVendorIsFgt() { return document.getElementById('provVendor')?.value === 'fortigate'; }
-function provPayloadAndBase() {
-    return provVendorIsFgt()
-        ? { payload: fgtCollectPayload(), base: '/api/provisioner/fgt' }
-        : { payload: provCollectPayload(), base: '/api/provisioner' };
-}
-
-// FortiGate has no push: the config is generated, downloaded and applied by the
-// operator. Hiding the delivery options is not enough on its own - the mode has
-// to be forced back to 'view', or switching vendor while 'ssh' was selected
-// would leave a hidden SSH form armed behind a dead endpoint.
-function provSyncDeliveryMode(isFgt) {
-    const mode = document.getElementById('provDeliveryMode');
-    if (!mode) return;
-    if (isFgt) mode.value = 'view';
-    mode.style.display = isFgt ? 'none' : '';
-    mode.dispatchEvent(new Event('change'));
-}
-
-// I chip "Tipo apparato" sono solo una skin del <select id="provVendor">, che
-// resta la fonte di verità: qui li riallineiamo al value corrente del select.
-function provSyncVendorChips() {
-    const sel = document.getElementById('provVendor');
-    if (!sel) return;
-    document.querySelectorAll('#provVendorChips .chip-choice').forEach(chip => {
-        chip.setAttribute('aria-pressed', String(chip.dataset.vendor === sel.value));
-    });
-}
-
-function provInitVendorChips() {
-    const sel = document.getElementById('provVendor');
-    if (!sel) return;
-    document.querySelectorAll('#provVendorChips .chip-choice').forEach(chip => {
-        chip.addEventListener('click', () => {
-            if (sel.value === chip.dataset.vendor) return;
-            sel.value = chip.dataset.vendor;
-            // Evento 'change' reale: rieffettua tutto il wiring vendor esistente
-            // (sezioni Cisco/FGT, campi console, token inline) senza duplicarlo.
-            sel.dispatchEvent(new Event('change'));
-        });
-    });
-    provSyncVendorChips();
-}
-
 function provInitToggles() {
     const roleSel = document.getElementById('provRole');
     if (!roleSel) return;
-    document.getElementById('provVendor').addEventListener('change', () => {
-        const fgt = provVendorIsFgt();
-        document.getElementById('provCiscoSection').style.display = fgt ? 'none' : '';
-        document.getElementById('provFgtSection').style.display = fgt ? '' : 'none';
-        // FortiGate generates only: the config is downloaded and applied by the
-        // operator, so the whole delivery half of the wizard is hidden and the
-        // mode forced back to view-only.
-        provSyncDeliveryMode(fgt);
-        const ciscoHint = document.getElementById('provCiscoTokenHint');
-        if (ciscoHint) ciscoHint.style.display = fgt ? 'none' : 'flex';
-        provSyncVendorChips();
-    });
-    provInitVendorChips();
 
-    // Toggle AAA server/key fields quando il protocollo AAA non è "none",
-    // sia per il wizard switch (Cisco) sia per quello FortiGate.
+    // Toggle AAA server/key fields quando il protocollo AAA non è "none".
     function wireAaaToggle(selectId, serverGroupId, keyGroupId, hintId) {
         const sel = document.getElementById(selectId);
         if (!sel) return;
@@ -380,7 +276,6 @@ function provInitToggles() {
         sync();
     }
     wireAaaToggle('provAaaProtocol', 'provAaaServerGroup', 'provAaaKeyGroup', 'provAaaHint');
-    wireAaaToggle('fgtAaaProtocol', 'fgtAaaServerGroup', 'fgtAaaKeyGroup', 'fgtAaaHint');
 
     const devVendorSel = document.getElementById('devVendor');
     if (devVendorSel) devVendorSel.addEventListener('change', updateDevSecretField);
@@ -409,35 +304,30 @@ function provInitToggles() {
             `<option value="${escapeHtml(st.id)}">${escapeHtml(st.name)}</option>`).join(''));
         sel.dataset.loaded = '1';
     }
-    document.getElementById('btnProvGenerate').addEventListener('click', async () => {
-        const { payload, base } = provPayloadAndBase();
-        const res = await apiFetch(`${base}/generate`, {
+    async function provGenerate() {
+        const res = await apiFetch('/api/provisioner/generate', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(provCollectPayload())
         });
-        if (res && res.ok) {
-            const data = await res.json();
-            document.getElementById('provOutput').value = data.config;
-        }
-    });
+        if (!res || !res.ok) return null;
+        const config = (await res.json()).config;
+        document.getElementById('provOutput').value = config;
+        return config;
+    }
+    document.getElementById('btnProvGenerate').addEventListener('click', provGenerate);
+    // Built client-side from the generated text: the server-side download
+    // route was removed in 2026-08 and this button kept calling it.
     document.getElementById('btnProvDownload').addEventListener('click', async () => {
-        const { payload, base } = provPayloadAndBase();
-        const res = await apiFetch(`${base}/download`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        if (res && res.ok) {
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${(payload.hostname || 'device')}-day0.txt`;
-            a.click();
-            URL.revokeObjectURL(url);
-        }
+        const config = await provGenerate();
+        if (config === null) return;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([config], { type: 'text/plain' }));
+        a.download = `${provCollectPayload().hostname}-day0.txt`;
+        a.click();
+        URL.revokeObjectURL(a.href);
     });
     document.getElementById('btnProvPushSsh').addEventListener('click', async () => {
-        const { payload, base } = provPayloadAndBase();
+        const payload = provCollectPayload();
         Object.assign(payload, {
             ssh_host: document.getElementById('provSshHost').value.trim(),
             ssh_port: parseInt(document.getElementById('provSshPort').value, 10) || 22,
@@ -448,7 +338,7 @@ function provInitToggles() {
         payload.ssh_secret = document.getElementById('provSshSecret').value;
         payload.save_after = true;
         document.getElementById('provOutput').value = 'Invio in corso via SSH...';
-        const res = await apiFetch(`${base}/push-ssh`, {
+        const res = await apiFetch('/api/provisioner/push-ssh', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
@@ -461,13 +351,13 @@ function provInitToggles() {
         }
     });
     document.getElementById('btnProvPushSerial').addEventListener('click', async () => {
-        const { payload, base } = provPayloadAndBase();
+        const payload = provCollectPayload();
         Object.assign(payload, {
             com_port: document.getElementById('provComPort').value.trim(),
             baudrate: parseInt(document.getElementById('provBaudrate').value, 10) || 9600,
         });
         document.getElementById('provOutput').value = 'Invio in corso via console/seriale...';
-        const res = await apiFetch(`${base}/push-serial`, {
+        const res = await apiFetch('/api/provisioner/push-serial', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
@@ -547,10 +437,8 @@ async function populateProbeOptions(preserve) {
 }
 window.populateProbeOptions = populateProbeOptions;
 
-// Popola le select del form di Provisioning Apparato (devVendor,
-// scanVerifyVendorSelect, devGroupSelect, devProbeSelect). Estratto da appInit() perché ora
-// serve anche quando si apre la tab dedicata tab-provisioning senza passare da
-// un reload completo.
+// Fills the device form's selects (devVendor, scanVerifyVendorSelect,
+// devGroupSelect, devProbeSelect): at app start and each time the form opens.
 function populateProvisioningFormSelects() {
     const devVendorSel = document.getElementById('devVendor');
     if (devVendorSel) devVendorSel.innerHTML = autoVendorOption(devVendorSel.value) + buildVendorOptions(devVendorSel.value || 'cisco');
@@ -576,7 +464,8 @@ function populateProvisioningFormSelects() {
     }
 }
 
-async function loadProvisioningTab() {
+// The device form's selects, refreshed each time the sheet opens.
+async function loadDeviceForm() {
     try {
         const res = await apiFetch('/api/groups');
         if (res && res.ok) {
@@ -587,8 +476,15 @@ async function loadProvisioningTab() {
     populateProvisioningFormSelects();
     await populateProbeOptions();
     await refreshIdentityOptions();
+}
+
+// Credentials page (tab-provisioning).
+function loadProvisioningTab() {
     renderIdentitiesPanel();
 }
+window.addEventListener('globalTenantChanged', () => {
+    if (document.getElementById('tab-provisioning')?.classList.contains('active')) renderIdentitiesPanel();
+});
 
 // --- BULK ASSIGN IDENTITY TO DEVICES ---
 // Apre un modale che elenca i dispositivi del tenant dell'identità (o del tenant
@@ -596,11 +492,11 @@ async function loadProvisioningTab() {
 function assignIdentityToDevices(identityId) {
     const ident = (window._tenantIdentities || []).find(x => x.id === identityId);
     if (!ident) return;
-    const currentTenant = document.getElementById('devGroupSelect')?.value || '';
+    const currentTenant = window.globalSelectedTenant || 'all';
     const L = i18n[currentLang];
 
     // Se l'identità è legata a tenant specifici, vengono elencati SOLO i device di quei tenant.
-    // Se è globale ('all'), vengono elencati i device del tenant corrente (o tutti se devGroupSelect è 'all').
+    // Global ('all'): the devices of the tenant chosen top-left (every device when that is 'all').
     let allowedTenants = null;
     if (ident.tenant && ident.tenant !== 'all') {
         allowedTenants = Array.isArray(ident.tenant)
@@ -679,8 +575,7 @@ function assignIdentityToDevices(identityId) {
         if (res && res.ok) {
             const data = await res.json();
             closeAssignIdentityModal();
-            await refreshIdentityOptions();
-            renderIdentitiesPanel();
+            await renderIdentitiesPanel();
             alert((L.assignSuccess || 'Identità assegnata a {n} dispositivi.').replace('{n}', data.assigned.length));
         } else if (res) {
             const err = await res.json();

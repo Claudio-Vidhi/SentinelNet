@@ -61,6 +61,9 @@ class TestRouterParity(unittest.TestCase):
     #   il push FortiGate (SSH, REST e console/seriale) e' stato rimosso ad
     #   agosto 2026 — il modo di lavorare corrente non ne ha bisogno. Resta
     #   generate; il push Cisco e' intatto.
+    # /api/provisioner/fgt/generate: il generatore day-0 FortiGate e' stato
+    #   dismesso a ottobre 2026 (UI, endpoint, servizio e tool MCP): la pagina
+    #   "Nuova configurazione" resta solo per gli switch Cisco.
     # /api/provisioner/download, /api/provisioner/fgt/download:
     #   dead code (audit 2026-08): nessun chiamante in static/js, nessun form
     #   nel template, nessun test. Il download avviene client-side dalla
@@ -71,7 +74,8 @@ class TestRouterParity(unittest.TestCase):
     #   aggiorna da POST /api/device-categories/assign, che chiama add_model()
     #   da se', ed e' la via che usa la UI. add_model/delete_model in
     #   inventory_manager restano, hanno altri chiamanti.
-    ALLOWED_REMOVED_PATHS = ("/api/provisioner/fgt/push-ssh",
+    ALLOWED_REMOVED_PATHS = ("/api/provisioner/fgt/generate",
+                             "/api/provisioner/fgt/push-ssh",
                              "/api/provisioner/fgt/push-serial",
                              "/api/provisioner/download",
                              "/api/provisioner/fgt/download",
@@ -490,16 +494,17 @@ class TestFullParity(unittest.TestCase):
     # defaults to ""), the probe id of a day-0 target that is not in the
     # inventory yet, so the push can be tunnelled through a bastion; no
     # existing field removed or retyped.
-    # FortiGateProvisionSchema: admin_user/admin_password became mandatory
-    # (validator, not a field change) when the day-0 defaults were removed.
-    ALLOWED_CHANGED_SCHEMAS = ("CSVImportRequest", "AgentDeviceSchema", "DeviceSchema", "DeviceReassignSchema", "PromoteDeviceSchema",
+    # FgtTokenSchema/FgtTargetUpdateSchema: optional 'keepalive' (default
+    # False / None = unchanged), the per-FortiGate persistent HTTPS session.
+    # Additive, no field removed or retyped.
+    ALLOWED_CHANGED_SCHEMAS = ("FgtTokenSchema", "FgtTargetUpdateSchema", "CSVImportRequest", "AgentDeviceSchema", "DeviceSchema", "DeviceReassignSchema", "PromoteDeviceSchema",
                                "FgtLogQuerySchema", "IdentitySchema",
                                "SubnetScanRequest", "AiGenerateConfigSchema",
                                # Optional 'ips' (default None = whole group): the
                                # inventory's bulk selection. Additive, no field retyped.
                                "PingCheckRequest", "TriageRunRequest",
                                "ProbeCreateSchema", "ProbeUpdateSchema",
-                               "SwitchProvisionSSHSchema", "FortiGateProvisionSchema",
+                               "SwitchProvisionSSHSchema",
                                # Campo 'email' opzionale (default ""): indirizzo
                                # di recupero password. Puramente additivo, un
                                # client che lo omette crea l'utente come prima.
@@ -519,7 +524,7 @@ class TestFullParity(unittest.TestCase):
     # Vedi TestRouterParity.ALLOWED_REMOVED_PATHS/_SCHEMAS: rimozioni volute,
     # non regressioni del destructuring.
     REMOVED_PATHS = TestRouterParity.ALLOWED_REMOVED_PATHS
-    REMOVED_SCHEMAS = ("FortiGateProvisionSSHSchema", "FortiGateProvisionSerialSchema",
+    REMOVED_SCHEMAS = ("FortiGateProvisionSchema", "FortiGateProvisionSSHSchema", "FortiGateProvisionSerialSchema",
                        "ModelSchema")
 
     def test_path_set_identical(self):

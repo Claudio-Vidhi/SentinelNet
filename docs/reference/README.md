@@ -11,7 +11,7 @@ this codebase — they change only when the vendor's product does.
 | [fortios/rest-api.md](fortios/rest-api.md) | API user creation, token auth, endpoints used by `services/fortigate_service.py` |
 | [fortios/logging.md](fortios/logging.md) | Syslog configuration, log formats, the `key=value` body the syslog parser expects |
 | [fortios/wifi.md](fortios/wifi.md) | Wireless controller concepts relevant to the WLC views |
-| [fortios/ztp.md](fortios/ztp.md) | Zero-touch provisioning, used by `services/fortigate_provisioner.py` |
+| [fortios/ztp.md](fortios/ztp.md) | Zero-touch provisioning (the FortiGate day-0 generator that used it was retired in 2026-10) |
 
 Note the version: these notes were distilled against FortiOS 7.4.12. Check them
 against the running firmware before trusting a CLI syntax detail.

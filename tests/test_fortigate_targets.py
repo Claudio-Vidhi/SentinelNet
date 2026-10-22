@@ -133,5 +133,46 @@ class MultiTargetTest(unittest.TestCase):
         self.assertIn("boom", out["error"])
 
 
+class PersistentSessionTest(unittest.TestCase):
+    """keepalive: consecutive REST calls reuse one HTTPS session per FortiGate."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._orig = fgs.TOKENS_FILE
+        fgs.TOKENS_FILE = os.path.join(self._tmp.name, "fortigate_tokens.json")
+
+    def tearDown(self):
+        fgs._drop_session("192.0.2.1")
+        fgs.TOKENS_FILE = self._orig
+        self._tmp.cleanup()
+
+    def test_off_by_default_each_call_is_a_new_request(self):
+        fgs.set_api_token("192.0.2.1", "tok")
+        self.assertFalse(fgs.list_targets()[0]["keepalive"])
+        with mock.patch.object(fgs.requests, "request", return_value=_resp(200, {})) as m:
+            fgs.api_get("192.0.2.1", "monitor/system/status")
+        m.assert_called_once()
+        self.assertNotIn("192.0.2.1", fgs._sessions)
+
+    def test_on_reuses_one_session_and_still_sends_the_token(self):
+        fgs.set_api_token("192.0.2.1", "tok", keepalive=True)
+        self.assertTrue(fgs.list_targets()[0]["keepalive"])
+        with mock.patch.object(fgs.requests.Session, "request", return_value=_resp(200, {})) as m:
+            fgs.api_get("192.0.2.1", "monitor/system/status")
+            first = fgs._sessions["192.0.2.1"]
+            fgs.api_get("192.0.2.1", "monitor/system/interface")
+        self.assertIs(fgs._sessions["192.0.2.1"], first)
+        self.assertEqual(m.call_count, 2)
+        self.assertEqual(m.call_args.kwargs["headers"]["Authorization"], "Bearer tok")
+
+    def test_changing_the_target_closes_the_session(self):
+        fgs.set_api_token("192.0.2.1", "tok", keepalive=True)
+        with mock.patch.object(fgs.requests.Session, "request", return_value=_resp(200, {})):
+            fgs.api_get("192.0.2.1", "monitor/system/status")
+        fgs.update_target("192.0.2.1", keepalive=False)
+        self.assertNotIn("192.0.2.1", fgs._sessions)
+        self.assertFalse(fgs.list_targets()[0]["keepalive"])
+
+
 if __name__ == "__main__":
     unittest.main()

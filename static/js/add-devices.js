@@ -3,7 +3,7 @@
 //
 // "Aggiungi apparati" (#addDevicesWizard): source -> input and destination ->
 // check -> result, all inside the panel for addresses, CSV file, network scan
-// and discovered neighbors. "Senza accesso" and "Da zero" are their own
+// and discovered neighbors. "Senza accesso" and "Nuova configurazione" are their own
 // procedures and open them.
 (() => {
     const $ = (id) => document.getElementById(id);
@@ -21,8 +21,9 @@
     //   {ip, hostname, vendor, state, msg, include, exists, nodeId?, csvRow?, location?}
     //   state: run | ok | bad | remote | new | update | error | skipped (last four: CSV preview)
     // results: null until the add starts. gen: stales async loops on close.
+    // csvDecisions: per-row answers to the CSV preview ({ location } = move it there).
     const adw = { src: 'addr', rows: [], results: null, adding: false, gen: 0, ctx: null,
-                  csvText: '', neighbors: [] };
+                  csvText: '', csvDecisions: {}, neighbors: [] };
 
     const isCsv = () => adw.src === 'csv';
     const parsed = () => expandAddressList(val('adwAddresses'));
@@ -55,6 +56,33 @@
         });
         fillLocations();
         if (adw.src === 'nbr') renderNeighbors();
+        if (isCsv()) loadProbeIds();
+    }
+
+    // The Probe column carries the probe id, a slug nobody types: list the real ones.
+    async function loadProbeIds() {
+        const res = await apiFetch('/api/probes');
+        const probes = res && res.ok ? (await res.json()).probes || [] : [];
+        $('importProbeIdsList').innerHTML = probes.map((x) => `<code>${escapeHtml(x.id)}</code>`).join(' ');
+        $('importProbeIds').hidden = !probes.length;
+    }
+
+    // 'Probe' is in the template although optional: next to Group, with a
+    // different value, it shows they are two things. Omitted, it is 'central'.
+    const CSV_TEMPLATE = [
+        'IP,Username,Password,Enable Secret,Hostname,Group,Location,Probe,Vendor',
+        '192.0.2.1,admin,Mypass123!,enablepass,switch-01,acme,roma,central,cisco',
+        '198.51.100.1,manager,Pwd456!,secret,switch-02,acme,roma,probe-roma,hpe',
+        '',
+    ].join('\n');
+
+    function downloadTemplate() {
+        // BOM first: without it Excel reads the file as ANSI and mangles accented site names.
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob(['\ufeff' + CSV_TEMPLATE], { type: 'text/csv;charset=utf-8' }));
+        a.download = 'sentinelnet-inventario-modello.csv';
+        a.click();
+        URL.revokeObjectURL(a.href);
     }
 
     function renderChips() {
@@ -157,7 +185,7 @@
     };
     const STATE_CLASS = { run: 'is-run', ok: 'is-ok', new: 'is-ok', update: 'is-ok', bad: 'is-bad',
                           error: 'is-bad', skipped: 'is-warn', remote: 'is-warn' };
-    const hasMsg = (r) => !!r.msg && ['bad', 'error', 'skipped', 'update'].includes(r.state);
+    const hasMsg = (r) => !!r.msg;
     const locked = (r) => r.state === 'run' || r.state === 'error' || r.state === 'skipped';
 
     function renderRows() {
@@ -174,8 +202,9 @@
                 : `<select data-adw-vendor="${i}" aria-label="${escapeHtml(tr('adwAriaVendor', { ip: r.ip }))}">
                    <option value="">${escapeHtml(tr('optScanNoVendor'))}</option>${buildVendorOptions(r.vendor)}</select>`}</td>
             <td><span class="adw-state ${STATE_CLASS[r.state]}">${escapeHtml(STATE_TEXT[r.state](r))}</span></td>
-            <td>${r.state === 'bad' ? `<button type="button" class="btn btn-secondary btn-small" data-adw-retry="${i}">${escapeHtml(tr('adwRetry'))}</button>` : ''}</td>
-          </tr>${hasMsg(r) ? `<tr class="adw-msg${r.state === 'update' ? ' is-info' : ''}"><td></td><td colspan="5">${escapeHtml(r.msg)}</td></tr>` : ''}`).join('');
+            <td>${r.state === 'bad' ? `<button type="button" class="btn btn-secondary btn-small" data-adw-retry="${i}">${escapeHtml(tr('adwRetry'))}</button>`
+                : r.moveTo ? `<button type="button" class="btn btn-secondary btn-small" data-adw-move="${i}">${escapeHtml(tr('importActionMove', { name: locationLabel(r.moveTo) }))}</button>` : ''}</td>
+          </tr>${hasMsg(r) ? `<tr class="adw-msg${['new', 'update'].includes(r.state) ? ' is-info' : ''}"><td></td><td colspan="5">${escapeHtml(r.msg)}</td></tr>` : ''}`).join('');
         const all = $('adwAll');
         const free = adw.rows.filter((r) => !locked(r));
         if (all instanceof HTMLInputElement) all.checked = free.length > 0 && free.every((r) => r.include);
@@ -266,14 +295,18 @@
 
     async function runCsvPreview(gen) {
         const res = await post('/api/import-csv/preview', { csv_data: adw.csvText, org: adw.ctx.group || null,
-                                                            location: adw.ctx.location || null, decisions: {} });
+                                                            location: adw.ctx.location || null, decisions: adw.csvDecisions });
         const data = res ? await res.json().catch(() => ({})) : {};
         if (gen !== adw.gen) return;
         if (!res || !res.ok) { setVerifyFooter(tr('devVerifyFail', { err: data.detail || tr('alertImportCsvError') })); return; }
         adw.rows = (data.rows || []).map((r) => ({
             ip: r.ip || '', hostname: r.hostname || '', location: r.location || '', csvRow: r.row, state: r.status,
             include: r.status === 'new' || r.status === 'update', exists: r.status === 'update',
-            msg: [r.reason, ...Object.keys(r.changes || {}).map((f) => `${f}: ${r.changes[f][0]} → ${r.changes[f][1]}`)]
+            moveTo: r.action && r.action.kind === 'move' ? r.action.location : '',
+            msg: [r.reason,
+                  ...Object.keys(r.changes || {}).map((f) => (r.changes[f][1] === 'changed'
+                      ? `${f}: ${tr('importPwdChanged')}` : `${f}: ${r.changes[f][0]} → ${r.changes[f][1]}`)),
+                  ...(r.warnings || []), r.credentials_note]
                 .filter(Boolean).join(' · '),
         }));
         renderRows();
@@ -346,7 +379,7 @@
     }
 
     async function importCsv() {
-        const decisions = {};
+        const decisions = { ...adw.csvDecisions };
         adw.rows.filter((r) => !r.include && !locked(r)).forEach((r) => { decisions[r.csvRow] = { skip: true }; });
         const res = await post('/api/import-csv', { csv_data: adw.csvText, org: adw.ctx.group || null,
                                                     location: adw.ctx.location || null, decisions });
@@ -403,9 +436,11 @@
         },
     });
 
-    async function openAddDevices() {
+    // preset: { src, group, location } -- e.g. the CSV import of one location,
+    // from the Organizations tab. It opens on the input step.
+    async function openAddDevices(preset = {}) {
         adw.gen++;
-        Object.assign(adw, { rows: [], results: null, adding: false, csvText: '', neighbors: [], ctx: null });
+        Object.assign(adw, { rows: [], results: null, adding: false, csvText: '', csvDecisions: {}, neighbors: [], ctx: null });
         const panel = $('addDevicesWizard');
         let first = null;
         panel.querySelectorAll('[data-adw-source]').forEach((b) => {
@@ -415,14 +450,20 @@
             if (ok && !first) first = src;
         });
         if (!first) return;
+        if (preset.src && SOURCE_GATES[preset.src].every(canOpenTab)) adw.src = preset.src;
         if (!SOURCE_GATES[adw.src].every(canOpenTab)) adw.src = first;
         const file = $('adwCsvFile');
         if (file instanceof HTMLInputElement) file.value = '';
         $('adwCsvNote').hidden = true;
         renderSources();
+        const tenant = $('adwTenant');
+        if (preset.group && tenant instanceof HTMLSelectElement) tenant.value = preset.group;
         await prepareDestination();
         if (adw.src === 'nbr') loadNeighbors();
-        wizard.open({ editable: true, onClose: () => { adw.gen++; } });
+        wizard.open({ at: preset.src ? 'addresses' : undefined, editable: true, onClose: () => { adw.gen++; } });
+        // After the step's own fill, which builds the location options.
+        const loc = $('adwLocation');
+        if (preset.location && loc instanceof HTMLSelectElement) { loc.value = preset.location; renderProbeNote(); }
     }
     window.openAddDevices = openAddDevices;
 
@@ -430,11 +471,34 @@
     const panel = $('addDevicesWizard');
     $('adwAddresses').addEventListener('input', renderChips);
     $('adwTenant').addEventListener('change', () => { fillLocations(); fillProfiles(); if (adw.src === 'nbr') renderNeighbors(); });
+    // New location for the chosen tenant (admins: /api/locations is admin-only).
+    function newLocation() {
+        window.openNewLocation(val('adwTenant'), async (id) => {
+            await loadLocations();
+            fillLocations();
+            const loc = $('adwLocation');
+            if (loc instanceof HTMLSelectElement) loc.value = id;
+            renderProbeNote();
+            wizard.refresh();
+        });
+    }
+    $('adwNewLocation').addEventListener('click', newLocation);
+    // A new tenant has no location yet: an admin goes straight on to create one.
+    $('adwNewTenant').addEventListener('click', () => window.openNewTenant(async (name) => {
+        await prepareDestination();
+        const sel = $('adwTenant');
+        if (sel instanceof HTMLSelectElement) sel.value = name;
+        fillLocations();
+        await fillProfiles();
+        wizard.refresh();
+        if (isAdminRole(currentRole)) newLocation();
+    }));
     $('adwLocation').addEventListener('change', renderProbeNote);
     $('adwCsvFile').addEventListener('change', () => {
         const input = $('adwCsvFile');
         const f = input instanceof HTMLInputElement && input.files ? input.files[0] : null;
         adw.csvText = '';
+        adw.csvDecisions = {};
         if (!f) return;
         const reader = new FileReader();
         reader.onload = () => {
@@ -478,6 +542,14 @@
         }
         const retry = t.closest('[data-adw-retry]');
         if (retry) { verifyRow(adw.rows[+(retry.getAttribute('data-adw-retry') || 0)], adw.gen); return; }
+        const move = t.closest('[data-adw-move]');
+        if (move) {
+            const row = adw.rows[+(move.getAttribute('data-adw-move') || 0)];
+            adw.csvDecisions[row.csvRow] = { location: row.moveTo };
+            runCsvPreview(adw.gen);
+            return;
+        }
+        if (t.closest('#btnDownloadCsvTemplate')) { downloadTemplate(); return; }
         const act = t.closest('[data-adw-action]');
         if (act) {
             const a = act.getAttribute('data-adw-action');
@@ -493,11 +565,11 @@
             else if (a === 'download') downloadLeft();
             return;
         }
-        // "Opzioni avanzate": the full provisioning form.
+        // "Opzioni avanzate": the full device form, starting from what is filled here.
         if (t.closest('[data-add-source="one"]')) {
+            const prefill = { group: val('adwTenant'), location: val('adwLocation'), ip: parsed().ips[0] || '' };
             wizard.close();
-            await switchTab('tab-provisioning');
-            $('devIp')?.focus();
+            window.openDeviceForm(prefill);
         }
     });
     // Double click on a source: choose it and go on.

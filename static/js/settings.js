@@ -894,12 +894,18 @@
     // interattiva, Provisioning + Provisioner): ognuno e' una spunta
     // distinta, com'era prima. Le etichette dei pannelli secondari non sono
     // nel markup del pulsante, e sono le sole due cose ancora nominate qui.
+    // tab-provisioning's page is Credentials, but the grant also lets one add
+    // and edit devices: its checkbox says so.
     const SECONDARY_TAB_LABELS = {
         'tab-map-interactive': 'tabInteractive',
-        'tab-provisioner': 'tabProvisioner',
         'tab-device-history': 'dhSubHistory',
         'tab-policy-test': 'tabPolicyTest',
+        'tab-provisioning': 'permProvisioning',
     };
+
+    // Grants with no page of their own: the CSV import runs in the "Add
+    // devices" wizard, and its routes still check tab-import.
+    const PAGELESS_WRITE_TABS = [{ id: 'tab-import', key: 'tabImport' }];
 
     // The five requires-admin tabs that ARE a concession on an admin-level
     // row (they gate the admin panels themselves). tab-incidents and
@@ -946,6 +952,7 @@
                           needsUnscopedAdmin: UNSCOPED_ADMIN_HINT_TABS.includes(id) });
             });
         });
+        if (!rowIsViewer) PAGELESS_WRITE_TABS.forEach(t => out.push({ ...t, needsUnscopedAdmin: false }));
         // A tab-restricted actor can grant only what it holds itself
         // (mirrors assert_tabs_within_grant server-side).
         if (currentAllowedTabs.length > 0) {

@@ -72,9 +72,11 @@ class TestAddDevicesPanel(unittest.TestCase):
         gates = dict(re.findall(r"(\w+): \[([^\]]*)\]", block))
         cards = re.findall(r'data-adw-source="(\w+)"', self.html)
         self.assertEqual(sorted(cards), sorted(gates))
+        # tab-import is a grant with no page: the import runs in this wizard.
         for src, tabs in gates.items():
             for tab in re.findall(r"'([\w-]+)'", tabs):
-                self.assertIn(f'id="{tab}"', self.html, f"{src} gate {tab} missing")
+                if tab != 'tab-import':
+                    self.assertIn(f'id="{tab}"', self.html, f"{src} gate {tab} missing")
 
     def test_in_panel_sources_have_an_input_block(self):
         for src in ("addr", "csv", "scan", "nbr"):

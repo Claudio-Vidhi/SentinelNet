@@ -17,7 +17,6 @@ from security.security_manager import log_audit
 from routers import deps
 from routers.deps import require_operator, require_unscoped_admin
 from services import switch_provisioner
-from services import fortigate_provisioner
 from security import provisioning_secrets
 from security import identity_manager
 
@@ -111,60 +110,6 @@ class SwitchProvisionSerialSchema(SwitchProvisionSchema):
     com_port: str
     baudrate: int = 9600
 
-class FortiGateProvisionSchema(BaseModel):
-    """Parametri del wizard ZTP FortiGate. Vedi fortigate_provisioner.build_config."""
-    hostname: str = "FortiGate"
-    timezone: str = "Europe/Rome"
-    admin_user: str = ""
-    admin_password: str = ""
-    admin_timeout: int = 10
-    lockout: bool = True
-    strong_crypto: bool = True
-    mgmt_interface: str = ""
-    mgmt_ip: str = ""
-    mgmt_mask: str = ""
-    mgmt_allowaccess: str = "ping https ssh"
-    wan_interface: str = ""
-    wan_mode: str = "dhcp"
-    wan_ip: str = ""
-    wan_mask: str = ""
-    wan_gw: str = ""
-    lan_interface: str = ""
-    lan_ip: str = ""
-    lan_mask: str = ""
-    dhcp_server: bool = False
-    dhcp_start: str = ""
-    dhcp_end: str = ""
-    dns_primary: str = ""
-    dns_secondary: str = ""
-    ntp_servers: List[str] = []
-    syslog_server: str = ""
-    snmpv3: dict = {}
-    lan_to_wan_policy: bool = True
-    disable_wan_admin: bool = True
-    banner: str = ""
-    # Elementi ZTP (FortiOS 7.4 Admin Guide)
-    api_user: dict = {}            # {name, accprofile, trusthosts: [..]}
-    central_mgmt: dict = {}        # {type: fortiguard|fortimanager, fmg_ip}
-    csf_group: str = ""
-    netflow_collector: str = ""
-    rest_api_logging: bool = True
-    ha: dict = {}                  # {group_name, mode, password, hbdev, priority, mgmt_interface, mgmt_ip, mgmt_mask}
-    aaa_protocol: Literal["none", "radius", "tacacs"] = "none"
-    aaa_server_ip: str = ""
-    aaa_key: str = ""
-
-    @model_validator(mode="after")
-    def _credentials_are_mandatory(self):
-        # Same reason as the switch: a day-0 unit with no known administrative
-        # credential is not administrable. Kept out of the class docstring so
-        # the published OpenAPI description does not change (test_router_parity).
-        if not (self.admin_user or "").strip():
-            raise ValueError("admin_user e' obbligatorio per il day-0 FortiGate.")
-        if not (self.admin_password or "").strip():
-            raise ValueError("admin_password e' obbligatoria per admin_user.")
-        return self
-
 def _assert_day_zero(ip: str) -> None:
     """Refuse to run the day-0 wizard against a device already in inventory.
 
@@ -182,14 +127,12 @@ def _assert_day_zero(ip: str) -> None:
         )
 
 
-# The placeholders are valid password strings on both platforms, so a config
-# pasted into a console silently sets the literal '{{VAULT:...}}' as the
-# password. The file has to say so about itself.
+# The placeholders are valid password strings, so a config pasted into a
+# console silently sets the literal '{{VAULT:...}}' as the password. The file
+# has to say so about itself.
 _PLACEHOLDER_WARNING = {
     "switch": "! ATTENZIONE: i valori {{VAULT:...}} sono segnaposto — "
               "sostituirli prima di applicare questa config.",
-    "fortigate": "# ATTENZIONE: i valori {{VAULT:...}} sono segnaposto — "
-                 "sostituirli prima di applicare questa config.",
 }
 
 
@@ -267,16 +210,6 @@ def provisioner_push_serial(payload: SwitchProvisionSerialSchema, current_user =
 def provisioner_serial_ports(current_user = Depends(require_operator)):
     """Elenca le porte COM/seriali disponibili sull'host del server."""
     return {"ports": switch_provisioner.list_serial_ports()}
-
-@router.post("/api/provisioner/fgt/generate", dependencies=[Depends(require_tab("tab-provisioning", "tab-provisioner"))])
-def fgt_provisioner_generate(payload: FortiGateProvisionSchema, materialized: bool = False,
-                             current_user = Depends(require_operator)):
-    """Genera la configurazione FortiOS day-0 e la restituisce come testo."""
-    cfg = _provision_cfg(payload.dict(), materialized, current_user, "FortiGate")
-    config_text = _with_placeholder_warning(
-        fortigate_provisioner.build_config(cfg), "fortigate")
-    log_audit(f"Config FortiGate day-0 generata per '{payload.hostname}' da '{current_user.get('sub')}'.")
-    return {"status": "success", "config": config_text, "materialized": materialized}
 
 # ── Identita' tenant (profili credenziali riusabili) ────────────────────────
 from security import identity_manager
