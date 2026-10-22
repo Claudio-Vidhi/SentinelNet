@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.53.4] - 2026-10-22
+
 ### Added
 
 - **Mappa gerarchica, etichette dei collegamenti**: nuovi comandi nella barra.
