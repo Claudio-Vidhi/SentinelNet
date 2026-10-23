@@ -796,7 +796,7 @@
     // Classic card: type chip, name, address and state in words. Flat: the
     // old gradient, shadow and pair of badges took room without saying more.
     // The border turns to the state colour only when something is wrong.
-    function createNodeSvg(label, ip, deviceType, status, isBoundary, vendor, vtp, stack) {
+    function createNodeSvg(label, ip, deviceType, status, isBoundary, vendor, vtp, stack, model) {
         const st = nodeStatusMeta(status, isBoundary);
         const typeColor = deviceTypeMeta(deviceType).color;
         const muted = cssVar('--text-muted', '#94a3b8');
@@ -821,16 +821,22 @@
           <text x="110" y="${y + 10.5}" font-family="${SVG_FONT}" font-size="8.5" font-weight="800" fill="${b.color}" text-anchor="middle">${escapeHtml(b.text)}</text>`;
         }).join('');
         const vendorTxt = (vendor && vendor !== 'discovered' ? vendor : tr('topoNeighbor')).toUpperCase();
-        const right = `${vendorTxt} · ${deviceTypeLabel(deviceType)}`.slice(0, 28);
+        // Model under the name when known (the address moves to the state
+        // row), otherwise the address there and vendor · type on the right.
+        const right = model ? ip : `${vendorTxt} · ${deviceTypeLabel(deviceType)}`.slice(0, 28);
+        const second = model
+            ? `<text x="48" y="37" font-family="${SVG_FONT}" font-size="10.5" fill="${muted}">${escapeHtml(String(model).slice(0, 26))}</text>`
+            : `<text x="48" y="37" font-family="${SVG_MONO}" font-size="10.5" fill="${muted}">${escapeHtml(ip)}</text>`;
         const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="${cardH}" viewBox="0 0 220 ${cardH}">
-          <rect x="1" y="1" width="218" height="${cardH - 2}" rx="8" fill="${cssVar('--surface', '#121a24')}" stroke="${border}" stroke-width="${st.problem ? 2 : 1}"/>
-          <rect x="10" y="10" width="28" height="28" rx="6" fill="${typeColor}" fill-opacity="0.14" stroke="${typeColor}" stroke-opacity="0.55"/>
+          <rect x="2" y="3" width="216" height="${cardH - 4}" rx="10" fill="#000" fill-opacity="0.18"/>
+          <rect x="1" y="1" width="218" height="${cardH - 4}" rx="10" fill="${cssVar('--surface', '#121a24')}" stroke="${border}" stroke-width="${st.problem ? 2 : 1}"/>
+          <rect x="10" y="10" width="28" height="28" rx="7" fill="${typeColor}" fill-opacity="0.14" stroke="${typeColor}" stroke-opacity="0.55"/>
           <g transform="translate(15, 15) scale(0.75)">${nodeIconSvg(deviceType, typeColor)}</g>
           <text x="48" y="22" font-family="${SVG_FONT}" font-size="13" font-weight="700" fill="${cssVar('--text', '#f1f5f9')}">${escapeHtml(label)}</text>
-          <text x="48" y="37" font-family="${SVG_MONO}" font-size="10.5" fill="${muted}">${escapeHtml(ip)}</text>
-          <circle cx="15" cy="51" r="3.5" fill="${st.glow}"/>
-          <text x="23" y="54.5" font-family="${SVG_FONT}" font-size="9.5" font-weight="700" fill="${st.color}">${escapeHtml(st.text)}</text>
-          <text x="208" y="54.5" font-family="${SVG_FONT}" font-size="8.5" font-weight="700" letter-spacing="0.4" fill="${muted}" text-anchor="end">${escapeHtml(right)}</text>
+          ${second}
+          <circle cx="15" cy="49" r="3.5" fill="${st.glow}"/>
+          <text x="23" y="52.5" font-family="${SVG_FONT}" font-size="9.5" font-weight="700" fill="${st.color}">${escapeHtml(st.text)}</text>
+          <text x="208" y="52.5" font-family="${model ? SVG_MONO : SVG_FONT}" font-size="${model ? 9.5 : 8.5}" font-weight="700" letter-spacing="${model ? 0 : 0.4}" fill="${muted}" text-anchor="end">${escapeHtml(right)}</text>
           ${bandsSvg}
         </svg>`;
         return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
@@ -865,7 +871,7 @@
         // Groups of leaves only exist in the hierarchy view.
         if (n.is_group) return createGroupClusterSvg(n);
         const bands = (stack ? 1 : 0) + ((vtp && vtp.showDomain && vtp.domain) ? 1 : 0);
-        return { image: createNodeSvg(n.label || String(n.id), String(n.id), n.device_type, status, n.is_boundary, vendor, vtp, stack),
+        return { image: createNodeSvg(n.label || String(n.id), String(n.id), n.device_type, status, n.is_boundary, vendor, vtp, stack, stack ? '' : (n.model || n.platform || '')),
                  size: Math.round(classicCardHeight(bands) * 0.45) };
     }
 
@@ -1035,7 +1041,6 @@
         cachedTopologyLinks = data.links || [];
 
         // Stato degli interruttori di filtro/evidenziazione della mappa
-        const highlightPC      = document.getElementById("togglePortChannel")?.checked || false;
         const showVtpDomain    = document.getElementById("toggleVtpDomain")?.checked || false;
         const showDiscovered   = document.getElementById("toggleDiscovered")?.checked || false;
 
@@ -1065,7 +1070,7 @@
         updateMapViewButtons();
         if (getMapView() === 'minimal') {
             const hoverInfo = document.getElementById("toggleMinimalHover")?.checked || false;
-            const { nodes, edges, options, bundles, groupsInfo } = buildMinimalGraph(filteredNodesData, filteredLinksData, { showVtpDomain, highlightPC, hoverInfo, group: selectedGroup });
+            const { nodes, edges, options, bundles, groupsInfo } = buildMinimalGraph(filteredNodesData, filteredLinksData, { showVtpDomain, hoverInfo, group: selectedGroup });
             const hasOverlay = (bundles && bundles.length) || (groupsInfo && groupsInfo.length > 1);
             // Conservati per l'export Visio: il .vsdx replica ESATTAMENTE il
             // disegno dell'overlay (cavi paralleli, etichette porta, pillole).
@@ -1157,9 +1162,7 @@
                     kind: 'redundancy_heartbeat'
                 };
             }
-            // Link aggregato (Port-Channel/LAG): evidenziato solo se il toggle è attivo
             const isPC      = !!l.is_portchannel;
-            const emphasize = isPC && highlightPC;
 
             // Interfacce membro per lato (liste affidabili dal backend)
             const localPorts  = (Array.isArray(l.local_ports)  && l.local_ports.length)  ? l.local_ports  : [l.local_port];
@@ -1220,7 +1223,7 @@
                 // ponytail: dati "piatti" (no oggetti color vis.js) usati solo dall'export Visio
                 // Il colore finisce nel .vsdx: Visio vuole un #RRGGBB, e un
                 // "var(--x)" cadeva nel fallback viola di _hex_to_rgb_fraction().
-                exportVal: { isPortChannel: isPC, pcEnds: ends, color: emphasize ? '#FFB84D' : cssVar('--text-soft', '#8d9bb0') }
+                exportVal: { isPortChannel: isPC, pcEnds: ends, color: isPC ? PC_COPPER : cssVar('--text-soft', '#8d9bb0') }
             };
         });
 
@@ -1342,6 +1345,12 @@
         if (typeof afterDraw === 'function') {
             networkInstance.on('afterDrawing', afterDraw);
         }
+        // Zoom bar level: every frame, so wheel, fit and animations all show.
+        const zoomLabel = document.getElementById('mapZoomLevel');
+        networkInstance.on('afterDrawing', () => {
+            const t = Math.round(networkInstance.getScale() * 100) + '%';
+            if (zoomLabel && zoomLabel.textContent !== t) zoomLabel.textContent = t;
+        });
         // Under nodes and cables: site zones (classic), plane bands (layered).
         if (typeof beforeDraw === 'function') {
             networkInstance.on('beforeDrawing', beforeDraw);
@@ -1747,27 +1756,21 @@
         return { x: anchor === 'start' ? x : anchor === 'end' ? x - w : x - w / 2, y: y - 9, w, h: 18 };
     }
 
+    // Plain text on a borderless backing: the copper pill and its outline
+    // competed with the cables for attention.
     function drawEndTag(ctx, t, x, y, anchor) {
         if (!t.ports && !t.po) return;
-        const mono = cssVar('--font-data', 'monospace'), h = 18;
+        const mono = cssVar('--font-data', 'monospace'), h = 16;
         const { w1, w2, w } = endTagWidths(ctx, t);
         const X = endTagRect(w, x, y, anchor).x;
-        roundRectPath(ctx, X, y - h / 2, w, h, h / 2);
+        roundRectPath(ctx, X + 3, y - h / 2, w - 6, h, 4);
         ctx.fillStyle = cssVar('--surface-2', '#16202d');
         ctx.fill();
-        ctx.save();
-        ctx.clip();
-        ctx.fillStyle = PC_COPPER;
-        if (t.po) ctx.fillRect(X, y - h / 2, w1, h);
-        ctx.restore();
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = t.po ? PC_COPPER : cssVar('--border', '#233245');
-        ctx.stroke();
         ctx.textBaseline = 'middle';
         ctx.textAlign = 'center';
         if (t.po) {
             ctx.font = `700 10px ${mono}`;
-            ctx.fillStyle = '#ffffff';
+            ctx.fillStyle = PC_COPPER;
             ctx.fillText(t.po, X + w1 / 2, y + 0.5);
         }
         if (t.ports) {
@@ -1777,9 +1780,25 @@
         }
     }
 
+    // Radius of the hierarchy map's cable corners.
+    const LINK_R = 8;
+    // Orthogonal polyline with rounded corners; a corner never takes more
+    // than half of either segment beside it.
+    function roundedRun(ctx, pts) {
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < pts.length - 1; i++) {
+            const [px, py] = pts[i - 1], [x, y] = pts[i], [nx, ny] = pts[i + 1];
+            const r = Math.min(LINK_R, Math.hypot(x - px, y - py) / 2, Math.hypot(nx - x, ny - y) / 2);
+            ctx.arcTo(x, y, nx, ny, r);
+        }
+        const last = pts[pts.length - 1];
+        ctx.lineTo(last[0], last[1]);
+    }
+
     // Hierarchy view cables: an elbow from the upper card's bottom edge to the
-    // lower card's top, one copper line per Port-Channel member, a straight
-    // run between cards on the same level. Dashed when it leaves the site.
+    // lower card's top with rounded corners, one copper line per Port-Channel
+    // (its size in the tag), a straight run between cards on the same level.
+    // Dashed when it leaves the site.
     function drawLayeredLinks(ctx) {
         if (!networkInstance) return;
         const pos = networkInstance.getPositions();
@@ -1856,21 +1875,40 @@
         });
         // Where tags must not land (auto placement): cards, buses, cables.
         const obstacles = ids.map(id => { const o = bb(id); return { x: o.left, y: o.top, w: o.right - o.left, h: o.bottom - o.top }; });
-        const busRun = (up, xs, y, color) => {
-            const lo = Math.min(pos[up].x, ...xs), hi = Math.max(pos[up].x, ...xs);
+        // Rounded corners where the bus turns: at its two ends, into the
+        // trunk or into the outermost drop. A drop that starts on a rounded
+        // corner is recorded in 'hooked' and starts below it.
+        const hooked = new Map();   // drop start -> corner radius
+        const hookKey = (x, y) => `${Math.round(x)}|${Math.round(y)}`;
+        const busRun = (up, xs, y, color, dx = 0) => {
+            const tx = pos[up].x + dx, lo = Math.min(tx, ...xs), hi = Math.max(tx, ...xs);
+            const r = Math.min(LINK_R, (hi - lo) / 2, (y - bb(up).bottom) / 2);
             ctx.strokeStyle = color;
             ctx.beginPath();
-            ctx.moveTo(pos[up].x, bb(up).bottom); ctx.lineTo(pos[up].x, y);
-            ctx.moveTo(lo, y); ctx.lineTo(hi, y);
+            if (hi - lo < 1) { ctx.moveTo(tx, bb(up).bottom); ctx.lineTo(tx, y); ctx.stroke(); return; }
+            const trunkDown = xs.some(x => Math.abs(x - tx) < 0.5);   // a drop continues the trunk
+            const end = x => (Math.abs(x - tx) < 0.5 ? (trunkDown ? 't' : 'trunk') : 'drop');
+            const left = end(lo), right = end(hi);
+            // Trunk: rounded into the bus when it sits at one end with nothing below it.
+            ctx.moveTo(tx, bb(up).bottom);
+            if (left === 'trunk') { ctx.arcTo(tx, y, tx + r, y, r); }
+            else if (right === 'trunk') { ctx.arcTo(tx, y, tx - r, y, r); }
+            else ctx.lineTo(tx, y);
+            // Bus, with a hook down into an outermost drop.
+            if (left === 'drop') { ctx.moveTo(lo, y + r); ctx.arcTo(lo, y, lo + r, y, r); hooked.set(hookKey(lo, y), r); }
+            else ctx.moveTo(left === 'trunk' ? lo + r : lo, y);
+            if (right === 'drop') { ctx.lineTo(hi - r, y); ctx.arcTo(hi, y, hi, y + r, r); hooked.set(hookKey(hi, y), r); }
+            else ctx.lineTo(right === 'trunk' ? hi - r : hi, y);
             ctx.stroke();
             obstacles.push({ x: lo - 2, y: y - 3, w: hi - lo + 4, h: 6 });
         };
         ctx.save();
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1.5;
         Object.values(buses).forEach(b => {
             if (!b.split) { busRun(b.up, b.xs, busY[b.up], b.pc ? PC_COPPER : muted); return; }
-            busRun(b.up, b.plainXs, busY[b.up], muted);
-            busRun(b.up, b.pcXs, busY[b.up] + PC_LANE, PC_COPPER);
+            // Two trunks side by side: on one x the copper one hid the grey.
+            busRun(b.up, b.plainXs, busY[b.up], muted, -PC_LANE);
+            busRun(b.up, b.pcXs, busY[b.up] + PC_LANE, PC_COPPER, PC_LANE);
         });
         ctx.restore();
         // Top of a drop: its own copper lane when the parent's bus is split.
@@ -1899,8 +1937,8 @@
             const kind = l.kind === 'group' ? 'group' : (l.kind === 'redundancy_heartbeat' ? 'ha' : (isPC ? 'pc' : 'link'));
             const lp = ((l.local_ports && l.local_ports.length) ? l.local_ports : [l.local_port]).map(shortIface).filter(Boolean);
             const rp = ((l.remote_ports && l.remote_ports.length) ? l.remote_ports : [l.remote_port]).map(shortIface).filter(Boolean);
-            // One line per member actually configured: a floor of 2 drew a
-            // one-port Po as two cables, a cap of 4 hid the rest.
+            // Members actually configured: a Po is one copper line, its size
+            // goes in the tag (×m).
             const m = kind === 'pc' ? Math.max(1, lp.length, rp.length) : 1;
             const ends = kind === 'pc' ? pcEnds(l) : null;
             // fromSide: the end on the link's source device (local_*).
@@ -1933,7 +1971,7 @@
             const push = (part, t, x, y, anchor, extra) => tags.push(Object.assign(
                 { key: `${linkKey}~${part}`, link: linkKey, t, ax: x, ay: y, cands: [{ x, y, anchor }] }, extra || {}));
             ctx.strokeStyle = kind === 'pc' ? PC_COPPER : (kind === 'ha' ? '#f9a825' : muted);
-            ctx.lineWidth = kind === 'pc' ? 2 : 1.5;
+            ctx.lineWidth = kind === 'pc' ? 2 : 1.25;
             ctx.setLineDash(kind === 'group' || kind === 'ha' ? [4, 4] : (tenantOf(e.from) !== tenantOf(e.to) ? [7, 4] : []));
             const a = pos[e.from], b = pos[e.to];
             ctx.beginPath();
@@ -1949,10 +1987,7 @@
                     const lane = overLanes[row] = (overLanes[row] ?? -1) + 1;
                     const ly = top - 58 - lane * 10;
                     const lx = bb(L).right - 24, rx = bb(R).left + 24;
-                    for (let k = 0; k < m; k++) {
-                        const o = (k - (m - 1) / 2) * 5;
-                        ctx.moveTo(lx + o, bb(L).top); ctx.lineTo(lx + o, ly - o); ctx.lineTo(rx - o, ly - o); ctx.lineTo(rx - o, bb(R).top);
-                    }
+                    roundedRun(ctx, [[lx, bb(L).top], [lx, ly], [rx, ly], [rx, bb(R).top]]);
                     ctx.stroke();
                     obstacles.push({ x: lx, y: ly - 4, w: rx - lx, h: 8 });
                     if (one) { push('o', oneTag(), (lx + rx) / 2, ly - 12, 'middle'); return; }
@@ -1960,12 +1995,9 @@
                     push('d', endTag(!fromLeft), rx - 10, ly - 12, 'end');
                     return;
                 }
-                for (let k = 0; k < m; k++) {
-                    const o = (k - (m - 1) / 2) * 6;
-                    ctx.moveTo(x1, a.y + o); ctx.lineTo(x2, a.y + o);
-                }
+                ctx.moveTo(x1, a.y); ctx.lineTo(x2, a.y);
                 ctx.stroke();
-                obstacles.push({ x: x1, y: a.y - m * 3 - 2, w: x2 - x1, h: m * 6 + 4 });
+                obstacles.push({ x: x1, y: a.y - 5, w: x2 - x1, h: 10 });
                 if (one) { push('o', oneTag(), (x1 + x2) / 2, a.y - 20, 'middle'); return; }
                 push('u', endTag(fromLeft), x1 + 6, a.y - 20, 'start');
                 push('d', endTag(!fromLeft), x2 - 6, a.y + 20, 'end');
@@ -1973,15 +2005,13 @@
             }
             const fromUp = a.y < b.y, U = fromUp ? e.from : e.to, D = fromUp ? e.to : e.from;
             const cx = dropX[e.id], cy = bb(D).top, lift = (drops[D].length - 1 - dropIdx[e.id]) * 46;
-            // The child's drop from its parent's bus: one line per Po member.
+            // The child's drop from its parent's bus; it starts below the
+            // bus corner when the bus turns into it.
             const cor = corridor[e.id], jy = cy - 56 - lift, top = dropTop(e);
-            for (let k = 0; k < m; k++) {
-                const o = (k - (m - 1) / 2) * 5;
-                if (cor === undefined) { ctx.moveTo(cx + o, top); ctx.lineTo(cx + o, cy); continue; }
-                ctx.moveTo(cor + o, top); ctx.lineTo(cor + o, jy + o); ctx.lineTo(cx + o, jy + o); ctx.lineTo(cx + o, cy);
-            }
+            const y0 = top + (hooked.get(hookKey(cor ?? cx, top)) || 0);
+            roundedRun(ctx, cor === undefined ? [[cx, y0], [cx, cy]] : [[cor, y0], [cor, jy], [cx, jy], [cx, cy]]);
             ctx.stroke();
-            const half = (m - 1) * 2.5 + 3;
+            const half = 4;
             if (cor === undefined) obstacles.push({ x: cx - half, y: top, w: 2 * half, h: cy - top });
             else obstacles.push({ x: cor - half, y: top, w: 2 * half, h: jy - top },
                                 { x: Math.min(cor, cx) - half, y: jy - half, w: Math.abs(cx - cor) + 2 * half, h: 2 * half },
@@ -2529,7 +2559,6 @@
             width:   1.5,
             pcColor: '#8B4513',                    // aggregato Port-Channel/vPC: rame/marrone (stile Cisco)
             pcWidth: 2,
-            emphWidth: 3,                          // con "Evidenzia Port-Channel"
             peerColor: '#2e7d32',                  // peer-link / peer-keepalive vPC: verde
             font: { multi: 'html', color: '#455a64', size: 10, face: 'Arial, Helvetica, sans-serif', strokeWidth: 0, background: '#ffffff' },
             pcFontColor: '#8B4513',
@@ -2736,7 +2765,6 @@
     function buildMinimalGraph(nodeData, linkData, opts) {
         const S = MINIMAL_MAP_STYLE;
         const showVtpDomain = !!(opts && opts.showVtpDomain);
-        const highlightPC   = !!(opts && opts.highlightPC);
         // Tooltip al passaggio del mouse: opt-in tramite l'interruttore dedicato.
         // Le informazioni Port-Channel restano comunque SEMPRE visibili come
         // etichette permanenti sul disegno.
@@ -2895,7 +2923,6 @@
         };
         const edges = linkData.map(l => {
             const isPC      = !!l.is_portchannel;
-            const emphasize = isPC && highlightPC;
             // Peer vPC: mgmt0↔mgmt0 = peer-keepalive; PortChannel tra una coppia di
             // peer (hostname appaiati) = peer-link. Entrambi resi in verde.
             // Entrambi gli estremi devono essere NX-OS (o il backend deve
@@ -2949,7 +2976,7 @@
             const lc = t => (t || '').replace(/^Po/i, 'po');
             bundles.push({
                 from: l.source, to: l.target,
-                pcTag, members: memberPairs, emphasize,
+                pcTag, members: memberPairs,
                 // 'peer' = peer-link vPC (verde), 'pc' = aggregato dati (rame),
                 // 'keepalive' = mgmt0↔mgmt0 (verde tratteggiato), 'link' = semplice.
                 type,
@@ -2986,6 +3013,7 @@
             // sempre trasparente e serve solo per fisica, selezione e tooltip.
             return {
                 from: l.source, to: l.target,
+                srcLink: l,   // for the draw.io export
                 label: '',
                 title: hoverInfo ? tip : undefined,
                 color: { color: 'rgba(0,0,0,0)', highlight: 'rgba(0,0,0,0)', hover: 'rgba(0,0,0,0)' },
@@ -3038,6 +3066,10 @@
                                   Math.max(r.N, r.S) * LINE_H + 2 * EDGE_INSET, 100);
             nd.widthConstraint  = { minimum: Math.round(minW) };
             nd.heightConstraint = { minimum: Math.round(minH) };
+            // Width the box needs if the overlay ends up drawing E/W labels
+            // anyway (boxes of side-by-side sites, a dragged box): the overlay
+            // grows the box to it, see drawMinimalOverlay.
+            nd._ewMinW = Math.round(textW + 2 * (r.labelW + INSET + BUF));
         });
 
         // Final x/y come from packSchemaRows() once vis.js has sized the boxes.
@@ -3065,6 +3097,7 @@
     let pillDrag = null;       // {key, mode:'move'|'resize'|'label', startM, orig, cx, cy}
     let hoverBundleKey = null; // pillKey of the bundle under the mouse
     const pillKey = b => `${b.from}~${b.to}~${b.pcTag || ''}`;
+    const routeMemo = {};      // pillKey -> { h, over }: last route shape, for hysteresis
     const pillAdj = key => pillAdjust[key] || { dx: 0, dy: 0, scale: 1 };
     // Scostamento delle ETICHETTE di testo (es. "po1"), indipendente dalla
     // pillola: ogni cartiglio è trascinabile per conto suo e viene persistito.
@@ -3270,10 +3303,10 @@
         // destro sul cavo) vince sempre sullo stile standard per-tipo.
         const styleFor = b => {
             const custom = customStyleForEdge(pillKey(b));
-            if (custom) return { color: custom.color, lw: b.emphasize ? 2.4 : 1.8, dash: custom.dash };
-            return b.type === 'peer'      ? { color: linkColor('peer'),      lw: b.emphasize ? 2.4 : 1.8, dash: null }
+            if (custom) return { color: custom.color, lw: 1.8, dash: custom.dash };
+            return b.type === 'peer'      ? { color: linkColor('peer'),      lw: 1.8, dash: null }
                  : b.type === 'keepalive' ? { color: linkColor('keepalive'), lw: 1.2, dash: [4, 3] }
-                 : b.type === 'pc'        ? { color: linkColor('pc'),        lw: b.emphasize ? 2.4 : 1.8, dash: null }
+                 : b.type === 'pc'        ? { color: linkColor('pc'),        lw: 1.8, dash: null }
                                           : { color: linkColor('link'),      lw: 1.4, dash: null };
         };
 
@@ -3293,15 +3326,23 @@
             // cable leaves from the bottom/top, which on the row layout keeps
             // it out of the boxes of the same row.
             const ba = bbox(b.from), bb2 = bbox(b.to);
-            let horizontal = ba && bb2 ? (ba.top < bb2.bottom && bb2.top < ba.bottom) : Math.abs(dx) >= Math.abs(dy);
+            // Hysteresis: a route changes shape only once the boxes moved
+            // HYST px past the threshold, so nudging a box no longer flips
+            // its cables between side, top and over-the-row routes.
+            const HYST = 30, memo = routeMemo[pillKey(b)] || {};
+            const ov = ba && bb2 ? Math.min(ba.bottom, bb2.bottom) - Math.max(ba.top, bb2.top) : null;
+            let horizontal = ov === null ? Math.abs(dx) >= Math.abs(dy)
+                : ov > (memo.h === undefined ? 0 : memo.h ? -HYST : HYST);
             // Same row with other boxes in between: a straight run would cross
             // them, so the cable leaves both tops and runs above the row.
+            const m = memo.over ? HYST : memo.over === undefined ? 0 : -HYST;
             const over = !!(horizontal && ba && bb2) && networkInstance.body.data.nodes.getIds().some(id => {
                 if (id === b.from || id === b.to) return false;
                 const o = bbox(id);
-                return o && o.right > Math.min(ba.right, bb2.right) && o.left < Math.max(ba.left, bb2.left)
-                    && o.top < Math.max(ba.bottom, bb2.bottom) && o.bottom > Math.min(ba.top, bb2.top);
+                return o && o.right > Math.min(ba.right, bb2.right) - m && o.left < Math.max(ba.left, bb2.left) + m
+                    && o.top < Math.max(ba.bottom, bb2.bottom) + m && o.bottom > Math.min(ba.top, bb2.top) - m;
             });
+            routeMemo[pillKey(b)] = { h: horizontal, over };
             if (over) horizontal = false;
             const fromSide = over ? 'N' : horizontal ? (dx >= 0 ? 'E' : 'W') : (dy >= 0 ? 'S' : 'N');
             const toSide   = over ? 'N' : horizontal ? (dx >= 0 ? 'W' : 'E') : (dy >= 0 ? 'N' : 'S');
@@ -3329,6 +3370,16 @@
                 entries.forEach((e, j) => { e.slot = slot; e.step = step; e.total = total; e.idx = j; slot += e.count; });
             });
         });
+        // Sizing guessed the sides from the levels; the geometry decides. A box
+        // drawing E/W labels it was not sized for would print them over its
+        // own name, so it grows now and the next frame draws it clear.
+        const ds = networkInstance.body.data.nodes;
+        const grow = Object.keys(sideRegistry).map(id => {
+            const s = sideRegistry[id], nd = ds.get(id), bb = bbox(id);
+            if (!(s.E || s.W) || !nd || !nd._ewMinW || !bb || bb.right - bb.left >= nd._ewMinW - 1) return null;
+            return { id: nd.id, widthConstraint: { minimum: nd._ewMinW } };
+        }).filter(Boolean);
+        if (grow.length && !visioConnectorSink) setTimeout(() => ds.update(grow), 0);
 
         // Punto di aggancio dello slot i-esimo di una entry sul lato del nodo.
         const anchorPoint = (id, side, entry, i) => {
@@ -3599,7 +3650,7 @@
             ctx.closePath();
             ctx.fillStyle = hexToRgba(color, 0.16);
             ctx.fill();
-            ctx.lineWidth = b.emphasize ? 2 : 1.4;
+            ctx.lineWidth = 1.4;
             ctx.strokeStyle = color;
             ctx.stroke();
             // Hitbox per il drag della pillola (niente maniglia visibile: il
@@ -4851,6 +4902,92 @@
         URL.revokeObjectURL(link.href);
     }
 
+    // Current map (Schema or Hierarchy) as a native draw.io file: one card per
+    // device inside its site container, real connectors glued to the cards
+    // (draw.io re-routes them when a card moves), Port-channel name in the
+    // middle and each end's ports at that end. Built in the browser: draw.io
+    // reads plain uncompressed XML.
+    function exportDrawioMap() {
+        if (!networkInstance) { alert(tr('alertNoTopology')); return; }
+        const pos = networkInstance.getPositions();
+        const ds = networkInstance.body.data.nodes;
+        const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const ACCENT = { switch: '#0EA5E9', router: '#22C55E', firewall: '#EF4444', wlc: '#8B5CF6', ap: '#3B82F6',
+                         server: '#EAB308', phone: '#14B8A6', camera: '#F97316', pc: '#64748B' };
+        const cells = [];
+        const cellId = {}, box = {}, zones = {};
+        ds.forEach(nd => {
+            if (!pos[nd.id]) return;
+            const b = networkInstance.getBoundingBox(nd.id);
+            box[nd.id] = b;
+            const z = topoZone(nd.nodeDataVal || { id: nd.id });
+            const s = zones[z.key] || (zones[z.key] = { label: z.label, ids: [], x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity });
+            s.ids.push(nd.id);
+            s.x0 = Math.min(s.x0, b.left); s.y0 = Math.min(s.y0, b.top);
+            s.x1 = Math.max(s.x1, b.right); s.y1 = Math.max(s.y1, b.bottom);
+        });
+        let seq = 0;
+        Object.values(zones).forEach(s => {
+            const zid = 'z' + (seq++), PAD = 30, HEAD = 40;
+            s.x0 -= PAD; s.y0 -= PAD + HEAD; s.x1 += PAD; s.y1 += PAD;
+            cells.push(`<mxCell id="${zid}" value="${esc(String(s.label || '').toUpperCase())}" style="rounded=1;arcSize=2;whiteSpace=wrap;html=1;container=1;collapsible=0;fillColor=#F8FAFC;strokeColor=#CBD5E1;verticalAlign=top;align=left;spacingLeft=16;spacingTop=10;fontStyle=1;fontSize=14;fontColor=#64748B;" vertex="1" parent="1"><mxGeometry x="${s.x0}" y="${s.y0}" width="${s.x1 - s.x0}" height="${s.y1 - s.y0}" as="geometry"/></mxCell>`);
+            s.ids.forEach(id => {
+                const nd = ds.get(id), n = nd.nodeDataVal || {}, b = box[id], cid = 'n' + (seq++);
+                cellId[id] = cid;
+                const off = n.status === 'offline';
+                const accent = off ? '#94A3B8' : (ACCENT[n.device_type] || '#64748B');
+                const dot = n.is_group ? '' : `<font color="${off ? '#EF4444' : '#10B981'}">●</font> `;
+                const model = n.is_group ? '' : (n.model || n.platform || '');
+                const ip = n.is_group ? '' : (n.mgmt_ip || n.display_ip || (n.status === 'discovered' ? n.reported_ip : n.id) || '');
+                const html = `${dot}<b>${esc(n.label || id)}</b>`
+                    + (model ? `<br><span style="font-size:10px;color:#64748B">${esc(model)}</span>` : '')
+                    + (ip ? `<br><span style="font-size:9px;color:#94A3B8">${esc(ip)}</span>` : '');
+                const style = `rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=${accent};strokeWidth=1.5;fontSize=12;fontColor=#0F172A;shadow=1;`
+                    + (n.is_group ? 'dashed=1;' : '') + (off ? 'opacity=60;' : '');
+                cells.push(`<mxCell id="${cid}" value="${esc(html)}" style="${style}" vertex="1" parent="${zid}"><mxGeometry x="${b.left - s.x0}" y="${b.top - s.y0}" width="${b.right - b.left}" height="${b.bottom - b.top}" as="geometry"/></mxCell>`);
+            });
+        });
+        const tenantOf = id => ((ds.get(id) || {}).nodeDataVal || {}).group || '';
+        const plain = p => (p && p !== 'Vicino' && p !== 'Neighbor') ? shortIface(p) : '';
+        networkInstance.body.data.edges.get().forEach(e => {
+            const l = e.lnk || e.srcLink;
+            if (!l || !cellId[e.from] || !cellId[e.to]) return;
+            const isPC = !!l.is_portchannel;
+            const kind = l.kind === 'group' ? 'group' : l.kind === 'redundancy_heartbeat' ? 'ha' : isPC ? 'pc' : 'link';
+            const lp = ((l.local_ports && l.local_ports.length) ? l.local_ports : [l.local_port]).map(plain).filter(Boolean);
+            const rp = ((l.remote_ports && l.remote_ports.length) ? l.remote_ports : [l.remote_port]).map(plain).filter(Boolean);
+            const a = pos[e.from], b = pos[e.to];
+            // Same row: side to side; otherwise bottom of the upper card to the top of the lower.
+            const glue = Math.abs(a.y - b.y) < 1
+                ? (a.x <= b.x ? 'exitX=1;exitY=0.5;entryX=0;entryY=0.5;' : 'exitX=0;exitY=0.5;entryX=1;entryY=0.5;')
+                : (a.y < b.y ? 'exitX=0.5;exitY=1;entryX=0.5;entryY=0;' : 'exitX=0.5;exitY=0;entryX=0.5;entryY=1;');
+            const color = kind === 'pc' ? PC_COPPER : kind === 'ha' ? '#F9A825' : '#94A3B8';
+            const dashed = kind === 'group' || kind === 'ha' || tenantOf(e.from) !== tenantOf(e.to);
+            const style = `edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=none;startArrow=none;${glue}`
+                + `strokeColor=${color};strokeWidth=${kind === 'pc' ? 2.5 : 1.5};${dashed ? 'dashed=1;' : ''}`
+                + `fontSize=10;fontStyle=1;fontColor=${color};labelBackgroundColor=#FFFFFF;`;
+            let mid = kind === 'ha' ? 'HA' : '';
+            if (kind === 'pc') {
+                const ends = pcEnds(l), m = Math.max(1, lp.length, rp.length);
+                mid = (ends.same ? ends.local : `${ends.local} ⇄ ${ends.remote}`) + (m > 1 ? ` ×${m}` : '');
+            }
+            const eid = 'e' + (seq++);
+            cells.push(`<mxCell id="${eid}" value="${esc(mid)}" style="${style}" edge="1" parent="1" source="${cellId[e.from]}" target="${cellId[e.to]}"><mxGeometry relative="1" as="geometry"/></mxCell>`);
+            if (kind !== 'pc' && kind !== 'link') return;
+            // End labels ride on the connector: they follow it when edited.
+            [[lp, -0.75], [rp, 0.75]].forEach(([ps, x]) => {
+                if (!ps.length) return;
+                cells.push(`<mxCell id="${'e' + (seq++)}" value="${esc(ps.join(', '))}" style="edgeLabel;html=1;resizable=0;points=[];fontSize=9;fontColor=#475569;labelBackgroundColor=#FFFFFF;" vertex="1" connectable="0" parent="${eid}"><mxGeometry x="${x}" relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry></mxCell>`);
+            });
+        });
+        const xml = `<mxfile host="SentinelNet"><diagram id="sentinelnet" name="${esc(lastMapGroup || 'SentinelNet')}"><mxGraphModel grid="1" gridSize="10" guides="1" page="0" math="0" shadow="0"><root><mxCell id="0"/><mxCell id="1" parent="0"/>${cells.join('')}</root></mxGraphModel></diagram></mxfile>`;
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(new Blob([xml], { type: 'application/xml' }));
+        link.download = 'sentinelnet-map-' + new Date().toISOString().slice(0, 10) + '.drawio';
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+
     async function resetTopology() {
         if (!confirm(tr('confirmReset'))) return;
 
@@ -4884,7 +5021,6 @@
     document.getElementById('btnResetPortchannels')?.addEventListener('click', resetTopology);
     document.getElementById('interactiveGroupSelect')?.addEventListener('change', loadInteractiveMap);
     document.getElementById('toggleDiscovered')?.addEventListener('change', loadInteractiveMap);
-    document.getElementById('togglePortChannel')?.addEventListener('change', loadInteractiveMap);
     document.getElementById('toggleVtpDomain')?.addEventListener('change', loadInteractiveMap);
     document.getElementById('mapViewMinimalBtn')?.addEventListener('click', () => setMapView('minimal'));
     document.getElementById('mapViewLayeredBtn')?.addEventListener('click', () => setMapView('layered'));
@@ -4983,6 +5119,12 @@
     document.getElementById('btnRefreshInteractiveMap')?.addEventListener('click', loadInteractiveMap);
     document.getElementById('btnDownloadTopology')?.addEventListener('click', downloadTopology);
     document.getElementById('btnExportVisioMap')?.addEventListener('click', exportVisioMap);
+    document.getElementById('btnExportDrawioMap')?.addEventListener('click', exportDrawioMap);
+    // Floating zoom bar: steps of 20% around the view centre, and fit.
+    const zoomBy = f => networkInstance && networkInstance.moveTo({ scale: networkInstance.getScale() * f, animation: { duration: 150 } });
+    document.getElementById('mapZoomIn')?.addEventListener('click', () => zoomBy(1.2));
+    document.getElementById('mapZoomOut')?.addEventListener('click', () => zoomBy(1 / 1.2));
+    document.getElementById('mapZoomFit')?.addEventListener('click', () => networkInstance && networkInstance.fit({ animation: { duration: 200 } }));
     document.getElementById('btnExportPdfMap')?.addEventListener('click', exportPdfMap);
     document.getElementById('legendToggleBtn')?.addEventListener('click', toggleLegend);
     document.getElementById('categoriesGroupSelect')?.addEventListener('change', renderCategoriesPanel);

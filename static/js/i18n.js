@@ -1371,6 +1371,10 @@ const i18n = {
         btnLayeredCollapse: "Comprimi gruppi",
         btnLayeredCollapseOne: "Richiudi gruppo",
         lblNetworkMap: "Mappa di rete",
+        lblMapZoomBar: "Zoom mappa",
+        lblMapZoomOut: "Riduci zoom",
+        lblMapZoomIn: "Aumenta zoom",
+        lblMapZoomFit: "Adatta alla vista",
         lblLayeredHint: "Trascina in verticale per cambiare livello · click su un gruppo per aprirlo · apri un apparato per segnarlo come core",
 
         // Tab 1
@@ -1585,7 +1589,6 @@ const i18n = {
         title2DMap: "Mappa Topologia 2D",
         lblShowEndDevices: "Mostra Terminali (Server, Telefoni, PC)",
         lblShowAccessPoints: "Mostra Access Point",
-        lblHighlightPortChannel: "Evidenzia Port-Channel",
         lblVtpDomain: "Dominio VTP",
         lblHoverInfo: "Info al passaggio",
         lblShowDiscovered: "Mostra Scoperti",
@@ -1599,6 +1602,7 @@ const i18n = {
         btnRefreshMap: '<i class="fa-solid fa-arrows-rotate"></i> Aggiorna Vista',
         btnDownloadMap: '<i class="fa-solid fa-download"></i> Scarica Mappa',
         btnExportVisio: '<i class="fa-solid fa-diagram-project"></i> Esporta Visio',
+        btnExportDrawio: '<i class="fa-solid fa-sitemap"></i> Esporta draw.io',
         btnExportPdf: '<i class="fa-solid fa-file-pdf"></i> Esporta PDF',
         legendOnline: "Dispositivo Online",
         legendOffline: "Dispositivo Offline",
@@ -5534,6 +5538,10 @@ const i18n = {
         btnLayeredCollapse: "Collapse groups",
         btnLayeredCollapseOne: "Collapse group",
         lblNetworkMap: "Network map",
+        lblMapZoomBar: "Map zoom",
+        lblMapZoomOut: "Zoom out",
+        lblMapZoomIn: "Zoom in",
+        lblMapZoomFit: "Fit to view",
         lblLayeredHint: "Drag vertically to change level · click a group to expand it · open a device to mark it as core",
 
         // Tab 1
@@ -5748,7 +5756,6 @@ const i18n = {
         title2DMap: "2D Topology Map",
         lblShowEndDevices: "Show End Devices (Servers, Phones, PCs)",
         lblShowAccessPoints: "Show Access Points",
-        lblHighlightPortChannel: "Highlight Port-Channel",
         lblVtpDomain: "VTP Domain",
         lblHoverInfo: "Hover info",
         lblShowDiscovered: "Show Discovered",
@@ -5762,6 +5769,7 @@ const i18n = {
         btnRefreshMap: '<i class="fa-solid fa-arrows-rotate"></i> Refresh View',
         btnDownloadMap: '<i class="fa-solid fa-download"></i> Download Map',
         btnExportVisio: '<i class="fa-solid fa-diagram-project"></i> Export Visio',
+        btnExportDrawio: '<i class="fa-solid fa-sitemap"></i> Export draw.io',
         btnExportPdf: '<i class="fa-solid fa-file-pdf"></i> Export PDF',
         legendOnline: "Device Online",
         legendOffline: "Device Offline",

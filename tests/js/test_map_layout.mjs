@@ -69,6 +69,8 @@ const T = (0, eval)(`(function () {
     ${line('const LAYERED_PITCH =')}
     ${line('const LAYERED_TENANT_GAP =')}
     ${line('const PC_COPPER =')}
+    ${line('const LINK_R =')}
+    ${extract('function roundedRun(')}
     ${line('const loadTagJson =')}
     ${line('let layeredTagCfg =')}
     ${line('let layeredTagFlip =')}
@@ -100,7 +102,7 @@ assert.equal(pos.core.x, (Math.min(...kids) + Math.max(...kids)) / 2, 'core cent
 assert.equal((pos['fw-a'].x + pos['fw-b'].x) / 2, pos.core.x, 'firewall pair centred over the core');
 assert.equal(Math.abs(pos['fw-a'].x - pos['fw-b'].x), LAYERED_PITCH, 'firewalls side by side');
 
-// One line per configured port: 4 into the WLC, 1 into the one-port Po.
+// One line per link, whatever the Po size: the size is in the tag (×4).
 const ends = [];
 const ctx = new Proxy({}, { get: (_, k) => k === 'lineTo' ? (x, y) => ends.push([x, y])
     : k === 'measureText' ? t => ({ width: t.length * 6 }) : (() => {}), set: () => true });
@@ -109,9 +111,10 @@ const into = id => {
     const b = networkInstance.getBoundingBox(id);
     return ends.filter(([x, y]) => Math.abs(y - b.top) < 0.5 && x > b.left && x < b.right).length;
 };
-assert.equal(into('wlc'), 4, 'a 4-port Po draws 4 lines');
-assert.equal(into('one'), 1, 'a 1-port Po draws 1 line');
-assert.equal(into('a1'), 2);
+assert.equal(into('wlc'), 1, 'a 4-port Po draws one line');
+assert.equal(into('one'), 1, 'a 1-port Po draws one line');
+assert.equal(into('a1'), 1);
+assert.ok(drawn.some(t => t.ports.endsWith('×4')), 'the Po size is in its tag');
 
 // Automatic placement (the default): two tags per link, none on top of another.
 const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;

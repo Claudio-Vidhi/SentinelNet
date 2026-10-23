@@ -1700,6 +1700,24 @@ tr.row-dirty td:first-child { border-left: 2px solid var(--lamp-warn); }
   overflow: hidden;
 }
 
+/* Floating zoom bar over the map, bottom centre. */
+.map-zoombar {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 5;
+  display: flex; align-items: center; gap: 2px; padding: 4px;
+  background: var(--surface); border: var(--seam) solid var(--border-strong);
+  border-radius: var(--radius-xl); box-shadow: var(--shadow-lift);
+}
+.map-zoombar button {
+  width: 30px; height: 30px; margin: 0; padding: 0; display: grid; place-items: center;
+  background: none; border: none; border-radius: var(--radius); color: var(--text); cursor: pointer;
+}
+.map-zoombar button:hover, .map-zoombar button:focus-visible { background: var(--surface-3); outline: none; }
+.map-zoombar #mapZoomLevel {
+  min-width: 48px; text-align: center; font: 600 12px var(--font-data); color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.map-zoombar-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+
 div.vis-tooltip {
   background-color: var(--surface) !important;
   border: var(--seam) solid var(--border-strong) !important;

@@ -1019,12 +1019,6 @@
             <span data-i18n="lblShowDiscovered">Mostra Scoperti</span>
           </label>
 
-          <!-- Interruttore evidenziazione link Port-Channel / LAG -->
-          <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-muted); cursor: pointer; user-select: none; padding-left: 10px; border-left: 1px solid var(--border); margin: 0;">
-            <input type="checkbox" id="togglePortChannel" style="width: 16px; height: 16px; accent-color: var(--text); cursor: pointer; border-radius: 0;">
-            <span data-i18n="lblHighlightPortChannel">Evidenzia Port-Channel</span>
-          </label>
-
           <!-- Interruttore range dominio VTP: colora i nodi per dominio VTP -->
           <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-muted); cursor: pointer; user-select: none; padding-left: 10px; border-left: 1px solid var(--border); margin: 0;">
             <input type="checkbox" id="toggleVtpDomain" style="width: 16px; height: 16px; accent-color: #b76bff; cursor: pointer; border-radius: 0;">
@@ -1116,6 +1110,9 @@
           <button class="btn btn-secondary btn-small" id="btnExportVisioMap" style="width:auto; margin:0;" data-i18n="btnExportVisio">
             <i class="fa-solid fa-diagram-project"></i> Esporta Visio
           </button>
+          <button class="btn btn-secondary btn-small" id="btnExportDrawioMap" style="width:auto; margin:0;" data-i18n="btnExportDrawio">
+            <i class="fa-solid fa-sitemap"></i> Esporta draw.io
+          </button>
           <button class="btn btn-secondary btn-small" id="btnExportPdfMap" style="width:auto; margin:0;" data-i18n="btnExportPdf">
             <i class="fa-solid fa-file-pdf"></i> Esporta PDF
           </button>
@@ -1128,6 +1125,13 @@
              tastiera non ha modo di scegliere un apparato. Frecce = nodo
              precedente/successivo, Invio = apre il pannello. -->
         <div id="networkGraphContainer" tabindex="0" role="application" aria-label="Mappa di rete" data-i18n-aria-label="lblNetworkMap"></div>
+        <div class="map-zoombar" role="toolbar" aria-label="Zoom mappa" data-i18n-aria-label="lblMapZoomBar">
+          <button type="button" id="mapZoomOut" aria-label="Riduci zoom" data-i18n-aria-label="lblMapZoomOut"><i class="fa-solid fa-minus"></i></button>
+          <span id="mapZoomLevel">100%</span>
+          <button type="button" id="mapZoomIn" aria-label="Aumenta zoom" data-i18n-aria-label="lblMapZoomIn"><i class="fa-solid fa-plus"></i></button>
+          <span class="map-zoombar-sep"></span>
+          <button type="button" id="mapZoomFit" aria-label="Adatta alla vista" data-i18n-aria-label="lblMapZoomFit"><i class="fa-solid fa-expand"></i></button>
+        </div>
         <div class="network-legend" id="networkLegend">
           <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;">
             <span style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--text-muted);" data-i18n="legendTitle">Legenda</span>
