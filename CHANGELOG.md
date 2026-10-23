@@ -10,6 +10,34 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Mappa, esporta draw.io**: la mappa corrente (Schema o Gerarchia) diventa
+  un file `.drawio` nativo: una card per apparato dentro la sua sede,
+  connettori agganciati alle card, nome del Port-Channel al centro e porte a
+  ciascun estremo.
+- **Mappa, barra zoom**: in basso al centro, con riduci, aumenta, adatta alla
+  vista e il livello di zoom corrente.
+
+### Changed
+
+- **Mappa gerarchica**: cavi con angoli arrotondati; un Port-Channel è una
+  sola linea rame con la sua dimensione nell'etichetta (×N); etichette di
+  porta più leggere; la card mostra il modello sotto il nome quando è noto.
+- **Mappa gerarchica**: sotto un apparato con sia cavi singoli sia
+  Port-Channel (per esempio uno stack) escono due tronchi affiancati, grigio
+  e rame. Prima il rame copriva il grigio e i cavi singoli sembravano non
+  partire da nessuna parte.
+- **Mappa Schema**: un cavo cambia percorso solo quando le card si spostano
+  di parecchio, quindi non salta più tra lato e sopra a ogni piccolo
+  trascinamento; una card che deve ospitare etichette laterali si allarga.
+- **Export Visio**: i Port-Channel sono sempre in rame.
+
+### Removed
+
+- **Mappa, "Evidenzia Port-Channel"**: superato, i Port-Channel sono già
+  sempre disegnati in rame.
+
 ## [0.54.0] - 2026-10-22
 
 ### Added
