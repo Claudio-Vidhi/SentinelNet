@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.55.0] - 2026-10-23
+
 ### Added
 
 - **Mappa, esporta draw.io**: la mappa corrente (Schema o Gerarchia) diventa
