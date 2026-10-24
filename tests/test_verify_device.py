@@ -92,6 +92,25 @@ class TestVerifyDevice(unittest.TestCase):
         finally:
             inventory_manager.delete_device("192.0.2.11")
 
+    def test_add_device_saves_the_verified_hostname(self):
+        # The wizard sends back the name /api/verify-device read.
+        from tests.conftest import make_location
+        loc = make_location("Default", "Milano")
+        body = {"ip": "192.0.2.14", "vendor": "cisco", "profile": "default", "group": "Default",
+                "location": loc, "hostname": "switch-01"}
+        try:
+            r = self.client.post("/api/add-device", json=body)
+            self.assertEqual(r.status_code, 200, r.text)
+            dev = next(d for d in inventory_manager.get_all_devices() if d["IP"] == "192.0.2.14")
+            self.assertEqual(dev["Hostname"], "switch-01")
+            # Empty on a later save keeps the stored name.
+            r = self.client.post("/api/add-device", json={**body, "hostname": ""})
+            self.assertEqual(r.status_code, 200, r.text)
+            dev = next(d for d in inventory_manager.get_all_devices() if d["IP"] == "192.0.2.14")
+            self.assertEqual(dev["Hostname"], "switch-01")
+        finally:
+            inventory_manager.delete_device("192.0.2.14")
+
 
 if __name__ == "__main__":
     unittest.main()

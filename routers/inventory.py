@@ -47,6 +47,8 @@ class DeviceSchema(BaseModel):
     # invariata quella già salvata; "" = rimuovila.
     snmp_community: Optional[str] = Field(None, max_length=128)
     snmp_disabled: Optional[bool] = None
+    # Name read by /api/verify-device. Empty = keep the stored one.
+    hostname: str = Field("", max_length=255)
 
 class DeviceDelete(BaseModel):
     ip: str
@@ -363,6 +365,7 @@ def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
             snmp_community=device.snmp_community,
             snmp_disabled=device.snmp_disabled,
             location=device.location.strip() or None,
+            hostname=device.hostname.strip() or None,
         )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))

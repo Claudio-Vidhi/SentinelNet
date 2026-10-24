@@ -505,12 +505,13 @@ def upsert_devices(entries: list) -> None:
 
 def add_or_update_device(ip, vendor, profile, username, password, enable_secret, group,
                          probe=None, ssh_port=None, transports=None, snmp_community=None,
-                         snmp_disabled=None, location=None, require_location=True):
+                         snmp_disabled=None, location=None, require_location=True, hostname=None):
     upsert_devices([dict(ip=ip, vendor=vendor, profile=profile, username=username,
                          password=password, enable_secret=enable_secret, group=group,
                          probe=probe, ssh_port=ssh_port, transports=transports,
                          snmp_community=snmp_community, snmp_disabled=snmp_disabled,
-                         location=location, require_location=require_location)])
+                         location=location, require_location=require_location,
+                         hostname=hostname)])
 
 def delete_device(ip: str, group: Optional[str] = None):
     with _io_lock:

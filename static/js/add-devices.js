@@ -373,6 +373,7 @@
                                                 device_type: n.device_type || '', hostname: n.label || '' });
         }
         const res = await post('/api/add-device', { ip: row.ip, vendor: row.vendor, profile, group, location, probe,
+                                                    hostname: row.hostname || '',
                                                     username: '', password: '', enable_secret: '' });
         const err = res && !res.ok ? await res.json().catch(() => ({})) : null;
         return { row, ok: !!(res && res.ok), msg: err ? (err.detail || tr('alertSaveDeviceError')) : '' };
