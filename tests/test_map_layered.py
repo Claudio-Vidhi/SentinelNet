@@ -27,6 +27,22 @@ class TestLayeredMapView(unittest.TestCase):
             self.assertIn(f'id="{element_id}"', self.html)
             self.assertIn(f"getElementById('{element_id}')", self.src)
 
+    def test_core_menu_serves_both_views(self):
+        # Up to two cores per location, chosen from the shared toolbar: the
+        # menu lives outside the hierarchy-only controls and is filled before
+        # the Schema branch returns.
+        self.assertIn('id="mapCoreMenu"', self.html)
+        self.assertIn('id="mapCoreList"', self.html)
+        self.assertIn("getElementById('mapCoreList')", self.src)
+        self.assertNotIn('id="layeredCoreWrap"', self.html)
+        render = self.src[self.src.index("fillMapCoreMenu(filteredNodesData, selectedGroup);"):]
+        self.assertLess(render.index("fillMapCoreMenu"), render.index("if (getMapView() === 'minimal') {"))
+        # The drawer button works in both views and keeps at most two.
+        drawer = self.src[self.src.index("const btnCore = document.getElementById('drawerBtnSetCore');"):]
+        drawer = drawer[:drawer.index("drawer.classList.add('open');")]
+        self.assertNotIn("getMapView()", drawer)
+        self.assertIn("[cores[0], nodeId]", drawer)
+
     def test_no_inline_handlers_added(self):
         head = self.html[self.html.index('id="mapViewLayeredBtn"') - 200:
                          self.html.index('id="layeredResetBtn"') + 400]

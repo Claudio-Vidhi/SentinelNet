@@ -224,37 +224,40 @@
         redrawInteractiveMap();
     }
 
-    // Cores chosen by hand, one per location: {"<tenant>": {"<zone>": "<id>"}}.
-    // The deduction starts from the border (firewall/router) or the best
-    // connected device; where that is not the real core of a site, the user
-    // names it and that site's levels are redone from there. A tenant with two
-    // sites has two cores: one choice per tenant left the other site flat.
+    // Cores chosen by hand, up to two per location (a core pair):
+    // {"<tenant>": {"<zone>": ["<id>", "<id>"]}}. Both views start their rows
+    // from them. The deduction starts from the border (firewall/router) or the
+    // best connected device; where that is not the real core of a site, the
+    // user names it and that site's levels are redone from there.
     let layeredRoots = {};
     try { layeredRoots = JSON.parse(localStorage.getItem('layeredRoots') || '{}'); } catch (e) { layeredRoots = {}; }
-    // Saved before cores were per location: a bare id, kept for its own site.
+    // Older saves: a bare id per tenant, then one id per location.
     const rootsOf = group => {
         const r = layeredRoots[group];
-        return typeof r === 'string' ? { [zoneKeyOf(r) || '']: r } : (r || {});
+        const m = typeof r === 'string' ? { [zoneKeyOf(r) || '']: r } : (r || {});
+        const out = {};
+        Object.entries(m).forEach(([z, v]) => { out[z] = (Array.isArray(v) ? v : [v]).filter(Boolean); });
+        return out;
     };
-    function setLayeredRoot(group, zone, id) {
+    function setLayeredRoots(group, zone, ids) {
         const roots = rootsOf(group);
-        if (id) {
-            roots[zone] = id;
-            // Un piano riassegnato a mano su questo nodo vincerebbe sul suo
-            // ruolo di radice, lasciandolo a meta' mappa.
-            if (layeredLevels[group]) { delete layeredLevels[group][id]; saveLayeredLevels(); }
-        } else {
-            delete roots[zone];
+        const list = [...new Set(ids.filter(Boolean))].slice(0, 2);
+        if (list.length) roots[zone] = list; else delete roots[zone];
+        // Un piano riassegnato a mano su questo nodo vincerebbe sul suo
+        // ruolo di radice, lasciandolo a meta' mappa.
+        if (layeredLevels[group] && list.some(id => id in layeredLevels[group])) {
+            list.forEach(id => { delete layeredLevels[group][id]; });
+            saveLayeredLevels();
         }
         layeredRoots[group] = roots;
         localStorage.setItem('layeredRoots', JSON.stringify(layeredRoots));
         redrawInteractiveMap();
     }
 
-    // "Core" in the hierarchy toolbar: one select per location on the map,
-    // each listing that location's switches and routers.
-    function fillLayeredCoreSelect(nodesData, group) {
-        const box = document.getElementById('layeredCoreWrap');
+    // "Core" menu in the map toolbar, for both views: per location, a first
+    // and a second core picked among its switches and routers.
+    function fillMapCoreMenu(nodesData, group) {
+        const box = document.getElementById('mapCoreList');
         if (!box) return;
         const roots = rootsOf(group), zones = new Map();
         nodesData.filter(n => n.device_type === 'switch' || n.device_type === 'router').forEach(n => {
@@ -263,13 +266,21 @@
             zones.get(z.key).nodes.push(n);
         });
         const many = zones.size > 1;
+        const count = document.getElementById('mapCoreCount');
+        const picked = Object.values(roots).reduce((t, l) => t + l.length, 0);
+        if (count) count.textContent = picked ? `(${picked})` : '';
+        if (!zones.size) { box.innerHTML = `<div class="map-core-empty">${escapeHtml(tr('topoCoreNone'))}</div>`; return; }
         box.innerHTML = [...zones.entries()].map(([key, z]) => {
-            const name = many ? tr('topoCoreFor', { zone: z.label }) : tr('topoCoreAuto');
-            const auto = many ? `${z.label}: ${tr('topoCoreAutoShort')}` : tr('topoCoreAuto');
-            return `<select class="layered-core" data-zone="${attrEsc(key)}" title="${attrEsc(name)}" aria-label="${attrEsc(name)}">
-                <option value="">${escapeHtml(auto)}</option>${
-                z.nodes.map(n => `<option value="${attrEsc(n.id)}"${roots[key] === n.id ? ' selected' : ''}>${
-                    escapeHtml(many ? `${z.label}: ${n.label || n.id}` : (n.label || n.id))}</option>`).join('')}</select>`;
+            const sel = roots[key] || [];
+            const select = slot => {
+                const name = tr(slot ? 'topoCore2For' : 'topoCoreFor', { zone: z.label || '—' });
+                const first = slot ? tr('topoCore2None') : tr('topoCoreAuto');
+                return `<select class="map-core" data-zone="${attrEsc(key)}" data-slot="${slot}" aria-label="${attrEsc(name)}"${slot && !sel[0] ? ' disabled' : ''}>
+                    <option value="">${escapeHtml(first)}</option>${
+                    z.nodes.filter(n => !slot || n.id !== sel[0]).map(n => `<option value="${attrEsc(n.id)}"${sel[slot] === n.id ? ' selected' : ''}>${
+                        escapeHtml(n.label || n.id)}</option>`).join('')}</select>`;
+            };
+            return `<div class="map-core-row">${many ? `<span class="map-core-zone">${escapeHtml(z.label || '—')}</span>` : ''}${select(0)}${select(1)}</div>`;
         }).join('');
     }
 
@@ -590,9 +601,10 @@
                 adj.get(l.target).push(l.source);
             }
         });
-        // Cores chosen by hand, one per location (a bare id: saved before that).
+        // Cores chosen by hand, up to two per location (older saves: a bare id,
+        // or one id per location).
         const chosen = layeredRoots[group];
-        const picked = new Set(typeof chosen === 'string' ? [chosen] : Object.values(chosen || {}));
+        const picked = new Set([].concat(...(typeof chosen === 'string' ? [chosen] : Object.values(chosen || {}))));
         const depth = new Map();
         const walk = start => {
             let frontier = start, d = 0;
@@ -1068,6 +1080,9 @@
         // resa grafica. I Port-Channel qui sono visibili di default (etichetta
         // aggregata con le interfacce membro), senza bisogno di alcun interruttore.
         updateMapViewButtons();
+        fillMapCoreMenu(filteredNodesData, selectedGroup);
+        // Both views: the drawer's "set as core" and the Schema core pair read it.
+        layeredGroup = selectedGroup;
         if (getMapView() === 'minimal') {
             const hoverInfo = document.getElementById("toggleMinimalHover")?.checked || false;
             const { nodes, edges, options, bundles, groupsInfo } = buildMinimalGraph(filteredNodesData, filteredLinksData, { showVtpDomain, hoverInfo, group: selectedGroup });
@@ -1075,6 +1090,8 @@
             // Conservati per l'export Visio: il .vsdx replica ESATTAMENTE il
             // disegno dell'overlay (cavi paralleli, etichette porta, pillole).
             minimalOverlayData = { bundles, groupsInfo, nodes };
+            // A new map: the focused node may be gone (filter, tenant).
+            schemaFocusId = null;
             renderNetwork(nodes, edges, options, MINIMAL_MAP_STYLE.background,
                           hasOverlay ? (ctx => drawMinimalOverlay(ctx, bundles, groupsInfo)) : null);
             return;
@@ -1084,10 +1101,8 @@
         // Piani della vista "A livelli" (ignorati dalle altre viste). I piani si
         // calcolano sulla topologia VERA, prima di comprimere le foglie: il
         // nodo aggregato eredita poi il piano dei suoi membri.
-        layeredGroup = selectedGroup;
         layeredGroupOfChild = {};
         {
-            fillLayeredCoreSelect(filteredNodesData, selectedGroup);
             layeredAssigned = computeLayeredLevels(filteredNodesData, filteredLinksData, selectedGroup);
             const grouped = groupLayeredLeaves(filteredNodesData, filteredLinksData, selectedGroup);
             layeredGroupOfChild = grouped.groupOfChild;
@@ -1267,12 +1282,44 @@
         if (tb) tb.style.display = mapViewMode === 'minimal' ? 'inline-block' : 'none';
         const hc = document.getElementById('toggleMinimalHover');
         if (hc) hc.checked = localStorage.getItem('minimalHoverInfo') === '1';
+        // Schema readability controls (focus, port labels, wrap, grouped uplinks).
+        const srw = document.getElementById('schemaReadWrap');
+        if (srw) srw.style.display = mapViewMode === 'minimal' ? 'inline-flex' : 'none';
+        syncSchemaReadControls();
         // Color-picker/legenda dei tipi di link: visibile solo sulla nuova mappa.
         const lw = document.getElementById('minimalLegendWrap');
         if (lw) { lw.style.display = mapViewMode === 'minimal' ? 'inline-flex' : 'none'; if (mapViewMode === 'minimal') renderMinimalLegend(); }
         // Gestione categorie personalizzate: visibile solo sulla nuova mappa.
         const cm = document.getElementById('minimalCustomCatMenu');
         if (cm) { cm.style.display = mapViewMode === 'minimal' ? 'inline-block' : 'none'; if (mapViewMode === 'minimal') renderMinimalCustomCatPanel(); }
+    }
+    function syncSchemaReadControls() {
+        const f = /** @type {HTMLInputElement|null} */ (document.getElementById('toggleSchemaFocus'));
+        const w = /** @type {HTMLInputElement|null} */ (document.getElementById('toggleSchemaWrap'));
+        const g = /** @type {HTMLInputElement|null} */ (document.getElementById('toggleSchemaGroupUplinks'));
+        const l = /** @type {HTMLSelectElement|null} */ (document.getElementById('schemaPortLabels'));
+        if (f) f.checked = schemaPref('schemaFocus', '1') === '1';
+        if (w) w.checked = schemaPref('schemaWrap', '0') === '1';
+        if (g) g.checked = schemaPref('schemaGroupUplinks', '0') === '1';
+        if (l) l.value = schemaPortLabelMode();
+    }
+    function schemaPortLabelMode() {
+        const v = schemaPref('schemaPortLabels', 'all');
+        return v === 'focus' || v === 'none' ? v : 'all';
+    }
+    // The two presets of the approved preview. Wrapping re-runs the tidy
+    // only when it changes, since the tidy drops manual moves.
+    const SCHEMA_PRESETS = {
+        recommended: { schemaFocus: '1', schemaPortLabels: 'focus', schemaWrap: '1', schemaGroupUplinks: '0' },
+        overview:    { schemaFocus: '1', schemaPortLabels: 'none',  schemaWrap: '1', schemaGroupUplinks: '1' },
+    };
+    function applySchemaPreset(name) {
+        const p = SCHEMA_PRESETS[name];
+        const wrapChanged = schemaPref('schemaWrap', '0') !== p.schemaWrap;
+        Object.entries(p).forEach(([k, v]) => setSchemaPref(k, v));
+        syncSchemaReadControls();
+        if (wrapChanged) packSchemaRows();
+        else if (networkInstance) networkInstance.redraw();
     }
     function setMapView(mode) {
         mapViewMode = MAP_VIEWS.includes(mode) ? mode : 'layered';
@@ -1419,6 +1466,13 @@
         });
         networkInstance.on('click', p => {
             if (!p.nodes || !p.nodes.length) closeTopologyNodeDrawer();
+            // Schema focus follows the click: a node focuses, empty space clears.
+            // On 'click' rather than select/deselect, whose order vis does not fix.
+            if (getMapView() === 'minimal') {
+                const on = /** @type {HTMLInputElement|null} */ (document.getElementById('toggleSchemaFocus'))?.checked;
+                const id = on && p.nodes && p.nodes.length ? String(p.nodes[0]) : null;
+                if (id !== schemaFocusId) applySchemaFocus(id);
+            }
         });
 
         let mapFrozen = false;
@@ -2308,19 +2362,20 @@
             btnCollapseGrp.onclick = key ? () => { closeTopologyNodeDrawer(); toggleLayeredGroup(layeredGroup, key); } : null;
         }
 
-        // Core a mano: solo nella vista a livelli, dove i piani hanno senso.
+        // Core by hand, in both views: a third pick replaces the second core.
         const btnCore = document.getElementById('drawerBtnSetCore');
         if (btnCore) {
-            const layered = getMapView() === 'layered';
-            btnCore.style.display = layered ? '' : 'none';
             const zone = zoneKeyOf(nodeId) || '';
-            const isCore = rootsOf(layeredGroup)[zone] === nodeId;
+            const cores = rootsOf(layeredGroup)[zone] || [];
+            const isCore = cores.includes(nodeId);
             btnCore.querySelector('span').textContent = isCore
                 ? (tr('topoClearCore'))
                 : (tr('topoSetAsCore'));
-            btnCore.onclick = layered
-                ? () => { closeTopologyNodeDrawer(); setLayeredRoot(layeredGroup, zone, isCore ? null : nodeId); }
-                : null;
+            btnCore.onclick = () => {
+                closeTopologyNodeDrawer();
+                setLayeredRoots(layeredGroup, zone, isCore ? cores.filter(id => id !== nodeId)
+                    : cores.length < 2 ? [...cores, nodeId] : [cores[0], nodeId]);
+            };
         }
 
         drawer.classList.add('open');
@@ -2411,8 +2466,10 @@
     // two rows grows with the cables crossing it, so their runs get tracks.
     // ponytail: one top-down barycentre pass, like the hierarchy view's.
     const SCHEMA_GAP = 70;
+    const SCHEMA_WRAP_MIN = 8;   // rows longer than this wrap when "Wrap rows" is on
     function packSchemaRows() {
         if (!networkInstance) return;
+        const wrap = schemaPref('schemaWrap', '0') === '1';
         const ds = networkInstance.body.data.nodes;
         // One block of rows per location, blocks side by side: packed as one
         // set of rows, two sites' boxes interleaved and their zones overlapped.
@@ -2448,6 +2505,21 @@
             };
             const row = rows[lv].map(nd => ({ nd, w: want(nd) }))
                 .sort((a, b) => ((a.w ?? Infinity) - (b.w ?? Infinity)) || String(a.nd.id).localeCompare(String(b.nd.id)));
+            // "Wrap rows": a long row splits into two staggered sub-rows,
+            // centred under the mean of what it hangs from.
+            if (wrap && row.length > SCHEMA_WRAP_MIN) {
+                const z = zigzagRow(row.map(r => box[r.nd.id].w), SCHEMA_GAP);
+                const maxW = Math.max(...row.map(r => box[r.nd.id].w));
+                const maxH = Math.max(...row.map(r => box[r.nd.id].h));
+                const blockW = z[z.length - 1].x + maxW / 2;
+                const ws = row.filter(r => r.w !== null).map(r => r.w);
+                const left = ws.length ? ws.reduce((a, b) => a + b, 0) / ws.length - blockW / 2 : base;
+                row.forEach((r, i) => {
+                    pos[r.nd.id] = { x: left + z[i].x, y: top + z[i].sub * (maxH + 60) + box[r.nd.id].h / 2 };
+                });
+                top += 2 * maxH + 60 + 120 + 8 * (wires[lv] || 0);
+                return;
+            }
             let right = -Infinity;
             row.forEach(r => {
                 const bw = box[r.nd.id].w;
@@ -3097,6 +3169,105 @@
     let pillDrag = null;       // {key, mode:'move'|'resize'|'label', startM, orig, cx, cy}
     let hoverBundleKey = null; // pillKey of the bundle under the mouse
     const pillKey = b => `${b.from}~${b.to}~${b.pcTag || ''}`;
+
+    // ===== Schema readability: focus, port labels, wrapped rows, grouped uplinks =====
+    // Hover beats focus: while the mouse is on a cable only that one stays lit.
+    function schemaDimmed(b, key, hoverKey, focusId) {
+        if (hoverKey) return key !== hoverKey;
+        if (focusId) return !(b.ends || [b.from, b.to]).includes(focusId);
+        return false;
+    }
+    function schemaNeighbors(bundles, focusId) {
+        const out = new Set([focusId]);
+        bundles.forEach(b => {
+            const ends = b.ends || [b.from, b.to];
+            if (ends.includes(focusId)) ends.forEach(id => out.add(id));
+        });
+        return out;
+    }
+    // Unknown stored value: every label, as before the setting existed.
+    function schemaPortLabelVisible(mode, b, focusId) {
+        if (mode === 'none') return false;
+        if (mode === 'focus') return !!focusId && (b.ends || [b.from, b.to]).includes(focusId);
+        return true;
+    }
+    // Two staggered sub-rows: each lower box sits centred in the gap of the
+    // upper row, so its straight drop passes between the upper boxes. A
+    // third sub-row would not narrow it: the drop clearance fixes the step.
+    // ponytail: clearance is gap/2 each side of the box centre, so a box with
+    // more than ~6 cables on its top side can still graze its upper neighbours.
+    function zigzagRow(widths, gap) {
+        const maxW = Math.max(...widths), step = maxW / 2 + gap / 2;
+        return widths.map((w, i) => ({ x: maxW / 2 + i * step, sub: i % 2 }));
+    }
+    // Core pairs whose shared uplinks can be drawn as one cable each. A pair:
+    // same level, boxes overlapping in height, nothing of that level between
+    // them, a bundle joining them (or both named in the Core menu: `forced`)
+    // and at least two targets cabled to both.
+    function schemaUplinkGroups(bundles, ids, levelOf, boxOf, forced) {
+        const pk = (a, c) => a < c ? a + '|' + c : c + '|' + a;
+        const between = {}, nbrs = {};
+        bundles.forEach(b => {
+            (between[pk(b.from, b.to)] || (between[pk(b.from, b.to)] = [])).push(b);
+            (nbrs[b.from] || (nbrs[b.from] = new Set())).add(b.to);
+            (nbrs[b.to] || (nbrs[b.to] = new Set())).add(b.from);
+        });
+        const forcedSet = new Set((forced || []).map(p => pk(p[0], p[1])));
+        const used = new Set(), consumed = new Set(), out = [];
+        const tryPair = (p, q) => {
+            if (used.has(p) || used.has(q)) return;
+            if (!boxOf(p) || !boxOf(q) || levelOf(p) !== levelOf(q)) return;
+            if (boxOf(p).left > boxOf(q).left) [p, q] = [q, p];
+            const L = boxOf(p), R = boxOf(q);
+            if (Math.min(L.bottom, R.bottom) <= Math.max(L.top, R.top)) return;
+            const lv = levelOf(p);
+            if (ids.some(o => o !== p && o !== q && levelOf(o) === lv
+                && (bo => bo && bo.right > L.right && bo.left < R.left)(boxOf(o)))) return;
+            if (!between[pk(p, q)] && !forcedSet.has(pk(p, q))) return;
+            // A cable already merged into another pair's group is not shared again.
+            const shared = [...(nbrs[p] || [])].filter(t => t !== q && nbrs[q] && nbrs[q].has(t)
+                && ![...between[pk(p, t)], ...between[pk(q, t)]].some(x => consumed.has(x)));
+            if (shared.length < 2) return;
+            used.add(p); used.add(q);
+            const id = '__pair:' + p + '|' + q;
+            shared.forEach(t => {
+                const parts = [...between[pk(p, t)], ...between[pk(q, t)]];
+                parts.forEach(x => consumed.add(x));
+                out.push({ id, pair: [p, q], target: t, parts });
+            });
+        };
+        (forced || []).forEach(pq => { if (ids.includes(pq[0]) && ids.includes(pq[1])) tryPair(pq[0], pq[1]); });
+        const byLevel = {};
+        ids.forEach(id => { if (boxOf(id)) (byLevel[levelOf(id)] || (byLevel[levelOf(id)] = [])).push(id); });
+        Object.values(byLevel).forEach(row => {
+            row.sort((a, c) => boxOf(a).left - boxOf(c).left);
+            for (let i = 0; i + 1 < row.length; i++) tryPair(row[i], row[i + 1]);
+        });
+        return out.sort((a, c) => a.target.localeCompare(c.target) || a.id.localeCompare(c.id));
+    }
+    // Preferences: storage can throw (private window, blocked site data).
+    function schemaPref(key, fallback) {
+        try { const v = localStorage.getItem(key); return v === null ? fallback : v; } catch (e) { return fallback; }
+    }
+    function setSchemaPref(key, value) {
+        try { localStorage.setItem(key, value); } catch (e) { /* still applies to this page */ }
+    }
+    let schemaFocusId = null;
+    // base: the node's own opacity (offline is already dimmed).
+    function schemaNodeOpacity(base, kept) { return kept ? base : Math.min(base, 0.35); }
+    // Focused node and its neighbours stay as they are, the rest fades; null clears.
+    function applySchemaFocus(id) {
+        schemaFocusId = id || null;
+        if (!networkInstance) return;
+        const ds = networkInstance.body.data.nodes;
+        const keep = schemaFocusId && minimalOverlayData ? schemaNeighbors(minimalOverlayData.bundles || [], schemaFocusId) : null;
+        ds.update(ds.getIds().map(nid => {
+            const nd = ds.get(nid);
+            if (nd._baseOpacity === undefined) nd._baseOpacity = nd.opacity ?? 1;
+            return { id: nid, opacity: schemaNodeOpacity(nd._baseOpacity, !keep || keep.has(nid)) };
+        }));
+        networkInstance.redraw();
+    }
     const routeMemo = {};      // pillKey -> { h, over }: last route shape, for hysteresis
     const pillAdj = key => pillAdjust[key] || { dx: 0, dy: 0, scale: 1 };
     // Scostamento delle ETICHETTE di testo (es. "po1"), indipendente dalla
@@ -3292,8 +3463,40 @@
 
         const spacing = 11;         // distanza tra cavi paralleli / slot di porta
         const EDGE_INSET = 14;      // margine degli ancoraggi dagli angoli del riquadro
+        const labelMode = schemaPortLabelMode();
 
-        const bbox = id => { try { return networkInstance.getBoundingBox(id); } catch (e) { return null; } };
+        const realBox = id => { try { return networkInstance.getBoundingBox(id); } catch (e) { return null; } };
+        // Grouped uplinks: one cable per target from a virtual '__pair:p|q'
+        // box, the union of the two cores. A drawing change only: the vis
+        // nodes stay as they are and the drawer still lists every port.
+        // ponytail: recomputed every frame, O(boxes²); cache per render if big sites stutter.
+        const pairBox = {};
+        // Not on the export: Visio glues connectors to real boxes and wants every port name.
+        if (!visioConnectorSink && schemaPref('schemaGroupUplinks', '0') === '1') {
+            const ds0 = networkInstance.body.data.nodes;
+            const roots = rootsOf(layeredGroup);
+            const forced = Object.values(roots).filter(l => l.length === 2);
+            const groups = schemaUplinkGroups(bundles, ds0.getIds().map(String),
+                id => (ds0.get(id) || {}).schemaLevel, realBox, forced);
+            if (groups.length) {
+                const grouped = new Set(groups.flatMap(gr => gr.parts));
+                const merged = groups.map(gr => {
+                    const a = realBox(gr.pair[0]), c = realBox(gr.pair[1]);
+                    pairBox[gr.id] = { left: Math.min(a.left, c.left), right: Math.max(a.right, c.right),
+                                       top: Math.min(a.top, c.top), bottom: Math.max(a.bottom, c.bottom) };
+                    return { from: gr.id, to: gr.target, ends: [...gr.pair, gr.target],
+                             members: [{ local: '', remote: '' }],
+                             type: gr.parts.some(p => p.type === 'pc' || p.type === 'peer') ? 'pc' : 'link',
+                             pcTag: '', label: '', grouped: '×' + gr.parts.length };
+                });
+                bundles = bundles.filter(b => !grouped.has(b)).concat(merged);
+            }
+        }
+        const bbox = id => pairBox[id] || realBox(id);
+        const posOf = id => {
+            const pb = pairBox[id];
+            return pb ? { x: (pb.left + pb.right) / 2, y: (pb.top + pb.bottom) / 2 } : networkInstance.getPosition(id);
+        };
         // Stile UNIFORME per tipo di collegamento (Fix rappresentazione
         // standardizzata): stesso colore/spessore per ogni Port-Channel, verde
         // per peer-link/keepalive, tinta sobria per i link semplici.
@@ -3318,7 +3521,7 @@
         const sideRegistry = {};   // nodeId -> { E|W|N|S: [entry] }
         const pre = bundles.map((b, bi) => {
             let p1, p2;
-            try { p1 = networkInstance.getPosition(b.from); p2 = networkInstance.getPosition(b.to); }
+            try { p1 = posOf(b.from); p2 = posOf(b.to); }
             catch (e) { return null; }
             if (!p1 || !p2) return null;
             const dx = p2.x - p1.x, dy = p2.y - p1.y;
@@ -3384,7 +3587,7 @@
         // Punto di aggancio dello slot i-esimo di una entry sul lato del nodo.
         const anchorPoint = (id, side, entry, i) => {
             const bb = bbox(id);
-            const p = networkInstance.getPosition(id);
+            const p = posOf(id);
             const off = ((entry.slot + i) - (entry.total - 1) / 2) * entry.step;
             if (side === 'E') return { x: bb ? bb.right : p.x, y: p.y + off };
             if (side === 'W') return { x: bb ? bb.left : p.x,  y: p.y + off };
@@ -3507,7 +3710,7 @@
 
             ctx.save();
             // Not on the export context: only the live map follows the mouse.
-            if (hoverBundleKey && !visioConnectorSink && pillKey(b) !== hoverBundleKey) ctx.globalAlpha = 0.18;
+            if (!visioConnectorSink && schemaDimmed(b, pillKey(b), hoverBundleKey, schemaFocusId)) ctx.globalAlpha = 0.18;
             ctx.strokeStyle = color;
             ctx.lineWidth = g.style.lw;
             ctx.setLineDash(g.style.dash || []);
@@ -3526,6 +3729,8 @@
             // per port, a core with twenty uplinks became a tall empty column.
             const drawPortLabel = (text, pt, side) => {
                 if (!text) return;
+                // The export (visioConnectorSink) always gets every port name.
+                if (!visioConnectorSink && !schemaPortLabelVisible(labelMode, b, schemaFocusId)) return;
                 ctx.fillStyle = color;
                 if (side === 'E')      { ctx.textAlign = 'right';  ctx.fillText(text, pt.x - 13, pt.y - 5); }
                 else if (side === 'W') { ctx.textAlign = 'left';   ctx.fillText(text, pt.x + 13, pt.y - 5); }
@@ -3586,6 +3791,15 @@
             edgeHitSegs.push({ key: pillKey(b), segs: g.members.flatMap(mm =>
                 mm.pts.slice(0, -1).map((p, k) => [p.x, p.y, mm.pts[k + 1].x, mm.pts[k + 1].y])) });
             ctx.setLineDash([]);
+            // Grouped uplink: how many real cables it stands for, over the target.
+            if (b.grouped) {
+                const B = g.members[0].B, up = g.toSide === 'N' ? -12 : 12;
+                ctx.font = 'bold 9px Arial, Helvetica, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = color;
+                ctx.fillText(b.grouped, B.x + 10, B.y + up);
+            }
 
             // Centro del fascio e ampiezza (per pillola/etichette).
             const half = (b.members.length - 1) / 2;
@@ -4602,7 +4816,10 @@
                 }
                 node.title = createNodeTooltip(node.nodeDataVal, scan, node.vendorVal);
                 if (node.opacity !== undefined) {
-                    node.opacity = (newStatus === 'offline') ? 0.45 : 1;
+                    node._baseOpacity = (newStatus === 'offline') ? 0.45 : 1;
+                    // Schema focus: a node outside it stays faded.
+                    const keep = schemaFocusId && minimalOverlayData ? schemaNeighbors(minimalOverlayData.bundles || [], schemaFocusId) : null;
+                    node.opacity = schemaNodeOpacity(node._baseOpacity, !keep || keep.has(node.id));
                 }
 
                 nodesDataSet.update(node);
@@ -4927,10 +5144,14 @@
             s.x1 = Math.max(s.x1, b.right); s.y1 = Math.max(s.y1, b.bottom);
         });
         let seq = 0;
+        // Click actions (draw.io viewer / lightbox): a box hides every cable
+        // and shows its own, the site container brings them all back. Each
+        // cable carries the tag 'sn-cable' plus the cell ids of its two ends.
+        const action = acts => esc('data:action/json,' + JSON.stringify({ actions: acts }));
         Object.values(zones).forEach(s => {
             const zid = 'z' + (seq++), PAD = 30, HEAD = 40;
             s.x0 -= PAD; s.y0 -= PAD + HEAD; s.x1 += PAD; s.y1 += PAD;
-            cells.push(`<mxCell id="${zid}" value="${esc(String(s.label || '').toUpperCase())}" style="rounded=1;arcSize=2;whiteSpace=wrap;html=1;container=1;collapsible=0;fillColor=#F8FAFC;strokeColor=#CBD5E1;verticalAlign=top;align=left;spacingLeft=16;spacingTop=10;fontStyle=1;fontSize=14;fontColor=#64748B;" vertex="1" parent="1"><mxGeometry x="${s.x0}" y="${s.y0}" width="${s.x1 - s.x0}" height="${s.y1 - s.y0}" as="geometry"/></mxCell>`);
+            cells.push(`<UserObject id="${zid}" label="${esc(String(s.label || '').toUpperCase())}" link="${action([{ show: { tags: ['sn-cable'] } }])}"><mxCell style="rounded=1;arcSize=2;whiteSpace=wrap;html=1;container=1;collapsible=0;fillColor=#F8FAFC;strokeColor=#CBD5E1;verticalAlign=top;align=left;spacingLeft=16;spacingTop=10;fontStyle=1;fontSize=14;fontColor=#64748B;" vertex="1" parent="1"><mxGeometry x="${s.x0}" y="${s.y0}" width="${s.x1 - s.x0}" height="${s.y1 - s.y0}" as="geometry"/></mxCell></UserObject>`);
             s.ids.forEach(id => {
                 const nd = ds.get(id), n = nd.nodeDataVal || {}, b = box[id], cid = 'n' + (seq++);
                 cellId[id] = cid;
@@ -4944,7 +5165,7 @@
                     + (ip ? `<br><span style="font-size:9px;color:#94A3B8">${esc(ip)}</span>` : '');
                 const style = `rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=${accent};strokeWidth=1.5;fontSize=12;fontColor=#0F172A;shadow=1;`
                     + (n.is_group ? 'dashed=1;' : '') + (off ? 'opacity=60;' : '');
-                cells.push(`<mxCell id="${cid}" value="${esc(html)}" style="${style}" vertex="1" parent="${zid}"><mxGeometry x="${b.left - s.x0}" y="${b.top - s.y0}" width="${b.right - b.left}" height="${b.bottom - b.top}" as="geometry"/></mxCell>`);
+                cells.push(`<UserObject id="${cid}" label="${esc(html)}" link="${action([{ hide: { tags: ['sn-cable'] } }, { show: { tags: [cid] } }])}"><mxCell style="${style}" vertex="1" parent="${zid}"><mxGeometry x="${b.left - s.x0}" y="${b.top - s.y0}" width="${b.right - b.left}" height="${b.bottom - b.top}" as="geometry"/></mxCell></UserObject>`);
             });
         });
         const tenantOf = id => ((ds.get(id) || {}).nodeDataVal || {}).group || '';
@@ -4972,7 +5193,7 @@
                 mid = (ends.same ? ends.local : `${ends.local} ⇄ ${ends.remote}`) + (m > 1 ? ` ×${m}` : '');
             }
             const eid = 'e' + (seq++);
-            cells.push(`<mxCell id="${eid}" value="${esc(mid)}" style="${style}" edge="1" parent="1" source="${cellId[e.from]}" target="${cellId[e.to]}"><mxGeometry relative="1" as="geometry"/></mxCell>`);
+            cells.push(`<UserObject id="${eid}" label="${esc(mid)}" tags="sn-cable ${cellId[e.from]} ${cellId[e.to]}"><mxCell style="${style}" edge="1" parent="1" source="${cellId[e.from]}" target="${cellId[e.to]}"><mxGeometry relative="1" as="geometry"/></mxCell></UserObject>`);
             if (kind !== 'pc' && kind !== 'link') return;
             // End labels ride on the connector: they follow it when edited.
             [[lp, -0.75], [rp, 0.75]].forEach(([ps, x]) => {
@@ -5033,11 +5254,16 @@
         const g = document.getElementById('interactiveGroupSelect');
         resetLayeredLevels(g ? g.value : 'all');
     });
-    document.getElementById('layeredCoreWrap')?.addEventListener('change', ev => {
+    document.getElementById('mapCoreList')?.addEventListener('change', ev => {
         const sel = /** @type {HTMLSelectElement} */ (ev.target);
-        if (!sel.matches('select.layered-core')) return;
+        if (!sel.matches('select.map-core')) return;
         const g = document.getElementById('interactiveGroupSelect');
-        setLayeredRoot(g ? g.value : 'all', sel.dataset.zone || '', sel.value);
+        const group = g ? g.value : 'all', zone = sel.dataset.zone || '';
+        const cores = (rootsOf(group)[zone] || []).slice();
+        if (sel.dataset.slot === '1') cores[1] = sel.value;
+        else if (sel.value) cores[0] = sel.value;
+        else cores.length = 0;   // first core back to automatic: the second goes too
+        setLayeredRoots(group, zone, cores);
     });
     // Level names: one field per row of the map, labelled with a few of its
     // devices so it is clear which row is which. Empty fields stay empty.
@@ -5115,6 +5341,25 @@
         localStorage.setItem('minimalHoverInfo', e.target.checked ? '1' : '0');
         loadInteractiveMap();
     });
+    // Schema readability controls: drawing changes only, no data reload.
+    document.getElementById('schemaReadWrap')?.addEventListener('change', ev => {
+        const el = /** @type {HTMLInputElement} */ (ev.target);
+        if (el.id === 'toggleSchemaFocus') {
+            setSchemaPref('schemaFocus', el.checked ? '1' : '0');
+            if (!el.checked) applySchemaFocus(null);
+        } else if (el.id === 'schemaPortLabels') {
+            setSchemaPref('schemaPortLabels', el.value);
+            networkInstance?.redraw();
+        } else if (el.id === 'toggleSchemaWrap') {
+            setSchemaPref('schemaWrap', el.checked ? '1' : '0');
+            packSchemaRows();
+        } else if (el.id === 'toggleSchemaGroupUplinks') {
+            setSchemaPref('schemaGroupUplinks', el.checked ? '1' : '0');
+            networkInstance?.redraw();
+        }
+    });
+    document.getElementById('schemaPresetRecommended')?.addEventListener('click', () => applySchemaPreset('recommended'));
+    document.getElementById('schemaPresetOverview')?.addEventListener('click', () => applySchemaPreset('overview'));
     document.getElementById('btnResetInteractiveTopology')?.addEventListener('click', resetTopology);
     document.getElementById('btnRefreshInteractiveMap')?.addEventListener('click', loadInteractiveMap);
     document.getElementById('btnDownloadTopology')?.addEventListener('click', downloadTopology);

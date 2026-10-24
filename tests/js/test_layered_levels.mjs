@@ -126,4 +126,21 @@ assert.equal(levels['192.0.2.1'], 0);
     assert.equal(lp['b-core'], 1);
 }
 
+// Two cores chosen for one location (a core pair): both on the top row, the
+// access switches of either one on the row below.
+{
+    const zones = Object.fromEntries(nodes.map(n => [n.id, 'A']));
+    const lv = build({}, { 'tenant-a': { A: ['192.0.2.10', '192.0.2.11'] } }, zones)(nodes, links, 'tenant-a');
+    assert.equal(lv['192.0.2.10'], 0, 'first core on top');
+    assert.equal(lv['192.0.2.11'], 0, 'second core on top too');
+    assert.equal(lv['192.0.2.1'], 1);
+    assert.equal(lv['192.0.2.20'], 1);
+    assert.equal(lv['192.0.2.21'], 1);
+    assert.equal(lv['192.0.2.30'], 2);
+    // A save from before pairs (one id per location) still works.
+    const one = build({}, { 'tenant-a': { A: '192.0.2.10' } }, zones)(nodes, links, 'tenant-a');
+    assert.equal(one['192.0.2.10'], 0);
+    assert.equal(one['192.0.2.11'], 1);
+}
+
 console.log('layered_levels: ok');

@@ -10,6 +10,27 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Mappa Schema, leggibilità**: due preset, *Consigliata* e *Panoramica*, e
+  quattro comandi della sola vista Schema. *Focus su clic*: clic su un
+  apparato e i suoi cavi e vicini restano pieni, il resto si spegne.
+  *Etichette porta*: tutte, solo sul focus o nessuna (l'export Visio le ha
+  sempre tutte). *Righe a capo*: una fila di più di 8 apparati va su due
+  righe sfalsate, larga circa la metà. *Raggruppa uplink*: una coppia di core
+  affiancati manda un cavo solo per access, con «×2».
+- **Mappa, export draw.io interattivo**: nel viewer di draw.io (o in
+  anteprima) un clic su un apparato lascia visibili solo i suoi cavi; un clic
+  sul riquadro della sede li riporta tutti.
+- **Mappa, menu Core**: nella barra della mappa, per entrambe le viste, fino
+  a due core per sede (una coppia). Le righe partono da entrambi; anche il
+  pulsante del pannello apparato funziona in Schema.
+
+### Fixed
+
+- **Aggiungi apparati**: il nome letto dalla verifica dell'apparato viene
+  salvato in inventario invece di andare perso.
+
 ## [0.55.0] - 2026-10-23
 
 ### Added

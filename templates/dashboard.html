@@ -1004,6 +1004,15 @@
             <div id="mapCatList" style="position:absolute; left:10px; top:130%; z-index:60; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:10px 14px; min-width:180px; box-shadow:var(--shadow-float);"></div>
           </details>
 
+          <!-- Core by hand, for both views: up to two per location (a core
+               pair). The deduced core (border or best connected device) may
+               not be the real one; rows are redone from the chosen ones.
+               Filled by topology.js fillMapCoreMenu(). -->
+          <details id="mapCoreMenu" style="position:relative; padding-left:10px; border-left:1px solid var(--border);">
+            <summary style="list-style:none; cursor:pointer; font-size:13px; font-weight:700; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px;"><i class="fa-solid fa-sitemap"></i> <span data-i18n="lblMapCore">Core</span> <span id="mapCoreCount"></span> <i class="fa-solid fa-caret-down" style="font-size:11px;"></i></summary>
+            <div id="mapCoreList" class="map-core-list"></div>
+          </details>
+
           <!-- Elenco dispositivi della Sede selezionata: spunta/deseleziona per
                escludere singoli apparati (e i relativi link) dalla mappa. Filtro
                applicato prima del render, quindi vale sia per la vista classica
@@ -1034,10 +1043,6 @@
           <!-- Vista "A livelli": suggerimento + azzeramento dei piani riassegnati a mano -->
           <span id="layeredResetWrap" style="display:none; align-items:center; gap:8px; padding-left:10px; border-left:1px solid var(--border);">
             <span style="font-size:12px; color:var(--text-muted);" data-i18n="lblLayeredHint">Trascina in verticale per cambiare livello · click su un gruppo per aprirlo · apri un apparato per segnarlo come core</span>
-            <!-- Il core dedotto (confine o nodo piu' connesso) puo' non essere
-                 quello vero: qui l'utente lo indica e i piani si rifanno da li'. -->
-            <!-- One "Core" select per location, filled by topology.js. -->
-            <span id="layeredCoreWrap" class="layered-core-wrap"></span>
             <button id="layeredCollapseBtn" class="chip" style="width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnLayeredCollapse">Comprimi gruppi</button>
             <button id="layeredResetBtn" class="chip" style="width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnLayeredReset">Azzera livelli</button>
             <button id="layeredNamesBtn" class="chip" style="width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnLayeredNames">Nomi livelli</button>
@@ -1083,6 +1088,22 @@
           </label>
           <!-- Schema: rimette i riquadri in righe ordinate dopo i trascinamenti. -->
           <button id="schemaTidyBtn" class="chip" style="display:none; width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnSchemaTidy">Riordina mappa</button>
+          <!-- Schema readability: two presets and four controls. Bound in
+               topology.js; shown only in the Schema view (updateMapViewButtons). -->
+          <span id="schemaReadWrap" class="schema-read-wrap" style="display:none;">
+            <button type="button" id="schemaPresetRecommended" class="chip" data-i18n="btnSchemaPresetRecommended" data-i18n-title="titleSchemaPresetRecommended" title="Focus su clic, etichette porta solo sul focus, righe a capo">Consigliata</button>
+            <button type="button" id="schemaPresetOverview" class="chip" data-i18n="btnSchemaPresetOverview" data-i18n-title="titleSchemaPresetOverview" title="Focus su clic, uplink raggruppati, righe a capo, nessuna etichetta porta">Panoramica</button>
+            <label for="toggleSchemaFocus"><input type="checkbox" id="toggleSchemaFocus"> <span data-i18n="lblSchemaFocus">Focus su clic</span></label>
+            <label for="schemaPortLabels" data-i18n="lblSchemaPortLabels">Etichette porta</label>
+            <select id="schemaPortLabels">
+              <option value="all" data-i18n="optSchemaLblAll">Tutte</option>
+              <option value="focus" data-i18n="optSchemaLblFocus">Solo focus</option>
+              <option value="none" data-i18n="optSchemaLblNone">Nessuna</option>
+            </select>
+            <label for="toggleSchemaWrap" data-i18n-title="titleSchemaWrap" title="Riordina la mappa: gli spostamenti manuali di questa sede si perdono"><input type="checkbox" id="toggleSchemaWrap"> <span data-i18n="lblSchemaWrap">Righe a capo</span></label>
+            <label for="toggleSchemaGroupUplinks"><input type="checkbox" id="toggleSchemaGroupUplinks"> <span data-i18n="lblSchemaGroupUplinks">Raggruppa uplink</span></label>
+          </span>
+          <!-- /schemaReadWrap -->
 
           <!-- Color-picker + legenda dei tipi di collegamento: solo nuova mappa.
                Generato da MINIMAL_LINK_TYPES (stessa tabella usata dal renderer). -->
