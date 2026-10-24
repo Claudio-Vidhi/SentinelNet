@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.57.0] - 2026-10-24
+
 ### Added
 
 - **Mappa Schema, access point**: nuovo menu *Access point* con tre modi.
