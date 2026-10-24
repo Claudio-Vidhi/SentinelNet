@@ -1085,6 +1085,16 @@
         layeredGroup = selectedGroup;
         if (getMapView() === 'minimal') {
             const hoverInfo = document.getElementById("toggleMinimalHover")?.checked || false;
+            // "Collapsed group": the hierarchy's grouping of leaves (3+ APs
+            // under one switch become one box, opened with a click).
+            layeredGroupOfChild = {};
+            if (schemaApMode() === 'group') {
+                const grouped = groupLayeredLeaves(filteredNodesData, filteredLinksData, selectedGroup);
+                layeredGroupOfChild = grouped.groupOfChild;
+                grouped.nodes.forEach(n => { if (n.is_group) mapZones[n.id] = topoZone(n); });
+                filteredNodesData = grouped.nodes;
+                filteredLinksData = grouped.links;
+            }
             const { nodes, edges, options, bundles, groupsInfo } = buildMinimalGraph(filteredNodesData, filteredLinksData, { showVtpDomain, hoverInfo, group: selectedGroup });
             const hasOverlay = (bundles && bundles.length) || (groupsInfo && groupsInfo.length > 1);
             // Conservati per l'export Visio: il .vsdx replica ESATTAMENTE il
@@ -1302,6 +1312,8 @@
         if (w) w.checked = schemaPref('schemaWrap', '0') === '1';
         if (g) g.checked = schemaPref('schemaGroupUplinks', '0') === '1';
         if (l) l.value = schemaPortLabelMode();
+        const ap = /** @type {HTMLSelectElement|null} */ (document.getElementById('schemaApMode'));
+        if (ap) ap.value = schemaApMode();
     }
     function schemaPortLabelMode() {
         const v = schemaPref('schemaPortLabels', 'all');
@@ -1447,20 +1459,21 @@
         networkInstance.on('selectNode', p => {
             if (!p.nodes || !p.nodes.length) return;
             const id = String(p.nodes[0]);
-            if (getMapView() === 'layered' && id.startsWith(GROUP_PREFIX)) {
+            if (id.startsWith(GROUP_PREFIX)) {
+                schemaRetidy = getMapView() === 'minimal';
                 toggleLayeredGroup(layeredGroup, id);
                 return;
             }
             openTopologyNodeDrawer(p.nodes[0]);
         });
         // Doppio click su un membro di un gruppo aperto: lo richiude.
-        if (getMapView() === 'layered') {
-            networkInstance.on('doubleClick', p => {
-                if (!p.nodes || !p.nodes.length) return;
-                const key = layeredGroupOfChild[p.nodes[0]];
-                if (key) toggleLayeredGroup(layeredGroup, key);
-            });
-        }
+        networkInstance.on('doubleClick', p => {
+            if (!p.nodes || !p.nodes.length) return;
+            const key = layeredGroupOfChild[p.nodes[0]];
+            if (!key) return;
+            schemaRetidy = getMapView() === 'minimal';
+            toggleLayeredGroup(layeredGroup, key);
+        });
         networkInstance.on('deselectNode', () => {
             closeTopologyNodeDrawer();
         });
@@ -1490,10 +1503,13 @@
         };
         // Schema: nothing known → full layout; some devices new → only those
         // are placed, at the end of their row.
-        if (isMinimal && !allKnown) {
+        if (isMinimal) networkInstance.once('afterDrawing', growSchemaColumnParents);
+        if (isMinimal && (!allKnown || schemaRetidy)) {
+            const full = schemaRetidy;
+            schemaRetidy = false;
             networkInstance.once('afterDrawing', () => {
                 const known = nodes.filter(nd => prevPos && prevPos[nd.id]).map(nd => nd.id);
-                if (known.length) placeNewSchemaNodes(known); else packSchemaRows();
+                if (known.length && !full) placeNewSchemaNodes(known); else packSchemaRows();
             });
         }
         // Hierarchy view: vis.js lays the rows out again on every render, so
@@ -2491,12 +2507,38 @@
             if (la.schemaLevel !== lb.schemaLevel) wires[top] = (wires[top] || 0) + b.members.length;
             else same[top] = (same[top] || 0) + b.members.length;
         });
+        // "Column" AP mode: a switch's single-homed APs leave the rows and
+        // stand in a column beside it, on its right. Under it they sat where
+        // the switch's own cables leave and were cut through. The switch grows
+        // as tall as its column and counts as wide as switch + column, so
+        // nothing hangs below it and its row keeps the rest clear.
+        // COL_SIDE: switch edge to spine; BRANCH: spine to AP, room for the port name.
+        const COL_GAP = 6, COL_SIDE = 10, BRANCH = 50;
+        const cols = schemaApMode() === 'column' && minimalOverlayData
+            ? schemaLeafColumns(minimalOverlayData.bundles || [], id => ((ds.get(id) || {}).nodeDataVal || {}).device_type, GROUPABLE_TYPES)
+            : {};
+        const col = {};
+        Object.entries(cols).forEach(([parent, leaves]) => {
+            if (!box[parent] || leaves.some(id => !box[id])) return;
+            leaves.forEach(id => {
+                const nd = ds.get(id), rows = zones[zoneOf(nd)];
+                rows[nd.schemaLevel] = rows[nd.schemaLevel].filter(x => x.id !== id);
+            });
+            col[parent] = { leaves, w: COL_SIDE + BRANCH + Math.max(...leaves.map(id => box[id].w)),
+                            h: leaves.reduce((t, id) => t + box[id].h, 0) + COL_GAP * (leaves.length - 1) };
+        });
+        // Room a box takes in its row: switch + its AP column; the unit's
+        // centre sits unitOff(id) right of the switch centre.
+        const ew = id => box[id].w + (col[id] ? col[id].w : 0);
+        const eh = id => col[id] ? Math.max(box[id].h, col[id].h) : box[id].h;
+        const unitOff = id => col[id] ? col[id].w / 2 : 0;
         const pos = {};
         let base = 0;
         Object.keys(zones).sort().forEach(zk => {
         const rows = zones[zk];
         let top = 0;
         Object.keys(rows).map(Number).sort((a, b) => a - b).forEach(lv => {
+            if (!rows[lv].length) return;   // a row of APs all moved into columns
             // Room above the row for cables between its own boxes that run over it.
             if (same[lv]) top += 20 + 8 * same[lv];
             const want = nd => {
@@ -2507,40 +2549,59 @@
                 .sort((a, b) => ((a.w ?? Infinity) - (b.w ?? Infinity)) || String(a.nd.id).localeCompare(String(b.nd.id)));
             // "Wrap rows": a long row splits into two staggered sub-rows,
             // centred under the mean of what it hangs from.
-            if (wrap && row.length > SCHEMA_WRAP_MIN) {
-                const z = zigzagRow(row.map(r => box[r.nd.id].w), SCHEMA_GAP);
-                const maxW = Math.max(...row.map(r => box[r.nd.id].w));
-                const maxH = Math.max(...row.map(r => box[r.nd.id].h));
+            // Small leaf boxes (APs) are never zigzagged: they stay packed under their switch.
+            if (wrap && row.length > SCHEMA_WRAP_MIN && !row.some(r => r.nd._compact)) {
+                const z = zigzagRow(row.map(r => ew(r.nd.id)), SCHEMA_GAP);
+                const maxW = Math.max(...row.map(r => ew(r.nd.id)));
+                const maxH = Math.max(...row.map(r => eh(r.nd.id)));
                 const blockW = z[z.length - 1].x + maxW / 2;
                 const ws = row.filter(r => r.w !== null).map(r => r.w);
                 const left = ws.length ? ws.reduce((a, b) => a + b, 0) / ws.length - blockW / 2 : base;
                 row.forEach((r, i) => {
-                    pos[r.nd.id] = { x: left + z[i].x, y: top + z[i].sub * (maxH + 60) + box[r.nd.id].h / 2 };
+                    pos[r.nd.id] = { x: left + z[i].x - unitOff(r.nd.id), y: top + z[i].sub * (maxH + 60) + eh(r.nd.id) / 2 };
                 });
                 top += 2 * maxH + 60 + 120 + 8 * (wires[lv] || 0);
                 return;
             }
-            let right = -Infinity;
+            let right = -Infinity, prevCompact = false;
             row.forEach(r => {
-                const bw = box[r.nd.id].w;
-                const x = Math.max(r.w ?? (right === -Infinity ? base + bw / 2 : right + SCHEMA_GAP + bw / 2), right + SCHEMA_GAP + bw / 2);
-                pos[r.nd.id] = { x, y: top + box[r.nd.id].h / 2 };
+                const bw = ew(r.nd.id);
+                // Two small leaf boxes side by side (APs of one switch) sit close.
+                const gap = prevCompact && r.nd._compact ? 16 : SCHEMA_GAP;
+                const want = r.w === null ? null : r.w + unitOff(r.nd.id);
+                const x = Math.max(want ?? (right === -Infinity ? base + bw / 2 : right + gap + bw / 2), right + gap + bw / 2);
+                pos[r.nd.id] = { x: x - unitOff(r.nd.id), y: top + eh(r.nd.id) / 2 };
                 right = x + bw / 2;
+                prevCompact = !!r.nd._compact;
             });
             // Pushed right by the packing: slide the row back so it stays
             // centred under what it hangs from.
             const off = row.filter(r => r.w !== null).map(r => pos[r.nd.id].x - r.w);
             const shift = off.length ? off.reduce((a, b) => a + b, 0) / off.length : 0;
             row.forEach(r => { pos[r.nd.id].x -= shift; });
-            top += Math.max(...row.map(r => box[r.nd.id].h)) + 120 + 8 * (wires[lv] || 0);
+            top += Math.max(...row.map(r => eh(r.nd.id))) + 120 + 8 * (wires[lv] || 0);
         });
         // Rows were centred under their parents: shift the block so its left
         // edge starts where the previous site ended, then leave a gap.
         const ids = [].concat(...Object.values(rows)).map(nd => nd.id);
         const left = Math.min(...ids.map(id => pos[id].x - box[id].w / 2));
         ids.forEach(id => { pos[id].x += base - left; });
-        base = Math.max(...ids.map(id => pos[id].x + box[id].w / 2)) + SCHEMA_GAP * 4;
+        base = Math.max(...ids.map(id => pos[id].x - box[id].w / 2 + ew(id))) + SCHEMA_GAP * 4;
         });
+        // Unpack the columns beside their switch, the first AP level with its top.
+        const grow = [];
+        Object.entries(col).forEach(([parent, c]) => {
+            const p = pos[parent];
+            if (!p) return;
+            const x0 = p.x + box[parent].w / 2 + COL_SIDE + BRANCH;
+            let y = p.y - eh(parent) / 2;
+            c.leaves.forEach(id => {
+                pos[id] = { x: x0 + box[id].w / 2, y: y + box[id].h / 2 };
+                y += box[id].h + COL_GAP;
+            });
+            if (c.h > box[parent].h) grow.push({ id: parent, heightConstraint: { minimum: Math.ceil(c.h) } });
+        });
+        if (grow.length) ds.update(grow);
         Object.entries(pos).forEach(([id, p]) => networkInstance.moveNode(id, p.x, p.y));
         saveSchemaPositions();
         setTimeout(() => networkInstance && networkInstance.fit(), 50);
@@ -2856,6 +2917,7 @@
             groupCenter[g] = { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
         });
 
+        const compact = schemaCompactLeaves(nodeData, linkData, GROUPABLE_TYPES);
         const nodes = nodeData.map((n, idx) => {
             const scan = globalVersions[n.id] || { version: tr('topoNotDetected'), status: n.status };
             const effectiveStatus = (scan && scan.status && scan.status !== 'unknown') ? scan.status : (n.status || 'offline');
@@ -2875,14 +2937,18 @@
             // Riga di management (piccola, in corsivo/attenuata): VLAN + IP di
             // gestione mostrati DENTRO il riquadro. La VLAN arriva dal backend
             // (SVI con l'IP di management); se assente si mostra solo l'IP.
-            const mgmtIp = n.mgmt_ip || (n.status === 'discovered' ? n.reported_ip : n.id) || '';
+            const mgmtIp = n.is_group ? '' : (n.mgmt_ip || (n.status === 'discovered' ? n.reported_ip : n.id) || '');
             const mgmtBits = [];
             if (n.mgmt_vlan) mgmtBits.push((tr('topoVlan')) + n.mgmt_vlan);
             if (mgmtIp) mgmtBits.push(mgmtIp);
             const mgmtLine = mgmtBits.join('  ·  ');
             let label = `<b>${n.label}</b>`;
-            if (modelLine) label += `\n${modelLine}`;
-            if (mgmtLine)  label += `\n<i>${mgmtLine}</i>`;
+            // Small leaf box: name and address only.
+            if (compact.has(n.id)) { if (mgmtIp) label += `\n<i>${mgmtIp}</i>`; }
+            else {
+                if (modelLine) label += `\n${modelLine}`;
+                if (mgmtLine)  label += `\n<i>${mgmtLine}</i>`;
+            }
             if (showVtpDomain && n.vtp_domain) {
                 const vtpModeTxt = n.vtp_mode ? String(n.vtp_mode).toLowerCase() : '';
                 label += `\nVTP: ${vtpModeTxt ? `${n.vtp_domain} · ${vtpModeTxt}` : n.vtp_domain}`;
@@ -2901,9 +2967,10 @@
                 id: n.id,
                 shape: S.node.shape,
                 shapeProperties: { borderRadius: S.node.borderRadius },
-                margin: S.node.margin,
+                margin: compact.has(n.id) ? { top: 5, right: 10, bottom: 5, left: 10 } : S.node.margin,
+                _compact: compact.has(n.id),
                 label,
-                title: hoverInfo ? createNodeTooltip(n, scan, resolvedVendor) : undefined,
+                title: hoverInfo ? (n.is_group ? groupTooltip(n) : createNodeTooltip(n, scan, resolvedVendor)) : undefined,
                 borderWidth: (stack && stack.health === 'degraded') ? S.node.borderWidth + 1
                            : (showVtpDomain && n.vtp_domain ? 2 : S.node.borderWidth),
                 borderWidthSelected: S.node.borderWidth + 1,
@@ -3114,6 +3181,8 @@
         const EDGE_INSET = 14;  // margine ancoraggi dagli angoli (= overlay)
         nodes.forEach(nd => {
             const r = nodeReq[nd.id];
+            // Leaf box: its own port name is not printed inside it, so no room is reserved.
+            if (nd._compact) { nd.widthConstraint = { minimum: 90 }; return; }
             if (!r) return;
             _measCtx.font = 'bold 12px Arial, Helvetica, sans-serif';
             const nameW = _measCtx.measureText(nd._nameTexts[0] || '').width;
@@ -3245,6 +3314,56 @@
         });
         return out.sort((a, c) => a.target.localeCompare(c.target) || a.id.localeCompare(c.id));
     }
+    // Access points in a column: single-homed leaves of the given types, per
+    // parent, sorted by id. {"<parent>": ["<leaf>", ...]}
+    function schemaLeafColumns(bundles, typeOf, types) {
+        const peers = {};
+        bundles.forEach(b => {
+            (peers[b.from] || (peers[b.from] = new Set())).add(b.to);
+            (peers[b.to] || (peers[b.to] = new Set())).add(b.from);
+        });
+        const out = {};
+        Object.keys(peers).sort().forEach(id => {
+            if (peers[id].size !== 1 || !types.includes(typeOf(id))) return;
+            const parent = [...peers[id]][0];
+            if (types.includes(typeOf(parent))) return;
+            (out[parent] || (out[parent] = [])).push(id);
+        });
+        return out;
+    }
+    // Leaves drawn as small boxes in the Schema view: single-homed devices of
+    // the given types (APs, phones, cameras...), never a group box. Sized like
+    // a switch, with room reserved for port stacks, an AP box was ~190px tall.
+    function schemaCompactLeaves(nodes, links, types) {
+        const deg = {};
+        links.forEach(l => { deg[l.source] = (deg[l.source] || 0) + 1; deg[l.target] = (deg[l.target] || 0) + 1; });
+        return new Set(nodes.filter(n => !n.is_group && types.includes(n.device_type) && deg[n.id] === 1).map(n => n.id));
+    }
+    // "Column" mode: a switch is as tall as the AP column beside it. The
+    // tidy sets it, but every render rebuilds the boxes, so it is set again.
+    function growSchemaColumnParents() {
+        if (schemaApMode() !== 'column' || !networkInstance || !minimalOverlayData) return;
+        const ds = networkInstance.body.data.nodes;
+        const bb = id => { try { return networkInstance.getBoundingBox(id); } catch (e) { return null; } };
+        const cols = schemaLeafColumns(minimalOverlayData.bundles || [], id => ((ds.get(id) || {}).nodeDataVal || {}).device_type, GROUPABLE_TYPES);
+        const grow = [];
+        Object.entries(cols).forEach(([p, ls]) => {
+            const pb = bb(p), lb = ls.map(bb);
+            if (!pb || lb.some(x => !x)) return;
+            const h = lb.reduce((t, x) => t + x.bottom - x.top, 0) + 6 * (ls.length - 1);   // 6 = COL_GAP
+            if (h > pb.bottom - pb.top + 0.5) grow.push({ id: p, heightConstraint: { minimum: Math.ceil(h) } });
+        });
+        if (grow.length) ds.update(grow);
+    }
+    // Schema access-point mode: 'each' (one box per AP, as before), 'group'
+    // (the hierarchy's collapsed group) or 'column' (stacked under the switch).
+    function schemaApMode() {
+        const v = schemaPref('schemaApMode', 'each');
+        return v === 'group' || v === 'column' ? v : 'each';
+    }
+    // Set before a redraw whose new boxes need the full tidy (AP mode, a group
+    // opened or closed): placed at the end of their row they land far away.
+    let schemaRetidy = false;
     // Preferences: storage can throw (private window, blocked site data).
     function schemaPref(key, fallback) {
         try { const v = localStorage.getItem(key); return v === null ? fallback : v; } catch (e) { return fallback; }
@@ -3490,9 +3609,69 @@
                              pcTag: '', label: '', grouped: '×' + gr.parts.length };
                 });
                 bundles = bundles.filter(b => !grouped.has(b)).concat(merged);
+                // One bar under each pair, from core to core: the grouped
+                // cables hang from it instead of from the empty gap.
+                ctx.save();
+                ctx.strokeStyle = linkColor('link');
+                ctx.lineWidth = 4;
+                ctx.lineCap = 'butt';
+                [...new Set(groups.map(gr => gr.id))].forEach(id => {
+                    const [p, q] = groups.find(gr => gr.id === id).pair.map(realBox);
+                    const y = pairBox[id].bottom, xa = (p.left + p.right) / 2, xb = (q.left + q.right) / 2;
+                    ctx.beginPath();
+                    ctx.moveTo(xa, y);
+                    ctx.lineTo(xb, y);
+                    // A shorter core reaches down to the bar.
+                    [[xa, p], [xb, q]].forEach(([x, bx]) => { if (bx.bottom < y) { ctx.moveTo(x, bx.bottom); ctx.lineTo(x, y); } });
+                    ctx.stroke();
+                });
+                ctx.restore();
+            }
+        }
+        // "Column" AP mode: the APs stand beside their switch (see
+        // packSchemaRows). One stub leaves the switch's right edge into a
+        // vertical spine, a branch runs from it into each AP with the switch
+        // port written above it. The normal route would cross the boxes.
+        if (schemaApMode() === 'column') {
+            const dsc = networkInstance.body.data.nodes;
+            const cols = schemaLeafColumns(bundles, id => ((dsc.get(id) || {}).nodeDataVal || {}).device_type, GROUPABLE_TYPES);
+            const leafOf = {};
+            Object.entries(cols).forEach(([p, ls]) => ls.forEach(l => { leafOf[l] = p; }));
+            const spineB = bundles.filter(b => leafOf[b.from] === b.to || leafOf[b.to] === b.from);
+            if (spineB.length) {
+                bundles = bundles.filter(b => !spineB.includes(b));
+                ctx.save();
+                ctx.font = '9px Arial, Helvetica, sans-serif';
+                ctx.textBaseline = 'bottom';
+                ctx.textAlign = 'left';
+                Object.entries(cols).forEach(([p, ls]) => {
+                    const pb = realBox(p), lb = ls.map(realBox);
+                    if (!pb || lb.some(x => !x)) return;
+                    const cy = lb.map(x => (x.top + x.bottom) / 2);
+                    const sx = pb.right + 10;   // = COL_SIDE in packSchemaRows
+                    const ys = Math.min(Math.max(cy[0], pb.top + 6), pb.bottom - 6);
+                    const color = linkColor('link');
+                    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 1.4;
+                    ctx.globalAlpha = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(pb.right, ys); ctx.lineTo(sx, ys);
+                    ctx.moveTo(sx, Math.min(ys, ...cy)); ctx.lineTo(sx, Math.max(ys, ...cy));
+                    ctx.stroke();
+                    ls.forEach((l, k) => {
+                        const b = spineB.find(x => x.from === l || x.to === l), y = cy[k];
+                        ctx.globalAlpha = !visioConnectorSink && schemaDimmed(b, pillKey(b), hoverBundleKey, schemaFocusId) ? 0.18 : 1;
+                        ctx.beginPath(); ctx.moveTo(sx, y); ctx.lineTo(lb[k].left, y); ctx.stroke();
+                        ctx.fillRect(lb[k].left + 1, y - 2.5, 5, 5);
+                        const m = b.members[0] || {}, port = b.from === p ? m.local : m.remote;
+                        if (port && (visioConnectorSink || schemaPortLabelVisible(labelMode, b, schemaFocusId))) ctx.fillText(port, sx + 4, y - 2);
+                    });
+                });
+                ctx.restore();
             }
         }
         const bbox = id => pairBox[id] || realBox(id);
+        const dsAll = networkInstance.body.data.nodes;
+        const compactIds = new Set(dsAll.getIds().filter(id => (dsAll.get(id) || {})._compact));
         const posOf = id => {
             const pb = pairBox[id];
             return pb ? { x: (pb.left + pb.right) / 2, y: (pb.top + pb.bottom) / 2 } : networkInstance.getPosition(id);
@@ -3784,22 +3963,14 @@
                 }
                 // Indice di slot globale sul lato (entry.slot + i): garantisce che le
                 // etichette N/S di fasci diversi si impilino su righe distinte.
-                drawPortLabel(mm.m.local,  mm.A, g.fromSide);
-                drawPortLabel(mm.m.remote, mm.B, g.toSide);
+                // A small leaf box has no room for its own port name.
+                if (!compactIds.has(b.from)) drawPortLabel(mm.m.local,  mm.A, g.fromSide);
+                if (!compactIds.has(b.to))   drawPortLabel(mm.m.remote, mm.B, g.toSide);
             });
             // Segmenti del fascio per l'hit-test del menu categorie (click destro).
             edgeHitSegs.push({ key: pillKey(b), segs: g.members.flatMap(mm =>
                 mm.pts.slice(0, -1).map((p, k) => [p.x, p.y, mm.pts[k + 1].x, mm.pts[k + 1].y])) });
             ctx.setLineDash([]);
-            // Grouped uplink: how many real cables it stands for, over the target.
-            if (b.grouped) {
-                const B = g.members[0].B, up = g.toSide === 'N' ? -12 : 12;
-                ctx.font = 'bold 9px Arial, Helvetica, sans-serif';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillStyle = color;
-                ctx.fillText(b.grouped, B.x + 10, B.y + up);
-            }
 
             // Centro del fascio e ampiezza (per pillola/etichette).
             const half = (b.members.length - 1) / 2;
@@ -3835,6 +4006,12 @@
                 });
             };
 
+            // Grouped uplink: how many real cables it stands for, on the cable
+            // just before the target.
+            if (b.grouped) {
+                const B = g.members[0].B;
+                drawTag(b.grouped, B.x, B.y + (g.toSide === 'N' ? -16 : 16));
+            }
             if (b.type === 'keepalive') {
                 drawTag(b.label || 'peer-keepalive', cx, cy - 10, pillKey(b) + '~ka');
                 ctx.restore();
@@ -5356,6 +5533,13 @@
         } else if (el.id === 'toggleSchemaGroupUplinks') {
             setSchemaPref('schemaGroupUplinks', el.checked ? '1' : '0');
             networkInstance?.redraw();
+        } else if (el.id === 'schemaApMode') {
+            // Boxes change (group) or move (column): rebuild and re-tidy.
+            setSchemaPref('schemaApMode', el.value);
+            // Groups left open (state shared with the hierarchy) would hide the change.
+            if (el.value === 'group') { delete layeredExpanded[layeredGroup]; saveLayeredExpanded(); }
+            schemaRetidy = true;
+            redrawInteractiveMap();
         }
     });
     document.getElementById('schemaPresetRecommended')?.addEventListener('click', () => applySchemaPreset('recommended'));

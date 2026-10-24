@@ -12,7 +12,8 @@ import unittest
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 CONTROLS = ("toggleSchemaFocus", "schemaPortLabels", "toggleSchemaWrap",
-            "toggleSchemaGroupUplinks", "schemaPresetRecommended", "schemaPresetOverview")
+            "toggleSchemaGroupUplinks", "schemaPresetRecommended", "schemaPresetOverview",
+            "schemaApMode")
 
 
 class TestSchemaReadability(unittest.TestCase):
@@ -68,9 +69,35 @@ class TestSchemaReadability(unittest.TestCase):
         self.assertIn("zigzagRow(", tidy)
         self.assertIn("SCHEMA_WRAP_MIN", tidy)
 
+    def test_ap_modes_wired(self):
+        # Collapsed group reuses the hierarchy's grouping; column is laid out by the tidy.
+        start = self.src.index('const hoverInfo = document.getElementById("toggleMinimalHover")')
+        branch = self.src[start:self.src.index("return;", start)]
+        self.assertIn("groupLayeredLeaves(", branch)
+        self.assertIn("schemaLeafColumns(", self._block("function packSchemaRows("))
+        self.assertIn("schemaLeafColumns(", self._block("function drawMinimalOverlay("))
+        # A group box opens on click in the Schema view too.
+        sel = self.src[self.src.index("networkInstance.on('selectNode'"):]
+        sel = sel[:sel.index("});")]
+        self.assertNotIn("getMapView() === 'layered' && id.startsWith(GROUP_PREFIX)", sel)
+
+    def test_group_mode_starts_collapsed(self):
+        # Choosing "Collapsed group" closes the groups left open (state shared with the hierarchy).
+        start = self.src.index("} else if (el.id === 'schemaApMode') {")
+        block = self.src[start:self.src.index("redrawInteractiveMap();", start)]
+        self.assertIn("delete layeredExpanded[", block)
+
+    def test_compact_leaves_wired(self):
+        # Small AP boxes: built compact, and no port label printed inside them.
+        build = self._block("function buildMinimalGraph(")
+        self.assertIn("schemaCompactLeaves(", build)
+        overlay = self._block("function drawMinimalOverlay(")
+        self.assertIn("compactIds.has(b.to)", overlay)
+        self.assertIn("compactIds.has(b.from)", overlay)
+
     def test_prefs_read_in_try_catch(self):
         # Storage can throw (private window, blocked site data).
-        for key in ("schemaFocus", "schemaPortLabels", "schemaWrap", "schemaGroupUplinks"):
+        for key in ("schemaFocus", "schemaPortLabels", "schemaWrap", "schemaGroupUplinks", "schemaApMode"):
             self.assertTrue(f"schemaPref('{key}'" in self.src, key)
         pref = self._block("function schemaPref(")
         self.assertRegex(pref, re.compile(r"try\s*\{.*localStorage\.getItem", re.S))

@@ -10,6 +10,24 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Mappa Schema, access point**: nuovo menu *Access point* con tre modi.
+  *Uno per riquadro* (come prima); *Gruppo compresso*: da 3 AP in su sotto
+  lo stesso switch un solo riquadro «N × Access Point», clic per aprirlo,
+  doppio clic su un membro per richiuderlo, come nella Gerarchia; *Colonna*:
+  gli AP in colonna accanto allo switch (che cresce alla stessa altezza),
+  appesi a una dorsale con il nome della porta.
+- **Mappa Schema, riquadri AP compatti**: un AP (o telefono, telecamera…)
+  collegato a un solo switch ha un riquadro piccolo con nome e indirizzo, e gli
+  AP vicini stanno accostati. Prima ogni AP era grande quanto uno switch.
+
+### Fixed
+
+- **Mappa Schema, uplink raggruppati**: i cavi condivisi dalla coppia di core
+  partono da una barra che unisce i due core invece che dal vuoto tra loro;
+  l'etichetta «×2» sta sul cavo, leggibile.
+
 ## [0.56.0] - 2026-10-24
 
 ### Added

@@ -140,24 +140,25 @@ assert.deepEqual(schemaUplinkGroups(bundles, ids, levelOf, id => {
     const net = {
         getPosition: id => ({ x: pos[id][0], y: pos[id][1] }),
         getBoundingBox: id => { const [x, y] = pos[id], w = W[id] || 100; return { left: x - w / 2, right: x + w / 2, top: y - 30, bottom: y + 30 }; },
-        body: { data: { nodes: { getIds: () => Object.keys(pos), get: id => pos[id] ? { id, schemaLevel: lv(id) } : null, update() {} } } },
+        body: { data: { nodes: { getIds: () => Object.keys(pos), get: id => pos[id] ? { id, schemaLevel: lv(id), nodeDataVal: { device_type: id.startsWith('ap-') ? 'ap' : 'switch' } } : null, update() {} } } },
     };
     const mk = (from, to, type = 'link') => ({ from, to, type, members: [{ local: 'Gi1/0/49', remote: 'Gi1/0/1' }], label: type === 'pc' ? 'Po1' : '' });
     const bundles0 = [mk('core-01', 'core-02', 'pc'), ...['access-01', 'access-02', 'access-03'].flatMap(a => [mk('core-01', a), mk('core-02', a)])];
     const run = (prefs, focus, sink) => {
-        const texts = [], strokes = [];   // strokes: one fillRect per cable end (terminal square)
+        const texts = [], strokes = [], tagBoxes = [], lines = [];   // strokes: one 5px terminal square per cable end
         const ctx = new Proxy({}, { get: (t, k) => k in t ? t[k]
             : k === 'measureText' ? s => ({ width: String(s).length * 5 })
             : k === 'fillText' ? s => texts.push({ s, a: t.globalAlpha ?? 1 })
-            : k === 'fillRect' ? () => strokes.push(t.globalAlpha ?? 1)
+            : k === 'fillRect' ? (x, y, w) => (w === 5 ? strokes : tagBoxes).push(t.globalAlpha ?? 1)
+            : k === 'moveTo' ? (x, y) => lines.push({ x, y, w: t.lineWidth })
             : k === 'save' ? () => stack.push(t.globalAlpha) : k === 'restore' ? () => { t.globalAlpha = stack.pop(); }
             : () => {} });
         const stack = [];
         const body = [extract('function drawMinimalOverlay('), extract('function schemaDimmed('), extract('function schemaNeighbors('),
             extract('function schemaPortLabelVisible('), extract('function schemaUplinkGroups('), extract('function schemaPortLabelMode('),
-            extract('function pcEndTags(')].join('\n');
+            extract('function pcEndTags('), extract('function schemaApMode('), extract('function schemaLeafColumns(')].join('\n');
         new Function('networkInstance', 'prefs', 'schemaFocusId', 'ctx', 'bundles', 'sink', `
-            const MINIMAL_MAP_STYLE = { edge: { group: {} } };
+            const MINIMAL_MAP_STYLE = { edge: { group: {} } }, GROUPABLE_TYPES = ['ap'];
             const initPillInteraction = () => {}, customStyleForEdge = () => null, linkColor = () => '#888888', hexToRgba = () => 'rgba(0,0,0,.1)';
             const visioColor = c => ({ hex: c }), routeMemo = {}, pillKey = b => b.from + '~' + b.to + '~' + (b.pcTag || '');
             const pillAdj = () => ({ dx: 0, dy: 0, scale: 1 }), labelAdj = () => ({ dx: 0, dy: 0 });
@@ -166,7 +167,7 @@ assert.deepEqual(schemaUplinkGroups(bundles, ids, levelOf, id => {
             let pillHitboxes = [], labelHitboxes = [], edgeHitSegs = [];
             ${body}
             drawMinimalOverlay(ctx, bundles, []);`)(net, prefs, focus, ctx, bundles0, sink || null);
-        return { texts, strokes };
+        return { texts, strokes, tagBoxes, lines };
     };
     const plain = run({}, null);
     assert.equal(plain.strokes.length / 2, 7, 'one cable per bundle');
@@ -174,7 +175,21 @@ assert.deepEqual(schemaUplinkGroups(bundles, ids, levelOf, id => {
     const grouped = run({ schemaGroupUplinks: '1', schemaPortLabels: 'none' }, null);
     assert.equal(grouped.strokes.length / 2, 4, 'core link + one grouped cable per access');
     assert.equal(grouped.texts.filter(t => t.s === '×2').length, 3);
+    assert.equal(grouped.tagBoxes.length, 3, '×2 sits on a white tag');
+    // the two cores are joined by a bar at their bottom: the grouped cables hang from it
+    assert.ok(grouped.lines.some(l => l.w === 4 && l.y === 60), 'pair bar under the cores');
+    assert.ok(!plain.lines.some(l => l.w === 4), 'no bar without grouping');
     assert.ok(!grouped.texts.some(t => t.s === 'Gi1/0/49'), 'no port labels');
+    // Column mode: the APs of access-03 hang from a spine, not from routed cables.
+    Object.assign(pos, { 'ap-03-01': [380, 330], 'ap-03-02': [380, 380] });
+    const keep = bundles0.slice();
+    bundles0.push(mk('access-03', 'ap-03-01'), mk('access-03', 'ap-03-02'));
+    const routed = run({}, null), spined = run({ schemaApMode: 'column' }, null);
+    bundles0.splice(0, bundles0.length, ...keep);
+    delete pos['ap-03-01']; delete pos['ap-03-02'];
+    assert.equal(routed.strokes.length / 2, 9);
+    assert.equal(spined.strokes.length, 7 * 2 + 2, '7 routed cables + one square per AP branch');
+    assert.equal(spined.texts.filter(t => t.s === 'Gi1/0/49').length, 9, 'AP port names beside the spine');
     const focused = run({ schemaPortLabels: 'focus' }, 'access-02');
     assert.equal(focused.strokes.filter(a => a === 1).length / 2, 2, 'only the focus cables stay full');
     assert.equal(focused.texts.filter(t => t.s === 'Gi1/0/49').length, 2, 'labels only on the focus cables');
@@ -200,7 +215,10 @@ assert.deepEqual(schemaUplinkGroups(bundles, ids, levelOf, id => {
             const topoZone = () => ({ key: 'z' }), saveSchemaPositions = () => {}, setTimeout = () => {};
             const schemaPref = (k, f) => k in prefs ? prefs[k] : f;
             const SCHEMA_GAP = 70, SCHEMA_WRAP_MIN = 8;
+            const GROUPABLE_TYPES = ['ap'];
             ${extract('function zigzagRow(')}
+            ${extract('function schemaLeafColumns(')}
+            ${extract('function schemaApMode(')}
             ${extract('function packSchemaRows(')}
             packSchemaRows();`)(net, { bundles }, { schemaWrap: wrap ? '1' : '0' });
         const acc = ids.slice(1).map(id => moved[id]);
@@ -212,6 +230,25 @@ assert.deepEqual(schemaUplinkGroups(bundles, ids, levelOf, id => {
     assert.ok(wrapped.width < flat.width * 0.6, `about half as wide: ${wrapped.width} vs ${flat.width}`);
     const mid = wrapped.acc.reduce((t, p) => t + p.x, 0) / wrapped.acc.length;
     assert.ok(Math.abs(mid - wrapped.core.x) < 1, 'block centred under the core');
+    // ...but a row of small leaf boxes (APs) is not wrapped
+    const leafRow = (() => {
+        const moved = {};
+        const nodes = ids.map(id => ({ id, schemaLevel: id === 'core-01' ? 0 : 1, _compact: id !== 'core-01' }));
+        const ds = { forEach: f => nodes.forEach(f), get: id => nodes.find(n => n.id === id) };
+        const net = { body: { data: { nodes: ds } }, getBoundingBox: () => ({ left: 0, right: 100, top: 0, bottom: 60 }),
+                      moveNode: (id, x, y) => { moved[id] = { x, y }; }, fit() {} };
+        new Function('networkInstance', 'minimalOverlayData', 'prefs', `
+            const topoZone = () => ({ key: 'z' }), saveSchemaPositions = () => {}, setTimeout = () => {};
+            const schemaPref = (k, f) => k in prefs ? prefs[k] : f;
+            const SCHEMA_GAP = 70, SCHEMA_WRAP_MIN = 8, GROUPABLE_TYPES = ['ap'];
+            ${extract('function zigzagRow(')}
+            ${extract('function schemaLeafColumns(')}
+            ${extract('function schemaApMode(')}
+            ${extract('function packSchemaRows(')}
+            packSchemaRows();`)(net, { bundles: ids.slice(1).map(a => ({ from: 'core-01', to: a, members: [{}] })) }, { schemaWrap: '1' });
+        return new Set(ids.slice(1).map(id => moved[id].y)).size;
+    })();
+    assert.equal(leafRow, 1, 'AP row not zigzagged');
 }
 
 // --- draw.io export: click a box and only its cables stay, click the site to bring all back.
@@ -250,6 +287,78 @@ assert.deepEqual(schemaUplinkGroups(bundles, ids, levelOf, id => {
     // the site container brings every cable back
     const site = objs.find(o => attr(o, 'label') === 'TENANT-A');
     assert.deepEqual(act(site), [{ show: { tags: ['sn-cable'] } }]);
+}
+
+// --- Access points in a column: leaves stacked under their switch.
+{
+    const { schemaLeafColumns } = new Function(extract('function schemaLeafColumns(') + '\nreturn { schemaLeafColumns };')();
+    const type = id => id.startsWith('ap-') ? 'ap' : 'switch';
+    const L = [b('core-01', 'access-01'), b('core-01', 'access-02'),
+               b('access-01', 'ap-01-02'), b('ap-01-01', 'access-01'), b('access-02', 'ap-02-01'),
+               b('access-02', 'switch-09'), b('ap-09-01', 'access-01'), b('ap-09-01', 'access-02')];
+    const cols = schemaLeafColumns(L, type, ['ap']);
+    // only single-homed APs; a switch below is not a leaf; sorted by id
+    assert.deepEqual(cols, { 'access-01': ['ap-01-01', 'ap-01-02'], 'access-02': ['ap-02-01'] });
+
+    // tidy: the column stands beside its switch (nothing hangs below it, where the
+    // switch's own cables leave), the switch grows as tall as the column, and the
+    // neighbour switch is pushed clear of it.
+    const ids = ['core-01', 'access-01', 'access-02', 'ap-01-01', 'ap-01-02', 'ap-01-03', 'ap-01-04'];
+    const lvl = id => id === 'core-01' ? 0 : id.startsWith('access') ? 1 : 2;
+    const nodes = ids.map(id => ({ id, schemaLevel: lvl(id), nodeDataVal: { device_type: type(id) } }));
+    const moved = {}, updates = [];
+    const W = id => id.startsWith('ap-') ? 140 : 100;
+    const net = { body: { data: { nodes: { forEach: f => nodes.forEach(f), get: id => nodes.find(n => n.id === id), update: l => updates.push(...l) } } },
+                  getBoundingBox: id => ({ left: 0, right: W(id), top: 0, bottom: 40 }),
+                  moveNode: (id, x, y) => { moved[id] = { x, y }; }, fit() {} };
+    const bundles = [b('core-01', 'access-01'), b('core-01', 'access-02'),
+                     ...ids.filter(i => i.startsWith('ap-')).map(a => b('access-01', a))];
+    new Function('networkInstance', 'minimalOverlayData', 'prefs', `
+        const topoZone = () => ({ key: 'z' }), saveSchemaPositions = () => {}, setTimeout = () => {};
+        const schemaPref = (k, f) => k in prefs ? prefs[k] : f;
+        const SCHEMA_GAP = 70, SCHEMA_WRAP_MIN = 8, GROUPABLE_TYPES = ['ap', 'phone', 'camera', 'pc', 'server'];
+        ${extract('function zigzagRow(')}
+        ${extract('function schemaLeafColumns(')}
+        ${extract('function schemaApMode(')}
+        ${extract('function packSchemaRows(')}
+        packSchemaRows();`)(net, { bundles }, { schemaApMode: 'column' });
+    const aps = ids.filter(i => i.startsWith('ap-')).map(i => moved[i]);
+    const sw = moved['access-01'], a2 = moved['access-02'];
+    const grown = updates.find(u => u.id === 'access-01');
+    assert.ok(grown, 'switch grows to its column');
+    const H = grown.heightConstraint.minimum, swTop = sw.y - H / 2;
+    assert.equal(new Set(aps.map(p => p.x)).size, 1, 'one column');
+    for (let k = 1; k < aps.length; k++) assert.ok(aps[k].y - aps[k - 1].y >= 40 + 6, 'stacked, no overlap');
+    assert.ok(aps[0].x - 70 >= sw.x + 50 + 40, 'beside the switch, room for the port names');
+    assert.equal(aps[0].y - 20, swTop, 'first AP level with the switch top');
+    assert.ok(aps[aps.length - 1].y + 20 <= swTop + H, 'nothing below the switch');
+    assert.ok(a2.x - 50 >= aps[0].x + 70 + 16, 'neighbour clear of the column');
+    assert.equal(a2.y - 20, swTop, 'neighbour on the same row');
+    // "One box each": small AP boxes side by side sit close together, not a full switch gap apart.
+    nodes.forEach(n => { if (n.id.startsWith('ap-')) n._compact = true; });
+    new Function('networkInstance', 'minimalOverlayData', 'prefs', `
+        const topoZone = () => ({ key: 'z' }), saveSchemaPositions = () => {}, setTimeout = () => {};
+        const schemaPref = (k, f) => k in prefs ? prefs[k] : f;
+        const SCHEMA_GAP = 70, SCHEMA_WRAP_MIN = 8, GROUPABLE_TYPES = ['ap'];
+        ${extract('function zigzagRow(')}
+        ${extract('function schemaLeafColumns(')}
+        ${extract('function schemaApMode(')}
+        ${extract('function packSchemaRows(')}
+        packSchemaRows();`)(net, { bundles }, { schemaApMode: 'each' });
+    const row = ids.filter(i => i.startsWith('ap-')).map(i => moved[i].x).sort((p, q) => p - q);
+    for (let k = 1; k < row.length; k++) assert.equal(row[k] - row[k - 1], 140 + 16, 'leaf gap');
+}
+
+// --- Compact leaves: single-homed APs (and phones, cameras...) get a small box.
+{
+    const { schemaCompactLeaves } = new Function(extract('function schemaCompactLeaves(') + '\nreturn { schemaCompactLeaves };')();
+    const nodes = [{ id: 'access-01', device_type: 'switch' }, { id: 'ap-01', device_type: 'ap' },
+                   { id: 'ap-02', device_type: 'ap' }, { id: 'grp:access-01:ap', device_type: 'ap', is_group: true },
+                   { id: 'switch-09', device_type: 'switch' }];
+    const links = [{ source: 'access-01', target: 'ap-01' }, { source: 'ap-02', target: 'access-01' },
+                   { source: 'ap-02', target: 'switch-09' }, { source: 'access-01', target: 'grp:access-01:ap' },
+                   { source: 'access-01', target: 'switch-09' }];
+    assert.deepEqual([...schemaCompactLeaves(nodes, links, ['ap'])], ['ap-01'], 'dual-homed AP, group box and switches stay full size');
 }
 
 console.log('schema readability: ok');
