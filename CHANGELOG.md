@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.58.0] - 2026-10-26
+
 ### Added
 
 - **Mappa, barra dei comandi rifatta**: una riga sola. Sede, Schema/Gerarchia,
