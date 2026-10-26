@@ -76,13 +76,16 @@ const T = (0, eval)(`(function () {
     ${line('let layeredTagFlip =')}
     ${line('let layeredTagAdjust =')}
     ${line('let layeredTagHits =')}
+    const layeredFocus = new Set();   // selected cards: empty = no focus overlay
+    ${extract('function roundRectPath(')}
+    ${extract('function drawLayeredFocus(')}
     ${extract('function shortIface(')}
     ${extract('function pcEnds(')}
     ${extract('function endTagWidths(')}
     ${extract('function endTagRect(')}
     ${extract('function tidyLayeredTree(')}
     ${extract('function drawLayeredLinks(')}
-    return { tidyLayeredTree, drawLayeredLinks, LAYERED_PITCH, cfg: layeredTagCfg, hits: () => layeredTagHits };
+    return { tidyLayeredTree, drawLayeredLinks, LAYERED_PITCH, cfg: layeredTagCfg, hits: () => layeredTagHits, focus: layeredFocus };
 })()`);
 const { tidyLayeredTree, drawLayeredLinks, LAYERED_PITCH } = T;
 
@@ -133,5 +136,29 @@ assert.ok(drawn.some(t => t.ports.startsWith('core ')) && !drawn.some(t => t.por
 T.cfg.form = 'one';
 drawLayeredLinks(ctx);
 assert.equal(T.hits().length, edges.length, 'one tag per link');
+
+// Focus: a selected card's cables are drawn again in orange, dashed and
+// moving; a cable between two selected cards in solid red; nothing lit
+// when nothing is selected.
+{
+    const strokes = [];
+    let st = '', dash = [];
+    const fctx = new Proxy({}, { get: (_, k) => k === 'stroke' ? () => strokes.push([st, dash.length])
+        : k === 'setLineDash' ? d => { dash = d; } : k === 'measureText' ? t => ({ width: t.length * 6 }) : (() => {}),
+        set: (_, k, v) => { if (k === 'strokeStyle') st = v; return true; } });
+    T.focus.clear();
+    drawLayeredLinks(fctx);
+    assert.ok(!strokes.some(([c]) => c === '#f97316'), 'nothing lit without a selection');
+    T.focus.add('core');
+    strokes.length = 0;
+    drawLayeredLinks(fctx);
+    const orange = strokes.filter(([c, d]) => c === '#f97316' && d);
+    assert.ok(orange.length >= 6, 'every cable of the core lit and dashed');
+    T.focus.add('a1');
+    strokes.length = 0;
+    drawLayeredLinks(fctx);
+    assert.ok(strokes.some(([c, d]) => c === '#dc2626' && !d), 'core to a1: solid red');
+    T.focus.clear();
+}
 
 console.log('ok');

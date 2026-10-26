@@ -556,9 +556,10 @@ class TestMapTabRestyle(unittest.TestCase):
         tab_end = html.index('<!-- TAB: Dispositivi & Categorie -->')
         tab_html = html[tab_start:tab_end]
         self.assertGreaterEqual(tab_html.count('class="page-head"'), 2, "page-head expected once per tab (tab-map + tab-map-interactive)")
-        self.assertGreaterEqual(tab_html.count('class="panel"'), 2)
-        # view-toggle buttons carry the .chip class alongside their existing marker class
-        self.assertIn('class="map-view-btn chip"', tab_html)
+        self.assertGreaterEqual(tab_html.count('class="panel'), 2)
+        # view toggle: a segmented control, the buttons keep their marker class
+        self.assertIn('class="map-seg"', tab_html)
+        self.assertIn('class="map-view-btn"', tab_html)
         # vis-network render target untouched: no restyle wrapper classes on it.
         # Gli attributi di accessibilita' (tabindex/role/aria-label) SONO ammessi:
         # il canvas altrimenti non e' raggiungibile da tastiera.

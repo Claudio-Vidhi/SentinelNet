@@ -165,7 +165,38 @@
     // Piani correnti della vista "A livelli" e Sede a cui si riferiscono: servono
     // al trascinamento verticale, che riassegna il piano del nodo mosso.
     let layeredAssigned = {};
+    // AI layout (runMapAiLayout): row order for packSchemaRows, and what Undo restores.
+    let schemaAiOrder = null, mapAiUndo = null;
     let layeredGroup = 'all';
+    // Row a dragged card would land in ({ lv, y }), drawn under the map.
+    let layeredDrop = null;
+    // Card just moved to another level: the redraw puts it back at the x it
+    // was dropped at, not where the tidy tree would centre it.
+    let layeredDropX = null;
+    // Hierarchy view: selected cards whose cables run animated towards their
+    // neighbours (drawLayeredLinks); the rest of the map fades.
+    let layeredFocus = new Set(), layeredAnimRaf = 0;
+    // Focus as it was when the pointer went down: tells a second click on
+    // the only lit card (turn it off) from a first one.
+    let layeredFocusBefore = new Set();
+    document.getElementById('networkGraphContainer')?.addEventListener('pointerdown', () => { layeredFocusBefore = new Set(layeredFocus); }, true);
+    function setLayeredFocus(ids) {
+        layeredFocus = new Set(ids);
+        if (networkInstance) networkInstance.redraw();
+        cancelAnimationFrame(layeredAnimRaf);
+        layeredAnimRaf = 0;
+        if (!layeredFocus.size || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        // ponytail: a full overlay redraw at ~16 fps while something is
+        // selected; on very large sites a cheaper partial redraw would be next.
+        let last = 0;
+        const tick = t => {
+            if (!layeredFocus.size || !networkInstance || getMapView() !== 'layered') { layeredAnimRaf = 0; return; }
+            const box = document.getElementById('networkGraphContainer');
+            if (t - last > 60 && box && box.offsetParent) { last = t; networkInstance.redraw(); }
+            layeredAnimRaf = requestAnimationFrame(tick);
+        };
+        layeredAnimRaf = requestAnimationFrame(tick);
+    }
     // Membro → gruppo aperto che lo contiene: il doppio click su un membro
     // richiude il suo gruppo.
     let layeredGroupOfChild = {};
@@ -217,6 +248,62 @@
         const m = layeredLevels[group] || (layeredLevels[group] = {});
         m[id] = level;
         saveLayeredLevels();
+    }
+    // Preset level names from what each row holds ({ level: [device_type] }):
+    // firewall/router only -> Firewall; the top switch row -> Core, the
+    // lowest -> Access, those in between -> Distribution; AP only ->
+    // Wireless; a WLC without switches -> Controller; anything else ->
+    // Endpoint. A name the user wrote always wins (layeredLevelName).
+    function layeredAutoNames(rowTypes) {
+        const sw = Object.keys(rowTypes).map(Number).filter(lv => rowTypes[lv].includes('switch')).sort((a, b) => a - b);
+        const out = {};
+        Object.keys(rowTypes).map(Number).forEach(lv => {
+            const t = rowTypes[lv], only = ok => t.every(ok);
+            out[lv] = only(x => x === 'firewall' || x === 'router') ? 'topoTierFirewall'
+                : t.includes('switch') ? (lv === sw[0] ? 'topoTierCore' : lv === sw[sw.length - 1] ? 'topoTierAccess' : 'topoTierDistribution')
+                : only(x => x === 'ap') ? 'topoTierWireless'
+                : t.includes('wlc') ? 'topoTierController' : 'topoTierEndpoint';
+        });
+        return out;   // i18n keys
+    }
+    // Name of each level on the current map: the user's, else the preset.
+    function layeredLevelNamer() {
+        const rows = {};
+        if (networkInstance) networkInstance.body.data.nodes.forEach(nd => {
+            const lv = layeredAssigned[nd.id] || 0;
+            (rows[lv] || (rows[lv] = [])).push(((nd.nodeDataVal || {}).device_type) || 'other');
+        });
+        const names = layeredLevelNames[layeredGroup] || [];
+        // Once the user names any level, the presets step aside: the levels
+        // left unnamed read "Level N" instead of a name they did not choose.
+        const auto = names.some(Boolean) ? {} : layeredAutoNames(rows);
+        // Several rows with the same preset (three Distribution rows) get a
+        // number, top to bottom, so each label names one row.
+        const preset = lv => {
+            const same = Object.keys(auto).map(Number).filter(l => auto[l] === auto[lv]).sort((a, b) => a - b);
+            return same.length > 1 ? `${tr(auto[lv])} ${same.indexOf(lv) + 1}` : tr(auto[lv]);
+        };
+        return lv => names[lv] || (auto[lv] ? preset(lv) : tr('topoLevelN', { n: lv + 1 }));
+    }
+    // Several cards at once, from the card menu or Alt+arrows. to(id) gives the
+    // new level, or null to hand the card back to the automatic one.
+    function moveLayeredLevels(ids, to) {
+        const m = layeredLevels[layeredGroup] || (layeredLevels[layeredGroup] = {});
+        ids.forEach(id => {
+            const lv = to(id);
+            if (lv === null) delete m[id]; else m[id] = Math.max(0, lv);
+        });
+        saveLayeredLevels();
+        // A free-move position would keep the card on its old row.
+        const free = layeredFreePos[layeredGroup];
+        if (free) { ids.forEach(id => { delete free[id]; }); saveLayeredFreePos(); }
+        // Keep them selected (and lit), so Alt+arrow can be pressed again.
+        return Promise.resolve(redrawInteractiveMap()).then(() => {
+            if (!networkInstance) return;
+            const keep = ids.filter(id => networkInstance.body.data.nodes.get(id));
+            networkInstance.selectNodes(keep);
+            if (getMapView() === 'layered') setLayeredFocus(keep);
+        });
     }
     function resetLayeredLevels(group) {
         delete layeredLevels[group];
@@ -977,11 +1064,28 @@
             return;
         }
         box.innerHTML = nodesData.map(n => `
-            <label style="display:flex; align-items:center; gap:8px; padding:3px 0; font-size:12px; cursor:pointer; color:var(--text);">
+            <label data-search="${attrEsc(((n.label || '') + ' ' + n.id + ' ' + (n.display_ip || '')).toLowerCase())}" style="display:flex; align-items:center; gap:8px; padding:3px 0; font-size:12px; cursor:pointer; color:var(--text);">
                 <input type="checkbox" ${isDeviceHidden(group, n.id) ? '' : 'checked'} data-action="toggle-device-filter" data-group="${attrEsc(group)}" data-node-id="${attrEsc(n.id)}" style="accent-color:var(--primary);">
                 <span>${escapeHtml(n.label || n.id)}</span>
             </label>`).join('');
+        filterDeviceFilterList();
     }
+    // Search box of the Devices menu: hides the rows that match neither the
+    // name nor the IP. A hidden row keeps its tick.
+    function filterDeviceFilterList() {
+        const input = /** @type {HTMLInputElement|null} */ (document.getElementById('deviceFilterSearch'));
+        const q = input ? input.value.trim().toLowerCase() : '';
+        let shown = 0;
+        document.querySelectorAll('#deviceFilterList label[data-search]').forEach(l => {
+            const hit = !q || (l.getAttribute('data-search') || '').includes(q);
+            // The row's inline display:flex would beat the hidden attribute.
+            /** @type {HTMLElement} */ (l).style.display = hit ? 'flex' : 'none';
+            if (hit) shown++;
+        });
+        const none = document.getElementById('deviceFilterEmpty');
+        if (none) none.hidden = !q || shown > 0;
+    }
+    document.getElementById('deviceFilterSearch')?.addEventListener('input', filterDeviceFilterList);
 
     document.getElementById('deviceFilterList')?.addEventListener('change', (e) => {
         const cb = e.target.closest('input[data-action="toggle-device-filter"]');
@@ -1272,13 +1376,15 @@
     let mapViewMode = MAP_VIEWS.includes(localStorage.getItem('mapViewMode')) ? localStorage.getItem('mapViewMode') : 'layered';
     function getMapView() { return mapViewMode; }
     function updateMapViewButtons() {
-        const base = 'width:auto; margin:0; padding:5px 12px; border-radius:0; border:1px solid; font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;';
-        const on  = base + 'background:var(--cta); color:var(--cta-text); border-color:var(--cta);';
-        const off = base + 'background:var(--surface-2); color:var(--text-muted); border-color:var(--border);';
         const m = document.getElementById('mapViewMinimalBtn');
         const l = document.getElementById('mapViewLayeredBtn');
-        if (m) m.setAttribute('style', mapViewMode === 'minimal' ? on : off);
-        if (l) l.setAttribute('style', mapViewMode === 'layered' ? on : off);
+        if (m) m.setAttribute('aria-pressed', String(mapViewMode === 'minimal'));
+        if (l) l.setAttribute('aria-pressed', String(mapViewMode === 'layered'));
+        const links = document.getElementById('mapViewLinks');
+        if (links) links.hidden = mapViewMode !== 'minimal';
+        // The AI layout works in both views; an undo belongs to the view it came from.
+        const aiUndo = document.getElementById('mapAiUndoBtn');
+        if (aiUndo) aiUndo.hidden = !mapAiUndo || mapAiUndo.view !== mapViewMode;
         const lrw = document.getElementById('layeredResetWrap');
         if (lrw) lrw.style.display = mapViewMode === 'layered' ? 'inline-flex' : 'none';
         const fr = document.getElementById('toggleLayeredFree');
@@ -1373,9 +1479,13 @@
         // overview used to inherit its rows. The Schema ones also outlive a
         // reload (saved per site in the browser).
         const group = lastMapGroup || '';
+        const view = getMapView(), hierarchy = view === 'layered';
+        // Same map drawn again (a level moved, a group opened): keep the
+        // user's zoom and position instead of fitting the whole site again.
+        const keepView = networkInstance && lastNetworkView === view && viewPosGroup === group
+            ? { scale: networkInstance.getScale(), position: networkInstance.getViewPosition() } : null;
         if (viewPosGroup !== group) { viewPositions = {}; viewPosGroup = group; }
         if (networkInstance && lastNetworkView) viewPositions[lastNetworkView] = networkInstance.getPositions();
-        const view = getMapView(), hierarchy = view === 'layered';
         const prevPos = viewPositions[view] || (view === 'minimal' ? loadSchemaPositions(group) : null);
         // Hierarchy view: the layout owns y (the level) and the column; only a
         // horizontal drag inside the same row survives a refresh (re-applied
@@ -1425,13 +1535,38 @@
         // Vista "A livelli": trascinare un nodo IN VERTICALE lo sposta di piano e
         // la scelta resta (per Sede). Uno spostamento solo orizzontale non
         // ridisegna nulla, così il nodo resta dove l'utente lo lascia.
+        layeredFocus = new Set();
         if (getMapView() === 'layered') {
+            // Selection = focus: a click lights the card's cables, Ctrl+click
+            // adds cards, a click on the empty map clears. A second plain
+            // click on the only lit card turns it off.
+            networkInstance.on('select', p => setLayeredFocus(p.nodes));
+            networkInstance.on('click', p => {
+                const ev = p.event && p.event.srcEvent;
+                if (ev && (ev.ctrlKey || ev.metaKey)) return;
+                if (p.nodes.length === 1 && layeredFocusBefore.size === 1 && layeredFocusBefore.has(p.nodes[0])) {
+                    networkInstance.unselectAll();
+                    setLayeredFocus([]);
+                }
+            });
             let dragFrom = null;
             networkInstance.on('dragStart', p => {
                 dragFrom = (p.nodes && p.nodes.length)
                     ? networkInstance.getPositions(p.nodes)[p.nodes[0]] : null;
             });
+            // While dragging, the row the card will land in lights up with its
+            // name: the vertical move was there but nothing showed it.
+            networkInstance.on('dragging', p => {
+                if (layeredFree || !dragFrom || !p.nodes || !p.nodes.length) return;
+                const id = p.nodes[0];
+                const steps = Math.round((networkInstance.getPositions([id])[id].y - dragFrom.y) / LAYERED_SEPARATION);
+                const lv = Math.max(0, (layeredAssigned[id] || 0) + steps);
+                if (layeredDrop && layeredDrop.lv === lv) return;
+                layeredDrop = { id, lv, y: dragFrom.y + (lv - (layeredAssigned[id] || 0)) * LAYERED_SEPARATION };
+                networkInstance.redraw();
+            });
             networkInstance.on('dragEnd', p => {
+                layeredDrop = null;
                 // Free move: wherever it lands, no level change, kept per site.
                 if (layeredFree) {
                     dragFrom = null;
@@ -1448,8 +1583,9 @@
                 const fromY = dragFrom.y;
                 dragFrom = null;
                 // Same level: back onto its row, keeping the new x.
-                if (!steps) { networkInstance.moveNode(id, to.x, fromY); return; }
+                if (!steps) { networkInstance.moveNode(id, to.x, fromY); networkInstance.redraw(); return; }
                 setLayeredLevel(layeredGroup, id, Math.max(0, (layeredAssigned[id] || 0) + steps));
+                layeredDropX = { id, x: to.x };
                 redrawInteractiveMap();
             });
         }
@@ -1519,20 +1655,31 @@
         if (hierarchy) {
             networkInstance.once('afterDrawing', () => {
                 tidyLayeredTree();
+                // vis.js pins a hierarchical card's y (options.fixed.y), so a
+                // vertical drag never moved it and the level never changed.
+                // The rows are ours anyway (tidy pass): let the card follow
+                // the mouse, dragEnd snaps it to a level.
+                Object.values(networkInstance.body.nodes).forEach(n => { if (n.options.fixed) n.options.fixed.y = false; });
                 // Only when the same cards come back: after a group opens or
                 // closes the tidy layout moved everyone, and the old x put the
                 // known cards on top of the new ones.
+                const drop = layeredDropX;
+                layeredDropX = null;
                 if (allKnown && Object.keys(prevPos).length === nodes.length) {
                     const now = networkInstance.getPositions();
                     Object.keys(now).forEach(id => {
                         const p = prevPos[id];
                         if (p && Math.abs(p.y - now[id].y) < 1) networkInstance.moveNode(id, p.x, now[id].y);
                     });
+                    // A card moved to another level stays at the x it was
+                    // dropped at; its y is the new row's.
+                    if (drop && now[drop.id]) networkInstance.moveNode(drop.id, drop.x, now[drop.id].y);
                 }
                 const free = layeredFree && layeredFreePos[layeredGroup];
                 if (free) Object.keys(free).forEach(id => { if (nodes.some(nd => nd.id === id)) networkInstance.moveNode(id, free[id].x, free[id].y); });
-                // Always: a fresh instance has no zoom of the user's to keep,
-                // and vis.js centred the cards before the tidy pass moved them.
+                // A first draw fits the site (vis.js centred the cards before
+                // the tidy pass moved them); a redraw stays where the user was.
+                if (keepView) { networkInstance.moveTo({ ...keepView, animation: false }); return; }
                 networkInstance.fit();
                 networkInstance.moveTo({ scale: networkInstance.getScale() * 0.85 });
             });
@@ -1760,6 +1907,7 @@
             const s = tenants[z.key] || (tenants[z.key] = { label: z.label, x0: Infinity, x1: -Infinity, nodes: [] });
             s.x0 = Math.min(s.x0, bb.left); s.x1 = Math.max(s.x1, bb.right); s.nodes.push(nd);
             top = Math.min(top, bb.top); bottom = Math.max(bottom, bb.bottom);
+            if (layeredDrop && layeredDrop.id === nd.id) return;   // the dragged card is in no row yet
             const lv = layeredAssigned[nd.id] || 0;
             const r = rows[lv] || (rows[lv] = { top: Infinity, bottom: -Infinity });
             r.top = Math.min(r.top, bb.top); r.bottom = Math.max(r.bottom, bb.bottom);
@@ -1768,7 +1916,7 @@
         if (!levels.length) return;
         // A rule halfway between a row's lowest card and the next row's highest.
         const rules = levels.slice(1).map((lv, i) => (rows[levels[i]].bottom + rows[lv].top) / 2);
-        const names = layeredLevelNames[layeredGroup] || [];
+        const nameOf = layeredLevelNamer();
         const y0 = top - 64, y1 = bottom + 30;
         const border = cssVar('--border', '#233245');
         ctx.save();
@@ -1790,7 +1938,8 @@
             ctx.stroke();
             ctx.setLineDash([]);
             levels.forEach((lv, i) => {
-                const name = names[lv];
+                // While a card is dragged every row says which level it is.
+                const name = nameOf(lv);
                 if (!name) return;
                 const y = i ? rules[i - 1] : y0 + 50;
                 const t = name.toUpperCase();
@@ -1805,6 +1954,28 @@
                 ctx.fillText(t, x0 + 19, y + 0.5);
             });
         });
+        // The row the dragged card will land in (a new one below the last too).
+        if (layeredDrop) {
+            const xs = Object.values(tenants), x0 = Math.min(...xs.map(s => s.x0)) - 30, x1 = Math.max(...xs.map(s => s.x1)) + 30;
+            const h = LAYERED_SEPARATION * 0.8, y = layeredDrop.y - h / 2;
+            const accent = cssVar('--primary', '#0ea5e9');
+            roundRectPath(ctx, x0 + 6, y, x1 - x0 - 12, h, 10);
+            ctx.globalAlpha = 0.12;
+            ctx.fillStyle = accent;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+            ctx.setLineDash([6, 4]);
+            ctx.strokeStyle = accent;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.setLineDash([]);
+            const t = '→ ' + nameOf(layeredDrop.lv).toUpperCase();
+            ctx.font = `700 14px ${cssVar('--font-legend', 'sans-serif')}`;
+            ctx.fillStyle = accent;
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'top';
+            ctx.fillText(t, x1 - 20, y + 8);
+        }
         ctx.restore();
     }
 
@@ -1869,6 +2040,46 @@
     // lower card's top with rounded corners, one copper line per Port-Channel
     // (its size in the tag), a straight run between cards on the same level.
     // Dashed when it leaves the site.
+    // Focus overlay of the hierarchy view: fades the cards that are neither
+    // selected nor linked to a selected one, rings the linked ones (pulsing),
+    // and draws the selected cards' cables on top: orange dashes running from
+    // the selected card to its neighbour, solid red between two selected cards.
+    function drawLayeredFocus(ctx, routes, ids, bb) {
+        const HI = '#f97316', BOTH = '#dc2626';
+        const peers = new Set();
+        routes.forEach(({ e }) => [e.from, e.to].forEach(id => { if (!layeredFocus.has(id)) peers.add(id); }));
+        const t = performance.now();
+        ctx.save();
+        ctx.fillStyle = cssVar('--surface', '#ffffff');
+        ctx.globalAlpha = 0.72;
+        ids.forEach(id => {
+            if (layeredFocus.has(id) || peers.has(id)) return;
+            const o = bb(id);
+            ctx.fillRect(o.left - 2, o.top - 2, o.right - o.left + 4, o.bottom - o.top + 4);
+        });
+        const ring = (id, color, grow, alpha, width) => {
+            const o = bb(id);
+            ctx.globalAlpha = alpha; ctx.strokeStyle = color; ctx.lineWidth = width;
+            roundRectPath(ctx, o.left - 4 - grow, o.top - 4 - grow, o.right - o.left + 8 + 2 * grow, o.bottom - o.top + 8 + 2 * grow, 10 + grow);
+            ctx.stroke();
+        };
+        layeredFocus.forEach(id => { if (ids.includes(id)) ring(id, cssVar('--primary', '#0ea5e9'), 0, 1, 2.5); });
+        const k = (t % 1400) / 1400;
+        peers.forEach(id => { ring(id, HI, 0, 1, 2.5); ring(id, HI, 10 * k, 0.8 * (1 - k), 2); });
+        ctx.globalAlpha = 1;
+        ctx.lineJoin = 'round';
+        routes.forEach(({ e, pts }) => {
+            const both = layeredFocus.has(e.from) && layeredFocus.has(e.to);
+            const run = !both && layeredFocus.has(e.to) ? pts.slice().reverse() : pts;
+            ctx.strokeStyle = both ? BOTH : HI;
+            ctx.lineWidth = both ? 3.5 : 3;
+            ctx.setLineDash(both ? [] : [9, 6]);
+            ctx.lineDashOffset = -((t / 45) % 15);
+            ctx.beginPath(); roundedRun(ctx, run); ctx.stroke();
+        });
+        ctx.restore();
+    }
+
     function drawLayeredLinks(ctx) {
         if (!networkInstance) return;
         const pos = networkInstance.getPositions();
@@ -1877,6 +2088,13 @@
         const tenantOf = id => { const nd = nodesDs.get(id); return (nd && nd.nodeDataVal && nd.nodeDataVal.group) || ''; };
         const edges = networkInstance.body.data.edges.get().filter(e => e.lnk && pos[e.from] && pos[e.to]);
         const muted = hexToRgba(cssVar('--text-muted', '#94a3b8'), 0.55);
+        // Focus (selected cards): everything is drawn faded, then the cables
+        // of the selected cards again on top, animated towards the neighbour.
+        const focusOn = layeredFocus.size > 0;
+        const FADE = 0.18;
+        const lit = e => focusOn && (layeredFocus.has(e.from) || layeredFocus.has(e.to));
+        const litLinks = new Set(edges.filter(lit).map(e => `${e.from}~${e.to}`));
+        const routes = [];   // { e, pts } of every lit cable, in draw order
         // Org-chart wiring: each parent drops ONE trunk to a bus that spans its
         // children, and every child hangs off that bus. One cable per child
         // with its own horizontal run piled a dozen lines on the same y and
@@ -1974,6 +2192,7 @@
         };
         ctx.save();
         ctx.lineWidth = 1.5;
+        if (focusOn) ctx.globalAlpha = FADE;
         Object.values(buses).forEach(b => {
             if (!b.split) { busRun(b.up, b.xs, busY[b.up], b.pc ? PC_COPPER : muted); return; }
             // Two trunks side by side: on one x the copper one hid the grey.
@@ -2002,6 +2221,7 @@
         const overLanes = {};   // row y -> last lane used above it
         ctx.save();
         ctx.lineJoin = 'round';
+        if (focusOn) ctx.globalAlpha = FADE;
         edges.forEach(e => {
             const l = e.lnk, isPC = !!l.is_portchannel;
             const kind = l.kind === 'group' ? 'group' : (l.kind === 'redundancy_heartbeat' ? 'ha' : (isPC ? 'pc' : 'link'));
@@ -2057,8 +2277,10 @@
                     const lane = overLanes[row] = (overLanes[row] ?? -1) + 1;
                     const ly = top - 58 - lane * 10;
                     const lx = bb(L).right - 24, rx = bb(R).left + 24;
-                    roundedRun(ctx, [[lx, bb(L).top], [lx, ly], [rx, ly], [rx, bb(R).top]]);
+                    const run = [[lx, bb(L).top], [lx, ly], [rx, ly], [rx, bb(R).top]];
+                    roundedRun(ctx, run);
                     ctx.stroke();
+                    if (lit(e)) routes.push({ e, pts: L === e.from ? run : run.slice().reverse() });
                     obstacles.push({ x: lx, y: ly - 4, w: rx - lx, h: 8 });
                     if (one) { push('o', oneTag(), (lx + rx) / 2, ly - 12, 'middle'); return; }
                     push('u', endTag(fromLeft), lx + 10, ly - 12, 'start');
@@ -2067,6 +2289,7 @@
                 }
                 ctx.moveTo(x1, a.y); ctx.lineTo(x2, a.y);
                 ctx.stroke();
+                if (lit(e)) routes.push({ e, pts: L === e.from ? [[x1, a.y], [x2, a.y]] : [[x2, a.y], [x1, a.y]] });
                 obstacles.push({ x: x1, y: a.y - 5, w: x2 - x1, h: 10 });
                 if (one) { push('o', oneTag(), (x1 + x2) / 2, a.y - 20, 'middle'); return; }
                 push('u', endTag(fromLeft), x1 + 6, a.y - 20, 'start');
@@ -2081,6 +2304,12 @@
             const y0 = top + (hooked.get(hookKey(cor ?? cx, top)) || 0);
             roundedRun(ctx, cor === undefined ? [[cx, y0], [cx, cy]] : [[cor, y0], [cor, jy], [cx, jy], [cx, cy]]);
             ctx.stroke();
+            if (lit(e)) {
+                // The whole way: parent's trunk, its stretch of bus, the drop.
+                const tx = pos[U].x + (buses[U].split ? (isPC ? PC_LANE : -PC_LANE) : 0);
+                const run = [[tx, bb(U).bottom], [tx, top], ...(cor === undefined ? [[cx, top], [cx, cy]] : [[cor, top], [cor, jy], [cx, jy], [cx, cy]])];
+                routes.push({ e, pts: U === e.from ? run : run.slice().reverse() });
+            }
             const half = 4;
             if (cor === undefined) obstacles.push({ x: cx - half, y: top, w: 2 * half, h: cy - top });
             else obstacles.push({ x: cor - half, y: top, w: 2 * half, h: jy - top },
@@ -2111,6 +2340,8 @@
             push('d', endTag(!fromUp), cx, dy, 'start', { cands: beside(cx, dy, [0, -12, -24, -36]) });
         });
         ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+        if (focusOn) drawLayeredFocus(ctx, routes, ids, bb);
         // Placement: auto takes the first candidate clear of cards, cables and
         // tags already placed; a hand drag is added on top in every mode.
         const free = r => !obstacles.some(o => r.x - 3 < o.x + o.w && o.x < r.x + r.w + 3 && r.y - 3 < o.y + o.h && o.y < r.y + r.h + 3);
@@ -2140,6 +2371,7 @@
             ctx.restore();
         });
         placed.forEach(({ g, at, r }) => {
+            ctx.globalAlpha = focusOn && !litLinks.has(g.link) ? FADE : 1;
             drawEndTag(ctx, g.t, at.x, at.y, at.anchor);
             layeredTagHits.push(Object.assign({ key: g.key, link: g.link }, r));
         });
@@ -2330,7 +2562,7 @@
                         ? `<span class="badge badge-warning" style="font-size:10px;">${escapeHtml(ends.same ? ownPc : `${ownPc} ⇄ ${peerPc}`)}</span>`
                         : (l.kind === 'redundancy_heartbeat'
                             ? '<span class="badge badge-warning" style="font-size:10px;">HA</span>' : '');
-                    return `<div class="drawer-list-item">
+                    return `<div class="drawer-list-item" data-node="${attrEsc(otherId)}" role="button" tabindex="0" style="cursor:pointer;">
                         <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:4px;">
                             <strong style="font-size:12.5px;">${escapeHtml((other && other.label) || otherId)}</strong>
                             ${pcTag}
@@ -2394,6 +2626,7 @@
             };
         }
 
+        renderDrawerLevel(nodeId);
         drawer.classList.add('open');
         // Il pannello è un dialogo: il fuoco ci entra, così chi naviga da
         // tastiera legge quello che è appena comparso invece di restare sulla
@@ -2401,6 +2634,57 @@
         const titleEl = document.getElementById('drawerNodeHostname');
         if (titleEl && document.activeElement !== titleEl) titleEl.focus({ preventScroll: true });
     }
+
+    // A neighbour in the panel: go to it (select, light its cables, open its
+    // panel); Ctrl+click adds it to the selection instead.
+    function goToNeighbor(ev) {
+        const row = /** @type {HTMLElement} */ (ev.target).closest('[data-node]');
+        if (!row || !networkInstance) return;
+        const id = row.getAttribute('data-node');
+        if (!networkInstance.body.data.nodes.get(id)) return;   // hidden by a filter
+        const ids = (ev.ctrlKey || ev.metaKey) ? [...new Set([...networkInstance.getSelectedNodes(), id])] : [id];
+        networkInstance.selectNodes(ids);
+        if (getMapView() === 'layered') setLayeredFocus(ids);
+        networkInstance.focus(id, { scale: networkInstance.getScale(), animation: { duration: 250 } });
+        if (!(ev.ctrlKey || ev.metaKey)) openTopologyNodeDrawer(id);
+    }
+    document.getElementById('drawerNeighborList')?.addEventListener('click', goToNeighbor);
+    document.getElementById('drawerNeighborList')?.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); goToNeighbor(ev); }
+    });
+
+    // Hierarchy view: the open card's level, by name or one step up/down,
+    // and back to the automatic one when it was set by hand.
+    function renderDrawerLevel(nodeId) {
+        const box = document.getElementById('drawerLevelBox');
+        if (!box) return;
+        const on = getMapView() === 'layered' && !!networkInstance && !!networkInstance.body.data.nodes.get(nodeId);
+        box.hidden = !on;
+        if (!on) return;
+        const nameOf = layeredLevelNamer(), cur = layeredAssigned[nodeId] || 0;
+        const last = Math.max(0, ...Object.values(layeredAssigned)) + 1;   // one empty level below the last
+        const sel = /** @type {HTMLSelectElement} */ (document.getElementById('drawerLevelSelect'));
+        sel.innerHTML = Array.from({ length: last + 1 }, (_, lv) =>
+            `<option value="${lv}"${lv === cur ? ' selected' : ''}>${escapeHtml(nameOf(lv))}</option>`).join('');
+        /** @type {HTMLButtonElement} */ (document.getElementById('drawerLevelUp')).disabled = cur === 0;
+        const manual = nodeId in (layeredLevels[layeredGroup] || {});
+        document.getElementById('drawerLevelState').textContent = tr(manual ? 'topoLevelManual' : 'topoLevelAutomatic');
+        const auto = document.getElementById('drawerLevelAuto');
+        auto.hidden = !manual;
+        auto.textContent = '↺ ' + tr('topoLevelAuto');
+    }
+    function moveDrawerLevel(to) {
+        const id = currentSelectedNodeId;
+        if (!id) return;
+        moveLayeredLevels([id], to).then(() => renderDrawerLevel(id));
+    }
+    document.getElementById('drawerLevelUp')?.addEventListener('click', () => moveDrawerLevel(id => (layeredAssigned[id] || 0) - 1));
+    document.getElementById('drawerLevelDown')?.addEventListener('click', () => moveDrawerLevel(id => (layeredAssigned[id] || 0) + 1));
+    document.getElementById('drawerLevelAuto')?.addEventListener('click', () => moveDrawerLevel(() => null));
+    document.getElementById('drawerLevelSelect')?.addEventListener('change', ev => {
+        const lv = +(/** @type {HTMLSelectElement} */ (ev.target)).value;
+        moveDrawerLevel(() => lv);
+    });
 
     function closeTopologyNodeDrawer() {
         const drawer = document.getElementById('topologyNodeDrawer');
@@ -2425,6 +2709,20 @@
         openTopologyNodeDrawer(next);
     }
     document.getElementById('networkGraphContainer')?.addEventListener('keydown', ev => {
+        if (ev.key === 'Escape' && layeredFocus.size && networkInstance) {
+            networkInstance.unselectAll();
+            setLayeredFocus([]);
+            return;
+        }
+        // Hierarchy view: Alt+Up/Down moves the selected cards one level.
+        if (ev.altKey && (ev.key === 'ArrowUp' || ev.key === 'ArrowDown')) {
+            const ids = getMapView() === 'layered' && networkInstance ? networkInstance.getSelectedNodes() : [];
+            if (!ids.length) return;
+            ev.preventDefault();
+            const d = ev.key === 'ArrowUp' ? -1 : 1;
+            moveLayeredLevels(ids, id => (layeredAssigned[id] || 0) + d);
+            return;
+        }
         if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') { ev.preventDefault(); focusMapNode(1); }
         else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') { ev.preventDefault(); focusMapNode(-1); }
         else if (ev.key === 'Enter' && currentSelectedNodeId) { ev.preventDefault(); openTopologyNodeDrawer(currentSelectedNodeId); }
@@ -2545,8 +2843,11 @@
                 const xs = (adj[nd.id] || []).filter(id => pos[id]).map(id => pos[id].x);
                 return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
             };
+            // An AI layout fixes the order inside the row; packing keeps it.
             const row = rows[lv].map(nd => ({ nd, w: want(nd) }))
-                .sort((a, b) => ((a.w ?? Infinity) - (b.w ?? Infinity)) || String(a.nd.id).localeCompare(String(b.nd.id)));
+                .sort(schemaAiOrder
+                    ? (a, b) => (schemaAiOrder[a.nd.id] ?? 1e9) - (schemaAiOrder[b.nd.id] ?? 1e9)
+                    : (a, b) => ((a.w ?? Infinity) - (b.w ?? Infinity)) || String(a.nd.id).localeCompare(String(b.nd.id)));
             // "Wrap rows": a long row splits into two staggered sub-rows,
             // centred under the mean of what it hangs from.
             // Small leaf boxes (APs) are never zigzagged: they stay packed under their switch.
@@ -2605,6 +2906,200 @@
         Object.entries(pos).forEach(([id, p]) => networkInstance.moveNode(id, p.x, p.y));
         saveSchemaPositions();
         setTimeout(() => networkInstance && networkInstance.fit(), 50);
+    }
+
+    // AI layout, both views. The browser sends the drawn boxes (id, type,
+    // row, site) and the cables between them to our server only;
+    // ai/map_layout.py swaps all of it for tokens and types before anything
+    // reaches the provider. The answer is rows of ids:
+    // - Schema: rows and order, packed like "Riordina mappa";
+    // - Hierarchy: rows become the site's level overrides (same as moving a
+    //   card by hand); with free move on, the order inside a row too.
+    // Undo puts back what the answer replaced.
+    // Sites drawn on the map, in drawing order: key -> label.
+    const mapAiZoneOf = nd => topoZone(nd.nodeDataVal || { id: nd.id }).key || '';
+    function mapAiZonesDrawn() {
+        const zones = new Map();
+        networkInstance.body.data.nodes.get().forEach(nd => {
+            const z = topoZone(nd.nodeDataVal || { id: nd.id });
+            if (!zones.has(z.key || '')) zones.set(z.key || '', z.label || z.key || '—');
+        });
+        return zones;
+    }
+    // Site picker of the AI section: shown when the map holds more than one
+    // site. An unticked site is remembered by key until the page reloads.
+    const mapAiZoneOff = new Set();
+    function renderMapAiZones() {
+        const wrap = document.getElementById('mapAiZonesWrap'), box = document.getElementById('mapAiZones');
+        if (!wrap || !box) return;
+        const zones = networkInstance ? mapAiZonesDrawn() : new Map();
+        wrap.hidden = zones.size < 2;
+        box.innerHTML = [...zones.entries()].map(([key, label]) => `
+            <label class="map-opt"><input type="checkbox" name="mapAiZone" value="${attrEsc(key)}"${mapAiZoneOff.has(key) ? '' : ' checked'}> <span>${escapeHtml(label)}</span></label>`).join('');
+    }
+    // Every name drawn on the map (card labels, addresses, sites): the server
+    // refuses a free-text direction that contains one. Checked there, never
+    // forwarded.
+    function mapAiDenyList() {
+        const out = new Set();
+        const add = v => String(v || '').split(/[\n\r]+/).forEach(t => { t = t.trim(); if (t.length >= 3) out.add(t); });
+        networkInstance.body.data.nodes.get().forEach(nd => {
+            const d = nd.nodeDataVal || {};
+            add(nd.id); add(nd.label); add(d.label); add(d.hostname); add(d.display_ip);
+        });
+        mapAiZonesDrawn().forEach(label => add(label));
+        add(lastMapGroup);
+        return [...out].map(t => t.slice(0, 256)).slice(0, 1600);
+    }
+    function mapAiGraph(zones) {
+        const ds = networkInstance.body.data.nodes, layered = getMapView() === 'layered';
+        const nodes = ds.get().filter(nd => zones.has(mapAiZoneOf(nd))).map(nd => ({
+            id: String(nd.id), type: (nd.nodeDataVal || {}).device_type || 'other',
+            level: (layered ? layeredAssigned[nd.id] : nd.schemaLevel) || 0,
+            zone: mapAiZoneOf(nd)
+        }));
+        if (!layered) {
+            const links = (minimalOverlayData ? minimalOverlayData.bundles : []).map(b => ({
+                a: String(b.from), b: String(b.to), kind: b.type || 'link', count: Math.min(64, (b.members || []).length || 1)
+            }));
+            return { nodes, links };
+        }
+        // Hierarchy: one vis.js edge per cable; folded into one link per pair.
+        const pairs = new Map();
+        networkInstance.body.data.edges.get().forEach(e => {
+            const a = String(e.from), b = String(e.to), k = a < b ? a + '|' + b : b + '|' + a;
+            const l = pairs.get(k) || { a, b, kind: 'link', count: 0 };
+            l.count = Math.min(64, l.count + 1);
+            pairs.set(k, l);
+        });
+        return { nodes, links: [...pairs.values()] };
+    }
+    function applyLayeredAiRows(rows) {
+        const ds = networkInstance.body.data.nodes, g = layeredGroup;
+        const levels = layeredLevels[g] || (layeredLevels[g] = {});
+        const free = layeredFree ? (layeredFreePos[g] || (layeredFreePos[g] = {})) : null;
+        // Free move: each site's rows are laid out where that site is now
+        // (centre of its cards, its top row), so sites never end up mixed.
+        const anchor = {};
+        if (free) {
+            const pos = networkInstance.getPositions();
+            ds.get().forEach(nd => {
+                const p = pos[nd.id], z = mapAiZoneOf(nd);
+                if (!p) return;
+                const a = anchor[z] || (anchor[z] = { x0: p.x, x1: p.x, top: p.y });
+                a.x0 = Math.min(a.x0, p.x); a.x1 = Math.max(a.x1, p.x); a.top = Math.min(a.top, p.y);
+            });
+        }
+        rows.forEach((row, lv) => {
+            const byZone = {};
+            row.forEach(id => {
+                const nd = ds.get(id);
+                if (!nd) return;
+                // A folded group has no level of its own: its members carry it.
+                ((nd.nodeDataVal || {}).members || [{ id }]).forEach(m => { levels[m.id] = lv; });
+                (byZone[mapAiZoneOf(nd)] || (byZone[mapAiZoneOf(nd)] = [])).push(id);
+            });
+            if (free) Object.entries(byZone).forEach(([z, ids]) => {
+                const a = anchor[z] || { x0: 0, x1: 0, top: 0 }, cx = (a.x0 + a.x1) / 2;
+                ids.forEach((id, i) => { free[id] = { x: cx + (i - (ids.length - 1) / 2) * LAYERED_PITCH, y: a.top + lv * LAYERED_SEPARATION }; });
+            });
+        });
+        saveLayeredLevels();
+        if (free) saveLayeredFreePos();
+        redrawInteractiveMap();
+    }
+    async function runMapAiLayout() {
+        if (!networkInstance) return;
+        const view = getMapView();
+        const status = document.getElementById('mapAiStatus');
+        const btn = /** @type {HTMLButtonElement|null} */ (document.getElementById('mapAiRunBtn'));
+        const say = t => { if (status) status.textContent = t; };
+        const zones = new Set([...mapAiZonesDrawn().keys()].filter(k => !mapAiZoneOff.has(k)));
+        if (!zones.size) { say(tr('mapAiNoZone')); return; }
+        const { nodes, links } = mapAiGraph(zones);
+        const note = /** @type {HTMLTextAreaElement|null} */ (document.getElementById('mapAiNote'));
+        const instruction = note ? note.value.trim() : '';
+        const goals = [...document.querySelectorAll('#mapAiSec input[name="mapAiGoal"]:checked')]
+            .map(i => /** @type {HTMLInputElement} */ (i).value);
+        if (btn) btn.disabled = true;
+        say(tr('mapAiWorking'));
+        try {
+            const res = await apiFetch('/api/map/ai-layout', {
+                method: 'POST',
+                body: JSON.stringify({ group: lastMapGroup || 'all', nodes, links, goals,
+                                       selected: networkInstance.getSelectedNodes().map(String),
+                                       instruction, deny: mapAiDenyList() })
+            });
+            if (!res) { say(tr('mapAiFailed', { detail: tr('errServerUnreachable') })); return; }
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) { say(tr('mapAiFailed', { detail: data.detail || res.status })); return; }
+            if (getMapView() !== view) return;   // view switched while waiting
+            const ds = networkInstance.body.data.nodes;
+            if (view === 'layered') {
+                const g = layeredGroup;
+                mapAiUndo = { view, group: g,
+                              levels: JSON.stringify(layeredLevels[g] || null),
+                              free: JSON.stringify(layeredFreePos[g] || null) };
+                applyLayeredAiRows(data.rows);
+            } else {
+                mapAiUndo = { view, pos: networkInstance.getPositions(),
+                              levels: ds.get().map(nd => ({ id: nd.id, schemaLevel: nd.schemaLevel })) };
+                const order = {}, update = [];
+                data.rows.forEach((row, lv) => row.forEach((id, i) => {
+                    if (ds.get(id)) { order[id] = i; update.push({ id, schemaLevel: lv }); }
+                }));
+                ds.update(update);
+                schemaAiOrder = order;
+                try { packSchemaRows(); } finally { schemaAiOrder = null; }
+                keepUnchosenSchemaZones(mapAiUndo.pos, zones);
+            }
+            const undo = document.getElementById('mapAiUndoBtn');
+            if (undo) undo.hidden = false;
+            say(data.note ? tr('mapAiDone', { note: data.note }) : tr('mapAiDoneNoNote'));
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+    // packSchemaRows lays out every site: put back the ones not chosen, and
+    // slide each chosen one so its block starts where it started before.
+    function keepUnchosenSchemaZones(before, zones) {
+        const ds = networkInstance.body.data.nodes, now = networkInstance.getPositions();
+        const box = {};
+        ds.get().forEach(nd => {
+            const z = mapAiZoneOf(nd), b = before[nd.id], n = now[nd.id];
+            if (!b || !n) return;
+            if (!zones.has(z)) { networkInstance.moveNode(nd.id, b.x, b.y); return; }
+            const k = box[z] || (box[z] = { bx: b.x, by: b.y, nx: n.x, ny: n.y, ids: [] });
+            k.bx = Math.min(k.bx, b.x); k.by = Math.min(k.by, b.y);
+            k.nx = Math.min(k.nx, n.x); k.ny = Math.min(k.ny, n.y);
+            k.ids.push(nd.id);
+        });
+        Object.values(box).forEach(k => k.ids.forEach(id =>
+            networkInstance.moveNode(id, now[id].x + k.bx - k.nx, now[id].y + k.by - k.ny)));
+        saveSchemaPositions();
+        networkInstance.redraw();
+    }
+    function undoMapAiLayout() {
+        const u = mapAiUndo;
+        if (!networkInstance || !u) return;
+        mapAiUndo = null;
+        if (u.view === 'layered') {
+            const restore = (store, json) => { const v = JSON.parse(json); if (v) store[u.group] = v; else delete store[u.group]; };
+            restore(layeredLevels, u.levels);
+            restore(layeredFreePos, u.free);
+            saveLayeredLevels();
+            saveLayeredFreePos();
+            redrawInteractiveMap();
+        } else {
+            networkInstance.body.data.nodes.update(u.levels);
+            Object.entries(u.pos).forEach(([id, p]) => networkInstance.moveNode(id, p.x, p.y));
+            saveSchemaPositions();
+            networkInstance.redraw();
+        }
+        const undo = document.getElementById('mapAiUndoBtn');
+        if (undo) undo.hidden = true;
+        const status = document.getElementById('mapAiStatus');
+        if (status) status.textContent = tr('mapAiUndone');
     }
 
     // Schema positions per site, in the browser: {"<site>": {"<id>": [x, y]}}.
@@ -2883,6 +3378,70 @@
         });
         setTimeout(() => document.addEventListener('mousedown', closeEdgeCatMenuOutside, true), 0);
     }
+
+    // Hierarchy view: right click on a card (or on a selection) moves it to a
+    // level by name, one level up or down, or back to the automatic level.
+    function closeLevelMenu() {
+        const m = document.getElementById('layeredLevelMenu');
+        if (m) m.remove();
+        document.removeEventListener('mousedown', closeLevelMenuOutside, true);
+    }
+    function closeLevelMenuOutside(ev) {
+        const m = document.getElementById('layeredLevelMenu');
+        if (m && !m.contains(ev.target)) closeLevelMenu();
+    }
+    function showLevelMenu(x, y, ids) {
+        closeLevelMenu();
+        const nameOf = layeredLevelNamer();
+        const cur = new Set(ids.map(id => layeredAssigned[id] || 0));
+        const last = Math.max(0, ...Object.values(layeredAssigned)) + 1;   // one empty level below the last
+        const manual = layeredLevels[layeredGroup] || {};
+        const head = ids.length > 1 ? tr('topoNDevices', { n: ids.length })
+            : String(((networkInstance.body.data.nodes.get(ids[0]) || {}).labelVal) || ids[0]);
+        const item = (to, text, on) => `<button type="button" role="menuitem" data-to="${to}" class="layered-level-item" style="display:block; width:100%; text-align:left; padding:5px 8px; border:0; background:${on ? 'rgba(120,144,156,0.25)' : 'transparent'}; color:var(--text); font:inherit; cursor:pointer;">${text}</button>`;
+        const sep = '<div style="border-top:1px solid var(--border); margin:4px 0;"></div>';
+        const levels = Array.from({ length: last + 1 }, (_, lv) => {
+            const on = cur.size === 1 && cur.has(lv);
+            return item(lv, `${on ? '● ' : ''}${escapeHtml(nameOf(lv))}`, on);
+        }).join('');
+        const div = document.createElement('div');
+        div.id = 'layeredLevelMenu';
+        div.setAttribute('role', 'menu');
+        div.setAttribute('aria-label', tr('topoMoveToLevel'));
+        div.style.cssText = `position:fixed; left:${Math.min(x, innerWidth - 230)}px; top:${Math.min(y, innerHeight - 40 - 30 * (last + 5))}px; z-index:9999; background:var(--surface-2); border:1px solid var(--border); padding:6px; box-shadow:0 10px 30px rgba(0,0,0,0.5); font-size:12px; min-width:210px;`;
+        div.innerHTML = `<div style="padding:4px 8px; color:var(--text-muted); font-size:11px;">${escapeHtml(head)} · ${escapeHtml(tr('topoMoveToLevel'))}</div>`
+            + levels + sep
+            + item('up', `↑ ${escapeHtml(tr('topoLevelUp'))} <span style="color:var(--text-muted);">Alt+↑</span>`)
+            + item('down', `↓ ${escapeHtml(tr('topoLevelDown'))} <span style="color:var(--text-muted);">Alt+↓</span>`)
+            + (ids.some(id => id in manual) ? sep + item('auto', `↺ ${escapeHtml(tr('topoLevelAuto'))}`) : '');
+        document.body.appendChild(div);
+        // The card's hover tooltip would sit on top of the menu.
+        document.querySelectorAll('#networkGraphContainer .vis-tooltip').forEach(t => { /** @type {HTMLElement} */ (t).style.visibility = 'hidden'; });
+        div.addEventListener('click', ev => {
+            const b = /** @type {HTMLElement} */ (ev.target).closest('[data-to]');
+            if (!b) return;
+            const to = b.getAttribute('data-to');
+            closeLevelMenu();
+            moveLayeredLevels(ids, id => to === 'auto' ? null
+                : to === 'up' ? (layeredAssigned[id] || 0) - 1
+                : to === 'down' ? (layeredAssigned[id] || 0) + 1 : +to);
+        });
+        div.addEventListener('keydown', ev => {
+            if (ev.key === 'Escape') { closeLevelMenu(); document.getElementById('networkGraphContainer')?.focus({ preventScroll: true }); }
+        });
+        /** @type {HTMLElement|null} */ (div.querySelector('[data-to]'))?.focus();
+        setTimeout(() => document.addEventListener('mousedown', closeLevelMenuOutside, true), 0);
+    }
+    document.getElementById('networkGraphContainer')?.addEventListener('contextmenu', ev => {
+        if (getMapView() !== 'layered' || !networkInstance) return;
+        const r = /** @type {HTMLElement} */ (ev.currentTarget).getBoundingClientRect();
+        const id = networkInstance.getNodeAt({ x: ev.clientX - r.left, y: ev.clientY - r.top });
+        if (id === undefined) return;
+        ev.preventDefault();
+        let ids = networkInstance.getSelectedNodes();
+        if (!ids.includes(id)) { ids = [id]; networkInstance.selectNodes(ids); }
+        showLevelMenu(ev.clientX, ev.clientY, ids);
+    });
 
     // Costruisce nodi/archi/opzioni per la vista minimalista dai medesimi dati già
     // filtrati della mappa classica. Nodi = riquadri con nome in grassetto e
@@ -5022,13 +5581,30 @@
         const prevPos   = networkInstance.getViewPosition();
         const prevScale = networkInstance.getScale();
 
-        // Esporta su un canvas molto più grande della finestra: più pixel = più
-        // risoluzione. Con fit() l'inquadratura comprende TUTTI i dispositivi.
-        const EXPORT_W = 3200, EXPORT_H = 2000;
+        // Size the canvas from the topology itself, at EXPORT_SCALE px per
+        // map unit, so a large map gets more pixels instead of smaller nodes.
+        // ponytail: 50 Mpx cap keeps Chrome/Edge/Firefox inside their canvas
+        // limits; Safari tops out at 16.7 Mpx, tile the export if it matters.
+        const EXPORT_SCALE = 2, MAX_SIDE = 16384, MAX_AREA = 50e6;
+        const dpr = window.devicePixelRatio || 1;
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        networkInstance.body.data.nodes.getIds().forEach(id => {
+            const b = networkInstance.getBoundingBox(id);
+            if (!b) return;
+            x0 = Math.min(x0, b.left); y0 = Math.min(y0, b.top);
+            x1 = Math.max(x1, b.right); y1 = Math.max(y1, b.bottom);
+        });
+        let EXPORT_W = Math.max(3200, (x1 - x0) * 1.1 * EXPORT_SCALE || 0);
+        let EXPORT_H = Math.max(2000, (y1 - y0) * 1.1 * EXPORT_SCALE || 0);
+        const k = Math.min(1, MAX_SIDE / (EXPORT_W * dpr), MAX_SIDE / (EXPORT_H * dpr),
+                           Math.sqrt(MAX_AREA / (EXPORT_W * EXPORT_H * dpr * dpr)));
+        EXPORT_W = Math.floor(EXPORT_W * k);
+        EXPORT_H = Math.floor(EXPORT_H * k);
         container.style.width  = EXPORT_W + "px";
         container.style.height = EXPORT_H + "px";
         networkInstance.setSize(EXPORT_W + "px", EXPORT_H + "px");
-        networkInstance.fit({ animation: false });   // racchiude l'intera topologia
+        // fit() caps zoom at 1 by default: allow EXPORT_SCALE.
+        networkInstance.fit({ animation: false, maxZoomLevel: EXPORT_SCALE });
         networkInstance.redraw();
 
         const restore = () => {
@@ -5061,12 +5637,30 @@
         }));
     }
 
+    // Every map export is named after the tenant shown, as the user reads it
+    // in the selector, plus the view and the day:
+    // sentinelnet-<tenant>-<schema|hierarchy>-YYYY-MM-DD.<ext>.
+    function mapExportName(ext) {
+        const sel = /** @type {HTMLSelectElement|null} */ (document.getElementById('interactiveGroupSelect'));
+        const opt = sel && sel.selectedOptions[0];
+        const tenant = ((opt && opt.value && opt.text) || lastMapGroup || 'map')
+            .normalize('NFKD').replace(/[̀-ͯ]/g, '')
+            .replace(/[^\w.-]+/g, '-').replace(/^[-.]+|[-.]+$/g, '').toLowerCase() || 'map';
+        const view = getMapView() === 'layered' ? 'hierarchy' : 'schema';
+        return `sentinelnet-${tenant}-${view}-${new Date().toISOString().slice(0, 10)}.${ext}`;
+    }
+
     function downloadTopology() {
         captureMapCanvas(out => {
             const link = document.createElement("a");
-            link.download = "sentinelnet-topology-" + new Date().toISOString().slice(0,10) + ".png";
-            link.href = out.toDataURL("image/png");
-            link.click();
+            link.download = mapExportName("png");
+            // toBlob, not toDataURL: a 50 Mpx PNG as a base64 string is huge.
+            out.toBlob(blob => {
+                if (!blob) return;
+                link.href = URL.createObjectURL(blob);
+                link.click();
+                URL.revokeObjectURL(link.href);
+            }, "image/png");
         });
     }
 
@@ -5074,7 +5668,9 @@
     // viene compresso in JPEG e incapsulato a mano in un PDF minimale (XObject
     // /DCTDecode). Nessuna libreria, nessuna chiamata al backend.
     function jpegToPdf(jpeg, w, h) {
-        const pw = (w * 72 / 96).toFixed(2), ph = (h * 72 / 96).toFixed(2);
+        // PDF caps a page at 14400 units: shrink the page, never the image.
+        const pt = Math.min(72 / 96, 14400 / Math.max(w, h));
+        const pw = (w * pt).toFixed(2), ph = (h * pt).toFixed(2);
         const enc = new TextEncoder();
         const chunks = [], offsets = [];
         let len = 0;
@@ -5103,16 +5699,16 @@
 
     function exportPdfMap() {
         captureMapCanvas(out => {
-            const b64 = out.toDataURL("image/jpeg", 0.92).split(',')[1];
-            const bin = atob(b64);
-            const jpeg = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i++) jpeg[i] = bin.charCodeAt(i);
-            const pdf = jpegToPdf(jpeg, out.width, out.height);
-            const link = document.createElement("a");
-            link.download = "sentinelnet-topology-" + new Date().toISOString().slice(0,10) + ".pdf";
-            link.href = URL.createObjectURL(new Blob([pdf], { type: "application/pdf" }));
-            link.click();
-            URL.revokeObjectURL(link.href);
+            const w = out.width, h = out.height;
+            out.toBlob(async blob => {
+                if (!blob) return;
+                const pdf = jpegToPdf(new Uint8Array(await blob.arrayBuffer()), w, h);
+                const link = document.createElement("a");
+                link.download = mapExportName("pdf");
+                link.href = URL.createObjectURL(new Blob([pdf], { type: "application/pdf" }));
+                link.click();
+                URL.revokeObjectURL(link.href);
+            }, "image/jpeg", 0.92);
         });
     }
 
@@ -5291,16 +5887,54 @@
         const blob = await res.blob();
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = 'sentinelnet-map.vsdx';
+        link.download = mapExportName('vsdx');
         link.click();
         URL.revokeObjectURL(link.href);
+    }
+
+    // Side of box `a` a cable to box `b` leaves from: left/right when the two
+    // share some height (same row), otherwise top/bottom.
+    function drawioSide(a, b) {
+        const besides = a.top < b.bottom && b.top < a.bottom;
+        return besides ? ((b.left + b.right) > (a.left + a.right) ? 'R' : 'L')
+                       : ((b.top + b.bottom) > (a.top + a.bottom) ? 'B' : 'T');
+    }
+
+    // Where each cable meets its two cards, as draw.io fractions of the side.
+    // ends: [{ key, meId, me, other, side? }] with me/other bounding boxes; a
+    // given side wins over the guess. Each result carries its rank on the side (k).
+    // Cables on one side are spread out in the order of the card they reach, so
+    // they never leave from the same point; one whose two cards face each other
+    // (overlap along that side) goes straight, at the middle of the overlap.
+    // If two points end up closer than a port name, the side falls back to spread.
+    function drawioAnchors(ends) {
+        const slots = {}, out = {};
+        ends.forEach(e => { const side = e.side || drawioSide(e.me, e.other); (slots[e.meId + '|' + side] || (slots[e.meId + '|' + side] = [])).push({ ...e, side }); });
+        Object.values(slots).forEach(list => {
+            const horiz = list[0].side === 'L' || list[0].side === 'R';
+            const lo = b => horiz ? b.top : b.left, hi = b => horiz ? b.bottom : b.right;
+            const mid = b => (lo(b) + hi(b)) / 2;
+            list.sort((p, q) => mid(p.other) - mid(q.other));
+            const me = list[0].me, len = hi(me) - lo(me);
+            const fs = list.map((s, k) => {
+                const a = Math.max(lo(me), lo(s.other)), b = Math.min(hi(me), hi(s.other));
+                return b - a > 12 ? ((a + b) / 2 - lo(me)) / len : (k + 1) / (list.length + 1);
+            });
+            const tooClose = fs.some((f, k) => k && (f - fs[k - 1]) * len < (horiz ? 22 : 55));
+            list.forEach((s, k) => {
+                const f = +(tooClose ? (k + 1) / (list.length + 1) : fs[k]).toFixed(3);
+                const x = s.side === 'R' ? 1 : s.side === 'L' ? 0 : f, y = s.side === 'B' ? 1 : s.side === 'T' ? 0 : f;
+                out[s.key] = { x, y, side: s.side, k };
+            });
+        });
+        return out;
     }
 
     // Current map (Schema or Hierarchy) as a native draw.io file: one card per
     // device inside its site container, real connectors glued to the cards
     // (draw.io re-routes them when a card moves), Port-channel name in the
-    // middle and each end's ports at that end. Built in the browser: draw.io
-    // reads plain uncompressed XML.
+    // middle and each end's ports beside the card. Built in the browser:
+    // draw.io reads plain uncompressed XML.
     function exportDrawioMap() {
         if (!networkInstance) { alert(tr('alertNoTopology')); return; }
         const pos = networkInstance.getPositions();
@@ -5308,6 +5942,8 @@
         const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         const ACCENT = { switch: '#0EA5E9', router: '#22C55E', firewall: '#EF4444', wlc: '#8B5CF6', ap: '#3B82F6',
                          server: '#EAB308', phone: '#14B8A6', camera: '#F97316', pc: '#64748B' };
+        const HI = '#F97316';
+        const BASE = { link: ['#94A3B8', '1.5'], group: ['#94A3B8', '1.5'], ha: ['#F9A825', '1.5'], pc: [PC_COPPER, '2.5'] };
         const cells = [];
         const cellId = {}, box = {}, zones = {};
         ds.forEach(nd => {
@@ -5320,18 +5956,64 @@
             s.x0 = Math.min(s.x0, b.left); s.y0 = Math.min(s.y0, b.top);
             s.x1 = Math.max(s.x1, b.right); s.y1 = Math.max(s.y1, b.bottom);
         });
+        const tenantOf = id => ((ds.get(id) || {}).nodeDataVal || {}).group || '';
+        const labelOf = id => ((ds.get(id) || {}).nodeDataVal || {}).label || id;
+        const plain = p => (p && p !== 'Vicino' && p !== 'Neighbor') ? shortIface(p) : '';
+        const cables = networkInstance.body.data.edges.get().filter(e => (e.lnk || e.srcLink) && box[e.from] && box[e.to]).map((e, i) => {
+            const l = e.lnk || e.srcLink;
+            const kind = l.kind === 'group' ? 'group' : l.kind === 'redundancy_heartbeat' ? 'ha' : l.is_portchannel ? 'pc' : 'link';
+            const lp = ((l.local_ports && l.local_ports.length) ? l.local_ports : [l.local_port]).map(plain).filter(Boolean);
+            const rp = ((l.remote_ports && l.remote_ports.length) ? l.remote_ports : [l.remote_port]).map(plain).filter(Boolean);
+            return { i, from: e.from, to: e.to, l, kind, lp, rp };
+        });
+        // Same row with another card in between: side to side would draw the
+        // cable straight across that card, so both ends leave from the bottom.
+        const blocked = (a, b) => {
+            const A = box[a], B = box[b];
+            if (!(A.top < B.bottom && B.top < A.bottom)) return false;
+            const x0 = Math.min(A.right, B.right), x1 = Math.max(A.left, B.left);
+            const y0 = Math.max(A.top, B.top), y1 = Math.min(A.bottom, B.bottom);
+            return Object.keys(box).some(o => o !== a && o !== b && box[o].left < x1 && box[o].right > x0 && box[o].top < y1 && box[o].bottom > y0);
+        };
+        const anchor = drawioAnchors(cables.flatMap(c => {
+            const side = blocked(c.from, c.to) ? 'B' : undefined;
+            return [{ key: c.i + 's', meId: c.from, me: box[c.from], other: box[c.to], side },
+                    { key: c.i + 't', meId: c.to, me: box[c.to], other: box[c.from], side }];
+        }));
         let seq = 0;
-        // Click actions (draw.io viewer / lightbox): a box hides every cable
-        // and shows its own, the site container brings them all back. Each
-        // cable carries the tag 'sn-cable' plus the cell ids of its two ends.
+        // Click actions (draw.io viewer, lightbox, HTML export): a card or a
+        // cable lights its cables up (colour, width, moving dashes) and makes
+        // the cards at the other end flash; the same click turns them off
+        // again. Selections add up, so two switches show the cables between
+        // them. The site container and the "show all" button reset everything.
+        // Each cable is tagged 'sn-cable', its own id, its two cards' ids, its
+        // kind, and id+kind (the colour to go back to depends on the kind).
         const action = acts => esc('data:action/json,' + JSON.stringify({ actions: acts }));
+        const toggle = (tag, kinds) => [{ show: { tags: [tag] } },
+            ...kinds.flatMap(k => [
+                { toggleStyle: { tags: [`${tag}-${k}`], key: 'strokeColor', value: HI, defaultValue: BASE[k][0] } },
+                { toggleStyle: { tags: [`${tag}-${k}`], key: 'strokeWidth', value: '3', defaultValue: BASE[k][1] } }]),
+            { toggleStyle: { tags: [tag], key: 'flowAnimation', value: '1', defaultValue: '0' } }];
+        const kindsUsed = [...new Set(cables.map(c => c.kind))];
+        const reset = [{ show: { tags: ['sn-cable'] } },
+            ...kindsUsed.flatMap(k => [
+                { style: { tags: [`sn-k-${k}`], key: 'strokeColor', value: BASE[k][0] } },
+                { style: { tags: [`sn-k-${k}`], key: 'strokeWidth', value: BASE[k][1] } }]),
+            { style: { tags: ['sn-cable'], key: 'flowAnimation', value: '0' } }];
+        const kindsOf = {}, peersOf = {};
+        cables.forEach(c => [[c.from, c.to], [c.to, c.from]].forEach(([a, b]) => {
+            (kindsOf[a] || (kindsOf[a] = new Set())).add(c.kind);
+            (peersOf[a] || (peersOf[a] = new Set())).add(b);
+        }));
+        Object.values(zones).forEach(s => s.ids.forEach(id => { cellId[id] = 'n' + (seq++); }));
+        let top = Infinity, left = Infinity;
         Object.values(zones).forEach(s => {
             const zid = 'z' + (seq++), PAD = 30, HEAD = 40;
             s.x0 -= PAD; s.y0 -= PAD + HEAD; s.x1 += PAD; s.y1 += PAD;
-            cells.push(`<UserObject id="${zid}" label="${esc(String(s.label || '').toUpperCase())}" link="${action([{ show: { tags: ['sn-cable'] } }])}"><mxCell style="rounded=1;arcSize=2;whiteSpace=wrap;html=1;container=1;collapsible=0;fillColor=#F8FAFC;strokeColor=#CBD5E1;verticalAlign=top;align=left;spacingLeft=16;spacingTop=10;fontStyle=1;fontSize=14;fontColor=#64748B;" vertex="1" parent="1"><mxGeometry x="${s.x0}" y="${s.y0}" width="${s.x1 - s.x0}" height="${s.y1 - s.y0}" as="geometry"/></mxCell></UserObject>`);
+            top = Math.min(top, s.y0); left = Math.min(left, s.x0);
+            cells.push(`<UserObject id="${zid}" label="${esc(String(s.label || '').toUpperCase())}" link="${action(reset)}"><mxCell style="rounded=1;arcSize=2;whiteSpace=wrap;html=1;container=1;collapsible=0;fillColor=#F8FAFC;strokeColor=#CBD5E1;verticalAlign=top;align=left;spacingLeft=16;spacingTop=10;fontStyle=1;fontSize=14;fontColor=#64748B;" vertex="1" parent="1"><mxGeometry x="${s.x0}" y="${s.y0}" width="${s.x1 - s.x0}" height="${s.y1 - s.y0}" as="geometry"/></mxCell></UserObject>`);
             s.ids.forEach(id => {
-                const nd = ds.get(id), n = nd.nodeDataVal || {}, b = box[id], cid = 'n' + (seq++);
-                cellId[id] = cid;
+                const nd = ds.get(id), n = nd.nodeDataVal || {}, b = box[id], cid = cellId[id];
                 const off = n.status === 'offline';
                 const accent = off ? '#94A3B8' : (ACCENT[n.device_type] || '#64748B');
                 const dot = n.is_group ? '' : `<font color="${off ? '#EF4444' : '#10B981'}">●</font> `;
@@ -5342,27 +6024,19 @@
                     + (ip ? `<br><span style="font-size:9px;color:#94A3B8">${esc(ip)}</span>` : '');
                 const style = `rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=${accent};strokeWidth=1.5;fontSize=12;fontColor=#0F172A;shadow=1;`
                     + (n.is_group ? 'dashed=1;' : '') + (off ? 'opacity=60;' : '');
-                cells.push(`<UserObject id="${cid}" label="${esc(html)}" link="${action([{ hide: { tags: ['sn-cable'] } }, { show: { tags: [cid] } }])}"><mxCell style="${style}" vertex="1" parent="${zid}"><mxGeometry x="${b.left - s.x0}" y="${b.top - s.y0}" width="${b.right - b.left}" height="${b.bottom - b.top}" as="geometry"/></mxCell></UserObject>`);
+                const acts = kindsOf[id] ? [...toggle(cid, [...kindsOf[id]]),
+                    { highlight: { cells: [...peersOf[id]].map(p => cellId[p]), color: HI, duration: 1500 } }] : null;
+                cells.push(`<UserObject id="${cid}" label="${esc(html)}"${acts ? ` link="${action(acts)}"` : ''}><mxCell style="${style}" vertex="1" parent="${zid}"><mxGeometry x="${b.left - s.x0}" y="${b.top - s.y0}" width="${b.right - b.left}" height="${b.bottom - b.top}" as="geometry"/></mxCell></UserObject>`);
             });
         });
-        const tenantOf = id => ((ds.get(id) || {}).nodeDataVal || {}).group || '';
-        const plain = p => (p && p !== 'Vicino' && p !== 'Neighbor') ? shortIface(p) : '';
-        networkInstance.body.data.edges.get().forEach(e => {
-            const l = e.lnk || e.srcLink;
-            if (!l || !cellId[e.from] || !cellId[e.to]) return;
-            const isPC = !!l.is_portchannel;
-            const kind = l.kind === 'group' ? 'group' : l.kind === 'redundancy_heartbeat' ? 'ha' : isPC ? 'pc' : 'link';
-            const lp = ((l.local_ports && l.local_ports.length) ? l.local_ports : [l.local_port]).map(plain).filter(Boolean);
-            const rp = ((l.remote_ports && l.remote_ports.length) ? l.remote_ports : [l.remote_port]).map(plain).filter(Boolean);
-            const a = pos[e.from], b = pos[e.to];
-            // Same row: side to side; otherwise bottom of the upper card to the top of the lower.
-            const glue = Math.abs(a.y - b.y) < 1
-                ? (a.x <= b.x ? 'exitX=1;exitY=0.5;entryX=0;entryY=0.5;' : 'exitX=0;exitY=0.5;entryX=1;entryY=0.5;')
-                : (a.y < b.y ? 'exitX=0.5;exitY=1;entryX=0.5;entryY=0;' : 'exitX=0.5;exitY=0;entryX=0.5;entryY=1;');
-            const color = kind === 'pc' ? PC_COPPER : kind === 'ha' ? '#F9A825' : '#94A3B8';
-            const dashed = kind === 'group' || kind === 'ha' || tenantOf(e.from) !== tenantOf(e.to);
+        cables.forEach(c => {
+            const { l, kind, lp, rp } = c, A = cellId[c.from], B = cellId[c.to];
+            const sa = anchor[c.i + 's'], ta = anchor[c.i + 't'];
+            const glue = `exitX=${sa.x};exitY=${sa.y};exitPerimeter=0;entryX=${ta.x};entryY=${ta.y};entryPerimeter=0;`;
+            const color = BASE[kind][0];
+            const dashed = kind === 'group' || kind === 'ha' || tenantOf(c.from) !== tenantOf(c.to);
             const style = `edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=none;startArrow=none;${glue}`
-                + `strokeColor=${color};strokeWidth=${kind === 'pc' ? 2.5 : 1.5};${dashed ? 'dashed=1;' : ''}`
+                + `strokeColor=${color};strokeWidth=${BASE[kind][1]};${dashed ? 'dashed=1;' : ''}`
                 + `fontSize=10;fontStyle=1;fontColor=${color};labelBackgroundColor=#FFFFFF;`;
             let mid = kind === 'ha' ? 'HA' : '';
             if (kind === 'pc') {
@@ -5370,18 +6044,36 @@
                 mid = (ends.same ? ends.local : `${ends.local} ⇄ ${ends.remote}`) + (m > 1 ? ` ×${m}` : '');
             }
             const eid = 'e' + (seq++);
-            cells.push(`<UserObject id="${eid}" label="${esc(mid)}" tags="sn-cable ${cellId[e.from]} ${cellId[e.to]}"><mxCell style="${style}" edge="1" parent="1" source="${cellId[e.from]}" target="${cellId[e.to]}"><mxGeometry relative="1" as="geometry"/></mxCell></UserObject>`);
+            // Hover names both ends: tells cables apart where they run together.
+            const tip = `${labelOf(c.from)} ${lp.join(', ')} ⇄ ${labelOf(c.to)} ${rp.join(', ')}`.replace(/\s+/g, ' ').trim();
+            const tags = ['sn-cable', eid, `${eid}-${kind}`, A, `${A}-${kind}`, B, `${B}-${kind}`, `sn-k-${kind}`].join(' ');
+            const acts = [...toggle(eid, [kind]), { highlight: { cells: [A, B], color: HI, duration: 1500 } }];
+            cells.push(`<UserObject id="${eid}" label="${esc(mid)}" tooltip="${esc(tip)}" tags="${tags}" link="${action(acts)}"><mxCell style="${style}" edge="1" parent="1" source="${A}" target="${B}"><mxGeometry relative="1" as="geometry"/></mxCell></UserObject>`);
             if (kind !== 'pc' && kind !== 'link') return;
-            // End labels ride on the connector: they follow it when edited.
-            [[lp, -0.75], [rp, 0.75]].forEach(([ps, x]) => {
+            // Port names beside the card, just outside the point the cable
+            // leaves from: the near end's above (or left of) the cable, the far
+            // end's below (or right of) it, so on a short cable they never meet.
+            // On a top/bottom side every other name steps out further, so
+            // neighbours on a crowded side do not run into each other.
+            // Plain text with explicit centring: HTML labels shift in the viewer.
+            [[lp, -1, sa, -8], [rp, 1, ta, 8]].forEach(([ps, x, an, dy]) => {
                 if (!ps.length) return;
-                cells.push(`<mxCell id="${'e' + (seq++)}" value="${esc(ps.join(', '))}" style="edgeLabel;html=1;resizable=0;points=[];fontSize=9;fontColor=#475569;labelBackgroundColor=#FFFFFF;" vertex="1" connectable="0" parent="${eid}"><mxGeometry x="${x}" relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry></mxCell>`);
+                const txt = ps.join(', '), w = txt.length * 5.2 + 6;
+                const dx = dy < 0 ? -(w / 2 + 4) : w / 2 + 4, out = 18 + (an.k % 2) * 13;
+                const off = { R: [w / 2 + 6, dy], L: [-(w / 2 + 6), dy], B: [dx, out], T: [dx, -out] }[an.side];
+                cells.push(`<mxCell id="${'e' + (seq++)}" value="${esc(txt)}" style="edgeLabel;html=0;resizable=0;points=[];align=center;verticalAlign=middle;fontSize=9;fontColor=#475569;labelBackgroundColor=#FFFFFF;" vertex="1" connectable="0" parent="${eid}"><mxGeometry x="${x}" relative="1" as="geometry"><mxPoint x="${off[0]}" y="${off[1]}" as="offset"/></mxGeometry></mxCell>`);
             });
         });
+        if (cables.length) {
+            const btn = (x, label, acts) => cells.push(`<UserObject id="${'b' + (seq++)}" label="${esc(label)}" link="${action(acts)}"><mxCell style="rounded=1;html=1;fillColor=#F1F5F9;strokeColor=#94A3B8;fontSize=11;fontStyle=1;fontColor=#0F172A;" vertex="1" parent="1"><mxGeometry x="${left + x}" y="${top - 50}" width="160" height="30" as="geometry"/></mxCell></UserObject>`);
+            btn(0, tr('drawioShowAll'), reset);
+            btn(170, tr('drawioHideAll'), [...reset, { hide: { tags: ['sn-cable'] } }]);
+            cells.push(`<mxCell id="${'b' + (seq++)}" value="${esc(tr('drawioClickHint'))}" style="text;html=0;align=left;verticalAlign=middle;fontSize=11;fontColor=#64748B;" vertex="1" parent="1"><mxGeometry x="${left + 345}" y="${top - 50}" width="520" height="30" as="geometry"/></mxCell>`);
+        }
         const xml = `<mxfile host="SentinelNet"><diagram id="sentinelnet" name="${esc(lastMapGroup || 'SentinelNet')}"><mxGraphModel grid="1" gridSize="10" guides="1" page="0" math="0" shadow="0"><root><mxCell id="0"/><mxCell id="1" parent="0"/>${cells.join('')}</root></mxGraphModel></diagram></mxfile>`;
         const link = document.createElement('a');
         link.href = URL.createObjectURL(new Blob([xml], { type: 'application/xml' }));
-        link.download = 'sentinelnet-map-' + new Date().toISOString().slice(0, 10) + '.drawio';
+        link.download = mapExportName('drawio');
         link.click();
         URL.revokeObjectURL(link.href);
     }
@@ -5422,6 +6114,33 @@
     document.getElementById('toggleVtpDomain')?.addEventListener('change', loadInteractiveMap);
     document.getElementById('mapViewMinimalBtn')?.addEventListener('click', () => setMapView('minimal'));
     document.getElementById('mapViewLayeredBtn')?.addEventListener('click', () => setMapView('layered'));
+    document.getElementById('mapAiRunBtn')?.addEventListener('click', runMapAiLayout);
+    document.getElementById('mapViewMenu')?.addEventListener('toggle', e => {
+        if (/** @type {HTMLDetailsElement} */ (e.target).open) renderMapAiZones();
+    });
+    document.getElementById('mapAiZones')?.addEventListener('change', e => {
+        const cb = /** @type {HTMLInputElement} */ (e.target);
+        if (cb.name !== 'mapAiZone') return;
+        if (cb.checked) mapAiZoneOff.delete(cb.value); else mapAiZoneOff.add(cb.value);
+    });
+    document.getElementById('mapAiUndoBtn')?.addEventListener('click', undoMapAiLayout);
+    // Toolbar popovers: one open at a time. A click outside closes them, and
+    // so does picking an item from the export or ⋯ menu. Esc closes the
+    // focused one and gives focus back to its button.
+    document.addEventListener('click', e => {
+        const t = /** @type {Element} */ (e.target);
+        const picked = t.closest?.('.map-menu-item');
+        document.querySelectorAll('#mapToolbar details.map-pop[open]').forEach(d => {
+            if (picked || !d.contains(t)) /** @type {HTMLDetailsElement} */ (d).open = false;
+        });
+    });
+    document.getElementById('mapToolbar')?.addEventListener('keydown', e => {
+        if (e.key !== 'Escape') return;
+        const d = /** @type {HTMLDetailsElement|null} */ (/** @type {Element} */ (e.target).closest('details.map-pop[open]'));
+        if (!d) return;
+        d.open = false;
+        d.querySelector('summary')?.focus();
+    });
     // Schema: positions survive refreshes and drags, so after a few changes
     // the boxes drift; this lays them out again in rows, on demand.
     document.getElementById('schemaTidyBtn')?.addEventListener('click', () => {
@@ -5452,11 +6171,12 @@
             (rows[lv] || (rows[lv] = [])).push(nd.labelVal || nd.id);
         });
         const names = layeredLevelNames[layeredGroup] || [];
+        const auto = layeredLevelNamer();   // an empty field shows the preset it falls back to
         document.getElementById('layeredNamesList').innerHTML = Object.keys(rows).map(Number).sort((a, b) => a - b).map(lv => {
             const who = rows[lv].slice(0, 3).join(', ') + (rows[lv].length > 3 ? ` +${rows[lv].length - 3}` : '');
             return `<div class="form-group">
                 <label for="layeredName${lv}">${escapeHtml(tr('topoLevelN', { n: lv + 1 }))} · <span style="font-weight:400;">${escapeHtml(who)}</span></label>
-                <input id="layeredName${lv}" data-level="${lv}" type="text" maxlength="40" value="${attrEsc(names[lv] || '')}" placeholder="${attrEsc(tr('phLayeredName'))}" style="padding-left:12px;">
+                <input id="layeredName${lv}" data-level="${lv}" type="text" maxlength="40" value="${attrEsc(names[lv] || '')}" placeholder="${attrEsc(auto(lv))}" style="padding-left:12px;">
             </div>`;
         }).join('');
         openModal('layeredNamesModal');

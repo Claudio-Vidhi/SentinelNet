@@ -224,12 +224,20 @@ assert.deepEqual(schemaUplinkGroups(bundles, ids, levelOf, id => {
         const acc = ids.slice(1).map(id => moved[id]);
         return { ys: new Set(acc.map(p => p.y)).size, width: Math.max(...acc.map(p => p.x)) - Math.min(...acc.map(p => p.x)), core: moved['core-01'], acc };
     };
+    // packSchemaRows reads the AI order from the module scope; null = no AI layout.
+    globalThis.schemaAiOrder = null;
     const flat = tidy(false), wrapped = tidy(true);
     assert.equal(flat.ys, 1);
     assert.equal(wrapped.ys, 2, 'two sub-rows');
     assert.ok(wrapped.width < flat.width * 0.6, `about half as wide: ${wrapped.width} vs ${flat.width}`);
     const mid = wrapped.acc.reduce((t, p) => t + p.x, 0) / wrapped.acc.length;
     assert.ok(Math.abs(mid - wrapped.core.x) < 1, 'block centred under the core');
+    // An AI layout fixes the order inside the row: reversed in, reversed out.
+    globalThis.schemaAiOrder = Object.fromEntries(ids.slice(1).reverse().map((id, i) => [id, i]));
+    const ai = tidy(false);
+    globalThis.schemaAiOrder = null;
+    const xs = ai.acc.map(p => p.x);
+    assert.ok(xs.every((x, i) => i === 0 || x < xs[i - 1]), 'AI order kept, right to left');
     // ...but a row of small leaf boxes (APs) is not wrapped
     const leafRow = (() => {
         const moved = {};
@@ -251,7 +259,7 @@ assert.deepEqual(schemaUplinkGroups(bundles, ids, levelOf, id => {
     assert.equal(leafRow, 1, 'AP row not zigzagged');
 }
 
-// --- draw.io export: click a box and only its cables stay, click the site to bring all back.
+// --- draw.io export: click a box (or a cable) to light its cables up, click again to turn them off.
 {
     const pos = { 'core-01': { x: 0, y: 0 }, 'access-01': { x: -100, y: 200 }, 'access-02': { x: 100, y: 200 } };
     const nodes = Object.keys(pos).map(id => ({ id, nodeDataVal: { id, label: id, device_type: 'switch', status: 'online' } }));
@@ -265,28 +273,111 @@ assert.deepEqual(schemaUplinkGroups(bundles, ids, levelOf, id => {
         const pcEnds = () => ({}), PC_COPPER = '#B45309', lastMapGroup = 'tenant-a', alert = () => {}, tr = k => k;
         const Blob = function (parts) { capture(parts.join('')); };
         const URL = { createObjectURL: () => 'blob:x', revokeObjectURL() {} };
-        const document = { createElement: () => ({ click() {} }) };
+        const document = { createElement: () => ({ click() {} }), getElementById: () => null };
+        const getMapView = () => 'minimal';
+        ${extract('function mapExportName(')}
+        ${extract('function drawioSide(')}
+        ${extract('function drawioAnchors(')}
         ${extract('function exportDrawioMap(')}
         exportDrawioMap();`)(net, x => { xml = x; });
     const attr = (tag, name) => (tag.match(new RegExp(name + '="([^"]*)"')) || [])[1];
     const unesc = v => v.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
     const objs = [...xml.matchAll(/<UserObject [^>]*>/g)].map(m => m[0]);
-    const edges = [...xml.matchAll(/<UserObject [^>]*>\s*<mxCell [^>]*edge="1"/g)].map(m => m[0]);
+    const edges = [...xml.matchAll(/<UserObject [^>]*>\s*<mxCell [^>]*edge="1"[^>]*>/g)].map(m => m[0]);
     assert.equal(edges.length, 2, 'every cable is a tagged object');
     const boxOf = id => objs.find(o => unesc(attr(o, 'label') || '').includes(`<b>${id}</b>`));
     const tagOf = id => attr(boxOf(id), 'id');
-    for (const e of edges) assert.ok(attr(e, 'tags').split(' ').includes('sn-cable'));
+    for (const e of edges) {
+        assert.ok(attr(e, 'tags').split(' ').includes('sn-cable'));
+        assert.match(unesc(attr(e, 'tooltip')), /^core-01 Gi1\/0\/49 ⇄ access-0[12] Gi1\/0\/1$/, 'hover names both ends');
+    }
     const act = o => JSON.parse(unesc(attr(o, 'link')).replace('data:action/json,', '')).actions;
-    // access-01: hide all cables, show its own
-    const a1 = act(boxOf('access-01'));
-    assert.deepEqual(a1[0], { hide: { tags: ['sn-cable'] } });
-    assert.deepEqual(a1[1], { show: { tags: [tagOf('access-01')] } });
-    const own = edges.filter(e => attr(e, 'tags').split(' ').includes(tagOf('access-01')));
+    // access-01: shows its cable and toggles colour, width and animation, so the same click turns it off
+    const a1 = act(boxOf('access-01')), t1 = tagOf('access-01');
+    assert.deepEqual(a1[0], { show: { tags: [t1] } });
+    assert.deepEqual(a1[1], { toggleStyle: { tags: [`${t1}-link`], key: 'strokeColor', value: '#F97316', defaultValue: '#94A3B8' } });
+    assert.ok(a1.some(x => x.toggleStyle && x.toggleStyle.key === 'flowAnimation' && x.toggleStyle.tags[0] === t1));
+    assert.deepEqual(a1.at(-1).highlight.cells, [tagOf('core-01')], 'the card at the other end flashes');
+    assert.ok(!a1.some(x => x.hide), 'selections add up: nothing else is hidden');
+    const own = edges.filter(e => attr(e, 'tags').split(' ').includes(`${t1}-link`));
     assert.equal(own.length, 1);
     assert.equal(edges.filter(e => attr(e, 'tags').split(' ').includes(tagOf('core-01'))).length, 2);
-    // the site container brings every cable back
+    // a cable toggles itself
+    const e0 = act(edges[0]);
+    assert.deepEqual(e0[0], { show: { tags: [attr(edges[0], 'id')] } });
+    // the site container brings every cable back to its own colour, still
     const site = objs.find(o => attr(o, 'label') === 'TENANT-A');
-    assert.deepEqual(act(site), [{ show: { tags: ['sn-cable'] } }]);
+    const r = act(site);
+    assert.deepEqual(r[0], { show: { tags: ['sn-cable'] } });
+    assert.deepEqual(r.at(-1), { style: { tags: ['sn-cable'], key: 'flowAnimation', value: '0' } });
+    assert.ok(objs.some(o => attr(o, 'label') === 'drawioHideAll'), 'hide-all button');
+    // the two cables leave core-01 from two different points on its bottom side
+    const exits = edges.map(e => xml.slice(xml.indexOf(e) + e.length - 400, xml.indexOf(e) + e.length).match(/exitX=([\d.]+);exitY=([\d.]+)/).slice(1).join(','));
+    assert.equal(new Set(exits).size, 2, 'no shared exit point');
+    exits.forEach(x => assert.match(x, /,1$/, 'bottom side'));
+    // port names: plain centred text, the far end's above the top of access-0x
+    const labels = [...xml.matchAll(/<mxCell [^>]*value="Gi1\/0\/1"[^>]*>.*?<mxPoint x="([-\d.]+)" y="([-\d.]+)"/g)];
+    assert.equal(labels.length, 2);
+    labels.forEach(m => { assert.match(m[0], /html=0;.*align=center/); assert.ok(+m[2] <= -18, 'above the card, not on it'); });
+}
+
+// --- draw.io export: same row with a card in between, the cable goes under it, not across.
+{
+    const pos = { 'core-01': { x: 0, y: 0 }, 'core-02': { x: 200, y: 0 }, 'wlc-01': { x: 400, y: 0 } };
+    const nodes = Object.keys(pos).map(id => ({ id, nodeDataVal: { id, label: id, device_type: 'switch', status: 'online' } }));
+    const net = { getPositions: () => pos, getBoundingBox: id => ({ left: pos[id].x - 50, right: pos[id].x + 50, top: pos[id].y - 30, bottom: pos[id].y + 30 }),
+                  body: { data: { nodes: { forEach: f => nodes.forEach(f), get: id => nodes.find(n => n.id === id) },
+                                  edges: { get: () => [{ from: 'core-01', to: 'wlc-01', lnk: { local_port: 'Te1/0/10', remote_port: 'Te0/0/0' } },
+                                                       { from: 'core-01', to: 'core-02', lnk: { local_port: 'Te1/0/9', remote_port: 'Te1/0/9' } }] } } } };
+    let xml = '';
+    new Function('networkInstance', 'capture', `
+        const topoZone = () => ({ key: 'z', label: 'tenant-a' }), shortIface = s => s;
+        const pcEnds = () => ({}), PC_COPPER = '#B45309', lastMapGroup = 'tenant-a', alert = () => {}, tr = k => k;
+        const Blob = function (parts) { capture(parts.join('')); };
+        const URL = { createObjectURL: () => 'blob:x', revokeObjectURL() {} };
+        const document = { createElement: () => ({ click() {} }), getElementById: () => null };
+        const getMapView = () => 'minimal';
+        ${extract('function mapExportName(')}
+        ${extract('function drawioSide(')}
+        ${extract('function drawioAnchors(')}
+        ${extract('function exportDrawioMap(')}
+        exportDrawioMap();`)(net, x => { xml = x; });
+    const glue = [...xml.matchAll(/exitX=([\d.]+);exitY=([\d.]+);exitPerimeter=0;entryX=([\d.]+);entryY=([\d.]+)/g)].map(m => m.slice(1).map(Number));
+    assert.equal(glue.length, 2);
+    assert.equal(glue[0][1], 1, 'blocked: leaves from the bottom');
+    assert.equal(glue[0][3], 1, 'blocked: enters from the bottom');
+    assert.deepEqual([glue[1][0], glue[1][2]], [1, 0], 'neighbours: side to side');
+}
+
+// --- Export file names follow the tenant shown in the selector.
+{
+    const name = (text, value, view) => new Function('document', 'getMapView', 'lastMapGroup', `
+        ${extract('function mapExportName(')}
+        return mapExportName('drawio');`)(
+        { getElementById: () => ({ selectedOptions: [{ text, value }] }) }, () => view, 'fallback');
+    const day = new Date().toISOString().slice(0, 10);
+    assert.equal(name('Sede Città / Nord', 'grp-1', 'layered'), `sentinelnet-sede-citta-nord-hierarchy-${day}.drawio`);
+    assert.equal(name('tenant-a', 'tenant-a', 'minimal'), `sentinelnet-tenant-a-schema-${day}.drawio`);
+    // the placeholder (no value) does not name the file
+    assert.equal(name('-- Seleziona --', '', 'minimal'), `sentinelnet-fallback-schema-${day}.drawio`);
+}
+
+// --- draw.io anchors: facing cards get a straight cable, crowded sides spread.
+{
+    const { drawioAnchors } = new Function(extract('function drawioSide(') + extract('function drawioAnchors(') + '\nreturn { drawioAnchors };')();
+    const bx = (x, y, w, h) => ({ left: x, right: x + w, top: y, bottom: y + h });
+    const sw = bx(0, 0, 240, 260), aps = [0, 1, 2, 3].map(k => bx(330, 10 + k * 50, 138, 42));
+    const out = drawioAnchors(aps.flatMap((a, k) => [{ key: k + 's', meId: 'sw', me: sw, other: a }, { key: k + 't', meId: 'ap' + k, me: a, other: sw }]));
+    aps.forEach((a, k) => {
+        assert.equal(out[k + 's'].side, 'R'); assert.equal(out[k + 't'].side, 'L');
+        // same height on both cards: straight
+        assert.equal(Math.round(out[k + 's'].y * 260), Math.round(out[k + 't'].y * 42 + a.top));
+    });
+    // three cables to cards far below the same narrow side: spread, in order, distinct
+    const far = [0, 1, 2].map(k => bx(-600 + k * 600, 600, 100, 60));
+    const o2 = drawioAnchors(far.map((f, k) => ({ key: 'f' + k, meId: 'sw', me: sw, other: f })));
+    assert.deepEqual([0, 1, 2].map(k => o2['f' + k].side), ['B', 'B', 'B']);
+    assert.ok(o2.f0.x < o2.f1.x && o2.f1.x < o2.f2.x);
 }
 
 // --- Access points in a column: leaves stacked under their switch.

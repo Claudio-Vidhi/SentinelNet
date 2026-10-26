@@ -143,4 +143,100 @@ assert.equal(levels['192.0.2.1'], 0);
     assert.equal(one['192.0.2.11'], 1);
 }
 
+// moveLayeredLevels(): the card menu and Alt+arrows. Moves several cards,
+// never above the top, "automatic" drops the override, a free-move position
+// for the moved card is forgotten (it would pin the card to its old row).
+{
+    const st = (0, eval)(`(function () {
+        const layeredGroup = 'tenant-a';
+        const layeredLevels = { 'tenant-a': { 'switch-03': 4 } };
+        const layeredFreePos = { 'tenant-a': { 'switch-01': { x: 1, y: 2 }, 'switch-09': { x: 3, y: 4 } } };
+        const layeredAssigned = { 'switch-01': 1, 'switch-02': 0, 'switch-03': 4 };
+        let redraws = 0, selected = null;
+        const saveLayeredLevels = () => {}, saveLayeredFreePos = () => {};
+        const redrawInteractiveMap = () => { redraws++; };
+        const networkInstance = { body: { data: { nodes: { get: id => id !== 'gone' } } }, selectNodes: ids => { selected = ids; } };
+        const getMapView = () => 'layered';
+        let focused = null;
+        const setLayeredFocus = ids => { focused = ids; };
+        ${extract('function moveLayeredLevels(')}
+        return { move: moveLayeredLevels, layeredLevels, layeredFreePos, layeredAssigned, get redraws() { return redraws; }, get selected() { return selected; }, get focused() { return focused; } };
+    })()`);
+    st.move(['switch-01', 'switch-02'], id => st.layeredAssigned[id] - 1);
+    assert.deepEqual(st.layeredLevels['tenant-a'], { 'switch-03': 4, 'switch-01': 0, 'switch-02': 0 }, 'one up, clamped at the top');
+    assert.deepEqual(Object.keys(st.layeredFreePos['tenant-a']), ['switch-09'], 'free position of the moved card dropped');
+    st.move(['switch-03', 'gone'], () => null);
+    assert.ok(!('switch-03' in st.layeredLevels['tenant-a']), 'automatic drops the override');
+    assert.equal(st.redraws, 2);
+    await Promise.resolve();
+    assert.deepEqual(st.selected, ['switch-03'], 'still selected after the redraw, vanished cards skipped');
+    assert.deepEqual(st.focused, ['switch-03'], 'and still lit');
+}
+
+// layeredAutoNames(): preset level names from what each row holds.
+{
+    const names = (0, eval)(`(function () { ${extract('function layeredAutoNames(')} return layeredAutoNames; })()`);
+    assert.deepEqual(names({ 0: ['firewall'], 1: ['switch', 'switch'], 2: ['switch', 'wlc'], 3: ['switch'], 4: ['ap', 'ap'], 5: ['phone', 'camera'] }), {
+        0: 'topoTierFirewall', 1: 'topoTierCore', 2: 'topoTierDistribution', 3: 'topoTierAccess', 4: 'topoTierWireless', 5: 'topoTierEndpoint' });
+    // one switch row is the core; a WLC on its own row is the controller; a router counts as a firewall row
+    assert.deepEqual(names({ 0: ['router', 'firewall'], 1: ['switch'], 2: ['wlc'], 3: ['ap', 'server'] }), {
+        0: 'topoTierFirewall', 1: 'topoTierCore', 2: 'topoTierController', 3: 'topoTierEndpoint' });
+}
+
+// layeredLevelNamer(): repeated presets are numbered; once the user names a
+// level, the presets go and unnamed levels read "Level N".
+{
+    const nodes = ['a', 'b', 'c', 'd', 'e'].map(id => ({ id, nodeDataVal: { device_type: 'switch' } }));
+    const namer = names => (0, eval)(`(function () {
+        const networkInstance = { body: { data: { nodes: ${JSON.stringify(nodes)} } } };
+        const layeredAssigned = { a: 0, b: 1, c: 2, d: 3, e: 4 }, layeredGroup = 'g';
+        const layeredLevelNames = { g: ${JSON.stringify(names)} };
+        const tr = (k, p) => p ? k + p.n : k;
+        ${extract('function layeredAutoNames(')}
+        ${extract('function layeredLevelNamer(')}
+        return layeredLevelNamer;
+    })()`)();
+    assert.deepEqual([0, 1, 2, 3, 4].map(namer(['', ''])),
+        ['topoTierCore', 'topoTierDistribution 1', 'topoTierDistribution 2', 'topoTierDistribution 3', 'topoTierAccess']);
+    assert.deepEqual([0, 1, 2, 3, 4, 5].map(namer(['', '', 'Agg'])),
+        ['topoLevelN1', 'topoLevelN2', 'Agg', 'topoLevelN4', 'topoLevelN5', 'topoLevelN6']);
+}
+
+// applyLayeredAiRows(): an AI answer becomes the site's level overrides,
+// a folded group hands its row to its members, and with free move on the
+// row order becomes positions, each site laid out where it already is.
+{
+    const run = free => {
+        const nodes = [
+            { id: '192.0.2.1', zone: 'z1', nodeDataVal: {} },
+            { id: '192.0.2.2', zone: 'z1', nodeDataVal: {} },
+            { id: 'grp', zone: 'z1', nodeDataVal: { members: [{ id: 'ap-1' }, { id: 'ap-2' }] } },
+            { id: '192.0.2.9', zone: 'z2', nodeDataVal: {} },
+        ];
+        const pos = { '192.0.2.1': { x: 0, y: 0 }, '192.0.2.2': { x: 200, y: 0 }, grp: { x: 100, y: 190 }, '192.0.2.9': { x: 3000, y: 0 } };
+        const state = { levels: {}, freePos: {}, saved: 0, redrawn: 0 };
+        new Function('st', 'free', 'pos', `
+            const networkInstance = { getPositions: () => pos,
+                body: { data: { nodes: { get: id => id === undefined ? st.nodes : st.nodes.find(n => n.id === id) } } } };
+            const layeredGroup = 'acme', layeredLevels = st.levels, layeredFreePos = st.freePos, layeredFree = free;
+            const mapAiZoneOf = nd => nd.zone;
+            const saveLayeredLevels = () => { st.saved++; }, saveLayeredFreePos = () => {}, redrawInteractiveMap = () => { st.redrawn++; };
+            ${constant('LAYERED_SEPARATION')}
+            ${constant('LAYERED_PITCH')}
+            ${extract('function applyLayeredAiRows(')}
+            applyLayeredAiRows([['192.0.2.2', '192.0.2.9'], ['grp', '192.0.2.1', 'unknown']]);`)(Object.assign(state, { nodes }), free, pos);
+        return state;
+    };
+    const fixed = run(false);
+    assert.deepEqual(fixed.levels, { acme: { '192.0.2.2': 0, '192.0.2.9': 0, 'ap-1': 1, 'ap-2': 1, '192.0.2.1': 1 } });
+    assert.deepEqual(fixed.freePos, {}, 'no positions without free move');
+    assert.equal(fixed.redrawn, 1);
+    const moved = run(true).freePos.acme;
+    assert.ok(moved.grp.x < moved['192.0.2.1'].x, 'row order kept left to right');
+    assert.equal(moved.grp.y, moved['192.0.2.1'].y);
+    assert.ok(moved['192.0.2.2'].y < moved.grp.y, 'row 0 above row 1');
+    assert.equal(moved['192.0.2.9'].x, 3000, 'the other site stays where it is');
+    assert.ok(Math.abs(moved['192.0.2.2'].x - 100) < 1, 'a site is laid out around its own centre');
+}
+
 console.log('layered_levels: ok');

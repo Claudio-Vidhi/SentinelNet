@@ -989,162 +989,214 @@
         <button class="btn btn-secondary ti-subtab active" data-switch-tab="tab-map-interactive" data-i18n="tabInteractive"></button>
       </div>
 
-      <div class="panel" style="margin-bottom:15px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; gap: 15px; flex-wrap: wrap;">
-        <div style="display:flex; align-items:center; gap: 15px; flex-wrap: wrap;">
-          <!-- Nessuna Sede preselezionata: la mappa si disegna solo su scelta esplicita -->
-          <select id="interactiveGroupSelect" aria-label="Tenant della mappa interattiva" data-i18n-aria-label="ariaInteractiveTenant">
-            <option value="" data-i18n="optSelectTenant">Scegli un Tenant…</option>
-            <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
-          </select>
+      <!-- Map toolbar: one row. Filters, view options, export and the reset
+           each open a popover (<details class="map-pop">); topology.js keeps
+           one open at a time and closes it on an outside click or Esc. -->
+      <div class="panel map-toolbar" id="mapToolbar" role="toolbar" aria-label="Controlli mappa" data-i18n-aria-label="ariaMapToolbar">
+        <!-- Nessuna Sede preselezionata: la mappa si disegna solo su scelta esplicita -->
+        <select id="interactiveGroupSelect" aria-label="Tenant della mappa interattiva" data-i18n-aria-label="ariaInteractiveTenant">
+          <option value="" data-i18n="optSelectTenant">Scegli un Tenant…</option>
+          <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
+        </select>
 
-          <!-- Selettore categorie da mostrare nella mappa -->
-          <details id="mapCatMenu" style="position:relative; padding-left:10px; border-left:1px solid var(--border);">
-            <summary style="list-style:none; cursor:pointer; font-size:13px; font-weight:700; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px;"><i class="fa-solid fa-layer-group"></i> <span data-i18n="lblMapCategories">Categorie</span> <i class="fa-solid fa-caret-down" style="font-size:11px;"></i></summary>
-            <div id="mapCatList" style="position:absolute; left:10px; top:130%; z-index:60; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:10px 14px; min-width:180px; box-shadow:var(--shadow-float);"></div>
-          </details>
+        <div class="map-seg" role="group" aria-label="Vista mappa" data-i18n-aria-label="ariaMapViewSwitch">
+          <button type="button" id="mapViewMinimalBtn" class="map-view-btn" data-i18n="btnMapMinimal">Schema</button>
+          <button type="button" id="mapViewLayeredBtn" class="map-view-btn" data-i18n="btnMapLayered">Gerarchia</button>
+        </div>
+        <span class="map-tb-sep" aria-hidden="true"></span>
 
-          <!-- Core by hand, for both views: up to two per location (a core
-               pair). The deduced core (border or best connected device) may
-               not be the real one; rows are redone from the chosen ones.
-               Filled by topology.js fillMapCoreMenu(). -->
-          <details id="mapCoreMenu" style="position:relative; padding-left:10px; border-left:1px solid var(--border);">
-            <summary style="list-style:none; cursor:pointer; font-size:13px; font-weight:700; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px;"><i class="fa-solid fa-sitemap"></i> <span data-i18n="lblMapCore">Core</span> <span id="mapCoreCount"></span> <i class="fa-solid fa-caret-down" style="font-size:11px;"></i></summary>
-            <div id="mapCoreList" class="map-core-list"></div>
-          </details>
+        <!-- Selettore categorie da mostrare nella mappa -->
+        <details id="mapCatMenu" class="map-pop">
+          <summary class="map-tb-btn"><i class="fa-solid fa-layer-group" aria-hidden="true"></i> <span data-i18n="lblMapCategories">Categorie</span> <i class="fa-solid fa-chevron-down map-tb-caret" aria-hidden="true"></i></summary>
+          <div id="mapCatList" class="map-pop-panel"></div>
+        </details>
 
-          <!-- Elenco dispositivi della Sede selezionata: spunta/deseleziona per
-               escludere singoli apparati (e i relativi link) dalla mappa. Filtro
-               applicato prima del render, quindi vale sia per la vista classica
-               che per quella minimalista. -->
-          <details id="deviceFilterMenu" style="position:relative; padding-left:10px; border-left:1px solid var(--border);">
-            <summary style="list-style:none; cursor:pointer; font-size:13px; font-weight:700; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px;"><i class="fa-solid fa-list-check"></i> <span data-i18n="lblDeviceFilter">Dispositivi</span> <i class="fa-solid fa-caret-down" style="font-size:11px;"></i></summary>
-            <div id="deviceFilterList" style="position:absolute; left:10px; top:130%; z-index:60; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:10px 14px; min-width:220px; max-height:320px; overflow-y:auto; box-shadow:var(--shadow-float);"></div>
-          </details>
+        <!-- Core by hand, for both views: up to two per location (a core
+             pair). The deduced core (border or best connected device) may
+             not be the real one; rows are redone from the chosen ones.
+             Filled by topology.js fillMapCoreMenu(). -->
+        <details id="mapCoreMenu" class="map-pop">
+          <summary class="map-tb-btn"><i class="fa-solid fa-sitemap" aria-hidden="true"></i> <span data-i18n="lblMapCore">Core</span> <span id="mapCoreCount" class="map-tb-count"></span> <i class="fa-solid fa-chevron-down map-tb-caret" aria-hidden="true"></i></summary>
+          <div id="mapCoreList" class="map-core-list map-pop-panel"></div>
+        </details>
 
-          <!-- Interruttore dispositivi scoperti (CDP/LLDP): nascosti di default -->
-          <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-muted); cursor: pointer; user-select: none; padding-left: 10px; border-left: 1px solid var(--border); margin: 0;">
-            <input type="checkbox" id="toggleDiscovered" style="width: 16px; height: 16px; accent-color: #a3a3a3; cursor: pointer; border-radius: 0;">
-            <span data-i18n="lblShowDiscovered">Mostra Scoperti</span>
-          </label>
-
-          <!-- Interruttore range dominio VTP: colora i nodi per dominio VTP -->
-          <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-muted); cursor: pointer; user-select: none; padding-left: 10px; border-left: 1px solid var(--border); margin: 0;">
-            <input type="checkbox" id="toggleVtpDomain" style="width: 16px; height: 16px; accent-color: #b76bff; cursor: pointer; border-radius: 0;">
-            <span data-i18n="lblVtpDomain">Dominio VTP</span>
-          </label>
-
-          <!-- View selector: Schema or Hierarchy -->
-          <div style="display:inline-flex; align-items:center; gap:4px; padding-left:10px; border-left:1px solid var(--border);">
-            <button id="mapViewMinimalBtn" class="map-view-btn chip" style="width:auto; margin:0; padding:5px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnMapMinimal">Schema</button>
-            <button id="mapViewLayeredBtn" class="map-view-btn chip" style="width:auto; margin:0; padding:5px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnMapLayered">Gerarchia</button>
+        <!-- Elenco dispositivi della Sede selezionata: spunta/deseleziona per
+             escludere singoli apparati (e i relativi link) dalla mappa. Filtro
+             applicato prima del render, quindi vale per entrambe le viste. -->
+        <details id="deviceFilterMenu" class="map-pop">
+          <summary class="map-tb-btn"><i class="fa-solid fa-list-check" aria-hidden="true"></i> <span data-i18n="lblDeviceFilter">Dispositivi</span> <i class="fa-solid fa-chevron-down map-tb-caret" aria-hidden="true"></i></summary>
+          <div class="map-pop-panel map-dev-panel">
+            <!-- Narrows the list below by name or IP; filled by topology.js. -->
+            <input type="search" id="deviceFilterSearch" class="map-pop-search" placeholder="Cerca nome o IP" data-i18n-placeholder="phMapDeviceSearch" aria-label="Cerca dispositivo" data-i18n-aria-label="ariaMapDeviceSearch">
+            <div id="deviceFilterList" class="map-pop-scroll"></div>
+            <p id="deviceFilterEmpty" class="map-view-hint" hidden data-i18n="mapDeviceSearchNone">Nessun dispositivo corrisponde.</p>
           </div>
+        </details>
 
-          <!-- Vista "A livelli": suggerimento + azzeramento dei piani riassegnati a mano -->
-          <span id="layeredResetWrap" style="display:none; align-items:center; gap:8px; padding-left:10px; border-left:1px solid var(--border);">
-            <span style="font-size:12px; color:var(--text-muted);" data-i18n="lblLayeredHint">Trascina in verticale per cambiare livello · click su un gruppo per aprirlo · apri un apparato per segnarlo come core</span>
-            <button id="layeredCollapseBtn" class="chip" style="width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnLayeredCollapse">Comprimi gruppi</button>
-            <button id="layeredResetBtn" class="chip" style="width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnLayeredReset">Azzera livelli</button>
-            <button id="layeredNamesBtn" class="chip" style="width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnLayeredNames">Nomi livelli</button>
-            <!-- Free move: cards go anywhere, positions saved per site. -->
-            <label for="toggleLayeredFree" style="display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--text-muted); cursor:pointer; user-select:none; margin:0;">
-              <input type="checkbox" id="toggleLayeredFree" style="width:16px; height:16px; accent-color:var(--text-soft); cursor:pointer; border-radius:0;">
-              <span data-i18n="lblLayeredFree">Spostamento libero</span>
-            </label>
-            <button id="layeredTidyBtn" class="chip" style="display:none; width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnSchemaTidy">Riordina mappa</button>
-            <!-- Cable labels: size, short form, placement (topology.js, layeredTagCfg).
-                 A click on a label flips its size, a drag moves it. -->
-            <span class="layered-tag-opts" title="Clic su un'etichetta: grande/piccola. Trascina per spostarla." data-i18n-title="topoLayeredTagHint">
-              <label for="layeredTagSize" data-i18n="lblLayeredTagSize">Etichette</label>
-              <select id="layeredTagSize">
-                <option value="big" data-i18n="optLayeredTagBig">Grandi</option>
-                <option value="small" data-i18n="optLayeredTagSmall">Piccole</option>
-              </select>
-              <label for="layeredTagForm" data-i18n="lblLayeredTagForm">Forma piccola</label>
-              <select id="layeredTagForm">
-                <option value="abbr" data-i18n="optLayeredTagAbbr">Nome abbreviato</option>
-                <option value="ports" data-i18n="optLayeredTagPorts">Solo porta</option>
-                <option value="one" data-i18n="optLayeredTagOne">Una per collegamento</option>
-              </select>
-              <label for="layeredTagPlace" data-i18n="lblLayeredTagPlace">Posizione</label>
-              <select id="layeredTagPlace">
-                <option value="stack" data-i18n="optLayeredTagStack">Sopra la card</option>
-                <option value="side" data-i18n="optLayeredTagSide">Di lato</option>
-                <option value="auto" data-i18n="optLayeredTagAuto">Automatica</option>
-              </select>
-              <label for="toggleLayeredPcLane" class="layered-tag-check">
-                <input type="checkbox" id="toggleLayeredPcLane">
-                <span data-i18n="lblLayeredPcLane">Port-Channel in rame continuo</span>
-              </label>
-              <button id="layeredTagResetBtn" type="button" class="chip" data-i18n="btnLayeredTagReset">Rimetti etichette</button>
-            </span>
-          </span>
+        <span class="map-tb-grow"></span>
 
-          <!-- Interruttore tooltip al passaggio del mouse: solo per la nuova mappa,
-               dove le etichette Port-Channel sono già sempre visibili sul disegno -->
-          <label id="minimalHoverWrap" style="display: none; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-muted); cursor: pointer; user-select: none; padding-left: 10px; border-left: 1px solid var(--border); margin: 0;">
-            <input type="checkbox" id="toggleMinimalHover" style="width: 16px; height: 16px; accent-color: var(--text-soft); cursor: pointer; border-radius: 0;">
-            <span data-i18n="lblHoverInfo">Info al passaggio</span>
-          </label>
-          <!-- Schema: rimette i riquadri in righe ordinate dopo i trascinamenti. -->
-          <button id="schemaTidyBtn" class="chip" style="display:none; width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnSchemaTidy">Riordina mappa</button>
-          <!-- Schema readability: two presets and four controls. Bound in
-               topology.js; shown only in the Schema view (updateMapViewButtons). -->
-          <span id="schemaReadWrap" class="schema-read-wrap" style="display:none;">
-            <button type="button" id="schemaPresetRecommended" class="chip" data-i18n="btnSchemaPresetRecommended" data-i18n-title="titleSchemaPresetRecommended" title="Focus su clic, etichette porta solo sul focus, righe a capo">Consigliata</button>
-            <button type="button" id="schemaPresetOverview" class="chip" data-i18n="btnSchemaPresetOverview" data-i18n-title="titleSchemaPresetOverview" title="Focus su clic, uplink raggruppati, righe a capo, nessuna etichetta porta">Panoramica</button>
-            <label for="toggleSchemaFocus"><input type="checkbox" id="toggleSchemaFocus"> <span data-i18n="lblSchemaFocus">Focus su clic</span></label>
-            <label for="schemaPortLabels" data-i18n="lblSchemaPortLabels">Etichette porta</label>
-            <select id="schemaPortLabels">
-              <option value="all" data-i18n="optSchemaLblAll">Tutte</option>
-              <option value="focus" data-i18n="optSchemaLblFocus">Solo focus</option>
-              <option value="none" data-i18n="optSchemaLblNone">Nessuna</option>
-            </select>
-            <label for="toggleSchemaWrap" data-i18n-title="titleSchemaWrap" title="Riordina la mappa: gli spostamenti manuali di questa sede si perdono"><input type="checkbox" id="toggleSchemaWrap"> <span data-i18n="lblSchemaWrap">Righe a capo</span></label>
-            <label for="toggleSchemaGroupUplinks"><input type="checkbox" id="toggleSchemaGroupUplinks"> <span data-i18n="lblSchemaGroupUplinks">Raggruppa uplink</span></label>
-            <label for="schemaApMode" data-i18n="lblSchemaApMode" data-i18n-title="titleSchemaApMode" title="Riordina la mappa: gli spostamenti manuali di questa sede si perdono">Access point</label>
-            <select id="schemaApMode">
-              <option value="each" data-i18n="optSchemaApEach">Uno per riquadro</option>
-              <option value="group" data-i18n="optSchemaApGroup">Gruppo compresso</option>
-              <option value="column" data-i18n="optSchemaApColumn">Colonna</option>
-            </select>
-          </span>
-          <!-- /schemaReadWrap -->
+        <!-- View options. Sections for one view only are shown by
+             updateMapViewButtons() in topology.js. -->
+        <details id="mapViewMenu" class="map-pop map-pop-end">
+          <summary class="map-tb-btn"><i class="fa-solid fa-sliders" aria-hidden="true"></i> <span data-i18n="lblMapViewOptions">Vista</span> <i class="fa-solid fa-chevron-down map-tb-caret" aria-hidden="true"></i></summary>
+          <div class="map-pop-panel map-view-panel">
+            <section class="map-view-sec">
+              <h3 class="map-view-h" data-i18n="lblMapOnMap">Sulla mappa</h3>
+              <!-- Dispositivi scoperti (CDP/LLDP): nascosti di default -->
+              <label class="map-opt" for="toggleDiscovered"><input type="checkbox" id="toggleDiscovered"> <span data-i18n="lblShowDiscovered">Mostra Scoperti</span></label>
+              <!-- Colora i nodi per dominio VTP -->
+              <label class="map-opt" for="toggleVtpDomain"><input type="checkbox" id="toggleVtpDomain"> <span data-i18n="lblVtpDomain">Dominio VTP</span></label>
+              <!-- Tooltip al passaggio: solo Schema, dove le etichette
+                   Port-Channel sono già sempre visibili sul disegno -->
+              <label id="minimalHoverWrap" class="map-opt" for="toggleMinimalHover" style="display:none;"><input type="checkbox" id="toggleMinimalHover"> <span data-i18n="lblHoverInfo">Info al passaggio</span></label>
+            </section>
 
-          <!-- Color-picker + legenda dei tipi di collegamento: solo nuova mappa.
-               Generato da MINIMAL_LINK_TYPES (stessa tabella usata dal renderer). -->
-          <div id="minimalLegendWrap" style="display:none; align-items:center; gap:12px; flex-wrap:wrap; padding-left:10px; border-left:1px solid var(--border);"></div>
+            <!-- Schema readability: two presets and four controls. -->
+            <section id="schemaReadWrap" class="map-view-sec" style="display:none;">
+              <h3 class="map-view-h" data-i18n="lblMapReadability">Leggibilità</h3>
+              <div class="map-seg map-seg-fill">
+                <button type="button" id="schemaPresetRecommended" data-i18n="btnSchemaPresetRecommended" data-i18n-title="titleSchemaPresetRecommended" title="Focus su clic, etichette porta solo sul focus, righe a capo">Consigliata</button>
+                <button type="button" id="schemaPresetOverview" data-i18n="btnSchemaPresetOverview" data-i18n-title="titleSchemaPresetOverview" title="Focus su clic, uplink raggruppati, righe a capo, nessuna etichetta porta">Panoramica</button>
+              </div>
+              <label class="map-opt" for="toggleSchemaFocus"><input type="checkbox" id="toggleSchemaFocus"> <span data-i18n="lblSchemaFocus">Focus su clic</span></label>
+              <div class="map-opt-row">
+                <label for="schemaPortLabels" data-i18n="lblSchemaPortLabels">Etichette porta</label>
+                <select id="schemaPortLabels">
+                  <option value="all" data-i18n="optSchemaLblAll">Tutte</option>
+                  <option value="focus" data-i18n="optSchemaLblFocus">Solo focus</option>
+                  <option value="none" data-i18n="optSchemaLblNone">Nessuna</option>
+                </select>
+              </div>
+              <label class="map-opt" for="toggleSchemaWrap" data-i18n-title="titleSchemaWrap" title="Riordina la mappa: gli spostamenti manuali di questa sede si perdono"><input type="checkbox" id="toggleSchemaWrap"> <span data-i18n="lblSchemaWrap">Righe a capo</span></label>
+              <label class="map-opt" for="toggleSchemaGroupUplinks"><input type="checkbox" id="toggleSchemaGroupUplinks"> <span data-i18n="lblSchemaGroupUplinks">Raggruppa uplink</span></label>
+              <div class="map-opt-row">
+                <label for="schemaApMode" data-i18n="lblSchemaApMode" data-i18n-title="titleSchemaApMode" title="Riordina la mappa: gli spostamenti manuali di questa sede si perdono">Access point</label>
+                <select id="schemaApMode">
+                  <option value="each" data-i18n="optSchemaApEach">Uno per riquadro</option>
+                  <option value="group" data-i18n="optSchemaApGroup">Gruppo compresso</option>
+                  <option value="column" data-i18n="optSchemaApColumn">Colonna</option>
+                </select>
+              </div>
+              <p class="map-view-hint" data-i18n="lblMapRetidyWarn">Righe a capo e Access point riordinano la sede: gli spostamenti manuali si perdono.</p>
+              <!-- Rimette i riquadri in righe ordinate dopo i trascinamenti. -->
+              <button type="button" id="schemaTidyBtn" class="map-tb-btn map-tb-full" style="display:none;" data-i18n="btnSchemaTidy">Riordina mappa</button>
+            </section>
+            <!-- /schemaReadWrap -->
 
-          <!-- Categorie personalizzate per i link (nome + colore + tratteggio) e
-               loro assegnazione manuale a un collegamento specifico (click destro
-               su un cavo nella mappa minimalista). Solo nuova mappa. -->
-          <details id="minimalCustomCatMenu" style="display:none; position:relative; padding-left:10px; border-left:1px solid var(--border);">
-            <summary style="list-style:none; cursor:pointer; font-size:13px; font-weight:700; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px;"><i class="fa-solid fa-tags"></i> <span data-i18n="lblCustomCats">Categorie link</span> <i class="fa-solid fa-caret-down" style="font-size:11px;"></i></summary>
-            <div id="minimalCustomCatList" style="position:absolute; left:10px; top:130%; z-index:60; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:10px 14px; min-width:230px; box-shadow:var(--shadow-float);"></div>
-          </details>
+            <!-- Gerarchia: livelli riassegnati a mano, gruppi, spostamento libero. -->
+            <section id="layeredResetWrap" class="map-view-sec" style="display:none;">
+              <h3 class="map-view-h" data-i18n="lblMapLevels">Livelli</h3>
+              <p class="map-view-hint" data-i18n="lblLayeredHint">Cambia livello trascinando in verticale, col tasto destro o dal pannello dell'apparato (Alt+↑/↓ sulla selezione) · click su un gruppo per aprirlo · apri un apparato per segnarlo come core</p>
+              <div class="map-view-actions">
+                <button type="button" id="layeredCollapseBtn" class="map-tb-btn" data-i18n="btnLayeredCollapse">Comprimi gruppi</button>
+                <button type="button" id="layeredResetBtn" class="map-tb-btn" data-i18n="btnLayeredReset">Azzera livelli</button>
+                <button type="button" id="layeredNamesBtn" class="map-tb-btn" data-i18n="btnLayeredNames">Nomi livelli</button>
+              </div>
+              <!-- Free move: cards go anywhere, positions saved per site. -->
+              <label class="map-opt" for="toggleLayeredFree"><input type="checkbox" id="toggleLayeredFree"> <span data-i18n="lblLayeredFree">Spostamento libero</span></label>
+              <button type="button" id="layeredTidyBtn" class="map-tb-btn map-tb-full" style="display:none;" data-i18n="btnSchemaTidy">Riordina mappa</button>
+              <!-- Cable labels: size, short form, placement (topology.js, layeredTagCfg).
+                   A click on a label flips its size, a drag moves it. -->
+              <div class="layered-tag-opts" title="Clic su un'etichetta: grande/piccola. Trascina per spostarla." data-i18n-title="topoLayeredTagHint">
+                <h3 class="map-view-h" data-i18n="lblMapCableLabels">Etichette cavi</h3>
+                <div class="map-opt-row">
+                  <label for="layeredTagSize" data-i18n="lblLayeredTagSize">Etichette</label>
+                  <select id="layeredTagSize">
+                    <option value="big" data-i18n="optLayeredTagBig">Grandi</option>
+                    <option value="small" data-i18n="optLayeredTagSmall">Piccole</option>
+                  </select>
+                </div>
+                <div class="map-opt-row">
+                  <label for="layeredTagForm" data-i18n="lblLayeredTagForm">Forma piccola</label>
+                  <select id="layeredTagForm">
+                    <option value="abbr" data-i18n="optLayeredTagAbbr">Nome abbreviato</option>
+                    <option value="ports" data-i18n="optLayeredTagPorts">Solo porta</option>
+                    <option value="one" data-i18n="optLayeredTagOne">Una per collegamento</option>
+                  </select>
+                </div>
+                <div class="map-opt-row">
+                  <label for="layeredTagPlace" data-i18n="lblLayeredTagPlace">Posizione</label>
+                  <select id="layeredTagPlace">
+                    <option value="stack" data-i18n="optLayeredTagStack">Sopra la card</option>
+                    <option value="side" data-i18n="optLayeredTagSide">Di lato</option>
+                    <option value="auto" data-i18n="optLayeredTagAuto">Automatica</option>
+                  </select>
+                </div>
+                <label for="toggleLayeredPcLane" class="map-opt layered-tag-check">
+                  <input type="checkbox" id="toggleLayeredPcLane">
+                  <span data-i18n="lblLayeredPcLane">Port-Channel in rame continuo</span>
+                </label>
+                <button id="layeredTagResetBtn" type="button" class="map-tb-btn" data-i18n="btnLayeredTagReset">Rimetti etichette</button>
+              </div>
+            </section>
 
-        </div>
-        <div style="display:flex; gap: 8px;">
-          <button class="btn btn-danger btn-small" id="btnResetInteractiveTopology" style="width: auto; margin: 0;" data-i18n="btnResetTopology">
-            <i class="fa-solid fa-trash-can"></i> Reset Topologia
-          </button>
-          <button class="btn btn-secondary btn-small" id="btnRefreshInteractiveMap" style="width: auto; margin: 0;" data-i18n="btnRefreshMap">
-            <i class="fa-solid fa-arrows-rotate"></i> Aggiorna Vista
-          </button>
-          <button class="btn btn-secondary btn-small" id="btnDownloadTopology" style="width:auto; margin:0;" data-i18n="btnDownloadMap">
-            <i class="fa-solid fa-download"></i> Scarica Mappa
-          </button>
-          <button class="btn btn-secondary btn-small" id="btnExportVisioMap" style="width:auto; margin:0;" data-i18n="btnExportVisio">
-            <i class="fa-solid fa-diagram-project"></i> Esporta Visio
-          </button>
-          <button class="btn btn-secondary btn-small" id="btnExportDrawioMap" style="width:auto; margin:0;" data-i18n="btnExportDrawio">
-            <i class="fa-solid fa-sitemap"></i> Esporta draw.io
-          </button>
-          <button class="btn btn-secondary btn-small" id="btnExportPdfMap" style="width:auto; margin:0;" data-i18n="btnExportPdf">
-            <i class="fa-solid fa-file-pdf"></i> Esporta PDF
-          </button>
-        </div>
-      </div>
+            <!-- AI layout, both views (ai/map_layout.py): the provider gets
+                 device types and cables as tokens, never a name, IP or port. -->
+            <section id="mapAiSec" class="map-view-sec">
+              <h3 class="map-view-h" data-i18n="lblMapAi">Riordina con AI</h3>
+              <div role="group" aria-label="Obiettivi" data-i18n-aria-label="lblMapAiGoals">
+                <label class="map-opt"><input type="checkbox" name="mapAiGoal" value="min_crossings" checked> <span data-i18n="mapAiGoalCrossings">Meno incroci tra i cavi</span></label>
+                <label class="map-opt"><input type="checkbox" name="mapAiGoal" value="core_center"> <span data-i18n="mapAiGoalCore">Core al centro</span></label>
+                <label class="map-opt"><input type="checkbox" name="mapAiGoal" value="edge_top"> <span data-i18n="mapAiGoalEdge">Firewall e router in alto</span></label>
+                <label class="map-opt"><input type="checkbox" name="mapAiGoal" value="ap_under_switch"> <span data-i18n="mapAiGoalAp">AP sotto il proprio switch</span></label>
+                <label class="map-opt"><input type="checkbox" name="mapAiGoal" value="group_by_type"> <span data-i18n="mapAiGoalType">Stesso tipo vicino</span></label>
+                <label class="map-opt"><input type="checkbox" name="mapAiGoal" value="selected_together"> <span data-i18n="mapAiGoalSelected">Tieni vicini i selezionati (Ctrl+clic sulla mappa)</span></label>
+              </div>
+              <!-- Sites to rearrange: shown when the map holds more than one;
+                   the others stay where they are. Filled by renderMapAiZones(). -->
+              <div id="mapAiZonesWrap" hidden>
+                <p class="map-view-h" data-i18n="lblMapAiZones">Sedi da riordinare</p>
+                <div id="mapAiZones" role="group" aria-label="Sedi da riordinare" data-i18n-aria-label="lblMapAiZones"></div>
+              </div>
+              <!-- Optional direction in the user's words. The server refuses
+                   it (and sends nothing) if it names a device, site, address
+                   or number: ai/map_layout.py check_instruction. -->
+              <label for="mapAiNote" class="map-view-h" data-i18n="lblMapAiNote">Direzione per l'AI (facoltativa)</label>
+              <textarea id="mapAiNote" class="map-ai-note" rows="2" maxlength="300" placeholder="Es. AP in fondo a destra, i selezionati vicino al core" data-i18n-placeholder="phMapAiNote"></textarea>
+              <p class="map-view-hint" data-i18n="lblMapAiPrivacy">All'AI arrivano solo tipo di apparato, collegamenti e la tua direzione. Una direzione che contiene un nome, un IP, una sede o un numero lungo non viene inviata: indica gli apparati per tipo o selezionali.</p>
+              <div class="map-view-actions">
+                <button type="button" id="mapAiRunBtn" class="map-tb-btn" data-i18n="btnMapAiRun">Proponi disposizione</button>
+                <button type="button" id="mapAiUndoBtn" class="map-tb-btn" hidden data-i18n="btnMapAiUndo">Annulla</button>
+              </div>
+              <p id="mapAiStatus" class="map-view-hint" role="status" aria-live="polite"></p>
+            </section>
+
+            <!-- Link types (color-picker legend, built from MINIMAL_LINK_TYPES)
+                 and custom link categories: Schema only. -->
+            <section id="mapViewLinks" class="map-view-sec" hidden>
+              <h3 class="map-view-h" data-i18n="lblMapLinks">Collegamenti</h3>
+              <div id="minimalLegendWrap" style="display:none; align-items:center; gap:10px 14px; flex-wrap:wrap;"></div>
+              <!-- Categorie personalizzate (nome + colore + tratteggio), assegnate
+                   a un cavo col click destro sulla mappa. -->
+              <details id="minimalCustomCatMenu" style="display:none;">
+                <summary class="map-view-link"><i class="fa-solid fa-tags" aria-hidden="true"></i> <span data-i18n="lblCustomCats">Categorie link</span></summary>
+                <div id="minimalCustomCatList"></div>
+              </details>
+            </section>
+          </div>
+        </details>
+
+        <button type="button" class="map-tb-btn map-tb-icon" id="btnRefreshInteractiveMap" aria-label="Aggiorna vista" data-i18n-aria-label="ariaMapRefresh"><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i></button>
+
+        <details id="mapExportMenu" class="map-pop map-pop-end">
+          <summary class="map-tb-btn"><i class="fa-solid fa-download" aria-hidden="true"></i> <span data-i18n="lblMapExport">Esporta</span> <i class="fa-solid fa-chevron-down map-tb-caret" aria-hidden="true"></i></summary>
+          <div class="map-pop-panel map-menu" role="menu">
+            <button type="button" role="menuitem" class="map-menu-item" id="btnDownloadTopology"><i class="fa-solid fa-image" aria-hidden="true"></i><span><span data-i18n="mapExportPng">Immagine PNG</span><small data-i18n="mapExportPngHint">Alta risoluzione, tutta la mappa</small></span></button>
+            <button type="button" role="menuitem" class="map-menu-item" id="btnExportPdfMap"><i class="fa-solid fa-file-pdf" aria-hidden="true"></i><span><span data-i18n="mapExportPdf">PDF</span><small data-i18n="mapExportPdfHint">Pagina singola, da stampare</small></span></button>
+            <div class="map-menu-sep" role="separator"></div>
+            <p class="map-view-h" data-i18n="lblMapEditable">Modificabili</p>
+            <button type="button" role="menuitem" class="map-menu-item" id="btnExportVisioMap"><i class="fa-solid fa-diagram-project" aria-hidden="true"></i><span data-i18n="mapExportVisio">Visio (.vsdx)</span></button>
+            <button type="button" role="menuitem" class="map-menu-item" id="btnExportDrawioMap"><i class="fa-solid fa-sitemap" aria-hidden="true"></i><span data-i18n="mapExportDrawio">draw.io (.drawio)</span></button>
+          </div>
+        </details>
+
+        <!-- Destructive reset lives behind ⋯, kept apart from the export menu. -->
+        <details id="mapMoreMenu" class="map-pop map-pop-end map-tb-isolated">
+          <summary class="map-tb-btn map-tb-icon" aria-label="Altre azioni" data-i18n-aria-label="ariaMapMore"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></summary>
+          <div class="map-pop-panel map-menu" role="menu">
+            <button type="button" role="menuitem" class="map-menu-item map-menu-danger" id="btnResetInteractiveTopology" data-i18n="btnResetTopology"><i class="fa-solid fa-trash-can"></i> Reset Topologia</button>
+          </div>
+        </details>
       </div>
 
       <div id="networkGraphWrapper" style="position: relative; flex-grow: 1; overflow: hidden;">
@@ -1199,6 +1251,19 @@
                 <div class="drawer-kpi"><span class="kpi-label" data-i18n="lblDrawerMgmtVlan">VLAN Mgmt / VTP</span><strong id="drawerNodeMgmtVlan">—</strong></div>
               </div>
               <div id="drawerStackInfo" class="drawer-list" style="display:none; margin-top:10px;"></div>
+              <!-- Hierarchy view only: the card's level on the map (topology.js, renderDrawerLevel). -->
+              <div id="drawerLevelBox" hidden style="margin-top:12px; padding:10px; border:1px solid var(--border); background:var(--surface-2);">
+                <label for="drawerLevelSelect" class="kpi-label" data-i18n="lblDrawerLevel">Livello sulla mappa</label>
+                <div style="display:flex; gap:6px; margin-top:6px;">
+                  <button type="button" id="drawerLevelUp" class="btn btn-secondary btn-small" style="width:auto; margin:0;" aria-label="Un livello su" data-i18n-aria-label="topoLevelUp"><i class="fa-solid fa-chevron-up"></i></button>
+                  <select id="drawerLevelSelect" style="flex:1; margin:0;"></select>
+                  <button type="button" id="drawerLevelDown" class="btn btn-secondary btn-small" style="width:auto; margin:0;" aria-label="Un livello giù" data-i18n-aria-label="topoLevelDown"><i class="fa-solid fa-chevron-down"></i></button>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px; margin-top:6px; font-size:12px; color:var(--text-muted);">
+                  <span id="drawerLevelState"></span>
+                  <button type="button" id="drawerLevelAuto" class="btn btn-secondary btn-small" style="width:auto; margin:0;" hidden></button>
+                </div>
+              </div>
             </div>
             <!-- Vicini CDP/LLDP -->
             <div class="drawer-section">

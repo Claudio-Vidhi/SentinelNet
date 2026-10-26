@@ -8,7 +8,7 @@ import asyncio
 import json
 import logging
 import os
-from typing import Optional, List, Dict, Any
+from typing import Annotated, Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from routers.deps import require_tab
@@ -19,7 +19,9 @@ from services import inventory_manager
 from core import core_engine, db
 from services import visio_export
 from security.security_manager import log_audit
-from routers.deps import get_current_user, require_admin, filter_map_to_scope, user_group_scope, require_operator
+from routers.deps import get_current_user, require_admin, filter_map_to_scope, user_group_scope, require_operator, assert_group_allowed
+from routers.ai import chat_with_active_profile
+from ai import map_layout
 
 router = APIRouter(tags=["Topology"])
 
@@ -51,6 +53,30 @@ class VisioExportSchema(BaseModel):
     # Cavi strutturati (mappa minimalista): diventano forme 1-D continue
     # incollate (glue) ai connection point dei riquadri dispositivo.
     connectors: Optional[List[dict]] = None
+
+
+class AiLayoutNode(BaseModel):
+    id: str = Field(max_length=256)
+    type: str = Field("other", max_length=32)
+    level: int = Field(0, ge=0, le=100)
+    zone: str = Field("", max_length=256)
+
+class AiLayoutLink(BaseModel):
+    a: str = Field(max_length=256)
+    b: str = Field(max_length=256)
+    kind: str = Field("link", max_length=32)
+    count: int = Field(1, ge=1, le=64)
+
+class AiLayoutSchema(BaseModel):
+    group: str = Field("all", max_length=256)
+    nodes: List[AiLayoutNode] = Field(max_length=map_layout.MAX_NODES)
+    links: List[AiLayoutLink] = Field([], max_length=map_layout.MAX_LINKS)
+    goals: List[str] = Field([], max_length=len(map_layout.GOALS))
+    selected: List[str] = Field([], max_length=map_layout.MAX_NODES)
+    # Optional free-text direction from the user, and the names drawn on the
+    # map (labels, sites) it is checked against. ``deny`` never leaves.
+    instruction: str = Field("", max_length=map_layout.MAX_INSTRUCTION)
+    deny: List[Annotated[str, Field(max_length=256)]] = Field([], max_length=4 * map_layout.MAX_NODES)
 
 
 # --- ROTTE ---
@@ -124,6 +150,43 @@ def export_map_vsdx(payload: VisioExportSchema, current_user = Depends(get_curre
         media_type="application/vnd.ms-visio.drawing",
         headers={"Content-Disposition": "attachment; filename=sentinelnet-map.vsdx"}
     )
+
+@router.post("/api/map/ai-layout", dependencies=[Depends(require_tab("tab-map-interactive"))])
+def ai_map_layout(payload: AiLayoutSchema, current_user = Depends(get_current_user)):
+    """Rows for the Schema map proposed by the active AI profile.
+
+    Only an anonymous graph leaves (ai/map_layout.py): tokens, device types,
+    levels and link kinds. The answer is read back to real ids here and goes
+    only to the caller, who sent those ids in the first place.
+    """
+    if payload.group != "all":
+        assert_group_allowed(current_user, payload.group)
+    if not payload.nodes:
+        raise HTTPException(status_code=400, detail="La mappa non ha apparati da disporre.")
+    deny = [*payload.deny, payload.group,
+            *(n.id for n in payload.nodes), *(n.zone for n in payload.nodes)]
+    try:
+        instruction = map_layout.check_instruction(payload.instruction, deny)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Direzione non inviata: {e}. "
+                            "Indica gli apparati per tipo o selezionali sulla mappa.")
+    data, token_map = map_layout.build_payload(
+        [n.model_dump() for n in payload.nodes], [lk.model_dump() for lk in payload.links],
+        payload.goals, payload.selected)
+    try:
+        messages = map_layout.build_messages(data, instruction)
+    except ValueError as e:
+        # The egress check refused: a bug in build_payload, never user error.
+        logging.getLogger(__name__).error("AI layout payload refused: %s", e)
+        raise HTTPException(status_code=500, detail="Dati della mappa non anonimi: invio bloccato.")
+    reply, profile = chat_with_active_profile(messages)
+    log_audit(f"Disposizione mappa via AI (provider='{profile.get('provider')}', "
+              f"{len(data['nodes'])} nodi) richiesta dall'utente '{current_user.get('sub')}'.")
+    try:
+        rows, note = map_layout.parse_reply(reply, token_map)
+    except ValueError as e:
+        raise HTTPException(status_code=502, detail=f"Risposta AI non utilizzabile: {e}")
+    return {"rows": rows, "note": note}
 
 @router.get("/api/portchannels", dependencies=[Depends(require_tab("tab-map", "tab-map-interactive"))])
 async def get_portchannels(group: str = "all",

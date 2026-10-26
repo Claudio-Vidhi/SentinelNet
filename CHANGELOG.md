@@ -10,6 +10,39 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Mappa, barra dei comandi rifatta**: una riga sola. Sede, Schema/Gerarchia,
+  filtri *Categorie*, *Core* e *Dispositivi*; le opzioni della vista stanno nel
+  menu *Vista*, divise in sezioni che cambiano con la vista; *Esporta* riunisce
+  PNG, PDF, Visio e draw.io; *Reset topologia* sta dietro ⋯, separato dal
+  resto. Un menu aperto chiude gli altri; clic fuori o Esc lo chiudono. Su
+  telefono il menu si apre sotto la barra, a tutta larghezza.
+- **Mappa, Riordina con AI** (Schema e Gerarchia): obiettivi da spuntare (meno
+  incroci, core al centro, firewall in alto, AP sotto il proprio switch, stesso
+  tipo vicino, selezionati vicini), scelta delle sedi da riordinare e una
+  direzione facoltativa in parole. Usa il profilo AI attivo. Al provider arriva
+  solo un grafo anonimo: token rimescolati a ogni richiesta, tipo di apparato,
+  livello e collegamenti; mai nomi, IP, porte, modelli o sedi. Una direzione che
+  nomina un apparato, una sede, un indirizzo o un numero lungo viene rifiutata
+  prima dell'invio. *Annulla* rimette la disposizione precedente.
+- **Mappa, ricerca nel menu Dispositivi** per nome o IP.
+- **Gerarchia, livello dal pannello dell'apparato**: su/giù, scelta del livello
+  e ritorno all'automatico; i livelli hanno nomi predefiniti (Firewall, Core,
+  Distribuzione, Accesso, Wireless, Controller, Endpoint).
+- **Gerarchia, focus sulla selezione**: i cavi degli apparati selezionati sono
+  evidenziati in arancio tratteggiato, quelli tra due selezionati in rosso.
+- **draw.io interattivo**: *Mostra/Nascondi tutti i cavi* e clic su un apparato
+  o un cavo per evidenziarlo.
+
+### Fixed
+
+- **Export PNG e PDF della mappa**: la risoluzione cresce con la mappa invece
+  di stringere tutto in 3200×2000 px; le mappe grandi restano leggibili. La
+  pagina PDF rientra nel limite di 14400 punti.
+- **Gerarchia, cambio di livello trascinando**: l'apparato resta dove è stato
+  lasciato invece di tornare al centro sotto il suo collegamento.
+
 ## [0.57.0] - 2026-10-24
 
 ### Added
