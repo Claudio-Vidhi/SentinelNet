@@ -10,6 +10,29 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Changed
+
+- **Export classificazione più semplice** (*Classificazione → Esporta CSV*):
+  scenari a un clic (Switch → AP collegati, AP → switch, Seriali e stack,
+  Elenco semplice, Completo, Completo con i vicini solo degli AP) e una frase
+  al posto delle quattro caselle di filtro: «Esporta [categoria] con i vicini
+  [categoria] solo per [categoria] del tenant [tenant]». Le colonne del vicino
+  seguono la frase; l'elenco delle colonne resta chiuso finché non serve. Il
+  tenant parte da quello scelto in alto a sinistra.
+
+### Added
+
+- **Colonne d'inventario nell'export classificazione**: probe, profilo, porta
+  SSH, trasporti e ridondanza (tipo, ruolo, salute, gruppo), così un solo CSV
+  porta dispositivo, vicino e dettagli. Vuote per gli apparati visti solo via
+  CDP/LLDP.
+
+### Fixed
+
+- **Anteprima dell'export classificazione**: mostra subito il caso scelto,
+  conta righe e dispositivi, e una risposta lenta non sovrascrive più una
+  selezione più recente.
+
 ## [0.59.0] - 2026-10-27
 
 ### Added
