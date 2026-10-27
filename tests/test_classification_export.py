@@ -36,6 +36,15 @@ VERSIONS = {"192.0.2.1": {"serial": "SW0000AAAA", "version": "1.0", "status": "o
 AP_ENTRY = {"serial": "FCW0000AAAA", "model": "AIR-EXAMPLE", "wlc_ip": "192.0.2.10",
             "tenant": "ACME", "seen_at": "2026-08-23T10:00:00+00:00"}
 AP_STORE = {"ap-lobby": AP_ENTRY}
+# Only the managed switches are in the inventory; ap-lobby is CDP-discovered.
+INVENTORY = [
+    {"IP": "192.0.2.1", "Hostname": "switch-01", "Group": "ACME", "Probe": "central",
+     "Profile": "default", "SSH Port": "22", "Transports": "ssh"},
+    {"IP": "192.0.2.2", "Hostname": "switch-02", "Group": "BETA", "Probe": "branch",
+     "Profile": "default", "SSH Port": "2222", "Transports": "ssh"},
+    {"IP": "192.0.2.9", "Hostname": "switch-lonely", "Group": "ACME", "Probe": "central",
+     "Profile": "default", "SSH Port": "22", "Transports": "ssh"},
+]
 
 
 def _export(query="", user=None, ap_store_data=None):
@@ -60,6 +69,7 @@ def _export(query="", user=None, ap_store_data=None):
              mock.patch("services.inventory_manager.get_detected_versions", return_value=VERSIONS), \
              mock.patch("services.ap_store.read_all", return_value=store), \
              mock.patch("redundancy.service.redundancy_badges_by_ip", return_value=BADGES), \
+             mock.patch("services.inventory_manager.get_all_devices", return_value=INVENTORY), \
              mock.patch("routers.catalog.log_audit"):
             client = TestClient(app_server.app)
             return client.get("/api/export/classification" + query,
@@ -158,6 +168,32 @@ class ExportRows(unittest.TestCase):
         self.assertEqual("", rows[0][1])
 
 
+class InventoryColumns(unittest.TestCase):
+    """One CSV with device, neighbour and the inventory-only fields."""
+
+    def test_an_inventoried_device_carries_its_inventory_fields(self):
+        rows = _rows(_export("?columns=hostname,probe,profile,ssh_port,transports"))[1:]
+        self.assertEqual(["switch-02", "branch", "default", "2222", "ssh"],
+                         next(r for r in rows if r[0] == "switch-02"))
+
+    def test_a_discovered_device_leaves_the_inventory_fields_empty(self):
+        rows = _rows(_export("?columns=hostname,probe,ssh_port,redundancy_type"))[1:]
+        self.assertEqual(["ap-lobby", "", "", ""],
+                         next(r for r in rows if r[0] == "ap-lobby"))
+
+    def test_redundancy_is_read_from_the_badge(self):
+        rows = _rows(_export("?columns=hostname,redundancy_type"))[1:]
+        by_host = {r[0]: r[1] for r in rows}
+        self.assertEqual("stack", by_host["switch-01"])
+        self.assertEqual("standalone", by_host["switch-02"])
+
+    def test_reverse_direction_ap_with_its_switch(self):
+        rows = _rows(_export("?columns=hostname,neighbour_device,neighbour_port,probe"
+                             "&categories=ap&neighbour_categories=switch"
+                             "&only_matching_neighbours=true"))[1:]
+        self.assertEqual([["ap-lobby", "switch-01", "Gi1/0/1", ""]], rows)
+
+
 class SerialResolution(unittest.TestCase):
     def test_an_inventoried_device_resolves_from_scan_data(self):
         rows = _rows(_export("?columns=hostname,serial"))[1:]
@@ -201,6 +237,7 @@ def _preview(query="", user=None, ap_store_data=None):
              mock.patch("services.inventory_manager.get_detected_versions", return_value=VERSIONS), \
              mock.patch("services.ap_store.read_all", return_value=store), \
              mock.patch("redundancy.service.redundancy_badges_by_ip", return_value=BADGES), \
+             mock.patch("services.inventory_manager.get_all_devices", return_value=INVENTORY), \
              mock.patch("routers.catalog.log_audit"):
             client = TestClient(app_server.app)
             return client.get("/api/export/classification/preview" + query,
@@ -253,6 +290,16 @@ class AdvancedNeighbourAndPreview(unittest.TestCase):
         self.assertEqual(["Hostname", "IP"], data["headers"])
         self.assertEqual(4, data["total_rows"])
         self.assertEqual(2, len(data["rows"]))
+
+    def test_preview_counts_the_devices_behind_the_rows(self):
+        """One row per link: 'N rows' alone does not say how many devices."""
+        data = _preview("?columns=hostname,neighbour_device&categories=switch"
+                        "&neighbour_categories=ap&only_matching_neighbours=true").json()
+        self.assertEqual(1, data["total_rows"])
+        self.assertEqual(1, data["total_devices"])
+        data = _preview("?columns=hostname,neighbour_device").json()
+        self.assertEqual(5, data["total_rows"])
+        self.assertEqual(4, data["total_devices"])
 
     def test_extract_serial_from_backup_cisco(self):
         from core import core_engine

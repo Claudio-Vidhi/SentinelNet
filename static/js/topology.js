@@ -6908,8 +6908,29 @@
     // The column registry lives in the backend, like the inventory export: a
     // second copy here is what lets the two drift apart.
     const CLS_EXPORT_PREFS_KEY = 'sentinelnet.classificationExportPrefs';
+    const CLS_NEIGHBOUR_DEFAULT_COLS = ['neighbour_device', 'neighbour_port', 'neighbour_category'];
+    // A scenario fills the sentence and the columns in one click. columns:
+    // null = the backend default, 'all' = every column except the per-unit ones
+    // (neighbours x stack members would multiply the rows).
+    const CLS_SCENARIOS = {
+        'sw-ap': { category: 'switch', neighbour: 'ap', only: true,
+                   columns: ['hostname', 'ip', 'tenant', 'model', 'serial', 'neighbour_device',
+                             'neighbour_port', 'neighbour_model', 'neighbour_serial'] },
+        'ap-sw': { category: 'ap', neighbour: 'switch', only: true,
+                   columns: ['hostname', 'ip', 'tenant', 'model', 'serial', 'neighbour_device',
+                             'neighbour_ip', 'neighbour_port'] },
+        'serials': { category: '', neighbour: '', only: false,
+                     columns: ['hostname', 'ip', 'tenant', 'category', 'model', 'serial',
+                               'member_index', 'member_role', 'member_serial', 'member_model'] },
+        'simple': { category: '', neighbour: '', only: false, columns: null },
+        'full': { category: '', neighbour: '*', only: false, columns: 'all' },
+    };
     let clsExportColumns = [];
+    let clsDefaultColumns = [];
     let clsExportPreviewTimer = null;
+    // Each preview request gets a number: a slow answer arriving after a newer
+    // one must not overwrite it, or the preview shows a stale selection.
+    let clsPreviewSeq = 0;
 
     function readClsPrefs() {
         try { return JSON.parse(localStorage.getItem(CLS_EXPORT_PREFS_KEY)) || {}; }
@@ -6921,53 +6942,130 @@
             .map(el => el.value);
     }
 
-    async function updateClsExportPreview() {
+    function clsExportSelect(id) {
+        return /** @type {HTMLSelectElement|null} */ (document.getElementById(id));
+    }
+
+    function clsOnlyBox() {
+        return /** @type {HTMLInputElement|null} */ (document.getElementById('clsOnlyMatchingNeighbours'));
+    }
+
+    function clsSetSelect(id, value) {
+        const sel = clsExportSelect(id);
+        if (!sel) return;
+        if (value && !Array.from(sel.options).some(o => o.value === value)) {
+            sel.add(new Option(value, value));
+        }
+        sel.value = value || '';
+    }
+
+    function clsIsNeighbourCol(key) { return key.startsWith('neighbour_'); }
+
+    function clsSetColumns(keys) {
+        const want = new Set(keys);
+        document.querySelectorAll('#clsColumnList input').forEach(b => {
+            /** @type {HTMLInputElement} */ (b).checked = want.has(/** @type {HTMLInputElement} */ (b).value);
+        });
+    }
+
+    function clsMarkScenario(name) {
+        document.querySelectorAll('#clsScenarioList [data-scenario]').forEach(b =>
+            b.setAttribute('aria-pressed', String(/** @type {HTMLElement} */ (b).dataset.scenario === name)));
+    }
+
+    function clsCurrentScenario() {
+        const on = document.querySelector('#clsScenarioList [aria-pressed="true"]');
+        return on ? /** @type {HTMLElement} */ (on).dataset.scenario : '';
+    }
+
+    function clsQuery() {
+        const qs = new URLSearchParams();
+        const cat = clsExportSelect('clsCategorySelect')?.value || '';
+        const nb = clsExportSelect('clsNeighbourSelect')?.value || '';
+        const tenant = clsExportSelect('clsTenantSelect')?.value || '';
+        if (cat) qs.set('categories', cat);
+        if (tenant) qs.set('groups', tenant);
+        if (nb && nb !== '*') {
+            qs.set('neighbour_categories', nb);
+            if (clsOnlyBox()?.checked) qs.set('only_matching_neighbours', 'true');
+        }
+        qs.set('columns', clsChecked('clsColumnList').join(','));
+        return qs;
+    }
+
+    function clsSyncSummary() {
+        const nb = clsExportSelect('clsNeighbourSelect')?.value || '';
+        const only = clsOnlyBox();
+        if (only) only.disabled = !nb || nb === '*';
+        const cols = clsChecked('clsColumnList');
+        const headerOf = new Map(clsExportColumns.map(c => [c.key, c.header]));
+        const count = document.getElementById('clsColumnCount');
+        if (count) count.textContent = String(cols.length);
+        const summary = document.getElementById('clsColumnSummary');
+        if (summary) {
+            summary.textContent = cols.slice(0, 5).map(k => headerOf.get(k) || k).join(', ')
+                + (cols.length > 5 ? ', …' : '');
+        }
+    }
+
+    function applyClsScenario(name) {
+        const s = CLS_SCENARIOS[name];
+        if (!s) return;
+        clsSetSelect('clsCategorySelect', s.category);
+        clsSetSelect('clsNeighbourSelect', s.neighbour);
+        const only = clsOnlyBox();
+        if (only) only.checked = s.only;
+        clsSetColumns(s.columns === null ? clsDefaultColumns
+            : s.columns === 'all' ? clsExportColumns.map(c => c.key).filter(k => !k.startsWith('member_'))
+            : s.columns);
+        clsMarkScenario(name);
+        updateClsExportPreview();
+    }
+
+    function updateClsExportPreview() {
+        clsSyncSummary();
         if (clsExportPreviewTimer) clearTimeout(clsExportPreviewTimer);
         clsExportPreviewTimer = setTimeout(async () => {
-            const cols = clsChecked('clsColumnList');
+            const seq = ++clsPreviewSeq;
             const container = document.getElementById('clsExportPreviewContainer');
             const badge = document.getElementById('clsExportPreviewBadge');
             const status = document.getElementById('clsExportPreviewStatus');
-            const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+            const runBtn = document.getElementById('btnRunClassificationExport');
 
-            if (!cols.length) {
-                if (badge) badge.textContent = `0 ${L.lblExportRowsCount || 'righe'}`;
+            if (!clsChecked('clsColumnList').length) {
+                if (badge) badge.textContent = `0 ${tr('lblExportRowsCount')}`;
                 if (status) status.textContent = '';
+                if (runBtn) runBtn.textContent = tr('btnExportClassification');
                 if (container) {
-                    container.innerHTML = `<div style="color:var(--warning); padding:10px; font-size:12px;">${escapeHtml(L.alertExportNoColumns || 'Seleziona almeno una colonna')}</div>`;
+                    container.innerHTML = `<div style="color:var(--warning); padding:10px; font-size:12px;">${escapeHtml(tr('alertExportNoColumns'))}</div>`;
                 }
                 return;
             }
-            if (status) status.textContent = L.lblExportLoading || 'Caricamento...';
-            const qs = new URLSearchParams({
-                groups: clsChecked('clsFilterGroups').join(','),
-                categories: clsChecked('clsFilterCategories').join(','),
-                neighbour_source_categories: clsChecked('clsFilterNeighbourSourceCategories').join(','),
-                neighbour_categories: clsChecked('clsFilterNeighbourCategories').join(','),
-                columns: cols.join(','),
-                limit: '15',
-            });
-            if (document.getElementById('clsOnlyMatchingNeighbours')?.checked) {
-                qs.set('only_matching_neighbours', 'true');
-            }
-
+            if (status) status.textContent = tr('lblExportLoading');
+            const qs = clsQuery();
+            qs.set('limit', '15');
             const res = await apiFetch('/api/export/classification/preview?' + qs.toString());
+            if (seq !== clsPreviewSeq) return;
             if (!res || !res.ok) {
                 if (status) status.textContent = '';
                 return;
             }
             const data = await res.json();
+            if (seq !== clsPreviewSeq) return;
+            const total = data.total_rows || 0;
             if (badge) {
-                badge.textContent = `${data.total_rows || 0} ${L.lblExportRowsCount || 'righe'}`;
+                badge.textContent = `${total} ${tr('lblExportRowsCount')} · `
+                    + `${data.total_devices || 0} ${tr('lblExportDevicesCount')}`;
             }
+            if (runBtn) runBtn.textContent = tr('btnClsExportRows', { n: total });
             if (status) {
-                status.textContent = (data.total_rows > (data.rows || []).length)
-                    ? `(${(L.lblExportShowingFirst || 'Prime {n} righe').replace('{n}', (data.rows || []).length)})`
+                status.textContent = (total > (data.rows || []).length)
+                    ? `(${tr('lblExportShowingFirst').replace('{n}', (data.rows || []).length)})`
                     : '';
             }
             if (!container) return;
             if (!data.rows || !data.rows.length) {
-                container.innerHTML = `<div style="color:var(--text-muted); padding:10px; font-size:12px;">${escapeHtml(L.lblExportNoData || 'Nessun record corrisponde ai filtri')}</div>`;
+                container.innerHTML = `<div style="color:var(--text-muted); padding:10px; font-size:12px;">${escapeHtml(tr('lblExportNoData'))}</div>`;
                 return;
             }
             container.innerHTML = `
@@ -6988,64 +7086,70 @@
         }, 150);
     }
 
-    function applyClsColumnPreset(presetKeys) {
-        const want = new Set(presetKeys);
-        const boxes = Array.from(document.querySelectorAll('#clsColumnList input'));
-        boxes.forEach(b => { b.checked = want.has(b.value); });
-        updateClsExportPreview();
-    }
-
     async function openClassificationExportModal() {
         if (!clsExportColumns.length) {
             const res = await apiFetch('/api/export/classification/columns');
             if (!res || !res.ok) { alert(tr('alertExportError')); return; }
             const data = await res.json();
             clsExportColumns = data.columns;
-            const seed = readClsPrefs();
-            if (!seed.columns) {
-                seed.columns = data.default;
-                localStorage.setItem(CLS_EXPORT_PREFS_KEY, JSON.stringify(seed));
-            }
+            clsDefaultColumns = data.default;
         }
         const prefs = readClsPrefs();
         const nodes = (categoriesData && categoriesData.nodes) || [];
-        const uniq = key => Array.from(new Set(nodes.map(n => n[key]).filter(Boolean)))
-            .sort().map(v => ({ value: v, label: v }));
-        renderCheckList('clsFilterGroups', uniq('group'), prefs.groups);
-        renderCheckList('clsFilterCategories', uniq('device_type'), prefs.categories);
-        renderCheckList('clsFilterNeighbourSourceCategories', uniq('device_type'),
-                        prefs.neighbour_source_categories);
-        renderCheckList('clsFilterNeighbourCategories', uniq('device_type'),
-                        prefs.neighbour_categories);
-        const matchChk = document.getElementById('clsOnlyMatchingNeighbours');
-        if (matchChk) {
-            matchChk.checked = !!prefs.only_matching_neighbours;
+        const uniq = key => Array.from(new Set(nodes.map(n => n[key]).filter(Boolean))).sort();
+        // switch and ap are always offered: the scenarios rely on them.
+        const cats = Array.from(new Set(['switch', 'ap', ...uniq('device_type')])).sort();
+        const tenants = uniq('group');
+        const opt = (v, label) => `<option value="${escapeHtml(v)}">${escapeHtml(label)}</option>`;
+        const catSel = clsExportSelect('clsCategorySelect');
+        const nbSel = clsExportSelect('clsNeighbourSelect');
+        const tenantSel = clsExportSelect('clsTenantSelect');
+        if (catSel) catSel.innerHTML = opt('', tr('optClsAllDevices')) + cats.map(c => opt(c, c)).join('');
+        if (nbSel) {
+            nbSel.innerHTML = opt('', tr('optClsNoNeighbour')) + opt('*', tr('optClsAnyNeighbour'))
+                + cats.map(c => opt(c, c)).join('');
+        }
+        if (tenantSel) {
+            tenantSel.innerHTML = opt('', tr('invTabAll'))
+                + tenants.map(g => opt(g, orgLabel(g))).join('');
         }
         renderCheckList('clsColumnList',
-            clsExportColumns.map(c => ({
-                value: c.key, label: c.header + (c.explodes ? ' *' : '') })),
-            prefs.columns);
+            clsExportColumns.map(c => ({ value: c.key, label: c.header })), []);
+
+        if (prefs.columns) {
+            clsSetSelect('clsCategorySelect', prefs.category || '');
+            clsSetSelect('clsNeighbourSelect', prefs.neighbour || '');
+            const only = clsOnlyBox();
+            if (only) only.checked = !!prefs.only;
+            clsSetColumns(prefs.columns);
+            clsMarkScenario(prefs.scenario || '');
+        } else {
+            clsSetColumns(clsDefaultColumns);
+            clsMarkScenario('simple');
+        }
+        // The tenant picked top-left wins over the one remembered here.
+        if (tenantSel) {
+            tenantSel.value = tenantSelectSeed('', tenants,
+                tenants.includes(prefs.tenant) ? prefs.tenant : '');
+        }
+
         openModal('classificationExportModal');
         updateClsExportPreview();
     }
 
     async function runClassificationExport() {
-        const prefs = {
-            groups: clsChecked('clsFilterGroups'),
-            categories: clsChecked('clsFilterCategories'),
-            neighbour_source_categories: clsChecked('clsFilterNeighbourSourceCategories'),
-            neighbour_categories: clsChecked('clsFilterNeighbourCategories'),
-            columns: clsChecked('clsColumnList'),
-            only_matching_neighbours:
-                document.getElementById('clsOnlyMatchingNeighbours')?.checked,
-        };
-        if (!prefs.columns.length) { alert(tr('alertExportNoColumns')); return; }
-        localStorage.setItem(CLS_EXPORT_PREFS_KEY, JSON.stringify(prefs));
-        const qs = new URLSearchParams();
-        for (const [k, v] of Object.entries(prefs)) {
-            if (Array.isArray(v)) { if (v.length) qs.set(k, v.join(',')); }
-            else if (v) qs.set(k, 'true');
-        }
+        const qs = clsQuery();
+        if (!clsChecked('clsColumnList').length) { alert(tr('alertExportNoColumns')); return; }
+        try {
+            localStorage.setItem(CLS_EXPORT_PREFS_KEY, JSON.stringify({
+                scenario: clsCurrentScenario(),
+                category: clsExportSelect('clsCategorySelect')?.value || '',
+                neighbour: clsExportSelect('clsNeighbourSelect')?.value || '',
+                tenant: clsExportSelect('clsTenantSelect')?.value || '',
+                only: !!clsOnlyBox()?.checked,
+                columns: clsChecked('clsColumnList'),
+            }));
+        } catch (e) { /* private window: the export still works */ }
         const res = await apiFetch('/api/export/classification?' + qs.toString());
         if (!res || !res.ok) { alert(tr('alertExportError')); return; }
         const blob = await res.blob();
@@ -7066,26 +7170,37 @@
         ?.addEventListener('click', () => {
             closeModal('classificationExportModal');
         });
-    document.getElementById('clsColumnList')?.addEventListener('change', updateClsExportPreview);
-    ['clsFilterGroups', 'clsFilterCategories', 'clsFilterNeighbourSourceCategories', 'clsFilterNeighbourCategories'].forEach(id => {
-        document.getElementById(id)?.addEventListener('change', updateClsExportPreview);
+
+    document.getElementById('clsScenarioList')?.addEventListener('click', ev => {
+        const btn = /** @type {HTMLElement|null} */ (/** @type {HTMLElement} */ (ev.target).closest('[data-scenario]'));
+        if (btn) applyClsScenario(btn.dataset.scenario);
     });
-    document.getElementById('clsOnlyMatchingNeighbours')?.addEventListener('change', updateClsExportPreview);
+    // Any hand edit turns the export into a custom one.
+    const clsManualEdit = () => { clsMarkScenario(''); updateClsExportPreview(); };
+    document.getElementById('clsCategorySelect')?.addEventListener('change', clsManualEdit);
+    document.getElementById('clsTenantSelect')?.addEventListener('change', clsManualEdit);
+    document.getElementById('clsOnlyMatchingNeighbours')?.addEventListener('change', clsManualEdit);
+    // The sentence and the neighbour columns say the same thing: keep them in step.
+    document.getElementById('clsNeighbourSelect')?.addEventListener('change', () => {
+        const nb = clsExportSelect('clsNeighbourSelect')?.value || '';
+        const cols = clsChecked('clsColumnList');
+        if (!nb) {
+            clsSetColumns(cols.filter(k => !clsIsNeighbourCol(k)));
+        } else if (!cols.some(clsIsNeighbourCol)) {
+            clsSetColumns([...cols, ...CLS_NEIGHBOUR_DEFAULT_COLS]);
+        }
+        clsManualEdit();
+    });
+    document.getElementById('clsColumnList')?.addEventListener('change', () => {
+        const hasNb = clsChecked('clsColumnList').some(clsIsNeighbourCol);
+        const nbSel = clsExportSelect('clsNeighbourSelect');
+        if (nbSel && hasNb && !nbSel.value) nbSel.value = '*';
+        if (nbSel && !hasNb && nbSel.value) nbSel.value = '';
+        clsManualEdit();
+    });
     document.getElementById('btnClsColsToggle')?.addEventListener('click', () => {
         const boxes = Array.from(document.querySelectorAll('#clsColumnList input'));
-        const turnOn = boxes.some(b => !b.checked);
-        boxes.forEach(b => { b.checked = turnOn; });
-        updateClsExportPreview();
-    });
-    document.getElementById('btnExportPresetClsDefault')?.addEventListener('click', () => {
-        applyClsColumnPreset(['hostname', 'ip', 'tenant', 'category', 'status']);
-    });
-    document.getElementById('btnExportPresetClsAll')?.addEventListener('click', () => {
-        applyClsColumnPreset(clsExportColumns.map(c => c.key));
-    });
-    document.getElementById('btnExportPresetClsAp')?.addEventListener('click', () => {
-        applyClsColumnPreset(['hostname', 'ip', 'tenant', 'category', 'model', 'serial', 'neighbour_device', 'neighbour_port', 'neighbour_category', 'neighbour_serial']);
-    });
-    document.getElementById('btnExportPresetClsSerials')?.addEventListener('click', () => {
-        applyClsColumnPreset(['hostname', 'ip', 'tenant', 'category', 'model', 'serial', 'member_index', 'member_role', 'member_serial', 'member_model']);
+        const turnOn = boxes.some(b => !/** @type {HTMLInputElement} */ (b).checked);
+        boxes.forEach(b => { /** @type {HTMLInputElement} */ (b).checked = turnOn; });
+        document.getElementById('clsColumnList')?.dispatchEvent(new Event('change'));
     });

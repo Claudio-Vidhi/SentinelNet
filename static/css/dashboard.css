@@ -5585,3 +5585,15 @@ details[open] > summary .mac-caret { transform: rotate(180deg); }
 
 /* Map toolbar: offer of the dual-core ladder */
 .map-ladder-hint { color: var(--primary); border-color: var(--primary); }
+
+/* Classification export: scenarios + one sentence instead of four filter boxes. */
+.cls-x-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 6px; }
+.cls-x-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.cls-x-sentence { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; margin-bottom: 10px; }
+.cls-x-sentence select { width: auto; margin: 0; min-width: 140px; font-weight: 600; }
+.cls-x-check { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; margin-bottom: 10px; }
+.cls-x-check input { width: 14px; height: 14px; margin: 0; accent-color: var(--primary); }
+.cls-x-check:has(input:disabled) { opacity: 0.5; cursor: default; }
+.cls-x-columns summary { cursor: pointer; font-size: 12px; font-weight: 700; padding: 4px 0; }
+.cls-x-muted { color: var(--text-muted); font-weight: 400; }
+.cls-x-columnlist { max-height: 220px; overflow-y: auto; border: 1px solid var(--border); background: var(--surface-2); padding: 6px; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); column-gap: 12px; }

@@ -297,6 +297,17 @@ _CLASSIFICATION_COLUMNS = {
     "member_role":      ("Member Role",      lambda n, l: l.get("member_role", "")),
     "member_serial":    ("Member Serial",    lambda n, l: l.get("member_serial", "")),
     "member_model":     ("Member Model",     lambda n, l: l.get("member_model", "")),
+    # Inventory-only fields, so one CSV carries device, neighbour and the rest.
+    # Empty for devices that were only discovered via CDP/LLDP.
+    "probe":            ("Probe",            lambda n, l: (n.get("_inv") or {}).get("Probe", "")),
+    "profile":          ("Profile",          lambda n, l: (n.get("_inv") or {}).get("Profile", "")),
+    "ssh_port":         ("SSH Port",         lambda n, l: (n.get("_inv") or {}).get("SSH Port", "")),
+    "transports":       ("Transports",       lambda n, l: (n.get("_inv") or {}).get("Transports", "")),
+    "redundancy_type":  ("Redundancy",       lambda n, l: (n.get("_badge") or {}).get(
+                                                 "type", "standalone" if n.get("_inv") else "")),
+    "redundancy_role":  ("Redundancy Role",  lambda n, l: (n.get("_badge") or {}).get("role", "")),
+    "redundancy_health": ("Redundancy Health", lambda n, l: (n.get("_badge") or {}).get("health", "")),
+    "redundancy_name":  ("Redundancy Group", lambda n, l: (n.get("_badge") or {}).get("name", "")),
 }
 
 # Asking for one of these columns means asking for one row per neighbour: a
@@ -419,8 +430,10 @@ def assemble_classification_rows(
     category_of = {n["id"]: n.get("device_type", "") for n in data["nodes"]}
     nodes_by_id = {n["id"]: n for n in data["nodes"]}
     explode = any(c in _NEIGHBOUR_COLUMNS for c in selected)
-    badges = (redundancy_service.redundancy_badges_by_ip()
-              if any(c in _MEMBER_COLUMNS for c in selected) else {})
+    badges: dict = (redundancy_service.redundancy_badges_by_ip()
+              if any(c in _MEMBER_COLUMNS or c.startswith("redundancy_") for c in selected)
+              else {})
+    inv_by_ip = {d["IP"]: d for d in inventory_manager.get_all_devices()}
     want_neighbour_categories = {v.strip()
                                  for v in neighbour_categories.split(",") if v.strip()}
     want_neighbour_sources = {v.strip()
@@ -428,6 +441,7 @@ def assemble_classification_rows(
 
     headers = [_CLASSIFICATION_COLUMNS[c][0] for c in selected]
     all_rows = []
+    device_count = 0
 
     for node in nodes:
         node_ip = str(node.get("display_ip") or node.get("reported_ip") or "")
@@ -439,6 +453,8 @@ def assemble_classification_rows(
         row_node = dict(node)
         row_node["serial"] = node.get("serial") or scan.get("serial") or (entry or {}).get("serial", "")
         row_node["serial_seen_at"] = (entry or {}).get("seen_at", "")
+        row_node["_inv"] = inv_by_ip.get(node["id"])
+        row_node["_badge"] = badges.get(node["id"])
 
         node_cat = node.get("device_type", "")
         should_explode_neighbours = (
@@ -464,6 +480,7 @@ def assemble_classification_rows(
              "member_serial": m.get("serial", ""), "member_model": m.get("model", "")}
             for m in ((badges.get(node["id"]) or {}).get("members") or [])
         ]
+        device_count += 1
         for link in (neighbours or [{}]):
             for member in (members or [{}]):
                 all_rows.append([
@@ -471,7 +488,7 @@ def assemble_classification_rows(
                     for c in selected
                 ])
 
-    return headers, all_rows
+    return headers, all_rows, device_count
 
 
 @router.get("/api/export/classification", dependencies=[Depends(require_tab("tab-categories"))])
@@ -488,7 +505,7 @@ def export_classification_csv(
     from fastapi.responses import Response as FastResponse
     from core.csv_safe import csv_cell
 
-    headers, rows = assemble_classification_rows(
+    headers, rows, _ = assemble_classification_rows(
         current_user=current_user,
         columns=columns,
         groups=groups,
@@ -525,7 +542,7 @@ def preview_classification_export(
     limit: int = 15,
     current_user = Depends(get_current_user),
 ):
-    headers, rows = assemble_classification_rows(
+    headers, rows, device_count = assemble_classification_rows(
         current_user=current_user,
         columns=columns,
         groups=groups,
@@ -539,6 +556,7 @@ def preview_classification_export(
         "headers": headers,
         "rows": rows[:safe_limit],
         "total_rows": len(rows),
+        "total_devices": device_count,
     }
 
 @router.post("/api/device-categories", dependencies=[Depends(require_tab("tab-categories"))])

@@ -33,16 +33,32 @@ class ClassificationExportUi(unittest.TestCase):
         js = _read("static/js/i18n.js")
         for key in ("titleClassificationExport", "descClassificationExport",
                     "btnExportClassification", "lblClsCategory",
-                    "lblClsNeighbourSource", "lblExportPreview", "btnPresetDefault",
-                    "btnPresetHardware", "btnPresetApNeighbours"):
+                    "lblClsNeighbourCategory", "lblExportPreview", "btnPresetDefault",
+                    "btnPresetHardware", "lblClsScenario", "clsScenarioSwAp",
+                    "clsScenarioApSw", "clsScenarioSerials", "clsScenarioSimple",
+                    "clsScenarioFull", "lblClsSentExport", "lblClsSentWithNeighbours",
+                    "lblClsSentTenant", "optClsAllDevices", "optClsNoNeighbour",
+                    "optClsAnyNeighbour", "lblClsSkipWithout", "lblClsTenant",
+                    "lblExportDevicesCount", "btnClsExportRows"):
             self.assertEqual(2, len(re.findall(r"\b%s\s*:" % key, js)),
                              f"{key} must appear in both the it and en blocks")
 
     def test_preview_elements_exist_in_template(self):
         html = _read("templates/dashboard.html")
         self.assertIn('id="clsExportPreviewContainer"', html)
-        self.assertIn('id="clsFilterNeighbourSourceCategories"', html)
+        for el in ("clsCategorySelect", "clsNeighbourSelect", "clsTenantSelect",
+                   "clsOnlyMatchingNeighbours", "clsColumnList", "clsScenarioList"):
+            self.assertIn(f'id="{el}"', html)
         self.assertIn('id="deviceExportPreviewContainer"', html)
+
+    def test_every_scenario_button_has_a_definition(self):
+        """A chip without an entry in CLS_SCENARIOS is a dead button."""
+        html = _read("templates/dashboard.html")
+        js = _read("static/js/topology.js")
+        chips = re.findall(r'data-scenario="([^"]+)"', html)
+        self.assertEqual(5, len(chips))
+        for name in chips:
+            self.assertRegex(js, r"'%s'\s*:\s*\{" % re.escape(name))
 
 
 if __name__ == "__main__":

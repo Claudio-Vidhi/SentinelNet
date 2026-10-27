@@ -6398,54 +6398,43 @@
       </div>
 
       <div style="overflow-y: auto; flex: 1; padding-right: 4px;">
-        <p style="color: var(--text-muted); font-size: 13px; margin: 0 0 14px;" data-i18n="descClassificationExport">
-          Nessuna casella spuntata in un filtro significa «tutti». Le colonne con * producono una riga per ogni collegamento o unità fisica. Filtrando la categoria del vicino gli altri collegamenti spariscono ma i dispositivi restano: spunta la casella per tenere solo quelli che hanno un vicino di quel tipo.
+        <p style="color: var(--text-muted); font-size: 13px; margin: 0 0 12px;" data-i18n="descClassificationExport">
+          Scegli uno scenario o completa la frase. L'anteprima mostra esattamente le righe che finiranno nel file.
         </p>
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; align-items:start;">
-          <div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-              <div>
-                <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="thGroup">Gruppo</div>
-                <div id="clsFilterGroups" style="max-height:110px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
-              </div>
-              <div>
-                <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="lblClsCategory">Categoria dispositivo</div>
-                <div id="clsFilterCategories" style="max-height:110px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
-              </div>
-            </div>
 
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:8px;">
-              <div>
-                <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="lblClsNeighbourSource">Espandi vicini solo per categoria *</div>
-                <div id="clsFilterNeighbourSourceCategories" style="max-height:110px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
-              </div>
-              <div>
-                <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="lblClsNeighbourCategory">Categoria vicino *</div>
-                <div id="clsFilterNeighbourCategories" style="max-height:110px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
-              </div>
-            </div>
-
-            <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin-top:8px; cursor:pointer;">
-              <input type="checkbox" id="clsOnlyMatchingNeighbours"
-                     style="width:14px; height:14px; accent-color:var(--primary); cursor:pointer;">
-              <span data-i18n="lblClsOnlyMatchingNeighbours">Solo dispositivi con un vicino corrispondente</span>
-            </label>
-          </div>
-
-          <div>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-              <label style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.5px;" data-i18n="lblExportColumns">Colonne</label>
-              <button class="btn btn-secondary btn-small" id="btnClsColsToggle" style="width:auto; margin:0; font-size:11px; padding:2px 6px;" data-i18n="btnExportSelectAll">Tutte / nessuna</button>
-            </div>
-            <div style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:6px;">
-              <button class="btn btn-secondary btn-small" id="btnExportPresetClsDefault" style="width:auto; margin:0; font-size:10px; padding:2px 6px;" data-i18n="btnPresetDefault">Predefinito</button>
-              <button class="btn btn-secondary btn-small" id="btnExportPresetClsAll" style="width:auto; margin:0; font-size:10px; padding:2px 6px;" data-i18n="btnPresetAll">Tutte</button>
-              <button class="btn btn-secondary btn-small" id="btnExportPresetClsAp" style="width:auto; margin:0; font-size:10px; padding:2px 6px;" data-i18n="btnPresetApNeighbours">AP e Vicini</button>
-              <button class="btn btn-secondary btn-small" id="btnExportPresetClsSerials" style="width:auto; margin:0; font-size:10px; padding:2px 6px;" data-i18n="btnPresetSerials">Seriali &amp; Stack</button>
-            </div>
-            <div id="clsColumnList" style="max-height:260px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
-          </div>
+        <div class="cls-x-label" data-i18n="lblClsScenario">Scenario</div>
+        <div class="cls-x-chips" id="clsScenarioList" role="group" aria-label="Scenario" data-i18n-aria-label="lblClsScenario">
+          <button type="button" class="chip-choice" data-scenario="sw-ap" aria-pressed="false" data-i18n="clsScenarioSwAp">Switch → AP collegati</button>
+          <button type="button" class="chip-choice" data-scenario="ap-sw" aria-pressed="false" data-i18n="clsScenarioApSw">AP → switch</button>
+          <button type="button" class="chip-choice" data-scenario="serials" aria-pressed="false" data-i18n="clsScenarioSerials">Seriali e stack</button>
+          <button type="button" class="chip-choice" data-scenario="simple" aria-pressed="false" data-i18n="clsScenarioSimple">Elenco semplice</button>
+          <button type="button" class="chip-choice" data-scenario="full" aria-pressed="false" data-i18n="clsScenarioFull">Completo</button>
         </div>
+
+        <div class="cls-x-sentence">
+          <span data-i18n="lblClsSentExport">Esporta</span>
+          <select id="clsCategorySelect" aria-label="Categoria dispositivo" data-i18n-aria-label="lblClsCategory"></select>
+          <span data-i18n="lblClsSentWithNeighbours">con i vicini</span>
+          <select id="clsNeighbourSelect" aria-label="Categoria vicino" data-i18n-aria-label="lblClsNeighbourCategory"></select>
+          <span data-i18n="lblClsSentTenant">del tenant</span>
+          <select id="clsTenantSelect" aria-label="Tenant" data-i18n-aria-label="lblClsTenant"></select>
+        </div>
+
+        <label class="cls-x-check">
+          <input type="checkbox" id="clsOnlyMatchingNeighbours">
+          <span data-i18n="lblClsSkipWithout">Salta chi non ha vicini di quel tipo</span>
+        </label>
+
+        <details class="cls-x-columns" id="clsColumnsDetails">
+          <summary>
+            <span data-i18n="lblExportColumns">Colonne</span>
+            (<span id="clsColumnCount">0</span>): <span id="clsColumnSummary" class="cls-x-muted"></span>
+          </summary>
+          <div style="display:flex; justify-content:flex-end; margin:6px 0;">
+            <button type="button" class="btn btn-secondary btn-small" id="btnClsColsToggle" style="width:auto; margin:0; font-size:11px; padding:2px 6px;" data-i18n="btnExportSelectAll">Tutte / nessuna</button>
+          </div>
+          <div id="clsColumnList" class="cls-x-columnlist"></div>
+        </details>
 
         <!-- Live Preview Panel -->
         <div style="margin-top:14px; border-top:1px solid var(--border); padding-top:10px;">
@@ -6457,7 +6446,7 @@
             </div>
             <span id="clsExportPreviewStatus" style="font-size:11px; color:var(--text-muted);"></span>
           </div>
-          <div id="clsExportPreviewContainer" style="max-height:160px; overflow:auto; border:1px solid var(--border); background:var(--surface-2); padding:4px;"></div>
+          <div id="clsExportPreviewContainer" style="max-height:260px; overflow:auto; border:1px solid var(--border); background:var(--surface-2); padding:4px;"></div>
         </div>
       </div>
 
