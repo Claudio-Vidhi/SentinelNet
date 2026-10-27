@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.59.1] - 2026-10-27
+
 ### Changed
 
 - **Export classificazione più semplice** (*Classificazione → Esporta CSV*):
