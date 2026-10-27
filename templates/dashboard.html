@@ -1003,6 +1003,8 @@
           <button type="button" id="mapViewMinimalBtn" class="map-view-btn" data-i18n="btnMapMinimal">Schema</button>
           <button type="button" id="mapViewLayeredBtn" class="map-view-btn" data-i18n="btnMapLayered">Gerarchia</button>
         </div>
+        <!-- Shown when the site is mostly dual-homed to a core pair (schemaLadderPlan). -->
+        <button type="button" id="mapLadderHint" class="map-tb-btn map-ladder-hint" hidden><i class="fa-solid fa-diagram-project" aria-hidden="true"></i> <span></span></button>
         <span class="map-tb-sep" aria-hidden="true"></span>
 
         <!-- Selettore categorie da mostrare nella mappa -->
@@ -1069,6 +1071,13 @@
               </div>
               <label class="map-opt" for="toggleSchemaWrap" data-i18n-title="titleSchemaWrap" title="Riordina la mappa: gli spostamenti manuali di questa sede si perdono"><input type="checkbox" id="toggleSchemaWrap"> <span data-i18n="lblSchemaWrap">Righe a capo</span></label>
               <label class="map-opt" for="toggleSchemaGroupUplinks"><input type="checkbox" id="toggleSchemaGroupUplinks"> <span data-i18n="lblSchemaGroupUplinks">Raggruppa uplink</span></label>
+              <div class="map-opt-row">
+                <label for="schemaLayout" data-i18n="lblSchemaLayout" data-i18n-title="titleSchemaLayout" title="Scala: core ai lati, apparati in colonna tra i due. Solo se quasi tutti sono collegati a entrambi i core.">Disposizione</label>
+                <select id="schemaLayout">
+                  <option value="rows" data-i18n="optSchemaLayoutRows">Righe per livello</option>
+                  <option value="ladder" data-i18n="optSchemaLayoutLadder">Scala doppio core</option>
+                </select>
+              </div>
               <div class="map-opt-row">
                 <label for="schemaApMode" data-i18n="lblSchemaApMode" data-i18n-title="titleSchemaApMode" title="Riordina la mappa: gli spostamenti manuali di questa sede si perdono">Access point</label>
                 <select id="schemaApMode">
@@ -1181,8 +1190,8 @@
         <details id="mapExportMenu" class="map-pop map-pop-end">
           <summary class="map-tb-btn"><i class="fa-solid fa-download" aria-hidden="true"></i> <span data-i18n="lblMapExport">Esporta</span> <i class="fa-solid fa-chevron-down map-tb-caret" aria-hidden="true"></i></summary>
           <div class="map-pop-panel map-menu" role="menu">
-            <button type="button" role="menuitem" class="map-menu-item" id="btnDownloadTopology"><i class="fa-solid fa-image" aria-hidden="true"></i><span><span data-i18n="mapExportPng">Immagine PNG</span><small data-i18n="mapExportPngHint">Alta risoluzione, tutta la mappa</small></span></button>
-            <button type="button" role="menuitem" class="map-menu-item" id="btnExportPdfMap"><i class="fa-solid fa-file-pdf" aria-hidden="true"></i><span><span data-i18n="mapExportPdf">PDF</span><small data-i18n="mapExportPdfHint">Pagina singola, da stampare</small></span></button>
+            <button type="button" role="menuitem" class="map-menu-item" id="btnDownloadTopology"><i class="fa-solid fa-image" aria-hidden="true"></i><span><span data-i18n="mapExportPng">Immagine PNG</span><small data-i18n="mapExportPngHint">Alta risoluzione, con cartiglio</small></span></button>
+            <button type="button" role="menuitem" class="map-menu-item" id="btnExportPdfMap"><i class="fa-solid fa-file-pdf" aria-hidden="true"></i><span><span data-i18n="mapExportPdf">PDF</span><small data-i18n="mapExportPdfHint">Pagina singola, con cartiglio</small></span></button>
             <div class="map-menu-sep" role="separator"></div>
             <p class="map-view-h" data-i18n="lblMapEditable">Modificabili</p>
             <button type="button" role="menuitem" class="map-menu-item" id="btnExportVisioMap"><i class="fa-solid fa-diagram-project" aria-hidden="true"></i><span data-i18n="mapExportVisio">Visio (.vsdx)</span></button>
@@ -6007,6 +6016,44 @@
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" data-close-modal="layeredNamesModal" data-i18n="uiCancel">Annulla</button>
         <button type="button" class="btn btn-primary" id="btnSaveLayeredNames" data-i18n="btnSave">Salva</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Title block for the PNG/PDF map export: style picked from previews,
+       opened by #btnDownloadTopology and #btnExportPdfMap. -->
+  <div class="modal-overlay" id="mapTitleBlockModal">
+    <div class="modal" style="width: 860px; max-width: 96%; max-height: 92vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-stamp" style="color: var(--primary);"></i> <span data-i18n="tbModalTitle">Cartiglio della mappa</span></h3>
+        <button type="button" class="modal-close" data-close-modal="mapTitleBlockModal" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div style="overflow-y: auto; flex: 1; padding-right: 4px;">
+        <p class="tb-hint" data-i18n="tbHint">Riquadro in basso a destra dell'immagine esportata. I dati e il logo restano in questo browser.</p>
+        <div class="tb-styles" role="radiogroup" aria-label="Stile" data-i18n-aria-label="tbStyle">
+          <label class="tb-style"><canvas data-tb-preview="classic" aria-hidden="true"></canvas><span><input type="radio" name="tbStyle" value="classic"> <span data-i18n="tbStyleClassic">Classico</span></span></label>
+          <label class="tb-style"><canvas data-tb-preview="modern" aria-hidden="true"></canvas><span><input type="radio" name="tbStyle" value="modern"> <span data-i18n="tbStyleModern">Moderno</span></span></label>
+          <label class="tb-style"><canvas data-tb-preview="minimal" aria-hidden="true"></canvas><span><input type="radio" name="tbStyle" value="minimal"> <span data-i18n="tbStyleMinimal">Essenziale</span></span></label>
+          <label class="tb-style"><canvas data-tb-preview="none" aria-hidden="true"></canvas><span><input type="radio" name="tbStyle" value="none"> <span data-i18n="tbStyleNone">Nessuno</span></span></label>
+        </div>
+        <div class="tb-fields">
+          <div class="form-group"><label for="tb_customer" data-i18n="tbCustomer">Cliente</label><input id="tb_customer" type="text" maxlength="80"></div>
+          <div class="form-group"><label for="tb_title" data-i18n="tbProject">Progetto</label><input id="tb_title" type="text" maxlength="80"></div>
+          <div class="form-group"><label for="tb_author" data-i18n="tbAuthor">Redatto da</label><input id="tb_author" type="text" maxlength="60"></div>
+          <div class="form-group"><label for="tb_company" data-i18n="tbCompany">Azienda</label><input id="tb_company" type="text" maxlength="60"></div>
+          <div class="form-group"><label for="tb_rev" data-i18n="tbRev">Rev.</label><input id="tb_rev" type="text" maxlength="12"></div>
+          <div class="form-group"><label for="tb_accent" data-i18n="tbAccent">Colore</label><input id="tb_accent" type="color" value="#1f4e79"></div>
+          <div class="form-group tb-logo"><label for="tb_logo" data-i18n="tbLogo">Logo aziendale</label>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <input id="tb_logo" type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp">
+              <button type="button" class="btn btn-secondary btn-small" id="btnTbRemoveLogo" data-i18n="tbRemoveLogo">Rimuovi logo</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal="mapTitleBlockModal" data-i18n="uiCancel">Annulla</button>
+        <button type="button" class="btn btn-primary" id="btnTbExport"><i class="fa-solid fa-download" aria-hidden="true"></i> <span data-i18n="lblMapExport">Esporta</span> <span id="tbExportFormat">PNG</span></button>
       </div>
     </div>
   </div>

@@ -1199,11 +1199,12 @@
                 filteredNodesData = grouped.nodes;
                 filteredLinksData = grouped.links;
             }
-            const { nodes, edges, options, bundles, groupsInfo } = buildMinimalGraph(filteredNodesData, filteredLinksData, { showVtpDomain, hoverInfo, group: selectedGroup });
+            const { nodes, edges, options, bundles, groupsInfo, ladder } = buildMinimalGraph(filteredNodesData, filteredLinksData, { showVtpDomain, hoverInfo, group: selectedGroup });
             const hasOverlay = (bundles && bundles.length) || (groupsInfo && groupsInfo.length > 1);
             // Conservati per l'export Visio: il .vsdx replica ESATTAMENTE il
             // disegno dell'overlay (cavi paralleli, etichette porta, pillole).
-            minimalOverlayData = { bundles, groupsInfo, nodes };
+            minimalOverlayData = { bundles, groupsInfo, nodes, ladder };
+            updateLadderHint(ladder);
             // A new map: the focused node may be gone (filter, tenant).
             schemaFocusId = null;
             renderNetwork(nodes, edges, options, MINIMAL_MAP_STYLE.background,
@@ -1211,6 +1212,7 @@
             return;
         }
         minimalOverlayData = null;
+        updateLadderHint(null);
 
         // Piani della vista "A livelli" (ignorati dalle altre viste). I piani si
         // calcolano sulla topologia VERA, prima di comprimere le foglie: il
@@ -1420,6 +1422,8 @@
         if (l) l.value = schemaPortLabelMode();
         const ap = /** @type {HTMLSelectElement|null} */ (document.getElementById('schemaApMode'));
         if (ap) ap.value = schemaApMode();
+        const lay = /** @type {HTMLSelectElement|null} */ (document.getElementById('schemaLayout'));
+        if (lay) lay.value = schemaLayout();
     }
     function schemaPortLabelMode() {
         const v = schemaPref('schemaPortLabels', 'all');
@@ -1528,8 +1532,27 @@
         // di ogni trascinamento il nodo mosso viene respinto fuori dai riquadri
         // che intersecherebbe (Fix no node overlapping).
         if (getMapView() === 'minimal') {
+            // "Column" mode: a switch dragged takes its APs along, at the
+            // same distance, so they never need moving one by one.
+            let followers = [];
+            const follow = () => followers.forEach(f => {
+                const pp = networkInstance.getPosition(f.p);
+                networkInstance.moveNode(f.id, pp.x + f.dx, pp.y + f.dy);
+            });
+            networkInstance.on('dragStart', p => {
+                followers = [];
+                if (schemaApMode() !== 'column' || !minimalOverlayData || !p.nodes || !p.nodes.length) return;
+                const cols = schemaColumnsNow(), moving = new Set(p.nodes.map(String));
+                p.nodes.forEach(pid => (cols[pid] || []).forEach(id => {
+                    if (moving.has(String(id))) return;
+                    const pp = networkInstance.getPosition(pid), lp = networkInstance.getPosition(id);
+                    followers.push({ p: pid, id, dx: lp.x - pp.x, dy: lp.y - pp.y });
+                }));
+            });
+            networkInstance.on('dragging', follow);
             networkInstance.on('dragEnd', p => {
-                if (p.nodes && p.nodes.length) { resolveNodeOverlaps(p.nodes); saveSchemaPositions(); }
+                if (p.nodes && p.nodes.length) { resolveNodeOverlaps(p.nodes); follow(); saveSchemaPositions(); }
+                followers = [];
             });
         }
         // Vista "A livelli": trascinare un nodo IN VERTICALE lo sposta di piano e
@@ -1640,13 +1663,18 @@
         // Schema: nothing known → full layout; some devices new → only those
         // are placed, at the end of their row.
         if (isMinimal) networkInstance.once('afterDrawing', growSchemaColumnParents);
-        if (isMinimal && (!allKnown || schemaRetidy)) {
-            const full = schemaRetidy;
+        // The ladder is laid out from the plan on every render, never from saved positions.
+        if (isMinimal && (!allKnown || schemaRetidy || schemaLadderActive())) {
+            const full = schemaRetidy || !!schemaLadderActive();
             schemaRetidy = false;
             networkInstance.once('afterDrawing', () => {
                 const known = nodes.filter(nd => prevPos && prevPos[nd.id]).map(nd => nd.id);
                 if (known.length && !full) placeNewSchemaNodes(known); else packSchemaRows();
             });
+        }
+        if (isMinimal && schemaPlaceColumns) {
+            schemaPlaceColumns = false;
+            networkInstance.once('afterDrawing', placeSchemaColumns);
         }
         // Hierarchy view: vis.js lays the rows out again on every render, so
         // the tidy pass always runs; a horizontal drag is put back on top.
@@ -2780,6 +2808,33 @@
     // two rows grows with the cables crossing it, so their runs get tracks.
     // ponytail: one top-down barycentre pass, like the hierarchy view's.
     const SCHEMA_GAP = 70;
+    // "Column" AP mode. COL_SIDE: switch edge to spine; BRANCH: spine to AP,
+    // room for the port name; COL_GAP: between two APs.
+    const COL_GAP = 6, COL_SIDE = 10, BRANCH = 50;
+    function schemaColumnsNow() {
+        const ds = networkInstance.body.data.nodes;
+        return schemaLeafColumns(minimalOverlayData.bundles || [], id => ((ds.get(id) || {}).nodeDataVal || {}).device_type, GROUPABLE_TYPES);
+    }
+    // Set when "Column" is chosen: after the redraw each switch's APs move
+    // beside it, where it is now. Nothing else moves.
+    let schemaPlaceColumns = false;
+    function placeSchemaColumns() {
+        if (!networkInstance || !minimalOverlayData || schemaLadderActive()) return;
+        const bb = id => { try { return networkInstance.getBoundingBox(id); } catch (e) { return null; } };
+        Object.entries(schemaColumnsNow()).forEach(([p, ls]) => {
+            const pb = bb(p);
+            if (!pb) return;
+            let y = pb.top;
+            ls.forEach(id => {
+                const b = bb(id);
+                if (!b) return;
+                networkInstance.moveNode(id, pb.right + COL_SIDE + BRANCH + (b.right - b.left) / 2, y + (b.bottom - b.top) / 2);
+                y += b.bottom - b.top + COL_GAP;
+            });
+        });
+        saveSchemaPositions();
+        networkInstance.redraw();
+    }
     const SCHEMA_WRAP_MIN = 8;   // rows longer than this wrap when "Wrap rows" is on
     function packSchemaRows() {
         if (!networkInstance) return;
@@ -2810,11 +2865,7 @@
         // the switch's own cables leave and were cut through. The switch grows
         // as tall as its column and counts as wide as switch + column, so
         // nothing hangs below it and its row keeps the rest clear.
-        // COL_SIDE: switch edge to spine; BRANCH: spine to AP, room for the port name.
-        const COL_GAP = 6, COL_SIDE = 10, BRANCH = 50;
-        const cols = schemaApMode() === 'column' && minimalOverlayData
-            ? schemaLeafColumns(minimalOverlayData.bundles || [], id => ((ds.get(id) || {}).nodeDataVal || {}).device_type, GROUPABLE_TYPES)
-            : {};
+        const cols = schemaApMode() === 'column' && minimalOverlayData && !schemaLadderActive() ? schemaColumnsNow() : {};
         const col = {};
         Object.entries(cols).forEach(([parent, leaves]) => {
             if (!box[parent] || leaves.some(id => !box[id])) return;
@@ -2825,6 +2876,16 @@
             col[parent] = { leaves, w: COL_SIDE + BRANCH + Math.max(...leaves.map(id => box[id].w)),
                             h: leaves.reduce((t, id) => t + box[id].h, 0) + COL_GAP * (leaves.length - 1) };
         });
+        // Ladder: its devices leave the rows; placed after the other sites.
+        const lad = schemaLadderActive();
+        const ladIds = new Set();
+        if (lad && [lad.A, lad.B].every(id => box[id])) {
+            [lad.A, lad.B, ...lad.upstream, ...lad.members.map(m => m.id), ...[].concat(...Object.values(lad.leaves))]
+                .forEach(id => { if (box[id]) ladIds.add(id); });
+            Object.values(zones).forEach(rows => Object.keys(rows).forEach(lv => {
+                rows[lv] = rows[lv].filter(nd => !ladIds.has(nd.id));
+            }));
+        }
         // Room a box takes in its row: switch + its AP column; the unit's
         // centre sits unitOff(id) right of the switch centre.
         const ew = id => box[id].w + (col[id] ? col[id].w : 0);
@@ -2885,6 +2946,7 @@
         // Rows were centred under their parents: shift the block so its left
         // edge starts where the previous site ended, then leave a gap.
         const ids = [].concat(...Object.values(rows)).map(nd => nd.id);
+        if (!ids.length) return;   // every box of the site went into the ladder
         const left = Math.min(...ids.map(id => pos[id].x - box[id].w / 2));
         ids.forEach(id => { pos[id].x += base - left; });
         base = Math.max(...ids.map(id => pos[id].x - box[id].w / 2 + ew(id))) + SCHEMA_GAP * 4;
@@ -2903,9 +2965,191 @@
             if (c.h > box[parent].h) grow.push({ id: parent, heightConstraint: { minimum: Math.ceil(c.h) } });
         });
         if (grow.length) ds.update(grow);
+        if (ladIds.size) Object.assign(pos, ladderPositions(lad, box, base));
         Object.entries(pos).forEach(([id, p]) => networkInstance.moveNode(id, p.x, p.y));
         saveSchemaPositions();
         setTimeout(() => networkInstance && networkInstance.fit(), 50);
+    }
+
+    // Draws the ladder's own cables (see drawMinimalOverlay) and returns the
+    // bundles it did not draw.
+    function drawLadderCables(ctx, lad, bundles, box, styleFor, labelMode) {
+        const member = {}, leafParent = {}, kidsOf = {};
+        lad.members.forEach(m => {
+            member[m.id] = m;
+            if (m.parent) (kidsOf[m.parent] || (kidsOf[m.parent] = [])).push(m.id);
+        });
+        Object.entries(lad.leaves).forEach(([p, ls]) => ls.forEach(l => { leafParent[l] = p; }));
+        const core = id => id === lad.A || id === lad.B;
+        const pairOf = (b, test) => test(b.from, b.to) ? [b.from, b.to] : test(b.to, b.from) ? [b.to, b.from] : null;
+        const isCore = (p, q) => core(p) && !!member[q];
+        const isTree = (p, q) => !!member[q] && member[q].parent === p;
+        const isLeaf = (p, q) => leafParent[q] === p;
+        const mine = bundles.filter(b => b.type !== 'keepalive' && (pairOf(b, isCore) || pairOf(b, isTree) || pairOf(b, isLeaf))
+            && box(b.from) && box(b.to));
+        const port = (b, id, mm) => (b.from === id ? mm.local : mm.remote) || '';
+        const showLbl = b => visioConnectorSink || schemaPortLabelVisible(labelMode, b, schemaFocusId);
+        const verts = [];   // [x, y1, y2] trunks and buses: horizontal runs hop over them
+        const paths = [];   // { pts, b, thin }
+        const labels = [];  // { t, x, y, align, rot }
+        const conns = [];   // Visio: each cable whole, box to box, glued at both ends
+
+        // Core lanes, assigned top to bottom so they never cross each other.
+        [lad.A, lad.B].forEach(c => {
+            const cb = box(c), left = c === lad.A, ends = [];
+            mine.forEach(b => {
+                const pq = pairOf(b, isCore);
+                if (!pq || pq[0] !== c) return;
+                const id = pq[1], m = member[id], bb = box(id), n = b.members.length;
+                b.members.forEach((mm, k) => {
+                    // Under a parent, A comes in above the trunk's branch.
+                    const y = m.depth && left ? bb.top + 11 + k * 6 : (bb.top + bb.bottom) / 2 + (k - (n - 1) / 2) * 8;
+                    ends.push({ b, id, bb, y, cp: port(b, c, mm), mp: port(b, id, mm) });
+                });
+            });
+            ends.sort((p, q) => p.y - q.y);
+            const step = ends.length > 1 ? Math.min(12, (cb.right - cb.left - 28) / (ends.length - 1)) : 0;
+            ends.forEach((e, i) => {
+                const x = left ? cb.right - 14 - i * step : cb.left + 14 + i * step;
+                const ex = left ? e.bb.left : e.bb.right;
+                paths.push({ b: e.b, pts: [[x, cb.bottom], [x, e.y], [ex, e.y]] });
+                conns.push({ b: e.b, from: c, to: e.id, pts: [[x, cb.bottom], [x, e.y], [ex, e.y]] });
+                if (!showLbl(e.b)) return;
+                if (e.cp) labels.push({ t: e.cp, x: x + 2, y: cb.bottom + 4, rot: true });
+                if (e.mp) labels.push({ t: e.mp, x: left ? ex + 5 : ex - 5, y: e.y - 2, align: left ? 'left' : 'right' });
+            });
+        });
+        // Devices under a column device: a trunk down the parent's left edge.
+        Object.entries(kidsOf).forEach(([p, ks]) => {
+            const pb = box(p);
+            if (!pb) return;
+            const tx = pb.left + 16;
+            const ys = ks.map(k => { const kb = box(k); return kb ? (kb.top + kb.bottom) / 2 : null; });
+            const last = Math.max(...ys.filter(y => y !== null));
+            verts.push([tx, pb.bottom, last]);
+            paths.push({ b: null, pts: [[tx, pb.bottom], [tx, last]] });
+            ks.forEach((k, j) => {
+                const kb = box(k), b = mine.find(x => { const pq = pairOf(x, isTree); return pq && pq[0] === p && pq[1] === k; });
+                if (!kb) return;
+                paths.push({ b, pts: [[tx, ys[j]], [kb.left, ys[j]]] });
+                conns.push({ b, from: p, to: k, pts: [[tx, pb.bottom], [tx, ys[j]], [kb.left, ys[j]]] });
+                if (b && showLbl(b)) {
+                    const mm = b.members[0] || {};
+                    const t = [port(b, p, mm), port(b, k, mm)].filter(Boolean).join(' → ');
+                    if (t) labels.push({ t, x: kb.left + 5, y: ys[j] - 2, align: 'left' });
+                }
+            });
+        });
+        // Leaves: a line down from the parent, a bus over each row, a drop into each box.
+        Object.entries(lad.leaves).forEach(([p, ls]) => {
+            const pb = box(p), lbs = ls.map(id => Object.assign({ id }, box(id))).filter(lb => lb.right !== undefined);
+            if (!pb || !lbs.length) return;
+            const tx = pb.left + LADDER_IN - 12;
+            const rows = {};
+            lbs.forEach(lb => { (rows[Math.round(lb.top)] || (rows[Math.round(lb.top)] = [])).push(lb); });
+            const tops = Object.keys(rows).map(Number).sort((a, c) => a - c);
+            tops.forEach(t => {
+                const bus = t - 8, cxs = rows[t].map(lb => (lb.left + lb.right) / 2);
+                paths.push({ b: null, thin: true, pts: [[tx, bus], [Math.max(...cxs), bus]] });
+                cxs.forEach(cx => paths.push({ b: null, thin: true, pts: [[cx, bus], [cx, t]] }));
+                rows[t].forEach((lb, k) => conns.push({ b: null, thin: true, from: p, to: lb.id,
+                    pts: [[tx, pb.bottom], [tx, bus], [cxs[k], bus], [cxs[k], t]] }));
+            });
+            verts.push([tx, pb.bottom, tops[tops.length - 1] - 8]);
+            paths.push({ b: null, thin: true, pts: [[tx, pb.bottom], [tx, tops[tops.length - 1] - 8]] });
+        });
+
+        ctx.save();
+        ctx.lineCap = 'butt';
+        if (visioConnectorSink) conns.forEach(c => {
+            const st = c.b ? styleFor(c.b) : { color: linkColor('link'), lw: c.thin ? 1 : 1.4, dash: null };
+            visioConnectorSink.push({ from: c.from, to: c.to, points: c.pts, color: visioColor(st.color).hex, width: st.lw, dash: !!st.dash });
+        });
+        (visioConnectorSink ? [] : paths).forEach(pth => {
+            const st = pth.b ? styleFor(pth.b) : { color: linkColor('link'), lw: 1.4, dash: null };
+            ctx.strokeStyle = st.color;
+            ctx.lineWidth = pth.thin ? 1 : st.lw;
+            ctx.setLineDash(st.dash || []);
+            ctx.globalAlpha = pth.b && !visioConnectorSink && schemaDimmed(pth.b, pillKey(pth.b), hoverBundleKey, schemaFocusId) ? 0.18 : 1;
+            ctx.beginPath();
+            ctx.moveTo(pth.pts[0][0], pth.pts[0][1]);
+            for (let k = 1; k < pth.pts.length; k++) {
+                const [x1, y1] = pth.pts[k - 1], [x2, y2] = pth.pts[k];
+                if (y1 === y2) {
+                    const dir = Math.sign(x2 - x1) || 1, lo = Math.min(x1, x2), hi = Math.max(x1, x2);
+                    verts.filter(v => v[0] > lo + 6 && v[0] < hi - 6 && y1 > v[1] + 1 && y1 < v[2] - 1)
+                        .map(v => v[0]).sort((a, c) => dir * (a - c))
+                        .forEach(hx => { ctx.lineTo(hx - dir * 5, y1); ctx.arc(hx, y1, 5, dir > 0 ? Math.PI : 0, dir > 0 ? 0 : Math.PI, dir < 0); });
+                }
+                ctx.lineTo(x2, y2);
+            }
+            ctx.stroke();
+            if (pth.b) edgeHitSegs.push({ key: pillKey(pth.b), segs: pth.pts.slice(0, -1).map((p, k) => [p[0], p[1], pth.pts[k + 1][0], pth.pts[k + 1][1]]) });
+        });
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+        ctx.font = '9px Arial, Helvetica, sans-serif';
+        ctx.fillStyle = '#334155';
+        labels.forEach(l => {
+            if (l.rot) {
+                ctx.save();
+                ctx.translate(l.x, l.y);
+                ctx.rotate(Math.PI / 2);
+                ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+                ctx.fillText(l.t, 0, 0);
+                ctx.restore();
+                return;
+            }
+            ctx.textAlign = l.align; ctx.textBaseline = 'bottom';
+            ctx.fillText(l.t, l.x, l.y);
+        });
+        ctx.restore();
+        return bundles.filter(b => !mine.includes(b));
+    }
+
+    // Ladder geometry, x0 = left edge of the block. Upstream devices in a row
+    // above, centred between the cores; then the cores; then the column, each
+    // device one step in per level and its leaves in rows under it.
+    function ladderPositions(lad, box, x0) {
+        const pos = {};
+        const wA = box[lad.A].w, wB = box[lad.B].w;
+        const colLeft = x0 + wA + LADDER_GAP;
+        const W = lad.W || Math.max(...lad.members.map(m => (box[m.id] ? box[m.id].w : 0) + m.depth * LADDER_IN));
+        const cxA = x0 + wA / 2, cxB = colLeft + W + LADDER_GAP + wB / 2;
+        let top = 0;
+        const up = lad.upstream.filter(id => box[id]);
+        if (up.length) {
+            const hUp = Math.max(...up.map(id => box[id].h));
+            const total = up.reduce((t, id) => t + box[id].w, 0) + SCHEMA_GAP * (up.length - 1);
+            let x = (cxA + cxB) / 2 - total / 2;
+            up.forEach(id => { pos[id] = { x: x + box[id].w / 2, y: hUp / 2 }; x += box[id].w + SCHEMA_GAP; });
+            top = hUp + 140;
+        }
+        const hC = Math.max(box[lad.A].h, box[lad.B].h);
+        pos[lad.A] = { x: cxA, y: top + hC / 2 };
+        pos[lad.B] = { x: cxB, y: top + hC / 2 };
+        // Under the cores: room for the core-side port names along each lane.
+        let cur = top + hC + 90;
+        lad.members.forEach((m, i) => {
+            const b = box[m.id];
+            if (!b) return;
+            const left = colLeft + m.depth * LADDER_IN;
+            pos[m.id] = { x: left + b.w / 2, y: cur + b.h / 2 };
+            cur += b.h;
+            const ls = (lad.leaves[m.id] || []).filter(id => box[id]);
+            if (ls.length) {
+                const lw = Math.max(...ls.map(id => box[id].w)), lh = Math.max(...ls.map(id => box[id].h));
+                const aLeft = left + LADDER_IN, cols = Math.max(1, Math.floor((colLeft + W - aLeft + 8) / (lw + 8)));
+                ls.forEach((id, k) => {
+                    pos[id] = { x: aLeft + (k % cols) * (lw + 8) + box[id].w / 2,
+                                y: cur + 18 + Math.floor(k / cols) * (lh + 18) + box[id].h / 2 };
+                });
+                cur += 18 + Math.ceil(ls.length / cols) * (lh + 18) - 18;
+            }
+            const next = lad.members[i + 1];
+            cur += next && next.depth > 0 ? 18 : 30;
+        });
+        return pos;
     }
 
     // AI layout, both views. The browser sends the drawn boxes (id, type,
@@ -3533,6 +3777,9 @@
                 borderWidth: (stack && stack.health === 'degraded') ? S.node.borderWidth + 1
                            : (showVtpDomain && n.vtp_domain ? 2 : S.node.borderWidth),
                 borderWidthSelected: S.node.borderWidth + 1,
+                // vis.js bolds a selected node's label by default: the box,
+                // sized by its label, grew on every click.
+                chosen: { label: false, node: true },
                 color: {
                     background: fill, border,
                     highlight: { background: fill, border: '#1a2430' },
@@ -3750,6 +3997,7 @@
             _measCtx.font = 'italic 10px Arial, Helvetica, sans-serif';
             const mgmtW = _measCtx.measureText(nd._nameTexts[2] || '').width;
             const textW = Math.max(nameW, modelW, mgmtW);
+            nd._textW = textW;
             // Fascia verticale occupata dal blocco nome (righe non vuote × ~14px).
             const nameLines = nd._nameTexts.filter(Boolean).length || 1;
             const nameH = nameLines * 14;
@@ -3772,6 +4020,14 @@
             nd._ewMinW = Math.round(textW + 2 * (r.labelW + INSET + BUF));
         });
 
+        // Ladder: looked for even when not chosen, so the toolbar can offer it.
+        const info = {};
+        nodeData.forEach(n => { info[n.id] = n; });
+        const forcedPair = Object.values(rootsOf((opts && opts.group) || '')).find(l => l.length === 2) || null;
+        const ladder = schemaLadderPlan(bundles, id => levels[id] || 0, id => (info[id] || {}).device_type,
+                                        id => (info[id] || {}).label || id, GROUPABLE_TYPES, forcedPair);
+        if (ladder && schemaLayout() === 'ladder') sizeLadderBoxes(nodes, bundles, ladder);
+
         // Final x/y come from packSchemaRows() once vis.js has sized the boxes.
         nodes.forEach((nd, i) => { nd.schemaLevel = levels[nd.id] || 0; nd.x = i * 400; nd.y = nd.schemaLevel * 400; });
         const options = {
@@ -3782,19 +4038,11 @@
             edges: { smooth: { type: 'continuous', roundness: 0.2 }, shadow: { enabled: false } }
         };
 
-        return { nodes, edges, options, bundles, groupsInfo };
+        return { nodes, edges, options, bundles, groupsInfo, ladder };
     }
 
-    // ponytail: pillole Port-Channel spostabili/ridimensionabili direttamente su
-    // canvas. Per ogni pillola si memorizza uno scostamento {dx,dy} e una scala
-    // in una mappa persistita in localStorage, indicizzata da un id stabile del
-    // Port-Channel (from~to~tag). Interazione più semplice possibile: hit-test in
-    // coordinate rete (DOMtoCanvas) sui rettangoli disegnati; TRASCINA il corpo =
-    // sposta, trascina la MANIGLIA all'angolo = ridimensiona. Niente dipendenze.
-    let pillAdjust = {};
-    try { pillAdjust = JSON.parse(localStorage.getItem('minimalPillAdjust') || '{}'); } catch (e) { pillAdjust = {}; }
-    let pillHitboxes = [];     // ricostruiti a ogni disegno: {key, x,y,w,h, hx,hy,hr}
-    let pillDrag = null;       // {key, mode:'move'|'resize'|'label', startM, orig, cx, cy}
+    // Bundle key (from~to~tag): keys label offsets, hover and link categories.
+    let pillDrag = null;       // label being dragged: {key, startM, orig}
     let hoverBundleKey = null; // pillKey of the bundle under the mouse
     const pillKey = b => `${b.from}~${b.to}~${b.pcTag || ''}`;
 
@@ -3890,6 +4138,116 @@
         });
         return out;
     }
+    // "Ladder" layout of the Schema view, for a site where most devices hang
+    // from both cores of a pair: core A on the left, core B on the right,
+    // everything they serve stacked in one column between them. Cables to A
+    // enter each box on its left edge, cables to B on its right. Devices
+    // below a column device stand under it, one step in; its single-homed
+    // leaves (APs...) in rows under it. Returns null when the site does not
+    // look like that: fewer than 2 dual-homed devices or under 60%.
+    // forced: a pair named in the Core menu. labelOf orders the column.
+    const LADDER_MIN_SHARE = 0.6;
+    const LADDER_MAX_DEPTH = 4;
+    function schemaLadderPlan(bundles, levelOf, typeOf, labelOf, leafTypes, forced) {
+        const nbrs = {};
+        bundles.forEach(b => {
+            if (b.type === 'keepalive') return;
+            (nbrs[b.from] || (nbrs[b.from] = new Set())).add(b.to);
+            (nbrs[b.to] || (nbrs[b.to] = new Set())).add(b.from);
+        });
+        const below = (id, lv) => (levelOf(id) || 0) > lv;
+        const shared = (p, q) => [...(nbrs[p] || [])].filter(t => t !== q && nbrs[q] && nbrs[q].has(t) && below(t, levelOf(p) || 0)).length;
+        // The pair: the one named in the Core menu, else the two linked boxes
+        // of one level sharing the most devices below them.
+        let pair = forced && nbrs[forced[0]] && nbrs[forced[1]] ? forced : null;
+        if (!pair) {
+            let best = 0;
+            bundles.forEach(b => {
+                if (b.from === b.to || (levelOf(b.from) || 0) !== (levelOf(b.to) || 0)) return;
+                if (leafTypes.includes(typeOf(b.from)) || leafTypes.includes(typeOf(b.to))) return;
+                const s = shared(b.from, b.to);
+                if (s > best) { best = s; pair = [b.from, b.to]; }
+            });
+        }
+        if (!pair) return null;
+        const byLabel = (x, y) => String(labelOf(x)).localeCompare(String(labelOf(y)), undefined, { numeric: true });
+        const [A, B] = [...pair].sort(byLabel);
+        const lv = Math.max(levelOf(A) || 0, levelOf(B) || 0);
+        const near = [...new Set([...(nbrs[A] || []), ...(nbrs[B] || [])])].filter(id => id !== A && id !== B);
+        const roots = near.filter(id => below(id, lv)).sort(byLabel);
+        // A device on one core that also hangs from a dual-homed one stands
+        // under it (its core cable still gets a lane), not as a column row,
+        // and does not count against the share.
+        const isDual = id => nbrs[A].has(id) && nbrs[B].has(id);
+        const top = roots.filter(id => isDual(id) || !roots.some(d => isDual(d) && nbrs[d].has(id)));
+        const dual = top.filter(isDual).length;
+        if (dual < 2 || dual / top.length < LADDER_MIN_SHARE) return null;
+        const upstream = near.filter(id => !below(id, lv)).sort(byLabel);
+        // Each device is placed once, under the first column device reaching it.
+        const placed = new Set([A, B, ...upstream, ...top]);
+        const members = [], leaves = {};
+        const visit = (id, depth, parent) => {
+            members.push({ id, depth: Math.min(depth, LADDER_MAX_DEPTH), parent });
+            const kids = [...(nbrs[id] || [])].filter(k => !placed.has(k)).sort(byLabel);
+            kids.forEach(k => placed.add(k));
+            const lf = kids.filter(k => leafTypes.includes(typeOf(k)) && nbrs[k].size === 1);
+            if (lf.length) leaves[id] = lf;
+            kids.filter(k => !lf.includes(k)).forEach(k => visit(k, depth + 1, id));
+        };
+        top.forEach(r => visit(r, 0, null));
+        return { A, B, upstream, members, leaves, dual, total: top.length };
+    }
+    // Schema arrangement: 'rows' (one row per level) or 'ladder' (above).
+    function schemaLayout() { return schemaPref('schemaLayout', 'rows') === 'ladder' ? 'ladder' : 'rows'; }
+    // The ladder of the map drawn now, when the user chose it and the site fits.
+    function schemaLadderActive() {
+        return getMapView() === 'minimal' && schemaLayout() === 'ladder' && minimalOverlayData && minimalOverlayData.ladder || null;
+    }
+    // Toolbar hint: a dual-core site drawn in rows is offered the ladder.
+    function updateLadderHint(plan) {
+        const btn = document.getElementById('mapLadderHint');
+        if (!btn) return;
+        btn.hidden = !plan || getMapView() !== 'minimal' || schemaLayout() === 'ladder';
+        if (!btn.hidden) btn.querySelector('span').textContent = tr('mapLadderHint', { n: plan.dual, t: plan.total });
+    }
+    function setSchemaLayout(v) {
+        setSchemaPref('schemaLayout', v);
+        const sel = /** @type {HTMLSelectElement|null} */ (document.getElementById('schemaLayout'));
+        if (sel) sel.value = schemaLayout();
+        schemaRetidy = true;
+        redrawInteractiveMap();
+    }
+    const LADDER_IN = 40;        // step in per level under a column device
+    const LADDER_GAP = 80;       // core edge to column: room for the lanes' turn
+    const LADDER_PORT_W = 70;    // room inside a column box for a port name on each side
+    // Column boxes share one width per level, so every cable from B ends on the
+    // same right edge; the cores are wide enough for one lane per cable.
+    function sizeLadderBoxes(nodes, bundles, plan) {
+        const byId = {};
+        nodes.forEach(nd => { byId[nd.id] = nd; });
+        let W = 240;
+        plan.members.forEach(m => {
+            const nd = byId[m.id];
+            if (nd) W = Math.max(W, (nd._textW || 60) + 2 * LADDER_PORT_W + m.depth * LADDER_IN);
+        });
+        plan.W = Math.ceil(W);
+        plan.members.forEach(m => {
+            const nd = byId[m.id];
+            if (!nd) return;
+            const w = plan.W - m.depth * LADDER_IN;
+            nd.widthConstraint = { minimum: w, maximum: w };
+            nd.heightConstraint = { minimum: 46 };
+        });
+        const inCol = new Set(plan.members.map(m => m.id));
+        [plan.A, plan.B].forEach(core => {
+            const nd = byId[core];
+            if (!nd) return;
+            const lanes = bundles.filter(b => (b.from === core && inCol.has(b.to)) || (b.to === core && inCol.has(b.from)))
+                .reduce((t, b) => t + b.members.length, 0);
+            const min = Math.max((nd.widthConstraint && nd.widthConstraint.minimum) || 0, 40 + lanes * 12);
+            nd.widthConstraint = { minimum: min };
+        });
+    }
     // Leaves drawn as small boxes in the Schema view: single-homed devices of
     // the given types (APs, phones, cameras...), never a group box. Sized like
     // a switch, with room reserved for port stacks, an AP box was ~190px tall.
@@ -3947,7 +4305,6 @@
         networkInstance.redraw();
     }
     const routeMemo = {};      // pillKey -> { h, over }: last route shape, for hysteresis
-    const pillAdj = key => pillAdjust[key] || { dx: 0, dy: 0, scale: 1 };
     // Scostamento delle ETICHETTE di testo (es. "po1"), indipendente dalla
     // pillola: ogni cartiglio è trascinabile per conto suo e viene persistito.
     let labelAdjust = {};
@@ -3988,20 +4345,10 @@
             return networkInstance.DOMtoCanvas({ x: ev.clientX - rect.left, y: ev.clientY - rect.top });
         };
         const hitAt = m => {
-            // Le etichette di testo hanno precedenza assoluta (sono piccole e
-            // disegnate sopra tutto), poi la maniglia, poi il corpo della pillola;
-            // scorro in ordine inverso (le ultime disegnate stanno "sopra").
+            // Last drawn sits on top: scan in reverse.
             for (let i = labelHitboxes.length - 1; i >= 0; i--) {
                 const p = labelHitboxes[i];
-                if (m.x >= p.x && m.x <= p.x + p.w && m.y >= p.y && m.y <= p.y + p.h) return { p, mode: 'label' };
-            }
-            for (let i = pillHitboxes.length - 1; i >= 0; i--) {
-                const p = pillHitboxes[i];
-                if (Math.hypot(m.x - p.hx, m.y - p.hy) <= p.hr + 2) return { p, mode: 'resize' };
-            }
-            for (let i = pillHitboxes.length - 1; i >= 0; i--) {
-                const p = pillHitboxes[i];
-                if (m.x >= p.x && m.x <= p.x + p.w && m.y >= p.y && m.y <= p.y + p.h) return { p, mode: 'move' };
+                if (m.x >= p.x && m.x <= p.x + p.w && m.y >= p.y && m.y <= p.y + p.h) return { p };
             }
             return null;
         };
@@ -4015,11 +4362,9 @@
             if (!hit) return;
             ev.preventDefault(); ev.stopPropagation();
             if (pillDrag) return; // già iniziato dall'altro tipo di evento
-            const a = hit.mode === 'label' ? labelAdj(hit.p.key) : pillAdj(hit.p.key);
-            pillDrag = { key: hit.p.key, mode: hit.mode, startM: toNet(ev),
-                         orig: { dx: a.dx, dy: a.dy, scale: a.scale },
-                         cx: hit.p.cx, cy: hit.p.cy };
-            container.style.cursor = hit.mode === 'resize' ? 'nwse-resize' : 'move';
+            const a = labelAdj(hit.p.key);
+            pillDrag = { key: hit.p.key, startM: toNet(ev), orig: { dx: a.dx, dy: a.dy } };
+            container.style.cursor = 'move';
         };
         container.addEventListener('pointerdown', beginPillDrag, true);
         container.addEventListener('mousedown', beginPillDrag, true);
@@ -4030,31 +4375,14 @@
         window.addEventListener('mousemove', ev => {
             if (!pillDrag || !networkInstance) return;
             const m = toNet(ev);
-            if (pillDrag.mode === 'label') {
-                const la = labelAdjust[pillDrag.key] || (labelAdjust[pillDrag.key] = {});
-                la.dx = pillDrag.orig.dx + (m.x - pillDrag.startM.x);
-                la.dy = pillDrag.orig.dy + (m.y - pillDrag.startM.y);
-                networkInstance.redraw();
-                return;
-            }
-            const a = pillAdjust[pillDrag.key] || (pillAdjust[pillDrag.key] = {});
-            if (pillDrag.mode === 'move') {
-                a.dx = pillDrag.orig.dx + (m.x - pillDrag.startM.x);
-                a.dy = pillDrag.orig.dy + (m.y - pillDrag.startM.y);
-                a.scale = pillDrag.orig.scale;
-            } else {
-                // Scala = rapporto tra distanza attuale dal centro e distanza iniziale.
-                const d0 = Math.max(Math.hypot(pillDrag.startM.x - pillDrag.cx, pillDrag.startM.y - pillDrag.cy), 6);
-                const d1 = Math.hypot(m.x - pillDrag.cx, m.y - pillDrag.cy);
-                a.dx = pillDrag.orig.dx; a.dy = pillDrag.orig.dy;
-                a.scale = Math.min(4, Math.max(0.5, pillDrag.orig.scale * (d1 / d0)));
-            }
+            const la = labelAdjust[pillDrag.key] || (labelAdjust[pillDrag.key] = {});
+            la.dx = pillDrag.orig.dx + (m.x - pillDrag.startM.x);
+            la.dy = pillDrag.orig.dy + (m.y - pillDrag.startM.y);
             networkInstance.redraw();
         });
         const endDrag = () => {
             if (!pillDrag) return;
             pillDrag = null;
-            localStorage.setItem('minimalPillAdjust', JSON.stringify(pillAdjust));
             localStorage.setItem('minimalLabelAdjust', JSON.stringify(labelAdjust));
             if (pillInteractionReady) document.getElementById('networkGraphContainer').style.cursor = '';
         };
@@ -4070,8 +4398,7 @@
         container.addEventListener('mousemove', ev => {
             if (pillDrag || getMapView() !== 'minimal' || !networkInstance) return;
             const m = toNet(ev);
-            const pill = pillHitboxes.find(p => m.x >= p.x && m.x <= p.x + p.w && m.y >= p.y && m.y <= p.y + p.h);
-            setHover(pill ? pill.key : hitEdgeAt(m));
+            setHover(hitEdgeAt(m));
         });
         container.addEventListener('mouseleave', () => { if (networkInstance) setHover(null); });
         // Click destro su un cavo: menu per assegnare/rimuovere una categoria
@@ -4097,13 +4424,13 @@
         if (!networkInstance) return;
         const S = MINIMAL_MAP_STYLE;
         initPillInteraction();
-        pillHitboxes = [];   // ricostruiti sotto per l'hit-test di drag/resize
         labelHitboxes = [];  // ricostruiti sotto per il drag delle etichette
         edgeHitSegs = [];    // ricostruiti sotto per l'hit-test del menu categorie
         const deferredTags = [];
 
         // --- 1) Contenitori di raggruppamento per Sede/Gruppo ------------------
-        if (Array.isArray(groupsInfo) && groupsInfo.length > 1) {
+        // Not in the Visio export: there every site has its own page, named after it.
+        if (Array.isArray(groupsInfo) && groupsInfo.length > 1 && !visioConnectorSink) {
             ctx.save();
             ctx.setLineDash([8, 5]);
             ctx.lineWidth = 1.2;
@@ -4191,7 +4518,7 @@
         // packSchemaRows). One stub leaves the switch's right edge into a
         // vertical spine, a branch runs from it into each AP with the switch
         // port written above it. The normal route would cross the boxes.
-        if (schemaApMode() === 'column') {
+        if (schemaApMode() === 'column' && !schemaLadderActive()) {
             const dsc = networkInstance.body.data.nodes;
             const cols = schemaLeafColumns(bundles, id => ((dsc.get(id) || {}).nodeDataVal || {}).device_type, GROUPABLE_TYPES);
             const leafOf = {};
@@ -4250,6 +4577,13 @@
                  : b.type === 'pc'        ? { color: linkColor('pc'),        lw: 1.8, dash: null }
                                           : { color: linkColor('link'),      lw: 1.4, dash: null };
         };
+
+        // Ladder: cables to the cores run down their own lane and enter the
+        // column box from its side; a device under another hangs from a trunk
+        // on its parent's left edge; leaves from a bus. These bundles leave the
+        // general router; the rest (peer link, upstream, second parents) stay.
+        const lad = schemaLadderActive();
+        if (lad && [lad.A, lad.B].every(realBox)) bundles = drawLadderCables(ctx, lad, bundles, realBox, styleFor, labelMode);
 
         // --- PASSO 1: ancoraggi per lato -----------------------------------
         // Ogni collegamento occupa 'members.length' slot sul lato del riquadro
@@ -4531,9 +4865,6 @@
                 mm.pts.slice(0, -1).map((p, k) => [p.x, p.y, mm.pts[k + 1].x, mm.pts[k + 1].y])) });
             ctx.setLineDash([]);
 
-            // Centro del fascio e ampiezza (per pillola/etichette).
-            const half = (b.members.length - 1) / 2;
-            const spread = half * spacing;
             // On the cable itself: the first (E/W) or the last (N/S) leg, both
             // straight runs of the whole bundle. The midpoint of the two ends
             // floated in empty space once the runs fanned out.
@@ -4578,36 +4909,8 @@
             }
             if (b.type === 'link') { ctx.restore(); return; }
 
-            // --- Pillola ovale standard: SEMPRE presente su ogni Port-Channel
-            // e peer-link, qualunque sia il numero di membri visibili.
-            // ponytail: posizione e dimensione regolabili dall'utente (drag/resize);
-            // lo scostamento {dx,dy} e la scala vengono dalla mappa persistita.
-            const adj = pillAdj(pillKey(b));
-            const sc  = adj.scale || 1;
-            const pcx = cx + (adj.dx || 0), pcy = cy + (adj.dy || 0);
-            const pillHalfW = 9 * sc;
-            const pillHalfSpread = (spread + 12) * sc;
-            let px, py, pw, ph;
-            if (horizontal) { px = pcx - pillHalfW; py = pcy - pillHalfSpread; pw = pillHalfW * 2; ph = pillHalfSpread * 2; }
-            else            { px = pcx - pillHalfSpread; py = pcy - pillHalfW; pw = pillHalfSpread * 2; ph = pillHalfW * 2; }
-            const r = Math.min(pillHalfW, 8);
-            ctx.beginPath();
-            ctx.moveTo(px + r, py);
-            ctx.arcTo(px + pw, py, px + pw, py + ph, r);
-            ctx.arcTo(px + pw, py + ph, px, py + ph, r);
-            ctx.arcTo(px, py + ph, px, py, r);
-            ctx.arcTo(px, py, px + pw, py, r);
-            ctx.closePath();
-            ctx.fillStyle = hexToRgba(color, 0.16);
-            ctx.fill();
-            ctx.lineWidth = 1.4;
-            ctx.strokeStyle = color;
-            ctx.stroke();
-            // Hitbox per il drag della pillola (niente maniglia visibile: il
-            // ridimensionamento resta possibile trascinando l'angolo esterno).
-            pillHitboxes.push({ key: pillKey(b), x: px, y: py, w: pw, h: ph,
-                                hx: px + pw, hy: py + ph, hr: 6, cx: pcx, cy: pcy });
-
+            // No pill across the cables: the bracket at each end already names
+            // the port-channel.
             // Port-channel name at each end, inside the device box: a bracket
             // groups the member port labels and carries that side's name
             // (po1 on one end, po2 on the other when they differ). A tag on
@@ -5651,7 +5954,8 @@
     }
 
     function downloadTopology() {
-        captureMapCanvas(out => {
+        captureMapCanvas(map => {
+            const out = withTitleBlock(map);
             const link = document.createElement("a");
             link.download = mapExportName("png");
             // toBlob, not toDataURL: a 50 Mpx PNG as a base64 string is huge.
@@ -5698,7 +6002,8 @@
     }
 
     function exportPdfMap() {
-        captureMapCanvas(out => {
+        captureMapCanvas(map => {
+            const out = withTitleBlock(map);
             const w = out.width, h = out.height;
             out.toBlob(async blob => {
                 if (!blob) return;
@@ -5711,6 +6016,271 @@
             }, "image/jpeg", 0.92);
         });
     }
+
+    // ===== Title block for PNG/PDF exports =====
+    // A box in the bottom-right corner: customer, project, who drew it, date,
+    // revision and the company logo. It sits on a strip added under the map,
+    // so it never covers a device. Settings and the logo (a small PNG data
+    // URL) stay in this browser.
+    const TB_SIZE = { classic: [480, 150], modern: [460, 132], minimal: [440, 92] };
+    let tbCfg = { style: 'classic', customer: '', title: '', author: '', company: '', rev: '', accent: '#1f4e79', logo: '' };
+    try { Object.assign(tbCfg, JSON.parse(localStorage.getItem('mapTitleBlock') || '{}')); } catch (e) { /* defaults */ }
+    let tbLogoImg = null;   // tbCfg.logo, decoded
+    let tbFormat = 'png';
+
+    function tbLoadLogo() {
+        if (!tbCfg.logo) { tbLogoImg = null; return Promise.resolve(); }
+        const img = new Image();
+        img.src = tbCfg.logo;
+        return img.decode().then(() => { tbLogoImg = img; }, () => { tbLogoImg = null; });
+    }
+
+    // What the block prints: empty fields fall back to the tenant shown and a
+    // generic title, so a first export is never blank.
+    function tbInfo() {
+        const sel = /** @type {HTMLSelectElement|null} */ (document.getElementById('interactiveGroupSelect'));
+        const opt = sel && sel.selectedOptions[0];
+        const tenant = (opt && opt.value && opt.value !== 'all' && opt.text) || '';
+        return {
+            customer: tbCfg.customer || tenant,
+            title: tbCfg.title || tr('tbDefaultTitle'),
+            author: tbCfg.author, company: tbCfg.company, rev: tbCfg.rev,
+            date: new Date().toISOString().slice(0, 10),
+        };
+    }
+
+    // Draws the block at the origin, in base units (TB_SIZE).
+    function drawTitleBlock(ctx, style, info, logo, accent) {
+        const [W, H] = TB_SIZE[style];
+        const FONT = 'Arial, Helvetica, sans-serif';
+        const fit = (text, maxW) => {
+            text = String(text || '');
+            if (ctx.measureText(text).width <= maxW) return text;
+            while (text && ctx.measureText(text + '…').width > maxW) text = text.slice(0, -1);
+            return text + '…';
+        };
+        const put = (text, x, y, maxW, font, color, align) => {
+            ctx.font = font; ctx.fillStyle = color;
+            ctx.textAlign = align || 'left'; ctx.textBaseline = 'middle';
+            ctx.fillText(fit(text, maxW), x, y);
+        };
+        const drawLogo = (x, y, w, h) => {
+            const k = Math.min(w / logo.width, h / logo.height);
+            ctx.drawImage(logo, x + (w - logo.width * k) / 2, y + (h - logo.height * k) / 2, logo.width * k, logo.height * k);
+        };
+        ctx.save();
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, W, H);
+        if (style === 'classic') {
+            // Engineering title block: logo cell on the left, a grid of
+            // labelled cells on the right.
+            const lw = 150, rh = 50, cw = (W - lw) / 3;
+            ctx.strokeStyle = '#1f2937'; ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(lw, 0); ctx.lineTo(lw, H);
+            ctx.moveTo(lw, rh); ctx.lineTo(W, rh);
+            ctx.moveTo(lw, rh * 2); ctx.lineTo(W, rh * 2);
+            if (logo) { ctx.moveTo(0, H - 34); ctx.lineTo(lw, H - 34); }
+            ctx.moveTo(lw + cw * 1.4, rh * 2); ctx.lineTo(lw + cw * 1.4, H);
+            ctx.moveTo(lw + cw * 2.3, rh * 2); ctx.lineTo(lw + cw * 2.3, H);
+            ctx.stroke();
+            ctx.lineWidth = 2;
+            ctx.strokeRect(1, 1, W - 2, H - 2);
+            ctx.fillStyle = accent; ctx.fillRect(lw, 0, 4, rh * 2);
+            if (logo) {
+                drawLogo(12, 10, lw - 24, H - 54);
+                put(info.company, lw / 2, H - 17, lw - 16, `11px ${FONT}`, '#374151', 'center');
+            } else put(info.company, lw / 2, H / 2, lw - 20, `bold 15px ${FONT}`, '#111827', 'center');
+            const cell = (label, value, x, y, w, big) => {
+                put(label.toUpperCase(), x + 10, y + 13, w - 20, `bold 8.5px ${FONT}`, '#6b7280');
+                put(value || '—', x + 10, y + 33, w - 20, big ? `bold 17px ${FONT}` : `bold 12px ${FONT}`, '#111827');
+            };
+            cell(tr('tbCustomer'), info.customer, lw + 4, 0, W - lw - 4, true);
+            cell(tr('tbProject'), info.title, lw + 4, rh, W - lw - 4, false);
+            cell(tr('tbAuthor'), info.author, lw, rh * 2, cw * 1.4, false);
+            cell(tr('tbDate'), info.date, lw + cw * 1.4, rh * 2, cw * 0.9, false);
+            cell(tr('tbRev'), info.rev, lw + cw * 2.3, rh * 2, cw * 0.7, false);
+        } else if (style === 'modern') {
+            // Card: accent bar, logo and customer on top, credits underneath.
+            ctx.strokeStyle = '#d1d5db'; ctx.lineWidth = 1;
+            ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
+            ctx.fillStyle = accent; ctx.fillRect(0, 0, 6, H);
+            let tx = 22;
+            if (logo) { drawLogo(20, 14, 110, 62); tx = 146; }
+            put(info.customer || '—', tx, 34, W - tx - 16, `bold 21px ${FONT}`, '#111827');
+            put(info.title, tx, 60, W - tx - 16, `13px ${FONT}`, '#4b5563');
+            ctx.fillStyle = '#e5e7eb'; ctx.fillRect(20, 90, W - 36, 1);
+            const by = [info.author && `${tr('tbAuthor')}: ${info.author}`, info.company].filter(Boolean).join(' · ');
+            const when = [info.date, info.rev && `${tr('tbRev')} ${info.rev}`].filter(Boolean).join(' · ');
+            ctx.font = `11px ${FONT}`;
+            const ww = ctx.measureText(when).width;
+            put(by, 20, 111, W - 56 - ww, `11px ${FONT}`, '#374151');
+            put(when, W - 16, 111, ww + 1, `11px ${FONT}`, '#6b7280', 'right');
+        } else {
+            // Minimal: a rule in the accent colour, text right-aligned beside
+            // the logo.
+            ctx.fillStyle = accent; ctx.fillRect(0, 0, W, 3);
+            let rx = W - 6;
+            if (logo) { drawLogo(W - 106, 14, 100, 66); rx = W - 122; }
+            put(info.customer || '—', rx, 26, rx - 6, `bold 17px ${FONT}`, '#111827', 'right');
+            put(info.title, rx, 48, rx - 6, `12px ${FONT}`, '#4b5563', 'right');
+            const meta = [info.author, info.company, info.date, info.rev && `${tr('tbRev')} ${info.rev}`].filter(Boolean).join(' · ');
+            put(meta, rx, 70, rx - 6, `10.5px ${FONT}`, '#6b7280', 'right');
+        }
+        ctx.restore();
+    }
+
+    // The recording context does not move paths (translate is for text only):
+    // this one shifts every coordinate, so the block lands at (ox, oy).
+    function shiftedCtx(ctx, ox, oy) {
+        return {
+            set fillStyle(v) { ctx.fillStyle = v; }, set strokeStyle(v) { ctx.strokeStyle = v; },
+            set lineWidth(v) { ctx.lineWidth = v; }, set textAlign(v) { ctx.textAlign = v; },
+            set textBaseline(v) { ctx.textBaseline = v; }, set font(v) { ctx.font = v; },
+            save() { ctx.save(); }, restore() { ctx.restore(); },
+            beginPath() { ctx.beginPath(); }, stroke() { ctx.stroke(); },
+            moveTo(x, y) { ctx.moveTo(ox + x, oy + y); }, lineTo(x, y) { ctx.lineTo(ox + x, oy + y); },
+            fillRect(x, y, w, h) { ctx.fillRect(ox + x, oy + y, w, h); },
+            strokeRect(x, y, w, h) { ctx.beginPath(); ctx.rect(ox + x, oy + y, w, h); ctx.stroke(); },
+            measureText(t) { return ctx.measureText(t); },
+            fillText(t, x, y) { ctx.fillText(t, ox + x, oy + y); },
+            drawImage(img, x, y, w, h) { ctx.drawImage(img, ox + x, oy + y, w, h); },
+        };
+    }
+    // Title block for draw.io: one group under the map, right edge on the
+    // map's (right, bottom); moved as one piece, every text still editable.
+    function drawioTitleBlock(right, bottom, esc) {
+        const [W, H] = TB_SIZE[tbCfg.style], gid = 'sn-title-block';
+        const p = titleBlockPrims(0, 0, true);
+        const out = [`<mxCell id="${gid}" value="" style="group;" vertex="1" connectable="0" parent="1"><mxGeometry x="${right - W}" y="${bottom + 60}" width="${W}" height="${H}" as="geometry"/></mxCell>`];
+        let n = 0;
+        const id = () => `${gid}-${n++}`;
+        const geo = (x, y, w, h) => `<mxGeometry x="${x}" y="${y}" width="${w}" height="${h}" as="geometry"/>`;
+        p.rects.forEach(r => out.push(`<mxCell id="${id()}" value="" style="rounded=0;fillColor=${r.fill};strokeColor=none;" vertex="1" parent="${gid}">${geo(r.x, r.y, r.w, r.h)}</mxCell>`));
+        // draw.io reads data:image/png,<base64>: a ';' would end the style entry.
+        p.images.forEach(im => out.push(`<mxCell id="${id()}" value="" style="shape=image;aspect=fixed;imageAspect=1;image=${esc(im.src.replace(';base64', ''))};" vertex="1" parent="${gid}">${geo(im.x, im.y, im.w, im.h)}</mxCell>`));
+        p.lines.forEach(l => {
+            const pts = l.points, a = pts[0], b = pts[pts.length - 1], mid = pts.slice(1, -1);
+            out.push(`<mxCell id="${id()}" style="endArrow=none;html=1;rounded=0;strokeColor=${l.color};strokeWidth=${l.width};" edge="1" parent="${gid}"><mxGeometry relative="1" as="geometry">`
+                + `<mxPoint x="${a[0]}" y="${a[1]}" as="sourcePoint"/><mxPoint x="${b[0]}" y="${b[1]}" as="targetPoint"/>`
+                + (mid.length ? `<Array as="points">${mid.map(q => `<mxPoint x="${q[0]}" y="${q[1]}"/>`).join('')}</Array>` : '')
+                + `</mxGeometry></mxCell>`);
+        });
+        p.texts.forEach(t => out.push(`<mxCell id="${id()}" value="${esc(t.text)}" style="text;html=0;align=center;verticalAlign=middle;spacing=0;fontFamily=Arial;fontSize=${t.size};fontStyle=${t.bold ? 1 : 0};fontColor=${t.color};" vertex="1" parent="${gid}">${geo(t.x - t.w / 2 - 2, t.y - t.size * 0.7, t.w + 4, t.size * 1.4)}</mxCell>`));
+        return out;
+    }
+    // Title block as Visio/draw.io primitives, (ox, oy) its top-left corner in map units.
+    function titleBlockPrims(ox, oy, withLogo) {
+        const prims = { lines: [], polys: [], rects: [], texts: [] };
+        if (withLogo) prims.images = [];
+        drawTitleBlock(shiftedCtx(makeRecordingCtx(prims), ox, oy), tbCfg.style, tbInfo(), withLogo ? tbLogoImg : null, tbCfg.accent);
+        return prims;
+    }
+
+    function withTitleBlock(map) {
+        if (!TB_SIZE[tbCfg.style]) return map;
+        const s = map.width / 3200;   // the same share of the width at any export size
+        const [bw, bh] = TB_SIZE[tbCfg.style];
+        const m = 32 * s;
+        const out = document.createElement('canvas');
+        out.width = map.width;
+        out.height = Math.ceil(map.height + bh * s + m);
+        const ctx = out.getContext('2d');
+        ctx.fillStyle = getMapView() === 'minimal' ? '#ffffff' : cssVar('--surface-2', '#181e23');
+        ctx.fillRect(0, 0, out.width, out.height);
+        ctx.drawImage(map, 0, 0);
+        ctx.translate(out.width - m - bw * s, map.height);
+        ctx.scale(s, s);
+        drawTitleBlock(ctx, tbCfg.style, tbInfo(), tbLogoImg, tbCfg.accent);
+        return out;
+    }
+
+    const TB_FIELDS = ['customer', 'title', 'author', 'company', 'rev', 'accent'];
+    const tbInput = f => /** @type {HTMLInputElement} */ (document.getElementById('tb_' + f));
+
+    function tbRenderPreviews() {
+        const info = tbInfo();
+        document.querySelectorAll('#mapTitleBlockModal canvas[data-tb-preview]').forEach(c => {
+            const cv = /** @type {HTMLCanvasElement} */ (c);
+            const style = cv.dataset.tbPreview || '';
+            const dpr = window.devicePixelRatio || 1;
+            const cw = cv.clientWidth || 220, ch = cv.clientHeight || 110;
+            cv.width = cw * dpr; cv.height = ch * dpr;
+            const ctx = cv.getContext('2d');
+            ctx.scale(dpr, dpr);
+            // The corner of a page, with the block where the export puts it.
+            ctx.fillStyle = '#f1f5f9'; ctx.fillRect(0, 0, cw, ch);
+            ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1;
+            [[16, 12], [64, 26], [120, 8]].forEach(([x, y]) => ctx.strokeRect(x, y, 34, 14));
+            if (!TB_SIZE[style]) return;
+            const [bw, bh] = TB_SIZE[style];
+            const k = Math.min((cw - 16) / bw, (ch - 30) / bh);
+            ctx.translate(cw - 8 - bw * k, ch - 8 - bh * k);
+            ctx.scale(k, k);
+            drawTitleBlock(ctx, style, info, tbLogoImg, tbCfg.accent);
+        });
+    }
+
+    function tbReadFields() {
+        TB_FIELDS.forEach(f => { tbCfg[f] = tbInput(f).value.trim(); });
+        const r = /** @type {HTMLInputElement|null} */ (document.querySelector('input[name="tbStyle"]:checked'));
+        tbCfg.style = r ? r.value : 'none';
+    }
+
+    async function openTitleBlock(format) {
+        tbFormat = format;
+        TB_FIELDS.forEach(f => { tbInput(f).value = tbCfg[f] || ''; });
+        tbInput('customer').placeholder = tbInfo().customer;
+        tbInput('title').placeholder = tr('tbDefaultTitle');
+        document.querySelectorAll('input[name="tbStyle"]').forEach(r => {
+            const radio = /** @type {HTMLInputElement} */ (r);
+            radio.checked = radio.value === (TB_SIZE[tbCfg.style] ? tbCfg.style : 'none');
+        });
+        const fmt = document.getElementById('tbExportFormat');
+        if (fmt) fmt.textContent = { png: 'PNG', pdf: 'PDF', vsdx: 'Visio', drawio: 'draw.io' }[format];
+        openModal('mapTitleBlockModal');
+        await tbLoadLogo();
+        tbRenderPreviews();
+    }
+
+    document.getElementById('mapTitleBlockModal')?.addEventListener('input', e => {
+        if (/** @type {HTMLInputElement} */ (e.target).type === 'file') return;
+        tbReadFields();
+        tbRenderPreviews();
+    });
+    document.getElementById('tb_logo')?.addEventListener('change', e => {
+        const input = /** @type {HTMLInputElement} */ (e.target);
+        const file = input.files && input.files[0];
+        if (!file) return;
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+            // Shrunk to at most 600x300 so it fits in browser storage.
+            const w0 = img.naturalWidth || 600, h0 = img.naturalHeight || 300;
+            const k = Math.min(1, 600 / w0, 300 / h0);
+            const c = document.createElement('canvas');
+            c.width = Math.max(1, Math.round(w0 * k));
+            c.height = Math.max(1, Math.round(h0 * k));
+            c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+            URL.revokeObjectURL(url);
+            tbCfg.logo = c.toDataURL('image/png');
+            input.value = '';
+            tbLoadLogo().then(tbRenderPreviews);
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); alert(tr('tbLogoInvalid')); };
+        img.src = url;
+    });
+    document.getElementById('btnTbRemoveLogo')?.addEventListener('click', () => {
+        tbCfg.logo = '';
+        tbLoadLogo().then(tbRenderPreviews);
+    });
+    document.getElementById('btnTbExport')?.addEventListener('click', () => {
+        tbReadFields();
+        try { localStorage.setItem('mapTitleBlock', JSON.stringify(tbCfg)); }
+        catch (e) { console.warn('title block not saved:', e); }
+        closeModal('mapTitleBlockModal');
+        ({ pdf: exportPdfMap, vsdx: exportVisioMap, drawio: exportDrawioMap }[tbFormat] || downloadTopology)();
+    });
 
     // Esporta la mappa interattiva corrente come file Visio (.vsdx) nativo ed
     // editabile. Riusa posizioni/dati già presenti nell'istanza vis.js: nessuna
@@ -5787,6 +6357,8 @@
                 prims.rects.push({ x, y, w, h, fill: c.hex, alpha: c.alpha });
             },
             measureText(t) { meas.font = this.font; return meas.measureText(t || ''); },
+            // The title block's logo: kept only by exports that can embed it (draw.io).
+            drawImage(img, x, y, w, h) { if (prims.images) prims.images.push({ x, y, w, h, src: img.src }); },
             fillText(text, x, y) {
                 if (!text) return;
                 meas.font = this.font;
@@ -5875,10 +6447,22 @@
             });
         }
 
+        // One page per site, named after it. Title block under each page's
+        // map, right-aligned. Visio gets no logo (no embedded images): the
+        // classic style prints the company name instead.
+        const pages = visioPages(nodes, edges, primitives, connectors,
+            id => topoZone((nodesDs.get(id) || {}).nodeDataVal || { id }));
+        if (TB_SIZE[tbCfg.style]) pages.forEach(pg => {
+            const right = Math.max(...pg.nodes.map(n => n.x + (n.w || 0) / 2));
+            const bottom = Math.max(...pg.nodes.map(n => n.y + (n.h || 0) / 2));
+            const tb = titleBlockPrims(right - TB_SIZE[tbCfg.style][0], bottom + 60, false);
+            pg.primitives = pg.primitives || { lines: [], polys: [], rects: [], texts: [] };
+            Object.keys(tb).forEach(k => { pg.primitives[k] = (pg.primitives[k] || []).concat(tb[k]); });
+        });
         const res = await apiFetch('/api/map/export/vsdx', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nodes, edges, primitives, connectors })
+            body: JSON.stringify({ pages })
         });
         if (!res || !res.ok) {
             alert(tr('alertVisioExportError'));
@@ -5890,6 +6474,38 @@
         link.download = mapExportName('vsdx');
         link.click();
         URL.revokeObjectURL(link.href);
+    }
+
+    // Visio export split by site: boxes by their site, cables by the site of
+    // the box they leave from (a cable to another site stays loose at that
+    // end), drawings (site frame, labels) by the site whose area holds them.
+    // zoneOf(id) -> { key, label }.
+    function visioPages(nodes, edges, primitives, connectors, zoneOf) {
+        const keyOf = {}, names = {};
+        nodes.forEach(n => { const z = zoneOf(n.id) || {}; keyOf[n.id] = z.key || ''; names[z.key || ''] = z.label || z.key || 'SentinelNet'; });
+        const keys = [...new Set(nodes.map(n => keyOf[n.id]))];
+        const area = {};
+        keys.forEach(k => {
+            const ns = nodes.filter(n => keyOf[n.id] === k);
+            area[k] = { x0: Math.min(...ns.map(n => n.x - (n.w || 0) / 2)), x1: Math.max(...ns.map(n => n.x + (n.w || 0) / 2)),
+                        y0: Math.min(...ns.map(n => n.y - (n.h || 0) / 2)), y1: Math.max(...ns.map(n => n.y + (n.h || 0) / 2)) };
+        });
+        const dist = (a, x, y) => Math.hypot(Math.max(a.x0 - x, 0, x - a.x1), Math.max(a.y0 - y, 0, y - a.y1));
+        const near = (x, y) => keys.reduce((best, k) => dist(area[k], x, y) < dist(area[best], x, y) ? k : best, keys[0]);
+        const mid = pts => [pts.reduce((t, p) => t + p[0], 0) / pts.length, pts.reduce((t, p) => t + p[1], 0) / pts.length];
+        const pages = keys.map(k => ({
+            name: names[k], nodes: nodes.filter(n => keyOf[n.id] === k),
+            edges: (edges || []).filter(e => keyOf[e.source] === k),
+            connectors: (connectors || []).filter(c => keyOf[c.from] === k),
+            primitives: primitives ? { lines: [], polys: [], rects: [], texts: [] } : null,
+        }));
+        const page = Object.fromEntries(keys.map((k, i) => [k, pages[i]]));
+        if (primitives) {
+            ['lines', 'polys'].forEach(t => (primitives[t] || []).forEach(p => page[near(...mid(p.points))].primitives[t].push(p)));
+            (primitives.rects || []).forEach(r => page[near(r.x + r.w / 2, r.y + r.h / 2)].primitives.rects.push(r));
+            (primitives.texts || []).forEach(t => page[near(t.x, t.y)].primitives.texts.push(t));
+        }
+        return pages;
     }
 
     // Side of box `a` a cable to box `b` leaves from: left/right when the two
@@ -6069,6 +6685,10 @@
             btn(0, tr('drawioShowAll'), reset);
             btn(170, tr('drawioHideAll'), [...reset, { hide: { tags: ['sn-cable'] } }]);
             cells.push(`<mxCell id="${'b' + (seq++)}" value="${esc(tr('drawioClickHint'))}" style="text;html=0;align=left;verticalAlign=middle;fontSize=11;fontColor=#64748B;" vertex="1" parent="1"><mxGeometry x="${left + 345}" y="${top - 50}" width="520" height="30" as="geometry"/></mxCell>`);
+        }
+        if (TB_SIZE[tbCfg.style] && Object.keys(box).length) {
+            const bs = Object.values(box);
+            cells.push(...drawioTitleBlock(Math.max(...bs.map(b => b.right)), Math.max(...bs.map(b => b.bottom)), esc));
         }
         const xml = `<mxfile host="SentinelNet"><diagram id="sentinelnet" name="${esc(lastMapGroup || 'SentinelNet')}"><mxGraphModel grid="1" gridSize="10" guides="1" page="0" math="0" shadow="0"><root><mxCell id="0"/><mxCell id="1" parent="0"/>${cells.join('')}</root></mxGraphModel></diagram></mxfile>`;
         const link = document.createElement('a');
@@ -6253,28 +6873,33 @@
         } else if (el.id === 'toggleSchemaGroupUplinks') {
             setSchemaPref('schemaGroupUplinks', el.checked ? '1' : '0');
             networkInstance?.redraw();
+        } else if (el.id === 'schemaLayout') {
+            setSchemaLayout(el.value);
         } else if (el.id === 'schemaApMode') {
-            // Boxes change (group) or move (column): rebuild and re-tidy.
+            // Group: new boxes, rebuild and re-tidy. Column: only the APs move,
+            // beside their switch where it stands now; the rest stays put.
             setSchemaPref('schemaApMode', el.value);
             // Groups left open (state shared with the hierarchy) would hide the change.
             if (el.value === 'group') { delete layeredExpanded[layeredGroup]; saveLayeredExpanded(); }
-            schemaRetidy = true;
+            if (el.value === 'group') schemaRetidy = true;
+            if (el.value === 'column') schemaPlaceColumns = true;
             redrawInteractiveMap();
         }
     });
+    document.getElementById('mapLadderHint')?.addEventListener('click', () => setSchemaLayout('ladder'));
     document.getElementById('schemaPresetRecommended')?.addEventListener('click', () => applySchemaPreset('recommended'));
     document.getElementById('schemaPresetOverview')?.addEventListener('click', () => applySchemaPreset('overview'));
     document.getElementById('btnResetInteractiveTopology')?.addEventListener('click', resetTopology);
     document.getElementById('btnRefreshInteractiveMap')?.addEventListener('click', loadInteractiveMap);
-    document.getElementById('btnDownloadTopology')?.addEventListener('click', downloadTopology);
-    document.getElementById('btnExportVisioMap')?.addEventListener('click', exportVisioMap);
-    document.getElementById('btnExportDrawioMap')?.addEventListener('click', exportDrawioMap);
+    document.getElementById('btnDownloadTopology')?.addEventListener('click', () => openTitleBlock('png'));
+    document.getElementById('btnExportVisioMap')?.addEventListener('click', () => openTitleBlock('vsdx'));
+    document.getElementById('btnExportDrawioMap')?.addEventListener('click', () => openTitleBlock('drawio'));
     // Floating zoom bar: steps of 20% around the view centre, and fit.
     const zoomBy = f => networkInstance && networkInstance.moveTo({ scale: networkInstance.getScale() * f, animation: { duration: 150 } });
     document.getElementById('mapZoomIn')?.addEventListener('click', () => zoomBy(1.2));
     document.getElementById('mapZoomOut')?.addEventListener('click', () => zoomBy(1 / 1.2));
     document.getElementById('mapZoomFit')?.addEventListener('click', () => networkInstance && networkInstance.fit({ animation: { duration: 200 } }));
-    document.getElementById('btnExportPdfMap')?.addEventListener('click', exportPdfMap);
+    document.getElementById('btnExportPdfMap')?.addEventListener('click', () => openTitleBlock('pdf'));
     document.getElementById('legendToggleBtn')?.addEventListener('click', toggleLegend);
     document.getElementById('categoriesGroupSelect')?.addEventListener('change', renderCategoriesPanel);
     document.getElementById('btnRefreshCategories')?.addEventListener('click', loadCategoriesData);

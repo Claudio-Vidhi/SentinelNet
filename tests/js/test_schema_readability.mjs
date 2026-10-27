@@ -162,7 +162,7 @@ assert.deepEqual(schemaUplinkGroups(bundles, ids, levelOf, id => {
             const initPillInteraction = () => {}, customStyleForEdge = () => null, linkColor = () => '#888888', hexToRgba = () => 'rgba(0,0,0,.1)';
             const visioColor = c => ({ hex: c }), routeMemo = {}, pillKey = b => b.from + '~' + b.to + '~' + (b.pcTag || '');
             const pillAdj = () => ({ dx: 0, dy: 0, scale: 1 }), labelAdj = () => ({ dx: 0, dy: 0 });
-            const schemaPref = (k, f) => k in prefs ? prefs[k] : f, rootsOf = () => ({});
+            const schemaPref = (k, f) => k in prefs ? prefs[k] : f, rootsOf = () => ({}), schemaLadderActive = () => null;
             let visioConnectorSink = sink, hoverBundleKey = null, layeredGroup = 'all';
             let pillHitboxes = [], labelHitboxes = [], edgeHitSegs = [];
             ${body}
@@ -213,7 +213,7 @@ assert.deepEqual(schemaUplinkGroups(bundles, ids, levelOf, id => {
         const bundles = ids.slice(1).map(a => ({ from: 'core-01', to: a, members: [{}] }));
         new Function('networkInstance', 'minimalOverlayData', 'prefs', `
             const topoZone = () => ({ key: 'z' }), saveSchemaPositions = () => {}, setTimeout = () => {};
-            const schemaPref = (k, f) => k in prefs ? prefs[k] : f;
+            const schemaPref = (k, f) => k in prefs ? prefs[k] : f, schemaLadderActive = () => null;
             const SCHEMA_GAP = 70, SCHEMA_WRAP_MIN = 8;
             const GROUPABLE_TYPES = ['ap'];
             ${extract('function zigzagRow(')}
@@ -247,7 +247,7 @@ assert.deepEqual(schemaUplinkGroups(bundles, ids, levelOf, id => {
                       moveNode: (id, x, y) => { moved[id] = { x, y }; }, fit() {} };
         new Function('networkInstance', 'minimalOverlayData', 'prefs', `
             const topoZone = () => ({ key: 'z' }), saveSchemaPositions = () => {}, setTimeout = () => {};
-            const schemaPref = (k, f) => k in prefs ? prefs[k] : f;
+            const schemaPref = (k, f) => k in prefs ? prefs[k] : f, schemaLadderActive = () => null;
             const SCHEMA_GAP = 70, SCHEMA_WRAP_MIN = 8, GROUPABLE_TYPES = ['ap'];
             ${extract('function zigzagRow(')}
             ${extract('function schemaLeafColumns(')}
@@ -278,6 +278,7 @@ assert.deepEqual(schemaUplinkGroups(bundles, ids, levelOf, id => {
         ${extract('function mapExportName(')}
         ${extract('function drawioSide(')}
         ${extract('function drawioAnchors(')}
+        const TB_SIZE = {}, tbCfg = { style: 'none' };
         ${extract('function exportDrawioMap(')}
         exportDrawioMap();`)(net, x => { xml = x; });
     const attr = (tag, name) => (tag.match(new RegExp(name + '="([^"]*)"')) || [])[1];
@@ -340,6 +341,7 @@ assert.deepEqual(schemaUplinkGroups(bundles, ids, levelOf, id => {
         ${extract('function mapExportName(')}
         ${extract('function drawioSide(')}
         ${extract('function drawioAnchors(')}
+        const TB_SIZE = {}, tbCfg = { style: 'none' };
         ${extract('function exportDrawioMap(')}
         exportDrawioMap();`)(net, x => { xml = x; });
     const glue = [...xml.matchAll(/exitX=([\d.]+);exitY=([\d.]+);exitPerimeter=0;entryX=([\d.]+);entryY=([\d.]+)/g)].map(m => m.slice(1).map(Number));
@@ -406,8 +408,10 @@ assert.deepEqual(schemaUplinkGroups(bundles, ids, levelOf, id => {
                      ...ids.filter(i => i.startsWith('ap-')).map(a => b('access-01', a))];
     new Function('networkInstance', 'minimalOverlayData', 'prefs', `
         const topoZone = () => ({ key: 'z' }), saveSchemaPositions = () => {}, setTimeout = () => {};
-        const schemaPref = (k, f) => k in prefs ? prefs[k] : f;
+        const schemaPref = (k, f) => k in prefs ? prefs[k] : f, schemaLadderActive = () => null;
         const SCHEMA_GAP = 70, SCHEMA_WRAP_MIN = 8, GROUPABLE_TYPES = ['ap', 'phone', 'camera', 'pc', 'server'];
+        const COL_GAP = 6, COL_SIDE = 10, BRANCH = 50;
+        ${extract('function schemaColumnsNow(')}
         ${extract('function zigzagRow(')}
         ${extract('function schemaLeafColumns(')}
         ${extract('function schemaApMode(')}
@@ -429,7 +433,7 @@ assert.deepEqual(schemaUplinkGroups(bundles, ids, levelOf, id => {
     nodes.forEach(n => { if (n.id.startsWith('ap-')) n._compact = true; });
     new Function('networkInstance', 'minimalOverlayData', 'prefs', `
         const topoZone = () => ({ key: 'z' }), saveSchemaPositions = () => {}, setTimeout = () => {};
-        const schemaPref = (k, f) => k in prefs ? prefs[k] : f;
+        const schemaPref = (k, f) => k in prefs ? prefs[k] : f, schemaLadderActive = () => null;
         const SCHEMA_GAP = 70, SCHEMA_WRAP_MIN = 8, GROUPABLE_TYPES = ['ap'];
         ${extract('function zigzagRow(')}
         ${extract('function schemaLeafColumns(')}
@@ -450,6 +454,26 @@ assert.deepEqual(schemaUplinkGroups(bundles, ids, levelOf, id => {
                    { source: 'ap-02', target: 'switch-09' }, { source: 'access-01', target: 'grp:access-01:ap' },
                    { source: 'access-01', target: 'switch-09' }];
     assert.deepEqual([...schemaCompactLeaves(nodes, links, ['ap'])], ['ap-01'], 'dual-homed AP, group box and switches stay full size');
+}
+
+// --- Choosing "Column": only the APs move, beside their switch where it is now.
+{
+    const moved = {};
+    const where = { 'access-01': { left: 500, right: 600, top: 300, bottom: 360 }, 'access-02': { left: 900, right: 1000, top: 300, bottom: 360 },
+                    'ap-01': { left: 0, right: 90, top: 0, bottom: 30 }, 'ap-02': { left: 100, right: 190, top: 0, bottom: 30 } };
+    const net = { body: { data: { nodes: { get: id => ({ id, nodeDataVal: { device_type: id.startsWith('ap') ? 'ap' : 'switch' } }) } } },
+                  getBoundingBox: id => where[id], moveNode: (id, x, y) => { moved[id] = { x, y }; }, redraw() {} };
+    const bundles = [b('access-01', 'ap-01'), b('access-01', 'ap-02'), b('core-01', 'access-01'), b('core-01', 'access-02')];
+    new Function('networkInstance', 'minimalOverlayData', `
+        const saveSchemaPositions = () => {}, schemaLadderActive = () => null;
+        const GROUPABLE_TYPES = ['ap'], COL_GAP = 6, COL_SIDE = 10, BRANCH = 50;
+        ${extract('function schemaLeafColumns(')}
+        ${extract('function schemaColumnsNow(')}
+        ${extract('function placeSchemaColumns(')}
+        placeSchemaColumns();`)(net, { bundles });
+    assert.deepEqual(Object.keys(moved).sort(), ['ap-01', 'ap-02'], 'switches stay where they are');
+    assert.deepEqual(moved['ap-01'], { x: 600 + 10 + 50 + 45, y: 315 });
+    assert.deepEqual(moved['ap-02'], { x: 705, y: 315 + 30 + 6 });
 }
 
 console.log('schema readability: ok');

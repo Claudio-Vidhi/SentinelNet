@@ -51,7 +51,7 @@ class TestSchemaReadability(unittest.TestCase):
 
     def test_focus_cleared_on_render(self):
         # A stale focus on a node that is gone would dim the whole new map.
-        start = self.src.index("minimalOverlayData = { bundles, groupsInfo, nodes }")
+        start = self.src.index("minimalOverlayData = { bundles, groupsInfo, nodes, ladder }")
         self.assertIn("schemaFocusId = null", self.src[start - 600:start + 300])
 
     def test_overlay_uses_the_helpers(self):
@@ -74,7 +74,7 @@ class TestSchemaReadability(unittest.TestCase):
         start = self.src.index('const hoverInfo = document.getElementById("toggleMinimalHover")')
         branch = self.src[start:self.src.index("return;", start)]
         self.assertIn("groupLayeredLeaves(", branch)
-        self.assertIn("schemaLeafColumns(", self._block("function packSchemaRows("))
+        self.assertIn("schemaColumnsNow(", self._block("function packSchemaRows("))
         self.assertIn("schemaLeafColumns(", self._block("function drawMinimalOverlay("))
         # A group box opens on click in the Schema view too.
         sel = self.src[self.src.index("networkInstance.on('selectNode'"):]

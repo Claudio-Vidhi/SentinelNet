@@ -339,6 +339,8 @@ class TestFullParity(unittest.TestCase):
                     "FavoritesSchema",
                     # ARP/MAC scans one login at a time.
                     "MacSequentialSchema",
+                    # Visio export split into one page per site (optional, additive).
+                    "VisioPageSchema",
                     # Bulk decommission / reactivate / delete.
                     "DevicePair", "DeviceBulkSchema",
                     # Factory reset.

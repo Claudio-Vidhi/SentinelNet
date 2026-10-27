@@ -5571,3 +5571,17 @@ details[open] > summary .mac-caret { transform: rotate(180deg); }
 /* Location dialog: "apply the probe to every device" is edit-only. A class, not
    an inline display, so the hidden attribute still hides it. */
 .loc-apply:not([hidden]) { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+
+/* Map export title block: style previews + fields */
+.tb-hint { font-size: 13px; color: var(--text-muted); margin: 0 0 12px; }
+.tb-styles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.tb-style { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--border); cursor: pointer; font-size: 13px; font-weight: 600; }
+.tb-style:has(input:checked) { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary); }
+.tb-style canvas { width: 100%; height: 110px; display: block; }
+.tb-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+.tb-fields .tb-logo { grid-column: 1 / -1; }
+.tb-fields input[type="color"] { width: 64px; height: 34px; padding: 2px; }
+@media (max-width: 640px) { .tb-fields { grid-template-columns: 1fr; } }
+
+/* Map toolbar: offer of the dual-core ladder */
+.map-ladder-hint { color: var(--primary); border-color: var(--primary); }

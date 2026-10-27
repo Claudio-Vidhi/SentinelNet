@@ -64,8 +64,47 @@ def _collect_bounds(nodes, primitives):
     return min(xs), min(ys), max(xs), max(ys)
 
 
-def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
-    """Costruisce un .vsdx in memoria.
+def _attr(value):
+    """Text safe inside a double-quoted XML attribute."""
+    return escape(str(value), {'"': "&quot;"})
+
+
+def _clip_to_box(cx, cy, to_x, to_y, w, h):
+    """Where the segment from a box centre (cx, cy) towards (to_x, to_y) leaves the w x h box."""
+    dx, dy = to_x - cx, to_y - cy
+    if not dx and not dy:
+        return [cx, cy]
+    k = min((w / 2) / abs(dx) if dx else float("inf"), (h / 2) / abs(dy) if dy else float("inf"))
+    return [cx + dx * k, cy + dy * k]
+
+
+def _edge_connector(e, node_by_id):
+    """A hierarchy-view cable (centre to centre) as a connector clipped to the two box edges."""
+    a, b = node_by_id.get(e.get("source")), node_by_id.get(e.get("target"))
+    if not a or not b:
+        return None
+    wa, ha = float(a.get("w") or 80.0), float(a.get("h") or 30.0)
+    wb, hb = float(b.get("w") or 80.0), float(b.get("h") or 30.0)
+    return {"from": a["id"], "to": b["id"], "color": e.get("color") or "#78909c", "width": 1.5,
+            "label": e.get("label") or "",
+            "points": [_clip_to_box(a["x"], a["y"], b["x"], b["y"], wa, ha),
+                       _clip_to_box(b["x"], b["y"], a["x"], a["y"], wb, hb)]}
+
+
+def build_vsdx(nodes, edges, primitives=None, connectors=None, pages=None) -> bytes:
+    """A .vsdx in memory: one page per entry of `pages` ([{name, nodes, edges,
+    primitives, connectors}], one per site), else one page from the other
+    arguments. Coordinates and content as in _render_page."""
+    pages = pages or [{"name": "SentinelNet Map", "nodes": nodes, "edges": edges,
+                       "primitives": primitives, "connectors": connectors}]
+    rendered = [(pg.get("name") or f"Page-{i + 1}",)
+                + _render_page(pg.get("nodes") or [], pg.get("edges") or [], pg.get("primitives"), pg.get("connectors"))
+                for i, pg in enumerate(pages)]
+    return _package(rendered)
+
+
+def _render_page(nodes, edges, primitives=None, connectors=None):
+    """Costruisce il contenuto di una pagina: (page_xml, page_w, page_h).
 
     nodes: [{id, label, model, ip, x, y, [w, h, fill, border]}, ...]
     edges: [{source, target, label, color}, ...]  (mappa classica)
@@ -84,6 +123,12 @@ def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
     Ritorna i byte del file zip (.vsdx).
     """
     connectors = connectors or []
+    # Hierarchy view: straight cables between box centres. They go through the
+    # connector path too, so both ends are glued (green dot in Visio).
+    if edges and not connectors:
+        by_id = {n["id"]: n for n in nodes}
+        connectors = [c for c in (_edge_connector(e, by_id) for e in edges) if c]
+        edges = []
     min_x, min_y, max_x, max_y = _collect_bounds(nodes, primitives)
     for c in connectors:
         for p in c.get("points", []):
@@ -135,7 +180,7 @@ def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
         lst.append({"lx": lx, "ly": ly, "color": color})
         return anchor_index[key]
 
-    conn_glue = []   # (connettore) -> {sid dopo emissione, from/to id, idx aggancio}
+    conn_glue: list[dict] = []   # (connettore) -> {sid dopo emissione, from/to id, idx aggancio}
     for c in connectors:
         pts = c.get("points") or []
         if len(pts) < 2:
@@ -318,15 +363,25 @@ def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
                 f'<Cell N="X" V="{x-x0:.4f}" F="Width*{fx:.6f}"/>'
                 f'<Cell N="Y" V="{y-y0:.4f}" F="Height*{fy:.6f}"/></Row>')
         dash_cell = '<Cell N="LinePattern" V="2"/>' if c.get("dash") else ''
+        # A glued end carries the PAR(PNT(...)) formula, as in a connector
+        # drawn by hand: without it Visio reads the end as loose (no green
+        # dot when the cable is selected) even though <Connects> lists it.
+        def _glue_f(node_key, idx_key):
+            nid = node_shape_id.get(c.get(node_key))
+            idx = g.get(idx_key)
+            if nid is None or idx is None:
+                return ''
+            return f' F="PAR(PNT(Sheet.{nid}!Connections.X{idx+1},Sheet.{nid}!Connections.Y{idx+1}))"'
+        fb, fe = _glue_f("from", "from_idx"), _glue_f("to", "to_idx")
         shapes_xml.append(f'''
         <Shape ID="{sid}" Type="Shape">
           <Cell N="ObjType" V="2"/>
           <Cell N="ConFixedCode" V="2"/>
           <Cell N="ShapeRouteStyle" V="16"/>
-          <Cell N="BeginX" V="{pts[0][0]:.4f}"/>
-          <Cell N="BeginY" V="{pts[0][1]:.4f}"/>
-          <Cell N="EndX" V="{pts[-1][0]:.4f}"/>
-          <Cell N="EndY" V="{pts[-1][1]:.4f}"/>
+          <Cell N="BeginX" V="{pts[0][0]:.4f}"{fb}/>
+          <Cell N="BeginY" V="{pts[0][1]:.4f}"{fb}/>
+          <Cell N="EndX" V="{pts[-1][0]:.4f}"{fe}/>
+          <Cell N="EndY" V="{pts[-1][1]:.4f}"{fe}/>
           <Cell N="PinX" V="{x0:.4f}"/>
           <Cell N="PinY" V="{y0:.4f}"/>
           <Cell N="Width" V="{w:.4f}"/>
@@ -340,6 +395,7 @@ def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
             <Cell N="NoFill" V="1"/>
             {''.join(rows)}
           </Section>
+          {f'<Text>{escape(c["label"])}</Text>' if c.get("label") else ''}
         </Shape>''')
         # Glue: BeginX/EndX -> Connections.Xn dei riquadri (FromPart 9=inizio,
         # 12=fine; ToPart 100+i = i-esimo connection point della forma).
@@ -359,10 +415,14 @@ def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
         # (i riquadri dispositivo sono già stati emessi per primi, come sul
         # canvas dove vis.js disegna i nodi prima dell'overlay... in realtà
         # l'overlay è sopra i nodi, quindi l'ordine qui coincide).
+        # Filled areas (site backgrounds) go to the back: drawn over the boxes
+        # and cables they took every click, so a cable could not be selected.
+        start = len(shapes_xml)
         for p in primitives.get("polys", []):
             if len(p.get("points", [])) > 2:
                 path_shape(p["points"], fill=p.get("fill"),
                            fill_alpha=float(p.get("alpha", 1.0)), closed=True)
+        shapes_xml[:] = shapes_xml[start:] + shapes_xml[:start]
         for r in primitives.get("rects", []):
             pts = [[r["x"], r["y"]], [r["x"] + r["w"], r["y"]],
                    [r["x"] + r["w"], r["y"] + r["h"]], [r["x"], r["y"] + r["h"]],
@@ -416,6 +476,12 @@ def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
   <Shapes>{"".join(shapes_xml)}
   </Shapes>{connects_block}
 </PageContents>'''
+    return page_xml, page_w, page_h
+
+
+def _package(rendered) -> bytes:
+    """Zips the pages ([(name, page_xml, page_w, page_h)]) into a .vsdx."""
+    page_w, page_h = rendered[0][2], rendered[0][3]
 
     # Visio (desktop e online) considera "danneggiato" un pacchetto senza le
     # parti standard: docProps (core/app/custom) e visio/windows.xml, oltre a un
@@ -426,12 +492,14 @@ def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
   <Default Extension="xml" ContentType="application/xml"/>
   <Override PartName="/visio/document.xml" ContentType="application/vnd.ms-visio.drawing.main+xml"/>
   <Override PartName="/visio/pages/pages.xml" ContentType="application/vnd.ms-visio.pages+xml"/>
-  <Override PartName="/visio/pages/page1.xml" ContentType="application/vnd.ms-visio.page+xml"/>
+  {PAGE_OVERRIDES}
   <Override PartName="/visio/windows.xml" ContentType="application/vnd.ms-visio.windows+xml"/>
   <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
   <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
   <Override PartName="/docProps/custom.xml" ContentType="application/vnd.openxmlformats-officedocument.custom-properties+xml"/>
-</Types>'''
+</Types>'''.replace("{PAGE_OVERRIDES}", "".join(
+        f'<Override PartName="/visio/pages/page{i + 1}.xml" ContentType="application/vnd.ms-visio.page+xml"/>'
+        for i in range(len(rendered))))
 
     root_rels = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -471,26 +539,28 @@ def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
   <property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="IsMetric"><vt:bool>false</vt:bool></property>
 </Properties>'''
 
-    pages_xml = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Pages xmlns="http://schemas.microsoft.com/office/visio/2012/main"
-       xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <Page ID="0" NameU="Page-1" Name="SentinelNet Map">
+    # One <Page> per site, each with its own size; the tab shows the site name.
+    page_entries = "".join(f'''
+  <Page ID="{i}" NameU="{_attr(name)}" Name="{_attr(name)}">
     <PageSheet>
-      <Cell N="PageWidth" V="{page_w:.4f}"/>
-      <Cell N="PageHeight" V="{page_h:.4f}"/>
+      <Cell N="PageWidth" V="{w:.4f}"/>
+      <Cell N="PageHeight" V="{h:.4f}"/>
       <Cell N="PageScale" V="1" U="IN_F"/>
       <Cell N="DrawingScale" V="1" U="IN_F"/>
       <Cell N="DrawingSizeType" V="3"/>
       <Cell N="DrawingScaleType" V="0"/>
     </PageSheet>
-    <Rel r:id="rId1"/>
-  </Page>
+    <Rel r:id="rId{i + 1}"/>
+  </Page>''' for i, (name, _xml, w, h) in enumerate(rendered))
+    pages_xml = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Pages xmlns="http://schemas.microsoft.com/office/visio/2012/main"
+       xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">{page_entries}
 </Pages>'''
 
     pages_rels = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.microsoft.com/visio/2010/relationships/page" Target="page1.xml"/>
-</Relationships>'''
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">''' + "".join(
+        f'\n  <Relationship Id="rId{i + 1}" Type="http://schemas.microsoft.com/visio/2010/relationships/page" Target="page{i + 1}.xml"/>'
+        for i in range(len(rendered))) + '\n</Relationships>'
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
@@ -504,7 +574,8 @@ def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
         z.writestr("visio/_rels/document.xml.rels", document_rels)
         z.writestr("visio/pages/pages.xml", pages_xml)
         z.writestr("visio/pages/_rels/pages.xml.rels", pages_rels)
-        z.writestr("visio/pages/page1.xml", page_xml)
+        for i, (_name, page_xml, _w, _h) in enumerate(rendered):
+            z.writestr(f"visio/pages/page{i + 1}.xml", page_xml)
     return buf.getvalue()
 
 
@@ -556,5 +627,26 @@ if __name__ == "__main__":
                 page = z.read("visio/pages/page1.xml").decode()
                 assert '<Connects>' in page and 'Connections.X1' in page
                 assert 'ObjType' in page and 'ConFixedCode' in page
+                # Both ends of both cables glued with a formula (green dot in Visio).
+                assert page.count('F="PAR(PNT(Sheet.') == 8
+            else:
+                # Hierarchy: the straight cable is a glued connector as well, with its label.
+                page = z.read("visio/pages/page1.xml").decode()
+                assert page.count('F="PAR(PNT(Sheet.') == 4 and '<Text>Po1</Text>' in page
                 assert page.count('Type="Group"') == 2  # riquadri con quadratini
         print(f"OK ({'primitives' if prims else 'classic'}): vsdx valido, {len(data)} bytes.")
+
+    # One page per site, named after it; each page glues its own cables.
+    data = build_vsdx([], [], pages=[
+        {"name": 'Sede "Nord"', "nodes": fake_nodes[:1], "connectors": []},
+        {"name": "Sede Sud", "nodes": fake_nodes, "connectors": fake_conns},
+    ])
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        for part in ("visio/pages/pages.xml", "visio/pages/_rels/pages.xml.rels",
+                     "visio/pages/page1.xml", "visio/pages/page2.xml", "[Content_Types].xml"):
+            minidom.parseString(z.read(part))
+        pages_part = z.read("visio/pages/pages.xml").decode()
+        assert 'Name="Sede &quot;Nord&quot;"' in pages_part and 'Name="Sede Sud"' in pages_part
+        assert 'page2.xml' in z.read("[Content_Types].xml").decode()
+        assert z.read("visio/pages/page2.xml").decode().count('F="PAR(PNT(Sheet.') == 8
+    print("OK (pages): una pagina per sede.")

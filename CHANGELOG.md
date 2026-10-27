@@ -10,6 +10,49 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Mappa, Scala doppio core** (Schema, *Vista → Disposizione*): quando quasi
+  tutti gli apparati di una sede (almeno il 60%) sono collegati a entrambi i
+  core di una coppia, la barra lo segnala e propone la Scala. Core ai lati,
+  apparati in colonna tra i due: i cavi verso il core di sinistra entrano a
+  sinistra, quelli verso il core di destra a destra, ognuno con la sua corsia e
+  senza incroci. Gli switch a valle stanno sotto il loro accesso, rientrati di
+  un passo; AP e terminali in righe sotto chi li alimenta. Uno switch a valle
+  collegato anche a un core resta sotto il padre e il suo cavo scavalca la linea
+  del padre col ponticello. Nessun apparato sparisce: chi non fa parte della
+  scala resta disposto in righe accanto.
+- **Cartiglio nelle esportazioni** (PNG, PDF, Visio, draw.io): prima di esportare si sceglie lo stile
+  da un'anteprima (Classico, Moderno, Essenziale o nessuno) e si compilano
+  cliente, progetto, autore, azienda, revisione e logo aziendale. Il riquadro
+  va in basso a destra, su una fascia aggiunta sotto la mappa, così non copre
+  mai un apparato. In Visio e draw.io è fatto di forme e testi modificabili (in
+  draw.io un unico gruppo, logo compreso; in Visio al posto del logo c'è il nome
+  dell'azienda). Dati e logo restano nel browser.
+
+### Fixed
+
+- **Export Visio, cavi incollati ai dispositivi**: ogni cavo ora è agganciato
+  ai due riquadri come un connettore disegnato a mano in Visio. Selezionandolo
+  compaiono i pallini verdi ai capi e spostando un dispositivo il cavo lo
+  segue. Vale anche per la vista Gerarchia (prima linee sciolte) e per i cavi
+  della Scala doppio core. Tolto il riquadro di sfondo della sede, che stava
+  sopra a tutto e prendeva il clic al posto dei cavi.
+- **Export Visio, una pagina per sede**: con più sedi sulla mappa ogni sede ha
+  la sua pagina, col nome della sede sulla linguetta e il suo cartiglio (al
+  posto del riquadro di sfondo, che nel Visio non c'è più). Un
+  cavo verso un'altra sede resta sulla pagina da cui parte.
+- **Mappa Schema, riquadri che cambiavano misura al clic**: vis.js metteva in
+  grassetto il nome dell'apparato selezionato e il riquadro si allargava.
+- **Mappa Schema, Access point in colonna**: sceglierlo non riordina più tutta
+  la mappa, sposta solo gli AP accanto al loro switch dove si trova ora. In
+  colonna, trascinare uno switch porta con sé i suoi AP alla stessa distanza.
+
+### Changed
+
+- **Mappa, Port-Channel**: tolta l'ellisse che attraversava i cavi; il nome del
+  Port-Channel resta sulla parentesi accanto alle porte.
+
 ## [0.58.0] - 2026-10-26
 
 ### Added

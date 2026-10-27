@@ -44,7 +44,16 @@ class VisioEdgeSchema(BaseModel):
     label: str = ""
     color: str = "#6A5FC1"
 
+class VisioPageSchema(BaseModel):
+    name: str = Field("", max_length=200)
+    nodes: List[VisioNodeSchema] = []
+    edges: List[VisioEdgeSchema] = []
+    primitives: Optional[dict] = None
+    connectors: Optional[List[dict]] = None
+
 class VisioExportSchema(BaseModel):
+    # One Visio page per site, named after it (same content, split by site).
+    pages: Optional[List[VisioPageSchema]] = None
     nodes: List[VisioNodeSchema] = []
     edges: List[VisioEdgeSchema] = []
     # Primitive grafiche registrate dal frontend (mappa minimalista): etichette
@@ -143,6 +152,7 @@ def export_map_vsdx(payload: VisioExportSchema, current_user = Depends(get_curre
         [e.dict() for e in payload.edges],
         payload.primitives,
         payload.connectors,
+        [p.model_dump() for p in payload.pages] if payload.pages else None,
     )
     log_audit(f"Export Visio mappa richiesto dall'utente '{current_user.get('sub')}'.")
     return Response(
