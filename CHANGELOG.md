@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.59.0] - 2026-10-27
+
 ### Added
 
 - **Mappa, Scala doppio core** (Schema, *Vista → Disposizione*): quando quasi
