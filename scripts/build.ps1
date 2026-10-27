@@ -14,7 +14,10 @@ if ($LASTEXITCODE -ne 0) { Write-Error "pyinstaller fallito"; exit 1 }
 
 if (-not $SkipSmoke) {
     # Smoke test: l'exe deve avviarsi e rispondere su HTTP entro 60s.
-    $port = 18443
+    # Porta effimera scelta dall'OS: 18443 cade negli intervalli che Windows/Hyper-V
+    # riserva (netsh interface ipv4 show excludedportrange) e il bind falliva con 10013.
+    $l = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+    $l.Start(); $port = $l.LocalEndpoint.Port; $l.Stop()
     $env:SENTINELNET_PORT = "$port"
     $env:SENTINELNET_NO_BROWSER = "true"
     # Bind forzato su loopback: app_settings.json puo' avere "host" sulla LAN,
