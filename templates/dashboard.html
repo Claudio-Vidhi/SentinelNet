@@ -6409,6 +6409,7 @@
           <button type="button" class="chip-choice" data-scenario="serials" aria-pressed="false" data-i18n="clsScenarioSerials">Seriali e stack</button>
           <button type="button" class="chip-choice" data-scenario="simple" aria-pressed="false" data-i18n="clsScenarioSimple">Elenco semplice</button>
           <button type="button" class="chip-choice" data-scenario="full" aria-pressed="false" data-i18n="clsScenarioFull">Completo</button>
+          <button type="button" class="chip-choice" data-scenario="full-ap" aria-pressed="false" data-i18n="clsScenarioFullAp">Completo, vicini solo degli AP</button>
         </div>
 
         <div class="cls-x-sentence">
@@ -6416,6 +6417,10 @@
           <select id="clsCategorySelect" aria-label="Categoria dispositivo" data-i18n-aria-label="lblClsCategory"></select>
           <span data-i18n="lblClsSentWithNeighbours">con i vicini</span>
           <select id="clsNeighbourSelect" aria-label="Categoria vicino" data-i18n-aria-label="lblClsNeighbourCategory"></select>
+          <span id="clsNeighbourSourceWrap" class="cls-x-sentence-part" hidden>
+            <span data-i18n="lblClsSentOnlyFor">solo per</span>
+            <select id="clsNeighbourSourceSelect" aria-label="Mostra i vicini solo per" data-i18n-aria-label="lblClsNeighbourSourceAria"></select>
+          </span>
           <span data-i18n="lblClsSentTenant">del tenant</span>
           <select id="clsTenantSelect" aria-label="Tenant" data-i18n-aria-label="lblClsTenant"></select>
         </div>

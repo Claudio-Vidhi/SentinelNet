@@ -39,7 +39,8 @@ class ClassificationExportUi(unittest.TestCase):
                     "clsScenarioFull", "lblClsSentExport", "lblClsSentWithNeighbours",
                     "lblClsSentTenant", "optClsAllDevices", "optClsNoNeighbour",
                     "optClsAnyNeighbour", "lblClsSkipWithout", "lblClsTenant",
-                    "lblExportDevicesCount", "btnClsExportRows"):
+                    "lblExportDevicesCount", "btnClsExportRows", "clsScenarioFullAp",
+                    "lblClsSentOnlyFor", "lblClsNeighbourSourceAria"):
             self.assertEqual(2, len(re.findall(r"\b%s\s*:" % key, js)),
                              f"{key} must appear in both the it and en blocks")
 
@@ -47,7 +48,8 @@ class ClassificationExportUi(unittest.TestCase):
         html = _read("templates/dashboard.html")
         self.assertIn('id="clsExportPreviewContainer"', html)
         for el in ("clsCategorySelect", "clsNeighbourSelect", "clsTenantSelect",
-                   "clsOnlyMatchingNeighbours", "clsColumnList", "clsScenarioList"):
+                   "clsOnlyMatchingNeighbours", "clsColumnList", "clsScenarioList",
+                   "clsNeighbourSourceSelect"):
             self.assertIn(f'id="{el}"', html)
         self.assertIn('id="deviceExportPreviewContainer"', html)
 
@@ -56,7 +58,7 @@ class ClassificationExportUi(unittest.TestCase):
         html = _read("templates/dashboard.html")
         js = _read("static/js/topology.js")
         chips = re.findall(r'data-scenario="([^"]+)"', html)
-        self.assertEqual(5, len(chips))
+        self.assertEqual(6, len(chips))
         for name in chips:
             self.assertRegex(js, r"'%s'\s*:\s*\{" % re.escape(name))
 

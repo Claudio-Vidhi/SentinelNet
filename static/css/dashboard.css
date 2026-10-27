@@ -5597,3 +5597,5 @@ details[open] > summary .mac-caret { transform: rotate(180deg); }
 .cls-x-columns summary { cursor: pointer; font-size: 12px; font-weight: 700; padding: 4px 0; }
 .cls-x-muted { color: var(--text-muted); font-weight: 400; }
 .cls-x-columnlist { max-height: 220px; overflow-y: auto; border: 1px solid var(--border); background: var(--surface-2); padding: 6px; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); column-gap: 12px; }
+.cls-x-sentence-part { display: inline-flex; align-items: center; gap: 8px; }
+.cls-x-sentence-part[hidden] { display: none; }

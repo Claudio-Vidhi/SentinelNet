@@ -6924,6 +6924,7 @@
                                'member_index', 'member_role', 'member_serial', 'member_model'] },
         'simple': { category: '', neighbour: '', only: false, columns: null },
         'full': { category: '', neighbour: '*', only: false, columns: 'all' },
+        'full-ap': { category: '', neighbour: '*', source: 'ap', only: false, columns: 'all' },
     };
     let clsExportColumns = [];
     let clsDefaultColumns = [];
@@ -6985,6 +6986,9 @@
         const tenant = clsExportSelect('clsTenantSelect')?.value || '';
         if (cat) qs.set('categories', cat);
         if (tenant) qs.set('groups', tenant);
+        // "only for": every device gets a row, only these ones get neighbours.
+        const source = clsExportSelect('clsNeighbourSourceSelect')?.value || '';
+        if (nb && !cat && source) qs.set('neighbour_source_categories', source);
         if (nb && nb !== '*') {
             qs.set('neighbour_categories', nb);
             if (clsOnlyBox()?.checked) qs.set('only_matching_neighbours', 'true');
@@ -6997,6 +7001,9 @@
         const nb = clsExportSelect('clsNeighbourSelect')?.value || '';
         const only = clsOnlyBox();
         if (only) only.disabled = !nb || nb === '*';
+        // With a single category picked, "only for" would repeat it.
+        const sourceWrap = document.getElementById('clsNeighbourSourceWrap');
+        if (sourceWrap) sourceWrap.hidden = !nb || !!(clsExportSelect('clsCategorySelect')?.value);
         const cols = clsChecked('clsColumnList');
         const headerOf = new Map(clsExportColumns.map(c => [c.key, c.header]));
         const count = document.getElementById('clsColumnCount');
@@ -7013,6 +7020,7 @@
         if (!s) return;
         clsSetSelect('clsCategorySelect', s.category);
         clsSetSelect('clsNeighbourSelect', s.neighbour);
+        clsSetSelect('clsNeighbourSourceSelect', s.source || '');
         const only = clsOnlyBox();
         if (only) only.checked = s.only;
         clsSetColumns(s.columns === null ? clsDefaultColumns
@@ -7104,6 +7112,8 @@
         const catSel = clsExportSelect('clsCategorySelect');
         const nbSel = clsExportSelect('clsNeighbourSelect');
         const tenantSel = clsExportSelect('clsTenantSelect');
+        const sourceSel = clsExportSelect('clsNeighbourSourceSelect');
+        if (sourceSel) sourceSel.innerHTML = opt('', tr('optClsAllDevices')) + cats.map(c => opt(c, c)).join('');
         if (catSel) catSel.innerHTML = opt('', tr('optClsAllDevices')) + cats.map(c => opt(c, c)).join('');
         if (nbSel) {
             nbSel.innerHTML = opt('', tr('optClsNoNeighbour')) + opt('*', tr('optClsAnyNeighbour'))
@@ -7119,6 +7129,7 @@
         if (prefs.columns) {
             clsSetSelect('clsCategorySelect', prefs.category || '');
             clsSetSelect('clsNeighbourSelect', prefs.neighbour || '');
+            clsSetSelect('clsNeighbourSourceSelect', prefs.source || '');
             const only = clsOnlyBox();
             if (only) only.checked = !!prefs.only;
             clsSetColumns(prefs.columns);
@@ -7145,6 +7156,7 @@
                 scenario: clsCurrentScenario(),
                 category: clsExportSelect('clsCategorySelect')?.value || '',
                 neighbour: clsExportSelect('clsNeighbourSelect')?.value || '',
+                source: clsExportSelect('clsNeighbourSourceSelect')?.value || '',
                 tenant: clsExportSelect('clsTenantSelect')?.value || '',
                 only: !!clsOnlyBox()?.checked,
                 columns: clsChecked('clsColumnList'),
@@ -7179,6 +7191,7 @@
     const clsManualEdit = () => { clsMarkScenario(''); updateClsExportPreview(); };
     document.getElementById('clsCategorySelect')?.addEventListener('change', clsManualEdit);
     document.getElementById('clsTenantSelect')?.addEventListener('change', clsManualEdit);
+    document.getElementById('clsNeighbourSourceSelect')?.addEventListener('change', clsManualEdit);
     document.getElementById('clsOnlyMatchingNeighbours')?.addEventListener('change', clsManualEdit);
     // The sentence and the neighbour columns say the same thing: keep them in step.
     document.getElementById('clsNeighbourSelect')?.addEventListener('change', () => {
