@@ -2996,17 +2996,20 @@
         const paths = [];   // { pts, b, thin }
         const labels = [];  // { t, x, y, align, rot }
         const conns = [];   // Visio: each cable whole, box to box, glued at both ends
+        const pcs = [];     // Port-channels to a core: their lanes and ends, for the brackets
+        const coreCps = {}; // core -> its vertical port names
 
         // Core lanes, assigned top to bottom so they never cross each other.
         [lad.A, lad.B].forEach(c => {
             const cb = box(c), left = c === lad.A, ends = [];
+            coreCps[c] = [];
             mine.forEach(b => {
                 const pq = pairOf(b, isCore);
                 if (!pq || pq[0] !== c) return;
                 const id = pq[1], m = member[id], bb = box(id), n = b.members.length;
                 b.members.forEach((mm, k) => {
                     // Under a parent, A comes in above the trunk's branch.
-                    const y = m.depth && left ? bb.top + 11 + k * 6 : (bb.top + bb.bottom) / 2 + (k - (n - 1) / 2) * 8;
+                    const y = m.depth && left ? bb.top + 11 + k * LADDER_PAR : (bb.top + bb.bottom) / 2 + (k - (n - 1) / 2) * LADDER_PAR;
                     ends.push({ b, id, bb, y, cp: port(b, c, mm), mp: port(b, id, mm) });
                 });
             });
@@ -3019,10 +3022,18 @@
                 conns.push({ b: e.b, from: c, to: e.id, pts: [[x, cb.bottom], [x, e.y], [ex, e.y]] });
                 if (!showLbl(e.b)) return;
                 // Inside the core, reading upward along its lane.
-                if (e.cp) labels.push({ t: e.cp, x: x + 2, y: cb.bottom - 4, rot: true });
-                if (e.mp) labels.push({ t: e.mp, x: left ? ex + 5 : ex - 5, y: e.y - 2, align: left ? 'left' : 'right' });
+                if (e.cp) { labels.push({ t: e.cp, x: x + 2, y: cb.bottom - 4, rot: true }); coreCps[c].push(e.cp); }
+                const tags = pcEndTags(e.b);
+                if (tags.from || tags.to) {
+                    let g = pcs.find(p => p.b === e.b && p.core === c);
+                    if (!g) pcs.push(g = { core: c, cb, left, b: e.b, ex, xs: [], ys: [], mps: [],
+                                           cname: e.b.from === c ? tags.from : tags.to, mname: e.b.from === c ? tags.to : tags.from });
+                    g.xs.push(x); g.ys.push(e.y); g.mps.push(e.mp);
+                }
+                // Under the cable: parallel cables stack their names, none sits on a cable.
+                if (e.mp) labels.push({ t: e.mp, x: left ? ex + 5 : ex - 5, y: e.y + 2, align: left ? 'left' : 'right', under: true });
                 // Optional: the core port again on the cable, just outside the switch.
-                if (e.cp && coreNear) labels.push({ t: e.cp, x: left ? ex - 8 : ex + 8, y: e.y - 2, align: left ? 'right' : 'left' });
+                if (e.cp && coreNear) labels.push({ t: e.cp, x: left ? ex - 8 : ex + 8, y: e.y + 2, align: left ? 'right' : 'left', under: true });
             });
         });
         // Devices under a column device: a trunk down the parent's left edge.
@@ -3042,27 +3053,29 @@
                 if (b && showLbl(b)) {
                     const mm = b.members[0] || {};
                     const t = [port(b, p, mm), port(b, k, mm)].filter(Boolean).join(' → ');
-                    if (t) labels.push({ t, x: kb.left + 5, y: ys[j] - 2, align: 'left' });
+                    // In the gap above the child: inside it, it ran into the centred name.
+                    if (t) labels.push({ t, x: kb.left + 2, y: kb.top - 3, align: 'left' });
                 }
             });
         });
-        // Leaves: a line down from the parent, a bus over each row, a drop into each box.
+        // Leaves: a trunk down from the parent, one branch per leaf with the
+        // switch port under it. A shared bus hid which port fed which leaf.
         Object.entries(lad.leaves).forEach(([p, ls]) => {
             const pb = box(p), lbs = ls.map(id => Object.assign({ id }, box(id))).filter(lb => lb.right !== undefined);
             if (!pb || !lbs.length) return;
-            const tx = pb.left + LADDER_IN - 12;
-            const rows = {};
-            lbs.forEach(lb => { (rows[Math.round(lb.top)] || (rows[Math.round(lb.top)] = [])).push(lb); });
-            const tops = Object.keys(rows).map(Number).sort((a, c) => a - c);
-            tops.forEach(t => {
-                const bus = t - 8, cxs = rows[t].map(lb => (lb.left + lb.right) / 2);
-                paths.push({ b: null, thin: true, pts: [[tx, bus], [Math.max(...cxs), bus]] });
-                cxs.forEach(cx => paths.push({ b: null, thin: true, pts: [[cx, bus], [cx, t]] }));
-                rows[t].forEach((lb, k) => conns.push({ b: null, thin: true, from: p, to: lb.id,
-                    pts: [[tx, pb.bottom], [tx, bus], [cxs[k], bus], [cxs[k], t]] }));
+            const { tx } = ladderLeafTrunk(pb.left, pb.right, lbs.length, Math.max(...lbs.map(lb => lb.right - lb.left)));
+            let last = pb.bottom;
+            lbs.forEach(lb => {
+                const my = (lb.top + lb.bottom) / 2, ex = lb.left >= tx ? lb.left : lb.right;
+                const b = mine.find(x => { const pq = pairOf(x, isLeaf); return pq && pq[0] === p && pq[1] === lb.id; }) || null;
+                last = Math.max(last, my);
+                paths.push({ b, pts: [[tx, my], [ex, my]] });
+                conns.push({ b, from: p, to: lb.id, pts: [[tx, pb.bottom], [tx, my], [ex, my]] });
+                const t = b && showLbl(b) ? port(b, p, b.members[0] || {}) : '';
+                if (t) labels.push({ t, x: (tx + ex) / 2, y: my + 2, align: 'center', under: true });
             });
-            verts.push([tx, pb.bottom, tops[tops.length - 1] - 8]);
-            paths.push({ b: null, thin: true, pts: [[tx, pb.bottom], [tx, tops[tops.length - 1] - 8]] });
+            verts.push([tx, pb.bottom, last]);
+            paths.push({ b: null, pts: [[tx, pb.bottom], [tx, last]] });
         });
 
         ctx.save();
@@ -3106,8 +3119,48 @@
                 ctx.restore();
                 return;
             }
-            ctx.textAlign = l.align; ctx.textBaseline = 'bottom';
+            ctx.textAlign = l.align; ctx.textBaseline = l.under ? 'top' : 'bottom';
             ctx.fillText(l.t, l.x, l.y);
+        });
+        // Port-channel name at both ends, as in the row view. In the core: a
+        // bracket over its lanes, above every vertical port name, the name on
+        // it; names that would touch go one step higher. On the switch: a
+        // bracket closing its stacked port names, the name beside it.
+        ctx.lineWidth = 1;
+        [lad.A, lad.B].forEach(c => {
+            const gs = pcs.filter(g => g.core === c).sort((p, q) => Math.min(...p.xs) - Math.min(...q.xs));
+            if (!gs.length) return;
+            const cb = gs[0].cb;
+            ctx.font = '9px Arial, Helvetica, sans-serif';
+            const yb = cb.bottom - 4 - Math.max(0, ...coreCps[c].map(t => ctx.measureText(t).width)) - 4;
+            ctx.font = 'bold 10px Arial, Helvetica, sans-serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+            const placed = [];   // [level, x0, x1]
+            gs.forEach(g => {
+                const xa = Math.min(...g.xs) + 1, xb = Math.max(...g.xs) + 12, w = ctx.measureText(g.cname).width;
+                const cx = Math.min(Math.max((xa + xb) / 2, cb.left + 2 + w / 2), cb.right - 2 - w / 2);
+                const x0 = cx - w / 2 - 3, x1 = cx + w / 2 + 3;
+                let lv = 0;
+                while (placed.some(p => p[0] === lv && p[1] < x1 && x0 < p[2])) lv++;
+                placed.push([lv, x0, x1]);
+                ctx.strokeStyle = ctx.fillStyle = styleFor(g.b).color;
+                ctx.beginPath();
+                ctx.moveTo(xa, yb + 4); ctx.lineTo(xa, yb); ctx.lineTo(xb, yb); ctx.lineTo(xb, yb + 4);
+                ctx.stroke();
+                ctx.fillText(g.cname, cx, yb - 2 - lv * LADDER_PO_STEP);
+            });
+        });
+        pcs.forEach(g => {
+            ctx.font = '9px Arial, Helvetica, sans-serif';
+            const d = g.left ? 1 : -1, mw = Math.max(0, ...g.mps.map(t => ctx.measureText(t || '').width));
+            const bx = g.ex + d * (5 + mw + 4), y0 = Math.min(...g.ys) + 1, y1 = Math.max(...g.ys) + 12;
+            ctx.strokeStyle = ctx.fillStyle = styleFor(g.b).color;
+            ctx.beginPath();
+            ctx.moveTo(bx - d * 4, y0); ctx.lineTo(bx, y0); ctx.lineTo(bx, y1); ctx.lineTo(bx - d * 4, y1);
+            ctx.stroke();
+            ctx.font = 'bold 10px Arial, Helvetica, sans-serif';
+            ctx.textAlign = g.left ? 'left' : 'right'; ctx.textBaseline = 'middle';
+            ctx.fillText(g.mname, bx + d * 4, (y0 + y1) / 2);
         });
         ctx.restore();
         return bundles.filter(b => !mine.includes(b));
@@ -3145,12 +3198,14 @@
             const ls = (lad.leaves[m.id] || []).filter(id => box[id]);
             if (ls.length) {
                 const lw = Math.max(...ls.map(id => box[id].w)), lh = Math.max(...ls.map(id => box[id].h));
-                const aLeft = left + LADDER_IN, cols = Math.max(1, Math.floor((colLeft + W - aLeft + 8) / (lw + 8)));
+                // Two columns either side of the trunk (left one flush to it), else one on its right.
+                const { two, tx } = ladderLeafTrunk(left, colLeft + W, ls.length, lw);
                 ls.forEach((id, k) => {
-                    pos[id] = { x: aLeft + (k % cols) * (lw + 8) + box[id].w / 2,
-                                y: cur + 18 + Math.floor(k / cols) * (lh + 18) + box[id].h / 2 };
+                    const right = !two || k % 2 === 1, r = two ? Math.floor(k / 2) : k;
+                    pos[id] = { x: right ? tx + LADDER_BRANCH + box[id].w / 2 : tx - LADDER_BRANCH - box[id].w / 2,
+                                y: cur + 18 + r * (lh + LADDER_LEAF_GAP) + box[id].h / 2 };
                 });
-                cur += 18 + Math.ceil(ls.length / cols) * (lh + 18) - 18;
+                cur += 18 + Math.ceil(ls.length / (two ? 2 : 1)) * (lh + LADDER_LEAF_GAP) - LADDER_LEAF_GAP;
             }
             const next = lad.members[i + 1];
             cur += next && next.depth > 0 ? 18 : 30;
@@ -4185,8 +4240,13 @@
         // A device on one core that also hangs from a dual-homed one stands
         // under it (its core cable still gets a lane), not as a column row,
         // and does not count against the share.
+        // Same for one hanging from a single-homed column device already kept:
+        // left as its own row it sorted to the bottom, its cable crossing the column.
         const isDual = id => nbrs[A].has(id) && nbrs[B].has(id);
-        const top = roots.filter(id => isDual(id) || !roots.some(d => isDual(d) && nbrs[d].has(id)));
+        const top = [];
+        roots.forEach(id => {
+            if (isDual(id) || !roots.some(d => d !== id && (isDual(d) || top.includes(d)) && nbrs[d].has(id))) top.push(id);
+        });
         const dual = top.filter(isDual).length;
         // The share only decides whether to offer it: once chosen, devices added
         // later (discovered neighbours) must not switch the map back to rows.
@@ -4230,37 +4290,80 @@
     const LADDER_GAP = 80;       // core edge to column: room for the lanes' turn
     const LADDER_PORT_W = 70;    // room inside a column box for a port name on each side
     const LADDER_LANE = 18;      // core lane spacing: one vertical port name between two lanes
+    const LADDER_PAR = 20;       // parallel cables of one bundle: a port name fits under each
+    const LADDER_BRANCH = 44;    // trunk to leaf: room for the switch port name
+    const LADDER_LEAF_GAP = 8;   // between two rows of leaves
+    const LADDER_LEAF_W = 90;    // a leaf box's minimum width (see the _compact sizing)
+    const LADDER_PO_STEP = 12;   // a Po name in the core moves up by this when it would touch its neighbour
+    // Trunk of a column device's leaves. Two columns either side of it when
+    // they fit inside the column, else one column on its right.
+    function ladderLeafTrunk(left, colRight, n, lw) {
+        const aLeft = left + LADDER_IN;
+        const two = n > 1 && aLeft + 2 * (lw + LADDER_BRANCH) <= colRight;
+        return { two, tx: two ? aLeft + lw + LADDER_BRANCH : aLeft };
+    }
     // Column boxes share one width per level, so every cable from B ends on the
     // same right edge; the cores are wide enough for one lane per cable.
     function sizeLadderBoxes(nodes, bundles, plan) {
         const byId = {};
         nodes.forEach(nd => { byId[nd.id] = nd; });
+        const inCol = new Set(plan.members.map(m => m.id));
+        const core = id => id === plan.A || id === plan.B;
+        const isPo = b => !!(pcEndTags(b).from || pcEndTags(b).to);
+        const meas = document.createElement('canvas').getContext('2d');
+        const textW = (t, font) => { meas.font = font; return meas.measureText(t || '').width; };
+        // Side of a column box: its port names, and for a Po the bracket and name beside them.
+        let sideW = LADDER_PORT_W;
+        bundles.forEach(b => {
+            const id = core(b.from) && inCol.has(b.to) ? b.to : core(b.to) && inCol.has(b.from) ? b.from : null;
+            if (!id || !isPo(b)) return;
+            const mine = b.from === id;
+            const portW = Math.max(0, ...b.members.map(mm => textW(mine ? mm.local : mm.remote, '9px Arial, Helvetica, sans-serif')));
+            const nameW = textW(mine ? pcEndTags(b).from : pcEndTags(b).to, 'bold 10px Arial, Helvetica, sans-serif');
+            sideW = Math.max(sideW, 5 + portW + 8 + nameW + 10);
+        });
         let W = 240;
         plan.members.forEach(m => {
             const nd = byId[m.id];
-            if (nd) W = Math.max(W, (nd._textW || 60) + 2 * LADDER_PORT_W + m.depth * LADDER_IN);
+            if (nd) W = Math.max(W, (nd._textW || 60) + 2 * sideW + m.depth * LADDER_IN);
+            // Room for two columns of leaves.
+            if ((plan.leaves[m.id] || []).length > 1) W = Math.max(W, (m.depth + 1) * LADDER_IN + 2 * (LADDER_LEAF_W + LADDER_BRANCH));
         });
         plan.W = Math.ceil(W);
+        // Cables per core side: parallel ones need height for a name under each.
+        const cables = (id, core) => bundles.filter(b => (b.from === core && b.to === id) || (b.to === core && b.from === id))
+            .reduce((t, b) => t + b.members.length, 0);
         plan.members.forEach(m => {
             const nd = byId[m.id];
             if (!nd) return;
             const w = plan.W - m.depth * LADDER_IN;
             nd.widthConstraint = { minimum: w, maximum: w };
-            nd.heightConstraint = { minimum: 46 };
+            const nA = cables(m.id, plan.A), nB = cables(m.id, plan.B);
+            let h = Math.max(46, (Math.max(nA, nB) - 1) * LADDER_PAR + 32);
+            // Under a parent, A's cables come in from the top, above the trunk's branch.
+            if (m.depth && nA) h = Math.max(h, 2 * ((nA - 1) * LADDER_PAR + 22));
+            nd.heightConstraint = { minimum: h };
         });
-        const inCol = new Set(plan.members.map(m => m.id));
-        [plan.A, plan.B].forEach(core => {
-            const nd = byId[core];
+        [plan.A, plan.B].forEach(c => {
+            const nd = byId[c];
             if (!nd) return;
-            const mine = bundles.filter(b => (b.from === core && inCol.has(b.to)) || (b.to === core && inCol.has(b.from)));
+            const mine = bundles.filter(b => (b.from === c && inCol.has(b.to)) || (b.to === c && inCol.has(b.from)));
             const lanes = mine.reduce((t, b) => t + b.members.length, 0);
             const min = Math.max((nd.widthConstraint && nd.widthConstraint.minimum) || 0, 40 + lanes * LADDER_LANE);
             nd.widthConstraint = { minimum: min };
-            // Port names stand inside the core, upward from its bottom edge:
-            // tall enough that they stay below the centred name.
-            const longest = Math.max(0, ...mine.flatMap(b => b.members.map(mm => String((b.from === core ? mm.local : mm.remote) || '').length)));
+            // Port names stand inside the core, upward from its bottom edge,
+            // Po brackets and names above them (at most `levels` steps up, see
+            // drawLadderCables): all of it below the centred name and below
+            // the cables of the link between the cores, which enter mid-side.
+            const longest = Math.max(0, ...mine.flatMap(b => b.members.map(mm => String((b.from === c ? mm.local : mm.remote) || '').length)));
             const nameH = ((nd._nameTexts || []).filter(Boolean).length || 1) * 14;
-            const h = Math.max((nd.heightConstraint && nd.heightConstraint.minimum) || 0, nameH + 2 * (longest * 5.2 + 12));
+            const pos = mine.filter(isPo);
+            const nameW = Math.max(0, ...pos.map(b => textW(b.from === c ? pcEndTags(b).from : pcEndTags(b).to, 'bold 10px Arial, Helvetica, sans-serif')));
+            const levels = Math.min(pos.length, Math.ceil((nameW + 6) / LADDER_LANE));
+            const band = pos.length ? 4 + levels * LADDER_PO_STEP : 0;
+            const peer = bundles.filter(b => b.type !== 'keepalive' && core(b.from) && core(b.to)).reduce((t, b) => t + b.members.length, 0);
+            const half = Math.max(nameH / 2, peer ? (peer - 1) * 5.5 + 6 : 0) + longest * 5.2 + 12 + band;
+            const h = Math.max((nd.heightConstraint && nd.heightConstraint.minimum) || 0, 2 * half);
             nd.heightConstraint = { minimum: Math.ceil(h) };
         });
     }
@@ -4275,7 +4378,8 @@
     // "Column" mode: a switch is as tall as the AP column beside it. The
     // tidy sets it, but every render rebuilds the boxes, so it is set again.
     function growSchemaColumnParents() {
-        if (schemaApMode() !== 'column' || !networkInstance || !minimalOverlayData) return;
+        // Not in the ladder: its leaves stand under the switch, not beside it.
+        if (schemaApMode() !== 'column' || !networkInstance || !minimalOverlayData || schemaLadderActive()) return;
         const ds = networkInstance.body.data.nodes;
         const bb = id => { try { return networkInstance.getBoundingBox(id); } catch (e) { return null; } };
         const cols = schemaLeafColumns(minimalOverlayData.bundles || [], id => ((ds.get(id) || {}).nodeDataVal || {}).device_type, GROUPABLE_TYPES);
