@@ -3036,11 +3036,7 @@
                 if (e.cp && coreNear) labels.push({ t: e.cp, x: left ? ex - 8 : ex + 8, y: e.y + 2, align: left ? 'right' : 'left', under: true });
             });
         });
-        // A device's own end of a cable: its ports, and its Po name if any.
-        const ownEnd = (b, id) => {
-            const tags = pcEndTags(b), po = b.from === id ? tags.from : tags.to;
-            return [b.members.map(mm => port(b, id, mm)).filter(Boolean).join(', '), po].filter(Boolean).join(' ');
-        };
+        const ownEnd = ladderOwnEnd;
         // Devices under a column device: a trunk down the parent's left edge.
         // Each port inside its own box: the parent's where the trunk leaves
         // it, the child's under the branch that enters it.
@@ -3064,6 +3060,7 @@
                 own.push(ownEnd(b, p));
             });
             // ponytail: one trunk leaves the parent, so its children's ports share one line, top child first.
+            // ladderPositions keeps the parent's leaves clear of it (plan.kidPortW).
             const t = own.filter(Boolean).join(' · ');
             if (t) labels.push({ t, x: tx + 4, y: pb.bottom - 3, align: 'left' });
         });
@@ -3212,14 +3209,16 @@
             const ls = (lad.leaves[m.id] || []).filter(id => box[id]);
             if (ls.length) {
                 const lw = Math.max(...ls.map(id => box[id].w)), lh = Math.max(...ls.map(id => box[id].h));
-                const plan = ladderLeafRows(left + LADDER_IN, colLeft + W, ls.length, lw);
+                // Side by side, the first leaf's port starts after the children's ports.
+                const aLeft = left + ladderLeafOffset(lad.kidPortW[m.id] || 0, lad.leafPortW[m.id] || 0, lw);
+                const plan = ladderLeafRows(aLeft, colLeft + W, ls.length, lw);
                 (lad.leafMode || (lad.leafMode = {}))[m.id] = plan ? 'rows' : 'col';
                 if (plan) {
                     // Side by side; a second row half a step over, its cables down the first row's gaps.
                     const pitch = lw + LADDER_AP_GAP;
                     ls.forEach((id, k) => {
                         const r = k < plan.c1 ? 0 : 1, i = r ? k - plan.c1 : k;
-                        pos[id] = { x: left + LADDER_IN + r * pitch / 2 + i * pitch + lw / 2,
+                        pos[id] = { x: aLeft + r * pitch / 2 + i * pitch + lw / 2,
                                     y: cur + 18 + r * (lh + LADDER_ROW_GAP) + box[id].h / 2 };
                     });
                     cur += 18 + plan.rows * lh + (plan.rows - 1) * LADDER_ROW_GAP;
@@ -4324,6 +4323,25 @@
     const LADDER_ROW_GAP = 18;   // between the two rows of leaves
     const LADDER_LEAF_LANE = 8;  // 'col' leaves: one lane each
     const LADDER_PORT_BAND = 20; // bottom of a switch with leaves or children: their ports
+    // Ports as written on a ladder cable end: a range when they run on
+    // (Gi1/0/23–24), else a list.
+    function compressPorts(ports) {
+        const sp = ports.map(p => /^(.*?)(\d+)$/.exec(p));
+        if (sp.length < 2 || sp.some(m => !m || m[1] !== sp[0][1])) return ports.join(', ');
+        const n = sp.map(m => Number(m[2]));
+        return n.every((v, i) => !i || v === n[i - 1] + 1) ? `${sp[0][1]}${n[0]}–${n[n.length - 1]}` : ports.join(', ');
+    }
+    // A device's own end of a ladder cable: its ports and its Po name.
+    function ladderOwnEnd(b, id) {
+        const tags = pcEndTags(b), po = b.from === id ? tags.from : tags.to;
+        return [compressPorts(b.members.map(mm => (b.from === id ? mm.local : mm.remote) || '').filter(Boolean)), po].filter(Boolean).join(' ');
+    }
+    // Left offset of a column device's leaves: past the step in, and far
+    // enough that the first leaf's port (centred on its cable) starts 8px
+    // after the children's ports, written from the trunk at left + 20.
+    function ladderLeafOffset(kidW, leafPortW, lw) {
+        return Math.max(LADDER_IN, kidW ? 20 + kidW + 8 - lw / 2 + leafPortW / 2 : 0);
+    }
     // Leaves of a column device side by side in [aLeft, colRight]: one row, or
     // two with the second half a step over. null: they do not fit (one column).
     function ladderLeafRows(aLeft, colRight, n, lw) {
@@ -4352,6 +4370,18 @@
             const nameW = textW(mine ? pcEndTags(b).from : pcEndTags(b).to, 'bold 10px Arial, Helvetica, sans-serif');
             sideW = Math.max(sideW, 5 + portW + 8 + nameW + 10);
         });
+        // Widths of the ports written along a column device's bottom edge: its
+        // children's (one line from the trunk) and its leaves' (one per cable).
+        const PORT_FONT = '9px Arial, Helvetica, sans-serif';
+        const link = (p, q) => bundles.find(b => b.type !== 'keepalive' && ((b.from === p && b.to === q) || (b.from === q && b.to === p)));
+        plan.kidPortW = {};
+        plan.leafPortW = {};
+        plan.members.forEach(m => {
+            const kids = plan.members.filter(x => x.parent === m.id).map(x => link(m.id, x.id)).filter(Boolean);
+            if (kids.length) plan.kidPortW[m.id] = textW(kids.map(b => ladderOwnEnd(b, m.id)).filter(Boolean).join(' · '), PORT_FONT);
+            const ls = (plan.leaves[m.id] || []).map(l => link(m.id, l)).filter(Boolean);
+            if (ls.length) plan.leafPortW[m.id] = Math.max(...ls.map(b => textW((b.from === m.id ? b.members[0].local : b.members[0].remote) || '', PORT_FONT)));
+        });
         let W = 240;
         plan.members.forEach(m => {
             const nd = byId[m.id];
@@ -4360,7 +4390,8 @@
             const n = (plan.leaves[m.id] || []).length;
             if (n > 1 && n <= 6) {
                 const pitch = LADDER_LEAF_W + LADDER_AP_GAP, c1 = Math.ceil(n / 2);
-                W = Math.max(W, (m.depth + 1) * LADDER_IN + (n > 2 ? pitch / 2 : 0) + c1 * pitch - LADDER_AP_GAP);
+                const off = ladderLeafOffset(plan.kidPortW[m.id] || 0, plan.leafPortW[m.id] || 0, LADDER_LEAF_W);
+                W = Math.max(W, m.depth * LADDER_IN + off + (n > 2 ? pitch / 2 : 0) + c1 * pitch - LADDER_AP_GAP);
             }
         });
         plan.W = Math.ceil(W);

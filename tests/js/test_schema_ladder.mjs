@@ -104,8 +104,14 @@ const geo = new Function(
     + 'const pillKey = b => b.from + "~" + b.to;\n'
     + 'let corePortNear = "0"; const schemaPref = (k, d) => (k === "schemaCorePortNear" ? corePortNear : d);\n'
     + 'const setNear = v => { corePortNear = v; };\n'
-    + extract('function pcEndTags(') + '\n' + extract('function ladderLeafRows(') + '\n' + extract('function ladderPositions(') + '\n' + extract('function drawLadderCables(')
-    + '\nreturn { ladderPositions, drawLadderCables, setNear };')();
+    + extract('function pcEndTags(') + '\n' + extract('function compressPorts(') + '\n' + extract('function ladderOwnEnd(') + '\n'
+    + extract('function ladderLeafOffset(') + '\n' + extract('function ladderLeafRows(') + '\n' + extract('function ladderPositions(') + '\n' + extract('function drawLadderCables(')
+    + '\nreturn { ladderPositions, drawLadderCables, setNear, compressPorts };')();
+
+// Ports on a cable end: a range when they run on, else a list.
+assert.equal(geo.compressPorts(['Gi1/0/23', 'Gi1/0/24']), 'Gi1/0/23–24');
+assert.equal(geo.compressPorts(['Te1/0/9', 'Te1/0/12']), 'Te1/0/9, Te1/0/12');
+assert.equal(geo.compressPorts(['Gi1/0/5']), 'Gi1/0/5');
 
 const net = base.concat([
     b('sw-acc-01', 'ap-01'), b('sw-acc-01', 'ap-02'), b('sw-acc-01', 'ap-03'), b('sw-acc-01', 'ap-04'),
@@ -114,6 +120,9 @@ const net = base.concat([
 ]);
 const lad = plan(net);
 lad.W = 400;
+// sw-acc-01 has a child and leaves: its children's ports, 60px, run along its bottom edge.
+lad.kidPortW = { 'sw-acc-01': 60, 'sw-piano-1': 35 };
+lad.leafPortW = { 'sw-acc-01': 35, 'sw-stanza-1': 35 };
 const sizes = {};
 const boxSize = id => sizes[id] || (id.startsWith('core') ? { w: 300, h: 80 } : id.startsWith('rtr') ? { w: 200, h: 60 }
     : id.startsWith('ap') ? { w: 90, h: 30 } : { w: 400 - (lad.members.find(x => x.id === id) || { depth: 0 }).depth * 40, h: 46 });
@@ -160,6 +169,8 @@ lr.filter(r => r.top !== lr[0].top).forEach(r => {
 const sw1 = rect('sw-acc-01');
 lr.forEach(r => assert.ok(calls.some(c => c[0] === 'fillText' && c[1] === 'Te1/1/1' && c[2] === (r.left + r.right) / 2 && c[3] === sw1.bottom - 3),
     'switch port inside the switch, above the cable'));
+// The first leaf's port starts after the children's ports (written from left + 20).
+lr.forEach(r => assert.ok((r.left + r.right) / 2 - 35 / 2 >= sw1.left + 20 + 60 + 8 - 0.01, 'leaf port clear of the child ports'));
 // A child: each end's port inside its own box.
 const kidR = rect('sw-piano-1');
 assert.ok(calls.some(c => c[0] === 'fillText' && c[1] === 'Te1/1/1' && c[2] === sw1.left + 20 && c[3] === sw1.bottom - 3), 'parent port inside the parent');
@@ -216,6 +227,8 @@ const many = Array.from({ length: 9 }, (_, k) => `ap-1${k}`);
 const cnet = base.concat(many.map(a => b('sw-acc-02', a)));
 const clad = plan(cnet);
 clad.W = 300;
+clad.kidPortW = {};
+clad.leafPortW = { 'sw-acc-02': 35 };
 const cids = [clad.A, clad.B, ...clad.upstream, ...clad.members.map(x => x.id), ...many];
 const cbox = Object.fromEntries(cids.map(id => [id, id.startsWith('core') ? { w: 300, h: 80 } : id.startsWith('rtr') ? { w: 200, h: 60 }
     : id.startsWith('ap') ? { w: 90, h: 30 } : { w: 300, h: 46 }]));

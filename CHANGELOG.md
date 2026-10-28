@@ -21,7 +21,9 @@ happened — `git log --grep="chore(release)"` is the record for those.
   degli AP, con i nomi di porta sopra gli AP.
 - **Switch sotto switch nella scala**: ogni porta dentro il proprio riquadro,
   quella del padre dove scende il cavo e quella del figlio sotto il ramo che
-  entra; un Po mostra anche il suo nome.
+  entra; un Po mostra anche il suo nome, con le porte consecutive scritte come
+  intervallo (`Gi1/0/23–24`). Se lo switch ha anche AP affiancati, la fila di
+  AP parte dopo quelle porte, così i nomi non si sovrappongono.
 
 ## [0.59.3] - 2026-10-28
 
