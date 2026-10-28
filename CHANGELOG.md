@@ -10,6 +10,23 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Porta core anche vicino allo switch** (*Mappa → Schema → Leggibilità*,
+  disposizione a scala): il nome della porta del core è ripetuto sul cavo,
+  appena fuori dallo switch di accesso, accanto alla porta dello switch.
+
+### Fixed
+
+- **Nomi di porta leggibili nella scala doppio core**: le porte del core
+  stanno dentro il core, in verticale lungo la propria corsia, con corsie più
+  distanziate; una porta da sola sul lato alto/basso di un riquadro è scritta
+  in orizzontale accanto al cavo invece che sopra il nome del dispositivo.
+- **La scala scelta resta tale** quando si aggiungono i dispositivi scoperti:
+  prima la mappa tornava alle righe.
+- **Access point in colonna**: ogni AP ha il proprio cavo e la propria porta
+  sul bordo dello switch, non più un ramo da una dorsale comune.
+
 ## [0.59.1] - 2026-10-27
 
 ### Changed
