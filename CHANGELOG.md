@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.59.2] - 2026-10-28
+
 ### Added
 
 - **Porta core anche vicino allo switch** (*Mappa → Schema → Leggibilità*,
