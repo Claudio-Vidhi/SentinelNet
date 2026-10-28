@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.59.4] - 2026-10-28
+
 ### Fixed
 
 - **Access point nella scala**: ogni AP ha di nuovo il proprio cavo, come
