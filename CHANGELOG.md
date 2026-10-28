@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.59.3] - 2026-10-28
+
 ### Added
 
 - **Port-channel nella scala doppio core**: come nella disposizione a righe,
