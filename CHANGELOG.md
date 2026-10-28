@@ -10,6 +10,25 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Port-channel nella scala doppio core**: come nella disposizione a righe,
+  ogni Po mostra il proprio nome a entrambi i capi (po10 sul core, po1 sullo
+  switch), con la parentesi che raccoglie le porte membro. I nomi vicini nel
+  core salgono di un gradino invece di sovrapporsi.
+
+### Fixed
+
+- **Access point nella scala**: ogni AP ha il proprio ramo dalla dorsale dello
+  switch, con la porta scritta sotto; due colonne di AP ai lati della dorsale.
+- **Cavi paralleli nella scala**: più distanziati, ogni nome di porta sotto il
+  proprio cavo invece che sopra quello vicino.
+- **Switch collegato a un core e a un altro switch della colonna**: ora sta
+  sotto quello switch, non più in fondo con il cavo che attraversa la colonna.
+- **Etichetta del ramo verso un dispositivo figlio** spostata sopra il suo
+  riquadro: dentro copriva il nome.
+- **Switch alti e vuoti nella scala** con la modalità AP «colonna» salvata.
+
 ## [0.59.2] - 2026-10-28
 
 ### Added
