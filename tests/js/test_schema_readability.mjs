@@ -180,7 +180,7 @@ assert.deepEqual(schemaUplinkGroups(bundles, ids, levelOf, id => {
     assert.ok(grouped.lines.some(l => l.w === 4 && l.y === 60), 'pair bar under the cores');
     assert.ok(!plain.lines.some(l => l.w === 4), 'no bar without grouping');
     assert.ok(!grouped.texts.some(t => t.s === 'Gi1/0/49'), 'no port labels');
-    // Column mode: the APs of access-03 hang from a spine, not from routed cables.
+    // Column mode: each AP of access-03 has its own cable from the switch edge, not a routed one.
     Object.assign(pos, { 'ap-03-01': [380, 330], 'ap-03-02': [380, 380] });
     const keep = bundles0.slice();
     bundles0.push(mk('access-03', 'ap-03-01'), mk('access-03', 'ap-03-02'));
@@ -188,8 +188,8 @@ assert.deepEqual(schemaUplinkGroups(bundles, ids, levelOf, id => {
     bundles0.splice(0, bundles0.length, ...keep);
     delete pos['ap-03-01']; delete pos['ap-03-02'];
     assert.equal(routed.strokes.length / 2, 9);
-    assert.equal(spined.strokes.length, 7 * 2 + 2, '7 routed cables + one square per AP branch');
-    assert.equal(spined.texts.filter(t => t.s === 'Gi1/0/49').length, 9, 'AP port names beside the spine');
+    assert.equal(spined.strokes.length, 7 * 2 + 2 * 2, '7 routed cables + a square at both ends of each AP cable');
+    assert.equal(spined.texts.filter(t => t.s === 'Gi1/0/49').length, 9, 'AP port names on the switch');
     const focused = run({ schemaPortLabels: 'focus' }, 'access-02');
     assert.equal(focused.strokes.filter(a => a === 1).length / 2, 2, 'only the focus cables stay full');
     assert.equal(focused.texts.filter(t => t.s === 'Gi1/0/49').length, 2, 'labels only on the focus cables');

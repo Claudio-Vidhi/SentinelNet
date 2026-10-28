@@ -56,6 +56,10 @@ assert.ok(p.members.every(m => m.depth === 0 && m.parent === null));
 // Under 60%: no ladder.
 assert.equal(plan([b('core-a', 'core-b', 'peer'), b('core-a', 'sw-1'), b('core-b', 'sw-1'),
     b('core-a', 'sw-2'), b('core-b', 'sw-2'), b('core-a', 'sw-3'), b('core-a', 'sw-4'), b('core-b', 'sw-5')]), null);
+// Chosen by the user: devices added later (discovered) keep the ladder.
+const thin = [b('core-a', 'core-b', 'peer'), b('core-a', 'sw-1'), b('core-b', 'sw-1'),
+    b('core-a', 'sw-2'), b('core-b', 'sw-2'), b('core-a', 'sw-3'), b('core-a', 'sw-4'), b('core-b', 'sw-5')];
+assert.ok(schemaLadderPlan(thin, levelOf, typeOf, labelOf, LEAF, null, true), 'chosen ladder survives a low share');
 // One dual-homed device is not a pattern.
 assert.equal(plan([b('core-a', 'core-b', 'peer'), b('core-a', 'sw-1'), b('core-b', 'sw-1')]), null);
 
@@ -86,12 +90,14 @@ assert.equal(p.A, 'core-a');
 
 // --- Geometry: positions and cables ---------------------------------------
 const geo = new Function(
-    'const LADDER_IN = 40, LADDER_GAP = 80, SCHEMA_GAP = 70;\n'
+    'const LADDER_IN = 40, LADDER_GAP = 80, SCHEMA_GAP = 70, LADDER_LANE = 18;\n'
     + 'let visioConnectorSink = null, schemaFocusId = null, hoverBundleKey = null, edgeHitSegs = [];\n'
     + 'const schemaPortLabelVisible = () => true, schemaDimmed = () => false, linkColor = () => "#333";\n'
     + 'const pillKey = b => b.from + "~" + b.to;\n'
+    + 'let corePortNear = "0"; const schemaPref = (k, d) => (k === "schemaCorePortNear" ? corePortNear : d);\n'
+    + 'const setNear = v => { corePortNear = v; };\n'
     + extract('function ladderPositions(') + '\n' + extract('function drawLadderCables(')
-    + '\nreturn { ladderPositions, drawLadderCables };')();
+    + '\nreturn { ladderPositions, drawLadderCables, setNear };')();
 
 const net = base.concat([
     b('sw-acc-01', 'ap-01'), b('sw-acc-01', 'ap-02'), b('sw-acc-01', 'ap-03'), b('sw-acc-01', 'ap-04'),
@@ -135,5 +141,20 @@ assert.deepEqual(left.map(x => `${x.from}~${x.to}~${x.type}`).sort(),
     ['core-a~core-b~keepalive', 'core-a~core-b~peer', 'rtr-01~core-a~link', 'rtr-01~core-b~link']);
 // The A cable into sw-piano-1 crosses its parent's trunk: one hop.
 assert.equal(calls.filter(c => c[0] === 'arc').length, 1);
+
+// Core port names sit inside the core, above its bottom edge.
+const texts = calls.filter(c => c[0] === 'translate');
+assert.ok(texts.length > 0);
+assert.ok(texts.every(([, x, y]) => y < rect(lad.A).bottom || y < rect(lad.B).bottom), 'port names inside the core');
+assert.ok(texts.every(([, x, y]) => [lad.A, lad.B].some(c => y <= rect(c).bottom && y >= rect(c).top && x >= rect(c).left && x <= rect(c).right)));
+
+// Option: the core port also on the cable, just outside the switch.
+const texts0 = calls.filter(c => c[0] === 'fillText').length;
+calls.length = 0;
+geo.setNear('1');
+geo.drawLadderCables(ctx, lad, net, rect, () => ({ color: '#333', lw: 1.4, dash: null }), 'all');
+const coreLanes = net.filter(x => x.type === 'link' && [x.from, x.to].some(id => id === lad.A || id === lad.B)
+    && [x.from, x.to].some(id => lad.members.some(m => m.id === id))).length;
+assert.equal(calls.filter(c => c[0] === 'fillText').length, texts0 + coreLanes, 'one extra name per core lane');
 
 console.log('schema ladder: ok');

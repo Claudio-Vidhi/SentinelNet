@@ -1419,6 +1419,8 @@
         if (f) f.checked = schemaPref('schemaFocus', '1') === '1';
         if (w) w.checked = schemaPref('schemaWrap', '0') === '1';
         if (g) g.checked = schemaPref('schemaGroupUplinks', '0') === '1';
+        const cn = /** @type {HTMLInputElement|null} */ (document.getElementById('toggleSchemaCorePortNear'));
+        if (cn) cn.checked = schemaPref('schemaCorePortNear', '0') === '1';
         if (l) l.value = schemaPortLabelMode();
         const ap = /** @type {HTMLSelectElement|null} */ (document.getElementById('schemaApMode'));
         if (ap) ap.value = schemaApMode();
@@ -2989,6 +2991,7 @@
             && box(b.from) && box(b.to));
         const port = (b, id, mm) => (b.from === id ? mm.local : mm.remote) || '';
         const showLbl = b => visioConnectorSink || schemaPortLabelVisible(labelMode, b, schemaFocusId);
+        const coreNear = schemaPref('schemaCorePortNear', '0') === '1';
         const verts = [];   // [x, y1, y2] trunks and buses: horizontal runs hop over them
         const paths = [];   // { pts, b, thin }
         const labels = [];  // { t, x, y, align, rot }
@@ -3008,15 +3011,18 @@
                 });
             });
             ends.sort((p, q) => p.y - q.y);
-            const step = ends.length > 1 ? Math.min(12, (cb.right - cb.left - 28) / (ends.length - 1)) : 0;
+            const step = ends.length > 1 ? Math.min(LADDER_LANE, (cb.right - cb.left - 28) / (ends.length - 1)) : 0;
             ends.forEach((e, i) => {
                 const x = left ? cb.right - 14 - i * step : cb.left + 14 + i * step;
                 const ex = left ? e.bb.left : e.bb.right;
                 paths.push({ b: e.b, pts: [[x, cb.bottom], [x, e.y], [ex, e.y]] });
                 conns.push({ b: e.b, from: c, to: e.id, pts: [[x, cb.bottom], [x, e.y], [ex, e.y]] });
                 if (!showLbl(e.b)) return;
-                if (e.cp) labels.push({ t: e.cp, x: x + 2, y: cb.bottom + 4, rot: true });
+                // Inside the core, reading upward along its lane.
+                if (e.cp) labels.push({ t: e.cp, x: x + 2, y: cb.bottom - 4, rot: true });
                 if (e.mp) labels.push({ t: e.mp, x: left ? ex + 5 : ex - 5, y: e.y - 2, align: left ? 'left' : 'right' });
+                // Optional: the core port again on the cable, just outside the switch.
+                if (e.cp && coreNear) labels.push({ t: e.cp, x: left ? ex - 8 : ex + 8, y: e.y - 2, align: left ? 'right' : 'left' });
             });
         });
         // Devices under a column device: a trunk down the parent's left edge.
@@ -3094,8 +3100,8 @@
             if (l.rot) {
                 ctx.save();
                 ctx.translate(l.x, l.y);
-                ctx.rotate(Math.PI / 2);
-                ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+                ctx.rotate(-Math.PI / 2);
+                ctx.textAlign = 'left'; ctx.textBaseline = 'top';
                 ctx.fillText(l.t, 0, 0);
                 ctx.restore();
                 return;
@@ -4025,7 +4031,8 @@
         nodeData.forEach(n => { info[n.id] = n; });
         const forcedPair = Object.values(rootsOf((opts && opts.group) || '')).find(l => l.length === 2) || null;
         const ladder = schemaLadderPlan(bundles, id => levels[id] || 0, id => (info[id] || {}).device_type,
-                                        id => (info[id] || {}).label || id, GROUPABLE_TYPES, forcedPair);
+                                        id => (info[id] || {}).label || id, GROUPABLE_TYPES, forcedPair,
+                                        schemaLayout() === 'ladder');
         if (ladder && schemaLayout() === 'ladder') sizeLadderBoxes(nodes, bundles, ladder);
 
         // Final x/y come from packSchemaRows() once vis.js has sized the boxes.
@@ -4148,7 +4155,7 @@
     // forced: a pair named in the Core menu. labelOf orders the column.
     const LADDER_MIN_SHARE = 0.6;
     const LADDER_MAX_DEPTH = 4;
-    function schemaLadderPlan(bundles, levelOf, typeOf, labelOf, leafTypes, forced) {
+    function schemaLadderPlan(bundles, levelOf, typeOf, labelOf, leafTypes, forced, chosen) {
         const nbrs = {};
         bundles.forEach(b => {
             if (b.type === 'keepalive') return;
@@ -4181,7 +4188,9 @@
         const isDual = id => nbrs[A].has(id) && nbrs[B].has(id);
         const top = roots.filter(id => isDual(id) || !roots.some(d => isDual(d) && nbrs[d].has(id)));
         const dual = top.filter(isDual).length;
-        if (dual < 2 || dual / top.length < LADDER_MIN_SHARE) return null;
+        // The share only decides whether to offer it: once chosen, devices added
+        // later (discovered neighbours) must not switch the map back to rows.
+        if (dual < 2 || (!chosen && dual / top.length < LADDER_MIN_SHARE)) return null;
         const upstream = near.filter(id => !below(id, lv)).sort(byLabel);
         // Each device is placed once, under the first column device reaching it.
         const placed = new Set([A, B, ...upstream, ...top]);
@@ -4220,6 +4229,7 @@
     const LADDER_IN = 40;        // step in per level under a column device
     const LADDER_GAP = 80;       // core edge to column: room for the lanes' turn
     const LADDER_PORT_W = 70;    // room inside a column box for a port name on each side
+    const LADDER_LANE = 18;      // core lane spacing: one vertical port name between two lanes
     // Column boxes share one width per level, so every cable from B ends on the
     // same right edge; the cores are wide enough for one lane per cable.
     function sizeLadderBoxes(nodes, bundles, plan) {
@@ -4242,10 +4252,16 @@
         [plan.A, plan.B].forEach(core => {
             const nd = byId[core];
             if (!nd) return;
-            const lanes = bundles.filter(b => (b.from === core && inCol.has(b.to)) || (b.to === core && inCol.has(b.from)))
-                .reduce((t, b) => t + b.members.length, 0);
-            const min = Math.max((nd.widthConstraint && nd.widthConstraint.minimum) || 0, 40 + lanes * 12);
+            const mine = bundles.filter(b => (b.from === core && inCol.has(b.to)) || (b.to === core && inCol.has(b.from)));
+            const lanes = mine.reduce((t, b) => t + b.members.length, 0);
+            const min = Math.max((nd.widthConstraint && nd.widthConstraint.minimum) || 0, 40 + lanes * LADDER_LANE);
             nd.widthConstraint = { minimum: min };
+            // Port names stand inside the core, upward from its bottom edge:
+            // tall enough that they stay below the centred name.
+            const longest = Math.max(0, ...mine.flatMap(b => b.members.map(mm => String((b.from === core ? mm.local : mm.remote) || '').length)));
+            const nameH = ((nd._nameTexts || []).filter(Boolean).length || 1) * 14;
+            const h = Math.max((nd.heightConstraint && nd.heightConstraint.minimum) || 0, nameH + 2 * (longest * 5.2 + 12));
+            nd.heightConstraint = { minimum: Math.ceil(h) };
         });
     }
     // Leaves drawn as small boxes in the Schema view: single-homed devices of
@@ -4533,24 +4549,26 @@
                 Object.entries(cols).forEach(([p, ls]) => {
                     const pb = realBox(p), lb = ls.map(realBox);
                     if (!pb || lb.some(x => !x)) return;
+                    // Each AP has its own cable from the switch's right edge, at
+                    // its own height: the switch is as tall as the column.
                     const cy = lb.map(x => (x.top + x.bottom) / 2);
-                    const sx = pb.right + 10;   // = COL_SIDE in packSchemaRows
-                    const ys = Math.min(Math.max(cy[0], pb.top + 6), pb.bottom - 6);
                     const color = linkColor('link');
                     ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 1.4;
-                    ctx.globalAlpha = 1;
-                    ctx.beginPath();
-                    ctx.moveTo(pb.right, ys); ctx.lineTo(sx, ys);
-                    ctx.moveTo(sx, Math.min(ys, ...cy)); ctx.lineTo(sx, Math.max(ys, ...cy));
-                    ctx.stroke();
                     ls.forEach((l, k) => {
-                        const b = spineB.find(x => x.from === l || x.to === l), y = cy[k];
+                        const b = spineB.find(x => x.from === l || x.to === l);
+                        const y = Math.min(Math.max(cy[k], pb.top + 6), pb.bottom - 6);
                         ctx.globalAlpha = !visioConnectorSink && schemaDimmed(b, pillKey(b), hoverBundleKey, schemaFocusId) ? 0.18 : 1;
-                        ctx.beginPath(); ctx.moveTo(sx, y); ctx.lineTo(lb[k].left, y); ctx.stroke();
-                        ctx.fillRect(lb[k].left + 1, y - 2.5, 5, 5);
+                        ctx.beginPath(); ctx.moveTo(pb.right, y); ctx.lineTo(lb[k].left, cy[k]); ctx.stroke();
+                        ctx.fillRect(pb.right - 6, y - 2.5, 5, 5);
+                        ctx.fillRect(lb[k].left + 1, cy[k] - 2.5, 5, 5);
                         const m = b.members[0] || {}, port = b.from === p ? m.local : m.remote;
-                        if (port && (visioConnectorSink || schemaPortLabelVisible(labelMode, b, schemaFocusId))) ctx.fillText(port, sx + 4, y - 2);
+                        if (port && (visioConnectorSink || schemaPortLabelVisible(labelMode, b, schemaFocusId))) {
+                            ctx.textAlign = 'right';
+                            ctx.fillText(port, pb.right - 9, y + 4);
+                        }
                     });
+                    ctx.textAlign = 'left';
+                    ctx.globalAlpha = 1;
                 });
                 ctx.restore();
             }
@@ -4799,13 +4817,20 @@
             // Top and bottom sides: the label turns vertical and runs inward
             // along its own cable, as on a Visio rack drawing. Stacked one row
             // per port, a core with twenty uplinks became a tall empty column.
-            const drawPortLabel = (text, pt, side) => {
+            const drawPortLabel = (text, pt, side, entry) => {
                 if (!text) return;
                 // The export (visioConnectorSink) always gets every port name.
                 if (!visioConnectorSink && !schemaPortLabelVisible(labelMode, b, schemaFocusId)) return;
                 ctx.fillStyle = color;
                 if (side === 'E')      { ctx.textAlign = 'right';  ctx.fillText(text, pt.x - 13, pt.y - 5); }
                 else if (side === 'W') { ctx.textAlign = 'left';   ctx.fillText(text, pt.x + 13, pt.y - 5); }
+                // Alone on its side: written level beside the cable, clear of the name.
+                else if (entry.total === 1) {
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = side === 'S' ? 'bottom' : 'top';
+                    ctx.fillText(text, pt.x + 6, side === 'S' ? pt.y - 3 : pt.y + 3);
+                    ctx.textBaseline = 'middle';
+                }
                 else {
                     ctx.save();
                     ctx.translate(pt.x, side === 'S' ? pt.y - 9 : pt.y + 9);
@@ -4857,8 +4882,8 @@
                 // Indice di slot globale sul lato (entry.slot + i): garantisce che le
                 // etichette N/S di fasci diversi si impilino su righe distinte.
                 // A small leaf box has no room for its own port name.
-                if (!compactIds.has(b.from)) drawPortLabel(mm.m.local,  mm.A, g.fromSide);
-                if (!compactIds.has(b.to))   drawPortLabel(mm.m.remote, mm.B, g.toSide);
+                if (!compactIds.has(b.from)) drawPortLabel(mm.m.local,  mm.A, g.fromSide, g.fromEntry);
+                if (!compactIds.has(b.to))   drawPortLabel(mm.m.remote, mm.B, g.toSide, g.toEntry);
             });
             // Segmenti del fascio per l'hit-test del menu categorie (click destro).
             edgeHitSegs.push({ key: pillKey(b), segs: g.members.flatMap(mm =>
@@ -6872,6 +6897,9 @@
             packSchemaRows();
         } else if (el.id === 'toggleSchemaGroupUplinks') {
             setSchemaPref('schemaGroupUplinks', el.checked ? '1' : '0');
+            networkInstance?.redraw();
+        } else if (el.id === 'toggleSchemaCorePortNear') {
+            setSchemaPref('schemaCorePortNear', el.checked ? '1' : '0');
             networkInstance?.redraw();
         } else if (el.id === 'schemaLayout') {
             setSchemaLayout(el.value);
