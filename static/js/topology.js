@@ -3036,7 +3036,14 @@
                 if (e.cp && coreNear) labels.push({ t: e.cp, x: left ? ex - 8 : ex + 8, y: e.y + 2, align: left ? 'right' : 'left', under: true });
             });
         });
+        // A device's own end of a cable: its ports, and its Po name if any.
+        const ownEnd = (b, id) => {
+            const tags = pcEndTags(b), po = b.from === id ? tags.from : tags.to;
+            return [b.members.map(mm => port(b, id, mm)).filter(Boolean).join(', '), po].filter(Boolean).join(' ');
+        };
         // Devices under a column device: a trunk down the parent's left edge.
+        // Each port inside its own box: the parent's where the trunk leaves
+        // it, the child's under the branch that enters it.
         Object.entries(kidsOf).forEach(([p, ks]) => {
             const pb = box(p);
             if (!pb) return;
@@ -3045,37 +3052,44 @@
             const last = Math.max(...ys.filter(y => y !== null));
             verts.push([tx, pb.bottom, last]);
             paths.push({ b: null, pts: [[tx, pb.bottom], [tx, last]] });
+            const own = [];
             ks.forEach((k, j) => {
                 const kb = box(k), b = mine.find(x => { const pq = pairOf(x, isTree); return pq && pq[0] === p && pq[1] === k; });
                 if (!kb) return;
                 paths.push({ b, pts: [[tx, ys[j]], [kb.left, ys[j]]] });
                 conns.push({ b, from: p, to: k, pts: [[tx, pb.bottom], [tx, ys[j]], [kb.left, ys[j]]] });
-                if (b && showLbl(b)) {
-                    const mm = b.members[0] || {};
-                    const t = [port(b, p, mm), port(b, k, mm)].filter(Boolean).join(' → ');
-                    // In the gap above the child: inside it, it ran into the centred name.
-                    if (t) labels.push({ t, x: kb.left + 2, y: kb.top - 3, align: 'left' });
-                }
+                if (!b || !showLbl(b)) return;
+                const kt = ownEnd(b, k);
+                if (kt) labels.push({ t: kt, x: kb.left + 5, y: ys[j] + 2, align: 'left', under: true });
+                own.push(ownEnd(b, p));
             });
+            // ponytail: one trunk leaves the parent, so its children's ports share one line, top child first.
+            const t = own.filter(Boolean).join(' · ');
+            if (t) labels.push({ t, x: tx + 4, y: pb.bottom - 3, align: 'left' });
         });
-        // Leaves: a trunk down from the parent, one branch per leaf with the
-        // switch port under it. A shared bus hid which port fed which leaf.
+        // Leaves (APs...), each on its own cable, as in the row view.
+        // 'rows': under the switch, straight down from its bottom edge, the
+        //   switch port inside the switch above the cable.
+        // 'col' (too many to fit): one column, each cable on its own lane from
+        //   the switch's bottom edge into the leaf's left side, nearest lane for
+        //   the top leaf so none cross; the port under the cable, before the leaf.
+        // Drawn from where the boxes are, never recomputed: two computations
+        // that disagreed put the trunk on the leaves' edge.
         Object.entries(lad.leaves).forEach(([p, ls]) => {
             const pb = box(p), lbs = ls.map(id => Object.assign({ id }, box(id))).filter(lb => lb.right !== undefined);
             if (!pb || !lbs.length) return;
-            const { tx } = ladderLeafTrunk(pb.left, pb.right, lbs.length, Math.max(...lbs.map(lb => lb.right - lb.left)));
-            let last = pb.bottom;
-            lbs.forEach(lb => {
-                const my = (lb.top + lb.bottom) / 2, ex = lb.left >= tx ? lb.left : lb.right;
+            const col = (lad.leafMode || {})[p] === 'col';
+            lbs.sort((a, c) => a.top - c.top).forEach((lb, k) => {
                 const b = mine.find(x => { const pq = pairOf(x, isLeaf); return pq && pq[0] === p && pq[1] === lb.id; }) || null;
-                last = Math.max(last, my);
-                paths.push({ b, pts: [[tx, my], [ex, my]] });
-                conns.push({ b, from: p, to: lb.id, pts: [[tx, pb.bottom], [tx, my], [ex, my]] });
                 const t = b && showLbl(b) ? port(b, p, b.members[0] || {}) : '';
-                if (t) labels.push({ t, x: (tx + ex) / 2, y: my + 2, align: 'center', under: true });
+                const cx = (lb.left + lb.right) / 2, cy = (lb.top + lb.bottom) / 2;
+                const pts = col ? [[lb.left - LADDER_BRANCH - 12 - k * LADDER_LEAF_LANE, pb.bottom], [lb.left - LADDER_BRANCH - 12 - k * LADDER_LEAF_LANE, cy], [lb.left, cy]]
+                                : [[cx, pb.bottom], [cx, lb.top]];
+                paths.push({ b, pts });
+                conns.push({ b, from: p, to: lb.id, pts });
+                if (t) labels.push(col ? { t, x: lb.left - 4, y: cy + 2, align: 'right', under: true }
+                                       : { t, x: cx, y: pb.bottom - 3, align: 'center' });
             });
-            verts.push([tx, pb.bottom, last]);
-            paths.push({ b: null, pts: [[tx, pb.bottom], [tx, last]] });
         });
 
         ctx.save();
@@ -3198,14 +3212,25 @@
             const ls = (lad.leaves[m.id] || []).filter(id => box[id]);
             if (ls.length) {
                 const lw = Math.max(...ls.map(id => box[id].w)), lh = Math.max(...ls.map(id => box[id].h));
-                // Two columns either side of the trunk (left one flush to it), else one on its right.
-                const { two, tx } = ladderLeafTrunk(left, colLeft + W, ls.length, lw);
-                ls.forEach((id, k) => {
-                    const right = !two || k % 2 === 1, r = two ? Math.floor(k / 2) : k;
-                    pos[id] = { x: right ? tx + LADDER_BRANCH + box[id].w / 2 : tx - LADDER_BRANCH - box[id].w / 2,
-                                y: cur + 18 + r * (lh + LADDER_LEAF_GAP) + box[id].h / 2 };
-                });
-                cur += 18 + Math.ceil(ls.length / (two ? 2 : 1)) * (lh + LADDER_LEAF_GAP) - LADDER_LEAF_GAP;
+                const plan = ladderLeafRows(left + LADDER_IN, colLeft + W, ls.length, lw);
+                (lad.leafMode || (lad.leafMode = {}))[m.id] = plan ? 'rows' : 'col';
+                if (plan) {
+                    // Side by side; a second row half a step over, its cables down the first row's gaps.
+                    const pitch = lw + LADDER_AP_GAP;
+                    ls.forEach((id, k) => {
+                        const r = k < plan.c1 ? 0 : 1, i = r ? k - plan.c1 : k;
+                        pos[id] = { x: left + LADDER_IN + r * pitch / 2 + i * pitch + lw / 2,
+                                    y: cur + 18 + r * (lh + LADDER_ROW_GAP) + box[id].h / 2 };
+                    });
+                    cur += 18 + plan.rows * lh + (plan.rows - 1) * LADDER_ROW_GAP;
+                } else {
+                    // One column, right of one lane per leaf plus room for the port name.
+                    const x0 = left + LADDER_IN + ls.length * LADDER_LEAF_LANE + LADDER_BRANCH;
+                    ls.forEach((id, k) => {
+                        pos[id] = { x: x0 + box[id].w / 2, y: cur + 18 + k * (lh + LADDER_LEAF_GAP) + box[id].h / 2 };
+                    });
+                    cur += 18 + ls.length * (lh + LADDER_LEAF_GAP) - LADDER_LEAF_GAP;
+                }
             }
             const next = lad.members[i + 1];
             cur += next && next.depth > 0 ? 18 : 30;
@@ -4293,14 +4318,19 @@
     const LADDER_PAR = 20;       // parallel cables of one bundle: a port name fits under each
     const LADDER_BRANCH = 44;    // trunk to leaf: room for the switch port name
     const LADDER_LEAF_GAP = 8;   // between two rows of leaves
-    const LADDER_LEAF_W = 90;    // a leaf box's minimum width (see the _compact sizing)
+    const LADDER_LEAF_W = 110;   // a leaf box's width, with margin over the _compact minimum of 90
     const LADDER_PO_STEP = 12;   // a Po name in the core moves up by this when it would touch its neighbour
-    // Trunk of a column device's leaves. Two columns either side of it when
-    // they fit inside the column, else one column on its right.
-    function ladderLeafTrunk(left, colRight, n, lw) {
-        const aLeft = left + LADDER_IN;
-        const two = n > 1 && aLeft + 2 * (lw + LADDER_BRANCH) <= colRight;
-        return { two, tx: two ? aLeft + lw + LADDER_BRANCH : aLeft };
+    const LADDER_AP_GAP = 16;    // between two leaves of a row: a cable of the second row runs down it
+    const LADDER_ROW_GAP = 18;   // between the two rows of leaves
+    const LADDER_LEAF_LANE = 8;  // 'col' leaves: one lane each
+    const LADDER_PORT_BAND = 20; // bottom of a switch with leaves or children: their ports
+    // Leaves of a column device side by side in [aLeft, colRight]: one row, or
+    // two with the second half a step over. null: they do not fit (one column).
+    function ladderLeafRows(aLeft, colRight, n, lw) {
+        const pitch = lw + LADDER_AP_GAP, room = colRight - aLeft;
+        if (n * pitch - LADDER_AP_GAP <= room) return { rows: 1, c1: n };
+        const c1 = Math.ceil(n / 2), c2 = n - c1;
+        return c1 * pitch - LADDER_AP_GAP <= room && pitch / 2 + c2 * pitch - LADDER_AP_GAP <= room ? { rows: 2, c1 } : null;
     }
     // Column boxes share one width per level, so every cable from B ends on the
     // same right edge; the cores are wide enough for one lane per cable.
@@ -4326,8 +4356,12 @@
         plan.members.forEach(m => {
             const nd = byId[m.id];
             if (nd) W = Math.max(W, (nd._textW || 60) + 2 * sideW + m.depth * LADDER_IN);
-            // Room for two columns of leaves.
-            if ((plan.leaves[m.id] || []).length > 1) W = Math.max(W, (m.depth + 1) * LADDER_IN + 2 * (LADDER_LEAF_W + LADDER_BRANCH));
+            // Room for up to 6 leaves in two staggered rows; more go in one column.
+            const n = (plan.leaves[m.id] || []).length;
+            if (n > 1 && n <= 6) {
+                const pitch = LADDER_LEAF_W + LADDER_AP_GAP, c1 = Math.ceil(n / 2);
+                W = Math.max(W, (m.depth + 1) * LADDER_IN + (n > 2 ? pitch / 2 : 0) + c1 * pitch - LADDER_AP_GAP);
+            }
         });
         plan.W = Math.ceil(W);
         // Cables per core side: parallel ones need height for a name under each.
@@ -4342,6 +4376,8 @@
             let h = Math.max(46, (Math.max(nA, nB) - 1) * LADDER_PAR + 32);
             // Under a parent, A's cables come in from the top, above the trunk's branch.
             if (m.depth && nA) h = Math.max(h, 2 * ((nA - 1) * LADDER_PAR + 22));
+            // Ports of its leaves' and children's cables, inside along the bottom edge.
+            if ((plan.leaves[m.id] || []).length || plan.members.some(x => x.parent === m.id)) h += LADDER_PORT_BAND;
             nd.heightConstraint = { minimum: h };
         });
         [plan.A, plan.B].forEach(c => {

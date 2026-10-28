@@ -10,6 +10,19 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Access point nella scala**: ogni AP ha di nuovo il proprio cavo, come
+  nella disposizione a righe. Gli AP stanno affiancati sotto lo switch (al più
+  due righe, la seconda sfalsata così i suoi cavi scendono tra gli AP della
+  prima) e la porta è scritta dentro lo switch sopra il cavo. Con troppi AP per
+  la larghezza vanno in colonna, ognuno con la propria corsia, e la porta sta
+  sotto il cavo prima dell'AP. Nella 0.59.3 la dorsale poteva finire sul bordo
+  degli AP, con i nomi di porta sopra gli AP.
+- **Switch sotto switch nella scala**: ogni porta dentro il proprio riquadro,
+  quella del padre dove scende il cavo e quella del figlio sotto il ramo che
+  entra; un Po mostra anche il suo nome.
+
 ## [0.59.3] - 2026-10-28
 
 ### Added

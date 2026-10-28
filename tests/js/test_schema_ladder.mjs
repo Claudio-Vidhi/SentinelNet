@@ -97,13 +97,14 @@ assert.equal(p.A, 'core-a');
 
 // --- Geometry: positions and cables ---------------------------------------
 const geo = new Function(
-    'const LADDER_IN = 40, LADDER_GAP = 80, SCHEMA_GAP = 70, LADDER_LANE = 18, LADDER_PAR = 20, LADDER_BRANCH = 44, LADDER_LEAF_GAP = 8, LADDER_PO_STEP = 12;\n'
+    'const LADDER_IN = 40, LADDER_GAP = 80, SCHEMA_GAP = 70, LADDER_LANE = 18, LADDER_PAR = 20, LADDER_BRANCH = 44, LADDER_LEAF_GAP = 8, LADDER_PO_STEP = 12, '
+    + 'LADDER_AP_GAP = 16, LADDER_ROW_GAP = 18, LADDER_LEAF_LANE = 8;\n'
     + 'let visioConnectorSink = null, schemaFocusId = null, hoverBundleKey = null, edgeHitSegs = [];\n'
     + 'const schemaPortLabelVisible = () => true, schemaDimmed = () => false, linkColor = () => "#333";\n'
     + 'const pillKey = b => b.from + "~" + b.to;\n'
     + 'let corePortNear = "0"; const schemaPref = (k, d) => (k === "schemaCorePortNear" ? corePortNear : d);\n'
     + 'const setNear = v => { corePortNear = v; };\n'
-    + extract('function pcEndTags(') + '\n' + extract('function ladderLeafTrunk(') + '\n' + extract('function ladderPositions(') + '\n' + extract('function drawLadderCables(')
+    + extract('function pcEndTags(') + '\n' + extract('function ladderLeafRows(') + '\n' + extract('function ladderPositions(') + '\n' + extract('function drawLadderCables(')
     + '\nreturn { ladderPositions, drawLadderCables, setNear };')();
 
 const net = base.concat([
@@ -146,15 +147,23 @@ const ctx = new Proxy({ measureText: t => ({ width: String(t).length * 5 }) }, {
 const left = geo.drawLadderCables(ctx, lad, net, rect, () => ({ color: '#333', lw: 1.4, dash: null }), 'all');
 assert.deepEqual(left.map(x => `${x.from}~${x.to}~${x.type}`).sort(),
     ['core-a~core-b~keepalive', 'core-a~core-b~peer', 'rtr-01~core-a~link', 'rtr-01~core-b~link']);
-// Leaves: two columns either side of one trunk, each with its own branch and
-// the switch port under it.
-const [l1, l2] = lad.leaves['sw-acc-01'].map(rect);
-assert.equal(l1.top, l2.top);
-assert.ok(l1.right < l2.left);
-lad.leaves['sw-acc-01'].forEach(l => {
-    const r = rect(l), my = (r.top + r.bottom) / 2;
-    assert.ok(calls.some(c => c[0] === 'fillText' && c[1] === 'Te1/1/1' && c[3] === my + 2), `port name under the branch to ${l}`);
+// Leaves that fit: side by side, a second row half a step over so its cables
+// run down the first row's gaps; each its own straight cable, the switch port
+// inside the switch above it.
+assert.equal(lad.leafMode['sw-acc-01'], 'rows');
+const lr = lad.leaves['sw-acc-01'].map(rect), row1 = lr.filter(r => r.top === lr[0].top);
+assert.ok(row1.length > 1 && row1.length < lr.length, 'two rows');
+lr.filter(r => r.top !== lr[0].top).forEach(r => {
+    const cx = (r.left + r.right) / 2;
+    assert.ok(row1.every(q => cx < q.left || cx > q.right), 'second-row cable clear of the first row');
 });
+const sw1 = rect('sw-acc-01');
+lr.forEach(r => assert.ok(calls.some(c => c[0] === 'fillText' && c[1] === 'Te1/1/1' && c[2] === (r.left + r.right) / 2 && c[3] === sw1.bottom - 3),
+    'switch port inside the switch, above the cable'));
+// A child: each end's port inside its own box.
+const kidR = rect('sw-piano-1');
+assert.ok(calls.some(c => c[0] === 'fillText' && c[1] === 'Te1/1/1' && c[2] === sw1.left + 20 && c[3] === sw1.bottom - 3), 'parent port inside the parent');
+assert.ok(calls.some(c => c[0] === 'fillText' && c[1] === 'Gi1/1/3' && c[2] === kidR.left + 5), 'child port inside the child');
 // The A cable into sw-piano-1 crosses its parent's trunk: one hop.
 assert.equal(calls.filter(c => c[0] === 'arc').length, 1);
 
@@ -200,5 +209,30 @@ for (let i = 0; i < nm.length; i++) for (let j = i + 1; j < nm.length; j++) {
     const [, , x, y] = at(t)[0], r = rect(['sw-acc-01', 'sw-acc-02', 'sw-acc-03'][i]);
     assert.ok(x > r.left && x < r.right && y > r.top && y < r.bottom, `${t} inside its switch`);
 });
+
+// Too many leaves for two rows: one column, one lane each, nested so none
+// cross, the port under its cable just before the leaf.
+const many = Array.from({ length: 9 }, (_, k) => `ap-1${k}`);
+const cnet = base.concat(many.map(a => b('sw-acc-02', a)));
+const clad = plan(cnet);
+clad.W = 300;
+const cids = [clad.A, clad.B, ...clad.upstream, ...clad.members.map(x => x.id), ...many];
+const cbox = Object.fromEntries(cids.map(id => [id, id.startsWith('core') ? { w: 300, h: 80 } : id.startsWith('rtr') ? { w: 200, h: 60 }
+    : id.startsWith('ap') ? { w: 90, h: 30 } : { w: 300, h: 46 }]));
+const cpos = geo.ladderPositions(clad, cbox, 0);
+const crect = id => ({ left: cpos[id].x - cbox[id].w / 2, right: cpos[id].x + cbox[id].w / 2,
+                       top: cpos[id].y - cbox[id].h / 2, bottom: cpos[id].y + cbox[id].h / 2 });
+assert.equal(clad.leafMode['sw-acc-02'], 'col');
+assert.ok(many.every(a => crect(a).left === crect(many[0]).left), 'one column');
+calls.length = 0;
+geo.drawLadderCables(ctx, clad, cnet, crect, () => ({ color: '#333', lw: 1.4, dash: null }), 'all');
+many.forEach(a => {
+    const r = crect(a);
+    assert.ok(calls.some(c => c[0] === 'fillText' && c[1] === 'Te1/1/1' && c[2] === r.left - 4 && c[3] === (r.top + r.bottom) / 2 + 2), `port before ${a}`);
+});
+// Lanes: the top leaf's nearest; all left of the column and right of the child trunk.
+const lanes = many.map((a, k) => crect(a).left - 44 - 12 - k * 8);
+assert.ok(lanes.every((x, k) => !k || x < lanes[k - 1]));
+assert.ok(lanes[lanes.length - 1] > crect('sw-acc-02').left + 16);
 
 console.log('schema ladder: ok');
