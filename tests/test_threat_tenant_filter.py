@@ -87,3 +87,23 @@ class IlSelettoreGlobaleRicaricaLaVistaAperta(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LaTendinaNonRestaVuotaDopoUnReload(unittest.TestCase):
+    """Reload su #tab-security con un tenant globale scelto: la tendina era
+    vuota. switchTab saltava loadThreatIntel durante il caricamento, e
+    applyGlobalTenant assegnava un tenant che fra le opzioni non c'era."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.js = _read("static", "js", "core.js")
+        start = cls.js.index("function applyGlobalTenant")
+        cls.apply = cls.js[start:cls.js.index("globalTenantChanged", start)]
+
+    def test_threat_intel_si_carica_anche_durante_il_caricamento(self):
+        self.assertNotIn("tabId === 'tab-security' && !appLoading", self.js)
+
+    def test_si_semina_solo_un_valore_presente_fra_le_opzioni(self):
+        self.assertIn("function canSeed", self.js)
+        self.assertNotIn("val !== 'all'", self.apply)
+        self.assertNotIn("val === 'all'", self.apply)

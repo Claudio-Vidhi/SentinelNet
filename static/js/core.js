@@ -1997,7 +1997,9 @@ async function switchTab(tabId, clickedBtn, opts = {}) {
     } else if (tabId === 'tab-map') loadTopology();
     else if (tabId === 'tab-map-interactive') loadInteractiveMap();
     else if (tabId === 'tab-categories') loadCategoriesData();
-    else if (tabId === 'tab-security' && !appLoading) {
+    // No appLoading guard: a reload on #tab-security reaches this only through
+    // the address restore, and the post-login fallback skips that case.
+    else if (tabId === 'tab-security') {
         loadThreatIntel();
     }
     else if (tabId === 'tab-endpoint') locSwitchView(_locView);
@@ -2457,6 +2459,14 @@ function tenantSelectSeed(cur, groups, fallback) {
 }
 window.tenantSelectSeed = tenantSelectSeed;
 
+// A select whose options are not built yet (its tab never opened) has no
+// option for the tenant: assigning it anyway blanks the control instead of
+// leaving "all". The tab seeds itself from the global tenant when it loads.
+function canSeed(sel, val) {
+    return sel instanceof HTMLSelectElement && val !== 'all'
+        && Array.from(sel.options).some(o => o.value === val);
+}
+
 // Propaga lo scope ai selettori che i pannelli leggono ancora.
 function applyGlobalTenant(val) {
     window.globalSelectedTenant = val;
@@ -2468,7 +2478,7 @@ function applyGlobalTenant(val) {
     // The overview was computed once for the whole fleet and never redrawn.
     if (document.getElementById('tab-home')?.classList.contains('active')) loadHome();
     const topSel = document.getElementById('topologyGroupSelect');
-    if (topSel instanceof HTMLSelectElement && val !== 'all') { topSel.value = val; }
+    if (canSeed(topSel, val)) { topSel.value = val; }
     // Sync remaining per-panel VIEW FILTERS: set value and fire change so the
     // panel's own handler reacts (re-fetches data, etc.).
     // La scheda HA non ha piu' una select propria: legge
@@ -2479,7 +2489,7 @@ function applyGlobalTenant(val) {
                        'configGroupSelect', 'interactiveGroupSelect',
                        'bulkGroupFilter', 'dhTenant']) {
         const sel = document.getElementById(sid);
-        if (sel instanceof HTMLSelectElement && val !== 'all') {
+        if (canSeed(sel, val)) {
             sel.value = val;
             sel.dispatchEvent(new Event('change', { bubbles: true }));
         }
@@ -2502,7 +2512,7 @@ function applyGlobalTenant(val) {
                                    ['cvePrioTenant', 'tiViewPriority'],
                                    ['cveReportTenant', 'tiViewReport']]) {
         const sel = document.getElementById(selId);
-        if (!(sel instanceof HTMLSelectElement) || val === 'all') continue;
+        if (!canSeed(sel, val)) continue;
         sel.value = val;
         const pane = document.getElementById(paneId);
         if (pane instanceof HTMLElement && pane.offsetParent !== null) {
@@ -2517,7 +2527,7 @@ function applyGlobalTenant(val) {
     // dispatch change on them — that fires the form's own side effects.
     for (const sid of ['aiAttachTenant', 'genCfgTenant', 'identTenant']) {
         const sel = document.getElementById(sid);
-        if (sel instanceof HTMLSelectElement && val !== 'all'
+        if (canSeed(sel, val)
             && sel.dataset.userSet !== '1') {
             sel.value = val;
         }
