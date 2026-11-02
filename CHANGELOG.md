@@ -10,6 +10,29 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Changed
+
+- **Vulnerability Matcher raggruppato per firmware**: una riga per vendor,
+  modello e versione invece di una per apparato; la freccia apre l'elenco degli
+  apparati su quel firmware e, dopo l'analisi, le CVE più gravi. In cima quattro
+  riquadri (apparati analizzati, firmware distinti, apparati con CVE critiche,
+  apparati esposti a CVE sfruttate KEV) e, al posto della tendina Severità,
+  pulsanti filtro con il conteggio: Tutti, Critical, High e superiori,
+  Sfruttate (KEV).
+- **Una query NVD per firmware**: le risposte NVD restano in cache 24 ore, così
+  apparati con la stessa versione non interrogano NVD una volta ciascuno.
+  "Riscansiona" e l'aggiornamento manuale dello snapshot chiedono sempre un
+  dato nuovo.
+- **"Analizza tutti" aggiorna anche l'archivio CVE**: la colonna "CVE
+  archiviate" non resta su "mai correlato" dopo l'analisi.
+
+### Fixed
+
+- **Tendina tenant vuota nella scheda Vulnerabilità**: ricaricando la pagina
+  sulla scheda con un tenant scelto in alto, la tendina restava vuota con la
+  sola voce "Tutti". Lo stesso controllo evita il problema in tutte le tendine
+  che seguono il tenant globale.
+
 ## [0.59.4] - 2026-10-28
 
 ### Fixed
