@@ -11,10 +11,21 @@ CVE", which is not a question a security tool may answer twice.
 """
 
 import os
+import time
+from urllib.parse import urlencode
+
+import requests
 
 from drivers.registry import model_matches
 
 BASE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+
+# Ten switches on the same firmware send the same query: the NVD answer
+# depends only on vendor + version, the model is applied afterwards in
+# normalize_item. One round trip per distinct query, not per device, under
+# a rate limit of 5 requests / 30 s without an API key.
+CACHE_TTL = 24 * 3600
+_cache: dict[str, tuple[float, dict]] = {}
 
 
 def headers() -> dict:
@@ -23,6 +34,23 @@ def headers() -> dict:
     if api_key:
         out["apiKey"] = api_key
     return out
+
+
+def get(params: dict, fresh: bool = False) -> "tuple[int, dict]":
+    """(HTTP status, JSON) of one NVD query. Only 200s are cached; fresh skips the cache."""
+    url = f"{BASE_URL}?{urlencode(params)}"
+    hit = _cache.get(url)
+    if hit and not fresh and time.time() - hit[0] < CACHE_TTL:
+        return 200, hit[1]
+    resp = requests.get(url, headers=headers(), timeout=20)
+    if resp.status_code != 200:
+        return resp.status_code, {}
+    data = resp.json()
+    # ponytail: wipe instead of LRU, distinct queries per fleet are few
+    if len(_cache) > 500:
+        _cache.clear()
+    _cache[url] = (time.time(), data)
+    return 200, data
 
 
 def _description(cve: dict) -> str:

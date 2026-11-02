@@ -125,6 +125,25 @@ class TestNvdQuery(unittest.TestCase):
         p = self._params(vendor="cisco", text="IOS Version 15.2(4)E10", size="3")
         self.assertGreaterEqual(int(p["resultsPerPage"][0]), 50)
 
+    def test_same_firmware_on_two_models_hits_nvd_once(self):
+        # The NVD answer depends on vendor + version only: a fleet on one
+        # firmware costs one request, and "Rescan" (fresh=1) still goes out.
+        calls = []
+
+        def fake_get(url, *a, **kw):
+            calls.append(url)
+            return _Resp()
+
+        q = {"vendor": "cisco", "size": "3"}
+        with mock.patch.object(backup.requests, "get", fake_get):
+            self.client.get("/api/search", params=dict(q, text="WS-C2960X-24PD-L 15.2(4)E7",
+                                                       model="WS-C2960X-24PD-L"))
+            self.client.get("/api/search", params=dict(q, text="WS-C2960X-48FPD-L 15.2(4)E7",
+                                                       model="WS-C2960X-48FPD-L"))
+            self.assertEqual(1, len(calls))
+            self.client.get("/api/search", params=dict(q, text="15.2(4)E7", fresh="1"))
+            self.assertEqual(2, len(calls))
+
 
 class TestCiscoOsFamily(unittest.TestCase):
     """Cisco spedisce cinque sistemi operativi sotto un solo nome vendor, e

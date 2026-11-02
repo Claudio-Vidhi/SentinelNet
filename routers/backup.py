@@ -20,7 +20,6 @@ from routers.deps import get_current_user, require_operator, assert_device_allow
 
 router = APIRouter(tags=["Backup"])
 
-NVD_BASE_URL = nvd.BASE_URL
 
 log = logging.getLogger("sentinelnet.nvd")
 
@@ -134,7 +133,7 @@ def download_backup(ip_or_filename: str, current_user = Depends(require_operator
 
 @router.get("/api/search", dependencies=[Depends(require_tab("tab-security"))])
 async def proxy_enisa_search(request: Request, current_user = Depends(get_current_user)):
-    from urllib.parse import parse_qs, urlencode
+    from urllib.parse import parse_qs
     import datetime
     raw = parse_qs(request.url.query, keep_blank_values=True)
 
@@ -283,7 +282,8 @@ async def proxy_enisa_search(request: Request, current_user = Depends(get_curren
             pass
     nvd_params["startIndex"] = str(start_index)
 
-    target_url = f"{NVD_BASE_URL}?{urlencode(nvd_params)}"
+    # "Riscansiona" asks for a new answer, not the cached one.
+    fresh = raw.get("fresh", [""])[0].lower() in ("1", "true")
     # The query IS the diagnosis when the matcher answers "nothing found":
     # without it there is no telling an unaffected device from a query that
     # could never have matched.
@@ -291,21 +291,15 @@ async def proxy_enisa_search(request: Request, current_user = Depends(get_curren
              nvd_params)
 
     try:
-        headers = {"User-Agent": "SentinelNet-NVD-Client/2.0"}
-        nvd_api_key = os.environ.get("NVD_API_KEY", "").strip()
-        if nvd_api_key:
-            headers["apiKey"] = nvd_api_key
-
         from fastapi.concurrency import run_in_threadpool
-        resp = await run_in_threadpool(requests.get, target_url, headers=headers, timeout=20)
+        status_code, data = await run_in_threadpool(nvd.get, nvd_params, fresh)
 
-        if resp.status_code != 200:
+        if status_code != 200:
             return JSONResponse(
-                status_code=resp.status_code,
-                content={"detail": f"NVD API HTTP {resp.status_code}", "items": [], "total": 0}
+                status_code=status_code,
+                content={"detail": f"NVD API HTTP {status_code}", "items": [], "total": 0}
             )
 
-        data = resp.json()
         total = data.get("totalResults", 0)
         vulnerabilities = data.get("vulnerabilities", [])
 
@@ -317,11 +311,9 @@ async def proxy_enisa_search(request: Request, current_user = Depends(get_curren
         version_unknown = False
         if not total and cpe_window and ":" in nvd_params.get("virtualMatchString", ""):
             unversioned = nvd_params["virtualMatchString"].rsplit(":", 1)[0]
-            probe = await run_in_threadpool(
-                requests.get,
-                f"{NVD_BASE_URL}?{urlencode({'virtualMatchString': unversioned, 'resultsPerPage': '1'})}",
-                headers=headers, timeout=20)
-            if probe.status_code == 200 and probe.json().get("totalResults", 0) > 0:
+            probe_status, probe = await run_in_threadpool(
+                nvd.get, {'virtualMatchString': unversioned, 'resultsPerPage': '1'}, fresh)
+            if probe_status == 200 and probe.get("totalResults", 0) > 0:
                 version_unknown = True
                 log.warning("NVD non conosce la versione richiesta: %s "
                             "(il prodotto esiste, la versione no)",
@@ -335,17 +327,14 @@ async def proxy_enisa_search(request: Request, current_user = Depends(get_curren
             fallback_params.pop("pubEndDate", None)
             fallback_params["resultsPerPage"] = "1"
             fallback_params["startIndex"] = "0"
-            r0_url = f"{NVD_BASE_URL}?{urlencode(fallback_params)}"
-            r0_resp = await run_in_threadpool(requests.get, r0_url, headers=headers, timeout=20)
-            if r0_resp.status_code == 200:
-                tot_count = r0_resp.json().get("totalResults", 0)
+            r0_status, r0_data = await run_in_threadpool(nvd.get, dict(fallback_params), fresh)
+            if r0_status == 200:
+                tot_count = r0_data.get("totalResults", 0)
                 if tot_count > 0:
                     fallback_params["resultsPerPage"] = str(results_per_page)
                     fallback_params["startIndex"] = str(max(0, tot_count - results_per_page))
-                    fb_url = f"{NVD_BASE_URL}?{urlencode(fallback_params)}"
-                    fb_resp = await run_in_threadpool(requests.get, fb_url, headers=headers, timeout=20)
-                    if fb_resp.status_code == 200:
-                        fb_data = fb_resp.json()
+                    fb_status, fb_data = await run_in_threadpool(nvd.get, fallback_params, fresh)
+                    if fb_status == 200:
                         total = fb_data.get("totalResults", 0)
                         vulnerabilities = fb_data.get("vulnerabilities", [])
 

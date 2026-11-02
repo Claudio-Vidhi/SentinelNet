@@ -1436,22 +1436,25 @@
             <label for="threatGroupSelect" style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="lblThreatGroup">Sede da analizzare:</label><select id="threatGroupSelect">
               <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
             </select>
-            <label for="threatSeveritySelect" style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="lblThreatSeverity">Severità:</label><select id="threatSeveritySelect">
-              <option value="all" data-i18n="optSevAll">Tutte le severità</option>
-              <option value="CRITICAL" data-i18n="optSevCritical">Solo Critica (CRITICAL)</option>
-              <option value="HIGH" data-i18n="optSevHigh">Alta e superiore (HIGH+)</option>
-              <option value="MEDIUM" data-i18n="optSevMedium">Media e superiore (MEDIUM+)</option>
-              <option value="LOW" data-i18n="optSevLow">Tutte (inclusa LOW)</option>
-            </select>
+            <span style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="lblThreatSeverity">Severità:</span>
+            <div id="threatSevChips" class="ti-chips" role="group" aria-label="Severità" data-i18n-aria-label="lblThreatSeverity">
+              <button type="button" class="ti-chip" data-sev="all" aria-pressed="true"><span data-i18n="tiChipAll">Tutti</span> <span class="ti-chip-n" data-count="all"></span></button>
+              <button type="button" class="ti-chip" data-sev="CRITICAL" aria-pressed="false"><span data-i18n="tiChipCritical">Critical</span> <span class="ti-chip-n" data-count="CRITICAL"></span></button>
+              <button type="button" class="ti-chip" data-sev="HIGH" aria-pressed="false"><span data-i18n="tiChipHigh">High e superiori</span> <span class="ti-chip-n" data-count="HIGH"></span></button>
+              <button type="button" class="ti-chip" data-sev="KEV" aria-pressed="false"><span data-i18n="tiChipKev">Sfruttate (KEV)</span> <span class="ti-chip-n" data-count="KEV"></span></button>
+            </div>
             <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:700; color:var(--text-muted); cursor:pointer;">
               <input type="checkbox" id="threatIncludeDiscovered" style="accent-color:var(--primary);">
               <span data-i18n="lblThreatDiscovered">Includi vicini scoperti</span>
             </label>
-            <button type="button" id="btnThreatAnalyzeAll" class="btn btn-primary" style="width:auto; margin:0 0 0 auto;">
+            <span id="threatQueryHint" class="ti-muted" style="margin-left:auto;"></span>
+            <button type="button" id="btnThreatAnalyzeAll" class="btn btn-primary" style="width:auto; margin:0;">
               <i class="fa-solid fa-magnifying-glass-chart"></i> <span data-i18n="tiBtnAnalyzeAll">Analizza tutti</span>
             </button>
           </div>
         </div>
+
+        <div id="threatKpis" class="ti-kpis" aria-live="polite"></div>
 
         <div class="panel">
           <div id="securityTriageContainer" style="display: flex; flex-direction: column; gap: 15px;">

@@ -17,9 +17,10 @@ import json
 import os
 import unittest
 from unittest import mock
+from urllib.parse import parse_qs, urlparse
 
 from drivers import registry
-from services import cve_intel
+from services import cve_intel, nvd
 
 STAMP_OLD = "20200101T000000.000000Z"
 
@@ -222,6 +223,8 @@ class LEstrattoreDeiServizi(unittest.TestCase):
 
 
 class _Resp:
+    status_code = 200
+
     def __init__(self, payload):
         self._payload = payload
 
@@ -247,12 +250,12 @@ class LoSnapshotPersistito(unittest.TestCase):
             "published": "2024-01-10T00:00:00.000",
         }}]}
 
-        def fake_get(url, params=None, **kw):
-            if (params or {}).get("resultsPerPage") == "1":
+        def fake_get(url, **kw):
+            if parse_qs(urlparse(url).query).get("resultsPerPage") == ["1"]:
                 return _Resp({"totalResults": total})
             return _Resp(payload_page)
 
-        with mock.patch.object(cve_intel.requests, "get", fake_get):
+        with mock.patch.object(nvd.requests, "get", fake_get):
             return cve_intel.refresh(self.DEVICE,
                                      "Cisco IOS Software, Version 15.2(7)E",
                                      STAMP_OLD)
@@ -328,6 +331,18 @@ class IlResocontoPerTenant(unittest.TestCase):
         self.assertEqual(1, row["with_version"])
         self.assertEqual(1, row["exact_cpe"])
         self.assertEqual(1, row["counts"]["critical"])
+
+    def test_i_cve_sfruttati_sono_contati_per_apparato(self):
+        # The Matcher's KEV chip and tile read this count.
+        devices = [{"IP": "192.0.2.10", "Group": "BETA-CVE-TEST", "Vendor": "cisco"}]
+        kev = dict(_cve("CVE-2024-00001", 9.8, "CRITICAL"), exploited=True)
+        snap = _snapshot("exact", [kev, _cve("CVE-2024-00002")])
+        with mock.patch.object(cve_intel, "load", lambda d: snap), \
+             mock.patch.object(cve_intel, "device_services", lambda d: {}), \
+             mock.patch("services.inventory_manager.get_detected_versions",
+                        lambda: {"192.0.2.10": {"version": "15.2(7)E"}}):
+            detail = cve_intel.summary(devices)[0]["devices_detail"][0]
+        self.assertEqual(1, detail["exploited"])
 
     def test_il_perimetro_viaggia_anche_nell_aggregato(self):
         devices = [{"IP": "192.0.2.10", "Group": "BETA-CVE-TEST", "Vendor": "cisco"}]
@@ -547,12 +562,12 @@ class LEtaRipiegaSulBackup(unittest.TestCase):
     DEVICE = {"IP": "192.0.2.10", "Group": "ACME-CVE-FALLBACK", "Vendor": "cisco"}
 
     def _refresh(self):
-        def fake_get(url, params=None, **kw):
-            if (params or {}).get("resultsPerPage") == "1":
+        def fake_get(url, **kw):
+            if parse_qs(urlparse(url).query).get("resultsPerPage") == ["1"]:
                 return _Resp({"totalResults": 0})
             return _Resp({"vulnerabilities": []})
 
-        with mock.patch.object(cve_intel.requests, "get", fake_get):
+        with mock.patch.object(nvd.requests, "get", fake_get):
             return cve_intel.refresh(self.DEVICE)
 
     def test_senza_seen_at_si_usa_la_data_dell_ultimo_backup(self):

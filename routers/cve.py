@@ -98,12 +98,13 @@ def cve_device(ip: str, current_user=Depends(get_current_user)):
 
 
 @router.post("/api/cve/{ip}/refresh", dependencies=[Depends(require_tab("tab-security"))])
-def cve_refresh(ip: str, current_user=Depends(require_operator)):
+def cve_refresh(ip: str, fresh: bool = True, current_user=Depends(require_operator)):
+    """fresh=false lets "Analyze all" reuse the NVD answer of an identical firmware."""
     device = _device_or_404(current_user, ip)
     log_audit(f"Snapshot CVE di {ip} riscaricato dall'utente "
               f"'{current_user.get('sub')}'.")
     try:
-        cve_intel.refresh(device)
+        cve_intel.refresh(device, fresh=fresh)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Errore connessione NVD: {e}")
     return _device_view(device)

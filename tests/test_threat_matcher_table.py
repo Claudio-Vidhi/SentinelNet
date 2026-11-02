@@ -28,15 +28,31 @@ class TheMatcherIsATable(unittest.TestCase):
 
     def test_rows_are_ranked_by_stored_counts(self):
         self.assertIn("/api/cve/summary?tenant=", self.js)
-        self.assertIn("onlineDevices.sort(", self.js)
+        self.assertIn("tiGroups.sort(", self.js)
+        self.assertIn("function tiRank", self.js)
 
     def test_live_result_opens_its_detail_row(self):
         # runEuvdQuery writes into results-<id>: that element must live in the
-        # detail row runManagedVulnCheck un-hides.
-        self.assertIn('id="ti-detail-${safeIpId}"', self.js)
-        self.assertIn('<div id="results-${safeIpId}"', self.js)
+        # detail row runManagedVulnCheck un-hides. The firmware row is keyed by
+        # its first device's IP, which is the data-ip its button sends.
+        self.assertIn('id="ti-detail-${sid}"', self.js)
+        self.assertIn('<div id="results-${sid}"', self.js)
+        self.assertIn("g.id = g.rep.IP.replace(/\./g, '-')", self.js)
+        self.assertIn('data-ip="${escapeHtml(g.rep.IP)}"', self.js)
         fn = self.js[self.js.index("async function runManagedVulnCheck"):]
         self.assertIn("`ti-detail-${safeIpId}`", fn[:400])
+
+
+    def test_one_row_per_firmware(self):
+        # Same vendor + model + version share one NVD answer: one row, not one per device.
+        self.assertIn("[(d.Vendor || '').toLowerCase(), model, version].join('|')", self.js)
+        self.assertIn('<tbody class="ti-group"', self.js)
+
+    def test_analyze_all_also_refreshes_the_archive_from_cache(self):
+        start = self.js.index("async function analyzeAllThreats")
+        body = self.js[start:self.js.index("document.getElementById('securityTriageContainer')", start)]
+        self.assertIn("/refresh?fresh=false", body)
+        self.assertIn("tiRenderStored(", body)
 
 
 if __name__ == "__main__":

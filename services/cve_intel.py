@@ -18,8 +18,6 @@ import logging
 import os
 from datetime import datetime, timezone
 
-import requests
-
 from core import data_config
 from services import nvd
 from services.config_drift import history
@@ -220,7 +218,7 @@ def _service_signal(names: list, services: dict) -> str:
 
 # --- Scaricamento (F1) ------------------------------------------------------
 
-def _fetch_cves(query: dict):
+def _fetch_cves(query: dict, fresh: bool = False):
     """I CVE piu' RECENTI per questa identita', e quanti ne esistono in tutto.
 
     NVD non ordina: rende le prime N per id CVE, cioe' le piu' vecchie. Si
@@ -235,20 +233,18 @@ def _fetch_cves(query: dict):
     key = "virtualMatchString" if query["kind"] == "cpe" else "keywordSearch"
     base = {key: query["value"]}
 
-    probe = requests.get(nvd.BASE_URL, params=dict(base, resultsPerPage="1"),
-                         headers=nvd.headers(), timeout=20)
-    probe.raise_for_status()
-    total = probe.json().get("totalResults", 0)
+    status, probe = nvd.get(dict(base, resultsPerPage="1"), fresh)
+    if status != 200:
+        raise RuntimeError(f"NVD HTTP {status}")
+    total = probe.get("totalResults", 0)
     if not total:
         return [], 0
 
-    page = requests.get(
-        nvd.BASE_URL,
-        params=dict(base, resultsPerPage=str(MAX_CVES),
-                    startIndex=str(max(0, total - MAX_CVES))),
-        headers=nvd.headers(), timeout=20)
-    page.raise_for_status()
-    return page.json().get("vulnerabilities", []), total
+    status, page = nvd.get(dict(base, resultsPerPage=str(MAX_CVES),
+                                startIndex=str(max(0, total - MAX_CVES))), fresh)
+    if status != 200:
+        raise RuntimeError(f"NVD HTTP {status}")
+    return page.get("vulnerabilities", []), total
 
 
 def is_truncated(snapshot: dict) -> bool:
@@ -267,7 +263,8 @@ def is_truncated(snapshot: dict) -> bool:
     return total > len(cves)
 
 
-def refresh(device: dict, version_text: str = "", version_seen_at: str = "") -> dict:
+def refresh(device: dict, version_text: str = "", version_seen_at: str = "",
+            fresh: bool = False) -> dict:
     """Riscarica lo snapshot dell'apparato e lo scrive su disco."""
     from services import inventory_manager
 
@@ -288,7 +285,7 @@ def refresh(device: dict, version_text: str = "", version_seen_at: str = "") -> 
     query = query_for(device, version_text)
     model = device.get("Model") or ""
     cves = []
-    vulns, total_available = _fetch_cves(query)
+    vulns, total_available = _fetch_cves(query, fresh)
     for elem in vulns:
         item = nvd.normalize_item(elem.get("cve", {}), model=model)
         cves.append({
@@ -483,6 +480,8 @@ def summary(devices: list) -> list:
             "truncated": bool(snapshot) and is_truncated(snapshot),
             "total_available": snapshot.get("total_available"),
             "counts": {"critical": 0, "high": 0, "medium": 0, "low": 0},
+            # CISA KEV: already exploited in the wild, ranked above any score.
+            "exploited": 0,
             "version_seen_at": version_seen_at_of(device, snapshot),
             # Il perimetro e' per APPARATO prima che per tenant: lo stato dei
             # servizi si sa per uno e non per l'altro, e il rapporto stampa una
@@ -511,6 +510,8 @@ def summary(devices: list) -> list:
             if sev in row["counts"]:
                 row["counts"][sev] += 1
                 detail["counts"][sev] += 1
+            if cve.get("exploited"):
+                detail["exploited"] += 1
 
     out = []
     for row in tenants.values():

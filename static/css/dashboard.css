@@ -4071,7 +4071,32 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
 .drift-profile-rules { font-size: 11px; color: var(--text-muted); text-transform: none; letter-spacing: 0; }
 
 /* --- Threat Intel matcher: one ranked table instead of a card per device --- */
-.ti-matcher-table .ti-device-row { cursor: pointer; }
+/* Matcher: one row per firmware, KPI tiles, severity chips */
+.ti-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.ti-kpis:empty { display: none; }
+.ti-kpi { background: var(--surface); border: 1px solid var(--border); padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
+.ti-kpi-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+.ti-kpi-value { font-family: var(--font-display); font-size: 32px; font-weight: 700; line-height: 1; color: var(--text); }
+.ti-kpi-value.ti-kpi-danger { color: var(--lamp-fault-ink); }
+.ti-kpi-value.ti-kpi-warn { color: var(--lamp-warn-ink); }
+.ti-chips { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.ti-chip { min-height: 36px; padding: 6px 12px; border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text); font-size: 13px; cursor: pointer; }
+.ti-chip[aria-pressed="true"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 18%, var(--surface-2)); }
+.ti-chip:focus-visible, .ti-toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ti-chip-n { font-family: var(--font-code); color: var(--text-muted); margin-left: 4px; }
+.ti-toggle { width: 32px; height: 32px; border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text); cursor: pointer; }
+.ti-toggle i { transition: transform var(--transition); }
+.ti-toggle[aria-expanded="true"] i { transform: rotate(90deg); }
+.ti-fw { font-family: var(--font-code); font-weight: 600; }
+.ti-dev-count { font-family: var(--font-display); font-size: 18px; font-weight: 700; }
+.ti-kev { display: inline-block; padding: 1px 6px; font-size: 11px; font-weight: 700; color: var(--lamp-warn-ink); background: var(--lamp-warn-wash); border: 1px solid var(--lamp-warn-ink); }
+.ti-detail { display: flex; flex-wrap: wrap; gap: 20px; }
+.ti-detail-devs { flex: 1 1 260px; display: flex; flex-direction: column; gap: 8px; }
+.ti-detail-res { flex: 2 1 460px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.ti-detail-res:empty { display: none; }
+.ti-detail-h { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+.ti-dev-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.ti-dev-chip { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); }
 .ti-device-name { font-weight: 600; }
 .ti-device-ip { font-family: var(--font-code); font-size: 11px; color: var(--text-muted); }
 .ti-counts { white-space: nowrap; }

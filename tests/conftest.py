@@ -98,3 +98,14 @@ def seed_inventory(hosts=(), decommissioned=(), orgs=(), locations=None):
                                     inventory_store.read_hosts(conn, "decommissioned_hosts"), dec)
     inventory_manager._rows_cache.clear()
     inventory_manager.invalidate_device_ip_cache()
+
+
+import pytest  # noqa: E402
+
+from services import nvd  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _empty_nvd_cache():
+    """The NVD answer cache is module state: a test must not see another's response."""
+    nvd._cache.clear()

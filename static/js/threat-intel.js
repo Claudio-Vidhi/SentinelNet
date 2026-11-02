@@ -225,20 +225,113 @@
         if (statusEl) statusEl.textContent = vwState.filtered.length + ' ' + tr('vwStatusRows');
     }
 
-    function applyThreatSeverityFilter() {
-        const selSev = document.getElementById('threatSeveritySelect')?.value || 'all';
-        const cards = document.querySelectorAll('#securityTriageContainer div[data-sev]');
-        const sevRanks = { 'CRITICAL': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1 };
-        const targetRank = selSev !== 'all' ? (sevRanks[selSev] || 0) : 0;
+    // Firmware groups of the last Matcher render (vendor + model + version).
+    let tiGroups = [];
+    // Active severity chip: all | CRITICAL | HIGH | KEV.
+    let tiSev = 'all';
+    const TI_SEV_RANK = { 'CRITICAL': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1 };
 
-        cards.forEach(card => {
-            const cardSev = (card.getAttribute('data-sev') || '').toUpperCase();
-            const cardRank = sevRanks[cardSev] || 0;
-            if (targetRank === 0 || cardRank >= targetRank) {
-                card.style.display = '';
-            } else {
-                card.style.display = 'none';
-            }
+    function tiStoredByIp(summary) {
+        const out = {};
+        (summary.tenants || []).forEach(t =>
+            (t.devices_detail || []).forEach(dd => { out[dd.ip] = dd; }));
+        return out;
+    }
+
+    // Stored counts of a device, or null when it was never correlated.
+    function tiCounts(snap) {
+        return (snap && snap.confidence !== 'none') ? snap : null;
+    }
+
+    function tiRank(snap) {
+        const s = tiCounts(snap);
+        if (!s) return -1;
+        const c = s.counts || {};
+        return (s.exploited || 0) * 1e9 + (c.critical || 0) * 1e6 + (c.high || 0) * 1e3 + (c.medium || 0);
+    }
+
+    function tiSnapMatches(snap, sev) {
+        const s = tiCounts(snap);
+        if (sev === 'all') return true;
+        if (!s) return false;
+        const c = s.counts || {};
+        if (sev === 'KEV') return (s.exploited || 0) > 0;
+        if (sev === 'CRITICAL') return (c.critical || 0) > 0;
+        return (c.critical || 0) + (c.high || 0) > 0;
+    }
+
+    // Archive column, KPI tiles and chip counts, all from the stored snapshots.
+    function tiRenderStored(stored) {
+        const sevCols = [
+            ['CRITICAL', 'critical', tr('cveThCritical')],
+            ['HIGH', 'high', tr('cveThHigh')],
+            ['MEDIUM', 'medium', tr('cveThMedium')],
+        ];
+        const devices = tiGroups.flatMap(g => g.devices);
+        tiGroups.forEach(g => {
+            g.snap = stored[g.rep.IP];
+            const cell = document.getElementById(`ti-arch-${g.id}`);
+            if (!cell) return;
+            const s = tiCounts(g.snap);
+            cell.innerHTML = s
+                ? sevCols.map(([sev, key, label]) => {
+                    const n = (s.counts || {})[key] || 0;
+                    return `<span class="severity-pill severity-${sev}${n ? '' : ' ti-zero'}" title="${escapeHtml(label)}">${n}</span>`;
+                }).join(' ') + (s.exploited ? ` <span class="ti-kev">${s.exploited} KEV</span>` : '')
+                : `<span class="ti-muted">${escapeHtml(tr('cveConf_none'))}</span>`;
+        });
+        const count = sev => devices.filter(d => tiSnapMatches(stored[d.IP], sev)).length;
+        document.querySelectorAll('#threatSevChips [data-count]').forEach(el => {
+            el.textContent = String(count(el.getAttribute('data-count') || 'all'));
+        });
+        tiUpdateKpis({
+            devices: devices.length, firmware: tiGroups.length,
+            critical: count('CRITICAL'), kev: count('KEV'),
+        });
+        applyThreatSeverityFilter();
+    }
+
+    function tiUpdateKpis(k) {
+        const box = document.getElementById('threatKpis');
+        const hint = document.getElementById('threatQueryHint');
+        if (hint) hint.textContent = k.devices ? tr('tiQueryHint', { fw: k.firmware, n: k.devices }) : '';
+        if (!box) return;
+        const tile = (label, value, cls) => `
+            <div class="ti-kpi"><span class="ti-kpi-label">${escapeHtml(label)}</span>
+            <span class="ti-kpi-value${cls ? ' ' + cls : ''}">${value}</span></div>`;
+        box.innerHTML = k.devices ? [
+            tile(tr('tiKpiDevices'), k.devices),
+            tile(tr('tiKpiFirmware'), k.firmware),
+            tile(tr('tiKpiCritical'), k.critical, k.critical ? 'ti-kpi-danger' : ''),
+            tile(tr('tiKpiKev'), k.kev, k.kev ? 'ti-kpi-warn' : ''),
+        ].join('') : '';
+    }
+
+    function tiToggleDetail(id, open) {
+        const detail = document.getElementById(id);
+        if (!detail) return;
+        detail.hidden = open === undefined ? !detail.hidden : !open;
+        document.querySelector(`#securityTriageContainer [data-target="${id}"]`)
+            ?.setAttribute('aria-expanded', String(!detail.hidden));
+    }
+
+    function applyThreatSeverityFilter() {
+        const container = document.getElementById('securityTriageContainer');
+        if (!container) return;
+        container.querySelectorAll('div[data-sev]').forEach(card => {
+            if (!(card instanceof HTMLElement)) return;
+            const show = tiSev === 'all'
+                || (tiSev === 'KEV' ? card.dataset.exploited === '1'
+                    : (TI_SEV_RANK[(card.dataset.sev || '').toUpperCase()] || 0) >= TI_SEV_RANK[tiSev]);
+            card.style.display = show ? '' : 'none';
+        });
+        // A firmware stays visible when its archive matches or a live result does.
+        container.querySelectorAll('tbody.ti-group').forEach(tb => {
+            if (!(tb instanceof HTMLElement)) return;
+            const g = tiGroups.find(x => x.id === tb.dataset.group);
+            const liveHit = [...tb.querySelectorAll('div[data-sev]')]
+                .some(c => c instanceof HTMLElement && c.style.display !== 'none');
+            tb.hidden = tiSev !== 'all' && !(g && tiSnapMatches(g.snap, tiSev)) && !liveHit;
         });
     }
 
@@ -350,17 +443,16 @@
         const queryingText = tr('queryingEnisa').replace(/<[^>]*>/g, '');
         container.innerHTML = `<div style="text-align:center; padding: 40px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><br><br>${queryingText}</div>`;
 
-        const res = await apiFetch('/api/local-devices');
+        // Independent reads: one round trip instead of two in a row.
+        const [res, sumRes] = await Promise.all([
+            apiFetch('/api/local-devices'),
+            apiFetch('/api/cve/summary?tenant=' + encodeURIComponent(selGroup)),
+        ]);
         if (!res) return;
         const data = await res.json();
-        // Stored correlation counts: the table ranks devices by what is already
+        // Stored correlation counts: the table ranks firmware by what is already
         // known, so the operator sees where the risk is before any live query.
-        const stored = {};
-        const sumRes = await apiFetch('/api/cve/summary?tenant=' + encodeURIComponent(selGroup));
-        if (sumRes && sumRes.ok) {
-            ((await sumRes.json()).tenants || []).forEach(t =>
-                (t.devices_detail || []).forEach(dd => { stored[dd.ip] = dd; }));
-        }
+        const stored = sumRes && sumRes.ok ? tiStoredByIp(await sumRes.json()) : {};
 
         let onlineDevices = data.devices.filter(d => {
             const scan = data.detected_versions[d.IP];
@@ -370,74 +462,76 @@
 
         container.innerHTML = "";
 
-        // ── SEZIONE 1: Dispositivi inventariati online ──────────────────────────
+        // ── SEZIONE 1: Dispositivi inventariati online, uno per firmware ────────
         if (onlineDevices.length === 0) {
+            tiGroups = [];
+            tiUpdateKpis({});
             container.innerHTML += `<div style="padding: 20px; border: 1px solid var(--border); border-radius:0; text-align:center; color: var(--text-muted); margin-bottom: 20px;">
                 ${tr('noDevicesText')}
             </div>`;
         } else {
-            // One table row per device, ranked by the stored critical/high
-            // counts. The live NVD query still runs only on request (row button
-            // or "Analyze all"), and its result opens in a detail row under the
-            // device instead of growing a card.
-            const storedRank = ip => {
-                const c = (stored[ip] || {}).counts || {};
-                return [c.critical || 0, c.high || 0, c.medium || 0];
-            };
-            onlineDevices.sort((a, b) => {
-                const ra = storedRank(a.IP), rb = storedRank(b.IP);
-                return (rb[0] - ra[0]) || (rb[1] - ra[1]) || (rb[2] - ra[2]);
-            });
-            const sevCols = [
-                ['CRITICAL', 'critical', tr('cveThCritical')],
-                ['HIGH', 'high', tr('cveThHigh')],
-                ['MEDIUM', 'medium', tr('cveThMedium')],
-            ];
-            const rows = onlineDevices.map(d => {
+            // One row per vendor + model + version: the NVD answer is the same
+            // for all of them, so the operator reads it (and pays for it) once.
+            const byKey = new Map();
+            onlineDevices.forEach(d => {
                 const scan = data.detected_versions[d.IP] || {};
-                const safeIpId = d.IP.replace(/\./g, '-');
                 const model = d.Model || scan.model || 'Non Rilevato';
-                const snap = stored[d.IP];
-                const counts = (snap && snap.confidence !== 'none') ? snap.counts : null;
-                const countCell = counts
-                    ? sevCols.map(([sev, key, label]) => {
-                        const n = counts[key] || 0;
-                        return `<span class="severity-pill severity-${sev}${n ? '' : ' ti-zero'}" title="${escapeHtml(label)}">${n}</span>`;
-                    }).join(' ')
-                    : `<span class="ti-muted">${escapeHtml(tr('cveConf_none'))}</span>`;
+                const version = scan.version || '';
+                const key = [(d.Vendor || '').toLowerCase(), model, version].join('|');
+                if (!byKey.has(key)) byKey.set(key, { vendor: d.Vendor || '', model, version, devices: [] });
+                byKey.get(key).devices.push(d);
+            });
+            tiGroups = [...byKey.values()];
+            tiGroups.forEach(g => {
+                g.devices.sort((a, b) => tiRank(stored[b.IP]) - tiRank(stored[a.IP]));
+                g.rep = g.devices[0];
+                g.id = g.rep.IP.replace(/\./g, '-');
+            });
+            tiGroups.sort((a, b) => tiRank(stored[b.rep.IP]) - tiRank(stored[a.rep.IP]));
+
+            const rows = tiGroups.map(g => {
+                const sid = g.id;
+                const model = g.model !== 'Non Rilevato' ? g.model : '—';
+                const devList = g.devices.map(d => `
+                    <li class="ti-dev-chip"><span class="ti-device-name">${escapeHtml(d.Hostname || d.IP)}</span><span class="ti-device-ip">${escapeHtml(d.IP)}</span></li>`).join('');
                 return `
-                <tr class="ti-device-row" data-action="ti-toggle-row" data-target="ti-detail-${safeIpId}">
-                    <td><div class="ti-device-name">${escapeHtml(d.Hostname || d.IP)}</div><div class="ti-device-ip">${escapeHtml(d.IP)}</div></td>
-                    <td><span class="badge">${escapeHtml((d.Vendor || '').toUpperCase())}</span></td>
-                    <td><code>${escapeHtml(model !== 'Non Rilevato' ? model : '—')}</code></td>
-                    <td><code>${escapeHtml(scan.version || '—')}</code></td>
-                    <td class="ti-counts">${countCell}</td>
-                    <td><div id="status-${safeIpId}" class="ti-status"></div></td>
+                <tbody class="ti-group" data-group="${escapeHtml(sid)}">
+                <tr class="ti-device-row">
+                    <td><button type="button" class="ti-toggle" data-action="ti-toggle-row" data-target="ti-detail-${sid}" aria-expanded="false"
+                        aria-label="${escapeHtml(tr('tiToggleGroup', { fw: g.version }))}"><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button></td>
+                    <td><div class="ti-fw">${escapeHtml(g.version || '—')}</div><div class="ti-device-ip">${escapeHtml((g.vendor || '').toUpperCase())} · ${escapeHtml(model)}</div></td>
+                    <td class="ti-dev-count">${g.devices.length}</td>
+                    <td class="ti-counts" id="ti-arch-${sid}"></td>
+                    <td><div id="status-${sid}" class="ti-status"></div></td>
                     <td style="text-align:right;">
-                        <button type="button" id="btn-mgd-${safeIpId}" class="btn btn-secondary btn-small" style="width:auto; margin:0; white-space:nowrap;"
+                        <button type="button" id="btn-mgd-${sid}" class="btn btn-secondary btn-small" style="width:auto; margin:0; white-space:nowrap;"
                             data-action="run-managed-vuln-check"
-                            data-ip="${escapeHtml(d.IP)}" data-vendor="${escapeHtml(d.Vendor)}" data-version="${escapeHtml(scan.version || '')}" data-model="${escapeHtml(model)}">
+                            data-ip="${escapeHtml(g.rep.IP)}" data-vendor="${escapeHtml(g.vendor)}" data-version="${escapeHtml(g.version)}" data-model="${escapeHtml(g.model)}">
                             ${tr('btnAnalyzeVuln')}
                         </button>
                     </td>
                 </tr>
-                <tr id="ti-detail-${safeIpId}" class="ti-detail-row" hidden>
-                    <td colspan="7"><div id="results-${safeIpId}" style="display:flex; flex-direction:column; gap:10px;"></div></td>
-                </tr>`;
+                <tr id="ti-detail-${sid}" class="ti-detail-row" hidden>
+                    <td colspan="6"><div class="ti-detail">
+                        <div class="ti-detail-devs"><div class="ti-detail-h">${escapeHtml(tr('tiGroupDevices'))}</div><ul class="ti-dev-list">${devList}</ul></div>
+                        <div id="results-${sid}" class="ti-detail-res"></div>
+                    </div></td>
+                </tr>
+                </tbody>`;
             }).join('');
             container.innerHTML = `
                 <div class="table-wrap"><table class="ti-matcher-table">
                     <thead><tr>
-                        <th>${escapeHtml(tr('cveThDevice'))}</th>
-                        <th>Vendor</th>
-                        <th>${escapeHtml(tr('tiModelLabel'))}</th>
-                        <th>${escapeHtml(tr('cveThVersion'))}</th>
+                        <th style="width:44px;"><span class="visually-hidden">${escapeHtml(tr('tiGroupDevices'))}</span></th>
+                        <th>${escapeHtml(tr('tiThFirmware'))}</th>
+                        <th>${escapeHtml(tr('tiThDevices'))}</th>
                         <th>${escapeHtml(tr('tiThStoredCves'))}</th>
                         <th>${escapeHtml(tr('tiThLiveCheck'))}</th>
                         <th></th>
                     </tr></thead>
-                    <tbody>${rows}</tbody>
+                    ${rows}
                 </table></div>`;
+            tiRenderStored(stored);
         }
 
         // ── SEZIONE 2: Vicini Scoperti (CDP/LLDP) – solo se richiesto ──────────
@@ -540,7 +634,7 @@
         return sysDesc.substring(0, 60).trim();
     }
 
-    async function runDiscoveredVulnCheck(nodeId, label, fullVersion, versionShort, nodeVendor, btnEl) {
+    async function runDiscoveredVulnCheck(nodeId, label, fullVersion, versionShort, nodeVendor, btnEl, fresh) {
         const safeId = nodeId.replace(/[^a-zA-Z0-9]/g, '-');
         const card = document.getElementById(`disc-card-${safeId}`);
         const resultArea = document.getElementById(`disc-results-${safeId}`);
@@ -581,18 +675,18 @@
             </div>
         `;
 
-        await runEuvdQuery(`disc-${safeId}`, vendor, versionShort, `disc-status-${safeId}`, `disc-vuln-${safeId}`);
+        await runEuvdQuery(`disc-${safeId}`, vendor, versionShort, `disc-status-${safeId}`, `disc-vuln-${safeId}`, '', fresh);
 
+        btnEl.dataset.scanned = '1';
         btnEl.disabled = false;
         btnEl.innerHTML = tr('btnRescan');
     }
 
     // Analisi vulnerabilità di UN singolo dispositivo gestito (scelto dall'utente).
-    async function runManagedVulnCheck(ip, vendor, version, btnEl, model) {
+    async function runManagedVulnCheck(ip, vendor, version, btnEl, model, fresh) {
         const safeIpId = ip.replace(/\./g, '-');
         // The result lands in the device's detail row: open it.
-        const detail = document.getElementById(`ti-detail-${safeIpId}`);
-        if (detail) detail.hidden = false;
+        tiToggleDetail(`ti-detail-${safeIpId}`, true);
         btnEl.disabled = true;
         btnEl.innerHTML = tr('scanningEuvd');
         const validModel = (model && model !== 'Non Rilevato') ? model : '';
@@ -600,7 +694,8 @@
         // Il modello va anche a parte: serve al server per capire quali CVE
         // riguardano davvero questo apparato e quali altri modelli sullo
         // stesso treno software.
-        await runEuvdQuery(safeIpId, vendor, queryText, null, null, validModel);
+        await runEuvdQuery(safeIpId, vendor, queryText, null, null, validModel, fresh);
+        btnEl.dataset.scanned = '1';
         btnEl.disabled = false;
         btnEl.innerHTML = tr('btnRescan');
     }
@@ -625,7 +720,8 @@
         btn.innerHTML = `<i class="fa-solid fa-chevron-${hidden ? 'up' : 'down'}"></i> ${label}`;
     }
 
-    async function runEuvdQuery(safeId, vendor, version, statusElId, resultsElId, model) {
+    // fresh: skip the server's NVD cache (the user pressed "Rescan").
+    async function runEuvdQuery(safeId, vendor, version, statusElId, resultsElId, model, fresh) {
         const effectiveResultsId = resultsElId || `results-${safeId}`;
         const statusEl  = document.getElementById(statusElId  || `status-${safeId}`);
         const resultsEl = document.getElementById(effectiveResultsId);
@@ -638,6 +734,7 @@
         params.set('text', version);
         if (model && model.trim()) params.set('model', model.trim());
         params.set('size', '3');
+        if (fresh) params.set('fresh', '1');
         const queryUrl = `/api/search?${params.toString()}`;
 
         try {
@@ -738,6 +835,15 @@
             for (const b of document.querySelectorAll('#securityTriageContainer [data-action="run-managed-vuln-check"]')) {
                 await runManagedVulnCheck(b.dataset.ip, b.dataset.vendor, b.dataset.version, b, b.dataset.model);
             }
+            // Then the stored archive, so "never correlated" does not outlive the
+            // analysis. fresh=false: identical firmware reuses the cached NVD answer.
+            for (const ip of tiGroups.flatMap(g => g.devices.map(d => d.IP))) {
+                const r = await apiFetch(`/api/cve/${encodeURIComponent(ip)}/refresh?fresh=false`, { method: 'POST' });
+                if (r && r.status === 403) break; // read-only role: the archive stays as it is
+            }
+            const selGroup = document.getElementById('threatGroupSelect')?.value || 'all';
+            const sumRes = await apiFetch('/api/cve/summary?tenant=' + encodeURIComponent(selGroup));
+            if (sumRes && sumRes.ok) tiRenderStored(tiStoredByIp(await sumRes.json()));
         } finally {
             if (btn) btn.disabled = false;
         }
@@ -746,20 +852,19 @@
     document.getElementById('securityTriageContainer')?.addEventListener('click', (e) => {
         const mgdBtn = e.target.closest('[data-action="run-managed-vuln-check"]');
         if (mgdBtn) {
-            runManagedVulnCheck(mgdBtn.dataset.ip, mgdBtn.dataset.vendor, mgdBtn.dataset.version, mgdBtn, mgdBtn.dataset.model);
+            runManagedVulnCheck(mgdBtn.dataset.ip, mgdBtn.dataset.vendor, mgdBtn.dataset.version, mgdBtn, mgdBtn.dataset.model,
+                                mgdBtn.dataset.scanned === '1');
             return;
         }
         const row = e.target.closest('[data-action="ti-toggle-row"]');
         if (row && row.dataset.target) {
-            const detail = document.getElementById(row.dataset.target);
-            const results = detail ? detail.querySelector('[id^="results-"]') : null;
-            // Nothing to show until the device has been analysed.
-            if (detail && results && results.childElementCount) detail.hidden = !detail.hidden;
+            tiToggleDetail(row.dataset.target);
             return;
         }
         const discBtn = e.target.closest('[data-action="run-discovered-vuln-check"]');
         if (discBtn) {
-            runDiscoveredVulnCheck(discBtn.dataset.id, discBtn.dataset.label, discBtn.dataset.version, discBtn.dataset.vshort, discBtn.dataset.vendor, discBtn);
+            runDiscoveredVulnCheck(discBtn.dataset.id, discBtn.dataset.label, discBtn.dataset.version, discBtn.dataset.vshort, discBtn.dataset.vendor, discBtn,
+                                   discBtn.dataset.scanned === '1');
             return;
         }
         const resBtn = e.target.closest('[data-action="toggle-vuln-results"]');
@@ -777,7 +882,14 @@
     document.getElementById('tiTabMatcher')?.addEventListener('click', () => tiSwitchView('matcher'));
     document.getElementById('tiTabWatch')?.addEventListener('click', () => tiSwitchView('watch'));
     document.getElementById('threatGroupSelect')?.addEventListener('change', startThreatScan);
-    document.getElementById('threatSeveritySelect')?.addEventListener('change', applyThreatSeverityFilter);
+    document.getElementById('threatSevChips')?.addEventListener('click', (e) => {
+        const chip = e.target instanceof Element ? e.target.closest('[data-sev]') : null;
+        if (!(chip instanceof HTMLElement)) return;
+        tiSev = chip.dataset.sev || 'all';
+        document.querySelectorAll('#threatSevChips [data-sev]').forEach(b =>
+            b.setAttribute('aria-pressed', String(b === chip)));
+        applyThreatSeverityFilter();
+    });
     document.getElementById('threatIncludeDiscovered')?.addEventListener('change', startThreatScan);
     document.getElementById('btnThreatAnalyzeAll')?.addEventListener('click', analyzeAllThreats);
     document.getElementById('vwRefresh')?.addEventListener('click', vwFetch);
