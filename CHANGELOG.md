@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.59.5] - 2026-11-02
+
 ### Changed
 
 - **Vulnerability Matcher raggruppato per firmware**: una riga per vendor,
