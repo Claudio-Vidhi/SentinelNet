@@ -3748,6 +3748,14 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
 .map-seg-swatches input:focus-visible + label { outline: 2px solid var(--text-soft); outline-offset: 2px; }
 .map-seg-members { max-height: 220px; }
 .map-seg-members .map-opt small { color: var(--text-muted); }
+.map-seg-badge { min-width: 18px; padding: 1px 6px; border-radius: 9px; background: #f97316; color: #fff; font-size: 11px; font-weight: 700; line-height: 16px; text-align: center; }
+.map-seg-badge[hidden] { display: none; }
+.map-seg-finding { margin: 0; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); }
+.map-seg-finding.open { border-color: #f97316; }
+.map-seg-finding legend { padding: 0 4px; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.map-seg-finding .map-seg-meta { margin: 0 0 6px; }
+.map-seg-choices { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.map-seg-choices .map-opt { min-height: 24px; font-size: 12.5px; }
 .map-seg-err { color: var(--danger, #c2410c); }
 .map-ai-note { width: 100%; box-sizing: border-box; margin: 2px 0 4px; resize: vertical; font: 13px/1.45 var(--font-prose); }
 

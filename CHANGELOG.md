@@ -10,6 +10,23 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Segmenti di rete sulle mappe**: reti separate nello stesso sito (per
+  esempio la rete OT dietro i suoi firewall), salvate per tenant. Un segmento
+  è fatto di subnet più apparati aggiunti o tolti a mano; i core restano
+  sempre nella rete principale. Il pulsante **Segmenti** della barra mappa li
+  elenca e li modifica, con anteprima tratteggiata sulla mappa, scelta degli
+  apparati con un clic e una proposta rilevata togliendo i firewall dal grafo.
+- Nella **Scala doppio core** ogni segmento ha la sua colonna a destra dei
+  core, con i gateway in alto allo stesso livello dei core; i cavi verso la
+  colonna girano attorno ai riquadri invece di attraversarli. In **Schema a
+  righe** e **Gerarchia** i membri hanno un alone del colore del segmento.
+- **Collegamenti fuori dai gateway**: un cavo tra segmenti che non arriva su
+  un gateway è un possibile bypass del firewall, disegnato arancione
+  tratteggiato e contato sul pulsante Segmenti. Per ognuno si sceglie
+  *Da verificare*, *Consentito* o *Rendi gateway*.
+
 ## [0.59.6] - 2026-11-03
 
 ### Security

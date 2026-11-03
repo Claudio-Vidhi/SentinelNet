@@ -1040,13 +1040,20 @@
         <!-- Network segments (plan 2026-11-03), per tenant: list and editor.
              Stays open while editing so devices can be picked on the map. -->
         <details id="mapSegMenu" class="map-pop map-pop-end">
-          <summary class="map-tb-btn"><i class="fa-solid fa-object-group" aria-hidden="true"></i> <span data-i18n="lblMapSegments">Segmenti</span> <i class="fa-solid fa-chevron-down map-tb-caret" aria-hidden="true"></i></summary>
+          <summary class="map-tb-btn"><i class="fa-solid fa-object-group" aria-hidden="true"></i> <span data-i18n="lblMapSegments">Segmenti</span> <span id="mapSegBadge" class="map-seg-badge" hidden></span> <i class="fa-solid fa-chevron-down map-tb-caret" aria-hidden="true"></i></summary>
           <div class="map-pop-panel map-view-panel">
             <section class="map-view-sec">
               <p class="map-view-hint" data-i18n="mapSegHint">Reti separate nello stesso sito.</p>
               <p id="mapSegNeedTenant" class="map-view-hint" data-i18n="mapSegNeedTenant">Scegli un tenant: i segmenti sono per tenant.</p>
               <div id="mapSegList" class="map-seg-list"></div>
               <div class="map-view-actions"><button type="button" id="mapSegNewBtn" class="map-tb-btn" data-i18n="btnMapSegNew">Nuovo segmento</button></div>
+            </section>
+            <!-- Findings: cables between segments that miss a gateway, one
+                 decision each (segment_links). Hidden while editing. -->
+            <section id="mapSegFindings" class="map-view-sec" hidden>
+              <h3 id="mapSegFindingsTitle" class="map-view-h"></h3>
+              <p class="map-view-hint" data-i18n="mapSegFindingsHint">Un cavo tra segmenti che non arriva su un gateway: possibile bypass del firewall.</p>
+              <div id="mapSegFindingList" class="map-seg-list"></div>
             </section>
             <section id="mapSegEditor" class="map-view-sec" hidden>
               <h3 id="mapSegEditorTitle" class="map-view-h"></h3>

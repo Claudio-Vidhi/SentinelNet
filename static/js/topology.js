@@ -2132,7 +2132,40 @@
                 <span class="map-seg-acts"><button type="button" class="map-tb-btn" data-seg-action="edit" data-id="${attrEsc(s.id)}"${segDraft ? ' disabled' : ''}>${escapeHtml(tr('btnMapSegEdit'))}</button><button type="button" class="map-tb-btn" data-seg-action="delete" data-id="${attrEsc(s.id)}"${segDraft ? ' disabled' : ''}>${escapeHtml(tr('btnMapSegDelete'))}</button></span>
                 <span class="map-seg-meta">${escapeHtml(tr('mapSegMeta', { n, gw }))}</span></div>`;
         }).join('');
+        renderSegFindings(ok ? m : null);
         if (segDraft) renderSegMembers();
+    }
+
+    // One row per finding with its decision. Hidden while a draft is open:
+    // the model then holds the preview's findings, not the saved ones.
+    function renderSegFindings(m) {
+        const sec = segEl('mapSegFindings'), list = segEl('mapSegFindingList'), badge = segEl('mapSegBadge');
+        if (!sec) return;
+        const fs = m && m.findings ? m.findings : [];
+        const open = fs.filter(f => !f.decision).length;
+        badge.hidden = !open || !!segDraft;
+        badge.textContent = String(open);
+        badge.setAttribute('aria-label', tr('mapSegFindingsBadge', { n: open }));
+        sec.hidden = !fs.length || !!segDraft;
+        if (sec.hidden) { list.innerHTML = ''; return; }
+        segEl('mapSegFindingsTitle').textContent = tr('mapSegFindingsTitle', { n: fs.length });
+        const segName = id => { const s = (mapSegments.segments || []).find(x => x.id === id); return s ? s.name : tr('mapSegMain'); };
+        const cores = segInput ? segInput.cores : [];
+        list.innerHTML = fs.map((f, i) => {
+            const cur = f.decision || 'verify';
+            // A core never joins a segment, so it cannot become a gateway either.
+            const noGw = (!f.segA && cores.includes(f.a)) || (!f.segB && cores.includes(f.b));
+            const opt = (v, key, dis) => `<label class="map-opt"><input type="radio" name="mapSegFd${i}" value="${v}" data-a="${attrEsc(f.a)}" data-b="${attrEsc(f.b)}"${cur === v ? ' checked' : ''}${dis ? ' disabled' : ''}> <span>${escapeHtml(tr(key))}</span></label>`;
+            return `<fieldset class="map-seg-finding${f.decision ? '' : ' open'}"><legend>${escapeHtml(segLabel(f.a))} ↔ ${escapeHtml(segLabel(f.b))}</legend>
+                <p class="map-seg-meta">${escapeHtml(segName(f.segA))} · ${escapeHtml(f.a)} ↔ ${escapeHtml(segName(f.segB))} · ${escapeHtml(f.b)}</p>
+                <div class="map-seg-choices">${opt('verify', 'optMapSegVerify')}${opt('allowed', 'optMapSegAllowed')}${opt('gateway', 'optMapSegGateway', noGw)}</div></fieldset>`;
+        }).join('');
+    }
+    async function setSegDecision(a, b, value) {
+        const decision = value === 'verify' ? null : value;
+        if (!(await segPost('/api/segments/link', { org: mapSegmentsOrg, a, b, decision }))) { renderSegPanel(); return; }
+        await loadMapSegments(mapSegmentsOrg, true);
+        redrawInteractiveMap();
     }
 
     function segDraftHas(id) {
@@ -2265,6 +2298,10 @@
         segEl('mapSegMembers')?.addEventListener('change', e => {
             const id = e.target.dataset && e.target.dataset.segNode;
             if (id) segToggle(id);
+        });
+        segEl('mapSegFindingList')?.addEventListener('change', e => {
+            const t = e.target;
+            if (t && t.dataset && t.dataset.a) setSegDecision(t.dataset.a, t.dataset.b, t.value);
         });
         segEl('mapSegSaveBtn')?.addEventListener('click', saveSegDraft);
         segEl('mapSegCancelBtn')?.addEventListener('click', () => closeSegEditor(true));
