@@ -326,6 +326,8 @@
         Object.entries(m).forEach(([z, v]) => { out[z] = (Array.isArray(v) ? v : [v]).filter(Boolean); });
         return out;
     };
+    // The core pair named in the Core menu for the tenant, if any.
+    const corePairOf = group => Object.values(rootsOf(group)).find(l => l.length === 2) || null;
     function setLayeredRoots(group, zone, ids) {
         const roots = rootsOf(group);
         const list = [...new Set(ids.filter(Boolean))].slice(0, 2);
@@ -1153,6 +1155,7 @@
             lastMapPayload = data;
             lastMapGroup = selectedGroup;
         }
+        await loadMapSegments(selectedGroup, !fromCache);
         cachedTopologyNodes = data.nodes || [];
         cachedTopologyLinks = data.links || [];
 
@@ -1207,12 +1210,15 @@
             updateLadderHint(ladder);
             // A new map: the focused node may be gone (filter, tenant).
             schemaFocusId = null;
+            mapSegmentModel = segmentModel(filteredNodesData, filteredLinksData, mapSegments,
+                                           ladder ? [ladder.A, ladder.B] : corePairOf(selectedGroup));
             renderNetwork(nodes, edges, options, MINIMAL_MAP_STYLE.background,
                           hasOverlay ? (ctx => drawMinimalOverlay(ctx, bundles, groupsInfo)) : null);
             return;
         }
         minimalOverlayData = null;
         updateLadderHint(null);
+        mapSegmentModel = segmentModel(filteredNodesData, filteredLinksData, mapSegments, corePairOf(selectedGroup));
 
         // Piani della vista "A livelli" (ignorati dalle altre viste). I piani si
         // calcolano sulla topologia VERA, prima di comprimere le foglie: il
@@ -1890,6 +1896,118 @@
         }
         nodesData.forEach(n => { if (!out[n.id]) out[n.id] = { key: 'org|' + (n.group || ''), label: n.group || '' }; });
         return out;
+    }
+
+    // --- Network segments (plan 2026-11-03): separate networks inside a site --
+    // Saved per tenant ({segments, links} from /api/segments), loaded with the map.
+    let mapSegments = { segments: [], links: [] }, mapSegmentsOrg = null;
+    // What the map draws from them, rebuilt on every render (segmentModel).
+    let mapSegmentModel = null;
+
+    /** Membership, gateways and findings of the saved segments on one map.
+     *  Membership: members, then subnets (address in a CIDR), minus excluded;
+     *  one node, one segment; cores never join. Gateways: a segment's firewalls
+     *  with a neighbour outside it, else every member with one. A cable between
+     *  two segments (or segment and main network) whose segment-side end is not
+     *  a gateway is a finding: a possible firewall bypass. Decided "gateway",
+     *  its outside end becomes an extra gateway of that segment. */
+    function segmentModel(nodesData, linksData, saved, cores) {
+        const coreSet = new Set(cores || []), segs = saved.segments || [];
+        const of = {};
+        segs.forEach(s => (s.members || []).forEach(id => {
+            if (!of[id] && !coreSet.has(id) && !(s.excluded || []).includes(id)) of[id] = s.id;
+        }));
+        nodesData.forEach(n => {
+            if (of[n.id] || coreSet.has(n.id)) return;
+            const a = ip4n(n.display_ip || n.id);
+            if (a === null) return;
+            const s = segs.find(s => !(s.excluded || []).includes(n.id) && (s.subnets || []).some(c => inCidr(a, c)));
+            if (s) of[n.id] = s.id;
+        });
+        const typeOf = {}, nbrs = {};
+        nodesData.forEach(n => { typeOf[n.id] = n.device_type; });
+        const pairs = new Map();
+        linksData.forEach(l => {
+            if (l.source === l.target) return;
+            const [a, b] = [l.source, l.target].sort();
+            pairs.set(a + '\u0000' + b, [a, b]);
+            (nbrs[a] || (nbrs[a] = new Set())).add(b);
+            (nbrs[b] || (nbrs[b] = new Set())).add(a);
+        });
+        const outside = id => [...(nbrs[id] || [])].some(nb => of[nb] !== of[id]);
+        const gateways = {};
+        segs.forEach(s => {
+            const edge = Object.keys(of).filter(id => of[id] === s.id && outside(id));
+            const fw = edge.filter(id => typeOf[id] === 'firewall');
+            gateways[s.id] = new Set(fw.length ? fw : edge);
+        });
+        const decision = {};
+        (saved.links || []).forEach(l => { decision[l.a + '\u0000' + l.b] = l.decision; });
+        const findings = [];
+        pairs.forEach(([a, b], key) => {
+            if (of[a] === of[b]) return;
+            const bad = [a, b].some(id => of[id] && !gateways[of[id]].has(id));
+            if (bad) findings.push({ a, b, segA: of[a] || null, segB: of[b] || null, decision: decision[key] || null });
+        });
+        findings.filter(f => f.decision === 'gateway').forEach(f => {
+            if (f.segA) gateways[f.segA].add(f.b);
+            if (f.segB) gateways[f.segB].add(f.a);
+        });
+        return { of, gateways, findings };
+    }
+
+    /** Segments the map suggests ("detect"): with the firewalls taken out, each
+     *  part of 2+ devices that no longer reaches the cores (or, without cores,
+     *  the largest part) and is not already in a saved segment. Its firewalls
+     *  join it by hand; its CIDRs are the /24s of the other members. Only a
+     *  proposal: the user confirms before anything is saved. */
+    function proposeSegments(nodesData, linksData, cores, of) {
+        const isFw = {}, nbrs = {}, addr = {};
+        nodesData.forEach(n => {
+            isFw[n.id] = n.device_type === 'firewall';
+            nbrs[n.id] = new Set();
+            addr[n.id] = ip4n(n.display_ip || n.id);
+        });
+        linksData.forEach(l => {
+            if (!nbrs[l.source] || !nbrs[l.target] || l.source === l.target) return;
+            nbrs[l.source].add(l.target);
+            nbrs[l.target].add(l.source);
+        });
+        const seen = new Set(), parts = [];
+        nodesData.forEach(n => {
+            if (isFw[n.id] || seen.has(n.id)) return;
+            const part = [n.id];
+            seen.add(n.id);
+            for (let i = 0; i < part.length; i++) nbrs[part[i]].forEach(nb => {
+                if (!isFw[nb] && !seen.has(nb)) { seen.add(nb); part.push(nb); }
+            });
+            parts.push(part);
+        });
+        const coreList = cores || [];
+        const main = coreList.length ? parts.find(p => p.some(id => coreList.includes(id)))
+                                     : parts.reduce((m, p) => (p.length > m.length ? p : m), []);
+        const taken = new Set(Object.keys(of || {}));
+        const out = [];
+        parts.forEach(p => {
+            const free = p.filter(id => !taken.has(id));
+            if (p === main || free.length < 2) return;
+            const fws = [...new Set(free.flatMap(id => [...nbrs[id]].filter(nb => isFw[nb] && !taken.has(nb))))].sort();
+            fws.forEach(id => taken.add(id));
+            const subnets = [...new Set(free.map(id => addr[id]).filter(a => a !== null)
+                .map(a => `${a >>> 24}.${(a >>> 16) & 255}.${(a >>> 8) & 255}.0/24`))].sort();
+            out.push({ members: [...free, ...fws].sort(), firewalls: fws, subnets });
+        });
+        return out;
+    }
+
+    // Segments of the tenant on the map; 'all' has none (they are per tenant).
+    async function loadMapSegments(org, force) {
+        if (org === mapSegmentsOrg && !force) return;
+        mapSegments = { segments: [], links: [] };
+        mapSegmentsOrg = org;
+        if (!org || org === 'all') return;
+        const res = await apiFetch('/api/segments?org=' + encodeURIComponent(org));
+        if (res && res.ok) mapSegments = await res.json();
     }
     function topoZone(n) {
         if (n.is_group && (n.members || []).length) return topoZone(n.members[0]);
@@ -4108,7 +4226,7 @@
         // Ladder: looked for even when not chosen, so the toolbar can offer it.
         const info = {};
         nodeData.forEach(n => { info[n.id] = n; });
-        const forcedPair = Object.values(rootsOf((opts && opts.group) || '')).find(l => l.length === 2) || null;
+        const forcedPair = corePairOf((opts && opts.group) || '');
         const ladder = schemaLadderPlan(bundles, id => levels[id] || 0, id => (info[id] || {}).device_type,
                                         id => (info[id] || {}).label || id, GROUPABLE_TYPES, forcedPair,
                                         schemaLayout() === 'ladder');
