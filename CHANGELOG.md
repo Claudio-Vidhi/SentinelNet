@@ -10,6 +10,15 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Security
+
+- Dipendenze aggiornate per gli avvisi di inizio novembre: `certifi`
+  2026.10.23 toglie la root eMudhra le cui intermedie hanno chiavi
+  compromesse (GHSA-6q48-6c7w-9gw2), `pyasn1` 0.6.5 chiude quattro CPU DoS
+  nel decoder usato da pysnmp (CVE-2026-119194..119197), `opentelemetry-api`
+  1.45.2 il ReDoS su `tracestate` (CVE-2026-114603), `setuptools` 84.2.1
+  (solo build) GHSA-xmj3-9gf7-h52w.
+
 ## [0.59.5] - 2026-11-02
 
 ### Changed
