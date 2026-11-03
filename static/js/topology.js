@@ -1202,7 +1202,7 @@
                 filteredNodesData = grouped.nodes;
                 filteredLinksData = grouped.links;
             }
-            const { nodes, edges, options, bundles, groupsInfo, ladder } = buildMinimalGraph(filteredNodesData, filteredLinksData, { showVtpDomain, hoverInfo, group: selectedGroup });
+            const { nodes, edges, options, bundles, groupsInfo, ladder, segModel } = buildMinimalGraph(filteredNodesData, filteredLinksData, { showVtpDomain, hoverInfo, group: selectedGroup });
             const hasOverlay = (bundles && bundles.length) || (groupsInfo && groupsInfo.length > 1);
             // Conservati per l'export Visio: il .vsdx replica ESATTAMENTE il
             // disegno dell'overlay (cavi paralleli, etichette porta, pillole).
@@ -1210,8 +1210,7 @@
             updateLadderHint(ladder);
             // A new map: the focused node may be gone (filter, tenant).
             schemaFocusId = null;
-            mapSegmentModel = segmentModel(filteredNodesData, filteredLinksData, mapSegments,
-                                           ladder ? [ladder.A, ladder.B] : corePairOf(selectedGroup));
+            mapSegmentModel = segModel;
             renderNetwork(nodes, edges, options, MINIMAL_MAP_STYLE.background,
                           hasOverlay ? (ctx => drawMinimalOverlay(ctx, bundles, groupsInfo)) : null);
             return;
@@ -1903,6 +1902,9 @@
     let mapSegments = { segments: [], links: [] }, mapSegmentsOrg = null;
     // What the map draws from them, rebuilt on every render (segmentModel).
     let mapSegmentModel = null;
+    // Stroke of each saved colour (segment_manager.COLORS); areas use it faded.
+    const SEGMENT_COLORS = { amber: '#d97706', teal: '#0d9488', violet: '#7c3aed', rose: '#e11d48', lime: '#65a30d', sky: '#0284c7' };
+    const SEGMENT_FINDING_COLOR = '#f97316';
 
     /** Membership, gateways and findings of the saved segments on one map.
      *  Membership: members, then subnets (address in a CIDR), minus excluded;
@@ -3000,7 +3002,8 @@
         const lad = schemaLadderActive();
         const ladIds = new Set();
         if (lad && [lad.A, lad.B].every(id => box[id])) {
-            [lad.A, lad.B, ...lad.upstream, ...lad.members.map(m => m.id), ...[].concat(...Object.values(lad.leaves))]
+            [lad.A, lad.B, ...lad.upstream, ...lad.members.map(m => m.id), ...[].concat(...Object.values(lad.leaves)),
+             ...(lad.segCols || []).flatMap(c => [...c.gateways, ...c.members.map(m => m.id)])]
                 .forEach(id => { if (box[id]) ladIds.add(id); });
             Object.values(zones).forEach(rows => Object.keys(rows).forEach(lv => {
                 rows[lv] = rows[lv].filter(nd => !ladIds.has(nd.id));
@@ -3351,6 +3354,25 @@
             }
             const next = lad.members[i + 1];
             cur += next && next.depth > 0 ? 18 : 30;
+        });
+        // Segment columns right of B: gateways in a row level with the cores,
+        // so the core cables reach them straight across; the rest below.
+        let sx = cxB + wB / 2 + LADDER_SEG_GAP;
+        (lad.segCols || []).forEach(c => {
+            const gw = c.gateways.filter(id => box[id]);
+            let x = sx, y = top;
+            gw.forEach(id => { pos[id] = { x: x + box[id].w / 2, y: top + hC / 2 }; x += box[id].w + SCHEMA_GAP; });
+            let right = gw.length ? x - SCHEMA_GAP : sx;
+            if (gw.length) y = top + hC / 2 + Math.max(...gw.map(id => box[id].h)) / 2 + 60;
+            c.members.forEach(m => {
+                const b = box[m.id];
+                if (!b) return;
+                const left = sx + m.depth * LADDER_IN;
+                pos[m.id] = { x: left + b.w / 2, y: y + b.h / 2 };
+                right = Math.max(right, left + b.w);
+                y += b.h + 30;
+            });
+            sx = right + LADDER_SEG_GAP;
         });
         return pos;
     }
@@ -4227,9 +4249,12 @@
         const info = {};
         nodeData.forEach(n => { info[n.id] = n; });
         const forcedPair = corePairOf((opts && opts.group) || '');
+        const labelOf = id => (info[id] || {}).label || id;
         const ladder = schemaLadderPlan(bundles, id => levels[id] || 0, id => (info[id] || {}).device_type,
-                                        id => (info[id] || {}).label || id, GROUPABLE_TYPES, forcedPair,
+                                        labelOf, GROUPABLE_TYPES, forcedPair,
                                         schemaLayout() === 'ladder');
+        const segModel = segmentModel(nodeData, linkData, mapSegments, ladder ? [ladder.A, ladder.B] : forcedPair);
+        if (ladder) ladder.segCols = ladderSegmentColumns(ladder, segModel, mapSegments.segments || [], bundles, labelOf);
         if (ladder && schemaLayout() === 'ladder') sizeLadderBoxes(nodes, bundles, ladder);
 
         // Final x/y come from packSchemaRows() once vis.js has sized the boxes.
@@ -4242,7 +4267,7 @@
             edges: { smooth: { type: 'continuous', roundness: 0.2 }, shadow: { enabled: false } }
         };
 
-        return { nodes, edges, options, bundles, groupsInfo, ladder };
+        return { nodes, edges, options, bundles, groupsInfo, ladder, segModel };
     }
 
     // Bundle key (from~to~tag): keys label offsets, hover and link categories.
@@ -4408,6 +4433,53 @@
         top.forEach(r => visit(r, 0, null));
         return { A, B, upstream, members, leaves, dual, total: top.length };
     }
+    /** One ladder column per network segment, right of the cores: its
+     *  gateways in a row on top, the rest hanging from them (each device once,
+     *  one step in per level). A single-homed device outside every segment
+     *  goes with the segment device it hangs from. The column devices leave
+     *  the main column; a main device whose parent left becomes a top row. */
+    function ladderSegmentColumns(plan, model, segs, bundles, labelOf) {
+        const of = model.of;
+        const nbrs = {};
+        bundles.forEach(b => {
+            if (b.type === 'keepalive') return;
+            (nbrs[b.from] || (nbrs[b.from] = new Set())).add(b.to);
+            (nbrs[b.to] || (nbrs[b.to] = new Set())).add(b.from);
+        });
+        const byLabel = (x, y) => String(labelOf(x)).localeCompare(String(labelOf(y)), undefined, { numeric: true });
+        const core = id => id === plan.A || id === plan.B;
+        const placed = new Set();
+        const cols = segs.map(s => {
+            const mine = Object.keys(of).filter(id => of[id] === s.id && nbrs[id]).sort(byLabel);
+            const gateways = mine.filter(id => model.gateways[s.id].has(id));
+            gateways.forEach(id => placed.add(id));
+            const members = [];
+            const visit = (id, depth, parent) => {
+                if (parent !== null || !gateways.includes(id)) members.push({ id, depth: Math.min(depth, LADDER_MAX_DEPTH), parent });
+                const kids = [...nbrs[id]].filter(k => !placed.has(k) && !core(k)
+                    && (of[k] === s.id || (!of[k] && nbrs[k].size === 1))).sort(byLabel);
+                kids.forEach(k => placed.add(k));
+                kids.forEach(k => visit(k, parent === null && gateways.includes(id) ? 0 : depth + 1, id));
+            };
+            gateways.forEach(id => visit(id, 0, null));
+            mine.forEach(id => { if (!placed.has(id)) { placed.add(id); visit(id, 0, null); } });
+            return { id: s.id, name: s.name, color: s.color, gateways, members };
+        }).filter(c => c.gateways.length || c.members.length);
+        if (!placed.size) return [];
+        plan.upstream = plan.upstream.filter(id => !placed.has(id));
+        const depth = {};
+        plan.members = plan.members.filter(m => !placed.has(m.id));
+        plan.members.forEach(m => {
+            if (m.parent && depth[m.parent] === undefined) m.parent = null;
+            m.depth = m.parent ? Math.min(depth[m.parent] + 1, LADDER_MAX_DEPTH) : 0;
+            depth[m.id] = m.depth;
+        });
+        Object.keys(plan.leaves).forEach(p => {
+            const ls = placed.has(p) ? [] : plan.leaves[p].filter(id => !placed.has(id));
+            if (ls.length) plan.leaves[p] = ls; else delete plan.leaves[p];
+        });
+        return cols;
+    }
     // Schema arrangement: 'rows' (one row per level) or 'ladder' (above).
     function schemaLayout() { return schemaPref('schemaLayout', 'rows') === 'ladder' ? 'ladder' : 'rows'; }
     // The ladder of the map drawn now, when the user chose it and the site fits.
@@ -4430,6 +4502,7 @@
     }
     const LADDER_IN = 40;        // step in per level under a column device
     const LADDER_GAP = 80;       // core edge to column: room for the lanes' turn
+    const LADDER_SEG_GAP = 140;  // between the cores and a segment column, and between columns
     const LADDER_PORT_W = 70;    // room inside a column box for a port name on each side
     const LADDER_LANE = 18;      // core lane spacing: one vertical port name between two lanes
     const LADDER_PAR = 20;       // parallel cables of one bundle: a port name fits under each
@@ -4768,6 +4841,26 @@
             });
             ctx.restore();
         }
+        // Ladder segment columns: a tinted frame, the name top-left.
+        const ladSeg = schemaLadderActive();
+        if (ladSeg && ladSeg.segCols && !visioConnectorSink) {
+            ctx.save();
+            ladSeg.segCols.forEach(c => {
+                const bbs = [...c.gateways, ...c.members.map(m => m.id)].map(id => {
+                    try { return networkInstance.getBoundingBox(id); } catch (e) { return null; }
+                }).filter(Boolean);
+                if (!bbs.length) return;
+                const pad = 24, col = SEGMENT_COLORS[c.color] || SEGMENT_COLORS.amber;
+                const x0 = Math.min(...bbs.map(b => b.left)) - pad, y0 = Math.min(...bbs.map(b => b.top)) - pad;
+                const x1 = Math.max(...bbs.map(b => b.right)) + pad, y1 = Math.max(...bbs.map(b => b.bottom)) + pad;
+                ctx.globalAlpha = 0.07; ctx.fillStyle = col; ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+                ctx.globalAlpha = 1; ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+                ctx.font = 'bold 12px Arial, Helvetica, sans-serif';
+                ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.fillStyle = col;
+                ctx.fillText(c.name, x0 + 4, y0 - 4);
+            });
+            ctx.restore();
+        }
 
         if (!Array.isArray(bundles) || !bundles.length) return;
 
@@ -4876,7 +4969,11 @@
         // color-picker/legenda e il disegno restano sempre allineati.
         // ponytail: una categoria personalizzata assegnata manualmente (click
         // destro sul cavo) vince sempre sullo stile standard per-tipo.
+        // Undecided segment findings (possible firewall bypass): orange dashed.
+        const findingKeys = new Set(((mapSegmentModel || {}).findings || [])
+            .filter(f => !f.decision).map(f => f.a + '\u0000' + f.b));
         const styleFor = b => {
+            if (findingKeys.size && findingKeys.has([b.from, b.to].sort().join('\u0000'))) return { color: SEGMENT_FINDING_COLOR, lw: 2, dash: [6, 4] };
             const custom = customStyleForEdge(pillKey(b));
             if (custom) return { color: custom.color, lw: 1.8, dash: custom.dash };
             return b.type === 'peer'      ? { color: linkColor('peer'),      lw: 1.8, dash: null }

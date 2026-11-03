@@ -21,10 +21,10 @@ function extract(marker) {
     throw new Error(`unbalanced braces after ${marker}`);
 }
 
-const { segmentModel, proposeSegments } = new Function(
-    [extract('const ip4n ='), extract('const inCidr ='), extract('function segmentModel('),
-     extract('function proposeSegments(')].join('\n')
-    + '\nreturn { segmentModel, proposeSegments };')();
+const { segmentModel, proposeSegments, ladderSegmentColumns } = new Function(
+    ['const LADDER_MAX_DEPTH = 4;', extract('const ip4n ='), extract('const inCidr ='), extract('function segmentModel('),
+     extract('function proposeSegments('), extract('function ladderSegmentColumns(')].join('\n')
+    + '\nreturn { segmentModel, proposeSegments, ladderSegmentColumns };')();
 
 // Synthetic site: IT dual core + access, an OT ring behind its firewall,
 // and a WLC cabled straight into an OT switch (the bypass).
@@ -95,5 +95,63 @@ assert.deepEqual(proposeSegments(nodes, links, cores, {}), []);
 assert.deepEqual(proposeSegments(nodes, clean, cores, segmentModel(nodes, clean, seg([ot]), cores).of), []);
 // No cores: the largest part is the main network.
 assert.equal(proposeSegments(nodes, clean, null, {}).length, 1);
+
+// Ladder columns: the OT devices leave the main column; the firewall heads
+// the OT column, the ring hangs from it; an AP single-homed to an OT switch
+// goes with it; a main device under an OT switch becomes a top row.
+{
+    const nodes2 = [...nodes, N('10.20.0.90', 'ap'), N('10.0.1.13')];
+    const links2 = [...links, L('10.20.0.3', '10.20.0.90'), L('10.20.0.3', '10.0.1.13'), L('10.0.1.13', '10.0.1.12')];
+    const B = (from, to) => ({ from, to, type: 'link', members: [{}] });
+    const bundles = links2.map(l => B(l.source, l.target));
+    const plan = {
+        A: '10.0.0.1', B: '10.0.0.2', upstream: ['10.0.0.10'],
+        members: [
+            { id: '10.0.1.11', depth: 0, parent: null },
+            { id: '10.0.1.12', depth: 0, parent: null },
+            { id: '10.20.0.1', depth: 0, parent: null },
+            { id: '10.20.0.3', depth: 1, parent: '10.20.0.1' },
+            { id: '10.0.1.13', depth: 2, parent: '10.20.0.3' },
+        ],
+        leaves: { '10.20.0.3': ['10.20.0.90'] },
+    };
+    const model = segmentModel(nodes2, links2, seg([{ ...ot, name: 'OT', color: 'teal' }]), cores);
+    const cols = ladderSegmentColumns(plan, model, [{ ...ot, name: 'OT', color: 'teal' }], bundles, id => id);
+    assert.equal(cols.length, 1);
+    assert.deepEqual(cols[0].gateways, ['10.0.0.10']);
+    assert.deepEqual(cols[0].members.map(m => [m.id, m.depth, m.parent]), [
+        ['10.20.0.1', 0, '10.0.0.10'],
+        ['10.20.0.2', 1, '10.20.0.1'],
+        ['10.20.0.3', 1, '10.20.0.1'],
+        ['10.20.0.90', 2, '10.20.0.3'],
+    ]);
+    assert.deepEqual(plan.upstream, []);
+    assert.deepEqual(plan.members.map(m => [m.id, m.depth, m.parent]),
+        [['10.0.1.11', 0, null], ['10.0.1.12', 0, null], ['10.0.1.13', 0, null]]);
+    assert.deepEqual(plan.leaves, {});
+    // Geometry: columns right of core B, gateways level with the cores, no overlaps.
+    const consts = src.match(/^ {4}const (LADDER_[A-Z_]+|SCHEMA_GAP) = .*$/gm).join('\n');
+    const { ladderPositions } = new Function(consts + '\n' + extract('function ladderLeafOffset(') + '\n'
+        + extract('function ladderLeafRows(') + '\n' + extract('function ladderPositions(') + '\nreturn { ladderPositions };')();
+    plan.segCols = cols;
+    plan.kidPortW = {}; plan.leafPortW = {};
+    const box = {};
+    nodes2.forEach(n => { box[n.id] = { w: n.device_type === 'ap' ? 110 : 200, h: 50 }; });
+    const pos = ladderPositions(plan, box, 0);
+    const rect = id => ({ l: pos[id].x - box[id].w / 2, r: pos[id].x + box[id].w / 2, t: pos[id].y - box[id].h / 2, b: pos[id].y + box[id].h / 2 });
+    const ids = Object.keys(pos);
+    assert.equal(ids.length, nodes2.length - 1, 'every drawn device placed except the WLC (no ladder role)');
+    const segIds = [...cols[0].gateways, ...cols[0].members.map(m => m.id)];
+    segIds.forEach(id => assert.ok(rect(id).l > rect('10.0.0.2').r, `${id} right of core B`));
+    assert.equal(pos['10.0.0.10'].y, pos['10.0.0.2'].y, 'gateway level with the cores');
+    ids.forEach((p, i) => ids.slice(i + 1).forEach(q => {
+        const a = rect(p), c = rect(q);
+        assert.ok(a.r <= c.l || c.r <= a.l || a.b <= c.t || c.b <= a.t, `${p} overlaps ${q}`);
+    }));
+    // No segments: the plan is untouched.
+    const p2 = { A: 'a', B: 'b', upstream: ['u'], members: [{ id: 'm', depth: 0, parent: null }], leaves: {} };
+    assert.deepEqual(ladderSegmentColumns(p2, { of: {}, gateways: {} }, [], [], id => id), []);
+    assert.deepEqual(p2.upstream, ['u']);
+}
 
 console.log('segments model OK');

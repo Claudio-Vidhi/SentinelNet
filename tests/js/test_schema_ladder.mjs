@@ -98,7 +98,7 @@ assert.equal(p.A, 'core-a');
 // --- Geometry: positions and cables ---------------------------------------
 const geo = new Function(
     'const LADDER_IN = 40, LADDER_GAP = 80, SCHEMA_GAP = 70, LADDER_LANE = 18, LADDER_PAR = 20, LADDER_BRANCH = 44, LADDER_LEAF_GAP = 8, LADDER_PO_STEP = 12, '
-    + 'LADDER_AP_GAP = 16, LADDER_ROW_GAP = 18, LADDER_LEAF_LANE = 8;\n'
+    + 'LADDER_AP_GAP = 16, LADDER_ROW_GAP = 18, LADDER_LEAF_LANE = 8, LADDER_SEG_GAP = 140;\n'
     + 'let visioConnectorSink = null, schemaFocusId = null, hoverBundleKey = null, edgeHitSegs = [];\n'
     + 'const schemaPortLabelVisible = () => true, schemaDimmed = () => false, linkColor = () => "#333";\n'
     + 'const pillKey = b => b.from + "~" + b.to;\n'
