@@ -191,8 +191,7 @@
         else if (action === 'open-blueprint') { window.bpPendingOrg = g; switchTab('tab-blueprint'); }
     });
 
-    // KPI row sopra la tabella inventario: conteggi sull'intera flotta (non filtrati
-    // da ricerca/tenant), stessa mappatura stato->led usata per le righe della tabella.
+    // KPI row sopra la tabella inventario: stessa mappatura stato->led usata per le righe della tabella.
     // A bastion-probe device has no ICMP, but the SSH triage does reach it through
     // the bastion and its outcome is persisted (detected_versions, written by
     // update_version_inventory). So "not measurable" applies only until that
@@ -217,11 +216,13 @@
         return st === 'online' || st === 'auth_failed' ? st : 'offline';
     }
 
-    function updateInventoryKpis() {
+    // Counts follow the tenant select (like the rows), not the search box.
+    function updateInventoryKpis(selectedGroup) {
         const counts = { online: 0, offline: 0, auth_failed: 0, unknown: 0 };
-        (globalDevices || []).forEach(d => { counts[inventoryStatusBucket(d)]++; });
+        const pool = (globalDevices || []).filter(d => selectedGroup === 'all' || d.Group === selectedGroup);
+        pool.forEach(d => { counts[inventoryStatusBucket(d)]++; });
         const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-        setText('invKpiAll', (globalDevices || []).length);
+        setText('invKpiAll', pool.length);
         setText('invKpiOnline', counts.online);
         setText('invKpiOffline', counts.offline);
         setText('invKpiAuthFailed', counts.auth_failed);
@@ -350,7 +351,9 @@
     }
 
     function renderDeviceTable() {
-        updateInventoryKpis();
+        const filterSelect  = document.getElementById('filterGroupSelect');
+        const selectedGroup = filterSelect ? filterSelect.value : 'all';
+        updateInventoryKpis(selectedGroup);
 
         // The Probe column needs the probe list, and every caller of this
         // function is synchronous. Fetch it once in the background and repaint
@@ -359,10 +362,8 @@
         if (_probesCache === null) loadDeviceProbes().then(renderDeviceTable);
         if (_decomCache === null) loadDecommissioned().then(renderDeviceTable);
         const decomCount = document.getElementById('invKpiDecommissioned');
-        if (decomCount) decomCount.textContent = _decomCache ? String(_decomCache.length) : '—';
-
-        const filterSelect  = document.getElementById('filterGroupSelect');
-        const selectedGroup = filterSelect ? filterSelect.value : 'all';
+        if (decomCount) decomCount.textContent = _decomCache
+            ? String(_decomCache.filter(d => selectedGroup === 'all' || d.Group === selectedGroup).length) : '—';
 
         const devBody = document.getElementById('deviceTableBody');
         if (!devBody) return;
