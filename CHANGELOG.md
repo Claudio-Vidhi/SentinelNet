@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.59.6] - 2026-11-03
+
 ### Security
 
 - Dipendenze aggiornate per gli avvisi di inizio novembre: `certifi`
