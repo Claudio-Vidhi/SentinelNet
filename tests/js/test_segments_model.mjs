@@ -154,4 +154,27 @@ assert.equal(proposeSegments(nodes, clean, null, {}).length, 1);
     assert.deepEqual(p2.upstream, ['u']);
 }
 
+// Router: a cable from a box down to another with a box in the way goes round it.
+{
+    const { segRoute } = new Function(extract('function segRoute(') + '\nreturn { segRoute };')();
+    const bx = (l, t, w = 100, h = 50) => ({ left: l, top: t, right: l + w, bottom: t + h });
+    const a = bx(0, 0), b = bx(200, 300), wall = bx(150, 100, 200, 100);   // wall: right of a, above b
+    const taken = { v: [], h: [] };
+    const pts = segRoute(a, b, 25, 325, [wall], taken);
+    assert.ok(pts && pts.length >= 2);
+    const crosses = (o, [x1, y1], [x2, y2]) => Math.max(x1, x2) > o.left && Math.min(x1, x2) < o.right
+        && Math.max(y1, y2) > o.top && Math.min(y1, y2) < o.bottom;
+    for (let i = 1; i < pts.length; i++) {
+        assert.ok(pts[i][0] === pts[i - 1][0] || pts[i][1] === pts[i - 1][1], 'orthogonal');
+        assert.ok(!crosses(wall, pts[i - 1], pts[i]), `segment ${i} crosses the box in the way`);
+    }
+    // A lane taken by another cable is not reused.
+    const lane = pts.find((p, i) => i && p[0] === pts[i - 1][0]);
+    if (lane) {
+        taken.v.push([lane[0], -1000, 1000]);
+        const again = segRoute(a, b, 25, 325, [wall], taken);
+        assert.ok(again.every((p, i) => !i || p[0] !== again[i - 1][0] || Math.abs(p[0] - lane[0]) >= 6), 'own lane');
+    }
+}
+
 console.log('segments model OK');

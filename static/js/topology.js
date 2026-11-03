@@ -3557,6 +3557,129 @@
         return bundles.filter(b => !mine.includes(b));
     }
 
+    /** Orthogonal route from box a to box b that crosses no other box:
+     *  out of a's side, along a free vertical lane (one bend pair), or two
+     *  lanes joined by a free horizontal run. Lanes already taken by other
+     *  routes (taken.v / taken.h: [pos, from, to]) are not shared. Cheapest
+     *  route wins: length plus a cost per bend. ya / yb: where it leaves and
+     *  enters (the box centre, nudged for a second cable on the same box).
+     *  Returns the points, or null when every candidate is blocked. */
+    function segRoute(a, b, ya, yb, others, taken) {
+        const pad = 4;
+        const hitH = (y, x1, x2) => others.some(o => y > o.top - pad && y < o.bottom + pad && Math.max(x1, x2) > o.left - pad && Math.min(x1, x2) < o.right + pad)
+            || taken.h.some(([ty, t1, t2]) => Math.abs(ty - y) < 6 && Math.max(x1, x2) > Math.min(t1, t2) && Math.min(x1, x2) < Math.max(t1, t2));
+        const hitV = (x, y1, y2) => others.some(o => x > o.left - pad && x < o.right + pad && Math.max(y1, y2) > o.top - pad && Math.min(y1, y2) < o.bottom + pad)
+            || taken.v.some(([tx, t1, t2]) => Math.abs(tx - x) < 6 && Math.max(y1, y2) > Math.min(t1, t2) && Math.min(y1, y2) < Math.max(t1, t2));
+        // The edge a route leaves box q from, towards lane x (null: x is over the box).
+        const edge = (q, x) => x >= q.right + 10 ? q.right : x <= q.left - 10 ? q.left : null;
+        const all = [a, b, ...others];
+        const xs = new Set([(a.right + b.left) / 2, (b.right + a.left) / 2]);
+        all.forEach(o => { for (let k = 0; k < 4; k++) { xs.add(o.left - 16 - 10 * k); xs.add(o.right + 16 + 10 * k); } });
+        const ys = new Set();
+        all.forEach(o => { for (let k = 0; k < 4; k++) { ys.add(o.top - 16 - 10 * k); ys.add(o.bottom + 16 + 10 * k); } });
+        let best = null, cost = Infinity;
+        const consider = (pts, bends) => {
+            let len = 0;
+            for (let i = 1; i < pts.length; i++) len += Math.abs(pts[i][0] - pts[i - 1][0]) + Math.abs(pts[i][1] - pts[i - 1][1]);
+            if (len + bends * 40 < cost) { cost = len + bends * 40; best = pts; }
+        };
+        // One lane: a -> x -> b.
+        xs.forEach(x => {
+            const ea = edge(a, x), eb = edge(b, x);
+            if (ea === null || eb === null || hitH(ya, ea, x) || hitV(x, ya, yb) || hitH(yb, x, eb)) return;
+            consider(ya === yb ? [[ea, ya], [eb, yb]] : [[ea, ya], [x, ya], [x, yb], [eb, yb]], ya === yb ? 0 : 2);
+        });
+        // Two lanes and a run between: a -> x1, down/up to y, across to x2, to b.
+        const near = (q, y0) => [...xs].filter(x => edge(q, x) !== null && Math.abs(x - (x > q.right ? q.right : q.left)) <= 60 && !hitH(y0, edge(q, x), x));
+        const xa = near(a, ya), xb = near(b, yb);
+        ys.forEach(y => xa.forEach(x1 => {
+            if (hitV(x1, ya, y)) return;
+            xb.forEach(x2 => {
+                if (hitH(y, x1, x2) || hitV(x2, y, yb)) return;
+                consider([[edge(a, x1), ya], [x1, ya], [x1, y], [x2, y], [x2, yb], [edge(b, x2), yb]], 4);
+            });
+        }));
+        return best;
+    }
+
+    // Ladder with segments: every cable touching a segment column (core to
+    // gateway, the ring inside, a finding) is routed round the boxes with
+    // segRoute; the general router cut straight through the column's boxes.
+    // Returns the bundles it did not draw.
+    const segRouteMemo = new Map();
+    function drawSegmentCables(ctx, lad, bundles, box, styleFor, labelMode) {
+        const inCol = new Set(lad.segCols.flatMap(c => [...c.gateways, ...c.members.map(m => m.id)]));
+        const mine = bundles.filter(b => b.type !== 'keepalive' && (inCol.has(b.from) || inCol.has(b.to)) && box(b.from) && box(b.to));
+        if (!mine.length) return bundles;
+        const ids = networkInstance.body.data.nodes.getIds();
+        const boxes = {};
+        ids.forEach(id => { const r = box(id); if (r) boxes[id] = r; });
+        // Routes depend only on where the boxes are: computed again when one moves.
+        const sig = ids.map(id => boxes[id] ? `${id}:${Math.round(boxes[id].left)},${Math.round(boxes[id].top)},${Math.round(boxes[id].right)},${Math.round(boxes[id].bottom)}` : '').join('|')
+            + '#' + mine.map(pillKey).join('|');
+        let routes = segRouteMemo.get('r');
+        if (segRouteMemo.get('sig') !== sig) {
+            const taken = { v: [], h: [] }, used = {};
+            const slot = id => { const k = used[id] = (used[id] || 0) + 1; return (k % 2 ? 1 : -1) * Math.floor(k / 2) * 12; };
+            // Shortest first: they get the lanes nearest the boxes.
+            const order = mine.slice().sort((p, q) => {
+                const d = b => { const s = boxes[b.from], t = boxes[b.to]; return Math.abs((s.left + s.right) - (t.left + t.right)) + Math.abs((s.top + s.bottom) - (t.top + t.bottom)); };
+                return d(p) - d(q);
+            });
+            routes = new Map();
+            order.forEach(b => {
+                const a = boxes[b.from], c = boxes[b.to];
+                const ya = (a.top + a.bottom) / 2 + slot(b.from), yb = (c.top + c.bottom) / 2 + slot(b.to);
+                const others = ids.filter(id => id !== b.from && id !== b.to && boxes[id]).map(id => boxes[id]);
+                const pts = segRoute(a, c, ya, yb, others, taken);
+                if (!pts) return;   // boxed in: left to the general router
+                for (let i = 1; i < pts.length; i++) {
+                    const [x1, y1] = pts[i - 1], [x2, y2] = pts[i];
+                    if (x1 === x2) taken.v.push([x1, y1, y2]); else taken.h.push([y1, x1, x2]);
+                }
+                routes.set(pillKey(b), pts);
+            });
+            segRouteMemo.set('sig', sig);
+            segRouteMemo.set('r', routes);
+        }
+        const showLbl = b => visioConnectorSink || schemaPortLabelVisible(labelMode, b, schemaFocusId);
+        ctx.save();
+        ctx.lineCap = 'butt';
+        mine.forEach(b => {
+            const pts = routes.get(pillKey(b));
+            if (!pts) return;
+            const st = styleFor(b);
+            if (visioConnectorSink) {
+                visioConnectorSink.push({ from: b.from, to: b.to, points: pts, color: visioColor(st.color).hex, width: st.lw, dash: !!st.dash });
+                return;
+            }
+            ctx.strokeStyle = st.color;
+            ctx.lineWidth = st.lw;
+            ctx.setLineDash(st.dash || []);
+            ctx.globalAlpha = schemaDimmed(b, pillKey(b), hoverBundleKey, schemaFocusId) ? 0.18 : 1;
+            ctx.beginPath();
+            ctx.moveTo(pts[0][0], pts[0][1]);
+            pts.slice(1).forEach(p => ctx.lineTo(p[0], p[1]));
+            ctx.stroke();
+            edgeHitSegs.push({ key: pillKey(b), segs: pts.slice(0, -1).map((p, k) => [p[0], p[1], pts[k + 1][0], pts[k + 1][1]]) });
+            if (!showLbl(b)) return;
+            // Each end's ports above the cable, just outside its box.
+            ctx.setLineDash([]);
+            ctx.font = '9px Arial, Helvetica, sans-serif';
+            ctx.fillStyle = '#334155';
+            ctx.textBaseline = 'bottom';
+            [[b.from, pts[0], pts[1]], [b.to, pts[pts.length - 1], pts[pts.length - 2]]].forEach(([id, p, q]) => {
+                const t = ladderOwnEnd(b, id);
+                if (!t) return;
+                const out = q[0] >= p[0] ? 1 : -1;
+                ctx.textAlign = out > 0 ? 'left' : 'right';
+                ctx.fillText(t, p[0] + out * 5, p[1] - 2);
+            });
+        });
+        ctx.restore();
+        return bundles.filter(b => !(mine.includes(b) && routes.has(pillKey(b))));
+    }
+
     // Ladder geometry, x0 = left edge of the block. Upstream devices in a row
     // above, centred between the cores; then the cores; then the column, each
     // device one step in per level and its leaves in rows under it.
@@ -5223,6 +5346,7 @@
         // general router; the rest (peer link, upstream, second parents) stay.
         const lad = schemaLadderActive();
         if (lad && [lad.A, lad.B].every(realBox)) bundles = drawLadderCables(ctx, lad, bundles, realBox, styleFor, labelMode);
+        if (lad && lad.segCols && lad.segCols.length) bundles = drawSegmentCables(ctx, lad, bundles, realBox, styleFor, labelMode);
 
         // --- PASSO 1: ancoraggi per lato -----------------------------------
         // Ogni collegamento occupa 'members.length' slot sul lato del riquadro
