@@ -1211,13 +1211,15 @@
             // A new map: the focused node may be gone (filter, tenant).
             schemaFocusId = null;
             mapSegmentModel = segModel;
+            renderSegPanel();
             renderNetwork(nodes, edges, options, MINIMAL_MAP_STYLE.background,
                           hasOverlay ? (ctx => drawMinimalOverlay(ctx, bundles, groupsInfo)) : null);
             return;
         }
         minimalOverlayData = null;
         updateLadderHint(null);
-        mapSegmentModel = segmentModel(filteredNodesData, filteredLinksData, mapSegments, corePairOf(selectedGroup));
+        mapSegmentModel = segModelFor(filteredNodesData, filteredLinksData, corePairOf(selectedGroup));
+        renderSegPanel();
 
         // Piani della vista "A livelli" (ignorati dalle altre viste). I piani si
         // calcolano sulla topologia VERA, prima di comprimere le foglie: il
@@ -1535,6 +1537,9 @@
         if (typeof beforeDraw === 'function') {
             networkInstance.on('beforeDrawing', beforeDraw);
         }
+        // Network segments, both views: areas under everything, the editor's draft over it.
+        networkInstance.on('beforeDrawing', drawSegmentAreas);
+        networkInstance.on('afterDrawing', drawSegmentDraft);
         // Nella nuova mappa i riquadri non possono MAI sovrapporsi: al termine
         // di ogni trascinamento il nodo mosso viene respinto fuori dai riquadri
         // che intersecherebbe (Fix no node overlapping).
@@ -1625,6 +1630,12 @@
         networkInstance.on('selectNode', p => {
             if (!p.nodes || !p.nodes.length) return;
             const id = String(p.nodes[0]);
+            // Segment editor, "pick on the map": a click adds or removes the device.
+            if (segPickOn()) {
+                networkInstance.unselectAll();
+                if (!id.startsWith(GROUP_PREFIX)) segToggle(id);
+                return;
+            }
             if (id.startsWith(GROUP_PREFIX)) {
                 schemaRetidy = getMapView() === 'minimal';
                 toggleLayeredGroup(layeredGroup, id);
@@ -2005,11 +2016,258 @@
     // Segments of the tenant on the map; 'all' has none (they are per tenant).
     async function loadMapSegments(org, force) {
         if (org === mapSegmentsOrg && !force) return;
+        if (org !== mapSegmentsOrg) closeSegEditor(false);   // a draft belongs to its tenant
         mapSegments = { segments: [], links: [] };
         mapSegmentsOrg = org;
         if (!org || org === 'all') return;
         const res = await apiFetch('/api/segments?org=' + encodeURIComponent(org));
         if (res && res.ok) mapSegments = await res.json();
+    }
+
+    // --- Segment editor (Segments menu in the map toolbar) -------------------
+    // While it is open the map draws the draft instead of its saved copy:
+    // dashed area, the rest faded, the ladder columns as they will be.
+    let segDraft = null;   // { id, name, color, subnets, members: Set, excluded: Set }
+    let segInput = null;   // nodes, links and cores of the map drawn now
+    let segSuggestions = [];
+    const SEG_DRAFT_ID = '__draft';
+    const SEG_COLOR_KEYS = { amber: 'mapSegColor_amber', teal: 'mapSegColor_teal', violet: 'mapSegColor_violet',
+                             rose: 'mapSegColor_rose', lime: 'mapSegColor_lime', sky: 'mapSegColor_sky' };
+    const segEl = id => /** @type {any} */ (document.getElementById(id));
+    // Saved segments with the draft in place of its saved copy, first: as
+    // after saving, its explicit members leave the other segments.
+    function segEffective() {
+        if (!segDraft) return mapSegments;
+        const d = { id: segDraft.id || SEG_DRAFT_ID, name: segDraft.name || tr('mapSegNewTitle'), color: segDraft.color,
+                    subnets: segDraft.subnets, members: [...segDraft.members], excluded: [...segDraft.excluded] };
+        return { segments: [d, ...(mapSegments.segments || []).filter(s => s.id !== segDraft.id)], links: mapSegments.links };
+    }
+    function segModelFor(nodes, links, cores) {
+        segInput = { nodes, links, cores: cores || [] };
+        return segmentModel(nodes, links, segEffective(), cores);
+    }
+    // An undecided finding (possible firewall bypass) on this cable: drawn orange dashed.
+    function segFindingOpen(a, b) {
+        const fs = mapSegmentModel && mapSegmentModel.findings;
+        if (!fs || !fs.length) return false;
+        const [x, y] = [String(a), String(b)].sort();
+        return fs.some(f => !f.decision && f.a === x && f.b === y);
+    }
+    const segNode = id => (segInput && segInput.nodes.find(n => n.id === id)) || null;
+    const segLabel = id => { const n = segNode(id); return (n && n.label) || id; };
+
+    // Areas of each segment on the map drawn now. Ladder: one frame round its
+    // column. Rows and hierarchy: members sit among other devices, so a frame
+    // round them would take those in too; each member gets its own halo.
+    function segAreas() {
+        const m = mapSegmentModel;
+        if (!m || !networkInstance) return [];
+        const lad = schemaLadderActive(), idsOf = {};
+        if (lad && lad.segCols) lad.segCols.forEach(c => { idsOf[c.id] = [...c.gateways, ...c.members.map(x => x.id)]; });
+        else Object.entries(m.of).forEach(([id, s]) => (idsOf[s] || (idsOf[s] = [])).push(id));
+        const ds = networkInstance.body.data.nodes;
+        const pad = lad && lad.segCols ? 24 : 8;
+        return segEffective().segments.map(s => {
+            const bbs = (idsOf[s.id] || []).filter(id => ds.get(id)).map(id => networkInstance.getBoundingBox(id)).filter(Boolean);
+            const rect = b => ({ x0: b.left - pad, y0: b.top - pad, x1: b.right + pad, y1: b.bottom + pad });
+            const rects = !bbs.length ? [] : lad && lad.segCols
+                ? [{ x0: Math.min(...bbs.map(b => b.left)) - pad, y0: Math.min(...bbs.map(b => b.top)) - pad,
+                     x1: Math.max(...bbs.map(b => b.right)) + pad, y1: Math.max(...bbs.map(b => b.bottom)) + pad }]
+                : bbs.map(rect);
+            // Name over the top-left one.
+            const head = rects.slice().sort((p, q) => (p.y0 - q.y0) || (p.x0 - q.x0))[0] || null;
+            return { s, bbs, rects, head };
+        });
+    }
+    const segRect = (ctx, r) => ctx.rect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+    function segPaint(ctx, a, col, fill, dash, text) {
+        ctx.globalAlpha = fill; ctx.fillStyle = col;
+        ctx.beginPath(); a.rects.forEach(r => segRect(ctx, r)); ctx.fill();
+        ctx.globalAlpha = 1; ctx.strokeStyle = col; ctx.lineWidth = dash ? 2 : 1.5; ctx.setLineDash(dash || []);
+        ctx.beginPath(); a.rects.forEach(r => segRect(ctx, r)); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.font = 'bold 12px Arial, Helvetica, sans-serif';
+        ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.fillStyle = col;
+        ctx.fillText(text, a.head.x0 + 4, a.head.y0 - 4);
+    }
+    // Under nodes and cables, both views: a tinted area per segment, name top-left.
+    function drawSegmentAreas(ctx) {
+        if (visioConnectorSink) return;
+        const draftId = segDraft ? (segDraft.id || SEG_DRAFT_ID) : null;
+        ctx.save();
+        segAreas().forEach(a => {
+            if (!a.head || a.s.id === draftId) return;
+            segPaint(ctx, a, SEGMENT_COLORS[a.s.color] || SEGMENT_COLORS.amber, 0.1, null, a.s.name);
+        });
+        ctx.restore();
+    }
+    // Over everything, editor open: the rest of the map faded, the draft dashed.
+    function drawSegmentDraft(ctx) {
+        if (!segDraft || visioConnectorSink) return;
+        const a = segAreas().find(x => x.s.id === (segDraft.id || SEG_DRAFT_ID));
+        ctx.save();
+        ctx.fillStyle = hexToRgba(cssVar('--bg', '#ffffff'), 0.6);
+        ctx.beginPath();
+        ctx.rect(-1e6, -1e6, 2e6, 2e6);
+        (a ? a.rects : []).forEach(r => segRect(ctx, r));
+        ctx.fill('evenodd');
+        if (a && a.head) segPaint(ctx, a, SEGMENT_COLORS[segDraft.color] || SEGMENT_COLORS.amber, 0.12, [8, 5],
+                                  `${segDraft.name.trim() || tr('mapSegNewTitle')} · ${tr('mapSegPreview')}`);
+        ctx.restore();
+    }
+
+    function renderSegPanel() {
+        const org = mapSegmentsOrg, ok = !!org && org !== 'all';
+        const need = segEl('mapSegNeedTenant'), list = segEl('mapSegList'), btn = segEl('mapSegNewBtn');
+        if (!list) return;
+        need.hidden = ok;
+        btn.hidden = !ok || !!segDraft;
+        const segs = ok ? (mapSegments.segments || []) : [];
+        const m = mapSegmentModel || { of: {}, gateways: {} };
+        list.innerHTML = !ok ? '' : !segs.length ? `<p class="map-view-hint">${escapeHtml(tr('mapSegNone'))}</p>` : segs.map(s => {
+            const n = Object.values(m.of).filter(x => x === s.id).length;
+            const gw = [...(m.gateways[s.id] || [])].map(segLabel).join(' + ') || '—';
+            return `<div class="map-seg-item"><span class="map-seg-dot" style="background:${SEGMENT_COLORS[s.color] || ''}"></span>
+                <span class="map-seg-name">${escapeHtml(s.name)}</span>
+                <span class="map-seg-acts"><button type="button" class="map-tb-btn" data-seg-action="edit" data-id="${attrEsc(s.id)}"${segDraft ? ' disabled' : ''}>${escapeHtml(tr('btnMapSegEdit'))}</button><button type="button" class="map-tb-btn" data-seg-action="delete" data-id="${attrEsc(s.id)}"${segDraft ? ' disabled' : ''}>${escapeHtml(tr('btnMapSegDelete'))}</button></span>
+                <span class="map-seg-meta">${escapeHtml(tr('mapSegMeta', { n, gw }))}</span></div>`;
+        }).join('');
+        if (segDraft) renderSegMembers();
+    }
+
+    function segDraftHas(id) {
+        if (segDraft.excluded.has(id)) return false;
+        if (segDraft.members.has(id)) return true;
+        const n = segNode(id), a = n ? ip4n(n.display_ip || n.id) : null;
+        return a !== null && segDraft.subnets.some(c => inCidr(a, c));
+    }
+    function renderSegMembers() {
+        const box = segEl('mapSegMembers');
+        if (!box || !segDraft || !segInput) return;
+        const term = String(segEl('mapSegSearch').value || '').trim().toLowerCase();
+        const nodes = segInput.nodes.filter(n => !n.is_group && !segInput.cores.includes(n.id))
+            .sort((a, b) => String(a.label || a.id).localeCompare(String(b.label || b.id), undefined, { numeric: true }));
+        const saved = mapSegments.segments || [];
+        const inOther = id => saved.find(s => s.id !== segDraft.id && (s.members || []).includes(id));
+        const top = box.scrollTop;
+        box.innerHTML = nodes.filter(n => !term || `${n.label || ''} ${n.display_ip || n.id}`.toLowerCase().includes(term)).map(n => {
+            const other = inOther(n.id);
+            return `<label class="map-opt"><input type="checkbox" data-seg-node="${attrEsc(n.id)}"${segDraftHas(n.id) ? ' checked' : ''}>
+                <span>${escapeHtml(n.label || n.id)} <small>${escapeHtml(n.display_ip || n.id)}${other ? ' · ' + escapeHtml(other.name) : ''}</small></span></label>`;
+        }).join('');
+        box.scrollTop = top;
+        const inside = nodes.filter(n => segDraftHas(n.id));
+        segEl('mapSegCount').textContent = tr('mapSegCount', { n: inside.length });
+        const moves = inside.filter(n => inOther(n.id)).map(n => `${n.label || n.id} (${inOther(n.id).name})`);
+        segEl('mapSegMoves').textContent = moves.length ? tr('mapSegMoves', { list: moves.join(', ') }) : '';
+    }
+    function segToggle(id) {
+        if (!segDraft) return;
+        if (segInput && segInput.cores.includes(id)) { segEl('mapSegErr').textContent = tr('mapSegCorePick'); return; }
+        segEl('mapSegErr').textContent = '';
+        if (segDraftHas(id)) { segDraft.members.delete(id); if (segDraftHas(id)) segDraft.excluded.add(id); }
+        else { segDraft.excluded.delete(id); if (!segDraftHas(id)) segDraft.members.add(id); }
+        redrawInteractiveMap();
+    }
+    const segPickOn = () => !!segDraft && !!segEl('mapSegPick')?.checked;
+
+    function openSegEditor(seg) {
+        const used = new Set((mapSegments.segments || []).map(s => s.color));
+        segDraft = seg
+            ? { id: seg.id, name: seg.name, color: seg.color, subnets: [...(seg.subnets || [])],
+                members: new Set(seg.members || []), excluded: new Set(seg.excluded || []) }
+            : { id: null, name: '', color: Object.keys(SEGMENT_COLORS).find(c => !used.has(c)) || 'amber',
+                subnets: [], members: new Set(), excluded: new Set() };
+        segEl('mapSegEditorTitle').textContent = tr(seg ? 'mapSegEditTitle' : 'mapSegNewTitle');
+        segEl('mapSegName').value = segDraft.name;
+        segEl('mapSegSubnets').value = segDraft.subnets.join('\n');
+        segEl('mapSegSearch').value = '';
+        segEl('mapSegErr').textContent = '';
+        segEl('mapSegColors').innerHTML = Object.keys(SEGMENT_COLORS).map(c => `<input type="radio" name="mapSegColor" id="mapSegColor-${c}" value="${c}"${c === segDraft.color ? ' checked' : ''}><label for="mapSegColor-${c}" style="background:${SEGMENT_COLORS[c]}" title="${attrEsc(tr(SEG_COLOR_KEYS[c]))}" aria-label="${attrEsc(tr(SEG_COLOR_KEYS[c]))}"></label>`).join('');
+        // Detected segments, from the saved ones only (the one edited included).
+        segSuggestions = [];
+        if (segInput) {
+            const nodes = segInput.nodes.filter(n => !n.is_group);
+            const saved = segmentModel(nodes, segInput.links, { segments: (mapSegments.segments || []).filter(s => s.id !== segDraft.id), links: [] }, segInput.cores);
+            segSuggestions = proposeSegments(nodes, segInput.links, segInput.cores, saved.of);
+        }
+        segEl('mapSegSuggest').innerHTML = `<option value="">${escapeHtml(tr('optMapSegSuggestNone'))}</option>` + segSuggestions.map((p, i) =>
+            `<option value="${i}">${escapeHtml(tr('mapSegSuggestOpt', { n: p.members.length, fw: p.firewalls.map(segLabel).join(' + ') || tr('mapSegNoFirewall') }))}</option>`).join('');
+        segEl('mapSegEditor').hidden = false;
+        redrawInteractiveMap();
+    }
+    function closeSegEditor(redraw) {
+        if (!segDraft) return;
+        segDraft = null;
+        const ed = segEl('mapSegEditor');
+        if (ed) ed.hidden = true;
+        renderSegPanel();
+        if (redraw) redrawInteractiveMap();
+    }
+    async function segPost(url, body) {
+        const res = await apiFetch(url, { method: 'POST', body: JSON.stringify(body) });
+        if (!res) return false;
+        if (res.ok) return true;
+        const d = await res.json().catch(() => ({}));
+        segEl('mapSegErr').textContent = typeof d.detail === 'string' ? d.detail : String(res.status);
+        return false;
+    }
+    async function saveSegDraft() {
+        const name = segDraft.name.trim();
+        if (!name) { segEl('mapSegErr').textContent = tr('mapSegErrName'); return; }
+        const ok = await segPost('/api/segments', { org: mapSegmentsOrg, id: segDraft.id, name, color: segDraft.color,
+            subnets: segDraft.subnets, members: [...segDraft.members], excluded: [...segDraft.excluded] });
+        if (!ok) return;
+        closeSegEditor(false);
+        await loadMapSegments(mapSegmentsOrg, true);
+        redrawInteractiveMap();
+    }
+    async function deleteSegment(id) {
+        const s = (mapSegments.segments || []).find(x => x.id === id);
+        if (!s || !confirm(tr('mapSegDeleteConfirm', { name: s.name }))) return;
+        if (!(await segPost('/api/segments/delete', { org: mapSegmentsOrg, id }))) return;
+        await loadMapSegments(mapSegmentsOrg, true);
+        redrawInteractiveMap();
+    }
+    function bindSegEditor() {
+        segEl('mapSegNewBtn')?.addEventListener('click', () => openSegEditor(null));
+        segEl('mapSegList')?.addEventListener('click', e => {
+            const b = /** @type {HTMLElement|null} */ (/** @type {Element} */ (e.target).closest('[data-seg-action]'));
+            if (!b) return;
+            if (b.dataset.segAction === 'edit') openSegEditor((mapSegments.segments || []).find(s => s.id === b.dataset.id));
+            else deleteSegment(b.dataset.id || '');
+        });
+        segEl('mapSegName')?.addEventListener('input', e => {
+            if (!segDraft) return;
+            segDraft.name = e.target.value;
+            if (networkInstance) networkInstance.redraw();
+        });
+        segEl('mapSegColors')?.addEventListener('change', e => {
+            if (!segDraft) return;
+            segDraft.color = e.target.value;
+            redrawInteractiveMap();
+        });
+        segEl('mapSegSubnets')?.addEventListener('change', e => {
+            if (!segDraft) return;
+            segDraft.subnets = String(e.target.value).split(/[\s,;]+/).map(x => x.trim()).filter(Boolean);
+            redrawInteractiveMap();
+        });
+        segEl('mapSegSuggest')?.addEventListener('change', e => {
+            const p = segSuggestions[Number(e.target.value)];
+            if (!segDraft || !p) return;
+            segDraft.members = new Set(p.members);
+            segDraft.excluded = new Set();
+            segDraft.subnets = [...p.subnets];
+            segEl('mapSegSubnets').value = segDraft.subnets.join('\n');
+            redrawInteractiveMap();
+        });
+        segEl('mapSegSearch')?.addEventListener('input', renderSegMembers);
+        segEl('mapSegMembers')?.addEventListener('change', e => {
+            const id = e.target.dataset && e.target.dataset.segNode;
+            if (id) segToggle(id);
+        });
+        segEl('mapSegSaveBtn')?.addEventListener('click', saveSegDraft);
+        segEl('mapSegCancelBtn')?.addEventListener('click', () => closeSegEditor(true));
     }
     function topoZone(n) {
         if (n.is_group && (n.members || []).length) return topoZone(n.members[0]);
@@ -2413,6 +2671,7 @@
             ctx.strokeStyle = kind === 'pc' ? PC_COPPER : (kind === 'ha' ? '#f9a825' : muted);
             ctx.lineWidth = kind === 'pc' ? 2 : 1.25;
             ctx.setLineDash(kind === 'group' || kind === 'ha' ? [4, 4] : (tenantOf(e.from) !== tenantOf(e.to) ? [7, 4] : []));
+            if (segFindingOpen(e.from, e.to)) { ctx.strokeStyle = SEGMENT_FINDING_COLOR; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); }
             const a = pos[e.from], b = pos[e.to];
             ctx.beginPath();
             if (Math.abs(a.y - b.y) < 1) {
@@ -4253,8 +4512,8 @@
         const ladder = schemaLadderPlan(bundles, id => levels[id] || 0, id => (info[id] || {}).device_type,
                                         labelOf, GROUPABLE_TYPES, forcedPair,
                                         schemaLayout() === 'ladder');
-        const segModel = segmentModel(nodeData, linkData, mapSegments, ladder ? [ladder.A, ladder.B] : forcedPair);
-        if (ladder) ladder.segCols = ladderSegmentColumns(ladder, segModel, mapSegments.segments || [], bundles, labelOf);
+        const segModel = segModelFor(nodeData, linkData, ladder ? [ladder.A, ladder.B] : forcedPair);
+        if (ladder) ladder.segCols = ladderSegmentColumns(ladder, segModel, segEffective().segments, bundles, labelOf);
         if (ladder && schemaLayout() === 'ladder') sizeLadderBoxes(nodes, bundles, ladder);
 
         // Final x/y come from packSchemaRows() once vis.js has sized the boxes.
@@ -4841,27 +5100,6 @@
             });
             ctx.restore();
         }
-        // Ladder segment columns: a tinted frame, the name top-left.
-        const ladSeg = schemaLadderActive();
-        if (ladSeg && ladSeg.segCols && !visioConnectorSink) {
-            ctx.save();
-            ladSeg.segCols.forEach(c => {
-                const bbs = [...c.gateways, ...c.members.map(m => m.id)].map(id => {
-                    try { return networkInstance.getBoundingBox(id); } catch (e) { return null; }
-                }).filter(Boolean);
-                if (!bbs.length) return;
-                const pad = 24, col = SEGMENT_COLORS[c.color] || SEGMENT_COLORS.amber;
-                const x0 = Math.min(...bbs.map(b => b.left)) - pad, y0 = Math.min(...bbs.map(b => b.top)) - pad;
-                const x1 = Math.max(...bbs.map(b => b.right)) + pad, y1 = Math.max(...bbs.map(b => b.bottom)) + pad;
-                ctx.globalAlpha = 0.07; ctx.fillStyle = col; ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
-                ctx.globalAlpha = 1; ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
-                ctx.font = 'bold 12px Arial, Helvetica, sans-serif';
-                ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.fillStyle = col;
-                ctx.fillText(c.name, x0 + 4, y0 - 4);
-            });
-            ctx.restore();
-        }
-
         if (!Array.isArray(bundles) || !bundles.length) return;
 
         const spacing = 11;         // distanza tra cavi paralleli / slot di porta
@@ -4969,11 +5207,8 @@
         // color-picker/legenda e il disegno restano sempre allineati.
         // ponytail: una categoria personalizzata assegnata manualmente (click
         // destro sul cavo) vince sempre sullo stile standard per-tipo.
-        // Undecided segment findings (possible firewall bypass): orange dashed.
-        const findingKeys = new Set(((mapSegmentModel || {}).findings || [])
-            .filter(f => !f.decision).map(f => f.a + '\u0000' + f.b));
         const styleFor = b => {
-            if (findingKeys.size && findingKeys.has([b.from, b.to].sort().join('\u0000'))) return { color: SEGMENT_FINDING_COLOR, lw: 2, dash: [6, 4] };
+            if (segFindingOpen(b.from, b.to)) return { color: SEGMENT_FINDING_COLOR, lw: 2, dash: [6, 4] };
             const custom = customStyleForEdge(pillKey(b));
             if (custom) return { color: custom.color, lw: 1.8, dash: custom.dash };
             return b.type === 'peer'      ? { color: linkColor('peer'),      lw: 1.8, dash: null }
@@ -7162,9 +7397,12 @@
         const t = /** @type {Element} */ (e.target);
         const picked = t.closest?.('.map-menu-item');
         document.querySelectorAll('#mapToolbar details.map-pop[open]').forEach(d => {
+            // The segment editor stays open: devices are picked on the map.
+            if (d.id === 'mapSegMenu' && segDraft) return;
             if (picked || !d.contains(t)) /** @type {HTMLDetailsElement} */ (d).open = false;
         });
     });
+    bindSegEditor();
     document.getElementById('mapToolbar')?.addEventListener('keydown', e => {
         if (e.key !== 'Escape') return;
         const d = /** @type {HTMLDetailsElement|null} */ (/** @type {Element} */ (e.target).closest('details.map-pop[open]'));

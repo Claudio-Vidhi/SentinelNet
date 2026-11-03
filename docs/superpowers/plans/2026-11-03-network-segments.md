@@ -52,11 +52,13 @@ API (`routers/segments.py`), tenant-scoped with `assert_group_allowed`:
 1. **Schema · ladder**: main network ladder on the left, one column per
    segment on the right, gateways at the column top; only core → gateway
    cables cross the border. Findings drawn as orange dashed lines.
-2. **Schema · rows** and **Hierarchy**: a tinted rectangle behind each
-   segment's members, label top-left. Findings as orange dashed edges.
-3. **Segment editor** (modal via `openModal`): name, colour, CIDRs, device
-   checklist + click-to-pick on the map, live dashed preview with the rest
-   of the map dimmed, save/cancel.
+2. **Schema · rows** and **Hierarchy**: a tinted halo behind each of a
+   segment's members (one frame would take in the devices between them),
+   label over the top-left one. Findings as orange dashed edges.
+3. **Segment editor** ("Segments" toolbar panel, not a modal: a modal
+   backdrop would block click-to-pick): name, colour, CIDRs, detected
+   proposal, device checklist + click-to-pick on the map, live dashed
+   preview with the rest of the map dimmed, save/cancel.
 4. **Findings panel** in the map side panel, one row per finding with the
    three decisions.
 

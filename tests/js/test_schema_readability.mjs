@@ -163,7 +163,8 @@ assert.deepEqual(schemaUplinkGroups(bundles, ids, levelOf, id => {
             const visioColor = c => ({ hex: c }), routeMemo = {}, pillKey = b => b.from + '~' + b.to + '~' + (b.pcTag || '');
             const pillAdj = () => ({ dx: 0, dy: 0, scale: 1 }), labelAdj = () => ({ dx: 0, dy: 0 });
             const schemaPref = (k, f) => k in prefs ? prefs[k] : f, rootsOf = () => ({}), schemaLadderActive = () => null;
-            let visioConnectorSink = sink, hoverBundleKey = null, layeredGroup = 'all', mapSegmentModel = null;
+            let visioConnectorSink = sink, hoverBundleKey = null, layeredGroup = 'all';
+            const segFindingOpen = () => false;
             let pillHitboxes = [], labelHitboxes = [], edgeHitSegs = [];
             ${body}
             drawMinimalOverlay(ctx, bundles, []);`)(net, prefs, focus, ctx, bundles0, sink || null);

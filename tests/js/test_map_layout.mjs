@@ -66,6 +66,7 @@ Object.assign(globalThis, { networkInstance, document, cssVar, hexToRgba, drawEn
 const T = (0, eval)(`(function () {
     const topoZone = n => ({ key: n.group || '' });
     const initLayeredTagInteraction = () => {};
+    const segFindingOpen = () => false, SEGMENT_FINDING_COLOR = '#f97316';
     ${line('const LAYERED_PITCH =')}
     ${line('const LAYERED_TENANT_GAP =')}
     ${line('const PC_COPPER =')}
