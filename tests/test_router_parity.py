@@ -152,7 +152,9 @@ class TestRouterParity(unittest.TestCase):
                     # Factory reset, archived at the next start.
                     "/api/settings/factory-reset",
                     # Schema map layout proposed by the AI (anonymous graph only).
-                    "/api/map/ai-layout")
+                    "/api/map/ai-layout",
+                    # Network segments on the maps (plan 2026-11-03).
+                    "/api/segments")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
@@ -329,7 +331,9 @@ class TestFullParity(unittest.TestCase):
                     # Factory reset, archived at the next start.
                     "/api/settings/factory-reset",
                     # Schema map layout proposed by the AI (anonymous graph only).
-                    "/api/map/ai-layout")
+                    "/api/map/ai-layout",
+                    # Network segments on the maps (plan 2026-11-03).
+                    "/api/segments")
     # Come NEW_PREFIXES, filtra entrambi i lati: copre anche FortigatePreviewSchema,
     # rimosso insieme al flag di preview /api/settings/fortigate-preview.
     NEW_SCHEMAS = ("DeviceProbeSchema", "GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "ReportPdfSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection", "AgentBackupSchema", "AgentStatusItemSchema", "AgentStatusSchema", "FortigatePreviewSchema",
@@ -413,7 +417,9 @@ class TestFullParity(unittest.TestCase):
                     # Blueprint assistant (spec 2026-10-11, routes under /api/blueprint).
                     "AssistantDescribeSchema", "AssistantDeriveSchema", "InstructionsSchema", "AssistantDraftSchema",
                     # AI layout of the Schema map.
-                    "AiLayoutSchema", "AiLayoutNode", "AiLayoutLink")
+                    "AiLayoutSchema", "AiLayoutNode", "AiLayoutLink",
+                    # Network segments (routes under /api/segments).
+                    "SegmentSaveSchema", "SegmentDeleteSchema", "SegmentLinkSchema")
     # v7: /anomalies ora restituisce INCIDENTI invece di singoli eventi
     # correlati. Parametri e forma della risposta restano quelli storici (li
     # consumano il tab Flussi e il tool MCP), è cambiata la descrizione.

@@ -58,6 +58,17 @@ _SCHEMA = "\n".join([
     "note TEXT NOT NULL DEFAULT '', snapshot TEXT NOT NULL, PRIMARY KEY (org, rev));",
     "CREATE TABLE IF NOT EXISTS blueprint_observations (org TEXT PRIMARY KEY "
     "REFERENCES organizations(key) ON DELETE CASCADE, at TEXT NOT NULL, data TEXT NOT NULL);",
+    # Network segments drawn on the maps (plan 2026-11-03 network-segments).
+    # members/excluded hold map node ids, not host rows: a discovered switch
+    # outside the inventory can be a member too.
+    "CREATE TABLE IF NOT EXISTS segments (id TEXT PRIMARY KEY, "
+    "org TEXT NOT NULL REFERENCES organizations(key) ON DELETE CASCADE, "
+    "name TEXT NOT NULL, color TEXT NOT NULL, subnets TEXT NOT NULL DEFAULT '[]', "
+    "members TEXT NOT NULL DEFAULT '[]', excluded TEXT NOT NULL DEFAULT '[]');",
+    "CREATE TABLE IF NOT EXISTS segment_links (org TEXT NOT NULL "
+    "REFERENCES organizations(key) ON DELETE CASCADE, a TEXT NOT NULL, b TEXT NOT NULL, "
+    "decision TEXT NOT NULL CHECK (decision IN ('allowed', 'gateway')), "
+    "CHECK (a < b), PRIMARY KEY (org, a, b));",
     _host_table("hosts", _FIELDS["hosts"]),
     _host_table("decommissioned_hosts", _FIELDS["decommissioned_hosts"]),
 ])
