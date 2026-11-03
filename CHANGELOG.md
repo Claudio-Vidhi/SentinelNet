@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.60.0] - 2026-11-03
+
 ### Added
 
 - **Segmenti di rete sulle mappe**: reti separate nello stesso sito (per
