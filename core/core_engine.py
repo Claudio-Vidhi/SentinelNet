@@ -227,6 +227,9 @@ TRIAGE_EXTRA_COMMANDS = {
         ("show lldp neighbors detail", "--- SHOW LLDP NEIGHBORS DETAIL ---"),
         ("show switch",                "--- SHOW SWITCH ---"),
         ("show inventory",             "--- SHOW INVENTORY ---"),
+        # Transceiver type and speed per port: the map colours cables by
+        # medium (copper, MM/SM fibre, DAC) and speed (core/port_media.py).
+        ("show interfaces status",     "--- SHOW INTERFACES STATUS ---"),
     ],
     'hpe': [
         ("show lldp info remote-device",        "--- SHOW LLDP NEIGHBORS ---"),
@@ -2556,6 +2559,23 @@ def _generate_network_map(group_filter=None) -> dict:
             "pc_names":       pc_names,
             "member_count":   member_count,
         })
+
+    # Per-port facts of each cable end the backup owns: mode (access/trunk)
+    # and, from 'show interfaces status', medium and speed. Keyed by the port
+    # name as the link carries it, so the map looks them up as drawn.
+    from core import port_media
+    facts_of = {}
+    for link in links:
+        for end, ports in ((link["source"], link["local_ports"]), (link["target"], link["remote_ports"])):
+            dev = parsed_devices.get(end)
+            if not dev or end not in nodes_map:
+                continue
+            if end not in facts_of:
+                facts_of[end] = port_media.port_facts(dev["content"])
+            for p in ports:
+                f = facts_of[end].get(_normalize_iface(p))
+                if f:
+                    nodes_map[end].setdefault("port_info", {})[p] = f
 
     # Manual overrides chosen by the user (name/version to resolve CDP/LLDP
     # conflicts, but also vendor/model reclassified by hand in the Categories tab):

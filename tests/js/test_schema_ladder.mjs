@@ -104,6 +104,7 @@ const geo = new Function(
     + 'const pillKey = b => b.from + "~" + b.to;\n'
     + 'let corePortNear = "0"; const schemaPref = (k, d) => (k === "schemaCorePortNear" ? corePortNear : d);\n'
     + 'const setNear = v => { corePortNear = v; };\n'
+    + 'const accessPort = () => false, endAccess = () => false, fillPortText = (c, t, x, y) => c.fillText(t, x, y);\n'
     + extract('function pcEndTags(') + '\n' + extract('function compressPorts(') + '\n' + extract('function ladderOwnEnd(') + '\n'
     + extract('function ladderLeafOffset(') + '\n' + extract('function ladderLeafRows(') + '\n' + extract('function ladderPositions(') + '\n' + extract('function drawLadderCables(')
     + '\nreturn { ladderPositions, drawLadderCables, setNear, compressPorts };')();

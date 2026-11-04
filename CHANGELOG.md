@@ -10,6 +10,22 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Uplink non in trunk**: uno switch il cui collegamento verso monte è una
+  porta configurata in access (una sola VLAN) è disegnato rosso, e quella
+  porta ha il nome su sfondo nero, come nella legenda di progetto. Il dato
+  viene dalla configurazione già nei backup.
+- **Colore cavi → Mezzo e velocità** (menu Vista): i cavi prendono i colori
+  della legenda di progetto, per mezzo (rame, F.O. multimodale, F.O.
+  monomodale, DAC Twinax) e velocità (da 100M a 100G); un DAC è 1 px più
+  spesso. Il dato viene dal nuovo comando `show interfaces status` nei backup
+  Cisco: i cavi di un apparato non ancora riletto restano col colore di sempre.
+  La legenda mostra solo le voci presenti sulla mappa; i colori finiscono
+  anche nell'export Visio.
+- **Dorsale**: col tasto destro su un cavo lo si segna come dorsale (fra rack
+  diversi): diventa una banda larga nel colore del suo mezzo.
+
 ### Fixed
 
 - Export Visio: mancavano i nomi delle porte dei cavi che girano attorno ai

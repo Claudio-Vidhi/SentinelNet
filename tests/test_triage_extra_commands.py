@@ -15,8 +15,9 @@ class Extras(unittest.TestCase):
     def test_cisco(self):
         cmds = ce.triage_extra_commands("cisco")
         self.assertEqual(cmds[0], ("show cdp neighbors", "--- SHOW CDP NEIGHBORS ---"))
-        self.assertEqual(cmds[-1], ("show inventory", "--- SHOW INVENTORY ---"))
-        self.assertEqual(len(cmds), 6)
+        self.assertIn(("show inventory", "--- SHOW INVENTORY ---"), cmds)
+        self.assertEqual(cmds[-1], ("show interfaces status", "--- SHOW INTERFACES STATUS ---"))
+        self.assertEqual(len(cmds), 7)
 
     def test_linux_privileged_tier(self):
         base = ce.triage_extra_commands("linux")
@@ -39,7 +40,7 @@ class Extras(unittest.TestCase):
 
     def test_returned_list_is_a_copy(self):
         ce.triage_extra_commands("cisco").clear()
-        self.assertEqual(len(ce.triage_extra_commands("cisco")), 6)
+        self.assertEqual(len(ce.triage_extra_commands("cisco")), 7)
 
 
 if __name__ == "__main__":

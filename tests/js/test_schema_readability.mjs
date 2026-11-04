@@ -159,7 +159,7 @@ assert.deepEqual(schemaUplinkGroups(bundles, ids, levelOf, id => {
             extract('function pcEndTags('), extract('function schemaApMode('), extract('function schemaLeafColumns(')].join('\n');
         new Function('networkInstance', 'prefs', 'schemaFocusId', 'ctx', 'bundles', 'sink', `
             const MINIMAL_MAP_STYLE = { edge: { group: {} } }, GROUPABLE_TYPES = ['ap'];
-            const initPillInteraction = () => {}, customStyleForEdge = () => null, linkColor = () => '#888888', hexToRgba = () => 'rgba(0,0,0,.1)';
+            const initPillInteraction = () => {}, customStyleForEdge = () => null, linkColor = () => '#888888', hexToRgba = () => 'rgba(0,0,0,.1)'; const cableStyle = () => null, accessPort = () => false, fillPortText = (c, t, x, y) => c.fillText(t, x, y);
             const visioColor = c => ({ hex: c }), routeMemo = {}, pillKey = b => b.from + '~' + b.to + '~' + (b.pcTag || '');
             const pillAdj = () => ({ dx: 0, dy: 0, scale: 1 }), labelAdj = () => ({ dx: 0, dy: 0 });
             const schemaPref = (k, f) => k in prefs ? prefs[k] : f, rootsOf = () => ({}), schemaLadderActive = () => null;

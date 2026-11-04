@@ -328,4 +328,39 @@ assert.equal(proposeSegments(nodes, clean, null, {}).length, 1);
     }
 }
 
+// Uplinks that are not trunks, and the project cable palette.
+{
+    const order = src.match(/^ {4}const SPEED_ORDER = .*$/m)[0];
+    const { accessUplinks, cableKey, CABLE_PALETTE } = new Function([order, extract('const CABLE_PALETTE ='),
+        extract('function accessUplinks('), extract('function cableKey(')].join('\n') + '\nreturn { accessUplinks, cableKey, CABLE_PALETTE };')();
+    const facts = {
+        core: { 'Gi1/0/1': { mode: 'access' }, 'Gi1/0/2': { mode: 'trunk' }, 'Gi1/0/3': { mode: 'access' } },
+        sw2: { 'Gi0/1': { mode: 'access' } },
+    };
+    const fact = (id, port) => (facts[id] || {})[port] || null;
+    const B = (from, to, local, remote) => ({ from, to, type: 'link', members: [{ local, remote }] });
+    const type = { core: 'switch', sw1: 'switch', sw2: 'switch', ap1: 'ap', sw3: 'switch' };
+    const level = { core: 0, sw1: 1, sw2: 1, ap1: 1, sw3: 2 };
+    const r = accessUplinks([
+        B('core', 'sw1', 'Gi1/0/1', 'Gi0/1'),   // core's port access: sw1 behind it
+        B('core', 'ap1', 'Gi1/0/3', 'Gi0'),     // an AP on an access port: normal
+        B('core', 'sw2', 'Gi1/0/2', 'Gi0/1'),   // trunk on the core, access on sw2's own uplink
+        B('sw1', 'sw3', 'Gi0/2', 'Gi0/1'),      // nothing known
+    ], id => type[id], id => level[id], fact);
+    assert.deepEqual([...r.nodes].sort(), ['sw1', 'sw2']);
+    assert.deepEqual([...r.ports].sort(), ['core\u0000Gi1/0/1', 'sw2\u0000Gi0/1']);
+
+    const f2 = {
+        a: { 'Te1/1/1': { medium: 'mm', speed: '10G' }, 'Gi1/0/1': { medium: 'copper', speed: '1G' }, 'Te1/1/2': { medium: 'dac', speed: '10G' } },
+        b: { 'Te1/1/1': { speed: '1G' } },
+    };
+    const fk = (id, port) => (f2[id] || {})[port] || null;
+    assert.equal(cableKey(B('a', 'c', 'Te1/1/1', 'x'), fk), 'mm-10G');
+    assert.equal(cableKey(B('a', 'b', 'Te1/1/1', 'Te1/1/1'), fk), 'mm-1G', 'the slower end');
+    assert.equal(cableKey(B('a', 'c', 'Gi1/0/1', 'x'), fk), 'copper-1G');
+    assert.equal(cableKey(B('a', 'c', 'Te1/1/2', 'x'), fk), 'dac-10G');
+    assert.equal(cableKey(B('c', 'd', 'Gi1', 'Gi2'), fk), null, 'nothing read yet');
+    assert.ok(Object.values(CABLE_PALETTE).every(c => /^#[0-9A-F]{6}$/.test(c)));
+}
+
 console.log('segments model OK');

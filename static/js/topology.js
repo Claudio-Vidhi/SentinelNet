@@ -1207,6 +1207,7 @@
             // Conservati per l'export Visio: il .vsdx replica ESATTAMENTE il
             // disegno dell'overlay (cavi paralleli, etichette porta, pillole).
             minimalOverlayData = { bundles, groupsInfo, nodes, ladder };
+            renderMinimalLegend();
             updateLadderHint(ladder);
             // A new map: the focused node may be gone (filter, tenant).
             schemaFocusId = null;
@@ -1433,6 +1434,8 @@
         if (ap) ap.value = schemaApMode();
         const lay = /** @type {HTMLSelectElement|null} */ (document.getElementById('schemaLayout'));
         if (lay) lay.value = schemaLayout();
+        const cc = /** @type {HTMLSelectElement|null} */ (document.getElementById('schemaCableColors'));
+        if (cc) cc.value = cableColorMode();
     }
     function schemaPortLabelMode() {
         const v = schemaPref('schemaPortLabels', 'all');
@@ -1916,6 +1919,93 @@
     // Stroke of each saved colour (segment_manager.COLORS); areas use it faded.
     const SEGMENT_COLORS = { amber: '#d97706', teal: '#0d9488', violet: '#7c3aed', rose: '#e11d48', lime: '#65a30d', sky: '#0284c7' };
     const SEGMENT_FINDING_COLOR = '#f97316';
+
+    // Per-port facts from the backups (core/port_media.py): the configured
+    // mode and, once 'show interfaces status' is read, medium and speed.
+    let mapPortInfo = {};
+    let mapAccessUplink = { ports: new Set(), nodes: new Set() };
+    const portFact = (id, port) => (port && (mapPortInfo[id] || {})[port]) || null;
+    const accessPort = (id, port) => mapAccessUplink.ports.has(id + '\u0000' + port);
+    // Either end of a bundle at device id is an access-mode uplink port.
+    const endAccess = (b, id) => b.members.some(mm => accessPort(id, b.from === id ? mm.local : mm.remote));
+    /** Uplinks that are not trunks: a cable whose port, on either end, is
+     *  configured access carries one VLAN only, and the switch behind it is
+     *  out of reach. Behind = the end farther from the cores (higher level);
+     *  at the same level, the end facing the access port. Only a switch
+     *  behind counts: an AP or a host on an access port is the norm. */
+    function accessUplinks(bundles, typeOf, levelOf, fact) {
+        const ports = new Set(), nodes = new Set();
+        bundles.forEach(b => {
+            if (b.type === 'keepalive' || b.from === b.to) return;
+            b.members.forEach(mm => {
+                [[b.from, mm.local, b.to], [b.to, mm.remote, b.from]].forEach(([id, port, other]) => {
+                    const f = fact(id, port);
+                    if (!f || f.mode !== 'access') return;
+                    const behind = levelOf(other) < levelOf(id) ? id : other;
+                    if (typeOf(behind) !== 'switch') return;
+                    ports.add(id + '\u0000' + port);
+                    nodes.add(behind);
+                });
+            });
+        });
+        return { ports, nodes };
+    }
+    // A port of an uplink that is not a trunk: white on black, as in the legend.
+    function fillPortText(ctx, t, x, y, blk) {
+        if (!blk) { ctx.fillText(t, x, y); return; }
+        const w = ctx.measureText(t).width, h = 11;
+        const l = ctx.textAlign === 'right' ? x - w : ctx.textAlign === 'center' ? x - w / 2 : x;
+        const top = ctx.textBaseline === 'top' ? y : ctx.textBaseline === 'bottom' ? y - h
+            : ctx.textBaseline === 'middle' ? y - h / 2 : y - 8;
+        const prev = ctx.fillStyle;
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(l - 2, top - 1, w + 4, h + 1);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(t, x, y);
+        ctx.fillStyle = prev;
+    }
+    // Cable colours by medium and speed (the project legend). A DAC is drawn
+    // like the others, one pixel thicker; a backbone (marked by hand) is a
+    // wide band in the colour of its medium.
+    const CABLE_PALETTE = {
+        'copper-100M': '#00FF33', 'copper-1G': '#FF99CC', 'fiber-100M': '#FFFF00',
+        'mm-1G': '#FF6600', 'sm-1G': '#0000CC', 'mm-10G': '#C00000', 'sm-10G': '#008080', 'dac-10G': '#7030A0',
+        'mm-25G': '#9999FF', 'sm-25G': '#CC66FF', 'dac-25G': '#0070C0', 'mm-40G': '#FFBB99', 'sm-40G': '#FF00FF',
+        'dac-40G': '#B04000', 'mm-100G': '#C0D080', 'sm-100G': '#6B7A2A', 'dac-100G': '#006400',
+    };
+    const BACKBONE_PALETTE = { mm: '#A0410D', sm: '#00FFFF', copper: '#C0C0C0' };
+    const SPEED_ORDER = ['100M', '1G', '10G', '25G', '40G', '100G'];
+    /** The palette key of a cable ('mm-10G', 'copper-1G'...): the medium read
+     *  at either end, the slower end's speed. null when either is unknown. */
+    function cableKey(b, fact) {
+        let medium = null, speed = null;
+        b.members.forEach(mm => {
+            const a = fact(b.from, mm.local) || {}, c = fact(b.to, mm.remote) || {};
+            medium = medium || a.medium || c.medium || null;
+            [a.speed, c.speed].filter(Boolean).forEach(v => {
+                if (!speed || SPEED_ORDER.indexOf(v) < SPEED_ORDER.indexOf(speed)) speed = v;
+            });
+        });
+        if (!medium || !speed) return null;
+        // ponytail: copper above 1G (10GBase-T) has no colour of its own in the legend: it reads as 1G.
+        if (medium === 'copper') return speed === '100M' ? 'copper-100M' : 'copper-1G';
+        if (speed === '100M') return 'fiber-100M';
+        const k = `${medium}-${speed}`;
+        return CABLE_PALETTE[k] ? k : null;
+    }
+    let mapBackbones = new Set();
+    try { mapBackbones = new Set(JSON.parse(localStorage.getItem('mapBackbones') || '[]')); } catch (e) { mapBackbones = new Set(); }
+    const cableColorMode = () => (schemaPref('cableColors', 'type') === 'media' ? 'media' : 'type');
+    // Style of a cable under the project legend, or null for the usual one.
+    function cableStyle(b, baseLw) {
+        const key = cableKey(b, portFact);
+        if (mapBackbones.has(pillKey(b))) {
+            const m = key ? key.split('-')[0] : null;
+            return { color: BACKBONE_PALETTE[m === 'dac' ? 'copper' : m] || linkColor(b.type === 'pc' ? 'pc' : 'link'), lw: 5, dash: null };
+        }
+        if (cableColorMode() !== 'media' || !key) return null;
+        return { color: CABLE_PALETTE[key], lw: baseLw + (key.startsWith('dac') ? 1 : 0), dash: null };
+    }
 
     /** Membership, cores, gateways and findings of the saved segments on one map.
      *  Membership: members, then subnets (address in a CIDR), minus excluded;
@@ -3512,7 +3602,7 @@
                 conns.push({ b: e.b, from: c, to: e.id, pts: [[x, cb.bottom], [x, e.y], [ex, e.y]] });
                 if (!showLbl(e.b)) return;
                 // Inside the core, reading upward along its lane.
-                if (e.cp) { labels.push({ t: e.cp, x: x + 2, y: cb.bottom - 4, rot: true }); coreCps[c].push(e.cp); }
+                if (e.cp) { labels.push({ t: e.cp, x: x + 2, y: cb.bottom - 4, rot: true, blk: accessPort(c, e.cp) }); coreCps[c].push(e.cp); }
                 const tags = pcEndTags(e.b);
                 if (tags.from || tags.to) {
                     let g = pcs.find(p => p.b === e.b && p.core === c);
@@ -3521,7 +3611,7 @@
                     g.xs.push(x); g.ys.push(e.y); g.mps.push(e.mp);
                 }
                 // Under the cable: parallel cables stack their names, none sits on a cable.
-                if (e.mp) labels.push({ t: e.mp, x: left ? ex + 5 : ex - 5, y: e.y + 2, align: left ? 'left' : 'right', under: true });
+                if (e.mp) labels.push({ t: e.mp, x: left ? ex + 5 : ex - 5, y: e.y + 2, align: left ? 'left' : 'right', under: true, blk: accessPort(e.id, e.mp) });
                 // Optional: the core port again on the cable, just outside the switch.
                 if (e.cp && coreNear) labels.push({ t: e.cp, x: left ? ex - 8 : ex + 8, y: e.y + 2, align: left ? 'right' : 'left', under: true });
             });
@@ -3543,8 +3633,8 @@
                 conns.push({ b, from: p, to: k0, pts: [[tx, pb.bottom], [tx, kb.top]] });
                 if (!b || !showLbl(b)) return;
                 const pt = ownEnd(b, p), kt = ownEnd(b, k0);
-                if (pt) labels.push({ t: pt, x: tx + 4, y: pb.bottom - 3, align: 'left' });
-                if (kt) labels.push({ t: kt, x: tx + 4, y: kb.top + 3, align: 'left', under: true });
+                if (pt) labels.push({ t: pt, x: tx + 4, y: pb.bottom - 3, align: 'left', blk: endAccess(b, p) });
+                if (kt) labels.push({ t: kt, x: tx + 4, y: kb.top + 3, align: 'left', under: true, blk: endAccess(b, k0) });
                 return;
             }
             // One cable per child, each on its own lane out of the parent's
@@ -3562,8 +3652,8 @@
                 conns.push({ b, from: p, to: k, pts: [[x, pb.bottom], [x, y], [kb.left, y]] });
                 if (!b || !showLbl(b)) return;
                 const kt = ownEnd(b, k), pt = ownEnd(b, p);
-                if (kt) labels.push({ t: kt, x: kb.left + 5, y: y + 2, align: 'left', under: true });
-                if (pt) labels.push({ t: pt, x: x + 2, y: pb.bottom - 4, rot: true });
+                if (kt) labels.push({ t: kt, x: kb.left + 5, y: y + 2, align: 'left', under: true, blk: endAccess(b, k) });
+                if (pt) labels.push({ t: pt, x: x + 2, y: pb.bottom - 4, rot: true, blk: endAccess(b, p) });
             });
         });
         // Leaves (APs...), each on its own cable, as in the row view.
@@ -3586,8 +3676,9 @@
                                 : [[cx, pb.bottom], [cx, lb.top]];
                 paths.push({ b, pts });
                 conns.push({ b, from: p, to: lb.id, pts });
-                if (t) labels.push(col ? { t, x: lb.left - 4, y: cy + 2, align: 'right', under: true }
-                                       : { t, x: cx, y: pb.bottom - 3, align: 'center' });
+                const blk = accessPort(p, t);
+                if (t) labels.push(col ? { t, x: lb.left - 4, y: cy + 2, align: 'right', under: true, blk }
+                                       : { t, x: cx, y: pb.bottom - 3, align: 'center', blk });
             });
         });
 
@@ -3628,12 +3719,12 @@
                 ctx.translate(l.x, l.y);
                 ctx.rotate(-Math.PI / 2);
                 ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-                ctx.fillText(l.t, 0, 0);
+                fillPortText(ctx, l.t, 0, 0, l.blk);
                 ctx.restore();
                 return;
             }
             ctx.textAlign = l.align; ctx.textBaseline = l.under ? 'top' : 'bottom';
-            ctx.fillText(l.t, l.x, l.y);
+            fillPortText(ctx, l.t, l.x, l.y, l.blk);
         });
         // Port-channel name at both ends, as in the row view. In the core: a
         // bracket over its lanes, above every vertical port name, the name on
@@ -3838,7 +3929,7 @@
                 if (!t) return;
                 const out = q[0] >= p[0] ? 1 : -1;
                 ctx.textAlign = out > 0 ? 'left' : 'right';
-                ctx.fillText(t, p[0] + out * 5, p[1] - 2);
+                fillPortText(ctx, t, p[0] + out * 5, p[1] - 2, endAccess(b, id));
             });
         });
         ctx.restore();
@@ -4102,7 +4193,7 @@
         const po = (b, id) => { const t = pcEndTags(b); return b.from === id ? t.from : t.to; };
         const showLbl = b => visioConnectorSink || schemaPortLabelVisible(labelMode, b, schemaFocusId);
         const paths = [], labels = [];
-        const lbl = (t, x, y, align, base) => { if (t) labels.push({ t, x, y, align, base }); };
+        const lbl = (t, x, y, align, base, blk) => { if (t) labels.push({ t, x, y, align, base, blk }); };
         // Core lanes: A's from its lower edge up, B's from its upper edge
         // down, the nearest box on the lane nearest the row: none cross.
         [L.A, L.B].filter(Boolean).forEach(c => {
@@ -4123,10 +4214,10 @@
                 const ey = isA ? e.bb.top : e.bb.bottom;
                 paths.push({ b: e.b, from: c, to: e.id, pts: [[x0, y], [ex, y], [ex, ey]] });
                 if (!showLbl(e.b)) return;
-                lbl(port(e.b, c, e.mm), x0 - dir * 4, y, dir > 0 ? 'right' : 'left', 'middle');
+                lbl(port(e.b, c, e.mm), x0 - dir * 4, y, dir > 0 ? 'right' : 'left', 'middle', accessPort(c, port(e.b, c, e.mm)));
                 const t = [port(e.b, e.id, e.mm), j === 1 ? po(e.b, e.id) : ''].filter(Boolean).join(' ');
                 lbl(t, ex - dir * 3, isA ? ey + 3 + (j - 1) * HL_LINE : ey - 3 - (j - 1) * HL_LINE,
-                    dir > 0 ? 'left' : 'right', isA ? 'top' : 'bottom');
+                    dir > 0 ? 'left' : 'right', isA ? 'top' : 'bottom', accessPort(e.id, port(e.b, e.id, e.mm)));
             });
         });
         // Children. An only child in line: one cable across the gap, low in
@@ -4143,8 +4234,8 @@
                 const y = Math.min(pb.bottom, kb.bottom) - 14, kin = dir > 0 ? kb.left : kb.right;
                 paths.push({ b, from: p, to: k, pts: [[out, y], [kin, y]] });
                 if (!b || !showLbl(b)) return;
-                lbl(ladderOwnEnd(b, p), out - dir * 4, y - 2, dir > 0 ? 'right' : 'left', 'bottom');
-                lbl(ladderOwnEnd(b, k), kin + dir * 4, y - 2, dir > 0 ? 'left' : 'right', 'bottom');
+                lbl(ladderOwnEnd(b, p), out - dir * 4, y - 2, dir > 0 ? 'right' : 'left', 'bottom', endAccess(b, p));
+                lbl(ladderOwnEnd(b, k), kin + dir * 4, y - 2, dir > 0 ? 'left' : 'right', 'bottom', endAccess(b, k));
                 return;
             }
             // One cable per child, each on its own lane out of the parent's
@@ -4155,8 +4246,8 @@
                 const ty = pb.top + 10 + (ks.length - 1 - j) * HL_LINE, x = dir > 0 ? kb.left + 16 : kb.right - 16;
                 paths.push({ b, from: p, to: k, pts: [[out, ty], [x, ty], [x, kb.top]] });
                 if (!b || !showLbl(b)) return;
-                lbl(ladderOwnEnd(b, k), x - dir * 3, kb.top + 3, dir > 0 ? 'left' : 'right', 'top');
-                lbl(ladderOwnEnd(b, p), out - dir * 4, ty - 1, dir > 0 ? 'right' : 'left', 'bottom');
+                lbl(ladderOwnEnd(b, k), x - dir * 3, kb.top + 3, dir > 0 ? 'left' : 'right', 'top', endAccess(b, k));
+                lbl(ladderOwnEnd(b, p), out - dir * 4, ty - 1, dir > 0 ? 'right' : 'left', 'bottom', endAccess(b, p));
             });
         });
         ctx.save();
@@ -4181,7 +4272,7 @@
         ctx.globalAlpha = 1;
         ctx.font = '9px Arial, Helvetica, sans-serif';
         ctx.fillStyle = '#334155';
-        labels.forEach(l => { ctx.textAlign = l.align; ctx.textBaseline = l.base; ctx.fillText(l.t, l.x, l.y); });
+        labels.forEach(l => { ctx.textAlign = l.align; ctx.textBaseline = l.base; fillPortText(ctx, l.t, l.x, l.y, l.blk); });
         ctx.restore();
         return bundles.filter(b => !mine.includes(b));
     }
@@ -4515,7 +4606,30 @@
                     <span style="width:18px; height:0; border-top:2px ${c.dash==='dashed'?'dashed':(c.dash==='dotted'?'dotted':'solid')} ${c.color}; display:inline-block;"></span>
                     <span>${escapeHtml(nm)}</span>
                 </span>`;
-            }).join('');
+            }).join('')
+            + projectLegendHtml();
+    }
+    // Legend of the project palette: only what the map drawn now has.
+    function projectLegendHtml() {
+        const bs = (minimalOverlayData && minimalOverlayData.bundles) || [];
+        const sw = (color, w) => `<span style="width:18px; height:0; border-top:${w}px solid ${color}; display:inline-block;"></span>`;
+        const item = (color, w, text) => `<span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:var(--text-muted);">${sw(color, w)}<span>${escapeHtml(text)}</span></span>`;
+        const mediumName = m => tr({ copper: 'legCopper', fiber: 'legFiber', mm: 'legFiberMM', sm: 'legFiberSM', dac: 'legDAC' }[m]);
+        const out = [];
+        if (cableColorMode() === 'media') {
+            const keys = new Set(bs.filter(b => b.type !== 'keepalive').map(b => cableKey(b, portFact)).filter(Boolean));
+            Object.keys(CABLE_PALETTE).filter(k => keys.has(k)).forEach(k => {
+                const [m, sp] = k.split('-');
+                out.push(item(CABLE_PALETTE[k], m === 'dac' ? 3 : 2, `${mediumName(m)} ${sp}`));
+            });
+        }
+        const bbs = new Set(bs.filter(b => mapBackbones.has(pillKey(b))).map(b => (cableKey(b, portFact) || '').split('-')[0]));
+        ['mm', 'sm', 'copper'].filter(m => bbs.has(m) || (m === 'copper' && bbs.has('dac')))
+            .forEach(m => out.push(item(BACKBONE_PALETTE[m], 5, `${tr('topoBackbone')} ${mediumName(m)}`)));
+        if (mapAccessUplink.nodes.size) {
+            out.push(`<span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:var(--text-muted);"><span style="width:16px; height:10px; background:#FF8080; border:1px solid #7F1D1D; display:inline-block;"></span><span>${escapeHtml(tr('legAccessUplink'))}</span></span>`);
+        }
+        return out.join('');
     }
 
     document.getElementById('minimalLegendWrap')?.addEventListener('change', (e) => {
@@ -4642,10 +4756,22 @@
             </div>`).join('')
             : `<div style="padding:4px 6px; color:var(--text-muted);">${tr('topoNoCustomCategoriesYet')}</div>`;
         const noneRow = `<div class="edgeCatRow" data-nm="" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:0; cursor:pointer; color:var(--text-muted);">${tr('topoNoneDefaultStyle')}</div>`;
-        div.innerHTML = rowsHtml + `<div style="border-top:1px solid var(--border); margin:4px 0;"></div>` + noneRow;
+        // Backbone (between racks): marked by hand, drawn as a wide band in its medium's colour.
+        const bbRow = `<div class="edgeCatRow" data-bb="1" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:0; cursor:pointer; color:var(--text);">
+            <span style="width:14px; display:inline-block;">${mapBackbones.has(edgeKey) ? '✓' : ''}</span><span>${escapeHtml(tr('topoBackbone'))}</span></div>`;
+        div.innerHTML = rowsHtml + `<div style="border-top:1px solid var(--border); margin:4px 0;"></div>` + noneRow
+            + `<div style="border-top:1px solid var(--border); margin:4px 0;"></div>` + bbRow;
         document.body.appendChild(div);
         div.querySelectorAll('.edgeCatRow').forEach(row => {
             row.addEventListener('click', () => {
+                if (row.hasAttribute('data-bb')) {
+                    if (mapBackbones.has(edgeKey)) mapBackbones.delete(edgeKey); else mapBackbones.add(edgeKey);
+                    try { localStorage.setItem('mapBackbones', JSON.stringify([...mapBackbones])); } catch (e) { /* private window: this session only */ }
+                    closeEdgeCatMenu();
+                    renderMinimalLegend();
+                    if (networkInstance) networkInstance.redraw();
+                    return;
+                }
                 const nm = row.getAttribute('data-nm');
                 if (nm) minimalCustomCats.assignments[edgeKey] = nm;
                 else delete minimalCustomCats.assignments[edgeKey];
@@ -5062,6 +5188,13 @@
         const ladder = schemaLadderPlan(bundles, id => levels[id] || 0, id => (info[id] || {}).device_type,
                                         labelOf, GROUPABLE_TYPES, forcedPair,
                                         schemaLayout() !== 'rows');
+        mapPortInfo = {};
+        nodeData.forEach(n => { if (n.port_info) mapPortInfo[n.id] = n.port_info; });
+        mapAccessUplink = accessUplinks(bundles, id => (info[id] || {}).device_type, id => levels[id] || 0, portFact);
+        // A switch behind an uplink that is not a trunk: red, as in the legend.
+        nodes.forEach(nd => {
+            if (mapAccessUplink.nodes.has(nd.id)) nd.color = Object.assign({}, nd.color, { background: '#FF8080', border: '#7F1D1D' });
+        });
         const segModel = segModelFor(nodeData, linkData, ladder ? [ladder.A, ladder.B] : forcedPair);
         if (ladder) ladder.segCols = ladderSegmentColumns(ladder, segModel, segEffective().segments, bundles, labelOf);
         if (ladder && hLadderMode()) sizeHLadderBoxes(nodes, bundles, ladder);
@@ -5798,7 +5931,7 @@
                         const m = b.members[0] || {}, port = b.from === p ? m.local : m.remote;
                         if (port && (visioConnectorSink || schemaPortLabelVisible(labelMode, b, schemaFocusId))) {
                             ctx.textAlign = 'right';
-                            ctx.fillText(port, pb.right - 9, y + 4);
+                            fillPortText(ctx, port, pb.right - 9, y + 4, accessPort(p, port));
                         }
                     });
                     ctx.textAlign = 'left';
@@ -5825,6 +5958,8 @@
             if (segFindingOpen(b.from, b.to)) return { color: SEGMENT_FINDING_COLOR, lw: 2, dash: [6, 4] };
             const custom = customStyleForEdge(pillKey(b));
             if (custom) return { color: custom.color, lw: 1.8, dash: custom.dash };
+            const cs = b.type === 'keepalive' ? null : cableStyle(b, b.type === 'link' ? 1.4 : 1.8);
+            if (cs) return cs;
             return b.type === 'peer'      ? { color: linkColor('peer'),      lw: 1.8, dash: null }
                  : b.type === 'keepalive' ? { color: linkColor('keepalive'), lw: 1.2, dash: [4, 3] }
                  : b.type === 'pc'        ? { color: linkColor('pc'),        lw: 1.8, dash: null }
@@ -6069,18 +6204,19 @@
             // Top and bottom sides: the label turns vertical and runs inward
             // along its own cable, as on a Visio rack drawing. Stacked one row
             // per port, a core with twenty uplinks became a tall empty column.
-            const drawPortLabel = (text, pt, side, entry) => {
+            const drawPortLabel = (text, pt, side, entry, id) => {
                 if (!text) return;
+                const blk = accessPort(id, text);
                 // The export (visioConnectorSink) always gets every port name.
                 if (!visioConnectorSink && !schemaPortLabelVisible(labelMode, b, schemaFocusId)) return;
                 ctx.fillStyle = color;
-                if (side === 'E')      { ctx.textAlign = 'right';  ctx.fillText(text, pt.x - 13, pt.y - 5); }
-                else if (side === 'W') { ctx.textAlign = 'left';   ctx.fillText(text, pt.x + 13, pt.y - 5); }
+                if (side === 'E')      { ctx.textAlign = 'right';  fillPortText(ctx, text, pt.x - 13, pt.y - 5, blk); }
+                else if (side === 'W') { ctx.textAlign = 'left';   fillPortText(ctx, text, pt.x + 13, pt.y - 5, blk); }
                 // Alone on its side: written level beside the cable, clear of the name.
                 else if (entry.total === 1) {
                     ctx.textAlign = 'left';
                     ctx.textBaseline = side === 'S' ? 'bottom' : 'top';
-                    ctx.fillText(text, pt.x + 6, side === 'S' ? pt.y - 3 : pt.y + 3);
+                    fillPortText(ctx, text, pt.x + 6, side === 'S' ? pt.y - 3 : pt.y + 3, blk);
                     ctx.textBaseline = 'middle';
                 }
                 else {
@@ -6089,7 +6225,7 @@
                     ctx.rotate(side === 'S' ? -Math.PI / 2 : Math.PI / 2);
                     ctx.textAlign = 'left';
                     ctx.textBaseline = 'middle';
-                    ctx.fillText(text, 0, 0);
+                    fillPortText(ctx, text, 0, 0, blk);
                     ctx.restore();
                 }
             };
@@ -6134,8 +6270,8 @@
                 // Indice di slot globale sul lato (entry.slot + i): garantisce che le
                 // etichette N/S di fasci diversi si impilino su righe distinte.
                 // A small leaf box has no room for its own port name.
-                if (!compactIds.has(b.from)) drawPortLabel(mm.m.local,  mm.A, g.fromSide, g.fromEntry);
-                if (!compactIds.has(b.to))   drawPortLabel(mm.m.remote, mm.B, g.toSide, g.toEntry);
+                if (!compactIds.has(b.from)) drawPortLabel(mm.m.local,  mm.A, g.fromSide, g.fromEntry, b.from);
+                if (!compactIds.has(b.to))   drawPortLabel(mm.m.remote, mm.B, g.toSide, g.toEntry, b.to);
             });
             // Segmenti del fascio per l'hit-test del menu categorie (click destro).
             edgeHitSegs.push({ key: pillKey(b), segs: g.members.flatMap(mm =>
@@ -8158,6 +8294,10 @@
             networkInstance?.redraw();
         } else if (el.id === 'schemaLayout') {
             setSchemaLayout(el.value);
+        } else if (el.id === 'schemaCableColors') {
+            setSchemaPref('cableColors', el.value);
+            renderMinimalLegend();
+            networkInstance?.redraw();
         } else if (el.id === 'schemaApMode') {
             // Group: new boxes, rebuild and re-tidy. Column: only the APs move,
             // beside their switch where it stands now; the rest stays put.
