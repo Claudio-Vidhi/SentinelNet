@@ -3790,7 +3790,11 @@
                 const a = boxes[b.from], c = boxes[b.to];
                 const ya = (a.top + a.bottom) / 2 + slot(b.from), yb = (c.top + c.bottom) / 2 + slot(b.to);
                 const others = ids.filter(id => id !== b.from && id !== b.to && boxes[id]).map(id => boxes[id]);
-                const pts = segRoute(a, c, ya, yb, others, taken, stub[b.from] || 0, stub[b.to] || 0);
+                // Room for the port names when there is any; boxes a row's
+                // gap apart have none, and a route without it still beats
+                // the general router's straight line through the row.
+                const pts = segRoute(a, c, ya, yb, others, taken, stub[b.from] || 0, stub[b.to] || 0)
+                    || segRoute(a, c, ya, yb, others, taken);
                 if (!pts) return;   // boxed in: left to the general router
                 for (let i = 1; i < pts.length; i++) {
                     const [x1, y1] = pts[i - 1], [x2, y2] = pts[i];

@@ -18,6 +18,9 @@ happened — `git log --grep="chore(release)"` is the record for those.
 - Un cavo che non fa parte della scala (per esempio quello che chiude un
   anello) non arriva più sul lato di uno switch nello stesso punto del cavo
   che viene dal core o dal padre.
+- Un cavo verso uno switch stretto fra altri nella fila (per esempio una
+  segnalazione di bypass nella scala orizzontale) non passa più sopra gli
+  switch: se non c'è spazio per il nome della porta, gira attorno lo stesso.
 
 ## [0.62.0] - 2026-11-04
 
