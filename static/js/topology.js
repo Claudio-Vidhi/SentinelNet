@@ -2099,7 +2099,7 @@
         const pad = lad && lad.segCols ? 24 : 8;
         // A core shared by two side-by-side zones: each frame takes its half.
         const half = {};
-        if (lad && lad.segCols) lad.segCols.forEach((c, i) => {
+        if (lad && lad.segCols && schemaLayout() === 'ladder') lad.segCols.forEach((c, i) => {
             const next = lad.segCols[i + 1];
             if (c.joinCore) (half[c.id] || (half[c.id] = {}))[c.joinCore] = 'right';
             if (next && next.joinCore) (half[c.id] || (half[c.id] = {}))[next.joinCore] = 'left';
@@ -3456,7 +3456,8 @@
             if (c.h > box[parent].h) grow.push({ id: parent, heightConstraint: { minimum: Math.ceil(c.h) } });
         });
         if (grow.length) ds.update(grow);
-        if (ladIds.size) Object.assign(pos, ladderPositions(lad, box, base));
+        if (ladIds.size) Object.assign(pos, hLadderMode() ? hLadderPositions(lad, box, base, schemaLayout() === 'hladder-below')
+                                                          : ladderPositions(lad, box, base));
         Object.entries(pos).forEach(([id, p]) => networkInstance.moveNode(id, p.x, p.y));
         saveSchemaPositions();
         setTimeout(() => networkInstance && networkInstance.fit(), 50);
@@ -3732,8 +3733,8 @@
     // segRoute; the general router cut straight through the column's boxes.
     // Returns the bundles it did not draw.
     const segRouteMemo = new Map();
-    function drawSegmentCables(ctx, lad, bundles, box, styleFor, labelMode) {
-        const inCol = new Set(lad.segCols.flatMap(segColIds));
+    function drawSegmentCables(ctx, lad, bundles, box, styleFor, labelMode, extra) {
+        const inCol = new Set([...(lad.segCols || []).flatMap(segColIds), ...(extra || [])]);
         const mine = bundles.filter(b => b.type !== 'keepalive' && (inCol.has(b.from) || inCol.has(b.to)) && box(b.from) && box(b.to));
         if (!mine.length) return bundles;
         const ids = networkInstance.body.data.nodes.getIds();
@@ -3914,6 +3915,262 @@
             sx = right + LADDER_SEG_GAP;
         });
         return pos;
+    }
+
+    // --- Horizontal ladder ('hladder', 'hladder-below') ---------------------
+    // The dual-core ladder turned on its side: core A above core B, the
+    // devices in a row between them, A's cables along the top into the top
+    // of each box, B's along the bottom into the bottom. 'hladder': the site
+    // row to the left of the cores, the zones to the right with their cores
+    // level with the site's. 'hladder-below': the row to the right, each
+    // zone a band under the site. Same plan as the ladder; only the geometry
+    // and the cables' drawing are its own.
+    const HL_GAP = 60;      // core edge to the row, and core to row band
+    const HL_ROW_GAP = 30;  // between two boxes of a row
+    const HL_IN = 24;       // a child with siblings sits this much lower
+    const HL_LINE = 11;     // stacked port names inside a box
+    const hLadderMode = () => schemaLayout() === 'hladder' || schemaLayout() === 'hladder-below';
+    /** A row of the horizontal ladder: the members with their leaves right
+     *  after them, as children. An only child stays in line with its parent
+     *  (a chain runs straight), siblings go one step down. */
+    function hRow(L) {
+        const raw = [];
+        L.members.forEach(m => {
+            raw.push({ id: m.id, parent: m.parent });
+            ((L.leaves || {})[m.id] || []).forEach(id => raw.push({ id, parent: m.id }));
+        });
+        const kids = {}, depth = {};
+        raw.forEach(m => { if (m.parent) kids[m.parent] = (kids[m.parent] || 0) + 1; });
+        return raw.map(m => {
+            const up = m.parent && depth[m.parent] !== undefined;
+            const d = up ? Math.min(depth[m.parent] + (kids[m.parent] > 1 ? 1 : 0), LADDER_MAX_DEPTH) : 0;
+            depth[m.id] = d;
+            return { id: m.id, parent: up ? m.parent : null, depth: d };
+        });
+    }
+    /** A zone's own ladder, horizontal: A on top. A core it shares with the
+     *  zone before stays there (ponytail: no border seat sideways; the
+     *  second zone reaches it by cable). */
+    function hZone(c) {
+        if (!c.ladder) return null;
+        const own = [c.ladder.A, c.ladder.B].filter(id => id && id !== c.joinCore);
+        return own.length ? { A: own[0], B: own[1] || null, members: c.members, leaves: {} } : null;
+    }
+    // Box sizes: every box of a row as tall as the tallest, wide enough for
+    // its name and the port names stacked by its cables; cores tall enough
+    // for one lane per cable on each side.
+    function sizeHLadderBoxes(nodes, bundles, plan) {
+        const byId = {};
+        nodes.forEach(nd => { byId[nd.id] = nd; });
+        const meas = document.createElement('canvas').getContext('2d');
+        const PORT = '9px Arial, Helvetica, sans-serif';
+        const textW = t => { meas.font = PORT; return meas.measureText(t || '').width; };
+        const between = (x, y) => bundles.filter(b => b.type !== 'keepalive' && ((b.from === x && b.to === y) || (b.from === y && b.to === x)));
+        const ends = (id, c) => c ? between(id, c).flatMap(b => b.members.map(mm => (b.from === id ? mm.local : mm.remote) || '')) : [];
+        const ladders = [plan, ...(plan.segCols || []).map(hZone).filter(Boolean)];
+        ladders.forEach(L => {
+            const row = hRow(L);
+            let H = 70;
+            row.forEach(m => {
+                const nd = byId[m.id];
+                if (!nd) return;
+                const a = ends(m.id, L.A), b = ends(m.id, L.B), n = Math.max(a.length, b.length);
+                const pw = Math.max(0, ...a.concat(b).map(t => textW(t + ' Po00')));
+                const w = Math.max((nd._textW || 60) + 2 * 48, 16 + Math.max(0, n - 1) * LADDER_PAR + pw + 10, 100);
+                nd.widthConstraint = { minimum: Math.ceil(w) };
+                H = Math.max(H, ((nd._nameTexts || []).filter(Boolean).length || 1) * 14 + 30 + HL_LINE * (Math.max(0, a.length - 1) + Math.max(0, b.length - 1)));
+            });
+            row.forEach(m => { if (byId[m.id]) byId[m.id].heightConstraint = { minimum: H }; });
+            [L.A, L.B].filter(Boolean).forEach(c => {
+                const nd = byId[c];
+                if (!nd) return;
+                const lanes = row.flatMap(m => ends(m.id, c));
+                const pw = Math.max(0, ...lanes.map(textW));
+                nd.heightConstraint = { minimum: Math.max((nd.heightConstraint && nd.heightConstraint.minimum) || 0, 30 + lanes.length * LADDER_LANE) };
+                nd.widthConstraint = { minimum: Math.ceil(Math.max((nd.widthConstraint && nd.widthConstraint.minimum) || 0, (nd._textW || 60) + 2 * (pw + 10))) };
+            });
+        });
+        // Upstream cabled to B only: under B, the rest above A.
+        const touches = (id, c) => between(id, c).length > 0;
+        plan.upBelow = plan.upstream.filter(id => !touches(id, plan.A) && touches(id, plan.B));
+    }
+    /** Positions of the horizontal ladder, x0 = left edge of the block. */
+    function hLadderPositions(lad, box, x0, below) {
+        const pos = {};
+        const zones = (lad.segCols || []).map(c => ({ c, L: hZone(c) }));
+        const coreW = L => Math.max(...[L.A, L.B].filter(id => id && box[id]).map(id => box[id].w));
+        const rowH = rows => Math.max(0, ...rows.flatMap(r => r.filter(m => box[m.id]).map(m => box[m.id].h + m.depth * HL_IN)));
+        const span = row => row.filter(m => box[m.id]).reduce((t, m) => t + box[m.id].w + HL_ROW_GAP, row.length ? HL_GAP - HL_ROW_GAP : 0);
+        // A row from the core column outwards (dir -1: leftwards); returns its far end.
+        const placeRow = (row, cx, cw, rowTop, dir) => {
+            let cur = cx + dir * (cw / 2 + HL_GAP);
+            row.forEach(m => {
+                const b = box[m.id];
+                if (!b) return;
+                pos[m.id] = { x: cur + dir * b.w / 2, y: rowTop + m.depth * HL_IN + b.h / 2 };
+                cur += dir * (b.w + HL_ROW_GAP);
+            });
+            return cur - dir * HL_ROW_GAP;
+        };
+        const mainRow = hRow(lad), cw = coreW(lad);
+        const up = lad.upstream.filter(id => box[id]), upB = (lad.upBelow || []).filter(id => box[id]), upA = up.filter(id => !upB.includes(id));
+        const zoneRows = zones.map(z => (z.L ? hRow(z.L) : hRow({ members: z.c.members })));
+        // Side by side, the site's band and the zones' share one height: cores level.
+        const level = below ? [] : zones.map(z => z.L).filter(Boolean);
+        const hA = Math.max(...[lad, ...level].map(L => (L.A && box[L.A] ? box[L.A].h : 0)));
+        const hB = Math.max(...[lad, ...level].map(L => (L.B && box[L.B] ? box[L.B].h : 0)));
+        const H = rowH(below ? [mainRow] : [mainRow, ...zoneRows]);
+        const top = upA.length ? Math.max(...upA.map(id => box[id].h)) + 80 : 0;
+        const cx = x0 + (below ? cw / 2 : span(mainRow) + cw / 2);
+        const yA = top + hA / 2, rowTop = top + hA + HL_GAP, yB = rowTop + H + HL_GAP + hB / 2;
+        pos[lad.A] = { x: cx, y: yA };
+        pos[lad.B] = { x: cx, y: yB };
+        const strip = (ids, y) => {
+            const total = ids.reduce((t, id) => t + box[id].w, 0) + SCHEMA_GAP * (ids.length - 1);
+            let x = cx - total / 2;
+            ids.forEach(id => { pos[id] = { x: x + box[id].w / 2, y }; x += box[id].w + SCHEMA_GAP; });
+        };
+        if (upA.length) strip(upA, Math.max(...upA.map(id => box[id].h)) / 2);
+        let bottom = yB + hB / 2;
+        if (upB.length) { strip(upB, bottom + 80 + Math.max(...upB.map(id => box[id].h)) / 2); bottom += 80 + Math.max(...upB.map(id => box[id].h)); }
+        placeRow(mainRow, cx, cw, rowTop, below ? 1 : -1);
+        // Zones: right of the cores (level with them) or each a band below.
+        let zx = cx + cw / 2 + LADDER_SEG_GAP, zy = bottom + LADDER_SEG_GAP;
+        zones.forEach(({ c, L }, i) => {
+            const row = zoneRows[i];
+            // Without its own ladder (no cores): its gateways stand in the core column.
+            const heads = L ? [L.A, L.B].filter(Boolean) : (c.cores.length ? c.cores : c.gateways).filter(id => box[id] && !pos[id]);
+            if (!heads.length && !row.length) return;
+            const zw = Math.max(0, ...heads.filter(id => box[id]).map(id => box[id].w));
+            const zcx = below ? cx : zx + zw / 2;
+            let zTop = rowTop, zEnd;
+            if (below) {
+                const a = heads[0] && box[heads[0]] ? box[heads[0]].h : 0;
+                if (heads[0]) pos[heads[0]] = { x: zcx, y: zy + a / 2 };
+                zTop = zy + a + HL_GAP;
+                const zH = rowH([row]);
+                let y = zTop + zH + HL_GAP;
+                heads.slice(1).forEach(id => { pos[id] = { x: zcx, y: y + box[id].h / 2 }; y += box[id].h + 30; });
+                zEnd = placeRow(row, zcx, zw, zTop, 1);
+                zy = Math.max(y, zTop + zH) + LADDER_SEG_GAP;
+            } else {
+                heads.forEach((id, k) => {
+                    if (!box[id]) return;
+                    pos[id] = { x: zcx, y: k === 0 ? yA : k === 1 ? yB : yB + hB / 2 + 30 + (k - 2) * (box[id].h + 30) + box[id].h / 2 };
+                });
+                zEnd = placeRow(row, zcx, zw, zTop, 1);
+                zx = Math.max(zEnd, zcx + zw / 2) + LADDER_SEG_GAP;
+            }
+        });
+        return pos;
+    }
+    // Draws the horizontal ladder's own cables (core lanes, chains, trunks)
+    // for one ladder, dir = side its row is on (-1 left). Port names are
+    // horizontal and inside the boxes: the core's along its lane, the row
+    // box's by the cable, stacked when several enter. Returns the rest.
+    function drawHLadderCables(ctx, L, dir, bundles, box, styleFor, labelMode) {
+        const row = hRow(L), member = {}, kidsOf = {};
+        row.forEach(m => {
+            member[m.id] = m;
+            if (m.parent) (kidsOf[m.parent] || (kidsOf[m.parent] = [])).push(m.id);
+        });
+        const core = id => !!id && (id === L.A || id === L.B);
+        const pairOf = (b, test) => test(b.from, b.to) ? [b.from, b.to] : test(b.to, b.from) ? [b.to, b.from] : null;
+        const isCore = (p, q) => core(p) && !!member[q];
+        const isTree = (p, q) => !!member[q] && member[q].parent === p;
+        const mine = bundles.filter(b => b.type !== 'keepalive' && (pairOf(b, isCore) || pairOf(b, isTree)) && box(b.from) && box(b.to));
+        const port = (b, id, mm) => (b.from === id ? mm.local : mm.remote) || '';
+        const po = (b, id) => { const t = pcEndTags(b); return b.from === id ? t.from : t.to; };
+        const showLbl = b => visioConnectorSink || schemaPortLabelVisible(labelMode, b, schemaFocusId);
+        const paths = [], labels = [];
+        const lbl = (t, x, y, align, base) => { if (t) labels.push({ t, x, y, align, base }); };
+        // Core lanes: A's from its lower edge up, B's from its upper edge
+        // down, the nearest box on the lane nearest the row: none cross.
+        [L.A, L.B].filter(Boolean).forEach(c => {
+            const cb = box(c), isA = c === L.A, ends = [];
+            if (!cb) return;
+            mine.forEach(b => {
+                const pq = pairOf(b, isCore);
+                if (!pq || pq[0] !== c) return;
+                b.members.forEach((mm, k) => ends.push({ b, id: pq[1], bb: box(pq[1]), mm, k }));
+            });
+            ends.sort((p, q) => dir * ((p.bb.left + p.bb.right) - (q.bb.left + q.bb.right)) || p.k - q.k);
+            const step = ends.length > 1 ? Math.min(LADDER_LANE, (cb.bottom - cb.top - 20) / (ends.length - 1)) : 0;
+            const x0 = dir > 0 ? cb.right : cb.left, seen = {};
+            ends.forEach((e, i) => {
+                const y = isA ? cb.bottom - 10 - i * step : cb.top + 10 + i * step;
+                const j = seen[e.id] = (seen[e.id] || 0) + 1;
+                const ex = dir > 0 ? e.bb.left + 16 + (j - 1) * LADDER_PAR : e.bb.right - 16 - (j - 1) * LADDER_PAR;
+                const ey = isA ? e.bb.top : e.bb.bottom;
+                paths.push({ b: e.b, from: c, to: e.id, pts: [[x0, y], [ex, y], [ex, ey]] });
+                if (!showLbl(e.b)) return;
+                lbl(port(e.b, c, e.mm), x0 - dir * 4, y, dir > 0 ? 'right' : 'left', 'middle');
+                const t = [port(e.b, e.id, e.mm), j === 1 ? po(e.b, e.id) : ''].filter(Boolean).join(' ');
+                lbl(t, ex - dir * 3, isA ? ey + 3 + (j - 1) * HL_LINE : ey - 3 - (j - 1) * HL_LINE,
+                    dir > 0 ? 'left' : 'right', isA ? 'top' : 'bottom');
+            });
+        });
+        // Children. An only child in line: one cable across the gap, low in
+        // both boxes, clear of the names. Siblings: a trunk out of the
+        // parent's far side near its top, over their tops, a drop into each.
+        Object.entries(kidsOf).forEach(([p, ks]) => {
+            const pb = box(p);
+            if (!pb) return;
+            const out = dir > 0 ? pb.right : pb.left;
+            const link = k => mine.find(x => { const pq = pairOf(x, isTree); return pq && pq[0] === p && pq[1] === k; }) || null;
+            if (ks.length === 1 && member[ks[0]].depth === member[p].depth) {
+                const k = ks[0], kb = box(k), b = link(k);
+                if (!kb) return;
+                const y = Math.min(pb.bottom, kb.bottom) - 14, kin = dir > 0 ? kb.left : kb.right;
+                paths.push({ b, from: p, to: k, pts: [[out, y], [kin, y]] });
+                if (!b || !showLbl(b)) return;
+                lbl(ladderOwnEnd(b, p), out - dir * 4, y - 2, dir > 0 ? 'right' : 'left', 'bottom');
+                lbl(ladderOwnEnd(b, k), kin + dir * 4, y - 2, dir > 0 ? 'left' : 'right', 'bottom');
+                return;
+            }
+            const ty = pb.top + 10;
+            const xs = ks.map(k => { const kb = box(k); return kb ? (dir > 0 ? kb.left + 16 : kb.right - 16) : null; });
+            const ok = xs.filter(x => x !== null);
+            if (!ok.length) return;
+            paths.push({ b: null, pts: [[out, ty], [dir > 0 ? Math.max(...ok) : Math.min(...ok), ty]] });
+            const own = [];
+            ks.forEach((k, j) => {
+                const kb = box(k), b = link(k);
+                if (!kb) return;
+                paths.push({ b, from: p, to: k, pts: [[xs[j], ty], [xs[j], kb.top]], visio: [[out, ty], [xs[j], ty], [xs[j], kb.top]] });
+                if (!b || !showLbl(b)) return;
+                lbl(ladderOwnEnd(b, k), xs[j] - dir * 3, kb.top + 3, dir > 0 ? 'left' : 'right', 'top');
+                own.push(ladderOwnEnd(b, p));
+            });
+            lbl(own.filter(Boolean).join(' · '), out - dir * 4, ty - 2, dir > 0 ? 'right' : 'left', 'bottom');
+        });
+        ctx.save();
+        ctx.lineCap = 'butt';
+        paths.forEach(pth => {
+            const st = pth.b ? styleFor(pth.b) : { color: linkColor('link'), lw: 1.4, dash: null };
+            if (visioConnectorSink) {
+                if (pth.b) visioConnectorSink.push({ from: pth.from, to: pth.to, points: pth.visio || pth.pts, color: visioColor(st.color).hex, width: st.lw, dash: !!st.dash });
+                return;
+            }
+            ctx.strokeStyle = st.color;
+            ctx.lineWidth = st.lw;
+            ctx.setLineDash(st.dash || []);
+            ctx.globalAlpha = pth.b && schemaDimmed(pth.b, pillKey(pth.b), hoverBundleKey, schemaFocusId) ? 0.18 : 1;
+            ctx.beginPath();
+            ctx.moveTo(pth.pts[0][0], pth.pts[0][1]);
+            pth.pts.slice(1).forEach(q => ctx.lineTo(q[0], q[1]));
+            ctx.stroke();
+            if (pth.b) edgeHitSegs.push({ key: pillKey(pth.b), segs: pth.pts.slice(0, -1).map((q, k) => [q[0], q[1], pth.pts[k + 1][0], pth.pts[k + 1][1]]) });
+        });
+        if (!visioConnectorSink) {
+            ctx.setLineDash([]);
+            ctx.globalAlpha = 1;
+            ctx.font = '9px Arial, Helvetica, sans-serif';
+            ctx.fillStyle = '#334155';
+            labels.forEach(l => { ctx.textAlign = l.align; ctx.textBaseline = l.base; ctx.fillText(l.t, l.x, l.y); });
+        }
+        ctx.restore();
+        return bundles.filter(b => !mine.includes(b));
     }
 
     // AI layout, both views. The browser sends the drawn boxes (id, type,
@@ -4791,10 +5048,11 @@
         const labelOf = id => (info[id] || {}).label || id;
         const ladder = schemaLadderPlan(bundles, id => levels[id] || 0, id => (info[id] || {}).device_type,
                                         labelOf, GROUPABLE_TYPES, forcedPair,
-                                        schemaLayout() === 'ladder');
+                                        schemaLayout() !== 'rows');
         const segModel = segModelFor(nodeData, linkData, ladder ? [ladder.A, ladder.B] : forcedPair);
         if (ladder) ladder.segCols = ladderSegmentColumns(ladder, segModel, segEffective().segments, bundles, labelOf);
-        if (ladder && schemaLayout() === 'ladder') {
+        if (ladder && hLadderMode()) sizeHLadderBoxes(nodes, bundles, ladder);
+        else if (ladder && schemaLayout() === 'ladder') {
             sizeLadderBoxes(nodes, bundles, ladder);
             ladder.segCols.forEach(c => { if (c.ladder) sizeLadderBoxes(nodes, bundles, c.ladder); });
         }
@@ -5078,17 +5336,21 @@
     }
     // Every device of a segment column: its cores, gateways and members.
     const segColIds = c => [...new Set([...(c.cores || []), ...c.gateways, ...c.members.map(m => m.id)])];
-    // Schema arrangement: 'rows' (one row per level) or 'ladder' (above).
-    function schemaLayout() { return schemaPref('schemaLayout', 'rows') === 'ladder' ? 'ladder' : 'rows'; }
+    // Schema arrangement: 'rows' (one row per level), 'ladder' (above) or
+    // the horizontal ladder, 'hladder' / 'hladder-below'.
+    function schemaLayout() {
+        const v = schemaPref('schemaLayout', 'rows');
+        return ['ladder', 'hladder', 'hladder-below'].includes(v) ? v : 'rows';
+    }
     // The ladder of the map drawn now, when the user chose it and the site fits.
     function schemaLadderActive() {
-        return getMapView() === 'minimal' && schemaLayout() === 'ladder' && minimalOverlayData && minimalOverlayData.ladder || null;
+        return getMapView() === 'minimal' && schemaLayout() !== 'rows' && minimalOverlayData && minimalOverlayData.ladder || null;
     }
     // Toolbar hint: a dual-core site drawn in rows is offered the ladder.
     function updateLadderHint(plan) {
         const btn = document.getElementById('mapLadderHint');
         if (!btn) return;
-        btn.hidden = !plan || getMapView() !== 'minimal' || schemaLayout() === 'ladder';
+        btn.hidden = !plan || getMapView() !== 'minimal' || schemaLayout() !== 'rows';
         if (!btn.hidden) btn.querySelector('span').textContent = tr('mapLadderHint', { n: plan.dual, t: plan.total });
     }
     function setSchemaLayout(v) {
@@ -5561,11 +5823,24 @@
         // on its parent's left edge; leaves from a bus. These bundles leave the
         // general router; the rest (peer link, upstream, second parents) stay.
         const lad = schemaLadderActive();
-        if (lad && [lad.A, lad.B].every(realBox)) bundles = drawLadderCables(ctx, lad, bundles, realBox, styleFor, labelMode);
-        (lad && lad.segCols || []).forEach(c => {
-            if (c.ladder && [c.ladder.A, c.ladder.B].filter(Boolean).every(realBox)) bundles = drawLadderCables(ctx, c.ladder, bundles, realBox, styleFor, labelMode);
-        });
-        if (lad && lad.segCols && lad.segCols.length) bundles = drawSegmentCables(ctx, lad, bundles, realBox, styleFor, labelMode);
+        if (lad && hLadderMode()) {
+            // Horizontal: the site row, then each zone's own ladder; whatever
+            // is left that touches the ladder (upstream, zone links, second
+            // parents) goes round the boxes.
+            if ([lad.A, lad.B].every(realBox)) bundles = drawHLadderCables(ctx, lad, schemaLayout() === 'hladder-below' ? 1 : -1, bundles, realBox, styleFor, labelMode);
+            (lad.segCols || []).forEach(c => {
+                const L = hZone(c);
+                if (L && [L.A, L.B].filter(Boolean).every(realBox)) bundles = drawHLadderCables(ctx, L, 1, bundles, realBox, styleFor, labelMode);
+            });
+            bundles = drawSegmentCables(ctx, lad, bundles, realBox, styleFor, labelMode,
+                                        [...lad.upstream, ...hRow(lad).map(m => m.id)]);
+        } else {
+            if (lad && [lad.A, lad.B].every(realBox)) bundles = drawLadderCables(ctx, lad, bundles, realBox, styleFor, labelMode);
+            (lad && lad.segCols || []).forEach(c => {
+                if (c.ladder && [c.ladder.A, c.ladder.B].filter(Boolean).every(realBox)) bundles = drawLadderCables(ctx, c.ladder, bundles, realBox, styleFor, labelMode);
+            });
+            if (lad && lad.segCols && lad.segCols.length) bundles = drawSegmentCables(ctx, lad, bundles, realBox, styleFor, labelMode);
+        }
 
         // --- PASSO 1: ancoraggi per lato -----------------------------------
         // Ogni collegamento occupa 'members.length' slot sul lato del riquadro

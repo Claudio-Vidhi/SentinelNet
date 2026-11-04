@@ -244,6 +244,62 @@ assert.equal(proposeSegments(nodes, clean, null, {}).length, 1);
     ]);
 }
 
+// Horizontal ladder: A above B, the site row on one side, the zone's cores
+// level with the site's ('hladder') or the zone in a band below
+// ('hladder-below'); no two boxes overlap.
+{
+    const fw = id => N(id, 'firewall');
+    const ns = [N('10.0.0.1'), N('10.0.0.2'), N('10.0.1.11'), N('10.0.1.12'), N('10.0.1.13'), N('10.0.1.90', 'ap'),
+                fw('10.0.0.21'), fw('10.0.0.22'), N('10.20.0.1'), N('10.20.0.2'), N('10.20.0.3')];
+    const ls = [L('10.0.0.1', '10.0.0.2'), L('10.0.0.1', '10.0.1.11'), L('10.0.0.2', '10.0.1.11'),
+                L('10.0.0.1', '10.0.1.12'), L('10.0.0.2', '10.0.1.12'), L('10.0.1.12', '10.0.1.13'), L('10.0.1.13', '10.0.1.90'),
+                L('10.0.0.1', '10.0.0.21'), L('10.0.0.2', '10.0.0.22'),
+                L('10.0.0.21', '10.20.0.1'), L('10.20.0.1', '10.20.0.2'), L('10.20.0.2', '10.20.0.3'), L('10.0.0.22', '10.20.0.3')];
+    const z = [{ id: 'ot', name: 'OT', color: 'rose', subnets: ['10.20.0.0/24'], members: [], excluded: [] }];
+    const consts = src.match(/^ {4}const ((LADDER|HL)_[A-Z_]+|SCHEMA_GAP) = .*$/gm).join('\n');
+    const { hLadderPositions, hRow } = new Function(consts + '\n' + extract('function hRow(') + '\n' + extract('function hZone(') + '\n'
+        + extract('function hLadderPositions(') + '\nreturn { hLadderPositions, hRow };')();
+    const box = {};
+    ns.forEach(n => { box[n.id] = { w: n.device_type === 'ap' ? 110 : 160, h: 70 }; });
+    const rect = (pos, id) => ({ l: pos[id].x - box[id].w / 2, r: pos[id].x + box[id].w / 2, t: pos[id].y - box[id].h / 2, b: pos[id].y + box[id].h / 2 });
+    const noOverlap = pos => { const ids = Object.keys(pos); ids.forEach((p, i) => ids.slice(i + 1).forEach(q => {
+        const a = rect(pos, p), c = rect(pos, q);
+        assert.ok(a.r <= c.l || c.r <= a.l || a.b <= c.t || c.b <= a.t, `${p} overlaps ${q}`);
+    })); };
+    ['hladder', 'hladder-below'].forEach(mode => {
+        const plan = { A: '10.0.0.1', B: '10.0.0.2', upstream: [],
+                       members: [{ id: '10.0.1.11', depth: 0, parent: null }, { id: '10.0.1.12', depth: 0, parent: null },
+                                 { id: '10.0.1.13', depth: 1, parent: '10.0.1.12' }],
+                       leaves: { '10.0.1.13': ['10.0.1.90'] } };
+        const md = segmentModel(ns, ls, seg(z), cores);
+        plan.segCols = ladderSegmentColumns(plan, md, z, ls.map(l => ({ from: l.source, to: l.target, type: 'link', members: [{}] })), id => id);
+        const below = mode === 'hladder-below';
+        const pos = hLadderPositions(plan, box, 0, below);
+        noOverlap(pos);
+        assert.equal(Object.keys(pos).length, ns.length, `${mode}: every device placed`);
+        assert.equal(pos['10.0.0.1'].x, pos['10.0.0.2'].x, 'cores stacked');
+        assert.ok(rect(pos, '10.0.0.1').b < rect(pos, '10.0.0.2').t, 'A above B');
+        const side = below ? 1 : -1;
+        ['10.0.1.11', '10.0.1.12', '10.0.1.13', '10.0.1.90'].forEach(id => {
+            assert.ok(side * (pos[id].x - pos['10.0.0.1'].x) > 0, `${mode}: ${id} on its side`);
+            assert.ok(rect(pos, id).t > rect(pos, '10.0.0.1').b && rect(pos, id).b < rect(pos, '10.0.0.2').t, `${mode}: ${id} between the cores`);
+        });
+        // A chain runs straight: an only child level with its parent.
+        assert.equal(pos['10.0.1.13'].y, pos['10.0.1.12'].y);
+        if (below) {
+            ['10.0.0.21', '10.0.0.22', '10.20.0.1'].forEach(id => assert.ok(rect(pos, id).t > rect(pos, '10.0.0.2').b, `${id} below the site`));
+            assert.equal(pos['10.0.0.21'].x, pos['10.0.0.1'].x, 'zone cores in the core column');
+        } else {
+            assert.equal(pos['10.0.0.21'].y, pos['10.0.0.1'].y, 'zone A level with site A');
+            assert.equal(pos['10.0.0.22'].y, pos['10.0.0.2'].y, 'zone B level with site B');
+            ['10.20.0.1', '10.20.0.2', '10.20.0.3'].forEach(id => assert.ok(rect(pos, id).l > rect(pos, '10.0.0.21').r, `${id} right of its cores`));
+        }
+    });
+    // Leaves join the row as children; siblings go a step down, an only child does not.
+    const r = hRow({ members: [{ id: 'p', parent: null }, { id: 'k', parent: 'p' }], leaves: { p: ['ap1'] } });
+    assert.deepEqual(r.map(m => [m.id, m.depth]), [['p', 0], ['ap1', 1], ['k', 1]]);
+}
+
 // Router: a cable from a box down to another with a box in the way goes round it.
 {
     const { segRoute } = new Function(extract('function segRoute(') + '\nreturn { segRoute };')();

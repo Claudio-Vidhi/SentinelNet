@@ -24,6 +24,14 @@ happened — `git log --grep="chore(release)"` is the record for those.
   due core gli switch stanno in colonna fra i due, con una corsia verso
   ciascuno; con uno solo la colonna sta alla sua destra. Un firewall core di
   due zone sta sul confine fra le due, che vengono affiancate.
+- **Scala orizzontale**, due disposizioni nuove nel menu Vista → Disposizione,
+  in aggiunta a quelle che c'erano: la scala doppio core ruotata, con il core
+  A sopra il core B e gli apparati in fila fra i due. I cavi di A entrano
+  dall'alto, quelli di B dal basso; le catene proseguono in linea.
+  *Scala orizzontale* mette il sito a sinistra dei core e le zone a destra,
+  con i loro firewall alla stessa altezza dei core del sito; *Scala
+  orizzontale, zone sotto* mette il sito a destra e ogni zona in una fascia
+  sotto.
 
 ### Changed
 
