@@ -37,6 +37,13 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Fixed
 
+- Schema: all'apertura i riquadri potevano comparire ammucchiati uno
+  sull'altro. La scala salvava le sue posizioni, e quando alla volta dopo la
+  scala non era attiva (coppia di core non trovata) venivano riusate con
+  riquadri di altre dimensioni. La scala non salva più posizioni, e un layout
+  salvato che si sovrappone viene ridisposto.
+- Colori dei cavi e uplink non in trunk: sulle mappe reali quasi nessuna
+  porta veniva riconosciuta (nome completo nei backup, abbreviato sui cavi).
 - Export Visio: mancavano i nomi delle porte dei cavi che girano attorno ai
   riquadri (segnalazioni di bypass, chiusure d'anello, cavi verso le zone) e,
   nella scala orizzontale, quasi tutti gli altri.

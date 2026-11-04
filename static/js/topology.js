@@ -1692,6 +1692,10 @@
                 const known = nodes.filter(nd => prevPos && prevPos[nd.id]).map(nd => nd.id);
                 if (known.length && !full) placeNewSchemaNodes(known); else packSchemaRows();
             });
+        } else if (isMinimal) {
+            // A saved layout whose boxes overlap (saved by an older build under
+            // the ladder, or boxes grown since) is laid out again.
+            networkInstance.once('afterDrawing', () => { if (schemaBoxesOverlap()) packSchemaRows(); });
         }
         if (isMinimal && schemaPlaceColumns) {
             schemaPlaceColumns = false;
@@ -4480,6 +4484,11 @@
 
     // Schema positions per site, in the browser: {"<site>": {"<id>": [x, y]}}.
     // Same persistence as the hierarchy levels; "Riordina mappa" rewrites them.
+    // ponytail: O(n²) over the boxes, fine for a site; a sweep if maps reach thousands.
+    function schemaBoxesOverlap() {
+        const bb = networkInstance.body.nodeIndices.map(id => networkInstance.getBoundingBox(id)).filter(Boolean);
+        return bb.some((a, i) => bb.some((b, k) => k > i && a.left < b.right - 2 && b.left < a.right - 2 && a.top < b.bottom - 2 && b.top < a.bottom - 2));
+    }
     function loadSchemaPositions(group) {
         try {
             const m = (JSON.parse(localStorage.getItem('schemaPositions') || '{}') || {})[group];
@@ -4490,7 +4499,9 @@
         } catch (e) { return null; }
     }
     function saveSchemaPositions() {
-        if (!networkInstance || getMapView() !== 'minimal') return;
+        // The ladder is laid out from its plan on every render: its positions
+        // are not the user's, and reused without it they pile the boxes up.
+        if (!networkInstance || getMapView() !== 'minimal' || schemaLadderActive()) return;
         try {
             const all = JSON.parse(localStorage.getItem('schemaPositions') || '{}') || {};
             const m = {};
