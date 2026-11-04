@@ -34,6 +34,10 @@ happened — `git log --grep="chore(release)"` is the record for those.
   un riquadro LEGENDA con le voci presenti sulla mappa: tipi di cavo (o mezzo
   e velocità), categorie personalizzate usate, dorsali, uplink non in trunk,
   apparati da rinnovare. Se la mappa è stretta finisce sotto il cartiglio.
+- Legenda: il cavo arancione tratteggiato (bypass firewall da verificare) ha
+  la sua voce, sotto la mappa e nell'export Visio; nell'export anche il
+  Peer-keepalive e le categorie tratteggiate sono disegnati tratteggiati, e il
+  riquadro si allarga quanto la voce più lunga.
 
 ### Fixed
 

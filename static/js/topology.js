@@ -1207,11 +1207,11 @@
             // Conservati per l'export Visio: il .vsdx replica ESATTAMENTE il
             // disegno dell'overlay (cavi paralleli, etichette porta, pillole).
             minimalOverlayData = { bundles, groupsInfo, nodes, ladder };
-            renderMinimalLegend();
             updateLadderHint(ladder);
             // A new map: the focused node may be gone (filter, tenant).
             schemaFocusId = null;
             mapSegmentModel = segModel;
+            renderMinimalLegend();   // after the model: it lists the open bypass findings
             renderSegPanel();
             renderNetwork(nodes, edges, options, MINIMAL_MAP_STYLE.background,
                           hasOverlay ? (ctx => drawMinimalOverlay(ctx, bundles, groupsInfo)) : null);
@@ -4632,8 +4632,9 @@
     function projectLegendItems() {
         const bs = (minimalOverlayData && minimalOverlayData.bundles) || [];
         const mediumName = m => tr({ copper: 'legCopper', fiber: 'legFiber', mm: 'legFiberMM', sm: 'legFiberSM', dac: 'legDAC' }[m]);
-        /** @type {Array<{text: string, color?: string, w?: number, box?: string, border?: string}>} */
+        /** @type {Array<{text: string, color?: string, w?: number, dash?: boolean, box?: string, border?: string}>} */
         const out = [];
+        if (bs.some(b => segFindingOpen(b.from, b.to))) out.push({ color: SEGMENT_FINDING_COLOR, w: 2, dash: true, text: tr('legBypass') });
         if (cableColorMode() === 'media') {
             const keys = new Set(bs.filter(b => b.type !== 'keepalive').map(b => cableKey(b, portFact)).filter(Boolean));
             Object.keys(CABLE_PALETTE).filter(k => keys.has(k)).forEach(k => {
@@ -4651,7 +4652,7 @@
     function projectLegendHtml() {
         return projectLegendItems().map(it => `<span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:var(--text-muted);">`
             + (it.box ? `<span style="width:16px; height:10px; background:${it.box}; border:1px solid ${it.border}; display:inline-block;"></span>`
-                : `<span style="width:18px; height:0; border-top:${it.w}px solid ${it.color}; display:inline-block;"></span>`)
+                : `<span style="width:18px; height:0; border-top:${it.w}px ${it.dash ? 'dashed' : 'solid'} ${it.color}; display:inline-block;"></span>`)
             + `<span>${escapeHtml(it.text)}</span></span>`).join('');
     }
     /** Legend of an exported schema: the link types drawn (under the type
@@ -4663,18 +4664,24 @@
         if (cableColorMode() !== 'media') {
             const types = new Set(bs.map(b => b.type));
             MINIMAL_LINK_TYPES.filter(t => types.has(t.key))
-                .forEach(t => out.push({ color: linkColor(t.key), w: 2, text: currentLang === 'en' ? t.en : t.it }));
+                .forEach(t => out.push({ color: linkColor(t.key), w: 2, dash: t.key === 'keepalive', text: currentLang === 'en' ? t.en : t.it }));
         }
         const cats = new Set(bs.map(b => minimalCustomCats.assignments[pillKey(b)]).filter(Boolean));
         Object.keys(minimalCustomCats.categories).filter(nm => cats.has(nm))
-            .forEach(nm => out.push({ color: minimalCustomCats.categories[nm].color, w: 2, text: nm }));
+            .forEach(nm => out.push({ color: minimalCustomCats.categories[nm].color, w: 2, dash: (minimalCustomCats.categories[nm].dash || 'solid') !== 'solid', text: nm }));
         return out.concat(projectLegendItems());
     }
-    const LEGEND_W = 240, LEGEND_ROW = 22;
+    const LEGEND_ROW = 22;
     const legendHeight = n => 40 + n * LEGEND_ROW;
+    // Wide enough for the longest entry, never under 240.
+    function legendWidth(items) {
+        const m = document.createElement('canvas').getContext('2d');
+        m.font = '12px Arial';
+        return Math.max(240, 68 + Math.max(0, ...items.map(it => m.measureText(it.text).width)));
+    }
     // The legend drawn on a canvas context, (ox, oy) its top-left corner.
     function drawExportLegend(ctx, items, ox, oy) {
-        const h = legendHeight(items.length);
+        const h = legendHeight(items.length), LEGEND_W = legendWidth(items);
         ctx.fillStyle = '#ffffff'; ctx.fillRect(ox, oy, LEGEND_W, h);
         ctx.strokeStyle = '#334155'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.rect(ox, oy, LEGEND_W, h); ctx.stroke();
@@ -4688,7 +4695,9 @@
                 ctx.beginPath(); ctx.rect(ox + 12, y - 6, 34, 12); ctx.stroke();
             } else {
                 ctx.strokeStyle = it.color; ctx.lineWidth = it.w;
+                ctx.setLineDash(it.dash ? [6, 4] : []);
                 ctx.beginPath(); ctx.moveTo(ox + 12, y); ctx.lineTo(ox + 46, y); ctx.stroke();
+                ctx.setLineDash([]);
             }
             ctx.fillStyle = '#0F172A'; ctx.font = '12px Arial';
             ctx.fillText(it.text, ox + 56, y);
@@ -7989,7 +7998,7 @@
             const right = Math.max(...pg.nodes.map(n => n.x + (n.w || 0) / 2));
             const bottom = Math.max(...pg.nodes.map(n => n.y + (n.h || 0) / 2));
             const tb = TB_SIZE[tbCfg.style];
-            const top = tb && left + LEGEND_W + 40 > right - tb[0] ? bottom + 60 + tb[1] + 40 : bottom + 60;
+            const top = tb && left + legendWidth(legend) + 40 > right - tb[0] ? bottom + 60 + tb[1] + 40 : bottom + 60;
             pg.primitives = pg.primitives || { lines: [], polys: [], rects: [], texts: [] };
             drawExportLegend(makeRecordingCtx(pg.primitives), legend, left, top);
         });
