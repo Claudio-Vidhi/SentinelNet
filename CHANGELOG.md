@@ -37,6 +37,10 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Fixed
 
+- Scala: i dispositivi sopra i core (firewall, router) sono in ordine per il
+  core a cui sono cablati (solo il sinistro, entrambi, solo il destro), poi
+  per nome: un firewall collegato al solo core destro, disegnato a sinistra,
+  incrociava i cavi dell'altro.
 - Schema: all'apertura i riquadri potevano comparire ammucchiati uno
   sull'altro. La scala salvava le sue posizioni, e quando alla volta dopo la
   scala non era attiva (coppia di core non trovata) venivano riusate con

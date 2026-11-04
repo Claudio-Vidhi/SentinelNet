@@ -49,6 +49,12 @@ assert.equal(p.B, 'core-b');
 assert.deepEqual(p.upstream, ['rtr-01']);
 assert.equal(p.dual, 3);
 assert.equal(p.total, 4);
+// Upstream ordered by side, so their cables do not cross: fw-01 cabled to
+// core-b only goes right, fw-02 to core-a only goes left; both cores between.
+level['fw-01'] = 0; level['fw-02'] = 0;
+const sides = plan(base.concat([b('fw-01', 'core-b'), b('fw-02', 'core-a')]));
+assert.deepEqual(sides.upstream, ['fw-02', 'rtr-01', 'fw-01']);
+delete level['fw-01']; delete level['fw-02'];
 // natural order: sw-acc-10 after sw-acc-03
 assert.deepEqual(p.members.map(m => m.id), ['sw-acc-01', 'sw-acc-02', 'sw-acc-03', 'sw-acc-10']);
 assert.ok(p.members.every(m => m.depth === 0 && m.parent === null));

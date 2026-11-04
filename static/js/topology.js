@@ -5465,7 +5465,10 @@
         // The share only decides whether to offer it: once chosen, devices added
         // later (discovered neighbours) must not switch the map back to rows.
         if (dual < 2 || (!chosen && dual / top.length < LADDER_MIN_SHARE)) return null;
-        const upstream = near.filter(id => !below(id, lv)).sort(byLabel);
+        // Upstream left to right by the core it is cabled to (A only, both,
+        // B only), then by name: a firewall on B alone drawn over A crossed the other's cables.
+        const side = id => (!nbrs[id].has(B) ? 0 : nbrs[id].has(A) ? 1 : 2);
+        const upstream = near.filter(id => !below(id, lv)).sort((x, y) => side(x) - side(y) || byLabel(x, y));
         // Each device is placed once, under the first column device reaching it.
         const placed = new Set([A, B, ...upstream, ...top]);
         const members = [], leaves = {};
