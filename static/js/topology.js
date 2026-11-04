@@ -3811,20 +3811,22 @@
             const pts = routes.get(pillKey(b));
             if (!pts) return;
             const st = styleFor(b);
+            // Export: the cable as a connector, its port names as text, like every other cable.
             if (visioConnectorSink) {
                 visioConnectorSink.push({ from: b.from, to: b.to, points: pts, color: visioColor(st.color).hex, width: st.lw, dash: !!st.dash });
-                return;
+            } else {
+                ctx.strokeStyle = st.color;
+                ctx.lineWidth = st.lw;
+                ctx.setLineDash(st.dash || []);
+                ctx.globalAlpha = schemaDimmed(b, pillKey(b), hoverBundleKey, schemaFocusId) ? 0.18 : 1;
+                ctx.beginPath();
+                ctx.moveTo(pts[0][0], pts[0][1]);
+                pts.slice(1).forEach(p => ctx.lineTo(p[0], p[1]));
+                ctx.stroke();
+                edgeHitSegs.push({ key: pillKey(b), segs: pts.slice(0, -1).map((p, k) => [p[0], p[1], pts[k + 1][0], pts[k + 1][1]]) });
             }
-            ctx.strokeStyle = st.color;
-            ctx.lineWidth = st.lw;
-            ctx.setLineDash(st.dash || []);
-            ctx.globalAlpha = schemaDimmed(b, pillKey(b), hoverBundleKey, schemaFocusId) ? 0.18 : 1;
-            ctx.beginPath();
-            ctx.moveTo(pts[0][0], pts[0][1]);
-            pts.slice(1).forEach(p => ctx.lineTo(p[0], p[1]));
-            ctx.stroke();
-            edgeHitSegs.push({ key: pillKey(b), segs: pts.slice(0, -1).map((p, k) => [p[0], p[1], pts[k + 1][0], pts[k + 1][1]]) });
             if (!showLbl(b)) return;
+            ctx.globalAlpha = 1;
             // Each end's ports above the cable, just outside its box: the
             // routes keep their first bend past the longest name (stub).
             ctx.setLineDash([]);
@@ -4175,13 +4177,11 @@
             ctx.stroke();
             if (pth.b) edgeHitSegs.push({ key: pillKey(pth.b), segs: pth.pts.slice(0, -1).map((q, k) => [q[0], q[1], pth.pts[k + 1][0], pth.pts[k + 1][1]]) });
         });
-        if (!visioConnectorSink) {
-            ctx.setLineDash([]);
-            ctx.globalAlpha = 1;
-            ctx.font = '9px Arial, Helvetica, sans-serif';
-            ctx.fillStyle = '#334155';
-            labels.forEach(l => { ctx.textAlign = l.align; ctx.textBaseline = l.base; ctx.fillText(l.t, l.x, l.y); });
-        }
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+        ctx.font = '9px Arial, Helvetica, sans-serif';
+        ctx.fillStyle = '#334155';
+        labels.forEach(l => { ctx.textAlign = l.align; ctx.textBaseline = l.base; ctx.fillText(l.t, l.x, l.y); });
         ctx.restore();
         return bundles.filter(b => !mine.includes(b));
     }

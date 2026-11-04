@@ -10,6 +10,12 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- Export Visio: mancavano i nomi delle porte dei cavi che girano attorno ai
+  riquadri (segnalazioni di bypass, chiusure d'anello, cavi verso le zone) e,
+  nella scala orizzontale, quasi tutti gli altri.
+
 ## [0.62.1] - 2026-11-04
 
 ### Fixed
