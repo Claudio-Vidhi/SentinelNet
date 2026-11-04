@@ -1998,7 +1998,10 @@
     // Devices marked by hand "to be replaced": yellow, as in the project legend.
     let mapRenew = new Set();
     try { mapRenew = new Set(JSON.parse(localStorage.getItem('mapRenew') || '[]')); } catch (e) { mapRenew = new Set(); }
-    let mapRenewShown = false;   // the map drawn now has one: the legend lists it
+    let mapRenewShown = false;
+    // Uplinks in access the user accepted as intended (a customer's design): not flagged.
+    let mapAccessOk = new Set();
+    try { mapAccessOk = new Set(JSON.parse(localStorage.getItem('mapAccessOk') || '[]')); } catch (e) { mapAccessOk = new Set(); }   // the map drawn now has one: the legend lists it
     const cableColorMode = () => (schemaPref('cableColors', 'type') === 'media' ? 'media' : 'type');
     // Style of a cable under the project legend, or null for the usual one.
     function cableStyle(b, baseLw) {
@@ -4808,11 +4811,23 @@
         // Backbone (between racks): marked by hand, drawn as a wide band in its medium's colour.
         const bbRow = `<div class="edgeCatRow" data-bb="1" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:0; cursor:pointer; color:var(--text);">
             <span style="width:14px; display:inline-block;">${mapBackbones.has(edgeKey) ? '✓' : ''}</span><span>${escapeHtml(tr('topoBackbone'))}</span></div>`;
+        // An uplink in access (flagged, or accepted before): accept it as intended, or flag it again.
+        const bun = ((minimalOverlayData && minimalOverlayData.bundles) || []).find(b => pillKey(b) === edgeKey);
+        const accRow = bun && (mapAccessOk.has(edgeKey) || endAccess(bun, bun.from) || endAccess(bun, bun.to))
+            ? `<div class="edgeCatRow" data-acc="1" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:0; cursor:pointer; color:var(--text);">
+                <span style="width:14px; display:inline-block;">${mapAccessOk.has(edgeKey) ? '✓' : ''}</span><span>${escapeHtml(tr('topoAccessOk'))}</span></div>` : '';
         div.innerHTML = rowsHtml + `<div style="border-top:1px solid var(--border); margin:4px 0;"></div>` + noneRow
-            + `<div style="border-top:1px solid var(--border); margin:4px 0;"></div>` + bbRow;
+            + `<div style="border-top:1px solid var(--border); margin:4px 0;"></div>` + bbRow + accRow;
         document.body.appendChild(div);
         div.querySelectorAll('.edgeCatRow').forEach(row => {
             row.addEventListener('click', () => {
+                if (row.hasAttribute('data-acc')) {
+                    if (mapAccessOk.has(edgeKey)) mapAccessOk.delete(edgeKey); else mapAccessOk.add(edgeKey);
+                    try { localStorage.setItem('mapAccessOk', JSON.stringify([...mapAccessOk])); } catch (e) { /* private window: this session only */ }
+                    closeEdgeCatMenu();
+                    loadInteractiveMap();
+                    return;
+                }
                 if (row.hasAttribute('data-bb')) {
                     if (mapBackbones.has(edgeKey)) mapBackbones.delete(edgeKey); else mapBackbones.add(edgeKey);
                     try { localStorage.setItem('mapBackbones', JSON.stringify([...mapBackbones])); } catch (e) { /* private window: this session only */ }
@@ -5258,8 +5273,11 @@
                                         labelOf, GROUPABLE_TYPES, forcedPair,
                                         schemaLayout() !== 'rows');
         mapPortInfo = {};
-        nodeData.forEach(n => { if (n.port_info) mapPortInfo[n.id] = n.port_info; });
-        mapAccessUplink = accessUplinks(bundles, id => (info[id] || {}).device_type, id => levels[id] || 0, portFact);
+        // Cable members carry short names (Te1/1/4), the backend the backup's (TenGigabitEthernet1/1/4).
+        nodeData.forEach(n => {
+            if (n.port_info) mapPortInfo[n.id] = Object.fromEntries(Object.entries(n.port_info).map(([k, v]) => [shortIface(k), v]));
+        });
+        mapAccessUplink = accessUplinks(bundles.filter(b => !mapAccessOk.has(pillKey(b))), id => (info[id] || {}).device_type, id => levels[id] || 0, portFact);
         // A switch behind an uplink that is not a trunk: red, as in the legend.
         mapRenewShown = nodes.some(nd => mapRenew.has(nd.id));
         nodes.forEach(nd => {

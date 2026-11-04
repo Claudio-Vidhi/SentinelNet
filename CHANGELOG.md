@@ -15,7 +15,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 - **Uplink non in trunk**: uno switch il cui collegamento verso monte è una
   porta configurata in access (una sola VLAN) è disegnato rosso, e quella
   porta ha il nome su sfondo nero, come nella legenda di progetto. Il dato
-  viene dalla configurazione già nei backup.
+  viene dalla configurazione già nei backup. Quando è una scelta del cliente,
+  tasto destro sul cavo → "Uplink in access voluto" e non viene più segnalato.
 - **Colore cavi → Mezzo e velocità** (menu Vista): i cavi prendono i colori
   della legenda di progetto, per mezzo (rame, F.O. multimodale, F.O.
   monomodale, DAC Twinax) e velocità (da 100M a 100G); un DAC è 1 px più
