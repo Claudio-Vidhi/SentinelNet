@@ -1067,6 +1067,11 @@
               <select id="mapSegSuggest"></select>
               <label for="mapSegSubnets" class="map-view-h" data-i18n="lblMapSegSubnets">Subnet, una per riga</label>
               <textarea id="mapSegSubnets" class="map-ai-note" rows="2" placeholder="10.20.0.0/24"></textarea>
+              <label for="mapSegCoreL" class="map-view-h" data-i18n="lblMapSegCoreL">Core sinistro</label>
+              <select id="mapSegCoreL" data-seg-core="0"></select>
+              <label for="mapSegCoreR" class="map-view-h" data-i18n="lblMapSegCoreR">Core destro</label>
+              <select id="mapSegCoreR" data-seg-core="1"></select>
+              <p id="mapSegCoreHint" class="map-view-hint" aria-live="polite"></p>
               <label class="map-opt" for="mapSegPick"><input type="checkbox" id="mapSegPick" checked> <span data-i18n="lblMapSegPick">Clic su un apparato della mappa lo aggiunge o lo toglie</span></label>
               <p id="mapSegCount" class="map-view-h"></p>
               <input type="search" id="mapSegSearch" class="map-pop-search" placeholder="Cerca nome o IP" data-i18n-placeholder="phMapSegSearch" aria-label="Cerca nome o IP" data-i18n-aria-label="phMapSegSearch">

@@ -10,6 +10,25 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Core di zona**: ogni segmento ha 0, 1 o 2 core. Di norma sono i firewall
+  collegati alla zona (membri, o fuori da ogni zona con un cavo dentro);
+  con 3 o più firewall non ne sceglie nessuno e l'editor chiede di
+  indicarli. Nell'editor Segmenti, **Core sinistro** e **Core destro**
+  permettono di sceglierli a mano tra tutti gli apparati della mappa tranne
+  i core del sito.
+- Nella **Scala doppio core** una zona con i suoi core è una scala a sé: con
+  due core gli switch stanno in colonna fra i due, con una corsia verso
+  ciascuno; con uno solo la colonna sta alla sua destra. Un firewall core di
+  due zone sta sul confine fra le due, che vengono affiancate.
+
+### Changed
+
+- Con i core di zona, un cavo che entra nella zona senza passare da un suo
+  core (per esempio dal core del sito direttamente a uno switch OT) è
+  segnalato come possibile bypass.
+
 ## [0.60.0] - 2026-11-03
 
 ### Added

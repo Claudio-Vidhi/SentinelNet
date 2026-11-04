@@ -55,6 +55,16 @@ class TestSegmentManager(_Isolated):
         segs = {s["id"]: s for s in segment_manager.list_segments("acme")["segments"]}
         self.assertEqual(segs[a["id"]]["members"], ["switch-01"])
 
+    def test_cores_keep_order_and_can_be_shared(self):
+        a = segment_manager.save_segment("acme", None, "A", "amber", cores=["fw-02", "fw-01", "fw-02"])
+        self.assertEqual(a["cores"], ["fw-02", "fw-01"])
+        b = segment_manager.save_segment("acme", None, "B", "teal", cores=["fw-01"])
+        segs = {s["id"]: s for s in segment_manager.list_segments("acme")["segments"]}
+        self.assertEqual(segs[a["id"]]["cores"], ["fw-02", "fw-01"])   # a core is not a member: not moved
+        self.assertEqual(segs[b["id"]]["cores"], ["fw-01"])
+        with self.assertRaises(ValueError):
+            segment_manager.save_segment("acme", None, "C", "lime", cores=["x", "y", "z"])
+
     def test_validation(self):
         with self.assertRaises(ValueError):
             segment_manager.save_segment("acme", None, "  ", "amber")

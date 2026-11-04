@@ -64,7 +64,8 @@ _SCHEMA = "\n".join([
     "CREATE TABLE IF NOT EXISTS segments (id TEXT PRIMARY KEY, "
     "org TEXT NOT NULL REFERENCES organizations(key) ON DELETE CASCADE, "
     "name TEXT NOT NULL, color TEXT NOT NULL, subnets TEXT NOT NULL DEFAULT '[]', "
-    "members TEXT NOT NULL DEFAULT '[]', excluded TEXT NOT NULL DEFAULT '[]');",
+    "members TEXT NOT NULL DEFAULT '[]', excluded TEXT NOT NULL DEFAULT '[]', "
+    "cores TEXT NOT NULL DEFAULT '[]');",
     "CREATE TABLE IF NOT EXISTS segment_links (org TEXT NOT NULL "
     "REFERENCES organizations(key) ON DELETE CASCADE, a TEXT NOT NULL, b TEXT NOT NULL, "
     "decision TEXT NOT NULL CHECK (decision IN ('allowed', 'gateway')), "
@@ -93,6 +94,9 @@ def connect(path: str) -> sqlite3.Connection:
             # (spec 2026-10-11 blueprint-assistant).
             if "assistant_instructions" not in {r["name"] for r in conn.execute("PRAGMA table_info(organizations)")}:
                 conn.execute("ALTER TABLE organizations ADD COLUMN assistant_instructions TEXT NOT NULL DEFAULT ''")
+            # Zone cores came after the first segments release.
+            if "cores" not in {r["name"] for r in conn.execute("PRAGMA table_info(segments)")}:
+                conn.execute("ALTER TABLE segments ADD COLUMN cores TEXT NOT NULL DEFAULT '[]'")
             _ready.add(path)
     return conn
 

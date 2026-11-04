@@ -1917,28 +1917,21 @@
     const SEGMENT_COLORS = { amber: '#d97706', teal: '#0d9488', violet: '#7c3aed', rose: '#e11d48', lime: '#65a30d', sky: '#0284c7' };
     const SEGMENT_FINDING_COLOR = '#f97316';
 
-    /** Membership, gateways and findings of the saved segments on one map.
+    /** Membership, cores, gateways and findings of the saved segments on one map.
      *  Membership: members, then subnets (address in a CIDR), minus excluded;
-     *  one node, one segment; cores never join. Gateways: a segment's firewalls
-     *  with a neighbour outside it, else every member with one. A cable between
-     *  two segments (or segment and main network) whose segment-side end is not
-     *  a gateway is a finding: a possible firewall bypass. Decided "gateway",
-     *  its outside end becomes an extra gateway of that segment. */
+     *  one node, one segment; site cores never join. Zone cores (0-2, left
+     *  then right): the saved ones, else the zone's firewalls (members, or
+     *  outside every segment with a cable into it) when there are 1 or 2; with
+     *  3+ none is picked (ambiguous) and the editor asks. A zone core is not
+     *  a member, so one firewall can be the core of two zones. Gateways: the
+     *  zone cores, else members with a neighbour outside (firewalls first).
+     *  A cable across zones whose zone-side end is not a gateway is a
+     *  finding: a possible firewall bypass. Decided "gateway", its outside end
+     *  becomes an extra gateway of that segment. */
     function segmentModel(nodesData, linksData, saved, cores) {
         const coreSet = new Set(cores || []), segs = saved.segments || [];
-        const of = {};
-        segs.forEach(s => (s.members || []).forEach(id => {
-            if (!of[id] && !coreSet.has(id) && !(s.excluded || []).includes(id)) of[id] = s.id;
-        }));
-        nodesData.forEach(n => {
-            if (of[n.id] || coreSet.has(n.id)) return;
-            const a = ip4n(n.display_ip || n.id);
-            if (a === null) return;
-            const s = segs.find(s => !(s.excluded || []).includes(n.id) && (s.subnets || []).some(c => inCidr(a, c)));
-            if (s) of[n.id] = s.id;
-        });
-        const typeOf = {}, nbrs = {};
-        nodesData.forEach(n => { typeOf[n.id] = n.device_type; });
+        const typeOf = {}, labelOf = {}, nbrs = {};
+        nodesData.forEach(n => { typeOf[n.id] = n.device_type; labelOf[n.id] = n.label || n.id; });
         const pairs = new Map();
         linksData.forEach(l => {
             if (l.source === l.target) return;
@@ -1947,9 +1940,42 @@
             (nbrs[a] || (nbrs[a] = new Set())).add(b);
             (nbrs[b] || (nbrs[b] = new Set())).add(a);
         });
-        const outside = id => [...(nbrs[id] || [])].some(nb => of[nb] !== of[id]);
+        const manual = {};
+        segs.forEach(s => { manual[s.id] = (s.cores || []).filter(id => typeOf[id] !== undefined && !coreSet.has(id)).slice(0, 2); });
+        const manualAll = new Set(Object.values(manual).flat());
+        const of = {};
+        segs.forEach(s => (s.members || []).forEach(id => {
+            if (!of[id] && !coreSet.has(id) && !manualAll.has(id) && !(s.excluded || []).includes(id)) of[id] = s.id;
+        }));
+        nodesData.forEach(n => {
+            if (of[n.id] || coreSet.has(n.id) || manualAll.has(n.id)) return;
+            const a = ip4n(n.display_ip || n.id);
+            if (a === null) return;
+            const s = segs.find(s => !(s.excluded || []).includes(n.id) && (s.subnets || []).some(c => inCidr(a, c)));
+            if (s) of[n.id] = s.id;
+        });
+        const byLabel = (x, y) => String(labelOf[x]).localeCompare(String(labelOf[y]), undefined, { numeric: true });
+        const zc = {}, ambiguous = {};
+        segs.forEach(s => {
+            if (manual[s.id].length) { zc[s.id] = manual[s.id]; return; }
+            const fws = nodesData.filter(n => n.device_type === 'firewall' && !coreSet.has(n.id) && !(s.excluded || []).includes(n.id)
+                && (of[n.id] === s.id || (!of[n.id] && [...(nbrs[n.id] || [])].some(nb => of[nb] === s.id))))
+                .map(n => n.id).sort(byLabel);
+            zc[s.id] = fws.length <= 2 ? fws : [];
+            if (fws.length > 2) ambiguous[s.id] = fws.length;
+        });
+        const coreSegs = {};
+        Object.entries(zc).forEach(([sid, ids]) => ids.forEach(id => {
+            delete of[id];
+            (coreSegs[id] || (coreSegs[id] = [])).push(sid);
+        }));
+        // Same side of every zone border: same zone, or a zone and one of its cores.
+        const same = (x, y) => of[x] === of[y] || (!!of[x] && (coreSegs[y] || []).includes(of[x]))
+            || (!!of[y] && (coreSegs[x] || []).includes(of[y]));
+        const outside = id => [...(nbrs[id] || [])].some(nb => !same(id, nb));
         const gateways = {};
         segs.forEach(s => {
+            if (zc[s.id].length) { gateways[s.id] = new Set(zc[s.id]); return; }
             const edge = Object.keys(of).filter(id => of[id] === s.id && outside(id));
             const fw = edge.filter(id => typeOf[id] === 'firewall');
             gateways[s.id] = new Set(fw.length ? fw : edge);
@@ -1958,7 +1984,7 @@
         (saved.links || []).forEach(l => { decision[l.a + '\u0000' + l.b] = l.decision; });
         const findings = [];
         pairs.forEach(([a, b], key) => {
-            if (of[a] === of[b]) return;
+            if (same(a, b)) return;
             const bad = [a, b].some(id => of[id] && !gateways[of[id]].has(id));
             if (bad) findings.push({ a, b, segA: of[a] || null, segB: of[b] || null, decision: decision[key] || null });
         });
@@ -1966,7 +1992,7 @@
             if (f.segA) gateways[f.segA].add(f.b);
             if (f.segB) gateways[f.segB].add(f.a);
         });
-        return { of, gateways, findings };
+        return { of, cores: zc, ambiguous, gateways, findings };
     }
 
     /** Segments the map suggests ("detect"): with the firewalls taken out, each
@@ -2039,7 +2065,8 @@
     function segEffective() {
         if (!segDraft) return mapSegments;
         const d = { id: segDraft.id || SEG_DRAFT_ID, name: segDraft.name || tr('mapSegNewTitle'), color: segDraft.color,
-                    subnets: segDraft.subnets, members: [...segDraft.members], excluded: [...segDraft.excluded] };
+                    subnets: segDraft.subnets, members: [...segDraft.members], excluded: [...segDraft.excluded],
+                    cores: segDraft.cores.filter(Boolean) };
         return { segments: [d, ...(mapSegments.segments || []).filter(s => s.id !== segDraft.id)], links: mapSegments.links };
     }
     function segModelFor(nodes, links, cores) {
@@ -2063,12 +2090,27 @@
         const m = mapSegmentModel;
         if (!m || !networkInstance) return [];
         const lad = schemaLadderActive(), idsOf = {};
-        if (lad && lad.segCols) lad.segCols.forEach(c => { idsOf[c.id] = [...c.gateways, ...c.members.map(x => x.id)]; });
-        else Object.entries(m.of).forEach(([id, s]) => (idsOf[s] || (idsOf[s] = [])).push(id));
+        if (lad && lad.segCols) lad.segCols.forEach(c => { idsOf[c.id] = segColIds(c); });
+        else {
+            Object.entries(m.of).forEach(([id, s]) => (idsOf[s] || (idsOf[s] = [])).push(id));
+            Object.entries(m.cores || {}).forEach(([s, ids]) => (idsOf[s] || (idsOf[s] = [])).push(...ids));
+        }
         const ds = networkInstance.body.data.nodes;
         const pad = lad && lad.segCols ? 24 : 8;
+        // A core shared by two side-by-side zones: each frame takes its half.
+        const half = {};
+        if (lad && lad.segCols) lad.segCols.forEach((c, i) => {
+            const next = lad.segCols[i + 1];
+            if (c.joinCore) (half[c.id] || (half[c.id] = {}))[c.joinCore] = 'right';
+            if (next && next.joinCore) (half[c.id] || (half[c.id] = {}))[next.joinCore] = 'left';
+        });
         return segEffective().segments.map(s => {
-            const bbs = (idsOf[s.id] || []).filter(id => ds.get(id)).map(id => networkInstance.getBoundingBox(id)).filter(Boolean);
+            const bbs = (idsOf[s.id] || []).filter(id => ds.get(id)).map(id => {
+                const bb = networkInstance.getBoundingBox(id), h = (half[s.id] || {})[id];
+                if (!bb || !h) return bb;
+                const mid = (bb.left + bb.right) / 2;
+                return h === 'right' ? { ...bb, left: mid + pad } : { ...bb, right: mid - pad };
+            }).filter(Boolean);
             const rect = b => ({ x0: b.left - pad, y0: b.top - pad, x1: b.right + pad, y1: b.bottom + pad });
             const rects = !bbs.length ? [] : lad && lad.segCols
                 ? [{ x0: Math.min(...bbs.map(b => b.left)) - pad, y0: Math.min(...bbs.map(b => b.top)) - pad,
@@ -2191,6 +2233,16 @@
         box.scrollTop = top;
         const inside = nodes.filter(n => segDraftHas(n.id));
         segEl('mapSegCount').textContent = tr('mapSegCount', { n: inside.length });
+        // Cores: what "automatic" picked, or why it picked none; zones sharing them.
+        const m = mapSegmentModel || {}, did = segDraft.id || SEG_DRAFT_ID;
+        const now = (m.cores || {})[did] || [];
+        const shared = Object.entries(m.cores || {}).filter(([sid, ids]) => sid !== did && ids.some(id => now.includes(id)))
+            .map(([sid]) => (saved.find(s => s.id === sid) || {}).name).filter(Boolean);
+        const hint = segDraft.cores.some(Boolean) ? []
+            : [(m.ambiguous || {})[did] ? tr('mapSegCoreMany', { n: m.ambiguous[did] })
+               : now.length ? tr('mapSegCoreAuto', { list: now.map(segLabel).join(' + ') }) : tr('mapSegCoreAutoNone')];
+        if (shared.length) hint.push(tr('mapSegCoreShared', { list: shared.join(', ') }));
+        segEl('mapSegCoreHint').textContent = hint.join(' ');
         const moves = inside.filter(n => inOther(n.id)).map(n => `${n.label || n.id} (${inOther(n.id).name})`);
         segEl('mapSegMoves').textContent = moves.length ? tr('mapSegMoves', { list: moves.join(', ') }) : '';
     }
@@ -2208,9 +2260,10 @@
         const used = new Set((mapSegments.segments || []).map(s => s.color));
         segDraft = seg
             ? { id: seg.id, name: seg.name, color: seg.color, subnets: [...(seg.subnets || [])],
-                members: new Set(seg.members || []), excluded: new Set(seg.excluded || []) }
+                members: new Set(seg.members || []), excluded: new Set(seg.excluded || []),
+                cores: [(seg.cores || [])[0] || '', (seg.cores || [])[1] || ''] }
             : { id: null, name: '', color: Object.keys(SEGMENT_COLORS).find(c => !used.has(c)) || 'amber',
-                subnets: [], members: new Set(), excluded: new Set() };
+                subnets: [], members: new Set(), excluded: new Set(), cores: ['', ''] };
         segEl('mapSegEditorTitle').textContent = tr(seg ? 'mapSegEditTitle' : 'mapSegNewTitle');
         segEl('mapSegName').value = segDraft.name;
         segEl('mapSegSubnets').value = segDraft.subnets.join('\n');
@@ -2226,6 +2279,14 @@
         }
         segEl('mapSegSuggest').innerHTML = `<option value="">${escapeHtml(tr('optMapSegSuggestNone'))}</option>` + segSuggestions.map((p, i) =>
             `<option value="${i}">${escapeHtml(tr('mapSegSuggestOpt', { n: p.members.length, fw: p.firewalls.map(segLabel).join(' + ') || tr('mapSegNoFirewall') }))}</option>`).join('');
+        // Any device of the map but the site cores; empty = automatic.
+        const cands = segInput ? segInput.nodes.filter(n => !n.is_group && !segInput.cores.includes(n.id))
+            .sort((a, b) => String(a.label || a.id).localeCompare(String(b.label || b.id), undefined, { numeric: true })) : [];
+        ['mapSegCoreL', 'mapSegCoreR'].forEach((id, i) => {
+            segEl(id).innerHTML = `<option value="">${escapeHtml(tr('optMapSegCoreAuto'))}</option>` + cands.map(n =>
+                `<option value="${attrEsc(n.id)}">${escapeHtml(n.label || n.id)} · ${escapeHtml(n.display_ip || n.id)}</option>`).join('');
+            segEl(id).value = segDraft.cores[i];
+        });
         segEl('mapSegEditor').hidden = false;
         redrawInteractiveMap();
     }
@@ -2249,7 +2310,8 @@
         const name = segDraft.name.trim();
         if (!name) { segEl('mapSegErr').textContent = tr('mapSegErrName'); return; }
         const ok = await segPost('/api/segments', { org: mapSegmentsOrg, id: segDraft.id, name, color: segDraft.color,
-            subnets: segDraft.subnets, members: [...segDraft.members], excluded: [...segDraft.excluded] });
+            subnets: segDraft.subnets, members: [...segDraft.members], excluded: [...segDraft.excluded],
+            cores: segDraft.cores.filter(Boolean) });
         if (!ok) return;
         closeSegEditor(false);
         await loadMapSegments(mapSegmentsOrg, true);
@@ -2294,6 +2356,16 @@
             segEl('mapSegSubnets').value = segDraft.subnets.join('\n');
             redrawInteractiveMap();
         });
+        ['mapSegCoreL', 'mapSegCoreR'].forEach((id, i) => segEl(id)?.addEventListener('change', e => {
+            if (!segDraft) return;
+            segDraft.cores[i] = e.target.value;
+            // One device, one side.
+            if (e.target.value && segDraft.cores[1 - i] === e.target.value) {
+                segDraft.cores[1 - i] = '';
+                segEl(i ? 'mapSegCoreL' : 'mapSegCoreR').value = '';
+            }
+            redrawInteractiveMap();
+        }));
         segEl('mapSegSearch')?.addEventListener('input', renderSegMembers);
         segEl('mapSegMembers')?.addEventListener('change', e => {
             const id = e.target.dataset && e.target.dataset.segNode;
@@ -3299,7 +3371,7 @@
         const ladIds = new Set();
         if (lad && [lad.A, lad.B].every(id => box[id])) {
             [lad.A, lad.B, ...lad.upstream, ...lad.members.map(m => m.id), ...[].concat(...Object.values(lad.leaves)),
-             ...(lad.segCols || []).flatMap(c => [...c.gateways, ...c.members.map(m => m.id)])]
+             ...(lad.segCols || []).flatMap(segColIds)]
                 .forEach(id => { if (box[id]) ladIds.add(id); });
             Object.values(zones).forEach(rows => Object.keys(rows).forEach(lv => {
                 rows[lv] = rows[lv].filter(nd => !ladIds.has(nd.id));
@@ -3417,7 +3489,7 @@
         const coreCps = {}; // core -> its vertical port names
 
         // Core lanes, assigned top to bottom so they never cross each other.
-        [lad.A, lad.B].forEach(c => {
+        [lad.A, lad.B].filter(Boolean).forEach(c => {
             const cb = box(c), left = c === lad.A, ends = [];
             coreCps[c] = [];
             mine.forEach(b => {
@@ -3555,7 +3627,7 @@
         // it; names that would touch go one step higher. On the switch: a
         // bracket closing its stacked port names, the name beside it.
         ctx.lineWidth = 1;
-        [lad.A, lad.B].forEach(c => {
+        [lad.A, lad.B].filter(Boolean).forEach(c => {
             const gs = pcs.filter(g => g.core === c).sort((p, q) => Math.min(...p.xs) - Math.min(...q.xs));
             if (!gs.length) return;
             const cb = gs[0].cb;
@@ -3600,18 +3672,21 @@
      *  routes (taken.v / taken.h: [pos, from, to]) are not shared. Cheapest
      *  route wins: length plus a cost per bend. ya / yb: where it leaves and
      *  enters (the box centre, nudged for a second cable on the same box).
-     *  Returns the points, or null when every candidate is blocked. */
-    function segRoute(a, b, ya, yb, others, taken) {
+     *  sa / sb: how far out of a / b the route runs before its first bend
+     *  (room for the port name). Returns the points, or null when every
+     *  candidate is blocked. */
+    function segRoute(a, b, ya, yb, others, taken, sa = 0, sb = 0) {
         const pad = 4;
         const hitH = (y, x1, x2) => others.some(o => y > o.top - pad && y < o.bottom + pad && Math.max(x1, x2) > o.left - pad && Math.min(x1, x2) < o.right + pad)
             || taken.h.some(([ty, t1, t2]) => Math.abs(ty - y) < 6 && Math.max(x1, x2) > Math.min(t1, t2) && Math.min(x1, x2) < Math.max(t1, t2));
         const hitV = (x, y1, y2) => others.some(o => x > o.left - pad && x < o.right + pad && Math.max(y1, y2) > o.top - pad && Math.min(y1, y2) < o.bottom + pad)
             || taken.v.some(([tx, t1, t2]) => Math.abs(tx - x) < 6 && Math.max(y1, y2) > Math.min(t1, t2) && Math.min(y1, y2) < Math.max(t1, t2));
         // The edge a route leaves box q from, towards lane x (null: x is over the box).
-        const edge = (q, x) => x >= q.right + 10 ? q.right : x <= q.left - 10 ? q.left : null;
+        const edge = (q, x, s = 0) => x >= q.right + Math.max(10, s) ? q.right : x <= q.left - Math.max(10, s) ? q.left : null;
         const all = [a, b, ...others];
         const xs = new Set([(a.right + b.left) / 2, (b.right + a.left) / 2]);
         all.forEach(o => { for (let k = 0; k < 4; k++) { xs.add(o.left - 16 - 10 * k); xs.add(o.right + 16 + 10 * k); } });
+        [[a, sa], [b, sb]].forEach(([o, s]) => { for (let k = 0; k < 4; k++) { xs.add(o.left - s - 6 - 10 * k); xs.add(o.right + s + 6 + 10 * k); } });
         const ys = new Set();
         all.forEach(o => { for (let k = 0; k < 4; k++) { ys.add(o.top - 16 - 10 * k); ys.add(o.bottom + 16 + 10 * k); } });
         let best = null, cost = Infinity;
@@ -3622,13 +3697,13 @@
         };
         // One lane: a -> x -> b.
         xs.forEach(x => {
-            const ea = edge(a, x), eb = edge(b, x);
+            const ea = edge(a, x, sa), eb = edge(b, x, sb);
             if (ea === null || eb === null || hitH(ya, ea, x) || hitV(x, ya, yb) || hitH(yb, x, eb)) return;
             consider(ya === yb ? [[ea, ya], [eb, yb]] : [[ea, ya], [x, ya], [x, yb], [eb, yb]], ya === yb ? 0 : 2);
         });
         // Two lanes and a run between: a -> x1, down/up to y, across to x2, to b.
-        const near = (q, y0) => [...xs].filter(x => edge(q, x) !== null && Math.abs(x - (x > q.right ? q.right : q.left)) <= 60 && !hitH(y0, edge(q, x), x));
-        const xa = near(a, ya), xb = near(b, yb);
+        const near = (q, y0, s) => [...xs].filter(x => edge(q, x, s) !== null && Math.abs(x - (x > q.right ? q.right : q.left)) <= 60 + s && !hitH(y0, edge(q, x, s), x));
+        const xa = near(a, ya, sa), xb = near(b, yb, sb);
         ys.forEach(y => xa.forEach(x1 => {
             if (hitV(x1, ya, y)) return;
             xb.forEach(x2 => {
@@ -3645,15 +3720,26 @@
     // Returns the bundles it did not draw.
     const segRouteMemo = new Map();
     function drawSegmentCables(ctx, lad, bundles, box, styleFor, labelMode) {
-        const inCol = new Set(lad.segCols.flatMap(c => [...c.gateways, ...c.members.map(m => m.id)]));
+        const inCol = new Set(lad.segCols.flatMap(segColIds));
         const mine = bundles.filter(b => b.type !== 'keepalive' && (inCol.has(b.from) || inCol.has(b.to)) && box(b.from) && box(b.to));
         if (!mine.length) return bundles;
         const ids = networkInstance.body.data.nodes.getIds();
         const boxes = {};
         ids.forEach(id => { const r = box(id); if (r) boxes[id] = r; });
+        const showLbl = b => visioConnectorSink || schemaPortLabelVisible(labelMode, b, schemaFocusId);
+        // Room out of each box before a cable may turn: its longest port
+        // name, so no other cable's lane runs over a name.
+        const stub = {};
+        ctx.save();
+        ctx.font = '9px Arial, Helvetica, sans-serif';
+        mine.forEach(b => [b.from, b.to].forEach(id => {
+            const t = showLbl(b) ? ladderOwnEnd(b, id) : '';
+            stub[id] = Math.max(stub[id] || 0, t ? Math.ceil(ctx.measureText(t).width) + 10 : 0);
+        }));
+        ctx.restore();
         // Routes depend only on where the boxes are: computed again when one moves.
         const sig = ids.map(id => boxes[id] ? `${id}:${Math.round(boxes[id].left)},${Math.round(boxes[id].top)},${Math.round(boxes[id].right)},${Math.round(boxes[id].bottom)}` : '').join('|')
-            + '#' + mine.map(pillKey).join('|');
+            + '#' + mine.map(pillKey).join('|') + '#' + JSON.stringify(stub);
         let routes = segRouteMemo.get('r');
         if (segRouteMemo.get('sig') !== sig) {
             const taken = { v: [], h: [] }, used = {};
@@ -3668,7 +3754,7 @@
                 const a = boxes[b.from], c = boxes[b.to];
                 const ya = (a.top + a.bottom) / 2 + slot(b.from), yb = (c.top + c.bottom) / 2 + slot(b.to);
                 const others = ids.filter(id => id !== b.from && id !== b.to && boxes[id]).map(id => boxes[id]);
-                const pts = segRoute(a, c, ya, yb, others, taken);
+                const pts = segRoute(a, c, ya, yb, others, taken, stub[b.from] || 0, stub[b.to] || 0);
                 if (!pts) return;   // boxed in: left to the general router
                 for (let i = 1; i < pts.length; i++) {
                     const [x1, y1] = pts[i - 1], [x2, y2] = pts[i];
@@ -3679,7 +3765,6 @@
             segRouteMemo.set('sig', sig);
             segRouteMemo.set('r', routes);
         }
-        const showLbl = b => visioConnectorSink || schemaPortLabelVisible(labelMode, b, schemaFocusId);
         ctx.save();
         ctx.lineCap = 'butt';
         mine.forEach(b => {
@@ -3700,7 +3785,8 @@
             ctx.stroke();
             edgeHitSegs.push({ key: pillKey(b), segs: pts.slice(0, -1).map((p, k) => [p[0], p[1], pts[k + 1][0], pts[k + 1][1]]) });
             if (!showLbl(b)) return;
-            // Each end's ports above the cable, just outside its box.
+            // Each end's ports above the cable, just outside its box: the
+            // routes keep their first bend past the longest name (stub).
             ctx.setLineDash([]);
             ctx.font = '9px Arial, Helvetica, sans-serif';
             ctx.fillStyle = '#334155';
@@ -3719,11 +3805,12 @@
 
     // Ladder geometry, x0 = left edge of the block. Upstream devices in a row
     // above, centred between the cores; then the cores; then the column, each
-    // device one step in per level and its leaves in rows under it.
+    // device one step in per level and its leaves in rows under it. A zone's
+    // ladder may lack A or B (one core): the column starts at x0 or ends it.
     function ladderPositions(lad, box, x0) {
         const pos = {};
-        const wA = box[lad.A].w, wB = box[lad.B].w;
-        const colLeft = x0 + wA + LADDER_GAP;
+        const wA = lad.A ? box[lad.A].w : 0, wB = lad.B ? box[lad.B].w : 0;
+        const colLeft = x0 + (lad.A ? wA + LADDER_GAP : 0);
         const W = lad.W || Math.max(...lad.members.map(m => (box[m.id] ? box[m.id].w : 0) + m.depth * LADDER_IN));
         const cxA = x0 + wA / 2, cxB = colLeft + W + LADDER_GAP + wB / 2;
         let top = 0;
@@ -3735,9 +3822,9 @@
             up.forEach(id => { pos[id] = { x: x + box[id].w / 2, y: hUp / 2 }; x += box[id].w + SCHEMA_GAP; });
             top = hUp + 140;
         }
-        const hC = Math.max(box[lad.A].h, box[lad.B].h);
-        pos[lad.A] = { x: cxA, y: top + hC / 2 };
-        pos[lad.B] = { x: cxB, y: top + hC / 2 };
+        const hC = Math.max(...[lad.A, lad.B].filter(Boolean).map(id => box[id].h));
+        if (lad.A) pos[lad.A] = { x: cxA, y: top + hC / 2 };
+        if (lad.B) pos[lad.B] = { x: cxB, y: top + hC / 2 };
         // Under the cores: room for the core-side port names along each lane.
         let cur = top + hC + 90;
         lad.members.forEach((m, i) => {
@@ -3774,10 +3861,21 @@
             const next = lad.members[i + 1];
             cur += next && next.depth > 0 ? 18 : 30;
         });
-        // Segment columns right of B: gateways in a row level with the cores,
-        // so the core cables reach them straight across; the rest below.
+        // Segment columns right of B: a zone's own ladder, its cores level
+        // with the site cores; else gateways in a row level with them, so the
+        // core cables reach them straight across, and the rest below. A zone
+        // sharing its left core with the previous one starts on that core.
         let sx = cxB + wB / 2 + LADDER_SEG_GAP;
         (lad.segCols || []).forEach(c => {
+            if (c.ladder) {
+                if (c.joinCore && pos[c.joinCore]) sx = pos[c.joinCore].x - box[c.joinCore].w / 2;
+                const sub = ladderPositions(c.ladder, box, sx);
+                const hZ = Math.max(...[c.ladder.A, c.ladder.B].filter(Boolean).map(id => box[id].h));
+                const dy = top + hC / 2 - hZ / 2;
+                Object.entries(sub).forEach(([id, p]) => { pos[id] = { x: p.x, y: p.y + dy }; });
+                sx = Math.max(...Object.keys(sub).map(id => sub[id].x + box[id].w / 2)) + LADDER_SEG_GAP;
+                return;
+            }
             const gw = c.gateways.filter(id => box[id]);
             let x = sx, y = top;
             gw.forEach(id => { pos[id] = { x: x + box[id].w / 2, y: top + hC / 2 }; x += box[id].w + SCHEMA_GAP; });
@@ -4674,7 +4772,10 @@
                                         schemaLayout() === 'ladder');
         const segModel = segModelFor(nodeData, linkData, ladder ? [ladder.A, ladder.B] : forcedPair);
         if (ladder) ladder.segCols = ladderSegmentColumns(ladder, segModel, segEffective().segments, bundles, labelOf);
-        if (ladder && schemaLayout() === 'ladder') sizeLadderBoxes(nodes, bundles, ladder);
+        if (ladder && schemaLayout() === 'ladder') {
+            sizeLadderBoxes(nodes, bundles, ladder);
+            ladder.segCols.forEach(c => { if (c.ladder) sizeLadderBoxes(nodes, bundles, c.ladder); });
+        }
 
         // Final x/y come from packSchemaRows() once vis.js has sized the boxes.
         nodes.forEach((nd, i) => { nd.schemaLevel = levels[nd.id] || 0; nd.x = i * 400; nd.y = nd.schemaLevel * 400; });
@@ -4852,11 +4953,15 @@
         top.forEach(r => visit(r, 0, null));
         return { A, B, upstream, members, leaves, dual, total: top.length };
     }
-    /** One ladder column per network segment, right of the cores: its
-     *  gateways in a row on top, the rest hanging from them (each device once,
-     *  one step in per level). A single-homed device outside every segment
-     *  goes with the segment device it hangs from. The column devices leave
-     *  the main column; a main device whose parent left becomes a top row. */
+    /** One ladder column per network segment, right of the cores. A zone
+     *  with cores and members is a ladder of its own (c.ladder: A and/or B,
+     *  its devices in a column between them); otherwise its gateways stand
+     *  in a row on top and the rest hangs from them. Each device once, one
+     *  step in per level; a single-homed device outside every segment goes
+     *  with the segment device it hangs from. Zones sharing a core sit side
+     *  by side, the core on their border (c.joinCore: the left core the zone
+     *  shares with the one before). The column devices leave the main
+     *  column; a main device whose parent left becomes a top row. */
     function ladderSegmentColumns(plan, model, segs, bundles, labelOf) {
         const of = model.of;
         const nbrs = {};
@@ -4868,9 +4973,10 @@
         const byLabel = (x, y) => String(labelOf(x)).localeCompare(String(labelOf(y)), undefined, { numeric: true });
         const core = id => id === plan.A || id === plan.B;
         const placed = new Set();
-        const cols = segs.map(s => {
+        let cols = segs.map(s => {
+            const zc = ((model.cores || {})[s.id] || []).filter(id => nbrs[id]);
             const mine = Object.keys(of).filter(id => of[id] === s.id && nbrs[id]).sort(byLabel);
-            const gateways = mine.filter(id => model.gateways[s.id].has(id));
+            const gateways = zc.length ? zc.slice() : mine.filter(id => model.gateways[s.id].has(id));
             gateways.forEach(id => placed.add(id));
             const members = [];
             const visit = (id, depth, parent) => {
@@ -4880,11 +4986,44 @@
                 kids.forEach(k => placed.add(k));
                 kids.forEach(k => visit(k, parent === null && gateways.includes(id) ? 0 : depth + 1, id));
             };
-            gateways.forEach(id => visit(id, 0, null));
+            if (zc.length) {
+                // As in the main ladder: whoever has a cable to a core is a top row.
+                const top = mine.filter(id => !placed.has(id) && zc.some(c => nbrs[c].has(id)));
+                top.forEach(id => placed.add(id));
+                top.forEach(id => visit(id, 0, null));
+            } else gateways.forEach(id => visit(id, 0, null));
             mine.forEach(id => { if (!placed.has(id)) { placed.add(id); visit(id, 0, null); } });
-            return { id: s.id, name: s.name, color: s.color, gateways, members };
+            return { id: s.id, name: s.name, color: s.color, gateways, cores: zc, members };
         }).filter(c => c.gateways.length || c.members.length);
         if (!placed.size) return [];
+        // Zones sharing a core in a row: the shared one right in the first, left in the next.
+        // ponytail: a core shared by 3+ zones borders two of them; the others reach it by cable.
+        const rest = cols.slice(), order = [];
+        while (rest.length) {
+            let c = rest.shift();
+            order.push(c);
+            for (;;) {
+                const i = rest.findIndex(d => d.cores.some(id => id !== c.joinCore && c.cores.includes(id)));
+                if (i < 0) break;
+                const next = rest.splice(i, 1)[0], sh = next.cores.find(id => id !== c.joinCore && c.cores.includes(id));
+                c.cores = [...c.cores.filter(id => id !== sh), sh];
+                next.cores = [sh, ...next.cores.filter(id => id !== sh)];
+                next.joinCore = sh;
+                order.push(next);
+                c = next;
+            }
+        }
+        cols = order;
+        const drawn = new Set();
+        cols.forEach((c, i) => {
+            const own = c.cores.filter(id => !drawn.has(id) || id === c.joinCore);
+            own.forEach(id => drawn.add(id));
+            if (!own.length || !c.members.length) { delete c.joinCore; return; }
+            const right = cols[i + 1] && cols[i + 1].joinCore;
+            // One core: on the left, unless the next zone shares it.
+            const [A, B] = own.length === 2 ? own : own[0] === right && own[0] !== c.joinCore ? [null, own[0]] : [own[0], null];
+            c.ladder = { A, B, upstream: [], members: c.members, leaves: {} };
+        });
         plan.upstream = plan.upstream.filter(id => !placed.has(id));
         const depth = {};
         plan.members = plan.members.filter(m => !placed.has(m.id));
@@ -4899,6 +5038,8 @@
         });
         return cols;
     }
+    // Every device of a segment column: its cores, gateways and members.
+    const segColIds = c => [...new Set([...(c.cores || []), ...c.gateways, ...c.members.map(m => m.id)])];
     // Schema arrangement: 'rows' (one row per level) or 'ladder' (above).
     function schemaLayout() { return schemaPref('schemaLayout', 'rows') === 'ladder' ? 'ladder' : 'rows'; }
     // The ladder of the map drawn now, when the user chose it and the site fits.
@@ -5383,6 +5524,9 @@
         // general router; the rest (peer link, upstream, second parents) stay.
         const lad = schemaLadderActive();
         if (lad && [lad.A, lad.B].every(realBox)) bundles = drawLadderCables(ctx, lad, bundles, realBox, styleFor, labelMode);
+        (lad && lad.segCols || []).forEach(c => {
+            if (c.ladder && [c.ladder.A, c.ladder.B].filter(Boolean).every(realBox)) bundles = drawLadderCables(ctx, c.ladder, bundles, realBox, styleFor, labelMode);
+        });
         if (lad && lad.segCols && lad.segCols.length) bundles = drawSegmentCables(ctx, lad, bundles, realBox, styleFor, labelMode);
 
         // --- PASSO 1: ancoraggi per lato -----------------------------------

@@ -52,10 +52,11 @@ const cores = ['10.0.0.1', '10.0.0.2'];
 const ot = { id: 'ot', subnets: ['10.20.0.0/24'], members: ['10.0.0.10'], excluded: [] };
 const seg = (segments, decided = []) => ({ segments, links: decided });
 
-// Membership: CIDR + manual member; the firewall is the gateway; the
-// parallel bypass cables are one finding.
+// Membership: CIDR + manual member; the firewall becomes the zone core (not
+// a member) and its gateway; the parallel bypass cables are one finding.
 let m = segmentModel(nodes, links, seg([ot]), cores);
-assert.deepEqual(Object.keys(m.of).sort(), ['10.0.0.10', '10.20.0.1', '10.20.0.2', '10.20.0.3']);
+assert.deepEqual(Object.keys(m.of).sort(), ['10.20.0.1', '10.20.0.2', '10.20.0.3']);
+assert.deepEqual(m.cores.ot, ['10.0.0.10']);
 assert.deepEqual([...m.gateways.ot], ['10.0.0.10']);
 assert.deepEqual(m.findings, [{ a: '10.0.0.50', b: '10.20.0.2', segA: null, segB: 'ot', decision: null }]);
 
@@ -76,10 +77,40 @@ m = segmentModel(nodes, links, seg([ot, { id: 'b', subnets: ['10.20.0.0/16'], me
 assert.equal(m.of['10.20.0.1'], 'ot');
 assert.deepEqual([...m.gateways.b], []);
 
-// No firewall in the segment: every member with an outside cable is a gateway.
+// Subnet only: the firewall cabled into the zone is still its core.
 m = segmentModel(nodes, links, seg([{ id: 'ot', subnets: ['10.20.0.0/24'], members: [], excluded: [] }]), cores);
+assert.deepEqual(m.cores.ot, ['10.0.0.10']);
+// No firewall (excluded): every member with an outside cable is a gateway.
+m = segmentModel(nodes, links, seg([{ id: 'ot', subnets: ['10.20.0.0/24'], members: [], excluded: ['10.0.0.10'] }]), cores);
+assert.deepEqual(m.cores.ot, []);
 assert.deepEqual([...m.gateways.ot].sort(), ['10.20.0.1', '10.20.0.2']);
 assert.deepEqual(m.findings, []);
+
+// Zone cores: two firewalls; three are ambiguous (none picked); the saved
+// ones win, any device, and one firewall can be the core of two zones.
+{
+    const fw = id => N(id, 'firewall');
+    const n3 = [...nodes, fw('10.0.0.11'), fw('10.0.0.12'), N('10.30.0.1'), N('10.30.0.2')];
+    const toOt = ['10.0.0.11', '10.0.0.12'].map(f => L(f, '10.20.0.3'));
+    const two = segmentModel(n3, [...clean, L('10.0.0.11', '10.20.0.3')], seg([ot]), cores);
+    assert.deepEqual(two.cores.ot, ['10.0.0.10', '10.0.0.11']);
+    const many = segmentModel(n3, [...clean, ...toOt], seg([ot]), cores);
+    assert.deepEqual(many.cores.ot, []);
+    assert.equal(many.ambiguous.ot, 3);
+    const pick = segmentModel(n3, [...clean, ...toOt], seg([{ ...ot, cores: ['10.0.0.12', '10.20.0.1', '10.0.0.1'] }]), cores);
+    assert.deepEqual(pick.cores.ot, ['10.0.0.12', '10.20.0.1'], 'saved order, site core dropped');
+    assert.equal(pick.of['10.20.0.1'], undefined, 'a core is not a member');
+    // Shared: 10.0.0.10, in no zone, cabled into OT and into a second zone.
+    // (A firewall member of one zone is never picked for another: set it by hand.)
+    const z2 = { id: 'z2', subnets: ['10.30.0.0/24'], members: [], excluded: [] };
+    const sh = segmentModel(n3, [...clean, L('10.0.0.10', '10.30.0.1'), L('10.30.0.1', '10.30.0.2')], seg([{ ...ot, members: [] }, z2]), cores);
+    assert.deepEqual(sh.cores.ot, ['10.0.0.10']);
+    assert.deepEqual(sh.cores.z2, ['10.0.0.10']);
+    assert.deepEqual(sh.findings, [], 'cables to a shared core are no bypass');
+    // A cable from a site core straight into a zone with a core: a bypass.
+    const by = segmentModel(n3, [...clean, L('10.0.0.1', '10.20.0.2')], seg([ot]), cores);
+    assert.deepEqual(by.findings.map(f => [f.a, f.b]), [['10.0.0.1', '10.20.0.2']]);
+}
 
 // Two segments cabled gateway to gateway: no finding.
 const lab = { id: 'lab', subnets: ['10.0.1.0/24'], members: [], excluded: [] };
@@ -119,8 +150,9 @@ assert.equal(proposeSegments(nodes, clean, null, {}).length, 1);
     const cols = ladderSegmentColumns(plan, model, [{ ...ot, name: 'OT', color: 'teal' }], bundles, id => id);
     assert.equal(cols.length, 1);
     assert.deepEqual(cols[0].gateways, ['10.0.0.10']);
+    assert.deepEqual([cols[0].ladder.A, cols[0].ladder.B], ['10.0.0.10', null], 'one core: on the left');
     assert.deepEqual(cols[0].members.map(m => [m.id, m.depth, m.parent]), [
-        ['10.20.0.1', 0, '10.0.0.10'],
+        ['10.20.0.1', 0, null],
         ['10.20.0.2', 1, '10.20.0.1'],
         ['10.20.0.3', 1, '10.20.0.1'],
         ['10.20.0.90', 2, '10.20.0.3'],
@@ -143,7 +175,8 @@ assert.equal(proposeSegments(nodes, clean, null, {}).length, 1);
     assert.equal(ids.length, nodes2.length - 1, 'every drawn device placed except the WLC (no ladder role)');
     const segIds = [...cols[0].gateways, ...cols[0].members.map(m => m.id)];
     segIds.forEach(id => assert.ok(rect(id).l > rect('10.0.0.2').r, `${id} right of core B`));
-    assert.equal(pos['10.0.0.10'].y, pos['10.0.0.2'].y, 'gateway level with the cores');
+    assert.equal(pos['10.0.0.10'].y, pos['10.0.0.2'].y, 'zone core level with the site cores');
+    cols[0].members.forEach(m => assert.ok(rect(m.id).l > rect('10.0.0.10').r, `${m.id} right of its core`));
     ids.forEach((p, i) => ids.slice(i + 1).forEach(q => {
         const a = rect(p), c = rect(q);
         assert.ok(a.r <= c.l || c.r <= a.l || a.b <= c.t || c.b <= a.t, `${p} overlaps ${q}`);
@@ -152,6 +185,45 @@ assert.equal(proposeSegments(nodes, clean, null, {}).length, 1);
     const p2 = { A: 'a', B: 'b', upstream: ['u'], members: [{ id: 'm', depth: 0, parent: null }], leaves: {} };
     assert.deepEqual(ladderSegmentColumns(p2, { of: {}, gateways: {} }, [], [], id => id), []);
     assert.deepEqual(p2.upstream, ['u']);
+}
+
+// Two zones sharing a firewall: side by side, the firewall right core of
+// the first and left core of the second, the frames' columns apart.
+{
+    const fw = id => N(id, 'firewall');
+    const ns = [N('10.0.0.1'), N('10.0.0.2'), N('10.0.1.11'), fw('10.0.0.21'), fw('10.0.0.22'), fw('10.0.0.23'),
+                N('10.20.0.1'), N('10.20.0.2'), N('10.30.0.1'), N('10.30.0.2')];
+    const ls = [L('10.0.0.1', '10.0.0.2'), L('10.0.0.1', '10.0.1.11'), L('10.0.0.2', '10.0.1.11'),
+                L('10.0.0.2', '10.0.0.21'), L('10.0.0.2', '10.0.0.22'), L('10.0.0.2', '10.0.0.23'),
+                L('10.0.0.21', '10.20.0.1'), L('10.0.0.21', '10.20.0.2'), L('10.0.0.22', '10.20.0.1'), L('10.0.0.22', '10.20.0.2'),
+                L('10.0.0.22', '10.30.0.1'), L('10.0.0.22', '10.30.0.2'), L('10.0.0.23', '10.30.0.1'), L('10.0.0.23', '10.30.0.2')];
+    // Saved the "wrong" way round: the shared one first in both.
+    const zs = [{ id: 'z2', name: 'Z2', color: 'teal', subnets: ['10.30.0.0/24'], members: [], excluded: [], cores: ['10.0.0.22', '10.0.0.23'] },
+                { id: 'ot', name: 'OT', color: 'rose', subnets: ['10.20.0.0/24'], members: [], excluded: [], cores: ['10.0.0.22', '10.0.0.21'] }];
+    const md = segmentModel(ns, ls, seg(zs), cores);
+    assert.deepEqual(md.findings, []);
+    const bundles = ls.map(l => ({ from: l.source, to: l.target, type: 'link', members: [{}] }));
+    const plan = { A: '10.0.0.1', B: '10.0.0.2', upstream: ['10.0.0.21', '10.0.0.22', '10.0.0.23'],
+                   members: [{ id: '10.0.1.11', depth: 0, parent: null }], leaves: {} };
+    const cs = ladderSegmentColumns(plan, md, zs, bundles, id => id);
+    assert.deepEqual(cs.map(c => [c.id, c.ladder.A, c.ladder.B, c.joinCore || null]),
+        [['z2', '10.0.0.23', '10.0.0.22', null], ['ot', '10.0.0.22', '10.0.0.21', '10.0.0.22']]);
+    const consts = src.match(/^ {4}const (LADDER_[A-Z_]+|SCHEMA_GAP) = .*$/gm).join('\n');
+    const { ladderPositions } = new Function(consts + '\n' + extract('function ladderLeafOffset(') + '\n'
+        + extract('function ladderLeafRows(') + '\n' + extract('function ladderPositions(') + '\nreturn { ladderPositions };')();
+    plan.segCols = cs;
+    const box = {};
+    ns.forEach(n => { box[n.id] = { w: 160, h: 50 }; });
+    const pos = ladderPositions(plan, box, 0);
+    const r = id => ({ l: pos[id].x - box[id].w / 2, r: pos[id].x + box[id].w / 2 });
+    assert.ok(r('10.0.0.23').l > r('10.0.0.2').r);
+    assert.ok(r('10.30.0.1').r < r('10.0.0.22').l && r('10.20.0.1').l > r('10.0.0.22').r, 'shared core between the columns');
+    assert.ok(r('10.0.0.21').l > r('10.20.0.1').r);
+    ['10.0.0.21', '10.0.0.22', '10.0.0.23'].forEach(id => assert.equal(pos[id].y, pos['10.0.0.2'].y));
+    // One core, shared with the next zone: it goes on the right.
+    const one = [{ ...zs[0], cores: ['10.0.0.22'] }, zs[1]];
+    const c1 = ladderSegmentColumns({ ...plan, upstream: [], members: [] }, segmentModel(ns, ls, seg(one), cores), one, bundles, id => id);
+    assert.deepEqual([c1[0].ladder.A, c1[0].ladder.B], [null, '10.0.0.22']);
 }
 
 // Router: a cable from a box down to another with a box in the way goes round it.
@@ -168,6 +240,11 @@ assert.equal(proposeSegments(nodes, clean, null, {}).length, 1);
         assert.ok(pts[i][0] === pts[i - 1][0] || pts[i][1] === pts[i - 1][1], 'orthogonal');
         assert.ok(!crosses(wall, pts[i - 1], pts[i]), `segment ${i} crosses the box in the way`);
     }
+    // Room for the port names: the first bend is that far out of each box.
+    const roomy = segRoute(a, b, 25, 325, [wall], { v: [], h: [] }, 60, 50);
+    assert.ok(Math.abs(roomy[1][0] - roomy[0][0]) >= 60, 'stub out of a');
+    const n = roomy.length;
+    assert.ok(Math.abs(roomy[n - 1][0] - roomy[n - 2][0]) >= 50, 'stub into b');
     // A lane taken by another cable is not reused.
     const lane = pts.find((p, i) => i && p[0] === pts[i - 1][0]);
     if (lane) {
