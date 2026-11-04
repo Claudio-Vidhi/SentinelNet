@@ -41,6 +41,9 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Fixed
 
+- Cartiglio: cliente, titolo e revisione sono ricordati per tenant, invece di
+  restare gli stessi su ogni mappa. Stile, autore, azienda, colore e logo
+  restano comuni a tutti i tenant.
 - Scala: i dispositivi sopra i core (firewall, router) sono in ordine per il
   core a cui sono cablati (solo il sinistro, entrambi, solo il destro), poi
   per nome: un firewall collegato al solo core destro, disegnato a sinistra,

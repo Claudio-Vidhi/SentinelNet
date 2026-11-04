@@ -7554,7 +7554,11 @@
     // so it never covers a device. Settings and the logo (a small PNG data
     // URL) stay in this browser.
     const TB_SIZE = { classic: [480, 150], modern: [460, 132], minimal: [440, 92] };
-    let tbCfg = { style: 'classic', customer: '', title: '', author: '', company: '', rev: '', accent: '#1f4e79', logo: '' };
+    let tbCfg = { style: 'classic', customer: '', title: '', author: '', company: '', rev: '', accent: '#1f4e79', logo: '', byTenant: {} };
+    // Customer, title and revision belong to the tenant's drawing; style,
+    // author, company, colour and logo to whoever draws, for every tenant.
+    const TB_PER_TENANT = ['customer', 'title', 'rev'];
+    const tbTenant = () => /** @type {HTMLSelectElement|null} */ (document.getElementById('interactiveGroupSelect'))?.value || '';
     try { Object.assign(tbCfg, JSON.parse(localStorage.getItem('mapTitleBlock') || '{}')); } catch (e) { /* defaults */ }
     let tbLogoImg = null;   // tbCfg.logo, decoded
     let tbFormat = 'png';
@@ -7760,6 +7764,8 @@
 
     async function openTitleBlock(format) {
         tbFormat = format;
+        const mine = (tbCfg.byTenant || {})[tbTenant()] || {};
+        TB_PER_TENANT.forEach(f => { tbCfg[f] = mine[f] || ''; });
         TB_FIELDS.forEach(f => { tbInput(f).value = tbCfg[f] || ''; });
         tbInput('customer').placeholder = tbInfo().customer;
         tbInput('title').placeholder = tr('tbDefaultTitle');
@@ -7807,6 +7813,7 @@
     });
     document.getElementById('btnTbExport')?.addEventListener('click', () => {
         tbReadFields();
+        tbCfg.byTenant = Object.assign({}, tbCfg.byTenant, { [tbTenant()]: Object.fromEntries(TB_PER_TENANT.map(f => [f, tbCfg[f]])) });
         try { localStorage.setItem('mapTitleBlock', JSON.stringify(tbCfg)); }
         catch (e) { console.warn('title block not saved:', e); }
         closeModal('mapTitleBlockModal');
