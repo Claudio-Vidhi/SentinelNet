@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.62.0] - 2026-11-04
+
 ### Added
 
 - **Scala orizzontale**, due disposizioni nuove nel menu Vista → Disposizione,
