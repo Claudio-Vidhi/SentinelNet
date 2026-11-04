@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.61.0] - 2026-11-04
+
 ### Added
 
 - **Core di zona**: ogni segmento ha 0, 1 o 2 core. Di norma sono i firewall
