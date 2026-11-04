@@ -155,7 +155,7 @@ assert.equal(proposeSegments(nodes, clean, null, {}).length, 1);
         ['10.20.0.1', 0, null],
         ['10.20.0.2', 1, '10.20.0.1'],
         ['10.20.0.3', 1, '10.20.0.1'],
-        ['10.20.0.90', 2, '10.20.0.3'],
+        ['10.20.0.90', 1, '10.20.0.3'],   // only child: in line
     ]);
     assert.deepEqual(plan.upstream, []);
     assert.deepEqual(plan.members.map(m => [m.id, m.depth, m.parent]),
@@ -224,6 +224,24 @@ assert.equal(proposeSegments(nodes, clean, null, {}).length, 1);
     const one = [{ ...zs[0], cores: ['10.0.0.22'] }, zs[1]];
     const c1 = ladderSegmentColumns({ ...plan, upstream: [], members: [] }, segmentModel(ns, ls, seg(one), cores), one, bundles, id => id);
     assert.deepEqual([c1[0].ladder.A, c1[0].ladder.B], [null, '10.0.0.22']);
+}
+
+// An OT ring between the zone's two firewalls: each half under the switch
+// cabled to its firewall, each half a straight stack (no staircase).
+{
+    const fw = id => N(id, 'firewall');
+    const ring = [...Array(8)].map((_, i) => '10.20.0.' + (11 + i));
+    const ns = [N('10.0.0.1'), N('10.0.0.2'), fw('10.0.0.21'), fw('10.0.0.22'), ...ring.map(id => N(id))];
+    const ls = [L('10.0.0.1', '10.0.0.2'), L('10.0.0.1', '10.0.0.21'), L('10.0.0.2', '10.0.0.22'),
+                L('10.0.0.21', ring[0]), L('10.0.0.22', ring[7]), ...ring.slice(1).map((id, i) => L(ring[i], id))];
+    const z = [{ id: 'ot', name: 'OT', color: 'rose', subnets: ['10.20.0.0/24'], members: [], excluded: [] }];
+    const md = segmentModel(ns, ls, seg(z), cores);
+    const plan = { A: '10.0.0.1', B: '10.0.0.2', upstream: ['10.0.0.21', '10.0.0.22'], members: [], leaves: {} };
+    const [c] = ladderSegmentColumns(plan, md, z, ls.map(l => ({ from: l.source, to: l.target, type: 'link', members: [{}] })), id => id);
+    assert.deepEqual(c.members.map(m => [m.id, m.depth, m.parent]), [
+        [ring[0], 0, null], [ring[1], 0, ring[0]], [ring[2], 0, ring[1]], [ring[3], 0, ring[2]],
+        [ring[7], 0, null], [ring[6], 0, ring[7]], [ring[5], 0, ring[6]], [ring[4], 0, ring[5]],
+    ]);
 }
 
 // Router: a cable from a box down to another with a box in the way goes round it.

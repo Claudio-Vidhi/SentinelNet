@@ -30,6 +30,13 @@ happened — `git log --grep="chore(release)"` is the record for those.
 - Con i core di zona, un cavo che entra nella zona senza passare da un suo
   core (per esempio dal core del sito direttamente a uno switch OT) è
   segnalato come possibile bypass.
+- Dentro una zona con core ogni switch sta sotto quello collegato al core più
+  vicino: un anello fra due firewall si divide a metà invece di pendere tutto
+  dal primo switch. Una catena senza diramazioni è una pila dritta, con il
+  cavo da un riquadro al successivo, invece di una scala che oltre il quarto
+  livello metteva il tronco sopra gli switch.
+- I nomi delle porte dei cavi verso e dentro le zone non finiscono più sotto
+  gli altri cavi: ogni cavo piega solo dopo il nome più lungo del riquadro.
 
 ## [0.60.0] - 2026-11-03
 

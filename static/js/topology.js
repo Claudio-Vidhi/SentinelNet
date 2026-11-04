@@ -3533,6 +3533,19 @@
             const pb = box(p);
             if (!pb) return;
             const tx = pb.left + 16;
+            // An only child in line under its parent (a zone's chain): one
+            // drop from box to box, each port inside its own box by the cable.
+            const k0 = ks.length === 1 && member[ks[0]].depth === (member[p] ? member[p].depth : -1) ? ks[0] : null;
+            if (k0 && box(k0)) {
+                const kb = box(k0), b = mine.find(x => { const pq = pairOf(x, isTree); return pq && pq[0] === p && pq[1] === k0; });
+                paths.push({ b, pts: [[tx, pb.bottom], [tx, kb.top]] });
+                conns.push({ b, from: p, to: k0, pts: [[tx, pb.bottom], [tx, kb.top]] });
+                if (!b || !showLbl(b)) return;
+                const pt = ownEnd(b, p), kt = ownEnd(b, k0);
+                if (pt) labels.push({ t: pt, x: tx + 4, y: pb.bottom - 3, align: 'left' });
+                if (kt) labels.push({ t: kt, x: tx + 4, y: kb.top + 3, align: 'left', under: true });
+                return;
+            }
             const ys = ks.map(k => { const kb = box(k); return kb ? (kb.top + kb.bottom) / 2 : null; });
             const last = Math.max(...ys.filter(y => y !== null));
             verts.push([tx, pb.bottom, last]);
@@ -4990,7 +5003,23 @@
                 // As in the main ladder: whoever has a cable to a core is a top row.
                 const top = mine.filter(id => !placed.has(id) && zc.some(c => nbrs[c].has(id)));
                 top.forEach(id => placed.add(id));
-                top.forEach(id => visit(id, 0, null));
+                // Each device under the top row nearest to it (breadth first):
+                // a ring between the two cores splits in two halves instead of
+                // hanging whole from the first switch.
+                const below = {}, queue = top.slice();
+                for (let i = 0; i < queue.length; i++) {
+                    const ks = [...nbrs[queue[i]]].filter(k => !placed.has(k) && !core(k)
+                        && (of[k] === s.id || (!of[k] && nbrs[k].size === 1))).sort(byLabel);
+                    ks.forEach(k => placed.add(k));
+                    below[queue[i]] = ks;
+                    queue.push(...ks);
+                }
+                // An only child stays in line: a chain is a straight stack, not a staircase.
+                const put = (id, depth, parent) => {
+                    members.push({ id, depth: Math.min(depth, LADDER_MAX_DEPTH), parent });
+                    below[id].forEach(k => put(k, below[id].length > 1 ? depth + 1 : depth, id));
+                };
+                top.forEach(id => put(id, 0, null));
             } else gateways.forEach(id => visit(id, 0, null));
             mine.forEach(id => { if (!placed.has(id)) { placed.add(id); visit(id, 0, null); } });
             return { id: s.id, name: s.name, color: s.color, gateways, cores: zc, members };
