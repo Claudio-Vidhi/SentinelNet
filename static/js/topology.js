@@ -1995,6 +1995,10 @@
     }
     let mapBackbones = new Set();
     try { mapBackbones = new Set(JSON.parse(localStorage.getItem('mapBackbones') || '[]')); } catch (e) { mapBackbones = new Set(); }
+    // Devices marked by hand "to be replaced": yellow, as in the project legend.
+    let mapRenew = new Set();
+    try { mapRenew = new Set(JSON.parse(localStorage.getItem('mapRenew') || '[]')); } catch (e) { mapRenew = new Set(); }
+    let mapRenewShown = false;   // the map drawn now has one: the legend lists it
     const cableColorMode = () => (schemaPref('cableColors', 'type') === 'media' ? 'media' : 'type');
     // Style of a cable under the project legend, or null for the usual one.
     function cableStyle(b, baseLw) {
@@ -4629,6 +4633,9 @@
         if (mapAccessUplink.nodes.size) {
             out.push(`<span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:var(--text-muted);"><span style="width:16px; height:10px; background:#FF8080; border:1px solid #7F1D1D; display:inline-block;"></span><span>${escapeHtml(tr('legAccessUplink'))}</span></span>`);
         }
+        if (mapRenewShown) {
+            out.push(`<span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:var(--text-muted);"><span style="width:16px; height:10px; background:#FFFF00; border:1px solid #806600; display:inline-block;"></span><span>${escapeHtml(tr('legRenew'))}</span></span>`);
+        }
         return out.join('');
     }
 
@@ -4780,6 +4787,26 @@
                 if (networkInstance) networkInstance.redraw();
             });
         });
+        setTimeout(() => document.addEventListener('mousedown', closeEdgeCatMenuOutside, true), 0);
+    }
+
+    // Right click on a device in the schema: mark it (or the selection) "to be replaced".
+    function showRenewMenu(x, y, ids) {
+        closeEdgeCatMenu();
+        const on = ids.every(id => mapRenew.has(id));
+        const div = document.createElement('div');
+        div.id = 'edgeCatMenu';
+        div.setAttribute('role', 'menu');
+        div.style.cssText = `position:fixed; left:${Math.min(x, innerWidth - 190)}px; top:${y}px; z-index:9999; background:var(--surface-2); border:1px solid var(--border); padding:6px; box-shadow:0 10px 30px rgba(0,0,0,0.5); font-size:12px; min-width:170px;`;
+        div.innerHTML = `<button type="button" role="menuitem" style="display:flex; gap:6px; width:100%; text-align:left; padding:4px 6px; border:0; background:transparent; color:var(--text); font:inherit; cursor:pointer;"><span style="width:14px;">${on ? '✓' : ''}</span><span>${escapeHtml(tr('legRenew'))}</span></button>`;
+        document.body.appendChild(div);
+        div.querySelector('button')?.addEventListener('click', () => {
+            ids.forEach(id => { if (on) mapRenew.delete(id); else mapRenew.add(id); });
+            try { localStorage.setItem('mapRenew', JSON.stringify([...mapRenew])); } catch (e) { /* private window: this session only */ }
+            closeEdgeCatMenu();
+            loadInteractiveMap();
+        });
+        div.querySelector('button')?.focus();
         setTimeout(() => document.addEventListener('mousedown', closeEdgeCatMenuOutside, true), 0);
     }
 
@@ -5192,8 +5219,11 @@
         nodeData.forEach(n => { if (n.port_info) mapPortInfo[n.id] = n.port_info; });
         mapAccessUplink = accessUplinks(bundles, id => (info[id] || {}).device_type, id => levels[id] || 0, portFact);
         // A switch behind an uplink that is not a trunk: red, as in the legend.
+        mapRenewShown = nodes.some(nd => mapRenew.has(nd.id));
         nodes.forEach(nd => {
             if (mapAccessUplink.nodes.has(nd.id)) nd.color = Object.assign({}, nd.color, { background: '#FF8080', border: '#7F1D1D' });
+            // The hand mark wins: it is a decision, the red is only a reading.
+            if (mapRenew.has(nd.id)) nd.color = Object.assign({}, nd.color, { background: '#FFFF00', border: '#806600' });
         });
         const segModel = segModelFor(nodeData, linkData, ladder ? [ladder.A, ladder.B] : forcedPair);
         if (ladder) ladder.segCols = ladderSegmentColumns(ladder, segModel, segEffective().segments, bundles, labelOf);
@@ -5790,9 +5820,14 @@
         container.addEventListener('contextmenu', ev => {
             if (getMapView() !== 'minimal' || !networkInstance) return;
             const key = hitEdgeAt(toNet(ev));
-            if (!key) return;
+            if (key) { ev.preventDefault(); showEdgeCatMenu(ev.clientX, ev.clientY, key); return; }
+            const r = container.getBoundingClientRect();
+            const id = networkInstance.getNodeAt({ x: ev.clientX - r.left, y: ev.clientY - r.top });
+            if (id === undefined) return;
             ev.preventDefault();
-            showEdgeCatMenu(ev.clientX, ev.clientY, key);
+            let ids = networkInstance.getSelectedNodes();
+            if (!ids.includes(id)) { ids = [id]; networkInstance.selectNodes(ids); }
+            showRenewMenu(ev.clientX, ev.clientY, ids);
         });
     }
 

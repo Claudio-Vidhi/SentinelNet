@@ -25,6 +25,10 @@ happened — `git log --grep="chore(release)"` is the record for those.
   anche nell'export Visio.
 - **Dorsale**: col tasto destro su un cavo lo si segna come dorsale (fra rack
   diversi): diventa una banda larga nel colore del suo mezzo.
+- **Da rinnovare**: col tasto destro su un apparato dello schema (o su una
+  selezione) lo si segna da rinnovare: diventa giallo, come nella legenda di
+  progetto, anche nell'export Visio. Il segno manuale prevale sul rosso
+  dell'uplink non in trunk.
 
 ### Fixed
 
