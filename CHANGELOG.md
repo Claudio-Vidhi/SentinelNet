@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.62.1] - 2026-11-04
+
 ### Fixed
 
 - Nelle scale, uno switch con più figli ha un cavo per figlio, ciascuno sulla
