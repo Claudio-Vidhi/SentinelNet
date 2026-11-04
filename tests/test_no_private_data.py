@@ -33,12 +33,18 @@ class RealNamesFromBackups(unittest.TestCase):
             "hostname core-sw-example\n"
             "VTP Domain Name : EXAMPLE-VTPDOM\n"
             "ip access-list extended ACL-EXAMPLE-NAME\n"
-            "Device ID: ap-example-01\n", encoding="utf-8")
+            "Device ID: ap-example-01\n"
+            "Device ID: ap-02\n"
+            "System Name: (none)\n"
+            "System Name: Broadcom\n", encoding="utf-8")
         names = checker.real_names(root)
         for n in ("core-sw-example", "example-vtpdom", "acl-example-name",
                   "ap-example-01", "tenant_x"):
             self.assertIn(n, names)
         self.assertNotIn("cisco", names)   # vendor folder, not a name
+        # Role + number, placeholders, chip vendors: the repo's own examples.
+        for n in ("ap-02", "(none)", "broadcom"):
+            self.assertNotIn(n, names)
         rx = checker._names_regex(names)
         self.assertTrue(rx.search('{"domain": "EXAMPLE-VTPDOM"}'))
         self.assertFalse(rx.search("core-sw-example2"))

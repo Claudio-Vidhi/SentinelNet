@@ -141,7 +141,11 @@ _NAME_PATTERNS = (
 )
 # Factory defaults and words every config has: flagging them is noise.
 _GENERIC_NAMES = {"switch", "router", "default", "standard", "extended",
-                  "management", "mgmt-intf", "mgmt-vrf", "fortigate", "huawei"}
+                  "management", "mgmt-intf", "mgmt-vrf", "fortigate", "huawei",
+                  "(none)", "broadcom"}
+# A role and a number (ap-02, sw-01, fw-1): what an unconfigured neighbour
+# reports, and the very names the repo uses as examples.
+_GENERIC_RX = re.compile(r"(ap|sw|switch|rtr|router|fw|phone)-?\d{1,3}", re.I)
 
 
 def real_names(data_dir=None):
@@ -167,7 +171,8 @@ def real_names(data_dir=None):
             names.update(rx.findall(text))
     return {n.lower() for n in names
             if len(n) >= 5 and re.search(r"[a-z]", n, re.I)
-            and n.lower() not in _GENERIC_NAMES and not n.startswith(".")}
+            and n.lower() not in _GENERIC_NAMES and not _GENERIC_RX.fullmatch(n)
+            and not n.startswith(".")}
 
 
 def _names_regex(names):
