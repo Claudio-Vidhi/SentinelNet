@@ -173,16 +173,19 @@ lr.forEach(r => assert.ok(calls.some(c => c[0] === 'fillText' && c[1] === 'Te1/1
 lr.forEach(r => assert.ok((r.left + r.right) / 2 - 35 / 2 >= sw1.left + 20 + 60 + 8 - 0.01, 'leaf port clear of the child ports'));
 // A child: each end's port inside its own box.
 const kidR = rect('sw-piano-1');
-assert.ok(calls.some(c => c[0] === 'fillText' && c[1] === 'Te1/1/1' && c[2] === sw1.left + 20 && c[3] === sw1.bottom - 3), 'parent port inside the parent');
+// The parent's port reads upward along the child's own lane, inside the parent.
+const inside = (r, x, y) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+assert.ok(calls.some(c => c[0] === 'translate' && inside(sw1, c[1], c[2]) && c[2] === sw1.bottom - 4), 'parent port inside the parent');
 assert.ok(calls.some(c => c[0] === 'fillText' && c[1] === 'Gi1/1/3' && c[2] === kidR.left + 5), 'child port inside the child');
 // The A cable into sw-piano-1 crosses its parent's trunk: one hop.
 assert.equal(calls.filter(c => c[0] === 'arc').length, 1);
 
 // Core port names sit inside the core, above its bottom edge.
+// Vertical names: the cores' own, and a parent's along each child's lane.
 const texts = calls.filter(c => c[0] === 'translate');
-assert.ok(texts.length > 0);
-assert.ok(texts.every(([, x, y]) => y < rect(lad.A).bottom || y < rect(lad.B).bottom), 'port names inside the core');
-assert.ok(texts.every(([, x, y]) => [lad.A, lad.B].some(c => y <= rect(c).bottom && y >= rect(c).top && x >= rect(c).left && x <= rect(c).right)));
+const parents = lad.members.filter(m => lad.members.some(k => k.parent === m.id)).map(m => m.id);
+assert.ok(texts.some(([, x, y]) => [lad.A, lad.B].some(c => inside(rect(c), x, y))), 'port names inside the core');
+assert.ok(texts.every(([, x, y]) => [lad.A, lad.B, ...parents].some(c => inside(rect(c), x, y))));
 
 // Option: the core port also on the cable, just outside the switch.
 const texts0 = calls.filter(c => c[0] === 'fillText').length;

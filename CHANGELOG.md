@@ -10,6 +10,15 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- Nelle scale, uno switch con più figli ha un cavo per figlio, ciascuno sulla
+  sua linea con la propria porta, invece di un'unica linea con le porte unite
+  in un'etichetta sola.
+- Un cavo che non fa parte della scala (per esempio quello che chiude un
+  anello) non arriva più sul lato di uno switch nello stesso punto del cavo
+  che viene dal core o dal padre.
+
 ## [0.62.0] - 2026-11-04
 
 ### Added

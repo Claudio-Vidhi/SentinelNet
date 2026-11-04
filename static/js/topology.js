@@ -3547,25 +3547,24 @@
                 if (kt) labels.push({ t: kt, x: tx + 4, y: kb.top + 3, align: 'left', under: true });
                 return;
             }
-            const ys = ks.map(k => { const kb = box(k); return kb ? (kb.top + kb.bottom) / 2 : null; });
-            const last = Math.max(...ys.filter(y => y !== null));
-            verts.push([tx, pb.bottom, last]);
-            paths.push({ b: null, pts: [[tx, pb.bottom], [tx, last]] });
-            const own = [];
+            // One cable per child, each on its own lane out of the parent's
+            // bottom: the top child on the lane nearest the children, so
+            // none cross. The parent's port reads upward along its lane.
+            // Lanes clear of the children's left edge (40 in), so a cable
+            // into a child hops them visibly.
+            const step = ks.length > 1 ? Math.min(12, 28 / (ks.length - 1)) : 0;
             ks.forEach((k, j) => {
                 const kb = box(k), b = mine.find(x => { const pq = pairOf(x, isTree); return pq && pq[0] === p && pq[1] === k; });
                 if (!kb) return;
-                paths.push({ b, pts: [[tx, ys[j]], [kb.left, ys[j]]] });
-                conns.push({ b, from: p, to: k, pts: [[tx, pb.bottom], [tx, ys[j]], [kb.left, ys[j]]] });
+                const x = ks.length === 1 ? pb.left + 16 : pb.left + 30 - j * step, y = (kb.top + kb.bottom) / 2;
+                verts.push([x, pb.bottom, y]);
+                paths.push({ b, pts: [[x, pb.bottom], [x, y], [kb.left, y]] });
+                conns.push({ b, from: p, to: k, pts: [[x, pb.bottom], [x, y], [kb.left, y]] });
                 if (!b || !showLbl(b)) return;
-                const kt = ownEnd(b, k);
-                if (kt) labels.push({ t: kt, x: kb.left + 5, y: ys[j] + 2, align: 'left', under: true });
-                own.push(ownEnd(b, p));
+                const kt = ownEnd(b, k), pt = ownEnd(b, p);
+                if (kt) labels.push({ t: kt, x: kb.left + 5, y: y + 2, align: 'left', under: true });
+                if (pt) labels.push({ t: pt, x: x + 2, y: pb.bottom - 4, rot: true });
             });
-            // ponytail: one trunk leaves the parent, so its children's ports share one line, top child first.
-            // ladderPositions keeps the parent's leaves clear of it (plan.kidPortW).
-            const t = own.filter(Boolean).join(' · ');
-            if (t) labels.push({ t, x: tx + 4, y: pb.bottom - 3, align: 'left' });
         });
         // Leaves (APs...), each on its own cable, as in the row view.
         // 'rows': under the switch, straight down from its bottom edge, the
@@ -3762,10 +3761,24 @@
             const peer = bundles.filter(x => x.type !== 'keepalive' && [lad.A, lad.B].includes(x.from) && [lad.A, lad.B].includes(x.to))
                 .reduce((t, x) => t + x.members.length, 0);
             const band = peer ? (peer - 1) * 5.5 + 18 : 0;
+            // On a box of a ladder column the middle of each side belongs to
+            // the ladder's own cables (core lanes, the branch from its parent).
+            const own = new Set(), coreN = {};
+            const networkBundlesOf = (id, L) => (minimalOverlayData && minimalOverlayData.bundles || [])
+                .filter(x => (x.from === id && [L.A, L.B].includes(x.to)) || (x.to === id && [L.A, L.B].includes(x.from)))
+                .map(x => x.members.length);
+            [lad, ...(lad.segCols || []).map(c => (hLadderMode() ? hZone(c) : c.ladder)).filter(Boolean)].forEach(L => {
+                (hLadderMode() ? hRow(L) : L.members).forEach(m => {
+                    own.add(m.id);
+                    coreN[m.id] = Math.max(0, ...networkBundlesOf(m.id, L));
+                });
+            });
             const slot = id => {
                 const k = used[id] = (used[id] || 0) + 1;
-                if (!band || (id !== lad.A && id !== lad.B)) return (k % 2 ? 1 : -1) * Math.floor(k / 2) * 12;
-                return (k % 2 ? 1 : -1) * (band + Math.floor((k - 1) / 2) * 12);
+                const base = (id === lad.A || id === lad.B) ? band
+                    : own.has(id) ? Math.max(0, (coreN[id] || 1) - 1) * LADDER_PAR / 2 + 16 : 0;
+                if (!base) return (k % 2 ? 1 : -1) * Math.floor(k / 2) * 12;
+                return (k % 2 ? 1 : -1) * (base + Math.floor((k - 1) / 2) * 12);
             };
             // Shortest first: they get the lanes nearest the boxes.
             const order = mine.slice().sort((p, q) => {
@@ -3927,7 +3940,7 @@
     // and the cables' drawing are its own.
     const HL_GAP = 60;      // core edge to the row, and core to row band
     const HL_ROW_GAP = 30;  // between two boxes of a row
-    const HL_IN = 24;       // a child with siblings sits this much lower
+    const HL_IN = 48;       // a child with siblings sits this much lower: room for four lanes over it
     const HL_LINE = 11;     // stacked port names inside a box
     const hLadderMode = () => schemaLayout() === 'hladder' || schemaLayout() === 'hladder-below';
     /** A row of the horizontal ladder: the members with their leaves right
@@ -4128,21 +4141,17 @@
                 lbl(ladderOwnEnd(b, k), kin + dir * 4, y - 2, dir > 0 ? 'left' : 'right', 'bottom');
                 return;
             }
-            const ty = pb.top + 10;
-            const xs = ks.map(k => { const kb = box(k); return kb ? (dir > 0 ? kb.left + 16 : kb.right - 16) : null; });
-            const ok = xs.filter(x => x !== null);
-            if (!ok.length) return;
-            paths.push({ b: null, pts: [[out, ty], [dir > 0 ? Math.max(...ok) : Math.min(...ok), ty]] });
-            const own = [];
+            // One cable per child, each on its own lane out of the parent's
+            // far side: the nearest child on the lowest lane, so none cross.
             ks.forEach((k, j) => {
                 const kb = box(k), b = link(k);
                 if (!kb) return;
-                paths.push({ b, from: p, to: k, pts: [[xs[j], ty], [xs[j], kb.top]], visio: [[out, ty], [xs[j], ty], [xs[j], kb.top]] });
+                const ty = pb.top + 10 + (ks.length - 1 - j) * HL_LINE, x = dir > 0 ? kb.left + 16 : kb.right - 16;
+                paths.push({ b, from: p, to: k, pts: [[out, ty], [x, ty], [x, kb.top]] });
                 if (!b || !showLbl(b)) return;
-                lbl(ladderOwnEnd(b, k), xs[j] - dir * 3, kb.top + 3, dir > 0 ? 'left' : 'right', 'top');
-                own.push(ladderOwnEnd(b, p));
+                lbl(ladderOwnEnd(b, k), x - dir * 3, kb.top + 3, dir > 0 ? 'left' : 'right', 'top');
+                lbl(ladderOwnEnd(b, p), out - dir * 4, ty - 1, dir > 0 ? 'right' : 'left', 'bottom');
             });
-            lbl(own.filter(Boolean).join(' · '), out - dir * 4, ty - 2, dir > 0 ? 'right' : 'left', 'bottom');
         });
         ctx.save();
         ctx.lineCap = 'butt';
