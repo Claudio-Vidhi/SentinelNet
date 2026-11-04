@@ -4614,29 +4614,71 @@
             + projectLegendHtml();
     }
     // Legend of the project palette: only what the map drawn now has.
-    function projectLegendHtml() {
+    // Entries: { color, w, text } a cable, { box, border, text } a device.
+    function projectLegendItems() {
         const bs = (minimalOverlayData && minimalOverlayData.bundles) || [];
-        const sw = (color, w) => `<span style="width:18px; height:0; border-top:${w}px solid ${color}; display:inline-block;"></span>`;
-        const item = (color, w, text) => `<span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:var(--text-muted);">${sw(color, w)}<span>${escapeHtml(text)}</span></span>`;
         const mediumName = m => tr({ copper: 'legCopper', fiber: 'legFiber', mm: 'legFiberMM', sm: 'legFiberSM', dac: 'legDAC' }[m]);
+        /** @type {Array<{text: string, color?: string, w?: number, box?: string, border?: string}>} */
         const out = [];
         if (cableColorMode() === 'media') {
             const keys = new Set(bs.filter(b => b.type !== 'keepalive').map(b => cableKey(b, portFact)).filter(Boolean));
             Object.keys(CABLE_PALETTE).filter(k => keys.has(k)).forEach(k => {
                 const [m, sp] = k.split('-');
-                out.push(item(CABLE_PALETTE[k], m === 'dac' ? 3 : 2, `${mediumName(m)} ${sp}`));
+                out.push({ color: CABLE_PALETTE[k], w: m === 'dac' ? 3 : 2, text: `${mediumName(m)} ${sp}` });
             });
         }
         const bbs = new Set(bs.filter(b => mapBackbones.has(pillKey(b))).map(b => (cableKey(b, portFact) || '').split('-')[0]));
         ['mm', 'sm', 'copper'].filter(m => bbs.has(m) || (m === 'copper' && bbs.has('dac')))
-            .forEach(m => out.push(item(BACKBONE_PALETTE[m], 5, `${tr('topoBackbone')} ${mediumName(m)}`)));
-        if (mapAccessUplink.nodes.size) {
-            out.push(`<span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:var(--text-muted);"><span style="width:16px; height:10px; background:#FF8080; border:1px solid #7F1D1D; display:inline-block;"></span><span>${escapeHtml(tr('legAccessUplink'))}</span></span>`);
+            .forEach(m => out.push({ color: BACKBONE_PALETTE[m], w: 5, text: `${tr('topoBackbone')} ${mediumName(m)}` }));
+        if (mapAccessUplink.nodes.size) out.push({ box: '#FF8080', border: '#7F1D1D', text: tr('legAccessUplink') });
+        if (mapRenewShown) out.push({ box: '#FFFF00', border: '#806600', text: tr('legRenew') });
+        return out;
+    }
+    function projectLegendHtml() {
+        return projectLegendItems().map(it => `<span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:var(--text-muted);">`
+            + (it.box ? `<span style="width:16px; height:10px; background:${it.box}; border:1px solid ${it.border}; display:inline-block;"></span>`
+                : `<span style="width:18px; height:0; border-top:${it.w}px solid ${it.color}; display:inline-block;"></span>`)
+            + `<span>${escapeHtml(it.text)}</span></span>`).join('');
+    }
+    /** Legend of an exported schema: the link types drawn (under the type
+     *  colours), the custom categories in use, then the project palette.
+     *  Same entries as the legend under the map, restricted to this map. */
+    function exportLegendItems() {
+        const bs = (minimalOverlayData && minimalOverlayData.bundles) || [];
+        const out = [];
+        if (cableColorMode() !== 'media') {
+            const types = new Set(bs.map(b => b.type));
+            MINIMAL_LINK_TYPES.filter(t => types.has(t.key))
+                .forEach(t => out.push({ color: linkColor(t.key), w: 2, text: currentLang === 'en' ? t.en : t.it }));
         }
-        if (mapRenewShown) {
-            out.push(`<span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:var(--text-muted);"><span style="width:16px; height:10px; background:#FFFF00; border:1px solid #806600; display:inline-block;"></span><span>${escapeHtml(tr('legRenew'))}</span></span>`);
-        }
-        return out.join('');
+        const cats = new Set(bs.map(b => minimalCustomCats.assignments[pillKey(b)]).filter(Boolean));
+        Object.keys(minimalCustomCats.categories).filter(nm => cats.has(nm))
+            .forEach(nm => out.push({ color: minimalCustomCats.categories[nm].color, w: 2, text: nm }));
+        return out.concat(projectLegendItems());
+    }
+    const LEGEND_W = 240, LEGEND_ROW = 22;
+    const legendHeight = n => 40 + n * LEGEND_ROW;
+    // The legend drawn on a canvas context, (ox, oy) its top-left corner.
+    function drawExportLegend(ctx, items, ox, oy) {
+        const h = legendHeight(items.length);
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(ox, oy, LEGEND_W, h);
+        ctx.strokeStyle = '#334155'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.rect(ox, oy, LEGEND_W, h); ctx.stroke();
+        ctx.fillStyle = '#0F172A'; ctx.font = 'bold 13px Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText(tr('legTitle'), ox + 12, oy + 18);
+        items.forEach((it, i) => {
+            const y = oy + 40 + i * LEGEND_ROW + LEGEND_ROW / 2 - 4;
+            if (it.box) {
+                ctx.fillStyle = it.box; ctx.fillRect(ox + 12, y - 6, 34, 12);
+                ctx.strokeStyle = it.border; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.rect(ox + 12, y - 6, 34, 12); ctx.stroke();
+            } else {
+                ctx.strokeStyle = it.color; ctx.lineWidth = it.w;
+                ctx.beginPath(); ctx.moveTo(ox + 12, y); ctx.lineTo(ox + 46, y); ctx.stroke();
+            }
+            ctx.fillStyle = '#0F172A'; ctx.font = '12px Arial';
+            ctx.fillText(it.text, ox + 56, y);
+        });
     }
 
     document.getElementById('minimalLegendWrap')?.addEventListener('change', (e) => {
@@ -7906,6 +7948,18 @@
             const tb = titleBlockPrims(right - TB_SIZE[tbCfg.style][0], bottom + 60, false);
             pg.primitives = pg.primitives || { lines: [], polys: [], rects: [], texts: [] };
             Object.keys(tb).forEach(k => { pg.primitives[k] = (pg.primitives[k] || []).concat(tb[k]); });
+        });
+        // Legend under each page's map, left-aligned; below the title block
+        // when the map is too narrow for both side by side.
+        const legend = primitives ? exportLegendItems() : [];
+        if (legend.length) pages.forEach(pg => {
+            const left = Math.min(...pg.nodes.map(n => n.x - (n.w || 0) / 2));
+            const right = Math.max(...pg.nodes.map(n => n.x + (n.w || 0) / 2));
+            const bottom = Math.max(...pg.nodes.map(n => n.y + (n.h || 0) / 2));
+            const tb = TB_SIZE[tbCfg.style];
+            const top = tb && left + LEGEND_W + 40 > right - tb[0] ? bottom + 60 + tb[1] + 40 : bottom + 60;
+            pg.primitives = pg.primitives || { lines: [], polys: [], rects: [], texts: [] };
+            drawExportLegend(makeRecordingCtx(pg.primitives), legend, left, top);
         });
         const res = await apiFetch('/api/map/export/vsdx', {
             method: 'POST',

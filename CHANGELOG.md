@@ -29,6 +29,10 @@ happened — `git log --grep="chore(release)"` is the record for those.
   selezione) lo si segna da rinnovare: diventa giallo, come nella legenda di
   progetto, anche nell'export Visio. Il segno manuale prevale sul rosso
   dell'uplink non in trunk.
+- **Legenda nell'export Visio**: sotto la mappa di ogni pagina, a sinistra,
+  un riquadro LEGENDA con le voci presenti sulla mappa: tipi di cavo (o mezzo
+  e velocità), categorie personalizzate usate, dorsali, uplink non in trunk,
+  apparati da rinnovare. Se la mappa è stretta finisce sotto il cartiglio.
 
 ### Fixed
 
