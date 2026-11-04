@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.63.0] - 2026-11-04
+
 ### Added
 
 - **Uplink non in trunk**: uno switch il cui collegamento verso monte è una
