@@ -3756,7 +3756,16 @@
         let routes = segRouteMemo.get('r');
         if (segRouteMemo.get('sig') !== sig) {
             const taken = { v: [], h: [] }, used = {};
-            const slot = id => { const k = used[id] = (used[id] || 0) + 1; return (k % 2 ? 1 : -1) * Math.floor(k / 2) * 12; };
+            // On a site core the middle of each side belongs to the link
+            // between the cores (it enters mid-side): start past its cables.
+            const peer = bundles.filter(x => x.type !== 'keepalive' && [lad.A, lad.B].includes(x.from) && [lad.A, lad.B].includes(x.to))
+                .reduce((t, x) => t + x.members.length, 0);
+            const band = peer ? (peer - 1) * 5.5 + 18 : 0;
+            const slot = id => {
+                const k = used[id] = (used[id] || 0) + 1;
+                if (!band || (id !== lad.A && id !== lad.B)) return (k % 2 ? 1 : -1) * Math.floor(k / 2) * 12;
+                return (k % 2 ? 1 : -1) * (band + Math.floor((k - 1) / 2) * 12);
+            };
             // Shortest first: they get the lanes nearest the boxes.
             const order = mine.slice().sort((p, q) => {
                 const d = b => { const s = boxes[b.from], t = boxes[b.to]; return Math.abs((s.left + s.right) - (t.left + t.right)) + Math.abs((s.top + s.bottom) - (t.top + t.bottom)); };

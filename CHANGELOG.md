@@ -37,6 +37,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
   livello metteva il tronco sopra gli switch.
 - I nomi delle porte dei cavi verso e dentro le zone non finiscono più sotto
   gli altri cavi: ogni cavo piega solo dopo il nome più lungo del riquadro.
+- Sui core del sito i cavi verso le zone escono sopra o sotto il collegamento
+  fra i due core, non più sovrapposti a lui a metà lato.
 
 ## [0.60.0] - 2026-11-03
 
