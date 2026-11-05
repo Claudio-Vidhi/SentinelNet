@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.64.1] - 2026-11-05
+
 ### Added
 
 - **Audit di sicurezza: Fortinet FortiOS 7.6 Best Practices**: nuovo
