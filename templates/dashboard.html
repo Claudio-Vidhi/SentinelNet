@@ -1282,15 +1282,24 @@
         <div class="network-legend" id="networkLegend">
           <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;">
             <span style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--text-muted);" data-i18n="legendTitle">Legenda</span>
+            <!-- Schema only: cable colours by type or by medium and speed (same setting as View → Cable colours). -->
+            <div id="legendCableMode" class="map-seg" role="group" aria-label="Colore cavi" data-i18n-aria-label="lblSchemaCableColors" hidden style="margin-left:auto;">
+              <button type="button" data-cable-colors="type" data-i18n="optCableColorsType">Tipo di collegamento</button>
+              <button type="button" data-cable-colors="media" data-i18n="optCableColorsMedia">Mezzo e velocità</button>
+            </div>
             <button id="legendToggleBtn" title="Legenda" data-i18n-title="titleLegend" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:13px;"><i class="fa-solid fa-chevron-down"></i></button>
           </div>
           <div id="legendBody" style="display:flex; flex-direction:column; gap:8px;">
+            <!-- Schema view: only what the schema draws, filled by topology.js renderMinimalLegend(). -->
+            <div id="legendSchema" style="display:none; flex-wrap:wrap; gap:8px 14px; width:100%;"></div>
+            <div id="legendHierarchy" style="display:flex; flex-direction:column; gap:8px;">
             <div class="legend-item"><span class="led led-online"></span><span data-i18n="legendOnline">Dispositivo Online</span></div>
             <div class="legend-item"><span class="led led-offline"></span><span data-i18n="legendOffline">Dispositivo Offline</span></div>
             <div class="legend-item"><span class="led led-auth_failed"></span><span data-i18n="legendAuthFailed">Autenticazione Fallita</span></div>
             <div class="legend-item"><span class="led led-discovered"></span><span data-i18n="legendDiscovered">Vicino Discoperto (CDP/LLDP)</span></div>
             <div class="legend-item"><span style="width:16px; height:0; border-top:2px dashed var(--warning); display:inline-block;"></span><span data-i18n="legendPortChannel">Link Port-Channel / LAG</span></div>
             <div id="deviceTypeLegend" style="display:flex; flex-wrap:wrap; gap:10px 14px; width:100%; margin-top:8px; padding-top:8px; border-top:1px solid var(--border);"></div>
+            </div>
           </div>
         </div>
 

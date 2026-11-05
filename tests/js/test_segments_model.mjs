@@ -257,8 +257,9 @@ assert.equal(proposeSegments(nodes, clean, null, {}).length, 1);
                 L('10.0.0.21', '10.20.0.1'), L('10.20.0.1', '10.20.0.2'), L('10.20.0.2', '10.20.0.3'), L('10.0.0.22', '10.20.0.3')];
     const z = [{ id: 'ot', name: 'OT', color: 'rose', subnets: ['10.20.0.0/24'], members: [], excluded: [] }];
     const consts = src.match(/^ {4}const ((LADDER|HL)_[A-Z_]+|SCHEMA_GAP) = .*$/gm).join('\n');
-    const { hLadderPositions, hRow } = new Function(consts + '\n' + extract('function hRow(') + '\n' + extract('function hZone(') + '\n'
-        + extract('function hLadderPositions(') + '\nreturn { hLadderPositions, hRow };')();
+    let layout = 'hladder';
+    const { hLadderPositions, hRow } = new Function('schemaLayout', consts + '\n' + extract('function hRow(') + '\n' + extract('function hZone(') + '\n'
+        + extract('function hZoneDirs(') + '\n' + extract('function hLadderPositions(') + '\nreturn { hLadderPositions, hRow };')(() => layout);
     const box = {};
     ns.forEach(n => { box[n.id] = { w: n.device_type === 'ap' ? 110 : 160, h: 70 }; });
     const rect = (pos, id) => ({ l: pos[id].x - box[id].w / 2, r: pos[id].x + box[id].w / 2, t: pos[id].y - box[id].h / 2, b: pos[id].y + box[id].h / 2 });
@@ -274,6 +275,7 @@ assert.equal(proposeSegments(nodes, clean, null, {}).length, 1);
         const md = segmentModel(ns, ls, seg(z), cores);
         plan.segCols = ladderSegmentColumns(plan, md, z, ls.map(l => ({ from: l.source, to: l.target, type: 'link', members: [{}] })), id => id);
         const below = mode === 'hladder-below';
+        layout = mode;
         const pos = hLadderPositions(plan, box, 0, below);
         noOverlap(pos);
         assert.equal(Object.keys(pos).length, ns.length, `${mode}: every device placed`);

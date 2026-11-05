@@ -258,4 +258,66 @@ const lanes = many.map((a, k) => crect(a).left - 44 - 12 - k * 8);
 assert.ok(lanes.every((x, k) => !k || x < lanes[k - 1]));
 assert.ok(lanes[lanes.length - 1] > crect('sw-acc-02').left + 16);
 
+// Horizontal ladder: a zone without cores of its own, cabled to the site's,
+// becomes the site row (each gateway then what hangs from it); a zone with
+// its own cores, or one not cabled to them, stays a zone.
+const { hMergeCorelessZones } = new Function(extract('function hMergeCorelessZones(') + '\nreturn { hMergeCorelessZones };')();
+const zplan = { A: 'core-a', B: 'core-b', members: [], segCols: [
+    { gateways: ['sw-it-01', 'sw-it-02'], members: [{ id: 'sw-it-03', parent: 'sw-it-01', depth: 0 }, { id: 'sw-it-09', parent: null, depth: 0 }] },
+    { gateways: ['fw-ot-01'], members: [{ id: 'sw-ot-01', parent: null, depth: 0 }], ladder: { A: 'fw-ot-01', B: null } },
+    { gateways: ['sw-far-01'], members: [] },
+] };
+hMergeCorelessZones(zplan, [b('core-a', 'sw-it-01'), b('core-b', 'sw-it-02'), b('sw-it-01', 'sw-it-03'), b('core-a', 'fw-ot-01'), b('sw-x', 'sw-far-01')]);
+assert.deepEqual(zplan.members.map(m => [m.id, m.parent]),
+                 [['sw-it-01', null], ['sw-it-03', 'sw-it-01'], ['sw-it-02', null], ['sw-it-09', null]]);
+assert.deepEqual(zplan.segCols.map(c => !!c.merged), [true, false, false]);
+
+// Two firewalls named as the site cores, each feeding one core switch: no
+// device on both, still a ladder because the user chose the pair.
+level['fw-01'] = 0; level['fw-02'] = 0;
+const fwBs = [b('fw-01', 'fw-02', 'peer'), b('fw-01', 'core-a'), b('fw-02', 'core-b'), b('core-a', 'core-b')];
+assert.equal(schemaLadderPlan(fwBs, levelOf, typeOf, labelOf, LEAF, null, true), null, 'not found on its own');
+const fwPlan = schemaLadderPlan(fwBs, levelOf, typeOf, labelOf, LEAF, ['fw-01', 'fw-02'], true);
+assert.ok(fwPlan && fwPlan.A === 'fw-01' && fwPlan.B === 'fw-02', 'a chosen pair is always a ladder');
+delete level['fw-01']; delete level['fw-02'];
+
+// Horizontal ladder sides: no site row, zones alternate from the left; with
+// a site row (or zones below) all go right.
+const dirsOf = (layout, lad) => new Function('schemaLayout', 'hRow',
+    extract('function hZoneDirs(') + '\nreturn hZoneDirs;')(() => layout, L => L.members)(lad);
+const zs = [{ id: 'z1' }, { id: 'z2', merged: true }, { id: 'z3' }, { id: 'z4' }];
+assert.deepEqual([...dirsOf('hladder', { members: [], segCols: zs }).entries()].map(([c, d]) => [c.id, d]),
+                 [['z1', -1], ['z3', 1], ['z4', -1]]);
+assert.ok([...dirsOf('hladder', { members: [{ id: 'x' }], segCols: zs }).values()].every(d => d === 1));
+assert.ok([...dirsOf('hladder-below', { members: [], segCols: zs }).values()].every(d => d === 1));
+
 console.log('schema ladder: ok');
+
+// Horizontal ladder: a firewall over core A cabled to A enters A's top, one
+// under core B cabled to B enters B's bottom; neither runs round the side.
+{
+    const hgeo = new Function(
+        'const LADDER_LANE = 18, LADDER_PAR = 20, LADDER_MAX_DEPTH = 4, HL_LINE = 11;\n'
+        + 'let visioConnectorSink = null, schemaFocusId = null, hoverBundleKey = null, edgeHitSegs = [];\n'
+        + 'const schemaPortLabelVisible = () => true, schemaDimmed = () => false, linkColor = () => "#333";\n'
+        + 'const pillKey = b => b.from + "~" + b.to, accessPort = () => false, endAccess = () => false;\n'
+        + 'const fillPortText = (c, t, x, y) => c.fillText(t, x, y);\n'
+        + extract('function pcEndTags(') + '\n' + extract('function compressPorts(') + '\n' + extract('function ladderOwnEnd(') + '\n'
+        + extract('function hRow(') + '\n' + extract('function drawHLadderCables(') + '\nreturn { drawHLadderCables };')();
+    const rects = {
+        'fw-01': { left: 0, right: 100, top: 0, bottom: 50 }, 'core-a': { left: -50, right: 150, top: 150, bottom: 250 },
+        'core-b': { left: -50, right: 150, top: 450, bottom: 550 }, 'fw-02': { left: 0, right: 100, top: 650, bottom: 700 },
+        'sw-acc-01': { left: -400, right: -200, top: 300, bottom: 400 },
+    };
+    const hl = { A: 'core-a', B: 'core-b', upstream: ['fw-01', 'fw-02'], upBelow: ['fw-02'],
+                 members: [{ id: 'sw-acc-01', parent: null, depth: 0 }], leaves: {} };
+    const lines = [];
+    const hctx = { save() {}, restore() {}, setLineDash() {}, beginPath() { lines.push([]); }, stroke() {},
+                   moveTo(x, y) { lines[lines.length - 1].push([x, y]); }, lineTo(x, y) { lines[lines.length - 1].push([x, y]); }, fillText() {} };
+    const hbs = [b('fw-01', 'core-a'), b('core-b', 'fw-02'), b('core-a', 'sw-acc-01'), b('fw-01', 'core-b')];
+    const rest = hgeo.drawHLadderCables(hctx, hl, -1, hbs, id => rects[id], () => ({ color: '#333', lw: 1, dash: null }), 'all');
+    assert.deepEqual(rest.map(x => x.from + '~' + x.to), ['fw-01~core-b'], 'A-over firewall to B is left to the router');
+    assert.ok(lines.some(l => l.length === 2 && l[0][1] === 150 && l[1][1] === 50 && l[0][0] === l[1][0]), 'straight into A top');
+    assert.ok(lines.some(l => l.length === 2 && l[0][1] === 550 && l[1][1] === 650 && l[0][0] === l[1][0]), 'straight into B bottom');
+}
+console.log('schema ladder (upstream): ok');

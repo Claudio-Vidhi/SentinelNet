@@ -344,12 +344,13 @@
     }
 
     // "Core" menu in the map toolbar, for both views: per location, a first
-    // and a second core picked among its switches and routers.
-    function fillMapCoreMenu(nodesData, group) {
+    // and a second core picked among its switches, routers and firewalls.
+    // suggested: the pair the Schema ladder finds on its own, marked in the list.
+    function fillMapCoreMenu(nodesData, group, suggested) {
         const box = document.getElementById('mapCoreList');
         if (!box) return;
-        const roots = rootsOf(group), zones = new Map();
-        nodesData.filter(n => n.device_type === 'switch' || n.device_type === 'router').forEach(n => {
+        const roots = rootsOf(group), zones = new Map(), hint = new Set(suggested || []);
+        nodesData.filter(n => ['switch', 'router', 'firewall'].includes(n.device_type)).forEach(n => {
             const z = mapZones[n.id] || { key: '', label: '' };
             if (!zones.has(z.key)) zones.set(z.key, { label: z.label, nodes: [] });
             zones.get(z.key).nodes.push(n);
@@ -367,7 +368,7 @@
                 return `<select class="map-core" data-zone="${attrEsc(key)}" data-slot="${slot}" aria-label="${attrEsc(name)}"${slot && !sel[0] ? ' disabled' : ''}>
                     <option value="">${escapeHtml(first)}</option>${
                     z.nodes.filter(n => !slot || n.id !== sel[0]).map(n => `<option value="${attrEsc(n.id)}"${sel[slot] === n.id ? ' selected' : ''}>${
-                        escapeHtml(n.label || n.id)}</option>`).join('')}</select>`;
+                        escapeHtml(n.label || n.id)}${hint.has(n.id) ? ` (${escapeHtml(tr('topoCoreSuggested'))})` : ''}</option>`).join('')}</select>`;
             };
             return `<div class="map-core-row">${many ? `<span class="map-core-zone">${escapeHtml(z.label || '—')}</span>` : ''}${select(0)}${select(1)}</div>`;
         }).join('');
@@ -1202,7 +1203,8 @@
                 filteredNodesData = grouped.nodes;
                 filteredLinksData = grouped.links;
             }
-            const { nodes, edges, options, bundles, groupsInfo, ladder, segModel } = buildMinimalGraph(filteredNodesData, filteredLinksData, { showVtpDomain, hoverInfo, group: selectedGroup });
+            const { nodes, edges, options, bundles, groupsInfo, ladder, segModel, suggested } = buildMinimalGraph(filteredNodesData, filteredLinksData, { showVtpDomain, hoverInfo, group: selectedGroup });
+            fillMapCoreMenu(filteredNodesData, selectedGroup, suggested);
             const hasOverlay = (bundles && bundles.length) || (groupsInfo && groupsInfo.length > 1);
             // Conservati per l'export Visio: il .vsdx replica ESATTAMENTE il
             // disegno dell'overlay (cavi paralleli, etichette porta, pillole).
@@ -1415,6 +1417,12 @@
         // Color-picker/legenda dei tipi di link: visibile solo sulla nuova mappa.
         const lw = document.getElementById('minimalLegendWrap');
         if (lw) { lw.style.display = mapViewMode === 'minimal' ? 'inline-flex' : 'none'; if (mapViewMode === 'minimal') renderMinimalLegend(); }
+        // Floating legend: each view lists its own symbols.
+        const ls = document.getElementById('legendSchema'), lh = document.getElementById('legendHierarchy');
+        if (ls) ls.style.display = mapViewMode === 'minimal' ? 'flex' : 'none';
+        if (lh) lh.style.display = mapViewMode === 'minimal' ? 'none' : 'flex';
+        const lc = document.getElementById('legendCableMode');
+        if (lc) lc.hidden = mapViewMode !== 'minimal';
         // Gestione categorie personalizzate: visibile solo sulla nuova mappa.
         const cm = document.getElementById('minimalCustomCatMenu');
         if (cm) { cm.style.display = mapViewMode === 'minimal' ? 'inline-block' : 'none'; if (mapViewMode === 'minimal') renderMinimalCustomCatPanel(); }
@@ -4077,6 +4085,25 @@
         const own = [c.ladder.A, c.ladder.B].filter(id => id && id !== c.joinCore);
         return own.length ? { A: own[0], B: own[1] || null, members: c.members, leaves: {} } : null;
     }
+    /** A zone without cores of its own, cabled to the site's: its devices
+     *  are the site row (left of the cores), each gateway followed by what
+     *  hangs from it. Left as a zone, its gateways were stacked in a column. */
+    function hMergeCorelessZones(plan, bundles) {
+        const onCore = id => bundles.some(b => b.type !== 'keepalive'
+            && ((b.from === id && (b.to === plan.A || b.to === plan.B)) || (b.to === id && (b.from === plan.A || b.from === plan.B))));
+        (plan.segCols || []).forEach(c => {
+            if (c.ladder || !c.gateways.some(onCore)) return;
+            const kids = {};
+            c.members.forEach(m => (kids[m.parent || ''] || (kids[m.parent || ''] = [])).push(m));
+            const put = (id, parent) => {
+                plan.members.push({ id, parent, depth: 0 });   // hRow works the depth out
+                (kids[id] || []).forEach(k => put(k.id, id));
+            };
+            c.gateways.forEach(g => put(g, null));
+            (kids[''] || []).forEach(m => put(m.id, null));
+            c.merged = true;
+        });
+    }
     // Box sizes: every box of a row as tall as the tallest, wide enough for
     // its name and the port names stacked by its cables; cores tall enough
     // for one lane per cable on each side.
@@ -4115,10 +4142,19 @@
         const touches = (id, c) => between(id, c).length > 0;
         plan.upBelow = plan.upstream.filter(id => !touches(id, plan.A) && touches(id, plan.B));
     }
+    /** Side of each zone (-1 left of the central cores, 1 right). 'hladder'
+     *  with no site row of its own (the cores feed only zones, e.g. two
+     *  firewalls): the zones alternate, the first on the left. */
+    function hZoneDirs(lad) {
+        const zs = (lad.segCols || []).filter(c => !c.merged);
+        const split = schemaLayout() === 'hladder' && !hRow(lad).length;
+        return new Map(zs.map((c, i) => [c, split && i % 2 === 0 ? -1 : 1]));
+    }
     /** Positions of the horizontal ladder, x0 = left edge of the block. */
     function hLadderPositions(lad, box, x0, below) {
         const pos = {};
-        const zones = (lad.segCols || []).map(c => ({ c, L: hZone(c) }));
+        const dirs = hZoneDirs(lad);
+        const zones = [...dirs.keys()].map(c => ({ c, L: hZone(c) }));
         const coreW = L => Math.max(...[L.A, L.B].filter(id => id && box[id]).map(id => box[id].w));
         const rowH = rows => Math.max(0, ...rows.flatMap(r => r.filter(m => box[m.id]).map(m => box[m.id].h + m.depth * HL_IN)));
         const span = row => row.filter(m => box[m.id]).reduce((t, m) => t + box[m.id].w + HL_ROW_GAP, row.length ? HL_GAP - HL_ROW_GAP : 0);
@@ -4156,14 +4192,14 @@
         if (upB.length) { strip(upB, bottom + 80 + Math.max(...upB.map(id => box[id].h)) / 2); bottom += 80 + Math.max(...upB.map(id => box[id].h)); }
         placeRow(mainRow, cx, cw, rowTop, below ? 1 : -1);
         // Zones: right of the cores (level with them) or each a band below.
-        let zx = cx + cw / 2 + LADDER_SEG_GAP, zy = bottom + LADDER_SEG_GAP;
+        let zx = cx + cw / 2 + LADDER_SEG_GAP, zxL = cx - cw / 2 - LADDER_SEG_GAP, zy = bottom + LADDER_SEG_GAP;
         zones.forEach(({ c, L }, i) => {
-            const row = zoneRows[i];
+            const row = zoneRows[i], dir = dirs.get(c);
             // Without its own ladder (no cores): its gateways stand in the core column.
             const heads = L ? [L.A, L.B].filter(Boolean) : (c.cores.length ? c.cores : c.gateways).filter(id => box[id] && !pos[id]);
             if (!heads.length && !row.length) return;
             const zw = Math.max(0, ...heads.filter(id => box[id]).map(id => box[id].w));
-            const zcx = below ? cx : zx + zw / 2;
+            const zcx = below ? cx : dir < 0 ? zxL - zw / 2 : zx + zw / 2;
             let zTop = rowTop, zEnd;
             if (below) {
                 const a = heads[0] && box[heads[0]] ? box[heads[0]].h : 0;
@@ -4179,10 +4215,14 @@
                     if (!box[id]) return;
                     pos[id] = { x: zcx, y: k === 0 ? yA : k === 1 ? yB : yB + hB / 2 + 30 + (k - 2) * (box[id].h + 30) + box[id].h / 2 };
                 });
-                zEnd = placeRow(row, zcx, zw, zTop, 1);
-                zx = Math.max(zEnd, zcx + zw / 2) + LADDER_SEG_GAP;
+                zEnd = placeRow(row, zcx, zw, zTop, dir);
+                if (dir < 0) zxL = Math.min(zEnd, zcx - zw / 2) - LADDER_SEG_GAP;
+                else zx = Math.max(zEnd, zcx + zw / 2) + LADDER_SEG_GAP;
             }
         });
+        // Zones on the left may reach past x0 (the site before): slide the block right.
+        const minL = Math.min(...Object.entries(pos).filter(([id]) => box[id]).map(([id, p]) => p.x - box[id].w / 2));
+        if (minL < x0) Object.values(pos).forEach(p => { p.x += x0 - minL; });
         return pos;
     }
     // Draws the horizontal ladder's own cables (core lanes, chains, trunks)
@@ -4199,7 +4239,11 @@
         const pairOf = (b, test) => test(b.from, b.to) ? [b.from, b.to] : test(b.to, b.from) ? [b.to, b.from] : null;
         const isCore = (p, q) => core(p) && !!member[q];
         const isTree = (p, q) => !!member[q] && member[q].parent === p;
-        const mine = bundles.filter(b => b.type !== 'keepalive' && (pairOf(b, isCore) || pairOf(b, isTree)) && box(b.from) && box(b.to));
+        // Upstream over A cabled to A, under B cabled to B: straight into that
+        // core's top (bottom), not round its side through the row's lanes.
+        const below = new Set(L.upBelow || []), up = new Set(L.upstream || []);
+        const isUp = (p, q) => up.has(q) && (p === L.A ? !below.has(q) : p === L.B && below.has(q));
+        const mine = bundles.filter(b => b.type !== 'keepalive' && (pairOf(b, isCore) || pairOf(b, isTree) || pairOf(b, isUp)) && box(b.from) && box(b.to));
         const port = (b, id, mm) => (b.from === id ? mm.local : mm.remote) || '';
         const po = (b, id) => { const t = pcEndTags(b); return b.from === id ? t.from : t.to; };
         const showLbl = b => visioConnectorSink || schemaPortLabelVisible(labelMode, b, schemaFocusId);
@@ -4229,6 +4273,28 @@
                 const t = [port(e.b, e.id, e.mm), j === 1 ? po(e.b, e.id) : ''].filter(Boolean).join(' ');
                 lbl(t, ex - dir * 3, isA ? ey + 3 + (j - 1) * HL_LINE : ey - 3 - (j - 1) * HL_LINE,
                     dir > 0 ? 'left' : 'right', isA ? 'top' : 'bottom', accessPort(e.id, port(e.b, e.id, e.mm)));
+            });
+        });
+        // Upstream: one entry per cable along the core's edge, ordered by
+        // where each box stands; straight down when the box is above it.
+        [L.A, L.B].filter(Boolean).forEach(c => {
+            const cb = box(c), isA = c === L.A, ends = [];
+            if (!cb) return;
+            mine.forEach(b => {
+                const pq = pairOf(b, isUp);
+                if (pq && pq[0] === c) b.members.forEach((mm, k) => ends.push({ b, id: pq[1], bb: box(pq[1]), mm, k }));
+            });
+            ends.sort((p, q) => (p.bb.left + p.bb.right) - (q.bb.left + q.bb.right) || p.k - q.k);
+            const ce = isA ? cb.top : cb.bottom;
+            ends.forEach((e, i) => {
+                const x = cb.left + (i + 1) * (cb.right - cb.left) / (ends.length + 1);
+                const ue = isA ? e.bb.bottom : e.bb.top, mid = (ue + ce) / 2;
+                const ux = x >= e.bb.left + 8 && x <= e.bb.right - 8 ? x : (e.bb.left + e.bb.right) / 2 + (e.k * LADDER_PAR);
+                paths.push({ b: e.b, from: c, to: e.id, pts: ux === x ? [[x, ce], [x, ue]] : [[x, ce], [x, mid], [ux, mid], [ux, ue]] });
+                if (!showLbl(e.b)) return;
+                const s = isA ? -1 : 1;   // outwards from the core
+                lbl(port(e.b, c, e.mm), x + 3, ce + s * 3, 'left', isA ? 'bottom' : 'top', accessPort(c, port(e.b, c, e.mm)));
+                lbl(port(e.b, e.id, e.mm), ux + 3, ue - s * 3, 'left', isA ? 'top' : 'bottom', accessPort(e.id, port(e.b, e.id, e.mm)));
             });
         });
         // Children. An only child in line: one cable across the gap, low in
@@ -4626,20 +4692,51 @@
                 </span>`;
             }).join('')
             + projectLegendHtml();
+        const sl = document.getElementById('legendSchema');
+        if (sl) sl.innerHTML = legendHtml(schemaLegendItems());
+        document.querySelectorAll('#legendCableMode [data-cable-colors]').forEach(b => {
+            b.setAttribute('aria-pressed', String(b.getAttribute('data-cable-colors') === cableColorMode()));
+        });
+    }
+    document.getElementById('legendCableMode')?.addEventListener('click', e => {
+        const b = /** @type {HTMLElement} */ (e.target).closest('[data-cable-colors]');
+        if (!b) return;
+        setSchemaPref('cableColors', b.getAttribute('data-cable-colors') || 'type');
+        syncSchemaReadControls();   // the View menu's select shows the same setting
+        renderMinimalLegend();
+        networkInstance?.redraw();
+    });
+    /** The floating legend in the Schema view: box fills of the device types
+     *  on the map, faded = offline, the zone frames, then the cables (as in
+     *  the export). The hierarchy's status LEDs mean nothing here. */
+    function schemaLegendItems() {
+        const S = MINIMAL_MAP_STYLE.node, nodes = (minimalOverlayData && minimalOverlayData.nodes) || [];
+        const types = new Set(nodes.map(nd => (S.fill[nd._type] ? nd._type : 'other')));
+        /** @type {Array<{text: string, color?: string, w?: number, dash?: boolean, box?: string, border?: string, faded?: boolean}>} */
+        const out = Object.keys(S.fill).filter(t => types.has(t)).map(t => ({ box: S.fill[t], border: S.borderColor, text: deviceTypeLabel(t) }));
+        if (nodes.some(nd => nd._offline)) out.push({ box: S.fill.switch, border: S.borderColor, faded: true, text: tr('legSchemaOffline') });
+        const m = mapSegmentModel, onMap = new Set(m ? [...Object.values(m.of), ...Object.keys(m.cores || {}).filter(s => m.cores[s].length)] : []);
+        (segEffective().segments || []).filter(s => onMap.has(s.id)).forEach(s => {
+            const c = SEGMENT_COLORS[s.color] || SEGMENT_COLORS.amber;
+            out.push({ box: c + '22', border: c, text: tr('legSchemaZone', { name: s.name }) });
+        });
+        return out.concat(exportLegendItems(true));
     }
     // Legend of the project palette: only what the map drawn now has.
     // Entries: { color, w, text } a cable, { box, border, text } a device.
-    function projectLegendItems() {
+    // counts: each medium/speed entry with its number of cables (the floating legend).
+    function projectLegendItems(counts) {
         const bs = (minimalOverlayData && minimalOverlayData.bundles) || [];
         const mediumName = m => tr({ copper: 'legCopper', fiber: 'legFiber', mm: 'legFiberMM', sm: 'legFiberSM', dac: 'legDAC' }[m]);
         /** @type {Array<{text: string, color?: string, w?: number, dash?: boolean, box?: string, border?: string}>} */
         const out = [];
         if (bs.some(b => segFindingOpen(b.from, b.to))) out.push({ color: SEGMENT_FINDING_COLOR, w: 2, dash: true, text: tr('legBypass') });
         if (cableColorMode() === 'media') {
-            const keys = new Set(bs.filter(b => b.type !== 'keepalive').map(b => cableKey(b, portFact)).filter(Boolean));
-            Object.keys(CABLE_PALETTE).filter(k => keys.has(k)).forEach(k => {
+            const n = {};
+            bs.filter(b => b.type !== 'keepalive').map(b => cableKey(b, portFact)).filter(Boolean).forEach(k => { n[k] = (n[k] || 0) + 1; });
+            Object.keys(CABLE_PALETTE).filter(k => n[k]).forEach(k => {
                 const [m, sp] = k.split('-');
-                out.push({ color: CABLE_PALETTE[k], w: m === 'dac' ? 3 : 2, text: `${mediumName(m)} ${sp}` });
+                out.push({ color: CABLE_PALETTE[k], w: m === 'dac' ? 3 : 2, text: `${mediumName(m)} ${sp}` + (counts ? ` (${n[k]})` : '') });
             });
         }
         const bbs = new Set(bs.filter(b => mapBackbones.has(pillKey(b))).map(b => (cableKey(b, portFact) || '').split('-')[0]));
@@ -4649,16 +4746,17 @@
         if (mapRenewShown) out.push({ box: '#FFFF00', border: '#806600', text: tr('legRenew') });
         return out;
     }
-    function projectLegendHtml() {
-        return projectLegendItems().map(it => `<span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:var(--text-muted);">`
-            + (it.box ? `<span style="width:16px; height:10px; background:${it.box}; border:1px solid ${it.border}; display:inline-block;"></span>`
+    function projectLegendHtml() { return legendHtml(projectLegendItems()); }
+    function legendHtml(items) {
+        return items.map(it => `<span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:var(--text-muted);">`
+            + (it.box ? `<span style="width:16px; height:10px; background:${it.box}; border:1px solid ${it.border}; display:inline-block;${it.faded ? ` opacity:${MINIMAL_MAP_STYLE.node.offlineOpacity};` : ''}"></span>`
                 : `<span style="width:18px; height:0; border-top:${it.w}px ${it.dash ? 'dashed' : 'solid'} ${it.color}; display:inline-block;"></span>`)
             + `<span>${escapeHtml(it.text)}</span></span>`).join('');
     }
     /** Legend of an exported schema: the link types drawn (under the type
      *  colours), the custom categories in use, then the project palette.
      *  Same entries as the legend under the map, restricted to this map. */
-    function exportLegendItems() {
+    function exportLegendItems(counts) {
         const bs = (minimalOverlayData && minimalOverlayData.bundles) || [];
         const out = [];
         if (cableColorMode() !== 'media') {
@@ -4669,7 +4767,7 @@
         const cats = new Set(bs.map(b => minimalCustomCats.assignments[pillKey(b)]).filter(Boolean));
         Object.keys(minimalCustomCats.categories).filter(nm => cats.has(nm))
             .forEach(nm => out.push({ color: minimalCustomCats.categories[nm].color, w: 2, dash: (minimalCustomCats.categories[nm].dash || 'solid') !== 'solid', text: nm }));
-        return out.concat(projectLegendItems());
+        return out.concat(projectLegendItems(counts));
     }
     const LEGEND_ROW = 22;
     const legendHeight = n => 40 + n * LEGEND_ROW;
@@ -5050,6 +5148,7 @@
                     hover: { background: fill, border: '#1a2430' }
                 },
                 opacity: (effectiveStatus === 'offline') ? S.node.offlineOpacity : 1,
+                _type: n.device_type, _offline: effectiveStatus === 'offline',   // read by the map legend
                 font: S.node.font,
                 x: c.x + ((idx * 137) % (2 * jitter)) - jitter,
                 y: c.y + ((idx * 89)  % (2 * jitter)) - jitter,
@@ -5292,6 +5391,10 @@
         const ladder = schemaLadderPlan(bundles, id => levels[id] || 0, id => (info[id] || {}).device_type,
                                         labelOf, GROUPABLE_TYPES, forcedPair,
                                         schemaLayout() !== 'rows');
+        // The pair found without the Core menu: suggested there.
+        const auto = forcedPair ? schemaLadderPlan(bundles, id => levels[id] || 0, id => (info[id] || {}).device_type,
+                                                   labelOf, GROUPABLE_TYPES, null, true) : ladder;
+        const suggested = auto ? [auto.A, auto.B] : null;
         mapPortInfo = {};
         // Cable members carry short names (Te1/1/4), the backend the backup's (TenGigabitEthernet1/1/4).
         nodeData.forEach(n => {
@@ -5307,7 +5410,7 @@
         });
         const segModel = segModelFor(nodeData, linkData, ladder ? [ladder.A, ladder.B] : forcedPair);
         if (ladder) ladder.segCols = ladderSegmentColumns(ladder, segModel, segEffective().segments, bundles, labelOf);
-        if (ladder && hLadderMode()) sizeHLadderBoxes(nodes, bundles, ladder);
+        if (ladder && hLadderMode()) { hMergeCorelessZones(ladder, bundles); sizeHLadderBoxes(nodes, bundles, ladder); }
         else if (ladder && schemaLayout() === 'ladder') {
             sizeLadderBoxes(nodes, bundles, ladder);
             ladder.segCols.forEach(c => { if (c.ladder) sizeLadderBoxes(nodes, bundles, c.ladder); });
@@ -5323,7 +5426,7 @@
             edges: { smooth: { type: 'continuous', roundness: 0.2 }, shadow: { enabled: false } }
         };
 
-        return { nodes, edges, options, bundles, groupsInfo, ladder, segModel };
+        return { nodes, edges, options, bundles, groupsInfo, ladder, segModel, suggested };
     }
 
     // Bundle key (from~to~tag): keys label offsets, hover and link categories.
@@ -5473,7 +5576,9 @@
         const dual = top.filter(isDual).length;
         // The share only decides whether to offer it: once chosen, devices added
         // later (discovered neighbours) must not switch the map back to rows.
-        if (dual < 2 || (!chosen && dual / top.length < LADDER_MIN_SHARE)) return null;
+        // A pair named in the Core menu is the user's call (two firewalls feeding
+        // a core switch each have no device cabled to both): always a ladder.
+        if (pair !== forced && (dual < 2 || (!chosen && dual / top.length < LADDER_MIN_SHARE))) return null;
         // Upstream left to right by the core it is cabled to (A only, both,
         // B only), then by name: a firewall on B alone drawn over A crossed the other's cables.
         const side = id => (!nbrs[id].has(B) ? 0 : nbrs[id].has(A) ? 1 : 2);
@@ -6094,9 +6199,9 @@
             // is left that touches the ladder (upstream, zone links, second
             // parents) goes round the boxes.
             if ([lad.A, lad.B].every(realBox)) bundles = drawHLadderCables(ctx, lad, schemaLayout() === 'hladder-below' ? 1 : -1, bundles, realBox, styleFor, labelMode);
-            (lad.segCols || []).forEach(c => {
+            hZoneDirs(lad).forEach((dir, c) => {
                 const L = hZone(c);
-                if (L && [L.A, L.B].filter(Boolean).every(realBox)) bundles = drawHLadderCables(ctx, L, 1, bundles, realBox, styleFor, labelMode);
+                if (L && [L.A, L.B].filter(Boolean).every(realBox)) bundles = drawHLadderCables(ctx, L, dir, bundles, realBox, styleFor, labelMode);
             });
             bundles = drawSegmentCables(ctx, lad, bundles, realBox, styleFor, labelMode,
                                         [...lad.upstream, ...hRow(lad).map(m => m.id)]);
