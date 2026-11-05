@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.64.0] - 2026-11-05
+
 ### Added
 
 - **Core centrali a scelta, anche firewall**: il menu Core propone anche i
