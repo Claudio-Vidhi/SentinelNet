@@ -10,6 +10,27 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Core centrali a scelta, anche firewall**: il menu Core propone anche i
+  firewall e segna "(consigliato)" la coppia che la mappa trova da sola. Una
+  coppia scelta a mano dà sempre la scala, anche senza apparati cablati a
+  entrambi (due firewall che alimentano un core switch ciascuno).
+- **Legenda della vista Schema**: elenca solo quello che lo schema disegna
+  (riempimenti per tipo, offline attenuato, zone, cavi). Un interruttore in
+  testa passa i cavi da tipo di collegamento a mezzo e velocità, con il
+  numero di cavi per voce.
+
+### Fixed
+
+- **Scala orizzontale**: una zona senza core propri, appesa ai core del sito,
+  è la riga a sinistra dei core invece di una colonna verticale. Senza riga
+  del sito le zone si alternano a sinistra e a destra dei core centrali.
+- **Scala orizzontale**: un apparato sopra il core A (sotto il core B) entra
+  dritto dal lato alto (basso) del core, non più dal fianco tra le corsie.
+- La legenda fluttuante della vista Schema mostrava i simboli della vista
+  Gerarchia (LED di stato, colori per tipo pieni).
+
 ## [0.63.0] - 2026-11-04
 
 ### Added
