@@ -1590,7 +1590,7 @@ ${pagesHtml}
         let catalog;
         try { catalog = await loadBenchmarkCatalog(); } catch (e) { return; }
         if (!catalog) return;
-        const groups = { cis: tr('nsaGroupCis'), framework: tr('nsaGroupFramework') };
+        const groups = { cis: tr('nsaGroupCis'), vendor: tr('nsaGroupVendor'), framework: tr('nsaGroupFramework') };
         const current = sel.value;
         // Ricostruzione idempotente: il tab si carica piu' volte e due
         // chiamate possono attendere il catalogo insieme. Un flag impostato

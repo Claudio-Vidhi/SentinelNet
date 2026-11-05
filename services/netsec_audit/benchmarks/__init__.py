@@ -10,7 +10,8 @@ endpoint and the benchmark picker in the UI all read from this registry.
   ``KEY``    identifier sent by the UI and stored in the audit history.
   ``TITLE``  name shown in the UI and in the report.
   ``GROUP``  ``"cis"`` for a per-product CIS benchmark (one platform),
-             ``"framework"`` for a cross-platform standard (NIST, PCI).
+             ``"framework"`` for a cross-platform standard (NIST, PCI),
+             ``"vendor"`` for a vendor's own hardening guide.
   ``RULES``  the rule entries, described below.
 
 Rules shared between benchmarks (e.g. the TLS version counts for CIS and for
@@ -23,6 +24,9 @@ v4.0", hence one module per product:
   - ``cis_fortigate``: CIS Fortinet FortiGate Benchmark v1.0.1 (``fortios``)
   - ``cis_ios``: CIS Cisco IOS XE 17.x Benchmark v2.2.1 (``ios``)
   - ``cis_ubuntu``: CIS Ubuntu Linux 24.04 LTS Benchmark v2.0.0 (``linux``)
+
+``fortios_76`` is not CIS: CIS has no FortiOS 7.6 benchmark, so it follows
+Fortinet's 7.6 hardening guide.
 
 Fields of each rule entry:
 
@@ -50,10 +54,10 @@ the standard that cites it.
 
 from typing import Any, Dict, List, Optional
 
-from . import cis_fortigate, cis_ios, cis_ubuntu, nist, pci
+from . import cis_fortigate, cis_ios, cis_ubuntu, fortios_76, nist, pci
 from .vendors import FORTIOS, IOS, LINUX
 
-_MODULES = (cis_fortigate, cis_ios, cis_ubuntu, nist, pci)
+_MODULES = (cis_fortigate, cis_ios, cis_ubuntu, fortios_76, nist, pci)
 
 BENCHMARKS: Dict[str, List[Dict[str, Any]]] = {m.KEY: m.RULES for m in _MODULES}
 BENCHMARK_TITLES: Dict[str, str] = {m.KEY: m.TITLE for m in _MODULES}

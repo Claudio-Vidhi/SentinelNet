@@ -2107,6 +2107,250 @@ GUIDANCE: Dict[str, Dict[str, Dict[str, str]]] = {
                   "rotation and watch the first few days.",
         },
     },
+    # --- Fortinet FortiOS 7.6 hardening -------------------------------------
+    "check_dh_params": {
+        "why": {
+            "it": "Un gruppo Diffie-Hellman piu' grande rende piu' costoso "
+                  "ricavare la chiave di sessione dallo scambio iniziale.",
+            "en": "A larger Diffie-Hellman group makes it costlier to recover "
+                  "the session key from the initial exchange.",
+        },
+        "impact": {
+            "it": "Piu' CPU a ogni handshake: sui modelli piccoli con molte "
+                  "sessioni HTTPS/SSL-VPN va misurato prima.",
+            "en": "More CPU per handshake: measure it first on small models "
+                  "with many HTTPS/SSL-VPN sessions.",
+        },
+        "default": {"it": "2048.", "en": "2048."},
+    },
+    "check_private_data_encryption": {
+        "why": {
+            "it": "Senza, password e chiavi private nel backup sono cifrate "
+                  "con una chiave uguale su ogni FortiGate: chi ottiene il "
+                  "file puo' recuperarle.",
+            "en": "Without it, passwords and private keys in the backup are "
+                  "encrypted with a key that is the same on every FortiGate: "
+                  "whoever gets the file can recover them.",
+        },
+        "impact": {
+            "it": "Un backup si ripristina solo su un apparato con la stessa "
+                  "chiave: conservarla in un luogo sicuro. Da 7.6.1 la chiave "
+                  "e' generata dall'apparato.",
+            "en": "A backup restores only on a unit with the same key: keep it "
+                  "somewhere safe. From 7.6.1 the unit generates the key.",
+        },
+        "default": {"it": "disable.", "en": "disable."},
+    },
+    "check_admin_host": {
+        "why": {
+            "it": "Il redirect costruisce l'indirizzo HTTPS dall'header Host "
+                  "della richiesta: un valore falsificato manda "
+                  "l'amministratore su un sito scelto dall'attaccante.",
+            "en": "The redirect builds the HTTPS address from the request's "
+                  "Host header: a forged value sends the administrator to a "
+                  "site the attacker chose.",
+        },
+        "impact": {
+            "it": "Nessuno, se il nome impostato risolve sull'apparato.",
+            "en": "None, as long as the name set resolves to the unit.",
+        },
+        "default": {"it": "vuoto.", "en": "empty."},
+    },
+    "check_admin_password_hash": {
+        "why": {
+            "it": "PBKDF2 rallenta di molto la forza bruta su un hash rubato "
+                  "rispetto a SHA256. Gli account aggiornati da versioni "
+                  "precedenti restano in SHA256 finche' la password non viene "
+                  "reimpostata o l'utente non accede.",
+            "en": "PBKDF2 slows brute force on a stolen hash far more than "
+                  "SHA256. Accounts upgraded from earlier releases stay on "
+                  "SHA256 until the password is reset or the user logs in.",
+        },
+        "impact": {
+            "it": "Nessuno: basta reimpostare la password (o un accesso).",
+            "en": "None: resetting the password (or one login) is enough.",
+        },
+        "default": {"it": "PBKDF2 da FortiOS 7.6.1.",
+                    "en": "PBKDF2 from FortiOS 7.6.1."},
+    },
+    "check_sslvpn_tunnel_mode": {
+        "why": {
+            "it": "Da FortiOS 7.6.3 il tunnel mode SSL-VPN non e' piu' "
+                  "supportato e l'SSL-VPN e' stato a lungo il bersaglio delle "
+                  "vulnerabilita' piu' sfruttate sui FortiGate.",
+            "en": "From FortiOS 7.6.3 SSL-VPN tunnel mode is no longer "
+                  "supported, and SSL-VPN has long been the target of the most "
+                  "exploited FortiGate vulnerabilities.",
+        },
+        "impact": {
+            "it": "Migrazione dei client a IPsec (FortiClient) o ZTNA: va "
+                  "pianificata prima dell'aggiornamento a 7.6.3, non dopo.",
+            "en": "Clients must move to IPsec (FortiClient) or ZTNA: plan it "
+                  "before upgrading to 7.6.3, not after.",
+        },
+    },
+    "check_dos_policy": {
+        "why": {
+            "it": "Una DoS policy fissa soglie su flood SYN, scansioni e "
+                  "sessioni per sorgente prima che arrivino alle policy.",
+            "en": "A DoS policy sets thresholds on SYN floods, scans and "
+                  "per-source sessions before they reach the policies.",
+        },
+        "impact": {
+            "it": "Soglie troppo basse bloccano traffico legittimo: partire "
+                  "in modalita' monitor e regolarle sui log.",
+            "en": "Thresholds set too low block legitimate traffic: start in "
+                  "monitor mode and tune them from the logs.",
+        },
+    },
+    "check_admin_access_on_wan": {
+        "why": {
+            "it": "Un'interfaccia WAN riceve scansioni continue: la GUI o "
+                  "l'SSH esposti li' sono il primo bersaglio di ogni "
+                  "vulnerabilita' di autenticazione pubblicata.",
+            "en": "A WAN interface is scanned all the time: a GUI or SSH "
+                  "exposed there is the first target of every published "
+                  "authentication flaw.",
+        },
+        "impact": {
+            "it": "Chi amministra da remoto deve passare da VPN o da "
+                  "un'interfaccia di gestione dedicata: va predisposta prima.",
+            "en": "Remote administrators must come in over VPN or a dedicated "
+                  "management interface: set that up first.",
+        },
+    },
+    "check_admin_mfa": {
+        "why": {
+            "it": "Con il secondo fattore una password rubata o indovinata "
+                  "non basta per entrare.",
+            "en": "With a second factor a stolen or guessed password is not "
+                  "enough to get in.",
+        },
+        "impact": {
+            "it": "Serve un token (FortiToken, email o SMS) per ogni "
+                  "amministratore; un FortiToken locale vale per un solo "
+                  "FortiGate.",
+            "en": "Each administrator needs a token (FortiToken, email or "
+                  "SMS); a local FortiToken works on one FortiGate only.",
+        },
+    },
+    "check_auth_server_encryption": {
+        "why": {
+            "it": "LDAP semplice e RADIUS su UDP fanno viaggiare credenziali "
+                  "o loro derivati leggibili da chi sta sul percorso.",
+            "en": "Plain LDAP and RADIUS over UDP send credentials, or values "
+                  "derived from them, readable by anyone on the path.",
+        },
+        "impact": {
+            "it": "Il server deve supportare LDAPS/STARTTLS o RADSEC e il "
+                  "FortiGate deve fidarsi del suo certificato.",
+            "en": "The server must support LDAPS/STARTTLS or RADSEC and the "
+                  "FortiGate must trust its certificate.",
+        },
+        "default": {"it": "secure disable, transport-protocol udp.",
+                    "en": "secure disable, transport-protocol udp."},
+    },
+    "check_ntp_auth": {
+        "why": {
+            "it": "Un orario falsificato sposta i log fuori dalla finestra "
+                  "d'indagine e puo' far accettare certificati scaduti.",
+            "en": "A forged clock moves logs out of the investigation window "
+                  "and can make expired certificates look valid.",
+        },
+        "impact": {
+            "it": "Serve una chiave condivisa con il server NTP.",
+            "en": "Needs a key shared with the NTP server.",
+        },
+    },
+    "check_ospf_auth": {
+        "why": {
+            "it": "Senza autenticazione chiunque sul segmento puo' annunciare "
+                  "rotte e deviare il traffico.",
+            "en": "Without authentication anyone on the segment can announce "
+                  "routes and divert traffic.",
+        },
+        "impact": {
+            "it": "La chiave va impostata su entrambi i lati nella stessa "
+                  "finestra: altrimenti l'adiacenza cade.",
+            "en": "Set the key on both ends in the same window, or the "
+                  "adjacency drops.",
+        },
+    },
+    "check_remote_logging": {
+        "why": {
+            "it": "I log che restano solo sull'apparato si perdono con un "
+                  "guasto e possono essere cancellati da chi lo compromette.",
+            "en": "Logs kept only on the unit are lost with a failure and can "
+                  "be wiped by whoever compromises it.",
+        },
+        "impact": {
+            "it": "Serve un collettore (FortiAnalyzer, syslog o FortiCloud) e "
+                  "un po' di banda.",
+            "en": "Needs a collector (FortiAnalyzer, syslog or FortiCloud) and "
+                  "some bandwidth.",
+        },
+    },
+    "check_factory_certificates": {
+        "why": {
+            "it": "Con un certificato di fabbrica il client non puo' "
+                  "distinguere l'apparato da un intermediario: l'utente si "
+                  "abitua ad accettare l'avviso.",
+            "en": "With a factory certificate the client cannot tell the unit "
+                  "from a man in the middle, and users learn to click through "
+                  "the warning.",
+        },
+        "impact": {
+            "it": "Serve un certificato firmato da una CA fidata (anche ACME/"
+                  "Let's Encrypt) con FQDN o IP dell'apparato.",
+            "en": "Needs a certificate signed by a trusted CA (ACME/Let's "
+                  "Encrypt works) carrying the unit's FQDN or IP.",
+        },
+        "default": {"it": "self-sign (GUI), Fortinet_Factory (SSL-VPN).",
+                    "en": "self-sign (GUI), Fortinet_Factory (SSL-VPN)."},
+    },
+    "check_policy_any_interface": {
+        "why": {
+            "it": "Una policy su «any» vale per ogni interfaccia, comprese "
+                  "quelle aggiunte dopo: apre percorsi che nessuno ha deciso.",
+            "en": "A policy on «any» covers every interface, including ones "
+                  "added later: it opens paths nobody decided on.",
+        },
+        "impact": {
+            "it": "Va sostituita con le interfacce o zone reali; verificare "
+                  "prima i contatori di hit.",
+            "en": "Replace it with the real interfaces or zones; check the hit "
+                  "counters first.",
+        },
+    },
+    "check_policy_names": {
+        "why": {
+            "it": "Il nome e' cio' che compare nei log e nei report: senza, o "
+                  "duplicato, non si risale alla regola giusta.",
+            "en": "The name is what appears in logs and reports: missing or "
+                  "duplicated, it no longer points to the right rule.",
+        },
+        "impact": {
+            "it": "Nessuno sul traffico.",
+            "en": "None on traffic.",
+        },
+    },
+    "check_deny_match_vip": {
+        "why": {
+            "it": "Le policy con VIP hanno la precedenza: una deny senza "
+                  "match-vip non ferma il traffico diretto a un server "
+                  "pubblicato.",
+            "en": "Policies with a VIP take precedence: a deny without "
+                  "match-vip does not stop traffic to a published server.",
+        },
+        "impact": {
+            "it": "Il traffico verso i VIP che la deny copre viene bloccato: "
+                  "e' l'effetto voluto, ma va verificato.",
+            "en": "Traffic to the VIPs the deny covers gets blocked: that is "
+                  "the intent, but check it.",
+        },
+        "default": {"it": "enable sulle nuove deny da 7.2.4.",
+                    "en": "enable on new deny policies from 7.2.4."},
+    },
 }
 
 

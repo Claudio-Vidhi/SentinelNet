@@ -10,6 +10,22 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Audit di sicurezza: Fortinet FortiOS 7.6 Best Practices**: nuovo
+  benchmark (34 controlli) dalla guida Fortinet "Best Practices FortiOS
+  7.6.0", perché CIS non ha ancora un benchmark 7.6. Oltre ai controlli già
+  presenti verifica dh-params 8192, private-data-encryption, admin-host,
+  hash PBKDF2 delle password admin, SSL-VPN tunnel mode (non supportato da
+  7.6.3), DoS policy, gestione su interfacce WAN, MFA degli admin,
+  certificati di fabbrica, LDAPS/RADSEC, autenticazione NTP e OSPF, log
+  remoti (anche FortiAnalyzer/FortiCloud), policy su «any», nomi delle
+  policy, deny con match-vip. Ogni regola cita la pagina della guida.
+
+### Changed
+
+- **Inventario apparati**: tolta la riga switch/porta sotto l'indirizzo IP.
+
 ## [0.64.0] - 2026-11-05
 
 ### Added

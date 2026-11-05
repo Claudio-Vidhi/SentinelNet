@@ -59,6 +59,10 @@ MESSAGES: Dict[str, Dict[str, str]] = {
         "it": "account amministrativo di default «admin» presente",
         "en": "default «admin» administrative account present",
     },
+    "ev.legacy_password_hash": {
+        "it": "password dell'account ancora in hash SHA256 («SH2»)",
+        "en": "account password still stored as a SHA256 hash («SH2»)",
+    },
     "ev.snmp_v1v2c_active": {
         "it": "community SNMP v1/v2c attiva",
         "en": "SNMP v1/v2c community active",
@@ -649,6 +653,252 @@ MESSAGES: Dict[str, Dict[str, str]] = {
     },
 
     # --- FortiOS: VPN -----------------------------------------------------
+    "fos.dh_params.no_section": {
+        "it": "Sezione «config system global» assente: impossibile valutare i "
+              "parametri Diffie-Hellman.",
+        "en": "«config system global» section absent: the Diffie-Hellman "
+              "parameters cannot be assessed.",
+    },
+    "fos.dh_params.not_set": {
+        "it": "«dh-params» non impostato: vale il default di fabbrica 2048 bit.",
+        "en": "«dh-params» not set: the factory default of 2048 bits applies.",
+    },
+    "fos.dh_params.weak": {
+        "it": "Parametri Diffie-Hellman a {value} bit: la guida di hardening "
+              "7.6 indica {min}.",
+        "en": "Diffie-Hellman parameters at {value} bits: the 7.6 hardening "
+              "guide calls for {min}.",
+    },
+    "fos.dh_params.ok": {
+        "it": "Parametri Diffie-Hellman a {value} bit.",
+        "en": "Diffie-Hellman parameters at {value} bits.",
+    },
+    "fos.private_data.no_section": {
+        "it": "Sezione «config system global» assente: impossibile valutare la "
+              "cifratura dei dati privati.",
+        "en": "«config system global» section absent: private-data encryption "
+              "cannot be assessed.",
+    },
+    "fos.private_data.not_set": {
+        "it": "«private-data-encryption» non impostato: di fabbrica e' "
+              "disabilitato, password e chiavi private nel backup sono "
+              "cifrate con la chiave comune a tutti i FortiGate.",
+        "en": "«private-data-encryption» not set: it is disabled out of the "
+              "box, so passwords and private keys in the backup are encrypted "
+              "with the key shared by every FortiGate.",
+    },
+    "fos.private_data.bad": {
+        "it": "Cifratura dei dati privati disabilitata: password e chiavi "
+              "private nel backup usano la chiave comune a tutti i FortiGate.",
+        "en": "Private-data encryption disabled: passwords and private keys in "
+              "the backup use the key shared by every FortiGate.",
+    },
+    "fos.private_data.ok": {
+        "it": "Cifratura dei dati privati abilitata.",
+        "en": "Private-data encryption enabled.",
+    },
+    "fos.admin_host.no_section": {
+        "it": "Sezione «config system global» assente: impossibile valutare "
+              "«admin-host».",
+        "en": "«config system global» section absent: «admin-host» cannot be "
+              "assessed.",
+    },
+    "fos.admin_host.no_redirect": {
+        "it": "Redirect HTTP->HTTPS disabilitato: «admin-host» non serve.",
+        "en": "HTTP-to-HTTPS redirect disabled: «admin-host» is not needed.",
+    },
+    "fos.admin_host.missing": {
+        "it": "Redirect HTTP->HTTPS attivo senza «admin-host»: il redirect usa "
+              "l'header Host inviato dal client, che un attaccante puo' "
+              "falsificare.",
+        "en": "HTTP-to-HTTPS redirect on without «admin-host»: the redirect "
+              "uses the Host header sent by the client, which an attacker can "
+              "forge.",
+    },
+    "fos.admin_host.ok": {
+        "it": "«admin-host» impostato: il redirect punta a un nome fisso.",
+        "en": "«admin-host» set: the redirect points to a fixed name.",
+    },
+    "fos.pw_hash.no_section": {
+        "it": "Sezione «config system admin» assente: impossibile valutare "
+              "l'hash delle password.",
+        "en": "«config system admin» section absent: password hashes cannot "
+              "be assessed.",
+    },
+    "fos.pw_hash.legacy": {
+        "it": "{count} account con password ancora in SHA256: reimpostarle "
+              "per passare a PBKDF2.",
+        "en": "{count} account(s) with passwords still in SHA256: reset them "
+              "to move to PBKDF2.",
+    },
+    "fos.pw_hash.ok": {
+        "it": "Nessuna password amministrativa in hash SHA256 legacy.",
+        "en": "No administrator password in legacy SHA256 hash.",
+    },
+    "fos.sslvpn_tunnel.off": {
+        "it": "SSL-VPN non in ascolto su alcuna interfaccia.",
+        "en": "SSL-VPN not listening on any interface.",
+    },
+    "fos.sslvpn_tunnel.in_use": {
+        "it": "{count} portali SSL-VPN in tunnel mode: da FortiOS 7.6.3 il "
+              "tunnel mode non e' piu' supportato, migrare a IPsec.",
+        "en": "{count} SSL-VPN portal(s) in tunnel mode: from FortiOS 7.6.3 "
+              "tunnel mode is no longer supported, migrate to IPsec.",
+    },
+    "fos.sslvpn_tunnel.ok": {
+        "it": "SSL-VPN attivo senza portali in tunnel mode.",
+        "en": "SSL-VPN active with no tunnel-mode portal.",
+    },
+    "fos.dos.none": {
+        "it": "Nessuna DoS policy: flood e scansioni verso l'apparato non "
+              "hanno soglie.",
+        "en": "No DoS policy: floods and scans against the device have no "
+              "thresholds.",
+    },
+    "fos.dos.ok": {
+        "it": "{count} DoS policy configurate.",
+        "en": "{count} DoS polic(ies) configured.",
+    },
+    "fos.wan_admin.no_section": {
+        "it": "Sezione «config system interface» assente: impossibile valutare "
+              "l'accesso amministrativo sulle interfacce WAN.",
+        "en": "«config system interface» section absent: admin access on WAN "
+              "interfaces cannot be assessed.",
+    },
+    "fos.wan_admin.found": {
+        "it": "{count} interfacce WAN con servizi di gestione abilitati: la "
+              "GUI/SSH e' esposta agli attacchi da Internet.",
+        "en": "{count} WAN interface(s) with management services enabled: the "
+              "GUI/SSH is exposed to attacks from the Internet.",
+    },
+    "fos.wan_admin.ok": {
+        "it": "Nessun servizio di gestione sulle interfacce WAN.",
+        "en": "No management service on WAN interfaces.",
+    },
+    "fos.mfa.no_section": {
+        "it": "Sezione «config system admin» assente: impossibile valutare "
+              "l'MFA degli amministratori.",
+        "en": "«config system admin» section absent: administrator MFA cannot "
+              "be assessed.",
+    },
+    "fos.mfa.missing": {
+        "it": "{count} amministratori locali senza autenticazione a due "
+              "fattori.",
+        "en": "{count} local administrator(s) without two-factor "
+              "authentication.",
+    },
+    "fos.mfa.ok": {
+        "it": "Ogni amministratore locale ha l'autenticazione a due fattori.",
+        "en": "Every local administrator has two-factor authentication.",
+    },
+    "fos.auth_enc.none": {
+        "it": "Nessun server LDAP o RADIUS configurato.",
+        "en": "No LDAP or RADIUS server configured.",
+    },
+    "fos.auth_enc.plaintext": {
+        "it": "{count} server di autenticazione senza cifratura (LDAP senza "
+              "LDAPS/STARTTLS, RADIUS senza RADSEC): credenziali in chiaro "
+              "sulla rete.",
+        "en": "{count} authentication server(s) without encryption (LDAP "
+              "without LDAPS/STARTTLS, RADIUS without RADSEC): credentials in "
+              "cleartext on the wire.",
+    },
+    "fos.auth_enc.ok": {
+        "it": "Server LDAP/RADIUS con trasporto cifrato.",
+        "en": "LDAP/RADIUS servers on encrypted transport.",
+    },
+    "fos.ntp_auth.no_section": {
+        "it": "Sezione «config system ntp» assente: impossibile valutare "
+              "l'autenticazione NTP.",
+        "en": "«config system ntp» section absent: NTP authentication cannot "
+              "be assessed.",
+    },
+    "fos.ntp_auth.fortiguard": {
+        "it": "Nessun server NTP personalizzato: si usa FortiGuard.",
+        "en": "No custom NTP server: FortiGuard is used.",
+    },
+    "fos.ntp_auth.missing": {
+        "it": "{count} server NTP senza autenticazione: un orario falsificato "
+              "altera log e validita' dei certificati.",
+        "en": "{count} NTP server(s) without authentication: a forged time "
+              "skews logs and certificate validity.",
+    },
+    "fos.ntp_auth.ok": {
+        "it": "Server NTP autenticati.",
+        "en": "NTP servers authenticated.",
+    },
+    "fos.ospf_auth.not_used": {
+        "it": "OSPF non configurato.",
+        "en": "OSPF not configured.",
+    },
+    "fos.ospf_auth.weak": {
+        "it": "{count} aree/interfacce OSPF senza autenticazione MD5.",
+        "en": "{count} OSPF area(s)/interface(s) without MD5 authentication.",
+    },
+    "fos.ospf_auth.none": {
+        "it": "OSPF attivo senza alcuna autenticazione: un router estraneo "
+              "puo' iniettare rotte.",
+        "en": "OSPF active with no authentication: a rogue router can inject "
+              "routes.",
+    },
+    "fos.ospf_auth.ok": {
+        "it": "OSPF autenticato con MD5.",
+        "en": "OSPF authenticated with MD5.",
+    },
+    "fos.remote_log.none": {
+        "it": "Nessun log remoto (FortiAnalyzer, syslog o FortiCloud): i log "
+              "restano solo sull'apparato.",
+        "en": "No remote logging (FortiAnalyzer, syslog or FortiCloud): logs "
+              "stay on the unit only.",
+    },
+    "fos.remote_log.ok": {
+        "it": "Log inoltrati verso {target}.",
+        "en": "Logs forwarded to {target}.",
+    },
+    "fos.certs.no_section": {
+        "it": "Sezione «config system global» assente: impossibile valutare i "
+              "certificati.",
+        "en": "«config system global» section absent: certificates cannot be "
+              "assessed.",
+    },
+    "fos.certs.factory": {
+        "it": "{count} servizi con certificato di fabbrica o autofirmato: i "
+              "client non possono verificare l'apparato.",
+        "en": "{count} service(s) on a factory or self-signed certificate: "
+              "clients cannot verify the unit.",
+    },
+    "fos.certs.ok": {
+        "it": "GUI e SSL-VPN con certificato dedicato.",
+        "en": "GUI and SSL-VPN on a dedicated certificate.",
+    },
+    "fos.any_intf.found": {
+        "it": "{count} riferimenti all'interfaccia «any» in policy che "
+              "accettano.",
+        "en": "{count} reference(s) to the «any» interface in accept "
+              "policies.",
+    },
+    "fos.any_intf.ok": {
+        "it": "Nessuna policy che accetta usa l'interfaccia «any».",
+        "en": "No accept policy uses the «any» interface.",
+    },
+    "fos.policy_names.bad": {
+        "it": "{count} policy senza nome o con nome duplicato.",
+        "en": "{count} polic(ies) without a name or with a duplicate name.",
+    },
+    "fos.policy_names.ok": {
+        "it": "Ogni policy ha un nome univoco.",
+        "en": "Every policy has a unique name.",
+    },
+    "fos.match_vip.disabled": {
+        "it": "{count} policy deny con «match-vip disable»: il traffico verso "
+              "un VIP le scavalca.",
+        "en": "{count} deny polic(ies) with «match-vip disable»: traffic to a "
+              "VIP bypasses them.",
+    },
+    "fos.match_vip.ok": {
+        "it": "Nessuna policy deny scavalcabile tramite VIP.",
+        "en": "No deny policy can be bypassed through a VIP.",
+    },
     "fos.sslvpn.no_section": {
         "it": "Sezione «config vpn ssl settings» assente: SSL-VPN non "
               "configurata.",

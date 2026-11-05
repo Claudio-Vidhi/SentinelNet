@@ -891,3 +891,326 @@ def check_log_local_disk(cfg: ParsedConfig) -> RuleOutcome:
         [_ev1(status, "log disk setting") if status is not None
          else absent("ev.no_directive", "log disk setting",
                      what="set status enable")])
+
+
+# =============================================================================
+# Fortinet FortiOS 7.6 hardening (vendor best practices, docs.fortinet.com)
+#
+# CIS has no FortiOS 7.6 benchmark yet: these checks cover what Fortinet's own
+# 7.6 hardening guide adds on top of the 7.4 CIS set. Backups list only values
+# that differ from the factory default, so an absent setting means "default".
+# =============================================================================
+
+# Fortinet 7.6 hardening: strongest Diffie-Hellman group. Factory default 2048.
+_MIN_DH_PARAMS = 8192
+
+
+def check_dh_params(cfg: ParsedConfig) -> RuleOutcome:
+    """'set dh-params 8192' in system global."""
+    rec = setting(cfg, "system global", "dh-params")
+    if rec is None:
+        if not section_present(cfg, "system global"):
+            return RuleOutcome(UNKNOWN, "fos.dh_params.no_section")
+        return RuleOutcome(WARN, "fos.dh_params.not_set",
+                           [absent("ev.not_set_default_value",
+                                   _ctx("system global"),
+                                   what="dh-params", value=2048)])
+    val = _int_value(rec)
+    if val is not None and val >= _MIN_DH_PARAMS:
+        return RuleOutcome(PASS, "fos.dh_params.ok", (), {"value": val})
+    return RuleOutcome(WARN, "fos.dh_params.weak", [_ev1(rec, "system global")],
+                       {"value": val, "min": _MIN_DH_PARAMS})
+
+
+def check_private_data_encryption(cfg: ParsedConfig) -> RuleOutcome:
+    """'set private-data-encryption enable' (factory default disable, so
+    an absent setting is the violation)."""
+    return _flag(cfg, "system global", "private-data-encryption", "enable",
+                 "fos.private_data", missing=FAIL)
+
+
+def check_admin_host(cfg: ParsedConfig) -> RuleOutcome:
+    """With the HTTP-to-HTTPS redirect on, 'admin-host' must be set, or the
+    redirect trusts the Host header the client sends."""
+    if not section_present(cfg, "system global"):
+        return RuleOutcome(UNKNOWN, "fos.admin_host.no_section")
+    redirect = setting(cfg, "system global", "admin-https-redirect")
+    if redirect is not None and redirect.values \
+            and redirect.values[0].lower() == "disable":
+        return RuleOutcome(PASS, "fos.admin_host.no_redirect")
+    rec = setting(cfg, "system global", "admin-host")
+    if rec is not None and rec.values:
+        return RuleOutcome(PASS, "fos.admin_host.ok")
+    return RuleOutcome(WARN, "fos.admin_host.missing",
+                       [absent("ev.no_directive", _ctx("system global"),
+                               what="set admin-host <hostname>")])
+
+
+def check_admin_password_hash(cfg: ParsedConfig) -> RuleOutcome:
+    """Admin passwords still stored as SHA256 ('SH2') instead of PBKDF2
+    ('PB2', default from 7.6.1). The evidence names the account, never the
+    line: quoting a hash in a delivered report would leak it."""
+    admins = section_entries(cfg, "system admin")
+    if not admins:
+        return RuleOutcome(UNKNOWN, "fos.pw_hash.no_section")
+    ev: List[Evidence] = []
+    for name in sorted(admins):
+        for r in admins[name]:
+            if r.key == "password" and any(v.upper().startswith("SH2")
+                                           for v in r.values):
+                ev.append(Evidence(r.line, "", _ctx("system admin", name),
+                                   message="ev.legacy_password_hash"))
+                break
+    if ev:
+        return RuleOutcome(WARN, "fos.pw_hash.legacy", ev, {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.pw_hash.ok")
+
+
+def check_sslvpn_tunnel_mode(cfg: ParsedConfig) -> RuleOutcome:
+    """SSL-VPN tunnel mode is no longer supported from FortiOS 7.6.3:
+    Fortinet points to IPsec. SSL-VPN only listens with a source-interface."""
+    if not section_present(cfg, "vpn ssl settings"):
+        return RuleOutcome(UNKNOWN, "fos.sslvpn.no_section")
+    status = setting(cfg, "vpn ssl settings", "status")
+    listening = setting(cfg, "vpn ssl settings", "source-interface")
+    if (status is not None and status.values
+            and status.values[0].lower() == "disable") \
+            or listening is None or not listening.values:
+        return RuleOutcome(PASS, "fos.sslvpn_tunnel.off")
+    ev = [_ev1(r, "vpn ssl web portal", name)
+          for name, recs in sorted(section_entries(cfg,
+                                                   "vpn ssl web portal").items())
+          for r in recs
+          if r.key == "tunnel-mode" and r.values
+          and r.values[0].lower() == "enable"]
+    if ev:
+        return RuleOutcome(WARN, "fos.sslvpn_tunnel.in_use", ev,
+                           {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.sslvpn_tunnel.ok")
+
+
+def check_dos_policy(cfg: ParsedConfig) -> RuleOutcome:
+    """At least one DoS policy (anomaly thresholds on the WAN)."""
+    entries = (section_entries(cfg, "firewall DoS-policy")
+               or section_entries(cfg, "firewall dos-policy"))
+    if entries:
+        return RuleOutcome(PASS, "fos.dos.ok", (), {"count": len(entries)})
+    return RuleOutcome(WARN, "fos.dos.none",
+                       [absent("ev.no_block", "firewall DoS-policy",
+                               what="config firewall DoS-policy")])
+
+
+# --- FortiOS 7.6 Best Practices guide: further checks -----------------------
+
+_ADMIN_SERVICES = {"https", "ssh", "http", "telnet"}
+
+
+def check_admin_access_on_wan(cfg: ParsedConfig) -> RuleOutcome:
+    """Administrative services enabled on a WAN interface."""
+    ifaces = section_entries(cfg, "system interface")
+    if not ifaces:
+        return RuleOutcome(UNKNOWN, "fos.wan_admin.no_section")
+    ev = [_ev1(r, "system interface", name)
+          for name in sorted(wan_interfaces(cfg))
+          for r in ifaces.get(name, [])
+          if r.key == "allowaccess"
+          and {v.lower() for v in r.values} & _ADMIN_SERVICES]
+    if ev:
+        return RuleOutcome(FAIL, "fos.wan_admin.found", ev, {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.wan_admin.ok")
+
+
+def check_admin_mfa(cfg: ParsedConfig) -> RuleOutcome:
+    """Local admins without 'two-factor'. Remote-authenticated admins are
+    left out: their MFA lives on the server, not in this file."""
+    admins = section_entries(cfg, "system admin")
+    if not admins:
+        return RuleOutcome(UNKNOWN, "fos.mfa.no_section")
+    ev: List[Evidence] = []
+    for name in sorted(admins):
+        vals = _policy_values(admins[name])
+        if "enable" in vals.get("remote-auth", []) \
+                or "enable" in vals.get("wildcard", []):
+            continue
+        if vals.get("two-factor", ["disable"])[0] == "disable":
+            ev.append(absent("ev.no_directive", _ctx("system admin", name),
+                             what="set two-factor <fortitoken|email|sms>"))
+    if ev:
+        return RuleOutcome(WARN, "fos.mfa.missing", ev, {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.mfa.ok")
+
+
+def check_auth_server_encryption(cfg: ParsedConfig) -> RuleOutcome:
+    """LDAP without LDAPS/STARTTLS, RADIUS without RADSEC (TLS). Absent
+    keys mean the cleartext factory default."""
+    ldap = section_entries(cfg, "user ldap")
+    radius = section_entries(cfg, "user radius")
+    if not ldap and not radius:
+        return RuleOutcome(UNKNOWN, "fos.auth_enc.none")
+    ev: List[Evidence] = []
+    for section, servers, key, good, want in (
+            ("user ldap", ldap, "secure", {"ldaps", "starttls"},
+             "set secure ldaps"),
+            ("user radius", radius, "transport-protocol", {"tls"},
+             "set transport-protocol tls")):
+        for name in sorted(servers):
+            rec = next((r for r in servers[name] if r.key == key), None)
+            if rec is None:
+                ev.append(absent("ev.no_directive", _ctx(section, name),
+                                 what=want))
+            elif not rec.values or rec.values[0].lower() not in good:
+                ev.append(_ev1(rec, section, name))
+    if ev:
+        return RuleOutcome(WARN, "fos.auth_enc.plaintext", ev,
+                           {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.auth_enc.ok")
+
+
+def check_ntp_auth(cfg: ParsedConfig) -> RuleOutcome:
+    """Custom NTP servers without authentication. FortiGuard NTP (the
+    default type) is not configurable here, so it is not assessed."""
+    if not section_present(cfg, "system ntp"):
+        return RuleOutcome(UNKNOWN, "fos.ntp_auth.no_section")
+    servers: Dict[str, List[ConfigRecord]] = {}
+    for path in cfg.sections:
+        if len(path) == 3 and path[:2] == ("system ntp", "ntpserver"):
+            servers.setdefault(path[2], [])
+    for r in _records_under(cfg, "system ntp", "ntpserver"):
+        if len(r.path) > 2:
+            servers.setdefault(r.path[2], []).append(r)
+    if not servers:
+        return RuleOutcome(UNKNOWN, "fos.ntp_auth.fortiguard")
+    ev = [absent("ev.no_directive", _ctx("system ntp", "ntpserver", name),
+                 what="set authentication enable")
+          for name in sorted(servers)
+          if "enable" not in _policy_values(servers[name]).get(
+              "authentication", [])]
+    if ev:
+        return RuleOutcome(WARN, "fos.ntp_auth.missing", ev,
+                           {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.ntp_auth.ok")
+
+
+_OSPF_GOOD_AUTH = {"md5", "message-digest"}
+
+
+def check_ospf_auth(cfg: ParsedConfig) -> RuleOutcome:
+    """OSPF in use (at least one area) without MD5 authentication on the
+    areas or the interfaces."""
+    if not any(len(p) > 2 and p[:2] == ("router ospf", "area")
+               for p in cfg.sections):
+        return RuleOutcome(UNKNOWN, "fos.ospf_auth.not_used")
+    auth = [r for r in _records_under(cfg, "router ospf")
+            if r.key == "authentication"]
+    weak = [_ev1(r, *r.path) for r in auth
+            if not r.values or r.values[0].lower() not in _OSPF_GOOD_AUTH]
+    if weak:
+        return RuleOutcome(WARN, "fos.ospf_auth.weak", weak,
+                           {"count": len(weak)})
+    if not auth:
+        return RuleOutcome(WARN, "fos.ospf_auth.none",
+                           [absent("ev.no_directive", "router ospf",
+                                   what="set authentication message-digest")])
+    return RuleOutcome(PASS, "fos.ospf_auth.ok")
+
+
+_LOG_TARGETS = ("log fortianalyzer setting", "log syslogd setting",
+                "log fortiguard setting")
+
+
+def check_remote_logging(cfg: ParsedConfig) -> RuleOutcome:
+    """Logs leave the unit: FortiAnalyzer, syslog or FortiCloud, any one.
+
+    ABSENCE AS VIOLATION: with none of the three enabled, no log survives
+    the unit itself."""
+    for section in _LOG_TARGETS:
+        rec = setting(cfg, section, "status")
+        if rec is not None and rec.values and rec.values[0].lower() == "enable":
+            return RuleOutcome(PASS, "fos.remote_log.ok", (),
+                               {"target": section.split()[1]})
+    return RuleOutcome(FAIL, "fos.remote_log.none",
+                       [absent("ev.no_directive", "log fortianalyzer setting",
+                               what="set status enable")])
+
+
+_FACTORY_CERTS = {"self-sign", "fortinet_factory", "fortinet_gui_server",
+                  "fortinet_ssl"}
+
+
+def check_factory_certificates(cfg: ParsedConfig) -> RuleOutcome:
+    """Admin GUI (and the listening SSL-VPN) still on a factory or
+    self-signed certificate. Absent means the factory default."""
+    if not section_present(cfg, "system global"):
+        return RuleOutcome(UNKNOWN, "fos.certs.no_section")
+    ev: List[Evidence] = []
+    gui = setting(cfg, "system global", "admin-server-cert")
+    if gui is None:
+        ev.append(absent("ev.not_set_default_value", "system global",
+                         what="admin-server-cert", value="self-sign"))
+    elif not gui.values or gui.values[0].lower() in _FACTORY_CERTS:
+        ev.append(_ev1(gui, "system global"))
+    listening = setting(cfg, "vpn ssl settings", "source-interface")
+    if listening is not None and listening.values:
+        vpn = setting(cfg, "vpn ssl settings", "servercert")
+        if vpn is None:
+            ev.append(absent("ev.not_set_default_value", "vpn ssl settings",
+                             what="servercert", value="Fortinet_Factory"))
+        elif not vpn.values or vpn.values[0].lower() in _FACTORY_CERTS:
+            ev.append(_ev1(vpn, "vpn ssl settings"))
+    if ev:
+        return RuleOutcome(WARN, "fos.certs.factory", ev, {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.certs.ok")
+
+
+def check_policy_any_interface(cfg: ParsedConfig) -> RuleOutcome:
+    """Accept policies bound to the 'any' interface."""
+    if not section_entries(cfg, "firewall policy"):
+        return RuleOutcome(UNKNOWN, "fos.policy.no_section")
+    ev = [_ev1(r, "firewall policy", pid)
+          for pid, recs in _accept_policies(cfg) for r in recs
+          if r.key in ("srcintf", "dstintf")
+          and "any" in {v.lower() for v in r.values}]
+    if ev:
+        return RuleOutcome(WARN, "fos.any_intf.found", ev, {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.any_intf.ok")
+
+
+def check_policy_names(cfg: ParsedConfig) -> RuleOutcome:
+    """Every policy has a name, and no two share one."""
+    policies = section_entries(cfg, "firewall policy")
+    if not policies:
+        return RuleOutcome(UNKNOWN, "fos.policy.no_section")
+    seen: Set[str] = set()
+    ev: List[Evidence] = []
+    for pid in sorted(policies, key=lambda k: (len(k), k)):
+        rec = next((r for r in policies[pid] if r.key == "name"), None)
+        if rec is None or not rec.values:
+            ev.append(absent("ev.no_directive", _ctx("firewall policy", pid),
+                             what="set name <nome>"))
+            continue
+        name = rec.values[0].lower()
+        if name in seen:
+            ev.append(_ev1(rec, "firewall policy", pid))
+        seen.add(name)
+    if ev:
+        return RuleOutcome(WARN, "fos.policy_names.bad", ev,
+                           {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.policy_names.ok")
+
+
+def check_deny_match_vip(cfg: ParsedConfig) -> RuleOutcome:
+    """Deny policies with 'match-vip disable': traffic to a VIP skips them.
+    The default is enable on deny policies since 7.2.4."""
+    policies = section_entries(cfg, "firewall policy")
+    if not policies:
+        return RuleOutcome(UNKNOWN, "fos.policy.no_section")
+    ev = [_ev1(r, "firewall policy", pid)
+          for pid in sorted(policies, key=lambda k: (len(k), k))
+          if "accept" not in _policy_values(policies[pid]).get("action", [])
+          for r in policies[pid]
+          if r.key == "match-vip" and r.values
+          and r.values[0].lower() == "disable"]
+    if ev:
+        return RuleOutcome(WARN, "fos.match_vip.disabled", ev,
+                           {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.match_vip.ok")
