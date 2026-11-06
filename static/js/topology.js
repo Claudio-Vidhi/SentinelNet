@@ -1703,7 +1703,13 @@
         } else if (isMinimal) {
             // A saved layout whose boxes overlap (saved by an older build under
             // the ladder, or boxes grown since) is laid out again.
-            networkInstance.once('afterDrawing', () => { if (schemaBoxesOverlap()) packSchemaRows(); });
+            // A few boxes grown into a neighbour (wider port labels, a taller
+            // AP column) are only pushed apart: a full tidy drops every manual move.
+            networkInstance.once('afterDrawing', () => {
+                const over = schemaBoxesOverlap();
+                if (over.length > networkInstance.body.nodeIndices.length / 2) packSchemaRows();
+                else if (over.length) { resolveNodeOverlaps(over); saveSchemaPositions(); }
+            });
         }
         if (isMinimal && schemaPlaceColumns) {
             schemaPlaceColumns = false;
@@ -1953,6 +1959,9 @@
                 [[b.from, mm.local, b.to], [b.to, mm.remote, b.from]].forEach(([id, port, other]) => {
                     const f = fact(id, port);
                     if (!f || f.mode !== 'access') return;
+                    // An endpoint on the port is the norm, whatever the levels say:
+                    // an AP reached by a shorter path sits above its own switch.
+                    if (GROUPABLE_TYPES.includes(typeOf(other))) return;
                     const behind = levelOf(other) < levelOf(id) ? id : other;
                     if (typeOf(behind) !== 'switch') return;
                     ports.add(id + '\u0000' + port);
@@ -4551,9 +4560,11 @@
     // Schema positions per site, in the browser: {"<site>": {"<id>": [x, y]}}.
     // Same persistence as the hierarchy levels; "Riordina mappa" rewrites them.
     // ponytail: O(n²) over the boxes, fine for a site; a sweep if maps reach thousands.
+    // Ids of the boxes overlapping another one.
     function schemaBoxesOverlap() {
-        const bb = networkInstance.body.nodeIndices.map(id => networkInstance.getBoundingBox(id)).filter(Boolean);
-        return bb.some((a, i) => bb.some((b, k) => k > i && a.left < b.right - 2 && b.left < a.right - 2 && a.top < b.bottom - 2 && b.top < a.bottom - 2));
+        const ids = networkInstance.body.nodeIndices, bb = ids.map(id => networkInstance.getBoundingBox(id));
+        const hit = (a, b) => a && b && a.left < b.right - 2 && b.left < a.right - 2 && a.top < b.bottom - 2 && b.top < a.bottom - 2;
+        return ids.filter((id, i) => bb.some((b, k) => k !== i && hit(bb[i], b)));
     }
     function loadSchemaPositions(group) {
         try {
@@ -6142,10 +6153,11 @@
                     // Each AP has its own cable from the switch's right edge, at
                     // its own height: the switch is as tall as the column.
                     const cy = lb.map(x => (x.top + x.bottom) / 2);
-                    const color = linkColor('link');
-                    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 1.4;
                     ls.forEach((l, k) => {
                         const b = spineB.find(x => x.from === l || x.to === l);
+                        // Medium colours as every other cable: the legend counts these too.
+                        const cs = cableStyle(b, 1.4) || { color: linkColor('link'), lw: 1.4 };
+                        ctx.strokeStyle = cs.color; ctx.fillStyle = cs.color; ctx.lineWidth = cs.lw;
                         const y = Math.min(Math.max(cy[k], pb.top + 6), pb.bottom - 6);
                         ctx.globalAlpha = !visioConnectorSink && schemaDimmed(b, pillKey(b), hoverBundleKey, schemaFocusId) ? 0.18 : 1;
                         ctx.beginPath(); ctx.moveTo(pb.right, y); ctx.lineTo(lb[k].left, cy[k]); ctx.stroke();
@@ -6154,6 +6166,7 @@
                         const m = b.members[0] || {}, port = b.from === p ? m.local : m.remote;
                         if (port && (visioConnectorSink || schemaPortLabelVisible(labelMode, b, schemaFocusId))) {
                             ctx.textAlign = 'right';
+                            ctx.fillStyle = linkColor('link');
                             fillPortText(ctx, port, pb.right - 9, y + 4, accessPort(p, port));
                         }
                     });

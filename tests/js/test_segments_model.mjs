@@ -333,7 +333,7 @@ assert.equal(proposeSegments(nodes, clean, null, {}).length, 1);
 // Uplinks that are not trunks, and the project cable palette.
 {
     const order = src.match(/^ {4}const SPEED_ORDER = .*$/m)[0];
-    const { accessUplinks, cableKey, CABLE_PALETTE } = new Function([order, extract('const CABLE_PALETTE ='),
+    const { accessUplinks, cableKey, CABLE_PALETTE } = new Function([order, src.match(/const GROUPABLE_TYPES = .*;/)[0],extract('const CABLE_PALETTE ='),
         extract('function accessUplinks('), extract('function cableKey(')].join('\n') + '\nreturn { accessUplinks, cableKey, CABLE_PALETTE };')();
     const facts = {
         core: { 'Gi1/0/1': { mode: 'access' }, 'Gi1/0/2': { mode: 'trunk' }, 'Gi1/0/3': { mode: 'access' } },
@@ -351,6 +351,9 @@ assert.equal(proposeSegments(nodes, clean, null, {}).length, 1);
     ], id => type[id], id => level[id], fact);
     assert.deepEqual([...r.nodes].sort(), ['sw1', 'sw2']);
     assert.deepEqual([...r.ports].sort(), ['core\u0000Gi1/0/1', 'sw2\u0000Gi0/1']);
+    // An AP placed above its own switch (shorter path, manual level): still normal.
+    const up = accessUplinks([B('sw2', 'ap1', 'Gi0/1', 'Gi0')], id => type[id], id => ({ sw2: 2, ap1: 1 })[id], fact);
+    assert.equal(up.nodes.size + up.ports.size, 0);
 
     const f2 = {
         a: { 'Te1/1/1': { medium: 'mm', speed: '10G' }, 'Gi1/0/1': { medium: 'copper', speed: '1G' }, 'Te1/1/2': { medium: 'dac', speed: '10G' } },
