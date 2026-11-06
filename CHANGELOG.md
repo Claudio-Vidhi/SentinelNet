@@ -10,6 +10,18 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Schema, uplink in access**: le porte di un access point non vengono più
+  segnalate come uplink non trunk (switch rosso, porta nera) quando l'AP
+  finisce a un livello sopra il suo switch.
+- **Schema, colore cavi**: in modalità Access point «Colonna» i cavi degli AP
+  prendono il colore di mezzo e velocità, come gli altri; prima erano grigi
+  ma la legenda li contava.
+- **Schema, spostamenti manuali**: riaprendo la mappa o cambiando un
+  controllo, se qualche riquadro si sovrappone vengono separati solo quelli,
+  invece di riordinare tutta la sede.
+
 ## [0.64.1] - 2026-11-05
 
 ### Added
