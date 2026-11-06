@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.64.2] - 2026-11-06
+
 ### Fixed
 
 - **Schema, uplink in access**: le porte di un access point non vengono più
