@@ -3,27 +3,20 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Router AI. Estratto da app_server.py (fase 6.6)."""
 
-import json
 import uuid
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
 from routers.deps import require_tab
 from pydantic import BaseModel
 
-from core import db
 from core.app_settings import get_app_settings, save_app_settings
 from security import crypto_vault
 from security.security_manager import log_audit
-from routers.deps import get_current_user, require_admin, require_unscoped_admin, user_group_scope, assert_device_allowed, assert_group_allowed
-from routers.fortigate import _fgt_device
+from routers.deps import get_current_user, require_admin, require_unscoped_admin, assert_device_allowed, assert_group_allowed
 from services import inventory_manager
-from core import core_engine
-from services import fortigate_service
 from ai import ai_assistant
 from ai import config_analyzer
-from collectors import mac_history
-from services import probe_manager
 
 _AI_PROVIDERS = {"anthropic", "openai", "gemini", "ollama"}
 
@@ -52,28 +45,6 @@ class AiProfileUpdateSchema(BaseModel):
     rate_limit_rpm: Optional[int] = None
     allow_unredacted: Optional[bool] = None
     context_budget_chars: Optional[int] = None
-
-class AiChatMessage(BaseModel):
-    role: str
-    content: str
-
-class FlowKeySchema(BaseModel):
-    """Identificatori di un flusso selezionato (11.3). SOLO identificatori:
-    byte/pacchetti NON sono accettati dal client — il server li ri-deriva dal DB."""
-    src_ip: str
-    dst_ip: str
-    protocol: int
-    dst_port: Optional[int] = None
-
-class AiChatSchema(BaseModel):
-    messages: List[AiChatMessage]
-    attach_inventory: bool = False   # allega un riepilogo dell'inventario dispositivi
-    attach_device_ip: Optional[str] = None  # allega la running-config di un dispositivo
-    attach_tenant: Optional[str] = None  # allega il contesto completo di un tenant/sede (gruppo)
-    attach_fortigate_ip: Optional[str] = None  # allega la config completa LIVE di un FortiGate (API/SSH)
-    attach_top_flows: bool = False   # allega il riassunto dei top flussi (observability, scoped)
-    attach_flow_keys: Optional[List[FlowKeySchema]] = None  # 11.3: analisi delle sole righe flusso selezionate (max 20)
-    attach_device_ips: List[str] = []  # multi-selezione: running-config di più dispositivi del tenant
 
 def _mask_ai_profile(p: dict) -> dict:
     """Rappresentazione di un profilo AI sicura da esporre via API (mai la
@@ -158,22 +129,6 @@ def chat_with_active_profile(messages):
         raise HTTPException(status_code=502, detail=str(e))
     return reply or "", profile
 
-def _device_inventory_summary(current_user) -> str:
-    """Riepilogo testuale sintetico dell'inventario, scopato per sede utente."""
-    scope = user_group_scope(current_user)
-    devices = inventory_manager.get_all_devices()
-    if scope is not None:
-        devices = [d for d in devices if d.get('Group', '') in scope]
-    lines = [f"Inventario dispositivi ({len(devices)} totali):"]
-    for d in devices[:200]:  # limite di sicurezza per non gonfiare il contesto
-        lines.append(
-            f"- {d.get('IP', '?')} | {d.get('Hostname', '') or '(senza hostname)'} | "
-            f"vendor={d.get('Vendor', '?')} | sede={d.get('Group', '')}"
-        )
-    if len(devices) > 200:
-        lines.append(f"... e altri {len(devices) - 200} dispositivi (troncato).")
-    return "\n".join(lines)
-
 def _device_running_config_context(ip: str, current_user) -> str:
     """Testo della running-config più recente per un dispositivo (raw), con
     verifica di scoping per sede prima di restituirlo."""
@@ -190,60 +145,6 @@ def _device_running_config_context(ip: str, current_user) -> str:
         raise HTTPException(status_code=500, detail=f"Impossibile leggere il backup di {ip}.")
     return f"Running-config di {ip}:\n\n{config_analyzer.running_config(content)}"
 
-def _fortigate_live_context(ip: str, current_user) -> str:
-    """Contesto AI: configurazione completa LIVE di un FortiGate (API o SSH)
-    più stato di sistema, per domande su policy, NAT, VPN, interfacce.
-    Best-effort: se il FortiGate non risponde si riporta l'errore nel blocco."""
-    from routers.fortigate import _fgt_device
-    device = _fgt_device(ip, current_user)
-    lines = [f"## FortiGate {ip} — dati live"]
-    try:
-        st = fortigate_service.get_system_status(device)
-        lines.append(f"Stato sistema (fonte {st['source']}):\n{json.dumps(st['data'], ensure_ascii=False)[:4000]}")
-    except Exception as e:
-        lines.append(f"Stato sistema non disponibile: {e}")
-    try:
-        cfg = fortigate_service.get_full_config(device)
-        text = cfg["data"] if isinstance(cfg["data"], str) else json.dumps(cfg["data"], ensure_ascii=False)
-        if len(text) > 120_000:
-            text = text[:120_000] + "\n... [config troncata]"
-        lines.append(f"Configurazione completa (fonte {cfg['source']}):\n{text}")
-    except Exception as e:
-        lines.append(f"Configurazione live non disponibile: {e}")
-    return "\n\n".join(lines)
-
-def _tenant_context_block(tenant: str, current_user) -> str:
-    """Raccoglie TUTTE le informazioni rilevanti per un singolo tenant/sede
-    (gruppo) — dispositivi, config del gruppo, MAC history, config sito VPN —
-    e le formatta in un blocco di contesto compatto. Lo scope è verificato
-    contro l'utente corrente e strettamente limitato al tenant richiesto:
-    ogni sorgente dati viene filtrata per quel gruppo prima di essere passata
-    al formatter di ai_assistant."""
-    assert_group_allowed(current_user, tenant)
-    groups = inventory_manager.get_all_groups()
-    if tenant not in groups:
-        raise HTTPException(status_code=404, detail=f"Sede/tenant '{tenant}' non trovata.")
-
-    devices = [d for d in inventory_manager.get_all_devices() if d.get('Group', '') == tenant]
-
-    mac_stats = mac_history.stats(tenants=[tenant])
-    mac_recent = mac_history.search(tenants=[tenant], limit=15)
-
-    # Le sedi VPN (probe_manager) sono un concetto distinto dai gruppi/tenant ma
-    # sono referenziate dai dispositivi tramite il campo 'Probe': recuperiamo la
-    # config di ognuna delle sedi VPN effettivamente usate da questo tenant.
-    probe_ids = sorted({d.get('Probe', 'central') for d in devices})
-    probes = [s for s in (probe_manager.get_probe(sid) for sid in probe_ids) if s]
-
-    return ai_assistant.build_tenant_context(
-        tenant,
-        devices=devices,
-        group_info=groups.get(tenant),
-        probe=probes,
-        mac_stats=mac_stats,
-        mac_recent=mac_recent,
-    )
-
 def _assert_unredacted_allowed(allow_unredacted: bool, provider: str, base_url: str):
     """Rifiuta il flag 'allow_unredacted' su provider NON locali: le config
     non redatte possono raggiungere solo LLM locali fidati (fail-closed)."""
@@ -258,14 +159,14 @@ def _assert_unredacted_allowed(allow_unredacted: bool, provider: str, base_url: 
                "(provider 'ollama' o endpoint OpenAI-compatible su host locale/privato)."
     )
 
-@router.get("/api/ai/profiles", dependencies=[Depends(require_tab("tab-ai", "tab-flows", "tab-provisioner"))])
+@router.get("/api/ai/profiles", dependencies=[Depends(require_tab("tab-settings", "tab-provisioner"))])
 def list_ai_profiles(current_user = Depends(require_admin)):
     """Elenca i profili di connessione AI salvati (chiavi API mascherate) e
-    l'id del profilo attualmente attivo (usato da /api/ai/chat)."""
+    l'id del profilo attualmente attivo."""
     profiles, active = _get_ai_profiles_raw()
     return {"profiles": [_mask_ai_profile(p) for p in profiles], "active_profile": active}
 
-@router.post("/api/ai/profiles", dependencies=[Depends(require_tab("tab-ai"))])
+@router.post("/api/ai/profiles", dependencies=[Depends(require_tab("tab-settings"))])
 def create_ai_profile(payload: AiProfileSchema, current_user = Depends(require_unscoped_admin)):
     provider = payload.provider.strip().lower()
     if provider not in _AI_PROVIDERS:
@@ -292,7 +193,7 @@ def create_ai_profile(payload: AiProfileSchema, current_user = Depends(require_u
     log_audit(f"Profilo AI '{new_profile['name']}' creato (provider='{provider}') dall'utente '{current_user.get('sub')}'.")
     return _mask_ai_profile(new_profile)
 
-@router.put("/api/ai/profiles/{profile_id}", dependencies=[Depends(require_tab("tab-ai"))])
+@router.put("/api/ai/profiles/{profile_id}", dependencies=[Depends(require_tab("tab-settings"))])
 def update_ai_profile(profile_id: str, payload: AiProfileUpdateSchema, current_user = Depends(require_unscoped_admin)):
     profiles, active = _get_ai_profiles_raw()
     profile = _find_ai_profile(profiles, profile_id)
@@ -328,7 +229,7 @@ def update_ai_profile(profile_id: str, payload: AiProfileUpdateSchema, current_u
     log_audit(f"Profilo AI '{profile['name']}' aggiornato dall'utente '{current_user.get('sub')}'.")
     return _mask_ai_profile(profile)
 
-@router.delete("/api/ai/profiles/{profile_id}", dependencies=[Depends(require_tab("tab-ai"))])
+@router.delete("/api/ai/profiles/{profile_id}", dependencies=[Depends(require_tab("tab-settings"))])
 def delete_ai_profile(profile_id: str, current_user = Depends(require_unscoped_admin)):
     profiles, active = _get_ai_profiles_raw()
     profile = _find_ai_profile(profiles, profile_id)
@@ -341,7 +242,7 @@ def delete_ai_profile(profile_id: str, current_user = Depends(require_unscoped_a
     log_audit(f"Profilo AI '{profile['name']}' eliminato dall'utente '{current_user.get('sub')}'.")
     return {"status": "success"}
 
-@router.post("/api/ai/profiles/{profile_id}/activate", dependencies=[Depends(require_tab("tab-ai"))])
+@router.post("/api/ai/profiles/{profile_id}/activate", dependencies=[Depends(require_tab("tab-settings"))])
 def activate_ai_profile(profile_id: str, current_user = Depends(require_unscoped_admin)):
     profiles, _active = _get_ai_profiles_raw()
     profile = _find_ai_profile(profiles, profile_id)
@@ -351,162 +252,7 @@ def activate_ai_profile(profile_id: str, current_user = Depends(require_unscoped
     log_audit(f"Profilo AI attivo impostato su '{profile['name']}' dall'utente '{current_user.get('sub')}'.")
     return {"status": "success", "active_profile": profile_id}
 
-# --- Conversazioni salvate ---------------------------------------------------
-# La chat viveva solo in memoria del browser: cambiare tab la cancellava. Le
-# conversazioni stanno su observability.db, di proprietà dell'utente che le ha
-# create: OGNI query filtra per username, non esiste un endpoint che legga
-# quelle di un altro. Le scritture usano una connessione sincrona dentro
-# ``asyncio.to_thread`` (come la transizione di stato degli incidenti): la coda
-# di ``enqueue_write`` è fire-and-forget e qui serve rileggere l'id appena
-# creato.
-
-# ponytail: tetto per utente, non retention a tempo. Una conversazione vecchia
-# resta utile, una centesima no; se qualcuno vorrà archiviarle, questo diventa
-# un parametro.
-MAX_CONVERSATIONS_PER_USER = 100
-
-
-class AiConversationSchema(BaseModel):
-    title: str = ""
-    messages: List[AiChatMessage] = []
-
-
-class AiConversationUpdateSchema(BaseModel):
-    """``None`` = non modificare. Rinominare non deve riscrivere i messaggi."""
-    title: Optional[str] = None
-    messages: Optional[List[AiChatMessage]] = None
-
-
-def _conversation_title(title: str, messages) -> str:
-    """Titolo esplicito se c'è, altrimenti l'inizio del primo messaggio utente:
-    una lista di 'Nuova conversazione' non aiuta a ritrovare niente.
-
-    Stringa vuota quando non c'è ancora niente da cui ricavarlo (conversazione
-    appena creata e ancora senza messaggi): il titolo verrà derivato al primo
-    salvataggio utile, e intanto la UI mostra il proprio segnaposto."""
-    title = (title or "").strip()
-    if title:
-        return title[:120]
-    first = next((m for m in messages if m.role == "user"), None)
-    return " ".join((first.content if first else "").split())[:60]
-
-
-@router.get("/api/ai/conversations", dependencies=[Depends(require_tab("tab-ai"))])
-async def list_ai_conversations(current_user = Depends(get_current_user)):
-    """Elenco delle conversazioni dell'utente, più recenti prima. Senza i
-    messaggi: la sidebar mostra solo i titoli."""
-    rows = await db.read(
-        "SELECT id, title, created_ts, updated_ts, "
-        "       json_array_length(messages_json) AS message_count "
-        "FROM ai_conversations WHERE username = ? "
-        "ORDER BY updated_ts DESC",
-        (current_user.get("sub"),))
-    return {"conversations": [dict(r) for r in rows]}
-
-
-@router.get("/api/ai/conversations/{conversation_id}", dependencies=[Depends(require_tab("tab-ai"))])
-async def get_ai_conversation(conversation_id: int, current_user = Depends(get_current_user)):
-    rows = await db.read(
-        "SELECT id, title, messages_json, created_ts, updated_ts "
-        "FROM ai_conversations WHERE id = ? AND username = ?",
-        (conversation_id, current_user.get("sub")))
-    if not rows:
-        raise HTTPException(status_code=404, detail="Conversazione non trovata.")
-    row = dict(rows[0])
-    row["messages"] = json.loads(row.pop("messages_json"))
-    return row
-
-
-@router.post("/api/ai/conversations", dependencies=[Depends(require_tab("tab-ai"))])
-async def create_ai_conversation(payload: AiConversationSchema,
-                                 current_user = Depends(get_current_user)):
-    import asyncio
-    import time as _time
-    user = current_user.get("sub")
-    now = int(_time.time())
-    title = _conversation_title(payload.title, payload.messages)
-    body = json.dumps([m.model_dump() for m in payload.messages], ensure_ascii=False)
-
-    def _insert():
-        conn = db.get_observability_connection()
-        try:
-            cur = conn.execute(
-                "INSERT INTO ai_conversations (username, title, messages_json, "
-                "created_ts, updated_ts) VALUES (?, ?, ?, ?, ?)",
-                (user, title, body, now, now))
-            conn.execute(
-                "DELETE FROM ai_conversations WHERE username = ? AND id NOT IN "
-                "(SELECT id FROM ai_conversations WHERE username = ? "
-                " ORDER BY updated_ts DESC LIMIT ?)",
-                (user, user, MAX_CONVERSATIONS_PER_USER))
-            conn.commit()
-            return cur.lastrowid
-        finally:
-            conn.close()
-
-    new_id = await asyncio.to_thread(_insert)
-    return {"id": new_id, "title": title, "created_ts": now, "updated_ts": now}
-
-
-@router.put("/api/ai/conversations/{conversation_id}", dependencies=[Depends(require_tab("tab-ai"))])
-async def update_ai_conversation(conversation_id: int,
-                                 payload: AiConversationUpdateSchema,
-                                 current_user = Depends(get_current_user)):
-    import asyncio
-    import time as _time
-    user = current_user.get("sub")
-    now = int(_time.time())
-    title = payload.title.strip()[:120] if payload.title is not None else None
-    body = (json.dumps([m.model_dump() for m in payload.messages], ensure_ascii=False)
-            if payload.messages is not None else None)
-    # Una conversazione creata vuota dal pulsante "+" non ha ancora un titolo:
-    # lo prende dal primo messaggio utente che arriva, ma senza mai sovrascrivere
-    # un titolo scelto a mano.
-    derived = _conversation_title("", payload.messages or [])
-
-    def _update():
-        conn = db.get_observability_connection()
-        try:
-            cur = conn.execute(
-                "UPDATE ai_conversations SET "
-                "    title = COALESCE(?, CASE WHEN title = '' THEN ? ELSE title END), "
-                "    messages_json = COALESCE(?, messages_json), "
-                "    updated_ts = ? "
-                "WHERE id = ? AND username = ?",
-                (title or None, derived, body, now, conversation_id, user))
-            conn.commit()
-            return cur.rowcount
-        finally:
-            conn.close()
-
-    if await asyncio.to_thread(_update) != 1:
-        raise HTTPException(status_code=404, detail="Conversazione non trovata.")
-    return {"status": "success", "id": conversation_id, "updated_ts": now}
-
-
-@router.delete("/api/ai/conversations/{conversation_id}", dependencies=[Depends(require_tab("tab-ai"))])
-async def delete_ai_conversation(conversation_id: int,
-                                 current_user = Depends(get_current_user)):
-    import asyncio
-    user = current_user.get("sub")
-
-    def _delete():
-        conn = db.get_observability_connection()
-        try:
-            cur = conn.execute(
-                "DELETE FROM ai_conversations WHERE id = ? AND username = ?",
-                (conversation_id, user))
-            conn.commit()
-            return cur.rowcount
-        finally:
-            conn.close()
-
-    if await asyncio.to_thread(_delete) != 1:
-        raise HTTPException(status_code=404, detail="Conversazione non trovata.")
-    return {"status": "success", "id": conversation_id}
-
-
-@router.get("/api/ai/models", dependencies=[Depends(require_tab("tab-ai"))])
+@router.get("/api/ai/models", dependencies=[Depends(require_tab("tab-settings"))])
 def list_ai_models(provider: Optional[str] = None, profile_id: Optional[str] = None,
                     current_user = Depends(require_unscoped_admin)):
     """Elenca i modelli disponibili che supportano la chat per un provider,
@@ -536,95 +282,6 @@ def list_ai_models(provider: Optional[str] = None, profile_id: Optional[str] = N
     except ai_assistant.AiAssistantError as e:
         raise HTTPException(status_code=502, detail=str(e))
     return {"provider": prov, "models": models, "default_model": ai_assistant.get_default_model(prov)}
-
-@router.post("/api/ai/chat", dependencies=[Depends(require_tab("tab-ai"))])
-def ai_chat(payload: AiChatSchema, current_user = Depends(get_current_user)):
-    profile = _get_active_ai_profile()
-    if profile is None:
-        raise HTTPException(status_code=400, detail="Nessun profilo AI configurato/attivo. Un amministratore deve crearne uno prima.")
-    provider = profile.get("provider", "")
-    api_key = crypto_vault.decrypt_password(profile.get("api_key_enc", "")) if profile.get("api_key_enc") else None
-    if provider != "ollama" and not api_key:
-        raise HTTPException(status_code=400, detail="API key non configurata per il profilo AI attivo.")
-
-    messages = [{"role": m.role, "content": m.content} for m in payload.messages]
-
-    context_blocks = []
-    if payload.attach_inventory:
-        context_blocks.append(_device_inventory_summary(current_user))
-    if payload.attach_device_ip:
-        context_blocks.append(_device_running_config_context(payload.attach_device_ip, current_user))
-    if payload.attach_device_ips:
-        # Multi-selezione: running-config di più dispositivi (scoping per-IP).
-        # Cap di sicurezza sul numero di device per non gonfiare il contesto.
-        for ip in payload.attach_device_ips[:20]:
-            if ip == payload.attach_device_ip:
-                continue  # già allegato sopra
-            context_blocks.append(_device_running_config_context(ip, current_user))
-    if payload.attach_tenant:
-        context_blocks.append(_tenant_context_block(payload.attach_tenant, current_user))
-    if payload.attach_fortigate_ip:
-        context_blocks.append(_fortigate_live_context(payload.attach_fortigate_ip, current_user))
-    if payload.attach_top_flows or payload.attach_flow_keys:
-        # Riassunto server-side (mai contesto raw assemblato dal browser),
-        # scoped per tenant; la redazione avviene nel choke-point di chat().
-        # 11.3: se sono state selezionate righe specifiche (attach_flow_keys),
-        # il contesto è vincolato a quelle tuple — ma lo scope tenant NON viene
-        # mai rilassato, e i totali byte/pacchetti sono ri-derivati dal DB
-        # (i valori del client vengono ignorati).
-        from observability.summary import top_flows_context
-        keys = None
-        if payload.attach_flow_keys:
-            if len(payload.attach_flow_keys) > 20:
-                raise HTTPException(status_code=400,
-                    detail="Troppi flussi selezionati: massimo 20 righe per analisi.")
-            keys = [k.model_dump() for k in payload.attach_flow_keys]
-        context_blocks.append(top_flows_context(user_group_scope(current_user), keys=keys))
-    instruction_blocks = []
-    if payload.attach_device_ips and current_user.get("role") in ("super_admin", "admin", "operator"):
-        # Contratto di proposta config (§10.2): il modello PROPONE, non esegue.
-        # Il browser mostra la proposta e, solo dopo conferma esplicita
-        # dell'utente, chiama /api/bulk-command (blacklist/RBAC/audit invariati).
-        # Blocco di istruzioni tenuto FUORI dal budget: non va mai troncato.
-        instruction_blocks.append(
-            "Se l'utente chiede una modifica di configurazione su uno dei "
-            "dispositivi allegati, oltre alla spiegazione emetti UN blocco "
-            "recintato cosi (JSON su una riga, device_ip tra quelli allegati):\n"
-            "```sentinelnet-config\n"
-            '{"device_ip": "<ip>", "commands": ["<riga config>", "..."], '
-            '"config_mode": true, "save_after": false}\n'
-            "```\n"
-            "Non usare il blocco per comandi show/diagnostici. Non proporre "
-            "comandi distruttivi (reload, erase, write erase, format)."
-        )
-    if context_blocks or instruction_blocks:
-        # Budget di contesto (fix 429 RESOURCE_EXHAUSTED): il contesto totale
-        # viene adattato al limite in caratteri del modello (override
-        # per-profilo con 'context_budget_chars'), privilegiando le sezioni
-        # pertinenti all'ultima domanda dell'utente.
-        budget = ai_assistant.context_char_budget(
-            provider, profile.get("model"), profile.get("context_budget_chars", 0))
-        question = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
-        context_blocks = ai_assistant.fit_context(context_blocks, budget, question=question)
-        messages = [{"role": "system", "content": "\n\n".join(context_blocks + instruction_blocks)}] + messages
-
-    try:
-        reply = ai_assistant.chat(
-            messages,
-            provider=provider,
-            model=profile.get("model") or None,
-            api_key=api_key,
-            base_url=profile.get("base_url") or None,
-            rate_limit_rpm=profile.get("rate_limit_rpm", 0),
-            allow_unredacted=bool(profile.get("allow_unredacted", False)),
-        )
-    except ai_assistant.RateLimitExceededError as e:
-        raise HTTPException(status_code=429, detail=str(e))
-    except ai_assistant.AiAssistantError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    return {"reply": reply, "provider": provider, "model": profile.get("model") or ai_assistant.get_default_model(provider),
-            "profile_name": profile.get("name", "")}
-
 
 # --- Generazione configurazione per un NUOVO switch (AI) ---------------------
 
@@ -705,11 +362,11 @@ def _tenant_common_parameters(tenant: str, current_user) -> str:
         out.extend(f"  {l}" for l in common[:120])
     return "\n".join(out)
 
-@router.post("/api/ai/generate-config", dependencies=[Depends(require_tab("tab-ai", "tab-provisioner"))])
+@router.post("/api/ai/generate-config", dependencies=[Depends(require_tab("tab-provisioner"))])
 def ai_generate_config(payload: AiGenerateConfigSchema, current_user = Depends(get_current_user)):
     """Genera con l'AI la configurazione proposta per un NUOVO switch del
     tenant: da un dispositivo template (running-config) oppure dai parametri
-    comuni dell'ambiente. Stessa autenticazione/profilo di /api/ai/chat; il
+    comuni dell'ambiente. Il
     contesto rispetta il budget caratteri del modello."""
     if payload.profile_id:
         profiles, active_id = _get_ai_profiles_raw()

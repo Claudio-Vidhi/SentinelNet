@@ -235,7 +235,7 @@ class TestRotteSmoke(unittest.TestCase):
     """Regola di .agents/AGENTS.md: una rotta nuova va colpita DAVVERO via
     TestClient — chiamare la funzione del handler non esegue i Depends e
     nasconde NameError/ImportError. 401 basta: prova che il codice gira
-    (precedente: tests/test_ai_conversations.py, stesso pattern)."""
+    (precedente: tests/test_ai_generate_config.py, stesso pattern)."""
 
     def test_le_rotte_rispondono_anche_senza_autenticazione(self):
         from fastapi.testclient import TestClient

@@ -369,7 +369,7 @@ requires a Linux host; central does not. Full deployment guide:
 
 ## MCP server — using SentinelNet from an external LLM client
 
-Besides the AI assistant built into the dashboard, SentinelNet exposes its data
+SentinelNet exposes its data
 as an **MCP server** (Model Context Protocol) over stdio. Any compatible client
 (Claude Desktop, LM Studio, Cline, …) can query the inventory, network map, MAC
 tracker and config analyzer, run CLI commands and generate day-0 configuration —

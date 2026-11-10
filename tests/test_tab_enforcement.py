@@ -87,7 +87,7 @@ class TestHomeTabAlwaysVisible(unittest.TestCase):
 # One GET TAB route per router file, with the tab that owns it. Handlers may
 # answer 404/422/400 once past the gate: only the tab 403 matters here.
 TAB_GET_ROUTES = [
-    ("/api/ai/conversations", "tab-ai"),
+    ("/api/ai/models", "tab-settings"),
     ("/api/netsec-audit/benchmarks", "tab-netsec-audit"),
     ("/api/arp/stats", "tab-endpoint"),
     ("/api/audit-checklist/templates", "tab-netsec-audit"),

@@ -125,7 +125,7 @@ refuses to start.
 
 | Table | Written by | Read by | Notes |
 |---|---|---|---|
-| `flow_aggregates` | Flow ingester (per-minute upsert) | `/top`, `/flowgraph`, `/protocol-distribution`, correlator, `summary.py` | `source` column added in v3 via idempotent ALTER; NULL means legacy rows |
+| `flow_aggregates` | Flow ingester (per-minute upsert) | `/top`, `/flowgraph`, `/protocol-distribution`, correlator | `source` column added in v3 via idempotent ALTER; NULL means legacy rows |
 | `syslog_events` | Syslog ingester | `/syslog`, **all of Flow SIEM**, correlator | `action` is the device's real verdict |
 | `correlated_events` | Correlator | `/anomalies`, "spikes" KPI | `dedup_key UNIQUE` + `INSERT OR IGNORE` |
 | `siem_suppressions` | `POST /alerts/suppress` | Exclusion in `/events` and `/facets` | PK is `syslog_events.id` |
@@ -280,19 +280,9 @@ confirm the existence of other sites' events.
 
 ### 4.8 AI integration
 
-Two paths, both with **server-side** context assembly:
-
-- no rows selected → `attach_top_flows: true` → top-N summary;
-- rows selected → `attach_flow_keys: [{src_ip, dst_ip, protocol, dst_port}]`,
-  max 20.
-
-The browser sends **identifying tuples only**: never bytes or packets. Totals are
-re-derived from the database in `top_flows_context()`
-([observability/summary.py](../observability/summary.py)), and tenant scope stays
-applied in `AND` — client-supplied keys cannot extract other tenants' rows. The
-context still passes through the redaction choke-point in `ai_assistant.chat()`.
-The UI explicitly states what is about to be sent and to which provider. See
-[ADR-0006](adr/0006-deterministic-correlation.md).
+Removed in 0.65.0 together with the in-app chat: the tab no longer sends flow
+summaries to an LLM provider. External LLM clients read flows through the MCP
+tools in §4.9.
 
 ### 4.9 MCP exposure
 

@@ -343,9 +343,6 @@
         <button class="nav-item requires-write" data-tab="tab-provisioner" role="tab" aria-controls="tab-provisioner" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabProvisioner"><i class="fa-solid fa-screwdriver-wrench"></i> Nuova configurazione</span>
         </button>
-        <button class="nav-item" data-tab="tab-ai" role="tab" aria-controls="tab-ai" aria-selected="false" tabindex="-1">
-          <span class="nav-left" data-i18n="tabAiAssistant"><i class="fa-solid fa-robot"></i> AI Assistant</span>
-        </button>
         </div>
       </div>
       <div class="nav-group" data-nav-group="admin">
@@ -2007,12 +2004,7 @@
           <span data-i18n="lblFlowsHideTelemetryShort">Escludi telemetria</span>
         </label>
         <span id="trafLastUpdate" style="font-size:12px; color:var(--text-muted);"></span>
-        <button id="btnAnalyzeFlowsAi" class="btn requires-write" style="width:auto; margin:0 0 0 auto;" data-i18n-title="titleAnalyzeFlowsAi" title="Invia un riassunto aggregato dei flussi all'assistente AI">
-          <i class="fa-solid fa-robot"></i> <span data-i18n="btnAnalyzeAi">Analizza con AI</span>
-        </button>
       </div>
-
-      <div id="flowsAiNote" style="display:none; font-size:12px; color:var(--warning, var(--lamp-warn)); margin-bottom:12px;"></div>
       <div id="trafPills" class="subtab-bar">
         <button type="button" class="ca-pill active" id="trafPill-overview" data-traf-view="overview" data-i18n="trafPillOverview">Panoramica</button>
         <button type="button" class="ca-pill" id="trafPill-flows" data-traf-view="flows" data-i18n="trafPillFlows">Flussi</button>
@@ -2356,221 +2348,6 @@
 
       <div class="panel">
         <div id="caResults"></div>
-      </div>
-    </div>
-
-    <!-- TAB: AI Assistant -->
-    <div id="tab-ai" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="page-head">
-        <div class="page-head-text">
-          <h2 data-i18n="titleAiAssistant">Assistente AI</h2>
-          <p data-i18n="descAiAssistant">Chat con un assistente AI (Anthropic Claude, OpenAI ChatGPT, Google Gemini o un LLM locale via Ollama). Puoi allegare l'inventario o la configurazione di un dispositivo come contesto.</p>
-        </div>
-      </div>
-
-      <!-- Panel: profilo attivo + configurazione provider (admin).
-           Le due <select> restano nel DOM (nascoste) e continuano a essere la
-           sorgente di verità che legge tutta la logica di ai.js: le card sono
-           una VISTA su di esse, non una seconda macchina a stati. -->
-      <div class="panel" style="margin-bottom:14px; padding:0;">
-      <details class="requires-admin" id="aiSettingsPanel" style="border:0; border-radius:0; padding:0; margin-bottom:0; background:transparent; overflow:hidden;">
-        <summary style="cursor:pointer; padding:14px 16px; font-weight:600; display:flex; align-items:center; gap:10px;">
-          <i class="fa-solid fa-sliders" style="color:var(--primary);"></i>
-          <span data-i18n="titleAiSettings">Configurazione Provider (Profili)</span>
-          <span id="aiActiveProfileBadge" class="chip" style="font-size:11px; margin-left:auto;"></span>
-        </summary>
-        <div style="padding:16px; border-top:var(--seam) solid var(--border);">
-          <div style="display:none;">
-            <select id="aiProfileSelect" aria-label="Profilo AI attivo" data-i18n-aria-label="ariaAiProfile">
-              <option value="" data-i18n="optAiNoProfile">Nessun profilo</option>
-            </select>
-            <select id="aiProfileEditSelect" aria-label="Profilo AI da modificare" data-i18n-aria-label="ariaAiProfileEdit">
-              <option value="__new__" data-i18n="optAiNewProfile">-- nuovo profilo --</option>
-            </select>
-          </div>
-          <div class="ai-profile-layout">
-            <div>
-              <div style="font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin-bottom:8px;" data-i18n="lblAiProfileList">Profili</div>
-              <div id="aiProfileCards" style="display:flex; flex-direction:column; gap:8px;"></div>
-              <button type="button" class="btn btn-secondary btn-small ai-profile-new" style="width:100%; margin-top:8px;" data-action="select-profile" data-profile-id="__new__">
-                <i class="fa-solid fa-plus"></i> <span data-i18n="optAiNewProfile">-- nuovo profilo --</span>
-              </button>
-            </div>
-            <div class="ai-profile-form" id="aiProfileForm" data-provider="">
-              <section class="ai-form-section">
-                <div class="ai-form-section-title" data-i18n="aiSecGeneral">Generale</div>
-                <div class="form-group ai-field">
-                  <label for="aiProfileName" data-i18n="lblAiProfileName">Nome profilo</label>
-                  <input id="aiProfileName" type="text" placeholder="es. Claude prod" data-i18n-placeholder="phAiProfileName">
-                </div>
-                <div class="form-group ai-field">
-                  <label for="aiProvider" id="aiProviderLbl" data-i18n="lblAiProvider">Provider</label>
-                  <!-- La select resta la sorgente di verità per ai.js; le tessere
-                       sono una vista che ne scrive il valore. -->
-                  <select id="aiProvider" style="display:none;">
-                    <option value="" data-i18n="optAiNoProvider">-- seleziona provider --</option>
-                    <option value="anthropic">Anthropic (Claude)</option>
-                    <option value="openai">OpenAI (ChatGPT)</option>
-                    <option value="gemini">Google Gemini</option>
-                    <option value="ollama">Ollama (LLM locale)</option>
-                  </select>
-                  <div class="ai-provider-tiles" role="radiogroup" aria-labelledby="aiProviderLbl">
-                    <button type="button" class="ai-provider-tile" role="radio" aria-checked="false" data-action="ai-pick-provider" data-provider="anthropic">
-                      <i class="fa-solid fa-a"></i><span class="ai-pt-name">Anthropic</span><span class="ai-pt-sub">Claude</span></button>
-                    <button type="button" class="ai-provider-tile" role="radio" aria-checked="false" data-action="ai-pick-provider" data-provider="openai">
-                      <i class="fa-solid fa-o"></i><span class="ai-pt-name">OpenAI</span><span class="ai-pt-sub">ChatGPT</span></button>
-                    <button type="button" class="ai-provider-tile" role="radio" aria-checked="false" data-action="ai-pick-provider" data-provider="gemini">
-                      <i class="fa-solid fa-gem"></i><span class="ai-pt-name">Google</span><span class="ai-pt-sub">Gemini</span></button>
-                    <button type="button" class="ai-provider-tile" role="radio" aria-checked="false" data-action="ai-pick-provider" data-provider="ollama">
-                      <i class="fa-solid fa-server"></i><span class="ai-pt-name">Ollama</span><span class="ai-pt-sub" data-i18n="lblAiLocalLlm">LLM locale (nessuna chiave)</span></button>
-                  </div>
-                </div>
-              </section>
-
-              <section class="ai-form-section">
-                <div class="ai-form-section-title" data-i18n="aiSecModel">Modello e accesso</div>
-                <div class="ai-form-grid">
-                  <div class="form-group ai-field">
-                    <label for="aiModel" data-i18n="lblAiModel">Modello</label>
-                    <div class="ai-model-row">
-                      <select id="aiModelSelect" aria-label="Modello AI" data-i18n-aria-label="ariaAiModel">
-                        <option value="" data-i18n="optAiModelCustom">-- modello personalizzato --</option>
-                      </select>
-                      <button type="button" class="btn btn-secondary btn-small" id="btnAiRefreshModels" title="Aggiorna elenco modelli" data-i18n-title="btnAiRefreshModelsTitle" aria-label="Aggiorna elenco modelli" data-i18n-aria-label="btnAiRefreshModelsTitle">
-                        <i class="fa-solid fa-rotate"></i>
-                      </button>
-                    </div>
-                    <input id="aiModel" type="text" placeholder="es. claude-3-5-sonnet-latest" data-i18n-placeholder="phAiModel">
-                    <p class="ai-hint" data-i18n="hintAiModel">Scegli dall'elenco (aggiornalo col pulsante) oppure scrivi il nome del modello.</p>
-                  </div>
-                  <div class="form-group ai-field ai-f-apikey">
-                    <label for="aiApiKey" id="aiApiKeyLabel" data-i18n="lblAiApiKey">API Key</label>
-                    <input id="aiApiKey" type="password" autocomplete="off" placeholder="•••••• (lascia vuoto per non modificare)" data-i18n-placeholder="phAiApiKey">
-                    <p class="ai-hint" data-i18n="hintAiApiKey">Non viene mai rimostrata dopo il salvataggio: lascia vuoto per tenere quella attuale.</p>
-                  </div>
-                  <div class="form-group ai-field ai-f-baseurl">
-                    <label for="aiBaseUrl" data-i18n="lblAiBaseUrl">Endpoint API</label>
-                    <input id="aiBaseUrl" type="text" placeholder="http://localhost:11434">
-                    <p class="ai-hint" data-i18n="hintAiBaseUrl">Ollama: indirizzo del server locale. OpenAI: solo per un endpoint compatibile, altrimenti lascia vuoto.</p>
-                  </div>
-                </div>
-              </section>
-
-              <section class="ai-form-section">
-                <div class="ai-form-section-title" data-i18n="aiSecLimits">Limiti e privacy</div>
-                <div class="ai-form-grid">
-                  <div class="form-group ai-field">
-                    <label for="aiRateLimitRpm" data-i18n="lblAiRateLimit">Limite richieste/min</label>
-                    <input id="aiRateLimitRpm" type="number" min="0" step="1">
-                    <p class="ai-hint" data-i18n="phAiRateLimit">0 = illimitato</p>
-                  </div>
-                  <div class="form-group ai-field">
-                    <label for="aiContextBudget" data-i18n="lblAiContextBudget">Budget contesto (caratteri)</label>
-                    <input id="aiContextBudget" type="number" min="0" step="1000">
-                    <p class="ai-hint" data-i18n="phAiContextBudget">0 = auto per modello</p>
-                  </div>
-                </div>
-                <label class="ai-setting-row" for="aiAllowUnredacted">
-                  <input type="checkbox" id="aiAllowUnredacted">
-                  <span>
-                    <span class="ai-setting-title" data-i18n="lblAiAllowUnredacted">Invia config non redatte (solo LLM locale attendibile)</span>
-                    <span class="ai-hint" data-i18n="hintAiAllowUnredacted">Password, chiavi e community SNMP partono in chiaro. Il server lo accetta solo verso Ollama o un endpoint OpenAI su rete locale.</span>
-                  </span>
-                </label>
-              </section>
-
-              <footer class="ai-form-actions">
-                <div id="aiSettingsStatus" class="ai-hint"></div>
-                <button class="btn btn-secondary" style="width:auto;" id="btnAiDeleteProfile" data-i18n="btnAiDeleteProfile">
-                  <i class="fa-solid fa-trash"></i> Elimina profilo
-                </button>
-                <button class="btn btn-primary" id="btnAiSaveSettings" style="width:auto;" data-i18n="btnAiSaveSettings">
-                  <i class="fa-solid fa-floppy-disk"></i> Salva profilo
-                </button>
-              </footer>
-            </div>
-          </div>
-        </div>
-      </details>
-      </div>
-
-
-
-      <!-- Panel: conversazione. Due colonne: elenco conversazioni salvate a
-           sinistra, thread + composer a destra. #aiChatMessages resta il
-           bersaglio di append/scroll di appendAiMessage(). -->
-      <div class="panel ai-chat-shell" style="padding:0; overflow:hidden;">
-        <!-- Deve restare un div: un elemento "aside" erediterebbe la regola
-             globale della sidebar del form (position:sticky, height:calc(100vh
-             - 40px)), diventerebbe alto quanto il viewport e sfonderebbe la
-             griglia della chat, spingendo il composer fuori dal riquadro. -->
-        <div class="ai-conv-sidebar">
-          <button class="btn btn-primary btn-small" id="btnAiNewChat" style="width:100%;" data-i18n="btnAiNewChat">
-            <i class="fa-solid fa-plus"></i> Nuova conversazione
-          </button>
-          <div class="ai-conv-heading" data-i18n="lblAiRecentChats">Conversazioni recenti</div>
-          <div id="aiConvList" class="ai-conv-list"></div>
-        </div>
-
-        <section class="ai-chat-main">
-          <header class="ai-chat-header">
-            <h3 id="aiChatTitle" data-i18n="titleAiChat">Conversazione</h3>
-            <button type="button" class="ai-icon-btn" id="btnAiRenameChat" data-i18n-title="btnAiRenameChat" title="Rinomina conversazione" aria-label="Rinomina conversazione" data-i18n-aria-label="btnAiRenameChat">
-              <i class="fa-solid fa-pen"></i>
-            </button>
-            <button type="button" class="ai-icon-btn" id="btnAiDeleteChat" data-i18n-title="btnAiDeleteChat" title="Elimina conversazione" aria-label="Elimina conversazione" data-i18n-aria-label="btnAiDeleteChat">
-              <i class="fa-solid fa-trash"></i>
-            </button>
-          </header>
-
-          <!-- Stato vuoto: visibile finché #aiChatMessages non ha figli (regola
-               :has in CSS), così clearAiChat() non deve sapere che esiste. -->
-          <div class="ai-chat-empty">
-            <i class="fa-solid fa-robot ai-chat-empty-icon"></i>
-            <h3 data-i18n="titleAiEmpty">Come posso aiutarti con la rete?</h3>
-            <p data-i18n="descAiEmpty">Allega l'inventario, un tenant o dei dispositivi qui sotto: l'assistente risponde su quel contesto.</p>
-            <div class="ai-suggestions">
-              <button type="button" class="ai-suggestion" data-action="ai-suggest" data-i18n="aiSuggestInventory">Riassumi lo stato dell'inventario e segnala le anomalie</button>
-              <button type="button" class="ai-suggestion" data-action="ai-suggest" data-i18n="aiSuggestSecurity">Controlla la configurazione dei dispositivi allegati per problemi di sicurezza</button>
-              <button type="button" class="ai-suggestion" data-action="ai-suggest" data-i18n="aiSuggestVlan">Spiegami come sono organizzate VLAN e uplink nei dispositivi allegati</button>
-            </div>
-          </div>
-
-          <div id="aiChatMessages" style="flex:1 1 0; min-height:0; overflow-y:auto; padding:16px; background:var(--surface);"></div>
-
-          <div class="ai-chat-composer">
-            <div class="ai-composer-box">
-              <textarea id="aiChatInput" rows="2" placeholder="Scrivi un messaggio..." data-i18n-placeholder="phAiChatInput" aria-label="Scrivi un messaggio..." data-i18n-aria-label="phAiChatInput"></textarea>
-              <!-- Contesto allegato: si sceglie mentre si scrive, non prima. -->
-              <div class="ai-composer-bar">
-                <label class="ai-ctx-chip">
-                  <input type="checkbox" id="aiAttachInventory"> <i class="fa-solid fa-boxes-stacked"></i> <span data-i18n="lblAiAttachInventory">Allega riepilogo inventario</span>
-                </label>
-                <select id="aiAttachTenant" class="ai-ctx-chip" aria-label="Tenant dell inventario allegato" data-i18n-aria-label="ariaAiAttachTenant">
-                  <option value="" data-i18n="optAiNoTenant">Nessun tenant allegato</option>
-                </select>
-                <div style="position:relative;">
-                  <button type="button" id="aiAttachDeviceBtn" class="ai-ctx-chip">
-                    <i class="fa-solid fa-server"></i> <span id="aiAttachDeviceBtnLabel">Dispositivi</span>
-                  </button>
-                  <div id="aiAttachDeviceDropdown" style="display:none; position:absolute; bottom:calc(100% + 6px); left:0; background:var(--surface-2); border:1px solid var(--border); border-radius:0; min-width:260px; max-height:300px; overflow-y:auto; z-index:1000; box-shadow:var(--shadow-lift);">
-                    <div style="padding:8px;">
-                      <div style="display:flex; gap:12px; padding:2px 8px 8px; border-bottom:1px solid var(--border); margin-bottom:6px;">
-                        <a href="javascript:void(0)" data-action="ai-select-all-devices" style="font-size:11px;" data-i18n="lnkSelectAll">Seleziona tutti</a>
-                        <a href="javascript:void(0)" data-action="ai-deselect-all-devices" style="font-size:11px;" data-i18n="lnkDeselectAll">Deseleziona tutti</a>
-                      </div>
-                      <div id="aiAttachDeviceList" style="font-size:13px;"></div>
-                    </div>
-                  </div>
-                </div>
-                <button class="btn btn-primary btn-small ai-send" id="btnAiSend" data-i18n="btnAiSend">
-                  <i class="fa-solid fa-paper-plane"></i> Invia
-                </button>
-              </div>
-            </div>
-            <p class="ai-composer-hint" data-i18n="lblAiComposerHint">Invio per inviare, Maiusc+Invio per andare a capo. L'AI può sbagliare: verifica ogni proposta prima di applicarla.</p>
-          </div>
-        </section>
       </div>
     </div>
 
@@ -3631,6 +3408,7 @@
           <button type="button" data-settings-jump="setSecTenantTelemetry"><span data-i18n="setNavTenantTelemetry">Telemetria per tenant</span></button>
           <span class="settings-nav-group" data-i18n="setNavSystem">Sistema</span>
           <button type="button" data-settings-jump="setSecApp"><span data-i18n="setNavApp">Applicazione</span></button>
+          <button type="button" data-settings-jump="aiSettingsPanel"><span data-i18n="setNavAi">Profili AI</span></button>
           <button type="button" data-settings-jump="cloudBackupPanel"><span data-i18n="setNavBackup">Copia offsite</span></button>
           <button type="button" data-settings-jump="setSecRestart"><span data-i18n="setNavRestart">Riavvio</span></button>
           <button type="button" class="requires-super-admin" data-settings-jump="setSecFactoryReset"><span data-i18n="setNavFactoryReset">Reset di fabbrica</span></button>
@@ -3917,6 +3695,128 @@
           <div class="set-loading"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
         </div>
       </section>
+
+      <!-- Ambito: profili di connessione AI (provider, modello, chiave).
+           Le due <select> restano nel DOM (nascoste) e continuano a essere la
+           sorgente di verità che legge tutta la logica di ai.js: le card sono
+           una VISTA su di esse, non una seconda macchina a stati. -->
+      <article class="panel requires-admin set-section" id="aiSettingsPanel">
+        <div class="panel-head">
+          <h3><span data-i18n="titleAiSettings">Configurazione Provider (Profili)</span></h3>
+          <span id="aiActiveProfileBadge" class="chip" style="font-size:11px;"></span>
+        </div>
+        <p class="set-desc" data-i18n="descAiSettings">Provider e modello usati dalle funzioni assistite: spiegazione degli incidenti, classificazione dei dispositivi, proposte Blueprint, layout della mappa e generatore di configurazione.</p>
+        <div style="display:none;">
+          <select id="aiProfileSelect" aria-label="Profilo AI attivo" data-i18n-aria-label="ariaAiProfile">
+            <option value="" data-i18n="optAiNoProfile">Nessun profilo</option>
+          </select>
+          <select id="aiProfileEditSelect" aria-label="Profilo AI da modificare" data-i18n-aria-label="ariaAiProfileEdit">
+            <option value="__new__" data-i18n="optAiNewProfile">-- nuovo profilo --</option>
+          </select>
+        </div>
+        <div class="ai-profile-layout">
+          <div>
+            <div style="font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin-bottom:8px;" data-i18n="lblAiProfileList">Profili</div>
+            <div id="aiProfileCards" style="display:flex; flex-direction:column; gap:8px;"></div>
+            <button type="button" class="btn btn-secondary btn-small ai-profile-new" style="width:100%; margin-top:8px;" data-action="select-profile" data-profile-id="__new__">
+              <i class="fa-solid fa-plus"></i> <span data-i18n="optAiNewProfile">-- nuovo profilo --</span>
+            </button>
+          </div>
+          <div class="ai-profile-form" id="aiProfileForm" data-provider="">
+            <section class="ai-form-section">
+              <div class="ai-form-section-title" data-i18n="aiSecGeneral">Generale</div>
+              <div class="form-group ai-field">
+                <label for="aiProfileName" data-i18n="lblAiProfileName">Nome profilo</label>
+                <input id="aiProfileName" type="text" placeholder="es. Claude prod" data-i18n-placeholder="phAiProfileName">
+              </div>
+              <div class="form-group ai-field">
+                <label for="aiProvider" id="aiProviderLbl" data-i18n="lblAiProvider">Provider</label>
+                <!-- La select resta la sorgente di verità per ai.js; le tessere
+                     sono una vista che ne scrive il valore. -->
+                <select id="aiProvider" style="display:none;">
+                  <option value="" data-i18n="optAiNoProvider">-- seleziona provider --</option>
+                  <option value="anthropic">Anthropic (Claude)</option>
+                  <option value="openai">OpenAI (ChatGPT)</option>
+                  <option value="gemini">Google Gemini</option>
+                  <option value="ollama">Ollama (LLM locale)</option>
+                </select>
+                <div class="ai-provider-tiles" role="radiogroup" aria-labelledby="aiProviderLbl">
+                  <button type="button" class="ai-provider-tile" role="radio" aria-checked="false" data-action="ai-pick-provider" data-provider="anthropic">
+                    <i class="fa-solid fa-a"></i><span class="ai-pt-name">Anthropic</span><span class="ai-pt-sub">Claude</span></button>
+                  <button type="button" class="ai-provider-tile" role="radio" aria-checked="false" data-action="ai-pick-provider" data-provider="openai">
+                    <i class="fa-solid fa-o"></i><span class="ai-pt-name">OpenAI</span><span class="ai-pt-sub">ChatGPT</span></button>
+                  <button type="button" class="ai-provider-tile" role="radio" aria-checked="false" data-action="ai-pick-provider" data-provider="gemini">
+                    <i class="fa-solid fa-gem"></i><span class="ai-pt-name">Google</span><span class="ai-pt-sub">Gemini</span></button>
+                  <button type="button" class="ai-provider-tile" role="radio" aria-checked="false" data-action="ai-pick-provider" data-provider="ollama">
+                    <i class="fa-solid fa-server"></i><span class="ai-pt-name">Ollama</span><span class="ai-pt-sub" data-i18n="lblAiLocalLlm">LLM locale (nessuna chiave)</span></button>
+                </div>
+              </div>
+            </section>
+
+            <section class="ai-form-section">
+              <div class="ai-form-section-title" data-i18n="aiSecModel">Modello e accesso</div>
+              <div class="ai-form-grid">
+                <div class="form-group ai-field">
+                  <label for="aiModel" data-i18n="lblAiModel">Modello</label>
+                  <div class="ai-model-row">
+                    <select id="aiModelSelect" aria-label="Modello AI" data-i18n-aria-label="ariaAiModel">
+                      <option value="" data-i18n="optAiModelCustom">-- modello personalizzato --</option>
+                    </select>
+                    <button type="button" class="btn btn-secondary btn-small" id="btnAiRefreshModels" title="Aggiorna elenco modelli" data-i18n-title="btnAiRefreshModelsTitle" aria-label="Aggiorna elenco modelli" data-i18n-aria-label="btnAiRefreshModelsTitle">
+                      <i class="fa-solid fa-rotate"></i>
+                    </button>
+                  </div>
+                  <input id="aiModel" type="text" placeholder="es. claude-3-5-sonnet-latest" data-i18n-placeholder="phAiModel">
+                  <p class="ai-hint" data-i18n="hintAiModel">Scegli dall'elenco (aggiornalo col pulsante) oppure scrivi il nome del modello.</p>
+                </div>
+                <div class="form-group ai-field ai-f-apikey">
+                  <label for="aiApiKey" id="aiApiKeyLabel" data-i18n="lblAiApiKey">API Key</label>
+                  <input id="aiApiKey" type="password" autocomplete="off" placeholder="•••••• (lascia vuoto per non modificare)" data-i18n-placeholder="phAiApiKey">
+                  <p class="ai-hint" data-i18n="hintAiApiKey">Non viene mai rimostrata dopo il salvataggio: lascia vuoto per tenere quella attuale.</p>
+                </div>
+                <div class="form-group ai-field ai-f-baseurl">
+                  <label for="aiBaseUrl" data-i18n="lblAiBaseUrl">Endpoint API</label>
+                  <input id="aiBaseUrl" type="text" placeholder="http://localhost:11434">
+                  <p class="ai-hint" data-i18n="hintAiBaseUrl">Ollama: indirizzo del server locale. OpenAI: solo per un endpoint compatibile, altrimenti lascia vuoto.</p>
+                </div>
+              </div>
+            </section>
+
+            <section class="ai-form-section">
+              <div class="ai-form-section-title" data-i18n="aiSecLimits">Limiti e privacy</div>
+              <div class="ai-form-grid">
+                <div class="form-group ai-field">
+                  <label for="aiRateLimitRpm" data-i18n="lblAiRateLimit">Limite richieste/min</label>
+                  <input id="aiRateLimitRpm" type="number" min="0" step="1">
+                  <p class="ai-hint" data-i18n="phAiRateLimit">0 = illimitato</p>
+                </div>
+                <div class="form-group ai-field">
+                  <label for="aiContextBudget" data-i18n="lblAiContextBudget">Budget contesto (caratteri)</label>
+                  <input id="aiContextBudget" type="number" min="0" step="1000">
+                  <p class="ai-hint" data-i18n="phAiContextBudget">0 = auto per modello</p>
+                </div>
+              </div>
+              <label class="ai-setting-row" for="aiAllowUnredacted">
+                <input type="checkbox" id="aiAllowUnredacted">
+                <span>
+                  <span class="ai-setting-title" data-i18n="lblAiAllowUnredacted">Invia config non redatte (solo LLM locale attendibile)</span>
+                  <span class="ai-hint" data-i18n="hintAiAllowUnredacted">Password, chiavi e community SNMP partono in chiaro. Il server lo accetta solo verso Ollama o un endpoint OpenAI su rete locale.</span>
+                </span>
+              </label>
+            </section>
+
+            <footer class="ai-form-actions">
+              <div id="aiSettingsStatus" class="ai-hint"></div>
+              <button class="btn btn-secondary" style="width:auto;" id="btnAiDeleteProfile" data-i18n="btnAiDeleteProfile">
+                <i class="fa-solid fa-trash"></i> Elimina profilo
+              </button>
+              <button class="btn btn-primary" id="btnAiSaveSettings" style="width:auto;" data-i18n="btnAiSaveSettings">
+                <i class="fa-solid fa-floppy-disk"></i> Salva profilo
+              </button>
+            </footer>
+          </div>
+        </div>
+      </article>
 
       <!-- Ambito: copia offsite dei backup (mirror SFTP) -->
       <article class="panel requires-admin set-section" id="cloudBackupPanel">

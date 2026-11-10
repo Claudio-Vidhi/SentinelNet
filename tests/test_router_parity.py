@@ -74,13 +74,21 @@ class TestRouterParity(unittest.TestCase):
     #   aggiorna da POST /api/device-categories/assign, che chiama add_model()
     #   da se', ed e' la via che usa la UI. add_model/delete_model in
     #   inventory_manager restano, hanno altri chiamanti.
+    # /api/ai/chat, /api/ai/conversations*: the in-app AI chat was removed in
+    #   0.65.0 (tab, saved conversations, AI-proposed config push). External
+    #   LLM clients go through the MCP server; the contextual assists
+    #   (incident explanation, classification, Blueprint, config generator)
+    #   and the provider profiles stay.
     ALLOWED_REMOVED_PATHS = ("/api/provisioner/fgt/generate",
                              "/api/provisioner/fgt/push-ssh",
                              "/api/provisioner/fgt/push-serial",
                              "/api/provisioner/download",
                              "/api/provisioner/fgt/download",
                              "/api/models",
-                             "/api/models/delete")
+                             "/api/models/delete",
+                             "/api/ai/chat",
+                             "/api/ai/conversations",
+                             "/api/ai/conversations/{conversation_id}")
 
     def test_all_golden_paths_still_exist(self):
         missing = [p for p in self.golden["paths"]
@@ -479,6 +487,9 @@ class TestFullParity(unittest.TestCase):
         # additiva — il default e' 'it', quindi omettendolo la risposta e'
         # quella storica — ma i parametri dell'operazione cambiano.
         ("get", "/api/incidents/rules"),
+        # Description only: both docstrings named /api/ai/chat, removed in 0.65.0.
+        ("get", "/api/ai/profiles"),
+        ("post", "/api/ai/generate-config"),
         # Audit checklist: 9 rotte erano raggiungibili senza autenticazione.
         # Cambia SOLO il requisito di sicurezza (Depends get_current_user /
         # require_operator), parametri e risposta invariati.
@@ -539,7 +550,10 @@ class TestFullParity(unittest.TestCase):
     # non regressioni del destructuring.
     REMOVED_PATHS = TestRouterParity.ALLOWED_REMOVED_PATHS
     REMOVED_SCHEMAS = ("FortiGateProvisionSchema", "FortiGateProvisionSSHSchema", "FortiGateProvisionSerialSchema",
-                       "ModelSchema")
+                       "ModelSchema",
+                       # In-app AI chat, removed in 0.65.0.
+                       "AiChatMessage", "AiChatSchema", "FlowKeySchema",
+                       "AiConversationSchema", "AiConversationUpdateSchema")
 
     def test_path_set_identical(self):
         snap_paths = [p for p in self.snap["paths"]

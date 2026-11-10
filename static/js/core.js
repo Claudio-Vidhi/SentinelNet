@@ -1824,15 +1824,14 @@ const LAZY_TAB_SCRIPTS = {
     'tab-flows': ['/static/js/flow-analytics.js', '/static/js/observability.js'],
     // vis-network: the Routing sub-tab draws its route map with it.
     'tab-config': ['/static/vendor/vis/vis-network.min.js', '/static/js/config-analyzer.js'],
-    'tab-ai': ['/static/js/ai.js'],
-    // The AI config generator is a panel of the Provisioner sub-tab, so its
-    // module has to load there too, not only on the AI tab.
+    // The AI config generator is a panel of the Provisioner sub-tab; the
+    // AI profiles panel lives in Settings. ai.js binds both.
     'tab-provisioner': ['/static/js/ai.js'],
     'tab-fortigate': ['/static/js/fortigate-management.js'],
     'tab-wlc': ['/static/js/wlc.js'],
     // settings.js owns the CRUD of four tabs, not just Settings: opening any of
     // the other three cold left every control on it dead and its table empty.
-    'tab-settings': ['/static/js/settings.js', '/static/js/observability.js', '/static/js/cloud-backup.js'],
+    'tab-settings': ['/static/js/settings.js', '/static/js/observability.js', '/static/js/cloud-backup.js', '/static/js/ai.js'],
     'tab-probes': ['/static/js/settings.js'],
     'tab-users': ['/static/js/settings.js'],
     'tab-mcp': ['/static/js/settings.js'],
@@ -2004,13 +2003,15 @@ async function switchTab(tabId, clickedBtn, opts = {}) {
     }
     else if (tabId === 'tab-endpoint') locSwitchView(_locView);
     else if (tabId === 'tab-config') loadConfigAnalyzer();
-    else if (tabId === 'tab-ai') loadAiTab();
     else if (tabId === 'tab-users') loadUsers();
     else if (tabId === 'tab-probes') loadProbes();
     else if (tabId === 'tab-mcp') loadMcpTab();
     else if (tabId === 'tab-fortigate') loadFgtTab();
     else if (tabId === 'tab-wlc' && typeof loadWlcTab === 'function') loadWlcTab();
-    else if (tabId === 'tab-settings') loadAppSettings();
+    else if (tabId === 'tab-settings') {
+        loadAppSettings();
+        if (document.body.classList.contains('role-admin')) loadAiProfiles();
+    }
     // Queste tre tab prima si inizializzavano con una seconda chiamata
     // nell'onclick del pulsante nav; ora il dispatch e' unico e arriva
     // dopo il caricamento lazy del modulo.
@@ -2264,9 +2265,6 @@ document.addEventListener('keydown', e => {
         if (target === 'h') switchTab('tab-home');
         else if (target === 's') switchTab('tab-settings');
         else if (target === 'd') switchTab('tab-devices');
-        // 'tab-ai-chat' era l'id del prototype: la tab reale e' tab-ai, e il
-        // vecchio id faceva morire switchTab su getElementById(null).
-        else if (target === 'a') switchTab('tab-ai');
     }
 });
 
@@ -2655,7 +2653,6 @@ function buildCommandPaletteItems(query = '') {
         { id: 'tab-incidents', title: tr('coreIncidents'), desc: tr('coreCorrelatedSecurityAndOperational'), group: tr('coreViews') },
         { id: 'tab-flows', title: tr('coreTrafficObservability'), desc: tr('coreTopTalkersAnomaliesAnd'), group: tr('coreViews') },
         { id: 'tab-endpoint', title: tr('coreEndpointInventoryMacTracker'), desc: tr('coreDiscoveredEndpointsMacTracking'), group: tr('coreViews') },
-        { id: 'tab-ai', title: tr('titleAiAssistant'), desc: tr('coreNetworkAssistantAndConfig'), group: tr('coreViews') },
         { id: 'tab-devices', title: tr('invHeroTitle'), desc: tr('coreDeviceListCredentialsAnd'), group: tr('coreViews') },
         { id: 'tab-map', title: tr('coreTopology'), desc: tr('coreLLTopologyAnd'), group: tr('coreViews') },
         { id: 'tab-categories', title: tr('coreCategoriesDevices'), desc: tr('coreHardwareModelsRolesAnd'), group: tr('coreViews') },

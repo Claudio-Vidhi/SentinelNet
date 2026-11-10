@@ -55,7 +55,7 @@ for (const id of ['tab-wlc', 'tab-interfaces', 'tab-redundancy',
 // Quelle che c'erano restano.
 for (const id of ['tab-devices', 'tab-map', 'tab-map-interactive', 'tab-endpoint',
                   'tab-flows', 'tab-security', 'tab-categories', 'tab-config',
-                  'tab-netsec-audit', 'tab-ai', 'tab-provisioning',
+                  'tab-netsec-audit', 'tab-provisioning',
                   'tab-provisioner', 'tab-import']) {
     assert.ok(ids.includes(id), `tab concedibile sparita: ${id}`);
 }

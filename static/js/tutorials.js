@@ -267,13 +267,6 @@
             icon: 'fa-robot',
             steps: [
                 {
-                    tab: 'tab-ai',
-                    target: '#tab-ai',
-                    badgeKey: 'tutBadgeMcp',
-                    titleKey: 'tutMcpS1Title',
-                    textKey: 'tutMcpS1Text'
-                },
-                {
                     tab: 'tab-mcp',
                     target: '#tab-mcp',
                     badgeKey: 'tutBadgeMcp',

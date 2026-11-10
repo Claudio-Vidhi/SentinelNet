@@ -112,7 +112,7 @@ def _parse(html, watch_ids=()):
 TAB_IDS_IN_DOC_ORDER = [
     "tab-home", "tab-devices", "tab-groups", "tab-map", "tab-map-interactive",
     "tab-categories", "tab-security", "tab-endpoint", "tab-flows",
-    "tab-config", "tab-ai", "tab-provisioner", "tab-users",
+    "tab-config", "tab-provisioner", "tab-users",
     "tab-probes", "tab-mcp", "tab-settings",
 ]
 
@@ -305,7 +305,7 @@ class TestSidebarIA(unittest.TestCase):
         # delegato in core.js.
         for tab in ("tab-devices", "tab-endpoint", "tab-flows",
                     "tab-map", "tab-map-interactive", "tab-categories", "tab-security",
-                    "tab-config", "tab-ai", "tab-provisioner", "tab-provisioning", "tab-groups",
+                    "tab-config", "tab-provisioner", "tab-provisioning", "tab-groups",
                     "tab-users", "tab-probes", "tab-mcp", "tab-settings"):
             self.assertTrue(
                 f'data-tab="{tab}"' in html or f'data-switch-tab="{tab}"' in html,
@@ -887,7 +887,7 @@ class TestConfigAnalyzerTabRestyle(unittest.TestCase):
     def test_config_tab_uses_component_classes(self):
         html = _html()
         tab_start = html.index('<div id="tab-config"')
-        tab_end = html.index('<!-- TAB: AI Assistant -->')
+        tab_end = html.index('<!-- Nuova configurazione (tab-provisioner)')
         tab_html = html[tab_start:tab_end]
         for cls in ('class="hero"', 'class="hero-card"',
                     'class="filterbar"', 'class="panel'):
@@ -903,153 +903,71 @@ class TestConfigAnalyzerTabRestyle(unittest.TestCase):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
 
-class TestAiAssistantTabRestyle(unittest.TestCase):
-    """Task 13: #tab-ai (AI Assistant) restyle + wiring guard.
-
-    Highest-risk preservation of any tab: the chat send path plus a
-    single-use WebSocket OTP (/api/ws-token) live in this file. The restyle
-    only reclasses the STATIC layout (hero header + .panel cards); the chat
-    render container (#aiChatMessages, with its scroll/overflow inline style),
-    the send handler, the model <select>, the profile CRUD controls, and the
-    device multi-select dropdown are all preserved verbatim.
-    """
+class TestAiProfilesPanel(unittest.TestCase):
+    """The AI provider profiles (provider, model, key) live in Settings since
+    0.65.0, when the in-app chat and its tab were removed. The profiles feed
+    the contextual assists and the Provisioner config generator, so the panel
+    and its wiring must survive the move."""
 
     def test_preserve_ids(self):
         html = _html()
-        # Active-profile + admin provider-config controls read/written by
-        # loadAiProfiles()/onAiProfile*Change()/saveAiSettings()/deleteAiProfile()
-        # /refreshAiModels(), the device multi-select machinery, and the chat
-        # container/input the send handler touches.
         for _id in ('aiProfileSelect', 'aiActiveProfileBadge', 'aiSettingsPanel',
                     'aiProfileEditSelect', 'aiProfileName', 'aiProvider',
                     'aiModelSelect', 'aiModel', 'aiApiKeyLabel', 'aiApiKey',
                     'aiBaseUrl', 'aiRateLimitRpm', 'aiAllowUnredacted',
-                    'btnAiDeleteProfile', 'aiSettingsStatus', 'aiAttachInventory',
-                    'aiAttachTenant', 'aiAttachDeviceBtn', 'aiAttachDeviceBtnLabel',
-                    'aiAttachDeviceDropdown', 'aiAttachDeviceList',
-                    'aiChatMessages', 'aiChatInput', 'btnAiSend'):
+                    'btnAiDeleteProfile', 'aiSettingsStatus'):
             self.assertIn(f'id="{_id}"', html)
 
-    def test_onclick_hooks_preserved(self):
+    def test_hooks_preserved(self):
         html = frontend_source()
         for hook in ('onAiProfileSelectChange', 'onAiProfileEditSelectChange',
                      'resetAiModelList', 'refreshAiModels', 'saveAiSettings',
-                     'deleteAiProfile', 'populateAiAttachDevices',
-                     'toggleAiDeviceDropdown', 'setAllAiAttachDevices',
-                     'sendAiChat'):
+                     'deleteAiProfile'):
             self.assertIn(hook, html)
 
-    def test_rbac_admin_gating_on_provider_config(self):
+    def test_panel_is_an_admin_gated_settings_section(self):
         html = _html()
-        # The provider/profile CRUD panel stays admin-gated: requires-admin must
-        # sit on the #aiSettingsPanel <details> element itself.
-        self.assertIn('id="aiSettingsPanel"', html)
-        panel_idx = html.index('id="aiSettingsPanel"')
-        details_tag = html.rindex('<details', 0, panel_idx)
-        self.assertIn('requires-admin', html[details_tag:panel_idx])
+        tag = html[html.rindex('<', 0, html.index('id="aiSettingsPanel"')):
+                   html.index('id="aiSettingsPanel"')]
+        self.assertIn('requires-admin', tag)
+        self.assertIn('set-section', tag)
+        settings = html[html.index('<div id="tab-settings"'):]
+        self.assertIn('id="aiSettingsPanel"', settings)
+        self.assertIn('data-settings-jump="aiSettingsPanel"', settings)
+        self.assertIn('id="aiActiveProfileBadge" class="chip"', settings)
+
+    def test_module_loads_with_settings_and_is_bound_to_the_panel(self):
+        """ai.js is lazy: without the tab-settings entry the panel is dead when
+        Settings is opened cold, and the provider tiles bind to the panel id."""
+        js = frontend_source()
+        row = js[js.index("'tab-settings': ["):]
+        self.assertIn('/static/js/ai.js', row[:row.index(']')])
+        self.assertIn("document.getElementById('aiSettingsPanel')?.addEventListener('click'", js)
+        self.assertIn('loadAiProfiles();', js[js.index("tabId === 'tab-settings'"):][:200])
 
     def test_endpoint_contract_present(self):
-        # sendAiChat()/refreshAiModels() moved to static/js/ai.js -- frontend_source()
-        # concatenates dashboard.html + all static js/css.
         html = frontend_source()
-        # sendAiChat() -> apiFetch('/api/ai/chat', {method:'POST', ...})
-        self.assertIn('/api/ai/chat', html)
-        # refreshAiModels() -> apiFetch('/api/ai/models?' + ...)
         self.assertIn('/api/ai/models', html)
-        # loadAiProfiles()/saveAiSettings() -> GET+POST /api/ai/profiles
         self.assertIn('/api/ai/profiles', html)
-        # PUT/DELETE /api/ai/profiles/{id} and POST /api/ai/profiles/{id}/activate
-        # are path-parameterized template-literal calls; assert the literal call
-        # forms (Task 6-12 precedent for path-param routes).
         self.assertIn('`/api/ai/profiles/${encodeURIComponent(profileId)}/activate`', html)
         self.assertIn('`/api/ai/profiles/${encodeURIComponent(editingId)}`', html)
         self.assertIn('`/api/ai/profiles/${encodeURIComponent(id)}`', html)
-        # STREAMING/WEBSOCKET WIRING GUARD: the single-use OTP endpoint that
-        # authorizes the WebSocket must still be present verbatim -- proving the
-        # ws-token fetch survived the restyle. (In this codebase /api/ws-token is
-        # consumed by the terminal WebSocket, not the AI chat POST path; asserted
-        # here per the brief's explicit streaming-preservation requirement.)
-        self.assertIn('/api/ws-token', html)
+        # The terminal WebSocket OTP used to be asserted here; it has nothing
+        # to do with AI but the guard is worth keeping.
         self.assertIn('apiFetch("/api/ws-token", { method: "POST" })', html)
 
-    def test_chat_container_untouched(self):
-        html = _html()
-        # Il thread non è più un riquadro alto 480px in fondo alla pagina: è la
-        # colonna destra di una chat a tutta altezza, quindi cresce con `flex:1`
-        # invece che con una max-height fissa. Ciò che DEVE restare è l'id e il
-        # contenitore di scorrimento su cui appendAiMessage() e
-        # renderAiConfigProposal() fanno box.scrollTop = box.scrollHeight.
-        self.assertIn(
-            '<div id="aiChatMessages" style="flex:1 1 0; min-height:0; '
-            'overflow-y:auto; padding:16px; background:var(--surface);"></div>',
-            html)
-        # `min-height:0` inline non è cosmetico e non va rimesso a un valore
-        # fisso: con una min-height l'area messaggi non si comprime, spinge il
-        # composer oltre il fondo del panel e l'overflow:hidden lo taglia —
-        # la casella di testo sparisce e la chat diventa inutilizzabile.
-        css = frontend_source()   # concatena anche static/css/dashboard.css
-        self.assertIn('#tab-ai .ai-chat-composer', css)
-        composer = css[css.index('#tab-ai .ai-chat-composer'):]
-        self.assertIn('flex:0 0 auto', composer[:composer.index('}')])
-
-    def test_device_multiselect_preserved(self):
-        # populateAiAttachDevices()/getAiAttachDeviceIps() moved to
-        # static/js/ai.js -- frontend_source() concatenates it.
+    def test_chat_is_gone(self):
         html = frontend_source()
-        # The AI device multi-select dropdown (prior feature) keeps its ids and
-        # per-item checkbox class + onchange used by getAiAttachDeviceIps().
-        self.assertIn('id="aiAttachDeviceDropdown"', html)
-        self.assertIn('id="aiAttachDeviceList"', html)
-        self.assertIn("querySelectorAll('#aiAttachDeviceList .ai-attach-device:checked')", html)
-        self.assertIn("class=\"ai-attach-device\"", html)
-        self.assertIn('updateAiDeviceBtnLabel', html)
-
-    def test_ai_tab_uses_component_classes(self):
-        html = _html()
-        tab_start = html.index('<div id="tab-ai"')
-        tab_end = html.index('<!-- Nuova configurazione (tab-provisioner)')
-        tab_html = html[tab_start:tab_end]
-        # Header come le altre schede (page-head); il contesto allegato vive
-        # nella barra del composer, non piu' in una filterbar separata.
-        for cls in ('class="page-head"', 'class="ai-composer-bar"', 'class="panel'):
-            self.assertIn(cls, tab_html)
-        # due panel card in #tab-ai: profili e chat (il generatore di config
-        # e' stato spostato nella scheda Provisioner)
-        self.assertGreaterEqual(tab_html.count('class="panel'), 2)
-        # active-profile badge reclassed to the .chip state-badge component
-        self.assertIn('id="aiActiveProfileBadge" class="chip"', tab_html)
+        for gone in ('id="tab-ai"', '/api/ai/chat', '/api/ai/conversations',
+                     'sendAiChat', 'aiChatMessages', 'btnAnalyzeFlowsAi',
+                     'detail-ai-flow'):
+            self.assertNotIn(gone, html)
 
     def test_i18n_keys_both_langs(self):
-        html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
-        for key in ('aiEyebrow:', 'titleAiChat:',
-                    'titleAiAssistant:', 'descAiAssistant:',
-                    'msgAiNoConversations:', 'lblAiProfileActive:'):
+        html = frontend_source()
+        for key in ('titleAiSettings:', 'descAiSettings:', 'setNavAi:',
+                    'lblAiProfileActive:'):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
-
-    def test_conversation_sidebar_wired(self):
-        """La cronologia conversazioni: elenco a sinistra + CRUD verso
-        /api/ai/conversations. Senza il contenitore la sidebar non renderizza."""
-        html = _html()
-        self.assertIn('id="aiConvList"', html)
-        self.assertIn('id="aiChatTitle"', html)
-        self.assertIn('id="btnAiNewChat"', html)
-        self.assertIn('id="btnAiRenameChat"', html)
-        self.assertIn('id="btnAiDeleteChat"', html)
-        # La sidebar della chat NON deve essere un <aside>: la regola globale
-        # `aside { position:sticky; height:calc(100vh - 40px) }` la renderebbe
-        # alta quanto il viewport, sfondando la griglia della chat e spingendo
-        # il composer sotto il bordo del panel, dove l'overflow lo taglia via.
-        tab = html[html.index('<div id="tab-ai"'):
-                   html.index('<!-- Nuova configurazione (tab-provisioner)')]
-        self.assertNotIn('<aside', tab)
-        self.assertIn('<div class="ai-conv-sidebar">', tab)
-        js = frontend_source()
-        for hook in ('newAiConversation', 'renameAiConversation',
-                     'deleteCurrentAiConversation'):
-            self.assertIn(hook, js)
-        self.assertIn("apiFetch('/api/ai/conversations')", js)
-        self.assertIn('`/api/ai/conversations/${Number(id)}`', js)
-        self.assertIn('`/api/ai/conversations/${Number(aiConvId)}`', js)
 
     def test_profile_cards_drive_the_hidden_selects(self):
         """Le card sono una vista sulle due <select>, che restano la sorgente
@@ -1494,9 +1412,10 @@ class TestSettingsTabRestyle(unittest.TestCase):
             "class=\"nav-item requires-admin\" data-tab=\"tab-settings\"",
             html)
         # The self-signed certificate, restart, fleet-versions, ping-monitor,
-        # observability, tenant telemetry, application, cloud-backup, SMTP and SSO panels stay
-        # admin-gated in-body (9 gates: one per admin-only concern).
-        self.assertEqual(self._tab(html).count("requires-admin"), 11)
+        # observability, tenant telemetry, application, cloud-backup, SMTP, SSO
+        # and AI profiles panels stay admin-gated in-body (one gate per
+        # admin-only concern).
+        self.assertEqual(self._tab(html).count("requires-admin"), 12)
         self.assertIn('class="panel requires-admin set-section"', self._tab(html))
         # Every loader is also role-gated server-side of the render.
         self.assertIn("if (!isAdminRole(currentRole)) return;", html)
@@ -1508,10 +1427,10 @@ class TestSettingsTabRestyle(unittest.TestCase):
         # Twelve one-concern sections: ui variant, network exposure, command
         # safety, self-signed certificate, application restart, fleet versions,
         # ping monitor, observability, tenant telemetry, application (general), cloud backup,
-        # SMTP, single sign-on, session lifetime, factory reset -- each with an
-        # entry in the settings index.
-        self.assertEqual(tab.count('class="panel '), 15)
-        self.assertEqual(tab.count('data-settings-jump='), 15)
+        # SMTP, single sign-on, session lifetime, factory reset, AI profiles --
+        # each with an entry in the settings index.
+        self.assertEqual(tab.count('class="panel '), 16)
+        self.assertEqual(tab.count('data-settings-jump='), 16)
         for sec in re.findall(r'data-settings-jump="([^"]+)"', tab):
             self.assertIn(f'id="{sec}"', tab)
 
@@ -1577,22 +1496,17 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         for _id in ('flowsTableHead', 'flowsTableBody',
                     'trafWindow', 'trafMetric',
                     'trafAutoRefresh', 'trafLastUpdate', 'flowsObsBanner',
-                    'flowsAiNote', 'flowsSourceChips', 'flowsColsBtn',
+                    'flowsSourceChips', 'flowsColsBtn',
                     'flowsColsDropdown',
                     'flowDetailPanel', 'flowDetailPanelBody'):
             self.assertIn(f'id="{_id}"', html)
         for hook in ('flowsTabShown', 'loadTopTalkers',
-                     'toggleFlowsColsDropdown', 'analyzeFlowsWithAi',
+                     'toggleFlowsColsDropdown',
                      'closeFlowDetailPanel'):
             self.assertIn(hook, html)
         # Ids created only by JS (never literal in the static markup).
         for _id in ('flowsSelectAll',):
             self.assertIn(f"id=\\\"{_id}\\\"", html.replace('"', '\\"'))
-        # RBAC: the two AI actions stay write-gated.
-        idx = html.index('id="btnAnalyzeFlowsAi"')
-        tag_end = html.index('>', idx)
-        self.assertIn('requires-write', html[html.rindex('<button', 0, idx):tag_end])
-        self.assertIn('data-action="detail-ai-flow"', html)
 
     def test_source_filter_chips_and_column_toggle_survive(self):
         # FLOWS_SOURCES/renderFlowsSourceChips/renderSyslogTable moved to

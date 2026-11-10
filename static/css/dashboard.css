@@ -1782,16 +1782,16 @@ div.vis-tooltip {
 
 /* Investigate + Assess tabs: the page header is a title row, not a banner. The data under
    it is what the operator opened the tab for. */
-:is(#tab-incidents, #tab-flows, #tab-endpoint, #tab-ai, #tab-security, #tab-config, #tab-netsec-audit, #tab-policy-test, #tab-routes, #tab-config-drift) .hero {
+:is(#tab-incidents, #tab-flows, #tab-endpoint, #tab-security, #tab-config, #tab-netsec-audit, #tab-policy-test, #tab-routes, #tab-config-drift) .hero {
   margin-bottom: 12px !important;
 }
-:is(#tab-incidents, #tab-flows, #tab-endpoint, #tab-ai, #tab-security, #tab-config, #tab-netsec-audit, #tab-policy-test, #tab-routes, #tab-config-drift) .hero-card {
+:is(#tab-incidents, #tab-flows, #tab-endpoint, #tab-security, #tab-config, #tab-netsec-audit, #tab-policy-test, #tab-routes, #tab-config-drift) .hero-card {
   padding: 12px 18px;
 }
-:is(#tab-incidents, #tab-flows, #tab-endpoint, #tab-ai, #tab-security, #tab-config, #tab-netsec-audit, #tab-policy-test, #tab-routes, #tab-config-drift) .hero-card > h2 {
+:is(#tab-incidents, #tab-flows, #tab-endpoint, #tab-security, #tab-config, #tab-netsec-audit, #tab-policy-test, #tab-routes, #tab-config-drift) .hero-card > h2 {
   font-size: 21px; margin: 0 0 2px;
 }
-:is(#tab-incidents, #tab-flows, #tab-endpoint, #tab-ai, #tab-security, #tab-config, #tab-netsec-audit, #tab-policy-test, #tab-routes, #tab-config-drift) .hero-card > p {
+:is(#tab-incidents, #tab-flows, #tab-endpoint, #tab-security, #tab-config, #tab-netsec-audit, #tab-policy-test, #tab-routes, #tab-config-drift) .hero-card > p {
   font-size: 13px; margin: 0; max-width: none;
 }
 
@@ -1839,110 +1839,56 @@ div.vis-tooltip {
 /* details/summary condivisi */
 details.mac-switch > summary::-webkit-details-marker,
 #tab-endpoint #macDeviceMenu > summary::-webkit-details-marker,
-#tab-endpoint #arpDeviceMenu > summary::-webkit-details-marker,
-#tab-ai details > summary::-webkit-details-marker { display: none; }
-details.mac-switch > summary, #tab-ai details > summary { list-style: none; cursor: pointer; }
+#tab-endpoint #arpDeviceMenu > summary::-webkit-details-marker { display: none; }
+details.mac-switch > summary { list-style: none; cursor: pointer; }
 details.mac-switch > summary .mac-chev { transition: transform var(--transition); color: var(--text-soft); }
 details.mac-switch[open] > summary .mac-chev { transform: rotate(90deg); }
-details.mac-switch > summary:hover,
-#tab-ai details > summary:hover { background: var(--surface-3); }
+details.mac-switch > summary:hover { background: var(--surface-3); }
 #tab-endpoint #macDeviceMenu[open] > summary .fa-chevron-down,
 #tab-endpoint #arpDeviceMenu[open] > summary .fa-chevron-down { transform: rotate(180deg); }
 #tab-endpoint #macDeviceList label:hover,
 #tab-endpoint #arpDeviceList label:hover { background: var(--surface-3); }
 
-/* Chat assistente */
-#tab-ai .ai-chat-shell { display: grid; grid-template-columns: 248px 1fr; grid-template-rows: minmax(0, 1fr); height: min(calc(100vh - 300px), 760px); min-height: 480px; }
-#tab-ai .ai-conv-sidebar { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-right: var(--seam) solid var(--border); background: var(--surface-2); overflow: hidden; min-height: 0; }
-#tab-ai .ai-conv-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin: 0 -6px; padding: 0 6px; }
-#tab-ai .ai-conv-item { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: var(--seam) solid transparent; cursor: pointer; font-size: 12.5px; color: var(--text-muted); transition: background var(--transition), color var(--transition); }
-#tab-ai .ai-conv-item:hover { background: var(--surface-3); color: var(--text); }
-#tab-ai .ai-conv-item.active { background: var(--surface-3); border-color: var(--border-strong); color: var(--text); }
-#tab-ai .ai-conv-item .ai-conv-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#tab-ai .ai-conv-item .ai-conv-del { opacity: 0; border: 0; background: none; color: var(--text-soft); cursor: pointer; padding: 2px 4px; font-size: 11px; }
-#tab-ai .ai-conv-item:hover .ai-conv-del { opacity: 1; }
-#tab-ai .ai-conv-item .ai-conv-del:hover { color: var(--lamp-fault-ink); }
-#tab-ai .ai-conv-empty { font-size: 12px; color: var(--text-soft); padding: 10px 4px; }
-#tab-ai .ai-chat-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
-#tab-ai .ai-conv-heading { font-family: var(--font-legend); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-soft); padding: 6px 3px 0; }
-#tab-ai .ai-chat-header { display: flex; align-items: center; gap: 4px; padding: 10px 14px; border-bottom: var(--seam) solid var(--border); flex:0 0 auto; background: var(--surface); }
-#tab-ai .ai-chat-header h3 { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#tab-ai .ai-icon-btn { border: var(--seam) solid transparent; background: none; color: var(--text-soft); cursor: pointer; padding: 6px 8px; font-size: 12px; transition: background var(--transition), color var(--transition); }
-#tab-ai .ai-icon-btn:hover { background: var(--surface-3); color: var(--text); }
-#tab-ai .ai-icon-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-#tab-ai #aiChatMessages { flex: 1 1 0; min-height: 0; }
-/* Stato vuoto finché il thread non ha messaggi. */
-#tab-ai #aiChatMessages:empty { display: none; }
-#tab-ai .ai-chat-main:has(#aiChatMessages:not(:empty)) .ai-chat-empty { display: none; }
-#tab-ai .ai-chat-empty { flex: 1 1 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px 16px; text-align: center; background: var(--surface); }
-#tab-ai .ai-chat-empty-icon { font-size: 22px; color: var(--primary); margin-bottom: 4px; }
-#tab-ai .ai-chat-empty h3 { margin: 0; font-size: 20px; font-weight: 600; }
-#tab-ai .ai-chat-empty p { margin: 0; font-size: 13px; color: var(--text-muted); max-width: 52ch; }
-#tab-ai .ai-suggestions { display: flex; flex-direction: column; gap: 6px; width: min(100%, 520px); margin-top: 14px; }
-#tab-ai .ai-suggestion { text-align: left; padding: 10px 14px; border: var(--seam) solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; transition: background var(--transition), border-color var(--transition); }
-#tab-ai .ai-suggestion:hover { background: var(--surface-3); border-color: var(--border-strong); }
-#tab-ai .ai-suggestion:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-/* Messaggi: l'utente in un riquadro a destra, l'assistente come testo pieno. */
-#tab-ai .ai-msg { display: flex; flex-direction: column; margin-bottom: 18px; }
-#tab-ai .ai-msg-user { align-items: flex-end; }
-#tab-ai .ai-msg-meta { font-family: var(--font-data); font-size: 10.5px; color: var(--text-soft); margin-bottom: 4px; }
-#tab-ai .ai-msg-body { white-space: pre-wrap; font-size: 13.5px; line-height: 1.6; max-width: 78ch; }
-#tab-ai .ai-msg-user .ai-msg-body { max-width: 75%; padding: 8px 12px; background: var(--surface-3); border: var(--seam) solid var(--border); }
-#tab-ai .ai-chat-composer { display: block; padding: 10px 14px 8px; border-top: var(--seam) solid var(--border); background: var(--surface); flex:0 0 auto; }
-#tab-ai .ai-composer-box { border: var(--seam) solid var(--border-strong); background: var(--surface-2); transition: border-color var(--transition); }
-#tab-ai .ai-composer-box:focus-within { border-color: var(--text-muted); }
-#tab-ai #aiChatInput { display: block; width: 100%; box-sizing: border-box; padding: 10px 12px; border: 0; border-radius: 0; background: transparent; color: var(--text); font: inherit; font-size: 13.5px; resize: none; min-height: 52px; max-height: 200px; }
-#tab-ai #aiChatInput:focus { outline: none; box-shadow: none; }
-#tab-ai .ai-composer-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 8px; }
-#tab-ai .ai-ctx-chip { display: inline-flex; align-items: center; gap: 6px; width: auto; margin: 0; padding: 4px 9px; border: var(--seam) solid var(--border); background: var(--surface); color: var(--text-muted); font-size: 11.5px; cursor: pointer; }
-#tab-ai .ai-ctx-chip:hover { color: var(--text); border-color: var(--border-strong); }
-#tab-ai .ai-ctx-chip:has(input:checked) { color: var(--text); border-color: var(--primary); }
-#tab-ai .ai-ctx-chip input { margin: 0; }
-#tab-ai .ai-ctx-chip, #tab-ai select.ai-ctx-chip { box-sizing: border-box; height: 28px; min-height: 0; line-height: 1; }
-/* Il select globale forza 36px con !important: qui serve la stessa altezza delle altre chip. */
-#tab-ai select.ai-ctx-chip { max-width: 200px; height: 28px !important; line-height: 26px !important; padding-left: 9px !important; font-family: inherit; }
-#tab-ai .ai-send { width: auto; margin: 0 0 0 auto; }
-#tab-ai .ai-composer-hint { margin: 6px 2px 0; font-size: 11px; color: var(--text-soft); }
-#tab-ai .ai-profile-layout { display: grid; grid-template-columns: 222px 1fr; gap: 16px; align-items: start; }
-#tab-ai .ai-profile-form { border-left: var(--seam) solid var(--border); padding-left: 20px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-#tab-ai .ai-form-section { display: flex; flex-direction: column; gap: 14px; padding: 4px 0 18px; border-bottom: var(--seam) solid var(--border); margin-bottom: 14px; }
-#tab-ai .ai-form-section-title { font-family: var(--font-legend); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-soft); }
-#tab-ai .ai-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px 18px; align-items: start; }
-#tab-ai .ai-field { gap: 6px; min-width: 0; margin: 0; }
-#tab-ai .ai-field label { margin: 0; font-family: inherit; font-size: 13px; font-weight: 600; letter-spacing: normal; text-transform: none; color: var(--text); }
-#tab-ai .ai-field input:not([type="checkbox"]) { padding-left: 12px; }
-#tab-ai .ai-hint { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--text-soft); }
-#tab-ai .ai-model-row { display: flex; gap: 6px; }
-#tab-ai .ai-model-row select { flex: 1; min-width: 0; }
-#tab-ai .ai-model-row .btn { width: auto; margin: 0; }
-#tab-ai .ai-provider-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
-#tab-ai .ai-provider-tile { display: grid; grid-template-columns: 22px 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: center; text-align: left; padding: 10px 12px; border: var(--seam) solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; cursor: pointer; transition: background var(--transition), border-color var(--transition); }
-#tab-ai .ai-provider-tile i { grid-row: 1 / 3; font-size: 15px; color: var(--text-soft); text-align: center; }
-#tab-ai .ai-provider-tile .ai-pt-name { font-size: 13px; font-weight: 600; }
-#tab-ai .ai-provider-tile .ai-pt-sub { font-size: 11px; color: var(--text-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#tab-ai .ai-provider-tile:hover { background: var(--surface-3); border-color: var(--border-strong); }
-#tab-ai .ai-provider-tile[aria-checked="true"] { border-color: var(--primary); background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--primary); }
-#tab-ai .ai-provider-tile[aria-checked="true"] i { color: var(--primary); }
-#tab-ai .ai-provider-tile:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+#aiSettingsPanel .ai-profile-layout { display: grid; grid-template-columns: 222px 1fr; gap: 16px; align-items: start; }
+#aiSettingsPanel .ai-profile-form { border-left: var(--seam) solid var(--border); padding-left: 20px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+#aiSettingsPanel .ai-form-section { display: flex; flex-direction: column; gap: 14px; padding: 4px 0 18px; border-bottom: var(--seam) solid var(--border); margin-bottom: 14px; }
+#aiSettingsPanel .ai-form-section-title { font-family: var(--font-legend); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-soft); }
+#aiSettingsPanel .ai-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px 18px; align-items: start; }
+#aiSettingsPanel .ai-field { gap: 6px; min-width: 0; margin: 0; }
+#aiSettingsPanel .ai-field label { margin: 0; font-family: inherit; font-size: 13px; font-weight: 600; letter-spacing: normal; text-transform: none; color: var(--text); }
+#aiSettingsPanel .ai-field input:not([type="checkbox"]) { padding-left: 12px; }
+#aiSettingsPanel .ai-hint { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--text-soft); }
+#aiSettingsPanel .ai-model-row { display: flex; gap: 6px; }
+#aiSettingsPanel .ai-model-row select { flex: 1; min-width: 0; }
+#aiSettingsPanel .ai-model-row .btn { width: auto; margin: 0; }
+#aiSettingsPanel .ai-provider-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+#aiSettingsPanel .ai-provider-tile { display: grid; grid-template-columns: 22px 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: center; text-align: left; padding: 10px 12px; border: var(--seam) solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; cursor: pointer; transition: background var(--transition), border-color var(--transition); }
+#aiSettingsPanel .ai-provider-tile i { grid-row: 1 / 3; font-size: 15px; color: var(--text-soft); text-align: center; }
+#aiSettingsPanel .ai-provider-tile .ai-pt-name { font-size: 13px; font-weight: 600; }
+#aiSettingsPanel .ai-provider-tile .ai-pt-sub { font-size: 11px; color: var(--text-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#aiSettingsPanel .ai-provider-tile:hover { background: var(--surface-3); border-color: var(--border-strong); }
+#aiSettingsPanel .ai-provider-tile[aria-checked="true"] { border-color: var(--primary); background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--primary); }
+#aiSettingsPanel .ai-provider-tile[aria-checked="true"] i { color: var(--primary); }
+#aiSettingsPanel .ai-provider-tile:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 /* Campi che non servono al provider scelto: Ollama non usa chiave, Anthropic e Gemini non hanno endpoint alternativo. */
-#tab-ai #aiProfileForm[data-provider="ollama"] .ai-f-apikey,
-#tab-ai #aiProfileForm[data-provider="anthropic"] .ai-f-baseurl,
-#tab-ai #aiProfileForm[data-provider="gemini"] .ai-f-baseurl { display: none; }
-#tab-ai .ai-setting-row { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: var(--seam) solid var(--border); background: var(--surface-2); cursor: pointer; text-transform: none; letter-spacing: normal; font-family: inherit; font-weight: 400; margin: 0; }
-#tab-ai .ai-setting-row input { margin-top: 2px; flex: 0 0 auto; }
-#tab-ai .ai-setting-row > span { display: flex; flex-direction: column; gap: 3px; }
-#tab-ai .ai-setting-row .ai-setting-title { font-size: 13px; font-weight: 600; color: var(--text); }
-#tab-ai .ai-setting-row:has(input:checked) { border-color: var(--lamp-warn, var(--warning)); }
-#tab-ai .ai-form-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-#tab-ai .ai-form-actions #aiSettingsStatus { flex: 1; min-width: 160px; }
-#tab-ai .ai-form-actions .btn { margin: 0; }
-#tab-ai .ai-profile-card { display: flex; flex-direction: column; gap: 3px; padding: 9px 11px; border: var(--seam) solid var(--border-strong); background: var(--surface-2); cursor: pointer; transition: background var(--transition), border-color var(--transition); }
-#tab-ai .ai-profile-card:hover { background: var(--surface-3); }
-#tab-ai .ai-profile-card.editing { border-color: var(--text); background: var(--surface-3); }
-#tab-ai .ai-profile-card .ai-prof-top { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; }
-#tab-ai .ai-profile-card .ai-prof-meta { font-size: 10.5px; color: var(--text-soft); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-family: var(--font-data); }
-#tab-ai .ai-profile-card .ai-prof-activate { border: 0; background: none; color: var(--text-muted); font-size: 10.5px; cursor: pointer; padding: 0; text-decoration: underline; align-self: flex-start; }
-#tab-ai .ai-profile-card .ai-prof-activate:hover { color: var(--text); }
+#aiSettingsPanel #aiProfileForm[data-provider="ollama"] .ai-f-apikey,
+#aiSettingsPanel #aiProfileForm[data-provider="anthropic"] .ai-f-baseurl,
+#aiSettingsPanel #aiProfileForm[data-provider="gemini"] .ai-f-baseurl { display: none; }
+#aiSettingsPanel .ai-setting-row { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: var(--seam) solid var(--border); background: var(--surface-2); cursor: pointer; text-transform: none; letter-spacing: normal; font-family: inherit; font-weight: 400; margin: 0; }
+#aiSettingsPanel .ai-setting-row input { margin-top: 2px; flex: 0 0 auto; }
+#aiSettingsPanel .ai-setting-row > span { display: flex; flex-direction: column; gap: 3px; }
+#aiSettingsPanel .ai-setting-row .ai-setting-title { font-size: 13px; font-weight: 600; color: var(--text); }
+#aiSettingsPanel .ai-setting-row:has(input:checked) { border-color: var(--lamp-warn, var(--warning)); }
+#aiSettingsPanel .ai-form-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#aiSettingsPanel .ai-form-actions #aiSettingsStatus { flex: 1; min-width: 160px; }
+#aiSettingsPanel .ai-form-actions .btn { margin: 0; }
+#aiSettingsPanel .ai-profile-card { display: flex; flex-direction: column; gap: 3px; padding: 9px 11px; border: var(--seam) solid var(--border-strong); background: var(--surface-2); cursor: pointer; transition: background var(--transition), border-color var(--transition); }
+#aiSettingsPanel .ai-profile-card:hover { background: var(--surface-3); }
+#aiSettingsPanel .ai-profile-card.editing { border-color: var(--text); background: var(--surface-3); }
+#aiSettingsPanel .ai-profile-card .ai-prof-top { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; }
+#aiSettingsPanel .ai-profile-card .ai-prof-meta { font-size: 10.5px; color: var(--text-soft); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-family: var(--font-data); }
+#aiSettingsPanel .ai-profile-card .ai-prof-activate { border: 0; background: none; color: var(--text-muted); font-size: 10.5px; cursor: pointer; padding: 0; text-decoration: underline; align-self: flex-start; }
+#aiSettingsPanel .ai-profile-card .ai-prof-activate:hover { color: var(--text); }
 
 /* ---------------------------------------------------------------
    18. SCHEMA UNIFILARE — la prima vista
@@ -2288,10 +2234,8 @@ body:not(.role-super_admin) .requires-super-admin { display: none !important; }
 }
 
 @media (max-width: 900px) {
-  #tab-ai .ai-chat-shell { grid-template-columns: 1fr; height: auto; }
-  #tab-ai .ai-conv-sidebar { border-right: 0; border-bottom: var(--seam) solid var(--border); max-height: 220px; }
-  #tab-ai .ai-profile-layout { grid-template-columns: 1fr; }
-  #tab-ai .ai-profile-form { border-left: 0; padding-left: 0; border-top: var(--seam) solid var(--border); padding-top: 14px; }
+  #aiSettingsPanel .ai-profile-layout { grid-template-columns: 1fr; }
+  #aiSettingsPanel .ai-profile-form { border-left: 0; padding-left: 0; border-top: var(--seam) solid var(--border); padding-top: 14px; }
 }
 
 @media (max-width: 768px) {

@@ -1,232 +1,7 @@
 // Copyright 2026 Claudio Vidhi
 // SPDX-License-Identifier: AGPL-3.0-only
-    // ===== AI Assistant =====
-    let aiHistory = [];  // {role, content} inviato al backend (senza system: aggiunto server-side)
     let aiProfilesCache = [];   // ultima lista di profili (mascherati) caricata dal server
     let aiActiveProfileId = ''; // id del profilo attivo lato server
-    let aiConversations = [];   // elenco (senza messaggi) delle conversazioni salvate
-    let aiConvId = null;        // id della conversazione aperta (null = non ancora salvata)
-    let aiConvTitle = '';       // titolo della conversazione aperta
-
-    // Popola la select dei dispositivi allegabili, filtrata per il tenant
-    // selezionato: la config allegata deve appartenere al tenant scelto.
-    function populateAiAttachDevices() {
-        const box = document.getElementById('aiAttachDeviceList');
-        if (!box) return;
-        const tenant = document.getElementById('aiAttachTenant')?.value || '';
-        // Multi-selezione: preserva gli IP già selezionati che restano visibili.
-        const cur = new Set(getAiAttachDeviceIps());
-        const devices = (globalDevices || []).filter(d =>
-            !tenant || (d.Group || '') === tenant);
-        box.innerHTML = devices.length ? devices.map(d =>
-            `<label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:4px 8px;">
-                <input type="checkbox" class="ai-attach-device" value="${escapeHtml(d.IP)}"${cur.has(d.IP) ? ' checked' : ''} style="accent-color:var(--primary);">
-                <span>${escapeHtml(d.Hostname || d.IP)} (${escapeHtml(d.IP)})</span>
-            </label>`
-        ).join('') : `<span style="color:var(--text-muted); padding:4px 8px; display:block;">${tr('msgAiNoDevices') || 'Nessun dispositivo'}</span>`;
-        updateAiDeviceBtnLabel();
-    }
-
-    function getAiAttachDeviceIps() {
-        return [...document.querySelectorAll('#aiAttachDeviceList .ai-attach-device:checked')]
-            .map(cb => cb.value);
-    }
-
-    function setAllAiAttachDevices(checked) {
-        document.querySelectorAll('#aiAttachDeviceList .ai-attach-device')
-            .forEach(cb => { cb.checked = checked; });
-        updateAiDeviceBtnLabel();
-    }
-
-    function updateAiDeviceBtnLabel() {
-        const el = document.getElementById('aiAttachDeviceBtnLabel');
-        if (!el) return;
-        const L = i18n[currentLang];
-        const n = getAiAttachDeviceIps().length;
-        el.textContent = n > 0
-            ? `${n} ${L.lblAiDevSelected || 'selezionati'}`
-            : (L.lblAiAttachDevices || 'Dispositivi');
-    }
-
-    function toggleAiDeviceDropdown() {
-        const dd = document.getElementById('aiAttachDeviceDropdown');
-        if (dd) dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
-    }
-
-    document.addEventListener('click', function(e) {
-        const dd = document.getElementById('aiAttachDeviceDropdown');
-        const btn = document.getElementById('aiAttachDeviceBtn');
-        if (dd && btn && !dd.contains(e.target) && !btn.contains(e.target)) {
-            dd.style.display = 'none';
-        }
-    });
-
-    function loadAiTab() {
-        populateAiAttachDevices();
-        // Popola la select dei tenant/sedi per allegare il contesto completo al chat
-        const tenantSel = document.getElementById('aiAttachTenant');
-        if (tenantSel) {
-            const curTenant = tenantSel.value;
-            const tenantOpts = Object.keys(globalGroups || {}).map(g =>
-                `<option value="${escapeHtml(g)}">${escapeHtml(orgLabel(g))}</option>`
-            ).join('');
-            tenantSel.innerHTML = `<option value="">${tr('optAiNoTenant')}</option>` + tenantOpts;
-            // Untouched by the user: the tenant selected at the top, so the
-            // device list below starts inside it.
-            const groups = Object.keys(globalGroups || {});
-            tenantSel.value = tenantSel.dataset.userSet === '1'
-                ? (groups.includes(curTenant) ? curTenant : '')
-                : tenantSelectSeed(curTenant, groups, '');
-            if (tenantSel.value !== curTenant) populateAiAttachDevices();
-        }
-        if (document.body.classList.contains('role-admin')) {
-            loadAiProfiles();
-        }
-        loadAiConversations();
-        populateGenCfgTenants();
-    }
-
-    // ===== Conversazioni salvate =====
-    // La chat viveva solo in `aiHistory`: cambiare tab la buttava via. Ora ogni
-    // scambio viene persistito lato server (POST alla prima risposta, PUT alle
-    // successive) e la sidebar elenca le conversazioni dell'utente.
-
-    function fmtAiConvTime(ts) {
-        const d = new Date((ts || 0) * 1000);
-        const days = Math.floor((Date.now() - d.getTime()) / 86400000);
-        if (days <= 0) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        if (days === 1) return tr('lblAiYesterday') || 'ieri';
-        return d.toLocaleDateString();
-    }
-
-    function renderAiConvList() {
-        const box = document.getElementById('aiConvList');
-        if (!box) return;
-        if (!aiConversations.length) {
-            box.innerHTML = `<div class="ai-conv-empty">${escapeHtml(tr('msgAiNoConversations') || 'Nessuna conversazione salvata.')}</div>`;
-            return;
-        }
-        const untitled = tr('lblAiUntitledChat') || 'Nuova conversazione';
-        box.innerHTML = aiConversations.map(c => `
-            <div class="ai-conv-item${c.id === aiConvId ? ' active' : ''}" data-action="open-conv" data-conv-id="${Number(c.id)}">
-                <i class="fa-regular fa-comment" style="font-size:11px;"></i>
-                <span class="ai-conv-title" title="${escapeHtml(c.title || untitled)}">${escapeHtml(c.title || untitled)}</span>
-                <span style="font-size:10px; color:var(--text-muted);">${escapeHtml(fmtAiConvTime(c.updated_ts))}</span>
-                <button class="ai-conv-del" data-action="delete-conv" data-conv-id="${Number(c.id)}"
-                        title="${escapeHtml(tr('btnAiDeleteChat') || 'Elimina conversazione')}">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>`).join('');
-    }
-
-    function setAiChatTitle(title) {
-        aiConvTitle = title || '';
-        const el = document.getElementById('aiChatTitle');
-        if (el) el.textContent = aiConvTitle
-            || (aiConvId !== null ? (tr('lblAiUntitledChat') || 'Nuova conversazione')
-                                  : (tr('titleAiChat') || 'Conversazione'));
-    }
-
-    async function loadAiConversations() {
-        try {
-            const res = await apiFetch('/api/ai/conversations');
-            if (!res || !res.ok) return;
-            aiConversations = (await res.json()).conversations || [];
-            // Il titolo di una conversazione creata vuota lo deriva il server
-            // dal primo messaggio: qui l'intestazione si riallinea.
-            const open = aiConversations.find(c => c.id === aiConvId);
-            if (open) setAiChatTitle(open.title);
-            renderAiConvList();
-        } catch (e) { /* silenzioso: la chat resta usabile senza cronologia */ }
-    }
-
-    async function openAiConversation(id) {
-        try {
-            const res = await apiFetch(`/api/ai/conversations/${Number(id)}`);
-            if (!res || !res.ok) return;
-            const data = await res.json();
-            aiConvId = data.id;
-            aiHistory = data.messages || [];
-            const box = document.getElementById('aiChatMessages');
-            if (box) box.innerHTML = '';
-            aiHistory.forEach(m => appendAiMessage(m.role, m.content));
-            setAiChatTitle(data.title);
-            renderAiConvList();
-        } catch (e) { /* silenzioso */ }
-    }
-
-    // Il "+" crea subito la riga lato server, così la conversazione compare in
-    // elenco appena la si apre invece che solo dopo la prima risposta.
-    async function newAiConversation() {
-        // Se quella aperta è già nuova e vuota non serve un doppione.
-        if (aiConvId !== null && !aiHistory.length) return;
-        clearAiChat();
-        try {
-            const res = await apiFetch('/api/ai/conversations', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages: [] })
-            });
-            if (!res || !res.ok) return;
-            aiConvId = (await res.json()).id;
-            setAiChatTitle('');
-            await loadAiConversations();
-        } catch (e) { /* silenzioso: la chat resta usabile senza cronologia */ }
-    }
-
-    async function deleteAiConversation(id) {
-        if (!confirm(tr('confirmAiDeleteChat') || 'Eliminare questa conversazione?')) return;
-        try {
-            const res = await apiFetch(`/api/ai/conversations/${Number(id)}`, { method: 'DELETE' });
-            if (!res || !res.ok) return;
-            if (id === aiConvId) clearAiChat();
-            await loadAiConversations();
-        } catch (e) { /* silenzioso */ }
-    }
-
-    function deleteCurrentAiConversation() {
-        if (aiConvId !== null) deleteAiConversation(aiConvId);
-    }
-
-    async function renameAiConversation() {
-        if (aiConvId === null) return;
-        const next = prompt(tr('promptAiRenameChat') || 'Nuovo titolo:', aiConvTitle);
-        if (next === null) return;
-        const title = next.trim();
-        if (!title) return;
-        try {
-            const res = await apiFetch(`/api/ai/conversations/${Number(aiConvId)}`, {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title })
-            });
-            if (!res || !res.ok) return;
-            setAiChatTitle(title);
-            await loadAiConversations();
-        } catch (e) { /* silenzioso */ }
-    }
-
-    // Persiste la conversazione corrente. Alla prima risposta crea la riga e
-    // ne memorizza l'id, poi aggiorna sempre la stessa.
-    async function persistAiConversation() {
-        if (!aiHistory.length) return;
-        try {
-            if (aiConvId === null) {
-                const res = await apiFetch('/api/ai/conversations', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ messages: aiHistory })
-                });
-                if (!res || !res.ok) return;
-                const data = await res.json();
-                aiConvId = data.id;
-                setAiChatTitle(data.title);
-            } else {
-                await apiFetch(`/api/ai/conversations/${Number(aiConvId)}`, {
-                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ messages: aiHistory })
-                });
-            }
-            await loadAiConversations();
-        } catch (e) { /* silenzioso: la chat non deve rompersi se il salvataggio fallisce */ }
-    }
 
     // ===== Generazione config nuovo switch (AI) =====
     function populateGenCfgProfiles() {
@@ -332,8 +107,8 @@
     }
 
     // Ricarica la lista dei profili AI dal server e ripopola sia la select
-    // "profilo attivo" (in cima alla chat) sia quella "profilo in modifica"
-    // (nel pannello di configurazione admin).
+    // "profilo attivo" sia quella "profilo in modifica" (entrambe nascoste,
+    // pannello Profili AI delle Impostazioni).
     async function loadAiProfiles() {
         const statusEl = document.getElementById('aiSettingsStatus');
         try {
@@ -432,8 +207,7 @@
         renderAiProfileCards();
     }
 
-    // L'utente ha cambiato il "profilo attivo" in cima alla chat: attiva
-    // subito quel profilo lato server, cosi' la chat lo usa istantaneamente.
+    // Una card ha chiesto di diventare il profilo attivo: lo attiva lato server.
     async function onAiProfileSelectChange() {
         const sel = document.getElementById('aiProfileSelect');
         const profileId = sel ? sel.value : '';
@@ -615,230 +389,11 @@
         }
     }
 
-    // Non cancella nulla lato server: chiude la conversazione corrente e ne
-    // apre una nuova. Quella di prima resta nella sidebar.
-    function clearAiChat() {
-        aiHistory = [];
-        aiConvId = null;
-        const box = document.getElementById('aiChatMessages');
-        if (box) box.innerHTML = '';
-        setAiChatTitle('');
-        renderAiConvList();
-    }
-
-    // --- Config push proposto dall'AI (§10.2): il modello PROPONE in un blocco
-    // ```sentinelnet-config {...}```; l'utente CONFERMA in un modale; solo allora
-    // il browser chiama /api/bulk-command (operator+blacklist+audit lato server).
-    function parseAiConfigProposal(reply) {
-        const m = (reply || '').match(/```sentinelnet-config\s*\n?([\s\S]*?)```/);
-        if (!m) return null;
-        try {
-            const p = JSON.parse(m[1].trim());
-            if (!p.device_ip || !Array.isArray(p.commands) || !p.commands.length) return null;
-            return p;
-        } catch (e) { return null; }
-    }
-
-    function renderAiConfigProposal(p, attachedIps) {
-        if (!p) return;
-        const box = document.getElementById('aiChatMessages');
-        if (!box) return;
-        const card = document.createElement('div');
-        card.style.cssText = 'border:1px solid var(--warning, var(--lamp-warn)); border-radius:0; padding:12px; margin:8px 0; font-size:13px;';
-        if (!(attachedIps || []).includes(p.device_ip)) {
-            card.innerHTML = tr('aiTheAiProposedA', {device_ip: escapeHtml(p.device_ip)});
-            box.appendChild(card);
-            box.scrollTop = box.scrollHeight;
-            return;
-        }
-        card.innerHTML = `
-            <div style="font-weight:600; margin-bottom:6px;"><i class="fa-solid fa-screwdriver-wrench"></i> ${tr('aiProposedConfigurationChange')} — <code>${escapeHtml(p.device_ip)}</code></div>
-            <pre style="background:var(--surface-2); border-radius:0; padding:10px; overflow:auto; margin:0 0 8px 0;">${escapeHtml(p.commands.join('\n'))}</pre>
-            <div style="display:flex; gap:8px; align-items:center;">
-                <button class="btn btn-primary btn-small requires-write" style="width:auto;"><i class="fa-solid fa-play"></i> ${tr('aiApply')}</button>
-                <button class="btn btn-secondary btn-small" style="width:auto;">${tr('uiCancel')}</button>
-                <span class="ai-cfg-status" style="font-size:12px; color:var(--text-muted);"></span>
-            </div>`;
-        const [applyBtn, cancelBtn] = card.querySelectorAll('button');
-        cancelBtn.onclick = () => card.remove();
-        applyBtn.onclick = () => showAiConfigConfirmModal(p, card);
-        box.appendChild(card);
-        box.scrollTop = box.scrollHeight;
-    }
-
-    function showAiConfigConfirmModal(p, card) {
-        const overlay = document.createElement('div');
-        overlay.style.cssText = 'position:fixed; inset:0; background:var(--scrim); z-index:10000; display:flex; align-items:center; justify-content:center;';
-        overlay.innerHTML = `
-            <div style="background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:0; max-width:560px; width:92%; padding:18px;">
-                <h4 style="margin:0 0 10px 0;">${tr('aiConfirmConfigurationPush')}</h4>
-                <p style="font-size:13px; margin:0 0 8px 0;">${tr('aiYouAreAboutTo', {length: p.commands.length, device_ip: escapeHtml(p.device_ip)})}</p>
-                <pre style="background:var(--surface-2); border-radius:0; padding:10px; max-height:220px; overflow:auto; font-size:12px;">${escapeHtml(p.commands.join('\n'))}</pre>
-                <label style="display:flex; align-items:center; gap:6px; font-size:13px; margin:8px 0;">
-                    <input type="checkbox" id="aiCfgSaveAfter"${p.save_after ? ' checked' : ''}> ${tr('aiSaveStartupConfigurationAfter')}
-                </label>
-                <div style="display:flex; gap:8px; justify-content:flex-end;">
-                    <button class="btn btn-secondary btn-small" style="width:auto;">${tr('uiCancel')}</button>
-                    <button class="btn btn-primary btn-small" style="width:auto;"><i class="fa-solid fa-play"></i> ${tr('aiConfirmAndApply')}</button>
-                </div>
-            </div>`;
-        const [cancelBtn, confirmBtn] = overlay.querySelectorAll('button');
-        cancelBtn.onclick = () => overlay.remove();
-        confirmBtn.onclick = async () => {
-            const save = overlay.querySelector('#aiCfgSaveAfter').checked;
-            overlay.remove();
-            await applyAiConfigProposal(p, save, card);
-        };
-        document.body.appendChild(overlay);
-    }
-
-    async function applyAiConfigProposal(p, save, card) {
-        const statusEl = card.querySelector('.ai-cfg-status');
-        const setStatus = (t, err) => { if (statusEl) { statusEl.textContent = t; statusEl.style.color = err ? 'var(--danger, #d9534f)' : 'var(--text-muted)'; } };
-        card.querySelectorAll('button').forEach(b => b.disabled = true);
-        setStatus(tr('aiSending'));
-        try {
-            const res = await apiFetch('/api/bulk-command', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ips: [p.device_ip],
-                    commands: p.commands.join('\n'),
-                    mode: p.config_mode === false ? 'exec' : 'config',
-                    save: !!save
-                })
-            });
-            if (!res || !res.ok) {
-                const err = res ? await res.json().catch(() => ({})) : {};
-                setStatus((tr('uiError')) + (err.detail || (tr('aiRequestRejected'))), true);
-                card.querySelectorAll('button').forEach(b => b.disabled = false);
-                return;
-            }
-            const jobId = (await res.json()).job_id;
-            // Poll dello stato del job (max ~120s).
-            for (let i = 0; i < 60; i++) {
-                await new Promise(r => setTimeout(r, 2000));
-                const jr = await apiFetch(`/api/bulk-command/${encodeURIComponent(jobId)}`);
-                if (!jr || !jr.ok) continue;
-                const job = await jr.json();
-                if (job.status !== 'running') {
-                    const entry = (job.results || [])[0];
-                    const result = entry ? (entry.result || {}) : { status: 'error', message: tr('aiDeviceNotFoundIn') };
-                    const ok = result.status === 'success';
-                    setStatus(ok ? (tr('aiConfigurationApplied')) : (tr('uiError')) + (result.message || (tr('aiPushFailed'))), !ok);
-                    appendAiMessage('assistant', (ok ? (tr('aiConfigurationAppliedTo')) : (tr('aiPushFailedTo'))) + p.device_ip + (result.output ? '\n\n' + result.output : (result.message ? '\n\n' + result.message : '')));
-                    return;
-                }
-                setStatus(tr('aiRunning'));
-            }
-            setStatus(tr('aiTimeoutWaitingForThe'), true);
-        } catch (e) {
-            setStatus((tr('aiNetworkError')) + e, true);
-            card.querySelectorAll('button').forEach(b => b.disabled = false);
-        }
-    }
-
-    function appendAiMessage(role, text, meta) {
-        const box = document.getElementById('aiChatMessages');
-        if (!box) return null;
-        const div = document.createElement('div');
-        const isUser = role === 'user';
-        div.className = 'ai-msg' + (isUser ? ' ai-msg-user' : '');
-        const label = isUser ? (tr('lblAiChatYou') || 'Tu') : (meta || (tr('lblAiChatAssistant') || 'AI'));
-        div.innerHTML = `<div class="ai-msg-meta">${escapeHtml(label)}</div>
-            <div class="ai-msg-body">${escapeHtml(text)}</div>`;
-        box.appendChild(div);
-        box.scrollTop = box.scrollHeight;
-        return div;
-    }
-
-    async function sendAiChat() {
-        const input = document.getElementById('aiChatInput');
-        const sendBtn = document.getElementById('btnAiSend');
-        const text = (input.value || '').trim();
-        if (!text) return;
-        input.value = '';
-        if (sendBtn) sendBtn.disabled = true;
-        aiHistory.push({ role: 'user', content: text });
-        appendAiMessage('user', text);
-
-        const attachInventory = document.getElementById('aiAttachInventory').checked;
-        const attachDeviceIps = getAiAttachDeviceIps();
-        const attachTenant = document.getElementById('aiAttachTenant')?.value || null;
-        const wasTopFlows = aiAttachTopFlowsOnce;
-        const wasFlowKeys = aiAttachFlowKeysOnce;
-
-        const placeholder = appendAiMessage('assistant', '...');
-
-        try {
-            const body = {
-                messages: aiHistory,
-                attach_inventory: attachInventory,
-                attach_device_ips: attachDeviceIps,
-                attach_tenant: attachTenant,
-                attach_top_flows: aiAttachTopFlowsOnce
-            };
-            // 11.3: se sono state selezionate righe flusso specifiche, invia le
-            // sole tuple identificative (mai byte/pacchetti — li ri-deriva il server).
-            if (aiAttachFlowKeysOnce && aiAttachFlowKeysOnce.length) {
-                body.attach_flow_keys = aiAttachFlowKeysOnce;
-            }
-            const res = await apiFetch('/api/ai/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-            if (placeholder) placeholder.remove();
-            if (res && res.ok) {
-                const data = await res.json();
-                aiHistory.push({ role: 'assistant', content: data.reply });
-                const meta = [data.profile_name, data.model].filter(Boolean).join(' · ');
-                appendAiMessage('assistant', data.reply, meta);
-                renderAiConfigProposal(parseAiConfigProposal(data.reply), attachDeviceIps);
-            } else if (res && res.status === 429) {
-                const err = await res.json().catch(() => ({}));
-                appendAiMessage('assistant', '⏳ ' + (tr('errAiRateLimited') || 'Troppe richieste: limite di frequenza superato. Riprova tra qualche secondo.') + (err.detail ? ' (' + err.detail + ')' : ''));
-            } else {
-                const err = res ? await res.json().catch(() => ({})) : {};
-                appendAiMessage('assistant', 'Errore: ' + (err.detail || 'richiesta fallita.'));
-            }
-        } catch (e) {
-            if (placeholder) placeholder.remove();
-            appendAiMessage('assistant', 'Errore di rete: ' + e);
-        } finally {
-            if (sendBtn) sendBtn.disabled = false;
-            if (wasTopFlows) aiAttachTopFlowsOnce = false; // allegato una sola volta
-            if (wasFlowKeys) aiAttachFlowKeysOnce = null;  // allegato una sola volta
-            await persistAiConversation();
-        }
-    }
-
     window.populateGenCfgProfiles = populateGenCfgProfiles;
     window.populateGenCfgTenants = populateGenCfgTenants;
     window.populateGenCfgTemplates = populateGenCfgTemplates;
     window.generateSwitchConfig = generateSwitchConfig;
     window.copyGenCfgOutput = copyGenCfgOutput;
-
-    // Delegated event listeners for AI tab
-    document.getElementById('aiAttachDeviceList')?.addEventListener('change', (e) => {
-        if (e.target.classList.contains('ai-attach-device')) {
-            updateAiDeviceBtnLabel();
-        }
-    });
-
-    document.getElementById('aiConvList')?.addEventListener('click', (e) => {
-        const delBtn = e.target.closest('[data-action="delete-conv"]');
-        if (delBtn && delBtn.dataset.convId) {
-            e.stopPropagation();
-            deleteAiConversation(Number(delBtn.dataset.convId));
-            return;
-        }
-        const openItem = e.target.closest('[data-action="open-conv"]');
-        if (openItem && openItem.dataset.convId) {
-            openAiConversation(Number(openItem.dataset.convId));
-            return;
-        }
-    });
 
     document.getElementById('aiProfileCards')?.addEventListener('click', (e) => {
         const actBtn = e.target.closest('[data-action="activate-profile"]');
@@ -860,47 +415,16 @@
     document.getElementById('btnAiRefreshModels')?.addEventListener('click', refreshAiModels);
     document.getElementById('btnAiSaveSettings')?.addEventListener('click', saveAiSettings);
     document.getElementById('btnAiDeleteProfile')?.addEventListener('click', deleteAiProfile);
-    document.getElementById('btnAiNewChat')?.addEventListener('click', newAiConversation);
-    document.getElementById('btnAiRenameChat')?.addEventListener('click', renameAiConversation);
-    document.getElementById('btnAiDeleteChat')?.addEventListener('click', deleteCurrentAiConversation);
-    document.getElementById('aiAttachTenant')?.addEventListener('change', populateAiAttachDevices);
-    // core.js seeds the two tenant fields without a change event (a form's
-    // side effects must not fire): redraw their device lists here.
-    window.addEventListener('globalTenantChanged', () => {
-        populateAiAttachDevices();
-        populateGenCfgTemplates();
-    });
-    document.getElementById('aiAttachDeviceBtn')?.addEventListener('click', toggleAiDeviceDropdown);
+    // core.js seeds the tenant field without a change event (a form's side
+    // effects must not fire): redraw its device list here.
+    window.addEventListener('globalTenantChanged', populateGenCfgTemplates);
 
-    document.getElementById('aiChatInput')?.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendAiChat();
-        }
-    });
-    document.getElementById('btnAiSend')?.addEventListener('click', sendAiChat);
-
-    document.getElementById('tab-ai')?.addEventListener('click', (e) => {
-        if (e.target.closest('[data-action="ai-select-all-devices"]')) {
-            setAllAiAttachDevices(true);
-            return;
-        }
-        if (e.target.closest('[data-action="ai-deselect-all-devices"]')) {
-            setAllAiAttachDevices(false);
-            return;
-        }
+    document.getElementById('aiSettingsPanel')?.addEventListener('click', (e) => {
         const tile = e.target.closest('[data-action="ai-pick-provider"]');
         if (tile) {
             const sel = document.getElementById('aiProvider');
             sel.value = tile.dataset.provider;
             sel.dispatchEvent(new Event('change'));
-            return;
-        }
-        const suggest = e.target.closest('[data-action="ai-suggest"]');
-        if (suggest) {
-            const input = document.getElementById('aiChatInput');
-            input.value = suggest.textContent.trim();
-            input.focus();
             return;
         }
         const newProf = e.target.closest('[data-action="select-profile"][data-profile-id="__new__"]');

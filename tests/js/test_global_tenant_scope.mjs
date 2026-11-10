@@ -39,14 +39,12 @@ const fnSrc = (src, head) => {
     assert.ok(/'bulkGroupFilter', 'dhTenant'\]/.test(core), 'device history tenant filter follows the global tenant');
 }
 
-// AI tab: attach-device and template lists start in the global tenant and follow it.
+// AI config generator: the template list starts in the global tenant and follows it.
 {
     const ai = read('../../static/js/ai.js');
-    assert.ok(ai.includes("tenantSelectSeed(curTenant, groups, '')"), 'AI attach tenant seeded from the global tenant');
     assert.ok(ai.includes("tenantSelectSeed('', allTenants, allTenants[0])"), 'config generator tenant seeded from the global tenant');
-    const onChange = ai.slice(ai.indexOf("window.addEventListener('globalTenantChanged'"));
-    assert.ok(onChange.includes('populateAiAttachDevices()') && onChange.includes('populateGenCfgTemplates()'),
-              'a tenant change redraws the AI device lists');
+    assert.ok(ai.includes("window.addEventListener('globalTenantChanged', populateGenCfgTemplates)"),
+              'a tenant change redraws the generator template list');
 }
 
 // Scheduler: a new schedule starts in the global tenant.

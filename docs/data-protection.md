@@ -53,7 +53,7 @@ reason, and the shipped configuration does not receive syslog at all (see §2).
 | Login attempts, per source and account | `login_attempts.json` | Lockout state, pruned after the lockout window |
 | Audit trail: who did what, when, from which declared client | `audit.log` | 10 MB × 9 rotated files. HMAC-chained, so a rewritten line is detectable |
 | Revoked session identifiers | `revoked_tokens.json` | Each entry lives only until the token it names would have expired |
-| AI conversations | `observability.db` → `ai_conversations` | Kept per user until deleted from the panel. **No automatic retention** |
+| AI conversations saved before 0.65.0 | `observability.db` → `ai_conversations` | The in-app chat was removed in 0.65.0: the table is no longer read or written. Existing rows stay until an administrator empties the table by hand |
 | Notification preferences and admin rules (recipient addresses, tenants, quiet hours) | `observability.db` → `notify_prefs`, `notify_rules` | Kept until changed or deleted |
 | Notification send history: recipient, event title, status, error | `observability.db` → `notify_log` | 30 days. Non-admins see only their own rows |
 | Pending notifications | `observability.db` → `notify_outbox` | Deleted once sent, or after three failed attempts |

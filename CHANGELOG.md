@@ -10,6 +10,24 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Removed
+
+- **Chat AI in dashboard**: tolte la tab «AI Assistant», le conversazioni
+  salvate, il config push proposto dall'AI e il pulsante «Analizza con AI»
+  della tab Traffico (rotte `/api/ai/chat` e `/api/ai/conversations`). Per
+  interrogare la rete in linguaggio naturale resta il server MCP; per
+  applicare comandi da un client LLM c'è `send_cli_command` con un account
+  operator. La tabella `ai_conversations` resta nel database, non più letta
+  né scritta.
+
+### Changed
+
+- **Profili AI**: provider, modello e chiave si configurano ora in
+  Impostazioni → Profili AI. Continuano ad alimentare la spiegazione degli
+  incidenti, la classificazione dei dispositivi, le proposte Blueprint, il
+  layout della mappa e il generatore di configurazione. Un account limitato
+  alla sola tab AI va riassegnato dalla tab Utenti.
+
 ## [0.64.2] - 2026-11-06
 
 ### Fixed

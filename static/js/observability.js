@@ -188,8 +188,6 @@
     // Autenticazione via cookie HttpOnly (apiFetch): nessun token lato JS.
     let flowsRefreshTimer = null;
     let flowsFetchInFlight = false;
-    let aiAttachTopFlowsOnce = false;
-    let aiAttachFlowKeysOnce = null;                  // 11.3: tuple dei flussi selezionati da allegare una sola volta
     let _flowsRawData = [];                           // cache rows from last fetch
     let _flowsSelectedTenants = new Set(Object.keys(globalGroups || {}));
     let _flowsAllTenantsChecked = true;                // "Tutti" checkbox state
@@ -923,23 +921,6 @@
         return `${f.tenant}|${f.src_ip}|${f.dst_ip}|${f.protocol}|${f.dst_port}|${f.source ?? ''}`;
     }
 
-    // Input per 11.3 (analisi AI sulle sole righe selezionate).
-    function getSelectedFlows() {
-        return _flowsRawData.filter(f => _flowsSelectedKeys.has(flowKey(f)));
-    }
-
-    // 11.3: tupla identificativa (SOLO identificatori — nessun byte/pacchetto:
-    // il server ri-deriva i totali dal DB).
-    function flowToKey(f) {
-        return {
-            src_ip: f.src_ip,
-            dst_ip: f.dst_ip,
-            protocol: Number(f.protocol),
-            dst_port: (f.dst_port === undefined || f.dst_port === null || f.dst_port === '')
-                ? null : Number(f.dst_port)
-        };
-    }
-
     function toggleFlowRowSelect(key, checked) {
         if (checked) _flowsSelectedKeys.add(key); else _flowsSelectedKeys.delete(key);
         syncFlowsSelectAllCheckbox();
@@ -1062,9 +1043,6 @@
                 <button class="btn" style="text-align:left;" data-action="detail-hl-topo" data-ip="${escapeHtml(f.dst_ip)}">
                     <i class="fa-solid fa-diagram-project"></i> ${tr('obsShowDestinationInTopology')}
                 </button>
-                <button class="btn requires-write" style="text-align:left;" data-action="detail-ai-flow" title="${tr('obsSendOnlyThisFlow')}">
-                    <i class="fa-solid fa-robot"></i> ${L.btnAnalyzeAi || 'Analizza con AI'}
-                </button>
             </div>
             <h5 style="margin:0 0 8px 0;">${tr('obsClientSource')}</h5>
             <div id="flowPanelClientMap" style="font-size:12px; color:var(--text-muted);">${tr('obsSearching')}</div>
@@ -1119,61 +1097,6 @@
         };
         tryFocus(0);
     }
-
-    // Percorso comune: prepara il chat AI col contesto flussi (server-side).
-    // ``flows`` non vuoto → analisi delle sole righe selezionate (attach_flow_keys);
-    // altrimenti fallback al riassunto top-N (attach_top_flows).
-    async function _prepareFlowAiChat(flows) {
-        const selected = flows && flows.length;
-        if (selected) {
-            aiAttachFlowKeysOnce = flows.map(flowToKey);
-            aiAttachTopFlowsOnce = false;
-        } else {
-            aiAttachFlowKeysOnce = null;
-            aiAttachTopFlowsOnce = true;
-        }
-        let providerName = '';
-        try {
-            const res = await apiFetch('/api/ai/profiles');
-            if (res && res.ok) {
-                const data = await res.json();
-                const active = (data.profiles || []).find(p => p.id === data.active_profile) || {};
-                providerName = active.provider || '';
-            }
-        } catch (e) { /* nome provider best-effort */ }
-        const note = document.getElementById('flowsAiNote');
-        note.style.display = 'block';
-        // Il contesto è assemblato e REDATTO lato server: il browser invia solo
-        // le tuple identificative (mai byte/pacchetti) e la domanda.
-        note.textContent = '⚠️ ' + (selected
-            ? tr('obsAiScopeSelected', {count: flows.length})
-            : tr('obsAiScopeAggregated'))
-            + tr('obsAiWillBeSent')
-            + (providerName ? ` (${providerName})` : '') + '.';
-        switchTab('tab-ai', document.querySelector(`.nav-item[onclick*="'tab-ai'"]`));
-        const input = document.getElementById('aiChatInput');
-        input.value = selected
-            ? tr('obsAiPromptSelected', {count: flows.length})
-            : tr('obsAiPromptAggregated');
-        input.focus();
-    }
-
-    async function analyzeFlowsWithAi() {
-        // Se l'utente ha selezionato righe (11.2), analizza SOLO quelle;
-        // altrimenti il percorso legacy top-N (attach_top_flows).
-        await _prepareFlowAiChat(getSelectedFlows());
-    }
-
-    // 11.3: analisi AI del singolo flusso dal pannello dettaglio.
-    async function analyzeSingleFlowWithAi() {
-        if (!_flowPanelFlow) return;
-        const f = _flowPanelFlow;
-        closeFlowDetailPanel();
-        await _prepareFlowAiChat([f]);
-    }
-
-
-
 
     // --- FLOW GRAPH (Task 3: Live Flows — grafo, KPI, riepilogo, tabelle) ---
 
@@ -1828,10 +1751,6 @@
             closeFlowDetailPanel();
             return;
         }
-        if (e.target.closest('[data-action="detail-ai-flow"]')) {
-            analyzeSingleFlowWithAi();
-            return;
-        }
     });
 
     document.getElementById('obsSettingsBody')?.addEventListener('click', (e) => {
@@ -1844,7 +1763,6 @@
     document.getElementById('trafMetric')?.addEventListener('change', (e) => trafSetMetric(e.target.value));
     document.getElementById('btnTrafRefresh')?.addEventListener('click', trafRefresh);
     document.getElementById('trafHideTelemetry')?.addEventListener('change', (e) => setFlowsHideTelemetry(e.target.checked));
-    document.getElementById('btnAnalyzeFlowsAi')?.addEventListener('click', analyzeFlowsWithAi);
     document.getElementById('trafPills')?.addEventListener('click', (e) => {
         const pill = e.target.closest('[data-traf-view]');
         if (pill && pill.dataset.trafView) trafSwitchView(pill.dataset.trafView);
