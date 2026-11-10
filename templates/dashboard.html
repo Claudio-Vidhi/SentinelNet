@@ -1975,14 +1975,14 @@
         <div class="hero-card">
           <h2 data-i18n="titleFlows">Traffic</h2>
           <p data-i18n="descFlows">
-            Aggregated network flows (IPFIX/NetFlow/sFlow) per tenant: overview, flow detail, event search and correlated anomalies. The window and tenant apply to all four views. Listeners are configured in Settings → Observability.
+            Syslog event search, flow and syslog rows, and per-policy firewall counters, per tenant. The window and tenant apply to every view. Listeners are configured in Settings → Observability.
           </p>
         </div>
       </div>
 
-      <!-- Header unico del tab: finestra, metrica, tenant e interruttori valgono
-           per tutte e quattro le viste. Prima la stessa finestra esisteva tre
-           volte e nessuna parlava con le altre. -->
+      <!-- One header for the whole tab: window, metric, tenant and toggles apply
+           to every view. The same window used to exist three times, each one
+           ignoring the others. -->
       <div class="filterbar" style="align-items:center; margin:0 0 12px;">
         <select id="trafWindow" aria-label="Finestra temporale del traffico" data-i18n-aria-label="ariaTrafWindow">
           <option value="15m" data-i18n="optWin15m">Ultimi 15 minuti</option>
@@ -2006,89 +2006,12 @@
         <span id="trafLastUpdate" style="font-size:12px; color:var(--text-muted);"></span>
       </div>
       <div id="trafPills" class="subtab-bar">
-        <button type="button" class="ca-pill active" id="trafPill-overview" data-traf-view="overview" data-i18n="trafPillOverview">Panoramica</button>
+        <button type="button" class="ca-pill active" id="trafPill-search" data-traf-view="search" data-i18n="trafPillSearch">Ricerca</button>
         <button type="button" class="ca-pill" id="trafPill-flows" data-traf-view="flows" data-i18n="trafPillFlows">Flussi</button>
-        <button type="button" class="ca-pill" id="trafPill-search" data-traf-view="search" data-i18n="trafPillSearch">Ricerca</button>
-        <button type="button" class="ca-pill" id="trafPill-hosts" data-traf-view="hosts" data-i18n="trafPillHosts">Per IP</button>
         <button type="button" class="ca-pill" id="trafPill-policies" data-traf-view="policies" data-i18n="trafPillPolicies">Per policy</button>
       </div>
-
-      <div id="trafPane-overview" class="traf-pane">
       <div id="flowsObsBanner" style="display:none; padding:10px 14px; margin-bottom:12px; border:1px solid var(--warning, var(--lamp-warn)); border-radius:0; color:var(--warning, var(--lamp-warn)); font-size:13px;"></div>
 
-      <!-- KPI strip -->
-      <div id="fgKpiStrip" class="traf-kpis">
-        <div class="panel traf-kpi"><span class="traf-kpi-label" data-i18n="kpiThroughput">Throughput</span><b class="traf-kpi-value" id="fgKpiThroughput">&mdash;</b></div>
-        <div class="panel traf-kpi"><span class="traf-kpi-label" data-i18n="kpiTopPath">Top path</span><b class="traf-kpi-value" id="fgKpiTopPath">&mdash;</b></div>
-        <div class="panel traf-kpi"><span class="traf-kpi-label" data-i18n="kpiTalkers">Active talkers</span><b class="traf-kpi-value" id="fgKpiTalkers">&mdash;</b></div>
-        <div class="panel traf-kpi"><span class="traf-kpi-label" data-i18n="kpiSpikes">Spikes</span><b class="traf-kpi-value" id="fgKpiSpikes">&mdash;</b></div>
-      </div>
-
-      <!-- "Top N" cards side by side: who talks, over what. -->
-      <div class="traf-grid">
-      <div class="panel">
-        <h3 class="traf-card-title"><i class="fa-solid fa-ranking-star"></i> <span data-i18n="titleTopTalkersTable">Top talker</span></h3>
-        <div class="table-wrap" style="max-height:320px;">
-          <table style="width:100%; border-collapse:collapse; font-size:12px;">
-            <thead><tr>
-              <th style="text-align:left; padding:6px 8px;" data-i18n="thFgSource">Sorgente</th>
-              <th style="text-align:left;" data-i18n="thFgTarget">Destinazione</th>
-              <th style="text-align:left;" data-i18n="thFgVlan">VLAN</th>
-              <th style="text-align:left;" data-i18n="thFgRate">Rate</th>
-            </tr></thead>
-            <tbody id="fgTalkersTableBody">
-              <tr><td colspan="4" style="padding:16px; text-align:center; color:var(--text-muted);" data-i18n="msgNoFlowGraphData">Nessun dato disponibile per il grafo dei flussi.</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div class="panel">
-        <h3 class="traf-card-title"><i class="fa-solid fa-network-wired"></i> <span data-i18n="titleTopProtocols">Protocolli e porte</span></h3>
-        <div class="table-wrap" style="max-height:320px;">
-          <table style="width:100%; border-collapse:collapse; font-size:12px;">
-            <thead><tr><th style="text-align:left; padding:4px 6px;" data-i18n="thFgProtocol">Protocollo</th><th style="text-align:left;" data-i18n="thFgPort">Porta</th><th style="text-align:left;" data-i18n="thFgRate">Rate</th></tr></thead>
-            <tbody id="fgProtoTableBody"></tbody>
-          </table>
-        </div>
-      </div>
-      </div>
-
-      <div class="traf-grid">
-      <div class="panel">
-        <h3 class="traf-card-title"><i class="fa-solid fa-building"></i> <span data-i18n="titleTrafTenant">Tenant</span></h3>
-        <div id="fgTenantSummary" style="font-size:13px; line-height:1.8;">—</div>
-      </div>
-
-      <!-- Panel: Ingest Protocol Distribution Graph (3 Graph Types: Donut, Bar, Trend) -->
-      <div class="panel" id="obsProtocolCard">
-        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:12px;">
-          <div>
-            <h3 style="margin:0; font-size:17px; display:flex; align-items:center; gap:8px;">
-              <i class="fa-solid fa-chart-pie" style="color:var(--primary);"></i>
-              <span data-i18n="titleObsProtocolDist">Ripartizione Protocolli Ingest (NetFlow / IPFIX / sFlow / Syslog)</span>
-            </h3>
-            <p style="margin:4px 0 0; font-size:12px; color:var(--text-muted);" data-i18n="descObsProtocolDist">Visualizza il volume di dati ed eventi ricevuti suddiviso per protocollo di telemetria.</p>
-          </div>
-          <div style="display:flex; align-items:center; gap:8px; flex-wrap:nowrap;">
-            <!-- 3-Way Graph Type Selector Buttons -->
-            <div class="btn-group" style="display:inline-flex; border:1px solid var(--border); border-radius:0; overflow:hidden; background:var(--surface-3);">
-              <button id="btnChartTypeDonut" class="btn btn-sm" data-chart-type="donut" style="padding:5px 10px; border:none; background:var(--cta); color:var(--cta-text); font-size:12px;" title="Grafico a Ciambella (Donut)"><i class="fa-solid fa-chart-pie"></i> <span data-i18n="lblChartDonut">Ciambella</span></button>
-              <button id="btnChartTypeBar" class="btn btn-sm" data-chart-type="bar" style="padding:5px 10px; border:none; background:transparent; color:var(--text); font-size:12px;" title="Grafico a Barre (Bar)" data-i18n-title="titleChartBar"><i class="fa-solid fa-chart-bar"></i> <span data-i18n="lblChartBar">Barre</span></button>
-              <button id="btnChartTypeTrend" class="btn btn-sm" data-chart-type="trend" style="padding:5px 10px; border:none; background:transparent; color:var(--text); font-size:12px;" title="Grafico Trend Temporale (Trend)" data-i18n-title="titleChartTrend"><i class="fa-solid fa-chart-line"></i> <span data-i18n="lblChartTrend">Trend</span></button>
-            </div>
-            <!-- La finestra e' quella del tab: la card non ne ha piu' una sua. -->
-            <button id="btnObsInspectModal" class="btn btn-sm btn-secondary" style="padding:5px 10px; font-size:12px; white-space:nowrap;" title="Ispeziona Dettagli Telemetria" data-i18n-title="titleObsInspect"><i class="fa-solid fa-magnifying-glass-chart"></i> <span data-i18n="lblObsInspect">Dettagli</span></button>
-          </div>
-        </div>
-        <div style="position:relative; width:100%; height:280px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:12px; overflow:hidden;">
-          <canvas id="obsProtocolCanvas" style="width:100%; height:100%; display:block; cursor:pointer;" title="Clicca per aprire l'ispezione dettagliata telemetria"></canvas>
-          <div id="obsProtocolStats" style="display:none; width:100%; height:100%; flex-direction:column; justify-content:center; gap:10px; padding:10px 20px;"></div>
-        </div>
-      </div>
-
-      </div>
-
-      </div>
       <div id="trafPane-flows" class="traf-pane" style="display:none;">
       <div class="panel" style="margin-bottom:18px;">
         <div class="filterbar" style="gap:6px; align-items:center;">
@@ -2194,59 +2117,7 @@
       </div>
       </div>
 
-      <div id="trafPane-hosts" class="traf-pane" style="display:none;">
-      <div class="filterbar" style="align-items:center; margin:0 0 12px;">
-        <div class="input-wrapper" style="flex:1; max-width:320px;">
-          <i class="fa-solid fa-magnifying-glass"></i>
-          <input type="text" id="trafHostSearch" placeholder="Filtra per indirizzo IP"
-                 data-i18n-placeholder="trafHostSearchPl"
-                 aria-label="Filtra per indirizzo IP" data-i18n-aria-label="trafHostSearchPl">
-        </div>
-        <span id="trafHostsCount" style="font-size:12px; color:var(--text-muted);"></span>
-      </div>
-
-      <div class="panel" style="margin-bottom:18px;">
-        <h4 style="margin:0 0 10px; font-size:14px; color:var(--text-muted);">
-          <i class="fa-solid fa-server"></i> <span data-i18n="trafHostsTitle">Traffico per host</span>
-        </h4>
-        <div class="table-container" style="max-height:420px; overflow:auto;">
-          <table style="width:100%; border-collapse:collapse;">
-            <thead>
-              <tr>
-                <th style="text-align:left; padding:6px 8px;" data-i18n="trafHostColIp">Indirizzo IP</th>
-                <th style="text-align:left; padding:6px 8px;" data-i18n="trafHostColName">Hostname</th>
-                <th style="text-align:left; padding:6px 8px;" data-i18n="trafHostColTenant">Sede</th>
-                <th style="text-align:left; padding:6px 8px;" data-i18n="trafHostColIn">In</th>
-                <th style="text-align:left; padding:6px 8px;" data-i18n="trafHostColOut">Out</th>
-                <th style="text-align:right; padding:6px 8px;" data-i18n="trafHostColTotal">Totale</th>
-              </tr>
-            </thead>
-            <tbody id="trafHostsBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
-          <h4 style="margin:0; font-size:14px; color:var(--text-muted);">
-            <i class="fa-solid fa-chart-line"></i> <span data-i18n="trafHostSeriesTitle">Andamento nel tempo</span>
-          </h4>
-          <label for="trafHostSeriesSelect" style="font-size:12px; color:var(--text-muted);"
-                 data-i18n="trafHostSeriesFor">Host</label>
-          <select id="trafHostSeriesSelect" style="max-width:280px;"
-                  aria-label="Host di cui mostrare l'andamento"
-                  data-i18n-aria-label="trafHostSeriesAria"></select>
-          <span id="trafHostSeriesLegend" style="font-size:12px; color:var(--text-muted);"></span>
-        </div>
-        <div style="position:relative; width:100%; height:260px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; overflow:hidden;">
-          <canvas id="trafHostSeriesCanvas" style="width:100%; height:100%; display:block;"></canvas>
-        </div>
-        <p id="trafHostSeriesEmpty" style="display:none; margin:10px 0 0; font-size:12px; color:var(--text-muted);"
-           data-i18n="trafHostSeriesEmpty">Nessun traffico per questo host nella finestra scelta.</p>
-      </div>
-      </div>
-
-      <div id="trafPane-search" class="traf-pane" style="display:none;">
+      <div id="trafPane-search" class="traf-pane">
       <div class="filterbar" style="align-items:center; margin:0 0 12px;">
         <span id="flowSiemStreamBadge" class="status ok"><span class="led led-success"></span>LIVE TAIL</span>
         <button id="btnFlowSiemStream" class="btn btn-sm btn-secondary"><i class="fa-solid fa-pause"></i> Pausa Streaming</button>
@@ -6486,26 +6357,6 @@
       </div>
     </div>
   </div>
-
-  <!-- Modal: Ispezione Dettagliata Protocollo (Protocol Inspection Modal) -->
-  <div id="obsInspectModal" class="modal-backdrop" style="display:none; position:fixed; inset:0; background:color-mix(in srgb, var(--bg) 82%, transparent); z-index:10050; align-items:center; justify-content:center;">
-    <div style="background:var(--surface-1); border:1px solid var(--border); border-radius:0; width:92%; max-width:680px; max-height:85vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:var(--shadow-float);">
-      <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
-        <h3 id="obsInspectTitle" style="margin:0; font-size:17px; display:flex; align-items:center; gap:8px;">
-          <i class="fa-solid fa-magnifying-glass-chart" style="color:var(--primary);"></i>
-          <span data-i18n="titleObsDetailModal">Dettaglio Telemetria Protocollo</span>
-        </h3>
-        <button data-action="close-obs-inspect-modal" style="border:none; background:transparent; color:var(--text-muted); font-size:17px; cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div id="obsInspectBody" style="padding:20px; overflow-y:auto; font-size:13px; line-height:1.6;">
-        <!-- Filled dynamically -->
-      </div>
-      <div style="padding:12px 20px; border-top:1px solid var(--border); background:var(--surface-2); display:flex; justify-content:flex-end;">
-        <button class="btn btn-sm" data-action="close-obs-inspect-modal" style="padding:6px 16px;" data-i18n="btnClose">Chiudi</button>
-      </div>
-    </div>
-  </div>
-
 
   <!-- Modal: Nuova / Modifica Regola di Notifica -->
   <div id="modalNotifyRule" class="modal-backdrop" style="display:none; position:fixed; inset:0; background:color-mix(in srgb, var(--bg) 82%, transparent); z-index:10050; align-items:center; justify-content:center;">

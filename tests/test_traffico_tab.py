@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Il tab Traffico e' una pill bar su quattro viste, non due tab gemelli.
+"""Il tab Traffico e' una pill bar su piu' viste (Ricerca, Flussi, Per policy dalla 0.65.0), non due tab gemelli.
 
 Prima della fusione la stessa finestra temporale esisteva tre volte
 (`#flowsWindow`, `#obsChartWindow`, `#flowSiemWindow`) senza che nessuna
@@ -52,7 +52,7 @@ class TestTrafficoStructure(unittest.TestCase):
 
     # Ogni pill ha il suo pane: una pill senza pane e' un pulsante che non apre
     # niente, un pane senza pill e' contenuto irraggiungibile.
-    PILLS = ["overview", "flows", "search"]
+    PILLS = ["search", "flows", "policies"]
     HEADER = ["trafWindow", "trafMetric", "trafAutoRefresh",
               "trafHideTelemetry", "trafLastUpdate"]
 
@@ -114,8 +114,6 @@ class TestTrafficoStructure(unittest.TestCase):
         # Spostare un pannello fuori dal suo pane lo renderebbe visibile in
         # tutte e tre le viste.
         for pane, ids in (
-            ("overview", ("fgKpiStrip", "fgTalkersTableBody", "obsProtocolCanvas",
-                          "fgProtoTableBody", "fgTenantSummary", "flowsObsBanner")),
             ("flows", ("flowsTableBody", "flowsSourceChips", "flowsSyslogAllSection")),
             ("search", ("flowSiemHistCanvas", "flowSiemQueryInput", "flowSiemTableBody",
                         "flowSiemFacets")),
@@ -158,46 +156,52 @@ class TestTrafficoCallsRealRoutes(unittest.TestCase):
                 )
 
 
-class PerIpViewIsWiredEndToEnd(unittest.TestCase):
-    """La pill "Per IP" e i suoi controlli.
+class FlowOnlyViewsStayGone(unittest.TestCase):
+    """Overview and Per IP read only NetFlow/IPFIX/sFlow aggregates, and no
+    exporter is configured anywhere: 0.65.0 removed them. The tab opens on
+    Ricerca, which reads syslog."""
 
-    Una pill aggiunta senza il suo pane, o un pane senza la sua voce in
-    TRAF_VIEWS, non da' errore: lascia visibile la vista precedente sotto
-    quella nuova. E un listener agganciato a un id che nel template non esiste
-    non solleva niente e lascia il controllo muto.
-    """
+    GONE_IDS = ("trafPill-overview", "trafPane-overview", "trafPill-hosts",
+                "trafPane-hosts", "fgKpiStrip", "fgTalkersTableBody",
+                "fgProtoTableBody", "fgTenantSummary", "obsProtocolCard",
+                "obsProtocolCanvas", "obsInspectModal", "trafHostsBody",
+                "trafHostSeriesCanvas")
+    GONE_JS = ("loadFlowGraph", "loadObsProtocolDist", "openObsInspectModal",
+               "loadTrafHosts", "loadTrafHostSeries", "obsWidgetBoot")
+    GONE_ROUTES = ("/api/observability/flowgraph",
+                   "/api/observability/protocol-distribution",
+                   "/api/observability/hosts", "/api/observability/host-series")
 
     @classmethod
     def setUpClass(cls):
         cls.html = _read("templates", "dashboard.html")
         cls.js = _read("static", "js", "observability.js")
 
-    def test_the_pill_and_its_pane_both_exist(self):
-        self.assertIn('id="trafPill-hosts"', self.html)
-        self.assertIn('data-traf-view="hosts"', self.html)
-        self.assertIn('id="trafPane-hosts"', self.html)
+    def test_markup_is_gone(self):
+        for element_id in self.GONE_IDS:
+            self.assertNotIn(f'id="{element_id}"', self.html)
 
-    def test_the_view_is_declared_where_the_panes_are_toggled(self):
-        # Senza questo, aprire la pill mostra il pane nuovo e NON nasconde
-        # quello vecchio.
-        self.assertIn("const TRAF_VIEWS = ['overview', 'flows', 'search', 'hosts', 'policies']", self.js)
-        self.assertIn("for (const v of TRAF_VIEWS)", self.js)
-        self.assertIn("hosts:     () => loadTrafHosts()", self.js)
+    def test_code_is_gone(self):
+        for name in self.GONE_JS:
+            self.assertNotIn(name, self.js)
 
-    def test_every_bound_id_exists_in_the_template(self):
-        for element_id in ("trafHostSearch", "trafHostSeriesSelect",
-                           "trafHostsBody", "trafHostsCount",
-                           "trafHostSeriesCanvas", "trafHostSeriesEmpty",
-                           "trafHostSeriesLegend"):
-            self.assertIn(f'id="{element_id}"', self.html,
-                          f"{element_id} e' usato da observability.js ma non "
-                          "esiste nel template")
+    def test_routes_are_gone(self):
+        literal, _ = _registered_api_paths()
+        for path in self.GONE_ROUTES:
+            self.assertNotIn(path, literal)
 
-    def test_the_search_reloads_from_the_server(self):
-        # Filtrare in locale farebbe divergere il conteggio mostrato accanto
-        # al titolo da quello che il server ha davvero contato.
-        self.assertIn("setTimeout(loadTrafHosts", self.js)
-        self.assertIn("&q=${encodeURIComponent(q.trim())}", self.js)
+    def test_the_tab_opens_on_search(self):
+        self.assertIn("let _trafView = 'search';", self.js)
+        self.assertIn('class="ca-pill active" id="trafPill-search"', self.html)
+        self.assertIn('<div id="trafPane-search" class="traf-pane">', self.html)
+        self.assertIn("const TRAF_VIEWS = ['search', 'flows', 'policies']", self.js)
+
+    def test_the_status_banner_sits_outside_the_panes(self):
+        # It used to live in the Overview pane; Ricerca and Flussi need it too
+        # (no listener means no syslog either).
+        banner = self.html.index('id="flowsObsBanner"')
+        self.assertLess(self.html.index('id="trafPills"'), banner)
+        self.assertLess(banner, self.html.index('id="trafPane-'))
 
 
 class TriageFlowLogRowOpens(unittest.TestCase):

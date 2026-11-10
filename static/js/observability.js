@@ -192,7 +192,6 @@
     let _flowsSelectedTenants = new Set(Object.keys(globalGroups || {}));
     let _flowsAllTenantsChecked = true;                // "Tutti" checkbox state
     let _deviceContextIp = null;                       // IP from global device context chip
-    let _flowsSelectedKeys = new Set();                // selected flow keys (tuple string, survives filter/refresh)
     let _flowPanelFlow = null;                         // flow object currently shown in the detail panel
 
     // --- Filtro per origine dati + colonne dinamiche (flussi vs syslog) ---
@@ -224,21 +223,18 @@
         autoRefresh: true,
         hideTelemetry: _flowsHideTelemetry,
     };
-    let _trafView = 'overview';
+    let _trafView = 'search';
 
-    // Loader per vista: registrato dal task che porta dentro il contenuto.
-    // Cambiare pill carica solo la vista che si apre, non tutte e quattro.
+    // One loader per view: switching pill loads only the view being opened.
     const TRAF_LOADERS = {
-        overview:  () => { loadTopTalkers(); loadObsProtocolDist(); },
         flows:     () => loadTopTalkers(),
         search:    () => loadFlowSiemTab(),
-        hosts:     () => loadTrafHosts(),
         policies:  () => trafPoliciesShown(),
     };
 
     // Una lista sola: aggiungere una pill e dimenticare questo array lasciava
     // il pane precedente visibile sotto quello nuovo.
-    const TRAF_VIEWS = ['overview', 'flows', 'search', 'hosts', 'policies'];
+    const TRAF_VIEWS = ['search', 'flows', 'policies'];
 
     function trafSwitchView(view) {
         if (!document.getElementById('trafPane-' + view)) return;
@@ -251,223 +247,6 @@
         }
         const loader = TRAF_LOADERS[view];
         if (loader) loader();
-    }
-
-    // --- VISTA "PER IP": chi consuma, non chi parla con chi -----------------
-    // I top talker rispondono "quali coppie parlano di piu'", che e' la domanda
-    // del troubleshooting. Questa risponde "quali macchine consumano di piu'",
-    // che e' la domanda della capacita', e non si ottiene sommando le righe dei
-    // top talker: lo stesso host vi compare come sorgente e come destinazione.
-
-    let _trafHosts = [];
-    let _trafHostSeries = null;
-    let _trafSeriesIp = null;
-
-    function trafHostName(ip) {
-        // L'hostname dell'inventario, quando c'e'. Un IP nudo si legge molto
-        // peggio di "192.0.2.10 - WS-ADMIN-01" davanti a una barra.
-        if (typeof globalDevices === 'undefined' || !Array.isArray(globalDevices)) return '';
-        const d = globalDevices.find(x => x && x.IP === ip);
-        return (d && d.Hostname) || '';
-    }
-
-    async function loadTrafHosts() {
-        const box = /** @type {HTMLInputElement|null} */ (
-            document.getElementById('trafHostSearch'));
-        const q = box ? box.value : '';
-        const url = `/api/observability/hosts?window=${encodeURIComponent(trafState.window)}`
-            + `&q=${encodeURIComponent(q.trim())}${telemetryParam()}`;
-        try {
-            const res = await apiFetch(url);
-            if (!res || !res.ok) return;
-            _trafHosts = (await res.json()).hosts || [];
-        } catch (e) {
-            _trafHosts = [];
-        }
-        renderTrafHosts();
-        syncTrafSeriesSelect();
-        loadTrafHostSeries();
-    }
-
-    // Perche' la tabella e' vuota. "Nessun traffico" da solo manda a cercare
-    // un bug in questa vista, mentre nove volte su dieci la risposta e' che
-    // nessun apparato sta esportando flussi. Il banner che lo spiega esiste
-    // gia' (checkObsStatusBanner) ma vive nel pane Panoramica: su questa pill
-    // non si vede, quindi la diagnosi va portata dentro lo stato vuoto.
-    let _trafFlowHealth = null;
-
-    async function trafEmptyReason() {
-        try {
-            const res = await apiFetch('/api/observability/health');
-            _trafFlowHealth = (res && res.ok) ? await res.json() : null;
-        } catch (e) {
-            _trafFlowHealth = null;
-        }
-        if (!_trafFlowHealth) return tr('trafHostsEmpty');
-        if (!_trafFlowHealth.enabled) return tr('trafEmptyObsDisabled');
-        const listeners = _trafFlowHealth.listeners || {};
-        if (!Object.values(listeners).some(l => l && l.active)) {
-            return tr('trafEmptyNoListener');
-        }
-        // Listener in ascolto e tabella vuota: il collector c'e', i flussi no.
-        // E' il caso che si confonde con i log di traffico del FortiGate, che
-        // arrivano in REST e non da qui.
-        return tr('trafEmptyNoExporter');
-    }
-
-    async function renderTrafHostsEmpty(tbody) {
-        tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center;
-            color:var(--text-muted);">${escapeHtml(tr('trafHostsEmpty'))}</td></tr>`;
-        const why = await trafEmptyReason();
-        tbody.innerHTML = `<tr><td colspan="6" style="padding:24px; text-align:center;
-            color:var(--text-muted); line-height:1.6;">
-              <div style="font-weight:600; margin-bottom:6px;">${escapeHtml(tr('trafHostsEmpty'))}</div>
-              <div style="font-size:12px; max-width:620px; margin:0 auto;">${escapeHtml(why)}</div>
-            </td></tr>`;
-    }
-
-    function renderTrafHosts() {
-        const tbody = document.getElementById('trafHostsBody');
-        const count = document.getElementById('trafHostsCount');
-        if (!tbody) return;
-        if (count) count.textContent = tr('trafHostsCount', { n: _trafHosts.length });
-        if (!_trafHosts.length) {
-            renderTrafHostsEmpty(tbody);
-            return;
-        }
-        // Le barre sono in scala sul MASSIMO della vista, non sul totale: e'
-        // il confronto fra host che si sta guardando, e una barra rapportata
-        // al totale sarebbe un filo sottile per tutti.
-        const max = Math.max(...(_trafHosts.map(h => h.total_bytes || 0)), 1);
-        const bar = (value, color) => {
-            const pct = Math.max(1, Math.round(((value || 0) / max) * 100));
-            return `<div style="position:relative; height:14px; background:var(--surface-3);
-                        border-radius:0; overflow:hidden; min-width:110px;">
-                <div style="height:100%; width:${pct}%; background:${color};"></div>
-                <span style="position:absolute; right:4px; top:50%; transform:translateY(-50%);
-                      font-size:10px; font-family:var(--font-code); color:var(--text);">${
-                          escapeHtml(fmtBytes(value || 0))}</span>
-            </div>`;
-        };
-        tbody.innerHTML = _trafHosts.map(h => {
-            const name = trafHostName(h.ip);
-            return `<tr style="border-top:1px solid var(--border); font-size:12px;">
-                <td style="padding:6px 8px; font-family:var(--font-code);">${escapeHtml(h.ip)}</td>
-                <td style="padding:6px 8px;">${name ? escapeHtml(name)
-                    : '<span style="color:var(--text-muted);">&mdash;</span>'}</td>
-                <td style="padding:6px 8px;"><span class="badge">${escapeHtml(h.tenant || '')}</span></td>
-                <td style="padding:6px 8px;">${bar(h.in_bytes, 'var(--success)')}</td>
-                <td style="padding:6px 8px;">${bar(h.out_bytes, 'var(--primary)')}</td>
-                <td style="padding:6px 8px; text-align:right; font-family:var(--font-code);
-                    font-weight:700;">${escapeHtml(fmtBytes(h.total_bytes || 0))}</td>
-            </tr>`;
-        }).join('');
-    }
-
-    function syncTrafSeriesSelect() {
-        const sel = /** @type {HTMLSelectElement|null} */ (
-            document.getElementById('trafHostSeriesSelect'));
-        if (!sel) return;
-        const previous = _trafSeriesIp;
-        sel.innerHTML = _trafHosts.slice(0, 50).map(h => {
-            const name = trafHostName(h.ip);
-            return `<option value="${escapeHtml(h.ip)}">${escapeHtml(h.ip)}${
-                name ? ' &mdash; ' + escapeHtml(name) : ''}</option>`;
-        }).join('');
-        // La scelta dell'utente sopravvive a un refresh, se quell'host c'e'
-        // ancora: cambiare finestra non deve riportare il grafico in cima.
-        if (previous && _trafHosts.some(h => h.ip === previous)) sel.value = previous;
-        _trafSeriesIp = sel.value || (_trafHosts[0] && _trafHosts[0].ip) || null;
-    }
-
-    async function loadTrafHostSeries() {
-        if (!_trafSeriesIp) { _trafHostSeries = null; renderTrafHostSeries(); return; }
-        const url = `/api/observability/host-series?ip=${encodeURIComponent(_trafSeriesIp)}`
-            + `&window=${encodeURIComponent(trafState.window)}${telemetryParam()}`;
-        try {
-            const res = await apiFetch(url);
-            _trafHostSeries = (res && res.ok) ? await res.json() : null;
-        } catch (e) {
-            _trafHostSeries = null;
-        }
-        renderTrafHostSeries();
-    }
-
-    function renderTrafHostSeries() {
-        const canvas = /** @type {HTMLCanvasElement|null} */ (
-            document.getElementById('trafHostSeriesCanvas'));
-        const empty = document.getElementById('trafHostSeriesEmpty');
-        const legend = document.getElementById('trafHostSeriesLegend');
-        if (!canvas) return;
-        const points = (_trafHostSeries && _trafHostSeries.points) || [];
-        const peak = points.reduce(
-            (m, p) => Math.max(m, p.in_bytes || 0, p.out_bytes || 0), 0);
-        if (empty) empty.style.display = peak ? 'none' : '';
-        if (legend) {
-            legend.innerHTML = peak
-                ? `<span style="color:var(--success);">&#9632;</span> ${escapeHtml(tr('trafHostIn'))}
-                   &nbsp; <span style="color:var(--primary);">&#9632;</span> ${escapeHtml(tr('trafHostOut'))}`
-                : '';
-        }
-
-        const ratio = window.devicePixelRatio || 1;
-        const width = canvas.clientWidth || 600;
-        const height = canvas.clientHeight || 260;
-        canvas.width = width * ratio;
-        canvas.height = height * ratio;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-        ctx.clearRect(0, 0, width, height);
-        if (!peak) return;
-
-        const css = getComputedStyle(document.body);
-        const textColor = css.getPropertyValue('--text-muted') || '#888';
-        const borderColor = css.getPropertyValue('--border') || '#444';
-        const inColor = css.getPropertyValue('--success') || '#10b981';
-        const outColor = css.getPropertyValue('--primary') || '#3b82f6';
-        const pad = { top: 14, right: 14, bottom: 26, left: 62 };
-        const graphW = width - pad.left - pad.right;
-        const graphH = height - pad.top - pad.bottom;
-
-        ctx.font = '10px sans-serif';
-        ctx.lineWidth = 1;
-        [0, 0.5, 1].forEach(factor => {
-            const y = height - pad.bottom - factor * graphH;
-            ctx.strokeStyle = factor === 0 ? borderColor : 'rgba(128,128,128,0.18)';
-            ctx.beginPath();
-            ctx.moveTo(pad.left, y);
-            ctx.lineTo(width - pad.right, y);
-            ctx.stroke();
-            ctx.fillStyle = textColor;
-            ctx.textAlign = 'right';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(fmtBytes(Math.round(peak * factor)), pad.left - 8, y);
-        });
-
-        const step = Math.max(1, Math.floor(points.length / 5));
-        points.forEach((pt, i) => {
-            if (i % step && i !== points.length - 1) return;
-            const x = pad.left + (i / Math.max(1, points.length - 1)) * graphW;
-            ctx.fillStyle = textColor;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-            ctx.fillText(new Date(pt.ts * 1000).toLocaleTimeString(
-                [], { hour: '2-digit', minute: '2-digit' }), x, height - pad.bottom + 6);
-        });
-
-        [['in_bytes', inColor], ['out_bytes', outColor]].forEach(([key, color]) => {
-            ctx.strokeStyle = color;
-            ctx.fillStyle = color;
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            points.forEach((pt, i) => {
-                const x = pad.left + (i / Math.max(1, points.length - 1)) * graphW;
-                const y = height - pad.bottom - ((pt[key] || 0) / peak) * graphH;
-                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-            });
-            ctx.stroke();
-        });
     }
 
     // --- VISTA "PER POLICY": i contatori che il firewall tiene da se' --------
@@ -671,8 +450,7 @@
         _flowsHideTelemetry = !!hide;
         trafState.hideTelemetry = _flowsHideTelemetry;
         localStorage.setItem('sentinelnet_flows_hide_telemetry', _flowsHideTelemetry ? '1' : '0');
-        loadTopTalkers();          // ricarica anche il flowgraph e la KPI strip
-        loadObsProtocolDist();
+        trafRefresh();
     }
 
     function toggleFlowsColsDropdown() {
@@ -719,7 +497,6 @@
             return;
         }
         head.innerHTML = `<tr style="font-size:12px; text-align:left;">
-            <th style="padding:8px;"><input type="checkbox" id="flowsSelectAll" style="accent-color:var(--primary);" title="${escapeHtml(L.lnkSelectAll || 'Seleziona tutti')}"></th>
             <th style="padding:8px;">#</th>
             ${flowsColHidden('tenant') ? '' : th(L.thFlTenant || 'Sede')}
             ${th(L.thFlSrc || 'Sorgente')}${th(L.thFlDst || 'Destinazione')}
@@ -901,44 +678,15 @@
 
             // Render filtered table
             renderFlowsTable();
-            loadFlowGraph(w);
         } finally {
             flowsFetchInFlight = false;
         }
     }
 
-    function fmtRate(bps) {
-        if (!bps) return '0 bps';
-        if (bps >= 1e9) return (bps / 1e9).toFixed(2) + ' Gbps';
-        if (bps >= 1e6) return (bps / 1e6).toFixed(2) + ' Mbps';
-        if (bps >= 1e3) return (bps / 1e3).toFixed(1) + ' Kbps';
-        return Math.round(bps) + ' bps';
-    }
-
-    // Chiave di selezione del flusso: per tupla, non per indice riga, così la
-    // selezione sopravvive al filtro tenant (11.1) e al refresh periodico.
+    // Row key: the flow tuple, not the row index, so a click still finds its
+    // flow after the tenant filter or a periodic refresh re-rendered the table.
     function flowKey(f) {
         return `${f.tenant}|${f.src_ip}|${f.dst_ip}|${f.protocol}|${f.dst_port}|${f.source ?? ''}`;
-    }
-
-    function toggleFlowRowSelect(key, checked) {
-        if (checked) _flowsSelectedKeys.add(key); else _flowsSelectedKeys.delete(key);
-        syncFlowsSelectAllCheckbox();
-    }
-
-    function toggleFlowsSelectAll(cb) {
-        const rowBoxes = Array.from(document.querySelectorAll('#flowsTableBody input.flow-row-check'));
-        rowBoxes.forEach(box => {
-            box.checked = cb.checked;
-            if (cb.checked) _flowsSelectedKeys.add(box.dataset.key);
-            else _flowsSelectedKeys.delete(box.dataset.key);
-        });
-    }
-
-    function syncFlowsSelectAllCheckbox() {
-        const all = document.getElementById('flowsSelectAll');
-        const rowBoxes = Array.from(document.querySelectorAll('#flowsTableBody input.flow-row-check'));
-        if (all) all.checked = rowBoxes.length > 0 && rowBoxes.every(b => b.checked);
     }
 
     // Sezione syslog sotto la tabella flussi, visibile solo in modo "Tutte le origini".
@@ -974,14 +722,8 @@
             filtered = filtered.filter(f => f.exporter_ip === _deviceContextIp);
         }
 
-        // Selection may reference flows no longer present (e.g. window change); prune lazily.
-        const filteredKeys = new Set(filtered.map(flowKey));
-        _flowsSelectedKeys.forEach(k => { if (!filteredKeys.has(k) && !_flowsRawData.some(f => flowKey(f) === k)) _flowsSelectedKeys.delete(k); });
-
         if (filtered.length === 0) {
             tbody.innerHTML = `<tr><td colspan="10" style="padding:20px; text-align:center; color:var(--text-muted);">${tr('msgNoFlows') || 'Nessun flusso nel periodo selezionato.'}</td></tr>`;
-            const all = document.getElementById('flowsSelectAll');
-            if (all) all.checked = false;
             return;
         }
 
@@ -992,10 +734,8 @@
             const pct = maxVal ? (val / maxVal * 100).toFixed(1) : 0;
             const proto = ({6: 'TCP', 17: 'UDP', 1: 'ICMP'})[f.protocol] || f.protocol || '—';
             const key = flowKey(f);
-            const checked = _flowsSelectedKeys.has(key) ? 'checked' : '';
             const srcLabel = FLOWS_SOURCE_LABELS[f.source] || '—';
             return `<tr style="font-size:12px; border-top:1px solid var(--border); cursor:pointer;" data-action="open-flow-detail" data-key="${escapeHtml(key)}">
-                    <td style="padding:6px 8px;"><input type="checkbox" class="flow-row-check" data-key="${escapeHtml(key)}" ${checked} style="accent-color:var(--primary);"></td>
                     <td style="padding:6px 8px;">${rowNum++}</td>
                     ${flowsColHidden('tenant') ? '' : `<td>${escapeHtml(f.tenant)}</td>`}
                     <td><a href="javascript:void(0)" data-action="flow-hl-topo" data-ip="${escapeHtml(f.src_ip)}" title="${hlTitle}">${escapeHtml(f.src_ip)}</a></td>
@@ -1009,7 +749,6 @@
                     ${flowsColHidden('flows') ? '' : `<td>${f.flow_count}</td>`}
                 </tr>`;
         }).join('');
-        syncFlowsSelectAllCheckbox();
     }
 
     // --- Pannello dettaglio flusso (slide-in) ---------------------------
@@ -1098,590 +837,6 @@
         tryFocus(0);
     }
 
-    // --- FLOW GRAPH (Task 3: Live Flows — grafo, KPI, riepilogo, tabelle) ---
-
-    let _fgData = null;          // ultima risposta /flowgraph
-    let _fgFetchInFlight = false;
-
-    async function loadFlowGraph(window_) {
-        if (_fgFetchInFlight) return;
-        _fgFetchInFlight = true;
-        try {
-            const w = window_ || trafState.window;
-            const res = await apiFetch(`/api/observability/flowgraph?window=${encodeURIComponent(w)}${telemetryParam()}`);
-            if (!res || !res.ok) return;
-            _fgData = await res.json();
-            renderFlowGraphKpis();
-            renderFlowGraphTenant();
-            renderFlowGraphProtocols();
-            renderFlowGraphTalkers();
-        } finally {
-            _fgFetchInFlight = false;
-        }
-    }
-
-    function renderFlowGraphKpis() {
-        const d = _fgData;
-        if (!d) return;
-        const L = i18n[currentLang];
-        document.getElementById('fgKpiThroughput').textContent = fmtRate(d.kpi.throughput_bps);
-        const tp = d.kpi.top_path;
-        const topPathEl = document.getElementById('fgKpiTopPath');
-        if (topPathEl) {
-            if (tp && tp.src) {
-                topPathEl.innerHTML = `
-                    <div class="kpi-top-path" title="${escapeHtml(tp.src)} → ${escapeHtml(tp.dst)} (${escapeHtml(tp.pct)}%)">
-                        <div class="kpi-path-line">
-                            <span class="kpi-path-ip">${escapeHtml(tp.src)}</span>
-                            <span class="kpi-path-arrow"><i class="fa-solid fa-arrow-right"></i></span>
-                            <span class="kpi-path-ip">${escapeHtml(tp.dst)}</span>
-                        </div>
-                        <div class="kpi-path-sub">
-                            <span class="kpi-path-pct">(${escapeHtml(tp.pct)}%)</span>
-                        </div>
-                    </div>
-                `;
-            } else {
-                topPathEl.textContent = '—';
-            }
-        }
-        document.getElementById('fgKpiTalkers').textContent = d.kpi.talkers;
-        document.getElementById('fgKpiSpikes').textContent = d.kpi.spikes;
-    }
-
-    function renderFlowGraphTenant() {
-        const d = _fgData;
-        const box = document.getElementById('fgTenantSummary');
-        if (!box) return;
-        if (!d || !d.tenant || !d.tenant.name) { box.textContent = '—'; return; }
-        const L = i18n[currentLang];
-        const t = d.tenant;
-        const tt = t.top_talker;
-        box.innerHTML = `
-            <div><b>${escapeHtml(L.thFlTenant || 'Tenant')}</b>: ${escapeHtml(t.name)}</div>
-            <div><b>${escapeHtml(L.thFgVlan || 'VLAN')}</b>: ${escapeHtml((t.vlans || []).join(', ') || '—')}</div>
-            <div><b>${escapeHtml(L.lblVisibleVlans || 'Visible VLANs')}</b>: ${(t.vlans || []).length}</div>
-            <div><b>${escapeHtml(L.lblFlowsShown || 'Flows shown')}</b>: ${t.flows_shown}</div>
-            <div><b>${escapeHtml(L.lblTopTalker || 'Top talker')}</b>: ${tt ? `${escapeHtml(tt.src)} → ${escapeHtml(tt.dst)} (${escapeHtml(fmtRate(tt.rate_bps))})` : '—'}</div>`;
-    }
-
-    function _fgVisibleEdges() {
-        // Archi visibili nelle due tabelle: l'intera finestra (il grafo
-        // click-to-filter è stato rimosso insieme al canvas force-directed).
-        return (_fgData && _fgData.edges) || [];
-    }
-
-    function renderFlowGraphProtocols() {
-        const tbody = document.getElementById('fgProtoTableBody');
-        if (!tbody) return;
-        // Intera finestra dei protocolli precalcolata dal backend.
-        const rows = (_fgData && _fgData.protocols) || [];
-        if (!rows.length) {
-            tbody.innerHTML = `<tr><td colspan="3" style="padding:10px; text-align:center; color:var(--text-muted);">—</td></tr>`;
-            return;
-        }
-        const max = Math.max(...rows.map(p => p.rate_bps || 0), 1);
-        tbody.innerHTML = rows.map(p => `
-            <tr style="border-top:1px solid var(--border);">
-                <td style="padding:4px 6px;">${escapeHtml(String(p.proto).toUpperCase())}</td>
-                <td>${escapeHtml(p.port == null ? '—' : String(p.port))}</td>
-                <td>${trafRateCell(p.rate_bps, max)}</td>
-            </tr>`).join('');
-    }
-
-    function renderFlowGraphTalkers() {
-        const tbody = document.getElementById('fgTalkersTableBody');
-        if (!tbody) return;
-        const edges = _fgVisibleEdges();
-        if (!edges.length) {
-            const L = i18n[currentLang];
-            tbody.innerHTML = `<tr><td colspan="4" style="padding:16px; text-align:center; color:var(--text-muted);">${escapeHtml(L.msgNoFlowGraphData || 'No data.')}</td></tr>`;
-            return;
-        }
-        const max = Math.max(...edges.map(e => e.rate_bps || 0), 1);
-        tbody.innerHTML = edges.map(e => `
-            <tr style="border-top:1px solid var(--border);">
-                <td style="padding:6px 8px;">${escapeHtml(e.src)}</td>
-                <td>${escapeHtml(e.dst)}</td>
-                <td>${e.vlan_real === false ? '—' : escapeHtml(String(e.vlan))}</td>
-                <td>${trafRateCell(e.rate_bps, max)}</td>
-            </tr>`).join('');
-    }
-
-    // Rate text plus a bar scaled to the largest row: the ranking reads at a
-    // glance, and the number stays for anyone who needs it exact.
-    function trafRateCell(bps, max) {
-        const pct = Math.max(2, Math.round(((bps || 0) / max) * 100));
-        return `<div class="traf-rate"><span class="traf-rate-text">${escapeHtml(fmtRate(bps))}</span>`
-            + `<span class="traf-bar" aria-hidden="true"><span style="width:${pct}%;"></span></span></div>`;
-    }
-
-    // --- PROTOCOL DISTRIBUTION CHART (DONUT, BAR, TREND) ---
-    let _obsChartType = 'donut';
-    let _obsProtocolData = null;
-
-    function setObsChartType(type) {
-        _obsChartType = type;
-        ['donut', 'bar', 'trend'].forEach(t => {
-            const btn = document.getElementById('btnChartType' + t.charAt(0).toUpperCase() + t.slice(1));
-            if (!btn) return;
-            if (t === type) {
-                btn.style.background = 'var(--cta)';
-                btn.style.color = 'var(--cta-text)';
-            } else {
-                btn.style.background = 'transparent';
-                btn.style.color = 'var(--text)';
-            }
-        });
-        renderObsProtocolChart();
-    }
-
-    async function loadObsProtocolDist() {
-        const card = document.getElementById('obsProtocolCard');
-        if (!card) return;
-        const win = trafState.window;
-        const res = await apiFetch(`/api/observability/protocol-distribution?window=${win}${telemetryParam()}`);
-        if (!res || !res.ok) return;
-        _obsProtocolData = await res.json();
-        renderObsProtocolChart();
-    }
-
-    function renderObsProtocolChart() {
-        if (!_obsProtocolData) return;
-        const canvas = document.getElementById('obsProtocolCanvas');
-        const statsBox = document.getElementById('obsProtocolStats');
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        const d = _obsProtocolData;
-        const totals = d.totals || {};
-
-        // Conduttori dello schema: il codice fasi del quadro, risolto in colori
-        // veri perche' questi valori finiscono anche in ctx.fillStyle su canvas.
-        const PROTO_COLORS = {
-            netflow: cssVar('--cond-a', '#5aa9e6'),
-            ipfix:   cssVar('--cond-c', '#63c88a'),
-            sflow:   cssVar('--cond-d', '#b98a5e'),
-            syslog:  cssVar('--cond-b', '#e0a03c')
-        };
-        const PROTO_LABELS = {
-            netflow: 'NetFlow',
-            ipfix: 'IPFIX',
-            sflow: 'sFlow',
-            syslog: 'Syslog'
-        };
-
-        if (_obsChartType === 'bar') {
-            canvas.style.display = 'none';
-            if (statsBox) {
-                statsBox.style.display = 'flex';
-                let totalBytes = 0;
-                let totalEvents = totals.syslog ? (totals.syslog.events || 0) : 0;
-                Object.keys(totals).forEach(k => {
-                    if (k !== 'syslog') totalBytes += (totals[k].bytes || 0);
-                });
-                
-                const protoKeys = ['netflow', 'ipfix', 'sflow', 'syslog'];
-                statsBox.innerHTML = protoKeys.map(k => {
-                    const col = PROTO_COLORS[k];
-                    const label = PROTO_LABELS[k];
-                    const item = totals[k] || {};
-                    let valStr = '0 B';
-                    let pct = 0;
-                    if (k === 'syslog') {
-                        valStr = `${item.events || 0} eventi`;
-                        pct = totalEvents > 0 ? Math.min(100, Math.round(((item.events || 0) / totalEvents) * 100)) : 0;
-                    } else {
-                        valStr = typeof fmtBytes === 'function' ? fmtBytes(item.bytes || 0) : `${item.bytes || 0} B`;
-                        pct = totalBytes > 0 ? Math.min(100, Math.round(((item.bytes || 0) / totalBytes) * 100)) : 0;
-                    }
-                    return `
-                    <div style="display:flex; flex-direction:column; gap:4px;">
-                        <div style="display:flex; align-items:center; justify-content:space-between; font-size:12px;">
-                            <span style="font-weight:700; color:${col}; flex:1;">${label}</span>
-                            <span style="font-family:var(--font-code); color:var(--text); font-weight:600;">${valStr}</span>
-                            <span style="color:var(--text-muted); width:45px; text-align:right;">${pct}%</span>
-                        </div>
-                        <div style="width:100%; height:8px; background:var(--surface-3); border-radius:0; overflow:hidden;">
-                            <div style="width:100%; transform:scaleX(${pct / 100}); transform-origin:left; height:100%; background:${col}; border-radius:0; transition:transform .3s;"></div>
-                        </div>
-                    </div>`;
-                }).join('');
-            }
-            return;
-        }
-
-        canvas.style.display = 'block';
-        if (statsBox) statsBox.style.display = 'none';
-
-        // ResizeObserver to automatically adjust canvas resolution when tab becomes visible or resizes
-        if (typeof ResizeObserver !== 'undefined' && canvas && !canvas._hasObsResizeObserver) {
-            canvas._hasObsResizeObserver = true;
-            const ro = new ResizeObserver(() => {
-                if (canvas.offsetWidth > 0) {
-                    renderObsProtocolChart();
-                }
-            });
-            ro.observe(canvas.parentElement || canvas);
-        }
-
-        // Resize canvas to pixel ratio accurately
-        const dpr = window.devicePixelRatio || 1;
-        const rect = canvas.getBoundingClientRect();
-        const parentRect = canvas.parentElement ? canvas.parentElement.getBoundingClientRect() : rect;
-        const width = Math.max(300, Math.round(rect.width || parentRect.width || 600));
-        const height = Math.max(180, Math.round(rect.height || parentRect.height || 230));
-
-        canvas.width = Math.round(width * dpr);
-        canvas.height = Math.round(height * dpr);
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.scale(dpr, dpr);
-
-        ctx.clearRect(0, 0, width, height);
-
-        if (_obsChartType === 'donut') {
-            let totalVal = 0;
-            const items = [];
-            Object.keys(totals).forEach(k => {
-                const v = k === 'syslog' ? (totals[k].events || 0) : (totals[k].bytes || 0);
-                if (v > 0) {
-                    items.push({ key: k, val: v, color: PROTO_COLORS[k], label: PROTO_LABELS[k] });
-                    totalVal += v;
-                }
-            });
-
-            const cx = width > 500 ? width * 0.32 : width * 0.3;
-            const cy = height / 2;
-            const radius = Math.min(width * 0.22, height * 0.38);
-            const innerRadius = radius * 0.58;
-
-            if (items.length === 0 || totalVal === 0) {
-                ctx.fillStyle = '#888';
-                ctx.font = '13px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.fillText(tr('obsNoTelemetryInPeriod'), width / 2, height / 2);
-                return;
-            }
-
-            let startAngle = -Math.PI / 2;
-            items.forEach(item => {
-                const sliceAngle = (item.val / totalVal) * (Math.PI * 2);
-                ctx.beginPath();
-                ctx.arc(cx, cy, radius, startAngle, startAngle + sliceAngle);
-                ctx.arc(cx, cy, innerRadius, startAngle + sliceAngle, startAngle, true);
-                ctx.closePath();
-                ctx.fillStyle = item.color;
-                ctx.fill();
-                startAngle += sliceAngle;
-            });
-
-            // Center total text
-            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text') || '#fff';
-            ctx.font = 'bold 14px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('Protocolli', cx, cy - 8);
-            ctx.font = '11px sans-serif';
-            ctx.fillStyle = '#888';
-            ctx.fillText(`${items.length} attivi`, cx, cy + 10);
-
-            // Render Legend on the right side
-            let lx = Math.max(220, width * 0.52);
-            let ly = Math.max(20, (height - (items.length * 28)) / 2);
-            items.forEach(item => {
-                ctx.fillStyle = item.color;
-                ctx.fillRect(lx, ly, 12, 12);
-                ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text') || '#fff';
-                ctx.font = '12px sans-serif';
-                ctx.textAlign = 'left';
-                ctx.textBaseline = 'top';
-                const pct = Math.round((item.val / totalVal) * 100);
-                const valStr = item.key === 'syslog' ? `${item.val} evt` : (typeof fmtBytes === 'function' ? fmtBytes(item.val) : `${item.val} B`);
-                ctx.fillText(`${item.label}: ${valStr} (${pct}%)`, lx + 20, ly - 1);
-                ly += 28;
-            });
-        } else if (_obsChartType === 'trend') {
-            const trend = d.trend || [];
-            if (trend.length === 0) {
-                ctx.fillStyle = '#888';
-                ctx.font = '13px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.fillText('Nessun trend temporale disponibile nel periodo', width / 2, height / 2);
-                return;
-            }
-
-            const padding = { top: 38, right: 55, bottom: 35, left: 60 };
-            const graphW = width - padding.left - padding.right;
-            const graphH = height - padding.top - padding.bottom;
-
-            // Render Top Legend
-            let legX = padding.left;
-            const legY = 12;
-            const protoKeys = ['netflow', 'ipfix', 'sflow', 'syslog'];
-            protoKeys.forEach(k => {
-                ctx.fillStyle = PROTO_COLORS[k];
-                ctx.fillRect(legX, legY, 10, 10);
-                ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text') || '#fff';
-                ctx.font = '11px sans-serif';
-                ctx.textAlign = 'left';
-                ctx.textBaseline = 'top';
-                const label = k === 'syslog' ? 'Syslog (Eventi)' : PROTO_LABELS[k] + ' (Bytes)';
-                ctx.fillText(label, legX + 14, legY - 1);
-                legX += ctx.measureText(label).width + 30;
-            });
-
-            // Find Max Values
-            let maxBytes = 1;
-            let maxSyslog = 1;
-            trend.forEach(pt => {
-                ['netflow', 'ipfix', 'sflow'].forEach(k => {
-                    if ((pt[k] || 0) > maxBytes) maxBytes = pt[k];
-                });
-                if ((pt.syslog || 0) > maxSyslog) maxSyslog = pt.syslog;
-            });
-
-            // Draw Background Gridlines & Y-Axis Ticks
-            const textColor = getComputedStyle(document.body).getPropertyValue('--text-muted') || '#888';
-            const borderColor = getComputedStyle(document.body).getPropertyValue('--border') || '#444';
-
-            ctx.lineWidth = 1;
-            ctx.font = '10px sans-serif';
-
-            [0, 0.5, 1.0].forEach(factor => {
-                const y = height - padding.bottom - (factor * graphH);
-                ctx.strokeStyle = factor === 0 ? borderColor : 'rgba(255,255,255,0.06)';
-                ctx.beginPath();
-                ctx.moveTo(padding.left, y);
-                ctx.lineTo(width - padding.right, y);
-                ctx.stroke();
-
-                // Left Y-Axis (Bytes)
-                ctx.fillStyle = textColor;
-                ctx.textAlign = 'right';
-                ctx.textBaseline = 'middle';
-                const bytesVal = Math.round(maxBytes * factor);
-                const bytesStr = typeof fmtBytes === 'function' ? fmtBytes(bytesVal) : `${bytesVal} B`;
-                ctx.fillText(bytesStr, padding.left - 8, y);
-
-                // Right Y-Axis (Syslog Events)
-                ctx.textAlign = 'left';
-                const evtVal = Math.round(maxSyslog * factor);
-                ctx.fillText(`${evtVal} evt`, width - padding.right + 8, y);
-            });
-
-            // Draw X-Axis Time Labels
-            const labelStep = Math.max(1, Math.floor(trend.length / 5));
-            trend.forEach((pt, i) => {
-                if (i % labelStep === 0 || i === trend.length - 1) {
-                    const x = padding.left + (i / Math.max(1, trend.length - 1)) * graphW;
-                    const dateObj = new Date(pt.ts * 1000);
-                    const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    ctx.fillStyle = textColor;
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'top';
-                    ctx.fillText(timeStr, x, height - padding.bottom + 8);
-                }
-            });
-
-            // Draw Lines and Points for each protocol
-            protoKeys.forEach(k => {
-                const col = PROTO_COLORS[k];
-                const isSyslog = k === 'syslog';
-                const curMax = isSyslog ? maxSyslog : maxBytes;
-
-                ctx.strokeStyle = col;
-                ctx.fillStyle = col;
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-
-                const points = [];
-                trend.forEach((pt, i) => {
-                    const x = padding.left + (i / Math.max(1, trend.length - 1)) * graphW;
-                    const val = pt[k] || 0;
-                    const y = height - padding.bottom - ((val / curMax) * graphH);
-                    points.push({ x, y, val });
-                    if (i === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
-                });
-                ctx.stroke();
-
-                // Draw Dots
-                points.forEach(p => {
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
-                    ctx.fill();
-                });
-            });
-        }
-    }
-
-    // --- INSPECTION MODAL & CLICK DRILL-DOWN ---
-    // Markup per la ripartizione telemetria (severità syslog, azioni, top
-    // device, breakdown L4 e top porte per protocollo). Riusata sia dal
-    // pannello inline "Dettaglio Flussi" sia dal modale di ispezione, così
-    // le due viste non divergono.
-    const OBS_PROTO_LABELS = { netflow: 'NetFlow', ipfix: 'IPFIX', sflow: 'sFlow', syslog: 'Syslog' };
-
-    function buildFlowTelemetryDetailHtml(protoKey = 'all') {
-        const bd = (_obsProtocolData && _obsProtocolData.breakdown) || {};
-        const totals = (_obsProtocolData && _obsProtocolData.totals) || {};
-        const windowStr = (_obsProtocolData && _obsProtocolData.window) || '24h';
-        const PROTO_LABELS = OBS_PROTO_LABELS;
-
-        let html = '';
-
-        if (protoKey === 'syslog' || protoKey === 'all') {
-            const slData = bd.syslog || {};
-            const sevs = slData.severity || {};
-            const actions = slData.actions || {};
-            const devices = slData.devices || {};
-            const totalSyslogEvts = totals.syslog ? (totals.syslog.events || 0) : 0;
-
-            const SEV_LABELS = {
-                '0': 'Emerg (0)', '1': 'Alert (1)', '2': 'Crit (2)', '3': 'Err (3)',
-                '4': 'Warn (4)', '5': 'Notice (5)', '6': 'Info (6)', '7': 'Debug (7)'
-            };
-            const SEV_COLORS = {
-                '0': 'var(--danger)', '1': 'var(--danger)', '2': 'var(--danger)', '3': 'var(--danger)',
-                '4': 'var(--warning)', '5': 'var(--info)', '6': 'var(--primary)', '7': 'var(--text-muted)'
-            };
-
-            let sevHtml = '';
-            Object.keys(sevs).sort().forEach(sev => {
-                const cnt = sevs[sev] || 0;
-                const pct = totalSyslogEvts > 0 ? Math.round((cnt / totalSyslogEvts) * 100) : 0;
-                sevHtml += `
-                <div style="margin-bottom:8px;">
-                    <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:2px;">
-                        <span style="color:${SEV_COLORS[sev] || 'var(--text)'}; font-weight:700;">${SEV_LABELS[sev] || ('Sev ' + sev)}</span>
-                        <span>${cnt} eventi (${pct}%)</span>
-                    </div>
-                    <div style="width:100%; height:6px; background:var(--surface-3); border-radius:0; overflow:hidden;">
-                        <div style="width:${pct}%; height:100%; background:${SEV_COLORS[sev] || 'var(--primary)'};"></div>
-                    </div>
-                </div>`;
-            });
-
-            let actHtml = '';
-            let totalAct = Object.values(actions).reduce((a, b) => a + b, 0);
-            Object.keys(actions)
-                .sort((a, b) => (actions[b] || 0) - (actions[a] || 0))
-                .forEach(act => {
-                    const cnt = actions[act];
-                    const pct = totalAct > 0 ? Math.round((cnt / totalAct) * 100) : 0;
-                    actHtml += `<span class="badge" style="background:var(--surface-3); border:1px solid var(--border); font-size:11px; padding:3px 8px; border-radius:0; white-space:nowrap; display:inline-flex; align-items:center; gap:4px;">${escapeHtml(act)}: <strong>${cnt}</strong> <span style="color:var(--text-muted); font-size:10px;">(${pct}%)</span></span>`;
-                });
-
-            let devHtml = '';
-            Object.keys(devices)
-                .sort((a, b) => (devices[b] || 0) - (devices[a] || 0))
-                .forEach(dev => {
-                    const cnt = devices[dev];
-                    const pct = totalSyslogEvts > 0 ? Math.round((cnt / totalSyslogEvts) * 100) : 0;
-                    devHtml += `<li style="margin-bottom:4px;"><code>${escapeHtml(dev)}</code> — ${cnt} log (${pct}%)</li>`;
-                });
-
-            html += `
-            <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px; margin-bottom:14px;">
-                <h4 style="margin:0 0 10px; font-size:14px; color:var(--warning); display:flex; align-items:center; gap:6px;">
-                    <i class="fa-solid fa-list-check"></i> Syslog Event Breakdown (Finestra ${windowStr})
-                </h4>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
-                    <div>
-                        <div style="font-size:12px; font-weight:700; margin-bottom:6px; color:var(--text-muted);">DISTRIBUZIONE SEVERITÀ (%)</div>
-                        ${sevHtml || '<div style="color:var(--text-muted); font-size:12px;">Nessun evento</div>'}
-                    </div>
-                    <div>
-                        <div style="font-size:12px; font-weight:700; margin-bottom:6px; color:var(--text-muted);">AZIONI REGISTRATE (ACCEPT/DENY)</div>
-                        <div style="display:flex; flex-wrap:wrap; gap:6px; max-height:150px; overflow-y:auto; padding:8px; background:var(--surface-1); border:1px solid var(--border); border-radius:0; margin-bottom:10px;">
-                            ${actHtml || '<div style="color:var(--text-muted); font-size:12px;">Nessuna azione</div>'}
-                        </div>
-                        <div style="font-size:12px; font-weight:700; margin:12px 0 6px; color:var(--text-muted);">TOP SORGENTI DISPOSITIVI</div>
-                        <ul style="margin:0; padding-left:16px; font-size:12px; max-height:100px; overflow-y:auto;">${devHtml || '<li>—</li>'}</ul>
-                    </div>
-                </div>
-            </div>`;
-        }
-
-        ['netflow', 'ipfix', 'sflow'].forEach(p => {
-            if (protoKey === p || protoKey === 'all') {
-                const pData = bd[p] || {};
-                const l4Map = pData.l4 || {};
-                const portsMap = pData.ports || {};
-                const pTot = totals[p] || {};
-                const totalBytes = pTot.bytes || 0;
-
-                let l4Html = '';
-                Object.keys(l4Map).forEach(proto => {
-                    const b = l4Map[proto];
-                    const pct = totalBytes > 0 ? Math.round((b / totalBytes) * 100) : 0;
-                    l4Html += `
-                    <div style="margin-bottom:6px;">
-                        <div style="display:flex; justify-content:space-between; font-size:12px;">
-                            <span style="font-weight:700;">${proto}</span>
-                            <span>${typeof fmtBytes === 'function' ? fmtBytes(b) : b + ' B'} (${pct}%)</span>
-                        </div>
-                        <div style="width:100%; height:6px; background:var(--surface-3); border-radius:0; overflow:hidden;">
-                            <div style="width:${pct}%; height:100%; background:var(--primary);"></div>
-                        </div>
-                    </div>`;
-                });
-
-                let portsHtml = '';
-                Object.keys(portsMap).slice(0, 5).forEach(port => {
-                    const b = portsMap[port];
-                    const pct = totalBytes > 0 ? Math.round((b / totalBytes) * 100) : 0;
-                    portsHtml += `<div style="display:flex; justify-content:space-between; font-size:12px; padding:3px 0; border-bottom:1px dashed var(--border);">
-                        <span>${escapeHtml(port)}</span>
-                        <span><strong>${typeof fmtBytes === 'function' ? fmtBytes(b) : b + ' B'}</strong> (${pct}%)</span>
-                    </div>`;
-                });
-
-                html += `
-                <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px; margin-bottom:14px;">
-                    <h4 style="margin:0 0 10px; font-size:14px; color:var(--primary); display:flex; align-items:center; gap:6px;">
-                        <i class="fa-solid fa-network-wired"></i> Telemetria ${PROTO_LABELS[p]} (Flussi: ${pTot.flows || 0}, Pacchetti: ${pTot.packets || 0})
-                    </h4>
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
-                        <div>
-                            <div style="font-size:12px; font-weight:700; margin-bottom:6px; color:var(--text-muted);">PROTOCOLLI L4 (PERCENTUALE BYTE)</div>
-                            ${l4Html || '<div style="color:var(--text-muted); font-size:12px;">Nessun dato di flusso</div>'}
-                        </div>
-                        <div>
-                            <div style="font-size:12px; font-weight:700; margin-bottom:6px; color:var(--text-muted);">TOP PORTE DI DESTINAZIONE</div>
-                            ${portsHtml || '<div style="color:var(--text-muted); font-size:12px;">Nessun dato</div>'}
-                        </div>
-                    </div>
-                </div>`;
-            }
-        });
-
-        return html;
-    }
-
-    async function openObsInspectModal(protoKey = 'all') {
-        const modal = document.getElementById('obsInspectModal');
-        const title = document.getElementById('obsInspectTitle');
-        const body = document.getElementById('obsInspectBody');
-        if (!modal || !body) return;
-
-        if (!_obsProtocolData) {
-            await loadObsProtocolDist();
-        }
-
-        if (title) {
-            title.innerHTML = `<i class="fa-solid fa-magnifying-glass-chart" style="color:var(--primary);"></i> ${escapeHtml(tr('titleObsInspect'))} — ${escapeHtml(protoKey === 'all' ? tr('obsAllProtocols') : (OBS_PROTO_LABELS[protoKey] || protoKey))}`;
-        }
-
-        const html = buildFlowTelemetryDetailHtml(protoKey);
-        body.innerHTML = html || `<div style="padding:20px; text-align:center; color:var(--text-muted);">${escapeHtml(tr('obsNoDetailInWindow'))}</div>`;
-        openModal(modal);
-    }
-
-    function closeObsInspectModal() {
-        const modal = document.getElementById('obsInspectModal');
-        if (modal) closeModal(modal);
-    }
-
     // Expose functions globally for UI
     window.loadObsHealth = loadObsHealth;
     window.pruneObsLogs = pruneObsLogs;
@@ -1691,10 +846,6 @@
     window.trafSetWindow = trafSetWindow;
     window.trafSetMetric = trafSetMetric;
     window.trafRefresh = trafRefresh;
-    window.setObsChartType = setObsChartType;
-    window.loadObsProtocolDist = loadObsProtocolDist;
-    window.openObsInspectModal = openObsInspectModal;
-    window.closeObsInspectModal = closeObsInspectModal;
 
     // Delegated click and change event listeners
     document.getElementById('flowsSourceChips')?.addEventListener('click', (e) => {
@@ -1705,11 +856,6 @@
     document.getElementById('flowsColsDropdown')?.addEventListener('change', (e) => {
         const cb = e.target.closest('.flows-col-cb');
         if (cb && cb.dataset.colId) toggleFlowsCol(cb.dataset.colId, cb.checked);
-    });
-
-    document.getElementById('flowsTableHead')?.addEventListener('change', (e) => {
-        const all = e.target.closest('#flowsSelectAll');
-        if (all) toggleFlowsSelectAll(all);
     });
 
     document.getElementById('flowsTableBody')?.addEventListener('click', (e) => {
@@ -1727,13 +873,6 @@
         const flowRow = e.target.closest('tr[data-action="open-flow-detail"]');
         if (flowRow && flowRow.dataset.key) {
             openFlowDetailPanelByKey(flowRow.dataset.key, e);
-        }
-    });
-
-    document.getElementById('flowsTableBody')?.addEventListener('change', (e) => {
-        const cb = e.target.closest('.flow-row-check');
-        if (cb && cb.dataset.key) {
-            toggleFlowRowSelect(cb.dataset.key, cb.checked);
         }
     });
 
@@ -1767,15 +906,6 @@
         const pill = e.target.closest('[data-traf-view]');
         if (pill && pill.dataset.trafView) trafSwitchView(pill.dataset.trafView);
     });
-    // Vista Per IP. Il campo di ricerca ricarica dal server e non filtra le
-    // righe gia' scaricate: il conteggio accanto al titolo deve corrispondere
-    // a quello che il server ha davvero contato, non a quante ne sono rimaste
-    // visibili.
-    let _trafHostSearchTimer = null;
-    document.getElementById('trafHostSearch')?.addEventListener('input', () => {
-        clearTimeout(_trafHostSearchTimer);
-        _trafHostSearchTimer = setTimeout(loadTrafHosts, 350);
-    });
     let _trafPolSearchTimer = null;
     document.getElementById('trafPolSearch')?.addEventListener('input', () => {
         clearTimeout(_trafPolSearchTimer);
@@ -1786,15 +916,6 @@
     document.getElementById('btnTrafPolRun')?.addEventListener('click', loadTrafPolicies);
     document.getElementById('trafPolAction')?.addEventListener('change', loadTrafPolicies);
 
-    document.getElementById('trafHostSeriesSelect')?.addEventListener('change', (e) => {
-        _trafSeriesIp = e.target.value;
-        loadTrafHostSeries();
-    });
-
-    document.getElementById('btnChartTypeDonut')?.addEventListener('click', () => setObsChartType('donut'));
-    document.getElementById('btnChartTypeBar')?.addEventListener('click', () => setObsChartType('bar'));
-    document.getElementById('btnChartTypeTrend')?.addEventListener('click', () => setObsChartType('trend'));
-    document.getElementById('btnObsInspectModal')?.addEventListener('click', () => openObsInspectModal('all'));
     document.getElementById('flowsColsBtn')?.addEventListener('click', toggleFlowsColsDropdown);
     document.getElementById('btnCloseFlowDetail')?.addEventListener('click', closeFlowDetailPanel);
 
@@ -1804,32 +925,6 @@
         }
     });
 
-    document.getElementById('obsInspectModal')?.addEventListener('click', (e) => {
-        if (e.target.id === 'obsInspectModal' || e.target.closest('[data-action="close-obs-inspect-modal"]')) {
-            closeObsInspectModal();
-        }
-    });
-
-
-    // Attach click listener on canvas. Il modulo ora si carica lazy alla
-    // prima visita di tab-flows: di solito DOMContentLoaded e' gia' passato,
-    // quindi il boot va eseguito subito (stesso pattern di provisioning.js).
-    function obsWidgetBoot() {
-        setTimeout(() => {
-            // Pre-login l'overlay copre l'app: nessuna sessione esiste ancora,
-            // e il fetch protetto produrrebbe solo uno 401 inutile.
-            const overlay = document.getElementById('authOverlay');
-            if (overlay && overlay.style.display !== 'none') return;
-            loadObsProtocolDist();
-            const canvas = document.getElementById('obsProtocolCanvas');
-            if (canvas) {
-                canvas.style.cursor = 'pointer';
-                canvas.addEventListener('click', () => {
-                    openObsInspectModal('all');
-                });
-            }
-        }, 800);
-    }
     // Listen for global tenant changes and update the traffic filter.
     window.addEventListener('globalTenantChanged', (/** @type {CustomEvent} */ e) => {
         const tenant = e.detail && e.detail.tenant;
@@ -1847,10 +942,4 @@
         _deviceContextIp = (e.detail && e.detail.ip) || null;
         trafRefresh();
     });
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', obsWidgetBoot);
-    } else {
-        obsWidgetBoot();
-    }
 

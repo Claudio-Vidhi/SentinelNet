@@ -153,14 +153,15 @@ All in [routers/observability.py](../routers/observability.py), all scoped by
 | Endpoint | Auth | What it does |
 |---|---|---|
 | `GET /api/observability/top` | user | Aggregated top talkers; `window`, `metric` (bytes\|packets), `source`, `limit≤500` |
-| `GET /api/observability/flowgraph` | user | Top-50 nodes/edges, KPIs, tenant summary, protocol breakdown |
-| `GET /api/observability/protocol-distribution` | user | Totals, time trend and drill-down breakdown |
 | `GET /api/observability/syslog` | user | Latest normalized syslog events |
 | `GET /api/observability/anomalies` | user | Correlated events, paginated, filtered by status |
 | `POST /api/observability/anomalies/{id}/status` | operator | **Deprecated** alias of `POST /api/incidents/{id}/status`, which it delegates to |
 | `GET/POST /api/observability/config` | **admin** | Listener config, applied hot |
 | `GET /api/observability/health` | **admin** | Active listeners, metrics, DB size |
 | `POST /api/observability/api-poll` | operator | One-shot REST poll |
+
+`/flowgraph`, `/protocol-distribution`, `/hosts` and `/host-series` were removed
+in 0.65.0 with the Overview and Per IP views they fed (§4.4).
 
 ### 4.2 Scope rule (CONTRIBUTING.md §4)
 
@@ -185,39 +186,21 @@ assigned.
 (`MAX_WINDOW_S`). Malformed or out of range → 400. It is the single entry point
 for the window across every endpoint in the router.
 
-### 4.4 `/flowgraph` — the interesting decisions
+### 4.4 Removed: Overview, Per IP and `/flowgraph`
 
-**Node bytes = src + dst.**
+The tab used to open on an **Overview** (KPI strip, top talkers, protocols and
+ports, tenant card, protocol distribution chart with an inspection modal) and
+had a **Per IP** view (traffic per host, IN/OUT series). Both read only
+`flow_aggregates`, and no NetFlow/IPFIX/sFlow exporter is configured in any
+deployment, so 0.65.0 removed them together with `/flowgraph`,
+`/protocol-distribution`, `/hosts` and `/host-series`. The tab now opens on
+**Ricerca** (syslog, §5); **Flussi** and **Per policy** stay.
 
-```python
-node_bytes[src] = node_bytes.get(src, 0) + nbytes
-node_bytes[dst] = node_bytes.get(dst, 0) + nbytes
-```
-
-A destination-only host (an internal server never seen as a source) would
-otherwise sit at 0 and be unfairly dropped by the top-50 cap.
-
-**Cap at 50 nodes, then filter edges against surviving nodes, then top-50
-edges.** The order matters: filtering edges before nodes would produce dangling
-edges.
-
-**VLAN: real when known, synthetic when not, and the difference is declared.**
-If an ARP binding exists for the IP (the `arp_entries` table behind Client Map,
-populated from L3 gateways), the real 802.1Q VLAN is used. Otherwise it falls
-back to `_synthetic_vlan(tenant)` and **the node/edge is marked
-`vlan_real: false`**. The frontend raises the `vlan_disclosure` flag and shows an
-asterisk with a tooltip
-([observability.js:872](../static/js/observability.js#L872)). Principle: never
-pass an invented value off as a real tag.
-
-`_synthetic_vlan()` uses a **truncated sha1**, not `hash()`: the builtin is
-salted per process (`PYTHONHASHSEED` is random), so the same site would have had
-different VLANs across restarts and across workers.
-
-**The force-directed graph no longer exists.** The canvas was removed; what
-remains are the KPIs, the tenant summary and the two tables. `_fgVisibleEdges()`
-returns the whole window precisely because there is no longer a graph to
-click-to-filter on.
+What the ingest side still does with flows is unchanged: `flow_aggregates` is
+written by the listeners, corroborates syslog in the correlator (§4.5) and feeds
+`/top` (Flussi table, MCP `get_top_talkers`). `mac_history.vlans_for_ips()`,
+once the flow graph's real-VLAN lookup, is still used by the incident engine,
+and its tenant-scope test moved to `tests/test_arp_collector.py`.
 
 ### 4.5 Correlator ([observability/correlator.py](../observability/correlator.py))
 
@@ -245,18 +228,17 @@ Never cross-tenant: every query filters by tenant.
 
 - **Auto-refresh every 30 s**, paused when the tab is inactive or the page is
   hidden; immediate refresh on return (`visibilitychange`).
-- **Overlap prevention**: `flowsFetchInFlight` and `_fgFetchInFlight` prevent
-  concurrent fetches.
-- **Selection by tuple, not by row index.** `flowKey(f)` is
-  `tenant|src|dst|proto|port|source`. The selection survives the tenant filter
-  and the periodic refresh; with an index it would have moved under the user's
-  fingers.
+- **Overlap prevention**: `flowsFetchInFlight` prevents concurrent fetches.
+- **Rows keyed by tuple, not by row index.** `flowKey(f)` is
+  `tenant|src|dst|proto|port|source`; a click finds its flow even after the
+  tenant filter or the periodic refresh re-rendered the table. (The row
+  checkboxes that fed "Analyze with AI" went with that feature in 0.65.0.)
 - **Source chips** (`all`/`netflow`/`ipfix`/`sflow`/`syslog`). In `syslog` mode
   the column layout differs: a dedicated table, not an adaptation of the flow
   table. In `all` mode syslog appears in a separate section below.
 - **Hideable columns** persisted in `localStorage`
   (`sentinelnet_flows_hidden_cols`).
-- **Status banner**: if `/health` reports observability off or no active
+- **Status banner** (above the panes, visible in every view): if `/health` reports observability off or no active
   listener, it says so. Previously the absence of data was silent and
   indistinguishable from "quiet network". `/health` is admin-only: a 403 hides
   the banner rather than raising an error.
@@ -519,7 +501,7 @@ with a truncated sha1.
 |---|---|
 | `tests/test_flow_siem.py` | `TestFlowSiem`, `TestFlowSiemDeepScan` |
 | `tests/test_observability_api.py` | Observability router endpoints |
-| `tests/test_observability_flowgraph.py` | `TestFlowGraph`, `TestFlowGraphRealVlan`, `TestFlowGraphVlanTenantScope` |
+| `tests/test_traffico_tab.py` | Pills, panes and routes of the tab; `FlowOnlyViewsStayGone` keeps the removed views out |
 | `tests/test_observability_ingest.py` | Parsers and ingest pipeline |
 | `tests/test_observability_ui.py` | Tab markup and wiring |
 
@@ -540,8 +522,7 @@ Run from the repository root:
 3. **RFC 3164 has no year and no timezone**: the current year and the server's
    local timezone are assumed. A limitation of the BSD format, not of the parser.
 4. **`siem_suppressions` is outside retention** (§3.1).
-5. **Synthetic VLAN** when the ARP binding is missing: always marked, never
-   silent — but still a value that isn't real.
+5. **Synthetic VLAN**: gone with `/flowgraph` in 0.65.0 (§4.4, §7.5).
 6. **Correlator precision-over-recall**: a security event with no corroborating
    NetFlow and severity > 3 produces no anomaly. Intended, but worth knowing when
    investigating "why didn't this show up".
@@ -550,8 +531,8 @@ Run from the repository root:
 
 ## 10. Typical investigation path
 
-1. **Live Flows** → KPIs (throughput, top path %, talkers, spikes) and the top
-   talker table. Filters: window, metric, source, tenant.
+1. **Traffic → Flussi** → the top talker table. Filters: window, metric,
+   source, tenant.
 2. Suspicious row → click opens the **detail panel**: the source's
    MAC/switch/port via client-map, a link to topology, a jump to that flow's
    anomalies.
@@ -560,5 +541,3 @@ Run from the repository root:
    ALLOW/DENY verdict, with facets and histogram.
 5. Confirmed false positive → **suppress** (persisted, excluded from events and
    facets).
-6. Optional: select rows in Live Flows → **AI analysis** with context assembled
-   and redacted server-side.

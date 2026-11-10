@@ -501,8 +501,8 @@ def vlans_for_ips(ip_tenant_map: dict) -> dict:
     because they share the same IP. Each lookup is therefore
     ``ip = ? AND tenant = ?`` — never a global IN(...) on the IPs.
 
-    Used by the flow graph (Task 3, observability) to show the real VLAN
-    when known, instead of a synthetic value. IPs with no known ARP binding
+    Used by the incident engine (observability/incidents.py) to tell whether
+    an incident's hosts sit on a known VLAN. IPs with no known ARP binding
     (for that tenant) are absent from the returned dict (fallback left to
     the caller)."""
     pairs = [(ip, tenant) for ip, tenant in ip_tenant_map.items() if ip]

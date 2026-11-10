@@ -1488,8 +1488,6 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         return html[start:html.index('<div id="flowDetailPanel"', start)]
 
     def test_preserve_ids(self):
-        # flowsSelectAll is emitted only by renderFlowsTable(), which moved to
-        # static/js/observability.js.
         html = frontend_source()
         # I controlli di finestra/metrica/tenant sono passati all'header unico
         # del tab (prefisso traf*): erano triplicati, uno per pannello.
@@ -1504,9 +1502,14 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
                      'toggleFlowsColsDropdown',
                      'closeFlowDetailPanel'):
             self.assertIn(hook, html)
-        # Ids created only by JS (never literal in the static markup).
-        for _id in ('flowsSelectAll',):
-            self.assertIn(f"id=\\\"{_id}\\\"", html.replace('"', '\\"'))
+
+    def test_flow_row_selection_is_gone(self):
+        # The row checkboxes only fed "Analyze with AI", removed in 0.65.0:
+        # a checkbox that selects for nothing is a dead control.
+        html = frontend_source()
+        for gone in ('flowsSelectAll', 'flow-row-check', '_flowsSelectedKeys',
+                     'toggleFlowRowSelect', 'syncFlowsSelectAllCheckbox'):
+            self.assertNotIn(gone, html)
 
     def test_source_filter_chips_and_column_toggle_survive(self):
         # FLOWS_SOURCES/renderFlowsSourceChips/renderSyslogTable moved to
@@ -1577,14 +1580,12 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         # Ricerca, la tabella per host col suo andamento e quella per policy.
         # Il pannello "Dettaglio Flussi" inline non c'e' piu': era la terza
         # copia della stessa ripartizione per protocollo.
-        # The overview's protocol table and tenant summary moved out of two
-        # untitled hero-cards into titled panels of the "top N" grid (+2), and
-        # the grid spaces its cells, so two panels dropped their own margin.
-        self.assertEqual(tab.count('<div class="panel"'), 12)
-        self.assertEqual(tab.count('<div class="panel" style="margin-bottom:18px;"'), 4)
-        # All tables wrapped: flows, syslog-in-all-sources, protocol breakdown,
-        # top talkers. The anomalies table left with its pane.
-        self.assertEqual(tab.count('class="table-wrap"'), 4)
+        # 0.65.0 removed the flow-only Overview (4 panels) and Per IP (2)
+        # views: no NetFlow/IPFIX/sFlow exporter is configured anywhere.
+        self.assertEqual(tab.count('<div class="panel"'), 6)
+        self.assertEqual(tab.count('<div class="panel" style="margin-bottom:18px;"'), 3)
+        # All tables wrapped: flows and syslog-in-all-sources.
+        self.assertEqual(tab.count('class="table-wrap"'), 2)
         self.assertIn('class="filterbar"', tab)
         html = frontend_source()
         # Flussi Live non e' piu' in preview: la voce di menu non porta badge.

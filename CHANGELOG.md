@@ -19,6 +19,15 @@ happened — `git log --grep="chore(release)"` is the record for those.
   applicare comandi da un client LLM c'è `send_cli_command` con un account
   operator. La tabella `ai_conversations` resta nel database, non più letta
   né scritta.
+- **Traffico, viste solo NetFlow**: tolte le viste «Panoramica» (KPI, top
+  talker, protocolli e porte, scheda tenant, grafico di ripartizione per
+  protocollo con il suo modale di ispezione) e «Per IP», che leggevano solo i
+  flussi NetFlow/IPFIX/sFlow, e con loro le rotte
+  `/api/observability/flowgraph`, `/protocol-distribution`, `/hosts` e
+  `/host-series`. Il tab si apre ora su «Ricerca»; restano «Flussi» e «Per
+  policy». Via anche le caselle di selezione delle righe nella tabella
+  Flussi, che servivano solo ad «Analizza con AI». Listener, tabelle,
+  correlatore, `/top` e `/anomalies` restano invariati.
 
 ### Changed
 
