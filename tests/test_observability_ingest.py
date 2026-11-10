@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Test della pipeline di ingest (fase 3): decoder NetFlow v5/v9/IPFIX con
-fixture sintetiche, sFlow con scaling del sampling rate, syslog multivendor,
-attribuzione tenant + quarantena, listener UDP end-to-end, retention,
-endpoint di health, e load test 5k pps con p99 di latenza del loop < 5 ms."""
+"""Ingest pipeline tests: multivendor syslog parser, tenant attribution +
+quarantine, UDP listener end to end, retention, health endpoint, listener
+config (legacy flow keys ignored), and a 5k pps load test on the loop."""
 
 import asyncio
 import os
@@ -25,7 +24,7 @@ data_config.DATA_DIR = _TMP_DATA_DIR
 from core import db  # noqa: E402
 from services import inventory_manager  # noqa: E402
 from observability import metrics, rollup  # noqa: E402
-from observability.ingesters import ipfix, sflow, syslog  # noqa: E402
+from observability.ingesters import syslog  # noqa: E402
 from observability.ingesters import udp_server  # noqa: E402
 
 EXPORTER = "192.168.1.1"
@@ -35,142 +34,9 @@ DEVICES = [
 ]
 
 
-# --- Generatori di fixture sintetiche (stile scapy, solo struct) -------------
-
-def make_v5(src="10.0.0.1", dst="10.0.0.2", pkts=10, octets=1000,
-            sport=12345, dport=443, proto=6, unix_secs=None):
-    unix_secs = unix_secs or int(time.time())
-    header = struct.pack("!HHIIIIBBH", 5, 1, 0, unix_secs, 0, 0, 0, 0, 0)
-    rec = struct.pack("!4s4s4sHHIIIIHHBBBBHHBBH",
-                      socket.inet_aton(src), socket.inet_aton(dst),
-                      socket.inet_aton("0.0.0.0"), 0, 0, pkts, octets,
-                      0, 0, sport, dport, 0, 0, proto, 0, 0, 0, 0, 0, 0)
-    return header + rec
-
-
-V9_TEMPLATE_ID = 256
-# IE: srcaddr(8,4) dstaddr(12,4) srcport(7,2) dstport(11,2) proto(4,1)
-# bytes(1,4) pkts(2,4)
-_V9_FIELDS = [(8, 4), (12, 4), (7, 2), (11, 2), (4, 1), (1, 4), (2, 4)]
-
-
-def make_v9_template(unix_secs=None):
-    unix_secs = unix_secs or int(time.time())
-    tmpl_body = struct.pack("!HH", V9_TEMPLATE_ID, len(_V9_FIELDS))
-    for ie, ln in _V9_FIELDS:
-        tmpl_body += struct.pack("!HH", ie, ln)
-    flowset = struct.pack("!HH", 0, 4 + len(tmpl_body)) + tmpl_body
-    header = struct.pack("!HHIIII", 9, 1, 0, unix_secs, 0, 99)
-    return header + flowset
-
-
-def make_v9_data(src="10.0.0.1", dst="10.0.0.2", sport=1111, dport=443,
-                 proto=6, octets=500, pkts=5, unix_secs=None):
-    unix_secs = unix_secs or int(time.time())
-    rec = (socket.inet_aton(src) + socket.inet_aton(dst)
-           + struct.pack("!HHB", sport, dport, proto)
-           + struct.pack("!II", octets, pkts))
-    flowset = struct.pack("!HH", V9_TEMPLATE_ID, 4 + len(rec)) + rec
-    header = struct.pack("!HHIIII", 9, 1, 0, unix_secs, 0, 99)
-    return header + flowset
-
-
-def make_ipfix_template(export_time=None):
-    export_time = export_time or int(time.time())
-    body = struct.pack("!HH", V9_TEMPLATE_ID, len(_V9_FIELDS))
-    for ie, ln in _V9_FIELDS:
-        body += struct.pack("!HH", ie, ln)
-    tset = struct.pack("!HH", 2, 4 + len(body)) + body
-    msg_len = 16 + len(tset)
-    header = struct.pack("!HHIII", 10, msg_len, export_time, 0, 7)
-    return header + tset
-
-
-def make_ipfix_data(src="10.0.0.1", dst="10.0.0.2", octets=700, pkts=7,
-                    dport=53, proto=17, export_time=None):
-    export_time = export_time or int(time.time())
-    rec = (socket.inet_aton(src) + socket.inet_aton(dst)
-           + struct.pack("!HHB", 5353, dport, proto)
-           + struct.pack("!II", octets, pkts))
-    dset = struct.pack("!HH", V9_TEMPLATE_ID, 4 + len(rec)) + rec
-    msg_len = 16 + len(dset)
-    header = struct.pack("!HHIII", 10, msg_len, export_time, 0, 7)
-    return header + dset
-
-
-def make_sflow(src="10.0.0.1", dst="10.0.0.2", dport=443, proto=6,
-               frame_len=1000, sampling_rate=100):
-    eth = b"\x00" * 12 + struct.pack("!H", 0x0800)
-    ip = struct.pack("!BBHHHBBH4s4s", 0x45, 0, 40, 0, 0, 64, proto, 0,
-                     socket.inet_aton(src), socket.inet_aton(dst))
-    l4 = struct.pack("!HH", 40000, dport)
-    frame = eth + ip + l4
-    raw_rec = struct.pack("!IIII", 1, frame_len, 4, len(frame)) + frame
-    rec = struct.pack("!II", 1, len(raw_rec)) + raw_rec
-    fs_body = struct.pack("!IIIIIIII", 1, 0, sampling_rate, 0, 0, 0, 0, 1) + rec
-    sample = struct.pack("!II", 1, len(fs_body)) + fs_body
-    header = struct.pack("!II4sIII", 5, 1, socket.inet_aton(EXPORTER), 0, 0, 0)
-    return header + struct.pack("!I", 1) + sample
-
-
-class TestDecoders(unittest.TestCase):
-    def setUp(self):
-        ipfix.reset_state()
-        metrics.reset()
-
-    def test_netflow_v5(self):
-        recs = ipfix.parse(make_v5(octets=1000, pkts=10), EXPORTER)
-        self.assertEqual(len(recs), 1)
-        r = recs[0]
-        self.assertEqual((r["src_ip"], r["dst_ip"], r["dst_port"], r["protocol"]),
-                         ("10.0.0.1", "10.0.0.2", 443, 6))
-        self.assertEqual((r["bytes"], r["packets"]), (1000, 10))
-
-    def test_netflow_v9_template_then_data(self):
-        self.assertEqual(ipfix.parse(make_v9_template(), EXPORTER), [])
-        recs = ipfix.parse(make_v9_data(octets=500, pkts=5), EXPORTER)
-        self.assertEqual(len(recs), 1)
-        self.assertEqual(recs[0]["bytes"], 500)
-
-    def test_v9_data_before_template_buffered_then_resolved(self):
-        recs = ipfix.parse(make_v9_data(octets=123), EXPORTER)
-        self.assertEqual(recs, [])  # nessun template: bufferizzato
-        recs = ipfix.parse(make_v9_template(), EXPORTER)
-        self.assertEqual(len(recs), 1)  # risolto all'arrivo del template
-        self.assertEqual(recs[0]["bytes"], 123)
-
-    def test_ipfix_roundtrip(self):
-        ipfix.parse(make_ipfix_template(), EXPORTER)
-        recs = ipfix.parse(make_ipfix_data(octets=700, dport=53, proto=17), EXPORTER)
-        self.assertEqual(len(recs), 1)
-        self.assertEqual((recs[0]["bytes"], recs[0]["dst_port"], recs[0]["protocol"]),
-                         (700, 53, 17))
-
-    def test_template_reannounce_replaces(self):
-        ipfix.parse(make_v9_template(), EXPORTER)
-        ipfix.parse(make_v9_template(), EXPORTER)  # ri-annuncio: nessun errore
-        recs = ipfix.parse(make_v9_data(), EXPORTER)
-        self.assertEqual(len(recs), 1)
-
-    def test_garbage_does_not_crash(self):
-        for garbage in (b"", b"\x00", os.urandom(64), os.urandom(1500),
-                        struct.pack("!H", 9) + os.urandom(10)):
-            self.assertIsInstance(ipfix.parse(garbage, EXPORTER), list)
-            self.assertIsInstance(sflow.parse(garbage, EXPORTER), list)
-            self.assertIsInstance(syslog.parse(garbage, EXPORTER), list)
-
-    def test_template_cache_bounded(self):
-        for i in range(ipfix.MAX_TEMPLATES + 50):
-            ipfix._store_template(("e", 1, i), [(8, 4)])
-        self.assertLessEqual(ipfix.template_cache_size(), ipfix.MAX_TEMPLATES)
-
-    def test_sflow_sampling_scaling(self):
-        recs = sflow.parse(make_sflow(frame_len=1000, sampling_rate=100), EXPORTER)
-        self.assertEqual(len(recs), 1)
-        # Vincolante: bytes = frame_len * rate; packets = rate.
-        self.assertEqual(recs[0]["bytes"], 100_000)
-        self.assertEqual(recs[0]["packets"], 100)
-        self.assertEqual(recs[0]["dst_port"], 443)
+# One FortiGate traffic line: the fixture every ingest test below sends.
+SYSLOG_LINE = (b'<134>date=2026-07-12 time=10:00:00 devname="FGT" type="traffic" '
+               b'action="deny" srcip=10.0.0.1 dstip=10.0.0.2 dstport=443 proto=6')
 
 
 class TestSyslogParser(unittest.TestCase):
@@ -208,6 +74,11 @@ class TestSyslogParser(unittest.TestCase):
         ev = syslog.parse(b"<13>" + b"A" * 10000, EXPORTER)[0]
         self.assertLessEqual(len(ev["message"]), syslog.MAX_MESSAGE_LEN)
 
+    def test_garbage_does_not_crash(self):
+        for garbage in (b"", b"\x00", os.urandom(64), os.urandom(1500),
+                        struct.pack("!H", 9) + os.urandom(10)):
+            self.assertIsInstance(syslog.parse(garbage, EXPORTER), list)
+
 
 class TestAttribution(unittest.TestCase):
     def setUp(self):
@@ -231,11 +102,11 @@ class TestAttribution(unittest.TestCase):
     def test_known_exporter_lands_with_tenant(self):
         with patch("services.inventory_manager.get_all_devices", return_value=DEVICES):
             inventory_manager.invalidate_device_ip_cache()
-            recs = ipfix.parse(make_v5(), EXPORTER)
-            udp_server._handle_records(recs, "flow", time.time())
+            recs = syslog.parse(SYSLOG_LINE, EXPORTER)
+            udp_server._handle_records(recs, time.time())
         self._drain()
         conn = db.get_observability_connection()
-        rows = conn.execute("SELECT tenant FROM flow_aggregates").fetchall()
+        rows = conn.execute("SELECT tenant FROM syslog_events").fetchall()
         conn.close()
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["tenant"], "sede-a")
@@ -243,11 +114,11 @@ class TestAttribution(unittest.TestCase):
     def test_unknown_exporter_dropped_and_quarantined(self):
         with patch("services.inventory_manager.get_all_devices", return_value=[]):
             inventory_manager.invalidate_device_ip_cache()
-            recs = ipfix.parse(make_v5(), "203.0.113.99")
-            udp_server._handle_records(recs, "flow", time.time())
+            recs = syslog.parse(SYSLOG_LINE, "203.0.113.99")
+            udp_server._handle_records(recs, time.time())
         self._drain()
         conn = db.get_observability_connection()
-        flows = conn.execute("SELECT COUNT(*) AS n FROM flow_aggregates").fetchone()["n"]
+        flows = conn.execute("SELECT COUNT(*) AS n FROM syslog_events").fetchone()["n"]
         quar = conn.execute("SELECT * FROM quarantined_exporters").fetchall()
         conn.close()
         self.assertEqual(flows, 0)
@@ -258,11 +129,11 @@ class TestAttribution(unittest.TestCase):
         # Gate permanente: dopo ogni fixture, nessuna riga con tenant 'default'.
         with patch("services.inventory_manager.get_all_devices", return_value=DEVICES):
             inventory_manager.invalidate_device_ip_cache()
-            for pkt in (make_v5(), make_v9_template(), make_v9_data()):
-                udp_server._handle_records(ipfix.parse(pkt, EXPORTER), "flow", time.time())
+            for pkt in (SYSLOG_LINE, b"<13>plain line", b"garbage"):
+                udp_server._handle_records(syslog.parse(pkt, EXPORTER), time.time())
         self._drain()
         conn = db.get_observability_connection()
-        n = conn.execute("SELECT COUNT(*) AS n FROM flow_aggregates "
+        n = conn.execute("SELECT COUNT(*) AS n FROM syslog_events "
                          "WHERE tenant = 'default'").fetchone()["n"]
         conn.close()
         self.assertEqual(n, 0)
@@ -281,11 +152,11 @@ class TestAttribution(unittest.TestCase):
                           "Group": "sede-b"}]
         with patch("services.inventory_manager.get_all_devices", return_value=dup):
             inventory_manager.invalidate_device_ip_cache()
-            recs = ipfix.parse(make_v5(), EXPORTER)
-            udp_server._handle_records(recs, "flow", time.time())
+            recs = syslog.parse(SYSLOG_LINE, EXPORTER)
+            udp_server._handle_records(recs, time.time())
         self._drain()
         conn = db.get_observability_connection()
-        n = conn.execute("SELECT COUNT(*) AS n FROM flow_aggregates").fetchone()["n"]
+        n = conn.execute("SELECT COUNT(*) AS n FROM syslog_events").fetchone()["n"]
         conn.close()
         self.assertEqual(n, 0)
 
@@ -312,7 +183,7 @@ class TestAttribution(unittest.TestCase):
                 recs = syslog.parse(msg, ip)
                 self.assertEqual(recs[0]["ts"], expected_ts)
                 self.assertEqual(recs[0]["severity"], severity)
-                udp_server._handle_records(recs, "syslog", time.time())
+                udp_server._handle_records(recs, time.time())
         self._drain()
         conn = db.get_observability_connection()
         rows = conn.execute("SELECT tenant, device_ip, message FROM syslog_events "
@@ -346,18 +217,17 @@ class TestUdpEndToEnd(unittest.TestCase):
                  "Group": "sede-a"}]):
                 inventory_manager.invalidate_device_ip_cache()
                 handle = await udp_server.start_udp_listener(
-                    "127.0.0.1", 0, ipfix.parse, "flow", "ipfix-test")
+                    "127.0.0.1", 0, syslog.parse, "syslog-test")
                 port = handle.bound_port()
                 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                sock.sendto(make_v5(), ("127.0.0.1", port))
-                sock.sendto(os.urandom(200), ("127.0.0.1", port))  # garbage
+                sock.sendto(SYSLOG_LINE, ("127.0.0.1", port))
                 sock.close()
                 await asyncio.sleep(0.5)
                 await handle.stop()
         asyncio.run(go())
         time.sleep(0.5)
         conn = db.get_observability_connection()
-        rows = conn.execute("SELECT * FROM flow_aggregates").fetchall()
+        rows = conn.execute("SELECT * FROM syslog_events").fetchall()
         conn.close()
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["tenant"], "sede-a")
@@ -391,11 +261,11 @@ class TestUdpEndToEnd(unittest.TestCase):
                  "Group": "sede-a"}]):
                 inventory_manager.invalidate_device_ip_cache()
                 handle = await udp_server.start_udp_listener(
-                    "127.0.0.1", 0, ipfix.parse, "flow", "ipfix-load")
+                    "127.0.0.1", 0, syslog.parse, "syslog-load")
                 port = handle.bound_port()
                 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 sock.setblocking(False)
-                pkt = make_v5()
+                pkt = SYSLOG_LINE
 
                 async def sender():
                     for i in range(5000):
@@ -479,11 +349,7 @@ class TestRetention(unittest.TestCase):
 
     def _seed(self, table, col, ts, **extra):
         conn = db.get_observability_connection()
-        if table == "flow_aggregates":
-            conn.execute("INSERT INTO flow_aggregates (window_start, tenant, src_ip, "
-                         "dst_ip, protocol, dst_port) VALUES (?, 'sede-a', '1.1.1.1', "
-                         "'203.0.113.2', 6, 443)", (ts,))
-        elif table == "syslog_events":
+        if table == "syslog_events":
             conn.execute("INSERT INTO syslog_events (ts, tenant) VALUES (?, 'sede-a')", (ts,))
         elif table == "incidents":
             conn.execute("INSERT INTO incidents (tenant, entity_key, opened_ts, "
@@ -503,17 +369,44 @@ class TestRetention(unittest.TestCase):
 
     def test_prune_strict_boundary(self):
         now = int(time.time())
-        cutoff_days = {"flow_aggregates": 30, "syslog_events": 7, "incidents": 90}
-        old = now - 31 * 86400
-        inside = now - 29 * 86400
-        self._seed("flow_aggregates", "window_start", old)
-        self._seed("flow_aggregates", "window_start", inside)
-        deleted = rollup.prune_once(cutoff_days)
+        old = now - 8 * 86400
+        inside = now - 6 * 86400
+        self._seed("syslog_events", "ts", old)
+        self._seed("syslog_events", "ts", inside)
+        deleted = rollup.prune_once({"syslog_events": 7, "incidents": 90})
+        self.assertEqual(deleted["syslog_events"], 1)
+        conn = db.get_observability_connection()
+        rows = conn.execute("SELECT ts FROM syslog_events").fetchall()
+        conn.close()
+        self.assertEqual([r["ts"] for r in rows], [inside])
+
+    def test_new_database_has_no_flow_table_and_prune_skips_it(self):
+        conn = db.get_observability_connection()
+        found = conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' "
+                             "AND name = 'flow_aggregates'").fetchone()
+        conn.close()
+        self.assertIsNone(found)
+        self.assertNotIn("flow_aggregates", rollup.prune_once({"flow_aggregates": 30}))
+
+    def test_legacy_flow_table_is_kept_and_still_pruned(self):
+        # A database created before the flow collectors were removed keeps
+        # flow_aggregates (no DROP), and its IP data still ages out.
+        now = int(time.time())
+        conn = db.get_observability_connection()
+        conn.execute("CREATE TABLE flow_aggregates (window_start INTEGER NOT NULL, "
+                     "tenant TEXT NOT NULL, src_ip TEXT, dst_ip TEXT)")
+        conn.executemany("INSERT INTO flow_aggregates VALUES (?, 'sede-a', "
+                         "'10.0.0.1', '10.0.0.2')",
+                         [(now - 31 * 86400,), (now - 29 * 86400,)])
+        conn.commit()
+        conn.close()
+        db.migrate()  # a restart on the old database: the table survives
+        deleted = rollup.prune_once({"flow_aggregates": 30})
         self.assertEqual(deleted["flow_aggregates"], 1)
         conn = db.get_observability_connection()
-        rows = conn.execute("SELECT window_start FROM flow_aggregates").fetchall()
+        n = conn.execute("SELECT COUNT(*) AS n FROM flow_aggregates").fetchone()["n"]
         conn.close()
-        self.assertEqual([r["window_start"] for r in rows], [inside])
+        self.assertEqual(n, 1)
 
     def test_unresolved_incidents_survive(self):
         now = int(time.time())
@@ -613,21 +506,45 @@ class TestListenerDefaults(unittest.TestCase):
                 del os.environ[var]
         cfg = data_config.obs_config()
         self.assertFalse(cfg["enabled"])
-        self.assertFalse(cfg["ipfix"]["enabled"])
-        self.assertFalse(cfg["sflow"]["enabled"])
         self.assertFalse(cfg["syslog"]["enabled"])
         self.assertEqual(cfg["bind"], "127.0.0.1")
-        self.assertEqual(cfg["syslog"]["port"], 5514)  # mai 514 in-process
+        # 514 on Windows (installer firewall rule), unprivileged 5514 elsewhere.
+        for platform, port in (("win32", 514), ("linux", 5514)):
+            with patch.object(data_config.sys, "platform", platform):
+                self.assertEqual(data_config.obs_config()["syslog"]["port"], port)
 
     def test_enable_flag_cascades(self):
         with patch.dict(os.environ, {"SENTINELNET_OBS_ENABLE": "1"}):
-            cfg = data_config.obs_config()
-            self.assertTrue(cfg["ipfix"]["enabled"])
+            self.assertTrue(data_config.obs_config()["syslog"]["enabled"])
         with patch.dict(os.environ, {"SENTINELNET_OBS_ENABLE": "1",
-                                     "SENTINELNET_OBS_IPFIX_ENABLE": "0"}):
-            cfg = data_config.obs_config()
-            self.assertFalse(cfg["ipfix"]["enabled"])
-            self.assertTrue(cfg["sflow"]["enabled"])
+                                     "SENTINELNET_OBS_SYSLOG_ENABLE": "0"}):
+            self.assertFalse(data_config.obs_config()["syslog"]["enabled"])
+
+    def test_legacy_flow_settings_are_ignored(self):
+        # An installation upgraded from a release with flow collectors still
+        # has ipfix_* / sflow_* / netflow_* saved and may export the old env
+        # vars: config and listener startup must ignore them, not fail.
+        import json
+        from observability import listener_manager
+        legacy = {"enabled": True, "syslog_enabled": True, "syslog_port": 5514,
+                  "ipfix_enabled": True, "ipfix_port": 4739,
+                  "sflow_enabled": True, "sflow_port": 6343,
+                  "netflow_enabled": True, "netflow_port": 2055}
+        path = data_config.get_path("app_settings.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"observability": legacy}, f)
+        try:
+            with patch.dict(os.environ, {"SENTINELNET_OBS_IPFIX_ENABLE": "1",
+                                         "SENTINELNET_OBS_IPFIX_PORT": "not-a-port",
+                                         "SENTINELNET_OBS_NETFLOW_PORT": "2055",
+                                         "SENTINELNET_OBS_SFLOW_ENABLE": "1"}):
+                cfg = data_config.obs_config()
+                names = [spec[0] for spec in listener_manager._listener_specs(cfg)]
+        finally:
+            os.remove(path)
+        self.assertTrue(cfg["syslog"]["enabled"])
+        self.assertFalse({"ipfix", "sflow", "netflow"} & set(cfg))
+        self.assertEqual(names, ["syslog"])
 
 
 if __name__ == "__main__":

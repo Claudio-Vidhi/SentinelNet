@@ -37,5 +37,5 @@ latest released minor is supported: fixes land there, not in older tags.
 ## Air-Gap & Data Protection Principles
 
 1. **Zero Outbound Telemetry**: SentinelNet makes no outbound tracking, telemetry, or metric reporting calls.
-2. **Local Processing**: Network discovery (LLDP, ARP, MAC), SNMP polling, NetFlow/IPFIX collection, and Syslog ingesters operate entirely within the local host/network boundary.
+2. **Local Processing**: Network discovery (LLDP, ARP, MAC), SNMP polling, and the Syslog ingester operate entirely within the local host/network boundary.
 3. **Cryptographic Storage**: Sensitive device passwords, enable secrets, and API tokens are encrypted with AES-GCM via `security/crypto_vault.py` and are never logged or exported in plain text.

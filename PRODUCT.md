@@ -33,8 +33,8 @@ per browser.
 
 Self-hosted platform that centralizes management of network infrastructure:
 configuration backup, firmware and vulnerability triage against the
-NIST NVD database, passive telemetry collection (NetFlow, IPFIX, sFlow,
-syslog, SNMP), and single-client L2+L3 diagnosis — all reachable from one
+NIST NVD database, passive telemetry collection (syslog, SNMP,
+FortiGate REST), and single-client L2+L3 diagnosis — all reachable from one
 browser console.
 
 The objective, taken from `docs/principles.md`: help the engineer understand

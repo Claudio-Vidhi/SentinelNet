@@ -14,10 +14,7 @@ No collector is enabled by default. Configuration and exposure:
 
 | Source | Transport | Default port | Module | Table |
 |---|---|---|---|---|
-| IPFIX | UDP | 4739 | [ingesters/ipfix.py](../observability/ingesters/ipfix.py) | `flow_aggregates` |
-| NetFlow v9 / v5 | UDP | 2055 | same decoder | `flow_aggregates` |
-| sFlow v5 | UDP | 6343 | [ingesters/sflow.py](../observability/ingesters/sflow.py) | `flow_aggregates` |
-| syslog | UDP | **5514** | [ingesters/syslog.py](../observability/ingesters/syslog.py) | `syslog_events` |
+| syslog | UDP | **514** Windows · **5514** Linux/Docker | [ingesters/syslog.py](../observability/ingesters/syslog.py) | `syslog_events` |
 | FortiGate REST | outbound HTTPS | — | [ingesters/api_poller.py](../observability/ingesters/api_poller.py) | `api_observations` |
 | SNMP v2c | outbound UDP 161 | — | [ingesters/snmp_poller.py](../observability/ingesters/snmp_poller.py) | `api_observations` |
 | Linux health | outbound SSH | 22 | [ingesters/linux_poller.py](../observability/ingesters/linux_poller.py) | `api_observations` |
@@ -25,14 +22,17 @@ No collector is enabled by default. Configuration and exposure:
 | Probe agent | inbound HTTPS | 8000 | [services/probe_agent.py](../services/probe_agent.py) | inventory, MAC, syslog |
 | ARP / MAC tables | SSH · NETCONF · RESTCONF | — | [collectors/](../collectors/) | `mac_history.db`, `arp_entries` |
 
-The first four are **passive**: devices send, SentinelNet listens. The rest are
-**active polling**: SentinelNet asks.
+Syslog is **passive**: devices send, SentinelNet listens. The rest are
+**active polling** (or, for probe agents, pushed over HTTPS): SentinelNet asks.
+
+NetFlow, IPFIX and sFlow are **not collected** (removed in 0.65.0). Old
+settings and `SENTINELNET_OBS_{IPFIX,NETFLOW,SFLOW}_*` variables are ignored.
 
 ---
 
 ## 2. The common UDP listener path
 
-Applies to IPFIX, NetFlow, sFlow and syslog
+Applies to the syslog listener
 ([ingesters/udp_server.py](../observability/ingesters/udp_server.py)):
 
 ```
@@ -41,7 +41,7 @@ datagram_received  →  put_nowait on an asyncio queue (max 20,000)
         ▼
 consumer (1 task per listener)  →  parse()  →  tenant resolution
         ▼
-db.enqueue_flow() / enqueue_write()  →  bounded queue, 10,000
+db.enqueue_write()  →  bounded queue, 10,000
         ▼
 writer thread  →  batch commit of 500  →  observability.db (WAL)
 ```
@@ -77,61 +77,13 @@ No record is ever written with a fallback tenant. See
 exporter behind NAT would be misattributed. Handle it with a site relay, not by
 exposing UDP over the VPN.
 
-### 2.2 Clock skew
-
-The exporter's timestamp is used only if it is within ±300 s of reception;
-otherwise reception time is used and `clock_skew_fallback` is incremented. A
-device with a wrong clock must not be able to write buckets into the future or
-the distant past.
-
 ---
 
-## 3. IPFIX and NetFlow
+## 3–4. NetFlow, IPFIX, sFlow — removed
 
-A single decoder for IPFIX (RFC 7011), NetFlow v9 and NetFlow v5.
-
-Normalized record: `src_ip`, `dst_ip`, `protocol`, `dst_port`, `bytes`,
-`packets`, `flow_end_ts`, `exporter_ip`.
-
-**Template handling** (v9 and IPFIX), which is where the real complexity lives:
-
-- cache keyed by `(exporter_ip, observation_domain_id, template_id)`, bounded to
-  1024 with oldest-first eviction and a 1800 s TTL;
-- **data sets that arrive before their template**: buffered (bounded to 256) and
-  re-decoded when the template shows up. This is the normal case after an
-  exporter restart, not an anomaly — dropping them would mean losing the first
-  minute of every session;
-- template re-announcement: clean replacement, and the pending buffer for that
-  key is retried;
-- unrecognized IEs are skipped using only their length. Variable-length fields
-  and enterprise numbers are handled per RFC.
-
-### 3.1 Aggregation
-
-`flow_aggregates` is **not a flow log**: it's a per-minute rollup. The UPSERT is
-on `UNIQUE(window_start, tenant, src_ip, dst_ip, protocol, dst_port)` with
-`window_start` truncated to the minute, and `flow_count` counts how many flow
-records landed in the bucket.
-
-Consequence worth remembering when reading downstream code: the normalization
-adapter re-reads buckets until the window closes and **updates** metrics on
-conflict rather than ignoring them.
-
----
-
-## 4. sFlow
-
-**The emitted values are estimates, and that is binding.** sFlow samples one
-packet every `sampling_rate`, so for each flow sample:
-
-```
-bytes   = frame_length * sampling_rate
-packets = sampling_rate
-```
-
-Counter samples are not used: the header is read, the body skipped,
-`counter_samples_skipped` incremented. Per-interface state comes from SNMP (§6),
-which gives it exactly rather than sampled.
+The flow collectors, their decoders and the `flow_aggregates` rollup were
+removed in 0.65.0. Databases created before keep the table, no longer read or
+written.
 
 ---
 
@@ -147,14 +99,14 @@ Unknown format → `action=None` and the raw message preserved. No field is
 invented: whatever the message doesn't contain stays `None`, and the UI shows a
 dash.
 
-**Port 5514, never 514 in-process.** 514 is privileged; if it's needed, map it
-from compose (`"514:5514/udp"`).
+**Default port: 514 on Windows, 5514 on Linux/Docker.** On Windows 514 matches
+the firewall rule the installer opens. On Linux 514 is privileged, so the
+process listens on 5514; map the standard port from compose (`"514:5514/udp"`).
 
 `syslog_events` is the only table that holds **real device verdicts**
-(ALLOW/DENY): `flow_aggregates` are counters and have no notion of them. That's
-why Flow SIEM reads from here and not from there — see
-[live-flows-and-siem.md](live-flows-and-siem.md) §7.1 for what happened
-when that distinction was ignored.
+(ALLOW/DENY). Flow SIEM reads from here — see
+[live-flows-and-siem.md](live-flows-and-siem.md) §7.1 for what happened when
+it once read flow counters instead.
 
 Field extraction from the message body lives in exactly one place,
 [fieldmap.py](../observability/fieldmap.py): two parsers over the same messages
@@ -169,7 +121,8 @@ inventory (§2.1). Two conditions, both on the sending side:
 1. **The server is in inventory**, with the IP its syslog packets leave from.
    A server not in inventory — or one sending from a second interface — is
    quarantined, not stored.
-2. **It sends UDP to the configured port** (default 5514). The listener is UDP
+2. **It sends UDP to the configured port** (default 514 on Windows, 5514 on Linux/Docker; the examples below
+   use 5514). The listener is UDP
    only: TCP or TLS syslog is not accepted. UDP loses messages under load and
    travels in clear, so keep it on a management network; for a server at a
    remote site use the probe agent, not UDP over the VPN.

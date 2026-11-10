@@ -9,8 +9,8 @@ secondo e' un servizio o una policy, e chi indaga partendo dal primo client
 perde tempo nel posto sbagliato.
 
 La chiave e' la destinazione (scelta dell'utente, 2026-09-13), e contano solo
-i blocchi che BLOCKED_TRAFFIC_001 accetterebbe gia': log di blocco
-corroborato da un flusso. Due regole in disaccordo su cosa sia "bloccato"
+i blocchi che BLOCKED_TRAFFIC_001 accetterebbe gia' (the deny log itself
+since the flow collectors were removed). Due regole in disaccordo su cosa sia "bloccato"
 sarebbero due verita'.
 """
 
@@ -40,15 +40,10 @@ def _event(event_type, src, dst, attrs, tenant="sede-a"):
     }
 
 
-def _blocked(src, dst=SERVICE, port=443, tenant="sede-a", corroborated=True):
-    """Un blocco come lo vede BLOCKED_TRAFFIC_001: log di deny e, se
-    corroborato, il flusso corrispondente nella stessa finestra."""
-    out = [_event("log.security", src, dst,
-                  {"action": "deny", "dst_port": port}, tenant=tenant)]
-    if corroborated:
-        out.append(_event("flow.aggregate", src, dst,
-                          {"dst_port": port}, tenant=tenant))
-    return out
+def _blocked(src, dst=SERVICE, port=443, tenant="sede-a"):
+    """Un blocco come lo vede BLOCKED_TRAFFIC_001: il log di deny."""
+    return [_event("log.security", src, dst,
+                   {"action": "deny", "dst_port": port}, tenant=tenant)]
 
 
 def _run(events, min_sources=None):
@@ -99,21 +94,11 @@ class TestIsItJustMe(unittest.TestCase):
                   + _blocked("10.0.1.12", tenant="sede-c"))
         self.assertEqual(_run(events), [])
 
-    def test_uncorroborated_blocks_do_not_count(self):
-        """La stessa precisione di ogni conclusione per client: un log di
-        deny senza flusso non basta a BLOCKED_TRAFFIC_001, e non basta qui."""
-        events = (_blocked("10.0.1.10", corroborated=False)
-                  + _blocked("10.0.1.11", corroborated=False)
-                  + _blocked("10.0.1.12", corroborated=False))
-        self.assertEqual(_run(events), [])
-
     def test_allowed_traffic_is_not_a_block(self):
         events = []
         for src in ("10.0.1.10", "10.0.1.11", "10.0.1.12"):
             events.append(_event("log.security", src, SERVICE,
                                  {"action": "accept", "dst_port": 443}))
-            events.append(_event("flow.aggregate", src, SERVICE,
-                                 {"dst_port": 443}))
         self.assertEqual(_run(events), [])
 
     def test_the_threshold_is_the_administrators(self):

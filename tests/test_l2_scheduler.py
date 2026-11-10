@@ -80,8 +80,7 @@ class TestListenerManagerWiring(unittest.TestCase):
         off = {"enabled": False, "port": 0}
         return {
             "enabled": True, "bind": "127.0.0.1",
-            "ipfix": dict(off), "netflow": dict(off),
-            "sflow": dict(off), "syslog": dict(off),
+            "syslog": dict(off),
             "api_poll_s": 0, "snmp_poll_s": 0, "linux_poll_s": 0,
             "l2_poll_s": l2_poll_s,
         }

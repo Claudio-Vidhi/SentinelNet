@@ -49,8 +49,8 @@ CONFIDENCE_MAX = 95
 # ``ts`` sugli eventi, e confonderli aveva un effetto preciso: le evidenze
 # statistiche portano il timestamp dell'INIZIO dell'ora misurata, e l'ultima ora
 # conclusa è sempre fra i 60 e i 120 minuti prima di adesso. Con la finestra su
-# ``ts`` non rientravano MAI, quindi BASELINE_SPIKE_001, NEW_TALKER_001 e
-# TOP_TALKER_001 producevano evidenze che nessun incidente raccoglieva.
+# ``ts`` non rientravano MAI: the hourly flow-baseline rules (removed with the
+# flow collectors) produced evidence that no incident ever collected.
 _UNASSIGNED_SQL = """
 SELECT id, ts, tenant, entity_key, role, rule_id, severity
 FROM evidence

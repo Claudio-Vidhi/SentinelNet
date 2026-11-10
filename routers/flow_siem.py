@@ -9,8 +9,8 @@ porte/byte vengono estratti dal corpo key=value del messaggio (FortiGate) con
 fallback sulle prime due IP (Palo Alto e generici), come fa gia' il
 correlatore.
 
-Perche' non ``flow_aggregates``: quella tabella contiene volumi NetFlow/IPFIX e
-NON ha alcuna nozione di ALLOW/DENY. La versione precedente di questo router la
+Why not ``flow_aggregates`` (flow volumes, no longer collected): it never had
+any notion of ALLOW/DENY. La versione precedente di questo router la
 usava e sintetizzava i campi mancanti — azione da ``idx % 5``, porta sorgente da
 ``1024 + idx*37``, timestamp da ``now - idx*45``, VLAN fissa a 10 — e assegnava
 agli eventi un id posizionale (``siem-fl-<indice>``) derivato dal rango per

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Listener UDP asincroni per l'ingest IPFIX/sFlow/syslog (fasi 3.1 + 3.5).
+"""Listener UDP asincroni per l'ingest syslog (fasi 3.1 + 3.5).
 
 Architettura loop-safe (corregge il difetto #1 della guida originale):
 - ``datagram_received`` fa SOLO ``put_nowait`` di (data, addr, recv_ts) su una
@@ -22,7 +22,6 @@ Nessun record viene mai scritto con tenant 'default'.
 import asyncio
 import logging
 import time
-from typing import Optional
 
 from core import db
 from services import inventory_manager
@@ -102,30 +101,23 @@ def _resolve_tenant(exporter_ip: str, recv_ts: float):
     return device["tenant"]
 
 
-def _handle_records(records, kind: str, recv_ts: float, name: Optional[str] = None):
+def _handle_records(records, recv_ts: float):
     for rec in records:
         tenant = _resolve_tenant(rec["exporter_ip"], recv_ts)
         if tenant is None:
             continue
-        if kind == "syslog":
-            db.enqueue_write(_SYSLOG_INSERT, (
-                rec["ts"], tenant, rec["device_ip"], rec["severity"],
-                rec["action"], rec["message"], rec["exporter_ip"]))
-        else:
-            db.enqueue_flow(
-                tenant, rec["src_ip"], rec["dst_ip"], rec["protocol"],
-                rec["dst_port"], rec["bytes"], rec["packets"],
-                rec["exporter_ip"], export_ts=rec.get("flow_end_ts"),
-                receive_ts=recv_ts, source=name)
+        db.enqueue_write(_SYSLOG_INSERT, (
+            rec["ts"], tenant, rec["device_ip"], rec["severity"],
+            rec["action"], rec["message"], rec["exporter_ip"]))
 
 
-async def _consumer(queue: asyncio.Queue, parser, kind: str, name: str):
+async def _consumer(queue: asyncio.Queue, parser, name: str):
     processed = 0
     while True:
         data, src_ip, recv_ts = await queue.get()
         try:
             records = parser(data, src_ip)
-            _handle_records(records, kind, recv_ts, name)
+            _handle_records(records, recv_ts)
         except Exception as e:
             metrics.inc("parse_errors", proto=name)
             if metrics.should_warn(f"consumer_{name}"):
@@ -206,21 +198,21 @@ class ListenerHandle:
             pass
 
 
-async def _create_listener(host, port, parser, kind, name, loop):
+async def _create_listener(host, port, parser, name, loop):
     queue: asyncio.Queue = asyncio.Queue(maxsize=INGEST_QUEUE_MAX)
     transport, _protocol = await loop.create_datagram_endpoint(
         lambda: _IngestProtocol(queue, name), local_addr=(host, port))
-    task = asyncio.create_task(_consumer(queue, parser, kind, name),
+    task = asyncio.create_task(_consumer(queue, parser, name),
                                name=f"obs-consumer-{name}")
     logger.info("Listener %s in ascolto su %s:%d (UDP).", name, host, port)
     return ListenerHandle(name, transport, task, queue, loop)
 
 
-async def start_udp_listener(host: str, port: int, parser, kind: str,
+async def start_udp_listener(host: str, port: int, parser,
                              name: str) -> ListenerHandle:
-    """Avvia un listener UDP sul loop di ingest dedicato. ``kind``: 'flow' |
-    'syslog'. Solleva OSError se il bind fallisce (gestito dal chiamante)."""
+    """Starts a UDP listener on the dedicated ingest loop. Raises OSError
+    if the bind fails (handled by the caller)."""
     loop = _get_ingest_loop()
     fut = asyncio.run_coroutine_threadsafe(
-        _create_listener(host, port, parser, kind, name, loop), loop)
+        _create_listener(host, port, parser, name, loop), loop)
     return await asyncio.wrap_future(fut)

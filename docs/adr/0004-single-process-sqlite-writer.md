@@ -22,7 +22,7 @@ up to 500.
 
 Binding rules ([CONTRIBUTING.md](../../CONTRIBUTING.md) §3):
 
-- writes go through `db.enqueue_write()` / `db.enqueue_flow()` — bounded, never
+- writes go through `db.enqueue_write()` — bounded, never
   blocking;
 - reads from async endpoints go through `await db.read()`
   (`asyncio.to_thread`, read-only connection per call; WAL allows concurrent

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Router observability: endpoint dati scoped multi-tenant (/top, /anomalies,
-fase 4.1) e diagnostica operativa della pipeline (health, fase 3.8).
+"""Router observability: endpoint dati scoped multi-tenant (/syslog, /events,
+/anomalies) e diagnostica operativa della pipeline (health, fase 3.8).
 
 REGOLA DI SCOPE (CONTRIBUTING.md §4): ogni query filtra
 ``WHERE tenant IN (…placeholders…)`` con parametri bound — mai interpolazione
@@ -20,7 +20,6 @@ from core import db
 from core import data_config
 from core.app_settings import get_app_settings, save_app_settings
 from observability import metrics
-from observability.ingesters import ipfix
 from routers.deps import (get_current_user, require_unscoped_admin, require_operator,
                           user_group_scope)
 
@@ -59,63 +58,6 @@ def _tenant_filter(current_user):
     return f" AND tenant IN ({placeholders})", tuple(groups)
 
 
-def _telemetry_filter(exclude: bool):
-    """Ritorna (clausola_sql, params) per escludere i flussi diretti ai
-    collector di telemetria.
-
-    Gli apparati esportano verso i nostri listener, e quel traffico rientra
-    poi come flusso: nei top talker sono conversazioni vere ma sono rumore di
-    misura, non traffico di rete. Le porte arrivano da ``obs_config()``, non
-    da costanti: se l'utente sposta un listener il filtro lo segue.
-    161/162 sono SNMP, che qui non ha un listener ma genera lo stesso rumore.
-    """
-    if not exclude:
-        return "", ()
-    cfg = data_config.obs_config()
-    ports = sorted({int(cfg[k]["port"])
-                    for k in ("ipfix", "sflow", "syslog", "netflow")} | {161, 162})
-    placeholders = ",".join("?" * len(ports))
-    return (f" AND (dst_port IS NULL OR dst_port NOT IN ({placeholders}))",
-            tuple(ports))
-
-
-@router.get("/api/observability/top", dependencies=[Depends(require_tab("tab-flows"))])
-async def obs_top_talkers(
-    window: str = Query("15m"),
-    limit: int = Query(50, ge=1, le=MAX_LIMIT),
-    metric: str = Query("bytes", pattern="^(bytes|packets)$"),
-    source: str = Query("all", pattern="^(all|ipfix|netflow|sflow)$"),
-    exclude_telemetry: bool = Query(False),
-    current_user = Depends(get_current_user),
-):
-    """Top talker aggregati sulla finestra richiesta, scoped per tenant.
-    ``source`` filtra per listener di origine (le righe legacy senza source
-    compaiono solo con 'all'); ``exclude_telemetry`` toglie i flussi diretti
-    ai collector (vedi ``_telemetry_filter``)."""
-    import time as _time
-    seconds = _parse_window(window)
-    cutoff = int(_time.time()) - seconds
-    order_col = "total_bytes" if metric == "bytes" else "total_packets"
-    clause, params = _tenant_filter(current_user)
-    source_clause = "" if source == "all" else " AND source = ?"
-    source_params = () if source == "all" else (source,)
-    tele_clause, tele_params = _telemetry_filter(exclude_telemetry)
-    rows = await db.read(
-        f"""SELECT tenant, src_ip, dst_ip, protocol, dst_port, source,
-                   SUM(total_bytes) AS total_bytes,
-                   SUM(total_packets) AS total_packets,
-                   SUM(flow_count) AS flow_count
-            FROM flow_aggregates
-            WHERE window_start >= ?{clause}{source_clause}{tele_clause}
-            GROUP BY tenant, src_ip, dst_ip, protocol, dst_port, source
-            ORDER BY SUM({order_col}) DESC
-            LIMIT ?""",
-        (cutoff, *params, *source_params, *tele_params, limit))
-    return {"window": window, "metric": metric, "source": source,
-            "exclude_telemetry": exclude_telemetry,
-            "flows": [dict(r) for r in rows]}
-
-
 @router.get("/api/observability/syslog", dependencies=[Depends(require_tab("tab-flows"))])
 async def obs_syslog(
     window: str = Query("15m"),
@@ -148,8 +90,8 @@ async def obs_events(
     page: int = Query(0, ge=0),
     current_user = Depends(get_current_user),
 ):
-    """Feed del modello eventi unificato: la stessa forma per NetFlow, syslog e
-    snapshot REST. È il livello su cui lavorano correlazione e ragionamento, ed
+    """Feed del modello eventi unificato: la stessa forma per syslog e
+    snapshot REST/SNMP. È il livello su cui lavorano correlazione e ragionamento, ed
     è esposto perché ogni consumatore (CLI, AI, automazione) possa partire da
     qui invece che dalle tabelle grezze di ogni sorgente."""
     import time as _time
@@ -197,7 +139,7 @@ async def obs_anomalies(
     Dalla v7 la riga è un INCIDENTE, non più un singolo evento correlato: la
     stessa anomalia ripetuta 27 volte era 27 righe da chiudere a mano. La forma
     della risposta resta quella storica (``kind``, ``src_ip``, ``switch_port``,
-    ``status``) perché la consumano il tab Flussi e il tool MCP ``get_anomalies``;
+    ``status``) perché la consumano la home e il tool MCP ``get_anomalies``;
     il dettaglio completo con ruoli e timeline sta in ``/api/incidents/{id}``.
     """
     import time as _time
@@ -249,7 +191,10 @@ async def obs_anomaly_status(
 def obs_get_config(current_user = Depends(require_unscoped_admin)):
     """Config effettiva dei listener (settings + eventuali override da env).
     Le modifiche via POST vengono applicate a caldo, senza riavvio."""
-    return data_config.obs_config()
+    cfg = data_config.obs_config()
+    # The UI shows the platform default as placeholder/hint.
+    cfg["syslog"]["default_port"] = data_config.obs_syslog_default_port()
+    return cfg
 
 
 @router.post("/api/observability/config", dependencies=[Depends(require_tab("tab-settings"))])
@@ -257,13 +202,19 @@ async def obs_set_config(payload: dict, current_user = Depends(require_unscoped_
     """Salva la sezione 'observability' in app_settings.json (§9.5) e applica
     subito la nuova config ai listener UDP e ai task di background (nessun
     riavvio del processo necessario).
-    Chiavi ammesse: enabled, bind, {ipfix,sflow,syslog,netflow}_{enabled,port},
+    Chiavi ammesse: enabled, bind, syslog_{enabled,port},
     api_poll_s, snmp_poll_s, linux_poll_s."""
-    allowed = {"enabled", "bind", "api_poll_s", "snmp_poll_s", "linux_poll_s"} | {
-        f"{l}_{k}" for l in ("ipfix", "sflow", "syslog", "netflow")
-        for k in ("enabled", "port")}
+    allowed = {"enabled", "bind", "api_poll_s", "snmp_poll_s", "linux_poll_s",
+               "syslog_enabled", "syslog_port"}
+    # Flow collectors were removed: a tab still running the old cached JS
+    # posts these keys. Drop them instead of failing the whole save.
+    legacy = ("ipfix_", "sflow_", "netflow_")
     clean = {}
+    ignored = []
     for k, v in (payload or {}).items():
+        if k.startswith(legacy):
+            ignored.append(k)
+            continue
         if k not in allowed:
             raise HTTPException(status_code=400, detail=f"Invalid key: '{k}'.")
         if k.endswith("_port") or k in ("api_poll_s", "snmp_poll_s", "linux_poll_s"):
@@ -284,7 +235,8 @@ async def obs_set_config(payload: dict, current_user = Depends(require_unscoped_
             except ValueError:
                 raise HTTPException(status_code=400, detail="Invalid value for 'bind'.")
         clean[k] = v
-    saved = dict(get_app_settings().get("observability", {}) or {})
+    saved = {k: v for k, v in (get_app_settings().get("observability", {}) or {}).items()
+             if not k.startswith(legacy)}
     saved.update(clean)
     save_app_settings({"observability": saved})
     effective = data_config.obs_config()
@@ -292,9 +244,11 @@ async def obs_set_config(payload: dict, current_user = Depends(require_unscoped_
     await listener_manager.apply_obs_config(effective)
     from security.security_manager import log_audit
     log_audit(f"Config observability aggiornata da '{current_user.get('sub')}': "
-              f"{clean} (applicata a caldo, nessun riavvio).")
+              f"{clean} (applicata a caldo, nessun riavvio)."
+              + (f" Legacy flow keys ignored: {ignored}." if ignored else ""))
     return {"status": "success", "restart_required": False,
-            "effective": effective, "listeners": listener_status}
+            "effective": effective, "listeners": listener_status,
+            "ignored": ignored}
 
 
 @router.get("/api/observability/api-context", dependencies=[Depends(require_tab("tab-flows"))])
@@ -344,7 +298,6 @@ def obs_health(current_user = Depends(require_unscoped_admin)):
         # WP7: writer loss is a STATE the operator reads, not just counters:
         # "degraded" is true on any drop or a dead writer since startup.
         "db_health": db.health_state(),
-        "template_cache_size": ipfix.template_cache_size(),
         "db_size_bytes": db_size,
         "schema_version": db.SCHEMA_VERSION,
     }
@@ -362,5 +315,4 @@ async def obs_prune_logs(payload: PruneLogsSchema, current_user = Depends(requir
     """Elimina i log di osservabilità più vecchi del limite in giorni."""
     cutoff = int(time.time()) - (payload.days * 86400)
     db.enqueue_write("DELETE FROM syslog_events WHERE ts < ?", (cutoff,))
-    db.enqueue_write("DELETE FROM flow_aggregates WHERE ts < ?", (cutoff,))
     return {"status": "success", "days_retained": payload.days, "cutoff_timestamp": cutoff}

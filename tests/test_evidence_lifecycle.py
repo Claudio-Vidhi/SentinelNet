@@ -51,8 +51,7 @@ class _Base(unittest.TestCase):
     def setUp(self):
         conn = db.get_observability_connection()
         for table in ("evidence", "incident_conclusions", "incidents", "events",
-                      "normalize_cursors", "api_observations", "syslog_events",
-                      "flow_aggregates"):
+                      "normalize_cursors", "api_observations", "syslog_events"):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()
         conn.close()
@@ -209,8 +208,8 @@ class TestRuleCatalogAndThresholds(_Base):
         param = blocked["parameters"][0]
         self.assertEqual(
             {param["name"], "min" in param, "max" in param, "default" in param},
-            {"match_delta_s", True, True, True})
-        self.assertEqual(blocked["effective"]["match_delta_s"], 120)
+            {"min_observations", True, True, True})
+        self.assertEqual(blocked["effective"]["min_observations"], 3)
 
     def test_threshold_is_saved_and_becomes_effective(self):
         stored = {}
@@ -221,14 +220,14 @@ class TestRuleCatalogAndThresholds(_Base):
         c = self._client("adm_rules")
         with patch("core.app_settings.save_app_settings", _fake_save):
             r = c.post("/api/incidents/rules/BLOCKED_TRAFFIC_001/parameters",
-                       headers=CSRF, json={"match_delta_s": 300})
+                       headers=CSRF, json={"min_observations": 5})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(stored["correlation_rules"]["BLOCKED_TRAFFIC_001"],
-                         {"match_delta_s": 300})
+                         {"min_observations": 5})
         # E ciò che è stato salvato diventa davvero la soglia effettiva.
         with patch("observability.rules.get_app_settings", return_value=stored):
             self.assertEqual(
-                rules.params_for("BLOCKED_TRAFFIC_001")["match_delta_s"], 300)
+                rules.params_for("BLOCKED_TRAFFIC_001")["min_observations"], 5)
 
     def test_unknown_parameter_is_rejected(self):
         c = self._client("adm_rules")
@@ -239,13 +238,13 @@ class TestRuleCatalogAndThresholds(_Base):
     def test_out_of_range_is_rejected(self):
         c = self._client("adm_rules")
         r = c.post("/api/incidents/rules/BLOCKED_TRAFFIC_001/parameters",
-                   headers=CSRF, json={"match_delta_s": 999999})
+                   headers=CSRF, json={"min_observations": 999999})
         self.assertEqual(r.status_code, 400)
 
     def test_non_numeric_is_rejected(self):
         c = self._client("adm_rules")
         r = c.post("/api/incidents/rules/BLOCKED_TRAFFIC_001/parameters",
-                   headers=CSRF, json={"match_delta_s": "molto"})
+                   headers=CSRF, json={"min_observations": "molto"})
         self.assertEqual(r.status_code, 400)
 
     def test_unknown_rule_is_404(self):
@@ -257,17 +256,17 @@ class TestRuleCatalogAndThresholds(_Base):
     def test_operator_cannot_change_thresholds(self):
         c = self._client("op_rules")
         r = c.post("/api/incidents/rules/BLOCKED_TRAFFIC_001/parameters",
-                   headers=CSRF, json={"match_delta_s": 200})
+                   headers=CSRF, json={"min_observations": 2})
         self.assertEqual(r.status_code, 403)
 
     def test_value_saved_out_of_range_is_clamped_not_ignored(self):
         # Se un valore fuori range arriva comunque nel file di configurazione,
         # la regola gira con l'estremo più vicino invece di spegnersi in silenzio.
         settings = {"correlation_rules": {"BLOCKED_TRAFFIC_001":
-                                          {"match_delta_s": 10 ** 9}}}
+                                          {"min_observations": 10 ** 9}}}
         with patch("observability.rules.get_app_settings", return_value=settings):
-            self.assertEqual(rules.params_for("BLOCKED_TRAFFIC_001")["match_delta_s"],
-                             3600)
+            self.assertEqual(rules.params_for("BLOCKED_TRAFFIC_001")["min_observations"],
+                             20)
 
 
 if __name__ == "__main__":

@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Test per db.py (fasi 1.2/1.3/1.4): migrazione idempotente + guardia di
-versione, UPSERT di aggregazione al minuto, regola del time-source con skew,
-coda bounded, drain in chiusura e letture async fuori dal loop."""
+"""Tests for db.py: idempotent migration + version guard, bounded queue,
+drain on shutdown and async reads off the loop."""
 
 import asyncio
 import os
@@ -19,6 +18,13 @@ from core import data_config  # noqa: E402
 data_config.DATA_DIR = _TMP_DATA_DIR
 
 from core import db  # noqa: E402
+
+_SYSLOG_SQL = ("INSERT INTO syslog_events (ts, tenant, device_ip, severity, "
+               "action, message) VALUES (?, 'sede-a', ?, 6, NULL, 'x')")
+
+
+def _enqueue_syslog(device_ip="10.0.0.1"):
+    return db.enqueue_write(_SYSLOG_SQL, (int(time.time()), device_ip))
 
 
 class TestDb(unittest.TestCase):
@@ -71,50 +77,11 @@ class TestDb(unittest.TestCase):
         self.assertIn("location_id", cols)
         self.assertNotIn("site_id", cols)  # check-site-name: ok
 
-    # --- 1.4 UPSERT / bucketing ---
-
     def _drain(self):
         deadline = time.time() + 5
         while time.time() < deadline and not db._write_queue.empty():
             time.sleep(0.05)
         time.sleep(0.2)  # lascia committare l'ultimo batch
-
-    def test_flow_upsert_same_bucket_sums(self):
-        db.start_writer()
-        now = int(time.time())
-        for _ in range(2):
-            db.enqueue_flow("sede-a", "10.0.0.1", "10.0.0.2", 6, 443,
-                            total_bytes=100, total_packets=10,
-                            exporter_ip="192.168.1.1", export_ts=now)
-        self._drain()
-        conn = db.get_observability_connection()
-        rows = conn.execute("SELECT * FROM flow_aggregates").fetchall()
-        conn.close()
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["total_bytes"], 200)
-        self.assertEqual(rows[0]["total_packets"], 20)
-        self.assertEqual(rows[0]["flow_count"], 2)
-
-    def test_flow_adjacent_buckets_two_rows(self):
-        db.start_writer()
-        base = (int(time.time()) // 60) * 60
-        db.enqueue_flow("sede-a", "10.0.0.1", "10.0.0.2", 6, 443, 1, 1,
-                        "192.168.1.1", export_ts=base - 60, receive_ts=base - 60)
-        db.enqueue_flow("sede-a", "10.0.0.1", "10.0.0.2", 6, 443, 1, 1,
-                        "192.168.1.1", export_ts=base, receive_ts=base)
-        self._drain()
-        conn = db.get_observability_connection()
-        n = conn.execute("SELECT COUNT(*) AS n FROM flow_aggregates").fetchone()["n"]
-        conn.close()
-        self.assertEqual(n, 2)
-
-    def test_clock_skew_falls_back_to_receive_time(self):
-        now = 1_800_000_000
-        ws = db.flow_window_start(now - 10_000, receive_ts=now)  # skew > 300s
-        self.assertEqual(ws, now - (now % 60))
-        self.assertEqual(db.metrics["clock_skew_fallback"], 1)
-        ws2 = db.flow_window_start(now - 30, receive_ts=now)     # entro tolleranza
-        self.assertEqual(ws2, (now - 30) - ((now - 30) % 60))
 
     # --- 1.2 coda / writer ---
 
@@ -131,10 +98,10 @@ class TestDb(unittest.TestCase):
     def test_bad_write_does_not_kill_writer(self):
         db.start_writer()
         db.enqueue_write("INSERT INTO tabella_inesistente VALUES (1)")
-        db.enqueue_flow("sede-a", "1.1.1.1", "203.0.113.2", 17, 53, 5, 1, "10.9.9.9")
+        _enqueue_syslog()
         self._drain()
         conn = db.get_observability_connection()
-        n = conn.execute("SELECT COUNT(*) AS n FROM flow_aggregates").fetchone()["n"]
+        n = conn.execute("SELECT COUNT(*) AS n FROM syslog_events").fetchone()["n"]
         conn.close()
         self.assertEqual(n, 1)  # la scrittura valida è passata comunque
         self.assertGreaterEqual(db.metrics["writes_dropped_error"], 1)
@@ -142,24 +109,24 @@ class TestDb(unittest.TestCase):
     def test_stop_writer_drains_queue(self):
         db.start_writer()
         for i in range(50):
-            db.enqueue_flow("sede-a", f"10.0.1.{i}", "10.0.0.2", 6, 443, 1, 1, "x")
+            _enqueue_syslog(f"10.0.1.{i}")
         db.stop_writer()
         conn = db.get_observability_connection()
-        n = conn.execute("SELECT COUNT(*) AS n FROM flow_aggregates").fetchone()["n"]
+        n = conn.execute("SELECT COUNT(*) AS n FROM syslog_events").fetchone()["n"]
         conn.close()
         self.assertEqual(n, 50)
 
     def test_async_read(self):
         db.start_writer()
-        db.enqueue_flow("sede-a", "10.0.0.1", "10.0.0.2", 6, 443, 100, 10, "x")
+        _enqueue_syslog()
         self._drain()
 
         async def go():
             return await db.read(
-                "SELECT SUM(total_bytes) AS b FROM flow_aggregates WHERE tenant = ?",
+                "SELECT COUNT(*) AS n FROM syslog_events WHERE tenant = ?",
                 ("sede-a",))
         rows = asyncio.run(go())
-        self.assertEqual(rows[0]["b"], 100)
+        self.assertEqual(rows[0]["n"], 1)
 
     def test_loop_latency_under_load(self):
         # p99 latenza aggiunta al loop < 5ms mentre produttori accodano (§1.2 DoD).
@@ -172,8 +139,7 @@ class TestDb(unittest.TestCase):
             async def producer(i):
                 n = 0
                 while time.monotonic() < stop:
-                    db.enqueue_flow("sede-a", f"10.1.{i}.{n % 250}", "10.0.0.2",
-                                    6, 443, 10, 1, "x")
+                    _enqueue_syslog(f"10.1.{i}.{n % 250}")
                     n += 1
                     await asyncio.sleep(0)
 

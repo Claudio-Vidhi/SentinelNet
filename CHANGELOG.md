@@ -24,10 +24,25 @@ happened — `git log --grep="chore(release)"` is the record for those.
   protocollo con il suo modale di ispezione) e «Per IP», che leggevano solo i
   flussi NetFlow/IPFIX/sFlow, e con loro le rotte
   `/api/observability/flowgraph`, `/protocol-distribution`, `/hosts` e
-  `/host-series`. Il tab si apre ora su «Ricerca»; restano «Flussi» e «Per
-  policy». Via anche le caselle di selezione delle righe nella tabella
-  Flussi, che servivano solo ad «Analizza con AI». Listener, tabelle,
-  correlatore, `/top` e `/anomalies` restano invariati.
+  `/host-series`. Il tab si apre ora su «Ricerca»; resta «Per policy» (per
+  «Flussi» vedi la voce successiva).
+- **BREAKING — Raccolta NetFlow / IPFIX / sFlow**: tolti i tre listener UDP
+  (porte 2055, 4739, 6343) con i loro decoder, le chiavi di configurazione
+  `ipfix_*` / `sflow_*` / `netflow_*` e le variabili
+  `SENTINELNET_OBS_{IPFIX,NETFLOW,SFLOW}_*` (se ancora presenti vengono
+  ignorate, l'avvio non fallisce), la baseline del traffico, le regole solo
+  di flusso (`TRAFFIC_SPIKE_001`, `BASELINE_SPIKE_001`,
+  `BASELINE_NORMAL_RETRACT_001`, `NEW_TALKER_001`, `TOP_TALKER_001`), la
+  traccia «flow» della timeline degli incidenti, la rotta
+  `/api/observability/top`, il tool MCP `get_top_talkers` e la vista
+  «Flussi» del tab Traffico, che ora tiene «Ricerca» e «Per policy».
+  `BLOCKED_TRAFFIC_001` (2.0.0) non chiede più un flusso corroborante: si
+  basa sul solo syslog e conclude dopo 3 blocchi della stessa sorgente nella
+  finestra (`min_observations`, regolabile); `BLAST_RADIUS_001` (2.0.0)
+  conta i log di blocco. La tabella `flow_aggregates` resta nei database
+  esistenti, non più scritta, e la retention la svuota; i database nuovi non
+  la creano. L'installer Windows rimuove le regole firewall per le tre porte.
+  Syslog, SNMP, FortiGate REST e host Linux/Windows restano invariati.
 
 ### Changed
 
@@ -36,6 +51,20 @@ happened — `git log --grep="chore(release)"` is the record for those.
   incidenti, la classificazione dei dispositivi, le proposte Blueprint, il
   layout della mappa e il generatore di configurazione. Un account limitato
   alla sola tab AI va riassegnato dalla tab Utenti.
+- **Porta syslog predefinita per piattaforma**: 514 su Windows (la porta che
+  l'installer apre nel firewall), 5514 su Linux/Docker (non privilegiata; il
+  compose mappa `514:5514`). Una porta salvata o
+  `SENTINELNET_OBS_SYSLOG_PORT` continuano a prevalere. Impostazioni →
+  Observability mostra il default ricevuto dal server. Aggiornamento: un
+  Windows con syslog acceso solo da variabili d'ambiente, senza porta
+  esplicita, passa da 5514 a 514; salvare da Impostazioni scrive sempre la
+  porta, quindi chi l'ha configurato lì resta dov'era.
+- **Config observability, chiavi di flusso legacy**: `POST
+  /api/observability/config` scarta le chiavi `ipfix_*` / `sflow_*` /
+  `netflow_*` (inviate da una tab con il JS vecchio in cache) invece di
+  rispondere 400, le elenca nel nuovo campo `ignored` e nel log di audit, e le
+  toglie anche dalla sezione già salvata al primo salvataggio. Le altre
+  chiavi sconosciute restano un 400.
 
 ## [0.64.2] - 2026-11-06
 

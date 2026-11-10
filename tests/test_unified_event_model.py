@@ -53,7 +53,7 @@ class _Base(unittest.TestCase):
     def setUp(self):
         conn = db.get_observability_connection()
         for table in ("events", "normalize_cursors", "syslog_events",
-                      "flow_aggregates", "api_observations"):
+                      "api_observations"):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()
         conn.close()
@@ -159,35 +159,6 @@ class TestAdapters(_Base):
         normalize.normalize_once(NOW)
         self.assertEqual(self._events("source = 'syslog'")[0]["event_type"],
                          "log.event")
-
-    def test_flow_becomes_an_event_and_refreshes_on_reread(self):
-        window = (NOW - 120) - ((NOW - 120) % 60)
-        conn = db.get_observability_connection()
-        conn.execute(
-            "INSERT INTO flow_aggregates (window_start, tenant, src_ip, dst_ip, "
-            "protocol, dst_port, total_bytes, total_packets, flow_count, source) "
-            "VALUES (?, 'sede-a', '10.1.0.5', '8.8.8.8', 6, 443, 1000, 10, 1, 'ipfix')",
-            (window,))
-        conn.commit()
-        conn.close()
-
-        normalize.normalize_once(NOW)
-        ev = self._events("event_type = 'flow.aggregate'")[0]
-        self.assertEqual(ev["entity_id"], "10.1.0.5>8.8.8.8")
-        self.assertEqual(ev["protocol"], "TCP")
-        self.assertEqual(json.loads(ev["metrics_json"])["bytes"], 1000)
-
-        # Il bucket ancora aperto viene aggiornato in place dall'ingestione:
-        # la riproiezione deve aggiornare le metriche, non ignorarle.
-        conn = db.get_observability_connection()
-        conn.execute("UPDATE flow_aggregates SET total_bytes = 5000")
-        conn.commit()
-        conn.close()
-
-        normalize.normalize_once(NOW)
-        rows = self._events("event_type = 'flow.aggregate'")
-        self.assertEqual(len(rows), 1)          # nessun doppione
-        self.assertEqual(json.loads(rows[0]["metrics_json"])["bytes"], 5000)
 
     def test_rerun_is_idempotent(self):
         conn = db.get_observability_connection()

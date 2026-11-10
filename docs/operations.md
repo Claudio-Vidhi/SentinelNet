@@ -23,7 +23,7 @@ for `data/` next to *that*. First thing to check when "the data disappeared".
 | File | Contents |
 |---|---|
 | `network_hosts.csv` | Inventory, credentials **encrypted** with Fernet |
-| `observability.db` (+ `-wal`, `-shm`) | Flows, syslog, events, evidence, incidents |
+| `observability.db` (+ `-wal`, `-shm`) | Syslog, poller snapshots, events, evidence, incidents |
 | `mac_history.db` | MAC position history, ARP |
 | `redundancy.db` | HA group state |
 | `device_meta.db` | Manual device classification (category, name, vendor, model, HA group per tenant and node) and the per-vendor model catalogue. Replaces `device_categories.json` / `device_models.json`, imported once and left as `*.migrated` |
@@ -61,13 +61,10 @@ listeners are up, how many packets were dropped and why. Counters worth reading:
 | Metric | Meaning |
 |---|---|
 | `dropped_queue_full` | Ingest faster than the writer: queue saturated |
-| `dropped_unknown_exporter` | Exporter not in inventory (§4) |
+| `dropped_unknown_exporter` | Syslog sender not in inventory (§4) |
 | `parse_errors{proto=…}` | Malformed datagrams, per protocol |
-| `data_before_template_dropped` | IPFIX/v9 data sets without a template, buffer full |
-| `clock_skew_fallback` | Exporter clock off by more than 300 s |
 | `listener_bind_failed` | Port busy or privileged |
 | `writes_dropped_error` | Payloads rejected by the writer after rollback |
-| `counter_samples_skipped` | sFlow counter samples ignored (normal) |
 
 ---
 
@@ -82,13 +79,14 @@ Precedence: **environment variables > `app_settings.json` > defaults**.
 ```
 SENTINELNET_OBS_ENABLE=1          # master switch
 SENTINELNET_OBS_BIND=127.0.0.1    # 0.0.0.0 requires explicit opt-in
-SENTINELNET_OBS_IPFIX_PORT=4739    SENTINELNET_OBS_IPFIX_ENABLE=1
-SENTINELNET_OBS_NETFLOW_PORT=2055  SENTINELNET_OBS_NETFLOW_ENABLE=1
-SENTINELNET_OBS_SFLOW_PORT=6343    SENTINELNET_OBS_SFLOW_ENABLE=1
 SENTINELNET_OBS_SYSLOG_PORT=5514   SENTINELNET_OBS_SYSLOG_ENABLE=1
 SENTINELNET_OBS_API_POLL_S=300     # 0 = off
 SENTINELNET_OBS_SNMP_POLL_S=0      # 0 = off (default)
 ```
+
+NetFlow, IPFIX and sFlow are not collected since 0.65.0. Leftover
+`SENTINELNET_OBS_{IPFIX,NETFLOW,SFLOW}_*` variables and `ipfix_*` / `sflow_*` /
+`netflow_*` keys in `app_settings.json` are ignored.
 
 From the GUI: `GET/POST /api/observability/config` (admin), settings tab.
 **Applied hot, no process restart**: `apply_obs_config()` is idempotent,
@@ -104,8 +102,7 @@ Hourly job, DELETEs batched at 5000 rows to avoid holding long locks.
 
 | Table | Default | Variable |
 |---|---|---|
-| `flow_aggregates` | 30 days | `SENTINELNET_OBS_RETENTION_FLOWS_DAYS` |
-| `events` | 30 days | Same — the projection must not outlive its origin |
+| `events` | 30 days | `SENTINELNET_OBS_RETENTION_FLOWS_DAYS` (historical name) |
 | `api_observations` (raw REST/SNMP snapshots) | 30 days | `SENTINELNET_OBS_RETENTION_FLOWS_DAYS` |
 | `iface_counter_reads` (on-demand error reads) | 30 days | Same |
 | `syslog_events` | 7 days | `SENTINELNET_OBS_RETENTION_SYSLOG_DAYS` |
@@ -124,19 +121,19 @@ point at (harmless orphan rows).
 
 ## 4. Symptoms and causes
 
-### "The Live Flows tab is empty"
+### "The Traffic tab / syslog search is empty"
 
 In order:
 
 1. Does `/health` say observability is off, or zero listeners? The UI banner
    already states this — absence of data must not be silent.
-2. Is `dropped_unknown_exporter` climbing? The exporting device is **not in
+2. Is `dropped_unknown_exporter` climbing? The sending device is **not in
    inventory** under that IP. Check `quarantined_exporters` and the audit log.
-   This is the most common case: export gets configured on the device before the
+   This is the most common case: syslog gets configured on the device before the
    device is registered.
 
    **Before adding it to inventory, look at the IP itself.** If the quarantined
-   address is the *server's own* address, or a router's, it is not the exporter
+   address is the *server's own* address, or a router's, it is not the sender
    — a NAT rewrote the source address in transit. The give-away: the device is
    already in inventory under its real IP, and a second, different IP keeps
    getting quarantined. Typical setup that produces it — a hypervisor NAT
@@ -145,33 +142,32 @@ In order:
    | | |
    |---|---|
    | Host (SentinelNet) | `192.0.2.10` on the LAN, `198.51.100.1` on the NAT network |
-   | Exporter VM | `198.51.100.20`, in inventory |
+   | Sending VM | `198.51.100.20`, in inventory |
    | Listeners bound to | `192.0.2.10` only |
 
    The VM has to send to `192.0.2.10`, so its packets cross the NAT device,
    which rewrites the source to the host's own address — and that is what gets
    quarantined. Fix by removing the NAT from the path: bind the listeners to
-   `0.0.0.0` and point the device's export at `198.51.100.1`, the interface it
+   `0.0.0.0` and point the device's syslog at `198.51.100.1`, the interface it
    reaches directly. The source IP then stays `198.51.100.20`.
 
    **Never register the NAT-rewritten address as a device.** It would attribute
-   the flows of everything behind that NAT to a device that does not exist, and
+   the logs of everything behind that NAT to a device that does not exist, and
    expose them to the wrong tenant — precisely the damage the drop prevents
    ([ADR-0005](adr/0005-strict-tenant-attribution.md)).
 3. Is `parse_errors` climbing? Unsupported protocol version or vendor.
 4. `listener_bind_failed`? Port busy (another instance, or the exe running while
    you run tests) or privileged.
-5. No metric moving at all? The device isn't exporting, or the UDP traffic isn't
+5. No metric moving at all? The device isn't sending, or the UDP traffic isn't
    arriving. Verify from the device, not from here.
 
 ### "An alarm didn't fire"
 
 1. Active suppression on the entity? `app_settings.json` → `suppressions`, and
    remember a device-level suppression covers **every** one of its interfaces.
-2. Precision-over-recall: without corroborating flow within ±120 s nothing is
-   emitted, except for severity ≤ 3. That's intended.
-3. A baseline with fewer than 2 samples emits nothing: the first hours after a
-   clean deploy are blind by construction.
+2. Confirmation before concluding: `BLOCKED_TRAFFIC_001` needs
+   `min_observations` (default 3) block logs from the same source in the
+   window; other rules default to 1. Severity ≤ 3 logs emerge on their own.
 
 ### "The exe can't find its data / starts from scratch"
 
@@ -445,7 +441,7 @@ is in the audit log and in Device History.
   ([ADR-0004](adr/0004-single-process-sqlite-writer.md)).
 - **UDP ingest is unauthenticated.** Expose it only on trusted management
   networks.
-- **Tenant attribution by source IP.** Exporters behind NAT need a site relay,
+- **Tenant attribution by source IP.** Senders behind NAT need a site relay,
   not UDP opened over the VPN.
 - **Flow SIEM deep scan**: up to 20,000 rows parsed in Python per request,
   repeated every 5 s by the live tail. If it becomes a problem, the path is
@@ -471,8 +467,6 @@ SENTINELNET_DATA_DIR=/opt/sentinelnet/data
 # SENTINELNET_OBS_BIND=0.0.0.0
 # SENTINELNET_OBS_SYSLOG_ENABLE=1
 # SENTINELNET_OBS_SYSLOG_PORT=5514
-# SENTINELNET_OBS_NETFLOW_ENABLE=1
-# SENTINELNET_OBS_NETFLOW_PORT=2055
 ```
 
 ### Systemd service unit (`/etc/systemd/system/sentinelnet.service`)
@@ -527,9 +521,6 @@ sudo systemctl status sentinelnet
    sudo firewall-cmd --permanent --add-port=8000/tcp
    # Observability ports (if enabled):
    # sudo firewall-cmd --permanent --add-port=5514/udp
-   # sudo firewall-cmd --permanent --add-port=2055/udp
-   # sudo firewall-cmd --permanent --add-port=4739/udp
-   # sudo firewall-cmd --permanent --add-port=6343/udp
    sudo firewall-cmd --reload
    ```
 

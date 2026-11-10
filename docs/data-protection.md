@@ -22,7 +22,7 @@ most of what this product holds is about equipment. Three categories are not.
 | Data | Where | Why it is there |
 |---|---|---|
 | MAC addresses | `mac_history.db` (`mac_sightings`, `arp_entries`) | The MAC is the only stable identifier of a device on L2, and the product exists to answer "where is this device plugged in" |
-| IP addresses (private and public) | `mac_history.db`, `observability.db` (`flow_aggregates`, `syslog_events`, `events`), `network_hosts.csv`, `device_meta.db` (`assignments`, keyed by tenant and node) | Inventory, flows, and the correlation between them |
+| IP addresses (private and public) | `mac_history.db`, `observability.db` (`syslog_events`, `events`), `network_hosts.csv`, `device_meta.db` (`assignments`, keyed by tenant and node) | Inventory, logs, and the correlation between them |
 | Hostnames | `network_hosts.csv`, `detected_versions.json`, `observability.db`, `device_meta.db` (names chosen by hand) | Naming an endpoint by hostname is what makes a report readable |
 | Switch port and VLAN of an endpoint | `mac_history.db` | The physical position of a device |
 
@@ -34,7 +34,7 @@ the honest assumption is that it is.
 
 | Data | Where | Retention |
 |---|---|---|
-| Flow records (src/dst IP, port, protocol, bytes, aggregated per minute) | `observability.db` → `flow_aggregates` | 30 days (`SENTINELNET_OBS_RETENTION_FLOWS_DAYS`) |
+| Flow records (legacy, databases created before 0.65.0 only) | `observability.db` → `flow_aggregates` | No longer written; still pruned at 30 days (`SENTINELNET_OBS_RETENTION_FLOWS_DAYS`) until empty |
 | Syslog messages, verbatim | `observability.db` → `syslog_events` | 7 days (`SENTINELNET_OBS_RETENTION_SYSLOG_DAYS`) |
 | Normalised events, evidence, incidents | `observability.db` | 30 days for events, 90 for evidence and incidents (`SENTINELNET_OBS_RETENTION_EVENTS_DAYS`) |
 | MAC/ARP sightings | `mac_history.db` | 30 days from the last time the row was updated, configurable in the MAC Tracker tab |
@@ -70,7 +70,7 @@ vault.
 Defaults matter for an assessment, so they are stated here rather than left to
 be inferred from the code:
 
-- **All observability listeners are off.** No flows, no sFlow, no syslog are
+- **All observability listeners are off.** No syslog is
   received until `SENTINELNET_OBS_ENABLE=1`, and even then each listener needs
   its own switch and binds to loopback unless told otherwise
   ([hardening.md](hardening.md) §4).

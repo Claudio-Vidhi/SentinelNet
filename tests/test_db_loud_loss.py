@@ -97,10 +97,10 @@ def test_health_state_reports_degradation(db_metrics):
 
 def test_ingest_drop_log_is_rate_limited_per_listener():
     udp_server._ingest_drop_last.clear()
-    assert udp_server._log_ingest_drop("netflow") is True
-    assert udp_server._log_ingest_drop("netflow") is False
-    # un altro listener ha la propria finestra
     assert udp_server._log_ingest_drop("syslog") is True
+    assert udp_server._log_ingest_drop("syslog") is False
+    # un altro listener ha la propria finestra
+    assert udp_server._log_ingest_drop("syslog-relay") is True
     udp_server._ingest_drop_last.clear()
 
 

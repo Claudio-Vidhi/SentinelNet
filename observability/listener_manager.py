@@ -9,7 +9,7 @@ senza mai richiedere il riavvio del processo.
 Stato tenuto a livello di modulo (non su ``app.state``) così l'endpoint può
 richiamare ``apply_obs_config`` senza bisogno di un riferimento a ``FastAPI``.
 
-Listener UDP (ipfix/netflow/sflow/syslog): diff fra handle attivi e config
+Listener UDP (syslog): diff fra handle attivi e config
 desiderata — ferma quelli rimossi/cambiati (bind o porta), poi avvia quelli
 mancanti. Lo stop precede sempre lo start per lo stesso nome (rebind pulito
 su Windows, che non permette il doppio bind della stessa porta).
@@ -42,13 +42,10 @@ _l2_poller_interval: int = 0
 
 
 def _listener_specs(cfg):
-    """(name, listener_cfg, parser, kind) per i quattro protocolli supportati."""
-    from observability.ingesters import ipfix, sflow, syslog as syslog_parser
+    """(name, listener_cfg, parser) for each UDP listener; syslog is the only one."""
+    from observability.ingesters import syslog as syslog_parser
     return (
-        ("ipfix", cfg["ipfix"], ipfix.parse, "flow"),
-        ("netflow", cfg["netflow"], ipfix.parse, "flow"),
-        ("sflow", cfg["sflow"], sflow.parse, "flow"),
-        ("syslog", cfg["syslog"], syslog_parser.parse, "syslog"),
+        ("syslog", cfg["syslog"], syslog_parser.parse),
     )
 
 
@@ -58,9 +55,9 @@ async def _apply_listeners(cfg):
 
     specs = _listener_specs(cfg)
     desired = {}
-    for name, lcfg, parser, kind in specs:
+    for name, lcfg, parser in specs:
         if cfg["enabled"] and lcfg["enabled"]:
-            desired[name] = (cfg["bind"], lcfg["port"], parser, kind)
+            desired[name] = (cfg["bind"], lcfg["port"], parser)
 
     # 1. Ferma i listener rimossi o con bind/porta cambiati (stop-before-start).
     for name in list(_handles):
@@ -77,11 +74,11 @@ async def _apply_listeners(cfg):
                 _obs_router_mod.listener_status[name] = {"active": False}
 
     # 2. Avvia i listener mancanti (nuovi o appena riconfigurati).
-    for name, (bind, port, parser, kind) in desired.items():
+    for name, (bind, port, parser) in desired.items():
         if name in _handles:
             continue
         try:
-            handle = await start_udp_listener(bind, port, parser, kind, name)
+            handle = await start_udp_listener(bind, port, parser, name)
             _handles[name] = handle
             _current[name] = (bind, port)
             _obs_router_mod.listener_status[name] = {
@@ -99,7 +96,7 @@ async def _apply_listeners(cfg):
 
     # 3. Segna esplicitamente disattivi i listener mai attivati (config
     # disabilitata sin dall'inizio: nessun handle da fermare).
-    for name, lcfg, parser, kind in specs:
+    for name, _lcfg, _parser in specs:
         if name not in desired and name not in _obs_router_mod.listener_status:
             _obs_router_mod.listener_status[name] = {"active": False}
 

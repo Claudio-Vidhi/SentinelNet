@@ -36,7 +36,7 @@ for user-facing strings, logs and comments, English for identifiers — see
 
 | Document | Contents |
 |---|---|
-| [collectors.md](collectors.md) | Sources: IPFIX, NetFlow, sFlow, syslog, FortiGate REST, SNMP (with interface error counters), Linux health, probe agents |
+| [collectors.md](collectors.md) | Sources: syslog, FortiGate REST, SNMP (with interface error counters), Linux health, probe agents |
 | [server-collection.md](server-collection.md) | Linux hosts: what the backup collects, which view each command feeds, what needs sudo |
 | [windows-collection.md](windows-collection.md) | Windows hosts over SSH: why not WinRM, why the artefact is pipe-delimited, what each section feeds |
 | [live-flows-and-siem.md](live-flows-and-siem.md) | The two flow tabs in depth: ingest, endpoints, frontend, past mistakes |

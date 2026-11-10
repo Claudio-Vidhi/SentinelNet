@@ -37,7 +37,7 @@ class _Base(unittest.TestCase):
         metrics.reset()
         conn = db.get_observability_connection()
         for table in ("events", "normalize_cursors", "syslog_events",
-                      "flow_aggregates", "api_observations"):
+                      "api_observations"):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()
         conn.close()
@@ -89,32 +89,29 @@ class TestNormalizeCapMetric(_Base):
     def tearDown(self):
         normalize.MAX_ROWS_PER_SOURCE = self._orig_cap
 
-    def _seed_flows(self, n):
+    def _seed_syslog(self, n):
         conn = db.get_observability_connection()
         for i in range(n):
             conn.execute(
-                """INSERT INTO flow_aggregates
-                       (window_start, tenant, src_ip, dst_ip, protocol, dst_port,
-                        total_bytes, total_packets, flow_count, exporter_ip, source)
-                   VALUES (?, 't1', '192.0.2.1', '198.51.100.9', 'TCP', 443,
-                           1000, 10, 1, '192.0.2.254', 'netflow')""",
+                "INSERT INTO syslog_events (ts, tenant, device_ip, severity, "
+                "action, message) VALUES (?, 't1', '192.0.2.254', 6, NULL, 'x')",
                 (NOW - 60 - i * 60,))
         conn.commit()
         conn.close()
 
     def test_source_at_cap_is_counted(self):
-        self._seed_flows(5)
+        self._seed_syslog(5)
         counts = normalize.normalize_once(NOW)
-        self.assertEqual(counts["flow"], 2)
+        self.assertEqual(counts["syslog"], 2)
         counters = metrics.snapshot()["counters"]
-        self.assertEqual(counters.get("normalize_capped{source=flow}"), 1)
+        self.assertEqual(counters.get("normalize_capped{source=syslog}"), 1)
 
     def test_source_below_cap_is_not_counted(self):
-        self._seed_flows(1)
+        self._seed_syslog(1)
         counts = normalize.normalize_once(NOW)
-        self.assertEqual(counts["flow"], 1)
+        self.assertEqual(counts["syslog"], 1)
         counters = metrics.snapshot()["counters"]
-        self.assertNotIn("normalize_capped{source=flow}", counters)
+        self.assertNotIn("normalize_capped{source=syslog}", counters)
 
 
 if __name__ == "__main__":

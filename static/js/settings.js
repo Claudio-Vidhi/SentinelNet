@@ -605,10 +605,10 @@
         'send_cli_command', 'arp_scan', 'fortigate_full_config', 'drift_diff', 'drift_versions', 'drift_summary'
     ]);
     const MCP_MONITOR_TOOLS = new Set([
-        'get_top_talkers', 'get_anomalies', 'linux_health', 'get_interface_errors', 'ping_device', 'get_cve_list'
+        'get_anomalies', 'linux_health', 'get_interface_errors', 'ping_device', 'get_cve_list'
     ]);
     const MCP_DEFAULT_DISABLED = new Set([
-        'get_top_talkers', 'get_anomalies', 'linux_health'
+        'get_anomalies', 'linux_health'
     ]);
 
     function updateMcpToolCounters() {

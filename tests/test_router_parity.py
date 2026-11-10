@@ -80,11 +80,11 @@ class TestRouterParity(unittest.TestCase):
     #   (incident explanation, classification, Blueprint, config generator)
     #   and the provider profiles stay.
     # /api/observability/flowgraph: fed the Traffic tab's Overview (KPI strip,
-    #   top talkers, protocols, tenant card), removed in 0.65.0 with that view
-    #   because no NetFlow/IPFIX/sFlow exporter is configured anywhere. /top
-    #   (Flows view, MCP get_top_talkers) stays. /hosts, /host-series and
-    #   /protocol-distribution went with it; they sit in NEW_PREFIXES, which
-    #   filters both sides, so they need no entry here.
+    #   top talkers, protocols, tenant card), removed in 0.65.0 with that view.
+    #   /hosts, /host-series and /protocol-distribution went with it; they sit
+    #   in NEW_PREFIXES, which filters both sides, so they need no entry here.
+    # /api/observability/top: the Flows view and MCP get_top_talkers, removed
+    #   in 0.65.0 with the NetFlow/IPFIX/sFlow collectors that fed it.
     ALLOWED_REMOVED_PATHS = ("/api/provisioner/fgt/generate",
                              "/api/provisioner/fgt/push-ssh",
                              "/api/provisioner/fgt/push-serial",
@@ -95,7 +95,8 @@ class TestRouterParity(unittest.TestCase):
                              "/api/ai/chat",
                              "/api/ai/conversations",
                              "/api/ai/conversations/{conversation_id}",
-                             "/api/observability/flowgraph")
+                             "/api/observability/flowgraph",
+                             "/api/observability/top")
 
     def test_all_golden_paths_still_exist(self):
         missing = [p for p in self.golden["paths"]
@@ -466,12 +467,9 @@ class TestFullParity(unittest.TestCase):
         # riga). Aggiunta puramente additiva — nessun campo rimosso o
         # ritipizzato — ma la descrizione dell'operazione la dichiara.
         ("get", "/api/fortigate/{ip}/firewall/policies-with-stats"),
-        # Filtro telemetria: query param ``exclude_telemetry`` opzionale con
-        # default False. Aggiunta additiva — omettendolo il comportamento è
-        # quello storico — ma i parametri dell'operazione cambiano.
-        # Copertura: test_observability_api.TestTopTalkers
-        # .test_telemetry_filter_excludes_collector_ports.
-        ("get", "/api/observability/top"),
+        # Description only: the docstring listed NetFlow among the sources of
+        # the event feed; the flow collectors were removed in 0.65.0.
+        ("get", "/api/observability/events"),
         # Origine MAC: query param ``tenant`` opzionale, e la risposta ora ha
         # una voce per (MAC, tenant) invece che per MAC. Vedi
         # TestRouterParity.ALLOWED_CHANGED_OPERATIONS per il motivo.

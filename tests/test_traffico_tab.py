@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Il tab Traffico e' una pill bar su piu' viste (Ricerca, Flussi, Per policy dalla 0.65.0), non due tab gemelli.
+"""Il tab Traffico e' una pill bar su piu' viste (Ricerca e Per policy dalla 0.65.0), non due tab gemelli.
 
 Prima della fusione la stessa finestra temporale esisteva tre volte
 (`#flowsWindow`, `#obsChartWindow`, `#flowSiemWindow`) senza che nessuna
@@ -52,9 +52,8 @@ class TestTrafficoStructure(unittest.TestCase):
 
     # Ogni pill ha il suo pane: una pill senza pane e' un pulsante che non apre
     # niente, un pane senza pill e' contenuto irraggiungibile.
-    PILLS = ["search", "flows", "policies"]
-    HEADER = ["trafWindow", "trafMetric", "trafAutoRefresh",
-              "trafHideTelemetry", "trafLastUpdate"]
+    PILLS = ["search", "policies"]
+    HEADER = ["trafWindow", "trafAutoRefresh"]
 
     @classmethod
     def setUpClass(cls):
@@ -86,7 +85,7 @@ class TestTrafficoStructure(unittest.TestCase):
         self.assertIn("const trafState", self.js)
         start = self.js.index("const trafState")
         block = self.js[start:start + 400]
-        for key in ("window:", "metric:", "autoRefresh:", "hideTelemetry:"):
+        for key in ("window:", "autoRefresh:"):
             self.assertIn(key, block, f"trafState non espone '{key}'")
 
     def test_the_tab_keeps_its_id(self):
@@ -114,13 +113,11 @@ class TestTrafficoStructure(unittest.TestCase):
         # Spostare un pannello fuori dal suo pane lo renderebbe visibile in
         # tutte e tre le viste.
         for pane, ids in (
-            ("flows", ("flowsTableBody", "flowsSourceChips", "flowsSyslogAllSection")),
             ("search", ("flowSiemHistCanvas", "flowSiemQueryInput", "flowSiemTableBody",
                         "flowSiemFacets")),
         ):
             start = self.html.index(f'id="trafPane-{pane}"')
-            end = self.html.index('id="trafPane-', start + 10) if pane != "search" \
-                else self.html.index('id="flowDetailPanel"', start)
+            end = self.html.index('id="tab-config"', start)
             body = self.html[start:end]
             for element_id in ids:
                 self.assertIn(f'id="{element_id}"', body,
@@ -157,20 +154,26 @@ class TestTrafficoCallsRealRoutes(unittest.TestCase):
 
 
 class FlowOnlyViewsStayGone(unittest.TestCase):
-    """Overview and Per IP read only NetFlow/IPFIX/sFlow aggregates, and no
-    exporter is configured anywhere: 0.65.0 removed them. The tab opens on
-    Ricerca, which reads syslog."""
+    """Overview, Per IP and Flussi read only NetFlow/IPFIX/sFlow aggregates;
+    0.65.0 removed them with the flow collectors. The tab opens on Ricerca,
+    which reads syslog."""
 
     GONE_IDS = ("trafPill-overview", "trafPane-overview", "trafPill-hosts",
                 "trafPane-hosts", "fgKpiStrip", "fgTalkersTableBody",
                 "fgProtoTableBody", "fgTenantSummary", "obsProtocolCard",
                 "obsProtocolCanvas", "obsInspectModal", "trafHostsBody",
-                "trafHostSeriesCanvas")
+                "trafHostSeriesCanvas",
+                "trafPill-flows", "trafPane-flows", "trafMetric",
+                "trafHideTelemetry", "flowsTableBody", "flowsSourceChips",
+                "flowsColsBtn", "flowsSyslogAllSection", "flowDetailPanel")
     GONE_JS = ("loadFlowGraph", "loadObsProtocolDist", "openObsInspectModal",
-               "loadTrafHosts", "loadTrafHostSeries", "obsWidgetBoot")
+               "loadTrafHosts", "loadTrafHostSeries", "obsWidgetBoot",
+               "loadTopTalkers", "trafSetMetric", "openFlowDetailPanel",
+               "exclude_telemetry")
     GONE_ROUTES = ("/api/observability/flowgraph",
                    "/api/observability/protocol-distribution",
-                   "/api/observability/hosts", "/api/observability/host-series")
+                   "/api/observability/hosts", "/api/observability/host-series",
+                   "/api/observability/top")
 
     @classmethod
     def setUpClass(cls):
@@ -194,10 +197,10 @@ class FlowOnlyViewsStayGone(unittest.TestCase):
         self.assertIn("let _trafView = 'search';", self.js)
         self.assertIn('class="ca-pill active" id="trafPill-search"', self.html)
         self.assertIn('<div id="trafPane-search" class="traf-pane">', self.html)
-        self.assertIn("const TRAF_VIEWS = ['search', 'flows', 'policies']", self.js)
+        self.assertIn("const TRAF_VIEWS = ['search', 'policies']", self.js)
 
     def test_the_status_banner_sits_outside_the_panes(self):
-        # It used to live in the Overview pane; Ricerca and Flussi need it too
+        # It used to live in the Overview pane; Ricerca needs it too
         # (no listener means no syslog either).
         banner = self.html.index('id="flowsObsBanner"')
         self.assertLess(self.html.index('id="trafPills"'), banner)

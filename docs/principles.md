@@ -71,7 +71,7 @@ question.
 ## 3. Multi-source correlation
 
 Never build a feature around a single data source. Every module should consume
-several wherever possible: NetFlow, IPFIX, sFlow, SNMP, syslog, LLDP/CDP,
+several wherever possible: SNMP, syslog, LLDP/CDP,
 routing tables, firewall logs, configuration backups, API integrations, cloud
 providers.
 
@@ -118,8 +118,7 @@ Every automated conclusion must be explainable. Never return "AI detected
 anomaly". Return:
 
 > **Reason:** traffic increased 650%.
-> **Supporting evidence:** NetFlow · SNMP · baseline deviation · configuration
-> unchanged.
+> **Supporting evidence:** syslog · SNMP · configuration unchanged.
 > **Confidence:** 92%.
 
 A corollary that runs through the whole codebase: **what isn't known is stated.**
@@ -135,9 +134,10 @@ same weekday, the same time window, rolling averages and seasonal patterns.
 
 Baselines must adapt over time. Do not generate alerts from temporary spikes.
 
-Realized in [observability/baseline.py](../observability/baseline.py), which also
-declines to emit anything when it has too few samples — an invented baseline is
-worse than none.
+The traffic baseline that realized this (`observability/baseline.py`) read flow
+records and was removed with the flow collectors in 0.65.0. The principle stands
+for whatever measure comes next: emit nothing with too few samples — an invented
+baseline is worse than none.
 
 ---
 

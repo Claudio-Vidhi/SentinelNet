@@ -524,7 +524,7 @@ connection error if you try):**
 |---|---|
 | ICMP ping monitor (`services/ping_monitor.py`, `collectors/network_scanner._ping`) | ICMP is not TCP; an SSH channel cannot carry it |
 | Subnet scan and discovery from the central | same, plus it needs broadcast/ARP adjacency |
-| Syslog reception, NetFlow/flow ingestion | inbound UDP from devices to us; the bastion never initiates back |
+| Syslog reception | inbound UDP from devices to us; the bastion never initiates back |
 | FortiGate REST, and any other `requests`-based vendor API | needs a listening local port, not a channel — not built |
 | SNMP (if ever wired up; `pysnmp` is a dependency but currently unused in code) | UDP |
 | Real-time device status in the inventory KPIs | derives from ping |

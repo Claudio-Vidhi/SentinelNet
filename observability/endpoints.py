@@ -18,7 +18,7 @@ persistita è il TESTO leggibile dentro ``evidence.summary``, perché quello è 
 contesto storico di una decisione presa allora e deve restare com'era.
 
 Copertura: **solo IPv4**. Non è una scelta di questo modulo — l'estrazione a
-monte (``fieldmap._IP_RE``, i decoder di flusso) riconosce solo IPv4, quindi
+monte (``fieldmap._IP_RE``) riconosce solo IPv4, quindi
 ``family`` sarà ``ipv4`` per tutto finché quella non cambia.
 
 Per i MAC la classificazione sta nei bit del primo byte, non in un database di

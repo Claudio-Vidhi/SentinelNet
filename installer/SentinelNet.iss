@@ -339,17 +339,31 @@ end;
 // bootloader PyInstaller e la porta la tiene comunque un processo solo.
 procedure FirewallPorts(var Names: TArrayOfString; var Ports: TArrayOfInteger);
 begin
-  SetArrayLength(Names, 4);
-  SetArrayLength(Ports, 4);
+  SetArrayLength(Names, 1);
+  SetArrayLength(Ports, 1);
   Names[0] := 'syslog';  Ports[0] := 514;
-  Names[1] := 'NetFlow'; Ports[1] := 2055;
-  Names[2] := 'IPFIX';   Ports[2] := 4739;
-  Names[3] := 'sFlow';   Ports[3] := 6343;
 end;
 
 function FirewallRuleName(Name: String; Port: Integer): String;
 begin
   Result := 'SentinelNet ' + Name + ' (UDP ' + IntToStr(Port) + ')';
+end;
+
+// Rules created by releases before 0.65.0 for the removed flow collectors.
+// Deleted on install and uninstall so an upgrade does not leave them open.
+procedure RemoveLegacyFlowRules;
+var
+  ResultCode: Integer;
+begin
+  Exec(ExpandConstant('{sys}\netsh.exe'),
+       'advfirewall firewall delete rule name="' + FirewallRuleName('NetFlow', 2055) + '"',
+       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\netsh.exe'),
+       'advfirewall firewall delete rule name="' + FirewallRuleName('IPFIX', 4739) + '"',
+       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\netsh.exe'),
+       'advfirewall firewall delete rule name="' + FirewallRuleName('sFlow', 6343) + '"',
+       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
 procedure AddFirewallRules;
@@ -359,6 +373,7 @@ var
   I, ResultCode: Integer;
   Failed: String;
 begin
+  RemoveLegacyFlowRules;
   FirewallPorts(Names, Ports);
   for I := 0 to GetArrayLength(Ports) - 1 do
   begin
@@ -385,6 +400,7 @@ var
   Ports: TArrayOfInteger;
   I, ResultCode: Integer;
 begin
+  RemoveLegacyFlowRules;
   FirewallPorts(Names, Ports);
   for I := 0 to GetArrayLength(Ports) - 1 do
     Exec(ExpandConstant('{sys}\netsh.exe'),

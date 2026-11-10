@@ -3,8 +3,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Traffico per policy firewall, letto dai contatori che gli apparati tengono.
 
-La vista "Per IP" del tab Traffico nasce da flow_aggregates: telemetria di rete,
-finestra temporale, serie storica. Questa no. I byte e le sessioni per policy
+Unlike the syslog Search view, these numbers have no time window. I byte e le sessioni per policy
 vivono SUL firewall, in contatori che il FortiGate azzera solo al reboot o a
 richiesta.
 

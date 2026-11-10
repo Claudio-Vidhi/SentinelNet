@@ -1368,10 +1368,11 @@ class TestSettingsTabRestyle(unittest.TestCase):
         # OBS_LISTENERS / renderObsSettings / saveObsSettings moved to
         # static/js/observability.js.
         html = frontend_source()
-        # obs_<listener>_enabled / obs_<listener>_port for all four listeners.
+        # obs_<listener>_enabled / obs_<listener>_port; syslog is the only
+        # listener since the flow collectors were removed in 0.65.0.
         self.assertIn('id="obs_${l}_enabled"', html)
         self.assertIn('id="obs_${l}_port"', html)
-        self.assertIn("const OBS_LISTENERS = ['ipfix', 'sflow', 'syslog', 'netflow'];", html)
+        self.assertIn("const OBS_LISTENERS = ['syslog'];", html)
         # saveObsSettings() reads back the same interpolated ids.
         self.assertIn("document.getElementById(`obs_${l}_enabled`)", html)
         self.assertIn("document.getElementById(`obs_${l}_port`)", html)
@@ -1477,31 +1478,22 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
     by TestMacTrackerTabRestyle; this class covers Live Flows only, plus one
     structural guard for the Client Map tenant filter (see the last test).
 
-    Most of this tab's controls are rendered from JS (renderFlowsThead,
-    renderFlowsTable, renderSyslogTable, renderFlowsSourceChips, loadAnomalies),
-    so the preserve-ID list is enumerated from that JS, not from static markup.
+    The Flussi view (top talkers, source chips, column toggle, flow detail
+    panel) went with the flow collectors in 0.65.0; what is left is the
+    header, the status banner and the Ricerca / Per policy panes.
     """
 
     def _tab(self, html):
-        # #flowDetailPanel is a fixed-position sibling that follows the tab body.
         start = html.index('<div id="tab-flows"')
-        return html[start:html.index('<div id="flowDetailPanel"', start)]
+        return html[start:html.index('<div id="tab-config"', start)]
 
     def test_preserve_ids(self):
         html = frontend_source()
-        # I controlli di finestra/metrica/tenant sono passati all'header unico
-        # del tab (prefisso traf*): erano triplicati, uno per pannello.
-        for _id in ('flowsTableHead', 'flowsTableBody',
-                    'trafWindow', 'trafMetric',
-                    'trafAutoRefresh', 'trafLastUpdate', 'flowsObsBanner',
-                    'flowsSourceChips', 'flowsColsBtn',
-                    'flowsColsDropdown',
-                    'flowDetailPanel', 'flowDetailPanelBody'):
+        # I controlli di finestra/tenant sono passati all'header unico del
+        # tab (prefisso traf*): erano triplicati, uno per pannello.
+        for _id in ('trafWindow', 'trafAutoRefresh', 'flowsObsBanner'):
             self.assertIn(f'id="{_id}"', html)
-        for hook in ('flowsTabShown', 'loadTopTalkers',
-                     'toggleFlowsColsDropdown',
-                     'closeFlowDetailPanel'):
-            self.assertIn(hook, html)
+        self.assertIn('flowsTabShown', html)
 
     def test_flow_row_selection_is_gone(self):
         # The row checkboxes only fed "Analyze with AI", removed in 0.65.0:
@@ -1511,31 +1503,11 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
                      'toggleFlowRowSelect', 'syncFlowsSelectAllCheckbox'):
             self.assertNotIn(gone, html)
 
-    def test_source_filter_chips_and_column_toggle_survive(self):
-        # FLOWS_SOURCES/renderFlowsSourceChips/renderSyslogTable moved to
-        # static/js/observability.js.
-        html = frontend_source()
-        # Source chips (incl. the syslog view) are data-driven; the array is
-        # what actually determines the chips, so assert the array itself.
-        self.assertIn("const FLOWS_SOURCES = ['all', 'netflow', 'ipfix', 'sflow', 'syslog'];", html)
-        self.assertIn("function renderFlowsSourceChips()", html)
-        self.assertIn('data-action="set-flows-source"', html)
-        # Syslog view swaps thead + tbody renderers.
-        self.assertIn("if (_flowsSource === 'syslog')", html)
-        # Dual-target: main table (syslog view) or the all-sources section below the flows.
-        self.assertIn("function renderSyslogTable(tbodyId = 'flowsTableBody')", html)
-        # Column-visibility toggle + its persistence.
-        self.assertIn("const FLOW_TOGGLE_COLS = [", html)
-        self.assertIn('class="flows-col-cb"', html)
-        self.assertIn("localStorage.setItem('sentinelnet_flows_hidden_cols'", html)
-
     def test_endpoint_contract_present(self):
         # loadTopTalkers/loadAnomalies/checkObsStatusBanner (and the
         # apiFetch calls they make) moved to static/js/observability.js.
         html = frontend_source()
-        for ep in ('/api/observability/top?window=',
-                   '/api/observability/syslog?window=',
-                   '/api/observability/health'):
+        for ep in ('/api/observability/health',):
             self.assertIn(ep, html)
 
     def test_english_relabel(self):
@@ -1564,10 +1536,6 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         self.assertNotIn('>Dettaglio flusso<', src)
         self.assertNotIn('title="Chiudi"', src)
         self.assertNotIn('title="Evidenzia nella topologia"', src)
-        # ...now routed through keys / the file's existing `const L` pattern.
-        self.assertIn('data-i18n="titleFlowDetail"', src)
-        self.assertIn('data-i18n-title="titleClose"', src)
-        self.assertIn("const hlTitle = escapeHtml(L.titleHighlightTopology", src)
         # Every remaining user-visible string in the tab body carries a key.
         self.assertNotIn('Anomalie correlate', tab)
 
@@ -1580,12 +1548,10 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         # Ricerca, la tabella per host col suo andamento e quella per policy.
         # Il pannello "Dettaglio Flussi" inline non c'e' piu': era la terza
         # copia della stessa ripartizione per protocollo.
-        # 0.65.0 removed the flow-only Overview (4 panels) and Per IP (2)
-        # views: no NetFlow/IPFIX/sFlow exporter is configured anywhere.
-        self.assertEqual(tab.count('<div class="panel"'), 6)
-        self.assertEqual(tab.count('<div class="panel" style="margin-bottom:18px;"'), 3)
-        # All tables wrapped: flows and syslog-in-all-sources.
-        self.assertEqual(tab.count('class="table-wrap"'), 2)
+        # 0.65.0 removed the flow-only Overview (4 panels), Per IP (2) and
+        # Flussi (1, with its two wrapped tables) views with the collectors.
+        self.assertEqual(tab.count('<div class="panel"'), 5)
+        self.assertEqual(tab.count('<div class="panel" style="margin-bottom:18px;"'), 2)
         self.assertIn('class="filterbar"', tab)
         html = frontend_source()
         # Flussi Live non e' piu' in preview: la voce di menu non porta badge.
@@ -1594,10 +1560,7 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
 
     def test_i18n_keys_both_langs(self):
         html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
-        for key in ("tabFlows:", "titleFlows:", "descFlows:", "flowsEyebrow:",
-                    "titleFlowDetail:", "titleClose:", "titleHighlightTopology:",
-                    "chipAllSources:", "msgNoFlows:",
-                    "msgNoSyslog:"):
+        for key in ("tabFlows:", "titleFlows:", "descFlows:", "flowsEyebrow:"):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
 

@@ -6,10 +6,9 @@
 Ogni sorgente conserva il proprio formato di ingestione (i listener UDP, il
 poller REST e gli agent non cambiano); qui gli eventi vengono PROIETTATI nella
 tabella ``events`` con lo stesso vocabolario. Da lì in poi correlazione,
-ragionamento, baseline e knowledge base leggono una forma sola.
+ragionamento e knowledge base leggono una forma sola.
 
 Adapter attivi (solo sorgenti già raccolte oggi):
-- ``flow_aggregates``  → ``flow.aggregate``   (entità flow)
 - ``syslog_events``    → ``log.security`` / ``log.event``   (entità device)
 - ``api_observations`` → ``device.state`` + ``device.change`` (entità device)
 - ``quarantined_exporters`` → ``platform.exporter_unknown`` (entità exporter)
@@ -23,9 +22,6 @@ Avanzamento: ``normalize_cursors`` tiene la posizione per sorgente. Il rientro
 è comunque idempotente grazie a ``dedup_key`` UNIQUE, quindi un cursore
 riavvolto non duplica: al più riscrive le stesse righe.
 
-I bucket di flusso vengono aggiornati in place dall'ingestione (UPSERT al
-minuto): l'adapter li rilegge finché la finestra non è chiusa e aggiorna le
-metriche sul conflitto, invece di ignorarle.
 """
 
 import json
@@ -106,44 +102,6 @@ def _emit(conn, **row) -> None:
         json.dumps(row.get("metrics") or {}, ensure_ascii=False),
         json.dumps(row.get("attrs") or {}, ensure_ascii=False),
         row["dedup_key"]))
-
-
-# --- ADAPTER: FLUSSI ---------------------------------------------------------
-
-def _from_flows(conn, now: int) -> int:
-    # Il cursore riparte DALLO STESSO bucket in cui si era fermato (>=, non >):
-    # l'ingestione aggiorna in place il bucket ancora aperto, e il rientro ne
-    # aggiorna le metriche via ON CONFLICT invece di perderle. Nessun ritardo di
-    # assestamento: la correlazione deve poter vedere il minuto corrente.
-    cur = _cursor(conn, "flow")
-    start = cur["last_ts"] or (now - LOOKBACK_S)
-    rows = conn.execute(
-        """SELECT window_start, tenant, src_ip, dst_ip, protocol, dst_port,
-                  total_bytes, total_packets, flow_count, exporter_ip, source
-           FROM flow_aggregates
-           WHERE window_start >= ?
-           ORDER BY window_start ASC LIMIT ?""",
-        (start, MAX_ROWS_PER_SOURCE)).fetchall()
-    last_ts = cur["last_ts"]
-    for r in rows:
-        proto = str(r["protocol"]) if r["protocol"] is not None else ""
-        _emit(conn,
-              ts=r["window_start"], ingested_ts=now, tenant=r["tenant"],
-              source=r["source"] or "netflow", event_type="flow.aggregate",
-              entity_type="flow",
-              entity_id=f"{r['src_ip']}>{r['dst_ip']}",
-              src_ip=r["src_ip"], dst_ip=r["dst_ip"], dst_port=r["dst_port"],
-              protocol=fieldmap.PROTO_NUM.get(proto, proto) or None,
-              device_ip=r["exporter_ip"],
-              metrics={"bytes": r["total_bytes"], "packets": r["total_packets"],
-                       "flows": r["flow_count"]},
-              dedup_key=f"flow:{r['window_start']}:{r['tenant']}:{r['src_ip']}:"
-                        f"{r['dst_ip']}:{r['protocol']}:{r['dst_port']}")
-        last_ts = max(last_ts, r["window_start"])
-    if rows:
-        # Il bucket più recente può ancora ricevere UPSERT: si riparte da lì.
-        _save_cursor(conn, "flow", 0, last_ts)
-    return len(rows)
 
 
 # --- ADAPTER: SYSLOG ---------------------------------------------------------
@@ -438,22 +396,17 @@ def normalize_once(now: Optional[int] = None) -> dict:
     now = now or int(time.time())
     conn = db.get_observability_connection()
     try:
-        from observability import baseline
         counts = {
-            "flow": _from_flows(conn, now),
             "syslog": _from_syslog(conn, now),
             "api": _from_api_observations(conn, now),
             "quarantine": _from_quarantine(conn, now),
-            # Il baseline è un adapter come gli altri: osserva lo storico dei
-            # flussi e scrive la misura come fatto. Non conclude nulla.
-            "baseline": baseline.compute_once(conn, now),
         }
         conn.commit()
         metrics.set_gauge("last_normalize_ts", now)
         metrics.inc("events_normalized", sum(counts.values()))
         # WP8: a source reading exactly its per-cycle cap may be falling
         # behind permanently — say it, instead of losing rows in silence.
-        for source in ("flow", "syslog", "api"):
+        for source in ("syslog", "api"):
             if counts.get(source, 0) >= MAX_ROWS_PER_SOURCE:
                 metrics.inc("normalize_capped", 1, source=source)
                 if metrics.should_warn(f"normalize_capped_{source}"):

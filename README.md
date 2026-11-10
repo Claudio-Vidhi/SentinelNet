@@ -7,7 +7,7 @@
 infrastructure. It automates configuration backup, detects the firmware versions
 running on active devices and compares them in real time against the
 NIST NVD vulnerability database — and it collects passive network telemetry
-(NetFlow, IPFIX, sFlow, syslog, SNMP), correlates it with deterministic rules,
+(syslog, SNMP, FortiGate REST), correlates it with deterministic rules,
 and turns it into explainable incidents. Everything is reachable from a single
 browser console.
 
@@ -61,8 +61,8 @@ populated demo.
   new CVE, incident, SIEM alert), minimum severity, tenants, immediate or
   digest delivery and quiet hours; admins add rules for distribution lists.
   Repeats of the same event are held back for 30 minutes.
-- **Network observability** — passive collectors for IPFIX, NetFlow, sFlow and
-  syslog, plus active FortiGate REST and SNMP polling, feeding a deterministic
+- **Network observability** — a passive syslog listener plus active
+  FortiGate REST and SNMP polling, feeding a deterministic
   correlation engine that produces evidence-backed incidents.
 - **Client diagnosis (L2 + L3)** — one report for a single client: access
   switch and port, port VLAN, link state and error-counter delta, whether its
@@ -109,7 +109,7 @@ Full index: [docs/README.md](docs/README.md).
 |---|---|
 | Engineering principles | [docs/principles.md](docs/principles.md) |
 | Architecture, data pipeline, event/evidence/incident model | [docs/architecture.md](docs/architecture.md) |
-| Data sources (NetFlow, IPFIX, sFlow, syslog, SNMP, REST) | [docs/collectors.md](docs/collectors.md) |
+| Data sources (syslog, SNMP, REST) | [docs/collectors.md](docs/collectors.md) |
 | Operations runbook (logs, diagnostics, retention, backup) | [docs/operations.md](docs/operations.md) |
 | Secure exposure (TLS, reverse proxy), roles and permissions | [docs/hardening.md](docs/hardening.md) |
 | Multi-site deployment | [docs/probes.md](docs/probes.md) |
@@ -502,7 +502,7 @@ Available tools, by area:
 | Config drift | `drift_summary`, `drift_versions`, `drift_diff` — operator account required |
 | Ports & routing | `interface_errors`, `interface_errors_port`, `get_routes`, `trace_route` |
 | Classification | `get_device_classification` |
-| Observability | `get_top_talkers`, `get_anomalies`, `linux_health` — **disabled by default**, enable them in the MCP Server tab |
+| Observability | `get_anomalies`, `linux_health` — **disabled by default**, enable them in the MCP Server tab |
 
 Write tools require an *operator* account; use a *viewer* account for read-only
 access. The list above is the catalogue — what a given client actually sees is

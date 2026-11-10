@@ -44,7 +44,7 @@ class _Base(unittest.TestCase):
         conn = db.get_observability_connection()
         for table in ("events", "normalize_cursors", "evidence", "incidents",
                       "incident_conclusions", "api_observations",
-                      "syslog_events", "flow_aggregates"):
+                      "syslog_events"):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()
         conn.close()

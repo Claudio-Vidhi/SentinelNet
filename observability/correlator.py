@@ -13,10 +13,10 @@ ruolo causale dichiarato dalla regola che l'ha prodotta e con la provenienza
 derivata, costruita da ``observability/incidents.py``.
 
 Il vantaggio della separazione: lo stesso insieme di evidenze alimenta motore
-incidenti, baseline, assistente AI e knowledge base senza duplicare la logica
+incidenti, assistente AI e knowledge base senza duplicare la logica
 di correlazione.
 
-Legge SOLO ``events``: non sa più cosa sia un syslog, un flusso o uno snapshot
+Legge SOLO ``events``: non sa più cosa sia un syslog o uno snapshot
 REST. Una sorgente nuova entra scrivendo un adapter in ``normalize.py``.
 
 Gira come task periodico (lifespan), su thread dedicato con connessione propria.
@@ -130,9 +130,9 @@ def correlate_once(now: Optional[int] = None) -> int:
     conn = db.get_observability_connection()
     try:
         # Due condizioni, non una: ``ts`` prende i fatti appena accaduti, ma
-        # alcune sorgenti descrivono finestre più larghe del ciclo — il
-        # baseline misura un'ora intera e la data all'inizio di quell'ora, che
-        # con il solo filtro su ``ts`` cadrebbe sempre fuori. ``ingested_ts``
+        # a source can date a fact well before it is ingested (an RFC 3164
+        # line with a skewed clock, a probe agent's late syslog batch), and
+        # with the ``ts`` filter alone it would fall outside. ``ingested_ts``
         # prende quindi anche ciò che è stato normalizzato adesso, comunque
         # datato.
         events = [dict(r) for r in conn.execute(

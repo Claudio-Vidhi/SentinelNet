@@ -694,20 +694,9 @@ TOOLS = {
     # --- Observability (phase 4.4): READ-ONLY, aggregated/summarized data
     # (never raw dump), tenant scoping and redaction applied server-side.
     # Disabled by default: admin enables them from the MCP Server tab.
-    "get_top_talkers": (
-        "Get the top bandwidth consumers (aggregated flow records) for a time "
-        "window. Read-only, tenant-scoped, summarized (top-N only).",
-        _obj({"window": {**_S, "description": "Time window, e.g. 15m, 24h (max 7d)"},
-              "limit": {"type": "integer", "description": "Max flows (default 20, max 100)"},
-              "metric": {**_S, "description": "'bytes' (default) or 'packets'"}}),
-        lambda a: api("GET", "/api/observability/top", params={
-            "window": a.get("window", "15m"),
-            "limit": min(int(a.get("limit", 20)), 100),
-            "metric": a.get("metric", "bytes")}),
-    ),
     "get_anomalies": (
-        "Get correlated security anomalies (blocked traffic matched with flow "
-        "evidence and switch port). Read-only, tenant-scoped.",
+        "Get correlated anomalies (incidents built from syslog, interface and "
+        "device-state evidence). Read-only, tenant-scoped.",
         _obj({"status": {**_S, "description": "'new' (default), 'ack', 'resolved', 'all'"},
               "window": {**_S, "description": "Time window, e.g. 24h (max 7d)"}}),
         lambda a: api("GET", "/api/observability/anomalies", params={
@@ -750,8 +739,8 @@ TOOLS = {
     # --- "What is wrong and why": incidents, CVE, drift, port errors, routing,
     # classification. Read-only bridges to existing routes.
     "list_incidents": (
-        "List correlated incidents (grouped evidence: syslog, flows, port "
-        "state) for a time window. Read-only, tenant-scoped.",
+        "List correlated incidents (grouped evidence: syslog, port state, "
+        "device health) for a time window. Read-only, tenant-scoped.",
         _obj({"status": {**_S, "description": "'new' (default), 'ack', 'resolved', 'all'"},
               "window": {**_S, "description": "Time window, e.g. 24h (default), 7d"},
               "limit": {"type": "integer", "description": "Max incidents (default 50)"}}),

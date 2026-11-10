@@ -71,8 +71,6 @@ SENTINELNET_DATA_DIR=/home/admin/DEV/SentinelNet/data
 # SENTINELNET_OBS_BIND=0.0.0.0
 # SENTINELNET_OBS_SYSLOG_ENABLE=1
 # SENTINELNET_OBS_SYSLOG_PORT=5514
-# SENTINELNET_OBS_NETFLOW_ENABLE=1
-# SENTINELNET_OBS_NETFLOW_PORT=2055
 EOF
 
 sudo chmod 644 /etc/sentinelnet.env
@@ -121,9 +119,6 @@ sudo firewall-cmd --permanent --add-port=8000/tcp
 
 # If observability listeners enabled:
 # sudo firewall-cmd --permanent --add-port=5514/udp
-# sudo firewall-cmd --permanent --add-port=2055/udp
-# sudo firewall-cmd --permanent --add-port=4739/udp
-# sudo firewall-cmd --permanent --add-port=6343/udp
 
 sudo firewall-cmd --reload
 ```

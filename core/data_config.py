@@ -187,12 +187,18 @@ def _app_adv(key, default=None):
         return default
 
 
+def obs_syslog_default_port() -> int:
+    """514 on Windows (the port the installer opens in the firewall), 5514
+    elsewhere: 514 is privileged on Linux, Docker maps 514:5514."""
+    return 514 if sys.platform == "win32" else 5514
+
+
 def obs_config() -> dict:
     """Configuration of the observability listeners (phase 3.6).
 
     Safe defaults: EVERYTHING OFF (exe/desktop and Docker), bind on loopback,
-    high non-privileged ports (never 514 in-process: privileged mapping only
-    via Docker). ``0.0.0.0`` requires explicit opt-in.
+    syslog on ``obs_syslog_default_port()``. ``0.0.0.0`` requires explicit
+    opt-in.
     """
     # Base: "observability" section of app_settings.json (GUI config, §9.5);
     # environment variables, if set, take precedence. Listeners
@@ -222,23 +228,10 @@ def obs_config() -> dict:
         "enabled": enabled,
         "bind": os.environ.get("SENTINELNET_OBS_BIND",
                                _saved.get("bind", "127.0.0.1")).strip(),
-        "ipfix": {
-            "enabled": enabled and _flag("SENTINELNET_OBS_IPFIX_ENABLE", "ipfix_enabled", True),
-            "port": _port("SENTINELNET_OBS_IPFIX_PORT", "ipfix_port", 4739),
-        },
-        "sflow": {
-            "enabled": enabled and _flag("SENTINELNET_OBS_SFLOW_ENABLE", "sflow_enabled", True),
-            "port": _port("SENTINELNET_OBS_SFLOW_PORT", "sflow_port", 6343),
-        },
         "syslog": {
             "enabled": enabled and _flag("SENTINELNET_OBS_SYSLOG_ENABLE", "syslog_enabled", True),
-            "port": _port("SENTINELNET_OBS_SYSLOG_PORT", "syslog_port", 5514),
-        },
-        # Classic NetFlow (v5/v9) on the canonical port 2055: same decoder
-        # as ipfix.parse (handles v5/v9/IPFIX from the header).
-        "netflow": {
-            "enabled": enabled and _flag("SENTINELNET_OBS_NETFLOW_ENABLE", "netflow_enabled", True),
-            "port": _port("SENTINELNET_OBS_NETFLOW_PORT", "netflow_port", 2055),
+            "port": _port("SENTINELNET_OBS_SYSLOG_PORT", "syslog_port",
+                          obs_syslog_default_port()),
         },
         # REST poller (§9.2): interval in seconds, 0 = disabled.
         "api_poll_s": _port("SENTINELNET_OBS_API_POLL_S", "api_poll_s", 300),
@@ -253,13 +246,15 @@ def obs_config() -> dict:
         # default 0 (off) — same credential-using family as the pollers above.
         "l2_poll_s": _port("SENTINELNET_OBS_L2_POLL_S", "l2_poll_s", 0),
         "retention_days": {
+            # Legacy table, pruned only where an older database still has it.
             "flow_aggregates": int(os.environ.get("SENTINELNET_OBS_RETENTION_FLOWS_DAYS")
                                    or _app_adv("retention_flows_days") or 30),
             "syslog_events": int(os.environ.get("SENTINELNET_OBS_RETENTION_SYSLOG_DAYS")
                                  or _app_adv("retention_syslog_days") or 7),
             # The unified model mixes projections with different lifetimes: the
-            # flow window is kept, the longest among the projected sources,
-            # so no event disappears before its own origin.
+            # longest window among the projected sources is kept, so no event
+            # disappears before its own origin. The variable keeps its
+            # historical "FLOWS" name so existing deployments stay valid.
             "events": int(os.environ.get("SENTINELNET_OBS_RETENTION_FLOWS_DAYS")
                           or _app_adv("retention_flows_days") or 30),
             # Poller snapshots and on-demand counter reads live as long as

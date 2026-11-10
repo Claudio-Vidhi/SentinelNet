@@ -1975,12 +1975,12 @@
         <div class="hero-card">
           <h2 data-i18n="titleFlows">Traffic</h2>
           <p data-i18n="descFlows">
-            Syslog event search, flow and syslog rows, and per-policy firewall counters, per tenant. The window and tenant apply to every view. Listeners are configured in Settings → Observability.
+            Syslog event search and per-policy firewall counters, per tenant. The window and tenant apply to every view. The syslog listener is configured in Settings → Observability.
           </p>
         </div>
       </div>
 
-      <!-- One header for the whole tab: window, metric, tenant and toggles apply
+      <!-- One header for the whole tab: window, tenant and toggles apply
            to every view. The same window used to exist three times, each one
            ignoring the others. -->
       <div class="filterbar" style="align-items:center; margin:0 0 12px;">
@@ -1990,63 +1990,18 @@
           <option value="24h" data-i18n="optWin24h">Ultime 24 ore</option>
           <option value="7d" data-i18n="optWin7d">Ultimi 7 giorni</option>
         </select>
-        <select id="trafMetric" aria-label="Metrica del traffico" data-i18n-aria-label="ariaTrafMetric">
-          <option value="bytes" data-i18n="optByBytes">Per byte</option>
-          <option value="packets" data-i18n="optByPackets">Per pacchetti</option>
-        </select>
         <button id="btnTrafRefresh" class="btn" style="width:auto; margin:0;"><i class="fa-solid fa-rotate"></i> <span data-i18n="btnRefresh">Aggiorna</span></button>
         <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer;" title="Auto-aggiornamento (30s, in pausa se la scheda non è visibile)" data-i18n-title="lblFlowsAutoRefresh">
           <input type="checkbox" id="trafAutoRefresh" checked style="accent-color:var(--primary);">
           <span data-i18n="lblFlowsAutoRefreshShort">Auto-aggiornamento 30s</span>
         </label>
-        <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer;" title="Escludi traffico di telemetria (NetFlow/IPFIX/sFlow/Syslog/SNMP)" data-i18n-title="lblFlowsHideTelemetry">
-          <input type="checkbox" id="trafHideTelemetry" style="accent-color:var(--primary);">
-          <span data-i18n="lblFlowsHideTelemetryShort">Escludi telemetria</span>
-        </label>
-        <span id="trafLastUpdate" style="font-size:12px; color:var(--text-muted);"></span>
       </div>
       <div id="trafPills" class="subtab-bar">
         <button type="button" class="ca-pill active" id="trafPill-search" data-traf-view="search" data-i18n="trafPillSearch">Ricerca</button>
-        <button type="button" class="ca-pill" id="trafPill-flows" data-traf-view="flows" data-i18n="trafPillFlows">Flussi</button>
         <button type="button" class="ca-pill" id="trafPill-policies" data-traf-view="policies" data-i18n="trafPillPolicies">Per policy</button>
       </div>
       <div id="flowsObsBanner" style="display:none; padding:10px 14px; margin-bottom:12px; border:1px solid var(--warning, var(--lamp-warn)); border-radius:0; color:var(--warning, var(--lamp-warn)); font-size:13px;"></div>
 
-      <div id="trafPane-flows" class="traf-pane" style="display:none;">
-      <div class="panel" style="margin-bottom:18px;">
-        <div class="filterbar" style="gap:6px; align-items:center;">
-          <div id="flowsSourceChips" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
-          <div style="position:relative; display:inline-block; margin-left:auto;">
-            <button id="flowsColsBtn" class="btn btn-small" style="padding:6px 12px;">
-              <i class="fa-solid fa-table-columns"></i> <span data-i18n="btnColumns">Colonne</span>
-            </button>
-            <div id="flowsColsDropdown" style="display:none; position:absolute; top:100%; right:0; background:var(--surface-2); border:1px solid var(--border); border-radius:0; min-width:180px; z-index:1000; box-shadow:var(--shadow-lift); padding:8px;"></div>
-          </div>
-        </div>
-        <div class="table-wrap" style="max-height:420px;">
-          <table style="width:100%; border-collapse:collapse;">
-            <thead id="flowsTableHead" style="position:sticky; top:0; background:var(--surface-2);">
-            </thead>
-            <tbody id="flowsTableBody">
-              <tr><td colspan="10" style="padding:20px; text-align:center; color:var(--text-muted);" data-i18n="msgNoFlows">Nessun flusso nel periodo selezionato.</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <!-- Eventi syslog nel modo "Tutte le origini" (tabella separata: schema diverso dai flussi) -->
-        <div id="flowsSyslogAllSection" style="display:none; margin-top:16px;">
-          <h4 style="font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin:0 0 8px;">
-            <i class="fa-solid fa-file-lines"></i> Syslog <span id="flowsSyslogAllCount" style="color:var(--text);"></span>
-          </h4>
-          <div class="table-wrap" style="max-height:300px;">
-            <table style="width:100%; border-collapse:collapse;">
-              <thead id="flowsSyslogAllHead" style="position:sticky; top:0; background:var(--surface-2);"></thead>
-              <tbody id="flowsSyslogAllBody"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      </div>
       <div id="trafPane-policies" class="traf-pane" style="display:none;">
       <div style="border:1px solid var(--info); background:color-mix(in srgb, var(--info) 8%, transparent);
                   padding:10px 14px; margin-bottom:12px; font-size:12px;">
@@ -2169,14 +2124,6 @@
         </div>
       </div>
       </div>
-    </div>
-
-    <div id="flowDetailPanel" style="display:none; position:fixed; top:0; right:0; height:100vh; width:380px; max-width:92vw; background:var(--surface-2); border-left:1px solid var(--border); box-shadow:var(--shadow-float); z-index:10010; overflow-y:auto; padding:18px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <h4 style="margin:0;" data-i18n="titleFlowDetail">Flow detail</h4>
-        <button id="btnCloseFlowDetail" class="btn" data-i18n-title="titleClose" title="Close"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div id="flowDetailPanelBody"></div>
     </div>
 
     <div id="tab-config" class="tab-content" role="tabpanel" tabindex="0">
@@ -3541,7 +3488,7 @@
 
       <!-- Ambito: observability (telemetria) -->
       <section class="panel requires-admin set-section" id="setSecObs">
-        <div class="panel-head"><h3><span data-i18n="titleObsSettings">Observability (IPFIX/sFlow/syslog/NetFlow)</span></h3></div>
+        <div class="panel-head"><h3><span data-i18n="titleObsSettings">Observability (syslog)</span></h3></div>
         <p class="set-desc" data-i18n="descObsSettings">
           Configura i listener di telemetria di rete. Le modifiche richiedono il riavvio dell'applicazione per avere effetto.
         </p>
@@ -5266,17 +5213,6 @@
   </div>
 
   <!-- Selettore sede per il Triage -->
-  <!-- Dettaglio evento syslog: campi FortiOS key=value in tabella + messaggio raw -->
-  <div class="modal-overlay" id="syslogDetailModal">
-    <div class="modal" style="width: 760px; max-width: 96%;">
-      <div class="modal-header">
-        <h3 style="margin:0; font-size:17px;"><i class="fa-solid fa-file-lines" style="color:var(--primary);"></i> <span data-i18n="titleSyslogDetail">Dettaglio evento syslog</span></h3>
-        <span class="modal-close" id="btnCloseSyslogDetail"><i class="fa-solid fa-xmark"></i></span>
-      </div>
-      <div id="syslogDetailBody" style="max-height:60vh; overflow:auto; font-size:13px;"></div>
-    </div>
-  </div>
-
   <!-- Users tab: guided account creation (ui-wizard.js). Account, role with
        what it can see and do, tenant/tab access, summary. Same field ids the
        old single form had. -->

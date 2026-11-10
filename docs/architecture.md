@@ -9,15 +9,15 @@ document covers how they were implemented.
 
 ## 1. What it is, in one line
 
-SentinelNet collects passive observations from the network (flows, syslog, REST
+SentinelNet collects passive observations from the network (syslog, REST
 snapshots, SNMP), normalizes them into **a single event model**, applies
 **deterministic rules** that produce **evidence with a causal role**, and
 derives **explainable incidents** from that evidence.
 
 The value isn't in the collecting: it's in not stopping at raw data. A tab
-showing "core utilization 96%" is not the product. The product is "the core is
-at 96% because Backup01 started transferring 2.4 Gbps to NAS01 at 09:31; the
-traffic is entirely east-west and never crosses the firewall".
+showing "core CPU 96%" is not the product. The product is "the core is at 96%
+because port Gi1/0/24 has been flapping since 09:31, right after a
+configuration change on that switch".
 
 Alongside this, the platform also does classic device-fleet management: config
 backup, firmware triage against NIST NVD, topology map, SSH terminal, day-0
@@ -30,25 +30,21 @@ and share inventory, RBAC and audit with it.
 
 ```
         SOURCES                           (collectors.md)
-  IPFIX 4739 / NetFlow 2055 / sFlow 6343 / syslog 5514   ← UDP, passive
+  syslog 514 (Windows) / 5514 (Linux)                    ← UDP, passive
   FortiGate REST (api_poller)  ·  SNMP v2c (snmp_poller) ← active polling
   probe agents (outbound HTTPS)
                     │
                     ▼
         RAW TABLES                        observability/storage/schema.sql
-  flow_aggregates · syslog_events · api_observations · quarantined_exporters
+  syslog_events · api_observations · quarantined_exporters
                     │
                     │  normalize.py — one adapter per source
                     ▼
         ┌───────────────────────┐
         │  events               │   ← UNIFIED MODEL. One vocabulary.
-        └───────────────────────┘      flow.aggregate, log.security, device.state,
+        └───────────────────────┘      log.security, log.event, device.state,
                     │                  interface.state, interface.change,
-                    │                  platform.exporter_unknown, flow.baseline, …
-                    │
-   baseline.py ─────┤  measures deviation from habit and writes the result
-                    │  BACK AS AN EVENT (flow.baseline / flow.emergence /
-                    │  flow.top_talker): it doesn't conclude, it supplies facts
+                    │                  platform.exporter_unknown, …
                     │
                     │  correlator.py + rules.py   (+ suppression.py)
                     ▼
@@ -70,7 +66,7 @@ and share inventory, RBAC and audit with it.
 
 The direction is one-way. No stage writes backwards, and each stage reads only
 the one immediately before it: the correlator **no longer knows** what a syslog
-line or a flow record is — it reads `events` and nothing else. That's why a new
+line or an SNMP snapshot is — it reads `events` and nothing else. That's why a new
 source costs one adapter in
 [normalize.py](../observability/normalize.py) and nothing downstream.
 
@@ -78,9 +74,9 @@ source costs one adapter in
 
 Without it, every rule would have to know every source format, and every new
 source would touch every rule. With it, the vocabulary is declared once and
-rules, baseline, timeline and knowledge base all read a single shape.
+rules, timeline and knowledge base all read a single shape.
 
-The case that makes the model clear: a UDP exporter that isn't in inventory
+The case that makes the model clear: a syslog sender that isn't in inventory
 produces `platform.exporter_unknown` — an event like any other, on the reserved
 `__platform__` tenant. Platform diagnostics get no parallel path; they inherit
 rules, evidence, incidents and timeline from the normal one. See
@@ -100,8 +96,8 @@ This is what makes a conclusion explainable rather than asserted. See
 
 ### 2.3 Retraction
 
-A new fact can invalidate an earlier conclusion: the interface came back up, the
-deviation returned to normal. Retraction is **produced by a rule**, never by an
+A new fact can invalidate an earlier conclusion: the interface came back up.
+Retraction is **produced by a rule**, never by an
 adapter, and the fact that justifies it (the `witness`) is recorded as evidence
 in its own right — so `retracted_by_evidence_id` points at something readable,
 and the retraction is itself retractable.
@@ -140,18 +136,20 @@ Current catalog ([rules.py](../observability/rules.py)):
 
 | Rule | What it concludes |
 |---|---|
-| `TRAFFIC_SPIKE_001` | Anomalous volume on a conversation |
-| `BASELINE_SPIKE_001` | Deviation from habit, as measured by the baseline |
-| `BASELINE_NORMAL_RETRACT_001` | Deviation is back to normal → retracts the previous one |
-| `NEW_TALKER_001` | Host never seen before in that window |
-| `TOP_TALKER_001` | Who dominates the traffic, and by how much |
-| `BLOCKED_TRAFFIC_001` | The device blocked traffic |
+| `BLOCKED_TRAFFIC_001` | The firewall blocked the same source repeatedly (syslog) |
+| `BLAST_RADIUS_001` | Several clients blocked towards the same destination |
 | `HIGH_SEVERITY_LOG_001` | Syslog severity ≤ 3 |
 | `IFACE_DOWN_001` / `IFACE_RECOVERED_001` | Interface down / back up (the latter retracts the former) |
 | `IFACE_FLAPPING_001` | The port is oscillating: one fact, not N alarms |
 | `DEVICE_LOAD_001` | Device CPU/memory load |
 | `CFG_CHANGE_001` | Configuration changed between two snapshots |
-| `FLOW_EXPORTER_UNKNOWN_001` | Exporter outside inventory: data loss made visible |
+| `FLOW_EXPORTER_UNKNOWN_001` | Syslog sender outside inventory: data loss made visible (id kept from the flow era) |
+| `DEVICE_UNREACHABLE_001` | A polled device stopped answering |
+| `IFACE_ERRORS_001` | Interface error counters rising |
+
+The flow rules (`TRAFFIC_SPIKE_001`, `BASELINE_SPIKE_001`,
+`BASELINE_NORMAL_RETRACT_001`, `NEW_TALKER_001`, `TOP_TALKER_001`) were removed
+in 0.65.0 with the flow collectors.
 
 New logic is an entry in `RULES`. A new source is an adapter in `normalize.py`.
 There is no third extension mechanism, deliberately: it would give three places
@@ -159,26 +157,10 @@ to look.
 
 ---
 
-## 4. Baseline
+## 4. Baseline (removed)
 
-[baseline.py](../observability/baseline.py) answers *"is this normal?"* and does
-so by **writing a fact**, not an alarm. Three distinct shapes, not three shades
-of one:
-
-- `flow.baseline` — how far the present deviates from habit;
-- `flow.emergence` — something that wasn't there before (it has no habit);
-- `flow.top_talker` — who composed the traffic, and for what share.
-
-The last one answers *"why is the link saturated?"*: a host can dominate traffic
-while staying perfectly within its own habit — no deviation, no emergence, and
-yet it is the answer.
-
-Never "versus yesterday" alone: first same weekday and same hour, up to 4 weeks
-back (Monday doesn't resemble Sunday); then fall back to the same hour on
-previous days; then **emit nothing**. A baseline built on two points is worse
-than no baseline. A historical hour counts as a sample only if the collector was
-actually collecting during it — otherwise an ingestion outage would read as
-"zero traffic" and inflate every later deviation.
+The traffic baseline (`observability/baseline.py`, "is this volume normal?")
+read only flow records and was removed with the flow collectors in 0.65.0.
 
 ---
 
@@ -191,7 +173,7 @@ readable:
 |---|---|---|
 | [endpoints.py](../observability/endpoints.py) | *what IS this address?* | multicast, CGNAT, locally-administered MAC… **Derived, never copied**: computed at read time, so the day the table learns a new role, history improves too. IPv4 only, because upstream extraction only recognizes IPv4. |
 | [flowpath.py](../observability/flowpath.py) | *which way did it go?* | The **logical** path (host → access port → gateway), not packet-by-packet. An unknown hop is marked `known: False`, never silently skipped. |
-| [timeline.py](../observability/timeline.py) | *in what order did it happen?* | Merges evidence, raw syslog, per-minute volumes, REST snapshots and physical location. Careful: `observability.db` uses unix integers, `mac_history.db` uses ISO-8601 text — conversion happens there, at the boundary. |
+| [timeline.py](../observability/timeline.py) | *in what order did it happen?* | Merges evidence, raw syslog, REST snapshots and physical location. Careful: `observability.db` uses unix integers, `mac_history.db` uses ISO-8601 text — conversion happens there, at the boundary. |
 
 ### 5.1 Client diagnosis
 
@@ -423,9 +405,9 @@ Stated, not forgotten:
 - **It does not scale horizontally** on observability: single-process writer.
 - **It does not reconstruct the packet-by-packet path**: the flow path is
   logical (§5).
-- **It does not conclude without corroborating flow**, except for high
-  severities: a precision-over-recall policy, worth knowing when investigating
-  "why didn't this show up". See
+- **It does not conclude on a single block log**, except for high
+  severities: `BLOCKED_TRAFFIC_001` waits for repeated blocks, worth knowing
+  when investigating "why didn't this show up". See
   [live-flows-and-siem.md](live-flows-and-siem.md) §4.5.
 - **It does not escalate.** Email notifications (`services/notifications.py`)
   send once per event to whoever subscribed, with a 30-minute flood window;

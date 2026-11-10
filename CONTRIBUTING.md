@@ -38,7 +38,7 @@ Bundled paths resolve via `sys._MEIPASS`.
 - **Never use `sqlite3` directly on async paths** (FastAPI endpoints, UDP
   handlers).
 - Reads: `await db.read(sql, params)` (off-loaded to a thread).
-- Writes: `db.enqueue_write(...)` / `db.enqueue_flow(...)` (bounded queue,
+- Writes: `db.enqueue_write(...)` (bounded queue,
   dedicated writer, batch commit).
 - `db.get_observability_connection()` is a blocking connection: never in the
   body of an `async def`. Migrations, tests, worker threads and a helper

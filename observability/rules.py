@@ -167,17 +167,17 @@ def params_for(rule_id: str) -> dict:
 
 RULES_EN = {
     "BLOCKED_TRAFFIC_001": {
-        "title": "Blocked traffic with flow evidence",
-        "description": "A blocking security event corroborated by real network flow between the same endpoints.",
+        "title": "Repeatedly blocked traffic",
+        "description": "The firewall logs several blocks from the same source within the window.",
         "investigation": "Verify if the block is expected by policy or if a legitimate service was blocked by mistake. Check the client switch port and whether attempts repeat toward different destinations.",
         "remediation": "If traffic is legitimate, update the firewall rule. If not, isolate the host and check for malware.",
         "parameters": {
-            "match_delta_s": "Maximum time delta between security event and flow bucket.",
+            "min_observations": "Distinct block logs from the same source within the window before concluding. A single block is noise: a firewall denies all the time.",
         },
     },
     "HIGH_SEVERITY_LOG_001": {
         "title": "High severity event log",
-        "description": "A log event severe enough to emerge even without flow corroboration.",
+        "description": "A log event severe enough to emerge on its own.",
         "investigation": "Read the full device message and correlate with any configuration changes or reboots in the same time window.",
         "remediation": "Intervene according to the reported device error; if recurring, investigate hardware health or firmware version.",
         "parameters": {
@@ -207,54 +207,14 @@ RULES_EN = {
             "window_s": "Lookback window to find the symptom to retract.",
         },
     },
-    "BASELINE_SPIKE_001": {
-        "title": "Historical baseline deviation",
-        "description": "A host's traffic volume significantly deviates from its historical baseline (same day and hour of preceding weeks).",
-        "investigation": "Identify the process driving volume (backup, replication, sync). Check whether the spike is East-West or crosses the firewall, and if it aligns with a scheduled window.",
-        "remediation": "If legitimate unscheduled activity, reschedule it. If unrecognized, isolate the host and inspect active sessions.",
-        "parameters": {
-            "min_deviation_pct": "Minimum deviation above expected volume to trigger a spike.",
-            "min_quality": "Minimum baseline quality confidence score required.",
-        },
-    },
-    "NEW_TALKER_001": {
-        "title": "New host never observed before",
-        "description": "An IP that has never transmitted in the retention window starts generating traffic.",
-        "investigation": "Trace MAC, VLAN, and switch port from client mapping. Check if the IP is in inventory, a legitimate DHCP lease, or an uninventoried device.",
-        "remediation": "If uninventoried, register in inventory or remove from network. Verify that the access switch port has the expected security profile.",
-        "parameters": {
-            "min_bytes": "Minimum byte volume threshold for new host emergence.",
-        },
-    },
     "FLOW_EXPORTER_UNKNOWN_001": {
-        "title": "Uninventoried flow exporter",
-        "description": "A flow exporter is sending packets from an IP not present in inventory and records are discarded. Platform health monitoring.",
+        "title": "Uninventoried syslog sender",
+        "description": "A device is sending syslog from an IP not present in inventory and its messages are discarded. Platform health monitoring.",
         "investigation": "Verify if the IP belongs to a legitimate uninventoried device, a device with a changed address, or an unintended exporter. Check `first_seen` for recent activity.\nFIRST OF ALL: Is the reported IP the SERVER itself, or a router/gateway? Then it is NAT rewriting the source IP along the path. Compare with server local IPs and listener bind addresses.",
         "remediation": "If the IP is rewritten by NAT, bind listeners to the interface reached directly and point export to THAT address. Only this way does the source IP remain that of the device.\nDO NOT add the NAT IP to inventory: it would attribute all exporter traffic to a non-existent device.\nIf the exporter is legitimate, add it to inventory. If not, block its traffic to the listeners.",
         "parameters": {
             "min_persistence_s": "Quarantine duration before alerting: newly added devices are normal for a few minutes.",
             "min_packets": "Minimum dropped packets threshold to trigger an alert.",
-        },
-    },
-    "TOP_TALKER_001": {
-        "title": "Dominant traffic contributor",
-        "description": "A host accounts for a dominant share of hourly traffic. Explains high link utilization rather than being an issue by itself.",
-        "investigation": "Identify the process driving volume (backup, replication, sync) and whether scheduled. Cross-reference with the host baseline: dominating traffic while staying in pattern is normal, doing so while deviating is not.",
-        "remediation": "No direct intervention needed: provides context for the primary incident trigger. Reschedule if out of window.",
-        "parameters": {
-            "min_share_pct": "Hourly traffic share threshold to qualify as top talker.",
-            "min_bytes": "Minimum byte volume required.",
-        },
-    },
-    "BASELINE_NORMAL_RETRACT_001": {
-        "title": "Volume within historical norm (retracts window spike)",
-        "description": "Historical baseline indicates traffic is within normal bounds: retracts window spike.",
-        "investigation": "None: rule removes noise. If retraction appears incorrect, verify baseline sample count and quality.",
-        "remediation": "If the spike was authentic, increase min_quality or narrow normal_band_pct.",
-        "parameters": {
-            "normal_band_pct": "Deviation percentage within which volume is considered normal.",
-            "min_quality": "Minimum baseline quality confidence score to retract.",
-            "window_s": "Lookback window to find the spike to retract.",
         },
     },
     "IFACE_FLAPPING_001": {
@@ -302,17 +262,6 @@ RULES_EN = {
             "max_cpu_pct": "CPU threshold percentage. Evaluates highest single core load rather than average.",
             "max_memory_pct": "Memory utilization threshold percentage.",
             "max_disk_pct": "Root filesystem disk utilization threshold percentage (Linux hosts).",
-        },
-    },
-    "TRAFFIC_SPIKE_001": {
-        "title": "Window traffic volume spike",
-        "description": "Flow volume significantly higher than current window median.",
-        "investigation": "Cross-reference with historical baseline before taking action: window comparison only reflects short-term metrics.",
-        "remediation": "No direct action required: serves as supporting context for the primary incident trigger.",
-        "parameters": {
-            "min_flows": "Minimum flow count required for median calculation.",
-            "spike_ratio": "Multiplier over median to qualify as a spike.",
-            "include_control_plane": "1 to include control plane multicast/broadcast traffic (0 = excluded).",
         },
     },
 }
@@ -368,13 +317,13 @@ def declares_output(rule_id: str, name: str) -> bool:
 # di eventi normalizzati e i propri parametri, e ritorna una lista di Finding.
 
 def _blocked_traffic(events: list, p: dict) -> list:
-    """Traffico bloccato con evidenza di flusso corroborante.
+    """Blocked traffic from the firewall's own log.
 
-    Precision over recall: l'evento di sicurezza da solo non basta, serve un
-    flusso che confermi che il traffico è davvero avvenuto. Il log è il
-    trigger, il flusso è il supporting.
+    Flow corroboration is gone with the flow collectors. Precision now comes
+    from repetition instead: the rule declares its own ``min_observations``
+    (default 3), so a single deny line does not open an incident — the same
+    source has to be blocked several times in the window.
     """
-    flows = [e for e in events if e["event_type"] == "flow.aggregate"]
     out = []
     for ev in events:
         if ev["event_type"] != "log.security":
@@ -385,40 +334,18 @@ def _blocked_traffic(events: list, p: dict) -> list:
         action = str(attrs.get("action") or "").lower()
         if action and action not in ("deny", "drop", "block", "close", "reject", "reset"):
             continue
-        ev_proto = attrs.get("proto") or attrs.get("protocol")
-        ev_dport = attrs.get("dst_port") or attrs.get("dport")
-        match = next(
-            (f for f in flows
-             if f["tenant"] == ev["tenant"]
-             and f["src_ip"] == ev["src_ip"] and f["dst_ip"] == ev["dst_ip"]
-             and abs(f["ts"] - ev["ts"]) <= p["match_delta_s"] + 60
-             and (ev_proto is None or json.loads(f["attrs_json"] or "{}").get("protocol") is None
-                  or str(ev_proto) == str(json.loads(f["attrs_json"] or "{}").get("protocol")))
-             and (ev_dport is None or json.loads(f["attrs_json"] or "{}").get("dst_port") is None
-                  or str(ev_dport) == str(json.loads(f["attrs_json"] or "{}").get("dst_port")))),
-            None)
-        if match is None:
-            continue
-        entity = f"ip:{ev['src_ip']}"
         out.append(Finding(
             event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"], role="trigger",
-            entity_key=entity, severity=ev["severity"],
+            entity_key=f"ip:{ev['src_ip']}", severity=ev["severity"],
             src_ip=ev["src_ip"], dst_ip=ev["dst_ip"],
             summary=f"Traffico bloccato {endpoints.describe(ev['src_ip'])} → "
                     f"{endpoints.describe(ev['dst_ip'])}",
             attrs={"action": attrs.get("action")}))
-        out.append(Finding(
-            event_id=match["id"], ts=match["ts"], tenant=match["tenant"],
-            role="supporting", entity_key=entity,
-            src_ip=match["src_ip"], dst_ip=match["dst_ip"],
-            summary=f"Flusso corrispondente {endpoints.describe(match['src_ip'])} → "
-                    f"{endpoints.describe(match['dst_ip'])}",
-            attrs={"metrics": json.loads(match["metrics_json"] or "{}")}))
     return out
 
 
 def _high_severity_log(events: list, p: dict) -> list:
-    """Log ad alta severità: emerge da solo, anche senza flusso e anche senza
+    """Log ad alta severità: emerge da solo, anche senza
     endpoint estraibili dal messaggio."""
     out = []
     for ev in events:
@@ -566,14 +493,13 @@ def _blast_radius(events: list, p: dict) -> list:
 
     La chiave e' la DESTINAZIONE (``dst:<ip>:<porta>``), scelta dell'utente: e'
     la domanda come la fa chi chiama l'helpdesk, e funziona con qualunque
-    sorgente di flussi. La chiave per policy esisterebbe solo dove i log
-    portano un policyid, cioe' in pratica su FortiGate.
+    firewall che logghi i blocchi. La chiave per policy esisterebbe solo dove
+    i log portano un policyid, cioe' in pratica su FortiGate.
 
-    Si contano SOLO i blocchi che ``BLOCKED_TRAFFIC_001`` avrebbe gia'
-    accettato -- log di blocco CORROBORATO da un flusso -- chiamandone la
-    logica invece di duplicarla. Contare i log nudi darebbe al raggio d'azione
-    una precisione diversa da quella di ogni singola conclusione, e due regole
-    in disaccordo su cosa sia "bloccato" sarebbero due verita'.
+    Blocks are classified by ``BLOCKED_TRAFFIC_001``'s own logic, called
+    rather than duplicated, so the two rules agree on what "blocked" means.
+    Its repetition threshold does not apply here: ``min_sources`` distinct
+    clients is already the corroboration.
     """
     by_id = {e["id"]: e for e in events}
     blocked = _blocked_traffic(events, params_for("BLOCKED_TRAFFIC_001"))
@@ -769,106 +695,6 @@ def _device_load(events: list, p: dict) -> list:
     return out
 
 
-def _traffic_volume_spike(events: list, p: dict) -> list:
-    """Volume di un flusso molto sopra la mediana della finestra.
-
-    Non è un baseline: confronta solo dentro la finestra corrente. Quando il
-    Baseline Engine esisterà, sostituirà il confronto — non la regola, che
-    resta il punto in cui il volume diventa evidenza.
-    """
-    flows = [e for e in events if e["event_type"] == "flow.aggregate"]
-    if not p["include_control_plane"]:
-        # Su una rete reale la maggioranza schiacciante dei bucket è chiacchiera
-        # di scoperta verso multicast e broadcast (mDNS, SSDP, OSPF, ARP).
-        # Lasciandola dentro, la mediana descrive il rumore e non le
-        # conversazioni: sia il riferimento sia i "picchi" finiscono per
-        # misurare quanto un host annuncia se stesso.
-        flows = [f for f in flows
-                 if endpoints.traffic_direction(f["src_ip"],
-                                                f["dst_ip"]) != "control_plane"]
-    if len(flows) < p["min_flows"]:
-        return []
-    volumes = sorted((json.loads(f["metrics_json"] or "{}").get("bytes") or 0)
-                     for f in flows)
-    mid = volumes[len(volumes) // 2]
-    if mid <= 0:
-        return []
-    out = []
-    for f in flows:
-        nbytes = json.loads(f["metrics_json"] or "{}").get("bytes") or 0
-        if nbytes < mid * p["spike_ratio"]:
-            continue
-        out.append(Finding(
-            event_id=f["id"], ts=f["ts"], tenant=f["tenant"], role="supporting",
-            entity_key=f"ip:{f['src_ip']}",
-            src_ip=f["src_ip"], dst_ip=f["dst_ip"],
-            summary=f"Volume anomalo {endpoints.describe(f['src_ip'])} → "
-                    f"{endpoints.describe(f['dst_ip'])}: "
-                    f"{nbytes} byte contro una mediana di {mid}",
-            attrs={"bytes": nbytes, "median_bytes": mid,
-                   "direction": endpoints.traffic_direction(f["src_ip"],
-                                                            f["dst_ip"])}))
-    return out
-
-
-def _baseline_spike(events: list, p: dict) -> list:
-    """Il traffico si discosta dall'abitudine, non solo dai vicini di finestra.
-
-    Consuma la misura prodotta dal Baseline Adapter: la decisione su cosa sia
-    "troppo" vive qui, dove è tarabile e registrata nella provenienza.
-    """
-    out = []
-    for ev in events:
-        if ev["event_type"] != "flow.baseline":
-            continue
-        m = json.loads(ev["metrics_json"] or "{}")
-        if (m.get("quality") or 0) < p["min_quality"]:
-            continue
-        deviation = m.get("deviation_pct")
-        if deviation is None or deviation < p["min_deviation_pct"]:
-            continue
-        attrs = json.loads(ev["attrs_json"] or "{}")
-        out.append(Finding(
-            event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"], role="trigger",
-            entity_key=f"ip:{ev['src_ip']}", severity=4, src_ip=ev["src_ip"],
-            summary=f"{endpoints.describe(ev['src_ip'])}: traffico {deviation:+.0f}% rispetto "
-                    f"all'abitudine ({m.get('observed')} byte contro "
-                    f"{m.get('expected')} attesi, baseline "
-                    f"{attrs.get('quality_label', '?')})",
-            attrs={**attrs, **m}))
-    return out
-
-
-def _new_talker(events: list, p: dict) -> list:
-    """Un talker mai visto prima. Non è una deviazione: è un'emergenza.
-
-    Distinzione voluta — chiedere "di quanto si discosta dalla sua abitudine"
-    a qualcosa che un'abitudine non ce l'ha produce solo numeri senza senso.
-    """
-    out = []
-    for ev in events:
-        if ev["event_type"] != "flow.emergence":
-            continue
-        src = ev.get("src_ip")
-        if not src or endpoints.traffic_direction(src, src) == "control_plane":
-            continue
-        attrs = json.loads(ev["attrs_json"] or "{}")
-        dst = attrs.get("dst_ip") or ""
-        if dst and endpoints.traffic_direction(src, dst) == "control_plane":
-            continue
-        m = json.loads(ev["metrics_json"] or "{}")
-        observed = m.get("observed") or 0
-        if observed < p["min_bytes"]:
-            continue
-        out.append(Finding(
-            event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"], role="trigger",
-            entity_key=f"ip:{ev['src_ip']}", severity=5, src_ip=ev["src_ip"],
-            summary=f"{endpoints.describe(ev['src_ip'])}: host mai osservato prima, "
-                    f"{observed} byte trasmessi",
-            attrs={**attrs, **m}))
-    return out
-
-
 def _unknown_exporter(events: list, p: dict) -> list:
     """Un exporter continua a inviare da un IP fuori inventario.
 
@@ -898,75 +724,6 @@ def _unknown_exporter(events: list, p: dict) -> list:
                     f"inventario da {persisted // 60} minuti: {packets} "
                     f"pacchetti scartati",
             attrs={**json.loads(ev["attrs_json"] or "{}"), **m}))
-    return out
-
-
-def _top_talker(events: list, p: dict) -> list:
-    """Chi ha composto il traffico dell'ora, quando la quota è dominante.
-
-    È l'evidenza che risponde a *"perché?"*. Ruolo ``supporting``, non
-    ``trigger``: da sola una quota alta non è un problema — un backup notturno
-    fa il 90% del traffico ed è quello che deve fare. Diventa una risposta
-    quando si aggrega a un innesco sulla stessa entità.
-    """
-    out = []
-    for ev in events:
-        if ev["event_type"] != "flow.top_talker":
-            continue
-        m = json.loads(ev["metrics_json"] or "{}")
-        share = m.get("share_pct")
-        if share is None or share < p["min_share_pct"]:
-            continue
-        if (m.get("observed") or 0) < p["min_bytes"]:
-            # Su una rete quasi ferma il primo host fa il 90% di pochissimo.
-            # La quota senza volume descrive il silenzio, non un contributo.
-            continue
-        out.append(Finding(
-            event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"],
-            role="supporting", entity_key=f"ip:{ev['src_ip']}",
-            src_ip=ev["src_ip"],
-            summary=f"{endpoints.describe(ev['src_ip'])} rappresenta il "
-                    f"{share:.0f}% del traffico osservato dell'ora "
-                    f"({m.get('observed')} byte su {m.get('total')})",
-            attrs={**json.loads(ev["attrs_json"] or "{}"), **m}))
-    return out
-
-
-def _baseline_normal_retracts_spike(events: list, p: dict) -> list:
-    """La misura storica dice che l'ora rientra nella norma: il picco rilevato
-    guardando solo dentro la finestra non regge più.
-
-    È il caso che il documento chiede di evitare — allarmi da picchi temporanei
-    — risolto senza cancellare nulla: l'evidenza resta, ritrattata, e
-    l'incidente può raccontare di aver cambiato idea.
-    """
-    out = []
-    for ev in events:
-        if ev["event_type"] != "flow.baseline":
-            continue
-        m = json.loads(ev["metrics_json"] or "{}")
-        # Soglia di qualità PIÙ ALTA che nella regola di scoperta: per
-        # concludere si può accettare un rischio, per DIS-concludere ne serve
-        # meno. Ritrattare un allarme sulla base di una baseline debole fa un
-        # danno silenzioso, ed è il verso opposto del falso positivo.
-        if (m.get("quality") or 0) < p["min_quality"]:
-            continue
-        deviation = m.get("deviation_pct")
-        if deviation is None or abs(deviation) > p["normal_band_pct"]:
-            continue
-        witness = Finding(
-            event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"],
-            role="supporting", entity_key=f"ip:{ev['src_ip']}",
-            src_ip=ev["src_ip"],
-            summary=f"{endpoints.describe(ev['src_ip'])}: volume nella norma storica "
-                    f"({deviation:+.0f}% sull'atteso)",
-            attrs={**m})
-        out.append(Retraction(
-            target_rule_id="TRAFFIC_SPIKE_001",
-            entity_key=f"ip:{ev['src_ip']}", tenant=ev["tenant"],
-            reason=f"Il confronto con lo storico colloca il volume nella norma "
-                   f"({deviation:+.0f}% sull'atteso)",
-            witness=witness, window_s=p["window_s"]))
     return out
 
 
@@ -1008,15 +765,19 @@ def _interface_recovered(events: list, p: dict) -> list:
 # che è ciò che leggono la UI e l'assistente AI.
 RULES = {
     "BLOCKED_TRAFFIC_001": {
-        "version": "1.0.0",
-        "title": "Traffico bloccato con evidenza di flusso",
-        "description": "Un evento di sicurezza bloccante corroborato da un "
-                       "flusso reale fra gli stessi endpoint.",
-        "inputs": ["log.security", "flow.aggregate"],
-        "outputs": ["trigger", "supporting"],
+        # 2.0.0: syslog only. The flow corroboration (1.x) went with the flow
+        # collectors; repetition (min_observations) replaces it.
+        "version": "2.0.0",
+        "title": "Traffico bloccato ripetutamente",
+        "description": "Il firewall registra più blocchi della stessa "
+                       "sorgente nella finestra.",
+        "inputs": ["log.security"],
+        "outputs": ["trigger"],
         "parameters": [
-            {"name": "match_delta_s", "default": 120, "min": 0, "max": 3600,
-             "description": "Distanza massima fra evento e bucket di flusso."},
+            {"name": "min_observations", "default": 3, "min": 1, "max": 20,
+             "description": "Log di blocco distinti della stessa sorgente "
+                            "nella finestra prima di concludere. Un blocco "
+                            "isolato è rumore: un firewall nega di continuo."},
         ],
         "base_confidence": 65,
         "investigation": 'Verificare se il blocco è atteso dalla policy o se un servizio legittimo è stato bloccato per errore. Controllare la porta dello switch del client e se il tentativo si ripete verso destinazioni diverse.',
@@ -1026,8 +787,7 @@ RULES = {
     "HIGH_SEVERITY_LOG_001": {
         "version": "1.0.0",
         "title": "Log ad alta severità",
-        "description": "Un log abbastanza grave da emergere anche senza "
-                       "corroborazione di flusso.",
+        "description": "Un log abbastanza grave da emergere da solo.",
         "inputs": ["log.security", "log.event"],
         "outputs": ["trigger"],
         "parameters": [
@@ -1088,56 +848,11 @@ RULES = {
         "remediation": "In caso di flapping ripetuto, indagare cablaggio e transceiver invece di considerare l'incidente chiuso.",
         "check": _interface_recovered,
     },
-    "BASELINE_SPIKE_001": {
-        "version": "1.0.0",
-        "title": "Scostamento dalla baseline storica",
-        "description": "Il volume di un talker si discosta dal suo "
-                       "comportamento abituale (stesso giorno e stessa ora "
-                       "delle settimane precedenti).",
-        "inputs": ["flow.baseline"],
-        "outputs": ["trigger"],
-        "parameters": [
-            {"name": "min_deviation_pct", "default": 200, "min": 20, "max": 10000,
-             "description": "Scostamento minimo sull'atteso per parlare di picco."},
-            {"name": "min_quality", "default": 0.3, "min": 0.0, "max": 1.0,
-             "description": "Qualità minima della baseline per fidarsene."},
-        ],
-        "base_confidence": 55,
-        "investigation": "Identificare il processo dietro il volume (backup, "
-                         "replica, sincronizzazione). Verificare se il picco è "
-                         "East-West o attraversa il firewall, e se coincide con "
-                         "una finestra pianificata.",
-        "remediation": "Se è un'attività legittima fuori finestra, riprogrammarla. "
-                       "Se non è riconducibile a nulla di noto, isolare l'host e "
-                       "ispezionare le sessioni attive.",
-        "check": _baseline_spike,
-    },
-    "NEW_TALKER_001": {
-        "version": "1.0.0",
-        "title": "Host mai osservato prima",
-        "description": "Un IP che non ha mai trasmesso nella finestra "
-                       "conservata inizia a generare traffico. È un'emergenza, "
-                       "non uno scostamento da un'abitudine.",
-        "inputs": ["flow.emergence"],
-        "outputs": ["trigger"],
-        "parameters": [
-            {"name": "min_bytes", "default": 10000, "min": 0, "max": 10 ** 12,
-             "description": "Volume minimo perché l'apparizione conti."},
-        ],
-        "base_confidence": 40,
-        "investigation": "Risalire a MAC, VLAN e porta dello switch dalla mappa "
-                         "client. Verificare se l'IP è nell'inventario, se è un "
-                         "rilascio DHCP legittimo o un dispositivo non censito.",
-        "remediation": "Se non è censito, registrarlo in inventario o rimuoverlo "
-                       "dalla rete. Verificare che la porta di accesso abbia il "
-                       "profilo di sicurezza previsto.",
-        "check": _new_talker,
-    },
     "FLOW_EXPORTER_UNKNOWN_001": {
         "version": "1.0.0",
-        "title": "Exporter di flussi fuori inventario",
-        "description": "Un exporter invia flussi da un IP non presente in "
-                       "inventario e i suoi record vengono scartati. È un "
+        "title": "Mittente syslog fuori inventario",
+        "description": "Un apparato invia syslog da un IP non presente in "
+                       "inventario e i suoi messaggi vengono scartati. È un "
                        "controllo di salute della piattaforma, non "
                        "un'anomalia della rete: qui SentinelNet osserva sé "
                        "stesso.",
@@ -1179,70 +894,16 @@ RULES = {
                        "QUELL'indirizzo. Solo così l'IP sorgente resta quello "
                        "dell'apparato.\n"
                        "NON aggiungere l'IP riscritto dal NAT all'inventario: "
-                       "attribuirebbe i flussi di tutti gli apparati dietro quel "
+                       "attribuirebbe i messaggi di tutti gli apparati dietro quel "
                        "NAT a un dispositivo che non esiste, e li renderebbe "
                        "visibili al tenant sbagliato — è esattamente il danno che "
                        "lo scarto serve a evitare (ADR-0005).\n"
                        "Se invece l'exporter è legittimo e semplicemente non "
-                       "censito, aggiungerlo all'inventario: i flussi vengono "
+                       "censito, aggiungerlo all'inventario: i messaggi vengono "
                        "accettati dal primo pacchetto successivo, senza "
                        "recuperare quelli già persi. Se non lo è, bloccarne il "
                        "traffico verso i listener.",
         "check": _unknown_exporter,
-    },
-    "TOP_TALKER_001": {
-        "version": "1.0.0",
-        "title": "Principale contributore del traffico",
-        "description": "Un host rappresenta una quota dominante del traffico "
-                       "osservato nell'ora. È l'evidenza che risponde a "
-                       "'perché il link è carico', non un problema di per sé.",
-        "inputs": ["flow.top_talker"],
-        "outputs": ["supporting"],
-        "parameters": [
-            {"name": "min_share_pct", "default": 50, "min": 5, "max": 100,
-             "description": "Quota del traffico dell'ora oltre la quale il "
-                            "contributo vale come spiegazione."},
-            {"name": "min_bytes", "default": 10 ** 7, "min": 0, "max": 10 ** 15,
-             "description": "Volume minimo perché la quota significhi "
-                            "qualcosa: su una rete ferma il primo host fa il "
-                            "90% di pochissimo."},
-        ],
-        "base_confidence": 45,
-        "investigation": "Identificare il processo dietro il volume (backup, "
-                         "replica, sincronizzazione) e se la finestra è "
-                         "pianificata. Incrociare con la baseline dello stesso "
-                         "host: dominare il traffico restando nella propria "
-                         "abitudine è normale, dominarlo discostandosene no.",
-        "remediation": "Nessun intervento diretto: è contesto per l'innesco "
-                       "principale dell'incidente. Se l'attività è legittima "
-                       "ma fuori finestra, riprogrammarla.",
-        "check": _top_talker,
-    },
-    "BASELINE_NORMAL_RETRACT_001": {
-        "version": "1.0.0",
-        "title": "Volume nella norma storica (ritratta il picco di finestra)",
-        "description": "Lo storico dice che l'ora rientra nell'abitudine: "
-                       "ritratta il picco rilevato guardando solo dentro la "
-                       "finestra corrente.",
-        "inputs": ["flow.baseline"],
-        "outputs": ["supporting", "retraction"],
-        "parameters": [
-            {"name": "normal_band_pct", "default": 50, "min": 5, "max": 500,
-             "description": "Entro quale scostamento il volume è considerato normale."},
-            {"name": "min_quality", "default": 0.5, "min": 0.0, "max": 1.0,
-             "description": "Qualità minima per ritrattare: più alta che per "
-                            "concludere, perché disfare una conclusione su dati "
-                            "deboli fa un danno silenzioso."},
-            {"name": "window_s", "default": 7200, "min": 60, "max": 86400,
-             "description": "Quanto indietro cercare il picco da ritrattare."},
-        ],
-        "base_confidence": 0,
-        "investigation": "Nessuna: questa regola serve a togliere rumore, non a "
-                         "segnalarlo. Se la ritrattazione sembra sbagliata, "
-                         "controllare qualità e numero di campioni della baseline.",
-        "remediation": "Se il picco era invece reale, alzare `min_quality` o "
-                       "stringere `normal_band_pct`.",
-        "check": _baseline_normal_retracts_spike,
     },
     "IFACE_FLAPPING_001": {
         "version": "1.0.0",
@@ -1273,12 +934,13 @@ RULES = {
         "check": _interface_flapping,
     },
     "BLAST_RADIUS_001": {
-        "version": "1.0.0",
+        # 2.0.0: counts block logs without flow corroboration.
+        "version": "2.0.0",
         "title": "Piu' client bloccati verso la stessa destinazione",
         "description": "Il traffico verso uno stesso servizio viene bloccato "
                        "per piu' client distinti. Non e' un problema di un "
                        "client: e' la destinazione, o la policy davanti.",
-        "inputs": ["log.security", "flow.aggregate"],
+        "inputs": ["log.security"],
         "outputs": ["trigger"],
         "parameters": [
             {"name": "min_sources", "default": 3, "min": 2, "max": 1000,
@@ -1389,37 +1051,6 @@ RULES = {
                        "nulla, verificare bug noti della versione firmware "
                        "prima di sostituire l'apparato.",
         "check": _device_load,
-    },
-    "TRAFFIC_SPIKE_001": {
-        "version": "1.0.0",
-        "title": "Picco di volume nella finestra",
-        "description": "Un flusso molto sopra la mediana della finestra "
-                       "corrente. Non è un baseline: confronta solo dentro la "
-                       "finestra.",
-        "inputs": ["flow.aggregate"],
-        "outputs": ["supporting"],
-        "parameters": [
-            {"name": "min_flows", "default": 5, "min": 2, "max": 1000,
-             "description": "Flussi minimi perché la mediana abbia senso."},
-            {"name": "spike_ratio", "default": 10, "min": 2, "max": 1000,
-             "description": "Quante volte la mediana per considerarlo picco."},
-            # 0/1 e non booleano: ``params_for`` accetta solo numeri e scarta
-            # esplicitamente i bool, perché una soglia deve restare confrontabile
-            # con il proprio min/max.
-            {"name": "include_control_plane", "default": 0, "min": 0, "max": 1,
-             "description": "1 per includere nel confronto anche il traffico "
-                            "verso multicast e broadcast (protocolli di "
-                            "scoperta e routing). Di norma va escluso: è la "
-                            "maggioranza dei bucket e non è una conversazione "
-                            "fra due host."},
-        ],
-        "base_confidence": 50,
-        "investigation": "Confrontare con la baseline storica prima di agire: "
-                         "questo confronto guarda solo dentro la finestra "
-                         "corrente e non conosce le abitudini del talker.",
-        "remediation": "Nessun intervento diretto: usare l'evidenza come "
-                       "contesto per l'innesco principale dell'incidente.",
-        "check": _traffic_volume_spike,
     },
 }
 

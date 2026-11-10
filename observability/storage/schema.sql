@@ -5,25 +5,9 @@ CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER NOT NULL
 );
 
--- 1. FLUSSI AGGREGATI (rollup al minuto via UPSERT — vedi 1.4)
-CREATE TABLE IF NOT EXISTS flow_aggregates (
-    window_start   INTEGER NOT NULL,          -- unix ts troncato a 60s
-    tenant         TEXT NOT NULL,             -- gruppo/sede (scope multi-gruppo)
-    src_ip         TEXT NOT NULL,
-    dst_ip         TEXT NOT NULL,
-    protocol       INTEGER,
-    dst_port       INTEGER,
-    total_bytes    INTEGER NOT NULL DEFAULT 0,
-    total_packets  INTEGER NOT NULL DEFAULT 0,
-    flow_count     INTEGER NOT NULL DEFAULT 0,
-    exporter_ip    TEXT,
-    source         TEXT,                      -- listener di origine: ipfix|netflow|sflow (NULL = legacy)
-    UNIQUE(window_start, tenant, src_ip, dst_ip, protocol, dst_port)
-);
-CREATE INDEX IF NOT EXISTS idx_flow_window_tenant
-    ON flow_aggregates(window_start, tenant);
-CREATE INDEX IF NOT EXISTS idx_flow_src_dst
-    ON flow_aggregates(src_ip, dst_ip);
+-- 1. (removed) flow_aggregates held NetFlow/IPFIX/sFlow buckets. The flow
+-- listeners are gone; databases created before keep the table, untouched and
+-- no longer read or written. New databases do not create it.
 
 -- 2. EVENTI SYSLOG normalizzati
 CREATE TABLE IF NOT EXISTS syslog_events (
@@ -164,10 +148,10 @@ CREATE TABLE IF NOT EXISTS events (
     ts           INTEGER NOT NULL,       -- quando è successo
     ingested_ts  INTEGER NOT NULL,       -- quando è stato normalizzato
     tenant       TEXT NOT NULL,
-    source       TEXT NOT NULL,          -- netflow|ipfix|sflow|syslog|fortigate_api|snmp|linux|platform
+    source       TEXT NOT NULL,          -- syslog|fortigate_api|snmp|linux|platform
     source_id    INTEGER,                -- id nella tabella d'origine (provenienza)
-    event_type   TEXT NOT NULL,          -- flow.aggregate|log.security|log.event|device.state|device.change|platform.exporter_unknown
-    entity_type  TEXT NOT NULL,          -- flow|device|interface|exporter
+    event_type   TEXT NOT NULL,          -- log.security|log.event|device.state|device.change|platform.exporter_unknown
+    entity_type  TEXT NOT NULL,          -- device|interface|exporter (flow: legacy rows only)
     entity_id    TEXT NOT NULL,          -- '10.1.0.5>8.8.8.8' | '10.1.0.254' | '10.1.0.254:port1'
     severity     INTEGER,                -- scala syslog 0-7
     device_ip    TEXT,

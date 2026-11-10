@@ -28,6 +28,9 @@ INTERVAL_S = 3600  # un run all'ora
 
 _TABLES = {
     # tabella -> (colonna ts, filtro extra)
+    # Legacy: no longer written (flow collectors removed in 0.65.0) and not
+    # created in new databases, but an older database still holds up to the
+    # retention window of IP data in it. Pruned until it is empty.
     "flow_aggregates": ("window_start", ""),
     "syslog_events": ("ts", ""),
     # Il modello unificato è una proiezione: senza pruning crescerebbe per
@@ -58,6 +61,9 @@ def prune_once(retention_days: dict) -> dict:
         for table, (col, extra) in _TABLES.items():
             days = retention_days.get(table)
             if not days or days <= 0:
+                continue
+            if not conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' "
+                                "AND name = ?", (table,)).fetchone():
                 continue
             cutoff = now - days * 86400
             total = 0

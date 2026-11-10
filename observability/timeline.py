@@ -11,7 +11,6 @@ Fonti unite (nessuna nuova raccolta dati):
   l'ha prodotta — è la spina dorsale della timeline;
 - ``syslog``: le righe syslog grezze attorno alla finestra, per le entità
   coinvolte (contesto che l'evento correlato da solo non mostra);
-- ``flow``: i volumi al minuto da ``flow_aggregates`` per le stesse entità;
 - ``api``: gli snapshot REST periodici dei dispositivi (``api_observations``);
 - ``location``: posizione fisica e VLAN da mac_history/ARP.
 
@@ -32,7 +31,6 @@ logger = logging.getLogger("sentinelnet.obs")
 
 PAD_S = 300           # finestra allargata attorno all'incidente
 MAX_SYSLOG = 200
-MAX_FLOW_BUCKETS = 200
 MAX_API = 50
 
 
@@ -52,15 +50,6 @@ def _evidence(raw) -> dict:
     except (ValueError, TypeError):
         return {}
     return data if isinstance(data, dict) else {}
-
-
-def _human_bytes(n: int) -> str:
-    value = float(n)
-    for unit in ("B", "KB", "MB", "GB"):
-        if value < 1024 or unit == "GB":
-            return f"{value:.0f} {unit}" if unit == "B" else f"{value:.1f} {unit}"
-        value /= 1024.0
-    return f"{value:.1f} GB"
 
 
 def build(incident_id: int) -> list:
@@ -113,7 +102,6 @@ def build(incident_id: int) -> list:
         ip_list = sorted(ips)
         if ip_list:
             entries += _syslog_entries(conn, tenant, ip_list, frm, to)
-            entries += _flow_entries(conn, tenant, ip_list, frm, to)
             entries += _api_entries(conn, tenant, ip_list, frm, to)
             entries += _location_entries(tenant, ip_list)
             entries += _endpoint_entries(ip_list)
@@ -140,26 +128,6 @@ def _syslog_entries(conn, tenant, ips, frm, to) -> list:
         "ts": r["ts"], "source": "syslog", "severity": r["severity"],
         "text": (r["message"] or "")[:300],
         "ref": {"device_ip": r["device_ip"], "action": r["action"]},
-    } for r in rows]
-
-
-def _flow_entries(conn, tenant, ips, frm, to) -> list:
-    """Volume al minuto per le entità coinvolte: mostra il picco di traffico
-    che accompagna gli eventi."""
-    placeholders = ",".join("?" * len(ips))
-    rows = conn.execute(
-        f"""SELECT window_start, SUM(total_bytes) AS total_bytes,
-                   SUM(total_packets) AS total_packets, COUNT(*) AS pairs
-            FROM flow_aggregates
-            WHERE tenant = ? AND window_start BETWEEN ? AND ?
-              AND (src_ip IN ({placeholders}) OR dst_ip IN ({placeholders}))
-            GROUP BY window_start
-            ORDER BY window_start ASC LIMIT ?""",
-        (tenant, frm, to, *ips, *ips, MAX_FLOW_BUCKETS)).fetchall()
-    return [{
-        "ts": r["window_start"], "source": "flow", "severity": None,
-        "text": f"{_human_bytes(r['total_bytes'] or 0)} in {r['pairs']} flussi",
-        "ref": {"bytes": r["total_bytes"], "packets": r["total_packets"]},
     } for r in rows]
 
 

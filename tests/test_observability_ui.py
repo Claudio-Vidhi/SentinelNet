@@ -150,18 +150,16 @@ class TestFrontendGates(_Base):
     def test_no_sessionstorage_anywhere(self):
         self.assertEqual(len(re.findall(r"sessionStorage\.(get|set)Item", self.HTML)), 0)
 
-    def test_flows_path_uses_apifetch_not_bearer(self):
-        # FLUSSI LIVE block moved to static/js/observability.js (which runs
-        # entirely before window.onload, defined back in dashboard.html);
-        # slice within that file directly to keep the check scoped to the
-        # flows module rather than the whole concatenated frontend source.
+    def test_traffic_path_uses_apifetch_not_bearer(self):
+        # The Traffic tab block of static/js/observability.js: cookie auth
+        # through apiFetch, never a bearer token in JS.
         obs_js = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                     "static", "js", "observability.js"),
                        encoding="utf-8").read()
-        block = obs_js[obs_js.index("FLUSSI LIVE"):]
+        block = obs_js[obs_js.index("TRAFFIC TAB"):]
         self.assertNotIn("Authorization", block)
         self.assertNotIn("Bearer", block)
-        self.assertIn("apiFetch('/api/observability/top", block.replace('`', "'"))
+        self.assertIn("apiFetch(", block)
 
     def test_flows_tab_registered(self):
         self.assertIn('id="tab-flows"', self.HTML)

@@ -146,21 +146,21 @@ The browser session does not use `sessionStorage`:
 
 ---
 
-## 4. Observability listeners (IPFIX/sFlow/syslog)
+## 4. Observability listener (syslog)
 
 Off by default everywhere, in both the exe and Docker. Enable via environment:
 
 ```
 SENTINELNET_OBS_ENABLE=1          # master switch
 SENTINELNET_OBS_BIND=127.0.0.1    # 0.0.0.0 requires explicit opt-in
-SENTINELNET_OBS_IPFIX_PORT=4739   SENTINELNET_OBS_IPFIX_ENABLE=1
-SENTINELNET_OBS_SFLOW_PORT=6343   SENTINELNET_OBS_SFLOW_ENABLE=1
 SENTINELNET_OBS_SYSLOG_PORT=5514  SENTINELNET_OBS_SYSLOG_ENABLE=1
 SENTINELNET_OBS_RETENTION_FLOWS_DAYS=30   # _SYSLOG_DAYS=7, _EVENTS_DAYS=90
 ```
 
-- **Never port 514 in-process**: use 5514, and if the standard port is required,
-  map it from Docker Compose (`"514:5514/udp"`).
+- **Default syslog port: 514 on Windows, 5514 on Linux/Docker.** On Windows 514
+  matches the installer's firewall rule. On Linux 514 is privileged: the process
+  stays on 5514 and the standard port is mapped from Docker Compose
+  (`"514:5514/udp"`).
 - **UDP ingest is unauthenticated.** Expose it ONLY on trusted management
   networks. Datagrams from IPs absent from the inventory are dropped and
   quarantined (`quarantined_exporters` table, hourly audit entry) — see
@@ -281,7 +281,7 @@ the risk this section is about. Decide per tool, not per bridge.
 | **Read-only, safe to enable** | `list_devices`, `get_network_map`, `get_port_channels`, `locate_mac`, `search_mac`, `mac_to_ip`, `client_map`, `endpoint_inventory`, `analyze_config`, `get_triage_status`, `list_probes`, every `fortigate_*` and `wlc_*` read, `diagnose_client`, `policy_trace`, `policy_findings`, `list_incidents`, `get_incident`, `cve_priority`, `cve_for_device`, `search_vulnerabilities`, `drift_summary`, `drift_versions`, `drift_diff`, `interface_errors`, `interface_errors_port`, `get_routes`, `trace_route`, `get_device_classification`, `blueprint_get` | They read what the panel already shows to that user. The worst case is a model summarising data the user could open in two clicks. The three `drift_*` tools need an operator account, like the drift tab; `get_routes` runs read-only `show` commands on the devices it is given |
 | **Touches devices — enable deliberately** | `send_cli_command`, `arp_scan`, `generate_switch_config` | `send_cli_command` opens an SSH session and runs a string: the CLI blacklist still applies (admins bypass it, audited — see §M-1 in the code), but a model chooses the command. `arp_scan` interrogates gateways. The generator produces configuration that someone may paste without reading |
 | **Writes a draft only** | `blueprint_propose` | Appends operations to an organization's Blueprint draft; nothing is applied until an admin presses «Applica». Needs an admin account, or a read-only grant on which the admin ticked «Consenti di proporre bozze del Blueprint» (`bpd` claim, re-checked against the user's current role at every call) |
-| **Disabled by default** | `get_top_talkers`, `get_anomalies`, `linux_health` | `routers/mcp.py:_MCP_DEFAULT_DISABLED`. They stay off until an admin saves an explicit MCP setting: absent settings mean off, not "all on" |
+| **Disabled by default** | `get_anomalies`, `linux_health` | `routers/mcp.py:_MCP_DEFAULT_DISABLED`. They stay off until an admin saves an explicit MCP setting: absent settings mean off, not "all on" |
 
 ### Rules that hold whatever you enable
 

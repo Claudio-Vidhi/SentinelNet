@@ -39,7 +39,6 @@ SCHEMA_VERSION = 15         # schema version supported by this code (v15: audit_
 QUEUE_MAX = 10_000          # max payloads in the write queue
 BATCH_SIZE = 500            # max payloads per single commit
 MAX_WRITER_RESTARTS = 5     # writer restarts allowed before fail-open
-CLOCK_SKEW_MAX_S = 300      # exporter timestamp tolerance (±300s, §1.4)
 
 metrics = {
     "writes_ok": 0,
@@ -47,7 +46,6 @@ metrics = {
     "writes_dropped_error": 0,
     "writer_restarts": 0,
     "writer_dead": 0,
-    "clock_skew_fallback": 0,
 }
 
 _write_queue: "queue.Queue[tuple[str, tuple]]" = queue.Queue(maxsize=QUEUE_MAX)
@@ -186,12 +184,6 @@ def migrate() -> None:
             )
         with open(_schema_path(), encoding="utf-8") as f:
             conn.executescript(f.read())
-        # v3: 'source' column on pre-existing DBs (idempotent ALTER:
-        # CREATE TABLE IF NOT EXISTS does not touch already-created tables).
-        cols = {r["name"] for r in conn.execute(
-            "PRAGMA table_info(flow_aggregates)").fetchall()}
-        if "source" not in cols:
-            conn.execute("ALTER TABLE flow_aggregates ADD COLUMN source TEXT")
         if current and current < 7:
             _migrate_v7_evidence(conn)
         # v8: lifecycle columns on a pre-existing evidence table
@@ -269,49 +261,6 @@ def enqueue_write(sql: str, params: tuple = ()) -> bool:
         metrics["writes_dropped_queue_full"] += 1
         _log_queue_full_drops(metrics["writes_dropped_queue_full"])
         return False
-
-
-def flow_window_start(export_ts, receive_ts=None) -> int:
-    """Per-minute bucket for a flow (§1.4): uses the exporter timestamp
-    if within ±300s of reception, otherwise the reception time
-    (metric ``clock_skew_fallback``)."""
-    now = int(receive_ts if receive_ts is not None else time.time())
-    try:
-        ts = int(export_ts)
-    except (TypeError, ValueError):
-        ts = None
-    if ts is None or abs(ts - now) > CLOCK_SKEW_MAX_S:
-        if ts is not None:
-            metrics["clock_skew_fallback"] += 1
-        ts = now
-    return ts - (ts % 60)
-
-
-FLOW_UPSERT_SQL = """
-INSERT INTO flow_aggregates
-    (window_start, tenant, src_ip, dst_ip, protocol, dst_port,
-     total_bytes, total_packets, flow_count, exporter_ip, source)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-ON CONFLICT(window_start, tenant, src_ip, dst_ip, protocol, dst_port)
-DO UPDATE SET
-    total_bytes   = total_bytes   + excluded.total_bytes,
-    total_packets = total_packets + excluded.total_packets,
-    flow_count    = flow_count    + 1,
-    exporter_ip   = excluded.exporter_ip,
-    source        = excluded.source
-"""
-
-
-def enqueue_flow(tenant: str, src_ip: str, dst_ip: str, protocol, dst_port,
-                 total_bytes: int, total_packets: int, exporter_ip: str,
-                 export_ts=None, receive_ts=None, source=None) -> bool:
-    """Enqueues the per-minute aggregation UPSERT for a flow (§1.4).
-    ``source``: name of the source listener (ipfix|netflow|sflow)."""
-    return enqueue_write(FLOW_UPSERT_SQL, (
-        flow_window_start(export_ts, receive_ts), tenant, src_ip, dst_ip,
-        protocol, dst_port, int(total_bytes or 0), int(total_packets or 0),
-        exporter_ip, source,
-    ))
 
 
 def _writer_loop():

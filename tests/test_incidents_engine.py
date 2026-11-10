@@ -55,7 +55,7 @@ class _Base(unittest.TestCase):
     def setUp(self):
         conn = db.get_observability_connection()
         for table in ("evidence", "incidents", "events", "normalize_cursors",
-                      "syslog_events", "flow_aggregates", "api_observations"):
+                      "syslog_events", "api_observations"):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()
         conn.close()
@@ -142,7 +142,7 @@ class TestReasoning(_Base):
         _seed_evidence(conn, "sede-a", "ip:10.1.0.5", NOW - 300, role="trigger",
                        rule_id="CFG_CHANGE_001", severity=5)
         _seed_evidence(conn, "sede-a", "ip:10.1.0.5", NOW - 280,
-                       role="supporting", rule_id="TRAFFIC_SPIKE_001")
+                       role="supporting", rule_id="HIGH_SEVERITY_LOG_001")
         conn.commit()
         conn.close()
 
@@ -202,14 +202,14 @@ class TestReasoning(_Base):
         conn = db.get_observability_connection()
         _seed_evidence(conn, "sede-a", "ip:10.1.0.5", NOW - 300,
                        rule_id="BLOCKED_TRAFFIC_001", rule_version="9.9.9",
-                       params={"match_delta_s": 42})
+                       params={"min_observations": 4})
         conn.commit()
         conn.close()
 
         incidents.group_once(NOW)
         reasoning = json.loads(self._rows("SELECT * FROM incidents")[0]["reasoning_json"])
         self.assertEqual(reasoning["rule_version"], "9.9.9")
-        self.assertEqual(reasoning["rule_params"], {"match_delta_s": 42})
+        self.assertEqual(reasoning["rule_params"], {"min_observations": 4})
 
 
 class TestTimeline(_Base):
@@ -223,11 +223,6 @@ class TestTimeline(_Base):
             "message) VALUES (?, 'sede-a', '10.1.0.254', 3, 'deny', ?)",
             (NOW - 290, "denied srcip=10.1.0.5 dstip=8.8.8.8"))
         conn.execute(
-            "INSERT INTO flow_aggregates (window_start, tenant, src_ip, dst_ip, "
-            "protocol, dst_port, total_bytes, total_packets, flow_count) "
-            "VALUES (?, 'sede-a', '10.1.0.5', '8.8.8.8', 6, 443, 4096, 20, 2)",
-            ((NOW - 280) - ((NOW - 280) % 60),))
-        conn.execute(
             "INSERT INTO api_observations (ts, tenant, device_ip, kind, "
             "summary_json) VALUES (?, 'sede-a', '10.1.0.5', 'system_status', '{}')",
             (NOW - 270,))
@@ -240,8 +235,9 @@ class TestTimeline(_Base):
 
         self.assertEqual([e["ts"] for e in entries],
                          sorted(e["ts"] for e in entries))
-        self.assertTrue({"evidence", "syslog", "flow", "api"} <=
-                        {e["source"] for e in entries})
+        sources = {e["source"] for e in entries}
+        self.assertTrue({"evidence", "syslog", "api"} <= sources)
+        self.assertNotIn("flow", sources)  # flow track removed with the collectors
 
     def test_evidence_entries_carry_role_and_provenance(self):
         conn = db.get_observability_connection()
