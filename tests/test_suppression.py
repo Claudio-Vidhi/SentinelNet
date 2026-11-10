@@ -7,11 +7,10 @@ Un'unica domanda con due forme che altrove sono due funzionalità separate:
 "questa porta è giù per progetto" e "questo apparato è in manutenzione
 stanotte". 'Per sempre' non è un caso speciale — è il caso senza scadenza.
 
-Il fatto resta: l'evento non sparisce da ``events``. Sparisce l'evidenza, cioè
-l'interpretazione, che è dove la conoscenza dell'operatore deve entrare.
+Il fatto resta: l'evento non sparisce da ``events``. Only the Interfaces
+tab's reading of the port changes.
 """
 
-import json
 import os
 import tempfile
 import time
@@ -24,8 +23,7 @@ os.environ["SENTINELNET_DATA_DIR"] = _TMP_DATA_DIR
 from core import data_config  # noqa: E402
 data_config.DATA_DIR = _TMP_DATA_DIR
 
-from core import db  # noqa: E402
-from observability import correlator, suppression  # noqa: E402
+from observability import suppression  # noqa: E402
 
 NOW = int(time.time())
 DEVICE = "192.168.31.6"
@@ -98,96 +96,6 @@ class TestMatching(unittest.TestCase):
         self.assertFalse(suppression.expired(_rule(), NOW))
 
 
-class TestAppliedToTheEngine(unittest.TestCase):
-    """Applicata in un posto solo: deve zittire QUALUNQUE regola, non solo
-    quella a cui qualcuno si è ricordato di aggiungere il controllo."""
-
-    @classmethod
-    def setUpClass(cls):
-        db.stop_writer()
-        for suffix in ("", "-wal", "-shm"):
-            try:
-                os.remove(db.get_db_path() + suffix)
-            except OSError:
-                pass
-        db.migrate()
-
-    def setUp(self):
-        conn = db.get_observability_connection()
-        for table in ("events", "normalize_cursors", "evidence", "incidents",
-                      "incident_conclusions", "api_observations"):
-            conn.execute(f"DELETE FROM {table}")
-        conn.commit()
-        conn.close()
-
-    def _shut(self, iface="Vl20", ts=None):
-        base = ts if ts is not None else NOW - 120
-        conn = db.get_observability_connection()
-        for offset, state in ((0, "up"), (60, "down")):
-            conn.execute(
-                "INSERT INTO api_observations (ts, tenant, device_ip, kind, summary_json) "
-                "VALUES (?, ?, ?, 'snmp_interfaces', ?)",
-                (base + offset, TENANT, DEVICE,
-                 json.dumps({"results": {iface: {"link": state}}})))
-        conn.commit()
-        conn.close()
-
-    def _correlate(self, rules_saved=None):
-        with patch("observability.suppression.get_app_settings",
-                   return_value={"suppressions": rules_saved or {}}), \
-             patch("observability.rules.get_app_settings", return_value={}), \
-             patch("collectors.mac_history.client_map", return_value=[]):
-            return correlator.correlate_once(NOW)
-
-    def _rows(self, sql, params=()):
-        conn = db.get_observability_connection()
-        try:
-            return [dict(r) for r in conn.execute(sql, params)]
-        finally:
-            conn.close()
-
-    def test_without_suppression_the_symptom_exists(self):
-        self._shut()
-        self._correlate()
-        self.assertTrue(
-            self._rows("SELECT * FROM evidence WHERE rule_id = 'IFACE_DOWN_001'"))
-
-    def test_a_permanent_suppression_silences_it(self):
-        self._shut()
-        self._correlate(_saved(_rule(interface="Vl20")))
-        self.assertEqual(
-            self._rows("SELECT * FROM evidence WHERE rule_id = 'IFACE_DOWN_001'"),
-            [])
-
-    def test_the_fact_survives_the_suppression(self):
-        self._shut()
-        self._correlate(_saved(_rule(interface="Vl20")))
-        events = self._rows(
-            "SELECT * FROM events WHERE event_type = 'interface.change'")
-        self.assertEqual(len(events), 1)
-        self.assertEqual(json.loads(events[0]["attrs_json"])["after"], "down")
-
-    def test_a_maintenance_window_silences_the_whole_device(self):
-        # Nessuna regola è stata modificata per saperlo: il filtro è a valle.
-        self._shut("Et0/0")
-        self._correlate(_saved(_rule(from_ts=NOW - 600, to_ts=NOW + 600)))
-        self.assertEqual(self._rows("SELECT * FROM evidence"), [])
-
-    def test_a_closed_window_no_longer_silences(self):
-        self._shut("Et0/0")
-        self._correlate(_saved(_rule(from_ts=NOW - 7200, to_ts=NOW - 3600)))
-        self.assertTrue(
-            self._rows("SELECT * FROM evidence WHERE rule_id = 'IFACE_DOWN_001'"))
-
-    def test_the_window_is_judged_on_the_event_time_not_on_now(self):
-        """Una manutenzione di ieri notte copre i fatti di ieri notte anche se
-        la correlazione li rilegge stamattina."""
-        self._shut("Et0/0", ts=NOW - 800)
-        self._correlate(_saved(_rule(from_ts=NOW - 900, to_ts=NOW - 600)))
-        self.assertEqual(self._rows("SELECT * FROM evidence"), [])
-
-
-
 class TestDeviceScopeFromTheApi(unittest.TestCase):
     """La manutenzione sull'INTERO apparato non aveva un modo per essere
     dichiarata dall'API: si poteva sopprimere una porta alla volta."""
@@ -217,7 +125,7 @@ class TestDeviceScopeFromTheApi(unittest.TestCase):
 
     def test_omitting_the_interface_suppresses_the_whole_device(self):
         client = self._client()
-        r = client.post("/api/incidents/interfaces/expected",
+        r = client.post("/api/observability/interfaces/expected",
                         json={"tenant": TENANT, "device_ip": DEVICE,
                               "suppressed": True, "note": "manutenzione"})
         self.assertEqual(r.status_code, 200, r.text)
@@ -230,7 +138,7 @@ class TestDeviceScopeFromTheApi(unittest.TestCase):
 
     def test_a_window_that_ends_before_it_starts_is_refused(self):
         client = self._client()
-        r = client.post("/api/incidents/interfaces/expected",
+        r = client.post("/api/observability/interfaces/expected",
                         json={"tenant": TENANT, "device_ip": DEVICE,
                               "suppressed": True,
                               "from_ts": NOW, "to_ts": NOW - 60})
@@ -238,7 +146,7 @@ class TestDeviceScopeFromTheApi(unittest.TestCase):
 
     def test_a_device_without_an_ip_is_refused(self):
         client = self._client()
-        r = client.post("/api/incidents/interfaces/expected",
+        r = client.post("/api/observability/interfaces/expected",
                         json={"tenant": TENANT, "suppressed": True})
         self.assertEqual(r.status_code, 400)
 

@@ -6,8 +6,7 @@
 La fonte e' ``syslog_events``: e' l'unica tabella che contiene VERDETTI reali
 degli apparati (colonna ``action``, popolata dall'ingester syslog). Src/dst/
 porte/byte vengono estratti dal corpo key=value del messaggio (FortiGate) con
-fallback sulle prime due IP (Palo Alto e generici), come fa gia' il
-correlatore.
+fallback sulle prime due IP (Palo Alto e generici), via ``fieldmap``.
 
 Why not ``flow_aggregates`` (flow volumes, no longer collected): it never had
 any notion of ALLOW/DENY. La versione precedente di questo router la

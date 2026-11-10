@@ -1,6 +1,6 @@
 # ADR-0003 — Rules produce evidence with a causal role; the incident is a derived view
 
-**Status:** Accepted
+**Status:** Superseded — the evidence/incident model and the Incidents tab were removed in 0.65.0 as misleading.
 **Date:** 2026-07-27
 
 ## Context

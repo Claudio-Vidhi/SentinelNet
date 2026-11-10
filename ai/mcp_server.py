@@ -694,16 +694,6 @@ TOOLS = {
     # --- Observability (phase 4.4): READ-ONLY, aggregated/summarized data
     # (never raw dump), tenant scoping and redaction applied server-side.
     # Disabled by default: admin enables them from the MCP Server tab.
-    "get_anomalies": (
-        "Get correlated anomalies (incidents built from syslog, interface and "
-        "device-state evidence). Read-only, tenant-scoped.",
-        _obj({"status": {**_S, "description": "'new' (default), 'ack', 'resolved', 'all'"},
-              "window": {**_S, "description": "Time window, e.g. 24h (max 7d)"}}),
-        lambda a: api("GET", "/api/observability/anomalies", params={
-            "status": a.get("status", "new"),
-            "window": a.get("window", "24h"),
-            "limit": 50}),
-    ),
     "linux_health": (
         "Get the latest health snapshot of a managed Linux host: uptime, "
         "kernel, failed systemd units and the measured CPU / memory / disk "
@@ -736,23 +726,8 @@ TOOLS = {
         _obj({"ip": {**_S, "description": "Device IP"}}, ["ip"]),
         lambda a: api("GET", f"/api/policy-test/{a['ip']}/findings"),
     ),
-    # --- "What is wrong and why": incidents, CVE, drift, port errors, routing,
+    # --- "What is wrong and why": CVE, drift, port errors, routing,
     # classification. Read-only bridges to existing routes.
-    "list_incidents": (
-        "List correlated incidents (grouped evidence: syslog, port state, "
-        "device health) for a time window. Read-only, tenant-scoped.",
-        _obj({"status": {**_S, "description": "'new' (default), 'ack', 'resolved', 'all'"},
-              "window": {**_S, "description": "Time window, e.g. 24h (default), 7d"},
-              "limit": {"type": "integer", "description": "Max incidents (default 50)"}}),
-        lambda a: api("GET", "/api/incidents", params={
-            "status": a.get("status", "new"), "window": a.get("window", "24h"),
-            "limit": int(a.get("limit", 50))}),
-    ),
-    "get_incident": (
-        "Full detail of one incident: timeline, evidence, affected entities.",
-        _obj({"incident_id": {"type": "integer"}}, ["incident_id"]),
-        lambda a: api("GET", f"/api/incidents/{int(a['incident_id'])}"),
-    ),
     "cve_priority": (
         "Devices ranked by vulnerability exposure (CVSS, known-exploited), "
         "i.e. what to patch first. Read-only, tenant-scoped.",

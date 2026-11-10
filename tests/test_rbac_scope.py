@@ -183,7 +183,7 @@ class TestRbacScope(unittest.TestCase):
 
     def test_command_job_lookup_is_scoped(self):
         # Job di un'altra sede: 404 identico al job inesistente, per non
-        # confermarne l'esistenza (stessa politica di /anomalies).
+        # confermarne l'esistenza.
         from services import probe_manager
         sid = probe_manager.create_probe("job-scope-test", "agent")[0]["id"]
         job_a = probe_manager.enqueue_job(sid, "10.1.0.1", "show version")

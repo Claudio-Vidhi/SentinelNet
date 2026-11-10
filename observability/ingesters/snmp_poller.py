@@ -3,9 +3,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Poller SNMP: sorgente di stato per gli apparati senza API REST.
 
-Il documento chiede correlazione multi-sorgente: oggi lo stato per apparato
-arriva solo dai FortiGate col token REST, quindi gli switch — che sono la
-maggioranza di una rete — non contribuiscono nulla al ragionamento. SNMP
+Without it, per-device state comes only from FortiGates with a REST token,
+so switches — most of a network — would report nothing. SNMP
 riempie quel vuoto in modo vendor-agnostico: si interrogano OID standard
 (IF-MIB, RFC1213), non comandi CLI da riconoscere per vendore.
 
@@ -13,8 +12,8 @@ DOVE FINISCONO I DATI: negli stessi ``api_observations`` del poller REST, con
 ``kind`` ``snmp_system`` / ``snmp_interfaces``. Non è un riuso furbo — è che a
 valle non deve cambiare niente: gli snapshot vengono già proiettati in
 ``device.state``, ``interface.state`` e ``interface.change`` da
-``normalize._from_api_observations``, quindi regole, evidenze, incidenti e
-timeline funzionano da subito. Il trasporto cambia, il fatto no.
+``normalize._from_api_observations``, so the Interfaces tab, interface
+errors and diagnosis read them unchanged. Il trasporto cambia, il fatto no.
 
 FORMA DELLO SNAPSHOT: ``{"results": {"<ifName>": {campo: valore}}}``, la stessa
 che espone la REST FortiGate, perché è quella che l'adapter sa già leggere per
@@ -104,8 +103,8 @@ _MAX_IFACE_SUMMARY = 1_000_000
 
 # VLAN di accesso della porta. NON esiste in IF-MIB, ed è il motivo per cui
 # cambiare VLAN a una porta di accesso non produceva alcun evento: lo snapshot
-# non conteneva la VLAN, quindi non poteva cambiare, quindi CFG_CHANGE_001 —
-# che scatta su ``interface.change`` — non aveva nulla da vedere. Una porta su
+# non conteneva la VLAN, quindi non poteva cambiare, quindi nessun
+# ``interface.change`` poteva registrarlo. Una porta su
 # nella VLAN sbagliata è indistinguibile da una porta su, e per chi la usa è
 # esattamente un guasto.
 #
@@ -386,8 +385,8 @@ def _snmp_devices() -> list:
     return out
 
 
-# Tipo di snapshot che registra un giro senza risposta. Lo legge
-# normalize (-> device.unreachable) e DEVICE_UNREACHABLE_001.
+# Tipo di snapshot che registra un giro senza risposta. Normalize projects
+# it as ``device.unreachable``.
 SILENT_KIND = "snmp_silent"
 
 

@@ -61,7 +61,7 @@ for (const id of ['tab-devices', 'tab-map', 'tab-map-interactive', 'tab-endpoint
 }
 // requires-admin e home non sono concessioni.
 for (const id of ['tab-users', 'tab-settings', 'tab-probes', 'tab-mcp',
-                  'tab-incidents', 'tab-fortigate', 'tab-groups', 'tab-home']) {
+                  'tab-fortigate', 'tab-groups', 'tab-home']) {
     assert.ok(!ids.includes(id), `tab non assegnabile offerta: ${id}`);
 }
 // Nessun duplicato: un pulsante con data-tabs elenca anche il proprio data-tab.
@@ -93,9 +93,9 @@ for (const rowRole of ['admin', 'super_admin']) {
     for (const id of ADMIN_GROUP_TABS) {
         assert.ok(adminIds.includes(id), `riga ${rowRole}: tab di gestione mancante: ${id}`);
     }
-    // Le tab requires-admin che NON sono di gestione (incidents, fortigate)
+    // Le tab requires-admin che NON sono di gestione (fortigate)
     // restano fuori: sono tab operative, non concessioni del pannello utenti.
-    for (const id of ['tab-incidents', 'tab-fortigate']) {
+    for (const id of ['tab-fortigate']) {
         assert.ok(!adminIds.includes(id), `riga ${rowRole}: tab operativa admin offerta: ${id}`);
     }
 }

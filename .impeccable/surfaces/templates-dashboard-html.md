@@ -26,7 +26,8 @@ or start a global triage (secondary). Bays and event rows are themselves
 navigation into the device tab.
 
 **Content on hand.** `globalDevices` + `globalVersions` from `/api/local-devices`
-(tenant, IP, hostname, scan status) and `/api/observability/anomalies?limit=5`.
+(tenant, IP, hostname, scan status). The event strip and the recent-anomalies
+block were removed with the incidents engine (0.65.0).
 No synthetic content: an empty inventory renders an explicit empty state saying
 the diagram is drawn at first provisioning.
 
@@ -35,8 +36,6 @@ the diagram is drawn at first provisioning.
   NOC wall at distance. The wall scene is why state is carried by symbol
   geometry rather than colour alone.
 - Both renditions required; neither is the default.
-- Admin-gated blocks (`event strip`, `recent anomalies`) must stay behind
-  `.requires-admin`; the server enforces independently.
 - Every string needs an `it` and an `en` entry.
 
 **Chosen direction.** Mimic Panel — the substation one-line and its SCADA

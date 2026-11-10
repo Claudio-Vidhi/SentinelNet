@@ -116,7 +116,7 @@ def set_ui_variant_settings(payload: UiVariantSchema, current_user = Depends(get
     log_audit(f"Variante UI impostata a '{variant}' dall'utente '{current_user.get('sub')}'.")
     return {"status": "success", "ui_variant": variant}
 
-# NetSec Audit, Incidenti, Flow SIEM e Fortigate Management non hanno piu' un
+# NetSec Audit, Flow SIEM e Fortigate Management non hanno piu' un
 # flag di attivazione: le tab sono sempre presenti (restano gated dalla sola
 # RBAC di nav). Le vecchie chiavi di app_settings.json per questi flag,
 # eventualmente rimaste da installazioni precedenti, sono semplicemente

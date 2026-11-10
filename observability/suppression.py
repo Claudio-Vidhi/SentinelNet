@@ -12,14 +12,9 @@ del mondo tratta come funzionalità separate:
 Sono lo stesso modello. Tenerli separati significherebbe avere due posti dove
 cercare perché un allarme non è scattato.
 
-NON sopprime il fatto. L'evento resta in ``events`` e nel feed: cambia solo se
-diventi un'evidenza. La conoscenza dell'operatore entra
-nell'INTERPRETAZIONE, che è l'unico punto in cui ha senso farla entrare — così
-il giorno in cui la soppressione scade, lo storico è ancora completo.
-
-Applicata in un posto solo (``correlator``), non regola per regola: una
-manutenzione zittisce tutto quello che riguarda quell'apparato, non solo la
-regola a cui qualcuno si è ricordato di aggiungere il controllo.
+NON sopprime il fatto. L'evento resta in ``events`` e nel feed: only the
+Interfaces tab's reading of the port changes (``maint`` / ``by_design``), so the
+day the suppression expires the history is still complete.
 """
 
 import time
@@ -63,9 +58,7 @@ def active(tenant: str, entity_key: Optional[str], interface: Optional[str],
            at_ts: int) -> Optional[dict]:
     """La soppressione che copre questo bersaglio a questo istante, se c'è.
 
-    ``at_ts`` è il tempo dell'EVENTO, non quello corrente: una manutenzione di
-    ieri notte deve continuare a coprire i fatti di ieri notte anche se la
-    correlazione li rilegge stamattina.
+    ``at_ts``: the instant being judged (the Interfaces view passes now).
     """
     if not entity_key:
         return None
@@ -80,7 +73,6 @@ def active(tenant: str, entity_key: Optional[str], interface: Optional[str],
 
 
 def expired(rule: dict, now: Optional[int] = None) -> bool:
-    """Finestra già chiusa: la UI la mostra spenta invece di farla sparire, così
-    resta leggibile perché un incidente di ieri non è mai nato."""
+    """Finestra già chiusa: la UI la mostra spenta invece di farla sparire."""
     to = rule.get("to_ts")
     return to is not None and to < (now or int(time.time()))

@@ -20,7 +20,7 @@ from security import user_manager
 
 logger = logging.getLogger("sentinelnet.notifications")
 
-KINDS = ("incident.opened", "siem.alert", "device.down", "device.up", "cve.new")
+KINDS = ("siem.alert", "device.down", "device.up", "cve.new")
 SEVERITIES = ("critical", "high", "medium", "low")
 SEVERITY_RANK = {"critical": 3, "high": 2, "medium": 1, "low": 0}
 
@@ -116,7 +116,7 @@ def get_user_prefs(username: str) -> dict:
             return {
                 "username": row["username"],
                 "enabled": bool(row["enabled"]),
-                "kinds": json.loads(row["kinds_json"]),
+                "kinds": [k for k in json.loads(row["kinds_json"]) if k in KINDS],
                 "min_severity": row["min_severity"],
                 "groups": json.loads(row["groups_json"]),
                 "mode": row["mode"],
@@ -186,7 +186,7 @@ def list_rules() -> list[dict]:
                 "name": r["name"],
                 "enabled": bool(r["enabled"]),
                 "recipients": json.loads(r["recipients_json"]),
-                "kinds": json.loads(r["kinds_json"]),
+                "kinds": [k for k in json.loads(r["kinds_json"]) if k in KINDS],
                 "min_severity": r["min_severity"],
                 "groups": json.loads(r["groups_json"]),
                 "mode": r["mode"],
@@ -213,7 +213,7 @@ def get_rule(rule_id: int) -> dict | None:
             "name": r["name"],
             "enabled": bool(r["enabled"]),
             "recipients": json.loads(r["recipients_json"]),
-            "kinds": json.loads(r["kinds_json"]),
+            "kinds": [k for k in json.loads(r["kinds_json"]) if k in KINDS],
             "min_severity": r["min_severity"],
             "groups": json.loads(r["groups_json"]),
             "mode": r["mode"],
@@ -574,29 +574,6 @@ def _tick() -> None:
     now = int(time.time())
     conn = db.get_observability_connection()
     try:
-        # 1. Avanzamento cursore incidents
-        cur_row = conn.execute("SELECT last_id FROM notify_cursors WHERE source = 'incidents'").fetchone()
-        last_inc_id = cur_row["last_id"] if cur_row else 0
-        new_incidents = conn.execute("""
-            SELECT id, tenant, title, severity FROM incidents
-            WHERE id > ? ORDER BY id ASC LIMIT 50
-        """, (last_inc_id,)).fetchall()
-        for inc in new_incidents:
-            emit(
-                kind="incident.opened",
-                device_ip=None,
-                severity=inc["severity"] if inc["severity"] is not None else "high",
-                title=f"Incidente aperto: {inc['title'] or 'Incidente rilevato'}",
-                ctx={"incident_id": inc["id"], "tenant": inc["tenant"]},
-                dedup_key=f"incident:{inc['id']}",
-                tenant=inc["tenant"],
-            )
-            last_inc_id = inc["id"]
-        conn.execute("""
-            INSERT INTO notify_cursors (source, last_id) VALUES ('incidents', ?)
-            ON CONFLICT(source) DO UPDATE SET last_id = excluded.last_id
-        """, (last_inc_id,))
-
         # 2. Avanzamento cursore events (siem.alert)
         cur_row = conn.execute("SELECT last_id FROM notify_cursors WHERE source = 'events'").fetchone()
         last_evt_id = cur_row["last_id"] if cur_row else 0

@@ -271,10 +271,6 @@
       <div class="nav-group" data-nav-group="monitor">
         <h3><button type="button" class="nav-group-toggle" aria-expanded="true" aria-controls="navItems-monitor"><span class="nav-group-label" data-i18n="navMonitor">Monitora</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button></h3>
         <div class="nav-group-items" id="navItems-monitor">
-        <button id="navIncidents" class="nav-item requires-admin" data-tab="tab-incidents" role="tab" aria-controls="tab-incidents" aria-selected="false" tabindex="-1">
-          <span class="nav-left" data-i18n="tabIncidents"><i class="fa-solid fa-timeline"></i> Incidenti</span>
-          <span class="preview-badge">preview</span>
-        </button>
         <button class="nav-item" data-tabs="tab-flows" data-tab="tab-flows" role="tab" aria-controls="tab-flows" aria-selected="false" tabindex="-1">
           <span class="nav-left" data-i18n="tabTrafficGroup"><i class="fa-solid fa-wave-square"></i> Traffico</span>
         </button>
@@ -544,7 +540,7 @@
         </div>
       </div>
 
-      <!-- Attention queue beside the event log: what to act on, and what just happened. -->
+      <!-- Attention queue: what to act on. -->
       <div class="home-split">
         <div class="panel">
           <div class="panel-head">
@@ -574,18 +570,6 @@
             </table>
           </div>
         </div>
-
-        <!-- Event strip: the control-room printer. One row per event, newest on top. -->
-        <div class="panel">
-          <h3 data-i18n="homeEventStrip">Registro eventi</h3>
-        <div class="eventstrip" id="homeEventStrip">
-          <div class="eventstrip-row" aria-hidden="true"><span class="sk" style="width:44px"></span><span class="sk" style="width:78%"></span><span class="sk" style="width:18px"></span></div>
-          <div class="eventstrip-row" aria-hidden="true"><span class="sk" style="width:44px"></span><span class="sk" style="width:64%"></span><span class="sk" style="width:18px"></span></div>
-          <div class="eventstrip-row" aria-hidden="true"><span class="sk" style="width:44px"></span><span class="sk" style="width:71%"></span><span class="sk" style="width:18px"></span></div>
-          <div class="eventstrip-row" aria-hidden="true"><span class="sk" style="width:44px"></span><span class="sk" style="width:58%"></span><span class="sk" style="width:18px"></span></div>
-          <div class="eventstrip-row" aria-hidden="true"><span class="sk" style="width:44px"></span><span class="sk" style="width:67%"></span><span class="sk" style="width:18px"></span></div>
-        </div>
-        </div>
       </div>
 
       <!-- Bastion-probe devices sit outside the two counters above (no ICMP through
@@ -610,16 +594,6 @@
             </thead>
             <tbody id="homeBastionBody"></tbody>
           </table>
-        </div>
-      </div>
-
-      <div class="panel requires-admin" style="margin-top:18px;">
-        <h3 style="margin:0 0 6px; font-size:17px;" data-i18n="homeAnomTitle"><i class="fa-solid fa-shield-halved" style="color:var(--primary);"></i> Anomalie recenti</h3>
-        <!-- Le anomalie si leggono in Traffico. Qui si contano soltanto: la
-             stessa coda in tre tabelle diverse erano tre inbox per un flusso
-             di allarmi solo. -->
-        <div id="homeAnomSummary">
-          <div aria-hidden="true" style="display:flex; gap:12px; align-items:center; padding:4px 0;"><span class="sk" style="width:28px; height:20px"></span><span class="sk" style="width:180px"></span></div>
         </div>
       </div>
     </div>
@@ -3004,13 +2978,6 @@
               <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;">
                 <label style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-radius:4px; border:1px solid var(--border); background:var(--surface-2); cursor:pointer;">
                   <div style="display:flex; align-items:center; gap:10px;">
-                    <i class="fa-solid fa-triangle-exclamation" style="color:var(--warning); font-size:14px; width:16px; text-align:center;"></i>
-                    <span style="font-size:13px; font-weight:500;" data-i18n="notifyKindIncidents">Incidenti aperti (Correlation Engine)</span>
-                  </div>
-                  <input type="checkbox" class="notify-pref-kind" value="incident.opened" aria-label="Incidenti aperti">
-                </label>
-                <label style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-radius:4px; border:1px solid var(--border); background:var(--surface-2); cursor:pointer;">
-                  <div style="display:flex; align-items:center; gap:10px;">
                     <i class="fa-solid fa-shield-halved" style="color:var(--danger); font-size:14px; width:16px; text-align:center;"></i>
                     <span style="font-size:13px; font-weight:500;" data-i18n="notifyKindSiem">Allerte SIEM e sicurezza</span>
                   </div>
@@ -3523,7 +3490,7 @@
           <h3><span data-i18n="titleAiSettings">Configurazione Provider (Profili)</span></h3>
           <span id="aiActiveProfileBadge" class="chip" style="font-size:11px;"></span>
         </div>
-        <p class="set-desc" data-i18n="descAiSettings">Provider e modello usati dalle funzioni assistite: spiegazione degli incidenti, classificazione dei dispositivi, proposte Blueprint, layout della mappa e generatore di configurazione.</p>
+        <p class="set-desc" data-i18n="descAiSettings">Provider e modello usati dalle funzioni assistite: classificazione dei dispositivi, proposte Blueprint, layout della mappa e generatore di configurazione.</p>
         <div style="display:none;">
           <select id="aiProfileSelect" aria-label="Profilo AI attivo" data-i18n-aria-label="ariaAiProfile">
             <option value="" data-i18n="optAiNoProfile">Nessun profilo</option>
@@ -3769,69 +3736,6 @@
     </div>
 
     <!-- TAB: Flow SIEM Analytics (preview) -->
-    <!-- TAB: Incidenti (preview) -->
-    <div id="tab-incidents" class="tab-content" role="tabpanel" tabindex="0">
-      <div class="hero" style="margin-bottom:18px;">
-        <div class="hero-card" style="flex:1;">
-          <h2 data-i18n="incTitle">Incidenti</h2>
-          <p data-i18n="incDesc">Gli eventi correlati che condividono un'entità e una finestra temporale diventano un incidente unico, con causa e confidenza calcolate in modo deterministico e la sequenza di ciò che è successo.</p>
-        </div>
-      </div>
-
-      <div class="panel" style="padding:12px 16px; margin-bottom:18px; display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
-        <div>
-          <label for="incStatusFilter" style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="incFilterStatus">Stato</label><select id="incStatusFilter">
-            <option value="new" data-i18n="incOptNew">Nuovi</option>
-            <option value="ack" data-i18n="incOptAck">Presi in carico</option>
-            <option value="resolved" data-i18n="incOptResolved">Risolti</option>
-            <option value="all" data-i18n="incOptAll">Tutti</option>
-          </select>
-        </div>
-        <div>
-          <label for="incWindowFilter" style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="incFilterWindow">Finestra</label><select id="incWindowFilter">
-            <option value="24h" data-i18n="optWin24h">24 ore</option>
-            <option value="6h" data-i18n="optWin6h">6 ore</option>
-            <option value="7d" data-i18n="optWin7d">7 giorni</option>
-          </select>
-        </div>
-        <button id="btnRefreshIncidents" class="btn btn-secondary btn-small" style="width:auto;" data-i18n="incBtnRefresh"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
-      </div>
-
-      <div style="display:grid; grid-template-columns: 380px 1fr; gap:18px; align-items:start;">
-        <div class="panel" style="padding:12px;">
-          <h4 style="margin:0 0 10px; font-size:14px; color:var(--primary);"><i class="fa-solid fa-list"></i> <span data-i18n="incListTitle">Incidenti</span></h4>
-          <div id="incidentsList"></div>
-        </div>
-        <div class="panel" style="padding:16px;">
-          <div id="incidentDetail"><div class="inc-empty"><i class="fa-solid fa-hand-pointer"></i><span data-i18n="incSelectOne">Seleziona un incidente dalla lista.</span></div></div>
-        </div>
-      </div>
-
-      <details class="panel" style="padding:12px 16px; margin-top:18px;">
-        <summary style="cursor:pointer; font-size:14px; color:var(--primary); font-weight:600;">
-          <i class="fa-solid fa-sliders"></i> <span data-i18n="incRulesTitle">Regole di correlazione e soglie</span>
-        </summary>
-        <p style="font-size:12px; color:var(--text-muted); margin:10px 0;" data-i18n="incRulesDesc">
-          La logica delle regole vive nel codice; qui si tarano solo le soglie, entro gli
-          intervalli dichiarati dalla regola stessa. Il valore usato viene registrato accanto
-          alla versione su ogni evidenza prodotta.
-        </p>
-        <div id="incidentRules"></div>
-      </details>
-
-      <details class="panel" style="padding:12px 16px; margin-top:18px;">
-        <summary style="cursor:pointer; font-size:14px; color:var(--primary); font-weight:600;">
-          <i class="fa-solid fa-ethernet"></i> <span data-i18n="incIfacesTitle">Interfacce e stato atteso</span>
-        </summary>
-        <p style="font-size:12px; color:var(--text-muted); margin:10px 0;" data-i18n="incIfacesDesc">
-          Loopback, Null e VLAN dismesse sono giù per progetto: confermarle qui evita che
-          ogni loro transizione diventi un sintomo. Non nasconde nulla — l'evento resta nel
-          feed, cambia solo se <code>IFACE_DOWN_001</code> lo consideri un sintomo.
-        </p>
-        <div id="incidentInterfaces"></div>
-      </details>
-    </div>
-
     <!-- TAB: Interfaces & Expected State (Monitoraggio Interfacce) -->
     <div id="tab-interfaces" class="tab-content" role="tabpanel" tabindex="0">
       <div class="page-head">
@@ -3963,7 +3867,7 @@
           <i class="fa-solid fa-calendar-check"></i> <span data-i18n="ifDeclaredSuppTitle">Storico &amp; Finestre Dichiarate</span>
         </summary>
         <p style="font-size:12px; color:var(--text-muted); margin:8px 0;" data-i18n="ifDeclaredSuppDesc">
-          Elenco di tutte le soppressioni registrate. Le voci barrate sono finestre terminate: restano visibili per spiegare perché fatti passati non hanno generato incidenti.
+          Elenco di tutte le soppressioni registrate. Le voci barrate sono finestre terminate: restano visibili per spiegare perché una porta non risultava guasta.
         </p>
         <div id="ifDeclaredSuppressionsBox"></div>
       </details>
@@ -5262,7 +5166,7 @@
                 <li class="pro" data-i18n="uwOperatorPro1">Tutto quello che vede un viewer, più Config Drift e cronologia apparati</li>
                 <li class="pro" data-i18n="uwOperatorPro2">Triage, comandi CLI, backup, provisioning e import CSV</li>
                 <li class="con" data-i18n="uwOperatorCon1">Non gestisce utenti, tenant, sonde né impostazioni</li>
-                <li class="con" data-i18n="uwOperatorCon2">Non vede Incidenti né FortiGate</li>
+                <li class="con" data-i18n="uwOperatorCon2">Non vede FortiGate</li>
               </ul>
             </label>
             <label class="choice-card">
@@ -5270,7 +5174,7 @@
               <span class="choice-title" data-i18n="roleAdmin">Admin (totale)</span>
               <span class="choice-desc" data-i18n="uwAdminDesc">Amministra la piattaforma per i tenant che gli assegni.</span>
               <ul>
-                <li class="pro" data-i18n="uwAdminPro1">Tutto quello che fa un operator, più Incidenti e FortiGate</li>
+                <li class="pro" data-i18n="uwAdminPro1">Tutto quello che fa un operator, più FortiGate</li>
                 <li class="pro" data-i18n="uwAdminPro2">Gestisce utenti, baseline di drift e impostazioni</li>
                 <li class="con" data-i18n="uwAdminCon1">Se limitato a dei tenant: niente impostazioni globali, sonde né MCP</li>
               </ul>
@@ -6321,7 +6225,6 @@
         <div>
           <span style="display:block; font-weight:600; margin-bottom:6px;" data-i18n="notifyEventKinds">Tipi di evento:</span>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
-            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" class="notify-rule-kind" value="incident.opened" checked aria-label="Incidenti aperti"><span data-i18n="notifyKindIncidents">Incidenti</span></label>
             <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" class="notify-rule-kind" value="siem.alert" checked aria-label="Allerte SIEM"><span data-i18n="notifyKindSiem">SIEM</span></label>
             <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" class="notify-rule-kind" value="device.down" checked aria-label="Device down"><span data-i18n="notifyKindDeviceDown">Device down</span></label>
             <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" class="notify-rule-kind" value="device.up" checked aria-label="Device up"><span data-i18n="notifyKindDeviceUp">Device up</span></label>
@@ -6586,8 +6489,8 @@
 
   <!-- Solo i moduli necessari prima del login e al boot della dashboard.
        Gli altri (topology, observability, ai, settings, fortigate, wlc,
-       config-analyzer, flow-analytics, netsec-audit, audit_checklist,
-       incidents) vengono iniettati da core.js alla prima visita della tab
+       config-analyzer, flow-analytics, netsec-audit, audit_checklist)
+       vengono iniettati da core.js alla prima visita della tab
        che li usa: vedi LAZY_TAB_SCRIPTS. -->
   <script src="/static/js/i18n.js"></script>
   <script src="/static/js/ui-modal.js"></script>

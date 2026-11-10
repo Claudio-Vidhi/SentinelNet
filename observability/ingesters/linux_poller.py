@@ -5,14 +5,13 @@
 
 Un server Linux non espone né una REST come il FortiGate né, di norma, un
 agente SNMP: senza questo poller resterebbe un device che si può interrogare a
-mano ma che non contribuisce nulla al ragionamento sugli incidenti.
+mano ma che non riporta nessuno stato.
 
 DOVE FINISCONO I DATI: negli stessi ``api_observations`` degli altri poller,
 con ``kind='linux_health'``. Non è riuso furbo — è che a valle non deve
 cambiare niente: lo snapshot viene già proiettato in ``device.state`` da
-``normalize._from_api_observations``, e ``DEVICE_LOAD_001`` legge
-``cpu_pct``/``memory_pct``/``disk_pct`` da ``events.metrics_json`` senza sapere
-da dove arrivano.
+``normalize._from_api_observations``, with ``cpu_pct``/``memory_pct``/
+``disk_pct`` in ``events.metrics_json``.
 
 FORMA DELLO SNAPSHOT: ``{"results": {...stato...}, "metrics": {...misure...}}``.
 La separazione non è cosmetica: ``metrics`` è escluso dal rilevamento delle

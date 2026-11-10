@@ -1782,16 +1782,16 @@ div.vis-tooltip {
 
 /* Investigate + Assess tabs: the page header is a title row, not a banner. The data under
    it is what the operator opened the tab for. */
-:is(#tab-incidents, #tab-flows, #tab-endpoint, #tab-security, #tab-config, #tab-netsec-audit, #tab-policy-test, #tab-routes, #tab-config-drift) .hero {
+:is(#tab-flows, #tab-endpoint, #tab-security, #tab-config, #tab-netsec-audit, #tab-policy-test, #tab-routes, #tab-config-drift) .hero {
   margin-bottom: 12px !important;
 }
-:is(#tab-incidents, #tab-flows, #tab-endpoint, #tab-security, #tab-config, #tab-netsec-audit, #tab-policy-test, #tab-routes, #tab-config-drift) .hero-card {
+:is(#tab-flows, #tab-endpoint, #tab-security, #tab-config, #tab-netsec-audit, #tab-policy-test, #tab-routes, #tab-config-drift) .hero-card {
   padding: 12px 18px;
 }
-:is(#tab-incidents, #tab-flows, #tab-endpoint, #tab-security, #tab-config, #tab-netsec-audit, #tab-policy-test, #tab-routes, #tab-config-drift) .hero-card > h2 {
+:is(#tab-flows, #tab-endpoint, #tab-security, #tab-config, #tab-netsec-audit, #tab-policy-test, #tab-routes, #tab-config-drift) .hero-card > h2 {
   font-size: 21px; margin: 0 0 2px;
 }
-:is(#tab-incidents, #tab-flows, #tab-endpoint, #tab-security, #tab-config, #tab-netsec-audit, #tab-policy-test, #tab-routes, #tab-config-drift) .hero-card > p {
+:is(#tab-flows, #tab-endpoint, #tab-security, #tab-config, #tab-netsec-audit, #tab-policy-test, #tab-routes, #tab-config-drift) .hero-card > p {
   font-size: 13px; margin: 0; max-width: none;
 }
 
@@ -2058,23 +2058,6 @@ details.mac-switch > summary:hover { background: var(--surface-3); }
 .oneline-legend .oneline-bay[data-state="idle"] .oneline-sw,
 .oneline-legend .oneline-bay[data-state="unknown"] .oneline-sw { border-width: 1.5px; }
 
-/* Striscia eventi: la stampante di sala controllo */
-.eventstrip { display: flex; flex-direction: column; }
-.eventstrip-row {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 10px;
-  align-items: baseline;
-  padding: 7px 0;
-  border-bottom: var(--seam) solid var(--border);
-  font-family: var(--font-data);
-  font-size: 12px;
-}
-.eventstrip-row:last-child { border-bottom: 0; }
-.eventstrip-time { color: var(--text-soft); font-size: 11px; }
-.eventstrip-text { color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.eventstrip-empty { padding: 14px 0; color: var(--text-soft); font-family: var(--font-prose); font-size: 13px; }
-
 /* --- Skeleton placeholders -------------------------------------------------
    Home paints its panels empty and fills them when the fleet data lands. The
    shimmer says "loading" instead of "nothing here", and — more to the point —
@@ -2187,7 +2170,6 @@ body:not(.role-super_admin) .requires-super-admin { display: none !important; }
 @media (max-width: 1200px) {
   .hero { grid-template-columns: 1fr; }
   #homeVerdicts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .home-split { grid-template-columns: 1fr; }
 }
 
 @media (min-width: 1001px) {
@@ -2925,14 +2907,13 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
 }
 .inv-panel > .filterbar input[type="search"] { width: 100%; padding-left: 30px; }
 
-/* Attention queue (wide) beside the event log (narrow). */
+/* Attention queue. */
 .home-split {
-  display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); gap: 12px;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px;
   align-items: stretch;
 }
 .home-split > .panel { margin-bottom: 0; }
 .home-split .table-container { margin: 0 -20px -18px; width: calc(100% + 40px); max-width: none; border: 0; box-shadow: none; border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
-.home-split .eventstrip-text { white-space: nowrap; }
 
 .cmd-item {
   display: flex;
@@ -4074,10 +4055,6 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
 .ti-status { font-size: 12px; font-weight: 600; color: var(--text-muted); }
 .ti-detail-row > td { background: var(--surface-2); padding: 12px 16px; }
 
-/* Incidents: the detail pane says what to do before anything is selected. */
-.inc-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 40px 20px; color: var(--text-muted); }
-.inc-empty i { font-size: 21px; }
-
 /* --- Stat cards (HA tab; born in the removed Traffic overview) --- */
 .traf-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
 .traf-kpi { margin: 0; padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
@@ -4085,31 +4062,6 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
 .traf-kpi-value { font-size: 21px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 1000px) {
   .traf-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-
-/* --- Incidents: list items, then a header + timeline beside cause/context --- */
-.incident-list-item { cursor: pointer; padding: 10px; margin-bottom: 8px; border: 1px solid var(--border); background: var(--surface-2); }
-.incident-list-item:hover { border-color: var(--border-strong); }
-.incident-list-item.is-active { border-color: var(--primary); background: var(--surface-3); }
-.inc-li-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.inc-li-title { font-size: 13px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.inc-sev-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-.inc-li-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; }
-.inc-li-conf { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-muted); }
-.inc-li-conf > span { min-width: 64px; }
-.inc-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; font-size: 11px; border: 1px solid var(--border-strong); color: var(--text-soft); white-space: nowrap; }
-.inc-chip-status { color: var(--text); }
-.inc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
-.inc-title { margin: 0 0 6px; font-family: var(--font-display); font-size: 21px; }
-.inc-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
-.inc-sub { font-size: 12px; color: var(--text-muted); }
-.inc-actions { display: flex; gap: 8px; flex: none; }
-.inc-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 18px; align-items: start; }
-.inc-section-title { margin: 16px 0 10px; font-size: 14px; color: var(--primary); }
-.inc-main > .inc-section-title:first-child { margin-top: 0; }
-@media (max-width: 1200px) {
-  .inc-body { grid-template-columns: minmax(0, 1fr); }
-  .inc-side { order: -1; }
 }
 
 /* ==== Admin tabs: members-style tables, dialogs, settings index ==== */

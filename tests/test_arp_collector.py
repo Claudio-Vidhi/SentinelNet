@@ -160,18 +160,6 @@ class DbTest(unittest.TestCase):
         self.assertEqual(len(self.mh.search_arp(tenants=["TenantB"])), 0)
         self.assertEqual(len(self.mh.search_arp(tenants=[])), 0)
 
-    def test_vlans_for_ips_does_not_leak_across_tenants(self):
-        # Same private IP behind two independent sites, different VLANs.
-        # Moved here from the flow graph tests when that endpoint was removed:
-        # the function still feeds the incident engine.
-        ip = "10.9.9.9"
-        self.mh.record_arp_entries([{"mac": "aa:bb:cc:dd:ee:02", "ip": ip, "vlan": "310"}],
-                                   source_ip="10.1.0.254", tenant="TenantA")
-        self.mh.record_arp_entries([{"mac": "aa:bb:cc:dd:ee:03", "ip": ip, "vlan": "420"}],
-                                   source_ip="10.2.0.254", tenant="TenantB")
-        self.assertEqual(self.mh.vlans_for_ips({ip: "TenantA"}), {ip: "310"})
-        self.assertEqual(self.mh.vlans_for_ips({ip: "TenantB"}), {ip: "420"})
-        self.assertEqual(self.mh.vlans_for_ips({ip: "TenantC"}), {})
 
 
 class CollectTest(unittest.TestCase):

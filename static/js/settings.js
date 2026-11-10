@@ -605,10 +605,10 @@
         'send_cli_command', 'arp_scan', 'fortigate_full_config', 'drift_diff', 'drift_versions', 'drift_summary'
     ]);
     const MCP_MONITOR_TOOLS = new Set([
-        'get_anomalies', 'linux_health', 'get_interface_errors', 'ping_device', 'get_cve_list'
+        'linux_health', 'get_interface_errors', 'ping_device', 'get_cve_list'
     ]);
     const MCP_DEFAULT_DISABLED = new Set([
-        'get_anomalies', 'linux_health'
+        'linux_health'
     ]);
 
     function updateMcpToolCounters() {
@@ -908,9 +908,9 @@
     const PAGELESS_WRITE_TABS = [{ id: 'tab-import', key: 'tabImport' }];
 
     // The five requires-admin tabs that ARE a concession on an admin-level
-    // row (they gate the admin panels themselves). tab-incidents and
-    // tab-fortigate are also requires-admin but are ordinary operational
-    // tabs, not part of the admin-management group, so they stay excluded.
+    // row (they gate the admin panels themselves). tab-fortigate is also
+    // requires-admin but is an ordinary operational tab, not part of the
+    // admin-management group, so it stays excluded.
     const ADMIN_GROUP_TABS = ['tab-users', 'tab-groups', 'tab-blueprint', 'tab-probes', 'tab-mcp', 'tab-settings'];
 
     // Of ADMIN_GROUP_TABS, only these route to endpoints gated by

@@ -14,7 +14,7 @@ desiderata — ferma quelli rimossi/cambiati (bind o porta), poi avvia quelli
 mancanti. Lo stop precede sempre lo start per lo stesso nome (rebind pulito
 su Windows, che non permette il doppio bind della stessa porta).
 
-Task di background (retention, correlazione, poller API): partono alla prima
+Task di background (retention, normalizzazione, poller API): partono alla prima
 attivazione del master switch "enabled" e restano attivi (sono idle/no-op se
 non c'è nulla da fare); il poller API viene riavviato se cambia l'intervallo.
 """
@@ -30,7 +30,7 @@ _handles: dict = {}
 _current: dict = {}
 
 _retention_task: "asyncio.Task | None" = None
-_correlation_task: "asyncio.Task | None" = None
+_normalize_task: "asyncio.Task | None" = None
 _api_poller_task: "asyncio.Task | None" = None
 _api_poller_interval: int = 0
 _snmp_poller_task: "asyncio.Task | None" = None
@@ -105,7 +105,7 @@ async def apply_obs_config(cfg):
     """Applica la config observability allo stato live: listener UDP + task
     di background. Idempotente — richiamabile sia al boot (lifespan) sia a
     ogni salvataggio di config (endpoint), senza restart del processo."""
-    global _retention_task, _correlation_task, _api_poller_task, _api_poller_interval
+    global _retention_task, _normalize_task, _api_poller_task, _api_poller_interval
     global _snmp_poller_task, _snmp_poller_interval
     global _linux_poller_task, _linux_poller_interval
     global _l2_poller_task, _l2_poller_interval
@@ -117,10 +117,10 @@ async def apply_obs_config(cfg):
             from observability import rollup
             _retention_task = asyncio.create_task(rollup.retention_loop(),
                                                    name="obs-retention")
-        if _correlation_task is None:
-            from observability import correlator
-            _correlation_task = asyncio.create_task(correlator.correlation_loop(),
-                                                     name="obs-correlation")
+        if _normalize_task is None:
+            from observability import normalize
+            _normalize_task = asyncio.create_task(normalize.normalize_loop(),
+                                                  name="obs-normalize")
         desired_interval = int(cfg.get("api_poll_s", 0) or 0)
         desired_snmp = int(cfg.get("snmp_poll_s", 0) or 0)
         desired_linux = int(cfg.get("linux_poll_s", 0) or 0)
@@ -178,16 +178,16 @@ async def apply_obs_config(cfg):
 
 async def shutdown():
     """Ferma tutti i listener e i task di background (spegnimento app)."""
-    global _retention_task, _correlation_task, _api_poller_task, _api_poller_interval
+    global _retention_task, _normalize_task, _api_poller_task, _api_poller_interval
     global _snmp_poller_task, _snmp_poller_interval
     global _linux_poller_task, _linux_poller_interval
     global _l2_poller_task, _l2_poller_interval
-    for task in (_retention_task, _correlation_task, _api_poller_task,
+    for task in (_retention_task, _normalize_task, _api_poller_task,
                  _snmp_poller_task, _linux_poller_task, _l2_poller_task):
         if task is not None:
             task.cancel()
     _retention_task = None
-    _correlation_task = None
+    _normalize_task = None
     _api_poller_task = None
     _api_poller_interval = 0
     _snmp_poller_task = None

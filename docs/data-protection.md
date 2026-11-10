@@ -36,7 +36,7 @@ the honest assumption is that it is.
 |---|---|---|
 | Flow records (legacy, databases created before 0.65.0 only) | `observability.db` → `flow_aggregates` | No longer written; still pruned at 30 days (`SENTINELNET_OBS_RETENTION_FLOWS_DAYS`) until empty |
 | Syslog messages, verbatim | `observability.db` → `syslog_events` | 7 days (`SENTINELNET_OBS_RETENTION_SYSLOG_DAYS`) |
-| Normalised events, evidence, incidents | `observability.db` | 30 days for events, 90 for evidence and incidents (`SENTINELNET_OBS_RETENTION_EVENTS_DAYS`) |
+| Normalised events (and, on an older install, the legacy evidence/incident tables) | `observability.db` | 30 days for events, 90 for the legacy incident tables (`SENTINELNET_OBS_RETENTION_EVENTS_DAYS`) |
 | MAC/ARP sightings | `mac_history.db` | 30 days from the last time the row was updated, configurable in the MAC Tracker tab |
 
 **Syslog content is the widest exposure, and it is not something the product

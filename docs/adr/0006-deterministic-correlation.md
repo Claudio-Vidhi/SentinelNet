@@ -1,6 +1,6 @@
 # ADR-0006 — Correlation is deterministic; the AI narrates, it doesn't decide
 
-**Status:** Accepted
+**Status:** Superseded — the correlation engine it governed was removed in 0.65.0; no AI sits in a decision path still holds.
 **Date:** 2026-07-27
 
 ## Context

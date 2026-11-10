@@ -87,10 +87,9 @@ Non-negotiable rules:
 - Reads from async endpoints go through `await db.read()`, which uses
   `asyncio.to_thread` with a read-only connection per call (WAL allows
   concurrent readers).
-- `get_observability_connection()` is **only** for migrations and tests, and is
-  forbidden on async paths (grep gate in review). One deliberate exception:
-  `set_incident_status()` (`routers/incidents.py`) uses it inside
-  `asyncio.to_thread` because it needs an atomic read-then-write transaction.
+- `get_observability_connection()` is **only** for migrations, tests and
+  helpers handed to `asyncio.to_thread`, and is forbidden in the body of an
+  `async def` (`tests/test_no_sync_db_on_event_loop.py`).
 
 See [ADR-0004](adr/0004-single-process-sqlite-writer.md).
 
@@ -112,17 +111,17 @@ refuses to start.
 | Table | Written by | Read by | Notes |
 |---|---|---|---|
 | `flow_aggregates` | nothing since 0.65.0 | nothing | Legacy: kept in databases created before, not created in new ones |
-| `syslog_events` | Syslog ingester | `/syslog`, **all of Flow SIEM**, correlator | `action` is the device's real verdict |
-| `correlated_events` | Correlator | `/anomalies`, "spikes" KPI | `dedup_key UNIQUE` + `INSERT OR IGNORE` |
+| `syslog_events` | Syslog ingester | `/syslog`, **all of Flow SIEM**, normalizer | `action` is the device's real verdict |
 | `siem_suppressions` | `POST /alerts/suppress` | Exclusion in `/events` and `/facets` | PK is `syslog_events.id` |
-| `quarantined_exporters` | Ingest | `normalize._from_quarantine` → `platform.exporter_unknown` → `FLOW_EXPORTER_UNKNOWN_001` | Exporters outside inventory; data loss becomes evidence on the reserved `__platform__` tenant instead of staying diagnostic-only |
+| `quarantined_exporters` | Ingest | `normalize._from_quarantine` → `platform.exporter_unknown` | Exporters outside inventory; data loss becomes an event on the reserved `__platform__` tenant instead of staying diagnostic-only |
 | `api_observations` | REST/SNMP pollers | `/api-context` | Device snapshots, not flows |
 
 ### 3.1 Retention ([observability/rollup.py](../observability/rollup.py))
 
 Hourly job, a technical GDPR measure. DELETEs batched at 5000 rows per
-transaction via `rowid`, to avoid holding long locks. **Unresolved** correlated
-events (`new`/`ack`) are never deleted automatically — only `resolved` ones.
+transaction via `rowid`, to avoid holding long locks. The legacy incident
+tables of an older database age out on their last activity (see
+[operations.md](operations.md) §Retention).
 
 > Note: `siem_suppressions` is not in the retention table. Suppressions outlive
 > the syslog event they point at (harmless orphan rows, but worth knowing).
@@ -139,14 +138,16 @@ All in [routers/observability.py](../routers/observability.py), all scoped by
 | Endpoint | Auth | What it does |
 |---|---|---|
 | `GET /api/observability/syslog` | user | Latest normalized syslog events |
-| `GET /api/observability/anomalies` | user | Correlated events, paginated, filtered by status |
-| `POST /api/observability/anomalies/{id}/status` | operator | **Deprecated** alias of `POST /api/incidents/{id}/status`, which it delegates to |
+| `GET /api/observability/interfaces` | `tab-interfaces` | Latest state per port, link transitions over 24h, declared expectations |
+| `POST /api/observability/interfaces/expected` | operator + `tab-interfaces` | Declare a port or a whole device expected down / in maintenance |
 | `GET/POST /api/observability/config` | **admin** | Listener config, applied hot |
 | `GET /api/observability/health` | **admin** | Active listeners, metrics, DB size |
 | `POST /api/observability/api-poll` | operator | One-shot REST poll |
 
 `/flowgraph`, `/protocol-distribution`, `/hosts`, `/host-series` and `/top`
-were removed in 0.65.0 with the flow views they fed (§4.4).
+were removed in 0.65.0 with the flow views they fed (§4.4). `/anomalies` and
+its `/status` alias went with the incidents engine in the same release; the
+two interface routes moved here from `/api/incidents/interfaces*`.
 
 ### 4.2 Scope rule (CONTRIBUTING.md §4)
 
@@ -179,14 +180,7 @@ read only `flow_aggregates`. 0.65.0 removed them with the flow collectors,
 `/top` and the MCP tool `get_top_talkers`. The tab now has **Ricerca** (syslog,
 §5) and **Per policy**.
 
-### 4.5 Correlation
-
-Syslog verdicts reach the rules engine through the unified event model
-(`log.security`); `BLOCKED_TRAFFIC_001` fires on repeated blocks from the same
-source rather than on flow corroboration. See
-[architecture.md](architecture.md) §3.
-
-### 4.6 Frontend ([static/js/observability.js](../static/js/observability.js))
+### 4.5 Frontend ([static/js/observability.js](../static/js/observability.js))
 
 - **Auto-refresh every 30 s**, paused when the tab is inactive or the page is
   hidden; immediate refresh on return (`visibilitychange`).
@@ -194,21 +188,6 @@ source rather than on flow corroboration. See
   listener, it says so. Previously the absence of data was silent and
   indistinguishable from "quiet network". `/health` is admin-only: a 403 hides
   the banner rather than raising an error.
-
-### 4.7 Anomaly status transitions
-
-`_ALLOWED_TRANSITIONS = {(new,ack), (new,resolved), (ack,resolved)}`.
-
-Optimistic concurrency: the client sends `from_status` and the UPDATE carries
-`AND status = ?`; `rowcount == 0` → **409** with a "reload the list" message. An
-out-of-scope or non-existent event returns an **identical 404**, so as not to
-confirm the existence of other sites' events.
-
-### 4.8 MCP exposure
-
-`get_anomalies` is defined in [ai/mcp_server.py](../ai/mcp_server.py) but sits
-in `_MCP_DEFAULT_DISABLED` ([routers/mcp.py](../routers/mcp.py)): it must be
-enabled explicitly.
 
 ---
 
@@ -263,12 +242,11 @@ itself the single source of truth disagreed with the ingester.
 **`SECURITY_ACTIONS` covers the UTM verbs, not just the policy ones.** IPS
 writes `dropped` / `reset` / `clear_session` and the DNS filter writes
 `redirect`; none of them is `drop`. While they were missing, an IPS drop
-normalized to `log.event` rather than `log.security`, never reached
-`BLOCKED_TRAFFIC_001`, and never raised an incident — and an IPS drop is one of
-the commonest reasons a page loads half way. Deliberately **excluded**:
+normalized to `log.event` rather than `log.security` and never counted as a
+block — and an IPS drop is one of the commonest reasons a page loads half way. Deliberately **excluded**:
 `passthrough` and `bypass` (SSL, traffic *allowed* without inspection),
 `detected` (IPS in monitor mode) and `pass`. Those are consent verbs; counting
-them as blocks would invent incidents on permitted traffic.
+them as blocks would invent alerts on permitted traffic.
 
 Because extraction happens **at read time** from the stored raw message, adding
 a key to that regex improves history retroactively — no re-ingest, no migration.
@@ -376,7 +354,7 @@ port. A failed bind produces a `listener_bind_failed` metric, a recorded state i
 State is module-level rather than on `app.state`, so the endpoint can call
 `apply_obs_config` without a reference to the `FastAPI` instance.
 
-Background tasks (retention, correlation, API poller) start on the first
+Background tasks (retention, normalization, API poller) start on the first
 activation of the master switch and stay up (they are no-ops when there is
 nothing to do); the API poller is restarted if its interval changes.
 
@@ -461,10 +439,6 @@ Run from the repository root:
    local timezone are assumed. A limitation of the BSD format, not of the parser.
 4. **`siem_suppressions` is outside retention** (§3.1).
 5. **Synthetic VLAN**: gone with `/flowgraph` in 0.65.0 (§4.4, §7.5).
-6. **Repetition before concluding**: a single block log with severity > 3
-   produces no incident — `BLOCKED_TRAFFIC_001` waits for `min_observations`
-   (default 3) blocks from the same source. Intended, but worth knowing when
-   investigating "why didn't this show up".
 
 ---
 
@@ -473,6 +447,5 @@ Run from the repository root:
 1. **Traffic → Ricerca** → filter `src_ip:<ip>` or `dst_ip:<ip>` for the
    device's real ALLOW/DENY verdict, with facets and histogram.
 2. **Traffic → Per policy** → which firewall rule carries the sessions.
-3. **Correlated anomalies** → transitions `new` → `ack` → `resolved`.
-4. Confirmed false positive → **suppress** (persisted, excluded from events and
+3. Confirmed false positive → **suppress** (persisted, excluded from events and
    facets).

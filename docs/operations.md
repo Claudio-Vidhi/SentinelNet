@@ -23,7 +23,7 @@ for `data/` next to *that*. First thing to check when "the data disappeared".
 | File | Contents |
 |---|---|
 | `network_hosts.csv` | Inventory, credentials **encrypted** with Fernet |
-| `observability.db` (+ `-wal`, `-shm`) | Syslog, poller snapshots, events, evidence, incidents |
+| `observability.db` (+ `-wal`, `-shm`) | Syslog, poller snapshots, events (plus the legacy incident tables of an older install) |
 | `mac_history.db` | MAC position history, ARP |
 | `redundancy.db` | HA group state |
 | `device_meta.db` | Manual device classification (category, name, vendor, model, HA group per tenant and node) and the per-vendor model catalogue. Replaces `device_categories.json` / `device_models.json`, imported once and left as `*.migrated` |
@@ -106,14 +106,14 @@ Hourly job, DELETEs batched at 5000 rows to avoid holding long locks.
 | `api_observations` (raw REST/SNMP snapshots) | 30 days | `SENTINELNET_OBS_RETENTION_FLOWS_DAYS` |
 | `iface_counter_reads` (on-demand error reads) | 30 days | Same |
 | `syslog_events` | 7 days | `SENTINELNET_OBS_RETENTION_SYSLOG_DAYS` |
-| `evidence` (orphans) | 90 days | `SENTINELNET_OBS_RETENTION_EVENTS_DAYS` |
-| `incidents` (`resolved` only) | 90 days | Same |
+| `evidence`, `incident_conclusions`, `incidents` (legacy, only where an older database still has them) | 90 days | `SENTINELNET_OBS_RETENTION_EVENTS_DAYS` |
 
 The notification send history (`notify_log`) is pruned separately by the
 notification loop, after 30 days.
 
-Unresolved incidents are never deleted automatically. Evidence attached to an
-incident follows it via `ON DELETE CASCADE`; the job only prunes orphans.
+The incidents engine was removed in 0.65.0: new databases do not create its
+tables, and in an older one every row ages out on its last activity, open
+incidents included, since nothing can resolve them any more.
 `siem_suppressions` is outside retention: suppressions outlive the event they
 point at (harmless orphan rows).
 
@@ -161,13 +161,10 @@ In order:
 5. No metric moving at all? The device isn't sending, or the UDP traffic isn't
    arriving. Verify from the device, not from here.
 
-### "An alarm didn't fire"
+### "A port shows as expected instead of down"
 
-1. Active suppression on the entity? `app_settings.json` → `suppressions`, and
-   remember a device-level suppression covers **every** one of its interfaces.
-2. Confirmation before concluding: `BLOCKED_TRAFFIC_001` needs
-   `min_observations` (default 3) block logs from the same source in the
-   window; other rules default to 1. Severity ≤ 3 logs emerge on their own.
+Active suppression on the entity? `app_settings.json` → `suppressions`, and
+remember a device-level suppression covers **every** one of its interfaces.
 
 ### "The exe can't find its data / starts from scratch"
 

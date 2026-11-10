@@ -1,6 +1,6 @@
 # ADR-0001 — Correlation rules are Python callables, not a YAML DSL
 
-**Status:** Accepted
+**Status:** Superseded — the correlation rules were removed with the incidents engine in 0.65.0.
 **Date:** 2026-07-27
 
 ## Context

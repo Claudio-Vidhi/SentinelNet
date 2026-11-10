@@ -130,7 +130,7 @@ class TestNotificationsApi(unittest.TestCase):
             headers=H,
             json={
                 "enabled": True,
-                "kinds": ["device.down", "incident.opened"],
+                "kinds": ["device.down", "siem.alert"],
                 "min_severity": "high",
                 "groups": ["sede-a"],
                 "mode": "immediate",
@@ -222,7 +222,7 @@ class TestNotificationsApi(unittest.TestCase):
             "name": "NOC Escalation",
             "enabled": True,
             "recipients": ["noc@example.com", "oncall@example.com"],
-            "kinds": ["device.down", "incident.opened"],
+            "kinds": ["device.down", "siem.alert"],
             "min_severity": "high",
             "groups": ["sede-a"],
             "mode": "immediate",
@@ -308,7 +308,7 @@ class TestNotificationsApi(unittest.TestCase):
             )
             conn.execute(
                 """INSERT INTO notify_log (ts, target, recipient, kind, title, status, item_count)
-                   VALUES (?, 'rule:1', 'team@example.com', 'incident.opened', 'Subject Rule', 'sent', 1)""",
+                   VALUES (?, 'rule:1', 'team@example.com', 'siem.alert', 'Subject Rule', 'sent', 1)""",
                 (now - 30,),
             )
             conn.commit()

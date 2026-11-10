@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Metriche di saturazione per normalizzatore e correlatore (WP8,
+"""Metriche di saturazione per il normalizzatore (WP8,
 docs/app-review-fix-plan.md): una sorgente che legge sempre il suo tetto
 per ciclo lo dichiara, invece di accumulare ritardo in silenzio."""
 
@@ -17,7 +17,7 @@ from core import data_config  # noqa: E402
 data_config.DATA_DIR = _TMP_DATA_DIR
 
 from core import db  # noqa: E402
-from observability import correlator, metrics, normalize  # noqa: E402
+from observability import metrics, normalize  # noqa: E402
 
 NOW = int(time.time())
 
@@ -41,42 +41,6 @@ class _Base(unittest.TestCase):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()
         conn.close()
-
-
-class TestCorrelatorCapMetric(_Base):
-
-    def setUp(self):
-        super().setUp()
-        self._orig_cap = correlator.MAX_EVENTS_PER_CYCLE
-        correlator.MAX_EVENTS_PER_CYCLE = 2
-
-    def tearDown(self):
-        correlator.MAX_EVENTS_PER_CYCLE = self._orig_cap
-
-    def _seed_events(self, n):
-        conn = db.get_observability_connection()
-        for i in range(n):
-            conn.execute(
-                """INSERT INTO events (ts, ingested_ts, tenant, source, source_id,
-                                       event_type, entity_type, entity_id, severity,
-                                       dedup_key)
-                   VALUES (?, ?, 't1', 'syslog', ?, 'test.synthetic', 'device',
-                           '192.0.2.1', 5, ?)""",
-                (NOW - 60 + i, NOW, i, f"cap-test:{i}"))
-        conn.commit()
-        conn.close()
-
-    def test_saturated_window_is_counted(self):
-        self._seed_events(4)
-        correlator.correlate_once(NOW)
-        counters = metrics.snapshot()["counters"]
-        self.assertEqual(counters.get("correlation_capped"), 1)
-
-    def test_normal_window_is_not_counted(self):
-        self._seed_events(1)
-        correlator.correlate_once(NOW)
-        counters = metrics.snapshot()["counters"]
-        self.assertNotIn("correlation_capped", counters)
 
 
 class TestNormalizeCapMetric(_Base):

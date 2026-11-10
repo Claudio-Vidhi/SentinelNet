@@ -263,10 +263,12 @@ def obs_config() -> dict:
                                     or _app_adv("retention_flows_days") or 30),
             "iface_counter_reads": int(os.environ.get("SENTINELNET_OBS_RETENTION_FLOWS_DAYS")
                                        or _app_adv("retention_flows_days") or 30),
-            # Orphan evidence (rule fired, incident never formed): those
-            # tied to an incident follow the incident via CASCADE.
+            # Legacy incident tables, pruned only where an older database
+            # still has them.
             "evidence": int(os.environ.get("SENTINELNET_OBS_RETENTION_EVENTS_DAYS")
                             or _app_adv("retention_events_days") or 90),
+            "incident_conclusions": int(os.environ.get("SENTINELNET_OBS_RETENTION_EVENTS_DAYS")
+                                        or _app_adv("retention_events_days") or 90),
             "incidents": int(os.environ.get("SENTINELNET_OBS_RETENTION_EVENTS_DAYS")
                              or _app_adv("retention_events_days") or 90),
         },

@@ -362,7 +362,7 @@ class TestHomeTab(unittest.TestCase):
         self.assertIn('data-i18n="tabHome"', html)
         # runtime-populated ids
         for eid in ('homeKpiOnline', 'homeKpiAttention',
-                    'homeAttentionBody', 'homeAnomSummary'):
+                    'homeAttentionBody'):
             self.assertIn(f'id="{eid}"', html)
         # Home wires only to REAL endpoints
         self.assertIn('/api/local-devices', js)
@@ -1341,8 +1341,8 @@ class TestSettingsTabRestyle(unittest.TestCase):
         start = html.index('<div id="tab-settings"')
         # Il confine era #tab-flow-siem, che non esiste piu' dopo la fusione
         # del tab Traffico: senza un confine valido la fetta si mangiava anche
-        # Incidenti e NetSec Audit, e il conteggio dei pannelli saliva a 14.
-        end = html.find('<div id="tab-incidents"', start)
+        # Interfaces and NetSec Audit, e il conteggio dei pannelli saliva.
+        end = html.find('<div id="tab-interfaces"', start)
         if end == -1:
             end = html.index("</main>", start)
         return html[start:end]

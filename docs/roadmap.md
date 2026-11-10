@@ -13,17 +13,21 @@ stand on data already collected come first.
 
 Ideas taken from Nagios/Naemon, reordered after checking them against the code.
 
+Items 1, 3, 4 and 5 were built inside the incidents engine, which was removed
+in 0.65.0 as misleading; the reasoning below is kept as the record of why they
+were built. Item 2 survives as the Interfaces tab's declared expected state.
+
 None of these items make the network more visible. They exist so the engineer
 trusts what they read, not so they discover something new. That is a different
 goal and worth keeping distinct.
 
 | # | Item | Status | Note |
 |---|---|---|---|
-| 1 | Flapping detection | **done** | `IFACE_FLAPPING_001` |
-| 2 | Windowed suppression (scheduled downtime) | **done** | [suppression.py](../observability/suppression.py), applied in the correlator |
-| 3 | Confirm before concluding | **done** | `min_observations` on every rule, counted as distinct events |
-| 4 | `device.unreachable` | **done** | `DEVICE_UNREACHABLE_001`: a device that was answering and stopped |
-| 5 | Full acknowledgement | **done** | who, when and why on the incident (schema v11) |
+| 1 | Flapping detection | **removed in 0.65.0** | was `IFACE_FLAPPING_001`; the Interfaces tab still counts link transitions over 24h |
+| 2 | Windowed suppression (scheduled downtime) | **done** | [suppression.py](../observability/suppression.py), read by the Interfaces tab |
+| 3 | Confirm before concluding | **removed in 0.65.0** | was `min_observations` on every rule |
+| 4 | `device.unreachable` | **removed in 0.65.0** | the event is still projected; `DEVICE_UNREACHABLE_001` that read it is gone |
+| 5 | Full acknowledgement | **removed in 0.65.0** | was who, when and why on the incident (schema v11) |
 | 6 | Notification engine → escalation | **phase 1 done** | Email: per-user preferences, admin distribution rules, digest, quiet hours, 30-minute flood window ([notifications.py](../services/notifications.py), schema v12). Escalation still undecided |
 
 ### 1.1 Why this order

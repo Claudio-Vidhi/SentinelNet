@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Observability API: /syslog and /anomalies (multi-tenant scope, hostile
-parameters), the correlation engine on syslog (repetition before concluding,
-dedup, cross-tenant, switch/port enrichment), a correlator cycle on a seeded
-database, and the MCP observability tools being off by default."""
+"""Observability API: /syslog (multi-tenant scope, hostile parameters), the
+interface routes moved out of the removed incidents router, the incidents
+routes being gone, old incident settings ignored, and the MCP observability
+tools being off by default."""
 
 import json
 import os
@@ -25,7 +25,6 @@ data_config.DATA_DIR = _TMP_DATA_DIR
 import app_server  # noqa: E402
 from core import db  # noqa: E402
 from security import user_manager  # noqa: E402
-from observability import correlator, incidents, rules  # noqa: E402
 
 PASS = "PasswordSicura1!"
 NOW = int(time.time())
@@ -77,8 +76,7 @@ class TestSyslogEndpoint(_Base):
     def test_hostile_params_rejected(self):
         c = self._client("adm")
         for url in ("/api/observability/syslog?window=15m;DROP TABLE x",
-                    "/api/observability/syslog?window=999999d",
-                    "/api/observability/anomalies?status=x'--"):
+                    "/api/observability/syslog?window=999999d"):
             r = c.get(url)
             self.assertIn(r.status_code, (400, 422), url)
 
@@ -101,194 +99,6 @@ class TestSyslogEndpoint(_Base):
                          {"sede-a", "sede-b"})
 
 
-class TestCorrelator(_Base):
-    FGT_MSG = ('logid="0316013057" type="utm" level="warning" '
-               'action="blocked" srcip=10.1.0.5 dstip=203.0.113.7 dstport=443 '
-               'msg="Malware site blocked"')
-
-    def setUp(self):
-        conn = db.get_observability_connection()
-        conn.execute("DELETE FROM evidence")
-        conn.execute("DELETE FROM incidents")
-        conn.execute("DELETE FROM syslog_events")
-        # Il correlatore consuma il modello normalizzato: la proiezione e i
-        # cursori vanno azzerati insieme alle tabelle d'origine, altrimenti un
-        # test eredita gli eventi normalizzati del precedente.
-        conn.execute("DELETE FROM events")
-        conn.execute("DELETE FROM normalize_cursors")
-        conn.commit()
-        conn.close()
-        db.start_writer()
-
-    def tearDown(self):
-        db.stop_writer()
-
-    def _rows(self, role="trigger"):
-        """Evidenze prodotte dal ciclo. Il correlatore emette anche le righe di
-        supporto: i test storici contano gli INNESCHI, che sono ciò che prima
-        era una riga di ``correlated_events``."""
-        conn = db.get_observability_connection()
-        rows = conn.execute(
-            "SELECT * FROM evidence WHERE role = ? ORDER BY id", (role,)).fetchall()
-        conn.close()
-        return rows
-
-    def _by_rule(self, rule_id, role="trigger"):
-        conn = db.get_observability_connection()
-        rows = conn.execute(
-            "SELECT * FROM evidence WHERE rule_id = ? AND role = ? ORDER BY id",
-            (rule_id, role)).fetchall()
-        conn.close()
-        return rows
-
-    def _seed_blocks(self, tenant="sede-a", n=3, severity=4):
-        conn = db.get_observability_connection()
-        for _ in range(n):
-            _seed_syslog(conn, tenant, self.FGT_MSG, severity=severity)
-        conn.commit()
-        conn.close()
-
-    def test_repeated_blocks_give_a_trigger_with_provenance(self):
-        # Severita' 4: fa scattare solo la regola sul traffico bloccato, non
-        # quella sulla severita' alta.
-        self._seed_blocks()
-        # Soglie ai default: il test verifica la regola, non la configurazione.
-        with patch("observability.rules.get_app_settings", return_value={}), \
-             patch("collectors.mac_history.client_map", return_value=[
-                {"switch_ip": "10.1.0.10", "switch_name": "SW-A1",
-                 "switch_port": "Gi1/0/7"}]):
-            correlator.correlate_once(NOW)
-
-        triggers = self._by_rule("BLOCKED_TRAFFIC_001")
-        self.assertEqual(len(triggers), 3)
-        trigger = triggers[0]
-        self.assertEqual(trigger["src_ip"], "10.1.0.5")
-        self.assertEqual(trigger["switch_port"], "SW-A1:Gi1/0/7")
-        self.assertEqual(trigger["entity_key"], "ip:10.1.0.5")
-        # Provenienza: versione della regola E soglie effettivamente usate.
-        self.assertEqual(trigger["rule_version"],
-                         rules.RULES["BLOCKED_TRAFFIC_001"]["version"])
-        self.assertEqual(json.loads(trigger["params_json"])["min_observations"], 3)
-        # No flow corroboration any more: nothing but the triggers.
-        self.assertEqual(self._by_rule("BLOCKED_TRAFFIC_001", "supporting"), [])
-
-    def test_a_single_block_is_not_enough(self):
-        # Severita' media (4) e un solo blocco: un firewall nega di continuo,
-        # un fatto isolato non diventa evidenza.
-        self._seed_blocks(n=1)
-        with patch("observability.rules.get_app_settings", return_value={}), \
-             patch("collectors.mac_history.client_map", return_value=[]):
-            emitted = correlator.correlate_once(NOW)
-        self.assertEqual(emitted, 0)
-        self.assertEqual(len(self._rows()), 0)
-
-    def test_two_rules_on_the_same_fact_reinforce_one_incident(self):
-        # Severita' 2 e blocchi ripetuti: scattano ENTRAMBE le regole. Non e'
-        # un doppione, sono due evidenze sullo stesso innesco, e l'incidente
-        # che ne deriva deve restare uno solo, con la confidenza rinforzata.
-        self._seed_blocks(severity=2)
-        with patch("observability.rules.get_app_settings", return_value={}), \
-             patch("collectors.mac_history.client_map", return_value=[]):
-            correlator.correlate_once(NOW)
-        self.assertEqual(len(self._by_rule("BLOCKED_TRAFFIC_001")), 3)
-        self.assertEqual(len(self._by_rule("HIGH_SEVERITY_LOG_001")), 3)
-
-        incidents.group_once(NOW)
-        conn = db.get_observability_connection()
-        rows = conn.execute("SELECT * FROM incidents").fetchall()
-        conn.close()
-        self.assertEqual(len(rows), 1)
-        reasoning = json.loads(rows[0]["reasoning_json"])
-        self.assertIn("piu_regole_concordi", reasoning["sources_used"])
-
-    def test_threshold_from_settings_is_applied(self):
-        # La soglia e' configurabile a runtime: con min_observations a 1 il
-        # blocco singolo basta.
-        settings = {"correlation_rules": {"BLOCKED_TRAFFIC_001":
-                                          {"min_observations": 1}}}
-        self._seed_blocks(n=1)
-        with patch("observability.rules.get_app_settings", return_value=settings), \
-             patch("collectors.mac_history.client_map", return_value=[]):
-            correlator.correlate_once(NOW)
-        self.assertEqual(len(self._by_rule("BLOCKED_TRAFFIC_001")), 1)
-
-    def test_rerun_does_not_duplicate(self):
-        self._seed_blocks()
-        with patch("observability.rules.get_app_settings", return_value={}), \
-             patch("collectors.mac_history.client_map", return_value=[]):
-            correlator.correlate_once(NOW)
-            correlator.correlate_once(NOW)
-        self.assertEqual(len(self._by_rule("BLOCKED_TRAFFIC_001")), 3)
-
-    def test_high_severity_emits_standalone(self):
-        # Severita' alta (<=3): l'evento emerge da solo, anche senza action di
-        # sicurezza e senza endpoint nel messaggio.
-        conn = db.get_observability_connection()
-        _seed_syslog(conn, "sede-a", 'logdesc="FortiGate update failed"',
-                     action=None, severity=1)
-        conn.commit()
-        conn.close()
-        with patch("collectors.mac_history.client_map", return_value=[]):
-            correlator.correlate_once(NOW)
-        rows = self._by_rule("HIGH_SEVERITY_LOG_001")
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["severity"], 1)
-        self.assertIsNone(rows[0]["src_ip"])
-
-    def test_high_severity_rerun_does_not_duplicate(self):
-        conn = db.get_observability_connection()
-        _seed_syslog(conn, "sede-a", "kernel panic", action=None, severity=0)
-        conn.commit()
-        conn.close()
-        with patch("collectors.mac_history.client_map", return_value=[]):
-            correlator.correlate_once(NOW)
-            correlator.correlate_once(NOW)
-        self.assertEqual(len(self._by_rule("HIGH_SEVERITY_LOG_001")), 1)
-
-    def test_no_cross_tenant_correlation(self):
-        # Stessa sorgente, tenant diversi: i blocchi non si sommano.
-        self._seed_blocks("sede-a", n=2)
-        self._seed_blocks("sede-b", n=1)
-        with patch("observability.rules.get_app_settings", return_value={}), \
-             patch("collectors.mac_history.client_map", return_value=[]):
-            emitted = correlator.correlate_once(NOW)
-        self.assertEqual(emitted, 0)
-
-    def test_missing_mac_gives_null_switch_port(self):
-        self._seed_blocks()
-        with patch("observability.rules.get_app_settings", return_value={}), \
-             patch("collectors.mac_history.client_map", return_value=[]):
-            correlator.correlate_once(NOW)
-        rows = self._by_rule("BLOCKED_TRAFFIC_001")
-        self.assertEqual(len(rows), 3)
-        self.assertTrue(all(row["switch_port"] is None for row in rows))
-
-
-class TestQueryPerf(_Base):
-    """A correlator cycle stays bounded on a database seeded with syslog."""
-
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        conn = db.get_observability_connection()
-        rows = ((NOW - (i % 3000), f"sede-{chr(97 + i % 3)}", 4, "deny",
-                 f"action=deny srcip=10.{i % 200}.{(i // 200) % 200}.{i % 250} "
-                 f"dstip=203.0.113.{i % 250} dstport=443")
-                for i in range(100_000))
-        conn.executemany(
-            "INSERT INTO syslog_events (ts, tenant, device_ip, severity, action, "
-            "message) VALUES (?, ?, '10.0.0.254', ?, ?, ?)", rows)
-        conn.commit()
-        conn.close()
-
-    def test_correlator_cycle_bounded_on_seeded_db(self):
-        t0 = time.perf_counter()
-        with patch("collectors.mac_history.client_map", return_value=[]):
-            correlator.correlate_once(NOW)
-        elapsed = time.perf_counter() - t0
-        self.assertLess(elapsed, 30, f"ciclo correlatore {elapsed:.1f}s")
-
-
 class TestMcpDefaultOff(_Base):
     def test_obs_tools_disabled_by_default(self):
         settings_path = data_config.get_path("app_settings.json")
@@ -300,7 +110,7 @@ class TestMcpDefaultOff(_Base):
         r = self._client("adm").get("/api/mcp/tool-config")
         self.assertEqual(r.status_code, 200)
         disabled = r.json()["disabled_tools"]
-        self.assertIn("get_anomalies", disabled)
+        self.assertEqual(disabled, ["linux_health"])
 
     def test_explicit_admin_choice_wins(self):
         c = self._client("adm")
@@ -312,8 +122,80 @@ class TestMcpDefaultOff(_Base):
 
     def test_obs_tools_registered(self):
         from ai import mcp_server
-        self.assertNotIn("get_top_talkers", mcp_server.TOOLS)
-        self.assertIn("get_anomalies", mcp_server.TOOLS)
+        for gone in ("get_top_talkers", "get_anomalies", "list_incidents",
+                     "get_incident"):
+            self.assertNotIn(gone, mcp_server.TOOLS)
+        self.assertIn("linux_health", mcp_server.TOOLS)
+
+
+class TestIncidentsRemoved(_Base):
+    """The incidents engine is gone: its routes answer 404, the two interface
+    routes the Interfaces tab needs live under /api/observability."""
+
+    H = {"X-Requested-With": "SentinelNet"}
+
+    def test_old_incident_routes_are_404(self):
+        c = self._client("adm")
+        for url in ("/api/incidents", "/api/incidents/1", "/api/incidents/rules",
+                    "/api/incidents/interfaces", "/api/observability/anomalies"):
+            self.assertEqual(c.get(url).status_code, 404, url)
+        for url in ("/api/incidents/1/status", "/api/incidents/1/explain",
+                    "/api/incidents/interfaces/expected",
+                    "/api/incidents/rules/X/parameters",
+                    "/api/observability/anomalies/1/status"):
+            self.assertEqual(c.post(url, json={}, headers=self.H).status_code,
+                             404, url)
+
+    def test_moved_interface_routes_run(self):
+        self.assertEqual(TestClient(app_server.app).get(
+            "/api/observability/interfaces").status_code, 401)
+        c = self._client("adm")
+        r = c.get("/api/observability/interfaces")
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["min_transitions"], 4)
+        # Missing tenant/device_ip: the handler ran and refused it.
+        r = c.post("/api/observability/interfaces/expected", json={},
+                   headers=self.H)
+        self.assertEqual(r.status_code, 400, r.text)
+
+
+class TestLegacyIncidentSettings(_Base):
+    """An install upgraded from a release with the incidents engine still has
+    correlation_rules and old MCP tool names saved: startup and the surviving
+    routes ignore them."""
+
+    def setUp(self):
+        from core.app_settings import save_app_settings
+        save_app_settings({
+            "correlation_rules": {"IFACE_FLAPPING_001": {"min_transitions": 50},
+                                  "BLOCKED_TRAFFIC_001": {"min_observations": 9}},
+            "mcp": {"disabled_tools": ["get_anomalies", "list_incidents",
+                                       "linux_health"]}})
+        self.addCleanup(save_app_settings, {"correlation_rules": None, "mcp": None,
+                                            "observability": {}})
+
+    def test_startup_and_routes_ignore_them(self):
+        import asyncio
+        from core.app_settings import save_app_settings
+        from observability import listener_manager
+
+        save_app_settings({"observability": {"enabled": True,
+                                             "syslog_enabled": False,
+                                             "api_poll_s": 0}})
+
+        async def _boot():
+            await listener_manager.apply_obs_config(data_config.obs_config())
+            await listener_manager.shutdown()
+
+        db.migrate()
+        asyncio.run(_boot())
+
+        c = self._client("adm")
+        self.assertEqual(c.get("/api/mcp/tool-config").json()["disabled_tools"],
+                         ["linux_health"])
+        r = c.get("/api/observability/interfaces")
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["min_transitions"], 4)
 
 
 @classmethod

@@ -118,49 +118,6 @@ class SchemaTooNewError(RuntimeError):
     pass
 
 
-def _migrate_v7_evidence(conn: sqlite3.Connection) -> None:
-    """v7: ``correlated_events`` and ``incident_events`` are replaced by
-    ``evidence``. Existing rows are TRANSFERRED, not thrown away: each correlated
-    event becomes an evidence with role 'trigger' and source
-    LEGACY_CORRELATOR.
-
-    Stated limitation: ``event_id`` is resolved only where the originating syslog
-    event still exists in the normalized model. Correlates older than
-    the syslog retention (7 days vs the 90 of correlates) have no
-    event to point to and remain with ``event_id`` NULL — their original
-    content is still preserved in ``attrs_json``, so nothing is lost.
-    """
-    tables = {r["name"] for r in conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-    if "correlated_events" not in tables:
-        return
-    has_link = "incident_events" in tables
-    link_select = ("(SELECT incident_id FROM incident_events ie "
-                   " WHERE ie.correlated_event_id = ce.id)" if has_link else "NULL")
-    conn.execute(f"""
-        INSERT OR IGNORE INTO evidence
-            (created_ts, ts, tenant, incident_id, event_id, entity_key, role,
-             rule_id, rule_version, weight, severity, src_ip, dst_ip,
-             switch_port, summary, attrs_json, dedup_key)
-        SELECT ce.created_ts,
-               COALESCE(json_extract(ce.evidence_json, '$.syslog_ts'), ce.created_ts),
-               ce.tenant,
-               {link_select},
-               (SELECT e.id FROM events e
-                 WHERE e.source = 'syslog'
-                   AND e.source_id = json_extract(ce.evidence_json, '$.syslog_id')),
-               CASE WHEN ce.src_ip IS NOT NULL THEN 'ip:' || ce.src_ip END,
-               'trigger', 'LEGACY_CORRELATOR', '0', 1,
-               ce.severity, ce.src_ip, ce.dst_ip, ce.switch_port,
-               ce.kind, ce.evidence_json,
-               'legacy:' || ce.id
-        FROM correlated_events ce
-    """)
-    conn.execute("DROP TABLE IF EXISTS incident_events")
-    conn.execute("DROP TABLE correlated_events")
-    logger.info("Migrazione v7: correlated_events travasata in evidence.")
-
-
 def migrate() -> None:
     """Applies the schema (idempotent, forward-only) and records the version.
 
@@ -184,44 +141,12 @@ def migrate() -> None:
             )
         with open(_schema_path(), encoding="utf-8") as f:
             conn.executescript(f.read())
-        if current and current < 7:
-            _migrate_v7_evidence(conn)
-        # v8: lifecycle columns on a pre-existing evidence table
-        # (CREATE TABLE IF NOT EXISTS does not touch already-created tables).
-        ev_cols = {r["name"] for r in conn.execute(
-            "PRAGMA table_info(evidence)").fetchall()}
-        for column, ddl in (
-                ("status", "TEXT NOT NULL DEFAULT 'active'"),
-                ("retracted_by_evidence_id", "INTEGER"),
-                ("retracted_by_rule_id", "TEXT"),
-                ("retracted_at", "INTEGER"),
-                ("retracted_reason", "TEXT")):
-            if ev_cols and column not in ev_cols:
-                conn.execute(f"ALTER TABLE evidence ADD COLUMN {column} {ddl}")
-        # run_name arrived after netsec_audit_runs shipped (same reason as above).
+        # run_name arrived after netsec_audit_runs shipped (CREATE TABLE IF NOT
+        # EXISTS does not touch already-created tables).
         ar_cols = {r["name"] for r in conn.execute(
             "PRAGMA table_info(netsec_audit_runs)").fetchall()}
         if ar_cols and "run_name" not in ar_cols:
             conn.execute("ALTER TABLE netsec_audit_runs ADD COLUMN run_name TEXT")
-        # v10: retention anchors to the RESOLUTION moment, not the opening
-        # (plan Phase 3 item 18). Existing resolved rows backfill from
-        # closed_ts/opened_ts so nothing already closed changes behaviour.
-        inc_cols = {r["name"] for r in conn.execute(
-            "PRAGMA table_info(incidents)").fetchall()}
-        if inc_cols and "resolved_ts" not in inc_cols:
-            conn.execute("ALTER TABLE incidents ADD COLUMN resolved_ts INTEGER")
-        # v11: il "chi" della presa in carico e della chiusura. Righe
-        # esistenti restano NULL: non si inventa un nome per un'azione fatta
-        # quando la colonna non c'era.
-        for column, ddl in (("acknowledged_by", "TEXT"),
-                            ("acknowledged_ts", "INTEGER"),
-                            ("ack_note", "TEXT"),
-                            ("resolved_by", "TEXT")):
-            if inc_cols and column not in inc_cols:
-                conn.execute(f"ALTER TABLE incidents ADD COLUMN {column} {ddl}")
-            conn.execute(
-                "UPDATE incidents SET resolved_ts = COALESCE(closed_ts, opened_ts) "
-                "WHERE status = 'resolved' AND resolved_ts IS NULL")
         # v15: an engagement's place is a location, not a probe.
         ae_cols = {r["name"] for r in conn.execute(
             "PRAGMA table_info(audit_engagements)").fetchall()}

@@ -22,7 +22,7 @@ class TestInterfacesMonitoring(unittest.TestCase):
         self.client = TestClient(app_server.app)
         save_app_settings({"suppressions": {}})
         conn = db.get_observability_connection()
-        for table in ("events", "api_observations", "evidence", "incidents"):
+        for table in ("events", "api_observations"):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()
         conn.close()
@@ -48,7 +48,7 @@ class TestInterfacesMonitoring(unittest.TestCase):
         conn.close()
 
         # 1. Fetch interfaces & verify counts
-        res = self.client.get("/api/incidents/interfaces")
+        res = self.client.get("/api/observability/interfaces")
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertIn("counts", data)
@@ -72,14 +72,14 @@ class TestInterfacesMonitoring(unittest.TestCase):
                 }
             ]
         }
-        res_post = self.client.post("/api/incidents/interfaces/expected", json=batch_payload)
+        res_post = self.client.post("/api/observability/interfaces/expected", json=batch_payload)
         self.assertEqual(res_post.status_code, 200)
         post_data = res_post.json()
         self.assertEqual(post_data["status"], "success")
         self.assertEqual(post_data["count"], 1)
 
         # 3. Verify counts updated: down is now in_maintenance
-        res2 = self.client.get("/api/incidents/interfaces")
+        res2 = self.client.get("/api/observability/interfaces")
         self.assertEqual(res2.status_code, 200)
         counts2 = res2.json()["counts"]
         self.assertEqual(counts2["total"], 2)
@@ -98,11 +98,11 @@ class TestInterfacesMonitoring(unittest.TestCase):
                 }
             ]
         }
-        res_clear = self.client.post("/api/incidents/interfaces/expected", json=clear_payload)
+        res_clear = self.client.post("/api/observability/interfaces/expected", json=clear_payload)
         self.assertEqual(res_clear.status_code, 200)
 
         # 5. Verify back to down
-        res3 = self.client.get("/api/incidents/interfaces")
+        res3 = self.client.get("/api/observability/interfaces")
         self.assertEqual(res3.json()["counts"]["outage"], 1)
         self.assertEqual(res3.json()["counts"]["maint"], 0)
 
@@ -135,7 +135,7 @@ class TestInterfacesMonitoring(unittest.TestCase):
         self._seed(["up", "down", "lowerLayerDown", "notPresent",
                     "dormant", "testing", None])
 
-        counts = self.client.get("/api/incidents/interfaces").json()["counts"]
+        counts = self.client.get("/api/observability/interfaces").json()["counts"]
 
         self.assertEqual(counts["total"], 7)
         self.assertEqual(counts["up"], 1, "only 'up' means the port carries traffic")
@@ -148,7 +148,7 @@ class TestInterfacesMonitoring(unittest.TestCase):
         side: that duplication is how the KPI cards and the table drift."""
         self._seed(["up", "notPresent", None])
 
-        data = self.client.get("/api/incidents/interfaces").json()
+        data = self.client.get("/api/observability/interfaces").json()
 
         states = sorted(r["state"] for r in data["interfaces"])
         self.assertEqual(states, ["outage", "unknown", "up"])
@@ -162,7 +162,7 @@ class TestInterfacesMonitoring(unittest.TestCase):
     def test_the_response_says_when_it_is_capped(self):
         """Past the cap every count describes the first page and nothing said
         so, while the UI presented 'Total Ports' as the truth."""
-        data = self.client.get("/api/incidents/interfaces").json()
+        data = self.client.get("/api/observability/interfaces").json()
         self.assertIn("truncated", data)
         self.assertFalse(data["truncated"])
         self.assertGreater(data["limit"], 0)
@@ -176,24 +176,24 @@ class TestInterfacesMonitoring(unittest.TestCase):
                   "to_ts": now + 3600, "note": "window"} for i in range(3)]
 
         calls = []
-        from core import app_settings as _app_settings
-        original = _app_settings.save_app_settings
+        from routers import observability as obs_router
+        original = obs_router.save_app_settings
 
         def _counting_save(payload):
             calls.append(payload)
             return original(payload)
 
-        _app_settings.save_app_settings = _counting_save
+        obs_router.save_app_settings = _counting_save
         try:
-            res = self.client.post("/api/incidents/interfaces/expected",
+            res = self.client.post("/api/observability/interfaces/expected",
                                    json={"items": items})
         finally:
-            _app_settings.save_app_settings = original
+            obs_router.save_app_settings = original
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.json()["count"], 3)
         self.assertEqual(len(calls), 1, f"saved {len(calls)} times for 3 items")
 
-        counts = self.client.get("/api/incidents/interfaces").json()["counts"]
+        counts = self.client.get("/api/observability/interfaces").json()["counts"]
         self.assertEqual(counts["maint"], 3, "all three declarations survived")
 
 

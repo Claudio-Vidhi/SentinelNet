@@ -28,7 +28,7 @@ for user-facing strings, logs and comments, English for identifiers — see
 | Document | Contents |
 |---|---|
 | [principles.md](principles.md) | Engineering principles every module is measured against |
-| [architecture.md](architecture.md) | Data pipeline end to end, event/evidence/incident model, module map |
+| [architecture.md](architecture.md) | Data pipeline end to end, event model, module map |
 | [adr/](adr/) | Architecture Decision Records — one decision per file |
 | [roadmap.md](roadmap.md) | What isn't built yet and why, in priority order |
 

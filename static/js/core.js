@@ -3,7 +3,7 @@
 // Escape di una stringa dentro un literal JavaScript, per la convenzione di
 // casa escapeHtml(jsStr(x)). Viveva in mcp-client.js, che era caricato con un
 // <script> fisso: alla rimozione di quella tab sarebbe sparito da sotto ai
-// tre moduli che lo usano (diagnosi, incidents, fortigate-management), tutti
+// moduli che lo usano (diagnosi, fortigate-management), tutti
 // lazy, tutti in questo unico scope globale. Sta qui perche' core.js c'e'
 // sempre.
 const jsStr = s => String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -1758,7 +1758,7 @@ async function appInit() {
         }
     } catch (e) { /* non bloccante */ }
 
-    // Flow SIEM, NetSec Audit, Incidenti e Fortigate Management non sono piu'
+    // Flow SIEM, NetSec Audit e Fortigate Management non sono piu'
     // dietro un flag: le tab sono sempre presenti, gated solo dalla RBAC di
     // nav come ogni altra voce.
 
@@ -1835,7 +1835,6 @@ const LAZY_TAB_SCRIPTS = {
     'tab-probes': ['/static/js/settings.js'],
     'tab-users': ['/static/js/settings.js'],
     'tab-mcp': ['/static/js/settings.js'],
-    'tab-incidents': ['/static/js/incidents.js'],
     'tab-interfaces': ['/static/js/interfaces.js'],
     'tab-redundancy': ['/static/js/redundancy.js'],
     // The Firewall Audit Checklist is a sub-tab of NetSec Audit: its module
@@ -2016,7 +2015,6 @@ async function switchTab(tabId, clickedBtn, opts = {}) {
     // nell'onclick del pulsante nav; ora il dispatch e' unico e arriva
     // dopo il caricamento lazy del modulo.
     else if (tabId === 'tab-flows') flowsTabShown();
-    else if (tabId === 'tab-incidents') loadIncidentsTab();
     else if (tabId === 'tab-interfaces' && typeof loadInterfacesTab === 'function') loadInterfacesTab();
     else if (tabId === 'tab-redundancy') loadRedundancyTab();
     else if (tabId === 'tab-netsec-audit') loadNetSecAuditTab();
@@ -2028,7 +2026,6 @@ async function switchTab(tabId, clickedBtn, opts = {}) {
     else if (tabId === 'tab-notifications' && typeof loadNotificationsTab === 'function') loadNotificationsTab();
 }
 
-// --- FLUSSI LIVE (fase 5): top talker + anomalie correlate -------------
 // Toast minimale non bloccante (il resto della dashboard usa alert()).
 function showToast(msg, kind) {
     // One live region for every toast: screen readers announce what lands in
@@ -2650,7 +2647,6 @@ function buildCommandPaletteItems(query = '') {
         { id: 'tab-wlc', title: 'Cisco WLC', desc: tr('coreAccessPointsSsidsAnd'), group: tr('coreDeviceTools') },
         { id: 'tab-redundancy', title: tr('coreHighAvailabilityHa'), desc: tr('coreRedundancyPairsAndFailover'), group: tr('coreViews') },
         { id: 'tab-home', title: tr('coreOverviewPosture'), desc: tr('coreFleetPostureVerdictsAnd'), group: tr('coreViews') },
-        { id: 'tab-incidents', title: tr('coreIncidents'), desc: tr('coreCorrelatedSecurityAndOperational'), group: tr('coreViews') },
         { id: 'tab-flows', title: tr('coreTrafficObservability'), desc: tr('coreTopTalkersAnomaliesAnd'), group: tr('coreViews') },
         { id: 'tab-endpoint', title: tr('coreEndpointInventoryMacTracker'), desc: tr('coreDiscoveredEndpointsMacTracking'), group: tr('coreViews') },
         { id: 'tab-devices', title: tr('invHeroTitle'), desc: tr('coreDeviceListCredentialsAnd'), group: tr('coreViews') },

@@ -35,13 +35,13 @@ PROTO_NUM = {"6": "TCP", "17": "UDP", "1": "ICMP"}
 # policy ci sono quelli UTM: IPS scrive 'dropped'/'reset'/'clear_session', il
 # DNS filter 'redirect' (dirottato su sinkhole: il client NON raggiunge il
 # sito). Senza di loro normalize.py li classificava 'log.event' invece di
-# 'log.security', quindi non arrivavano a BLOCKED_TRAFFIC_001 — e un drop IPS
-# è una delle cause più comuni di "il sito si carica a metà".
+# 'log.security', quindi non arrivavano a Flow SIEM né alle notifiche SIEM —
+# e un drop IPS è una delle cause più comuni di "il sito si carica a metà".
 #
 # DELIBERATAMENTE ASSENTI: 'passthrough' e 'bypass' (SSL: traffico lasciato
 # passare SENZA ispezione, è un permesso), 'detected' (IPS in sola rilevazione)
 # e 'pass' (application control). Sono verbi di consenso: classificarli come
-# blocchi produrrebbe falsi positivi in Flow SIEM e incidenti inventati, che
+# blocchi produrrebbe falsi positivi in Flow SIEM e allerte inventate, che
 # è peggio di un blocco non visto.
 SECURITY_ACTIONS = ("deny", "denied", "blocked", "block", "drop", "dropped",
                     "reset", "reset-both", "reset-client", "reset-server",

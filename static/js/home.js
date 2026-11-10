@@ -198,9 +198,6 @@ async function loadHome() {
 
     renderBastionPanel(viaBastion);
     renderLocationsBanner(devs);
-
-    if (isAdminRole(currentRole)) loadHomeAnomalies();
-    else renderEventStripDenied();
 }
 
 function renderHomeVerdicts(devs) {
@@ -473,72 +470,6 @@ function openInventoryForTenant(tenant) {
 }
 
 
-async function loadHomeAnomalies() {
-    const box = document.getElementById('homeAnomSummary');
-    if (!box) return;
-    const L = i18n[currentLang];
-    // Una sola chiamata: la striscia eventi vuole le righe recenti, il
-    // riepilogo vuole quante ne restano da lavorare.
-    const res = await apiFetch('/api/observability/anomalies?status=all&limit=100');
-    if (!res || !res.ok) {
-        // The panels ship with skeleton placeholders. Returning without
-        // clearing them would leave the page shimmering forever, claiming to
-        // still be loading something that already failed.
-        box.innerHTML = `<p style="color:var(--text-muted); margin:0; padding:8px 0;">${escapeHtml(L.homeAnomLoadFailed)}</p>`;
-        renderEventStrip([]);
-        return;
-    }
-    const rows = (await res.json()).anomalies || [];
-    renderEventStrip(rows.slice(0, 5));
-    if (rows.length === 0) {
-        box.innerHTML = `<p style="color:var(--text-muted); margin:0; padding:8px 0;">${escapeHtml(L.homeNoAnomalies)}</p>`;
-        return;
-    }
-    const openCount = rows.filter(a => a.status === 'new').length;
-    box.innerHTML = `
-        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:4px 0;">
-            <span class="status ${openCount ? 'warn' : 'ok'}" style="font-size:15px;">${openCount}</span>
-            <span style="font-size:13px; color:var(--text-muted);">${escapeHtml(L.homeAnomOpenCount)}</span>
-            <button class="btn btn-small" style="width:auto; margin:0;" data-action="open-traffico-anomalies">
-                <i class="fa-solid fa-arrow-right"></i> ${escapeHtml(L.homeAnomOpenLink)}
-            </button>
-        </div>`;
-}
-
-// Una sezione che non si puo' mostrare spiega perche', invece di sparire.
-function renderEventStripDenied() {
-    const strip = document.getElementById('homeEventStrip');
-    if (strip) strip.innerHTML =
-        `<p class="eventstrip-empty">${escapeHtml(tr('homeEventStripDenied'))}</p>`;
-}
-
-// Striscia eventi: una riga per evento, la piu' recente in alto, come la
-// stampante di sala controllo da cui prende la forma.
-function renderEventStrip(rows) {
-    const strip = document.getElementById('homeEventStrip');
-    if (!strip) return;
-    const L = i18n[currentLang];
-    if (!rows || rows.length === 0) {
-        strip.innerHTML = `<p class="eventstrip-empty">${escapeHtml(L.homeNoAnomalies)}</p>`;
-        return;
-    }
-    strip.innerHTML = rows.map(a => {
-        const sev = (a.severity || '').toString().toLowerCase();
-        const cls = (sev === 'high' || sev === 'critical') ? 'bad' : (sev === 'medium' ? 'warn' : 'ok');
-        const when = a.created_ts
-            ? new Date(a.created_ts * 1000).toLocaleTimeString(tr('homeEnGb'))
-            : '--:--:--';
-        const src = escapeHtml((a.src_ip || '').toString());
-        const dst = escapeHtml((a.dst_ip || '').toString());
-        const kind = escapeHtml((a.kind || '').toString());
-        return `<div class="eventstrip-row">
-            <span class="eventstrip-time">${escapeHtml(when)}</span>
-            <span class="eventstrip-text">${kind}${src ? ` &middot; ${src} &rarr; ${dst}` : ''}</span>
-            <span class="status ${cls}"><span class="led led-${cls === 'bad' ? 'danger' : cls === 'warn' ? 'warning' : 'success'}"></span>${escapeHtml((a.severity || '—').toString())}</span>
-        </div>`;
-    }).join('');
-}
-
 document.getElementById('btnHomeRunTriage')?.addEventListener('click', () => {
     if (typeof startGroupTriage === 'function') {
         startGroupTriage('all');
@@ -563,14 +494,3 @@ document.getElementById('homeAttentionBody')?.addEventListener('click', (e) => {
     }
 });
 
-document.getElementById('homeAnomSummary')?.addEventListener('click', async (e) => {
-    if (e.target.closest('[data-action="open-traffico-anomalies"]')) {
-        // Un'anomalia E' un incidente: stesso id, stessa coda, e la
-        // transizione di stato scrive comunque su /api/incidents. Portava
-        // alla copia dentro Traffico passando da tab-flows solo per caricare
-        // il modulo che la mostrava. Ora va alla coda vera, senza il rimbalzo
-        // e senza dipendere da observability.js.
-        const nav = document.querySelector('.nav-item[data-tab="tab-incidents"]');
-        await switchTab('tab-incidents', nav || undefined);
-    }
-});

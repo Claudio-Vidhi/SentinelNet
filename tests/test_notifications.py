@@ -31,9 +31,7 @@ def _reset_notify_state():
         conn.execute("DELETE FROM notify_cursors")
         # Cursors at the current high-water mark, not wiped to 0: this
         # observability.db is shared with the other modules of the worker, and
-        # their incidents/events must not be replayed into these tests.
-        conn.execute("""INSERT INTO notify_cursors (source, last_id)
-                        SELECT 'incidents', COALESCE(MAX(id), 0) FROM incidents""")
+        # their events must not be replayed into these tests.
         conn.execute("""INSERT INTO notify_cursors (source, last_id)
                         SELECT 'events', COALESCE(MAX(id), 0) FROM events""")
         conn.commit()
@@ -67,10 +65,10 @@ def test_filters_and_scope():
                     ]):
                         # Evento su 192.0.2.10 (TenantA): sia admin che operator lo ricevono
                         eq = notifications.emit(
-                            kind="incident.opened",
+                            kind="siem.alert",
                             device_ip="192.0.2.10",
                             severity="high",
-                            title="Incidente TenantA",
+                            title="Allerta TenantA",
                         )
                         assert eq == 2
 
@@ -80,10 +78,10 @@ def test_filters_and_scope():
                     ]):
                         # Evento su 192.0.2.20 (TenantB): solo admin lo riceve, operator_scoped no (fuori perimetro)
                         eq = notifications.emit(
-                            kind="incident.opened",
+                            kind="siem.alert",
                             device_ip="192.0.2.20",
                             severity="high",
-                            title="Incidente TenantB",
+                            title="Allerta TenantB",
                         )
                         assert eq == 1
 
@@ -101,14 +99,14 @@ def _scoped_users():
 
 
 def test_tenant_without_device_ip_reaches_scoped_user():
-    # incident.opened carries the tenant and no device IP: before the fix the
-    # group stayed None and a scoped operator never got an incident email.
+    # An event that carries the tenant and no device IP: before the fix the
+    # group stayed None and a scoped operator never got the email.
     users, groups = _scoped_users()
     with patch.object(mailer, "get_config", return_value={"enabled": True}), users, groups, \
             patch("services.inventory_manager.get_all_devices", return_value=[]):
-        assert notifications.emit(kind="incident.opened", device_ip=None, severity="high",
+        assert notifications.emit(kind="siem.alert", device_ip=None, severity="high",
                                   title="t", tenant="TenantA", dedup_key="a") == 2
-        assert notifications.emit(kind="incident.opened", device_ip=None, severity="high",
+        assert notifications.emit(kind="siem.alert", device_ip=None, severity="high",
                                   title="t", tenant="TenantB", dedup_key="b") == 1
 
 
@@ -120,10 +118,10 @@ def test_ip_shared_by_two_tenants_names_no_group():
     devices = [{"IP": "192.0.2.30", "Group": "TenantA"}, {"IP": "192.0.2.30", "Group": "TenantB"}]
     with patch.object(mailer, "get_config", return_value={"enabled": True}), users, groups, \
             patch("services.inventory_manager.get_all_devices", return_value=devices):
-        assert notifications.emit(kind="incident.opened", device_ip="192.0.2.30", severity="high",
+        assert notifications.emit(kind="siem.alert", device_ip="192.0.2.30", severity="high",
                                   title="t", dedup_key="c") == 1
         # The explicit tenant wins over the IP lookup.
-        assert notifications.emit(kind="incident.opened", device_ip="192.0.2.30", severity="high",
+        assert notifications.emit(kind="siem.alert", device_ip="192.0.2.30", severity="high",
                                   title="t", tenant="TenantA", dedup_key="d") == 2
 
 
@@ -135,7 +133,7 @@ def test_group_filter_excludes_event_of_unknown_group():
             patch("services.inventory_manager.get_all_devices", return_value=[]), \
             patch.object(notifications, "get_user_prefs",
                          return_value={"enabled": True, "groups": ["TenantA"]}):
-        assert notifications.emit(kind="incident.opened", device_ip=None, severity="high",
+        assert notifications.emit(kind="siem.alert", device_ip=None, severity="high",
                                   title="t", dedup_key="e") == 0
 
 
@@ -186,7 +184,7 @@ def test_quiet_hours_defer_and_critical_bypass():
 
 @pytest.mark.anyio
 async def test_rows_left_by_other_modules_are_not_replayed():
-    # The suite shares one observability.db per worker: incidents written by
+    # The suite shares one observability.db per worker: events written by
     # other modules are already there. With the cursors wiped the tick replayed
     # them and mailed every user with an email -- the extra 'sent' row that
     # made test_notification_tick_delivery_and_retry fail one run in a few.
@@ -194,9 +192,10 @@ async def test_rows_left_by_other_modules_are_not_replayed():
     conn = db.get_observability_connection()
     try:
         conn.execute("""
-            INSERT INTO incidents (tenant, entity_key, opened_ts, last_event_ts, title,
-                                   severity, event_count, status, cause_kind, confidence)
-            VALUES ('TenantZ', 'ip:192.0.2.9', ?, ?, 'left by another module', 3, 1, 'new', 'x', 50)
+            INSERT INTO events (ts, ingested_ts, tenant, source, event_type,
+                                entity_type, entity_id, severity, device_ip, attrs_json)
+            VALUES (?, ?, 'TenantZ', 'syslog', 'log.security', 'device',
+                    '192.0.2.9', 3, '192.0.2.9', '{"message": "left by another module"}')
         """, (now - 600, now - 300))
         conn.commit()
     finally:
@@ -221,7 +220,7 @@ async def test_notification_tick_delivery_and_retry():
         conn.execute("""
             INSERT INTO notify_outbox
                 (target, kind, severity, device_ip, grp, title, ctx_json, dedup_key, created_ts, due_ts, attempts)
-            VALUES ('user:testuser', 'incident.opened', 'high', '192.0.2.1', 'TenantA', 'Test incidente', '{}', 'k1', ?, ?, 0)
+            VALUES ('user:testuser', 'siem.alert', 'high', '192.0.2.1', 'TenantA', 'Test allerta', '{}', 'k1', ?, ?, 0)
         """, (now, now - 10))
         conn.commit()
     finally:

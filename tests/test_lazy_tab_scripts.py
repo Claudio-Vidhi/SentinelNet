@@ -255,8 +255,8 @@ class CrossModuleCallsMustBeOptional(unittest.TestCase):
         the first click and works on the second.
 
         That was observability.js jumping from an anomaly row to the incident:
-        it called switchTab('tab-incidents') without awaiting it and then used
-        incidents.js straight away.
+        it called switchTab() on the (since removed) Incidents tab without
+        awaiting it and then used that tab's module straight away.
         """
         js_dir = ROOT / "static/js"
         tabs_of = {}

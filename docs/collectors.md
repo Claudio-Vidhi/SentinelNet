@@ -298,7 +298,7 @@ without it, every round would produce a "change" on every port of every device.
 
 A Linux server exposes neither a REST API like a FortiGate nor, as a rule, an
 SNMP agent: without this poller it would be a device you can query by hand but
-that contributes nothing to incident reasoning.
+that reports no state at all.
 
 One SSH session per host, one command
 ([`PROBE_COMMAND`](../observability/ingesters/linux_poller.py)), snapshots into
@@ -361,8 +361,8 @@ central. Full guide: [probes.md](probes.md).
 ## 9. ARP and MAC tables
 
 These aren't observability: they feed the Client Map and the position history,
-which the flow path and the correlator then re-read to answer "*where* is that
-IP plugged in".
+which the flow path and client diagnosis then re-read to answer "*where* is
+that IP plugged in".
 
 - [arp_collector.py](../collectors/arp_collector.py) — ARP tables from L3
   gateways (that's where the IP↔MAC↔VLAN binding is authoritative);
@@ -404,5 +404,5 @@ current — which is why the client diagnosis carries both dates into its report
 5. `test_observability_ingest.py` for the decoder,
    `test_unified_event_model.py` for the adapter.
 
-Rules, incidents, timeline and UI need no changes: if the event model is
+The views that read `events` need no changes: if the event model is
 respected, the source inherits them.

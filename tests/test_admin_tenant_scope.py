@@ -4,8 +4,8 @@
 """Tenant scope applies to admins (admin-permissions Task 3, spec D3).
 
 A tenant-scoped admin sees and acts only on its tenants' devices, and every
-global admin route (settings, SSO/SMTP, probes, tenants, MCP, cloud backup,
-incident rule parameters) needs an admin with no tenant restriction."""
+global admin route (settings, SSO/SMTP, probes, tenants, MCP, cloud backup)
+needs an admin with no tenant restriction."""
 import os
 import re
 import tempfile
@@ -46,7 +46,6 @@ MUST_BE_GLOBAL = {
     ("POST", "/api/probes/regenerate-token"),
     ("PUT", "/api/cloud-backup/settings"),
     ("POST", "/api/mcp/settings"),
-    ("POST", "/api/incidents/rules/{rule_id}/parameters"),
     ("POST", "/api/provisioner/push-ssh"),
     ("POST", "/api/provisioner/push-serial"),
     ("POST", "/api/fortigate/targets/active"),

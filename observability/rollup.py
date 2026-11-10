@@ -3,8 +3,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Job periodico di retention/pruning (fase 3.7) — misura tecnica GDPR
 (piano §6.7): elimina le righe STRETTAMENTE più vecchie della finestra
-configurata, per tabella. Gli eventi correlati non risolti (status new/ack)
-non vengono MAI eliminati automaticamente.
+configurata, per tabella.
 
 I DELETE sono batchati (BATCH_ROWS righe per transazione, via rowid) per non
 tenere lock lunghi. Il prune gira su un thread dedicato (asyncio.to_thread)
@@ -40,13 +39,13 @@ _TABLES = {
     # per device forever. Same window as the events they are projected into.
     "api_observations": ("ts", ""),
     "iface_counter_reads": ("ts", ""),
-    # Le evidenze di un incidente seguono via ON DELETE CASCADE; qui si potano
-    # quelle rimaste orfane (regola scattata, incidente mai formato).
-    "evidence": ("ts", " AND incident_id IS NULL"),
-    # La retention parte dalla RISOLUZIONE, non dall'apertura: un incidente
-    # durato un anno e chiuso ieri non perde le sue evidenze al giro dopo
-    # (plan Phase 3, item 18; resolved_ts da schema v10).
-    "incidents": ("resolved_ts", " AND status = 'resolved'"),
+    # Legacy: the incidents engine was removed in 0.65.0 and new databases do
+    # not create these tables. Older databases keep them; every row ages out
+    # on its last activity, whatever its status, since nothing can resolve an
+    # incident any more.
+    "evidence": ("ts", ""),
+    "incident_conclusions": ("concluded_ts", ""),
+    "incidents": ("last_event_ts", ""),
 }
 
 _running = False

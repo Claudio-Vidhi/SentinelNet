@@ -295,7 +295,7 @@ def get_command_job_ep(job_id: str, current_user = Depends(require_operator)):
     if not job:
         raise HTTPException(status_code=404, detail="Job non trovato.")
     # Job fuori scope: 404 identico al job inesistente, per non confermare
-    # l'esistenza di attività in sedi altrui (stessa politica di /anomalies).
+    # l'esistenza di attività in sedi altrui.
     if not _device_in_scope(current_user, job.get("device_ip", "")):
         raise HTTPException(status_code=404, detail="Job non trovato.")
     return job

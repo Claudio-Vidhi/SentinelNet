@@ -4,8 +4,8 @@
 """Poller SNMP: sorgente di stato per gli apparati senza API REST.
 
 Il punto non è il protocollo — è che uno snapshot SNMP entri nella STESSA
-pipeline degli snapshot REST. Se ci riesce, regole, evidenze, incidenti e
-timeline funzionano senza sapere da dove arriva il dato.
+pipeline degli snapshot REST, so ``events`` carries it without knowing where
+the data came from.
 """
 
 import json
@@ -22,7 +22,7 @@ from core import data_config  # noqa: E402
 data_config.DATA_DIR = _TMP_DATA_DIR
 
 from core import db  # noqa: E402
-from observability import correlator, normalize  # noqa: E402
+from observability import normalize  # noqa: E402
 from observability.ingesters import snmp_poller  # noqa: E402
 from security import crypto_vault  # noqa: E402
 
@@ -176,8 +176,7 @@ class TestSnapshotsReachTheEngine(unittest.TestCase):
 
     def setUp(self):
         conn = db.get_observability_connection()
-        for table in ("events", "normalize_cursors", "evidence", "incidents",
-                      "incident_conclusions", "api_observations"):
+        for table in ("events", "normalize_cursors", "api_observations"):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()
         conn.close()
@@ -206,17 +205,6 @@ class TestSnapshotsReachTheEngine(unittest.TestCase):
         self.assertEqual(events[0]["source"], "snmp")
         self.assertEqual(events[0]["entity_id"], "10.1.0.1:Gi1/0/1")
         self.assertEqual(events[0]["interface"], "Gi1/0/1")
-
-    def test_a_port_going_down_becomes_evidence(self):
-        self._observe(NOW - 300, {"Gi1/0/1": {"link": "up", "speed_mbps": 1000}})
-        self._observe(NOW - 60, {"Gi1/0/1": {"link": "down", "speed_mbps": 1000}})
-        with patch("observability.rules.get_app_settings", return_value={}), \
-             patch("collectors.mac_history.client_map", return_value=[]):
-            correlator.correlate_once(NOW)
-        ev = self._rows("SELECT * FROM evidence WHERE rule_id = 'IFACE_DOWN_001'")
-        self.assertEqual(len(ev), 1)
-        self.assertEqual(ev[0]["role"], "symptom")
-        self.assertIn("Gi1/0/1", ev[0]["summary"])
 
     def test_counters_do_not_invent_a_change_every_poll(self):
         # I contatori crescono a ogni giro per costruzione: se entrassero nel

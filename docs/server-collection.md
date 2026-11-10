@@ -10,7 +10,7 @@ design decision, not an accident:
 | Path | Cadence | Purpose | Consumers |
 |---|---|---|---|
 | **Backup artefact** | on demand / scheduled | stable state, audit-relevant, archived forever | Config Analyzer, NetSec Audit, search, AI assistant |
-| **Health poller** | every polling round | time-varying measurements | `device.state`, rules, incidents |
+| **Health poller** | every polling round | time-varying measurements | `device.state` events |
 
 A number that changes on every read belongs to the poller. Putting it in the
 artefact would make every backup differ from the last one for no reason.

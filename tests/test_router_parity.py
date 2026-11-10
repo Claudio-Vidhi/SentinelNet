@@ -77,14 +77,19 @@ class TestRouterParity(unittest.TestCase):
     # /api/ai/chat, /api/ai/conversations*: the in-app AI chat was removed in
     #   0.65.0 (tab, saved conversations, AI-proposed config push). External
     #   LLM clients go through the MCP server; the contextual assists
-    #   (incident explanation, classification, Blueprint, config generator)
-    #   and the provider profiles stay.
+    #   (classification, Blueprint, config generator) and the provider
+    #   profiles stay.
     # /api/observability/flowgraph: fed the Traffic tab's Overview (KPI strip,
     #   top talkers, protocols, tenant card), removed in 0.65.0 with that view.
     #   /hosts, /host-series and /protocol-distribution went with it; they sit
     #   in NEW_PREFIXES, which filters both sides, so they need no entry here.
     # /api/observability/top: the Flows view and MCP get_top_talkers, removed
     #   in 0.65.0 with the NetFlow/IPFIX/sFlow collectors that fed it.
+    # /api/observability/anomalies (+ /{event_id}/status): incident-backed
+    #   (Home counter, MCP get_anomalies), removed in 0.65.0 with the incidents
+    #   engine. The /api/incidents routes went too; they sit in the prefix
+    #   lists, which filter both sides. The two interface routes moved to
+    #   /api/observability/interfaces[/expected].
     ALLOWED_REMOVED_PATHS = ("/api/provisioner/fgt/generate",
                              "/api/provisioner/fgt/push-ssh",
                              "/api/provisioner/fgt/push-serial",
@@ -96,7 +101,9 @@ class TestRouterParity(unittest.TestCase):
                              "/api/ai/conversations",
                              "/api/ai/conversations/{conversation_id}",
                              "/api/observability/flowgraph",
-                             "/api/observability/top")
+                             "/api/observability/top",
+                             "/api/observability/anomalies",
+                             "/api/observability/anomalies/{event_id}/status")
 
     def test_all_golden_paths_still_exist(self):
         missing = [p for p in self.golden["paths"]
@@ -285,6 +292,8 @@ class TestFullParity(unittest.TestCase):
                     # e stato letto dal tab Impostazioni.
                     "/api/settings/ping-monitor", "/api/ping-monitor", "/api/settings/ui-variant",
                     "/api/observability/prune-logs",
+                    # Interfaces tab routes, moved from /api/incidents in 0.65.0.
+                    "/api/observability/interfaces",
                     "/api/mac/port-control", "/api/wlc/{ip}/ap-summary", "/api/wlc/{ip}/client-summary", "/api/wlc/{ip}/client/{mac}", "/api/wlc/{ip}/rogue-aps", "/api/wlc/{ip}/status", "/api/wlc/{ip}/overview",
                     # La scansione non tenta piu' il login: l'autenticazione e'
                     # diventata un passo esplicito e opzionale, su un endpoint suo.
@@ -436,9 +445,6 @@ class TestFullParity(unittest.TestCase):
                     "AiLayoutSchema", "AiLayoutNode", "AiLayoutLink",
                     # Network segments (routes under /api/segments).
                     "SegmentSaveSchema", "SegmentDeleteSchema", "SegmentLinkSchema")
-    # v7: /anomalies ora restituisce INCIDENTI invece di singoli eventi
-    # correlati. Parametri e forma della risposta restano quelli storici (li
-    # consumano il tab Flussi e il tool MCP), è cambiata la descrizione.
     ALLOWED_CHANGED_OPERATIONS = (
         # S1: il logout revoca il token, non solo il cookie. Cambia SOLO la
         # descrizione (la docstring che lo dice), e va detta a chi chiama la
@@ -452,8 +458,6 @@ class TestFullParity(unittest.TestCase):
         ("post", "/api/groups/rename"),
         ("post", "/api/groups/delete"),
         ("post", "/api/agent/heartbeat"),
-        ("get", "/api/observability/anomalies"),
-        ("post", "/api/observability/anomalies/{event_id}/status"),
         # Poller SNMP: la config accetta la chiave in più ``snmp_poll_s``.
         # Aggiunta puramente additiva — nessun client esistente cambia — ma la
         # descrizione dell'operazione elenca le chiavi ammesse, e quella è
@@ -486,11 +490,6 @@ class TestFullParity(unittest.TestCase):
         ("get", "/api/arp/client-map"),
         ("get", "/api/arp/search"),
         ("get", "/api/endpoints/list"),
-        # Catalogo regole: query param ``lang`` opzionale ('it'/'en') per
-        # servire titoli e descrizioni tradotti alla UI multilingua. Aggiunta
-        # additiva — il default e' 'it', quindi omettendolo la risposta e'
-        # quella storica — ma i parametri dell'operazione cambiano.
-        ("get", "/api/incidents/rules"),
         # Description only: both docstrings named /api/ai/chat, removed in 0.65.0.
         ("get", "/api/ai/profiles"),
         ("post", "/api/ai/generate-config"),

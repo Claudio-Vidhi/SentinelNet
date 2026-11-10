@@ -4,8 +4,8 @@
 """Poller di salute Linux: parsing, selezione degli host, e la pipeline intera.
 
 Il punto non è leggere ``/proc``: è che uno snapshot Linux entri nella STESSA
-pipeline degli snapshot REST e SNMP. Se ci riesce, regole, evidenze e incidenti
-funzionano senza sapere da dove arriva la misura.
+pipeline degli snapshot REST e SNMP, so ``events`` carries it without knowing
+where the measure came from.
 """
 
 import json
@@ -22,7 +22,7 @@ from core import data_config  # noqa: E402
 data_config.DATA_DIR = _TMP_DATA_DIR
 
 from core import db  # noqa: E402
-from observability import correlator, normalize  # noqa: E402
+from observability import normalize  # noqa: E402
 from observability.ingesters import linux_poller  # noqa: E402
 
 NOW = int(time.time())
@@ -142,8 +142,7 @@ class TestSnapshotsReachTheEngine(unittest.TestCase):
 
     def setUp(self):
         conn = db.get_observability_connection()
-        for table in ("events", "normalize_cursors", "evidence", "incidents",
-                      "incident_conclusions", "api_observations"):
+        for table in ("events", "normalize_cursors", "api_observations"):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()
         conn.close()
@@ -164,11 +163,6 @@ class TestSnapshotsReachTheEngine(unittest.TestCase):
             return [dict(r) for r in conn.execute(sql, params)]
         finally:
             conn.close()
-
-    def _correlate(self):
-        with patch("observability.rules.get_app_settings", return_value={}), \
-             patch("collectors.mac_history.client_map", return_value=[]):
-            return correlator.correlate_once(NOW)
 
     def test_measures_land_in_the_event_and_provenance_says_linux(self):
         self._observe(NOW - 60, PROBE_OUTPUT)
@@ -200,25 +194,6 @@ class TestSnapshotsReachTheEngine(unittest.TestCase):
         self.assertEqual(len(changes), 1)
         self.assertEqual(json.loads(changes[0]["attrs_json"])["field"],
                          "results.failed_units")
-
-    def test_disk_over_threshold_is_a_symptom(self):
-        self._observe(NOW - 60, PROBE_OUTPUT)
-        self._correlate()
-        rows = self._rows("SELECT * FROM evidence WHERE rule_id = 'DEVICE_LOAD_001' "
-                          "ORDER BY id")
-        metrics = [json.loads(r["attrs_json"])["metric"] for r in rows]
-        self.assertIn("disk_pct", metrics)
-        disk = rows[metrics.index("disk_pct")]
-        self.assertEqual(disk["role"], "symptom")
-        self.assertIn("Disco al 92%", disk["summary"])
-        self.assertEqual(disk["entity_key"], f"ip:{DEVICE}")
-
-    def test_disk_below_threshold_says_nothing(self):
-        self._observe(NOW - 60, PROBE_OUTPUT.replace("92%", "42%"))
-        self._correlate()
-        self.assertEqual(
-            self._rows("SELECT * FROM evidence WHERE rule_id = 'DEVICE_LOAD_001'"),
-            [])
 
 
 if __name__ == "__main__":

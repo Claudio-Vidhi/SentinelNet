@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Windows health poller: parsing, host selection, and DEVICE_LOAD_001 firing
-on a Windows snapshot through the same pipeline as Linux."""
+"""Windows health poller: parsing, host selection, and a Windows snapshot
+reaching ``events`` through the same pipeline as Linux."""
 
 import json
 import os
@@ -18,7 +18,7 @@ from core import data_config  # noqa: E402
 data_config.DATA_DIR = _TMP_DATA_DIR
 
 from core import db  # noqa: E402
-from observability import correlator, normalize  # noqa: E402
+from observability import normalize  # noqa: E402
 from observability.ingesters import linux_poller, windows_poller  # noqa: E402
 
 NOW = int(time.time())
@@ -90,8 +90,7 @@ class TestSnapshotReachesTheEngine(unittest.TestCase):
 
     def setUp(self):
         conn = db.get_observability_connection()
-        for table in ("events", "normalize_cursors", "evidence", "incidents",
-                      "incident_conclusions", "api_observations"):
+        for table in ("events", "normalize_cursors", "api_observations"):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()
         conn.close()
@@ -117,17 +116,6 @@ class TestSnapshotReachesTheEngine(unittest.TestCase):
         normalize.normalize_once(NOW)
         ev = self._rows("SELECT * FROM events WHERE event_type = 'device.state'")[0]
         self.assertEqual(ev["source"], "windows")
-
-    def test_disk_over_threshold_fires_device_load(self):
-        self._observe(NOW - 60, windows_poller.parse_health(
-            "LOAD|10|100|50|1000|50"))
-        with patch("observability.rules.get_app_settings", return_value={}), \
-             patch("collectors.mac_history.client_map", return_value=[]):
-            correlator.correlate_once(NOW)
-        rows = self._rows("SELECT * FROM evidence WHERE rule_id = 'DEVICE_LOAD_001'")
-        metrics = [json.loads(r["attrs_json"])["metric"] for r in rows]
-        self.assertIn("disk_pct", metrics)
-        self.assertEqual(rows[metrics.index("disk_pct")]["entity_key"], f"ip:{DEVICE}")
 
 
 if __name__ == "__main__":

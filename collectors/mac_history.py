@@ -490,38 +490,6 @@ def search_arp(mac: Optional[str] = None, ip: Optional[str] = None, source_ip: O
     return [dict(r) for r in rows]
 
 
-def vlans_for_ips(ip_tenant_map: dict) -> dict:
-    """Returns { ip: vlan } for the requested IPs, from the most recent ARP
-    binding with a non-empty VLAN (exact match, no prefix-LIKE), **constrained
-    to the tenant** of each IP (``ip_tenant_map``: { ip: tenant }).
-
-    IMPORTANT (multi-tenant scoping): private IPs can repeat across different
-    sites (RFC1918 behind independent NATs). Without the tenant filter, an
-    ARP binding from site B could "leak" into the flow graph of site A just
-    because they share the same IP. Each lookup is therefore
-    ``ip = ? AND tenant = ?`` — never a global IN(...) on the IPs.
-
-    Used by the incident engine (observability/incidents.py) to tell whether
-    an incident's hosts sit on a known VLAN. IPs with no known ARP binding
-    (for that tenant) are absent from the returned dict (fallback left to
-    the caller)."""
-    pairs = [(ip, tenant) for ip, tenant in ip_tenant_map.items() if ip]
-    if not pairs:
-        return {}
-    init_db()
-    out = {}
-    with _connect() as c:
-        for ip, tenant in pairs:
-            row = c.execute(
-                """SELECT vlan FROM arp_entries
-                   WHERE ip = ? AND tenant = ? AND vlan != ''
-                   ORDER BY last_seen DESC LIMIT 1""",
-                (ip, tenant or "")).fetchone()
-            if row:
-                out[ip] = row["vlan"]
-    return out
-
-
 def positions_for_mac(mac: str, tenants=None) -> list:
     """Where this MAC is attached, from the MAC table alone — without ARP.
 

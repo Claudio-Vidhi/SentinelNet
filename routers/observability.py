@@ -2,16 +2,19 @@
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
 """Router observability: endpoint dati scoped multi-tenant (/syslog, /events,
-/anomalies) e diagnostica operativa della pipeline (health, fase 3.8).
+/interfaces) e diagnostica operativa della pipeline (health, fase 3.8).
 
 REGOLA DI SCOPE (CONTRIBUTING.md §4): ogni query filtra
 ``WHERE tenant IN (…placeholders…)`` con parametri bound — mai interpolazione
 di stringhe, mai un gruppo scalare. Scope None (admin o utente non limitato)
 = nessun filtro tenant."""
 
+import asyncio
 import ipaddress
+import json
 import os
 import re
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from routers.deps import require_tab
@@ -19,9 +22,10 @@ from routers.deps import require_tab
 from core import db
 from core import data_config
 from core.app_settings import get_app_settings, save_app_settings
-from observability import metrics
+from observability import metrics, suppression
 from routers.deps import (get_current_user, require_unscoped_admin, require_operator,
                           user_group_scope)
+from security.security_manager import log_audit
 
 router = APIRouter(tags=["Observability"])
 
@@ -91,7 +95,7 @@ async def obs_events(
     current_user = Depends(get_current_user),
 ):
     """Feed del modello eventi unificato: la stessa forma per syslog e
-    snapshot REST/SNMP. È il livello su cui lavorano correlazione e ragionamento, ed
+    snapshot REST/SNMP. È il livello che leggono le viste derivate, ed
     è esposto perché ogni consumatore (CLI, AI, automazione) possa partire da
     qui invece che dalle tabelle grezze di ogni sorgente."""
     import time as _time
@@ -126,65 +130,226 @@ async def obs_events(
             "events": events}
 
 
-@router.get("/api/observability/anomalies", dependencies=[Depends(require_tab("tab-home", "tab-flows"))])
-async def obs_anomalies(
-    status: str = Query("new", pattern="^(new|ack|resolved|all)$"),
-    window: str = Query("24h"),
-    limit: int = Query(50, ge=1, le=MAX_LIMIT),
-    page: int = Query(0, ge=0),
-    current_user = Depends(get_current_user),
-):
-    """Anomalie correlate, scoped per tenant, paginate.
+# --- Interfaces tab: last state per port and what the operator expects ------
+# Moved here from the removed /api/incidents router (0.65.0).
 
-    Dalla v7 la riga è un INCIDENTE, non più un singolo evento correlato: la
-    stessa anomalia ripetuta 27 volte era 27 righe da chiudere a mano. La forma
-    della risposta resta quella storica (``kind``, ``src_ip``, ``switch_port``,
-    ``status``) perché la consumano la home e il tool MCP ``get_anomalies``;
-    il dettaglio completo con ruoli e timeline sta in ``/api/incidents/{id}``.
+INSTABILITY_WINDOW_S = 86400
+# Link transitions in INSTABILITY_WINDOW_S that make a port "flapping" (4 = two
+# full down/up cycles). It was the IFACE_FLAPPING_001 default of the removed
+# incidents engine; a saved correlation_rules override is ignored.
+MIN_FLAPS = 4
+LINK_UP = frozenset({"up", "1", "true"})
+LINK_DOWN = frozenset({"down", "0", "false", "lowerlayerdown", "notpresent"})
+
+
+def _parse_json(raw):
+    try:
+        return json.loads(raw or "{}")
+    except (ValueError, TypeError):
+        return {}
+
+
+def _iface_state(item: dict, min_flaps: int) -> str:
+    """The one classifier. It used to exist twice -- here and again in
+    interfaces.js -- with two different vocabularies, so a change to one left
+    the KPI cards disagreeing with the table under them.
+
+    Order matters: a declared expectation outranks a fault, because that is
+    what declaring it is for.
+
+    An unrecognised or missing link value is NOT up. Only "down"/"0"/"false"
+    used to count as down and everything else fell through to up, which read a
+    port whose transceiver had been pulled (notPresent) or whose lower layer
+    had failed (lowerLayerDown) as operational -- on the one view whose job is
+    saying what is broken.
     """
-    import time as _time
-    seconds = _parse_window(window)
-    cutoff = int(_time.time()) - seconds
+    if item.get("suppressed"):
+        return "maint" if item.get("to_ts") is not None else "by_design"
+    if (item.get("transitions") or 0) >= min_flaps:
+        return "flapping"
+    link = str(item.get("link") or "").strip().lower()
+    if link in LINK_DOWN:
+        return "outage"
+    if link in LINK_UP:
+        return "up"
+    return "unknown"
+
+
+@router.get("/api/observability/interfaces", dependencies=[Depends(require_tab("tab-interfaces"))])
+async def list_interfaces(current_user = Depends(get_current_user)):
+    """Interfacce: ultimo stato, instabilità recente e la soppressione che le
+    copre.
+
+    Serve a due cose opposte. Togliere rumore prima che diventi tale (Loopback,
+    Null e VLAN dismesse sono giù per progetto), e MOSTRARE l'instabilità su
+    un giorno intero, anche quella di una porta che oscilla piano."""
     clause, params = _tenant_filter(current_user)
-    status_clause = "" if status == "all" else " AND i.status = ?"
-    status_params = () if status == "all" else (status,)
     rows = await db.read(
-        f"""SELECT i.id, i.opened_ts AS created_ts, i.tenant,
-                   i.cause_kind AS kind, i.title, i.severity, i.status,
-                   i.confidence, i.event_count, i.entity_key,
-                   (SELECT src_ip FROM evidence e WHERE e.incident_id = i.id
-                      AND e.src_ip IS NOT NULL ORDER BY e.ts LIMIT 1) AS src_ip,
-                   (SELECT dst_ip FROM evidence e WHERE e.incident_id = i.id
-                      AND e.dst_ip IS NOT NULL ORDER BY e.ts LIMIT 1) AS dst_ip,
-                   (SELECT switch_port FROM evidence e WHERE e.incident_id = i.id
-                      AND e.switch_port IS NOT NULL ORDER BY e.ts LIMIT 1) AS switch_port,
-                   i.reasoning_json AS evidence_json
-            FROM incidents i
-            WHERE i.last_event_ts >= ?{clause}{status_clause}
-            ORDER BY i.last_event_ts DESC
-            LIMIT ? OFFSET ?""",
-        (cutoff, *params, *status_params, limit, page * limit))
-    return {"window": window, "status": status, "page": page,
-            "anomalies": [dict(r) for r in rows]}
+        f"""SELECT tenant, device_ip, interface, attrs_json, ts FROM events
+            WHERE event_type = 'interface.state'{clause}
+              AND id IN (SELECT MAX(id) FROM events
+                         WHERE event_type = 'interface.state'
+                         GROUP BY tenant, entity_id)
+            ORDER BY device_ip, interface LIMIT ?""",
+        (*params, MAX_LIMIT))
+    now = int(time.time())
+    flaps = await _link_transitions(current_user, now - INSTABILITY_WINDOW_S)
+    # Events only know the IP: the name lives in the inventory. Without it, with
+    # several locations the table is a list of addresses to translate by heart.
+    names = await asyncio.to_thread(_hostnames)
+    out = []
+    for r in rows:
+        attrs = _parse_json(r["attrs_json"])
+        rule = suppression.active(r["tenant"], f"ip:{r['device_ip']}",
+                                  r["interface"], now)
+        out.append({"tenant": r["tenant"], "device_ip": r["device_ip"],
+                    "hostname": names.get(r["device_ip"], ""),
+                    "interface": r["interface"], "ts": r["ts"],
+                    "link": attrs.get("link"),
+                    "admin_status": attrs.get("admin_status"),
+                    "transitions": flaps.get((r["tenant"], r["device_ip"],
+                                              r["interface"]), 0),
+                    "suppressed": rule is not None,
+                    "scope": ("device" if rule and not rule.get("interface")
+                              else "interface") if rule else None,
+                    "from_ts": (rule or {}).get("from_ts"),
+                    "to_ts": (rule or {}).get("to_ts"),
+                    "note": (rule or {}).get("note", "")})
+
+    counts = {"total": len(out), "up": 0, "outage": 0, "flapping": 0,
+              "maint": 0, "by_design": 0, "unknown": 0}
+    for item in out:
+        # Computed once, server side, and shipped with the row: the client
+        # renders this value instead of deriving its own.
+        item["state"] = _iface_state(item, MIN_FLAPS)
+        counts[item["state"]] += 1
+
+    return {"interfaces": out, "counts": counts, "window_s": INSTABILITY_WINDOW_S,
+            "min_transitions": MIN_FLAPS,
+            # The cap is not a detail the reader can afford to miss: past it,
+            # every count above describes the first MAX_LIMIT ports and nothing
+            # says so. 20 switches x 48 ports is already over.
+            "truncated": len(out) >= MAX_LIMIT,
+            "limit": MAX_LIMIT,
+            "suppressions": _visible_suppressions(current_user)}
 
 
-@router.post("/api/observability/anomalies/{event_id}/status", deprecated=True, dependencies=[Depends(require_tab("tab-flows"))])
-async def obs_anomaly_status(
-    event_id: int,
-    payload: dict,
-    current_user = Depends(require_operator),
-):
-    """DEPRECATA: usare ``POST /api/incidents/{id}/status``.
+def _hostnames() -> dict:
+    from services import inventory_manager
+    return {d.get("IP"): (d.get("Hostname") or "")
+            for d in inventory_manager.get_all_devices()}
 
-    Dalla v7 ``event_id`` è l'id dell'INCIDENTE (vedi ``obs_anomalies``), e
-    questa rotta scriveva la stessa tabella con una seconda copia della
-    transizione: due implementazioni dello stesso controllo di scope, libere
-    di divergere. Ora delega a quella degli incidenti — l'URL resta in piedi
-    per i client esterni che lo chiamano ancora.
 
-    L'import è locale perché ``routers.incidents`` importa questo modulo."""
-    from routers.incidents import set_incident_status
-    return await set_incident_status(event_id, payload, current_user)
+async def _link_transitions(current_user, since: int) -> dict:
+    """{(tenant, device_ip, interface): transizioni di link} nella finestra.
+
+    Solo il campo ``link``: uno shutdown amministrativo è una decisione, non
+    instabilità, e contarlo qui farebbe sembrare inaffidabile una porta che
+    qualcuno ha semplicemente spento."""
+    clause, params = _tenant_filter(current_user)
+    rows = await db.read(
+        f"""SELECT tenant, device_ip, interface, COUNT(*) AS n FROM events
+            WHERE event_type = 'interface.change' AND ts >= ?{clause}
+              AND json_extract(attrs_json, '$.field') LIKE '%.link'
+            GROUP BY tenant, device_ip, interface""",
+        (since, *params))
+    return {(r["tenant"], r["device_ip"], r["interface"]): r["n"] for r in rows}
+
+
+def _visible_suppressions(current_user) -> list:
+    """Every suppression in scope, expired ones too: the UI shows them greyed
+    out instead of letting them vanish."""
+    scope = user_group_scope(current_user)
+    now = int(time.time())
+    out = []
+    for key, rule in suppression.all_rules().items():
+        if not isinstance(rule, dict):
+            continue
+        if scope is not None and rule.get("tenant") not in scope:
+            continue
+        out.append({**rule, "key": key, "expired": suppression.expired(rule, now)})
+    return sorted(out, key=lambda r: (r.get("entity_key") or "",
+                                      r.get("interface") or ""))
+
+
+def _mutate_suppression(saved: dict, payload: dict, current_user) -> dict:
+    """Apply one declaration to ``saved`` in place, and report it.
+
+    Takes the dict instead of loading and saving it: a bulk call used to
+    read-modify-write the whole settings blob once PER ITEM, so fifty
+    ports meant fifty rewrites and a concurrent operator's save was lost
+    to whoever finished last."""
+    tenant = str((payload or {}).get("tenant") or "")
+    device_ip = str((payload or {}).get("device_ip") or "")
+    interface = str((payload or {}).get("interface") or "") or None
+    if not (tenant and device_ip):
+        raise HTTPException(status_code=400,
+                            detail="tenant e device_ip sono richiesti.")
+    scope = user_group_scope(current_user)
+    if scope is not None and tenant not in scope:
+        raise HTTPException(status_code=404, detail="Interface not found.")
+
+    frm = _optional_ts(payload, "from_ts")
+    to = _optional_ts(payload, "to_ts")
+    if frm is not None and to is not None and to <= frm:
+        raise HTTPException(status_code=400,
+                            detail="La fine della finestra precede l'inizio.")
+
+    entity_key = f"ip:{device_ip}"
+    key = suppression.key(tenant, entity_key, interface)
+    if (payload or {}).get("suppressed"):
+        saved[key] = {"tenant": tenant, "entity_key": entity_key,
+                      "device_ip": device_ip, "interface": interface,
+                      "from_ts": frm, "to_ts": to,
+                      "note": str((payload or {}).get("note") or "")[:200],
+                      "by": current_user.get("sub"),
+                      "created_ts": int(time.time())}
+        window = "sempre" if to is None else f"fino a {to}"
+        action = f"soppressa ({window})"
+    else:
+        saved.pop(key, None)
+        action = "riportata sotto osservazione"
+    log_audit(f"{device_ip}:{interface or 'tutto l apparato'} ({tenant}) "
+              f"{action} da '{current_user.get('sub')}'.")
+    return {"status": "success", "key": key, "suppressed": key in saved}
+
+
+@router.post("/api/observability/interfaces/expected", dependencies=[Depends(require_tab("tab-interfaces"))])
+async def set_suppression(payload: dict,
+                          current_user = Depends(require_operator)):
+    """Dichiara che qualcosa è atteso, con o senza scadenza.
+
+    Nessuna finestra = "è così per progetto". Con ``to_ts`` = manutenzione
+    pianificata. Sono lo stesso modello: 'per sempre' è il caso senza scadenza,
+    non un caso speciale.
+
+    Deletes and hides nothing: the event stays in ``events``. It only changes
+    how the Interfaces tab classifies the port."""
+    items = (payload or {}).get("items")
+    batch = [i for i in items if isinstance(i, dict)] if isinstance(items, list) else None
+
+    saved = dict(get_app_settings().get("suppressions") or {})
+    if batch is None:
+        result = _mutate_suppression(saved, payload, current_user)
+        save_app_settings({"suppressions": saved})
+        return result
+
+    # One read, one write, whatever the size of the batch. A rejected item
+    # raises before anything is saved, so the batch does not land half applied.
+    results = [_mutate_suppression(saved, item, current_user) for item in batch]
+    save_app_settings({"suppressions": saved})
+    return {"status": "success", "count": len(results), "results": results}
+
+
+def _optional_ts(payload: dict, name: str):
+    """Estremo di finestra: assente o vuoto = aperto."""
+    raw = (payload or {}).get(name)
+    if raw in (None, ""):
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail=f"'{name}' non valido.")
 
 
 @router.get("/api/observability/config", dependencies=[Depends(require_tab("tab-settings"))])
@@ -242,7 +407,6 @@ async def obs_set_config(payload: dict, current_user = Depends(require_unscoped_
     effective = data_config.obs_config()
     from observability import listener_manager
     await listener_manager.apply_obs_config(effective)
-    from security.security_manager import log_audit
     log_audit(f"Config observability aggiornata da '{current_user.get('sub')}': "
               f"{clean} (applicata a caldo, nessun riavvio)."
               + (f" Legacy flow keys ignored: {ignored}." if ignored else ""))
@@ -304,7 +468,6 @@ def obs_health(current_user = Depends(require_unscoped_admin)):
 
 
 from pydantic import BaseModel
-import time
 
 class PruneLogsSchema(BaseModel):
     days: int = 30

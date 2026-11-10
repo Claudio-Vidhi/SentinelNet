@@ -19,7 +19,7 @@ os.environ["SENTINELNET_DATA_DIR"] = _TMP_DATA_DIR
 from core import data_config  # noqa: E402
 data_config.DATA_DIR = _TMP_DATA_DIR
 
-from observability import endpoints, rules  # noqa: E402
+from observability import endpoints  # noqa: E402
 
 
 class TestClassification(unittest.TestCase):
@@ -194,29 +194,6 @@ class TestMacClassification(unittest.TestCase):
                          "00:11:22:33:44:55")
         self.assertIn("VMware", endpoints.describe_mac("00:50:56:aa:bb:cc"))
         self.assertIn("localmente", endpoints.describe_mac("aa:bb:cc:80:01:00"))
-
-
-class TestRulesConsumeMetadataOnly(unittest.TestCase):
-    """Il principio architetturale, verificato sul codice: le regole non devono
-    contenere conoscenza dei range IP. Se qualcuno la reintroduce, questo test
-    lo intercetta."""
-
-    def test_rules_module_has_no_hardcoded_ip_knowledge(self):
-        import inspect
-        import re
-        source = inspect.getsource(rules)
-        # Nessun indirizzo o prefisso IPv4 letterale nel motore delle regole.
-        # Quattro ottetti: le versioni delle regole ("1.0.0") ne hanno tre.
-        literals = re.findall(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?:/\d{1,2})?\b',
-                              source)
-        self.assertEqual(literals, [],
-                         f"conoscenza di range IP rientrata in rules.py: {literals}")
-
-    def test_summaries_use_the_knowledge_base(self):
-        import inspect
-        source = inspect.getsource(rules)
-        self.assertIn("endpoints.describe", source,
-                      "i summary delle evidenze devono passare dalla Endpoint KB")
 
 
 if __name__ == "__main__":

@@ -7,8 +7,8 @@
 infrastructure. It automates configuration backup, detects the firmware versions
 running on active devices and compares them in real time against the
 NIST NVD vulnerability database — and it collects passive network telemetry
-(syslog, SNMP, FortiGate REST), correlates it with deterministic rules,
-and turns it into explainable incidents. Everything is reachable from a single
+(syslog, SNMP, FortiGate REST) into one event model that feeds port state,
+log search and client diagnosis. Everything is reachable from a single
 browser console.
 
 ![The operational posture dashboard](docs/images/dashboard.png)
@@ -58,12 +58,13 @@ populated demo.
   ten seconds apart over SNMP, or over SSH when SNMP does not answer (Cisco
   IOS/IOS-XE/NX-OS, Junos, ProCurve/ArubaOS-Switch, AOS-CX, FortiOS, PAN-OS).
 - **Email notifications** — each user picks event types (device down/up,
-  new CVE, incident, SIEM alert), minimum severity, tenants, immediate or
+  new CVE, SIEM alert), minimum severity, tenants, immediate or
   digest delivery and quiet hours; admins add rules for distribution lists.
   Repeats of the same event are held back for 30 minutes.
 - **Network observability** — a passive syslog listener plus active
-  FortiGate REST and SNMP polling, feeding a deterministic
-  correlation engine that produces evidence-backed incidents.
+  FortiGate REST and SNMP polling, normalised into one event model: the
+  Interfaces tab (port state, flapping, declared expected state), syslog
+  search and per-policy traffic.
 - **Client diagnosis (L2 + L3)** — one report for a single client: access
   switch and port, port VLAN, link state and error-counter delta, whether its
   VLAN is allowed on the switch trunks, the logical traffic path, the firewall
@@ -108,7 +109,7 @@ Full index: [docs/README.md](docs/README.md).
 | Topic | Document |
 |---|---|
 | Engineering principles | [docs/principles.md](docs/principles.md) |
-| Architecture, data pipeline, event/evidence/incident model | [docs/architecture.md](docs/architecture.md) |
+| Architecture, data pipeline, event model | [docs/architecture.md](docs/architecture.md) |
 | Data sources (syslog, SNMP, REST) | [docs/collectors.md](docs/collectors.md) |
 | Operations runbook (logs, diagnostics, retention, backup) | [docs/operations.md](docs/operations.md) |
 | Secure exposure (TLS, reverse proxy), roles and permissions | [docs/hardening.md](docs/hardening.md) |
@@ -127,7 +128,7 @@ multi-group scope): [CONTRIBUTING.md](CONTRIBUTING.md).
 |---|---|
 | `app_server.py` | FastAPI entrypoint: lifespan, router mounting, static files |
 | `core/` | SQLite writer, path/config resolution, SSH engine |
-| `observability/` | Ingest → events → rules → evidence → incidents pipeline |
+| `observability/` | Ingest → normalised events pipeline, retention |
 | `collectors/` | ARP, MAC tables, MAC history, subnet scanner |
 | `routers/` | One FastAPI router per functional area |
 | `services/` | FortiGate, WLC, inventory, provisioners, probes, probe agent, notifications, scheduled triage |
@@ -498,11 +499,11 @@ Available tools, by area:
 | Cisco WLC | `wlc_status`, `_ap_summary`, `_client_summary`, `_client_detail`, `_wlan_summary`, `_rogue_aps`, `wlc_diagnose_client` |
 | Config & ops | `analyze_config`, `get_triage_status`, `send_cli_command` |
 | Provisioning | `generate_switch_config` |
-| Incidents & vulnerabilities | `list_incidents`, `get_incident`, `cve_priority`, `cve_for_device`, `search_vulnerabilities` |
+| Vulnerabilities | `cve_priority`, `cve_for_device`, `search_vulnerabilities` |
 | Config drift | `drift_summary`, `drift_versions`, `drift_diff` — operator account required |
 | Ports & routing | `interface_errors`, `interface_errors_port`, `get_routes`, `trace_route` |
 | Classification | `get_device_classification` |
-| Observability | `get_anomalies`, `linux_health` — **disabled by default**, enable them in the MCP Server tab |
+| Observability | `linux_health` — **disabled by default**, enable it in the MCP Server tab |
 
 Write tools require an *operator* account; use a *viewer* account for read-only
 access. The list above is the catalogue — what a given client actually sees is

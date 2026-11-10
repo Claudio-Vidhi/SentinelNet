@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Flow Path: per dove passa il traffico di un incidente.
+"""Flow Path: per dove passa il traffico fra due host (used by client diagnosis).
 
-Il documento elenca il percorso fra le evidenze che un incidente deve mostrare.
 Ricostruirlo incrociando exporter diversi lungo la tratta richiederebbe un
 exporter per salto — qui invece si usa la TOPOLOGIA già raccolta:
 

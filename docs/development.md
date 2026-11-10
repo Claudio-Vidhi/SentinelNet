@@ -33,7 +33,7 @@ Flat by design. No `src/`, no package nesting beyond one level.
 | Folder | Rule of thumb |
 |---|---|
 | `core/` | Infrastructure everyone depends on: DB writer, path/config resolution, SSH engine |
-| `observability/` | The event → evidence → incident pipeline; `ingesters/` holds the decoders |
+| `observability/` | The ingest → normalised events pipeline and retention; `ingesters/` holds the decoders |
 | `collectors/` | Data collected over SSH/NETCONF/RESTCONF (ARP, MAC, scan) |
 | `routers/` | One FastAPI router per area. HTTP concerns only: validation, RBAC, shaping |
 | `services/` | Business logic reused by routers, MCP and agents |

@@ -55,17 +55,6 @@ declare var suppressSiemAlert: any;
 declare var toggleEventDrawer: any;
 declare var toggleSiemStream: any;
 
-// incidents.js
-declare var explainIncident: any;
-declare var loadIncidentsList: any;
-declare var loadIncidentsTab: any;
-declare var loadRuleCatalog: any;
-declare var openIncident: any;
-declare var saveDeviceSuppression: any;
-declare var saveInterfaceExpectation: any;
-declare var saveRuleParameters: any;
-declare var setIncidentStatus: any;
-
 // interfaces.js
 declare var loadInterfacesTab: any;
 declare var saveSingleInterface: any;
@@ -173,8 +162,6 @@ interface Window {
     populateDevLocationOptions: any; // provisioning.js, called by devices.js
     pickLocation: any;       // core.js, asks which location of an organization
     updateTopologyMapNodeStatus: any; // topology.js, called from devices.js
-    openTrafficoAnomalies: any; // observability.js, called from home.js
-    openIncident: any; // incidents.js, called from observability.js
     renderCheckList: any; // devices.js, called from topology.js
     switchMcpPane: any;   // settings.js
     openDeviceForm: any;  // devices.js, opened by the wizard's full-form link

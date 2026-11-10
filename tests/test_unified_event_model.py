@@ -30,7 +30,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 import app_server  # noqa: E402
 from core import db  # noqa: E402
-from observability import fieldmap, normalize, rules  # noqa: E402
+from observability import fieldmap, normalize  # noqa: E402
 from security import user_manager  # noqa: E402
 
 PASS = "PasswordSicura1!"
@@ -121,7 +121,7 @@ class TestFieldmap(unittest.TestCase):
     def test_permissive_verbs_are_not_security(self):
         """'passthrough' e 'bypass' significano lasciato passare SENZA
         ispezione, 'detected' è IPS in sola rilevazione: classificarli come
-        blocchi inventerebbe incidenti su traffico consentito."""
+        blocchi inventerebbe allerte su traffico consentito."""
         for verb in ("passthrough", "bypass", "detected", "pass", "accept"):
             self.assertFalse(fieldmap.is_security_action(verb), verb)
 
@@ -271,9 +271,8 @@ class TestInterfaceEntities(_Base):
     def test_access_port_vlan_change_raises_an_event(self):
         """Il caso reale che non produceva NULLA: si sposta di VLAN una porta
         di accesso e l'apparato non lo dice a nessuno. La VLAN non stava nello
-        snapshot (IF-MIB non ce l'ha), quindi non poteva cambiare, quindi
-        CFG_CHANGE_001 non aveva niente da vedere. Una porta su nella VLAN
-        sbagliata è indistinguibile da una porta su."""
+        snapshot (IF-MIB non ce l'ha), quindi non poteva cambiare. Una porta
+        su nella VLAN sbagliata è indistinguibile da una porta su."""
         conn = db.get_observability_connection()
         self._snapshot(conn, {"results": {"Gi1/0/5": {"link": "up", "port_vlan": 10}}},
                        NOW - 600)
@@ -289,13 +288,6 @@ class TestInterfaceEntities(_Base):
         self.assertEqual(attrs["field"], "results.Gi1/0/5.port_vlan")
         self.assertEqual((attrs["before"], attrs["after"]), (10, 20))
         self.assertEqual(changes[0]["interface"], "Gi1/0/5")
-
-        # E la regola che sorveglia i cambiamenti la vede: nessuna regola nuova
-        # serviva, mancava solo il dato.
-        findings = [f for _r, _v, _p, f in
-                    rules.evaluate(self._events(), only=["CFG_CHANGE_001"])]
-        self.assertTrue(any("port_vlan" in (f.summary or "") or
-                            "port_vlan" in json.dumps(f.attrs) for f in findings))
 
     def test_port_vlan_is_not_treated_as_a_volatile_counter(self):
         """Se finisse fra i campi volatili tornerebbe invisibile, e questo
@@ -338,19 +330,6 @@ class TestInterfaceEntities(_Base):
         self.assertEqual(len(self._events("event_type = 'device.change'")), 1)
         self.assertEqual(self._events("event_type = 'interface.change'"), [])
 
-    def test_iface_down_rule_produces_a_symptom(self):
-        """Il termine `interface.down` dell'esempio di regola adesso esiste."""
-        conn = db.get_observability_connection()
-        self._snapshot(conn, {"results": {"port1": {"link": "up"}}}, NOW - 600)
-        self._snapshot(conn, {"results": {"port1": {"link": "down"}}}, NOW - 300)
-        conn.commit()
-        conn.close()
-
-        normalize.normalize_once(NOW)
-        events = self._events()
-        findings = [f for rid, _v, _p, f in rules.evaluate(events, only=["IFACE_DOWN_001"])]
-        self.assertEqual(len(findings), 1)
-        self.assertEqual(findings[0].role, "symptom")
 
 
 class TestEventsApi(_Base):

@@ -103,7 +103,7 @@ TAB_GET_ROUTES = [
     ("/api/firewall-traffic/devices", "tab-flows"),
     ("/api/flow-siem/facets", "tab-flows"),
     ("/api/fortigate/tokens", "tab-fortigate"),
-    ("/api/incidents/rules", "tab-incidents"),
+    ("/api/observability/interfaces", "tab-interfaces"),
     ("/api/export/devices/columns", "tab-devices"),
     ("/api/mac/stats", "tab-endpoint"),
     ("/api/mcp/settings", "tab-mcp"),

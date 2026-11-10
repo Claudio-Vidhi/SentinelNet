@@ -23,10 +23,8 @@ CREATE TABLE IF NOT EXISTS syslog_events (
 CREATE INDEX IF NOT EXISTS idx_syslog_ts_tenant ON syslog_events(ts, tenant);
 CREATE INDEX IF NOT EXISTS idx_syslog_src ON syslog_events(device_ip);
 
--- 3. (rimossa in v7) ``correlated_events`` e ``incident_events`` sono state
--- sostituite da ``evidence``: il correlatore non produce più incidenti diretti
--- ma evidenze, e l'incidente è una vista derivata. Le righe preesistenti
--- vengono travasate da core/db.py::_migrate_v7_evidence.
+-- 3. (removed in v7) ``correlated_events`` and ``incident_events``. A database
+-- older than v7 keeps them, untouched and no longer read.
 
 -- 5. OSSERVAZIONI API (schema v2, §9.2): snapshot periodici via REST poller.
 CREATE TABLE IF NOT EXISTS api_observations (
@@ -140,9 +138,9 @@ CREATE TABLE IF NOT EXISTS audit_evidence (
 CREATE INDEX IF NOT EXISTS idx_audit_evidence_eng_ref ON audit_evidence(engagement_id, item_ref);
 
 -- 10. MODELLO EVENTI UNIFICATO (v6): ogni sorgente viene proiettata qui da
--- observability/normalize.py. Tutto ciò che viene dopo (correlazione,
--- ragionamento, baseline, knowledge base) legge SOLO questa tabella: le
--- tabelle grezze restano la provenienza, non il contratto.
+-- observability/normalize.py. Its readers (Interfaces, interface errors,
+-- diagnosis, SIEM notifications) read only this table: the raw tables stay
+-- the provenance, not the contract.
 CREATE TABLE IF NOT EXISTS events (
     id           INTEGER PRIMARY KEY,
     ts           INTEGER NOT NULL,       -- quando è successo
@@ -172,8 +170,8 @@ CREATE INDEX IF NOT EXISTS idx_events_entity     ON events(tenant, entity_id, ts
 -- row in the table (~3.1s on a 1M-row events table); with it the same lookup is
 -- a covering index scan.
 CREATE INDEX IF NOT EXISTS idx_events_type_entity ON events(event_type, tenant, entity_id, id);
--- Il correlatore seleziona per ts OPPURE per ingested_ts (vedi correlator.py):
--- senza questo indice il secondo ramo dell'OR sarebbe una scansione.
+-- Served the removed correlator's ingested_ts lookup. Kept: dropping it from
+-- existing databases would need a migration.
 CREATE INDEX IF NOT EXISTS idx_events_ingested   ON events(ingested_ts);
 
 -- Posizione raggiunta da ogni adapter di normalizzazione: la tabella È il bus,
@@ -184,113 +182,10 @@ CREATE TABLE IF NOT EXISTS normalize_cursors (
     last_ts  INTEGER NOT NULL DEFAULT 0
 );
 
--- 8. INCIDENTI (v5, ridefiniti in v7): raggruppamento delle EVIDENZE per
--- entità condivisa + gap temporale. Un incidente resta aperto (closed_ts NULL) finché arrivano
--- eventi; dopo un periodo di quiete viene chiuso.
-CREATE TABLE IF NOT EXISTS incidents (
-    id             INTEGER PRIMARY KEY,
-    tenant         TEXT NOT NULL,
-    entity_key     TEXT NOT NULL,      -- 'ip:10.0.0.5' | 'port:sw01:Gi1/0/12'
-    opened_ts      INTEGER NOT NULL,
-    last_event_ts  INTEGER NOT NULL,
-    closed_ts      INTEGER,            -- NULL = aperto, accetta nuovi eventi
-    title          TEXT,
-    severity       INTEGER,            -- la peggiore (min) fra gli eventi
-    event_count    INTEGER NOT NULL DEFAULT 0,
-    status         TEXT DEFAULT 'new' CHECK(status IN ('new','ack','resolved')),
-    resolved_ts    INTEGER,            -- istante della transizione a resolved:
-                                       -- ancora la retention (v10). NULL finché aperto.
-    -- v11: il "chi". Lo stato diceva che qualcuno aveva preso in carico e non
-    -- chi: il nome finiva solo nel registro di audit, che e' un altro file e
-    -- un'altra schermata. Con un motore di notifiche diventa la differenza fra
-    -- "ci sta lavorando Tizio" e una seconda sveglia alle tre di notte.
-    acknowledged_by TEXT,
-    acknowledged_ts INTEGER,
-    ack_note        TEXT,              -- perché: "atteso, finestra di manutenzione"
-    resolved_by     TEXT,
-    cause_kind     TEXT,               -- regola deterministica che ha concluso
-    confidence     INTEGER,            -- 0-100, deterministico
-    reasoning_json TEXT,               -- {cause, rules_fired[], sources_used[], evidence_refs[]}
-    ai_narrative    TEXT,              -- prosa LLM: MAI la conclusione
-    ai_narrative_ts INTEGER,
-    ai_assisted     INTEGER NOT NULL DEFAULT 0
-);
-CREATE INDEX IF NOT EXISTS idx_incidents_open
-    ON incidents(tenant, closed_ts, last_event_ts);
-CREATE INDEX IF NOT EXISTS idx_incidents_entity
-    ON incidents(tenant, entity_key, closed_ts);
-
--- 11. EVIDENZE (v7): il Correlation Engine NON produce più incidenti, produce
--- evidenze. L'incidente è una vista derivata da esse.
---
---     events → regole di correlazione → evidence → incidents
---
--- Una riga di evidenza È l'associazione evento↔incidente: lo stesso evento può
--- essere evidenza per più incidenti (righe distinte), cosa che una colonna
--- correlation_id sull'evento non potrebbe esprimere.
---
--- ``role``: il ruolo causale è DICHIARATO DALLA REGOLA, mai dedotto. Sapere
--- che un aumento di traffico è conseguenza e non innesco richiede la direzione
--- causale, che la regola conosce per costruzione e un'euristica indovina.
---
--- ``rule_id``/``rule_version``/``params_json``: provenienza. La versione da
--- sola non basta, perché le soglie sono modificabili dall'admin a runtime:
--- stessa versione + soglia diversa = esito diverso. Le soglie EFFETTIVAMENTE
--- usate vengono quindi salvate qui accanto alla versione.
-CREATE TABLE IF NOT EXISTS evidence (
-    id           INTEGER PRIMARY KEY,
-    created_ts   INTEGER NOT NULL,          -- quando la regola ha concluso
-    ts           INTEGER NOT NULL,          -- quando è successo il fatto
-    tenant       TEXT NOT NULL,
-    incident_id  INTEGER,                   -- NULL = non ancora assegnata
-    event_id     INTEGER,                   -- events.id (NULL solo per il backfill legacy)
-    entity_key   TEXT,                      -- 'ip:10.1.0.5' | 'port:sw01:Gi1/0/12'
-    role         TEXT NOT NULL CHECK(role IN ('trigger','supporting','symptom','consequence')),
-    rule_id      TEXT NOT NULL,
-    rule_version TEXT NOT NULL,
-    params_json  TEXT,                      -- soglie effettive al momento dello scatto
-    weight       INTEGER NOT NULL DEFAULT 1,
-    severity     INTEGER,
-    src_ip       TEXT,
-    dst_ip       TEXT,
-    switch_port  TEXT,
-    summary      TEXT,                      -- una riga leggibile dall'ingegnere
-    attrs_json   TEXT,
-    dedup_key    TEXT UNIQUE,
-    -- v8 — ciclo di vita, tenuto DELIBERATAMENTE minimo: active → retracted,
-    -- nient'altro. Ogni altra sfumatura vive nel ragionamento, non qui.
-    -- Un'evidenza ritrattata NON viene cancellata: il sistema deve poter dire
-    -- "avevamo concluso X, poi un fatto nuovo l'ha invalidata".
-    status                  TEXT NOT NULL DEFAULT 'active'
-                            CHECK(status IN ('active', 'retracted')),
-    retracted_by_evidence_id INTEGER,       -- QUALE evidenza l'ha invalidata
-    retracted_by_rule_id     TEXT,          -- e quale regola l'ha decisa
-    retracted_at             INTEGER,
-    retracted_reason         TEXT,
-    FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_evidence_incident ON evidence(incident_id, ts);
-CREATE INDEX IF NOT EXISTS idx_evidence_open     ON evidence(tenant, incident_id, ts);
-CREATE INDEX IF NOT EXISTS idx_evidence_event    ON evidence(event_id);
-CREATE INDEX IF NOT EXISTS idx_evidence_status   ON evidence(status, incident_id);
-
--- 12. STORICO DELLE CONCLUSIONI (v8): la conclusione di un incidente è
--- versionata come le regole. Quando un'evidenza viene ritrattata il
--- ragionamento si rifà, e quella precedente non sparisce: è ciò che permette
--- di dire "avevamo ipotizzato una congestione, ma una nuova evidenza l'ha
--- invalidata" invece di cambiare idea in silenzio.
-CREATE TABLE IF NOT EXISTS incident_conclusions (
-    id             INTEGER PRIMARY KEY,
-    incident_id    INTEGER NOT NULL,
-    concluded_ts   INTEGER NOT NULL,
-    cause_kind     TEXT,
-    confidence     INTEGER,
-    reasoning_json TEXT,
-    superseded_ts  INTEGER,               -- NULL = conclusione corrente
-    FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_conclusions_incident
-    ON incident_conclusions(incident_id, concluded_ts);
+-- 8, 11, 12. (removed) incidents, evidence and incident_conclusions held the
+-- incidents engine. It is gone; databases created before keep the tables,
+-- no longer written, and retention empties them. New databases do not create
+-- them.
 
 CREATE TABLE IF NOT EXISTS audit_engagement_history (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -356,7 +251,7 @@ CREATE INDEX IF NOT EXISTS idx_netsec_audit_runs_tenant_ts
 CREATE TABLE IF NOT EXISTS notify_prefs (
     username               TEXT PRIMARY KEY,
     enabled                INTEGER NOT NULL DEFAULT 1,
-    kinds_json             TEXT NOT NULL DEFAULT '["incident.opened","siem.alert","device.down","device.up","cve.new"]',
+    kinds_json             TEXT NOT NULL DEFAULT '["siem.alert","device.down","device.up","cve.new"]',
     min_severity           TEXT NOT NULL DEFAULT 'low',
     groups_json            TEXT NOT NULL DEFAULT '[]',
     mode                   TEXT NOT NULL DEFAULT 'immediate',

@@ -310,7 +310,7 @@
         };
 
         try {
-            const res = await apiFetch('/api/incidents/interfaces/expected', {
+            const res = await apiFetch('/api/observability/interfaces/expected', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -367,7 +367,7 @@
         });
 
         try {
-            const res = await apiFetch('/api/incidents/interfaces/expected', {
+            const res = await apiFetch('/api/observability/interfaces/expected', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ items: items })
@@ -469,7 +469,7 @@
         if (statusBox) statusBox.textContent = '';
 
         try {
-            const [res] = await Promise.all([apiFetch('/api/incidents/interfaces'), _loadErrors()]);
+            const [res] = await Promise.all([apiFetch('/api/observability/interfaces'), _loadErrors()]);
             if (!res || !res.ok) {
                 const tableBox = document.getElementById('ifacesTableBox');
                 if (tableBox) tableBox.innerHTML = `<div style="color:var(--danger); font-size:12px; padding:16px;">${_ifL('ifErrLoad')}</div>`;
@@ -590,7 +590,7 @@
             // Remove declared suppression
             const remBtn = /** @type {HTMLElement|null} */ (target?.closest('[data-action="remove-declared-supp"]'));
             if (remBtn && remBtn.dataset.tenant && remBtn.dataset.ip) {
-                await apiFetch('/api/incidents/interfaces/expected', {
+                await apiFetch('/api/observability/interfaces/expected', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

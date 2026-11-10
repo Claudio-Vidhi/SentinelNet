@@ -1,6 +1,6 @@
 # ADR-0002 — Every source is projected into a single `events` table
 
-**Status:** Accepted
+**Status:** Accepted (0.65.0: the rules, evidence and incidents named below as consumers were removed; the event model stands)
 **Date:** 2026-07-27
 
 ## Context

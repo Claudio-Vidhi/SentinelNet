@@ -347,23 +347,9 @@ class TestRetention(unittest.TestCase):
                 pass
         db.migrate()
 
-    def _seed(self, table, col, ts, **extra):
+    def _seed(self, table, col, ts):
         conn = db.get_observability_connection()
-        if table == "syslog_events":
-            conn.execute("INSERT INTO syslog_events (ts, tenant) VALUES (?, 'sede-a')", (ts,))
-        elif table == "incidents":
-            conn.execute("INSERT INTO incidents (tenant, entity_key, opened_ts, "
-                         "last_event_ts, status, resolved_ts) "
-                         "VALUES ('sede-a', 'ip:10.1.0.5', ?, ?, ?, ?)",
-                         (ts, ts, extra.get("status", "resolved"),
-                          # La retention parte dalla risoluzione (schema v10):
-                          # il seed allinea resolved_ts al tempo del seme.
-                          ts if extra.get("status", "resolved") == "resolved" else None))
-        else:
-            conn.execute("INSERT INTO evidence (created_ts, ts, tenant, role, "
-                         "rule_id, rule_version, dedup_key) "
-                         "VALUES (?, ?, 'sede-a', 'trigger', 'X', '1.0.0', ?)",
-                         (ts, ts, f"k{ts}{extra}"))
+        conn.execute("INSERT INTO syslog_events (ts, tenant) VALUES (?, 'sede-a')", (ts,))
         conn.commit()
         conn.close()
 
@@ -408,61 +394,60 @@ class TestRetention(unittest.TestCase):
         conn.close()
         self.assertEqual(n, 1)
 
-    def test_unresolved_incidents_survive(self):
-        now = int(time.time())
-        very_old = now - 365 * 86400
-        self._seed("incidents", "opened_ts", very_old, status="new")
-        self._seed("incidents", "opened_ts", very_old, status="ack")
-        self._seed("incidents", "opened_ts", very_old, status="resolved")
-        deleted = rollup.prune_once({"incidents": 90})
-        self.assertEqual(deleted["incidents"], 1)  # solo resolved
-        conn = db.get_observability_connection()
-        n = conn.execute("SELECT COUNT(*) AS n FROM incidents").fetchone()["n"]
-        conn.close()
-        self.assertEqual(n, 2)
 
-    def test_long_lived_incident_resolved_yesterday_survives(self):
-        """La retention conta dalla risoluzione, non dall'apertura (plan
-        Phase 3 item 18): un incidente durato un anno e chiuso ieri non
-        perde le sue evidenze al giro di pruning successivo."""
-        now = int(time.time())
-        opened = now - 365 * 86400
-        resolved = now - 1 * 86400
+    def test_new_database_has_no_incident_tables_and_prune_skips_them(self):
         conn = db.get_observability_connection()
-        conn.execute(
-            "INSERT INTO incidents (tenant, entity_key, opened_ts, last_event_ts, "
-            "status, resolved_ts) VALUES ('sede-a', 'ip:10.1.0.9', ?, ?, "
-            "'resolved', ?)",
-            (opened, opened, resolved))
+        found = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN "
+            "('incidents', 'evidence', 'incident_conclusions')").fetchall()
+        conn.close()
+        self.assertEqual(found, [])
+        deleted = rollup.prune_once({"incidents": 90, "evidence": 90,
+                                     "incident_conclusions": 90})
+        self.assertEqual(deleted, {})
+
+    def test_legacy_incident_tables_are_kept_and_still_pruned(self):
+        """A database from before the incidents engine was removed keeps its
+        tables (no DROP). Nothing can resolve an incident any more, so every
+        row ages out on its last activity, open ones included."""
+        now = int(time.time())
+        old, recent = now - 91 * 86400, now - 10 * 86400
+        conn = db.get_observability_connection()
+        conn.executescript("""
+            CREATE TABLE incidents (id INTEGER PRIMARY KEY, tenant TEXT NOT NULL,
+                entity_key TEXT NOT NULL, opened_ts INTEGER NOT NULL,
+                last_event_ts INTEGER NOT NULL, closed_ts INTEGER,
+                status TEXT DEFAULT 'new', resolved_ts INTEGER);
+            CREATE TABLE evidence (id INTEGER PRIMARY KEY, ts INTEGER NOT NULL,
+                incident_id INTEGER,
+                FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE CASCADE);
+            CREATE TABLE incident_conclusions (id INTEGER PRIMARY KEY,
+                incident_id INTEGER NOT NULL, concluded_ts INTEGER NOT NULL,
+                FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE CASCADE);
+        """)
+        conn.executemany(
+            "INSERT INTO incidents (id, tenant, entity_key, opened_ts, "
+            "last_event_ts, status) VALUES (?, 'sede-a', 'ip:10.1.0.5', ?, ?, ?)",
+            [(1, old, old, "new"), (2, old, old, "resolved"),
+             (3, old, recent, "ack")])
+        conn.executemany("INSERT INTO evidence (ts, incident_id) VALUES (?, ?)",
+                         [(old, 1), (old, None), (recent, 3)])
+        conn.executemany("INSERT INTO incident_conclusions (incident_id, "
+                         "concluded_ts) VALUES (?, ?)", [(2, old), (3, recent)])
         conn.commit()
         conn.close()
-        deleted = rollup.prune_once({"incidents": 90})
-        self.assertEqual(deleted["incidents"], 0)
-
-    def test_orphan_evidence_is_pruned_assigned_is_not(self):
-        # Le evidenze legate a un incidente seguono l'incidente (CASCADE): qui
-        # si potano solo quelle rimaste senza, cioè regole scattate che non
-        # hanno mai formato un incidente.
-        now = int(time.time())
-        very_old = now - 365 * 86400
+        db.migrate()  # a restart on the old database: the tables survive
+        with patch.dict(os.environ, {"SENTINELNET_OBS_RETENTION_EVENTS_DAYS": "90"}):
+            deleted = rollup.prune_once(data_config.obs_config()["retention_days"])
+        self.assertEqual(deleted["evidence"], 2)
+        self.assertEqual(deleted["incident_conclusions"], 1)
+        self.assertEqual(deleted["incidents"], 2)
         conn = db.get_observability_connection()
-        conn.execute("INSERT INTO incidents (id, tenant, entity_key, opened_ts, "
-                     "last_event_ts) VALUES (900, 'sede-a', 'ip:10.1.0.5', ?, ?)",
-                     (very_old, very_old))
-        conn.execute("INSERT INTO evidence (created_ts, ts, tenant, incident_id, "
-                     "role, rule_id, rule_version, dedup_key) "
-                     "VALUES (?, ?, 'sede-a', 900, 'trigger', 'X', '1.0.0', 'assigned')",
-                     (very_old, very_old))
-        conn.commit()
+        left = {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+                for t in ("incidents", "evidence", "incident_conclusions")}
         conn.close()
-        self._seed("evidence", "ts", very_old)
-
-        deleted = rollup.prune_once({"evidence": 90})
-        self.assertEqual(deleted["evidence"], 1)
-        conn = db.get_observability_connection()
-        left = conn.execute("SELECT dedup_key FROM evidence").fetchall()
-        conn.close()
-        self.assertEqual([r["dedup_key"] for r in left], ["assigned"])
+        self.assertEqual(left, {"incidents": 1, "evidence": 1,
+                                "incident_conclusions": 1})
 
 
 class TestHealthEndpoint(unittest.TestCase):

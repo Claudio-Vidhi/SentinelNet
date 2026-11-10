@@ -43,7 +43,7 @@ Bundled paths resolve via `sys._MEIPASS`.
 - `db.get_observability_connection()` is a blocking connection: never in the
   body of an `async def`. Migrations, tests, worker threads and a helper
   handed to `asyncio.to_thread` may use it — that is how short transactional
-  read-modify-writes (incident transitions, notification cursors) are done.
+  read-modify-writes (notification cursors, retention batches) are done.
   `tests/test_no_sync_db_on_event_loop.py` enforces it.
 
 ```python

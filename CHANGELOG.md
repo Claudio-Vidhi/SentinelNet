@@ -36,20 +36,37 @@ happened — `git log --grep="chore(release)"` is the record for those.
   traccia «flow» della timeline degli incidenti, la rotta
   `/api/observability/top`, il tool MCP `get_top_talkers` e la vista
   «Flussi» del tab Traffico, che ora tiene «Ricerca» e «Per policy».
-  `BLOCKED_TRAFFIC_001` (2.0.0) non chiede più un flusso corroborante: si
-  basa sul solo syslog e conclude dopo 3 blocchi della stessa sorgente nella
-  finestra (`min_observations`, regolabile); `BLAST_RADIUS_001` (2.0.0)
-  conta i log di blocco. La tabella `flow_aggregates` resta nei database
+  La tabella `flow_aggregates` resta nei database
   esistenti, non più scritta, e la retention la svuota; i database nuovi non
   la creano. L'installer Windows rimuove le regole firewall per le tre porte.
   Syslog, SNMP, FortiGate REST e host Linux/Windows restano invariati.
+- **BREAKING — Incidenti e motore di correlazione**: tolti la tab «Incidenti»
+  e tutto il motore che la alimentava: regole di correlazione e soglie
+  (`correlation_rules`), evidenze, raggruppamento in incidenti, ritrattazioni,
+  timeline, stati new/ack/resolved, narrativa AI («Spiega con AI»). Via le
+  rotte `/api/incidents*`, `/api/observability/anomalies` e il suo alias
+  `/status`, i tool MCP `list_incidents`, `get_incident` e `get_anomalies`,
+  il riquadro «Anomalie recenti» e il «Registro eventi» della Situazione, e la
+  notifica email «Incidente aperto» (`incident.opened`). Restano le altre
+  notifiche: allerte SIEM, dispositivo giù/su (ping monitor) e nuove CVE.
+  La tab Interfacce resta com'è: le sue due rotte passano a
+  `GET /api/observability/interfaces` e
+  `POST /api/observability/interfaces/expected` (permesso `tab-interfaces`),
+  con le stesse soppressioni salvate; la soglia di flapping è fissa a 4
+  transizioni in 24 ore. La normalizzazione nel modello eventi continua a
+  girare ogni 5 minuti. I database nuovi non creano `incidents`, `evidence` e
+  `incident_conclusions`; quelli esistenti li tengono, non più scritti, e la
+  retention (`SENTINELNET_OBS_RETENTION_EVENTS_DAYS`, 90 giorni) li svuota
+  in base all'ultima attività, anche per gli incidenti mai chiusi. Le soglie
+  `correlation_rules`, i nomi dei tool MCP rimossi e `incident.opened` nelle
+  preferenze di notifica, se salvati, vengono ignorati: l'avvio non fallisce.
 
 ### Changed
 
 - **Profili AI**: provider, modello e chiave si configurano ora in
-  Impostazioni → Profili AI. Continuano ad alimentare la spiegazione degli
-  incidenti, la classificazione dei dispositivi, le proposte Blueprint, il
-  layout della mappa e il generatore di configurazione. Un account limitato
+  Impostazioni → Profili AI. Continuano ad alimentare la classificazione dei
+  dispositivi, le proposte Blueprint, il layout della mappa e il generatore
+  di configurazione. Un account limitato
   alla sola tab AI va riassegnato dalla tab Utenti.
 - **Porta syslog predefinita per piattaforma**: 514 su Windows (la porta che
   l'installer apre nel firewall), 5514 su Linux/Docker (non privilegiata; il

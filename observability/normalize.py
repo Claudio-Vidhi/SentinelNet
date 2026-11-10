@@ -5,8 +5,8 @@
 
 Ogni sorgente conserva il proprio formato di ingestione (i listener UDP, il
 poller REST e gli agent non cambiano); qui gli eventi vengono PROIETTATI nella
-tabella ``events`` con lo stesso vocabolario. Da lì in poi correlazione,
-ragionamento e knowledge base leggono una forma sola.
+tabella ``events`` con lo stesso vocabolario. Da lì in poi i consumatori
+(Interfaces, errori di porta, diagnosi, notifiche SIEM) leggono una forma sola.
 
 Adapter attivi (solo sorgenti già raccolte oggi):
 - ``syslog_events``    → ``log.security`` / ``log.event``   (entità device)
@@ -14,9 +14,8 @@ Adapter attivi (solo sorgenti già raccolte oggi):
 - ``quarantined_exporters`` → ``platform.exporter_unknown`` (entità exporter)
 
 L'ultimo non osserva la rete: osserva la PIATTAFORMA. Ha lo stesso posto degli
-altri perché è lo stesso tipo di cosa — un fatto misurato — e passando dal bus
-degli eventi eredita regole, evidenze, incidenti, timeline e catalogo senza un
-percorso parallelo per la diagnostica interna.
+altri perché è lo stesso tipo di cosa — un fatto misurato. It goes through
+the same event bus, so no parallel path is needed for internal diagnostics.
 
 Avanzamento: ``normalize_cursors`` tiene la posizione per sorgente. Il rientro
 è comunque idempotente grazie a ``dedup_key`` UNIQUE, quindi un cursore
@@ -24,6 +23,7 @@ riavvolto non duplica: al più riscrive le stesse righe.
 
 """
 
+import asyncio
 import json
 import logging
 import time
@@ -34,6 +34,7 @@ from observability import fieldmap, metrics
 
 logger = logging.getLogger("sentinelnet.obs")
 
+INTERVAL_S = 300          # one projection round every 5 minutes
 LOOKBACK_S = 3600         # quanto indietro guardare al primo giro / dopo un fermo
 MAX_ROWS_PER_SOURCE = 2000
 MAX_CHANGES_PER_SNAPSHOT = 20
@@ -69,9 +70,7 @@ ON CONFLICT(dedup_key) DO UPDATE SET
 # ``ingested_ts`` NON viene riscritto sul conflitto: significa "quando abbiamo
 # saputo questo fatto", non "l'ultima volta che l'abbiamo ritoccato". La
 # riproiezione di un bucket ancora aperto ne aggiorna le metriche, non l'età
-# della conoscenza — e il correlatore seleziona anche su quella colonna, quindi
-# riscriverla farebbe rientrare nella finestra fatti vecchi come se fossero
-# nuovi. Tempo dell'evento (``ts``) e tempo della conoscenza (``ingested_ts``)
+# della conoscenza. Tempo dell'evento (``ts``) e tempo della conoscenza (``ingested_ts``)
 # restano due assi distinti.
 
 
@@ -361,12 +360,10 @@ def _from_quarantine(conn, now: int) -> int:
 
     Nessun cursore: la tabella è un upsert per exporter, non una coda. La
     finestra su ``last_seen`` è già il filtro — un exporter che ha smesso di
-    inviare smette da solo di produrre eventi, e l'incidente si chiude per
-    quiete come qualunque altro.
+    inviare smette da solo di produrre eventi.
 
-    Il bucket tiene ``ingested_ts`` fresco mentre la quarantena dura: il
-    correlatore guarda una finestra di 15 minuti, quindi un fatto emesso una
-    volta sola e poi solo aggiornato in place gli uscirebbe di vista subito.
+    The bucket keeps ``ingested_ts`` fresh while the quarantine lasts, so the
+    fact stays among the recent events instead of being emitted once.
     """
     rows = conn.execute(
         """SELECT exporter_ip, first_seen, last_seen, packet_count
@@ -417,3 +414,15 @@ def normalize_once(now: Optional[int] = None) -> dict:
         return counts
     finally:
         conn.close()
+
+
+async def normalize_loop():
+    """Periodic task started by the lifespan: keeps ``events`` current for
+    the views that read it (Interfaces, interface errors, diagnosis, SIEM
+    notifications)."""
+    while True:
+        await asyncio.sleep(INTERVAL_S)
+        try:
+            await asyncio.to_thread(normalize_once)
+        except Exception as e:
+            logger.warning("Errore nel ciclo di normalizzazione: %s", e)

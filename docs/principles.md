@@ -87,9 +87,9 @@ routing, configuration, security events and historical behaviour.
 
 **Correlation must be deterministic wherever possible. Avoid hidden logic.**
 
-Realized as: [ADR-0002](adr/0002-unified-event-model.md) (unified event model),
-[ADR-0001](adr/0001-python-rules-not-yaml.md) (rules as inspectable Python),
-[ADR-0006](adr/0006-deterministic-correlation.md) (no AI in the decision path).
+Realized as: [ADR-0002](adr/0002-unified-event-model.md) (unified event model).
+The rule engine built on it ([ADR-0001](adr/0001-python-rules-not-yaml.md),
+[ADR-0006](adr/0006-deterministic-correlation.md)) was removed in 0.65.0.
 
 ---
 
@@ -108,7 +108,8 @@ Every conclusion must expose its supporting evidence, a confidence score and the
 reasoning path. The engineer must always be able to see why a conclusion was
 produced.
 
-Realized as: [ADR-0003](adr/0003-evidence-and-derived-incident.md).
+Was realized as [ADR-0003](adr/0003-evidence-and-derived-incident.md), superseded:
+the incidents engine was removed in 0.65.0 as misleading.
 
 ---
 
@@ -175,8 +176,9 @@ Every incident should generate a timeline automatically:
 Most likely cause: unexpected backup replication.
 ```
 
-The timeline should be the primary troubleshooting interface. Realized in
-[observability/timeline.py](../observability/timeline.py).
+The timeline should be the primary troubleshooting interface. The first
+attempt (`observability/timeline.py`) was removed with the incidents engine in
+0.65.0.
 
 ---
 
@@ -239,7 +241,6 @@ Before implementing any feature, ask:
 - Does it correlate multiple data sources?
 - Does it explain rather than visualize?
 - Is the conclusion explainable?
-- Does it integrate into the incident timeline?
 - Can another module reuse this information?
 - Does it remain vendor independent?
 - Does it expose reusable APIs?

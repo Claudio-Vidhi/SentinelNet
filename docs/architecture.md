@@ -10,14 +10,18 @@ document covers how they were implemented.
 ## 1. What it is, in one line
 
 SentinelNet collects passive observations from the network (syslog, REST
-snapshots, SNMP), normalizes them into **a single event model**, applies
-**deterministic rules** that produce **evidence with a causal role**, and
-derives **explainable incidents** from that evidence.
+snapshots, SNMP) and normalizes them into **a single event model** that the
+views read: port state and flapping (Interfaces), interface errors, client
+diagnosis, SIEM notifications, and the syslog search of the Traffic tab.
 
 The value isn't in the collecting: it's in not stopping at raw data. A tab
-showing "core CPU 96%" is not the product. The product is "the core is at 96%
-because port Gi1/0/24 has been flapping since 09:31, right after a
-configuration change on that switch".
+showing a list of link transitions is not the product; "this port has flapped
+six times today and nobody declared it in maintenance" is.
+
+Until 0.65.0 a correlation engine turned those events into evidence and
+incidents (rules, retraction, an Incidents tab). It was removed as misleading;
+[ADR-0003](adr/0003-evidence-and-derived-incident.md) and
+[ADR-0006](adr/0006-deterministic-correlation.md) record what it was.
 
 Alongside this, the platform also does classic device-fleet management: config
 backup, firmware triage against NIST NVD, topology map, SSH terminal, day-0
@@ -45,68 +49,34 @@ and share inventory, RBAC and audit with it.
         └───────────────────────┘      log.security, log.event, device.state,
                     │                  interface.state, interface.change,
                     │                  platform.exporter_unknown, …
-                    │
-                    │  correlator.py + rules.py   (+ suppression.py)
                     ▼
-        ┌───────────────────────┐
-        │  evidence             │   ← every row: causal ROLE + PROVENANCE
-        └───────────────────────┘      (rule_id, rule_version, thresholds used)
-                    │
-                    │  incidents.py — groups by entity and time proximity
-                    ▼
-        ┌───────────────────────┐
-        │  incidents            │   ← DERIVED VIEW: cause, confidence,
-        └───────────────────────┘      reasoning path
-                    │
-                    ▼
-        PRESENTATION
-  timeline.py (sequence) · flowpath.py (which way it went) · endpoints.py (what an IP is)
+        READERS
+  Interfaces (+ suppression.py) · interface errors · client diagnosis
+  SIEM notifications · /api/observability/events
+  flowpath.py (which way it went) · endpoints.py (what an IP is)
   routers/*.py → static/js/*.js
 ```
 
-The direction is one-way. No stage writes backwards, and each stage reads only
-the one immediately before it: the correlator **no longer knows** what a syslog
-line or an SNMP snapshot is — it reads `events` and nothing else. That's why a new
-source costs one adapter in
+The direction is one-way. No stage writes backwards, and the readers **do not
+know** what a syslog line or an SNMP snapshot is — they read `events`. That's
+why a new source costs one adapter in
 [normalize.py](../observability/normalize.py) and nothing downstream.
 
 ### 2.1 Why an event layer
 
-Without it, every rule would have to know every source format, and every new
-source would touch every rule. With it, the vocabulary is declared once and
-rules, timeline and knowledge base all read a single shape.
+Without it, every reader would have to know every source format, and every new
+source would touch every reader. With it, the vocabulary is declared once and
+every reader sees a single shape.
 
 The case that makes the model clear: a syslog sender that isn't in inventory
 produces `platform.exporter_unknown` — an event like any other, on the reserved
-`__platform__` tenant. Platform diagnostics get no parallel path; they inherit
-rules, evidence, incidents and timeline from the normal one. See
+`__platform__` tenant. Platform diagnostics get no parallel path. See
 [ADR-0002](adr/0002-unified-event-model.md).
 
-### 2.2 Why evidence instead of incidents directly
+The projection runs every 5 minutes (`normalize.normalize_loop`, started with
+the other background tasks).
 
-A rule doesn't conclude "there is an incident": it produces evidence and
-**declares its role** — `trigger`, `supporting`, `symptom`, `consequence`. The
-incident is what you get by grouping evidence about the same entity close in
-time: the cause is the rule behind the `trigger` evidence, and every distinct
-form of corroboration raises confidence by one step, recorded in
-`reasoning_json.sources_used`.
-
-This is what makes a conclusion explainable rather than asserted. See
-[ADR-0003](adr/0003-evidence-and-derived-incident.md).
-
-### 2.3 Retraction
-
-A new fact can invalidate an earlier conclusion: the interface came back up.
-Retraction is **produced by a rule**, never by an
-adapter, and the fact that justifies it (the `witness`) is recorded as evidence
-in its own right — so `retracted_by_evidence_id` points at something readable,
-and the retraction is itself retractable.
-
-Known and accepted limit: retraction happens **after** concluding. That's fine
-while only the UI reads conclusions; it would not be with a notification engine
-(see [roadmap.md](roadmap.md) §3).
-
-### 2.4 Suppressions
+### 2.2 Suppressions
 
 *Was the operator expecting this?* One question, two forms that most tools treat
 as separate features: "this port is down by design" (no expiry) and "this device
@@ -114,46 +84,20 @@ is under maintenance tonight" (`from_ts`/`to_ts` window). Same model,
 [suppression.py](../observability/suppression.py).
 
 Suppression **does not hide the fact**: the event stays in `events` and in the
-feed; only whether it becomes evidence changes. Operator knowledge enters at
+feed; only the Interfaces tab's reading of the port changes (`maint` /
+`by_design` instead of `outage` / `flapping`). Operator knowledge enters at
 interpretation time, not at observation time — so when the suppression expires,
-history is still complete. Applied in exactly one place (the correlator), not
-rule by rule.
+history is still complete. Declared from the Interfaces tab
+(`POST /api/observability/interfaces/expected`).
 
 ---
 
-## 3. The rules
+## 3. The rules (removed)
 
-They are **Python callables in a table**, not a DSL. You put a breakpoint inside
-one and see why it fired. See [ADR-0001](adr/0001-python-rules-not-yaml.md).
-
-What's configurable at runtime is the **thresholds**, not the logic: each rule
-declares its parameters with a default, an admin adjusts them from
-`app_settings` (`correlation_rules` section), and the values **actually used**
-end up in `evidence.params_json` next to `rule_version`. Without that, two
-different outcomes would carry the same provenance.
-
-Current catalog ([rules.py](../observability/rules.py)):
-
-| Rule | What it concludes |
-|---|---|
-| `BLOCKED_TRAFFIC_001` | The firewall blocked the same source repeatedly (syslog) |
-| `BLAST_RADIUS_001` | Several clients blocked towards the same destination |
-| `HIGH_SEVERITY_LOG_001` | Syslog severity ≤ 3 |
-| `IFACE_DOWN_001` / `IFACE_RECOVERED_001` | Interface down / back up (the latter retracts the former) |
-| `IFACE_FLAPPING_001` | The port is oscillating: one fact, not N alarms |
-| `DEVICE_LOAD_001` | Device CPU/memory load |
-| `CFG_CHANGE_001` | Configuration changed between two snapshots |
-| `FLOW_EXPORTER_UNKNOWN_001` | Syslog sender outside inventory: data loss made visible (id kept from the flow era) |
-| `DEVICE_UNREACHABLE_001` | A polled device stopped answering |
-| `IFACE_ERRORS_001` | Interface error counters rising |
-
-The flow rules (`TRAFFIC_SPIKE_001`, `BASELINE_SPIKE_001`,
-`BASELINE_NORMAL_RETRACT_001`, `NEW_TALKER_001`, `TOP_TALKER_001`) were removed
-in 0.65.0 with the flow collectors.
-
-New logic is an entry in `RULES`. A new source is an adapter in `normalize.py`.
-There is no third extension mechanism, deliberately: it would give three places
-to look.
+The correlation rules, the evidence and incident tables, retraction and the
+Incidents tab were removed in 0.65.0. New databases do not create `evidence`,
+`incidents` or `incident_conclusions`; an older database keeps them, unread,
+and retention empties them. Saved `correlation_rules` thresholds are ignored.
 
 ---
 
@@ -166,14 +110,13 @@ read only flow records and was removed with the flow collectors in 0.65.0.
 
 ## 5. Enrichment
 
-Three modules that decide nothing and exist to make already-made decisions
+Two modules that decide nothing and exist to make already-made decisions
 readable:
 
 | Module | Question | Note |
 |---|---|---|
 | [endpoints.py](../observability/endpoints.py) | *what IS this address?* | multicast, CGNAT, locally-administered MAC… **Derived, never copied**: computed at read time, so the day the table learns a new role, history improves too. IPv4 only, because upstream extraction only recognizes IPv4. |
 | [flowpath.py](../observability/flowpath.py) | *which way did it go?* | The **logical** path (host → access port → gateway), not packet-by-packet. An unknown hop is marked `known: False`, never silently skipped. |
-| [timeline.py](../observability/timeline.py) | *in what order did it happen?* | Merges evidence, raw syslog, REST snapshots and physical location. Careful: `observability.db` uses unix integers, `mac_history.db` uses ISO-8601 text — conversion happens there, at the boundary. |
 
 ### 5.1 Client diagnosis
 
@@ -276,9 +219,8 @@ site poisons scoping for everyone else. See
 
 ## 8. What the AI does
 
-The AI **does not decide**. Correlation is deterministic; the assistant and the
-MCP server read what the engine already concluded and narrate it. See
-[ADR-0006](adr/0006-deterministic-correlation.md).
+The AI **does not decide**. Every verdict is computed by code; the contextual
+assists and the MCP server read what the platform already concluded.
 
 Context sent to the provider is assembled **server-side** (the browser sends
 only identifying tuples, never volumes), is always aggregated or top-N, and
@@ -306,7 +248,7 @@ and audit log unchanged.
 | [drivers/](../drivers/) | One driver per vendor, `BaseDriver` as the contract, `registry.py` (vendor → driver → netmiko mapping) |
 | [fw_analyzers/](../fw_analyzers/) | Firewall config analysis (FortiOS, PAN-OS) |
 | [redundancy/](../redundancy/) | HA group detection and state |
-| [static/js/](../static/js/) | One JS file per tab. Rendering, formatting and presentation helpers live here; decisions (correlation, scoping, policy) stay server-side — the dashboard is a lens, never the logic |
+| [static/js/](../static/js/) | One JS file per tab. Rendering, formatting and presentation helpers live here; decisions (verdicts, scoping, policy) stay server-side — the dashboard is a lens, never the logic |
 | [templates/](../templates/) | `dashboard.html`, single page |
 
 [app_server.py](../app_server.py) is deliberately thin: `lifespan`, the FastAPI
@@ -319,7 +261,7 @@ and periodic tasks per config, seed the audit template, start the ping monitor;
 on the way out, stop the ping monitor, close bastion transports, stop listeners
 and drain the write queue.
 
-Periodic tasks: retention (1h), correlation (5 min), REST poller, SNMP poller
+Periodic tasks: retention (1h), event normalization (5 min), REST poller, SNMP poller
 and Linux health poller (configurable interval), scheduled L2 discovery
 (opt-in, `l2_poll_s`). The notification loop and the triage scheduler tick
 every 60 seconds. The pollers start on the first activation of the master switch
@@ -405,11 +347,10 @@ Stated, not forgotten:
 - **It does not scale horizontally** on observability: single-process writer.
 - **It does not reconstruct the packet-by-packet path**: the flow path is
   logical (§5).
-- **It does not conclude on a single block log**, except for high
-  severities: `BLOCKED_TRAFFIC_001` waits for repeated blocks, worth knowing
-  when investigating "why didn't this show up". See
-  [live-flows-and-siem.md](live-flows-and-siem.md) §4.5.
+- **It does not correlate.** There is no incident engine since 0.65.0: a
+  device going down is an email (ping monitor, `device.down`), a port going
+  down is a row in Interfaces, and nothing groups them into one story.
 - **It does not escalate.** Email notifications (`services/notifications.py`)
   send once per event to whoever subscribed, with a 30-minute flood window;
   there is no on-call rotation, acknowledgement by reply, or re-notification
-  of an incident nobody handled ([roadmap.md](roadmap.md) §1).
+  of an event nobody handled ([roadmap.md](roadmap.md) §1).

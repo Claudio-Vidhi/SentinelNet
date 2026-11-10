@@ -64,8 +64,8 @@ out; anything that reads as **operational security** is core:
 Three things a neighboring product could not truthfully copy:
 
 - **Deterministic reporting.** Independent sources are normalized into one event
-  model and evaluated by inspectable Python rules. No AI sits in the decision
-  path (ADR-0006).
+  model, and every verdict (posture, drift, CVE, audit, port state) comes from
+  inspectable code. No AI sits in the decision path.
 - **Every conclusion ships its evidence.** A finding carries what was observed,
   when, and from which source. "AI detected anomaly" is a defect, not an output.
 - **Self-hosted with nothing leaving the estate.** Windows executable or

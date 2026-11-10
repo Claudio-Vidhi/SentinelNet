@@ -51,7 +51,7 @@ Message text in the catalog uses typed placeholders where runtime values appear:
 triple is a *stable* identifier while the rendered text varies per occurrence.
 Deduplicating or grouping on the full message text would treat every occurrence
 as distinct; the mnemonic is the part that identifies "the same kind of event".
-That is the same distinction `evidence.dedup_key` already makes elsewhere — see
+That is the same distinction `events.dedup_key` already makes elsewhere — see
 [architecture.md](../../architecture.md) §2.
 
 ---
@@ -72,10 +72,8 @@ in the parser is correct and needs no Cisco-specific mapping.
 | 6 | informational | Informational only |
 | 7 | debugging | Debug output |
 
-This is the same 0–7 scale that `HIGH_SEVERITY_LOG_001` thresholds on (≤ 3) and
-that the correlator uses for its standalone-event exception
-([live-flows-and-siem.md](../../live-flows-and-siem.md) §4.5). No conversion
-needed.
+This is the same 0–7 scale stored in `syslog_events.severity` and
+`events.severity`. No conversion needed.
 
 **Default logging level is 7 (debugging) to console.** A device left at default
 and pointed at SentinelNet will send a lot of noise.
@@ -101,7 +99,7 @@ events.** Verified by search: it contains **no** `LINEPROTO-*`, `SPANTREE-*`,
 `MAC_MOVE`/`MACFLAP`, or `ERRDISABLE-*` entries, and only one `LINK-*`
 (`LINK-2-BADVCALL`, quoted as a format example).
 
-So the messages most relevant to SentinelNet's interface rules —
+So the messages most relevant to SentinelNet's interface state —
 `%LINK-3-UPDOWN` and `%LINEPROTO-5-UPDOWN` — are **not** documented here. Those
 live in the per-technology system message references. If interface state is ever
 to be driven from syslog rather than from SNMP/REST snapshots, that is the
@@ -135,8 +133,8 @@ learns about at the next triage.
 `CMRP_ENVMON-3-TEMP_WARN_CRITICAL`, `CMRP_ENVMON-3-TEMP_SYS_SHUTDOWN_PENDING`.
 
 `TEMP_SYS_SHUTDOWN_PENDING` is a device announcing it is about to power itself
-off. At severity 3 it already trips `HIGH_SEVERITY_LOG_001`, so it produces
-evidence today — but as a generic high-severity log, without the meaning.
+off. At severity 3 it is stored as a generic high-severity log, without the
+meaning.
 
 ---
 

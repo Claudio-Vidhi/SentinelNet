@@ -13,9 +13,7 @@ solo, come già fatto per l'estrazione syslog in ``fieldmap.py``.
 
 DERIVATA, MAI COPIATA. La classificazione si calcola al momento della lettura e
 non viene salvata dentro gli eventi: il giorno in cui questa tabella impara un
-ruolo nuovo, migliora anche tutto ciò che è già stato scritto. L'unica forma
-persistita è il TESTO leggibile dentro ``evidence.summary``, perché quello è il
-contesto storico di una decisione presa allora e deve restare com'era.
+ruolo nuovo, migliora anche tutto ciò che è già stato scritto.
 
 Copertura: **solo IPv4**. Non è una scelta di questo modulo — l'estrazione a
 monte (``fieldmap._IP_RE``) riconosce solo IPv4, quindi
