@@ -33,10 +33,10 @@ _TXT = {
     "days": ("giorni", "days"),
     "version": ("Versione SentinelNet", "SentinelNet version"),
     "disclaimer": (
-        "Questo documento raccoglie EVIDENZE tecniche dai dati che SentinelNet gia' "
-        "raccoglie sulla rete del tenant. Non e' una certificazione ne' un giudizio di "
-        "conformita' a NIS2 o ad altri standard: la valutazione spetta all'auditor. "
-        "I riferimenti ai controlli indicano a quali requisiti l'evidenza e' pertinente; "
+        "Questo documento raccoglie EVIDENZE tecniche dai dati che SentinelNet già "
+        "raccoglie sulla rete del tenant. Non è una certificazione né un giudizio di "
+        "conformità a NIS2 o ad altri standard: la valutazione spetta all'auditor. "
+        "I riferimenti ai controlli indicano a quali requisiti l'evidenza è pertinente; "
         "i titoli sono redatti da noi e non riproducono il testo delle norme.",
         "This document collects technical EVIDENCE from data SentinelNet already "
         "collects about the tenant's network. It is not a certification nor a verdict "
@@ -53,7 +53,7 @@ _TXT = {
     "detail": ("Dettaglio delle evidenze", "Evidence detail"),
     "metrics": ("Metriche", "Metrics"),
     "no_rows": ("Nessuna riga.", "No rows."),
-    "capped": ("Mostrate {shown} righe su {total}; l'elenco completo e' nello snapshot JSON.",
+    "capped": ("Mostrate {shown} righe su {total}; l'elenco completo è nello snapshot JSON.",
                "Showing {shown} of {total} rows; the full list is in the JSON snapshot."),
     "out_of_scope": ("Fuori dal perimetro tecnico", "Outside the technical scope"),
     "out_intro": (
@@ -63,7 +63,7 @@ _TXT = {
         "not covered by this report and must be documented separately."),
     "method": ("Metodo", "Method"),
     "method_intro": (
-        "Ogni evidenza e' calcolata da una fonte dati esistente; lo stato deriva dalle "
+        "Ogni evidenza è calcolata da una fonte dati esistente; lo stato deriva dalle "
         "soglie del mapping (versione {mv}), valutate in ordine: vale la prima che scatta.",
         "Each evidence comes from an existing data source; its status follows from the "
         "mapping thresholds (version {mv}), checked in order: the first that matches wins."),

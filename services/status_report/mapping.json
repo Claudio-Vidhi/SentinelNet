@@ -12,8 +12,8 @@
   "controls": {
     "nis2": {
       "21(2)(b)": {"it": "Gestione degli incidenti", "en": "Incident handling"},
-      "21(2)(c)": {"it": "Continuita' operativa e backup", "en": "Business continuity and backup"},
-      "21(2)(e)": {"it": "Sicurezza di acquisizione, sviluppo e manutenzione, gestione vulnerabilita'", "en": "Security in acquisition, development and maintenance, vulnerability handling"},
+      "21(2)(c)": {"it": "Continuità operativa e backup", "en": "Business continuity and backup"},
+      "21(2)(e)": {"it": "Sicurezza di acquisizione, sviluppo e manutenzione, gestione vulnerabilità", "en": "Security in acquisition, development and maintenance, vulnerability handling"},
       "21(2)(h)": {"it": "Crittografia", "en": "Cryptography"},
       "21(2)(i)": {"it": "Controllo accessi e gestione degli asset", "en": "Access control and asset management"}
     },
@@ -25,7 +25,7 @@
       "6.6": {"it": "Gestione delle patch di sicurezza", "en": "Security patch management"},
       "6.7": {"it": "Sicurezza della rete", "en": "Network security"},
       "6.8": {"it": "Segmentazione della rete", "en": "Network segmentation"},
-      "6.10": {"it": "Gestione e divulgazione delle vulnerabilita'", "en": "Vulnerability handling and disclosure"},
+      "6.10": {"it": "Gestione e divulgazione delle vulnerabilità", "en": "Vulnerability handling and disclosure"},
       "11": {"it": "Controllo degli accessi", "en": "Access control"},
       "12.4": {"it": "Inventario degli asset", "en": "Asset inventory"}
     },
@@ -34,7 +34,7 @@
       "A.5.15": {"it": "Controllo accessi", "en": "Access control"},
       "A.8.2": {"it": "Accessi privilegiati", "en": "Privileged access"},
       "A.8.5": {"it": "Autenticazione", "en": "Authentication"},
-      "A.8.8": {"it": "Vulnerabilita' tecniche", "en": "Technical vulnerabilities"},
+      "A.8.8": {"it": "Vulnerabilità tecniche", "en": "Technical vulnerabilities"},
       "A.8.9": {"it": "Gestione della configurazione", "en": "Configuration management"},
       "A.8.13": {"it": "Backup", "en": "Backup"},
       "A.8.15": {"it": "Registrazione degli eventi", "en": "Logging"},
@@ -48,7 +48,7 @@
       "4": {"it": "Configurazione sicura", "en": "Secure configuration"},
       "5": {"it": "Gestione degli account", "en": "Account management"},
       "6": {"it": "Gestione dei permessi di accesso", "en": "Access permission management"},
-      "7": {"it": "Gestione continua delle vulnerabilita'", "en": "Continuous vulnerability management"},
+      "7": {"it": "Gestione continua delle vulnerabilità", "en": "Continuous vulnerability management"},
       "8": {"it": "Gestione dei log", "en": "Log management"},
       "11": {"it": "Ripristino dei dati", "en": "Data recovery"},
       "12": {"it": "Gestione dell'infrastruttura di rete", "en": "Network infrastructure management"}
@@ -69,9 +69,9 @@
     "critical": {"it": "CVE critiche", "en": "Critical CVEs"},
     "high": {"it": "CVE alte", "en": "High CVEs"},
     "exploited": {"it": "CVE sfruttate (KEV)", "en": "Exploited CVEs (KEV)"},
-    "data_age_hours": {"it": "Eta' dei dati CVE (ore)", "en": "CVE data age (hours)"},
+    "data_age_hours": {"it": "Età dei dati CVE (ore)", "en": "CVE data age (hours)"},
     "never_backed_up": {"it": "Apparati senza backup", "en": "Devices never backed up"},
-    "max_age_days": {"it": "Eta' massima del backup (giorni)", "en": "Oldest backup age (days)"},
+    "max_age_days": {"it": "Età massima del backup (giorni)", "en": "Oldest backup age (days)"},
     "versions_kept": {"it": "Versioni di backup conservate", "en": "Backup versions kept"},
     "checked": {"it": "Apparati verificati", "en": "Devices checked"},
     "deviating": {"it": "Apparati in drift", "en": "Devices with drift"},
@@ -95,19 +95,19 @@
     "admins": {"it": "Amministratori", "en": "Admins"},
     "unscoped": {"it": "Utenti senza restrizione di tenant", "en": "Users not restricted to a tenant"},
     "disabled": {"it": "Disabilitati", "en": "Disabled"},
-    "audit_chain_ok": {"it": "Catena di audit integra (1 = si')", "en": "Audit chain intact (1 = yes)"},
+    "audit_chain_ok": {"it": "Catena di audit integra (1 = sì)", "en": "Audit chain intact (1 = yes)"},
     "audit_chain_broken_line": {"it": "Riga di audit interrotta", "en": "Audit chain broken at line"},
-    "mfa_available": {"it": "MFA disponibile (1 = si')", "en": "MFA available (1 = yes)"},
+    "mfa_available": {"it": "MFA disponibile (1 = sì)", "en": "MFA available (1 = yes)"},
     "device": {"it": "Apparato", "en": "Device"},
     "ip": {"it": "IP", "en": "IP"},
     "vendor": {"it": "Vendor", "en": "Vendor"},
     "model": {"it": "Modello", "en": "Model"},
     "firmware": {"it": "Firmware", "en": "Firmware"},
     "last_seen": {"it": "Ultimo rilevamento", "en": "Last seen"},
-    "confidence": {"it": "Affidabilita'", "en": "Confidence"},
+    "confidence": {"it": "Affidabilità", "en": "Confidence"},
     "version_seen_at": {"it": "Versione rilevata il", "en": "Version seen at"},
     "last_backup": {"it": "Ultimo backup", "en": "Last backup"},
-    "age_days": {"it": "Eta' (giorni)", "en": "Age (days)"},
+    "age_days": {"it": "Età (giorni)", "en": "Age (days)"},
     "versions": {"it": "Versioni", "en": "Versions"},
     "benchmark": {"it": "Benchmark", "en": "Benchmark"},
     "score": {"it": "Punteggio", "en": "Score"},
@@ -135,7 +135,7 @@
     },
     "vulnerabilities": {
       "source": {"it": "Correlazione CVE (NVD, CISA KEV) sulle versioni rilevate.", "en": "CVE correlation (NVD, CISA KEV) on the detected versions."},
-      "title": {"it": "Vulnerabilita' note sul firmware", "en": "Known firmware vulnerabilities"},
+      "title": {"it": "Vulnerabilità note sul firmware", "en": "Known firmware vulnerabilities"},
       "controls": {"nis2": ["21(2)(e)"], "ir2690": ["6.10", "6.6"], "iso27001": ["A.8.8"], "cis8": ["7"]},
       "rules": [
         {"status": "gap", "metric": "critical", "op": ">", "value": 0},
@@ -182,7 +182,7 @@
       "rules": [],
       "default": "partial",
       "note": {
-        "it": "Le zone e le decisioni sui collegamenti sono quelle salvate. La ricerca dei possibili bypass del firewall si fa sulla mappa (dipende dalla topologia disegnata) e non entra in questo report: lo stato resta 'parziale' finche' non e' verificata li'.",
+        "it": "Le zone e le decisioni sui collegamenti sono quelle salvate. La ricerca dei possibili bypass del firewall si fa sulla mappa (dipende dalla topologia disegnata) e non entra in questo report: lo stato resta 'parzialè finché non è verificata lì.",
         "en": "Zones and link decisions are the saved ones. The search for possible firewall bypasses runs on the map (it depends on the drawn topology) and is not part of this report: the status stays 'partial' until it is checked there."
       }
     },
@@ -212,6 +212,6 @@
     {"ref": "NIS2 21(2)(g)", "it": "Igiene informatica di base e formazione.", "en": "Basic cyber hygiene and training."},
     {"ref": "NIS2 21(2)(h)", "it": "Politiche sull'uso della crittografia (il report mostra solo la configurazione degli apparati).", "en": "Policies on the use of cryptography (the report only shows device configuration)."},
     {"ref": "NIS2 21(2)(i)", "it": "Sicurezza delle risorse umane.", "en": "Human resources security."},
-    {"ref": "NIS2 21(2)(j)", "it": "Autenticazione a piu' fattori e comunicazioni protette. Il login di SentinelNet non ha l'autenticazione a piu' fattori.", "en": "Multi-factor authentication and secured communications. SentinelNet's own login has no multi-factor authentication."}
+    {"ref": "NIS2 21(2)(j)", "it": "Autenticazione a più fattori e comunicazioni protette. Il login di SentinelNet non ha l'autenticazione a più fattori.", "en": "Multi-factor authentication and secured communications. SentinelNet's own login has no multi-factor authentication."}
   ]
 }
