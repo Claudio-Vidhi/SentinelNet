@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.65.0] - 2026-11-13
+
 ### Added
 
 - **Report stato rete per auditor**: nella tab NetSec Audit il pulsante
