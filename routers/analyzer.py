@@ -19,7 +19,8 @@ from pydantic import BaseModel
 from core import db
 from ai import config_analyzer
 from services import inventory_manager
-from routers.deps import get_current_user, user_group_scope, assert_device_allowed, require_admin
+from routers.deps import (get_current_user, user_group_scope, assert_device_allowed,
+                          assert_group_allowed, require_admin)
 from security.security_manager import log_audit
 
 router = APIRouter(tags=["Analyzer"])
@@ -325,6 +326,35 @@ def netsec_audit_export_docx(payload: Dict[str, Any], current_user = Depends(get
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+
+
+@router.get("/api/reports/network-status", dependencies=[Depends(require_tab("tab-netsec-audit"))])
+def network_status_report(tenant: str = "", format: str = "docx", lang: str = "it",
+                          current_user=Depends(get_current_user)):
+    """Network status evidence for one tenant, as .docx or the raw JSON snapshot.
+
+    One tenant per report: the tenant scope is the security boundary, so
+    'all' is refused instead of merging tenants into one document.
+    """
+    from services.status_report import docx_render, evidence
+    if not tenant or tenant == "all":
+        raise HTTPException(status_code=400, detail="Select a single tenant.")
+    if format not in ("docx", "json"):
+        raise HTTPException(status_code=400, detail="format must be docx or json.")
+    assert_group_allowed(current_user, tenant)
+    if tenant not in inventory_manager.get_all_groups():
+        raise HTTPException(status_code=404, detail=f"Tenant '{tenant}' not found.")
+    user = current_user.get("sub", "")
+    snapshot = evidence.build_snapshot(tenant, user)
+    log_audit(f"Report stato rete del tenant '{tenant}' ({format}) generato da '{user}'.")
+    stem = "network-status-" + re.sub(r"[^A-Za-z0-9_.-]", "_", tenant) + "-" + snapshot["generated_at"][:10]
+    if format == "json":
+        return Response(content=json.dumps(snapshot, indent=1, ensure_ascii=False),
+                        media_type="application/json",
+                        headers={"Content-Disposition": f'attachment; filename="{stem}.json"'})
+    return Response(content=docx_render.render(snapshot, "en" if lang == "en" else "it"),
+                    media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    headers={"Content-Disposition": f'attachment; filename="{stem}.docx"'})
 
 
 @router.get("/api/netsec-audit/history", dependencies=[Depends(require_tab("tab-netsec-audit"))])

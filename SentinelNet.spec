@@ -16,6 +16,8 @@ a = Analysis(
     # core_engine, quindi PyInstaller li include gia' compilati.
     datas=[('templates', 'templates'), ('static', 'static'),
            ('observability/storage/schema.sql', 'observability/storage'),
+           # Read at runtime by services/status_report/evidence.py.
+           ('services/status_report/mapping.json', 'services/status_report'),
            # Apache 2.0 4(a)/4(d): l'exe e' una redistribuzione, licenza e
            # NOTICE devono viaggiare con lui.
            ('LICENSE', '.'), ('NOTICE', '.'),

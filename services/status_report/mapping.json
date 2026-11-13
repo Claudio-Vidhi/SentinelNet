@@ -1,0 +1,153 @@
+{
+  "mapping_version": "2026-11-13",
+  "period_days": 30,
+  "_comment": "Evidence -> control references and status thresholds. Titles are our own wording, never the standards' text. NIS2 art. 21(2) letters and the 2024/2690 annex sections were checked against the official text (Publications Office of the EU, CELEX 32022L2555 and 32024R2690) on 2026-11-13. Rules are evaluated in order, the first match wins; a rule whose metric is null is skipped; no match gives 'default'.",
+  "frameworks": {
+    "nis2": {"it": "NIS2 - Direttiva (UE) 2022/2555, art. 21(2)", "en": "NIS2 - Directive (EU) 2022/2555, art. 21(2)"},
+    "ir2690": {"it": "Regolamento di esecuzione (UE) 2024/2690, allegato", "en": "Implementing Regulation (EU) 2024/2690, annex"},
+    "iso27001": {"it": "ISO/IEC 27001:2022, Allegato A", "en": "ISO/IEC 27001:2022, Annex A"},
+    "cis8": {"it": "CIS Controls v8", "en": "CIS Controls v8"},
+    "iec62443": {"it": "IEC 62443-3-3 (reti OT)", "en": "IEC 62443-3-3 (OT networks)"}
+  },
+  "controls": {
+    "nis2": {
+      "21(2)(b)": {"it": "Gestione degli incidenti", "en": "Incident handling"},
+      "21(2)(c)": {"it": "Continuita' operativa e backup", "en": "Business continuity and backup"},
+      "21(2)(e)": {"it": "Sicurezza di acquisizione, sviluppo e manutenzione, gestione vulnerabilita'", "en": "Security in acquisition, development and maintenance, vulnerability handling"},
+      "21(2)(h)": {"it": "Crittografia", "en": "Cryptography"},
+      "21(2)(i)": {"it": "Controllo accessi e gestione degli asset", "en": "Access control and asset management"}
+    },
+    "ir2690": {
+      "3.2": {"it": "Monitoraggio e registrazione", "en": "Monitoring and logging"},
+      "4.2": {"it": "Backup e ridondanza", "en": "Backup and redundancy"},
+      "6.3": {"it": "Gestione della configurazione", "en": "Configuration management"},
+      "6.4": {"it": "Gestione delle modifiche e manutenzione", "en": "Change management and maintenance"},
+      "6.6": {"it": "Gestione delle patch di sicurezza", "en": "Security patch management"},
+      "6.7": {"it": "Sicurezza della rete", "en": "Network security"},
+      "6.8": {"it": "Segmentazione della rete", "en": "Network segmentation"},
+      "6.10": {"it": "Gestione e divulgazione delle vulnerabilita'", "en": "Vulnerability handling and disclosure"},
+      "11": {"it": "Controllo degli accessi", "en": "Access control"},
+      "12.4": {"it": "Inventario degli asset", "en": "Asset inventory"}
+    },
+    "iso27001": {
+      "A.5.9": {"it": "Inventario degli asset", "en": "Asset inventory"},
+      "A.5.15": {"it": "Controllo accessi", "en": "Access control"},
+      "A.8.2": {"it": "Accessi privilegiati", "en": "Privileged access"},
+      "A.8.5": {"it": "Autenticazione", "en": "Authentication"},
+      "A.8.8": {"it": "Vulnerabilita' tecniche", "en": "Technical vulnerabilities"},
+      "A.8.9": {"it": "Gestione della configurazione", "en": "Configuration management"},
+      "A.8.13": {"it": "Backup", "en": "Backup"},
+      "A.8.15": {"it": "Registrazione degli eventi", "en": "Logging"},
+      "A.8.16": {"it": "Monitoraggio", "en": "Monitoring"},
+      "A.8.20": {"it": "Sicurezza delle reti", "en": "Network security"},
+      "A.8.22": {"it": "Separazione delle reti", "en": "Network separation"},
+      "A.8.32": {"it": "Gestione delle modifiche", "en": "Change management"}
+    },
+    "cis8": {
+      "1": {"it": "Inventario degli asset aziendali", "en": "Enterprise asset inventory"},
+      "4": {"it": "Configurazione sicura", "en": "Secure configuration"},
+      "5": {"it": "Gestione degli account", "en": "Account management"},
+      "6": {"it": "Gestione dei permessi di accesso", "en": "Access permission management"},
+      "7": {"it": "Gestione continua delle vulnerabilita'", "en": "Continuous vulnerability management"},
+      "8": {"it": "Gestione dei log", "en": "Log management"},
+      "11": {"it": "Ripristino dei dati", "en": "Data recovery"},
+      "12": {"it": "Gestione dell'infrastruttura di rete", "en": "Network infrastructure management"}
+    },
+    "iec62443": {
+      "SR 5.1": {"it": "Segmentazione della rete (zone)", "en": "Network segmentation (zones)", "verify": true},
+      "SR 5.2": {"it": "Protezione dei confini di zona (conduit)", "en": "Zone boundary protection (conduits)", "verify": true}
+    }
+  },
+  "evidence": {
+    "asset_inventory": {
+      "source": {"it": "Inventario SentinelNet e versioni rilevate dal triage.", "en": "SentinelNet inventory and versions read by triage."},
+      "title": {"it": "Inventario degli apparati", "en": "Device inventory"},
+      "controls": {"nis2": ["21(2)(i)"], "ir2690": ["12.4"], "iso27001": ["A.5.9"], "cis8": ["1"]},
+      "rules": [
+        {"status": "gap", "metric": "firmware_unknown_pct", "op": ">", "value": 10},
+        {"status": "partial", "metric": "firmware_unknown", "op": ">", "value": 0}
+      ],
+      "default": "ok"
+    },
+    "vulnerabilities": {
+      "source": {"it": "Correlazione CVE (NVD, CISA KEV) sulle versioni rilevate.", "en": "CVE correlation (NVD, CISA KEV) on the detected versions."},
+      "title": {"it": "Vulnerabilita' note sul firmware", "en": "Known firmware vulnerabilities"},
+      "controls": {"nis2": ["21(2)(e)"], "ir2690": ["6.10", "6.6"], "iso27001": ["A.8.8"], "cis8": ["7"]},
+      "rules": [
+        {"status": "gap", "metric": "critical", "op": ">", "value": 0},
+        {"status": "gap", "metric": "exploited", "op": ">", "value": 0},
+        {"status": "partial", "metric": "data_age_hours", "op": ">", "value": 168},
+        {"status": "partial", "metric": "devices_not_evaluated", "op": ">", "value": 0}
+      ],
+      "default": "ok"
+    },
+    "config_backup": {
+      "source": {"it": "Storico delle configurazioni salvate per apparato.", "en": "Per-device history of saved configurations."},
+      "title": {"it": "Backup delle configurazioni", "en": "Configuration backups"},
+      "controls": {"nis2": ["21(2)(c)"], "ir2690": ["4.2"], "iso27001": ["A.8.13"], "cis8": ["11"]},
+      "rules": [
+        {"status": "gap", "metric": "never_backed_up", "op": ">", "value": 0},
+        {"status": "gap", "metric": "max_age_days", "op": ">", "value": 7}
+      ],
+      "default": "ok"
+    },
+    "config_drift": {
+      "source": {"it": "Baseline di configurazione del tenant e storico delle versioni.", "en": "Tenant configuration baseline and version history."},
+      "title": {"it": "Scostamenti dalla baseline di configurazione", "en": "Configuration baseline deviations"},
+      "controls": {"nis2": ["21(2)(e)"], "ir2690": ["6.3", "6.4"], "iso27001": ["A.8.9", "A.8.32"], "cis8": ["4"]},
+      "rules": [
+        {"status": "partial", "metric": "deviating", "op": ">", "value": 0}
+      ],
+      "default": "ok"
+    },
+    "hardening": {
+      "source": {"it": "Esecuzioni NetSec Audit salvate nello storico (ultima per apparato e benchmark).", "en": "NetSec Audit runs saved in history (latest per device and benchmark)."},
+      "title": {"it": "Hardening (NetSec Audit / CIS benchmark)", "en": "Hardening (NetSec Audit / CIS benchmark)"},
+      "controls": {"nis2": ["21(2)(e)", "21(2)(h)"], "ir2690": ["6.3", "6.7"], "iso27001": ["A.8.9", "A.8.20"], "cis8": ["4", "12"]},
+      "rules": [
+        {"status": "gap", "metric": "min_score", "op": "<", "value": 50},
+        {"status": "partial", "metric": "min_score", "op": "<", "value": 80},
+        {"status": "partial", "metric": "devices_not_audited", "op": ">", "value": 0}
+      ],
+      "default": "ok"
+    },
+    "segmentation": {
+      "source": {"it": "Zone di rete salvate sulla mappa e decisioni sui collegamenti.", "en": "Network zones saved on the map and link decisions."},
+      "title": {"it": "Segmentazione IT/OT", "en": "IT/OT segmentation"},
+      "controls": {"nis2": ["21(2)(e)"], "ir2690": ["6.8"], "iso27001": ["A.8.22"], "cis8": ["12"], "iec62443": ["SR 5.1", "SR 5.2"]},
+      "rules": [],
+      "default": "partial",
+      "note": {
+        "it": "Le zone e le decisioni sui collegamenti sono quelle salvate. La ricerca dei possibili bypass del firewall si fa sulla mappa (dipende dalla topologia disegnata) e non entra in questo report: lo stato resta 'parziale' finche' non e' verificata li'.",
+        "en": "Zones and link decisions are the saved ones. The search for possible firewall bypasses runs on the map (it depends on the drawn topology) and is not part of this report: the status stays 'partial' until it is checked there."
+      }
+    },
+    "logging": {
+      "source": {"it": "Eventi syslog ricevuti nel periodo e retention configurata.", "en": "Syslog events received in the period and configured retention."},
+      "title": {"it": "Raccolta log (syslog)", "en": "Log collection (syslog)"},
+      "controls": {"nis2": ["21(2)(b)"], "ir2690": ["3.2"], "iso27001": ["A.8.15", "A.8.16"], "cis8": ["8"]},
+      "rules": [
+        {"status": "partial", "metric": "logging_pct", "op": "<", "value": 80}
+      ],
+      "default": "ok"
+    },
+    "platform_access": {
+      "source": {"it": "Utenti di SentinelNet con accesso al tenant; verifica della catena del registro di audit.", "en": "SentinelNet users with access to the tenant; audit log chain check."},
+      "title": {"it": "Accessi a SentinelNet e registro di audit", "en": "SentinelNet access and audit log"},
+      "controls": {"nis2": ["21(2)(i)"], "ir2690": ["11"], "iso27001": ["A.5.15", "A.8.2", "A.8.5", "A.8.15"], "cis8": ["5", "6"]},
+      "rules": [
+        {"status": "gap", "metric": "audit_chain_ok", "op": "==", "value": 0}
+      ],
+      "default": "ok"
+    }
+  },
+  "out_of_scope": [
+    {"ref": "NIS2 21(2)(a)", "it": "Politiche di analisi dei rischi e di sicurezza dei sistemi informativi.", "en": "Risk analysis and information system security policies."},
+    {"ref": "NIS2 21(2)(d)", "it": "Sicurezza della catena di approvvigionamento e rapporti con i fornitori.", "en": "Supply chain security and supplier relationships."},
+    {"ref": "NIS2 21(2)(f)", "it": "Valutazione dell'efficacia delle misure di gestione del rischio.", "en": "Assessment of the effectiveness of risk-management measures."},
+    {"ref": "NIS2 21(2)(g)", "it": "Igiene informatica di base e formazione.", "en": "Basic cyber hygiene and training."},
+    {"ref": "NIS2 21(2)(h)", "it": "Politiche sull'uso della crittografia (il report mostra solo la configurazione degli apparati).", "en": "Policies on the use of cryptography (the report only shows device configuration)."},
+    {"ref": "NIS2 21(2)(i)", "it": "Sicurezza delle risorse umane.", "en": "Human resources security."},
+    {"ref": "NIS2 21(2)(j)", "it": "Autenticazione a piu' fattori e comunicazioni protette. Il login di SentinelNet non ha l'autenticazione a piu' fattori.", "en": "Multi-factor authentication and secured communications. SentinelNet's own login has no multi-factor authentication."}
+  ]
+}
