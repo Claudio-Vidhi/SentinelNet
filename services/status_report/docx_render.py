@@ -13,6 +13,7 @@ from docx import Document
 from docx.shared import Pt, RGBColor
 
 from services.netsec_audit.docx_export import _set_cell_background
+from services.status_report.evidence import load_mapping
 
 ROW_CAP = 50
 
@@ -117,6 +118,12 @@ def _controls_text(controls: dict, frameworks: dict) -> str:
 def render(snapshot: dict, lang: str = "it") -> bytes:
     en = lang == "en"
     k = "en" if en else "it"
+    # Labels are presentation only: the snapshot keeps the raw keys.
+    labels = load_mapping().get("labels", {})
+
+    def _lbl(key: str) -> str:
+        return labels.get(key, {}).get(k, key)
+
     refs = snapshot["references"]
     evidence = snapshot["evidence"]
     doc = Document()
@@ -166,7 +173,7 @@ def render(snapshot: dict, lang: str = "it") -> bytes:
             doc.add_paragraph(e["note"][k])
         if e["metrics"]:
             doc.add_paragraph(_t("metrics", en)).runs[0].bold = True
-            _table(doc, ["", ""], [[name, ", ".join(map(str, v)) if isinstance(v, list) else v]
+            _table(doc, ["", ""], [[_lbl(name), ", ".join(map(str, v)) if isinstance(v, list) else v]
                                    for name, v in e["metrics"].items()])
         rows = e["rows"]
         if not rows:
@@ -174,7 +181,7 @@ def render(snapshot: dict, lang: str = "it") -> bytes:
             continue
         shown = rows[:ROW_CAP]
         doc.add_paragraph()
-        _table(doc, list(shown[0].keys()), [list(r.values()) for r in shown])
+        _table(doc, [_lbl(c) for c in shown[0]], [list(r.values()) for r in shown])
         if len(rows) > ROW_CAP:
             doc.add_paragraph(_t("capped", en).format(shown=ROW_CAP, total=len(rows)))
 

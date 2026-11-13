@@ -4,6 +4,8 @@
 """Network status report: mapping contract, snapshot statuses, tenant
 isolation and the route's gate."""
 
+import ast
+import inspect
 import io
 import time
 
@@ -39,6 +41,24 @@ def test_mapping_matches_the_collectors():
             assert rule["status"] in ("ok", "partial", "gap")
     # MFA absence must always be stated, never omitted.
     assert any("multi-factor" in i["en"] and "SentinelNet" in i["en"] for i in mapping["out_of_scope"])
+
+
+def test_every_emitted_key_has_a_label_in_both_languages(seeded):
+    # Keys come from the collectors' source (some stay empty for the seeded tenant)
+    # plus the seeded snapshot itself.
+    keys = set()
+    src = ast.parse(inspect.getsource(evidence))
+    for fn in src.body:
+        if isinstance(fn, ast.FunctionDef) and fn.name.startswith("collect_"):
+            for node in ast.walk(fn):
+                if isinstance(node, ast.Dict):
+                    keys |= {k.value for k in node.keys if isinstance(k, ast.Constant)}
+    keys -= {"available", "metrics", "rows"}
+    for e in evidence.build_snapshot(T, "tester")["evidence"].values():
+        keys |= set(e["metrics"]) | {c for r in e["rows"] for c in r}
+    labels = evidence.load_mapping()["labels"]
+    for key in keys:
+        assert {"it", "en"} <= set(labels.get(key, {})), key
 
 
 def test_status_rules_first_match_wins_and_null_is_skipped():
