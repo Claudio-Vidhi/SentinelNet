@@ -63,7 +63,8 @@ Format: **.docx** via `python-docx` (already used by
    One function per source; each returns
    `{"metrics": {...}, "rows": [...], "collected_at": ..., "available": bool}`.
    They read existing services, never raw files when a service exists.
-2. **Mapping** (`services/status_report/mapping.yaml`, tracked, not under
+2. **Mapping** (`services/status_report/mapping.json`, JSON because PyYAML is not a
+   dependency; tracked, not under
    `data/`). Per evidence: the controls it supports per framework, a title in IT
    and EN written by us, and the thresholds that turn metrics into a status.
    A test checks the file loads, every evidence id has a collector and every
