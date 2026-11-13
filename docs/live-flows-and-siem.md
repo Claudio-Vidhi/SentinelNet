@@ -111,7 +111,7 @@ refuses to start.
 | Table | Written by | Read by | Notes |
 |---|---|---|---|
 | `flow_aggregates` | nothing since 0.65.0 | nothing | Legacy: kept in databases created before, not created in new ones |
-| `syslog_events` | Syslog ingester | `/syslog`, **all of Flow SIEM**, normalizer | `action` is the device's real verdict |
+| `syslog_events` | Syslog ingester | **all of Flow SIEM**, client diagnosis, normalizer | `action` is the device's real verdict |
 | `siem_suppressions` | `POST /alerts/suppress` | Exclusion in `/events` and `/facets` | PK is `syslog_events.id` |
 | `quarantined_exporters` | Ingest | `normalize._from_quarantine` → `platform.exporter_unknown` | Exporters outside inventory; data loss becomes an event on the reserved `__platform__` tenant instead of staying diagnostic-only |
 | `api_observations` | REST/SNMP pollers | `/api-context` | Device snapshots, not flows |
@@ -137,7 +137,6 @@ All in [routers/observability.py](../routers/observability.py), all scoped by
 
 | Endpoint | Auth | What it does |
 |---|---|---|
-| `GET /api/observability/syslog` | user | Latest normalized syslog events |
 | `GET /api/observability/interfaces` | `tab-interfaces` | Latest state per port, link transitions over 24h, declared expectations |
 | `POST /api/observability/interfaces/expected` | operator + `tab-interfaces` | Declare a port or a whole device expected down / in maintenance |
 | `GET/POST /api/observability/config` | **admin** | Listener config, applied hot |

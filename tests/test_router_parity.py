@@ -90,6 +90,8 @@ class TestRouterParity(unittest.TestCase):
     #   engine. The /api/incidents routes went too; they sit in the prefix
     #   lists, which filter both sides. The two interface routes moved to
     #   /api/observability/interfaces[/expected].
+    # /api/observability/syslog: raw syslog feed, no caller left once the Flows
+    #   view went (0.65.0); the Traffic tab search reads /api/flow-siem/events.
     ALLOWED_REMOVED_PATHS = ("/api/provisioner/fgt/generate",
                              "/api/provisioner/fgt/push-ssh",
                              "/api/provisioner/fgt/push-serial",
@@ -102,6 +104,7 @@ class TestRouterParity(unittest.TestCase):
                              "/api/ai/conversations/{conversation_id}",
                              "/api/observability/flowgraph",
                              "/api/observability/top",
+                             "/api/observability/syslog",
                              "/api/observability/anomalies",
                              "/api/observability/anomalies/{event_id}/status")
 

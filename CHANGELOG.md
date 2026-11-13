@@ -33,8 +33,9 @@ happened — `git log --grep="chore(release)"` is the record for those.
   ignorate, l'avvio non fallisce), la baseline del traffico, le regole solo
   di flusso (`TRAFFIC_SPIKE_001`, `BASELINE_SPIKE_001`,
   `BASELINE_NORMAL_RETRACT_001`, `NEW_TALKER_001`, `TOP_TALKER_001`), la
-  traccia «flow» della timeline degli incidenti, la rotta
-  `/api/observability/top`, il tool MCP `get_top_talkers` e la vista
+  traccia «flow» della timeline degli incidenti, le rotte
+  `/api/observability/top` e `/api/observability/syslog` (i syslog restano
+  consultabili in «Ricerca», via `/api/flow-siem/events`), il tool MCP `get_top_talkers` e la vista
   «Flussi» del tab Traffico, che ora tiene «Ricerca» e «Per policy».
   La tabella `flow_aggregates` resta nei database
   esistenti, non più scritta, e la retention la svuota; i database nuovi non

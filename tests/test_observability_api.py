@@ -75,28 +75,22 @@ class TestSyslogEndpoint(_Base):
 
     def test_hostile_params_rejected(self):
         c = self._client("adm")
-        for url in ("/api/observability/syslog?window=15m;DROP TABLE x",
-                    "/api/observability/syslog?window=999999d"):
+        for url in ("/api/observability/events?window=15m;DROP TABLE x",
+                    "/api/observability/events?window=999999d"):
             r = c.get(url)
             self.assertIn(r.status_code, (400, 422), url)
 
     def test_anonymous_401(self):
-        r = TestClient(app_server.app).get("/api/observability/syslog")
+        r = TestClient(app_server.app).get("/api/observability/events")
         self.assertEqual(r.status_code, 401)
 
-    def test_top_talkers_route_is_gone(self):
-        # Removed with the flow collectors: no route, not an empty answer.
-        r = self._client("adm").get("/api/observability/top?window=1h")
-        self.assertEqual(r.status_code, 404)
-
-    def test_syslog_endpoint_scoped(self):
-        r = self._client("op_a").get("/api/observability/syslog?window=1h")
-        self.assertEqual(r.status_code, 200)
-        events = r.json()["events"]
-        self.assertEqual({e["tenant"] for e in events}, {"sede-a"})
-        r = self._client("adm").get("/api/observability/syslog?window=1h")
-        self.assertEqual({e["tenant"] for e in r.json()["events"]},
-                         {"sede-a", "sede-b"})
+    def test_removed_routes_are_gone(self):
+        # Top talkers went with the flow collectors; raw syslog had no caller
+        # left (the Traffic tab search reads /api/flow-siem/events).
+        c = self._client("adm")
+        for url in ("/api/observability/top?window=1h",
+                    "/api/observability/syslog?window=1h"):
+            self.assertEqual(c.get(url).status_code, 404, url)
 
 
 class TestMcpDefaultOff(_Base):

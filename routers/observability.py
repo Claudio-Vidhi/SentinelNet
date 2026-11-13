@@ -62,27 +62,6 @@ def _tenant_filter(current_user):
     return f" AND tenant IN ({placeholders})", tuple(groups)
 
 
-@router.get("/api/observability/syslog", dependencies=[Depends(require_tab("tab-flows"))])
-async def obs_syslog(
-    window: str = Query("15m"),
-    limit: int = Query(100, ge=1, le=MAX_LIMIT),
-    current_user = Depends(get_current_user),
-):
-    """Ultimi eventi syslog normalizzati sulla finestra, scoped per tenant."""
-    import time as _time
-    seconds = _parse_window(window)
-    cutoff = int(_time.time()) - seconds
-    clause, params = _tenant_filter(current_user)
-    rows = await db.read(
-        f"""SELECT ts, tenant, device_ip, severity, action, message, exporter_ip
-            FROM syslog_events
-            WHERE ts >= ?{clause}
-            ORDER BY ts DESC
-            LIMIT ?""",
-        (cutoff, *params, limit))
-    return {"window": window, "events": [dict(r) for r in rows]}
-
-
 # Superficie pubblica deliberata: nessun chiamante in-tree (la UI legge le
 # tabelle specifiche), esiste per i consumatori esterni CLI/MCP/automazione.
 @router.get("/api/observability/events", dependencies=[Depends(require_tab("tab-flows"))])
