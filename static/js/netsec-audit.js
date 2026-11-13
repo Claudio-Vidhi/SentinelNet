@@ -33,6 +33,36 @@
     let _droppedConfigText = null;
     let _droppedConfigName = '';
 
+    // Network status report: evidence for one tenant, never "all".
+    async function downloadNetworkStatusReport() {
+        const tenant = window.globalSelectedTenant;
+        if (!tenant || tenant === 'all') {
+            showToast(tr('nsaStatusReportPickTenant'), 'warning');
+            return;
+        }
+        const btn = document.getElementById('btnNetworkStatusReport');
+        if (btn) btn.disabled = true;
+        try {
+            const qs = new URLSearchParams({ tenant, format: 'docx', lang: currentLang });
+            const res = await apiFetch('/api/reports/network-status?' + qs.toString());
+            if (!res || !res.ok) throw new Error(res ? String(res.status) : '');
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'network-status-' + tenant.replace(/[^A-Za-z0-9_.-]/g, '_') + '.docx';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast(tr('nsaStatusReportDone'), 'info');
+        } catch (e) {
+            showToast(tr('nsaStatusReportFailed') + (e.message || e), 'error');
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
     function loadNetSecAuditTab() {
         // Il report esce per default nella lingua in cui si sta lavorando;
         // il selettore serve a consegnarlo in un'altra, non a doverlo
@@ -1830,6 +1860,7 @@ ${pagesHtml}
     document.getElementById('auditRunName')?.addEventListener('input', toggleAuditSaveNameInput);
     document.getElementById('btnRunAuditScan')?.addEventListener('click', runAuditScan);
     document.getElementById('btnExportAuditReport')?.addEventListener('click', exportAuditReport);
+    document.getElementById('btnNetworkStatusReport')?.addEventListener('click', downloadNetworkStatusReport);
     document.getElementById('auditSevFilter')?.addEventListener('change', renderAuditRulesTable);
     document.getElementById('auditCatFilter')?.addEventListener('change', renderAuditRulesTable);
     document.getElementById('auditStatusFilter')?.addEventListener('change', renderAuditRulesTable);

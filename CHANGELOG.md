@@ -10,6 +10,23 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Report stato rete per auditor**: nella tab NetSec Audit il pulsante
+  «Report stato rete (.docx)» genera, per il tenant scelto in alto a
+  sinistra, un documento di evidenze tecniche (inventario, CVE, backup e
+  scostamenti di configurazione, hardening, zone IT/OT, syslog, accessi a
+  SentinelNet e integrità del registro di audit) collegate a NIS2 art.
+  21(2), Regolamento di esecuzione (UE) 2024/2690, ISO/IEC 27001:2022
+  Allegato A, CIS Controls v8 e IEC 62443. Evidenze, non un giudizio di
+  conformità: lo dice la copertina, e la sezione «Fuori dal perimetro
+  tecnico» elenca sempre ciò che SentinelNet non osserva (compresa l'assenza
+  di MFA sul proprio login). Rotta `GET /api/reports/network-status`
+  (`format=docx|json`, un solo tenant del proprio profilo, `all` rifiutato,
+  ogni generazione nel registro di audit); il JSON è lo snapshot
+  (`schema_version` 1) da cui il documento è generato. Soglie e mapping dei
+  controlli in `services/status_report/mapping.json`.
+
 ### Removed
 
 - **Chat AI in dashboard**: tolte la tab «AI Assistant», le conversazioni
