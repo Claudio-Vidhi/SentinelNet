@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.65.1] - 2026-11-14
+
 ### Fixed
 
 - **Installazione nuova senza file residui**: al primo avvio su una cartella
