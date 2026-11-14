@@ -10,6 +10,13 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Installazione nuova senza file residui**: al primo avvio su una cartella
+  dati vuota (es. un volume Docker nuovo) la migrazione delle sedi non scrive
+  più un `locations.json` vuoto, che la migrazione a SQLite lasciava poi in
+  `data/` come `locations.json.pre-sqlite`.
+
 ## [0.65.0] - 2026-11-13
 
 ### Added
