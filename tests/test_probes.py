@@ -174,8 +174,10 @@ class TestRouterSmoke(unittest.TestCase):
              {"ip": "192.0.2.1", "new_probe": "no-such-probe"}, {400}),
             ("scan", "post", "/api/scan-subnet", {"network": "not-a-network"}, {400, 422}),
             ("triage", "post", "/api/triage/schedules", {}, {400, 422}),
+            # Not 192.0.2.1: other modules register it in the shared inventory,
+            # and then the handler gets as far as the credentials (409).
             ("commands", "post", "/api/send-command",
-             {"ip": "192.0.2.1", "command": "show version"}, {400, 403, 404, 422}),
+             {"ip": "198.51.100.243", "command": "show version"}, {400, 403, 404, 422}),
             ("audit_checklist", "post", "/api/audit-checklist/templates/1/items", {}, {400, 422}),
             ("manual_config", "get", "/api/manual-config/guide", None, {200}),
             ("provisioner", "get", "/api/identities", None, {200}),
