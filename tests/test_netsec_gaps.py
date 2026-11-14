@@ -36,14 +36,17 @@ class TestNetSecGaps(TestCase):
         self.assertEqual(resp.json().get("status"), "success")
         self.assertEqual(resp.json().get("days_retained"), 15)
 
+    # The suite shares one inventory (tests/conftest.py) and hundreds of tests
+    # register 192.0.2.1/.2: with those IPs the handler sometimes found a device
+    # and answered 400. These addresses are used by no other test.
     def test_fortigate_delete_sessions(self):
-        # 404 expected when device 192.0.2.1 is not in inventory, but handler body executes cleanly
-        resp = self.client.request("DELETE", "/api/fortigate/192.0.2.1/sessions", json={"src_ip": "192.0.2.50"})
+        # 404 expected: device not in inventory, but handler body executes cleanly
+        resp = self.client.request("DELETE", "/api/fortigate/198.51.100.241/sessions", json={"src_ip": "192.0.2.50"})
         self.assertIn(resp.status_code, (200, 404))
 
     def test_mac_port_control(self):
-        # 404 expected when device 192.0.2.2 is not in inventory, but handler body executes cleanly
-        resp = self.client.post("/api/mac/port-control", json={"ip": "192.0.2.2", "port": "Gi1/0/1", "action": "shutdown"})
+        # 404 expected: device not in inventory, but handler body executes cleanly
+        resp = self.client.post("/api/mac/port-control", json={"ip": "198.51.100.242", "port": "Gi1/0/1", "action": "shutdown"})
         self.assertIn(resp.status_code, (200, 404))
 
 if __name__ == '__main__':
