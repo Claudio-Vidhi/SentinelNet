@@ -63,10 +63,15 @@ class TestLocationMigration(unittest.TestCase):
         self.assertTrue(location_migration.migrate(self.d))
         self.assertEqual(location_migration.migrate(self.d), [])
 
-    def test_fresh_install_writes_an_empty_registry_and_no_banner(self):
+    def test_fresh_install_writes_nothing(self):
         self.assertEqual(location_migration.migrate(self.d), [])
-        self.assertEqual(self._r("locations.json"), {})
-        self.assertFalse(os.path.exists(os.path.join(self.d, "app_settings.json")))
+        self.assertEqual(os.listdir(self.d), [])
+
+    def test_fresh_install_leaves_no_pre_sqlite_backup(self):
+        from core import inventory_migration
+        location_migration.migrate(self.d)
+        inventory_migration.migrate(self.d)
+        self.assertEqual(os.listdir(self.d), [])
 
     def test_empty_group_rows_migrate_with_generale(self):
         # Decision A: «Generale» is migrated like any organization.

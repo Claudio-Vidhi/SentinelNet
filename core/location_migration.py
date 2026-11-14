@@ -70,6 +70,11 @@ def migrate(data_dir: str) -> list:
     loc_path = os.path.join(data_dir, "locations.json")
     if os.path.exists(loc_path):
         return []
+    # Fresh install: nothing to migrate, and writing the done-flag here would
+    # only leave inventory_migration a stray locations.json.pre-sqlite.
+    if not any(os.path.exists(os.path.join(data_dir, n))
+               for n in ("groups.json", "probes.json", "device_meta.db") + _CSVS):
+        return []
     groups_path = os.path.join(data_dir, "groups.json")
     probes_path = os.path.join(data_dir, "probes.json")
     for name in ("groups.json", "probes.json") + _CSVS:
