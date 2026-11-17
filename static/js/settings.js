@@ -2101,6 +2101,7 @@
                     <th>${escapeHtml(tr('ttColSnmp'))}</th>
                     <th>${escapeHtml(tr('ttColApi'))}</th>
                     <th>${escapeHtml(tr('ttColTriage'))}</th>
+                    <th>${escapeHtml(tr('ttColOtSafe'))}</th>
                     <th>${escapeHtml(tr('ttColAction'))}</th>
                 </tr>
             </thead>
@@ -2108,26 +2109,33 @@
 
         for (const t of tenants) {
             const item = telemetryMap[t];
+            const otSafe = !!item.ot_safe_mode;
+            const disAttr = otSafe ? 'disabled' : '';
             html += `<tr>
                 <td><strong>${escapeHtml(t)}</strong></td>
                 <td>
                     <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
-                        <input type="checkbox" id="tt_ping_${escapeHtml(t)}" ${item.ping_enabled ? 'checked' : ''}> Ping
+                        <input type="checkbox" id="tt_ping_${escapeHtml(t)}" ${item.ping_enabled && !otSafe ? 'checked' : ''} ${disAttr}> Ping
                     </label>
                 </td>
                 <td>
                     <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
-                        <input type="checkbox" id="tt_snmp_${escapeHtml(t)}" ${item.snmp_enabled ? 'checked' : ''}> SNMP
+                        <input type="checkbox" id="tt_snmp_${escapeHtml(t)}" ${item.snmp_enabled && !otSafe ? 'checked' : ''} ${disAttr}> SNMP
                     </label>
                 </td>
                 <td>
                     <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
-                        <input type="checkbox" id="tt_api_${escapeHtml(t)}" ${item.api_enabled ? 'checked' : ''}> API
+                        <input type="checkbox" id="tt_api_${escapeHtml(t)}" ${item.api_enabled && !otSafe ? 'checked' : ''} ${disAttr}> API
                     </label>
                 </td>
                 <td>
                     <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
-                        <input type="checkbox" id="tt_triage_${escapeHtml(t)}" ${item.triage_enabled ? 'checked' : ''}> Triage
+                        <input type="checkbox" id="tt_triage_${escapeHtml(t)}" ${item.triage_enabled && !otSafe ? 'checked' : ''} ${disAttr}> Triage
+                    </label>
+                </td>
+                <td>
+                    <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
+                        <input type="checkbox" id="tt_ot_safe_${escapeHtml(t)}" data-action="toggle-ot-safe" data-tenant="${escapeHtml(t)}" ${otSafe ? 'checked' : ''}> ${escapeHtml(tr('ttOtSafeOnly'))}
                     </label>
                 </td>
                 <td>
@@ -2147,13 +2155,15 @@
         const snmpEl = document.getElementById(`tt_snmp_${tenant}`);
         const apiEl = document.getElementById(`tt_api_${tenant}`);
         const triageEl = document.getElementById(`tt_triage_${tenant}`);
-        if (!pingEl || !snmpEl || !apiEl || !triageEl) return;
+        const otSafeEl = document.getElementById(`tt_ot_safe_${tenant}`);
+        if (!pingEl || !snmpEl || !apiEl || !triageEl || !otSafeEl) return;
 
         const payload = {
             ping_enabled: pingEl.checked,
             snmp_enabled: snmpEl.checked,
             api_enabled: apiEl.checked,
-            triage_enabled: triageEl.checked
+            triage_enabled: triageEl.checked,
+            ot_safe_mode: otSafeEl.checked
         };
 
         const res = await apiFetch(`/api/settings/tenant-telemetry/${encodeURIComponent(tenant)}`, {
@@ -2168,6 +2178,19 @@
             showToast(`${tr('ttSaveError')} ${tenant}`, 'error');
         }
     }
+
+    document.getElementById('tenantTelemetryContainer')?.addEventListener('change', (e) => {
+        const cb = e.target.closest('[data-action="toggle-ot-safe"]');
+        if (!cb || !cb.dataset.tenant) return;
+        const t = cb.dataset.tenant;
+        const otSafe = cb.checked;
+        for (const f of ['ping', 'snmp', 'api', 'triage']) {
+            const el = document.getElementById(`tt_${f}_${t}`);
+            if (!el) continue;
+            el.disabled = otSafe;
+            if (otSafe) el.checked = false;
+        }
+    });
 
     document.getElementById('tenantTelemetryContainer')?.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-action="save-tenant-telemetry"]');

@@ -9,6 +9,8 @@ import ipaddress
 import json
 import uuid
 
+from services.inventory_store import PURDUE_LEVELS
+
 COLORS = ("amber", "teal", "violet", "rose", "lime", "sky")
 DECISIONS = ("allowed", "gateway")
 _MAX_IDS = 2000
@@ -48,7 +50,8 @@ def _subnets(values) -> list:
 def _row(r) -> dict:
     return {"id": r["id"], "org": r["org"], "name": r["name"], "color": r["color"],
             "subnets": json.loads(r["subnets"]), "members": json.loads(r["members"]),
-            "excluded": json.loads(r["excluded"]), "cores": json.loads(r["cores"])}
+            "excluded": json.loads(r["excluded"]), "cores": json.loads(r["cores"]),
+            "purdue_level": r["purdue_level"] or "", "is_ot": bool(r["is_ot"])}
 
 
 def list_segments(org: str) -> dict:
@@ -59,7 +62,8 @@ def list_segments(org: str) -> dict:
     return {"segments": segs, "links": links}
 
 
-def save_segment(org, seg_id, name, color, subnets=None, members=None, excluded=None, cores=None) -> dict:
+def save_segment(org, seg_id, name, color, subnets=None, members=None, excluded=None, cores=None,
+                 purdue_level: str = "", is_ot: bool = False) -> dict:
     """cores: the zone's cores, left then right (at most 2; empty = the map
     picks its firewalls). A core is not a member: the same firewall can be
     the core of two zones."""
@@ -69,6 +73,10 @@ def save_segment(org, seg_id, name, color, subnets=None, members=None, excluded=
         raise ValueError("Nome del segmento obbligatorio (massimo 60 caratteri).")
     if color not in COLORS:
         raise ValueError(f"Colore non valido: {color}")
+    purdue = str(purdue_level or "").strip()
+    if purdue not in PURDUE_LEVELS:
+        raise ValueError(f"Livello Purdue non valido: {purdue}")
+    ot_flag = bool(is_ot)
     subnets, members, excluded = _subnets(subnets), _ids(members), _ids(excluded)
     # Order matters (left, right): not _ids, which sorts.
     cores = list(dict.fromkeys(str(v).strip()[:200] for v in cores or [] if str(v).strip()))
@@ -87,15 +95,16 @@ def save_segment(org, seg_id, name, color, subnets=None, members=None, excluded=
             left = [m for m in json.loads(r["members"]) if m not in taken]
             conn.execute("UPDATE segments SET members = ? WHERE id = ?", (json.dumps(left), r["id"]))
         conn.execute(
-            "INSERT INTO segments (id, org, name, color, subnets, members, excluded, cores) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "INSERT INTO segments (id, org, name, color, subnets, members, excluded, cores, purdue_level, is_ot) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (id) DO UPDATE SET name = excluded.name, color = excluded.color, "
             "subnets = excluded.subnets, members = excluded.members, excluded = excluded.excluded, "
-            "cores = excluded.cores",
+            "cores = excluded.cores, purdue_level = excluded.purdue_level, is_ot = excluded.is_ot",
             (seg_id, org, name, color, json.dumps(subnets), json.dumps(members), json.dumps(excluded),
-             json.dumps(cores)))
+             json.dumps(cores), purdue, 1 if ot_flag else 0))
     return {"id": seg_id, "org": org, "name": name, "color": color,
-            "subnets": subnets, "members": members, "excluded": excluded, "cores": cores}
+            "subnets": subnets, "members": members, "excluded": excluded, "cores": cores,
+            "purdue_level": purdue, "is_ot": ot_flag}
 
 
 def delete_segment(org: str, seg_id: str) -> None:

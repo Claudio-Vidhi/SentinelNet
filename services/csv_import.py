@@ -160,7 +160,8 @@ def apply(csv_text, default_org, default_location, decisions, scope) -> dict:
                             username=rec.get("Username", ""), password=rec.get("Password", ""),
                             enable_secret=rec.get("Enable Secret", ""), group=r["org"],
                             probe=(rec.get("Probe") or "").strip() or None,
-                            location=r["location"], hostname=r["hostname"] or None))
+                            location=r["location"], hostname=r["hostname"] or None,
+                            purdue_level=(rec.get("Purdue Level") or "").strip() or None))
     if entries:
         inventory_manager.upsert_devices(entries)
     return {"imported": [r["ip"] for r in todo if r["status"] == "new"],

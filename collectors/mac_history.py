@@ -14,6 +14,7 @@ The storage layer is independent of the transport used to collect the data
 """
 import copy
 import ipaddress
+import logging
 import os
 import re
 import sqlite3
@@ -23,6 +24,8 @@ from typing import Optional, Any, List
 
 from core import data_config
 from collectors.mac_collector import expand_iface
+
+_log = logging.getLogger("sentinelnet.mac_history")
 
 DB_PATH = data_config.get_path("mac_history.db")
 RETENTION_DAYS_DEFAULT = 30
@@ -275,6 +278,39 @@ def prune(retention_days: Optional[int] = None) -> int:
 
 # --- Writing sightings (upsert) ---
 
+def _ot_segment_for_switch(tenant: str, switch_ip: str, switch_name: str):
+    """Return the first OT segment (is_ot=True) covering this switch, or None."""
+    if not tenant:
+        return None
+    try:
+        from services import segment_manager
+        segs = segment_manager.list_segments(tenant).get("segments") or []
+    except Exception:
+        return None
+    try:
+        addr = ipaddress.ip_address(switch_ip) if switch_ip else None
+    except ValueError:
+        addr = None
+    for seg in segs:
+        if not seg.get("is_ot"):
+            continue
+        excluded = set(seg.get("excluded") or [])
+        if switch_ip in excluded or (switch_name and switch_name in excluded):
+            continue
+        members = set(seg.get("members") or [])
+        if switch_ip in members or (switch_name and switch_name in members):
+            return seg
+        if addr is not None:
+            for raw_net in seg.get("subnets") or []:
+                try:
+                    net = ipaddress.ip_network(raw_net, strict=False)
+                except ValueError:
+                    continue
+                if net.version == addr.version and addr in net:
+                    return seg
+    return None
+
+
 def record_sightings(rows, switch_ip: str, switch_name: str = "", tenant: str = "",
                      probe: str = "central") -> dict:
     """Records a list of sightings from ONE switch.
@@ -288,7 +324,23 @@ def record_sightings(rows, switch_ip: str, switch_name: str = "", tenant: str = 
     init_db()
     now = _now_iso()
     n_new = n_upd = n_skip = 0
+    ot_seg = _ot_segment_for_switch(tenant, switch_ip, switch_name)
+    rogue_alerts = []
     with _lock, _connect() as c:
+        had_baseline = False
+        known_macs: set[str] = set()
+        if ot_seg is not None:
+            had_baseline = c.execute(
+                "SELECT 1 FROM mac_sightings WHERE switch_ip=? AND tenant=? LIMIT 1",
+                (switch_ip, tenant),
+            ).fetchone() is not None
+            if had_baseline:
+                known_macs = {
+                    row["mac"] for row in c.execute(
+                        "SELECT DISTINCT mac FROM mac_sightings WHERE switch_ip=? AND tenant=?",
+                        (switch_ip, tenant),
+                    )
+                }
         for r in rows:
             mac = normalize_mac(r.get("mac"))
             if not mac:
@@ -300,6 +352,9 @@ def record_sightings(rows, switch_ip: str, switch_name: str = "", tenant: str = 
             up = 1 if r.get("is_uplink") else 0
             uplink_to = (r.get("uplink_to") or "").strip()
             oui = (r.get("oui_vendor") or "").strip()
+            if ot_seg is not None and had_baseline and not up and mac not in known_macs:
+                rogue_alerts.append((mac, vlan, iface, oui))
+                known_macs.add(mac)
             existing = c.execute(
                 "SELECT id FROM mac_sightings WHERE mac=? AND switch_ip=? AND interface=? AND vlan=?",
                 (mac, switch_ip, iface, vlan)).fetchone()
@@ -317,7 +372,32 @@ def record_sightings(rows, switch_ip: str, switch_name: str = "", tenant: str = 
                              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)""",
                           (mac, oui, vlan, switch_ip, switch_name, iface, pc, up, uplink_to, tenant, probe, now, now))
                 n_new += 1
-    return {"new": n_new, "updated": n_upd, "skipped": n_skip}
+    if ot_seg is not None and rogue_alerts:
+        try:
+            from services import notifications
+            sw_label = switch_name or switch_ip
+            for mac, vlan, iface, oui in rogue_alerts:
+                notifications.emit(
+                    kind="siem.alert",
+                    device_ip=switch_ip,
+                    severity="critical",
+                    title=f"Rogue MAC OT su {sw_label} ({iface or '-'}, VLAN {vlan or '-'}): {mac}",
+                    ctx={
+                        "ot_rogue_mac": True,
+                        "mac": mac,
+                        "vlan": vlan,
+                        "interface": iface,
+                        "switch_ip": switch_ip,
+                        "switch_name": switch_name,
+                        "segment": ot_seg["name"],
+                        "oui_vendor": oui,
+                    },
+                    dedup_key=f"ot_rogue_mac:{tenant}:{switch_ip}:{mac}",
+                    tenant=tenant,
+                )
+        except Exception:
+            _log.warning("OT rogue MAC notification failed for %s", switch_ip, exc_info=True)
+    return {"new": n_new, "updated": n_upd, "skipped": n_skip, "rogue_macs": len(rogue_alerts)}
 
 
 def latest_scan_by_switch(switch_ips) -> dict:

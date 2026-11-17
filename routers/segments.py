@@ -24,6 +24,8 @@ class SegmentSaveSchema(BaseModel):
     members: List[str] = []
     excluded: List[str] = []
     cores: List[str] = []
+    purdue_level: str = ""
+    is_ot: bool = False
 
 
 class SegmentDeleteSchema(BaseModel):
@@ -50,7 +52,7 @@ def save_segment_ep(payload: SegmentSaveSchema, current_user=Depends(require_ope
     try:
         seg = segment_manager.save_segment(payload.org, payload.id, payload.name, payload.color,
                                            payload.subnets, payload.members, payload.excluded,
-                                           payload.cores)
+                                           payload.cores, payload.purdue_level, payload.is_ot)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     log_audit(f"Segmento '{seg['name']}' ({payload.org}) salvato dall'utente '{current_user.get('sub')}'.")

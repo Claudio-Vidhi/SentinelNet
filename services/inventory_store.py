@@ -12,9 +12,11 @@ import os
 import sqlite3
 import threading
 
+PURDUE_LEVELS = ("", "L0", "L1", "L2", "L3", "L3.5", "L4")
+
 HOST_FIELDS = ['IP', 'Vendor', 'Profile', 'Username', 'Password', 'Enable Secret', 'Group',
                'Hostname', 'Probe', 'Location', 'SSH Port', 'Transports', 'SNMP Community',
-               'SNMP Disabled']
+               'SNMP Disabled', 'Purdue Level']
 DECOM_FIELDS = ['Decommissioned', 'Decommissioned By']
 _FIELDS = {"hosts": HOST_FIELDS, "decommissioned_hosts": HOST_FIELDS + DECOM_FIELDS}
 
@@ -65,7 +67,8 @@ _SCHEMA = "\n".join([
     "org TEXT NOT NULL REFERENCES organizations(key) ON DELETE CASCADE, "
     "name TEXT NOT NULL, color TEXT NOT NULL, subnets TEXT NOT NULL DEFAULT '[]', "
     "members TEXT NOT NULL DEFAULT '[]', excluded TEXT NOT NULL DEFAULT '[]', "
-    "cores TEXT NOT NULL DEFAULT '[]');",
+    "cores TEXT NOT NULL DEFAULT '[]', purdue_level TEXT NOT NULL DEFAULT '', "
+    "is_ot INTEGER NOT NULL DEFAULT 0);",
     "CREATE TABLE IF NOT EXISTS segment_links (org TEXT NOT NULL "
     "REFERENCES organizations(key) ON DELETE CASCADE, a TEXT NOT NULL, b TEXT NOT NULL, "
     "decision TEXT NOT NULL CHECK (decision IN ('allowed', 'gateway')), "
@@ -95,8 +98,16 @@ def connect(path: str) -> sqlite3.Connection:
             if "assistant_instructions" not in {r["name"] for r in conn.execute("PRAGMA table_info(organizations)")}:
                 conn.execute("ALTER TABLE organizations ADD COLUMN assistant_instructions TEXT NOT NULL DEFAULT ''")
             # Zone cores came after the first segments release.
-            if "cores" not in {r["name"] for r in conn.execute("PRAGMA table_info(segments)")}:
+            seg_cols = {r["name"] for r in conn.execute("PRAGMA table_info(segments)")}
+            if "cores" not in seg_cols:
                 conn.execute("ALTER TABLE segments ADD COLUMN cores TEXT NOT NULL DEFAULT '[]'")
+            if "purdue_level" not in seg_cols:
+                conn.execute("ALTER TABLE segments ADD COLUMN purdue_level TEXT NOT NULL DEFAULT ''")
+            if "is_ot" not in seg_cols:
+                conn.execute("ALTER TABLE segments ADD COLUMN is_ot INTEGER NOT NULL DEFAULT 0")
+            for tbl in ("hosts", "decommissioned_hosts"):
+                if "Purdue Level" not in {r["name"] for r in conn.execute(f"PRAGMA table_info({tbl})")}:
+                    conn.execute(f'ALTER TABLE {tbl} ADD COLUMN "Purdue Level" TEXT NOT NULL DEFAULT \'\'')
             _ready.add(path)
     return conn
 

@@ -627,6 +627,7 @@ class TenantTelemetrySchema(BaseModel):
     snmp_enabled: bool = True
     api_enabled: bool = True
     triage_enabled: bool = True
+    ot_safe_mode: bool = False
 
 
 @router.get("/api/settings/tenant-telemetry", dependencies=[Depends(require_tab("tab-settings"))])

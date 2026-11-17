@@ -64,3 +64,49 @@ class TestTenantTelemetry(unittest.TestCase):
              patch("redundancy.service.discover_fgcp"):
             api_poller.poll_once()
         self.assertEqual(polled, ["192.0.2.2"])
+
+    def test_ot_safe_mode_forces_active_telemetry_off(self):
+        saved = {}
+
+        def mock_save(new_data):
+            saved.update(new_data)
+
+        with patch.object(tenant_telemetry, "get_app_settings", return_value=saved), \
+             patch.object(tenant_telemetry, "save_app_settings", side_effect=mock_save), \
+             patch.object(tenant_telemetry, "log_audit"):
+            res = tenant_telemetry.save_tenant_telemetry(
+                "Plant-OT",
+                {"ping_enabled": True, "snmp_enabled": True, "api_enabled": True,
+                 "triage_enabled": True, "ot_safe_mode": True},
+                "admin_tester",
+            )
+            self.assertTrue(res["ot_safe_mode"])
+            self.assertTrue(tenant_telemetry.is_ot_safe_mode("Plant-OT"))
+            for feat in tenant_telemetry.FEATURES:
+                self.assertFalse(res[f"{feat}_enabled"])
+                self.assertFalse(tenant_telemetry.is_telemetry_enabled("Plant-OT", feat))
+
+    def test_scan_endpoints_reject_ot_safe_mode_tenant(self):
+        from fastapi import HTTPException
+        from routers import scan as scan_router
+        from services import inventory_manager, location_manager
+
+        locations = [{"id": "loc-1", "subnets": ["192.0.2.0/24"]}]
+        with patch.object(inventory_manager, "get_all_groups", return_value={"Plant-OT": {}}), \
+             patch.object(location_manager, "list_locations", return_value=locations), \
+             patch.object(tenant_telemetry, "is_ot_safe_mode", return_value=True):
+            with self.assertRaises(HTTPException) as ctx:
+                scan_router.start_subnet_scan(
+                    scan_router.SubnetScanRequest(network="192.0.2.0/24"),
+                    {"sub": "admin", "role": "admin"},
+                )
+            self.assertEqual(ctx.exception.status_code, 409)
+
+            with patch.object(scan_router.identity_manager, "identity_visible_to", return_value=True), \
+                 patch.object(inventory_manager, "get_all_devices", return_value=[]):
+                with self.assertRaises(HTTPException) as ctx2:
+                    scan_router.start_scan_verify(
+                        scan_router.ScanVerifyRequest(ips=["192.0.2.10"], vendor="cisco", identity_id="id-1"),
+                        {"sub": "admin", "role": "admin"},
+                    )
+            self.assertEqual(ctx2.exception.status_code, 409)
