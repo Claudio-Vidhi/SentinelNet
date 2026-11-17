@@ -125,6 +125,8 @@ def _syslog_attrs(row, fields: dict, action) -> dict:
         attrs["dst_name"] = dst_name
     if fields.get("qname"):
         attrs["qname"] = fields["qname"]
+    if fields.get("ot_protocol"):
+        attrs["ot_protocol"] = fields["ot_protocol"]
     return attrs
 
 

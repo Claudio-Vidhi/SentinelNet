@@ -299,7 +299,8 @@ def record_sightings(rows, switch_ip: str, switch_name: str = "", tenant: str = 
             pc = expand_iface((r.get("port_channel") or "").strip())
             up = 1 if r.get("is_uplink") else 0
             uplink_to = (r.get("uplink_to") or "").strip()
-            oui = (r.get("oui_vendor") or "").strip()
+            from collectors.industrial_oui import lookup_industrial_oui
+            oui = (r.get("oui_vendor") or "").strip() or lookup_industrial_oui(mac)
             existing = c.execute(
                 "SELECT id FROM mac_sightings WHERE mac=? AND switch_ip=? AND interface=? AND vlan=?",
                 (mac, switch_ip, iface, vlan)).fetchone()
@@ -1040,9 +1041,11 @@ def endpoint_inventory(tenants=None, probe: Optional[str] = None,
         assigned = next((assignments[k] for k in
                          (inventory_manager._akey(tenant, ip) for ip in ips)
                          if assignments.get(k)), {})
+        from collectors.industrial_oui import lookup_industrial_oui
+        resolved_oui = next((s["oui_vendor"] for s in grp if s.get("oui_vendor")), "") or lookup_industrial_oui(mac)
         results.append({
             "mac": mac, "tenant": tenant,
-            "oui_vendor": next((s["oui_vendor"] for s in grp if s.get("oui_vendor")), ""),
+            "oui_vendor": resolved_oui,
             "probe": grp[0].get("probe") or "",
             "ips": ips,
             "ip_sources": [{"ip": ip, "source_ip": s} for ip, s in src_of.items()],
@@ -1093,8 +1096,11 @@ def endpoint_inventory(tenants=None, probe: Optional[str] = None,
 # --- Historical search ---
 
 def _row_to_dict(row) -> dict:
+    from collectors.industrial_oui import lookup_industrial_oui
     d = dict(row)
     d["is_uplink"] = bool(d.get("is_uplink"))
+    if not d.get("oui_vendor") and d.get("mac"):
+        d["oui_vendor"] = lookup_industrial_oui(d["mac"])
     return d
 
 

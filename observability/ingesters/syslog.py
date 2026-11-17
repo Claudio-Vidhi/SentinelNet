@@ -17,7 +17,8 @@ import re
 import time
 from datetime import datetime, timezone
 
-from observability import metrics
+from observability import fieldmap, metrics
+from observability.ingesters import ot_protocols
 
 MAX_MESSAGE_LEN = 2048
 
@@ -60,6 +61,7 @@ def _parse(data: bytes, exporter_ip: str) -> dict:
     if vendor_severity is not None:
         severity = vendor_severity
 
+    extracted = fieldmap.extract(text)
     return {
         "ts": ts if ts is not None else int(time.time()),
         "device_ip": exporter_ip,
@@ -67,6 +69,7 @@ def _parse(data: bytes, exporter_ip: str) -> dict:
         "action": action,
         "message": text[:MAX_MESSAGE_LEN],
         "exporter_ip": exporter_ip,
+        "ot_protocol": extracted.get("ot_protocol"),
     }
 
 

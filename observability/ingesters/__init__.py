@@ -5,6 +5,12 @@
 import asyncio
 import logging
 
+from observability.ingesters.ot_protocols import (
+    OT_PROTOCOLS,
+    identify_ot_protocol,
+    tag_record,
+)
+
 logger = logging.getLogger(__name__)
 
 

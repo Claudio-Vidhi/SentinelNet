@@ -17,9 +17,12 @@ Vendor-agnostico per costruzione: prima si prova la forma key=value
 import re
 from typing import Optional
 
+from observability.ingesters import ot_protocols
+
 _KV_RE = re.compile(
     r'\b(srcip|dstip|srcport|dstport|proto|service|utmaction|action|'
-    r'policyid|subtype|eventtype|sentbyte|rcvdbyte|hostname|dstname|qname)'
+    r'policyid|subtype|eventtype|sentbyte|rcvdbyte|hostname|dstname|qname|'
+    r'app|appcat|ethertype)'
     r'=(?:"([^"]*)"|(\S+))')
 _IP_RE = re.compile(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b")
 # ``utmaction`` è elencato a parte e non è coperto da ``action``: il ``\b``
@@ -79,12 +82,22 @@ def extract(message: str) -> dict:
     sent = int_or_none(pairs.get("sentbyte")) or 0
     rcvd = int_or_none(pairs.get("rcvdbyte")) or 0
     proto = pairs.get("proto") or pairs.get("service")
+    src_port = int_or_none(pairs.get("srcport"))
+    dst_port = int_or_none(pairs.get("dstport"))
+    norm_proto = PROTO_NUM.get(str(proto), str(proto).upper()) if proto else None
+    ot_info = ot_protocols.identify_ot_protocol(
+        protocol=norm_proto or pairs.get("service") or pairs.get("app"),
+        src_port=src_port,
+        dst_port=dst_port,
+        message=message,
+        ethertype=pairs.get("ethertype"),
+    )
     return {
         "src_ip": src,
         "dst_ip": dst,
-        "src_port": int_or_none(pairs.get("srcport")),
-        "dst_port": int_or_none(pairs.get("dstport")),
-        "protocol": PROTO_NUM.get(str(proto), str(proto).upper()) if proto else None,
+        "src_port": src_port,
+        "dst_port": dst_port,
+        "protocol": norm_proto,
         # Stesso ordine di precedenza dell'ingester: su un log UTM il verdetto
         # sta in utmaction, su un log di traffico in action.
         "action": pairs.get("action") or pairs.get("utmaction"),
@@ -96,6 +109,7 @@ def extract(message: str) -> dict:
         "hostname": pairs.get("hostname"),
         "dstname": pairs.get("dstname"),
         "qname": pairs.get("qname"),
+        "ot_protocol": ot_info["id"] if ot_info else None,
     }
 
 

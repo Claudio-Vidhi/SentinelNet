@@ -90,13 +90,18 @@ def parse_matm_oper(xml_text: str) -> list:
         iface = rec.get('interface') or rec.get('interface-name') or rec.get('port')
         if not mac or not iface:
             continue
-        out.append({
+        from collectors.industrial_oui import lookup_industrial_oui
+        vendor = lookup_industrial_oui(mac)
+        row = {
             "mac": mac,
             "vlan": rec.get('vlan') or rec.get('fdb-id') or '',
             "interface": expand_iface(iface),
             "port_channel": expand_iface(iface) if is_port_channel(iface) else '',
             "type": (rec.get('type') or '').lower(),
-        })
+        }
+        if vendor:
+            row["oui_vendor"] = vendor
+        out.append(row)
     return out
 
 
@@ -109,14 +114,19 @@ def parse_matm_oper(xml_text: str) -> list:
 # it is the preferred path because it is vendor-independent.
 
 def _row_from(mac, vlan, iface, etype=""):
+    from collectors.industrial_oui import lookup_industrial_oui
     iface = str(iface or "")
-    return {
+    row = {
         "mac": mac,
         "vlan": str(vlan) if vlan not in (None, "") else "",
         "interface": expand_iface(iface),
         "port_channel": expand_iface(iface) if is_port_channel(iface) else "",
         "type": str(etype or "").lower(),
     }
+    vendor = lookup_industrial_oui(mac)
+    if vendor:
+        row["oui_vendor"] = vendor
+    return row
 
 
 def _json_mac_rows(data, mac_keys, iface_keys, vlan_keys) -> list:
@@ -228,14 +238,20 @@ def parse_cli_mac_table(text: str) -> list:
         # The CBS 'self' row ("0  self") also fits the IOS regex with columns swapped.
         if port.lower() in ('cpu', 'router', 'drop', 'switch', '-', 'self') or m.group('type').lower() == 'self':
             continue
+        from collectors.industrial_oui import lookup_industrial_oui
         vlan = m.group('vlan')
-        out.append({
-            "mac": m.group('mac'),
+        mac_val = m.group('mac')
+        row = {
+            "mac": mac_val,
             "vlan": '' if vlan.lower() == 'all' else vlan,
             "interface": expand_iface(port),
             "port_channel": expand_iface(port) if is_port_channel(port) else '',
             "type": m.group('type').lower(),
-        })
+        }
+        vendor = lookup_industrial_oui(mac_val)
+        if vendor:
+            row["oui_vendor"] = vendor
+        out.append(row)
     return out
 
 
