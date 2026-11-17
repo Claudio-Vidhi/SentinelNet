@@ -11,7 +11,7 @@ In ambiente OT le scansioni attive aggressive (SYN sweep, SSH/SNMP brute probe) 
 - **Preset `OT Safe Mode` per tenant** (`services/tenant_telemetry.py`)
   - Disabilita scansioni ICMP/SSH/attive su un tenant o sito mantenendo attivo solo l'ascolto passivo (syslog, trap SNMP, import manuale/CSV, eventuale SPAN/TAP).
 - **Fingerprinting passivo MAC/OUI + traffico SPAN/NetFlow/IPFIX** (`collectors/mac_collector.py`, `observability/ingesters/`)
-  - Database OUI per vendor industriali (Siemens, Rockwell/Allen-Bradley, Schneider Electric, Beckhoff, Omron, Moxa, Hirschmann, Phoenix Contact, Wago, Fanuc, ABB).
+  - Database OUI per vendor industriali (Siemens, Rockwell/Allen-Bradley, Schneider Electric, Beckhoff, Omron, Moxa, Hirschmann, Phoenix Contact, Wago, Fanuc, ABB). <!-- check-private-data: ok (public vendor list) -->
   - Rilevamento passivo di protocolli OT da mirror/flow (Modbus TCP, S7comm, EtherNet/IP, OPC-UA, PROFINET, BACnet, IEC 60870-5-104, DNP3) senza inviare pacchetti ai PLC.
 - **Probe read-only opt-in** (`services/probe_agent.py`)
   - Interrogazioni sicure solo-lettura e rate-limited (es. EtherNet/IP `ListIdentity`, Modbus FC 43/14 *Read Device Identification*, OPC-UA `GetEndpoints`, BACnet `Who-Is`) per estrarre modello, firmware e seriale senza mai scrivere registri o coil.
