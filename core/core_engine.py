@@ -227,6 +227,16 @@ TRIAGE_EXTRA_COMMANDS = {
         ("show lldp neighbors detail", "--- SHOW LLDP NEIGHBORS DETAIL ---"),
         ("show switch",                "--- SHOW SWITCH ---"),
         ("show inventory",             "--- SHOW INVENTORY ---"),
+        # On a VTP client the VLANs live only here, not in the running-config:
+        # parse_show_vlan, the VTP checks and the C1200 converter read these
+        # sections. Dropped by mistake in 4d93d696, restored.
+        ("show vlan",                  "--- SHOW VLAN ---"),
+        ("show vtp status",            "--- SHOW VTP STATUS ---"),
+        ("show etherchannel summary",  "--- SHOW ETHERCHANNEL SUMMARY ---"),
+        # Archive only (no parser): a complete snapshot of the device.
+        ("show spanning-tree summary", "--- SHOW SPANNING-TREE SUMMARY ---"),
+        ("show mac address-table",     "--- SHOW MAC ADDRESS-TABLE ---"),
+        ("show version",               "--- SHOW VERSION ---"),
         # Transceiver type and speed per port: the map colours cables by
         # medium (copper, MM/SM fibre, DAC) and speed (core/port_media.py).
         ("show interfaces status",     "--- SHOW INTERFACES STATUS ---"),
@@ -234,6 +244,7 @@ TRIAGE_EXTRA_COMMANDS = {
     'hpe': [
         ("show lldp info remote-device",        "--- SHOW LLDP NEIGHBORS ---"),
         ("show lldp info remote-device detail", "--- SHOW LLDP NEIGHBORS DETAIL ---"),
+        ("show vlans",                          "--- SHOW VLANS ---"),
     ],
     # Catalyst 9800 is IOS-XE: it answers the switch commands, and
     # 'show chassis' is where an HA pair names both of its members.
@@ -261,7 +272,7 @@ TRIAGE_EXTRA_COMMANDS = {
 }
 # read_timeout per vendor; absent = netmiko's default. Windows pays the .NET
 # runtime start on the first `powershell -Command`.
-TRIAGE_EXTRA_TIMEOUT = {'cisco_9800': 30, 'cisco_wlc': 30, 'paloalto': 30, 'windows': 45}
+TRIAGE_EXTRA_TIMEOUT = {'cisco': 30, 'cisco_9800': 30, 'cisco_wlc': 30, 'paloalto': 30, 'windows': 45}
 # `hostname` comes out as a bare name: it is written in the form
 # `hostname <name>` so extract_hostname_from_config recognizes it
 # without a dedicated parser (the Linux prompt

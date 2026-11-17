@@ -78,7 +78,8 @@ class SessionLog(unittest.TestCase):
         self.assertNotIn("show version", config)
         self.assertNotIn("PuTTY log", out["backup"])
         self.assertIn("--- SHOW CDP NEIGHBORS DETAIL ---\nDevice ID: switch-02", rest)
-        self.assertNotIn("Cisco IOS Software", out["backup"])  # read, not stored
+        # Read into the fields and, like the live triage, stored under its tag.
+        self.assertIn("--- SHOW VERSION ---\nCisco IOS Software", rest)
         self.assertEqual(out["version"], "15.2(7)E2")
         self.assertEqual(out["model"], "WS-C2960X-24TS-L")
         self.assertEqual(out["serial"], "FOC0000X0XX")

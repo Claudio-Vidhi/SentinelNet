@@ -17,7 +17,8 @@ class Extras(unittest.TestCase):
         self.assertEqual(cmds[0], ("show cdp neighbors", "--- SHOW CDP NEIGHBORS ---"))
         self.assertIn(("show inventory", "--- SHOW INVENTORY ---"), cmds)
         self.assertEqual(cmds[-1], ("show interfaces status", "--- SHOW INTERFACES STATUS ---"))
-        self.assertEqual(len(cmds), 7)
+        self.assertIn(("show vlan", "--- SHOW VLAN ---"), cmds)
+        self.assertEqual(len(cmds), 13)
 
     def test_linux_privileged_tier(self):
         base = ce.triage_extra_commands("linux")
@@ -36,11 +37,11 @@ class Extras(unittest.TestCase):
 
     def test_timeouts_match_the_old_branches(self):
         self.assertEqual(ce.TRIAGE_EXTRA_TIMEOUT,
-                         {"cisco_9800": 30, "cisco_wlc": 30, "paloalto": 30, "windows": 45})
+                         {"cisco": 30, "cisco_9800": 30, "cisco_wlc": 30, "paloalto": 30, "windows": 45})
 
     def test_returned_list_is_a_copy(self):
         ce.triage_extra_commands("cisco").clear()
-        self.assertEqual(len(ce.triage_extra_commands("cisco")), 7)
+        self.assertEqual(len(ce.triage_extra_commands("cisco")), 13)
 
 
 if __name__ == "__main__":
