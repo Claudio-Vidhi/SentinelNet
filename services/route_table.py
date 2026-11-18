@@ -680,26 +680,32 @@ def _collect_ios(device) -> dict:
             "rows": [_row(device, e) for e in parsed]}
 
 
-def fortigate_context(device, answer: dict) -> dict:
+def fortigate_context(device, answer: dict, addresses: "list | None" = None,
+                      ha: bool = True) -> dict:
     """What lets the route graph name a next hop: interface addresses, HA
     cluster members, IPsec tunnels with their remote gateway.
 
     Asked only of a FortiGate that just answered over REST: one that timed out
     or is only known from its backup would time out again, three times, for
     data that would not be there anyway. Each part fails on its own and comes
-    back empty: a missing tunnel list must not hide the addresses."""
+    back empty: a missing tunnel list must not hide the addresses.
+
+    ``addresses`` already read by the caller are reused instead of asking the
+    interface list again; ``ha=False`` skips the HA call for callers (the
+    path trace) that never read it."""
     from services import path_trace
     rows = answer.get("rows") or []
     is_fortigate = (device.get("Vendor") or "").lower() == "fortinet"
     live_rest = is_fortigate and answer.get("source") == "api"
     # For a switch addresses_for() only reads its own local rows: no session.
-    out = {"addresses": path_trace.addresses_for(device, rows)
-                        if live_rest or not is_fortigate else [],
+    if addresses is None:
+        addresses = path_trace.addresses_for(device, rows) if live_rest or not is_fortigate else []
+    out = {"addresses": addresses,
            "ha": [], "tunnels": [], "sdwan": [], "policy_routes": []}
     if not live_rest:
         return out
     try:
-        peers = fortigate_service.get_ha_status(device).get("results") or []
+        peers = (fortigate_service.get_ha_status(device).get("results") or []) if ha else []
         out["ha"] = [{"hostname": p.get("hostname") or "", "serial": p.get("serial_no") or ""}
                      for p in peers if isinstance(p, dict)]
     except fortigate_service.FortiGateError as e:

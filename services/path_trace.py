@@ -20,8 +20,10 @@ una raccolta nuova:
 - Cisco: le rotte *local* (``L 10.0.0.1/32``) che il parser di `show ip route`
   estrae gia' — sono per definizione l'indirizzo di un'interfaccia.
 """
+import functools
 import ipaddress
 import logging
+import os
 
 logger = logging.getLogger("sentinelnet.path_trace")
 
@@ -759,29 +761,13 @@ def collect_hop_context(device: dict, forti_ctx: "dict | None" = None,
             from ai import config_analyzer
             path, _tenant = config_analyzer._find_freshest_backup(ip, device.get("Group") or "")
             if path:
-                with open(path, encoding="utf-8", errors="ignore") as fh:
-                    raw = fh.read()
-                content = "\n".join(config_analyzer.running_config(raw))
-                cfg_type = config_analyzer.detect_config_type(content, device)
-                if cfg_type == "fortios":
-                    from services.policy_test.fortios import parse_fortios_config
-                    env = parse_fortios_config(content)
+                cfg_type, env = _parse_hop_backup(path, os.path.getmtime(path),
+                                                  device.get("Vendor") or "")
+                if env is not None:
                     ctx["policy_env"] = env
                     ctx["policy_source"] = "backup"
-                    if not ctx["policy_routes"] and env.policy_routes:
+                    if cfg_type == "fortios" and not ctx["policy_routes"] and env.policy_routes:
                         ctx["policy_routes"] = list(env.policy_routes)
-                elif cfg_type == "panos":
-                    from services.policy_test.panos import parse_panos_config
-                    ctx["policy_env"] = parse_panos_config(content)
-                    ctx["policy_source"] = "backup"
-                elif cfg_type == "junos":
-                    from services.policy_test.junos import parse_junos_config
-                    ctx["policy_env"] = parse_junos_config(content)
-                    ctx["policy_source"] = "backup"
-                elif cfg_type in ("ios", "nxos", "ot_switch"):
-                    from services.policy_test.ios import parse_ios_config
-                    ctx["policy_env"] = parse_ios_config(content)
-                    ctx["policy_source"] = "backup"
         except Exception as e:
             logger.debug("Impossibile caricare backup policy per %s: %s", ip, e)
 
@@ -793,13 +779,39 @@ def collect_hop_context(device: dict, forti_ctx: "dict | None" = None,
                 ctx["vips"] = [v for v in vdata if isinstance(v, dict)]
         except fortigate_service.FortiGateError:
             pass
-        try:
-            pdata = fortigate_service.get_ip_pools(device).get("data")
-            if isinstance(pdata, list):
-                ctx["ippools"] = [p for p in pdata if isinstance(p, dict)]
-        except fortigate_service.FortiGateError:
-            pass
+        # IP pools only serve source NAT, evaluated only with a source IP.
+        if ctx["live_policy_lookup"]:
+            try:
+                pdata = fortigate_service.get_ip_pools(device).get("data")
+                if isinstance(pdata, list):
+                    ctx["ippools"] = [p for p in pdata if isinstance(p, dict)]
+            except fortigate_service.FortiGateError:
+                pass
     return ctx
+
+
+@functools.lru_cache(maxsize=32)
+def _parse_hop_backup(path: str, mtime: float, vendor: str) -> tuple:
+    """``(config_type, policy_env | None)`` of one backup, parsed once per file
+    version: every trace used to re-parse every selected device's backup.
+    ``mtime`` is only the cache key; callers only read the env."""
+    from ai import config_analyzer
+    with open(path, encoding="utf-8", errors="ignore") as fh:
+        content = "\n".join(config_analyzer.running_config(fh.read()))
+    cfg_type = config_analyzer.detect_config_type(content, {"Vendor": vendor})
+    if cfg_type == "fortios":
+        from services.policy_test.fortios import parse_fortios_config
+        return cfg_type, parse_fortios_config(content)
+    if cfg_type == "panos":
+        from services.policy_test.panos import parse_panos_config
+        return cfg_type, parse_panos_config(content)
+    if cfg_type == "junos":
+        from services.policy_test.junos import parse_junos_config
+        return cfg_type, parse_junos_config(content)
+    if cfg_type in ("ios", "nxos", "ot_switch"):
+        from services.policy_test.ios import parse_ios_config
+        return cfg_type, parse_ios_config(content)
+    return cfg_type, None
 
 
 def supplement_from_backup_env(device: dict, rows: list, addrs: list, ctx: dict) -> tuple:

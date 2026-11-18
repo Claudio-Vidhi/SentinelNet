@@ -132,7 +132,7 @@ def _valid_ip(value: str) -> str:
                             detail=f"'{value}' non e' un indirizzo IPv4 valido.")
 
 
-async def _collect_selection(current_user, device: str):
+async def _collect_selection(current_user, device: str, flow: bool = False):
     """Rotte e indirizzi degli apparati scelti, in una passata sola.
 
     Gli indirizzi delle interfacce sono il dato che permette di dire quale
@@ -164,8 +164,11 @@ async def _collect_selection(current_user, device: str):
             answer = await run_ssh(route_table.collect_for, dev)
             rows = answer.get("rows") or []
             addrs = await run_ssh(path_trace.addresses_for, dev, rows)
-            fctx = await run_ssh(route_table.fortigate_context, dev, answer)
-            hctx = await run_ssh(path_trace.collect_hop_context, dev, fctx, answer, True)
+            # Reuse the addresses just read and skip HA (the trace never reads
+            # it): two REST calls less per FortiGate. Live policy lookup and IP
+            # pools only when a source IP asks for flow evaluation.
+            fctx = await run_ssh(route_table.fortigate_context, dev, answer, addrs, False)
+            hctx = await run_ssh(path_trace.collect_hop_context, dev, fctx, answer, flow)
             rows, addrs = path_trace.supplement_from_backup_env(dev, rows, addrs, hctx)
             return dev, answer, rows, addrs, hctx
 
@@ -215,7 +218,7 @@ async def trace_path(
         raise HTTPException(status_code=400,
                             detail=f"Protocollo '{proto}' non valido (usa tcp, udp, icmp, ip).")
     rows_by_device, addresses, devices_by_ip, hop_contexts, errors = await _collect_selection(
-        current_user, device)
+        current_user, device, flow=bool(flow_src_ip))
     if start_ip not in rows_by_device:
         raise HTTPException(
             status_code=404,

@@ -227,6 +227,27 @@ class FortiGateContext(unittest.TestCase):
         self.assertEqual([t["name"] for t in ctx["tunnels"]], ["t1"])
         self.assertEqual(ctx["sdwan"], [], "no SD-WAN configured (404) is no members, not an error")
 
+    def test_the_trace_reuses_addresses_and_skips_ha_and_ip_pools(self):
+        # The path trace already read the interfaces and never reads HA; IP
+        # pools only serve source NAT, evaluated only with a source IP.
+        from services import path_trace
+        addrs = [{"iface": "port1", "ip": "192.0.2.1", "network": "192.0.2.0/24"}]
+        with mock.patch.object(fortigate_service, "get_interfaces") as gi, \
+             mock.patch.object(fortigate_service, "get_ha_status") as ha, \
+             mock.patch.object(fortigate_service, "get_vpn_tunnels", return_value={"data": []}), \
+             mock.patch.object(fortigate_service, "get_sdwan_health", return_value={"data": []}), \
+             mock.patch.object(fortigate_service, "get_policy_routes", return_value={"data": []}), \
+             mock.patch.object(fortigate_service, "get_vips", return_value={"data": []}), \
+             mock.patch.object(fortigate_service, "get_ip_pools") as pools, \
+             mock.patch("ai.config_analyzer._find_freshest_backup", return_value=(None, None)):
+            answer = {"source": "api", "rows": []}
+            ctx = route_table.fortigate_context(FGT_A, answer, addrs, False)
+            path_trace.collect_hop_context(FGT_A, ctx, answer, False)
+        self.assertEqual(ctx["addresses"], addrs)
+        gi.assert_not_called()
+        ha.assert_not_called()
+        pools.assert_not_called()
+
     def test_sdwan_members_state_from_their_checks(self):
         ctx, _ = self._ctx({"source": "api", "rows": [{"type": "static"}]})
         by = {m["interface"]: m for m in ctx["sdwan"]}
