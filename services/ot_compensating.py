@@ -19,8 +19,8 @@ import os
 import re
 
 from services import cve_intel, ot_vuln_intel, purdue_model
-from services.policy_test.engine import evaluate
-from services.policy_test.model import Flow, int_to_ip, mask_to_prefix_len
+from services.policy_test.engine import _derive_ingress_intf, evaluate
+from services.policy_test.model import Flow, Step, Trace, int_to_ip, mask_to_prefix_len
 
 CLASSES = ("NOT_EVALUATED", "SERVICE_DISABLED", "EXPOSED",
            "MITIGATED_BY_IPS", "MITIGATED_BY_FIREWALL")
@@ -109,10 +109,12 @@ def _load_gateway_candidates(tenant: str, devices: list) -> list:
         # An L2 switch with only a management SVI in the OT VLAN routes
         # nothing: taking it for the gateway reported every asset behind a
         # real firewall as exposed through its ACL-less SVI.
-        if cfg == "ios" and not _ios_routes(path, os.path.getmtime(path)):
-            continue
         try:
-            cfg, env = _parse_hop_backup(path, os.path.getmtime(path), d.get("Vendor") or "")
+            # The backup may vanish after _find_freshest_backup picked it.
+            mtime = os.path.getmtime(path)
+            if cfg == "ios" and not _ios_routes(path, mtime):
+                continue
+            cfg, env = _parse_hop_backup(path, mtime, d.get("Vendor") or "")
         except Exception:
             env = None
         out.append({"device": d, "config_type": cfg, "env": env,
@@ -126,8 +128,21 @@ def _evaluate_flow(env, src: str, dst: str, proto: str, port: int):
     # which skips inbound ACLs and zone-scoped policies.
     route = env.route_table.lookup(src)
     ingress = route.interface if route is not None and route.interface else None
-    return evaluate(env, Flow(src_ip=src, dst_ip=dst, proto=proto, dport=port,
-                              ingress_intf=ingress))
+    # Junos and PAN-OS statics carry only the next hop: the ingress is the
+    # connected interface that reaches it, as evaluate() does for egress.
+    if ingress is None and route is not None and route.next_hop:
+        ingress = _derive_ingress_intf(route.next_hop, env.route_table)
+    flow = Flow(src_ip=src, dst_ip=dst, proto=proto, dport=port, ingress_intf=ingress)
+    if ingress is None and (
+            any(r.fields.ingress_intfs and not r.disabled for r in _rules(env))
+            or any(i.get("acl_in") for i in getattr(env, "interfaces", {}).values())):
+        # Without an ingress, zone-scoped policies match any source and
+        # inbound ACLs are skipped: a deny scoped to another zone would read
+        # as a mitigation.
+        return Trace(verdict="UNKNOWN", flow=flow.to_dict(), steps=[Step(
+            kind="note", action="unknown",
+            note=f"ingress interface of {src} unknown (no route with interface)")])
+    return evaluate(env, flow)
 
 
 def _matched_rules(env, trace) -> list:

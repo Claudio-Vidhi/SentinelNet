@@ -196,6 +196,12 @@ class TestFirewallHygieneUnit(unittest.TestCase):
         self.assertEqual(res["tightenable_rules"][0]["suggested_src"], ["10.20.0.5/32"])
         self.assertEqual(res["tightenable_rules"][0]["suggested_services"], ["MODBUS-TCP"])
 
+    def test_window_days_is_the_second_positional_argument(self):
+        # The router calls analyze_hygiene(scoped, days) through to_thread.
+        with mock.patch("ai.config_analyzer._find_freshest_backup", return_value=(None, None)):
+            res = firewall_traffic.analyze_hygiene([FGT_DEV], 7)
+        self.assertEqual(res["window_days"], 7)
+
 
 class TestFirewallHygieneApi(unittest.TestCase):
     @classmethod

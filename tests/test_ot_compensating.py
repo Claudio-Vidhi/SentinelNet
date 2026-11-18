@@ -314,6 +314,76 @@ class TestFortiosIpsParser(unittest.TestCase):
         self.assertEqual(generic.ips_sensors["OT-CVE"][0]["cve"], [])
 
 
+_JUNOS_ZONES = """set interfaces ge-0/0/0 unit 0 family inet address 198.51.100.2/30
+set interfaces ge-0/0/1 unit 0 family inet address 10.10.0.1/24
+set interfaces ge-0/0/2 unit 0 family inet address 10.20.0.1/24
+set security zones security-zone untrust interfaces ge-0/0/0.0
+set security zones security-zone ot interfaces ge-0/0/1.0
+set security zones security-zone mgmt interfaces ge-0/0/2.0
+{route}set security policies from-zone mgmt to-zone ot policy deny-mgmt match source-address any
+set security policies from-zone mgmt to-zone ot policy deny-mgmt match destination-address any
+set security policies from-zone mgmt to-zone ot policy deny-mgmt match application any
+set security policies from-zone mgmt to-zone ot policy deny-mgmt then deny
+set security policies from-zone untrust to-zone ot policy open match source-address any
+set security policies from-zone untrust to-zone ot policy open match destination-address any
+set security policies from-zone untrust to-zone ot policy open match application any
+set security policies from-zone untrust to-zone ot policy open then permit
+"""
+
+
+class TestIngressDerivation(unittest.TestCase):
+    """The ingress of a remote source decides which zone-scoped policy or
+    inbound ACL applies: guessing wrong turns an open path into a mitigation."""
+
+    def _junos(self, route):
+        from services.policy_test.junos import parse_junos_config
+        return parse_junos_config(_JUNOS_ZONES.format(route=route))
+
+    def test_junos_nexthop_only_static_resolves_ingress(self):
+        env = self._junos("set routing-options static route 0.0.0.0/0 next-hop 198.51.100.1\n")
+        trace = ot_compensating._evaluate_flow(env, "203.0.113.1", "10.10.0.5", "tcp", 502)
+        self.assertEqual(trace.verdict, "PERMIT", trace.to_dict())
+        self.assertEqual([s.rule_id for s in trace.steps if s.kind == "policy"],
+                         ["untrust->ot:open"])
+
+    def test_junos_no_route_to_source_is_unknown(self):
+        trace = ot_compensating._evaluate_flow(self._junos(""), "203.0.113.1", "10.10.0.5",
+                                               "tcp", 502)
+        self.assertEqual(trace.verdict, "UNKNOWN", trace.to_dict())
+
+    def test_ios_inbound_acl_without_route_to_source_is_unknown(self):
+        from services.policy_test.ios import parse_ios_config
+        env = parse_ios_config("""hostname rtr-01
+ip access-list extended WAN-IN
+ deny ip any any
+interface GigabitEthernet0/0
+ ip address 10.1.0.1 255.255.255.0
+ ip access-group WAN-IN in
+interface GigabitEthernet0/1
+ ip address 10.10.0.1 255.255.255.0
+end
+""")
+        trace = ot_compensating._evaluate_flow(env, "203.0.113.1", "10.10.0.5", "tcp", 502)
+        self.assertEqual(trace.verdict, "UNKNOWN", trace.to_dict())
+        # The downstream row builder must digest the note-only trace.
+        gw = {"env": env, "config_type": "ios", "device": {"IP": "10.1.0.1"}}
+        r = ot_compensating._flow_result(gw, "203.0.113.1", "internet", "10.10.0.5",
+                                         "tcp", 502, lambda ip: "")
+        self.assertEqual((r["verdict"], r["rule_id"]), ("UNKNOWN", ""))
+        self.assertIn("ingress interface", r["rule_name"])
+
+
+class TestGatewayCandidates(unittest.TestCase):
+    def test_backup_removed_after_lookup_is_unsupported_not_a_crash(self):
+        from ai import config_analyzer
+        # IOS takes the routing pre-check, which read the file outside the try.
+        sw = {"IP": "10.0.0.2", "Hostname": "sw-l3-01", "Vendor": "cisco", "Group": T}
+        gone = os.path.join(tempfile.gettempdir(), "otcomp-missing", "sw.txt")
+        with patch.object(config_analyzer, "_find_freshest_backup", lambda ip, t: (gone, None)):
+            out = ot_compensating._load_gateway_candidates(T, [sw])
+        self.assertEqual([(c["env"], c["reason"]) for c in out], [(None, "gateway_unsupported")])
+
+
 class TestStatusReportCollector(_Base):
     def test_kev_exposed_is_gap(self):
         from services.status_report import evidence

@@ -1048,8 +1048,31 @@ def detect_wan_exposure(
                     continue
                 srcs = nr.get("source") or []
                 dsts = nr.get("destination") or []
+                # PAN-OS matches security rules on the pre-NAT destination:
+                # a DNAT no rule allows publishes nothing. An unresolvable
+                # original destination keeps the finding (conservative).
+                pre_nat = []
+                for name in dsts:
+                    if env.addresses.get(name):
+                        pre_nat.append(env.addresses[name][0].value)
+                        continue
+                    try:
+                        pre_nat.append(int(ipaddress.IPv4Network(name, strict=False).network_address))
+                    except ValueError:
+                        pre_nat = []
+                        break
+                open_src = not srcs or "any" in srcs
+                if pre_nat:
+                    # 'unknown' is an unresolved rule that may still allow.
+                    permits = [r for r in env.policies
+                               if not r.disabled and r.action in ("permit", "unknown")
+                               and any(c.contains_ip(v) for c in r.fields.dst_ips for v in pre_nat)]
+                    if not permits:
+                        continue
+                    open_src = any(c.is_any() or cube_external(c)
+                                   for r in permits for c in r.fields.src_ips)
                 findings.append({
-                    **base, "severity": "critical" if (not srcs or "any" in srcs) else "high",
+                    **base, "severity": "critical" if open_src else "high",
                     "rule_id": nr["name"], "rule_name": nr["name"], "nat_name": nr["name"],
                     "ext_ip": dsts[0] if dsts else "", "ext_intf": ",".join(nr.get("from") or []),
                     "mapped_ip": mapped, "level": z["level"], "segment": z["segment_name"],

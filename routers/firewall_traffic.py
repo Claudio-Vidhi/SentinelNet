@@ -137,7 +137,6 @@ async def get_firewall_hygiene(
     report = await asyncio.to_thread(
         firewall_traffic.analyze_hygiene,
         scoped,
-        None,
         days,
     )
     report["eligible_devices"] = [

@@ -592,6 +592,13 @@ set rulebase nat rules DNAT-OLD disabled yes
 """
 
 
+
+def _pan_allow(source, action="allow"):
+    r = "set rulebase security rules ALLOW-PLC"
+    return "\n".join([f"{r} from untrust", f"{r} to ot", f"{r} source {source}",
+                      f"{r} destination 203.0.113.9", f"{r} service any",
+                      f"{r} application any", f"{r} action {action}", ""])
+
 class TestWanExposureDetector(_PurdueBase):
     def setUp(self):
         super().setUp()
@@ -622,11 +629,23 @@ class TestWanExposureDetector(_PurdueBase):
         self.assertEqual(by_rule["2"]["mapped_ip"], "192.0.2.30")
 
     def test_panos_dnat_to_ot(self):
-        fw = self._backup("paloalto", "fw-plant-02", "203.0.113.2", _PAN_CFG)
+        fw = self._backup("paloalto", "fw-plant-02", "203.0.113.2", _PAN_CFG + _pan_allow("any"))
         found, checked = purdue_model.detect_wan_exposure(_T, [fw], _SEGS)
         self.assertEqual(checked, 1)
         self.assertEqual([(f["nat_name"], f["severity"], f["mapped_ip"]) for f in found],
                          [("DNAT-PLC", "critical", "192.0.2.10")])
+
+    def test_panos_dnat_without_permitting_rule_is_not_exposure(self):
+        # Pre-NAT destination matched by a deny only: the NAT publishes nothing.
+        fw = self._backup("paloalto", "fw-plant-02", "203.0.113.2",
+                          _PAN_CFG + _pan_allow("any", "deny"))
+        self.assertEqual(purdue_model.detect_wan_exposure(_T, [fw], _SEGS), ([], 1))
+
+    def test_panos_dnat_severity_follows_the_permitting_rule_source(self):
+        fw = self._backup("paloalto", "fw-plant-02", "203.0.113.2",
+                          _PAN_CFG + _pan_allow("10.1.0.0/24"))
+        found, _ = purdue_model.detect_wan_exposure(_T, [fw], _SEGS)
+        self.assertEqual([(f["nat_name"], f["severity"]) for f in found], [("DNAT-PLC", "high")])
 
     def test_firewall_without_backup_not_counted(self):
         fw = {"IP": "203.0.113.3", "Hostname": "fw-plant-03", "Vendor": "fortinet", "Group": _T}

@@ -904,7 +904,6 @@ def _flow_matches_rule(rule_obj: Any, ev: Dict[str, Any]) -> bool:
 
 def analyze_hygiene(
     devices: List[Dict[str, Any]],
-    live_rows_by_ip: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     window_days: int = 30,
     now_ts: Optional[int] = None,
 ) -> Dict[str, Any]:
@@ -917,7 +916,6 @@ def analyze_hygiene(
     now = int(now_ts if now_ts is not None else time.time())
     since_ts = now - int(window_days) * 86400
     targets = hygiene_devices(devices)
-    live_map = live_rows_by_ip or {}
 
     dead_policies: List[Dict[str, Any]] = []
     unused_objects: List[Dict[str, Any]] = []
@@ -967,24 +965,14 @@ def analyze_hygiene(
         for s in history:
             latest_snap_by_pid[str(s["policy_id"])] = s
 
-        if ip in live_map:
-            base_rows = [dict(r) for r in live_map[ip]]
-            backup_by_id = {str(br["policyid"]): br for br in backup_rows}
-            for r in base_rows:
-                br = backup_by_id.get(str(r.get("policyid")))
-                if br:
-                    r["is_broad"] = br.get("is_broad", False)
-                    r["_rule"] = br.get("_rule")
-                    r["vendor"] = cfg_type
-        else:
-            base_rows = backup_rows
-            for r in base_rows:
-                snap = latest_snap_by_pid.get(str(r.get("policyid")))
-                if snap:
-                    r["hit_count"] = snap["hit_count"]
-                    r["bytes"] = snap["bytes"]
-                    r["last_used"] = snap["last_used"]
-                    r["never_hit"] = (snap["hit_count"] == 0 and snap["bytes"] == 0)
+        base_rows = backup_rows
+        for r in base_rows:
+            snap = latest_snap_by_pid.get(str(r.get("policyid")))
+            if snap:
+                r["hit_count"] = snap["hit_count"]
+                r["bytes"] = snap["bytes"]
+                r["last_used"] = snap["last_used"]
+                r["never_hit"] = (snap["hit_count"] == 0 and snap["bytes"] == 0)
 
         enriched = compute_policy_deltas(ip, group, base_rows, now_ts=now)
 
