@@ -391,8 +391,8 @@ class TestOtVulnApiAndUiHooks(_OtVulnBase):
         self.assertEqual(client.get("/api/cve/ot/ics-advisories", headers=view_headers).status_code, 200)
         self.assertEqual(client.get("/api/cve/ot/bundle/export", headers=view_headers).status_code, 403)
 
-        mock_kev = {"vulnerabilities": [{"cveID": "CVE-2024-60001", "vendorProject": "Schneider", "product": "Modicon"}]}
-        mock_ics = {"advisories": [{"id": "ICSA-24-200-01", "title": "Modicon M340", "vendor": "Schneider", "cves": ["CVE-2024-60001"]}]}
+        mock_kev = {"vulnerabilities": [{"cveID": "CVE-2024-60001", "vendorProject": "Siemens", "product": "SIMATIC S7-1500"}]}
+        mock_ics = {"advisories": [{"id": "ICSA-24-200-01", "title": "SIMATIC S7-1500", "vendor": "Siemens", "cves": ["CVE-2024-60001"]}]}
 
         class _FakeResp:
             def __init__(self, data):
@@ -446,7 +446,7 @@ class TestOtVulnApiAndUiHooks(_OtVulnBase):
         self.assertEqual(del_res.status_code, 200)
 
         # ICS advisories query endpoint filters properly
-        adv_res = client.get("/api/cve/ot/ics-advisories", params={"vendor": "schneider"}, headers=view_headers)
+        adv_res = client.get("/api/cve/ot/ics-advisories", params={"vendor": "siemens"}, headers=view_headers)
         self.assertEqual(adv_res.status_code, 200)
         self.assertEqual(adv_res.json()["advisories"][0]["id"], "ICSA-24-200-01")
 

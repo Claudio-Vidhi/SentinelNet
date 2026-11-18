@@ -153,12 +153,13 @@ async def get_firewall_hygiene(
 
 
 def _capture_device_snapshot_sync(dev: dict) -> dict:
-    """Capture and persist one policy counter snapshot for a single device."""
-    from ai import config_analyzer
+    """Capture and persist one policy counter snapshot for a single device.
 
+    Only live counters are recorded. A backup carries no hit counters: saving
+    its rules as 0 hits made analyze_hygiene flag every accept rule as dead."""
     ip = dev.get("IP") or ""
     rows = []
-    source = "backup"
+    source = "none"
     if (dev.get("Vendor") or "").lower() == "fortinet":
         transports = dev.get("Transports") or {}
         if not (isinstance(transports, dict) and transports.get("manual")):
@@ -166,25 +167,6 @@ def _capture_device_snapshot_sync(dev: dict) -> dict:
             if ans.get("rows"):
                 rows = ans["rows"]
                 source = str(ans.get("source") or "live")
-
-    if not rows:
-        path, _ = config_analyzer._find_freshest_backup(ip, dev.get("Group"))
-        if path:
-            try:
-                with open(path, encoding="utf-8", errors="ignore") as fh:
-                    content = "\n".join(config_analyzer.running_config(fh.read()))
-                cfg_type = config_analyzer.detect_config_type(content, dev)
-                rows, _ = firewall_traffic._extract_backup_rules(content, cfg_type, dev)
-                hist = firewall_traffic.get_policy_snapshot_history(ip)
-                latest = {str(h["policy_id"]): h for h in hist}
-                for r in rows:
-                    prev = latest.get(str(r.get("policyid")))
-                    if prev:
-                        r["hit_count"] = prev["hit_count"]
-                        r["bytes"] = prev["bytes"]
-                        r["last_used"] = prev["last_used"]
-            except OSError:
-                rows = []
 
     saved = firewall_traffic.record_policy_snapshots(dev, rows) if rows else 0
     return {"device_ip": ip, "hostname": dev.get("Hostname") or ip, "saved": saved, "source": source}

@@ -126,7 +126,7 @@ class TestWhatIfSimulator(unittest.TestCase):
 class TestWhatIfApi(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        for u, role, grps in (("adm_wi", "admin", None), ("op_a_wi", "operator", ["site-a"])):
+        for u, role, grps in (("adm_wi", "admin", None), ("op_a_wi", "operator", ["tenant-a"])):
             try:
                 user_manager.create_user(u, PASS, role=role, groups=grps)
             except Exception:
@@ -139,8 +139,8 @@ class TestWhatIfApi(unittest.TestCase):
         return c
 
     def test_whatif_endpoint_auth_and_tenant_boundary(self):
-        dev_a = {"IP": "192.0.2.40", "Hostname": "fw-a", "Vendor": "fortinet", "Group": "site-a"}
-        dev_b = {"IP": "198.51.100.40", "Hostname": "fw-b", "Vendor": "fortinet", "Group": "site-b"}
+        dev_a = {"IP": "192.0.2.40", "Hostname": "fw-a", "Vendor": "fortinet", "Group": "tenant-a"}
+        dev_b = {"IP": "198.51.100.40", "Hostname": "fw-b", "Vendor": "fortinet", "Group": "tenant-b"}
 
         with tempfile.NamedTemporaryFile("w", suffix=".cfg", delete=False, encoding="utf-8") as tf:
             tf.write(FORTI_CFG)
@@ -148,8 +148,8 @@ class TestWhatIfApi(unittest.TestCase):
 
         try:
             with mock.patch("services.inventory_manager.get_all_devices", return_value=[dev_a, dev_b]), \
-                 mock.patch("ai.config_analyzer._find_freshest_backup", return_value=(cfg_path, "site-a")):
-                # Operator in site-a can simulate site-a device
+                 mock.patch("ai.config_analyzer._find_freshest_backup", return_value=(cfg_path, "tenant-a")):
+                # Operator in tenant-a can simulate tenant-a device
                 r_ok = self._client("op_a_wi").post(
                     "/api/policy-test/192.0.2.40/what-if",
                     json={
@@ -161,7 +161,7 @@ class TestWhatIfApi(unittest.TestCase):
                 self.assertEqual(r_ok.status_code, 200, r_ok.text)
                 self.assertEqual(r_ok.json()["risk"], "HIGH")
 
-                # Operator in site-a gets 403/404 for site-b device
+                # Operator in tenant-a gets 403/404 for tenant-b device
                 r_denied = self._client("op_a_wi").post(
                     "/api/policy-test/198.51.100.40/what-if",
                     json={"change": {"action": "disable_rule", "rule_id": "10"}},

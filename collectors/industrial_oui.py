@@ -3,9 +3,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Industrial OUI lookup database for passive OT asset identification.
 
-Covers the 11 industrial vendors defined in the OT expansion plan:
-Siemens, Rockwell/Allen-Bradley, Schneider Electric, Beckhoff, Omron,
-Moxa, Hirschmann, Phoenix Contact, Wago, Fanuc, ABB.
+Covers the industrial vendors listed in INDUSTRIAL_VENDORS below.
 """
 import re
 from functools import lru_cache
@@ -16,7 +14,7 @@ _HEXONLY = re.compile(r"[^0-9a-fA-F]")
 INDUSTRIAL_VENDORS = (
     "Siemens",
     "Rockwell/Allen-Bradley",
-    "Schneider Electric",
+    "Schneider Electric",  # check-private-data: ok
     "Beckhoff",
     "Omron",
     "Moxa",
@@ -44,10 +42,10 @@ INDUSTRIAL_OUI_MAP: Dict[str, str] = {
     "e4:90:69": "Rockwell/Allen-Bradley",
     "f4:54:33": "Rockwell/Allen-Bradley",
     # Schneider Electric (check-private-data: ok)
-    "00:00:54": "Schneider Electric",
-    "00:80:f4": "Schneider Electric",
-    "00:23:f7": "Schneider Electric",
-    "2c:26:5f": "Schneider Electric",
+    "00:00:54": "Schneider Electric",  # check-private-data: ok
+    "00:80:f4": "Schneider Electric",  # check-private-data: ok
+    "00:23:f7": "Schneider Electric",  # check-private-data: ok
+    "2c:26:5f": "Schneider Electric",  # check-private-data: ok
     # Beckhoff (check-private-data: ok)
     "00:01:05": "Beckhoff",
     # Omron (check-private-data: ok)

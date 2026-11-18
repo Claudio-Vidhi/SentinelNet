@@ -20,7 +20,7 @@ class TestIndustrialOuiDatabase(unittest.TestCase):
         required = {
             "Siemens",
             "Rockwell/Allen-Bradley",
-            "Schneider Electric",
+            "Schneider Electric",  # check-private-data: ok
             "Beckhoff",
             "Omron",
             "Moxa",

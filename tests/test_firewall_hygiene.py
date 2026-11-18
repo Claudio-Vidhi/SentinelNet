@@ -19,9 +19,9 @@ from services import firewall_traffic
 
 PASS = "PasswordSicura1!"
 
-FGT_DEV = {"IP": "192.0.2.40", "Hostname": "fw-dmz-01", "Vendor": "fortinet", "Group": "site-a"}
-FGT_OTHER = {"IP": "198.51.100.40", "Hostname": "fw-other", "Vendor": "fortinet", "Group": "site-b"}
-PA_DEV = {"IP": "203.0.113.10", "Hostname": "fw-pa-01", "Vendor": "paloalto", "Group": "site-a"}
+FGT_DEV = {"IP": "192.0.2.40", "Hostname": "fw-dmz-01", "Vendor": "fortinet", "Group": "tenant-a"}
+FGT_OTHER = {"IP": "198.51.100.40", "Hostname": "fw-other", "Vendor": "fortinet", "Group": "tenant-b"}
+PA_DEV = {"IP": "203.0.113.10", "Hostname": "fw-pa-01", "Vendor": "paloalto", "Group": "tenant-a"}
 
 FORTI_CFG = """config firewall address
     edit "OT-NET"
@@ -103,7 +103,7 @@ class TestFirewallHygieneUnit(unittest.TestCase):
     def test_snapshots_deltas_and_counter_reset_handling(self):
         now = int(time.time())
         dev_ip = "192.0.2.244"
-        dev_obj = {"IP": dev_ip, "Group": "site-a"}
+        dev_obj = {"IP": dev_ip, "Group": "tenant-a"}
         firewall_traffic.record_policy_snapshots(dev_obj, [
             {"policyid": 1, "name": "R1", "hit_count": 100, "bytes": 1000},
             {"policyid": 2, "name": "Dead", "hit_count": 50, "bytes": 500},
@@ -150,14 +150,14 @@ class TestFirewallHygieneUnit(unittest.TestCase):
                     "(ts, ingested_ts, tenant, source, event_type, entity_type, entity_id, severity, "
                     "device_ip, interface, src_ip, dst_ip, dst_port, protocol, attrs_json, dedup_key) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (now - 100, now, "site-a", "syslog", "flow", "flow", "10.20.0.5>192.0.2.10", 6,
+                    (now - 100, now, "tenant-a", "syslog", "flow", "flow", "10.20.0.5>192.0.2.10", 6,
                      FGT_DEV["IP"], "", "10.20.0.5", "192.0.2.10", 502, "tcp", "{}", "hyg-test-flow"),
                 )
                 conn.commit()
             finally:
                 conn.close()
 
-            with mock.patch("ai.config_analyzer._find_freshest_backup", return_value=(cfg_path, "site-a")):
+            with mock.patch("ai.config_analyzer._find_freshest_backup", return_value=(cfg_path, "tenant-a")):
                 res = firewall_traffic.analyze_hygiene([FGT_DEV], window_days=30, now_ts=now)
 
         self.assertEqual([d["policyid"] for d in res["dead_policies"]], ["99"])
@@ -170,7 +170,7 @@ class TestFirewallHygieneUnit(unittest.TestCase):
 class TestFirewallHygieneApi(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        for u, role, grps in (("adm_hyg", "admin", None), ("op_hyg", "operator", ["site-a"])):
+        for u, role, grps in (("adm_hyg", "admin", None), ("op_hyg", "operator", ["tenant-a"])):
             try:
                 user_manager.create_user(u, PASS, role=role, groups=grps)
             except Exception:
@@ -191,7 +191,7 @@ class TestFirewallHygieneApi(unittest.TestCase):
             ips = {d["ip"] for d in body["eligible_devices"]}
             self.assertEqual(ips, {FGT_DEV["IP"], PA_DEV["IP"]})
 
-            # Snapshot endpoint targets FGT_DEV + PA_DEV in site-a (excludes site-b) and runs live collect_for for FortiGate
+            # Snapshot endpoint targets FGT_DEV + PA_DEV in tenant-a (excludes tenant-b) and runs live collect_for for FortiGate
             with mock.patch.object(firewall_traffic, "collect_for",
                                    return_value={"rows": [{"policyid": 1, "name": "P1", "hit_count": 7, "bytes": 70}]}) as m_collect:
                 snap_res = self._client("op_hyg").post(

@@ -22,7 +22,7 @@ from core import backup_store, db
 
 _OT_VENDORS = frozenset((
     "siemens_scalance", "siemens", "rockwell", "rockwell automation",
-    "allen-bradley", "allen bradley", "schneider", "schneider electric",
+    "allen-bradley", "allen bradley", "schneider", "schneider electric",  # check-private-data: ok
     "beckhoff", "omron", "moxa", "hirschmann", "westermo",
     "phoenix_contact", "phoenix contact", "phoenixcontact",
     "cisco_ie", "wago", "fanuc", "abb", "honeywell", "emerson",

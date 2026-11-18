@@ -1126,8 +1126,8 @@ VENDOR_NVD_MAP = {
     "rockwell automation": "rockwell automation",
     "allen-bradley": "rockwell automation",
     "allen bradley": "rockwell automation",
-    "schneider": "schneider electric",
-    "schneider electric": "schneider electric",
+    "schneider": "schneider electric",  # check-private-data: ok
+    "schneider electric": "schneider electric",  # check-private-data: ok
     "beckhoff": "beckhoff",
     "omron": "omron",
     "wago": "wago",

@@ -5,7 +5,7 @@
 **Goal:** Deliver passive industrial asset and protocol visibility without active PLC polling by default, plus opt-in, rate-limited read-only OT identity probes in the remote agent.
 
 **Architecture:**
-1. **Industrial OUI Lookup (`collectors/industrial_oui.py` + `collectors/mac_collector.py` + `collectors/mac_history.py`):** Static OUI prefix table covering the 11 target industrial vendors (Siemens, Rockwell/Allen-Bradley, Schneider Electric, Beckhoff, Omron, Moxa, Hirschmann, Phoenix Contact, Wago, Fanuc, ABB). Integrated into MAC collection (`collect_mac_table` / `collect_wlc` in `collectors/mac_collector.py`) and sighting persistence/enrichment (`record_sightings` and `endpoint_inventory` in `collectors/mac_history.py`), preserving any explicit `oui_vendor` already passed by callers.
+1. **Industrial OUI Lookup (`collectors/industrial_oui.py` + `collectors/mac_collector.py` + `collectors/mac_history.py`):** Static OUI prefix table covering the 11 target industrial vendors (Siemens, Rockwell/Allen-Bradley, Schneider Electric, Beckhoff, Omron, Moxa, Hirschmann, Phoenix Contact, Wago, Fanuc, ABB). Integrated into MAC collection (`collect_mac_table` / `collect_wlc` in `collectors/mac_collector.py`) and sighting persistence/enrichment (`record_sightings` and `endpoint_inventory` in `collectors/mac_history.py`), preserving any explicit `oui_vendor` already passed by callers. <!-- check-private-data: ok -->
 2. **Passive OT Protocol Tagging (`observability/ingesters/ot_protocols.py` + `observability/ingesters/syslog.py` + `observability/fieldmap.py` + `observability/normalize.py`):** Purely passive classification of Modbus TCP (`tcp/502`), S7comm (`tcp/102`), EtherNet/IP (`tcp/44818`, `udp/2222`), OPC-UA (`tcp/4840`), PROFINET (`udp/34964`, `ethertype 0x8892`, DCP/RT keywords), BACnet (`udp/47808`), IEC 60870-5-104 (`tcp/2404`), and DNP3 (`tcp/20000`, `udp/20000`) from flow/syslog/mirror metadata without sending packets to PLCs.
 3. **Opt-In Rate-Limited Read-Only OT Probes (`services/probe_agent.py`):** Read-only discovery frame builders, response parsers, and rate-limited probe runners for EtherNet/IP `ListIdentity` (0x0063), Modbus FC 43 / MEI 14 (*Read Device Identification*, `0x2B 0x0E 0x01 0x00` — never coil/register writes), OPC-UA `GetEndpoints` (`HEL`/`OPN` read-only endpoint discovery), and BACnet `Who-Is` (unconfirmed service `0x08`). Blocked unless explicitly enabled at both the site/agent level (`ot_probes_enabled: True`) and device level (`ot_probe_enabled` / `ot_probes`), enforcing a per-device minimum interval (`ot_probe_min_interval_s`, default 300s).
 
@@ -23,7 +23,7 @@
 1. Create `collectors/industrial_oui.py` with IEEE OUI prefixes (`aa:bb:cc` normalized lowercase) for:
    - `Siemens`
    - `Rockwell/Allen-Bradley`
-   - `Schneider Electric`
+   - `Schneider Electric` <!-- check-private-data: ok -->
    - `Beckhoff`
    - `Omron`
    - `Moxa`
