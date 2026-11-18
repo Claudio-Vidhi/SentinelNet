@@ -109,6 +109,14 @@ def _handle_records(records, recv_ts: float):
         db.enqueue_write(_SYSLOG_INSERT, (
             rec["ts"], tenant, rec["device_ip"], rec["severity"],
             rec["action"], rec["message"], rec["exporter_ip"]))
+        if rec.get("ring_event"):
+            try:
+                from observability.ingesters import ring_monitor
+                ring_monitor.notify_ring_event(
+                    rec["device_ip"], tenant, rec["ring_event"], source="syslog"
+                )
+            except Exception:
+                logger.debug("Immediate ring notification failed for %s", rec["device_ip"], exc_info=True)
 
 
 async def _consumer(queue: asyncio.Queue, parser, name: str):

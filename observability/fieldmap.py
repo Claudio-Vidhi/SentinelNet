@@ -17,7 +17,7 @@ Vendor-agnostico per costruzione: prima si prova la forma key=value
 import re
 from typing import Optional
 
-from observability.ingesters import ot_protocols
+from observability.ingesters import ot_protocols, ring_monitor
 
 _KV_RE = re.compile(
     r'\b(srcip|dstip|srcport|dstport|proto|service|utmaction|action|'
@@ -92,6 +92,7 @@ def extract(message: str) -> dict:
         message=message,
         ethertype=pairs.get("ethertype"),
     )
+    ring_ev = ring_monitor.parse_ring_syslog(message)
     return {
         "src_ip": src,
         "dst_ip": dst,
@@ -110,6 +111,7 @@ def extract(message: str) -> dict:
         "dstname": pairs.get("dstname"),
         "qname": pairs.get("qname"),
         "ot_protocol": ot_info["id"] if ot_info else None,
+        "ring_event": ring_ev,
     }
 
 

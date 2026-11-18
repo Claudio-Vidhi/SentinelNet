@@ -70,6 +70,7 @@ def _parse(data: bytes, exporter_ip: str) -> dict:
         "message": text[:MAX_MESSAGE_LEN],
         "exporter_ip": exporter_ip,
         "ot_protocol": extracted.get("ot_protocol"),
+        "ring_event": extracted.get("ring_event"),
     }
 
 

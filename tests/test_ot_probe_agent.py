@@ -13,7 +13,7 @@ from services import probe_agent
 def _make_agent(ot_probes_enabled=False, min_interval_s=300):
     cfg = {
         "central_url": "https://192.0.2.1:8000",
-        "probe_id": "ot-site",
+        "probe_id": "ot-probe",
         "token": "tok",
         "syslog_enabled": False,
         "ot_probes_enabled": ot_probes_enabled,
@@ -23,7 +23,7 @@ def _make_agent(ot_probes_enabled=False, min_interval_s=300):
 
 
 class TestOtProbeOptInAndRateLimit(unittest.TestCase):
-    def test_blocked_by_default_when_site_disabled(self):
+    def test_blocked_by_default_when_probe_disabled(self):
         agent = _make_agent(ot_probes_enabled=False)
         dev = {"IP": "192.0.2.50", "Vendor": "siemens", "ot_probe_enabled": True}
         with patch("socket.create_connection") as m_conn:

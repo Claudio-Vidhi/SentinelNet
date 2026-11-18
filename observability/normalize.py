@@ -127,6 +127,8 @@ def _syslog_attrs(row, fields: dict, action) -> dict:
         attrs["qname"] = fields["qname"]
     if fields.get("ot_protocol"):
         attrs["ot_protocol"] = fields["ot_protocol"]
+    if fields.get("ring_event"):
+        attrs["ring_event"] = fields["ring_event"]
     return attrs
 
 
@@ -158,6 +160,18 @@ def _from_syslog(conn, now: int) -> int:
               metrics={"bytes": fields["bytes"]} if fields["bytes"] else {},
               attrs=_syslog_attrs(r, fields, action),
               dedup_key=f"syslog:{r['id']}")
+        ring_ev = fields.get("ring_event")
+        if ring_ev:
+            _emit(conn,
+                  ts=r["ts"], ingested_ts=now, tenant=r["tenant"], source="syslog",
+                  source_id=r["id"],
+                  event_type="ring.alert",
+                  entity_type="device",
+                  entity_id=r["device_ip"] or (fields["src_ip"] or "sconosciuto"),
+                  severity=ring_ev.get("severity"),
+                  device_ip=r["device_ip"],
+                  attrs=ring_ev,
+                  dedup_key=f"syslog-ring:{r['id']}")
         last_id = max(last_id, r["id"])
     if rows:
         _save_cursor(conn, "syslog", last_id, now)
@@ -325,6 +339,28 @@ def _from_api_observations(conn, now: int) -> int:
                       attrs={"kind": r["kind"], "field": field,
                              "before": before[field], "after": after[field]},
                       dedup_key=f"api-change:{r['id']}:{field}")
+        if r["kind"] == "snmp_ring":
+            try:
+                from observability.ingesters import ring_monitor
+                cur_obj = json.loads(r["summary_json"] or "{}")
+                prev_obj = json.loads(prev["summary_json"] or "{}") if prev is not None else {}
+                ring_alerts = ring_monitor.diff_ring_states(
+                    prev_obj.get("results"),
+                    cur_obj.get("results") or {},
+                    prev_obj.get("metrics"),
+                    cur_obj.get("metrics"),
+                )
+                for ra in ring_alerts:
+                    _emit(conn,
+                          ts=r["ts"], ingested_ts=now, tenant=r["tenant"],
+                          source="snmp", source_id=r["id"],
+                          event_type="ring.alert", entity_type="device",
+                          entity_id=r["device_ip"], device_ip=r["device_ip"],
+                          severity=ra.get("severity"),
+                          attrs=ra,
+                          dedup_key=f"api-ring:{r['id']}:{ra['protocol']}:{ra['instance']}:{ra['condition']}")
+            except (ValueError, TypeError):
+                pass
 
         # Stato per interfaccia: rende interrogabile la singola porta, non solo
         # l'apparato. ``entity_type='interface'`` esisteva nello schema e non lo

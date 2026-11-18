@@ -21,13 +21,18 @@ from services.config_drift.normalize import TRIAGE_MARKER
 
 # Inventory vendor keys the guide offers (drivers/registry.VENDOR_DRIVER_DEFAULTS
 # without its aliases).
-GUIDE_VENDORS = ("cisco", "cisco_cbs", "cisco_9800", "cisco_wlc", "hpe", "aruba",
-                 "juniper", "fortinet", "paloalto", "linux", "windows")
+GUIDE_VENDORS = (
+    "cisco", "cisco_ie", "cisco_cbs", "cisco_9800", "cisco_wlc", "hpe", "aruba",
+    "juniper", "fortinet", "paloalto",
+    "siemens_scalance", "hirschmann", "moxa", "westermo", "phoenix_contact",
+    "linux", "windows",
+)
 
 # The pager-off command a human types first; the triage gets the same effect
 # from netmiko's session preparation.
 PAGING = {
     "cisco": "terminal length 0",
+    "cisco_ie": "terminal length 0",
     "cisco_9800": "terminal length 0",
     "cisco_cbs": "terminal datadump",
     "cisco_wlc": "config paging disable",
@@ -36,6 +41,11 @@ PAGING = {
     "juniper": "set cli screen-length 0",
     "fortinet": "config system console\n    set output standard\nend",
     "paloalto": "set cli pager off",
+    "siemens_scalance": "terminal length 0",
+    "hirschmann": "cli numlines 0",
+    "moxa": "terminal length 0",
+    "westermo": "terminal length 0",
+    "phoenix_contact": "terminal length 0",
 }
 
 # Per-vendor notes, as i18n keys the UI translates.
