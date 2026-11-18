@@ -212,13 +212,37 @@ def collect_platform_access(tenant: str, devices: list, period_days: int) -> dic
             "rows": rows}
 
 
+def collect_ot_vault(tenant: str, devices: list, period_days: int) -> dict:
+    from services import ot_compliance
+    return ot_compliance.evaluate_ot_vault(tenant, devices, period_days)
+
+
+def collect_ot_insecure_protocols(tenant: str, devices: list, period_days: int) -> dict:
+    from services import ot_compliance
+    return ot_compliance.evaluate_insecure_protocols(tenant, devices, period_days)
+
+
+def collect_ot_unused_ports(tenant: str, devices: list, period_days: int) -> dict:
+    from services import ot_compliance
+    return ot_compliance.evaluate_unused_ports(tenant, devices, period_days)
+
+
+def collect_ot_remote_access(tenant: str, devices: list, period_days: int) -> dict:
+    from services import ot_compliance
+    return ot_compliance.evaluate_remote_access(tenant, devices, period_days)
+
+
 COLLECTORS = {
     "asset_inventory": collect_asset_inventory,
     "vulnerabilities": collect_vulnerabilities,
     "config_backup": collect_config_backup,
+    "ot_vault": collect_ot_vault,
     "config_drift": collect_config_drift,
     "hardening": collect_hardening,
     "segmentation": collect_segmentation,
+    "ot_insecure_protocols": collect_ot_insecure_protocols,
+    "ot_unused_ports": collect_ot_unused_ports,
+    "ot_remote_access": collect_ot_remote_access,
     "logging": collect_logging,
     "platform_access": collect_platform_access,
 }

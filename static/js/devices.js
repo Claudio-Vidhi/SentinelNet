@@ -453,6 +453,7 @@
                         // edit form has no 'manual' transport to save back.
                         iconBtn('upload-manual-config', 'fa-file-arrow-up', tr('devUploadConfig')),
                         iconBtn('download-backup', 'fa-download', tr('devDownloadBackup')),
+                        iconBtn('ot-vault', 'fa-vault', tr('devOtVault')),
                         iconBtn('delete-device', 'fa-trash-can', tr('uiDelete'), ' danger'),
                     ] : [
                         iconBtn('ping-device', 'fa-wifi', tr('devPingDevice')),
@@ -460,6 +461,7 @@
                         iconBtn('open-cli', 'fa-terminal', 'CLI'),
                         iconBtn('edit-device', 'fa-pen', tr('devEditDevice')),
                         iconBtn('download-backup', 'fa-download', tr('devDownloadBackup')),
+                        iconBtn('ot-vault', 'fa-vault', tr('devOtVault')),
                         iconBtn('delete-device', 'fa-trash-can', tr('uiDelete'), ' danger'),
                     ]).join('')}
                 </div></td>
@@ -491,6 +493,7 @@
         else if (action === 'rename-device') renameDevice(ip);
         else if (action === 'open-name-twins') openNameTwins(ip);
         else if (action === 'download-backup') downloadBackup(ip);
+        else if (action === 'ot-vault') openOtVault(ip);
         else if (action === 'upload-manual-config') window.openManualConfigWizard(ip);
         else if (action === 'open-facet') openDeviceFacet(btn.dataset.facet, ip);
     });
@@ -2762,5 +2765,230 @@
                 toggleScheduleEnabled(id, e.target.checked);
             }
         }
+    });
+
+    // --- OT CONFIG / PROJECT VAULT ---
+
+    let _otVaultIp = '';
+
+    function _otVaultFormatBytes(n) {
+        const val = Number(n) || 0;
+        if (val < 1024) return `${val} B`;
+        if (val < 1024 * 1024) return `${(val / 1024).toFixed(1)} KB`;
+        return `${(val / (1024 * 1024)).toFixed(2)} MB`;
+    }
+
+    async function openOtVault(ip) {
+        _otVaultIp = String(ip || '');
+        const dev = (globalDevices || []).find(d => d.IP === _otVaultIp);
+        const sub = document.getElementById('otVaultDeviceSubtitle');
+        if (sub) {
+            const name = dev && dev.Hostname ? `${dev.Hostname} · ` : '';
+            const vend = dev && dev.Vendor ? ` (${dev.Vendor})` : '';
+            sub.textContent = `${name}${_otVaultIp}${vend}`;
+        }
+        const fIn = document.getElementById('otVaultFileInput');
+        if (fIn) fIn.value = '';
+        const vIn = document.getElementById('otVaultVersionInput');
+        if (vIn) vIn.value = '';
+        const nIn = document.getElementById('otVaultNotesInput');
+        if (nIn) nIn.value = '';
+        openModal('otVaultModal');
+        await refreshOtVault();
+    }
+
+    async function refreshOtVault() {
+        const listEl = document.getElementById('otVaultList');
+        const bannerEl = document.getElementById('otVaultIntegrityBanner');
+        if (!listEl || !_otVaultIp) return;
+        listEl.innerHTML = `<div style="padding:16px; text-align:center; color:var(--text-muted); font-size:12px;">${escapeHtml(tr('otVaultLoading'))}</div>`;
+        try {
+            const res = await apiFetch(`/api/ot-vault/${encodeURIComponent(_otVaultIp)}`);
+            if (!res || !res.ok) {
+                listEl.innerHTML = `<div class="alert-box alert-danger">${escapeHtml(tr('otVaultLoadError'))}</div>`;
+                return;
+            }
+            const data = await res.json();
+            renderOtVaultList(data.versions || [], data.integrity || {});
+        } catch (_err) {
+            if (bannerEl) bannerEl.textContent = '';
+            listEl.innerHTML = `<div class="alert-box alert-danger">${escapeHtml(tr('otVaultLoadError'))}</div>`;
+        }
+    }
+
+    function renderOtVaultList(versions, integrity) {
+        const listEl = document.getElementById('otVaultList');
+        const bannerEl = document.getElementById('otVaultIntegrityBanner');
+        if (!listEl) return;
+
+        const statusMap = {};
+        (integrity && integrity.results ? integrity.results : []).forEach(r => {
+            statusMap[r.version_id] = r.status;
+        });
+
+        if (bannerEl) {
+            if (!versions.length) {
+                bannerEl.textContent = tr('otVaultEmptyBanner');
+                bannerEl.style.color = 'var(--text-muted)';
+            } else if (integrity && integrity.ok === false) {
+                bannerEl.textContent = tr('otVaultIntegrityBad');
+                bannerEl.style.color = 'var(--danger, #ef4444)';
+            } else {
+                bannerEl.textContent = tr('otVaultIntegrityOk').replace('{n}', String(versions.length));
+                bannerEl.style.color = 'var(--success, #22c55e)';
+            }
+        }
+
+        if (!versions.length) {
+            listEl.innerHTML = `<div style="padding:20px; text-align:center; color:var(--text-muted); font-size:12px;">${escapeHtml(tr('otVaultEmpty'))}</div>`;
+            return;
+        }
+
+        const isAdmin = typeof currentRole !== 'undefined' && (currentRole === 'admin' || currentRole === 'super_admin');
+        listEl.innerHTML = versions.map(v => {
+            const st = statusMap[v.version_id] || 'ok';
+            const stBadge = st === 'ok'
+                ? `<span style="color:#16a34a; font-weight:600; font-size:11px;">SHA-256 OK</span>`
+                : `<span style="color:#dc2626; font-weight:700; font-size:11px;">${escapeHtml(st.toUpperCase())}</span>`;
+            const revHtml = v.project_version ? ` · <code>${escapeHtml(v.project_version)}</code>` : '';
+            const notesHtml = v.notes ? `<div style="font-size:11px; color:var(--text-muted); margin-top:3px;">${escapeHtml(v.notes)}</div>` : '';
+            const delBtn = isAdmin
+                ? `<button type="button" class="btn btn-secondary btn-small" data-action="ot-vault-delete" data-vid="${escapeHtml(v.version_id)}" aria-label="${escapeHtml(tr('uiDelete'))}" title="${escapeHtml(tr('uiDelete'))}"><i class="fa-solid fa-trash-can"></i></button>`
+                : '';
+            return `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px; border-bottom:1px solid var(--border);">
+                <div style="min-width:0; flex:1;">
+                    <div style="font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(v.filename)}${revHtml}</div>
+                    <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
+                        <span>${escapeHtml(v.artifact_type || '')}</span> ·
+                        <span>${escapeHtml(_otVaultFormatBytes(v.size))}</span> ·
+                        <span>${escapeHtml(v.uploaded_at || '')}</span> ·
+                        ${stBadge}
+                    </div>
+                    <div style="font-size:11px; font-family:monospace; color:var(--text-muted); word-break:break-all; margin-top:2px;">${escapeHtml(v.sha256 || '')}</div>
+                    ${notesHtml}
+                </div>
+                <div style="display:flex; gap:6px; flex-shrink:0;">
+                    <button type="button" class="btn btn-secondary btn-small" data-action="ot-vault-download" data-vid="${escapeHtml(v.version_id)}" aria-label="${escapeHtml(tr('otVaultDownload'))}" title="${escapeHtml(tr('otVaultDownload'))}"><i class="fa-solid fa-download"></i></button>
+                    ${delBtn}
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function _readFileAsBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const res = String(reader.result || '');
+                const idx = res.indexOf(',');
+                resolve(idx >= 0 ? res.slice(idx + 1) : res);
+            };
+            reader.onerror = () => reject(reader.error || new Error('File read error'));
+            reader.readAsDataURL(file);
+        });
+    }
+
+    async function uploadOtVaultArtifact() {
+        const fIn = /** @type {HTMLInputElement|null} */ (document.getElementById('otVaultFileInput'));
+        const file = fIn && fIn.files && fIn.files[0];
+        if (!file) {
+            showToast(tr('otVaultPickFile'), 'warning');
+            return;
+        }
+        const typeEl = /** @type {HTMLSelectElement|null} */ (document.getElementById('otVaultTypeSelect'));
+        const revEl = /** @type {HTMLInputElement|null} */ (document.getElementById('otVaultVersionInput'));
+        const noteEl = /** @type {HTMLInputElement|null} */ (document.getElementById('otVaultNotesInput'));
+        const btn = /** @type {HTMLButtonElement|null} */ (document.getElementById('btnOtVaultUpload'));
+        if (btn) btn.disabled = true;
+        try {
+            const content_b64 = await _readFileAsBase64(file);
+            const res = await apiFetch(`/api/ot-vault/${encodeURIComponent(_otVaultIp)}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    filename: file.name,
+                    content_b64,
+                    artifact_type: typeEl ? typeEl.value : '',
+                    project_version: revEl ? revEl.value : '',
+                    notes: noteEl ? noteEl.value : '',
+                }),
+            });
+            if (!res || !res.ok) {
+                const err = res ? await res.json().catch(() => ({})) : {};
+                showToast((err && err.detail) || tr('otVaultUploadError'), 'error');
+                return;
+            }
+            const out = await res.json();
+            showToast(out.deduplicated ? tr('otVaultDeduplicated') : tr('otVaultUploaded'), 'success');
+            if (fIn) fIn.value = '';
+            if (noteEl) noteEl.value = '';
+            await refreshOtVault();
+        } catch (_err) {
+            showToast(tr('otVaultUploadError'), 'error');
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
+    async function verifyOtVaultIntegrity() {
+        if (!_otVaultIp) return;
+        const res = await apiFetch(`/api/ot-vault/${encodeURIComponent(_otVaultIp)}/verify`, { method: 'POST' });
+        if (!res || !res.ok) {
+            showToast(tr('otVaultVerifyError'), 'error');
+            return;
+        }
+        const check = await res.json();
+        showToast(check.ok ? tr('otVaultVerifyPass') : tr('otVaultIntegrityBad'), check.ok ? 'success' : 'error');
+        await refreshOtVault();
+    }
+
+    async function downloadOtVaultArtifact(vid) {
+        if (!_otVaultIp || !vid) return;
+        try {
+            const res = await apiFetch(`/api/ot-vault/${encodeURIComponent(_otVaultIp)}/download/${encodeURIComponent(vid)}`);
+            if (!res || !res.ok) {
+                const err = res ? await res.json().catch(() => ({})) : {};
+                showToast((err && err.detail) || tr('alertDownloadError'), 'error');
+                return;
+            }
+            const blob = await res.blob();
+            const disp = res.headers.get('content-disposition') || '';
+            let fname = 'artifact.bin';
+            const match = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disp);
+            if (match && match[1]) fname = match[1].replace(/['"]/g, '');
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = fname;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (_err) {
+            showToast(tr('alertNetworkDownloadError'), 'error');
+        }
+    }
+
+    async function deleteOtVaultArtifact(vid) {
+        if (!_otVaultIp || !vid) return;
+        const res = await apiFetch(`/api/ot-vault/${encodeURIComponent(_otVaultIp)}/${encodeURIComponent(vid)}`, { method: 'DELETE' });
+        if (!res || !res.ok) {
+            showToast(tr('otVaultDeleteError'), 'error');
+            return;
+        }
+        showToast(tr('otVaultDeleted'), 'info');
+        await refreshOtVault();
+    }
+
+    document.getElementById('btnCloseOtVaultModal')?.addEventListener('click', () => closeModal('otVaultModal'));
+    document.getElementById('btnOtVaultUpload')?.addEventListener('click', uploadOtVaultArtifact);
+    document.getElementById('btnOtVaultVerify')?.addEventListener('click', verifyOtVaultIntegrity);
+    document.getElementById('otVaultList')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const vid = btn.dataset.vid;
+        if (btn.dataset.action === 'ot-vault-download') downloadOtVaultArtifact(vid);
+        else if (btn.dataset.action === 'ot-vault-delete') deleteOtVaultArtifact(vid);
     });
 

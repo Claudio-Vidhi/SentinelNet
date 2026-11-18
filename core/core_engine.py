@@ -2036,7 +2036,7 @@ def _get_portchannel_report(group_filter=None) -> list:
     for root, _dirs, files in os.walk(BACKUP_FOLDER):
         # .history holds archived config versions, not current backups: without
         # this the report grows one row per archived version per switch.
-        _dirs[:] = [d for d in _dirs if d != ".history"]
+        _dirs[:] = [d for d in _dirs if d not in (".history", ".ot-vault")]
         for fn in files:
             if not fn.endswith('.txt'):
                 continue
@@ -2133,7 +2133,7 @@ def _netmap_signature():
     max_mtime = 0.0
     if os.path.exists(BACKUP_FOLDER):
         for root, _dirs, files in os.walk(BACKUP_FOLDER):
-            _dirs[:] = [d for d in _dirs if d != ".history"]
+            _dirs[:] = [d for d in _dirs if d not in (".history", ".ot-vault")]
             for f in files:
                 if not f.endswith('.txt'):
                     continue
@@ -2264,7 +2264,7 @@ def _generate_network_map(group_filter=None) -> dict:
             # .history holds archived config versions: os.walk is topdown, so
             # without this an archived file is visited after its current
             # backup and last-write-wins overwrites the map with stale data.
-            _dirs[:] = [d for d in _dirs if d != ".history"]
+            _dirs[:] = [d for d in _dirs if d not in (".history", ".ot-vault")]
             for f in files:
                 if f.endswith('.txt'):
                     backup_files.append(os.path.join(root, f))

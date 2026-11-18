@@ -41,6 +41,7 @@
       "A.8.16": {"it": "Monitoraggio", "en": "Monitoring"},
       "A.8.20": {"it": "Sicurezza delle reti", "en": "Network security"},
       "A.8.22": {"it": "Separazione delle reti", "en": "Network separation"},
+      "A.8.24": {"it": "Uso della crittografia", "en": "Use of cryptography"},
       "A.8.32": {"it": "Gestione delle modifiche", "en": "Change management"}
     },
     "cis8": {
@@ -54,8 +55,14 @@
       "12": {"it": "Gestione dell'infrastruttura di rete", "en": "Network infrastructure management"}
     },
     "iec62443": {
+      "SR 1.13": {"it": "Accesso da reti non fidate / teleassistenza", "en": "Access via untrusted networks / remote access", "verify": true},
+      "SR 3.1": {"it": "Integrità delle comunicazioni", "en": "Communication integrity"},
+      "SR 4.1": {"it": "Riservatezza delle informazioni (protocolli cifrati)", "en": "Information confidentiality (encrypted protocols)"},
       "SR 5.1": {"it": "Segmentazione della rete (zone)", "en": "Network segmentation (zones)", "verify": true},
-      "SR 5.2": {"it": "Protezione dei confini di zona (conduit)", "en": "Zone boundary protection (conduits)", "verify": true}
+      "SR 5.2": {"it": "Protezione dei confini di zona (conduit)", "en": "Zone boundary protection (conduits)", "verify": true},
+      "SR 7.3": {"it": "Backup dei sistemi e progetti OT", "en": "OT system and project backup"},
+      "SR 7.4": {"it": "Ripristino e integrità dei backup OT", "en": "OT backup recovery and integrity"},
+      "SR 7.7": {"it": "Funzionalità minima (porte inutilizzate disabilitate)", "en": "Least functionality (unused ports disabled)"}
     }
   },
   "labels": {
@@ -77,6 +84,37 @@
     "never_backed_up": {"it": "Apparati senza backup", "en": "Devices never backed up"},
     "max_age_days": {"it": "Età massima del backup (giorni)", "en": "Oldest backup age (days)"},
     "versions_kept": {"it": "Versioni di backup conservate", "en": "Backup versions kept"},
+    "ot_devices": {"it": "Apparati OT", "en": "OT assets"},
+    "devices_with_artifacts": {"it": "Apparati con artefatti OT", "en": "Devices with OT artifacts"},
+    "ot_without_artifacts": {"it": "Apparati OT senza artefatto", "en": "OT assets without artifact"},
+    "total_artifacts": {"it": "Artefatti OT archiviati", "en": "Archived OT artifacts"},
+    "integrity_failures": {"it": "Errori integrità SHA-256", "en": "SHA-256 integrity failures"},
+    "artifacts": {"it": "Artefatti", "en": "Artifacts"},
+    "integrity_status": {"it": "Stato integrità", "en": "Integrity status"},
+    "last_artifact_at": {"it": "Ultimo caricamento", "en": "Last uploaded"},
+    "devices_with_findings": {"it": "Apparati con rilievi", "en": "Devices with findings"},
+    "telnet_devices": {"it": "Apparati con Telnet attivo", "en": "Devices with Telnet active"},
+    "http_devices": {"it": "Apparati con HTTP non cifrato", "en": "Devices with unencrypted HTTP"},
+    "snmp_v1_v2c_devices": {"it": "Apparati con SNMPv1/v2c", "en": "Devices with SNMPv1/v2c"},
+    "unsegregated_ot_flows": {"it": "Flussi Modbus/S7 non segregati", "en": "Unsegregated Modbus/S7 flows"},
+    "total_findings": {"it": "Rilievi totali", "en": "Total findings"},
+    "protocol": {"it": "Protocollo", "en": "Protocol"},
+    "detail": {"it": "Dettaglio", "en": "Detail"},
+    "source": {"it": "Fonte", "en": "Source"},
+    "switches_evaluated": {"it": "Switch valutati", "en": "Switches evaluated"},
+    "physical_ports_checked": {"it": "Porte fisiche verificate", "en": "Physical ports checked"},
+    "unused_admin_up": {"it": "Porte inutilizzate admin up", "en": "Unused admin-up ports"},
+    "field_switches_affected": {"it": "Switch interessati", "en": "Affected switches"},
+    "purdue_level": {"it": "Livello Purdue", "en": "Purdue level"},
+    "interface": {"it": "Interfaccia", "en": "Interface"},
+    "admin_status": {"it": "Stato admin", "en": "Admin status"},
+    "link": {"it": "Stato link", "en": "Link state"},
+    "mediated_ot_devices": {"it": "Asset OT via jump/agent/DMZ", "en": "OT assets via jump/agent/DMZ"},
+    "unmediated_ot_devices": {"it": "Asset OT senza jump/DMZ", "en": "OT assets without jump/DMZ"},
+    "jump_probes": {"it": "Bastion jump host usati", "en": "Jump-host bastions used"},
+    "dmz_zones": {"it": "Zone DMZ L3.5", "en": "L3.5 DMZ zones"},
+    "direct_remote_bypasses": {"it": "Bypass diretti verso OT", "en": "Direct OT bypasses"},
+    "probe_mode": {"it": "Modalità accesso", "en": "Access mode"},
     "checked": {"it": "Apparati verificati", "en": "Devices checked"},
     "deviating": {"it": "Apparati in drift", "en": "Devices with drift"},
     "deviations": {"it": "Scostamenti", "en": "Deviations"},
@@ -159,6 +197,16 @@
       ],
       "default": "ok"
     },
+    "ot_vault": {
+      "source": {"it": "Vault versionato degli artefatti OT (TIA Portal, Studio 5000, SCL/ICD, HMI) con verifica SHA-256.", "en": "Versioned OT artifact vault (TIA Portal, Studio 5000, SCL/ICD, HMI) with SHA-256 verification."},
+      "title": {"it": "Backup Vault artefatti OT e integrità SHA-256", "en": "OT Project Vault backups & SHA-256 integrity"},
+      "controls": {"nis2": ["21(2)(c)"], "ir2690": ["4.2"], "iso27001": ["A.8.13"], "cis8": ["11"], "iec62443": ["SR 7.3", "SR 7.4"]},
+      "rules": [
+        {"status": "gap", "metric": "integrity_failures", "op": ">", "value": 0},
+        {"status": "partial", "metric": "ot_without_artifacts", "op": ">", "value": 0}
+      ],
+      "default": "ok"
+    },
     "config_drift": {
       "source": {"it": "Baseline di configurazione del tenant e storico delle versioni.", "en": "Tenant configuration baseline and version history."},
       "title": {"it": "Scostamenti dalla baseline di configurazione", "en": "Configuration baseline deviations"},
@@ -189,6 +237,36 @@
         "it": "Le zone e le decisioni sui collegamenti sono quelle salvate. La ricerca dei possibili bypass del firewall si fa sulla mappa (dipende dalla topologia disegnata) e non entra in questo report: lo stato resta 'parzialè finché non è verificata lì.",
         "en": "Zones and link decisions are the saved ones. The search for possible firewall bypasses runs on the map (it depends on the drawn topology) and is not part of this report: the status stays 'partial' until it is checked there."
       }
+    },
+    "ot_insecure_protocols": {
+      "source": {"it": "Inventario trasporti/SNMP, configurazioni salvate e flussi OT passivi in observability.", "en": "Inventory transports/SNMP, saved configs, and passive OT flow telemetry."},
+      "title": {"it": "Protocolli insicuri (Telnet, HTTP, SNMPv1/v2c, Modbus/S7 non segregati)", "en": "Insecure protocols (Telnet, HTTP, SNMPv1/v2c, unsegregated Modbus/S7)"},
+      "controls": {"nis2": ["21(2)(e)", "21(2)(h)"], "ir2690": ["6.3", "6.7"], "iso27001": ["A.8.9", "A.8.20", "A.8.24"], "cis8": ["4"], "iec62443": ["SR 3.1", "SR 4.1"]},
+      "rules": [
+        {"status": "gap", "metric": "unsegregated_ot_flows", "op": ">", "value": 0},
+        {"status": "gap", "metric": "telnet_devices", "op": ">", "value": 0},
+        {"status": "partial", "metric": "total_findings", "op": ">", "value": 0}
+      ],
+      "default": "ok"
+    },
+    "ot_unused_ports": {
+      "source": {"it": "Stato delle interfacce SNMP (admin_status / link) sugli switch di campo del tenant.", "en": "SNMP interface state (admin_status / link) on tenant field switches."},
+      "title": {"it": "Porte fisiche inutilizzate admin up su switch", "en": "Unused physical switch ports left admin up"},
+      "controls": {"nis2": ["21(2)(e)"], "ir2690": ["6.3"], "iso27001": ["A.8.9"], "cis8": ["4"], "iec62443": ["SR 7.7"]},
+      "rules": [
+        {"status": "gap", "metric": "unused_admin_up", "op": ">", "value": 0}
+      ],
+      "default": "ok"
+    },
+    "ot_remote_access": {
+      "source": {"it": "Modalità probe (jump/agent/central), zone DMZ L3.5, conduit Purdue e traffico di teleassistenza.", "en": "Probe modes (jump/agent/central), L3.5 DMZ zones, Purdue conduits, and remote access traffic."},
+      "title": {"it": "Segregazione accesso remoto fornitori e jump-host", "en": "Vendor remote access & jump-host segregation"},
+      "controls": {"nis2": ["21(2)(i)"], "ir2690": ["6.8", "11"], "iso27001": ["A.5.15", "A.8.22"], "cis8": ["6", "12"], "iec62443": ["SR 1.13", "SR 5.2"]},
+      "rules": [
+        {"status": "gap", "metric": "direct_remote_bypasses", "op": ">", "value": 0},
+        {"status": "partial", "metric": "unmediated_ot_devices", "op": ">", "value": 0}
+      ],
+      "default": "ok"
     },
     "logging": {
       "source": {"it": "Eventi syslog ricevuti nel periodo e retention configurata.", "en": "Syslog events received in the period and configured retention."},
