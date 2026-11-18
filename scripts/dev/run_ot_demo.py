@@ -437,6 +437,7 @@ config firewall policy
 end
 """
     sw_core_cfg = """hostname sw-core-01
+ip routing
 !
 ip access-list extended OT-CELL-IN
  permit tcp host 172.16.10.1 host 192.0.2.10 eq 502

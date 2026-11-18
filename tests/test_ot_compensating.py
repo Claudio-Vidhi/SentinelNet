@@ -185,6 +185,41 @@ end
         self.assertEqual(r["exposure"]["rule_name"], "OT-OUT")
 
 
+    _L2_SWITCH = {"IP": "10.0.0.3", "Hostname": "sw-cell-01", "Vendor": "cisco", "Group": T}
+    _L2_CFG = """hostname sw-cell-01
+{routing}interface GigabitEthernet1/0/1
+ switchport mode access
+ switchport access vlan 10
+interface Vlan10
+ ip address 192.0.2.2 255.255.255.0
+end
+"""
+
+    def test_l2_switch_management_svi_is_not_a_gateway(self):
+        # Behind a denying firewall, an ACL-less management SVI must not
+        # turn the asset into EXPOSED.
+        self._backup(FW, _FGT_HEAD)
+        self._backup(self._L2_SWITCH, self._L2_CFG.format(routing=""))
+        r = self._one([ASSET, FW, self._L2_SWITCH])
+        self.assertEqual(r["class"], "MITIGATED_BY_FIREWALL", r)
+        self.assertEqual([g["ip"] for g in r["gateways"]], [FW["IP"]])
+
+    def test_switch_with_ip_routing_is_a_gateway(self):
+        self._backup(FW, _FGT_HEAD)
+        self._backup(self._L2_SWITCH, self._L2_CFG.format(routing="ip routing\n"))
+        r = self._one([ASSET, FW, self._L2_SWITCH])
+        self.assertIn(self._L2_SWITCH["IP"], [g["ip"] for g in r["gateways"]])
+        self.assertEqual(r["class"], "EXPOSED", r)
+
+    def test_router_with_no_ip_routing_is_not_a_gateway(self):
+        sw = dict(self._L2_SWITCH, Hostname="rtr-cell-01")
+        self._backup(FW, _FGT_HEAD)
+        self._backup(sw, "hostname rtr-cell-01\nno ip routing\ninterface Vlan10\n"
+                         " ip address 192.0.2.2 255.255.255.0\nend\n")
+        r = self._one([ASSET, FW, sw])
+        self.assertEqual([g["ip"] for g in r["gateways"]], [FW["IP"]])
+
+
 class TestIpsClasses(_Base):
     def test_ips_block_naming_cve_is_mitigated_by_ips(self):
         self._backup(FW, _FGT_HEAD + _ips("block") + _policy("all", _UTM))

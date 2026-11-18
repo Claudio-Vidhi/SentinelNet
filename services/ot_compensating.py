@@ -13,8 +13,10 @@ doubt (no gateway, unreadable backup, undecidable rule, IPS entry that cannot
 be tied to the CVE) ends in NOT_EVALUATED or EXPOSED, never in MITIGATED_*.
 """
 
+import functools
 import ipaddress
 import os
+import re
 
 from services import cve_intel, ot_vuln_intel, purdue_model
 from services.policy_test.engine import evaluate
@@ -71,6 +73,21 @@ def _rules(env) -> list:
     return [r for acl in env.acls.values() for r in acl.rules]
 
 
+@functools.lru_cache(maxsize=64)
+def _ios_routes(path: str, mtime: float) -> bool:
+    """Whether a Cisco IOS backup routes IP. Catalyst/IE switches default to
+    no routing and print ``ip routing`` once enabled; routers route by
+    default and print only ``no ip routing``. A config with ``switchport``
+    lines is a switch platform. ``mtime`` is only the cache key."""
+    with open(path, encoding="utf-8", errors="ignore") as fh:
+        text = fh.read()
+    if re.search(r"^no ip routing\b", text, re.M):
+        return False
+    if re.search(r"^ip routing\b", text, re.M):
+        return True
+    return not re.search(r"^\s*switchport\b", text, re.M)
+
+
 def _load_gateway_candidates(tenant: str, devices: list) -> list:
     """Firewalls and Cisco L3 devices of the tenant with their parsed backup.
 
@@ -83,14 +100,16 @@ def _load_gateway_candidates(tenant: str, devices: list) -> list:
     for d in devices:
         cfg = config_analyzer.detect_config_type("", d)
         vendor = (d.get("Vendor") or "").lower()
-        # ponytail: a Cisco switch with only a management SVI in the asset's
-        # subnet also counts as a gateway. That can only over-report exposure
-        # (its egress usually has no ACL), never invent a mitigation.
         if not (cfg in _FIREWALL_TYPES or (cfg in _CISCO_TYPES and vendor.startswith("cisco"))):
             continue
         path, _t = config_analyzer._find_freshest_backup(d.get("IP"), tenant)
         if not path:
             out.append({"device": d, "config_type": cfg, "env": None, "reason": "gateway_no_backup"})
+            continue
+        # An L2 switch with only a management SVI in the OT VLAN routes
+        # nothing: taking it for the gateway reported every asset behind a
+        # real firewall as exposed through its ACL-less SVI.
+        if cfg == "ios" and not _ios_routes(path, os.path.getmtime(path)):
             continue
         try:
             cfg, env = _parse_hop_backup(path, os.path.getmtime(path), d.get("Vendor") or "")
