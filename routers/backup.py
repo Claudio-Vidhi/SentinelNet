@@ -35,6 +35,9 @@ _epss_down_until = 0.0
 
 def _epss_scores(cve_ids: list[str]) -> dict[str, float]:
     global _epss_down_until
+    from services import ot_vuln_intel
+    if ot_vuln_intel.is_airgap_mode():
+        return {}
     now = time.time()
     missing = [c for c in cve_ids if now - _epss_cache.get(c, (0.0, 0.0))[1] > _EPSS_TTL]
     if missing and now >= _epss_down_until:

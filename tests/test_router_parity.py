@@ -451,7 +451,9 @@ class TestFullParity(unittest.TestCase):
                     # AI layout of the Schema map.
                     "AiLayoutSchema", "AiLayoutNode", "AiLayoutLink",
                     # Network segments (routes under /api/segments).
-                    "SegmentSaveSchema", "SegmentDeleteSchema", "SegmentLinkSchema")
+                    "SegmentSaveSchema", "SegmentDeleteSchema", "SegmentLinkSchema",
+                    # OT vulnerability intelligence / air-gap bundles (routes under /api/cve/ot).
+                    "AirgapModeSchema", "BundleImportSchema", "FeedSyncSchema", "TrustedKeySchema")
     ALLOWED_CHANGED_OPERATIONS = (
         # S1: il logout revoca il token, non solo il cookie. Cambia SOLO la
         # descrizione (la docstring che lo dice), e va detta a chi chiama la

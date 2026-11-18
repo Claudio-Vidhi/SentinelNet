@@ -14,7 +14,7 @@ import threading
 
 HOST_FIELDS = ['IP', 'Vendor', 'Profile', 'Username', 'Password', 'Enable Secret', 'Group',
                'Hostname', 'Probe', 'Location', 'SSH Port', 'Transports', 'SNMP Community',
-               'SNMP Disabled', 'Purdue Level']
+               'SNMP Disabled', 'Purdue Level', 'Process Criticality', 'Maintenance Window']
 DECOM_FIELDS = ['Decommissioned', 'Decommissioned By']
 _FIELDS = {"hosts": HOST_FIELDS, "decommissioned_hosts": HOST_FIELDS + DECOM_FIELDS}
 
@@ -104,8 +104,10 @@ def connect(path: str) -> sqlite3.Connection:
             if "ot_vlans" not in seg_cols:
                 conn.execute("ALTER TABLE segments ADD COLUMN ot_vlans TEXT NOT NULL DEFAULT '[]'")
             for tbl in ("hosts", "decommissioned_hosts"):
-                if "Purdue Level" not in {r["name"] for r in conn.execute(f"PRAGMA table_info({tbl})")}:
-                    conn.execute(f'ALTER TABLE {tbl} ADD COLUMN "Purdue Level" TEXT NOT NULL DEFAULT \'\'')
+                tbl_cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({tbl})")}
+                for col in ("Purdue Level", "Process Criticality", "Maintenance Window"):
+                    if col not in tbl_cols:
+                        conn.execute(f'ALTER TABLE {tbl} ADD COLUMN "{col}" TEXT NOT NULL DEFAULT \'\'')
             _ready.add(path)
     return conn
 

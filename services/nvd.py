@@ -38,10 +38,21 @@ def headers() -> dict:
 
 def get(params: dict, fresh: bool = False) -> "tuple[int, dict]":
     """(HTTP status, JSON) of one NVD query. Only 200s are cached; fresh skips the cache."""
+    from services import ot_vuln_intel
+
+    airgap = ot_vuln_intel.is_airgap_mode()
     url = f"{BASE_URL}?{urlencode(params)}"
     hit = _cache.get(url)
     if hit and not fresh and time.time() - hit[0] < CACHE_TTL:
         return 200, hit[1]
+
+    # Air-gapped deployments never leave the box and read imported/recorded bundles.
+    if airgap:
+        offline = ot_vuln_intel.lookup_nvd_response(params)
+        if offline is not None:
+            return 200, offline
+        return 503, {"airgap_offline": True}
+
     resp = requests.get(url, headers=headers(), timeout=20)
     if resp.status_code != 200:
         return resp.status_code, {}
@@ -50,6 +61,10 @@ def get(params: dict, fresh: bool = False) -> "tuple[int, dict]":
     if len(_cache) > 500:
         _cache.clear()
     _cache[url] = (time.time(), data)
+    try:
+        ot_vuln_intel.record_nvd_response(params, data)
+    except Exception:
+        pass
     return 200, data
 
 
@@ -139,6 +154,10 @@ def normalize_item(cve: dict, model: str = "", vendor_label: str = "",
     published = cve.get("published", "")
     prod_display = ", ".join(extracted_prods[:3]) if extracted_prods else (text_label or "—")
 
+    from services import ot_vuln_intel
+    kev_entry = ot_vuln_intel.lookup_kev(cid)
+    ics_advs = ot_vuln_intel.advisories_for_cve(cid)
+
     return {
         "id": cid,
         "cve": cid,
@@ -153,7 +172,9 @@ def normalize_item(cve: dict, model: str = "", vendor_label: str = "",
         "severity": str(severity).upper(),
         "published": published,
         "date": published,
-        "exploited": bool(cve.get("cisaExploitAdd")),
+        "exploited": bool(cve.get("cisaExploitAdd")) or (kev_entry is not None),
+        "kev": kev_entry,
+        "icsAdvisories": ics_advs,
         "modelScope": model_scope,
         "cpeHardware": hw_models,
         "references": [r.get("url") for r in cve.get("references", []) if r.get("url")],

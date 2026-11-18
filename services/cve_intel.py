@@ -297,6 +297,8 @@ def refresh(device: dict, version_text: str = "", version_seen_at: str = "",
             "cpe_hardware": item["cpeHardware"],
             "model_scope": item["modelScope"],
             "exploited": item["exploited"],
+            "kev": item.get("kev"),
+            "ics_advisories": [a["id"] for a in (item.get("icsAdvisories") or []) if isinstance(a, dict)],
             "services": cve_services(item["summary"]),
         })
 
@@ -332,7 +334,7 @@ def refresh(device: dict, version_text: str = "", version_seen_at: str = "",
                         kind="cve.new",
                         device_ip=device.get("IP"),
                         severity=sev,
-                        title=f"Nuova CVE {c.get('id')} per {device.get('IP')}: {c.get('summary', '')[:100]}",
+                        title=f"Nuova CVE {c.get('id')} per {device.get('IP')}: {str(c.get('summary') or '')[:100]}",
                         ctx={"cve_id": c.get("id"), "device_ip": device.get("IP"), "cvss": c.get("cvss")},
                         dedup_key=f"cve:{device.get('IP')}:{c.get('id')}",
                         tenant=device.get("Group") or "",
@@ -375,12 +377,14 @@ def not_evaluated_for(services: dict) -> list:
     return out
 
 
-def score_rows(snapshot: dict, services: dict) -> list:
+def score_rows(snapshot: dict, services: dict, device: "dict | None" = None) -> list:
     """I CVE dello snapshot con punteggio e fattori, dal piu' urgente.
 
     I segnali RIORDINANO, non filtrano: la lista in uscita ha sempre gli stessi
     elementi di `snapshot['cves']`.
     """
+    from services import ot_vuln_intel
+
     confidence = (snapshot.get("query") or {}).get("confidence", "keyword")
     conf_factor = CONFIDENCE_FACTOR.get(confidence, CONFIDENCE_FACTOR["keyword"])
 
@@ -388,20 +392,28 @@ def score_rows(snapshot: dict, services: dict) -> list:
     # Eta' ignota vale come vecchia: dire "fresco" senza saperlo e' il verdetto
     # negativo travestito da ordinamento che questo design vieta.
     stale = age is None or age > STALE_HOURS
+    posture = ot_vuln_intel.asset_patch_posture(device)
 
     rows = []
     for cve in snapshot.get("cves", []):
         signal = _service_signal(cve.get("services") or [], services)
         svc_factor = SERVICE_FACTOR[signal]
         base = cve.get("cvss") or 0.0
+        cid = cve.get("id", "")
+        kev_entry = ot_vuln_intel.lookup_kev(cid) or cve.get("kev")
+        live_ics = [a["id"] for a in ot_vuln_intel.advisories_for_cve(cid)]
+        merged_ics = sorted(set(cve.get("ics_advisories") or []) | set(live_ics))
+        is_exploited = bool(cve.get("exploited")) or (kev_entry is not None)
         rows.append({
             "device": snapshot.get("device", ""),
-            "id": cve.get("id", ""),
+            "id": cid,
             "cvss": cve.get("cvss"),
             "severity": cve.get("severity", ""),
             "summary": cve.get("summary", ""),
             "published": cve.get("published", ""),
-            "exploited": bool(cve.get("exploited")),
+            "exploited": is_exploited,
+            "kev": kev_entry,
+            "ics_advisories": merged_ics,
             "model_scope": cve.get("model_scope", "generic"),
             "confidence": confidence,
             "service": signal,
@@ -410,6 +422,10 @@ def score_rows(snapshot: dict, services: dict) -> list:
             # prodotto qui sotto.
             "stale": stale,
             "version_seen_at": snapshot.get("version_seen_at", ""),
+            "process_criticality": posture["process_criticality"],
+            "maintenance_window": posture["maintenance_window"],
+            "maintenance_deferrable": posture["maintenance_deferrable"],
+            "patch_posture": posture["patch_posture"],
             "score": round(base * conf_factor * svc_factor, 2),
             "factors": {
                 "cvss": base,
@@ -418,6 +434,7 @@ def score_rows(snapshot: dict, services: dict) -> list:
                 "service": signal,
                 "service_factor": svc_factor,
                 "stale": stale,
+                "process_criticality": posture["process_criticality"],
             },
         })
 
@@ -436,7 +453,7 @@ def summary(devices: list) -> list:
     identico, "nessun apparato di quel tenant ha una versione leggibile": due
     situazioni opposte, stesso numero.
     """
-    from services import inventory_manager
+    from services import inventory_manager, ot_vuln_intel
 
     detected = inventory_manager.get_detected_versions()
     tenants: "dict[str, dict]" = {}
@@ -449,6 +466,8 @@ def summary(devices: list) -> list:
                 "oldest_version_seen_at": "",
                 "not_evaluated": set(NOT_EVALUATED),
                 "truncated": False,
+                "deferrable_devices": 0,
+                "ics_advisories_count": 0,
                 # Da dove viene ogni numero della riga. Un totale di tenant e'
                 # quasi sempre un apparato solo che lo domina — nel caso che ha
                 # motivato questa colonna, 94 di 109 CVE HIGH venivano da uno —
@@ -467,6 +486,17 @@ def summary(devices: list) -> list:
 
         snapshot = load(device)
         services = device_services(device)
+        posture = ot_vuln_intel.asset_patch_posture(device)
+        if posture["maintenance_deferrable"]:
+            row["deferrable_devices"] += 1
+        snap_cve_ids = [
+            str(c.get("id") or "").upper()
+            for c in (snapshot.get("cves") or [])
+            if isinstance(c, dict) and c.get("id")
+        ]
+        matched_ics = ot_vuln_intel.advisories_for_device(device, entry, snap_cve_ids)
+        row["ics_advisories_count"] += len(matched_ics)
+
         detail = {
             "ip": device.get("IP", ""),
             "hostname": device.get("Hostname", ""),
@@ -482,6 +512,11 @@ def summary(devices: list) -> list:
             "counts": {"critical": 0, "high": 0, "medium": 0, "low": 0},
             # CISA KEV: already exploited in the wild, ranked above any score.
             "exploited": 0,
+            "ics_advisories": [a["id"] for a in matched_ics],
+            "process_criticality": posture["process_criticality"],
+            "maintenance_window": posture["maintenance_window"],
+            "maintenance_deferrable": posture["maintenance_deferrable"],
+            "patch_posture": posture["patch_posture"],
             "version_seen_at": version_seen_at_of(device, snapshot),
             # Il perimetro e' per APPARATO prima che per tenant: lo stato dei
             # servizi si sa per uno e non per l'altro, e il rapporto stampa una
@@ -510,7 +545,8 @@ def summary(devices: list) -> list:
             if sev in row["counts"]:
                 row["counts"][sev] += 1
                 detail["counts"][sev] += 1
-            if cve.get("exploited"):
+            cid = str(cve.get("id") or "")
+            if cve.get("exploited") or ot_vuln_intel.lookup_kev(cid) is not None:
                 detail["exploited"] += 1
 
     out = []

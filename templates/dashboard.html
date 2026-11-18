@@ -1483,6 +1483,7 @@
         <button class="btn btn-secondary ti-subtab" id="tiTabPriority" data-i18n="tiTabPriority"><i class="fa-solid fa-list-ol"></i> Priorit&agrave;</button>
         <button class="btn btn-secondary ti-subtab" id="tiTabReport" data-i18n="tiTabReport"><i class="fa-solid fa-chart-pie"></i> Resoconto</button>
         <button class="btn btn-secondary ti-subtab" id="tiTabWatch" data-i18n="tiTabWatch"><i class="fa-solid fa-satellite-dish"></i> Vendor Watch</button>
+        <button class="btn btn-secondary ti-subtab" id="tiTabOt" data-i18n="tiTabOt"><i class="fa-solid fa-industry"></i> CISA ICS &amp; Air-Gap</button>
       </div>
 
       <div id="tiViewMatcher">
@@ -1558,6 +1559,10 @@
             <label for="cvePrioTenant" style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="cveLblTenant">Sede:</label><select id="cvePrioTenant">
               <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
             </select>
+            <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--text-muted); cursor:pointer;">
+              <input type="checkbox" id="cvePrioHideDeferrable" style="accent-color:var(--primary);">
+              <span data-i18n="cveHideDeferrable">Nascondi asset in fermo pianificato</span>
+            </label>
             <button class="btn btn-primary" id="cvePrioRefresh" style="width:auto; margin:0;" title="Aggiorna" data-i18n-title="titleBtnRefresh" aria-label="Aggiorna" data-i18n-aria-label="titleBtnRefresh"><i class="fa-solid fa-rotate"></i></button>
           </div>
         </div>
@@ -1615,6 +1620,80 @@
           <summary style="cursor:pointer; font-weight:700; font-size:14px;" data-i18n="cveMethTitle">Come si leggono questi numeri</summary>
           <div id="cveReportMethodBody" style="font-size:13px; line-height:1.6; margin-top:12px;"></div>
         </details>
+      </div>
+
+      <div id="tiViewOt" style="display:none;">
+        <div class="panel" style="margin-bottom:14px;">
+          <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
+            <div>
+              <h3 style="margin:0 0 4px;" data-i18n="otFeedsTitle">Feed CISA ICS / KEV &amp; Modalit&agrave; Air-Gap</h3>
+              <div id="otFeedStatusText" style="font-size:12px; color:var(--text-muted);">—</div>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; align-items:center; gap:10px;">
+              <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:700; cursor:pointer;">
+                <input type="checkbox" id="otAirgapToggle" style="accent-color:var(--warning);">
+                <span data-i18n="otAirgapToggleLbl">Modalit&agrave; Air-Gap (offline)</span>
+              </label>
+              <button type="button" class="btn btn-primary" id="otSyncFeedsBtn" style="width:auto; margin:0;" data-i18n="otBtnSyncFeeds"><i class="fa-solid fa-cloud-arrow-down"></i> Sincronizza KEV + ICS</button>
+              <button type="button" class="btn btn-secondary" id="otExportBundleBtn" style="width:auto; margin:0;" data-i18n="otBtnExportBundle"><i class="fa-solid fa-file-shield"></i> Esporta pacchetto firmato</button>
+            </div>
+          </div>
+
+          <div style="border-top:1px solid var(--border); padding-top:12px; display:flex; flex-wrap:wrap; align-items:center; gap:10px;">
+            <label for="otImportBundleFile" style="font-size:12px; font-weight:700; color:var(--text-muted);" data-i18n="otLblImportBundle">Importa pacchetto offline (.json):</label>
+            <input type="file" id="otImportBundleFile" accept=".json,application/json" style="font-size:12px;">
+            <label style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer;">
+              <input type="checkbox" id="otImportTrustNew" style="accent-color:var(--primary);">
+              <span data-i18n="otLblTrustBundleKey">Autorizza chiave firma se nuova (Admin)</span>
+            </label>
+            <button type="button" class="btn btn-primary" id="otImportBundleBtn" style="width:auto; margin:0;" data-i18n="otBtnImportBundle"><i class="fa-solid fa-upload"></i> Verifica e importa</button>
+            <span id="otBundleStatus" style="font-size:12px; color:var(--text-muted);"></span>
+          </div>
+
+          <details style="margin-top:12px; border-top:1px solid var(--border); padding-top:10px;">
+            <summary style="cursor:pointer; font-size:12px; font-weight:700; color:var(--text-muted);" data-i18n="otTrustedKeysSummary">Chiavi pubbliche Ed25519 attendibili</summary>
+            <div style="margin-top:10px; display:flex; flex-wrap:wrap; gap:8px; align-items:end;">
+              <div class="form-group" style="margin:0;">
+                <label for="otTrustedKeyLabel" data-i18n="otLblKeyLabel">Etichetta</label>
+                <input type="text" id="otTrustedKeyLabel" maxlength="80" placeholder="Online Collector" style="width:160px; padding-left:10px;">
+              </div>
+              <div class="form-group" style="margin:0; flex:1; min-width:240px;">
+                <label for="otTrustedKeyPem" data-i18n="otLblKeyPem">Chiave pubblica PEM</label>
+                <textarea id="otTrustedKeyPem" rows="2" placeholder="-----BEGIN PUBLIC KEY-----" style="width:100%; font-family:monospace; font-size:11px; padding:6px;"></textarea>
+              </div>
+              <button type="button" class="btn btn-secondary" id="otAddTrustedKeyBtn" style="width:auto; margin:0;" data-i18n="otBtnAddKey">Aggiungi chiave</button>
+            </div>
+            <div id="otTrustedKeysList" style="margin-top:8px; font-size:12px;"></div>
+          </details>
+        </div>
+
+        <div class="panel">
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:end; margin-bottom:12px;">
+            <div class="form-group" style="margin:0;">
+              <label for="otIcsVendorFilter" data-i18n="otLblIcsVendor">Vendor OT</label>
+              <input type="text" id="otIcsVendorFilter" placeholder="siemens, rockwell..." style="width:180px; padding-left:10px;">
+            </div>
+            <div class="form-group" style="margin:0; flex:1; min-width:200px;">
+              <label for="otIcsSearch" data-i18n="otLblIcsSearch">Cerca advisory / CVE</label>
+              <input type="text" id="otIcsSearch" placeholder="ICSA-, CVE-, Modbus..." style="width:100%; padding-left:10px;">
+            </div>
+            <button type="button" class="btn btn-primary" id="otIcsRefresh" style="width:auto; margin:0;" title="Aggiorna" data-i18n-title="titleBtnRefresh" aria-label="Aggiorna" data-i18n-aria-label="titleBtnRefresh"><i class="fa-solid fa-rotate"></i></button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th>ID</th>
+                <th data-i18n="otThVendor">Vendor</th>
+                <th data-i18n="otThProduct">Prodotto</th>
+                <th data-i18n="otThTitle">Titolo</th>
+                <th>CVE</th>
+                <th>CVSS</th>
+                <th data-i18n="otThPublished">Pubblicata</th>
+              </tr></thead>
+              <tbody id="otIcsBody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -4793,6 +4872,27 @@
               <option value="L1" data-i18n="optPurdueL1">L1 · Controllo (PLC/RTU)</option>
               <option value="L0" data-i18n="optPurdueL0">L0 · Campo / Sensori</option>
             </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="devProcessCriticality" data-i18n="lblProcessCriticality">Criticit&agrave; Processo / Patching</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-calendar-check" aria-hidden="true"></i>
+            <select id="devProcessCriticality" aria-label="Criticità processo del dispositivo" data-i18n-aria-label="ariaDevCriticality">
+              <option value="" data-i18n="optCritUnset">— Non specificata —</option>
+              <option value="hot_patchable" data-i18n="optCritHotPatchable">Aggiornabile a caldo</option>
+              <option value="scheduled_shutdown" data-i18n="optCritShutdown">Solo fermo impianto pianificato</option>
+              <option value="mission_critical" data-i18n="optCritMission">Processo critico (24/7)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="devMaintenanceWindow" data-i18n="lblMaintenanceWindow">Finestra di manutenzione</label>
+          <div class="input-wrapper">
+            <i class="fa-regular fa-clock" aria-hidden="true"></i>
+            <input id="devMaintenanceWindow" type="text" maxlength="128" placeholder="Dom 02:00-06:00 / Fermata agosto" aria-label="Finestra di manutenzione" data-i18n-aria-label="ariaDevMaintWindow">
           </div>
         </div>
 

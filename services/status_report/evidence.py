@@ -73,11 +73,16 @@ def collect_vulnerabilities(tenant: str, devices: list, period_days: int) -> dic
                         "devices_not_evaluated": len(detail) - len(evaluated),
                         "critical": row["counts"]["critical"], "high": row["counts"]["high"],
                         "exploited": sum(d["exploited"] for d in detail),
+                        "ics_advisories": row.get("ics_advisories_count", 0),
+                        "deferrable_devices": row.get("deferrable_devices", 0),
                         "data_age_hours": None if age is None else round(age, 1),
                         "not_evaluated": row["not_evaluated"]},
             "rows": [{"device": d["hostname"] or d["ip"], "ip": d["ip"], "firmware": d["version"],
                       "confidence": d["confidence"], "critical": d["counts"]["critical"],
                       "high": d["counts"]["high"], "exploited": d["exploited"],
+                      "ics_advisories": len(d.get("ics_advisories") or []),
+                      "process_criticality": d.get("process_criticality", ""),
+                      "maintenance_window": d.get("maintenance_window", ""),
                       "version_seen_at": d["version_seen_at"]} for d in detail]}
 
 

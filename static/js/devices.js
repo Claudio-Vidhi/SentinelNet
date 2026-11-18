@@ -634,6 +634,8 @@
     function deviceFormPayload() {
         const probeSel = document.getElementById('devProbeSelect');
         const purdueSel = document.getElementById('devPurdueLevel');
+        const critSel = document.getElementById('devProcessCriticality');
+        const maintInput = document.getElementById('devMaintenanceWindow');
         const payload = {
             ip: document.getElementById('devIp').value.trim(),
             vendor: document.getElementById('devVendor').value,
@@ -645,6 +647,8 @@
             location: document.getElementById('devLocationSelect').value,
             probe: (probeSel && probeSel.value) ? probeSel.value : 'central',
             purdue_level: purdueSel ? purdueSel.value : '',
+            process_criticality: critSel ? critSel.value : '',
+            maintenance_window: maintInput ? maintInput.value.trim() : '',
             transports: readTransportsForm()
         };
 
@@ -765,6 +769,10 @@
         document.getElementById('devVendor').value = (dev.Vendor || '').toLowerCase();
         const purdueSelEdit = document.getElementById('devPurdueLevel');
         if (purdueSelEdit) purdueSelEdit.value = dev['Purdue Level'] || '';
+        const critSelEdit = document.getElementById('devProcessCriticality');
+        if (critSelEdit) critSelEdit.value = dev['Process Criticality'] || '';
+        const maintEdit = document.getElementById('devMaintenanceWindow');
+        if (maintEdit) maintEdit.value = dev['Maintenance Window'] || '';
         updateDevSecretField();
         // Il segreto non torna dal server: il placeholder dice solo SE c'è.
         document.getElementById('devSnmp').value = '';
@@ -821,6 +829,10 @@
         if (probeSelReset) probeSelReset.value = 'central';
         const purdueSelReset = document.getElementById('devPurdueLevel');
         if (purdueSelReset) purdueSelReset.value = '';
+        const critSelReset = document.getElementById('devProcessCriticality');
+        if (critSelReset) critSelReset.value = '';
+        const maintReset = document.getElementById('devMaintenanceWindow');
+        if (maintReset) maintReset.value = '';
         setTransportsForm(null, 22);
         document.getElementById('customCredsForm').style.display = 'none';
         document.getElementById('devUser').value = '';
