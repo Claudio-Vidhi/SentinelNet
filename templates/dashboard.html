@@ -1694,6 +1694,30 @@
             </table>
           </div>
         </div>
+
+        <div class="panel" style="margin-top:14px;">
+          <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
+            <div>
+              <h3 style="margin:0 0 4px;" data-i18n="otCompTitle">Controlli compensativi OT</h3>
+              <div id="otCompSummary" style="font-size:12px; color:var(--text-muted);" data-i18n="otCompHint">Per ogni CVE KEV o CVSS &ge; 7 di un asset L0-L2: il gateway della subnet la protegge?</div>
+            </div>
+            <button type="button" class="btn btn-primary" id="otCompLoad" style="width:auto; margin:0;" data-i18n="otCompLoadBtn"><i class="fa-solid fa-shield-halved"></i> Valuta</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th data-i18n="otCompThAsset">Asset</th>
+                <th>CVE</th>
+                <th>KEV</th>
+                <th data-i18n="otCompThClass">Classe</th>
+                <th data-i18n="otCompThSeverity">Gravit&agrave;</th>
+                <th data-i18n="otCompThPatch">Patch pianificata</th>
+                <th data-i18n="otCompThEvidence">Evidenza / motivo</th>
+              </tr></thead>
+              <tbody id="otCompBody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
 

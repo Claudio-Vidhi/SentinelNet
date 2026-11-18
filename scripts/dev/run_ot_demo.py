@@ -143,6 +143,33 @@ def _seed_mac_history() -> None:
     )
 
 
+def _seed_cve_snapshots(devices: list) -> None:
+    """Synthetic CVE snapshots so the OT compensating controls panel shows
+    every class: hmi-01 exposed (KEV), plc-01 behind the core ACL, plc-cell-02
+    behind the FortiGate IPS entry, plc-legacy-01 with no gateway backup."""
+    from services import cve_intel
+    from services.config_drift import history
+    cves = {
+        "192.0.2.30": ("CVE-2024-60001", 9.8, ["http"], {"dateAdded": "2024-06-01"}),
+        "192.0.2.10": ("CVE-2024-60002", 8.1, ["ssh"], None),
+        "10.40.0.10": ("CVE-2024-60003", 9.8, ["http"], None),
+        "198.51.100.20": ("CVE-2024-60004", 9.8, [], None),
+    }
+    for d in devices:
+        if d["IP"] not in cves:
+            continue
+        cid, cvss, services, kev = cves[d["IP"]]
+        cve_intel._save(d, {
+            "device": d["IP"], "fetched_at": history._now(), "version_seen_at": history._now(),
+            "source": "nvd", "query": {"kind": "keyword", "value": "demo", "confidence": "product"},
+            "total_available": 1,
+            "cves": [{"id": cid, "cvss": cvss, "severity": "CRITICAL" if cvss >= 9 else "HIGH",
+                      "published": "2024-05-01", "summary": "Synthetic demo vulnerability.",
+                      "cpe_hardware": [], "model_scope": "generic", "exploited": bool(kev),
+                      "kev": kev, "ics_advisories": [], "services": services}],
+        })
+
+
 def seed_demo(reset: bool = False) -> None:
     if reset:
         shutil.rmtree(DEMO_DATA_DIR, ignore_errors=True)
@@ -242,6 +269,14 @@ def seed_demo(reset: bool = False) -> None:
         purdue_level="L3", probe="central",
     )
 
+    # Second cell behind the FortiGate, shielded by a CVE-specific IPS entry.
+    inventory_manager.add_or_update_device(
+        ip="10.40.0.10", hostname="plc-cell-02", vendor="siemens", profile="default",
+        username="", password="", enable_secret="", group="plant-demo",
+        location="loc-cell1", transports={"ssh": 22}, snmp_disabled=True,
+        purdue_level="L1", probe=jump["id"],
+    )
+
     # Legacy OT site with findings (plant-legacy)
     inventory_manager.add_or_update_device(
         ip="198.51.100.10", hostname="switch-legacy-01", vendor="moxa", profile="default",
@@ -278,8 +313,25 @@ def seed_demo(reset: bool = False) -> None:
         set ip 172.16.10.1 255.255.255.252
         set alias "ot-core-transit"
     next
+    edit "port3"
+        set ip 10.40.0.1 255.255.255.0
+        set alias "ot-cell2"
+    next
+end
+config ips sensor
+    edit "OT-CVE-BLOCK"
+        config entries
+            edit 1
+                set cve "CVE-2024-60003"
+                set action block
+            next
+        end
+    next
 end
 config firewall address
+    edit "OT-CELL2-NET"
+        set subnet 10.40.0.0 255.255.255.0
+    next
     edit "IT-ENG-NET"
         set subnet 10.20.0.0 255.255.255.0
     next
@@ -370,6 +422,17 @@ config firewall policy
         set dstaddr "VIP-HMI-WEB"
         set action accept
         set service "HTTPS"
+    next
+    edit 70
+        set name "Eng-Web-To-Cell2-IPS"
+        set srcintf "port1"
+        set dstintf "port3"
+        set srcaddr "all"
+        set dstaddr "OT-CELL2-NET"
+        set action accept
+        set service "HTTP" "HTTPS"
+        set utm-status enable
+        set ips-sensor "OT-CVE-BLOCK"
     next
 end
 """
@@ -523,6 +586,11 @@ end
         subnets=["10.20.0.0/24", "203.0.113.0/24"], purdue_level="L3.5",
         members=["192.0.2.40", "203.0.113.10", "203.0.113.20", "203.0.113.30"],
     )
+    segment_manager.save_segment(
+        "plant-demo", None, "Cell 2 PLC", "sky",
+        subnets=["10.40.0.0/24"], purdue_level="L1", members=["10.40.0.10"],
+    )
+    _seed_cve_snapshots(inventory_manager.get_all_devices())
     _seed_events(db)
     _seed_policy_snapshots(db)
     _seed_mac_history()

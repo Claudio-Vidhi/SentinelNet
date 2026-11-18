@@ -115,6 +115,22 @@
     "dmz_zones": {"it": "Zone DMZ L3.5", "en": "L3.5 DMZ zones"},
     "direct_remote_bypasses": {"it": "Bypass diretti verso OT", "en": "Direct OT bypasses"},
     "probe_mode": {"it": "Modalità accesso", "en": "Access mode"},
+    "assets_evaluated": {"it": "Asset OT con CVE in ambito", "en": "OT assets with in-scope CVEs"},
+    "cves_in_scope": {"it": "Coppie asset/CVE in ambito (KEV o CVSS >= 7)", "en": "In-scope asset/CVE pairs (KEV or CVSS >= 7)"},
+    "exposed": {"it": "CVE esposte da sorgenti non fidate", "en": "CVEs exposed to untrusted sources"},
+    "kev_exposed": {"it": "CVE KEV esposte", "en": "Exposed KEV CVEs"},
+    "mitigated_by_firewall": {"it": "Mitigate dal firewall", "en": "Mitigated by firewall"},
+    "mitigated_by_ips": {"it": "Mitigate da firma IPS sulla CVE", "en": "Mitigated by a CVE-specific IPS signature"},
+    "service_disabled": {"it": "Servizio vulnerabile disabilitato", "en": "Vulnerable service disabled"},
+    "ot_not_evaluated": {"it": "Non valutate (gateway o backup mancante)", "en": "Not evaluated (gateway or backup missing)"},
+    "exposed_pct": {"it": "CVE in ambito esposte (%)", "en": "In-scope CVEs exposed (%)"},
+    "mitigated_pct": {"it": "CVE in ambito mitigate (%)", "en": "In-scope CVEs mitigated (%)"},
+    "not_evaluated_pct": {"it": "CVE in ambito non valutate (%)", "en": "In-scope CVEs not evaluated (%)"},
+    "cve_id": {"it": "CVE", "en": "CVE"},
+    "kev": {"it": "KEV", "en": "KEV"},
+    "control_class": {"it": "Controllo compensativo", "en": "Compensating control"},
+    "severity": {"it": "Gravità", "en": "Severity"},
+    "patch_planned": {"it": "Patch pianificata", "en": "Patch planned"},
     "checked": {"it": "Apparati verificati", "en": "Devices checked"},
     "deviating": {"it": "Apparati in drift", "en": "Devices with drift"},
     "deviations": {"it": "Scostamenti", "en": "Deviations"},
@@ -267,6 +283,21 @@
         {"status": "partial", "metric": "unmediated_ot_devices", "op": ">", "value": 0}
       ],
       "default": "ok"
+    },
+    "ot_compensating_controls": {
+      "source": {"it": "Snapshot CVE degli asset OT (L0-L2), CISA KEV e backup dei gateway della subnet valutati offline con il motore Policy Test.", "en": "CVE snapshots of OT assets (L0-L2), CISA KEV and the subnet gateways' backups evaluated offline with the Policy Test engine."},
+      "title": {"it": "Controlli compensativi OT sulle vulnerabilità", "en": "OT compensating controls for vulnerabilities"},
+      "controls": {"nis2": ["21(2)(e)"], "ir2690": ["6.10"], "iso27001": ["A.8.8"], "cis8": ["7"], "iec62443": ["SR 5.2"]},
+      "rules": [
+        {"status": "gap", "metric": "kev_exposed", "op": ">", "value": 0},
+        {"status": "partial", "metric": "exposed", "op": ">", "value": 0},
+        {"status": "partial", "metric": "ot_not_evaluated", "op": ">", "value": 0}
+      ],
+      "default": "ok",
+      "note": {
+        "it": "Sono valutati solo i flussi che attraversano i gateway della subnet dell'asset: percorsi che li aggirano (host dual-homed, estensioni L2) non entrano in questa verifica. Una firma IPS conta solo se blocca esplicitamente la CVE.",
+        "en": "Only flows that cross the gateways of the asset's subnet are evaluated: paths that bypass them (dual-homed hosts, L2 extensions) are not part of this check. An IPS signature counts only when it explicitly blocks the CVE."
+      }
     },
     "logging": {
       "source": {"it": "Eventi syslog ricevuti nel periodo e retention configurata.", "en": "Syslog events received in the period and configured retention."},

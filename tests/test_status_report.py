@@ -122,6 +122,7 @@ def test_snapshot_statuses_and_tenant_isolation(seeded):
         "ot_insecure_protocols": "ok",   # no telnet/http/snmpv1-v2c/unsegregated OT flows
         "ot_unused_ports": "not_available",  # no interface.state telemetry
         "ot_remote_access": "not_available",  # no OT devices or remote bypasses
+        "ot_compensating_controls": "not_available",  # no OT asset with a CVE snapshot
         "logging": "ok",                 # both devices sent syslog
         "platform_access": "ok",
     }, status

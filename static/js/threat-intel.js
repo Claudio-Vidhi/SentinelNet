@@ -1962,6 +1962,87 @@
         }).join('');
     }
 
+    // ===== OT compensating controls (per asset x CVE) =====
+    // Literal keys, not 'prefix' + value: the i18n checks only see literals.
+    const OT_COMP_CLASS = {
+        EXPOSED: 'otCompClass_EXPOSED', MITIGATED_BY_FIREWALL: 'otCompClass_MITIGATED_BY_FIREWALL',
+        MITIGATED_BY_IPS: 'otCompClass_MITIGATED_BY_IPS', SERVICE_DISABLED: 'otCompClass_SERVICE_DISABLED',
+        NOT_EVALUATED: 'otCompClass_NOT_EVALUATED',
+    };
+    const OT_COMP_SEV = {
+        critical: 'otCompSev_critical', high: 'otCompSev_high', medium: 'otCompSev_medium', info: 'otCompSev_info',
+    };
+    const OT_COMP_REASON = {
+        no_gateway: 'otCompReason_no_gateway', gateway_no_backup: 'otCompReason_gateway_no_backup',
+        gateway_unsupported: 'otCompReason_gateway_unsupported',
+        undecidable_policy: 'otCompReason_undecidable_policy',
+        asset_unresolvable: 'otCompReason_asset_unresolvable',
+    };
+
+    function otCompEvidence(r) {
+        if (r.class === 'EXPOSED' && r.exposure) {
+            const x = r.exposure;
+            const text = tr('otCompExposureFmt', {
+                src: x.src, level: x.src_level, proto: x.proto, port: x.port,
+                gw: x.gateway, rule: x.rule_name || x.rule_id || '—',
+            });
+            return r.ips_present_unverified ? `${text} · ${tr('otCompIpsUnverified')}` : text;
+        }
+        if (r.class === 'NOT_EVALUATED') {
+            const [code, ip] = String(r.reason || '').split(':');
+            return tr(OT_COMP_REASON[code] || code) + (ip ? ` (${ip})` : '');
+        }
+        if (r.class === 'SERVICE_DISABLED') {
+            return tr('otCompSvcDisabled', { svc: ((r.evidence[0] || {}).services || []).join(', ') });
+        }
+        return (r.evidence || []).slice(0, 3).map(e => (e.kind === 'ips'
+            ? `${e.gateway} IPS ${e.sensor} #${e.entry} (${e.action})`
+            : `${e.gateway} ${e.rule_name || e.rule_id}${e.kind === 'jump_host' ? ' · ' + tr('otCompJump') : ''}`)).join('; ');
+    }
+
+    async function otCompLoad() {
+        const body = document.getElementById('otCompBody');
+        const sumEl = document.getElementById('otCompSummary');
+        if (!body) return;
+        const msgRow = (key, color) =>
+            `<tr><td colspan="7" style="color:var(${color});">${escapeHtml(tr(key))}</td></tr>`;
+        const tenant = window.globalSelectedTenant || 'all';
+        if (tenant === 'all') {
+            body.innerHTML = msgRow('otCompPickTenant', '--text-muted');
+            return;
+        }
+        body.innerHTML = msgRow('otCompLoading', '--text-muted');
+        const res = await apiFetch('/api/cve/ot/compensating?tenant=' + encodeURIComponent(tenant));
+        if (!res || !res.ok) {
+            body.innerHTML = msgRow('otCompLoadError', '--danger');
+            return;
+        }
+        const data = await res.json();
+        const s = data.summary || {};
+        if (sumEl) {
+            sumEl.textContent = tr('otCompSummaryFmt', {
+                assets: data.assets_evaluated ?? 0, exp: s.EXPOSED ?? 0,
+                fw: s.MITIGATED_BY_FIREWALL ?? 0, ips: s.MITIGATED_BY_IPS ?? 0,
+                svc: s.SERVICE_DISABLED ?? 0, ne: s.NOT_EVALUATED ?? 0,
+            });
+        }
+        const rows = data.rows || [];
+        if (!rows.length) {
+            body.innerHTML = msgRow('otCompEmpty', '--text-muted');
+            return;
+        }
+        body.innerHTML = rows.map(r => `<tr>
+                <td>${escapeHtml(r.device || '')} <code style="font-size:11px;">${escapeHtml(r.ip || '')}</code></td>
+                <td><code>${escapeHtml(r.cve_id || '')}</code> <span style="color:var(--text-muted);">${escapeHtml(r.cvss == null ? '' : String(r.cvss))}</span></td>
+                <td>${r.kev ? 'KEV' : '—'}</td>
+                <td>${escapeHtml(tr(OT_COMP_CLASS[r.class] || r.class))}</td>
+                <td>${escapeHtml(tr(OT_COMP_SEV[r.severity] || r.severity))}</td>
+                <td>${escapeHtml(tr(r.patch_planned ? 'otCompYes' : 'otCompNo'))}</td>
+                <td style="font-size:12px;">${escapeHtml(otCompEvidence(r))}</td>
+            </tr>`).join('');
+    }
+
+    document.getElementById('otCompLoad')?.addEventListener('click', otCompLoad);
     document.getElementById('otAirgapToggle')?.addEventListener('change', otToggleAirgap);
     document.getElementById('otSyncFeedsBtn')?.addEventListener('click', otSyncFeeds);
     document.getElementById('otExportBundleBtn')?.addEventListener('click', otExportBundle);

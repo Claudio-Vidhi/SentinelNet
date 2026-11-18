@@ -35,6 +35,9 @@ _NARROWING_KEYS = ("groups", "users", "fsso-groups", "application",
                    "app-category", "app-group", "url-category")
 
 
+_IPS_NARROWING_KEYS = ("rule", "severity", "protocol", "os", "application", "location")
+
+
 def _is_ip(tok: str) -> bool:
     parts = tok.split('.')
     if len(parts) != 4:
@@ -55,6 +58,10 @@ class FortiOSPolicyEnvironment:
     policy_routes: List[Dict[str, Any]] = field(default_factory=list)
     policy_nat_pools: Dict[str, List[str]] = field(default_factory=dict)
     policy_dst_names: Dict[str, List[str]] = field(default_factory=dict)
+    # 'config ips sensor': sensor name -> entries {id, cve: [CVE ids], action, status}.
+    ips_sensors: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
+    # Policy id -> {"utm_status": bool, "ips_sensor": name or ""}.
+    policy_ips: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     unresolved: List[str] = field(default_factory=list)
 
 
@@ -458,6 +465,23 @@ def parse_fortios_config(config_text: str) -> FortiOSPolicyEnvironment:
         protocols=["ospf" if _forti_get(root, "router ospf") else "bgp"] if dynamic_present else [],
     )
 
+    # 6c. IPS sensors. Only the CVE list and the action are kept: an entry
+    # selecting signatures by rule id, severity or OS cannot be tied to a CVE
+    # offline, so its cve list stays empty.
+    ips_node = _forti_get(root, "ips sensor")
+    if ips_node:
+        for sname, sentry in ips_node.get("children", {}).items():
+            entries_node = sentry.get("children", {}).get("entries") or {}
+            env.ips_sensors[sname] = [{
+                "id": str(eid),
+                "cve": [c.upper() for c in e.get("sets", {}).get("cve", [])],
+                "action": _forti_set1(e, "action", "default").lower(),
+                "status": _forti_set1(e, "status", "enable").lower(),
+                # Extra filters narrow the entry to a subset of the CVE's
+                # signatures, so it no longer proves the CVE is covered.
+                "filtered": any(k in e.get("sets", {}) for k in _IPS_NARROWING_KEYS),
+            } for eid, e in entries_node.get("children", {}).items()]
+
     # 7. Parse firewall policies in sequence order
     pol_node = _forti_get(root, "firewall policy")
     if pol_node:
@@ -485,6 +509,10 @@ def parse_fortios_config(config_text: str) -> FortiOSPolicyEnvironment:
                 if poolnames:
                     env.policy_nat_pools[str(pid)] = poolnames
             env.policy_dst_names[str(pid)] = list(dstaddr_list)
+            env.policy_ips[str(pid)] = {
+                "utm_status": _forti_set1(entry, "utm-status", "disable").lower() == "enable",
+                "ips_sensor": _forti_set1(entry, "ips-sensor", ""),
+            }
 
             policy_unresolved: List[str] = []
             if action_raw == "ipsec":

@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from routers.deps import (
     assert_device_allowed,
+    assert_group_allowed,
     devices_in_scope,
     get_current_user,
     require_admin,
@@ -25,7 +26,7 @@ from routers.deps import (
     require_tab,
 )
 from security.security_manager import log_audit
-from services import cve_intel, ot_vuln_intel
+from services import cve_intel, ot_compensating, ot_vuln_intel
 
 router = APIRouter(tags=["CVE"])
 
@@ -127,7 +128,17 @@ def ot_vuln_status(current_user=Depends(get_current_user)):
     return status
 
 
-@router.post("/api/cve/ot/airgap", dependencies=[Depends(require_tab("tab-security"))])
+@router.get("/api/cve/ot/compensating", dependencies=[Depends(require_tab("tab-security"))])
+def ot_compensating_controls(tenant: str = "", current_user=Depends(get_current_user)):
+    """OT compensating controls for one tenant: is each vulnerable OT asset
+    shielded by its gateway's policy, an IPS signature, or neither."""
+    if not tenant or tenant == "all":
+        raise HTTPException(status_code=400, detail="Seleziona un tenant.")
+    assert_group_allowed(current_user, tenant)
+    return ot_compensating.classify_tenant(tenant, _scoped_devices(current_user, tenant))
+
+
+@router.post("/api/cve/ot/airgap",dependencies=[Depends(require_tab("tab-security"))])
 def ot_set_airgap(payload: AirgapModeSchema, current_user=Depends(require_admin)):
     """Enable or disable air-gapped offline vulnerability intelligence mode."""
     enabled = ot_vuln_intel.set_airgap_mode(payload.enabled)
