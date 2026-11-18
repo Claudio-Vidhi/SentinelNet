@@ -459,7 +459,9 @@ class TestFullParity(unittest.TestCase):
                     # OT vulnerability intelligence / air-gap bundles (routes under /api/cve/ot).
                     "AirgapModeSchema", "BundleImportSchema", "FeedSyncSchema", "TrustedKeySchema",
                     # OT Project Vault upload body (routes under /api/ot-vault).
-                    "OtVaultUploadSchema")
+                    "OtVaultUploadSchema",
+                    # Firewall Hygiene & Change What-If Simulator schemas.
+                    "SnapshotRequest", "WhatIfChange", "WhatIfRequest")
     ALLOWED_CHANGED_OPERATIONS = (
         # S1: il logout revoca il token, non solo il cookie. Cambia SOLO la
         # descrizione (la docstring che lo dice), e va detta a chi chiama la

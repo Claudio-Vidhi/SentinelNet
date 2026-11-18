@@ -202,11 +202,12 @@
     const TRAF_LOADERS = {
         search:    () => loadFlowSiemTab(),
         policies:  () => trafPoliciesShown(),
+        hygiene:   () => loadTrafHygiene(),
     };
 
     // Una lista sola: aggiungere una pill e dimenticare questo array lasciava
     // il pane precedente visibile sotto quello nuovo.
-    const TRAF_VIEWS = ['search', 'policies'];
+    const TRAF_VIEWS = ['search', 'policies', 'hygiene'];
 
     function trafSwitchView(view) {
         if (!document.getElementById('trafPane-' + view)) return;
@@ -284,7 +285,7 @@
             + `&action=${encodeURIComponent(f.action)}&q=${encodeURIComponent(f.q.trim())}`;
         const body = document.getElementById('trafPolBody');
         if (body) {
-            body.innerHTML = `<tr><td colspan="8" style="padding:20px; text-align:center;
+            body.innerHTML = `<tr><td colspan="9" style="padding:20px; text-align:center;
                 color:var(--text-muted);">${escapeHtml(tr('trafPolLoading'))}</td></tr>`;
         }
         let totals = { total_bytes: 0, total_sessions: 0 };
@@ -317,6 +318,12 @@
           </div>`;
     }
 
+    function _fmtDeltaPair(d7, d30) {
+        const a = (d7 === null || d7 === undefined) ? '—' : `+${d7}`;
+        const b = (d30 === null || d30 === undefined) ? '—' : `+${d30}`;
+        return `${a} / ${b}`;
+    }
+
     function renderTrafPolicies(totals) {
         const tbody = document.getElementById('trafPolBody');
         const totalsBox = document.getElementById('trafPolTotals');
@@ -330,7 +337,7 @@
         }
         if (!_trafPolicies.length) {
             const msg = trafPolSelectedDevices().length ? tr('trafPolEmpty') : tr('trafPolPickDevices');
-            tbody.innerHTML = `<tr><td colspan="8" style="padding:20px; text-align:center;
+            tbody.innerHTML = `<tr><td colspan="9" style="padding:20px; text-align:center;
                 color:var(--text-muted);">${escapeHtml(msg)}</td></tr>`;
             return;
         }
@@ -358,6 +365,7 @@
             const flow = `${escapeHtml(r.srcaddr || '?')} &rarr; ${escapeHtml(r.dstaddr || '?')}`;
             const ips = [r.srcaddr_ips, r.dstaddr_ips].filter(Boolean).join(' -> ');
             const disabled = r.status && r.status !== 'enable';
+            const deltaText = _fmtDeltaPair(r.delta_hits_7d, r.delta_hits_30d);
             return `<tr style="border-top:1px solid var(--border); font-size:12px; ${
                        disabled ? 'opacity:.55;' : ''}">
                 <td style="padding:6px 8px;">${escapeHtml(r.device)}</td>
@@ -372,10 +380,182 @@
                 <td style="padding:6px 8px; font-weight:700; color:${actionColor};">${
                     escapeHtml((r.action || '').toUpperCase() || 'N/D')}</td>
                 <td style="padding:6px 8px;">${traffic}</td>
+                <td style="padding:6px 8px; text-align:right; font-family:var(--font-code);">${escapeHtml(deltaText)}</td>
                 <td style="padding:6px 8px; text-align:right; font-family:var(--font-code);">${
                     escapeHtml(String(r.active_sessions || 0))}</td>
             </tr>`;
         }).join('');
+    }
+
+    // --- VISTA "IGIENE & DELTA TRACKER" -------------------------------------
+
+    async function loadTrafHygiene() {
+        const box = document.getElementById('trafHygBody');
+        const devSel = document.getElementById('trafHygDevice');
+        const daysEl = document.getElementById('trafHygDays');
+        if (!box) return;
+        const devFilter = devSel ? devSel.value : '';
+        const days = Math.max(1, parseInt((daysEl && daysEl.value) || '30', 10) || 30);
+
+        box.innerHTML = `<div class="panel" style="text-align:center; padding:30px; color:var(--text-muted);">
+            <i class="fa-solid fa-circle-notch fa-spin fa-2x"></i>
+            <div style="margin-top:10px;">${escapeHtml(tr('trafHygLoading'))}</div>
+        </div>`;
+
+        try {
+            const url = `/api/firewall-traffic/hygiene?device=${encodeURIComponent(devFilter)}&days=${days}`;
+            const res = await apiFetch(url);
+            if (!res || !res.ok) throw new Error('HTTP ' + (res ? res.status : '?'));
+            const data = await res.json();
+            if (devSel && Array.isArray(data.eligible_devices)) {
+                const cur = devSel.value;
+                devSel.innerHTML = `<option value="">${escapeHtml(tr('trafHygAllDevices'))}</option>` +
+                    data.eligible_devices.map(d =>
+                        `<option value="${escapeHtml(d.ip)}">${escapeHtml(d.hostname)} (${escapeHtml(d.ip)} · ${escapeHtml((d.vendor || '').toUpperCase())})</option>`
+                    ).join('');
+                devSel.value = data.eligible_devices.some(d => d.ip === cur) ? cur : '';
+            }
+            renderTrafHygiene(data);
+        } catch (e) {
+            box.innerHTML = `<div class="panel" style="color:var(--danger); padding:16px;">${escapeHtml(String(e))}</div>`;
+        }
+    }
+
+    function _renderSnippetDetails(item) {
+        return `<details style="margin-top:6px;">
+            <summary style="cursor:pointer; font-size:11px; color:var(--primary); font-weight:600;">${escapeHtml(tr('trafHygDryRun'))} / ${escapeHtml(tr('trafHygRollback'))}</summary>
+            <div style="margin-top:6px; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <div>
+                    <div style="font-size:10px; text-transform:uppercase; color:var(--text-muted); margin-bottom:2px;">${escapeHtml(tr('trafHygDryRun'))}</div>
+                    <pre style="margin:0; padding:8px; background:var(--surface-3); border:1px solid var(--border); font-size:11px; overflow:auto;">${escapeHtml(item.cli_dry_run || '')}${item.api_dry_run ? '\n# API: ' + escapeHtml(item.api_dry_run) : ''}</pre>
+                </div>
+                <div>
+                    <div style="font-size:10px; text-transform:uppercase; color:var(--text-muted); margin-bottom:2px;">${escapeHtml(tr('trafHygRollback'))}</div>
+                    <pre style="margin:0; padding:8px; background:var(--surface-3); border:1px solid var(--border); font-size:11px; overflow:auto;">${escapeHtml(item.cli_rollback || '')}</pre>
+                </div>
+            </div>
+        </details>`;
+    }
+
+    function renderTrafHygiene(data) {
+        const box = document.getElementById('trafHygBody');
+        if (!box) return;
+        const s = data.summary || {};
+        const dead = data.dead_policies || [];
+        const unused = data.unused_objects || [];
+        const tighten = data.tightenable_rules || [];
+        const deltas = data.policy_deltas || [];
+
+        const kpi = (label, val, col) => `
+            <div class="panel" style="padding:12px 16px;">
+                <div style="font-size:11px; text-transform:uppercase; color:var(--text-muted);">${escapeHtml(label)}</div>
+                <div style="font-size:24px; font-weight:700; color:${col}; font-family:var(--font-code);">${escapeHtml(String(val || 0))}</div>
+            </div>`;
+
+        const deadHtml = dead.length ? dead.map(d => `
+            <div style="padding:10px 12px; border:1px solid var(--border); border-left:2px solid var(--warning); background:var(--lamp-warn-wash); margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+                    <strong>${escapeHtml(d.device)} &middot; #${escapeHtml(String(d.policyid))} ${escapeHtml(d.name || '')}</strong>
+                    <span class="badge badge-warning">0 hit / ${escapeHtml(String(data.window_days || 30))}d</span>
+                </div>
+                <div style="font-size:12px; margin-top:4px; font-family:var(--font-code);">
+                    ${escapeHtml(d.srcaddr || 'any')} &rarr; ${escapeHtml(d.dstaddr || 'any')} (${escapeHtml(d.service || 'ALL')})
+                </div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${escapeHtml(tr('trafHygReason'))}: ${escapeHtml(d.reason || '')}</div>
+                ${_renderSnippetDetails(d)}
+            </div>`).join('')
+            : `<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">${escapeHtml(tr('trafHygEmptyDead'))}</div>`;
+
+        const unusedHtml = unused.length ? unused.map(u => `
+            <div style="padding:10px 12px; border:1px solid var(--border); background:var(--surface-2); margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+                    <strong>${escapeHtml(u.device)} &middot; <code>${escapeHtml(u.name)}</code></strong>
+                    <span class="badge">${escapeHtml(u.kind || 'object')}</span>
+                </div>
+                ${u.detail ? `<div style="font-size:11px; color:var(--text-muted); font-family:var(--font-code); margin-top:3px;">${escapeHtml(u.detail)}</div>` : ''}
+                ${_renderSnippetDetails(u)}
+            </div>`).join('')
+            : `<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">${escapeHtml(tr('trafHygEmptyUnused'))}</div>`;
+
+        const tightenHtml = tighten.length ? tighten.map(t => `
+            <div style="padding:10px 12px; border:1px solid var(--border); border-left:2px solid var(--danger); background:var(--lamp-fault-wash); margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+                    <strong>${escapeHtml(t.device)} &middot; #${escapeHtml(String(t.policyid))} ${escapeHtml(t.name || '')}</strong>
+                    <span class="badge badge-danger">${escapeHtml(tr('trafHygObserved'))}: ${escapeHtml(String(t.observed_flows || 0))}</span>
+                </div>
+                <div style="font-size:12px; margin-top:4px;">
+                    <code>${escapeHtml(t.current || '')}</code>
+                    &rarr; <code>${escapeHtml((t.suggested_src || []).join(', '))} &rarr; ${escapeHtml((t.suggested_dst || []).join(', '))} (${escapeHtml((t.suggested_services || []).join(', '))})</code>
+                </div>
+                ${_renderSnippetDetails(t)}
+            </div>`).join('')
+            : `<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">${escapeHtml(tr('trafHygEmptyTighten'))}</div>`;
+
+        const deltaRows = deltas.slice(0, 30).map(r => `
+            <tr style="border-top:1px solid var(--border); font-size:12px;">
+                <td style="padding:6px 8px;">${escapeHtml(r.device)}</td>
+                <td style="padding:6px 8px; font-family:var(--font-code);">${escapeHtml(String(r.policyid || ''))}</td>
+                <td style="padding:6px 8px;">${escapeHtml(r.name || '—')}</td>
+                <td style="padding:6px 8px; text-align:right; font-family:var(--font-code);">${escapeHtml(String(r.hit_count || 0))}</td>
+                <td style="padding:6px 8px; text-align:right; font-family:var(--font-code);">${escapeHtml(_fmtDeltaPair(r.delta_hits_7d, r.delta_hits_30d))}</td>
+                <td style="padding:6px 8px; text-align:right; font-family:var(--font-code);">${escapeHtml(fmtBytes(r.bytes || 0))}</td>
+            </tr>`).join('');
+
+        box.innerHTML = `
+            <div style="display:grid; grid-template-columns:repeat(4, minmax(140px, 1fr)); gap:12px; margin-bottom:14px;">
+                ${kpi(tr('trafHygKpiDead'), s.dead_policies, 'var(--warning)')}
+                ${kpi(tr('trafHygKpiUnused'), s.unused_objects, 'var(--primary)')}
+                ${kpi(tr('trafHygKpiTighten'), s.tightenable_rules, 'var(--danger)')}
+                ${kpi(tr('trafHygKpiTracked'), s.policies_tracked, 'var(--success)')}
+            </div>
+            <div class="panel" style="margin-bottom:14px;">
+                <h4 style="margin:0 0 10px; font-size:13px;">${escapeHtml(tr('trafHygSecTighten'))}</h4>
+                ${tightenHtml}
+            </div>
+            <div class="panel" style="margin-bottom:14px;">
+                <h4 style="margin:0 0 10px; font-size:13px;">${escapeHtml(tr('trafHygSecDead'))}</h4>
+                ${deadHtml}
+            </div>
+            <div class="panel" style="margin-bottom:14px;">
+                <h4 style="margin:0 0 10px; font-size:13px;">${escapeHtml(tr('trafHygSecUnused'))}</h4>
+                ${unusedHtml}
+            </div>
+            <div class="panel">
+                <h4 style="margin:0 0 10px; font-size:13px;">${escapeHtml(tr('trafHygSecDeltas'))}</h4>
+                <div class="table-container" style="max-height:320px; overflow:auto;">
+                    <table style="width:100%; border-collapse:collapse;">
+                        <thead>
+                            <tr>
+                                <th style="text-align:left; padding:6px 8px;">${escapeHtml(tr('trafPolColDevice'))}</th>
+                                <th style="text-align:left; padding:6px 8px;">${escapeHtml(tr('trafPolColId'))}</th>
+                                <th style="text-align:left; padding:6px 8px;">${escapeHtml(tr('trafPolColName'))}</th>
+                                <th style="text-align:right; padding:6px 8px;">Hits</th>
+                                <th style="text-align:right; padding:6px 8px;">${escapeHtml(tr('trafPolColDelta'))}</th>
+                                <th style="text-align:right; padding:6px 8px;">${escapeHtml(tr('trafPolColTraffic'))}</th>
+                            </tr>
+                        </thead>
+                        <tbody>${deltaRows || '<tr><td colspan="6" style="padding:12px; color:var(--text-muted); text-align:center;">—</td></tr>'}</tbody>
+                    </table>
+                </div>
+            </div>`;
+    }
+
+    async function captureTrafSnapshot() {
+        const devSel = document.getElementById('trafHygDevice');
+        const device = devSel ? devSel.value : '';
+        try {
+            const res = await apiFetch('/api/firewall-traffic/snapshot', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ device }),
+            });
+            if (!res || !res.ok) throw new Error('HTTP ' + (res ? res.status : '?'));
+            const d = await res.json();
+            showToast(tr('trafHygSnapshotSaved', { n: d.snapshots_saved || 0, d: d.devices_snapshotted || 0 }), 'success');
+            loadTrafHygiene();
+        } catch (e) {
+            showToast(tr('trafHygSnapshotErr'), 'error');
+        }
     }
 
     function trafSetWindow(value) {
@@ -478,6 +658,9 @@
     // Interroga. Ogni firewall in piu' e' una sessione REST in piu'.
     document.getElementById('btnTrafPolRun')?.addEventListener('click', loadTrafPolicies);
     document.getElementById('trafPolAction')?.addEventListener('change', loadTrafPolicies);
+    document.getElementById('btnTrafHygRun')?.addEventListener('click', loadTrafHygiene);
+    document.getElementById('trafHygDevice')?.addEventListener('change', loadTrafHygiene);
+    document.getElementById('btnTrafHygSnapshot')?.addEventListener('click', captureTrafSnapshot);
 
     // Listen for global tenant changes and update the traffic filter.
     window.addEventListener('globalTenantChanged', (/** @type {CustomEvent} */ e) => {

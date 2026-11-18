@@ -35,6 +35,8 @@ def _first_match(rules: List[Rule], flow: Flow) -> Optional[Rule]:
     flow outright, which keeps the common case decidable.
     """
     for rule in rules:
+        if rule.disabled:
+            continue
         if _rule_stops_walk(rule, flow):
             return rule
     return None
@@ -373,7 +375,7 @@ def evaluate_fortios_chain(
             flow=flow.to_dict(),
         )
 
-    egress = route.interface
+    egress = flow.egress_intf or route.interface
     ingress = flow.ingress_intf or _derive_ingress_intf(flow.src_ip, route_table)
 
     evaluated_flow = Flow(
@@ -497,8 +499,26 @@ def evaluate_fortios_chain(
 
 
 def evaluate(env: Any, flow: Flow) -> Trace:
-    """Generic entry point: dispatches to evaluate_ios or evaluate_fortios."""
+    """Generic entry point: dispatches to evaluate_ios or evaluate_fortios/zone."""
     if hasattr(env, "policies") and hasattr(env, "route_table"):
+        iface_to_zone = getattr(env, "iface_to_zone", None) or {}
+        if iface_to_zone:
+            # Map physical interface (either caller-supplied or route-derived) to its security zone
+            route = env.route_table.lookup(flow.dst_ip)
+            egress_raw = flow.egress_intf or (route.interface if route else None)
+            if not egress_raw and route and route.next_hop:
+                egress_raw = _derive_ingress_intf(route.next_hop, env.route_table)
+            ingress_raw = flow.ingress_intf or _derive_ingress_intf(flow.src_ip, env.route_table)
+            in_z = iface_to_zone.get((ingress_raw or "").lower(), ingress_raw) if ingress_raw else None
+            out_z = iface_to_zone.get((egress_raw or "").lower(), egress_raw) if egress_raw else None
+            z_flow = Flow(
+                src_ip=flow.src_ip, dst_ip=flow.dst_ip, proto=flow.proto,
+                sport=flow.sport, dport=flow.dport,
+                ingress_intf=in_z, egress_intf=out_z,
+                tcp_flags=flow.tcp_flags, established=flow.established,
+                icmp_type=flow.icmp_type,
+            )
+            return evaluate_fortios_chain(env.policies, env.route_table, z_flow, getattr(env, "unresolved", []))
         return evaluate_fortios_chain(env.policies, env.route_table, flow, getattr(env, "unresolved", []))
     if isinstance(env, IOSPolicyEnvironment):
         return evaluate_ios(env, flow)

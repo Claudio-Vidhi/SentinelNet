@@ -148,8 +148,37 @@ def find_routing_defects(route_table: RouteTable) -> List[Finding]:
     return findings
 
 
-def analyze_policy_findings(env: Any) -> List[Finding]:
-    """Collect all static findings from an IOS or FortiOS environment."""
+def find_hygiene_findings(
+    config_text: str,
+    vendor: str = "fortios",
+) -> List[Finding]:
+    """Return static hygiene findings (unused objects/ACLs) from raw config text."""
+    from services import firewall_traffic
+
+    out: List[Finding] = []
+    for obj in firewall_traffic.extract_unused_objects(config_text, vendor=vendor):
+        out.append(Finding(
+            key="unused_object",
+            severity="low",
+            acl_name=obj.get("kind"),
+            params={
+                "object": obj.get("name"),
+                "kind": obj.get("kind"),
+                "detail": obj.get("detail") or "",
+                "cli_dry_run": obj.get("cli_dry_run") or "",
+                "cli_rollback": obj.get("cli_rollback") or "",
+            },
+            message_key="finding.unused_object",
+        ))
+    return out
+
+
+def analyze_policy_findings(
+    env: Any,
+    config_text: Optional[str] = None,
+    vendor: Optional[str] = None,
+) -> List[Finding]:
+    """Collect all static findings from an IOS, FortiOS, PAN-OS, or Junos environment."""
     findings: List[Finding] = []
 
     # RuleSet findings
@@ -158,9 +187,17 @@ def analyze_policy_findings(env: Any) -> List[Finding]:
             findings.extend(find_ruleset_defects(acl))
         findings.extend(find_routing_defects(env.route_table))
     elif hasattr(env, "policies") and hasattr(env, "route_table"):
-        # FortiOS environment
         rs = RuleSet(name="firewall_policy", kind="firewall_policy", rules=env.policies)
         findings.extend(find_ruleset_defects(rs))
         findings.extend(find_routing_defects(env.route_table))
 
+    if config_text:
+        inferred_vendor = vendor or (
+            "panos" if hasattr(env, "nat_rules")
+            else ("junos" if hasattr(env, "applications")
+                  else ("ios" if isinstance(env, IOSPolicyEnvironment) else "fortios"))
+        )
+        findings.extend(find_hygiene_findings(config_text, vendor=inferred_vendor))
+
     return findings
+

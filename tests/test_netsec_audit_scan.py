@@ -194,7 +194,9 @@ class TestAuditEngineResults(unittest.TestCase):
     def test_each_cis_benchmark_covers_one_platform(self):
         from services.netsec_audit import benchmarks
         cis = [k for k, g in benchmarks.BENCHMARK_GROUPS.items() if g == "cis"]
-        self.assertEqual(sorted(cis), ["cis-fortigate", "cis-ios", "cis-ubuntu"])
+        self.assertEqual(sorted(cis), [
+            "cis-fortigate", "cis-ios", "cis-junos", "cis-nxos", "cis-panos", "cis-ubuntu"
+        ])
         for key in cis:
             self.assertEqual(len(benchmarks.vendors_of(key)), 1, key)
 

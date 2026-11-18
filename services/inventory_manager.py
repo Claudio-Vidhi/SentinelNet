@@ -694,6 +694,10 @@ VENDOR_ALIASES = {
     "cisco-ie": "cisco_ie",
     "cisco ie": "cisco_ie",
     "cisco industrial ethernet": "cisco_ie",
+    "nxos": "cisco_nxos",
+    "nx-os": "cisco_nxos",
+    "cisco-nxos": "cisco_nxos",
+    "nexus": "cisco_nxos",
 }
 
 def normalize_vendor(raw_vendor: "str | None") -> str:
@@ -710,6 +714,7 @@ def get_all_vendors() -> dict:
     defaults = {
         "cisco":            {"driver": "cisco_ios"},
         "cisco_ie":         {"driver": "cisco_ie"},
+        "cisco_nxos":       {"driver": "cisco_nxos"},
         "cisco_cbs":        {"driver": "cisco_s300"},
         "hpe":              {"driver": "hp_procurve"},
         "juniper":          {"driver": "juniper_junos"},

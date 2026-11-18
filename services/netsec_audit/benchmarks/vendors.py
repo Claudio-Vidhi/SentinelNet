@@ -6,3 +6,7 @@
 FORTIOS = "fortios"
 IOS = "ios"
 LINUX = "linux"
+PANOS = "panos"
+JUNOS = "junos"
+NXOS = "nxos"
+OT_SWITCH = "ot_switch"

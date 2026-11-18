@@ -40,11 +40,21 @@ def _seed_events(db) -> None:
             "192.0.2.20:Vlan10", 6, "192.0.2.20", "Vlan10", "", "", None, "",
             json.dumps({"admin_status": "up", "link": "down"}), "demo-pd-vlan10",
         ),
-        # Segregated Modbus TCP flow inside plant-demo L1 cell
+        # Segregated Modbus TCP + HTTPS HMI flows inside plant-demo L1 cell
         (
             now, now, "plant-demo", "syslog", "flow", "flow",
             "192.0.2.30>192.0.2.10", 6, "192.0.2.40", "", "192.0.2.30", "192.0.2.10", 502, "tcp",
             json.dumps({"ot_protocol": "modbus_tcp", "action": "accept"}), "demo-pd-modbus",
+        ),
+        (
+            now, now, "plant-demo", "syslog", "flow", "flow",
+            "10.20.0.5>192.0.2.10", 6, "192.0.2.40", "", "10.20.0.5", "192.0.2.10", 443, "tcp",
+            json.dumps({"action": "accept"}), "demo-pd-https-plc",
+        ),
+        (
+            now, now, "plant-demo", "syslog", "flow", "flow",
+            "10.20.0.5>192.0.2.30", 6, "203.0.113.10", "", "10.20.0.5", "192.0.2.30", 443, "tcp",
+            json.dumps({"action": "accept"}), "demo-pd-https-hmi",
         ),
         # plant-legacy findings: unused physical port left admin_up + unsegregated S7comm flow
         (
@@ -72,6 +82,51 @@ def _seed_events(db) -> None:
         conn.close()
 
 
+def _seed_policy_snapshots(db) -> None:
+    now = int(time.time())
+    t35 = now - 35 * 86400
+    t7 = now - 7 * 86400
+    snaps = [
+        # fw-dmz-01 (192.0.2.40) FortiGate snapshots across 35d -> 7d -> now
+        (t35, "plant-demo", "192.0.2.40", "10", "Allow-Eng-Modbus-VIP", 12000, 9_600_000, t35),
+        (t7,  "plant-demo", "192.0.2.40", "10", "Allow-Eng-Modbus-VIP", 18400, 14_720_000, t7),
+        (now, "plant-demo", "192.0.2.40", "10", "Allow-Eng-Modbus-VIP", 19850, 15_880_000, now),
+
+        (t35, "plant-demo", "192.0.2.40", "20", "Block-IT-SSH-To-OT", 40, 3_200, t35),
+        (t7,  "plant-demo", "192.0.2.40", "20", "Block-IT-SSH-To-OT", 112, 8_960, t7),
+        (now, "plant-demo", "192.0.2.40", "20", "Block-IT-SSH-To-OT", 138, 11_040, now),
+
+        (t35, "plant-demo", "192.0.2.40", "50", "Temp-Commissioning-Any", 18, 2_400, t35),
+        (t7,  "plant-demo", "192.0.2.40", "50", "Temp-Commissioning-Any", 24, 3_100, t7),
+        (now, "plant-demo", "192.0.2.40", "50", "Temp-Commissioning-Any", 26, 3_420, now),
+
+        # Dead policy: 0 hits for 35 days
+        (t35, "plant-demo", "192.0.2.40", "99", "Unused-Legacy-Vendor", 0, 0, None),
+        (t7,  "plant-demo", "192.0.2.40", "99", "Unused-Legacy-Vendor", 0, 0, None),
+        (now, "plant-demo", "192.0.2.40", "99", "Unused-Legacy-Vendor", 0, 0, None),
+
+        # fw-edge-pa (203.0.113.10) PAN-OS snapshots
+        (t35, "plant-demo", "203.0.113.10", "Allow-HTTPS-HMI", "Allow-HTTPS-HMI", 4200, 3_360_000, t35),
+        (t7,  "plant-demo", "203.0.113.10", "Allow-HTTPS-HMI", "Allow-HTTPS-HMI", 5900, 4_720_000, t7),
+        (now, "plant-demo", "203.0.113.10", "Allow-HTTPS-HMI", "Allow-HTTPS-HMI", 6420, 5_136_000, now),
+
+        (t35, "plant-demo", "203.0.113.10", "Temp-Any-Any-Audit", "Temp-Any-Any-Audit", 12, 1_500, t35),
+        (t7,  "plant-demo", "203.0.113.10", "Temp-Any-Any-Audit", "Temp-Any-Any-Audit", 15, 1_900, t7),
+        (now, "plant-demo", "203.0.113.10", "Temp-Any-Any-Audit", "Temp-Any-Any-Audit", 16, 2_050, now),
+    ]
+    conn = db.get_observability_connection()
+    try:
+        conn.executemany(
+            "INSERT INTO policy_hit_snapshots "
+            "(ts, tenant, device_ip, policy_id, policy_name, hit_count, bytes, last_used) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            snaps,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def seed_demo(reset: bool = False) -> None:
     if reset:
         shutil.rmtree(DEMO_DATA_DIR, ignore_errors=True)
@@ -90,7 +145,7 @@ def seed_demo(reset: bool = False) -> None:
         user_manager.create_user(DEMO_USER, DEMO_PASS, role="super_admin", groups=None)
 
     inventory_manager.save_groups({
-        "plant-demo": {"description": "Demo Plant OT (Compliant)"},
+        "plant-demo": {"description": "Demo Plant OT (Compliant + Multi-Vendor)"},
         "plant-legacy": {"description": "Demo Legacy Plant OT (Findings)"},
     })
     with inventory_manager._db() as conn:
@@ -119,7 +174,7 @@ def seed_demo(reset: bool = False) -> None:
         jump_identity="ot-jump-id",
     )
 
-    # Compliant OT cell (plant-demo)
+    # Compliant OT cell + Multi-Vendor edge/core (plant-demo)
     inventory_manager.add_or_update_device(
         ip="192.0.2.10", hostname="plc-01", vendor="siemens", profile="default",
         username="", password="", enable_secret="", group="plant-demo",
@@ -148,6 +203,24 @@ def seed_demo(reset: bool = False) -> None:
     )
     inventory_manager.add_or_update_device(
         ip="192.0.2.254", hostname="sw-core-01", vendor="cisco", profile="default",
+        username="", password="", enable_secret="", group="plant-demo",
+        location="loc-cell1", transports={"manual": True}, snmp_disabled=True,
+        purdue_level="L3", probe="central",
+    )
+    inventory_manager.add_or_update_device(
+        ip="203.0.113.10", hostname="fw-edge-pa", vendor="paloalto", profile="default",
+        username="", password="", enable_secret="", group="plant-demo",
+        location="loc-cell1", transports={"manual": True}, snmp_disabled=True,
+        purdue_level="L3.5", probe="central",
+    )
+    inventory_manager.add_or_update_device(
+        ip="203.0.113.20", hostname="fw-branch-srx", vendor="juniper", profile="default",
+        username="", password="", enable_secret="", group="plant-demo",
+        location="loc-cell1", transports={"manual": True}, snmp_disabled=True,
+        purdue_level="L3.5", probe="central",
+    )
+    inventory_manager.add_or_update_device(
+        ip="203.0.113.30", hostname="sw-dc-nxos", vendor="cisco_nxos", profile="default",
         username="", password="", enable_secret="", group="plant-demo",
         location="loc-cell1", transports={"manual": True}, snmp_disabled=True,
         purdue_level="L3", probe="central",
@@ -197,6 +270,12 @@ config firewall address
     edit "OT-CELL-NET"
         set subnet 192.0.2.0 255.255.255.0
     next
+    edit "LEGACY-ENG-NET"
+        set subnet 10.99.0.0 255.255.255.0
+    next
+    edit "LEGACY-TEMP-HOST"
+        set subnet 198.51.100.88 255.255.255.255
+    next
 end
 config firewall vip
     edit "VIP-PLC-MODBUS"
@@ -212,6 +291,9 @@ end
 config firewall service custom
     edit "MODBUS-TCP"
         set tcp-portrange 502
+    next
+    edit "OLD-TELNET-SVC"
+        set tcp-portrange 23
     next
 end
 config router static
@@ -241,6 +323,24 @@ config firewall policy
         set action deny
         set service "SSH"
     next
+    edit 50
+        set name "Temp-Commissioning-Any"
+        set srcintf "port1"
+        set dstintf "port2"
+        set srcaddr "all"
+        set dstaddr "OT-CELL-NET"
+        set action accept
+        set service "ALL"
+    next
+    edit 99
+        set name "Unused-Legacy-Vendor"
+        set srcintf "port1"
+        set dstintf "port2"
+        set srcaddr "LEGACY-ENG-NET"
+        set dstaddr "OT-CELL-NET"
+        set action accept
+        set service "ALL"
+    next
 end
 """
     sw_core_cfg = """hostname sw-core-01
@@ -265,9 +365,123 @@ ip route 0.0.0.0 0.0.0.0 172.16.10.1
 !
 end
 """
+    pa_edge_cfg = """set deviceconfig system hostname fw-edge-pa
+set deviceconfig setting management http-ocsp yes
+set network interface ethernet ethernet1/1 layer3 ip 203.0.113.10/24
+set network interface ethernet ethernet1/2 layer3 ip 172.16.10.5/30
+set zone untrust network layer3 ethernet1/1
+set zone ot-dmz network layer3 ethernet1/2
+set address IT-CORP ip-netmask 10.20.0.0/24
+set address OT-CELL ip-netmask 192.0.2.0/24
+set address UNUSED-PAN-HOST ip-netmask 198.51.100.77/32
+set service HTTPS-OT protocol tcp port 443
+set network virtual-router default routing-table ip static-route ot-cell destination 192.0.2.0/24 nexthop ip-address 172.16.10.6 interface ethernet1/2
+set rulebase security rules Allow-HTTPS-HMI from untrust
+set rulebase security rules Allow-HTTPS-HMI to ot-dmz
+set rulebase security rules Allow-HTTPS-HMI source IT-CORP
+set rulebase security rules Allow-HTTPS-HMI destination OT-CELL
+set rulebase security rules Allow-HTTPS-HMI service HTTPS-OT
+set rulebase security rules Allow-HTTPS-HMI action allow
+set rulebase security rules Temp-Any-Any-Audit from untrust
+set rulebase security rules Temp-Any-Any-Audit to ot-dmz
+set rulebase security rules Temp-Any-Any-Audit source any
+set rulebase security rules Temp-Any-Any-Audit destination any
+set rulebase security rules Temp-Any-Any-Audit service any
+set rulebase security rules Temp-Any-Any-Audit action allow
+set rulebase nat rules DNAT-HMI from untrust
+set rulebase nat rules DNAT-HMI to ot-dmz
+set rulebase nat rules DNAT-HMI source IT-CORP
+set rulebase nat rules DNAT-HMI destination 203.0.113.50/32
+set rulebase nat rules DNAT-HMI destination-translation translated-address 192.0.2.30
+"""
+    srx_branch_cfg = """set system host-name fw-branch-srx
+set system services ssh protocol-version v2
+set system services telnet
+set interfaces ge-0/0/0 unit 0 family inet address 203.0.113.20/24
+set interfaces ge-0/0/1 unit 0 family inet address 172.16.20.1/30
+set security zones security-zone untrust interfaces ge-0/0/0.0
+set security zones security-zone ot-zone interfaces ge-0/0/1.0
+set security address-book global address IT-ENG-NET 10.20.0.0/24
+set security address-book global address OT-PLC-NET 192.0.2.0/24
+set security address-book global address UNUSED-SRX-ADDR 198.51.100.99/32
+set applications application MODBUS-TCP protocol tcp destination-port 502
+set routing-options static route 192.0.2.0/24 next-hop 172.16.20.2
+set security policies from-zone untrust to-zone ot-zone policy ALLOW-MODBUS match source-address IT-ENG-NET
+set security policies from-zone untrust to-zone ot-zone policy ALLOW-MODBUS match destination-address OT-PLC-NET
+set security policies from-zone untrust to-zone ot-zone policy ALLOW-MODBUS match application MODBUS-TCP
+set security policies from-zone untrust to-zone ot-zone policy ALLOW-MODBUS then permit
+"""
+    nxos_dc_cfg = """hostname sw-dc-nxos
+feature vpc
+feature ospf
+feature interface-vlan
+!
+vrf context management
+!
+object-group ip address UNUSED-NXOS-GRP
+  10 host 198.51.100.66
+!
+ip access-list extended NXOS-OT-IN
+  10 permit tcp 10.20.0.0 0.0.0.255 192.0.2.0 0.0.0.255 eq 502
+  20 deny tcp any any eq 23
+  30 permit ip any any
+!
+interface Vlan10
+  ip address 203.0.113.30/24
+  ip access-group NXOS-OT-IN in
+!
+interface Ethernet1/1
+  no switchport
+  ip address 172.16.30.1/30
+!
+ip route 192.0.2.0/24 172.16.30.2
+"""
+    scalance_cfg = """hostname switch-01
+service password-encryption
+no ip http server
+!
+ip access-list extended OT-SCALANCE-IN
+  10 permit tcp 192.0.2.0 0.0.0.255 192.0.2.0 0.0.0.255 eq 502
+  20 deny ip any any
+!
+interface Vlan10
+  ip address 192.0.2.20 255.255.255.0
+  ip access-group OT-SCALANCE-IN in
+!
+line vty 0 4
+  transport input ssh
+!
+ip route 0.0.0.0 0.0.0.0 192.0.2.254
+end
+"""
+    moxa_legacy_cfg = """hostname switch-legacy-01
+ip http server
+snmp-server community public RO
+!
+ip access-list extended OT-LEGACY-IN
+  10 permit tcp any any eq 23
+  20 permit ip any any
+!
+interface Vlan1
+  ip address 198.51.100.10 255.255.255.0
+  ip access-group OT-LEGACY-IN in
+!
+interface FastEthernet0/4
+  no shutdown
+!
+line vty 0 4
+  transport input telnet ssh
+!
+ip route 0.0.0.0 0.0.0.0 198.51.100.1
+end
+"""
     backup_store.save_backup(by_ip["192.0.2.40"], "fw-dmz-01", fw_demo_cfg)
     backup_store.save_backup(by_ip["192.0.2.254"], "sw-core-01", sw_core_cfg)
-    backup_store.save_backup(by_ip["198.51.100.10"], "switch-legacy-01", "ip http server\n")
+    backup_store.save_backup(by_ip["192.0.2.20"], "switch-01", scalance_cfg)
+    backup_store.save_backup(by_ip["203.0.113.10"], "fw-edge-pa", pa_edge_cfg)
+    backup_store.save_backup(by_ip["203.0.113.20"], "fw-branch-srx", srx_branch_cfg)
+    backup_store.save_backup(by_ip["203.0.113.30"], "sw-dc-nxos", nxos_dc_cfg)
+    backup_store.save_backup(by_ip["198.51.100.10"], "switch-legacy-01", moxa_legacy_cfg)
 
     segment_manager.save_segment(
         "plant-demo", None, "Cell L1 PLC/HMI", "sky",
@@ -276,10 +490,11 @@ end
     )
     segment_manager.save_segment(
         "plant-demo", None, "IT/OT DMZ", "amber",
-        subnets=["10.20.0.0/24"], purdue_level="L3.5",
-        members=["192.0.2.40"],
+        subnets=["10.20.0.0/24", "203.0.113.0/24"], purdue_level="L3.5",
+        members=["192.0.2.40", "203.0.113.10", "203.0.113.20", "203.0.113.30"],
     )
     _seed_events(db)
+    _seed_policy_snapshots(db)
 
 
 def main() -> int:

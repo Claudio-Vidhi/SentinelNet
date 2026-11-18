@@ -2070,6 +2070,7 @@
       <div id="trafPills" class="subtab-bar">
         <button type="button" class="ca-pill active" id="trafPill-search" data-traf-view="search" data-i18n="trafPillSearch">Ricerca</button>
         <button type="button" class="ca-pill" id="trafPill-policies" data-traf-view="policies" data-i18n="trafPillPolicies">Per policy</button>
+        <button type="button" class="ca-pill" id="trafPill-hygiene" data-traf-view="hygiene" data-i18n="trafPillHygiene">Igiene &amp; Delta</button>
       </div>
       <div id="flowsObsBanner" style="display:none; padding:10px 14px; margin-bottom:12px; border:1px solid var(--warning, var(--lamp-warn)); border-radius:0; color:var(--warning, var(--lamp-warn)); font-size:13px;"></div>
 
@@ -2134,6 +2135,7 @@
                 <th style="text-align:left; padding:6px 8px;" data-i18n="trafPolColService">Servizio</th>
                 <th style="text-align:left; padding:6px 8px;" data-i18n="trafPolColAction">Azione</th>
                 <th style="text-align:left; padding:6px 8px;" data-i18n="trafPolColTraffic">Traffico</th>
+                <th style="text-align:right; padding:6px 8px;" data-i18n="trafPolColDelta">Delta 7g / 30g</th>
                 <th style="text-align:right; padding:6px 8px;" data-i18n="trafPolColSessions">Sessioni</th>
               </tr>
             </thead>
@@ -2141,6 +2143,37 @@
           </table>
         </div>
       </div>
+      </div>
+
+      <div id="trafPane-hygiene" class="traf-pane" style="display:none;">
+        <div class="panel" style="margin-bottom:14px;">
+          <h4 style="margin:0 0 6px; font-size:14px;">
+            <i class="fa-solid fa-broom" style="color:var(--primary);"></i>
+            <span data-i18n="trafHygTitle">Igiene Firewall &amp; Delta Tracker</span>
+          </h4>
+          <p style="margin:0 0 12px; font-size:12px; color:var(--text-muted);" data-i18n="trafHygDesc">
+            Snapshot periodici 7g/30g, rilevazione policy morte (0 hit), oggetti inutilizzati e restringimento regole any-any dai flussi osservati.
+          </p>
+          <div class="filterbar" style="align-items:flex-end; gap:12px; flex-wrap:wrap; margin:0;">
+            <div class="form-group" style="margin-bottom:0; min-width:220px;">
+              <label for="trafHygDevice" data-i18n="trafHygDevice">Apparato</label>
+              <select id="trafHygDevice">
+                <option value="" data-i18n="trafHygAllDevices">Tutti gli apparati compatibili</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0; width:130px;">
+              <label for="trafHygDays" data-i18n="trafHygDays">Finestra (giorni)</label>
+              <input type="number" id="trafHygDays" min="1" max="365" value="30">
+            </div>
+            <button type="button" id="btnTrafHygRun" class="btn btn-primary btn-small" style="width:auto; margin:0;">
+              <i class="fa-solid fa-magnifying-glass-chart"></i> <span data-i18n="trafHygRun">Analizza Igiene</span>
+            </button>
+            <button type="button" id="btnTrafHygSnapshot" class="btn btn-secondary btn-small" style="width:auto; margin:0;">
+              <i class="fa-solid fa-camera"></i> <span data-i18n="trafHygSnapshotBtn">Acquisisci Snapshot Ora</span>
+            </button>
+          </div>
+        </div>
+        <div id="trafHygBody"></div>
       </div>
 
       <div id="trafPane-search" class="traf-pane">
@@ -4523,6 +4556,9 @@
       <button id="ptSubtabBtnFindings" class="btn btn-secondary" data-subtab="findings">
         <i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="ptSubtabFindings">Anomalie &amp; Difetti</span>
       </button>
+      <button id="ptSubtabBtnWhatIf" class="btn btn-secondary" data-subtab="whatif">
+        <i class="fa-solid fa-code-branch"></i> <span data-i18n="ptSubtabWhatIf">What-If &amp; Rollback</span>
+      </button>
     </div>
 
     <!-- Sotto-tab 1: Packet Tracer -->
@@ -4605,6 +4641,99 @@
         <h3><i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="ptSubtabFindings">Anomalie &amp; Difetti</span></h3>
         <div id="ptFindingsContainer">
           <div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i> Analisi difetti in corso...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sotto-tab 4: Change What-If & Safe Rollback -->
+    <div id="ptSubtabWhatIf" style="display:none;">
+      <div style="display:grid; grid-template-columns: 380px 1fr; gap:18px;">
+        <div class="panel">
+          <h3><i class="fa-solid fa-code-branch"></i> <span data-i18n="ptWiTitle">Simulazione Modifica (What-If)</span></h3>
+          <div class="form-group">
+            <label for="ptWiAction" data-i18n="ptWiAction">Operazione</label>
+            <select id="ptWiAction">
+              <option value="disable_rule" data-i18n="ptWiActDisable">Disabilita regola</option>
+              <option value="delete_rule" data-i18n="ptWiActDelete">Elimina regola</option>
+              <option value="add_rule" data-i18n="ptWiActAddRule">Aggiungi regola</option>
+              <option value="tighten_rule" data-i18n="ptWiActTighten">Restringi regola (Tighten)</option>
+              <option value="add_route" data-i18n="ptWiActAddRoute">Aggiungi rotta statica</option>
+              <option value="remove_route" data-i18n="ptWiActRemoveRoute">Rimuovi rotta statica</option>
+            </select>
+          </div>
+          <div id="ptWiRuleFields">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div class="form-group">
+                <label for="ptWiRuleId" data-i18n="ptWiRuleId">ID / Nome Regola</label>
+                <input id="ptWiRuleId" type="text" placeholder="es. 10">
+              </div>
+              <div class="form-group">
+                <label for="ptWiAcl" data-i18n="ptWiAcl">Nome ACL (IOS/NX-OS)</label>
+                <input id="ptWiAcl" type="text" placeholder="es. OT-CELL-IN">
+              </div>
+            </div>
+            <div id="ptWiRuleDetailFields">
+              <div class="form-group">
+                <label for="ptWiRuleAction" data-i18n="ptWiRuleAction">Azione Regola</label>
+                <select id="ptWiRuleAction">
+                  <option value="permit" data-i18n="ptWiRulePermit">PERMIT / ACCEPT</option>
+                  <option value="deny" data-i18n="ptWiRuleDeny">DENY</option>
+                </select>
+              </div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <div class="form-group">
+                  <label for="ptWiSrcCidr" data-i18n="ptWiSrcCidr">Sorgente CIDR</label>
+                  <input id="ptWiSrcCidr" type="text" placeholder="es. 10.20.0.0/24">
+                </div>
+                <div class="form-group">
+                  <label for="ptWiDstCidr" data-i18n="ptWiDstCidr">Destinazione CIDR</label>
+                  <input id="ptWiDstCidr" type="text" placeholder="es. 192.0.2.10/32">
+                </div>
+              </div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <div class="form-group">
+                  <label for="ptWiProto" data-i18n="ptWiProto">Protocollo</label>
+                  <select id="ptWiProto">
+                    <option value="tcp" selected>TCP</option>
+                    <option value="udp">UDP</option>
+                    <option value="icmp">ICMP</option>
+                    <option value="ip">IP (Any)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="ptWiDport" data-i18n="ptWiDport">Porta Dest.</label>
+                  <input id="ptWiDport" type="number" min="1" max="65535" placeholder="502">
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="ptWiRouteFields" style="display:none;">
+            <div class="form-group">
+              <label for="ptWiPrefix" data-i18n="ptWiPrefix">Prefisso Rotta (CIDR)</label>
+              <input id="ptWiPrefix" type="text" placeholder="es. 192.0.2.0/24">
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div class="form-group">
+                <label for="ptWiNextHop" data-i18n="ptWiNextHop">Next-Hop IP</label>
+                <input id="ptWiNextHop" type="text" placeholder="es. 172.16.10.2">
+              </div>
+              <div class="form-group">
+                <label for="ptWiIface" data-i18n="ptWiIface">Interfaccia Uscita</label>
+                <input id="ptWiIface" type="text" placeholder="es. port2">
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="ptWiCustomFlows" data-i18n="ptWiCustomFlows">Flussi critici aggiuntivi (uno per riga: src,dst,proto,dport)</label>
+            <textarea id="ptWiCustomFlows" rows="3" placeholder="10.20.0.5,192.0.2.10,tcp,502" style="width:100%; font-family:var(--font-code); font-size:12px;"></textarea>
+          </div>
+          <button type="button" id="btnPtRunWhatIf" class="btn btn-primary" style="width:100%;">
+            <i class="fa-solid fa-code-branch"></i> <span data-i18n="ptWiRunBtn">Simula Impatto &amp; Rollback</span>
+          </button>
+        </div>
+        <div class="panel">
+          <h3><i class="fa-solid fa-shield-halved"></i> <span data-i18n="ptSubtabWhatIf">What-If &amp; Rollback</span></h3>
+          <div id="ptWhatIfResultContainer"></div>
         </div>
       </div>
     </div>

@@ -65,14 +65,20 @@ def _load_device_backup(ip: str, current_user) -> Tuple[str, str]:
 # to be refused: routing every unknown type to the IOS parser produced an
 # empty environment, so /findings answered [] and the UI painted a green
 # "no defects" panel for a device that was never analysed at all.
-_SUPPORTED_CONFIG_TYPES = {"ios", "fortios"}
+_SUPPORTED_CONFIG_TYPES = {"ios", "fortios", "panos", "junos", "nxos", "ot_switch"}
 
 
 def _parse_environment(content: str, config_type: str) -> Any:
     """Parse policy environment based on vendor. 422 on an unsupported one."""
     if config_type == "fortios":
         return parse_fortios_config(content)
-    if config_type == "ios":
+    if config_type == "panos":
+        from services.policy_test.panos import parse_panos_config
+        return parse_panos_config(content)
+    if config_type == "junos":
+        from services.policy_test.junos import parse_junos_config
+        return parse_junos_config(content)
+    if config_type in ("ios", "nxos", "ot_switch"):
         return parse_ios_config(content)
     raise HTTPException(
         status_code=422,
@@ -154,12 +160,21 @@ def policy_examples(ip: str, current_user = Depends(get_current_user)):
 
     groups: List[Dict[str, Any]] = []
     if hasattr(env, "policies"):
-        # FortiOS: a single ordered policy list, evaluated top-down.
+        is_panos = hasattr(env, "nat_rules")
+        is_junos = hasattr(env, "applications") and not is_panos
+        grp_name = "security rulebase" if is_panos else ("security policies" if is_junos else "firewall policy")
+        decl = ("rulebase security rules" if is_panos
+                else ("security policies from-zone -> to-zone" if is_junos
+                      else _acl_declaration("firewall policy", "firewall_policy")))
+        zone_bindings = [
+            {"interface": f"{z} ({', '.join(ifs)})", "direction": "zone"}
+            for z, ifs in (getattr(env, "zones", {}) or {}).items() if ifs
+        ]
         groups.append({
-            "name": "firewall policy",
+            "name": grp_name,
             "kind": "firewall_policy",
-            "declaration": _acl_declaration("firewall policy", "firewall_policy"),
-            "bindings": [],
+            "declaration": decl,
+            "bindings": zone_bindings,
             "default_action": "deny",
             "examples": [e.to_dict() for e in generate_ruleset_examples(env.policies)],
         })
@@ -220,3 +235,47 @@ def policy_prove(ip: str, req: ProofRequest, current_user = Depends(get_current_
         "actual_rule_id": actual,
         "trace": trace.to_dict(),
     }
+
+
+class WhatIfChange(BaseModel):
+    action: str = Field(..., min_length=1, max_length=40)
+    rule_id: Optional[str] = None
+    acl: Optional[str] = None
+    name: Optional[str] = None
+    rule_action: str = "permit"
+    src_cidr: Optional[str] = None
+    dst_cidr: Optional[str] = None
+    proto: str = "tcp"
+    dport: Optional[int] = Field(None, ge=1, le=65535)
+    src_intf: Optional[str] = None
+    dst_intf: Optional[str] = None
+    position: str = "top"
+    prefix: Optional[str] = None
+    next_hop: Optional[str] = None
+    interface: Optional[str] = None
+    distance: int = Field(1, ge=1, le=255)
+
+
+class WhatIfRequest(BaseModel):
+    change: WhatIfChange
+    flows: List[FlowRequest] = Field(default_factory=list)
+
+
+@router.post("/api/policy-test/{ip}/what-if")
+def policy_whatif(ip: str, req: WhatIfRequest, current_user = Depends(get_current_user)):
+    """Simulate a rule or route change offline and compute verdict diffs and rollback plan."""
+    from services.whatif_simulator import simulate_whatif
+
+    content, config_type = _load_device_backup(ip, current_user)
+    env = _parse_environment(content, config_type)
+    try:
+        return simulate_whatif(
+            env,
+            config_type,
+            req.change.model_dump(),
+            flows=[f.model_dump() for f in req.flows],
+            device_ip=ip,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+

@@ -726,6 +726,52 @@ TOOLS = {
         _obj({"ip": {**_S, "description": "Device IP"}}, ["ip"]),
         lambda a: api("GET", f"/api/policy-test/{a['ip']}/findings"),
     ),
+    "simulate_policy_change": (
+        "Change What-If & Safe Rollback simulator on a device backup: simulates adding, "
+        "disabling, deleting or tightening a policy/ACL rule, or adding/removing a static route, "
+        "and reports verdict diffs (broken/newly_allowed/rerouted flows), findings delta, and "
+        "vendor-specific Apply CLI/API + Safe Rollback snippets before touching the device.",
+        _obj({
+            "ip": {**_S, "description": "Device IP"},
+            "action": {**_S, "description": "disable_rule | delete_rule | add_rule | tighten_rule | add_route | remove_route"},
+            "rule_id": {**_S, "description": "Target rule/policy ID (for disable/delete/tighten or new rule id)"},
+            "acl": {**_S, "description": "ACL name (optional, IOS/NX-OS/OT switch)"},
+            "rule_action": {**_S, "description": "permit | deny (default permit, for add_rule)"},
+            "src_cidr": {**_S, "description": "Source CIDR or 'any'"},
+            "dst_cidr": {**_S, "description": "Destination CIDR or 'any'"},
+            "proto": {**_S, "description": "Protocol: tcp | udp | icmp | ip"},
+            "dport": {"type": "integer", "description": "Destination port 1-65535 (optional)"},
+            "prefix": {**_S, "description": "Route prefix CIDR (for add_route/remove_route)"},
+            "next_hop": {**_S, "description": "Next-hop IP (for add_route)"},
+            "interface": {**_S, "description": "Egress interface name (for add_route)"},
+            "flows": {"type": "array", "description": "Optional custom flows [{src_ip, dst_ip, proto, dport}]"},
+        }, ["ip", "action"]),
+        lambda a: api("POST", f"/api/policy-test/{a['ip']}/what-if", body={
+            "change": {
+                k: a[k] for k in (
+                    "action", "rule_id", "acl", "rule_action",
+                    "src_cidr", "dst_cidr", "proto", "dport",
+                    "prefix", "next_hop", "interface",
+                ) if a.get(k) is not None
+            },
+            "flows": a.get("flows") or [],
+        }),
+    ),
+    "firewall_hygiene": (
+        "Firewall Hygiene & Rule Delta Tracker: 7d/30d policy hit/bytes deltas from periodic snapshots, "
+        "dead policies (0 hit in 30d), unused address/service objects, overpermissive any-any rules "
+        "tightenable from observed traffic flows, and CLI/API dry-run + rollback snippets.",
+        _obj({
+            "device": {**_S, "description": "Comma-separated device IPs (optional, default all in scope)"},
+            "days": {"type": "integer", "description": "Analysis window in days (default 30)"},
+        }),
+        lambda a: api("GET", "/api/firewall-traffic/hygiene", params={
+            k: v for k, v in {
+                "device": a.get("device"),
+                "days": a.get("days"),
+            }.items() if v is not None and v != ""
+        }),
+    ),
     # --- "What is wrong and why": CVE, drift, port errors, routing,
     # classification. Read-only bridges to existing routes.
     "cve_priority": (

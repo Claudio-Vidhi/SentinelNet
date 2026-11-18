@@ -26,16 +26,18 @@ sta lavorando — per questo ``lang`` e' un parametro, non una preferenza global
 from typing import Any, Dict, List, Optional
 
 from .benchmarks import (BENCHMARK_GROUPS, BENCHMARK_TITLES, BENCHMARKS, FORTIOS,
-                         IOS, LINUX, cis_for)
+                         IOS, JUNOS, LINUX, NXOS, OT_SWITCH, PANOS, cis_for)
 from .guidance import guidance_for
 from .ios_parser import parse_ios
 from .linux_parser import parse_linux
 from .messages import DEFAULT_LANG, LANGS, normalize_lang, render
 from .model import UNKNOWN, RuleOutcome, score_rules
+from .multivendor_parser import parse_multivendor
 from .parser import parse_with_lines
 
 __all__ = ["run_netsec_audit", "detect_vendor", "BENCHMARKS",
-           "BENCHMARK_TITLES", "BENCHMARK_GROUPS", "FORTIOS", "IOS", "LINUX", "LANGS"]
+           "BENCHMARK_TITLES", "BENCHMARK_GROUPS", "FORTIOS", "IOS", "LINUX",
+           "PANOS", "JUNOS", "NXOS", "OT_SWITCH", "LANGS"]
 
 # "cis" is not a benchmark of its own: it picks the per-product CIS benchmark
 # of the platform found in the configuration (see ``run_netsec_audit``).
@@ -50,6 +52,12 @@ _FORTIOS_MARKERS = ("config system global", "config firewall policy",
 _IOS_MARKERS = ("line vty", "line con 0", "interface gigabitethernet",
                 "ip http server", "aaa new-model", "boot system flash",
                 "service password-encryption", "interface vlan")
+_PANOS_MARKERS = ("set deviceconfig ", "set rulebase security ",
+                  "set network virtual-router ", "<rulebase>", "<virtual-router>")
+_JUNOS_MARKERS = ("set system host-name ", "set security zones ",
+                  "set security policies ", "set routing-options static ")
+_NXOS_MARKERS = ("feature vpc", "feature lacp", "vpc domain ", "vrf context ")
+_OT_MARKERS = ("! siemens scalance", "! moxa ", "! hirschmann ", "! westermo ")
 # I marcatori Linux sono i separatori che l'artefatto di backup si scrive da
 # solo (``drivers/linux.py``): non si indovina una grammatica, si riconosce un
 # formato che abbiamo generato noi.
@@ -69,6 +77,10 @@ def detect_vendor(config_text: Optional[str]) -> Optional[str]:
         return None
     low = config_text.lower()
     counts = ((FORTIOS, sum(low.count(m) for m in _FORTIOS_MARKERS)),
+              (PANOS, sum(low.count(m) for m in _PANOS_MARKERS)),
+              (JUNOS, sum(low.count(m) for m in _JUNOS_MARKERS)),
+              (NXOS, sum(low.count(m) for m in _NXOS_MARKERS)),
+              (OT_SWITCH, sum(low.count(m) for m in _OT_MARKERS)),
               (IOS, sum(low.count(m) for m in _IOS_MARKERS)),
               (LINUX, sum(low.count(m) for m in _LINUX_MARKERS)))
     vendor, best = max(counts, key=lambda vc: vc[1])
@@ -108,10 +120,13 @@ def run_netsec_audit(config_text: Optional[str] = None,
         key = cis_for(vendor)
     # Vendor non riconosciuto: si tenta comunque FortiOS, che e' la piattaforma
     # storica di questo motore, ma il payload lo dichiara e la UI puo' dirlo.
+    cfg: Any
     if vendor == IOS:
         cfg = parse_ios(config_text)
     elif vendor == LINUX:
         cfg = parse_linux(config_text)
+    elif vendor in (PANOS, JUNOS, NXOS, OT_SWITCH):
+        cfg = parse_multivendor(config_text, vendor)
     else:
         cfg = parse_with_lines(config_text)
     device = device_name or "-"
@@ -184,8 +199,14 @@ def _policy_defects(config_text: Optional[str],
     su ``policy_defects``. Tollerante come il resto del motore, perche' un
     extra non deve far fallire un audit che senza di lui funzionerebbe.
     """
-    if not config_text:
+    if not config_text or vendor == LINUX:
         return []
     from ai import config_analyzer
-    return config_analyzer.policy_findings(
-        config_text, 'ios' if vendor == IOS else 'fortios')
+    cfg_map = {
+        IOS: "ios",
+        NXOS: "nxos",
+        OT_SWITCH: "ot_switch",
+        PANOS: "panos",
+        JUNOS: "junos",
+    }
+    return config_analyzer.policy_findings(config_text, cfg_map.get(vendor or FORTIOS, "fortios"))

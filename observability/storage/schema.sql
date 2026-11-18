@@ -370,3 +370,20 @@ CREATE TABLE IF NOT EXISTS iface_counter_reads (
 );
 CREATE INDEX IF NOT EXISTS idx_iface_counter_reads_dev
     ON iface_counter_reads(tenant, device_ip, ts);
+
+-- 17. FIREWALL POLICY HIT SNAPSHOTS (v16): periodic hit_count/bytes snapshots
+-- for 7d/30d delta tracking, dead-policy detection, and rule hygiene.
+CREATE TABLE IF NOT EXISTS policy_hit_snapshots (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts          INTEGER NOT NULL,
+    tenant      TEXT NOT NULL DEFAULT '',
+    device_ip   TEXT NOT NULL,
+    policy_id   TEXT NOT NULL,
+    policy_name TEXT NOT NULL DEFAULT '',
+    hit_count   INTEGER NOT NULL DEFAULT 0,
+    bytes       INTEGER NOT NULL DEFAULT 0,
+    last_used   INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_policy_hit_snapshots_dev_ts
+    ON policy_hit_snapshots(device_ip, ts DESC);
+

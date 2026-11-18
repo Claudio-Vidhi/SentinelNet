@@ -303,7 +303,7 @@ def _apply_dnat(ctx: dict, vendor: str, cur_dst: str, cur_dport, cur_proto: str,
                 cur_vrf: str, ingress_iface: str, aliases: dict) -> tuple:
     """Apply pre-routing DNAT (FortiGate VIP or Cisco IOS static outside->inside)."""
     env = ctx.get("policy_env")
-    if vendor == "fortinet":
+    if vendor in ("fortinet", "paloalto", "palo_alto", "panos"):
         vips = ctx.get("vips")
         if vips is None and env is not None:
             vips = list((getattr(env, "vips", {}) or {}).values())
@@ -350,7 +350,7 @@ def _apply_dnat(ctx: dict, vendor: str, cur_dst: str, cur_dport, cur_proto: str,
             }
             return new_dst, new_dport, vip.get("name") or "", nat_ev
 
-    elif vendor == "cisco" and env is not None:
+    elif vendor in ("cisco", "cisco_ie", "cisco_nxos") and env is not None:
         ifaces = getattr(env, "interfaces", {}) or {}
         in_info = ifaces.get(ingress_iface) or next(
             (v for k, v in ifaces.items() if k.lower() == ingress_iface.lower()), None
@@ -443,7 +443,7 @@ def _eval_hop_security(ctx: dict, device: dict, vendor: str, addrs: list, aliase
                        cur_src: str, cur_dst: str, cur_proto: str, cur_dport,
                        ingress_iface: str, egress_iface: str,
                        matched_vip_name: str = "") -> tuple:
-    """Evaluate per-hop Cisco ACL or FortiGate firewall policy and SNAT.
+    """Evaluate per-hop Cisco/OT ACL or NGFW (FortiGate/PAN-OS/Junos) policy and SNAT.
 
     Returns ``(security_dict, new_src, snat_event_or_None)``.
     """
@@ -469,13 +469,17 @@ def _eval_hop_security(ctx: dict, device: dict, vendor: str, addrs: list, aliase
 
     proto_use = cur_proto or "tcp"
 
-    if vendor == "cisco":
+    _SWITCH_ACL_VENDORS = (
+        "cisco", "cisco_ie", "cisco_nxos",
+        "siemens_scalance", "hirschmann", "moxa", "westermo", "phoenix_contact",
+    )
+    if vendor in _SWITCH_ACL_VENDORS:
         if env is None:
             return ({
                 "evaluated": False,
                 "source": "none",
                 "verdict": "SKIPPED",
-                "note": "nessun backup IOS disponibile per valutare le ACL",
+                "note": "nessun backup disponibile per valutare le ACL",
             }, cur_src, None)
         from services.policy_test.engine import _find_interface, _first_match
         steps_out = []
@@ -574,10 +578,14 @@ def _eval_hop_security(ctx: dict, device: dict, vendor: str, addrs: list, aliase
             "note": note,
         }, new_src, snat_ev)
 
-    if vendor == "fortinet":
+    if vendor in ("fortinet", "paloalto", "palo_alto", "panos", "juniper", "junos"):
         if env is not None:
             from services.policy_test.engine import _rule_stops_walk
             from services.policy_test.model import Rule
+
+            iface_to_zone = getattr(env, "iface_to_zone", None) or {}
+            eff_in = iface_to_zone.get((ingress_iface or "").lower(), ingress_iface) if ingress_iface else None
+            eff_out = iface_to_zone.get((egress_iface or "").lower(), egress_iface) if egress_iface else None
 
             def _expand_ifaces(if_set):
                 if if_set is None:
@@ -593,8 +601,8 @@ def _eval_hop_security(ctx: dict, device: dict, vendor: str, addrs: list, aliase
                 dst_ip=cur_dst,
                 proto=proto_use,
                 dport=cur_dport,
-                ingress_intf=ingress_iface or None,
-                egress_intf=egress_iface or None,
+                ingress_intf=eff_in or None,
+                egress_intf=eff_out or None,
             )
             matched_pol = None
             for pol in env.policies:
@@ -689,7 +697,7 @@ def _eval_hop_security(ctx: dict, device: dict, vendor: str, addrs: list, aliase
                 "note": f"VIP {matched_vip_name}" if matched_vip_name else "",
             }, new_src, snat_ev)
 
-        if ctx.get("live_policy_lookup"):
+        if vendor == "fortinet" and ctx.get("live_policy_lookup"):
             try:
                 from services import fortigate_service
                 res = fortigate_service.policy_lookup(
@@ -741,7 +749,12 @@ def collect_hop_context(device: dict, forti_ctx: "dict | None" = None,
     }
     ip = device.get("IP")
     vendor = (device.get("Vendor") or "").lower()
-    if ip and vendor in ("cisco", "fortinet", "fortigate"):
+    _SUPPORTED_HOP_VENDORS = (
+        "cisco", "cisco_ie", "cisco_nxos", "fortinet", "fortigate",
+        "paloalto", "palo_alto", "panos", "juniper", "junos",
+        "siemens_scalance", "hirschmann", "moxa", "westermo", "phoenix_contact",
+    )
+    if ip and vendor in _SUPPORTED_HOP_VENDORS:
         try:
             from ai import config_analyzer
             path, _tenant = config_analyzer._find_freshest_backup(ip, device.get("Group") or "")
@@ -757,7 +770,15 @@ def collect_hop_context(device: dict, forti_ctx: "dict | None" = None,
                     ctx["policy_source"] = "backup"
                     if not ctx["policy_routes"] and env.policy_routes:
                         ctx["policy_routes"] = list(env.policy_routes)
-                elif cfg_type == "ios":
+                elif cfg_type == "panos":
+                    from services.policy_test.panos import parse_panos_config
+                    ctx["policy_env"] = parse_panos_config(content)
+                    ctx["policy_source"] = "backup"
+                elif cfg_type == "junos":
+                    from services.policy_test.junos import parse_junos_config
+                    ctx["policy_env"] = parse_junos_config(content)
+                    ctx["policy_source"] = "backup"
+                elif cfg_type in ("ios", "nxos", "ot_switch"):
                     from services.policy_test.ios import parse_ios_config
                     ctx["policy_env"] = parse_ios_config(content)
                     ctx["policy_source"] = "backup"
@@ -826,10 +847,15 @@ def supplement_from_backup_env(device: dict, rows: list, addrs: list, ctx: dict)
                 continue
             ip_val = info.get("ip") or ""
             mask_val = info.get("mask") or ""
-            if not ip_val or not mask_val:
-                continue
+            ip_cidr = info.get("ip_cidr") or ""
             try:
-                net_obj = ipaddress.ip_network(f"{ip_val}/{mask_val}", strict=False)
+                if ip_val and mask_val:
+                    net_obj = ipaddress.ip_network(f"{ip_val}/{mask_val}", strict=False)
+                elif ip_cidr:
+                    ip_val = str(ipaddress.ip_interface(ip_cidr).ip)
+                    net_obj = ipaddress.ip_network(ip_cidr, strict=False)
+                else:
+                    continue
                 out_addrs.append({
                     "iface": iface_name,
                     "ip": ip_val,
