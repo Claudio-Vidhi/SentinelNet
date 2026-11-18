@@ -475,5 +475,244 @@ class ProbeApi(unittest.TestCase):
         self.assertEqual(r.status_code, 404)
 
 
+class EndToEndFlowTrace(unittest.TestCase):
+    """End-to-end L3 + VRF + PBR + SD-WAN + NAT + Firewall/ACL tracing across FortiGate and Cisco."""
+
+    FW_CFG = """config system interface
+    edit "port1"
+        set ip 10.20.0.1 255.255.255.0
+        set alias "wan1"
+    next
+    edit "port2"
+        set ip 192.0.2.40 255.255.255.0
+        set alias "ot-dmz"
+    next
+end
+config firewall address
+    edit "IT-NET"
+        set subnet 10.20.0.0 255.255.255.0
+    next
+    edit "OT-NET"
+        set subnet 192.0.2.0 255.255.255.0
+    next
+end
+config firewall vip
+    edit "VIP-PLC"
+        set extip 10.20.0.50
+        set mappedip 192.0.2.10
+        set extintf "port1"
+        set portforward enable
+        set protocol tcp
+        set extport 502
+        set mappedport 502
+    next
+end
+config firewall service custom
+    edit "MODBUS"
+        set tcp-portrange 502
+    next
+end
+config router static
+    edit 1
+        set dst 192.0.2.0 255.255.255.0
+        set gateway 192.0.2.254
+        set device "port2"
+    next
+end
+config firewall policy
+    edit 10
+        set name "Allow-Modbus"
+        set srcintf "port1"
+        set dstintf "port2"
+        set srcaddr "IT-NET"
+        set dstaddr "VIP-PLC"
+        set action accept
+        set service "MODBUS"
+        set nat enable
+    next
+    edit 20
+        set name "Deny-SSH"
+        set srcintf "port1"
+        set dstintf "port2"
+        set srcaddr "all"
+        set dstaddr "OT-NET"
+        set action deny
+        set service "SSH"
+    next
+end
+"""
+
+    IOS_CFG = """hostname sw-core
+!
+ip access-list extended OT-IN
+ permit tcp host 192.0.2.40 host 192.0.2.10 eq 502
+ deny tcp any host 192.0.2.10 eq 443
+ permit ip any any
+!
+interface Vlan10
+ ip address 192.0.2.254 255.255.255.0
+ ip access-group OT-IN in
+!
+interface Vlan20
+ ip vrf forwarding VRF-OT
+ ip address 10.99.0.1 255.255.255.0
+!
+ip nat inside source static tcp 192.0.2.10 502 203.0.113.10 502
+!
+ip route 0.0.0.0 0.0.0.0 192.0.2.40
+ip route vrf VRF-OT 172.30.0.0 255.255.0.0 10.99.0.254
+!
+end
+"""
+
+    def _build_env(self):
+        from services.policy_test.fortios import parse_fortios_config
+        from services.policy_test.ios import parse_ios_config
+
+        fw = dict(FW_EDGE, IP="192.0.2.40", Hostname="fw-dmz")
+        sw = dict(SWITCH, IP="192.0.2.254", Hostname="sw-core")
+        fw_env = parse_fortios_config(self.FW_CFG)
+        sw_env = parse_ios_config(self.IOS_CFG)
+
+        contexts = {
+            fw["IP"]: {"policy_env": fw_env, "policy_source": "backup"},
+            sw["IP"]: {"policy_env": sw_env, "policy_source": "backup"},
+        }
+        rows = {
+            fw["IP"]: [
+                _row(fw, "10.20.0.0/24", "connected", "", "port1", 0),
+                _row(fw, "192.0.2.0/24", "static", sw["IP"], "port2", 10),
+            ],
+            sw["IP"]: [
+                _row(sw, "192.0.2.0/24", "connected", "", "Vlan10", 0),
+                _row(sw, "0.0.0.0/0", "static", fw["IP"], "Vlan10", 1),
+            ],
+        }
+        addrs = {
+            fw["IP"]: [
+                {"iface": "port1", "ip": "10.20.0.1", "network": "10.20.0.0/24", "alias": "wan1"},
+                {"iface": "port2", "ip": "192.0.2.40", "network": "192.0.2.0/24", "alias": "ot-dmz"},
+            ],
+            sw["IP"]: [
+                {"iface": "Vlan10", "ip": "192.0.2.254", "network": "192.0.2.0/24"},
+            ],
+        }
+        devs = {fw["IP"]: fw, sw["IP"]: sw}
+        return fw, sw, rows, addrs, devs, contexts
+
+    def test_fortigate_vip_dnat_snat_then_cisco_acl_permit_delivers(self):
+        fw, sw, rows, addrs, devs, contexts = self._build_env()
+        out = path_trace.trace(
+            "10.20.0.50", fw["IP"], rows, addrs, devs,
+            src_ip="10.20.0.99", proto="tcp", dport=502, hop_contexts=contexts,
+        )
+        self.assertEqual(out["outcome"], "consegna")
+        self.assertEqual(out["security_verdict"], "PERMIT")
+        self.assertEqual([h["device"] for h in out["hops"]], ["fw-dmz", "sw-core"])
+        # DNAT 10.20.0.50 -> 192.0.2.10 + SNAT 10.20.0.99 -> 192.0.2.40
+        kinds = [n["kind"] for n in out["nat_translations"]]
+        self.assertEqual(kinds, ["dnat_vip", "snat_interface"])
+        self.assertEqual(out["effective_flow"]["src_ip"], "192.0.2.40")
+        self.assertEqual(out["effective_flow"]["dst_ip"], "192.0.2.10")
+        self.assertEqual(out["hops"][1]["security"]["verdict"], "PERMIT")
+
+    def test_fortigate_policy_deny_stops_trace(self):
+        fw, sw, rows, addrs, devs, contexts = self._build_env()
+        out = path_trace.trace(
+            "192.0.2.10", fw["IP"], rows, addrs, devs,
+            src_ip="10.20.0.99", proto="tcp", dport=22, hop_contexts=contexts,
+        )
+        self.assertEqual(out["outcome"], "bloccato")
+        self.assertEqual(out["security_verdict"], "DENY")
+        self.assertEqual(len(out["hops"]), 1)
+        self.assertEqual(out["blocked_at_hop"]["device"], "fw-dmz")
+
+    def test_cisco_acl_deny_stops_trace_at_switch(self):
+        fw, sw, rows, addrs, devs, contexts = self._build_env()
+        # Port 443 is permitted on sw-core? No, OT-IN denies 443 to 192.0.2.10!
+        # Let's add a permit-all policy on FW for 443 or trace directly from sw-core:
+        out = path_trace.trace(
+            "192.0.2.10", sw["IP"], rows, addrs, devs,
+            src_ip="192.0.2.55", proto="tcp", dport=443, hop_contexts=contexts,
+        )
+        self.assertEqual(out["outcome"], "bloccato")
+        self.assertEqual(out["security_verdict"], "DENY")
+        self.assertEqual(out["blocked_at_hop"]["acl"], "OT-IN")
+
+    def test_vrf_isolation_and_ios_nat_vrf_parsing(self):
+        from services.policy_test.ios import parse_ios_config
+        sw_env = parse_ios_config(self.IOS_CFG)
+        self.assertEqual(sw_env.interfaces["Vlan20"]["vrf"], "VRF-OT")
+        self.assertEqual(len(sw_env.static_nats), 1)
+        self.assertEqual(sw_env.static_nats[0]["global_ip"], "203.0.113.10")
+
+        vrf_rows = [
+            _row(SWITCH, "10.10.0.0/16", "connected", "", "Vlan10", 0),
+            {**_row(SWITCH, "172.30.0.0/16", "static", "10.99.0.254", "Vlan20", 1), "vrf": "VRF-OT"},
+        ]
+        # Global lookup must NOT leak VRF-OT route
+        self.assertEqual(path_trace.candidates(vrf_rows, "172.30.1.5", vrf=""), [])
+        # VRF-OT lookup DOES find it
+        cand = path_trace.candidates(vrf_rows, "172.30.1.5", vrf="VRF-OT")
+        self.assertEqual(len(cand), 1)
+        self.assertEqual(cand[0]["vrf"], "VRF-OT")
+
+    def test_pbr_and_sdwan_preference(self):
+        fw_dev = dict(FW_EDGE, IP="192.0.2.1")
+        rows = {
+            fw_dev["IP"]: [
+                _row(fw_dev, "0.0.0.0/0", "static", "203.0.113.1", "port1", 1),
+                _row(fw_dev, "0.0.0.0/0", "static", "198.51.100.1", "port2", 1),
+            ]
+        }
+        addrs = {
+            fw_dev["IP"]: [
+                {"iface": "port1", "ip": "203.0.113.2", "network": "203.0.113.0/30"},
+                {"iface": "port2", "ip": "198.51.100.2", "network": "198.51.100.0/30"},
+                {"iface": "lan", "ip": "10.10.1.1", "network": "10.10.1.0/24"},
+            ]
+        }
+        # SD-WAN prefers healthy port2 when port1 is down
+        ctx_sdwan = {
+            fw_dev["IP"]: {
+                "sdwan": [
+                    {"interface": "port1", "state": "down", "checks": []},
+                    {"interface": "port2", "state": "up", "checks": []},
+                ]
+            }
+        }
+        out_sd = path_trace.trace("198.51.100.200", fw_dev["IP"], rows, addrs, {fw_dev["IP"]: fw_dev}, hop_contexts=ctx_sdwan)
+        self.assertEqual(out_sd["hops"][0]["decided_by"], "sdwan")
+        self.assertEqual(out_sd["hops"][0]["egress_iface"], "port2")
+
+        # PBR overrides RIB
+        ctx_pbr = {
+            fw_dev["IP"]: {
+                "policy_routes": [{
+                    "seq": 5, "enabled": True, "permit": True,
+                    "input": ["lan"], "src": ["10.10.0.0/16"], "dst": ["198.51.100.128/25"],
+                    "gateway": "203.0.113.9", "output": "port1", "comment": "ISP1-PBR",
+                }]
+            }
+        }
+        out_pbr = path_trace.trace(
+            "198.51.100.200", fw_dev["IP"], rows, addrs, {fw_dev["IP"]: fw_dev},
+            src_ip="10.10.1.5", hop_contexts=ctx_pbr,
+        )
+        self.assertEqual(out_pbr["hops"][0]["decided_by"], "pbr")
+        self.assertEqual(out_pbr["exit_hop"], "203.0.113.9")
+
+    def test_api_accepts_flow_params_and_rejects_bad_proto(self):
+        c = TestClient(app_server.app)
+        try:
+            user_manager.create_user("adm_e2e", PASS, role="admin", groups=None)
+        except Exception:
+            pass
+        c.post("/api/auth/login", json={"username": "adm_e2e", "password": PASS})
+        with mock.patch("services.inventory_manager.get_all_devices", return_value=[FW_EDGE]):
+            bad = c.get(f"/api/routes/trace?device={FW_EDGE['IP']}&src={FW_EDGE['IP']}&dst=198.51.100.200&src_ip=10.10.0.5&proto=bogus")
+            self.assertEqual(bad.status_code, 400)
+
+
 if __name__ == "__main__":
     unittest.main()

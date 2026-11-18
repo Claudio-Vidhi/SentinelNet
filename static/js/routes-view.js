@@ -1105,6 +1105,7 @@
         'biforcazione': 'warn',
         'non interrogato': 'warn',
         'limite salti': 'warn',
+        'bloccato': 'bad',
     };
 
     const RT_END = {
@@ -1115,6 +1116,7 @@
         'biforcazione': { label: 'rtTraceEndFork', color: 'var(--lamp-warn-ink)' },
         'non interrogato': { label: 'rtTraceEndUnknown', color: 'var(--lamp-warn-ink)' },
         'limite salti': { label: 'rtTraceEndHopLimit', color: 'var(--lamp-warn-ink)' },
+        'bloccato': { label: 'rtTraceEndBlocked', color: 'var(--lamp-fault-ink)' },
     };
 
     function rtTraceSyncSources() {
@@ -1139,6 +1141,25 @@
         box.textContent = text;
     }
 
+    function rtTraceSecVerdict(secVerdict) {
+        const box = document.getElementById('rtTraceSecVerdict');
+        if (!box) return;
+        if (!secVerdict) {
+            box.className = 'badge rt-verdict';
+            box.textContent = '';
+            return;
+        }
+        const map = {
+            PERMIT: ['ok', tr('rtTraceSecPermit')],
+            DENY: ['bad', tr('rtTraceSecDeny')],
+            UNKNOWN: ['warn', tr('rtTraceSecUnknown')],
+            NOT_EVALUATED: ['muted', tr('rtTraceSecNotEvaluated')],
+        };
+        const pair = map[secVerdict] || ['muted', secVerdict];
+        box.className = 'badge rt-verdict on ' + pair[0];
+        box.textContent = pair[1];
+    }
+
     function rtTraceOutcomeText(data) {
         const n = (data.hops || []).length;
         switch (data.outcome) {
@@ -1149,6 +1170,10 @@
             case 'biforcazione': return tr('rtTraceFork');
             case 'non interrogato': return tr('rtTraceNotQueried', { ip: data.device_ip || '?' });
             case 'limite salti': return tr('rtTraceHopLimit', { n: n });
+            case 'bloccato': {
+                const b = data.blocked_at_hop || {};
+                return tr('rtTraceBlocked', { device: b.device || '?', rule: b.rule || b.acl || '?' });
+            }
             default: return data.outcome || '';
         }
     }
@@ -1158,6 +1183,14 @@
             document.getElementById('rtTraceSrc'));
         const dst = /** @type {HTMLInputElement|null} */ (
             document.getElementById('rtTraceDst'));
+        const srcIpEl = /** @type {HTMLInputElement|null} */ (
+            document.getElementById('rtTraceSrcIp'));
+        const protoEl = /** @type {HTMLSelectElement|null} */ (
+            document.getElementById('rtTraceProto'));
+        const dportEl = /** @type {HTMLInputElement|null} */ (
+            document.getElementById('rtTraceDport'));
+        const vrfEl = /** @type {HTMLInputElement|null} */ (
+            document.getElementById('rtTraceVrf'));
         if (!src || !dst) return;
         clearInterval(_traceTimer);
         const mine = ++_traceSeq;
@@ -1166,8 +1199,23 @@
         if (!dst.value.trim()) { rtTraceVerdict('muted', tr('rtTraceNeedDst')); return; }
 
         rtTraceVerdict('muted', tr('rtTraceRunning'));
-        const url = `/api/routes/trace?device=${encodeURIComponent(devices)}`
-            + `&src=${encodeURIComponent(src.value)}&dst=${encodeURIComponent(dst.value.trim())}`;
+        rtTraceSecVerdict('');
+        const params = new URLSearchParams({
+            device: devices,
+            src: src.value,
+            dst: dst.value.trim(),
+        });
+        const srcIpVal = srcIpEl ? srcIpEl.value.trim() : '';
+        const protoVal = protoEl ? protoEl.value.trim() : '';
+        const dportVal = dportEl ? dportEl.value.trim() : '';
+        const vrfVal = vrfEl ? vrfEl.value.trim() : '';
+        if (srcIpVal) {
+            params.set('src_ip', srcIpVal);
+            if (protoVal) params.set('proto', protoVal);
+            if (dportVal) params.set('dport', dportVal);
+        }
+        if (vrfVal) params.set('vrf', vrfVal);
+        const url = `/api/routes/trace?${params.toString()}`;
         try {
             const res = await apiFetch(url);
             if (!res || mine !== _traceSeq) return;
@@ -1199,6 +1247,7 @@
         if (!_trace || !(_trace.hops || []).length) {
             rail.style.display = 'none';
             rail.innerHTML = '';
+            rtTraceSecVerdict('');
             // Non un vuoto: la vista dice cosa le serve per rispondere.
             steps.innerHTML = `<p class="rt-idle">${escapeHtml(tr('rtTraceIdle'))}</p>`;
             if (play) play.style.display = 'none';
@@ -1207,6 +1256,7 @@
         }
         rtTraceVerdict(RT_VERDICTS[_trace.outcome] || 'muted',
                        tr((RT_END[_trace.outcome] || RT_END['non interrogato']).label));
+        rtTraceSecVerdict(_trace.security_verdict || '');
         rail.style.display = '';
         rail.innerHTML = rtRailHtml(_trace);
         steps.innerHTML = rtStepsHtml(_trace);
@@ -1216,6 +1266,57 @@
         if (probe) probe.style.display = (currentRole === 'viewer') ? 'none' : '';
         const out = document.getElementById('rtProbeOut');
         if (out) { out.style.display = 'none'; out.innerHTML = ''; }
+    }
+
+    function rtHopNatText(n) {
+        if (n.orig_dst && n.new_dst) {
+            const op = n.orig_dport ? `:${n.orig_dport}` : '';
+            const np = n.new_dport ? `:${n.new_dport}` : '';
+            return `DNAT ${n.orig_dst}${op} → ${n.new_dst}${np}`;
+        }
+        if (n.orig_src && n.new_src) {
+            return `SNAT ${n.orig_src} → ${n.new_src}`;
+        }
+        return n.kind || tr('rtTraceNatLabel');
+    }
+
+    function rtHopChipsHtml(hop) {
+        const chips = [];
+        if (hop.vrf) {
+            chips.push(`<span class="rt-hop-chip">VRF ${escapeHtml(hop.vrf)}</span>`);
+        }
+        if (hop.ingress_iface || hop.egress_iface) {
+            const pathIf = `${hop.ingress_iface || '?'} → ${hop.egress_iface || '?'}`;
+            chips.push(`<span class="rt-hop-chip">${escapeHtml(pathIf)}</span>`);
+        }
+        if (hop.pbr && hop.pbr.permit) {
+            chips.push(`<span class="rt-hop-chip warn">PBR #${escapeHtml(String(hop.pbr.seq || '?'))}</span>`);
+        }
+        if (hop.sdwan) {
+            const st = hop.sdwan.state || '?';
+            const cls = st === 'up' ? 'ok' : (st === 'down' ? 'bad' : 'warn');
+            chips.push(`<span class="rt-hop-chip ${cls}">${escapeHtml(tr('rtTraceSdwanLabel', {
+                iface: hop.sdwan.interface || '?', state: st,
+            }))}</span>`);
+        }
+        if (hop.tunnel) {
+            const key = hop.tunnel.up ? 'rtTraceTunUp' : 'rtTraceTunDown';
+            const cls = hop.tunnel.up ? 'ok' : 'bad';
+            chips.push(`<span class="rt-hop-chip ${cls}">${escapeHtml(tr(key, {
+                name: hop.tunnel.name || '?',
+            }))}</span>`);
+        }
+        for (const n of (hop.nat || [])) {
+            chips.push(`<span class="rt-hop-chip nat">${escapeHtml(rtHopNatText(n))}</span>`);
+        }
+        const sec = hop.security;
+        if (sec && sec.evaluated) {
+            const v = sec.verdict || 'UNKNOWN';
+            const cls = v === 'PERMIT' ? 'ok' : (v === 'DENY' ? 'bad' : 'warn');
+            const detail = sec.matched_rule ? ` (${sec.matched_rule})` : '';
+            chips.push(`<span class="rt-hop-chip ${cls}">${escapeHtml(v + detail)}</span>`);
+        }
+        return chips.length ? `<div class="rt-hop-chips">${chips.join('')}</div>` : '';
     }
 
     // La catena in HTML e non in SVG: i riquadri si dimensionano sul contenuto,
@@ -1229,6 +1330,17 @@
             const role = i === 0 ? tr('rtTraceStart') : tr('rtTraceHopN', { n: i });
             const flag = hop.from_backup
                 ? `<span class="rt-node-flag">${escapeHtml(tr('rtFromBackup'))}</span>` : '';
+            const sec = hop.security;
+            const secFlag = (sec && sec.evaluated && sec.verdict !== 'SKIPPED')
+                ? `<span class="rt-node-flag" style="color:${
+                    sec.verdict === 'PERMIT' ? 'var(--lamp-up-ink)'
+                    : sec.verdict === 'DENY' ? 'var(--lamp-fault-ink)' : 'var(--lamp-warn-ink)'
+                  }">${escapeHtml(sec.verdict)}${sec.matched_rule ? ' · ' + escapeHtml(sec.matched_rule) : ''}</span>`
+                : '';
+            const natFlag = (hop.nat && hop.nat.length)
+                ? `<span class="rt-node-flag" style="color:var(--info);">${escapeHtml(
+                    hop.nat.map(rtHopNatText).join(', '))}</span>`
+                : '';
             const meta = win
                 ? (win.gateway ? tr('rtTraceVia', { hop: win.gateway }) + '  ·  ad ' + win.ad
                                : tr('rtTraceOnIface', { iface: win.interface || '?' }))
@@ -1246,8 +1358,8 @@
                 <div class="rt-node">
                   <span class="rt-node-role">${escapeHtml(role)}</span>
                   <span class="rt-node-name">${escapeHtml(hop.device || '')}</span>
-                  <span class="rt-node-ip">${escapeHtml(hop.device_ip || '')}</span>
-                  ${flag}
+                  <span class="rt-node-ip">${escapeHtml(hop.device_ip || '')}${hop.vrf ? ' · ' + escapeHtml(hop.vrf) : ''}</span>
+                  ${flag}${natFlag}${secFlag}
                 </div>${link}
               </li>`;
         }).join('');
@@ -1266,9 +1378,16 @@
 
     /** Il dettaglio sotto l'esito: l'indirizzo che chiude il percorso. */
     function rtTraceEndDetail(data) {
-        if (data.outcome === 'consegna') return data.dst || '';
+        if (data.outcome === 'consegna') {
+            const eff = data.effective_flow || {};
+            return eff.dst_ip || data.dst || '';
+        }
         if (data.outcome === 'fuori inventario') return data.exit_hop || '';
         if (data.outcome === 'non interrogato') return data.device_ip || '';
+        if (data.outcome === 'bloccato') {
+            const b = data.blocked_at_hop || {};
+            return `${b.device || ''} ${b.rule || b.acl || ''}`.trim();
+        }
         return '';
     }
 
@@ -1299,7 +1418,11 @@
                 return `<span class="rt-rule-step ${cls}">${escapeHtml(rule.label)}</span>`;
             }).join('');
             let say = tr('rtWhyOnly');
-            if (cand.length >= 2) {
+            if (hop.decided_by === 'pbr' && hop.pbr) {
+                say = tr('rtWhyPbr', { seq: String(hop.pbr.seq || '?') });
+            } else if (hop.decided_by === 'sdwan') {
+                say = tr('rtWhySdwan');
+            } else if (cand.length >= 2) {
                 if (hop.decided_by === 'prefisso') say = tr('rtWhyPrefix', { len: cand[0].prefixlen });
                 else if (hop.decided_by === 'distanza') say = tr('rtWhyDistance');
                 else if (hop.decided_by === 'ecmp') say = tr('rtWhyEcmp');
@@ -1307,6 +1430,7 @@
             }
             const backup = hop.from_backup
                 ? ` <span style="color:var(--warning);">${escapeHtml(tr('rtWhyBackup'))}</span>` : '';
+            const chips = rtHopChipsHtml(hop);
             const table = cand.length
                 ? `<table class="rt-cand">
                     <thead><tr>
@@ -1318,8 +1442,8 @@
                       <th class="rt-num" data-no-sort="1">${escapeHtml(tr('rtTraceColOutcome'))}</th>
                     </tr></thead><tbody>${rows}</tbody></table>
                     <div class="rt-rule">${rules}</div>`
-                : `<span class="rt-step-empty">${
-                      escapeHtml(tr('rtTraceNoRoute'))}</span>`;
+                : (hop.decided_by === 'pbr' ? '' : `<span class="rt-step-empty">${
+                      escapeHtml(tr('rtTraceNoRoute'))}</span>`);
             return `<div class="rt-step pending" data-step="${i}">
                 <div class="rt-step-gutter"><span class="rt-step-n">${i + 1}</span></div>
                 <div class="rt-step-body">
@@ -1330,6 +1454,7 @@
                         ? `<span class="badge rt-badge-backup">${escapeHtml(tr('rtFromBackup'))}</span>`
                         : ''}
                   </div>
+                  ${chips}
                   <p class="rt-step-say">${escapeHtml(say)}${backup}</p>
                   ${table}
                 </div>

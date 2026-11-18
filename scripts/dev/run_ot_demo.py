@@ -141,10 +141,16 @@ def seed_demo(reset: bool = False) -> None:
         process_criticality="mission_critical", maintenance_window="Planned turnaround only",
     )
     inventory_manager.add_or_update_device(
-        ip="192.0.2.40", hostname="fw-dmz-01", vendor="fortigate", profile="default",
+        ip="192.0.2.40", hostname="fw-dmz-01", vendor="fortinet", profile="default",
         username="", password="", enable_secret="", group="plant-demo",
-        location="loc-cell1", transports={"ssh": 22}, snmp_disabled=True,
+        location="loc-cell1", transports={"manual": True}, snmp_disabled=True,
         purdue_level="L3.5", probe=jump["id"],
+    )
+    inventory_manager.add_or_update_device(
+        ip="192.0.2.254", hostname="sw-core-01", vendor="cisco", profile="default",
+        username="", password="", enable_secret="", group="plant-demo",
+        location="loc-cell1", transports={"manual": True}, snmp_disabled=True,
+        purdue_level="L3", probe="central",
     )
 
     # Legacy OT site with findings (plant-legacy)
@@ -174,12 +180,99 @@ def seed_demo(reset: bool = False) -> None:
         by_ip["192.0.2.30"], "hmi01_panel.hmi", b"HMI-RUNTIME-DEMO",
         uploaded_by=DEMO_USER, project_version="v3.1", notes="Operator HMI backup",
     )
+    fw_demo_cfg = """config system interface
+    edit "port1"
+        set ip 10.20.0.1 255.255.255.0
+        set alias "it-uplink"
+    next
+    edit "port2"
+        set ip 172.16.10.1 255.255.255.252
+        set alias "ot-core-transit"
+    next
+end
+config firewall address
+    edit "IT-ENG-NET"
+        set subnet 10.20.0.0 255.255.255.0
+    next
+    edit "OT-CELL-NET"
+        set subnet 192.0.2.0 255.255.255.0
+    next
+end
+config firewall vip
+    edit "VIP-PLC-MODBUS"
+        set extip 10.20.0.50
+        set mappedip 192.0.2.10
+        set extintf "port1"
+        set portforward enable
+        set protocol tcp
+        set extport 502
+        set mappedport 502
+    next
+end
+config firewall service custom
+    edit "MODBUS-TCP"
+        set tcp-portrange 502
+    next
+end
+config router static
+    edit 1
+        set dst 192.0.2.0 255.255.255.0
+        set gateway 172.16.10.2
+        set device "port2"
+    next
+end
+config firewall policy
+    edit 10
+        set name "Allow-Eng-Modbus-VIP"
+        set srcintf "port1"
+        set dstintf "port2"
+        set srcaddr "IT-ENG-NET"
+        set dstaddr "VIP-PLC-MODBUS"
+        set action accept
+        set service "MODBUS-TCP"
+        set nat enable
+    next
+    edit 20
+        set name "Block-IT-SSH-To-OT"
+        set srcintf "port1"
+        set dstintf "port2"
+        set srcaddr "all"
+        set dstaddr "OT-CELL-NET"
+        set action deny
+        set service "SSH"
+    next
+end
+"""
+    sw_core_cfg = """hostname sw-core-01
+!
+ip access-list extended OT-CELL-IN
+ permit tcp host 172.16.10.1 host 192.0.2.10 eq 502
+ deny tcp any 192.0.2.0 0.0.0.255 eq 22
+ permit ip any any
+!
+interface GigabitEthernet0/0
+ ip address 172.16.10.2 255.255.255.252
+ ip access-group OT-CELL-IN in
+!
+interface Vlan10
+ ip address 192.0.2.254 255.255.255.0
+!
+interface Vlan20
+ ip address 10.30.0.1 255.255.255.0
+ ip access-group OT-CELL-IN in
+!
+ip route 0.0.0.0 0.0.0.0 172.16.10.1
+!
+end
+"""
+    backup_store.save_backup(by_ip["192.0.2.40"], "fw-dmz-01", fw_demo_cfg)
+    backup_store.save_backup(by_ip["192.0.2.254"], "sw-core-01", sw_core_cfg)
     backup_store.save_backup(by_ip["198.51.100.10"], "switch-legacy-01", "ip http server\n")
 
     segment_manager.save_segment(
         "plant-demo", None, "Cell L1 PLC/HMI", "sky",
         subnets=["192.0.2.0/24"], purdue_level="L1",
-        members=["192.0.2.10", "192.0.2.20", "192.0.2.30"],
+        members=["192.0.2.10", "192.0.2.20", "192.0.2.30", "192.0.2.254"],
     )
     segment_manager.save_segment(
         "plant-demo", None, "IT/OT DMZ", "amber",

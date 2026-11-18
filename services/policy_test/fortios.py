@@ -50,6 +50,11 @@ class FortiOSPolicyEnvironment:
     interfaces: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     addresses: Dict[str, List[Cube]] = field(default_factory=dict)
     services: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    vips: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    ippools: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    policy_routes: List[Dict[str, Any]] = field(default_factory=list)
+    policy_nat_pools: Dict[str, List[str]] = field(default_factory=dict)
+    policy_dst_names: Dict[str, List[str]] = field(default_factory=dict)
     unresolved: List[str] = field(default_factory=list)
 
 
@@ -113,6 +118,10 @@ def _collect_policy_address(name: str, pid: Any, env: FortiOSPolicyEnvironment,
             unresolved.append(
                 f"address '{name}' referenced by policy {pid} cannot be resolved "
                 "offline (FQDN, dynamic or geography object)")
+        return
+    vip = env.vips.get(name)
+    if vip and _is_ip(vip.get("mappedip", "")):
+        out.append(Cube.from_ip(vip["mappedip"]))
         return
     unresolved.append(f"address '{name}' referenced by policy {pid} is not defined")
 
@@ -301,6 +310,8 @@ def parse_fortios_config(config_text: str) -> FortiOSPolicyEnvironment:
             sets = entry.get("sets", {})
             ip_tokens = sets.get("ip", [])
             status = _forti_set1(entry, "status", "up").lower()
+            alias = _forti_set1(entry, "alias", "")
+            vrf = _forti_set1(entry, "vrf", "")
             if len(ip_tokens) >= 2 and _is_ip(ip_tokens[0]) and _is_ip(ip_tokens[1]):
                 ip_str, mask_str = ip_tokens[0], ip_tokens[1]
                 iface_info = {
@@ -308,6 +319,8 @@ def parse_fortios_config(config_text: str) -> FortiOSPolicyEnvironment:
                     "ip": ip_str,
                     "mask": mask_str,
                     "status": status,
+                    "alias": alias,
+                    "vrf": vrf,
                 }
                 env.interfaces[name] = iface_info
 
@@ -323,9 +336,41 @@ def parse_fortios_config(config_text: str) -> FortiOSPolicyEnvironment:
                             interface=name,
                             source="connected",
                             distance=0,
+                            vrf=vrf,
                         ))
                     except Exception:
                         pass
+
+    # 5b. Parse Virtual IPs (DNAT) and IP Pools (SNAT) before policies
+    vip_node = _forti_get(root, "firewall vip")
+    if vip_node:
+        for vname, entry in vip_node.get("children", {}).items():
+            extip = _forti_set1(entry, "extip")
+            mappedip = _forti_set1(entry, "mappedip")
+            if extip and mappedip:
+                env.vips[vname] = {
+                    "name": vname,
+                    "extip": extip,
+                    "mappedip": mappedip,
+                    "extintf": _forti_set1(entry, "extintf", "any"),
+                    "portforward": _forti_set1(entry, "portforward", "disable").lower() == "enable",
+                    "extport": _forti_set1(entry, "extport", ""),
+                    "mappedport": _forti_set1(entry, "mappedport", ""),
+                    "protocol": _forti_set1(entry, "protocol", "tcp").lower(),
+                }
+
+    pool_node = _forti_get(root, "firewall ippool")
+    if pool_node:
+        for pname, entry in pool_node.get("children", {}).items():
+            startip = _forti_set1(entry, "startip")
+            endip = _forti_set1(entry, "endip") or startip
+            if startip:
+                env.ippools[pname] = {
+                    "name": pname,
+                    "type": _forti_set1(entry, "type", "overload"),
+                    "startip": startip,
+                    "endip": endip,
+                }
 
     # 6. Parse static routes
     static_node = _forti_get(root, "router static")
@@ -341,6 +386,7 @@ def parse_fortios_config(config_text: str) -> FortiOSPolicyEnvironment:
             gw = _forti_set1(entry, "gateway")
             device = _forti_set1(entry, "device")
             distance = int(_forti_set1(entry, "distance", "10") or 10)
+            vrf = _forti_set1(entry, "vrf", "")
 
             if len(dst) >= 2 and _is_ip(dst[0]) and _is_ip(dst[1]):
                 net_str, mask_str = dst[0], dst[1]
@@ -363,9 +409,46 @@ def parse_fortios_config(config_text: str) -> FortiOSPolicyEnvironment:
                         interface=egress_intf,
                         source="static",
                         distance=distance,
+                        vrf=vrf,
                     ))
                 except Exception:
                     pass
+
+    # 6b. Parse policy routes (PBR)
+    pbr_node = _forti_get(root, "router policy")
+    if pbr_node:
+        for pid, entry in pbr_node.get("children", {}).items():
+            sets = entry.get("sets", {})
+            src_toks = sets.get("src") or sets.get("srcaddr") or []
+            dst_toks = sets.get("dst") or sets.get("dstaddr") or []
+
+            def _pbr_items(toks):
+                items = []
+                i = 0
+                while i < len(toks):
+                    if (i + 1 < len(toks) and _is_ip(toks[i])
+                            and _is_ip(toks[i + 1])):
+                        c = Cube.from_netmask(toks[i], toks[i + 1])
+                        pl = mask_to_prefix_len(c.mask) or 0
+                        items.append(f"{int_to_ip(c.value)}/{pl}")
+                        i += 2
+                    else:
+                        items.append(toks[i])
+                        i += 1
+                return items
+
+            seq_val = int(pid) if str(pid).isdigit() else len(env.policy_routes) + 1
+            env.policy_routes.append({
+                "seq": seq_val,
+                "enabled": _forti_set1(entry, "status", "enable").lower() == "enable",
+                "permit": _forti_set1(entry, "action", "permit").lower() == "permit",
+                "input": list(sets.get("input-device") or []),
+                "src": _pbr_items(src_toks),
+                "dst": _pbr_items(dst_toks),
+                "gateway": _forti_set1(entry, "gateway", ""),
+                "output": _forti_set1(entry, "output-device", ""),
+                "comment": _forti_set1(entry, "comments", ""),
+            })
 
     # Dynamic routing check
     dynamic_present = bool(_forti_get(root, "router ospf") or _forti_get(root, "router bgp"))
@@ -397,6 +480,11 @@ def parse_fortios_config(config_text: str) -> FortiOSPolicyEnvironment:
             srcaddr_list = sets.get("srcaddr", ["all"])
             dstaddr_list = sets.get("dstaddr", ["all"])
             service_list = sets.get("service", ["ALL"])
+            if nat_enabled and _forti_set1(entry, "ippool", "disable").lower() == "enable":
+                poolnames = list(sets.get("poolname") or [])
+                if poolnames:
+                    env.policy_nat_pools[str(pid)] = poolnames
+            env.policy_dst_names[str(pid)] = list(dstaddr_list)
 
             policy_unresolved: List[str] = []
             if action_raw == "ipsec":

@@ -3243,6 +3243,20 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
 .rt-node-name { font-family: var(--font-code); font-size: 14px; font-weight: 700; }
 .rt-node-ip { font-family: var(--font-code); font-size: 11.5px; color: var(--text-muted); }
 .rt-node-flag { font-family: var(--font-code); font-size: 10px; color: var(--lamp-warn-ink); }
+.rt-hop-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.rt-hop-chip {
+  font-family: var(--font-code);
+  font-size: 10.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: var(--seam) solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-soft);
+}
+.rt-hop-chip.ok { border-color: var(--lamp-up-ink); color: var(--lamp-up-ink); }
+.rt-hop-chip.bad { border-color: var(--lamp-fault-ink); color: var(--lamp-fault-ink); }
+.rt-hop-chip.warn { border-color: var(--lamp-warn-ink); color: var(--lamp-warn-ink); }
+.rt-hop-chip.nat { border-color: var(--info); color: var(--info); }
 
 /* L'esito e' l'unico riquadro colorato: qui il colore vuol dire stato. */
 .rt-node-end {

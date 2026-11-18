@@ -4380,7 +4380,10 @@
         <h4 style="margin:0; font-size:14px; color:var(--text-muted);">
           <i class="fa-solid fa-route"></i> <span data-i18n="rtTraceTitle">Analisi di percorso</span>
         </h4>
-        <span id="rtTraceVerdict" class="badge rt-verdict"></span>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <span id="rtTraceSecVerdict" class="badge rt-verdict"></span>
+          <span id="rtTraceVerdict" class="badge rt-verdict"></span>
+        </div>
       </div>
       <p class="rt-trace-desc" data-i18n="rtTraceDesc">Dove finisce un indirizzo partendo da un apparato, e quale rotta vince su ogni salto. Calcolato sulle tabelle gia' raccolte: nessun pacchetto viene inviato.</p>
 
@@ -4389,10 +4392,34 @@
           <label for="rtTraceSrc" data-i18n="rtTraceSrc">Apparato di partenza</label>
           <select id="rtTraceSrc"></select>
         </div>
-        <div class="form-group" style="margin-bottom:0; min-width:200px;">
+        <div class="form-group" style="margin-bottom:0; min-width:170px;">
+          <label for="rtTraceSrcIp" data-i18n="rtTraceSrcIp">IP sorgente (opz.)</label>
+          <input type="text" id="rtTraceSrcIp" placeholder="es. 192.0.2.30"
+                 data-i18n-placeholder="rtTraceSrcIpPl" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="form-group" style="margin-bottom:0; min-width:170px;">
           <label for="rtTraceDst" data-i18n="rtTraceDst">Indirizzo di destinazione</label>
           <input type="text" id="rtTraceDst" placeholder="es. 10.30.0.7"
                  data-i18n-placeholder="rtTraceDstPl" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="form-group" style="margin-bottom:0; min-width:105px;">
+          <label for="rtTraceProto" data-i18n="rtTraceProto">Protocollo</label>
+          <select id="rtTraceProto">
+            <option value="tcp">TCP</option>
+            <option value="udp">UDP</option>
+            <option value="icmp">ICMP</option>
+            <option value="ip">IP</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0; width:100px;">
+          <label for="rtTraceDport" data-i18n="rtTraceDport">Porta (opz.)</label>
+          <input type="number" id="rtTraceDport" min="1" max="65535" placeholder="443"
+                 data-i18n-placeholder="rtTraceDportPl" autocomplete="off">
+        </div>
+        <div class="form-group" style="margin-bottom:0; width:130px;">
+          <label for="rtTraceVrf" data-i18n="rtTraceVrf">VRF (opz.)</label>
+          <input type="text" id="rtTraceVrf" placeholder="global"
+                 data-i18n-placeholder="rtTraceVrfPl" autocomplete="off" spellcheck="false">
         </div>
         <button id="btnRtTrace" class="btn btn-secondary" style="width:auto; margin:0;">
           <i class="fa-solid fa-diagram-project"></i> <span data-i18n="rtTraceRun">Analizza</span>

@@ -347,9 +347,13 @@ def _collect_ios(device) -> dict:
     una shell. bypass_blacklist=True perche' e' un comando di sola lettura
     scelto qui, non digitato da un utente."""
     from core import core_engine
+    from core.device_credentials import CredentialDecryptError, CredentialResolveError
     ip = device.get("IP")
-    answer = core_engine.send_custom_command(device, "show ip route",
-                                             bypass_blacklist=True)
+    try:
+        answer = core_engine.send_custom_command(device, "show ip route",
+                                                 bypass_blacklist=True)
+    except (CredentialDecryptError, CredentialResolveError) as e:
+        return {"device_ip": ip, "error": str(e)}
     if answer.get("status") != "success":
         return {"device_ip": ip, "error": answer.get("message") or "SSH fallito"}
     output = answer.get("output")

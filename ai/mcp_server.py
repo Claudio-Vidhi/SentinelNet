@@ -801,14 +801,25 @@ TOOLS = {
             "device": a["devices"], "type": a.get("type", ""), "q": a.get("q", "")}),
     ),
     "trace_route": (
-        "Hop-by-hop path to a destination computed from the routing tables of "
-        "the given devices, starting at device 'src'. No packet is sent.",
+        "End-to-end hop-by-hop L3 + VRF + PBR + SD-WAN + NAT + ACL/Firewall path "
+        "computed across the given Cisco/FortiGate devices starting at 'src'. "
+        "When src_ip is supplied, evaluates per-hop firewall policies, IOS ACLs, "
+        "VIP/DNAT/SNAT translations, and FortiGate PBR/SD-WAN.",
         _obj({"devices": {**_S, "description": "Comma-separated device IPs to consider (must include src)"},
               "src": {**_S, "description": "Starting device IP"},
-              "dst": {**_S, "description": "Destination IP"}},
+              "dst": {**_S, "description": "Destination IP"},
+              "src_ip": {**_S, "description": "Traffic source IP for policy/ACL/NAT evaluation (optional)"},
+              "proto": {**_S, "description": "Protocol: tcp, udp, icmp, ip (optional)"},
+              "dport": {"type": "integer", "description": "Destination port 1-65535 (optional)"},
+              "vrf": {**_S, "description": "Starting VRF name (optional, empty = global)"}},
              ["devices", "src", "dst"]),
         lambda a: api("GET", "/api/routes/trace", params={
-            "device": a["devices"], "src": a["src"], "dst": a["dst"]}),
+            k: v for k, v in {
+                "device": a["devices"], "src": a["src"], "dst": a["dst"],
+                "src_ip": a.get("src_ip"), "proto": a.get("proto"),
+                "dport": a.get("dport"), "vrf": a.get("vrf"),
+            }.items() if v not in (None, "")
+        }),
     ),
     "get_device_classification": (
         "Inventoried and CDP/LLDP-discovered devices with category, "
