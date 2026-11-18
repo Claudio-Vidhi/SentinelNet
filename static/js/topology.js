@@ -2297,12 +2297,12 @@
     }
 
     // Segments of the tenant on the map; 'all' has none (they are per tenant).
-    let mapOtFindings = { conduit_violations: [], traffic_violations: [], rogue_ot_devices: [] };
+    let mapOtFindings = { conduit_violations: [], traffic_violations: [], rogue_ot_devices: [], dual_homed_hosts: [], multi_mac_ports: [], wan_exposures: [], wan_firewalls_checked: 0 };
     async function loadMapSegments(org, force) {
         if (org === mapSegmentsOrg && !force) return;
         if (org !== mapSegmentsOrg) closeSegEditor(false);   // a draft belongs to its tenant
         mapSegments = { segments: [], links: [] };
-        mapOtFindings = { conduit_violations: [], traffic_violations: [], rogue_ot_devices: [] };
+        mapOtFindings = { conduit_violations: [], traffic_violations: [], rogue_ot_devices: [], dual_homed_hosts: [], multi_mac_ports: [], wan_exposures: [], wan_firewalls_checked: 0 };
         mapSegmentsOrg = org;
         if (!org || org === 'all') return;
         const res = await apiFetch('/api/segments?org=' + encodeURIComponent(org));
@@ -2453,7 +2453,10 @@
         const conduits = mapOtFindings.conduit_violations || [];
         const traffic = mapOtFindings.traffic_violations || [];
         const rogues = mapOtFindings.rogue_ot_devices || [];
-        const total = conduits.length + traffic.length + rogues.length;
+        const dual = mapOtFindings.dual_homed_hosts || [];
+        const multi = mapOtFindings.multi_mac_ports || [];
+        const wan = mapOtFindings.wan_exposures || [];
+        const total = conduits.length + traffic.length + rogues.length + dual.length + multi.length + wan.length;
         sec.hidden = !total;
         if (!total) { list.innerHTML = ''; return; }
         if (title) title.textContent = tr('mapSegOtTitle', { n: total });
@@ -2468,6 +2471,23 @@
         rogues.slice(0, 10).forEach(r => {
             rows.push(`<div class="map-seg-item" style="border-left:2px solid #ef4444; padding-left:6px;"><span class="map-seg-meta" style="color:#ef4444;">${escapeHtml(tr('mapSegOtRogueMac', { mac: r.mac || '', sw: r.switch_name || r.switch_ip || '', iface: r.interface || '', vlan: r.vlan || '—' }))}</span></div>`);
         });
+        wan.slice(0, 10).forEach(w => {
+            const c = w.severity === 'critical' ? '#ef4444' : '#f97316';
+            rows.push(`<div class="map-seg-item" style="border-left:2px solid ${c}; padding-left:6px;"><span class="map-seg-meta" style="color:${c};">${escapeHtml(tr('mapSegOtWanExposure', { fw: w.device || w.device_ip || '', rule: w.rule_name || w.rule_id || '', ext: w.ext_ip || w.nat_name || '', ip: w.mapped_ip || '', lvl: w.level || '' }))}</span></div>`);
+        });
+        dual.slice(0, 10).forEach(h => {
+            const ips = (h.ips || []).map(i => `${i.ip} (${i.level || '?'})`).join(', ');
+            const macs = h.macs || [];
+            const possible = h.signal === 'sibling_nic';
+            const c = possible ? '#eab308' : '#f97316';
+            const text = possible
+                ? tr('mapSegOtDualHomedPossible', { mac: macs[0] || '', mac2: macs[1] || '', ips })
+                : tr('mapSegOtDualHomed', { mac: macs[0] || '', ips });
+            rows.push(`<div class="map-seg-item" style="border-left:2px solid ${c}; padding-left:6px;"><span class="map-seg-meta" style="color:${c};">${escapeHtml(text)}</span></div>`);
+        });
+        multi.slice(0, 10).forEach(p => {
+            rows.push(`<div class="map-seg-item" style="border-left:2px solid #eab308; padding-left:6px;"><span class="map-seg-meta" style="color:#eab308;">${escapeHtml(tr('mapSegOtMultiMac', { n: p.count || 0, sw: p.switch_name || p.switch_ip || '', iface: p.interface || '', vlan: (p.vlans || []).join(', ') || '—' }))}</span></div>`);
+        });
         list.innerHTML = rows.join('');
     }
 
@@ -2480,7 +2500,10 @@
         const open = fs.filter(f => !f.decision).length;
         const otTotal = (mapOtFindings.conduit_violations || []).length
             + (mapOtFindings.traffic_violations || []).length
-            + (mapOtFindings.rogue_ot_devices || []).length;
+            + (mapOtFindings.rogue_ot_devices || []).length
+            + (mapOtFindings.dual_homed_hosts || []).length
+            + (mapOtFindings.multi_mac_ports || []).length
+            + (mapOtFindings.wan_exposures || []).length;
         const badgeCount = open + otTotal;
         badge.hidden = !badgeCount || !!segDraft;
         badge.textContent = String(badgeCount);

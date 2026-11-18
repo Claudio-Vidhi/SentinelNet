@@ -11,11 +11,15 @@ Provides:
 - Immediate alerts (`events` + `notifications.emit`) for IT/OT violations
   and rogue MACs on OT VLANs.
 """
+import functools
 import ipaddress
 import json
 import logging
+import os
+import re
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from core import db
@@ -788,6 +792,271 @@ def list_rogue_ot_events(org: Optional[str] = None, limit: int = 100) -> list[di
     return out
 
 
+# ---------------------------------------------------------------------------
+# Passive OT exposure detectors (MAC/ARP history + firewall backups)
+# ---------------------------------------------------------------------------
+
+_IT_LEVELS = frozenset(("L3.5", "L4"))
+_RECENT_DAYS = 7
+# First-hop redundancy virtual MACs (VRRP v4/v6, HSRP v1/v2, GLBP): one MAC
+# answering for gateway IPs in every VLAN it serves.
+_VIRTUAL_MAC_PREFIXES = ("00:00:5e:00:01:", "00:00:5e:00:02:", "00:00:0c:07:ac:",
+                         "00:00:0c:9f:f", "00:07:b4:00:")
+_FORTI_ACCEPT_RE = re.compile(r"^\s*set action accept\b", re.M)
+
+
+def _recent_cutoff() -> str:
+    return (datetime.now(timezone.utc) - timedelta(days=_RECENT_DAYS)).isoformat(timespec="seconds")
+
+
+def _vlan_key(v: str) -> int:
+    return int(v) if v.isdigit() else 0
+
+
+def _infra_macs(dev_ips: list[str]) -> set:
+    """MACs owned by inventoried devices: switch interface MACs plus the ARP
+    bindings of every inventory IP (the union of ``own_macs`` over them, in
+    one query). A FortiGate answers for all its VLAN subinterfaces with one
+    MAC, which would otherwise look dual-homed."""
+    from collectors import mac_history
+    out = set(mac_history.get_switch_if_macs())
+    with mac_history._connect() as c:
+        out |= {r["mac"] for r in c.execute(
+            "SELECT DISTINCT mac FROM arp_entries WHERE ip IN (SELECT value FROM json_each(?))",
+            (json.dumps(dev_ips),))}
+    return out
+
+
+def detect_dual_homed(org: str, devices: list[dict], segments: list[dict]) -> list[dict]:
+    """Hosts bridging IT (L3.5/L4) and OT (L0-L2): one MAC with recent ARP IPs
+    on both sides, or seen on access ports in an OT-protected and a non-OT
+    VLAN; plus a low-confidence sibling-NIC heuristic (adjacent MACs)."""
+    from collectors import industrial_oui, mac_history
+    mac_history.init_db()
+    segs = _index_segments(segments)
+    dev_by_ip = {str(d.get("IP") or ""): d for d in devices if d.get("IP")}
+    ot_vlans = {v for s in segs for v in s["ot_vlans"]}
+    cutoff = _recent_cutoff()
+    with mac_history._connect() as c:
+        arp = c.execute(
+            "SELECT mac, ip, vlan, last_seen FROM arp_entries "
+            "WHERE tenant = ? AND last_seen >= ?", (org, cutoff)).fetchall()
+        sights = c.execute(
+            "SELECT mac, vlan, switch_ip, switch_name, interface, last_seen FROM mac_sightings "
+            "WHERE tenant = ? AND is_uplink = 0 AND last_seen >= ?", (org, cutoff)).fetchall()
+    skip = _infra_macs(list(dev_by_ip))
+
+    zones: dict[str, dict] = {}
+    by_mac: dict[str, dict] = {}
+
+    def entry(mac: str) -> dict:
+        return by_mac.setdefault(mac, {"ips": {}, "vlans": set(), "port_vlans": set(),
+                                       "ports": [], "last_seen": ""})
+
+    for r in arp:
+        mac, ip = r["mac"], r["ip"]
+        if mac in skip or mac.startswith(_VIRTUAL_MAC_PREFIXES):
+            continue
+        if ip not in zones:
+            zones[ip] = resolve_ip_zone(ip, devices, segments, segs, dev_by_ip)
+        e = entry(mac)
+        e["ips"][ip] = {"ip": ip, "level": zones[ip]["level"], "segment": zones[ip]["segment_name"]}
+        if r["vlan"]:
+            e["vlans"].add(str(r["vlan"]))
+        e["last_seen"] = max(e["last_seen"], r["last_seen"] or "")
+    for r in sights:
+        mac = r["mac"]
+        if mac in skip or mac.startswith(_VIRTUAL_MAC_PREFIXES):
+            continue
+        e = entry(mac)
+        vlan = str(r["vlan"] or "")
+        if vlan:
+            e["vlans"].add(vlan)
+            e["port_vlans"].add(vlan)
+        e["ports"].append({"switch": r["switch_name"] or r["switch_ip"], "switch_ip": r["switch_ip"],
+                           "interface": r["interface"] or "", "vlan": vlan})
+        e["last_seen"] = max(e["last_seen"], r["last_seen"] or "")
+
+    findings: list[dict] = []
+    side: dict[str, str] = {}
+    for mac, e in by_mac.items():
+        levels = {i["level"] for i in e["ips"].values()}
+        pv = e["port_vlans"]
+        if (levels & OT_LEVELS and levels & _IT_LEVELS) or (pv & ot_vlans and pv - ot_vlans):
+            findings.append({
+                "code": "ot_dual_homed", "signal": "same_mac", "severity": "high",
+                "macs": [mac], "ips": sorted(e["ips"].values(), key=lambda x: x["ip"]),
+                "vlans": sorted(e["vlans"], key=_vlan_key),
+                "ports": e["ports"][:5], "last_seen": e["last_seen"],
+            })
+        elif levels & OT_LEVELS:
+            side[mac] = "ot"
+        elif levels & _IT_LEVELS:
+            side[mac] = "it"
+
+    # ponytail: sibling-NIC is a guess on adjacent MAC serials. Without
+    # persisted hostnames (DHCP leases are only queried live) a two-NIC host
+    # whose MACs are unrelated is undetectable; persisting leases closes it.
+    it_by_nic = {(m[:8], int(m[9:].replace(":", ""), 16)): m for m, s in side.items() if s == "it"}
+    for mac, s in side.items():
+        # Industrial vendors number PLC/IO MACs sequentially: adjacency means nothing.
+        if s != "ot" or industrial_oui.is_industrial_oui(mac):
+            continue
+        nic = int(mac[9:].replace(":", ""), 16)
+        for delta in (-2, -1, 1, 2):
+            other = it_by_nic.get((mac[:8], nic + delta))
+            if not other:
+                continue
+            a, b = by_mac[mac], by_mac[other]
+            findings.append({
+                "code": "ot_dual_homed_possible", "signal": "sibling_nic", "severity": "low",
+                "macs": [mac, other],
+                "ips": sorted([*a["ips"].values(), *b["ips"].values()], key=lambda x: x["ip"]),
+                "vlans": sorted(a["vlans"] | b["vlans"], key=_vlan_key),
+                "ports": (a["ports"] + b["ports"])[:5],
+                "last_seen": max(a["last_seen"], b["last_seen"]),
+            })
+    return findings
+
+
+def detect_multi_mac_ports(
+    org: str, devices: list[dict], segments: list[dict], threshold: int = 3,
+) -> list[dict]:
+    """OT access ports learning ``threshold`` or more endpoint MACs: an
+    unmanaged switch, hub or bridging host behind a PLC/HMI port. PC + IP
+    phone (2) is normal, hence the default of 3."""
+    from collectors import mac_history
+    mac_history.init_db()
+    segs = _index_segments(segments)
+    dev_by_ip = {str(d.get("IP") or ""): d for d in devices if d.get("IP")}
+    ot_vlans = {v for s in segs for v in s["ot_vlans"]}
+    infra = set(mac_history.get_switch_if_macs())
+    with mac_history._connect() as c:
+        rows = c.execute(
+            "SELECT mac, oui_vendor, vlan, switch_ip, switch_name, interface, last_seen "
+            "FROM mac_sightings WHERE tenant = ? AND is_uplink = 0 AND last_seen >= ?",
+            (org, _recent_cutoff())).fetchall()
+
+    ports: dict[tuple, list] = {}
+    for r in rows:
+        if r["mac"] not in infra:
+            ports.setdefault((r["switch_ip"], r["interface"] or ""), []).append(r)
+    sw_ot: dict[str, bool] = {}
+    findings: list[dict] = []
+    for (sw, iface), prs in ports.items():
+        if sw not in sw_ot:
+            # Inventory Purdue Level first, then segment membership / subnet.
+            sw_ot[sw] = resolve_ip_zone(sw, devices, segments, segs, dev_by_ip)["level"] in OT_LEVELS
+        vlans = {str(r["vlan"] or "") for r in prs} - {""}
+        if not (sw_ot[sw] or vlans & ot_vlans):
+            continue
+        macs = {r["mac"]: r["oui_vendor"] or "" for r in prs}
+        if len(macs) < threshold:
+            continue
+        findings.append({
+            "code": "ot_multi_mac_port", "severity": "medium",
+            "switch_ip": sw, "switch_name": prs[0]["switch_name"] or sw, "interface": iface,
+            "count": len(macs),
+            "macs": [{"mac": m, "oui_vendor": v} for m, v in sorted(macs.items())[:5]],
+            "vlans": sorted(vlans, key=_vlan_key),
+            "last_seen": max(r["last_seen"] or "" for r in prs),
+        })
+    return findings
+
+
+@functools.lru_cache(maxsize=16)
+def _parse_fw_backup(path: str, mtime: float, kind: str) -> Any:
+    """Parsed policy environment of one backup. ``mtime`` is only the cache
+    key: a newer backup of the same device is parsed again."""
+    from ai import config_analyzer
+    from services.policy_test.fortios import parse_fortios_config
+    from services.policy_test.panos import parse_panos_config
+    with open(path, encoding="utf-8", errors="ignore") as fh:
+        content = "\n".join(config_analyzer.running_config(fh.read()))
+    return parse_fortios_config(content) if kind == "fortios" else parse_panos_config(content)
+
+
+def detect_wan_exposure(
+    org: str, devices: list[dict], segments: list[dict],
+) -> tuple[list[dict], int]:
+    """Firewall DNAT (FortiGate VIP in an accept policy / PAN-OS NAT rule)
+    publishing an L0-L2 asset. Returns ``(findings, firewalls_parsed)`` so an
+    empty list can be told apart from "no firewall backup evaluated"."""
+    from ai import config_analyzer
+    from services.policy_test.model import int_to_ip, mask_to_prefix_len
+    segs = _index_segments(segments)
+    dev_by_ip = {str(d.get("IP") or ""): d for d in devices if d.get("IP")}
+
+    def ot_zone(ip_text: str) -> Optional[dict]:
+        z = resolve_ip_zone(ip_text, devices, segments, segs, dev_by_ip)
+        return z if z["level"] in OT_LEVELS else None
+
+    def cube_external(cube) -> bool:
+        plen = mask_to_prefix_len(cube.mask)
+        text = int_to_ip(cube.value) + (f"/{plen}" if plen is not None else "")
+        return resolve_target_zone(text, devices, segments, segs, dev_by_ip)["level"] == "external"
+
+    findings: list[dict] = []
+    checked = 0
+    for d in devices:
+        kind = config_analyzer.detect_config_type("", d)
+        if kind not in ("fortios", "panos"):
+            continue
+        ip = str(d.get("IP") or "")
+        path, _ = config_analyzer._find_freshest_backup(ip, org)
+        if not path:
+            continue
+        try:
+            env = _parse_fw_backup(path, os.path.getmtime(path), kind)
+        except OSError:
+            continue
+        checked += 1
+        base = {"code": "ot_wan_exposure", "device": d.get("Hostname") or ip, "device_ip": ip}
+        if kind == "fortios":
+            for rule in env.policies:
+                # Raw action: a VIP with a mapped range leaves the rule
+                # 'unknown' in the parsed model, yet it still accepts.
+                if rule.disabled or not _FORTI_ACCEPT_RE.search(rule.raw_text):
+                    continue
+                src = rule.fields.src_ips
+                open_src = any(c.is_any() or cube_external(c) for c in src)
+                # ponytail: VIP groups (firewall vipgrp) are not parsed, so a
+                # policy reaching OT through a group is not reported.
+                for name in env.policy_dst_names.get(rule.id, []):
+                    vip = env.vips.get(name)
+                    if not vip:
+                        continue
+                    mapped = str(vip.get("mappedip") or "").split("-")[0].strip()
+                    z = ot_zone(mapped)
+                    if z:
+                        findings.append({
+                            **base, "severity": "critical" if open_src else "high",
+                            "rule_id": rule.id, "rule_name": rule.name, "nat_name": name,
+                            "ext_ip": vip.get("extip") or "", "ext_intf": vip.get("extintf") or "",
+                            "mapped_ip": mapped, "level": z["level"], "segment": z["segment_name"],
+                        })
+        else:
+            for nr in env.nat_rules:
+                if nr.get("disabled") or not nr.get("dnat"):
+                    continue
+                mapped = str(nr["dnat"])
+                if env.addresses.get(mapped):
+                    mapped = int_to_ip(env.addresses[mapped][0].value)
+                mapped = mapped.split("/")[0].split("-")[0].strip()
+                z = ot_zone(mapped)
+                if not z:
+                    continue
+                srcs = nr.get("source") or []
+                dsts = nr.get("destination") or []
+                findings.append({
+                    **base, "severity": "critical" if (not srcs or "any" in srcs) else "high",
+                    "rule_id": nr["name"], "rule_name": nr["name"], "nat_name": nr["name"],
+                    "ext_ip": dsts[0] if dsts else "", "ext_intf": ",".join(nr.get("from") or []),
+                    "mapped_ip": mapped, "level": z["level"], "segment": z["segment_name"],
+                })
+    return findings, checked
+
+
 def ot_security_summary(org: str) -> dict:
     """Consolidated IT/OT conduit violations and rogue OT MAC alerts for a tenant."""
     from services import inventory_manager, segment_manager
@@ -800,10 +1069,15 @@ def ot_security_summary(org: str) -> dict:
     conduit_findings = check_purdue_blueprint(devices, segments, seg_links)
     traffic_findings = scan_recent_syslog_violations(org, devices, segments)
     rogue_events = list_rogue_ot_events(org=org, limit=100)
+    wan_findings, wan_checked = detect_wan_exposure(org, devices, segments)
 
     return {
         "org": org,
         "conduit_violations": conduit_findings,
         "traffic_violations": traffic_findings,
         "rogue_ot_devices": rogue_events,
+        "dual_homed_hosts": detect_dual_homed(org, devices, segments),
+        "multi_mac_ports": detect_multi_mac_ports(org, devices, segments),
+        "wan_exposures": wan_findings,
+        "wan_firewalls_checked": wan_checked,
     }

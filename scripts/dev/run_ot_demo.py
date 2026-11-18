@@ -127,6 +127,22 @@ def _seed_policy_snapshots(db) -> None:
         conn.close()
 
 
+def _seed_mac_history() -> None:
+    from collectors import mac_history
+    # One host with an ARP binding on each side of the DMZ: dual-homed finding.
+    mac_history.record_arp_entries(
+        [{"mac": "aa:bb:cc:00:00:01", "ip": "192.0.2.77", "vlan": "10"},
+         {"mac": "aa:bb:cc:00:00:01", "ip": "10.20.0.77", "vlan": "20"}],
+        source_ip="192.0.2.254", source_name="sw-core-01", source_type="switch", tenant="plant-demo",
+    )
+    # Four endpoints behind one OT access port: multi-MAC port finding.
+    mac_history.record_sightings(
+        [{"mac": f"aa:bb:cc:00:01:0{i}", "vlan": "10", "interface": "Gi1/0/5", "is_uplink": False}
+         for i in range(1, 5)],
+        switch_ip="192.0.2.20", switch_name="switch-01", tenant="plant-demo",
+    )
+
+
 def seed_demo(reset: bool = False) -> None:
     if reset:
         shutil.rmtree(DEMO_DATA_DIR, ignore_errors=True)
@@ -287,6 +303,11 @@ config firewall vip
         set extport 502
         set mappedport 502
     next
+    edit "VIP-HMI-WEB"
+        set extip 203.0.113.60
+        set mappedip 192.0.2.30
+        set extintf "port1"
+    next
 end
 config firewall service custom
     edit "MODBUS-TCP"
@@ -340,6 +361,15 @@ config firewall policy
         set dstaddr "OT-CELL-NET"
         set action accept
         set service "ALL"
+    next
+    edit 60
+        set name "Publish-HMI-Web"
+        set srcintf "port1"
+        set dstintf "port2"
+        set srcaddr "all"
+        set dstaddr "VIP-HMI-WEB"
+        set action accept
+        set service "HTTPS"
     next
 end
 """
@@ -495,6 +525,7 @@ end
     )
     _seed_events(db)
     _seed_policy_snapshots(db)
+    _seed_mac_history()
 
 
 def main() -> int:
