@@ -88,7 +88,15 @@ async def list_policy_traffic(
     # Le piu' cariche in cima: e' l'ordine in cui si guarda una tabella di
     # traffico, e mette sotto gli occhi la policy che sposta i dati.
     rows.sort(key=lambda r: (-(r["bytes"] or 0), r["device"], r["policyid"] or 0))
+    from services import purdue_model, segment_manager
+    scoped_devs = devices_in_scope(current_user)
+    groups = {d.get("Group") for d in targets if d.get("Group")}
+    segs = []
+    for g in sorted(groups):
+        segs.extend(segment_manager.list_segments(g).get("segments") or [])
+    ot_violations = purdue_model.check_policy_violations(rows, scoped_devs, segs)
     return {"total": len(rows), "rows": rows, "errors": errors,
             "devices_queried": len(targets),
             "total_bytes": sum(r["bytes"] or 0 for r in rows),
-            "total_sessions": sum(r["active_sessions"] or 0 for r in rows)}
+            "total_sessions": sum(r["active_sessions"] or 0 for r in rows),
+            "ot_violations": ot_violations}

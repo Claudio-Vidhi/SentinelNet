@@ -49,6 +49,8 @@ class DeviceSchema(BaseModel):
     snmp_disabled: Optional[bool] = None
     # Name read by /api/verify-device. Empty = keep the stored one.
     hostname: str = Field("", max_length=255)
+    # Optional IEC 62443 Purdue level (L0, L1, L2, L3, L3.5, L4). None = keep existing.
+    purdue_level: Optional[str] = Field(None, max_length=8)
 
 class DeviceDelete(BaseModel):
     ip: str
@@ -177,6 +179,7 @@ _EXPORT_COLUMNS = {
     "profile":    ("Profile",    lambda d, s, b, m: d.get("Profile", "")),
     "ssh_port":   ("SSH Port",   lambda d, s, b, m: d.get("SSH Port", "")),
     "transports": ("Transports", lambda d, s, b, m: d.get("Transports", "")),
+    "purdue_level": ("Purdue Level", lambda d, s, b, m: d.get("Purdue Level", "")),
     "redundancy_type":   ("Redundancy",        lambda d, s, b, m: (b or {}).get("type", "standalone")),
     "redundancy_role":   ("Redundancy Role",   lambda d, s, b, m: (b or {}).get("role", "")),
     "redundancy_health": ("Redundancy Health", lambda d, s, b, m: (b or {}).get("health", "")),
@@ -366,6 +369,7 @@ def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
             snmp_disabled=device.snmp_disabled,
             location=device.location.strip() or None,
             hostname=device.hostname.strip() or None,
+            purdue_level=device.purdue_level,
         )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))

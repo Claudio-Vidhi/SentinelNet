@@ -1018,6 +1018,7 @@
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${tr('topoType')}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:${deviceTypeMeta(n.device_type).color};">${escapeHtml(deviceTypeLabel(n.device_type))}</td></tr>
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">Firmware:</td><td style="font-size: 11px; padding: 2px 0; border: none; background:none;"><code style="font-family: var(--font-code); color: var(--primary); font-size: 10px;">${escapeHtml(firmware)}</code></td></tr>
             ${(n.vtp_domain || n.vtp_mode) ? `<tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">VTP:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:${vtpDomainColor(n.vtp_domain)};">${escapeHtml([n.vtp_domain, n.vtp_mode].filter(Boolean).join(' · '))}</td></tr>` : ''}
+            ${nodePurdueLevel(n) ? `<tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${escapeHtml(tr('topoPurdueLevel'))}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:var(--primary);">${escapeHtml(nodePurdueLevel(n))}</td></tr>` : ''}
             ${stackRow}
             ${reportedRow}
           </table>
@@ -1224,11 +1225,13 @@
         mapSegmentModel = segModelFor(filteredNodesData, filteredLinksData, corePairOf(selectedGroup));
         renderSegPanel();
 
+        const isPurdue = getMapView() === 'purdue';
+
         // Piani della vista "A livelli" (ignorati dalle altre viste). I piani si
         // calcolano sulla topologia VERA, prima di comprimere le foglie: il
         // nodo aggregato eredita poi il piano dei suoi membri.
         layeredGroupOfChild = {};
-        {
+        if (!isPurdue) {
             layeredAssigned = computeLayeredLevels(filteredNodesData, filteredLinksData, selectedGroup);
             const grouped = groupLayeredLeaves(filteredNodesData, filteredLinksData, selectedGroup);
             layeredGroupOfChild = grouped.groupOfChild;
@@ -1241,6 +1244,9 @@
             filteredNodesData = grouped.nodes;
             filteredLinksData = grouped.links;
         }
+
+        const nodePurdueMap = {};
+        filteredNodesData.forEach(n => { nodePurdueMap[n.id] = nodePurdueLevel(n); });
 
         // Trasforma nodi filtrati per l'interfaccia interattiva Vis.js
         const nodes = filteredNodesData.map(n => {
@@ -1270,6 +1276,7 @@
                 isBoundaryVal: n.is_boundary || false,
                 vendorVal: resolvedVendor,
                 vtpVal: vtp,
+                purdueVal: nodePurdueMap[n.id] || '',
                 nodeDataVal: n
             };
         });
@@ -1322,6 +1329,13 @@
                 <i class="fa-solid fa-link"></i> ${tr('topoAggregated')} · ${escapeHtml(ends.text)}${l.member_count > 1 ? ` · ${l.member_count} ${tr('topoMembers')}` : ''}
               </div>` : '';
 
+            const conduitState = isPurdue ? purdueConduitState(nodePurdueMap[l.source], nodePurdueMap[l.target]) : 'normal';
+            const conduitBadge = conduitState === 'violation'
+                ? `<div style="display:inline-flex; align-items:center; gap:6px; font-size:10px; font-weight:700; color:#ef4444; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.35); padding:2px 7px; margin-bottom:8px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(tr('purdueEdgeViolation'))}</div>`
+                : (conduitState === 'dmz'
+                    ? `<div style="display:inline-flex; align-items:center; gap:6px; font-size:10px; font-weight:700; color:#06b6d4; background:rgba(6,182,212,0.12); border:1px solid rgba(6,182,212,0.35); padding:2px 7px; margin-bottom:8px;"><i class="fa-solid fa-shield-halved"></i> ${escapeHtml(tr('purdueEdgeDmz'))}</div>`
+                    : '');
+
             // Interfacce membro per lato, con il Port-channel di quel lato.
             const memberRows = (isPC && (localMembers || remoteMembers)) ? `
               <div style="margin-top:8px; border-top:1px solid rgba(255,255,255,0.08); padding-top:6px; font-family:var(--font-code); font-size:10px;">
@@ -1336,6 +1350,7 @@
               <div style="font-size: 13px; font-weight: 700; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px; color: var(--primary); display: flex; align-items: center; gap: 8px;">
                 <i class="fa-solid fa-circle-nodes"></i> ${tr('topoInterconnectionLink')}
               </div>
+              ${conduitBadge}
               ${pcBadge}
               <div style="display: grid; grid-template-columns: 1fr 30px 1fr; gap: 8px; align-items: center; font-size: 11px; line-height: 1.4;">
                 <div>
@@ -1361,12 +1376,41 @@
                 to: l.target,
                 title: container, // HTML Tooltip DOM element
                 arrows: { to: { enabled: false } },
+                conduitState,
                 // ponytail: dati "piatti" (no oggetti color vis.js) usati solo dall'export Visio
                 // Il colore finisce nel .vsdx: Visio vuole un #RRGGBB, e un
                 // "var(--x)" cadeva nel fallback viola di _hex_to_rgb_fraction().
                 exportVal: { isPortChannel: isPC, pcEnds: ends, color: isPC ? PC_COPPER : cssVar('--text-soft', '#8d9bb0') }
             };
         });
+
+        if (isPurdue) {
+            nodes.forEach(nd => { nd.level = PURDUE_LEVEL_ROW[nd.purdueVal || ''] ?? 6; });
+            edges.forEach((e, i) => {
+                e.lnk = filteredLinksData[i];
+                if (e.kind === 'group' || e.kind === 'redundancy_heartbeat') return;
+                if (e.conduitState === 'violation') {
+                    e.color = { color: '#ef4444', highlight: '#ef4444' };
+                    e.dashes = [8, 4];
+                    e.width = 3;
+                    e.label = 'IEC 62443 !';
+                    e.font = { color: '#ef4444', size: 11, strokeWidth: 2, strokeColor: '#0f172a' };
+                } else if (e.conduitState === 'dmz') {
+                    e.color = { color: '#06b6d4', highlight: '#22d3ee' };
+                    e.dashes = false;
+                    e.width = 2.5;
+                    e.label = 'DMZ L3.5';
+                    e.font = { color: '#06b6d4', size: 10, strokeWidth: 2, strokeColor: '#0f172a' };
+                } else {
+                    const isPC = e.lnk && e.lnk.is_portchannel;
+                    e.color = { color: isPC ? PC_COPPER : hexToRgba(cssVar('--text-soft', '#8d9bb0'), 0.65), highlight: cssVar('--primary', '#0ea5e9') };
+                    e.dashes = false;
+                    e.width = isPC ? 2.2 : 1.5;
+                }
+            });
+            renderNetwork(nodes, edges, purdueMapOptions(), '', null, drawPurdueBands);
+            return;
+        }
 
         // Hierarchy view: vis.js places each level (layeredMapOptions), the
         // cables are drawn by the overlay (bus per parent, one line per Po
@@ -1379,19 +1423,107 @@
         renderNetwork(nodes, edges, layeredMapOptions(), '', drawLayeredLinks, drawLayeredColumns);
     }
 
-    // ===== Map view selector (Schema / Hierarchy) =====
+    // ===== Purdue Model (IEC 62443) helpers & view =====
+    const PURDUE_LEVEL_ROW = { L4: 0, 'L3.5': 1, L3: 2, L2: 3, L1: 4, L0: 5, '': 6 };
+    const PURDUE_ROWS = [
+        { code: 'L4',   row: 0, key: 'purdueLaneL4',  color: '#3b82f6' },
+        { code: 'L3.5', row: 1, key: 'purdueLaneL35', color: '#06b6d4' },
+        { code: 'L3',   row: 2, key: 'purdueLaneL3',  color: '#22c55e' },
+        { code: 'L2',   row: 3, key: 'purdueLaneL2',  color: '#eab308' },
+        { code: 'L1',   row: 4, key: 'purdueLaneL1',  color: '#f97316' },
+        { code: 'L0',   row: 5, key: 'purdueLaneL0',  color: '#ef4444' },
+        { code: '',     row: 6, key: 'purdueLaneUnk', color: '#64748b' },
+    ];
+    function nodePurdueLevel(n) {
+        if (!n) return '';
+        if (n.purdue_level) return n.purdue_level;
+        const dev = (globalDevices || []).find(d => d.IP === (n.display_ip || n.id) || d.IP === n.id);
+        if (dev && dev['Purdue Level']) return dev['Purdue Level'];
+        const segId = mapSegmentModel && mapSegmentModel.of && mapSegmentModel.of[n.id];
+        if (segId) {
+            const seg = (mapSegments.segments || []).find(s => s.id === segId);
+            if (seg && seg.purdue_level) return seg.purdue_level;
+        }
+        return '';
+    }
+    function purdueConduitState(lvA, lvB) {
+        if (!lvA || !lvB || lvA === lvB) return 'normal';
+        const pair = new Set([lvA, lvB]);
+        const hasShop = pair.has('L0') || pair.has('L1');
+        const hasOt = hasShop || pair.has('L2');
+        if (hasOt && pair.has('L4')) return 'violation';
+        if (hasShop && pair.has('L3')) return 'violation';
+        if (pair.has('L3.5') && (hasOt || pair.has('L3') || pair.has('L4'))) return 'dmz';
+        return 'normal';
+    }
+    function purdueMapOptions() {
+        return {
+            layout: { improvedLayout: false, randomSeed: 42, hierarchical: { enabled: true, direction: 'UD', sortMethod: 'directed', levelSeparation: 145, nodeSpacing: 240, treeSpacing: 260, shakeTowards: 'roots' } },
+            physics: { enabled: false },
+            interaction: { hover: true, hoverConnectedEdges: true, selectConnectedEdges: true, tooltipDelay: 150, dragNodes: true, dragView: true, zoomView: true, multiselect: true },
+            nodes: { shadow: { enabled: false } },
+            edges: { smooth: { type: 'cubicBezier', forceDirection: 'vertical', roundness: 0.35 }, shadow: { enabled: false } }
+        };
+    }
+    function drawPurdueBands(ctx) {
+        if (!networkInstance) return;
+        drawDotGrid(ctx);
+        const pos = networkInstance.getPositions();
+        const rows = {};
+        let minX = Infinity, maxX = -Infinity;
+        networkInstance.body.data.nodes.forEach(nd => {
+            const bb = networkInstance.getBoundingBox(nd.id);
+            if (!bb || !pos[nd.id]) return;
+            minX = Math.min(minX, bb.left);
+            maxX = Math.max(maxX, bb.right);
+            const row = PURDUE_LEVEL_ROW[nd.purdueVal || ''] ?? 6;
+            const r = rows[row] || (rows[row] = { top: Infinity, bottom: -Infinity });
+            r.top = Math.min(r.top, bb.top);
+            r.bottom = Math.max(r.bottom, bb.bottom);
+        });
+        const keys = Object.keys(rows).map(Number).sort((a, b) => a - b);
+        if (!keys.length) return;
+        const x0 = minX - 180, x1 = maxX + 80;
+        ctx.save();
+        keys.forEach(rowIdx => {
+            const meta = PURDUE_ROWS.find(p => p.row === rowIdx) || PURDUE_ROWS[6];
+            const b = rows[rowIdx];
+            const y0 = b.top - 22, y1 = b.bottom + 22;
+            ctx.globalAlpha = 0.08;
+            ctx.fillStyle = meta.color;
+            roundRectPath(ctx, x0, y0, x1 - x0, y1 - y0, 10);
+            ctx.fill();
+            ctx.globalAlpha = 0.55;
+            ctx.strokeStyle = meta.color;
+            ctx.lineWidth = meta.code === 'L3.5' ? 2 : 1;
+            ctx.setLineDash(meta.code === 'L3.5' ? [6, 4] : []);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.globalAlpha = 1;
+            ctx.font = `700 12px ${cssVar('--font-legend', 'sans-serif')}`;
+            ctx.fillStyle = meta.color;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.fillText(tr(meta.key).toUpperCase(), x0 + 14, y0 + 10);
+        });
+        ctx.restore();
+    }
+
+    // ===== Map view selector (Schema / Hierarchy / Purdue) =====
     // La scelta è ricordata in localStorage. Entrambe le viste condividono dati,
     // filtri, interruttori, selettore Sede/Categorie e istanza Vis.js.
     // The overview is gone: a saved 'classic' opens the hierarchy, whose
     // free move does what the overview was kept for.
-    const MAP_VIEWS = ['minimal', 'layered'];
+    const MAP_VIEWS = ['minimal', 'layered', 'purdue'];
     let mapViewMode = MAP_VIEWS.includes(localStorage.getItem('mapViewMode')) ? localStorage.getItem('mapViewMode') : 'layered';
     function getMapView() { return mapViewMode; }
     function updateMapViewButtons() {
         const m = document.getElementById('mapViewMinimalBtn');
         const l = document.getElementById('mapViewLayeredBtn');
+        const p = document.getElementById('mapViewPurdueBtn');
         if (m) m.setAttribute('aria-pressed', String(mapViewMode === 'minimal'));
         if (l) l.setAttribute('aria-pressed', String(mapViewMode === 'layered'));
+        if (p) p.setAttribute('aria-pressed', String(mapViewMode === 'purdue'));
         const links = document.getElementById('mapViewLinks');
         if (links) links.hidden = mapViewMode !== 'minimal';
         // The AI layout works in both views; an undo belongs to the view it came from.
@@ -1749,6 +1881,13 @@
                 if (keepView) { networkInstance.moveTo({ ...keepView, animation: false }); return; }
                 networkInstance.fit();
                 networkInstance.moveTo({ scale: networkInstance.getScale() * 0.85 });
+            });
+        } else if (view === 'purdue') {
+            networkInstance.once('afterDrawing', () => {
+                Object.values(networkInstance.body.nodes).forEach(n => { if (n.options.fixed) n.options.fixed.y = false; });
+                if (keepView) { networkInstance.moveTo({ ...keepView, animation: false }); return; }
+                networkInstance.fit();
+                networkInstance.moveTo({ scale: networkInstance.getScale() * 0.88 });
             });
         }
         networkInstance.once('stabilizationIterationsDone', freezeLayout);
@@ -2158,20 +2297,26 @@
     }
 
     // Segments of the tenant on the map; 'all' has none (they are per tenant).
+    let mapOtFindings = { conduit_violations: [], traffic_violations: [], rogue_ot_devices: [] };
     async function loadMapSegments(org, force) {
         if (org === mapSegmentsOrg && !force) return;
         if (org !== mapSegmentsOrg) closeSegEditor(false);   // a draft belongs to its tenant
         mapSegments = { segments: [], links: [] };
+        mapOtFindings = { conduit_violations: [], traffic_violations: [], rogue_ot_devices: [] };
         mapSegmentsOrg = org;
         if (!org || org === 'all') return;
         const res = await apiFetch('/api/segments?org=' + encodeURIComponent(org));
         if (res && res.ok) mapSegments = await res.json();
+        try {
+            const otRes = await apiFetch('/api/segments/ot-findings?org=' + encodeURIComponent(org));
+            if (otRes && otRes.ok) mapOtFindings = await otRes.json();
+        } catch (_) {}
     }
 
     // --- Segment editor (Segments menu in the map toolbar) -------------------
     // While it is open the map draws the draft instead of its saved copy:
     // dashed area, the rest faded, the ladder columns as they will be.
-    let segDraft = null;   // { id, name, color, subnets, members: Set, excluded: Set }
+    let segDraft = null;   // { id, name, color, purdue_level, ot_vlans, subnets, members: Set, excluded: Set }
     let segInput = null;   // nodes, links and cores of the map drawn now
     let segSuggestions = [];
     const SEG_DRAFT_ID = '__draft';
@@ -2183,6 +2328,7 @@
     function segEffective() {
         if (!segDraft) return mapSegments;
         const d = { id: segDraft.id || SEG_DRAFT_ID, name: segDraft.name || tr('mapSegNewTitle'), color: segDraft.color,
+                    purdue_level: segDraft.purdue_level || '', ot_vlans: segDraft.ot_vlans || [],
                     subnets: segDraft.subnets, members: [...segDraft.members], excluded: [...segDraft.excluded],
                     cores: segDraft.cores.filter(Boolean) };
         return { segments: [d, ...(mapSegments.segments || []).filter(s => s.id !== segDraft.id)], links: mapSegments.links };
@@ -2257,7 +2403,8 @@
         ctx.save();
         segAreas().forEach(a => {
             if (!a.head || a.s.id === draftId) return;
-            segPaint(ctx, a, SEGMENT_COLORS[a.s.color] || SEGMENT_COLORS.amber, 0.1, null, a.s.name);
+            const title = a.s.purdue_level ? `${a.s.name} [${a.s.purdue_level}]` : a.s.name;
+            segPaint(ctx, a, SEGMENT_COLORS[a.s.color] || SEGMENT_COLORS.amber, 0.1, null, title);
         });
         ctx.restore();
     }
@@ -2287,13 +2434,41 @@
         list.innerHTML = !ok ? '' : !segs.length ? `<p class="map-view-hint">${escapeHtml(tr('mapSegNone'))}</p>` : segs.map(s => {
             const n = Object.values(m.of).filter(x => x === s.id).length;
             const gw = [...(m.gateways[s.id] || [])].map(segLabel).join(' + ') || '—';
+            const purdueTag = s.purdue_level ? ` <small style="color:var(--primary); font-weight:700;">[${escapeHtml(s.purdue_level)}]</small>` : '';
+            const vlanTag = (s.ot_vlans && s.ot_vlans.length) ? ` · OT VLAN ${escapeHtml(s.ot_vlans.join(','))}` : '';
             return `<div class="map-seg-item"><span class="map-seg-dot" style="background:${SEGMENT_COLORS[s.color] || ''}"></span>
-                <span class="map-seg-name">${escapeHtml(s.name)}</span>
+                <span class="map-seg-name">${escapeHtml(s.name)}${purdueTag}</span>
                 <span class="map-seg-acts"><button type="button" class="map-tb-btn" data-seg-action="edit" data-id="${attrEsc(s.id)}"${segDraft ? ' disabled' : ''}>${escapeHtml(tr('btnMapSegEdit'))}</button><button type="button" class="map-tb-btn" data-seg-action="delete" data-id="${attrEsc(s.id)}"${segDraft ? ' disabled' : ''}>${escapeHtml(tr('btnMapSegDelete'))}</button></span>
-                <span class="map-seg-meta">${escapeHtml(tr('mapSegMeta', { n, gw }))}</span></div>`;
+                <span class="map-seg-meta">${escapeHtml(tr('mapSegMeta', { n, gw }))}${vlanTag}</span></div>`;
         }).join('');
         renderSegFindings(ok ? m : null);
+        renderSegOtFindings(ok);
         if (segDraft) renderSegMembers();
+    }
+
+    function renderSegOtFindings(ok) {
+        const sec = segEl('mapSegOtSection'), list = segEl('mapSegOtList'), title = segEl('mapSegOtTitle');
+        if (!sec || !list) return;
+        if (!ok || segDraft) { sec.hidden = true; list.innerHTML = ''; return; }
+        const conduits = mapOtFindings.conduit_violations || [];
+        const traffic = mapOtFindings.traffic_violations || [];
+        const rogues = mapOtFindings.rogue_ot_devices || [];
+        const total = conduits.length + traffic.length + rogues.length;
+        sec.hidden = !total;
+        if (!total) { list.innerHTML = ''; return; }
+        if (title) title.textContent = tr('mapSegOtTitle', { n: total });
+        const rows = [];
+        conduits.forEach(f => {
+            const p = f.params || {};
+            rows.push(`<div class="map-seg-item" style="border-left:2px solid #ef4444; padding-left:6px;"><span class="map-seg-meta" style="color:#ef4444;">${escapeHtml(tr('mapSegOtConduit', { a: p.segment_a || p.a || '', la: p.level_a || '', b: p.segment_b || p.b || '', lb: p.level_b || '' }))}</span></div>`);
+        });
+        traffic.slice(0, 10).forEach(v => {
+            rows.push(`<div class="map-seg-item" style="border-left:2px solid #f97316; padding-left:6px;"><span class="map-seg-meta" style="color:#f97316;">${escapeHtml(tr('mapSegOtTraffic', { src: v.src_ip || '', ls: v.src_level || '', dst: v.dst_ip || '', ld: v.dst_level || '' }))}</span></div>`);
+        });
+        rogues.slice(0, 10).forEach(r => {
+            rows.push(`<div class="map-seg-item" style="border-left:2px solid #ef4444; padding-left:6px;"><span class="map-seg-meta" style="color:#ef4444;">${escapeHtml(tr('mapSegOtRogueMac', { mac: r.mac || '', sw: r.switch_name || r.switch_ip || '', iface: r.interface || '', vlan: r.vlan || '—' }))}</span></div>`);
+        });
+        list.innerHTML = rows.join('');
     }
 
     // One row per finding with its decision. Hidden while a draft is open:
@@ -2303,9 +2478,13 @@
         if (!sec) return;
         const fs = m && m.findings ? m.findings : [];
         const open = fs.filter(f => !f.decision).length;
-        badge.hidden = !open || !!segDraft;
-        badge.textContent = String(open);
-        badge.setAttribute('aria-label', tr('mapSegFindingsBadge', { n: open }));
+        const otTotal = (mapOtFindings.conduit_violations || []).length
+            + (mapOtFindings.traffic_violations || []).length
+            + (mapOtFindings.rogue_ot_devices || []).length;
+        const badgeCount = open + otTotal;
+        badge.hidden = !badgeCount || !!segDraft;
+        badge.textContent = String(badgeCount);
+        badge.setAttribute('aria-label', tr('mapSegFindingsBadge', { n: badgeCount }));
         sec.hidden = !fs.length || !!segDraft;
         if (sec.hidden) { list.innerHTML = ''; return; }
         segEl('mapSegFindingsTitle').textContent = tr('mapSegFindingsTitle', { n: fs.length });
@@ -2377,14 +2556,19 @@
     function openSegEditor(seg) {
         const used = new Set((mapSegments.segments || []).map(s => s.color));
         segDraft = seg
-            ? { id: seg.id, name: seg.name, color: seg.color, subnets: [...(seg.subnets || [])],
+            ? { id: seg.id, name: seg.name, color: seg.color,
+                purdue_level: seg.purdue_level || '', ot_vlans: [...(seg.ot_vlans || [])],
+                subnets: [...(seg.subnets || [])],
                 members: new Set(seg.members || []), excluded: new Set(seg.excluded || []),
                 cores: [(seg.cores || [])[0] || '', (seg.cores || [])[1] || ''] }
             : { id: null, name: '', color: Object.keys(SEGMENT_COLORS).find(c => !used.has(c)) || 'amber',
+                purdue_level: '', ot_vlans: [],
                 subnets: [], members: new Set(), excluded: new Set(), cores: ['', ''] };
         segEl('mapSegEditorTitle').textContent = tr(seg ? 'mapSegEditTitle' : 'mapSegNewTitle');
         segEl('mapSegName').value = segDraft.name;
         segEl('mapSegSubnets').value = segDraft.subnets.join('\n');
+        if (segEl('mapSegPurdue')) segEl('mapSegPurdue').value = segDraft.purdue_level;
+        if (segEl('mapSegOtVlans')) segEl('mapSegOtVlans').value = segDraft.ot_vlans.join(', ');
         segEl('mapSegSearch').value = '';
         segEl('mapSegErr').textContent = '';
         segEl('mapSegColors').innerHTML = Object.keys(SEGMENT_COLORS).map(c => `<input type="radio" name="mapSegColor" id="mapSegColor-${c}" value="${c}"${c === segDraft.color ? ' checked' : ''}><label for="mapSegColor-${c}" style="background:${SEGMENT_COLORS[c]}" title="${attrEsc(tr(SEG_COLOR_KEYS[c]))}" aria-label="${attrEsc(tr(SEG_COLOR_KEYS[c]))}"></label>`).join('');
@@ -2428,6 +2612,7 @@
         const name = segDraft.name.trim();
         if (!name) { segEl('mapSegErr').textContent = tr('mapSegErrName'); return; }
         const ok = await segPost('/api/segments', { org: mapSegmentsOrg, id: segDraft.id, name, color: segDraft.color,
+            purdue_level: segDraft.purdue_level || '', ot_vlans: segDraft.ot_vlans || [],
             subnets: segDraft.subnets, members: [...segDraft.members], excluded: [...segDraft.excluded],
             cores: segDraft.cores.filter(Boolean) });
         if (!ok) return;
@@ -2459,6 +2644,15 @@
             if (!segDraft) return;
             segDraft.color = e.target.value;
             redrawInteractiveMap();
+        });
+        segEl('mapSegPurdue')?.addEventListener('change', e => {
+            if (!segDraft) return;
+            segDraft.purdue_level = e.target.value || '';
+            redrawInteractiveMap();
+        });
+        segEl('mapSegOtVlans')?.addEventListener('change', e => {
+            if (!segDraft) return;
+            segDraft.ot_vlans = String(e.target.value || '').split(/[\s,;]+/).map(x => x.trim()).filter(Boolean);
         });
         segEl('mapSegSubnets')?.addEventListener('change', e => {
             if (!segDraft) return;
@@ -7598,7 +7792,8 @@
         const tenant = ((opt && opt.value && opt.text) || lastMapGroup || 'map')
             .normalize('NFKD').replace(/[̀-ͯ]/g, '')
             .replace(/[^\w.-]+/g, '-').replace(/^[-.]+|[-.]+$/g, '').toLowerCase() || 'map';
-        const view = getMapView() === 'layered' ? 'hierarchy' : 'schema';
+        const mView = getMapView();
+        const view = mView === 'purdue' ? 'purdue' : (mView === 'layered' ? 'hierarchy' : 'schema');
         return `sentinelnet-${tenant}-${view}-${new Date().toISOString().slice(0, 10)}.${ext}`;
     }
 
@@ -8402,6 +8597,7 @@
     document.getElementById('toggleVtpDomain')?.addEventListener('change', loadInteractiveMap);
     document.getElementById('mapViewMinimalBtn')?.addEventListener('click', () => setMapView('minimal'));
     document.getElementById('mapViewLayeredBtn')?.addEventListener('click', () => setMapView('layered'));
+    document.getElementById('mapViewPurdueBtn')?.addEventListener('click', () => setMapView('purdue'));
     document.getElementById('mapAiRunBtn')?.addEventListener('click', runMapAiLayout);
     document.getElementById('mapViewMenu')?.addEventListener('toggle', e => {
         if (/** @type {HTMLDetailsElement} */ (e.target).open) renderMapAiZones();

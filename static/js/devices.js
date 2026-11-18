@@ -633,6 +633,7 @@
 
     function deviceFormPayload() {
         const probeSel = document.getElementById('devProbeSelect');
+        const purdueSel = document.getElementById('devPurdueLevel');
         const payload = {
             ip: document.getElementById('devIp').value.trim(),
             vendor: document.getElementById('devVendor').value,
@@ -643,6 +644,7 @@
             group: document.getElementById('devGroupSelect').value,
             location: document.getElementById('devLocationSelect').value,
             probe: (probeSel && probeSel.value) ? probeSel.value : 'central',
+            purdue_level: purdueSel ? purdueSel.value : '',
             transports: readTransportsForm()
         };
 
@@ -761,6 +763,8 @@
         try { devTransports = dev.Transports ? JSON.parse(dev.Transports) : null; } catch (e) { devTransports = null; }
         setTransportsForm(devTransports, dev['SSH Port']);
         document.getElementById('devVendor').value = (dev.Vendor || '').toLowerCase();
+        const purdueSelEdit = document.getElementById('devPurdueLevel');
+        if (purdueSelEdit) purdueSelEdit.value = dev['Purdue Level'] || '';
         updateDevSecretField();
         // Il segreto non torna dal server: il placeholder dice solo SE c'è.
         document.getElementById('devSnmp').value = '';
@@ -815,6 +819,8 @@
         populateDevLocationOptions('');
         const probeSelReset = document.getElementById('devProbeSelect');
         if (probeSelReset) probeSelReset.value = 'central';
+        const purdueSelReset = document.getElementById('devPurdueLevel');
+        if (purdueSelReset) purdueSelReset.value = '';
         setTransportsForm(null, 22);
         document.getElementById('customCredsForm').style.display = 'none';
         document.getElementById('devUser').value = '';

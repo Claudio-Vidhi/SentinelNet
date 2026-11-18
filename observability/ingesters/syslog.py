@@ -69,6 +69,8 @@ def _parse(data: bytes, exporter_ip: str) -> dict:
         "action": action,
         "message": text[:MAX_MESSAGE_LEN],
         "exporter_ip": exporter_ip,
+        "src_ip": extracted.get("src_ip"),
+        "dst_ip": extracted.get("dst_ip"),
         "ot_protocol": extracted.get("ot_protocol"),
         "ring_event": extracted.get("ring_event"),
     }

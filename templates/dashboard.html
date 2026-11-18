@@ -973,6 +973,7 @@
         <div class="map-seg" role="group" aria-label="Vista mappa" data-i18n-aria-label="ariaMapViewSwitch">
           <button type="button" id="mapViewMinimalBtn" class="map-view-btn" data-i18n="btnMapMinimal">Schema</button>
           <button type="button" id="mapViewLayeredBtn" class="map-view-btn" data-i18n="btnMapLayered">Gerarchia</button>
+          <button type="button" id="mapViewPurdueBtn" class="map-view-btn" data-i18n="btnMapPurdue">Purdue</button>
         </div>
         <!-- Shown when the site is mostly dual-homed to a core pair (schemaLadderPlan). -->
         <button type="button" id="mapLadderHint" class="map-tb-btn map-ladder-hint" hidden><i class="fa-solid fa-diagram-project" aria-hidden="true"></i> <span></span></button>
@@ -1026,6 +1027,11 @@
               <p class="map-view-hint" data-i18n="mapSegFindingsHint">Un cavo tra segmenti che non arriva su un gateway: possibile bypass del firewall.</p>
               <div id="mapSegFindingList" class="map-seg-list"></div>
             </section>
+            <!-- IEC 62443 / Purdue IT/OT boundary violations and rogue OT MAC alerts -->
+            <section id="mapSegOtSection" class="map-view-sec" hidden>
+              <h3 id="mapSegOtTitle" class="map-view-h"></h3>
+              <div id="mapSegOtList" class="map-seg-list"></div>
+            </section>
             <section id="mapSegEditor" class="map-view-sec" hidden>
               <h3 id="mapSegEditorTitle" class="map-view-h"></h3>
               <label for="mapSegName" class="map-view-h" data-i18n="lblMapSegName">Nome</label>
@@ -1038,6 +1044,18 @@
               <select id="mapSegSuggest"></select>
               <label for="mapSegSubnets" class="map-view-h" data-i18n="lblMapSegSubnets">Subnet, una per riga</label>
               <textarea id="mapSegSubnets" class="map-ai-note" rows="2" placeholder="10.20.0.0/24"></textarea>
+              <label for="mapSegPurdue" class="map-view-h" data-i18n="lblMapSegPurdue">Livello Purdue</label>
+              <select id="mapSegPurdue" aria-label="Livello Purdue del segmento" data-i18n-aria-label="ariaMapSegPurdue">
+                <option value="" data-i18n="optPurdueNone">— Nessuno —</option>
+                <option value="L4" data-i18n="optPurdueL4">L4 · Enterprise IT</option>
+                <option value="L3.5" data-i18n="optPurdueL35">L3.5 · DMZ IT/OT</option>
+                <option value="L3" data-i18n="optPurdueL3">L3 · Site Operations</option>
+                <option value="L2" data-i18n="optPurdueL2">L2 · Supervisione (SCADA)</option>
+                <option value="L1" data-i18n="optPurdueL1">L1 · Controllo (PLC/RTU)</option>
+                <option value="L0" data-i18n="optPurdueL0">L0 · Campo / Sensori</option>
+              </select>
+              <label for="mapSegOtVlans" class="map-view-h" data-i18n="lblMapSegOtVlans">VLAN OT protette (es. 100, 110)</label>
+              <input type="text" id="mapSegOtVlans" class="map-pop-search" placeholder="es. 100, 110" data-i18n-placeholder="phMapSegOtVlans" aria-label="VLAN OT protette" data-i18n-aria-label="ariaMapSegOtVlans">
               <label for="mapSegCoreL" class="map-view-h" data-i18n="lblMapSegCoreL">Core sinistro</label>
               <select id="mapSegCoreL" data-seg-core="0"></select>
               <label for="mapSegCoreR" class="map-view-h" data-i18n="lblMapSegCoreR">Core destro</label>
@@ -4759,6 +4777,22 @@
           <div class="input-wrapper">
             <i class="fa-solid fa-gears"></i>
             <select id="devVendor" aria-label="Vendor del dispositivo" data-i18n-aria-label="ariaDevVendor"></select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="devPurdueLevel" data-i18n="lblPurdueLevel">Livello Purdue (IEC 62443)</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-layer-group" aria-hidden="true"></i>
+            <select id="devPurdueLevel" aria-label="Livello Purdue del dispositivo" data-i18n-aria-label="ariaDevPurdue">
+              <option value="" data-i18n="optPurdueNone">— Nessuno —</option>
+              <option value="L4" data-i18n="optPurdueL4">L4 · Enterprise IT</option>
+              <option value="L3.5" data-i18n="optPurdueL35">L3.5 · DMZ IT/OT</option>
+              <option value="L3" data-i18n="optPurdueL3">L3 · Site Operations</option>
+              <option value="L2" data-i18n="optPurdueL2">L2 · Supervisione (SCADA)</option>
+              <option value="L1" data-i18n="optPurdueL1">L1 · Controllo (PLC/RTU)</option>
+              <option value="L0" data-i18n="optPurdueL0">L0 · Campo / Sensori</option>
+            </select>
           </div>
         </div>
 

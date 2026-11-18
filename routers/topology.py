@@ -109,9 +109,16 @@ def enrich_map_nodes(data: dict) -> dict:
 
     versions = inventory_manager.get_detected_versions()
     entries = ap_store.read_all()
+    dev_purdue = {
+        d.get("IP"): (d.get("Purdue Level") or "")
+        for d in inventory_manager.get_all_devices()
+        if d.get("IP") and d.get("Purdue Level")
+    }
     for node in data.get("nodes") or []:
         discovered = node.get("status") == "discovered"
         node["display_ip"] = (node.get("reported_ip") or "") if discovered else node["id"]
+        if not node.get("purdue_level"):
+            node["purdue_level"] = dev_purdue.get(node["id"]) or dev_purdue.get(node["display_ip"]) or ""
         if node.get("serial"):
             continue
         name = node.get("label") or node["id"]

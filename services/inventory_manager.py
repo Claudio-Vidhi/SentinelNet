@@ -386,7 +386,8 @@ def _same_device(row: dict, ip: str, group: str) -> bool:
 
 def _merged_row(devices, get_location, ip, vendor, profile, username, password, enable_secret, group,
                 probe=None, ssh_port=None, transports=None, snmp_community=None,
-                snmp_disabled=None, location=None, require_location=True, hostname=None) -> dict:
+                snmp_disabled=None, location=None, require_location=True, hostname=None,
+                purdue_level=None) -> dict:
     # Validazione IP robusta
     match = IP_PATTERN.match(ip)
     if not match or not all(0 <= int(octet) <= 255 for octet in match.groups()):
@@ -471,6 +472,11 @@ def _merged_row(devices, get_location, ip, vendor, profile, username, password, 
         disabled_val = (existing.get('SNMP Disabled') if existing else '') or ''
     else:
         disabled_val = '1' if snmp_disabled else ''
+    if purdue_level is None:
+        resolved_purdue = (existing.get('Purdue Level') if existing else '') or ''
+    else:
+        from services import purdue_model
+        resolved_purdue = purdue_model.normalize_purdue_level(purdue_level)
     new_device = {
         'IP': ip, 'Vendor': vendor.lower(), 'Profile': profile,
         'Username': username, 'Password': enc_password, 'Enable Secret': enc_secret,
@@ -481,6 +487,7 @@ def _merged_row(devices, get_location, ip, vendor, profile, username, password, 
         'Transports': json.dumps(resolved_transports, separators=(',', ':')),
         'SNMP Community': enc_community,
         'SNMP Disabled': disabled_val,
+        'Purdue Level': resolved_purdue,
     }
     if existing_hostname:
         new_device['Hostname'] = existing_hostname
@@ -505,13 +512,14 @@ def upsert_devices(entries: list) -> None:
 
 def add_or_update_device(ip, vendor, profile, username, password, enable_secret, group,
                          probe=None, ssh_port=None, transports=None, snmp_community=None,
-                         snmp_disabled=None, location=None, require_location=True, hostname=None):
+                         snmp_disabled=None, location=None, require_location=True, hostname=None,
+                         purdue_level=None):
     upsert_devices([dict(ip=ip, vendor=vendor, profile=profile, username=username,
                          password=password, enable_secret=enable_secret, group=group,
                          probe=probe, ssh_port=ssh_port, transports=transports,
                          snmp_community=snmp_community, snmp_disabled=snmp_disabled,
                          location=location, require_location=require_location,
-                         hostname=hostname)])
+                         hostname=hostname, purdue_level=purdue_level)])
 
 def delete_device(ip: str, group: Optional[str] = None):
     with _io_lock:

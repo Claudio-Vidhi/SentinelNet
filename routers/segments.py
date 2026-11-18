@@ -24,6 +24,8 @@ class SegmentSaveSchema(BaseModel):
     members: List[str] = []
     excluded: List[str] = []
     cores: List[str] = []
+    purdue_level: str = ""
+    ot_vlans: List[str] = []
 
 
 class SegmentDeleteSchema(BaseModel):
@@ -50,7 +52,8 @@ def save_segment_ep(payload: SegmentSaveSchema, current_user=Depends(require_ope
     try:
         seg = segment_manager.save_segment(payload.org, payload.id, payload.name, payload.color,
                                            payload.subnets, payload.members, payload.excluded,
-                                           payload.cores)
+                                           payload.cores, purdue_level=payload.purdue_level,
+                                           ot_vlans=payload.ot_vlans)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     log_audit(f"Segmento '{seg['name']}' ({payload.org}) salvato dall'utente '{current_user.get('sub')}'.")
@@ -78,3 +81,11 @@ def link_decision_ep(payload: SegmentLinkSchema, current_user=Depends(require_op
     log_audit(f"Collegamento {payload.a} - {payload.b} ({payload.org}): decisione "
               f"'{payload.decision or 'da verificare'}' dall'utente '{current_user.get('sub')}'.")
     return {"status": "success"}
+
+
+@router.get("/api/segments/ot-findings", dependencies=[Depends(require_tab(*_MAP_TABS))])
+def ot_findings_ep(org: str = Query(...), current_user=Depends(get_current_user)):
+    """IT/OT boundary violations and rogue OT MAC events for one tenant."""
+    assert_group_allowed(current_user, org)
+    from services import purdue_model
+    return purdue_model.ot_security_summary(org)

@@ -288,7 +288,17 @@ def record_sightings(rows, switch_ip: str, switch_name: str = "", tenant: str = 
     init_db()
     now = _now_iso()
     n_new = n_upd = n_skip = 0
+    new_candidates = []
+    prior_baseline_vlans: set[str] = set()
     with _lock, _connect() as c:
+        prior_baseline_vlans = {
+            str(r["vlan"] or "")
+            for r in c.execute(
+                "SELECT DISTINCT vlan FROM mac_sightings WHERE switch_ip=? AND is_uplink=0",
+                (switch_ip,),
+            )
+        }
+        infra_macs = {r["mac"] for r in c.execute("SELECT mac FROM switch_if_macs")}
         for r in rows:
             mac = normalize_mac(r.get("mac"))
             if not mac:
@@ -318,6 +328,21 @@ def record_sightings(rows, switch_ip: str, switch_name: str = "", tenant: str = 
                              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)""",
                           (mac, oui, vlan, switch_ip, switch_name, iface, pc, up, uplink_to, tenant, probe, now, now))
                 n_new += 1
+                if up == 0 and mac not in infra_macs:
+                    new_candidates.append({
+                        "mac": mac,
+                        "oui_vendor": oui,
+                        "vlan": vlan,
+                        "interface": iface,
+                    })
+    if new_candidates and prior_baseline_vlans:
+        try:
+            from services import purdue_model
+            purdue_model.handle_new_mac_sightings(
+                switch_ip, switch_name, tenant, new_candidates, prior_baseline_vlans,
+            )
+        except Exception:
+            pass
     return {"new": n_new, "updated": n_upd, "skipped": n_skip}
 
 
