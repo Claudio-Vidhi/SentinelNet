@@ -27,13 +27,13 @@ class SnapshotRequest(BaseModel):
 
 
 def _enrich_with_deltas(rows: list) -> list:
-    by_ip: dict = {}
+    by_dev: dict = {}
     for r in rows:
-        by_ip.setdefault(r.get("device_ip") or "", []).append(r)
+        by_dev.setdefault((r.get("device_ip") or "", r.get("group") or ""), []).append(r)
     out = []
-    for ip, group_rows in by_ip.items():
+    for (ip, tenant), group_rows in by_dev.items():
         if ip:
-            out.extend(firewall_traffic.compute_policy_deltas(ip, group_rows))
+            out.extend(firewall_traffic.compute_policy_deltas(ip, tenant, group_rows))
         else:
             out.extend(group_rows)
     return out

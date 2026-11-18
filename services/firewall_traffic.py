@@ -126,6 +126,11 @@ def collect_for(device) -> dict:
 # Policy Hit Snapshots & 7d / 30d Deltas
 # ---------------------------------------------------------------------------
 
+# A 30d delta needs a baseline up to ~45 days old; the retention job keeps
+# exactly this window (observability/rollup.py).
+SNAPSHOT_HISTORY_DAYS = 45
+
+
 def record_policy_snapshots(
     device: Dict[str, Any],
     rows: List[Dict[str, Any]],
@@ -173,26 +178,23 @@ def record_policy_snapshots(
 
 def get_policy_snapshot_history(
     device_ip: str,
-    since_ts: Optional[int] = None,
+    tenant: str,
+    since_ts: int = 0,
 ) -> List[Dict[str, Any]]:
-    """Return stored snapshots for ``device_ip`` sorted ascending by timestamp."""
+    """Return stored snapshots for ``device_ip`` in ``tenant``, oldest first.
+
+    The tenant is part of the key: two customers can run their firewall on
+    the same private IP, and mixing their counters fakes the deltas."""
     if not device_ip:
         return []
     conn = db.get_observability_connection()
     try:
-        if since_ts is not None:
-            cur = conn.execute(
-                "SELECT id, ts, tenant, device_ip, policy_id, policy_name, hit_count, bytes, last_used "
-                "FROM policy_hit_snapshots WHERE device_ip = ? AND ts >= ? "
-                "ORDER BY ts ASC, id ASC",
-                (device_ip, int(since_ts)),
-            )
-        else:
-            cur = conn.execute(
-                "SELECT id, ts, tenant, device_ip, policy_id, policy_name, hit_count, bytes, last_used "
-                "FROM policy_hit_snapshots WHERE device_ip = ? ORDER BY ts ASC, id ASC",
-                (device_ip,),
-            )
+        cur = conn.execute(
+            "SELECT id, ts, tenant, device_ip, policy_id, policy_name, hit_count, bytes, last_used "
+            "FROM policy_hit_snapshots WHERE device_ip = ? AND tenant = ? AND ts >= ? "
+            "ORDER BY ts ASC, id ASC",
+            (device_ip, tenant or "", int(since_ts)),
+        )
         return [dict(r) for r in cur.fetchall()]
     finally:
         conn.close()
@@ -243,12 +245,13 @@ def _delta_pair(
 
 def compute_policy_deltas(
     device_ip: str,
+    tenant: str,
     rows: List[Dict[str, Any]],
     now_ts: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """Attach 7d and 30d delta counters to each row using stored snapshots."""
     now = int(now_ts if now_ts is not None else time.time())
-    history = get_policy_snapshot_history(device_ip, since_ts=now - 45 * 86400)
+    history = get_policy_snapshot_history(device_ip, tenant, since_ts=now - SNAPSHOT_HISTORY_DAYS * 86400)
     by_pid: Dict[str, List[Dict[str, Any]]] = {}
     for s in history:
         by_pid.setdefault(str(s["policy_id"]), []).append(s)
@@ -958,7 +961,7 @@ def analyze_hygiene(
 
         # Policy rows: combine backup structure + live counters + latest snapshot
         backup_rows, _env = _extract_backup_rules(content, cfg_type, dev) if content else ([], None)
-        history = get_policy_snapshot_history(ip, since_ts=now - 45 * 86400)
+        history = get_policy_snapshot_history(ip, group, since_ts=now - SNAPSHOT_HISTORY_DAYS * 86400)
         snapshots_available += len(history)
         latest_snap_by_pid: Dict[str, Dict[str, Any]] = {}
         for s in history:
@@ -983,7 +986,7 @@ def analyze_hygiene(
                     r["last_used"] = snap["last_used"]
                     r["never_hit"] = (snap["hit_count"] == 0 and snap["bytes"] == 0)
 
-        enriched = compute_policy_deltas(ip, base_rows, now_ts=now)
+        enriched = compute_policy_deltas(ip, group, base_rows, now_ts=now)
 
         # Scope observed events relevant to this device/tenant
         dev_flows = [

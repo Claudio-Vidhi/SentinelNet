@@ -121,12 +121,42 @@ class TestFirewallHygieneUnit(unittest.TestCase):
             # Counter reset (lower than baseline 900): delta equals current value (12)
             {"policyid": 3, "name": "ResetRule", "hit_count": 12, "bytes": 120},
         ]
-        enriched = firewall_traffic.compute_policy_deltas(dev_ip, current_rows, now_ts=now)
+        enriched = firewall_traffic.compute_policy_deltas(dev_ip, "tenant-a", current_rows, now_ts=now)
         by_id = {r["policyid"]: r for r in enriched}
         self.assertEqual(by_id[1]["delta_hits_7d"], 50)
         self.assertEqual(by_id[1]["delta_hits_30d"], 150)
         self.assertEqual(by_id[2]["delta_hits_30d"], 0)
         self.assertEqual(by_id[3]["delta_hits_30d"], 12)
+
+    def test_snapshot_history_is_keyed_by_tenant(self):
+        # Two customers, same private firewall IP: counters must not mix.
+        now = int(time.time())
+        dev_ip = "192.0.2.245"
+        firewall_traffic.record_policy_snapshots({"IP": dev_ip, "Group": "tenant-a"}, [
+            {"policyid": 1, "name": "R1", "hit_count": 100, "bytes": 1000},
+        ], ts=now - 8 * 86400)
+        firewall_traffic.record_policy_snapshots({"IP": dev_ip, "Group": "tenant-b"}, [
+            {"policyid": 1, "name": "R1", "hit_count": 5, "bytes": 50},
+        ], ts=now - 8 * 86400)
+        rows = [{"policyid": 1, "name": "R1", "hit_count": 160, "bytes": 1600}]
+        a = firewall_traffic.compute_policy_deltas(dev_ip, "tenant-a", rows, now_ts=now)
+        self.assertEqual(a[0]["delta_hits_7d"], 60)
+        self.assertEqual({h["tenant"] for h in firewall_traffic.get_policy_snapshot_history(dev_ip, "tenant-b")},
+                         {"tenant-b"})
+        c = firewall_traffic.compute_policy_deltas(dev_ip, "tenant-c", rows, now_ts=now)
+        self.assertIsNone(c[0]["delta_hits_7d"])
+
+    def test_snapshots_pruned_after_history_window(self):
+        from observability import rollup
+        dev = {"IP": "192.0.2.246", "Group": "tenant-a"}
+        now = int(time.time())
+        days = firewall_traffic.SNAPSHOT_HISTORY_DAYS
+        firewall_traffic.record_policy_snapshots(dev, [{"policyid": 1, "hit_count": 1}],
+                                                 ts=now - (days + 1) * 86400)
+        firewall_traffic.record_policy_snapshots(dev, [{"policyid": 1, "hit_count": 2}], ts=now - 86400)
+        rollup.prune_once({"policy_hit_snapshots": days})
+        hist = firewall_traffic.get_policy_snapshot_history(dev["IP"], "tenant-a")
+        self.assertEqual([h["hit_count"] for h in hist], [2])
 
     def test_analyze_hygiene_dead_unused_and_tightening(self):
         now = int(time.time())
