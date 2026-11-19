@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.67.0] - 2026-11-19
+
 ### Added
 
 - **Tabelle di routing (layout B + drawer richiudibile A)**: navigazione a
