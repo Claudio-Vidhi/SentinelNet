@@ -183,8 +183,39 @@ class TestEndpoints(unittest.TestCase):
             saved = c.get("/api/device-classification/ai-suggestions").json()
             self.assertIn("disc-1", saved["suggestions"])
             self.assertEqual(saved["conventions"]["tenant-a"], "LOC-SW-ROLE-NN")
+            self.assertIn("ai_available", saved)
         # Proposal only: no device assignment was written.
         self.assertNotIn("disc-1", str(inventory_manager.get_device_categories()["assignments"]))
+
+    def test_ai_suggestions_reports_ai_available_false_without_profile(self):
+        with patch.object(catalog, "assemble_classification", return_value=FAKE_DATA), \
+             patch("routers.ai._get_active_ai_profile", return_value=None):
+            c = self._client()
+            saved = c.get("/api/device-classification/ai-suggestions").json()
+            self.assertFalse(saved["ai_available"])
+
+    def test_assemble_classification_populates_seen_on_for_discovered(self):
+        fake_map = {
+            "nodes": [
+                {"id": "192.0.2.10", "label": "sw-core-01", "group": "tenant-a",
+                 "status": "online", "device_type": "switch", "vendor": "cisco"},
+                {"id": "discovered_ap-1", "label": "ap-1", "group": "tenant-a",
+                 "status": "discovered", "device_type": "ap", "vendor": "discovered",
+                 "reported_ip": "192.0.2.45"},
+            ],
+            "links": [
+                {"source": "192.0.2.10", "target": "discovered_ap-1",
+                 "local_port": "Gi1/0/12", "remote_port": "eth0"},
+            ],
+        }
+        with patch("routers.catalog.core_engine.generate_network_map", return_value=fake_map), \
+             patch.object(inventory_manager, "get_all_devices",
+                          return_value=[{"IP": "192.0.2.10", "Group": "tenant-a"}]):
+            res = catalog.assemble_classification(None)
+        ap = next(n for n in res["nodes"] if n["id"] == "discovered_ap-1")
+        self.assertEqual(ap["seen_on"], [
+            {"switch": "192.0.2.10", "switch_label": "sw-core-01", "port": "Gi1/0/12", "macs": []}
+        ])
 
     def test_model_merge_rewrites_catalogue(self):
         inventory_manager.add_model("cisco", "C2960X-48FPD")

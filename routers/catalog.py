@@ -233,10 +233,10 @@ def assemble_classification(scope):
         node["name_twins"] = twins.get(node["id"], [])
         # Only the twins pay for the lookup: it is what tells them apart.
         node["macs"] = sorted(mac_history.own_macs(node["id"])) if node["name_twins"] else []
-        # Where each twin is cabled, and the MACs seen on that port: the
-        # evidence a user checks, and the switches a "read MACs" button asks.
+        # Upstream managed switch + port that discovered this device (for triage
+        # context), plus port MACs when disambiguating duplicate hostnames.
         node["seen_on"] = []
-        if not node["name_twins"]:
+        if not (node["discovered"] or node["name_twins"]):
             continue
         for link in data.get("links", []):
             if link.get("target") == node["id"]:
@@ -247,10 +247,13 @@ def assemble_classification(scope):
                 continue
             if sw not in ip_set:
                 continue
-            if sw not in tables:
-                tables[sw] = core_engine.port_mac_table(sw)
+            macs: list = []
+            if node["name_twins"]:
+                if sw not in tables:
+                    tables[sw] = core_engine.port_mac_table(sw)
+                macs = sorted(tables[sw].get(core_engine._normalize_iface(port or ""), ()))
             node["seen_on"].append({"switch": sw, "switch_label": label_of.get(sw, sw), "port": port or "",
-                                    "macs": sorted(tables[sw].get(core_engine._normalize_iface(port or ""), ()))})
+                                    "macs": macs})
 
     return {
         "categories": cats["categories"],
@@ -664,12 +667,15 @@ def _ai_candidates(nodes: list, group: str = "all") -> list:
 def get_ai_classification_suggestions(current_user = Depends(get_current_user)):
     """Saved proposals for devices still in the queue, so reopening the tab
     does not spend another request."""
+    from routers.ai import is_ai_profile_ready
+
     data = assemble_classification(user_group_scope(current_user))
     queue_ids = {n["id"] for n in _ai_candidates(data["nodes"])}
     store = _load_ai_suggestions()
     return {
         "suggestions": {k: v for k, v in store["suggestions"].items() if k in queue_ids},
         "conventions": {t: c for t, c in store["conventions"].items() if t in data["counts_by_group"]},
+        "ai_available": is_ai_profile_ready(),
     }
 
 

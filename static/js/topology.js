@@ -6833,58 +6833,73 @@
         ctx.restore();
     }
 
-    // ===== Pannello Dispositivi & Categorie (classificazione manuale) =====
+    // ===== Pannello Dispositivi & Categorie (KPI + Tabella Triage + Slide-over Drawer) =====
     let categoriesData = { categories: {}, nodes: [], counts_by_category: {}, counts_by_group: {}, vendors: [], models: {} };
 
-    // ===== Dispositivi & Categorie: rail | lista | inspector =====
-    // The list is read-only; the inspector edits ONE device and saves it on
-    // its own. The old table put an input in every cell and saved a batch of
-    // rows at once: dense to read, and a half-edited row was easy to miss.
     function attrEsc(s) { return escapeHtml(String(s == null ? '' : s)).replace(/"/g, '&quot;'); }
 
-    // 'todo' | 'conflict' | 'all' | '<cat>' | '<cat>/<sub>'
-    let clsView = 'all';
+    // clsScope: 'todo' | 'manage' | 'problems' | 'discovered' | 'all'
+    let clsScope = 'all';
+    // clsCatFilter: 'all' | '<cat>' | '<cat>/<sub>'
+    let clsCatFilter = 'all';
     let clsSelected = null;
+    let clsDrawerOpen = false;
     let clsDirty = false;
-    let clsViewChosen = false;
-    // AI proposals for queued devices + naming convention per tenant. Read
-    // from the server, which keeps them: reopening the tab costs no request.
+    let clsScopeChosen = false;
+    let clsAiAvailable = false;
     let clsAi = { suggestions: {}, conventions: {} };
     let clsMerges = [];
-    // Rows picked with Ctrl/Cmd+click, for "add these to the managed ones".
     const clsPicked = new Set();
+    const CLS_INFRA_TYPES = new Set(['switch', 'router', 'firewall', 'ap']);
 
-    // A device discovered via CDP/LLDP whose category was only inferred: no
-    // human has looked at it yet. That is the queue the view opens on.
     function clsToClassify(n) { return n.discovered && !n.is_manual; }
     function clsHasConflict(n) { return (n.name_options || []).length > 1; }
     function clsHasTwins(n) { return (n.name_twins || []).length > 0; }
-    // The AI said this discovered device is infrastructure worth managing,
-    // and it announced an address to reach it at.
-    function clsToManage(n) { return n.discovered && !!n.display_ip && !!(clsAi.suggestions[n.id] || {}).manage; }
+    function clsHasProblem(n) { return clsHasConflict(n) || clsHasTwins(n); }
+    // When AI is active, use AI's manage recommendation; without AI, fall back to
+    // local deterministic heuristics (discovered infrastructure with a reachable IP).
+    function clsToManage(n) {
+        if (!n.discovered || !n.display_ip) return false;
+        if (clsAiAvailable) return !!(clsAi.suggestions[n.id] || {}).manage;
+        return CLS_INFRA_TYPES.has(n.device_type);
+    }
     function clsCanPromote(n) { return n.discovered && !!n.display_ip; }
     function clsCanWrite() { return isAdminRole(currentRole) || currentRole === 'operator'; }
+    function clsHighAiCandidates() {
+        if (!clsAiAvailable) return [];
+        return clsScopedNodes().filter(n => {
+            const s = clsAi.suggestions[n.id];
+            return clsToClassify(n) && s && Number(s.confidence || 0) >= 90 && !clsHasProblem(n);
+        });
+    }
 
     function clsScopedNodes() {
         const g = /** @type {HTMLSelectElement|null} */ (document.getElementById('categoriesGroupSelect'))?.value || 'all';
         return categoriesData.nodes.filter(n => g === 'all' || n.group === g);
     }
 
-    function clsInView(n) {
-        if (clsView === 'all') return true;
-        if (clsView === 'todo') return clsToClassify(n);
-        if (clsView === 'manage') return clsToManage(n);
-        if (clsView === 'conflict') return clsHasConflict(n);
-        if (clsView === 'twins') return clsHasTwins(n);
-        const [cat, sub] = clsView.split('/');
+    function clsInScope(n) {
+        if (clsScope === 'all') return true;
+        if (clsScope === 'todo') return clsToClassify(n);
+        if (clsScope === 'manage') return clsToManage(n);
+        if (clsScope === 'problems') return clsHasProblem(n);
+        if (clsScope === 'discovered') return !!n.discovered;
+        return true;
+    }
+
+    function clsInCategory(n) {
+        if (clsCatFilter === 'all') return true;
+        const [cat, sub] = clsCatFilter.split('/');
         return n.device_type === cat && (sub === undefined || (n.subcategory || '') === sub);
     }
 
     function clsVisibleNodes() {
         const q = (/** @type {HTMLInputElement|null} */ (document.getElementById('clsSearch'))?.value || '').trim().toLowerCase();
         return clsScopedNodes()
-            .filter(clsInView)
-            .filter(n => !q || [n.label, n.display_ip, n.vendor, n.model]
+            .filter(clsInScope)
+            .filter(clsInCategory)
+            .filter(n => !q || [n.label, n.display_ip, n.vendor, n.model,
+                ...(n.seen_on || []).map(s => `${s.switch_label || ''} ${s.port || ''}`)]
                 .some(v => String(v || '').toLowerCase().includes(q)))
             .sort((a, b) => (a.group || '').localeCompare(b.group || '')
                 || (a.label || '').localeCompare(b.label || ''));
@@ -6917,29 +6932,77 @@
         if (dl) dl.innerHTML = Object.keys(categoriesData.categories)
             .map(k => `<option value="${escapeHtml(k)}">`).join("");
 
-        // First open: start on the queue when there is something in it.
-        if (!clsViewChosen) clsView = clsScopedNodes().some(clsToClassify) ? 'todo' : 'all';
-        // Sent here by a "same name" badge (Inventory, map): open on that device.
+        if (!clsScopeChosen) clsScope = clsScopedNodes().some(clsToClassify) ? 'todo' : 'all';
         const twin = window.clsPendingTwin;
         window.clsPendingTwin = null;
         if (twin && categoriesData.nodes.some(n => n.id === twin)) {
-            clsView = 'twins';
-            clsViewChosen = true;
+            clsScope = 'problems';
+            clsCatFilter = 'all';
+            clsScopeChosen = true;
             clsSelected = twin;
+            clsDrawerOpen = true;
         }
         clsDirty = false;
         renderCategoriesPanel();
     }
 
+    function syncClsAiChrome() {
+        const canWrite = clsCanWrite();
+        const pill = document.getElementById('clsAiModePill');
+        const btnSuggest = document.getElementById('btnClsAiSuggest');
+        const btnModels = document.getElementById('btnClsAiModels');
+        const btnHigh = document.getElementById('btnClsAiAcceptHigh');
+        const btnHighLabel = document.getElementById('btnClsAiAcceptHighLabel');
+
+        if (pill) pill.hidden = clsAiAvailable;
+        if (btnSuggest) btnSuggest.hidden = !clsAiAvailable || !canWrite;
+        if (btnModels) btnModels.hidden = !clsAiAvailable || !canWrite;
+        const high = canWrite ? clsHighAiCandidates() : [];
+        if (btnHigh) btnHigh.hidden = !(clsAiAvailable && canWrite && high.length > 0);
+        if (btnHighLabel) btnHighLabel.textContent = tr('clsAiAcceptHigh', { n: high.length });
+    }
+
     function renderCategoriesPanel() {
+        syncClsAiChrome();
         const visible = clsVisibleNodes();
-        if (!visible.some(n => n.id === clsSelected)) clsSelected = visible.length ? visible[0].id : null;
+        if (!visible.some(n => n.id === clsSelected)) {
+            clsSelected = visible.length ? visible[0].id : null;
+            if (!clsSelected) clsDrawerOpen = false;
+        }
         const shown = new Set(visible.map(n => n.id));
         [...clsPicked].forEach(id => { if (!shown.has(id)) clsPicked.delete(id); });
+        renderClsKpis();
         renderClsRail();
         renderClsList(visible);
         renderClsBulk();
         renderClsInspector();
+    }
+
+    function renderClsKpis() {
+        const box = document.getElementById('clsKpiBar');
+        if (!box) return;
+        const nodes = clsScopedNodes();
+        const total = nodes.length;
+        const todo = nodes.filter(clsToClassify).length;
+        const manage = nodes.filter(clsToManage).length;
+        const problems = nodes.filter(clsHasProblem).length;
+        const discovered = nodes.filter(n => n.discovered).length;
+        const managed = total - discovered;
+        const donePct = total ? Math.round(((total - todo) / total) * 100) : 100;
+
+        const card = (scope, label, val, sub, dotCls) =>
+            `<button type="button" class="cls-kpi" data-action="cls-scope" data-scope="${scope}" aria-pressed="${clsScope === scope}">
+               <span class="cls-kpi-top"><span>${escapeHtml(label)}</span><span class="cls-kpi-dot ${dotCls}" aria-hidden="true"></span></span>
+               <span class="cls-kpi-main"><span class="cls-kpi-val">${val}</span><span class="cls-kpi-sub">${escapeHtml(sub)}</span></span>
+             </button>`;
+
+        box.innerHTML =
+            card('todo', tr('clsKpiTodo'), todo, tr('clsKpiDonePct', { n: donePct }), 'warn')
+            + card('manage', tr(clsAiAvailable ? 'clsKpiManageAi' : 'clsKpiManageLocal'), manage,
+                   tr(clsAiAvailable ? 'clsKpiAiSub' : 'clsKpiLocalSub'), 'ai')
+            + card('problems', tr('clsKpiProblems'), problems, tr('clsKpiConflictSub'), 'fault')
+            + card('discovered', tr('clsKpiDiscovered'), discovered, tr('clsKpiOutInv'), 'idle')
+            + card('all', tr('clsKpiCatalog'), total, tr('clsKpiManagedSub', { n: managed }), 'up');
     }
 
     function renderClsBulk() {
@@ -6950,9 +7013,17 @@
         const ready = clsPickedPromotable();
         const info = document.getElementById('clsBulkInfo');
         if (info) info.textContent = tr('clsBulkInfo', { n: clsPicked.size });
+        const catSel = /** @type {HTMLSelectElement|null} */ (document.getElementById('clsBulkCatSelect'));
+        if (catSel) {
+            catSel.innerHTML = `<option value="">${escapeHtml(tr('clsBulkCatPlaceholder'))}</option>`
+                + Object.entries(categoriesData.categories).map(([k, c]) =>
+                    `<option value="${attrEsc(k)}">${escapeHtml(c.label)}</option>`).join('');
+        }
+        const btnConfirm = /** @type {HTMLButtonElement|null} */ (document.getElementById('btnClsBulkConfirm'));
+        if (btnConfirm) btnConfirm.disabled = !clsCanWrite();
         const btn = /** @type {HTMLButtonElement|null} */ (document.getElementById('btnClsBulkPromote'));
         if (btn) {
-            btn.disabled = !ready.length;
+            btn.disabled = !ready.length || !clsCanWrite();
             btn.textContent = tr('clsBulkPromote', { n: ready.length });
         }
     }
@@ -6973,37 +7044,39 @@
     function renderClsRail() {
         const box = document.getElementById('clsRail');
         if (!box) return;
-        const nodes = clsScopedNodes();
+        const nodes = clsScopedNodes().filter(clsInScope);
         const canWrite = clsCanWrite();
         const count = f => nodes.filter(f).length;
         const item = (key, label, n, lead, cls = '', del = '') =>
             `<div class="cls-rail-row ${cls}">
                <button type="button" class="cls-rail-item" data-action="cls-view" data-view="${attrEsc(key)}"
-                       aria-current="${clsView === key}">${lead}<span class="cls-rail-label">${escapeHtml(label)}</span><span class="cls-rail-n">${n}</span></button>${del}
+                       aria-current="${clsCatFilter === key}">${lead}<span class="cls-rail-label">${escapeHtml(label)}</span><span class="cls-rail-n">${n}</span></button>${del}
              </div>`;
         const delBtn = (action, k, s, aria) => canWrite
             ? `<button type="button" class="cls-rail-del" data-action="${action}" data-k="${attrEsc(k)}"${s !== undefined ? ` data-s="${attrEsc(s)}"` : ''}
                        aria-label="${attrEsc(aria)}" title="${attrEsc(aria)}"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>` : '';
-        let html = `<div class="cls-rail-h">${escapeHtml(tr('clsQueues'))}</div>`
-            + item('todo', tr('clsToClassify'), count(clsToClassify),
-                   '<span class="cls-iso warn" aria-hidden="true"></span>', 'queue')
-            + item('manage', tr('clsToManage'), count(clsToManage),
-                   '<i class="fa-solid fa-wand-magic-sparkles cls-rail-ai" aria-hidden="true"></i>', 'queue')
-            + item('conflict', tr('clsConflicts'), count(clsHasConflict),
-                   '<span class="cls-iso fault" aria-hidden="true"></span>', 'queue')
-            + item('twins', tr('clsTwins'), count(clsHasTwins),
-                   '<i class="fa-solid fa-clone cls-rail-ai" aria-hidden="true"></i>', 'queue')
-            + `<div class="cls-rail-h">${escapeHtml(tr('clsCategories'))}</div>`
-            + item('all', tr('clsAll'), nodes.length, '<span class="cls-sq all" aria-hidden="true"></span>');
+        let html = item('all', tr('clsAll'), nodes.length, '<span class="cls-sq all" aria-hidden="true"></span>');
+        const activeCat = clsCatFilter === 'all' ? '' : clsCatFilter.split('/')[0];
         for (const [k, c] of Object.entries(categoriesData.categories)) {
-            html += item(k, c.label, count(x => x.device_type === k), clsSwatch(k), '',
+            const catCount = count(x => x.device_type === k);
+            html += item(k, c.label, catCount, clsSwatch(k), '',
                          c.builtin ? '' : delBtn('delete-category', k, undefined, tr('clsDeleteCategory', { label: c.label })));
-            for (const s of (c.subcategories || [])) {
-                html += item(`${k}/${s}`, s, count(x => x.device_type === k && (x.subcategory || '') === s), '', 'sub',
-                             delBtn('delete-subcategory', k, s, tr('clsDeleteSub', { sub: s })));
+            if (activeCat === k) {
+                for (const s of (c.subcategories || [])) {
+                    html += item(`${k}/${s}`, s, count(x => x.device_type === k && (x.subcategory || '') === s), '', 'sub',
+                                 delBtn('delete-subcategory', k, s, tr('clsDeleteSub', { sub: s })));
+                }
             }
         }
         box.innerHTML = html;
+    }
+
+    function clsScopeTitle() {
+        if (clsScope === 'todo') return tr('clsKpiTodo');
+        if (clsScope === 'manage') return tr(clsAiAvailable ? 'clsKpiManageAi' : 'clsKpiManageLocal');
+        if (clsScope === 'problems') return tr('clsKpiProblems');
+        if (clsScope === 'discovered') return tr('clsKpiDiscovered');
+        return tr('clsAll');
     }
 
     function renderClsList(visible) {
@@ -7012,47 +7085,95 @@
         const hint = document.getElementById('clsHint');
         const box = document.getElementById('categoriesDeviceList');
         if (!box) return;
-        const [cat, sub] = clsView.split('/');
-        if (title) title.textContent = clsView === 'all' ? tr('clsAll')
-            : clsView === 'todo' ? tr('clsToClassify')
-            : clsView === 'manage' ? tr('clsToManage')
-            : clsView === 'conflict' ? tr('clsConflicts')
-            : clsView === 'twins' ? tr('clsTwins')
-            : clsCatLabel(cat) + (sub !== undefined ? ` / ${sub}` : '');
+        const [cat, sub] = clsCatFilter.split('/');
+        if (title) {
+            const catPart = clsCatFilter !== 'all' ? ` · ${clsCatLabel(cat)}${sub !== undefined ? ` / ${sub}` : ''}` : '';
+            title.textContent = clsScopeTitle() + catPart;
+        }
         if (countEl) countEl.textContent = tr('clsCountN', { n: visible.length });
         if (hint) {
             hint.hidden = !visible.length;
-            hint.textContent = tr(clsView === 'todo' ? 'clsHintQueue' : clsView === 'manage' ? 'clsHintManage'
-                : clsView === 'twins' ? 'clsHintTwins' : 'clsHintPick');
+            hint.textContent = tr(clsScope === 'todo' ? 'clsHintQueue' : clsScope === 'manage' ? 'clsHintManage'
+                : clsScope === 'problems' ? 'clsHintTwins' : 'clsHintPick');
         }
         if (!visible.length) {
-            box.innerHTML = `<p class="cls-empty">${escapeHtml(tr(clsView === 'todo' ? 'clsEmptyQueue'
-                : clsView === 'manage' ? 'clsEmptyManage' : clsView === 'twins' ? 'clsEmptyTwins' : 'clsEmptyList'))}</p>`;
+            box.innerHTML = `<p class="cls-empty">${escapeHtml(tr(clsScope === 'todo' ? 'clsEmptyQueue'
+                : clsScope === 'manage' ? 'clsEmptyManage' : 'clsEmptyList'))}</p>`;
             return;
         }
+
+        const canWrite = clsCanWrite();
+        const cats = categoriesData.categories;
+        const catKeys = Object.keys(cats);
+        const allChecked = visible.length > 0 && visible.every(n => clsPicked.has(n.id));
         const byGroup = {};
         visible.forEach(n => { (byGroup[n.group] ||= []).push(n); });
-        box.innerHTML = Object.keys(byGroup).map(g =>
-            `<div class="cls-grp">${escapeHtml(g)} <span>${byGroup[g].length}</span></div>`
-            + byGroup[g].map(n => {
-                const vm = [n.vendor && n.vendor !== 'discovered' ? n.vendor : '', n.model].filter(Boolean).join(' · ');
-                const flags = (n.stack ? `<span class="cls-flag" title="${attrEsc(tr('topoShowStackUnits'))}">×${n.stack.member_count}</span>` : '')
-                    + (n.stack && n.stack.health === 'degraded' ? `<span class="cls-iso fault" title="${attrEsc(tr('topoDegradedStack'))}"></span>` : '')
-                    + (n.ha_group ? '<span class="cls-flag">HA</span>' : '')
-                    + (clsHasConflict(n) ? `<span class="cls-iso fault" title="${attrEsc(tr('topoCdpLldpNameConflict'))}"></span>` : '')
-                    + (clsHasTwins(n) ? `<span class="cls-flag" title="${attrEsc(tr('twinBadge'))}"><i class="fa-solid fa-clone" aria-hidden="true"></i></span>` : '')
-                    + (clsAi.suggestions[n.id] ? `<span class="cls-flag cls-flag-ai" title="${attrEsc(tr('clsAiFlag'))}">AI</span>` : '')
-                    + (clsToManage(n) ? `<span class="cls-flag cls-flag-ai" title="${attrEsc(tr('clsManageFlag'))}"><i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i></span>` : '');
-                return `<button type="button" class="cls-row${clsPicked.has(n.id) ? ' cls-picked' : ''}" data-action="cls-select" data-node-id="${attrEsc(n.id)}"
-                        aria-current="${n.id === clsSelected}" aria-pressed="${clsPicked.has(n.id)}">
-                    ${clsSwatch(n.device_type)}
-                    <span class="cls-id"><span class="cls-name">${escapeHtml(n.label)}</span><span class="cls-vm">${escapeHtml(vm || '—')}</span></span>
-                    <span class="cls-ip">${escapeHtml(n.display_ip || '—')}</span>
-                    <span class="cls-cat">${escapeHtml(clsCatLabel(n.device_type))}${n.subcategory ? ` <i>/ ${escapeHtml(n.subcategory)}</i>` : ''}</span>
-                    <span class="cls-src${n.discovered ? ' disc' : ''}">${escapeHtml(tr(n.discovered ? 'clsDiscovered' : 'clsManaged'))}</span>
-                    <span class="cls-flags">${flags}</span>
-                </button>`;
-            }).join('')).join('');
+        const multiGroup = Object.keys(byGroup).length > 1;
+
+        const rowHtml = (n) => {
+            const vm = [n.vendor && n.vendor !== 'discovered' ? n.vendor : '', n.model].filter(Boolean).join(' · ');
+            const seen = n.seen_on || [];
+            const seenHtml = seen.length
+                ? `<div>${escapeHtml(seen[0].switch_label || seen[0].switch)}</div>`
+                  + `<div class="cls-seen-port">${escapeHtml(seen[0].port || '—')}${seen.length > 1 ? ` · ${escapeHtml(tr('clsMorePorts', { n: seen.length - 1 }))}` : ''}</div>`
+                : `<span class="cls-vm">${escapeHtml(n.discovered ? '—' : tr('clsLocalInv'))}</span>`;
+            const flags = (n.stack ? `<span class="cls-flag" title="${attrEsc(tr('topoShowStackUnits'))}">×${n.stack.member_count}</span>` : '')
+                + (n.stack && n.stack.health === 'degraded' ? `<span class="cls-flag cls-flag-fault" title="${attrEsc(tr('topoDegradedStack'))}">!</span>` : '')
+                + (n.ha_group ? '<span class="cls-flag">HA</span>' : '')
+                + (clsHasConflict(n) ? `<span class="cls-flag cls-flag-fault" title="${attrEsc(tr('topoCdpLldpNameConflict'))}">${escapeHtml(tr('clsConflicts'))}</span>` : '')
+                + (clsHasTwins(n) ? `<span class="cls-flag cls-flag-warn" title="${attrEsc(tr('twinBadge'))}">${escapeHtml(tr('twinBadge'))}</span>` : '');
+            const ai = clsAiAvailable ? clsAi.suggestions[n.id] : null;
+            const aiPill = (canWrite && ai && clsToClassify(n))
+                ? `<button type="button" class="cls-ai-pill" data-action="cls-quick-ai" data-node-id="${attrEsc(n.id)}" title="${attrEsc(tr('clsQuickAiTitle', { n: ai.confidence || 0 }))}">
+                     <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> ${escapeHtml(clsCatLabel(ai.category || n.device_type))} (${ai.confidence || 0}%) ✓
+                   </button>` : '';
+            const catControl = canWrite
+                ? `<select class="ui-input cls-inline-cat" data-action="cls-inline-cat" data-node-id="${attrEsc(n.id)}" aria-label="${attrEsc(tr('clsInlineCatAria', { name: n.label }))}">
+                     ${catKeys.map(k => `<option value="${attrEsc(k)}"${k === n.device_type ? ' selected' : ''}>${escapeHtml(cats[k].label)}</option>`).join('')}
+                   </select>`
+                : `<span>${escapeHtml(clsCatLabel(n.device_type))}${n.subcategory ? ` / ${escapeHtml(n.subcategory)}` : ''}</span>`;
+            const statusCls = !n.discovered ? 'managed' : (n.is_manual ? 'confirmed' : 'disc');
+            const statusLabel = !n.discovered ? tr('clsManaged') : tr(n.is_manual ? 'clsConfirmed' : 'clsToReview');
+
+            return `<tr class="cls-row${clsPicked.has(n.id) ? ' cls-picked' : ''}" data-node-id="${attrEsc(n.id)}" aria-current="${clsDrawerOpen && n.id === clsSelected}">
+                <td class="cls-td-chk"><input type="checkbox" class="cls-row-chk" data-action="cls-pick" data-node-id="${attrEsc(n.id)}" ${clsPicked.has(n.id) ? 'checked' : ''} aria-label="${attrEsc(tr('clsPickRowAria', { name: n.label }))}"></td>
+                <td>
+                  <div class="cls-id">
+                    <div class="cls-id-top">${clsSwatch(n.device_type)}<span class="cls-name">${escapeHtml(n.label)}</span>${flags}</div>
+                    <span class="cls-vm">${escapeHtml([vm || '—', orgLabel(n.group)].join(' · '))}</span>
+                  </div>
+                </td>
+                <td class="cls-ip-cell">
+                  <div>${escapeHtml(n.display_ip || tr('clsNoIp'))}</div>
+                  <span class="cls-src ${statusCls}">${escapeHtml(statusLabel)}</span>
+                </td>
+                <td class="cls-seen-cell">${seenHtml}</td>
+                <td><div class="cls-cat-cell">${catControl}${aiPill}</div></td>
+                <td>
+                  <div class="cls-row-actions">
+                    ${canWrite && clsToClassify(n) ? `<button type="button" class="btn btn-secondary btn-small" data-action="cls-confirm-one" data-node-id="${attrEsc(n.id)}">${escapeHtml(tr('clsConfirm'))}</button>` : ''}
+                    ${canWrite && clsCanPromote(n) ? `<button type="button" class="btn btn-primary btn-small" data-action="cls-promote-one" data-node-id="${attrEsc(n.id)}">${escapeHtml(tr('clsPromote'))}</button>` : ''}
+                    <button type="button" class="btn btn-secondary btn-small" data-action="cls-open-drawer" data-node-id="${attrEsc(n.id)}">${escapeHtml(tr('clsDetails'))}</button>
+                  </div>
+                </td>
+              </tr>`;
+        };
+
+        const tbody = Object.keys(byGroup).map(g =>
+            (multiGroup ? `<tr class="cls-grp-row"><td colspan="6">${escapeHtml(orgLabel(g))} <span>${byGroup[g].length}</span></td></tr>` : '')
+            + byGroup[g].map(rowHtml).join('')).join('');
+
+        box.innerHTML = `<table class="cls-table" data-no-colpicker>
+            <thead><tr>
+              <th class="cls-th-chk" data-no-sort="1"><input type="checkbox" id="clsCheckAll" ${allChecked ? 'checked' : ''} aria-label="${attrEsc(tr('clsCheckAllAria'))}"></th>
+              <th data-no-sort="1">${escapeHtml(tr('clsColDevice'))}</th>
+              <th data-no-sort="1">${escapeHtml(tr('clsColIp'))}</th>
+              <th data-no-sort="1">${escapeHtml(tr('clsColSeenOn'))}</th>
+              <th data-no-sort="1">${escapeHtml(tr('clsColCategory'))}</th>
+              <th class="cls-th-act" data-no-sort="1">${escapeHtml(tr('clsColActions'))}</th>
+            </tr></thead>
+            <tbody>${tbody}</tbody>
+          </table>`;
     }
 
     function clsField(id, label, control) {
@@ -7065,18 +7186,49 @@
           </select>`);
     }
 
+    function openClsDrawer(id) {
+        if (id && id !== clsSelected && !clsMayLeave()) return;
+        if (id) clsSelected = id;
+        clsDrawerOpen = true;
+        renderClsInspector();
+        document.querySelectorAll('#categoriesDeviceList .cls-row').forEach(r =>
+            r.setAttribute('aria-current', String(r.getAttribute('data-node-id') === clsSelected)));
+    }
+
+    function closeClsDrawer() {
+        if (!clsDrawerOpen) return;
+        if (!clsMayLeave()) return;
+        clsDirty = false;
+        clsDrawerOpen = false;
+        renderClsInspector();
+        document.querySelectorAll('#categoriesDeviceList .cls-row').forEach(r =>
+            r.setAttribute('aria-current', 'false'));
+    }
+
     function renderClsInspector() {
         const box = document.getElementById('clsInspector');
+        const scrim = document.getElementById('clsDrawerScrim');
         if (!box) return;
         const n = categoriesData.nodes.find(x => x.id === clsSelected);
         clsDirty = false;
-        if (!n) { box.innerHTML = `<p class="cls-empty">${escapeHtml(tr('clsPickDevice'))}</p>`; return; }
+        if (!clsDrawerOpen || !n) {
+            box.classList.remove('open');
+            if (scrim) scrim.hidden = true;
+            if (!n) box.innerHTML = `<p class="cls-empty">${escapeHtml(tr('clsPickDevice'))}</p>`;
+            return;
+        }
+        box.classList.add('open');
+        if (scrim) scrim.hidden = false;
         const canWrite = clsCanWrite();
-        // /api/redundancy/groups is admin-only: so is stack editing.
         const canAdmin = isAdminRole(currentRole);
         const cats = categoriesData.categories;
         const subs = (cats[n.device_type] && cats[n.device_type].subcategories) || [];
         const vendor = n.vendor && n.vendor !== 'discovered' ? n.vendor : '';
+
+        const seenBox = (n.seen_on || []).length ? `<div class="cls-seen-box">
+              <div class="cls-sec-h">${escapeHtml(tr('clsSeenOnTitle'))}</div>
+              <ul>${n.seen_on.map(s => `<li>${escapeHtml(tr('clsSeenOnSummary', { sw: s.switch_label || s.switch, port: s.port || '—' }))}</li>`).join('')}</ul>
+            </div>` : '';
 
         const conflict = clsHasConflict(n) ? `<div class="cls-conflict">
               <p>${escapeHtml(tr('clsConflictMsg', { ip: n.display_ip || n.id }))}</p>
@@ -7157,19 +7309,22 @@
                   escapeHtml(tr(clsToClassify(n) ? 'clsConfirm' : 'clsSave'))}</button>
               <button type="button" class="btn btn-secondary btn-small" id="btnDiscardCatEdits" data-action="cls-undo">${escapeHtml(tr('clsUndo'))}</button>
               <span class="cls-dirty">${escapeHtml(tr('clsUnsaved'))}</span>
-              <span class="cls-kbd" aria-hidden="true">↑ ↓</span>
+              <span class="cls-kbd" aria-hidden="true">Esc</span>
             </div>` : '';
 
         box.innerHTML = `<div class="cls-insp-head">
-              <div class="cls-insp-title">${clsSwatch(n.device_type)}<span>${escapeHtml(n.label)}</span></div>
-              <div class="cls-insp-sub">${escapeHtml([n.display_ip || '—', n.group, tr(n.discovered ? 'clsDiscoveredVia' : 'clsManaged')].join(' · '))}</div>
+              <div class="cls-insp-head-main">
+                <div class="cls-insp-title">${clsSwatch(n.device_type)}<span>${escapeHtml(n.label)}</span></div>
+                <div class="cls-insp-sub">${escapeHtml([n.display_ip || '—', orgLabel(n.group), tr(n.discovered ? 'clsDiscoveredVia' : 'clsManaged')].join(' · '))}</div>
+              </div>
+              <button type="button" class="btn btn-secondary btn-small" data-action="cls-close" aria-label="${attrEsc(tr('clsCloseDrawer'))}">
+                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+              </button>
             </div>
-            <div class="cls-insp-body">${clsTwinBox(n)}${canWrite ? clsAiBox(n) : ''}${conflict}${fields}${stack}${facts}${actions ? `<div class="cls-actions">${actions}</div>` : ''}</div>
+            <div class="cls-insp-body">${seenBox}${clsTwinBox(n)}${canWrite && clsAiAvailable ? clsAiBox(n) : ''}${conflict}${fields}${stack}${facts}${actions ? `<div class="cls-actions">${actions}</div>` : ''}</div>
             ${foot}`;
     }
 
-    // The devices sharing this one's name, side by side with what tells them
-    // apart. Renaming is the form below: the normal save path.
     function clsTwinBox(n) {
         if (!clsHasTwins(n)) return '';
         const loc = id => {
@@ -7178,10 +7333,8 @@
         };
         const ids = [n.id].concat(n.name_twins);
         const nodeOf = id => categoriesData.nodes.find(x => x.id === id) || { id, label: id, group: '', macs: [], seen_on: [] };
-        // A list, not a table: the inspector is narrow and a MAC column ran off it.
         const row = id => {
             const t = nodeOf(id), seen = t.seen_on || [];
-            // A discovered twin has no location of its own: the switch it hangs off has.
             const where = globalDevices.some(x => x.IP === id) ? loc(id) : (seen.length ? loc(seen[0].switch) : '—');
             return `<li${id === n.id ? ' class="cls-twin-me"' : ''}><b>${escapeHtml(t.label)}</b> · ${escapeHtml(t.group)} · ${escapeHtml(where)}
                 <span class="cls-mono">${escapeHtml(t.display_ip || id)}</span>
@@ -7190,8 +7343,6 @@
                     <span class="cls-mono">${escapeHtml(s.macs.length ? s.macs.slice(0, 3).join(', ') : tr('clsTwinNoMac'))}</span></span>`).join('')}</li>`;
         };
         const switches = [...new Set(ids.flatMap(id => (nodeOf(id).seen_on || []).map(s => s.switch)))];
-        // Reads the whole MAC table of those switches (read-only, the MAC
-        // tracker's own scan): the map then tells the twins apart by MAC.
         const scan = switches.length && clsCanWrite()
             ? `<button type="button" class="btn btn-secondary btn-small" data-action="cls-twin-scan" data-ips="${attrEsc(switches.join(','))}">
                  <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> ${escapeHtml(tr('clsTwinScan', { n: switches.length }))}</button>` : '';
@@ -7218,11 +7369,16 @@
 
     async function loadClsAiSuggestions() {
         const r = await apiFetch('/api/device-classification/ai-suggestions');
-        clsAi = (r && r.ok) ? await r.json() : { suggestions: {}, conventions: {} };
+        if (r && r.ok) {
+            const d = await r.json();
+            clsAi = { suggestions: d.suggestions || {}, conventions: d.conventions || {} };
+            clsAiAvailable = d.ai_available !== false;
+        } else {
+            clsAi = { suggestions: {}, conventions: {} };
+            clsAiAvailable = false;
+        }
     }
 
-    // The proposal is shown, not applied: "Applica" fills the form and the
-    // user saves it like any manual edit.
     function clsAiBox(n) {
         const s = clsAi.suggestions[n.id];
         if (!s) return '';
@@ -7250,7 +7406,6 @@
         const cat = field('category');
         if (s.category && cat) {
             cat.value = s.category;
-            // Redraws the subcategory select for the new category.
             cat.dispatchEvent(new Event('change', { bubbles: true }));
         }
         for (const f of ['subcategory', 'name', 'vendor', 'model', 'ha_group']) {
@@ -7258,6 +7413,54 @@
             if (el && s[f]) el.value = s[f];
         }
         clsSetDirty(true);
+    }
+
+    async function clsQuickAssign(nodeId, fields) {
+        const n = categoriesData.nodes.find(x => x.id === nodeId);
+        if (!n) return false;
+        const body = Object.assign({ node_id: n.id, category: n.device_type }, fields || {});
+        const res = await apiFetch("/api/device-categories/assign", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+        });
+        return !!(res && res.ok);
+    }
+
+    async function clsQuickAcceptAi(nodeId) {
+        const n = categoriesData.nodes.find(x => x.id === nodeId);
+        const s = clsAi.suggestions[nodeId];
+        if (!n || !s) return;
+        const body = { category: s.category || n.device_type };
+        if (s.subcategory) body.subcategory = s.subcategory;
+        if (s.vendor) body.vendor = s.vendor;
+        if (s.model) body.model = s.model;
+        if (s.name) body.name = s.name;
+        if (s.ha_group) body.ha_group = s.ha_group;
+        if (!(await clsQuickAssign(nodeId, body))) {
+            showToast(tr('clsSaveFailed'), 'error');
+            return;
+        }
+        await loadCategoriesData();
+        showToast(tr('clsSaved', { name: body.name || n.label }));
+    }
+
+    async function acceptAllHighAi() {
+        const list = clsHighAiCandidates();
+        if (!list.length) { showToast(tr('clsAiAcceptedNone'), 'info'); return; }
+        let ok = 0;
+        for (const n of list) {
+            const s = clsAi.suggestions[n.id];
+            const body = { category: s.category || n.device_type };
+            if (s.subcategory) body.subcategory = s.subcategory;
+            if (s.vendor) body.vendor = s.vendor;
+            if (s.model) body.model = s.model;
+            if (s.name) body.name = s.name;
+            if (s.ha_group) body.ha_group = s.ha_group;
+            if (await clsQuickAssign(n.id, body)) ok++;
+        }
+        await loadCategoriesData();
+        showToast(tr('clsAiAcceptedHigh', { n: ok }));
     }
 
     async function runClsAiSuggest() {
@@ -7277,8 +7480,8 @@
             showToast(tr('clsAiDone', { n: Object.keys(data.suggestions || {}).length,
                                         req: data.requested, rem: data.remaining, m: manage }), 'info');
             await loadClsAiSuggestions();
-            clsView = clsScopedNodes().some(clsToClassify) || !clsScopedNodes().some(clsToManage) ? 'todo' : 'manage';
-            clsViewChosen = true;
+            clsScope = clsScopedNodes().some(clsToClassify) || !clsScopedNodes().some(clsToManage) ? 'todo' : 'manage';
+            clsScopeChosen = true;
             renderCategoriesPanel();
         } finally {
             if (btn) { btn.disabled = false; btn.innerHTML = label; }
@@ -7338,6 +7541,7 @@
         if (el instanceof HTMLElement && el.dataset.ip) openNameTwins(el.dataset.ip);
     });
     document.getElementById('btnClsAiSuggest')?.addEventListener('click', runClsAiSuggest);
+    document.getElementById('btnClsAiAcceptHigh')?.addEventListener('click', acceptAllHighAi);
     document.getElementById('btnClsAiModels')?.addEventListener('click', openClsModels);
     document.getElementById('btnCloseClsModels')?.addEventListener('click', () => closeModal('clsModelsModal'));
     document.getElementById('clsModelsBody')?.addEventListener('click', (e) => {
@@ -7353,36 +7557,12 @@
         document.querySelector('#clsInspector .cls-foot')?.classList.toggle('is-dirty', on);
     }
 
-    // Leaving a device with unsaved edits asks first: the list is not a place
-    // to lose a half-typed model name silently.
     function clsMayLeave() {
         if (!clsDirty) return true;
         const n = categoriesData.nodes.find(x => x.id === clsSelected);
         return confirm(tr('clsDiscardConfirm', { name: n ? n.label : '' }));
     }
 
-    function clsSelect(id, focusRow) {
-        if (id === clsSelected) return;
-        if (!clsMayLeave()) return;
-        clsSelected = id;
-        document.querySelectorAll('#categoriesDeviceList .cls-row').forEach(r =>
-            r.setAttribute('aria-current', String(r.getAttribute('data-node-id') === id)));
-        const row = /** @type {HTMLElement|null} */ (document.querySelector(
-            `#categoriesDeviceList .cls-row[data-node-id="${CSS.escape(id)}"]`));
-        row?.scrollIntoView({ block: 'nearest' });
-        if (focusRow) row?.focus();
-        renderClsInspector();
-    }
-
-    function clsMove(step) {
-        const ids = clsVisibleNodes().map(n => n.id);
-        if (!ids.length) return;
-        const i = ids.indexOf(clsSelected);
-        clsSelect(ids[Math.max(0, Math.min(ids.length - 1, i + step))], true);
-    }
-
-    // Save only what changed, for this one device. Confirming a queued device
-    // always sends the category: that is what turns "inferred" into "manual".
     async function saveCategoryEdits() {
         const n = categoriesData.nodes.find(x => x.id === clsSelected);
         if (!n) return;
@@ -7396,15 +7576,11 @@
             const v = val(f);
             if (v !== undefined && v !== was[f]) body[f] = v;
         }
-        // The category changed: the old subcategory belongs to another list.
         if (body.category && val('subcategory') === undefined) body.subcategory = '';
         if (clsToClassify(n)) body.category = val('category') || n.device_type;
-        // A new model is filed under its vendor's catalogue.
         if (body.model && !body.vendor && was.vendor) body.vendor = was.vendor;
-        if (Object.keys(body).length === 1) { clsSetDirty(false); return; }
+        if (Object.keys(body).length === 1) { clsSetDirty(false); clsDrawerOpen = false; renderClsInspector(); return; }
 
-        const nextInQueue = clsView === 'todo'
-            ? clsVisibleNodes().map(x => x.id).filter(id => id !== n.id)[0] : null;
         const res = await apiFetch("/api/device-categories/assign", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -7412,12 +7588,14 @@
         });
         if (!(res && res.ok)) { alert(tr('clsSaveFailed')); return; }
         clsDirty = false;
-        if (nextInQueue) clsSelected = nextInQueue;
+        clsDrawerOpen = false;
         await loadCategoriesData();
         showToast(tr('clsSaved', { name: body.name || n.label }));
     }
 
     function discardCategoryEdits() {
+        clsDirty = false;
+        clsDrawerOpen = false;
         renderClsInspector();
     }
 
@@ -7433,6 +7611,18 @@
         else alert(tr('topoFailedToResolveConflict'));
     }
 
+    document.getElementById('clsKpiBar')?.addEventListener('click', (e) => {
+        const btn = /** @type {HTMLElement} */ (e.target).closest('[data-action="cls-scope"]');
+        if (!(btn instanceof HTMLElement)) return;
+        if (!clsMayLeave()) return;
+        clsDirty = false;
+        clsDrawerOpen = false;
+        clsScope = btn.dataset.scope || 'all';
+        clsScopeChosen = true;
+        clsPicked.clear();
+        renderCategoriesPanel();
+    });
+
     document.getElementById('clsRail')?.addEventListener('click', (e) => {
         const el = /** @type {HTMLElement} */ (e.target).closest('[data-action]');
         if (!(el instanceof HTMLElement)) return;
@@ -7440,8 +7630,7 @@
         if (act === 'cls-view') {
             if (!clsMayLeave()) return;
             clsDirty = false;
-            clsView = el.dataset.view || 'all';
-            clsViewChosen = true;
+            clsCatFilter = el.dataset.view || 'all';
             clsPicked.clear();
             renderCategoriesPanel();
         } else if (act === 'delete-category' && el.dataset.k) {
@@ -7451,43 +7640,107 @@
         }
     });
 
-    document.getElementById('categoriesDeviceList')?.addEventListener('click', (e) => {
-        const row = /** @type {HTMLElement} */ (e.target).closest('[data-action="cls-select"]');
-        if (!(row instanceof HTMLElement) || !row.dataset.nodeId) return;
-        const me = /** @type {MouseEvent} */ (e);
-        if (me.ctrlKey || me.metaKey) {
-            // The row already open counts as the first pick.
-            if (!clsPicked.size && clsSelected) clsPicked.add(clsSelected);
-            const id = row.dataset.nodeId;
-            if (clsPicked.has(id)) clsPicked.delete(id); else clsPicked.add(id);
-            document.querySelectorAll('#categoriesDeviceList .cls-row').forEach(r => {
-                const on = clsPicked.has(r.getAttribute('data-node-id') || '');
-                r.classList.toggle('cls-picked', on);
-                r.setAttribute('aria-pressed', String(on));
-            });
+    document.getElementById('categoriesDeviceList')?.addEventListener('change', async (e) => {
+        const t = e.target;
+        if (t instanceof HTMLInputElement && t.id === 'clsCheckAll') {
+            const visible = clsVisibleNodes();
+            if (t.checked) visible.forEach(n => clsPicked.add(n.id));
+            else visible.forEach(n => clsPicked.delete(n.id));
+            renderClsList(visible);
             renderClsBulk();
             return;
         }
-        if (clsPicked.size) {
-            clsPicked.clear();
-            document.querySelectorAll('#categoriesDeviceList .cls-picked').forEach(r => {
-                r.classList.remove('cls-picked');
-                r.setAttribute('aria-pressed', 'false');
-            });
+        if (t instanceof HTMLInputElement && t.dataset.action === 'cls-pick' && t.dataset.nodeId) {
+            if (t.checked) clsPicked.add(t.dataset.nodeId);
+            else clsPicked.delete(t.dataset.nodeId);
+            const row = t.closest('.cls-row');
+            row?.classList.toggle('cls-picked', t.checked);
+            const allBox = /** @type {HTMLInputElement|null} */ (document.getElementById('clsCheckAll'));
+            const visible = clsVisibleNodes();
+            if (allBox) allBox.checked = visible.length > 0 && visible.every(n => clsPicked.has(n.id));
             renderClsBulk();
+            return;
         }
-        clsSelect(row.dataset.nodeId, false);
+        if (t instanceof HTMLSelectElement && t.dataset.action === 'cls-inline-cat' && t.dataset.nodeId) {
+            const nodeId = t.dataset.nodeId;
+            const n = categoriesData.nodes.find(x => x.id === nodeId);
+            t.disabled = true;
+            const ok = await clsQuickAssign(nodeId, { category: t.value, subcategory: '' });
+            t.disabled = false;
+            if (!ok) {
+                showToast(tr('clsSaveFailed'), 'error');
+                renderCategoriesPanel();
+                return;
+            }
+            await loadCategoriesData();
+            showToast(tr('clsSaved', { name: n ? n.label : nodeId }));
+        }
     });
+
+    document.getElementById('categoriesDeviceList')?.addEventListener('click', async (e) => {
+        const target = /** @type {HTMLElement} */ (e.target);
+        if (target.closest('input, select, label')) return;
+        const btn = target.closest('[data-action]');
+        if (btn instanceof HTMLElement && btn.dataset.nodeId) {
+            const act = btn.dataset.action;
+            const id = btn.dataset.nodeId;
+            if (act === 'cls-quick-ai') { await clsQuickAcceptAi(id); return; }
+            if (act === 'cls-confirm-one') {
+                const n = categoriesData.nodes.find(x => x.id === id);
+                if (await clsQuickAssign(id, {})) {
+                    await loadCategoriesData();
+                    showToast(tr('clsSaved', { name: n ? n.label : id }));
+                } else showToast(tr('clsSaveFailed'), 'error');
+                return;
+            }
+            if (act === 'cls-promote-one') { await promoteDevice(id); return; }
+            if (act === 'cls-open-drawer') { openClsDrawer(id); return; }
+        }
+        const row = target.closest('.cls-row');
+        if (row instanceof HTMLElement && row.dataset.nodeId) {
+            openClsDrawer(row.dataset.nodeId);
+        }
+    });
+
+    document.getElementById('btnClsBulkConfirm')?.addEventListener('click', async () => {
+        const ids = [...clsPicked];
+        if (!ids.length) return;
+        let ok = 0;
+        for (const id of ids) {
+            if (await clsQuickAssign(id, {})) ok++;
+        }
+        clsPicked.clear();
+        await loadCategoriesData();
+        showToast(tr('clsBulkConfirmed', { n: ok }));
+    });
+
+    document.getElementById('clsBulkCatSelect')?.addEventListener('change', async (e) => {
+        const sel = /** @type {HTMLSelectElement} */ (e.target);
+        const cat = sel.value;
+        if (!cat) return;
+        const ids = [...clsPicked];
+        let ok = 0;
+        for (const id of ids) {
+            if (await clsQuickAssign(id, { category: cat, subcategory: '' })) ok++;
+        }
+        clsPicked.clear();
+        await loadCategoriesData();
+        showToast(tr('clsBulkCatApplied', { n: ok }));
+    });
+
     document.getElementById('btnClsBulkPromote')?.addEventListener('click', promotePicked);
     document.getElementById('btnClsBulkClear')?.addEventListener('click', () => {
         clsPicked.clear();
         renderCategoriesPanel();
     });
+    document.getElementById('clsDrawerScrim')?.addEventListener('click', closeClsDrawer);
 
     document.getElementById('clsInspector')?.addEventListener('click', (e) => {
         const el = /** @type {HTMLElement} */ (e.target).closest('[data-action]');
-        if (!(el instanceof HTMLElement) || !clsSelected) return;
+        if (!(el instanceof HTMLElement)) return;
         const act = el.dataset.action;
+        if (act === 'cls-close') { closeClsDrawer(); return; }
+        if (!clsSelected) return;
         if (act === 'cls-save') saveCategoryEdits();
         else if (act === 'cls-undo') discardCategoryEdits();
         else if (act === 'cls-pick-name') clsPickName(el);
@@ -7502,8 +7755,6 @@
     document.getElementById('clsInspector')?.addEventListener('input', (e) => {
         if (/** @type {HTMLElement} */ (e.target).closest('[data-field]')) clsSetDirty(true);
     });
-    // Another category has other subcategories: redraw that select only, so
-    // what was typed in the other fields stays.
     document.getElementById('clsInspector')?.addEventListener('change', (e) => {
         const t = e.target;
         if (!(t instanceof HTMLSelectElement) || t.dataset.field !== 'category') return;
@@ -7519,26 +7770,20 @@
         const visible = clsVisibleNodes();
         if (!visible.some(n => n.id === clsSelected) && !clsDirty) {
             clsSelected = visible.length ? visible[0].id : null;
-            renderClsInspector();
         }
         renderClsList(visible);
+        renderClsBulk();
     });
 
-    // Up/down walk the list while the tab is open and focus is not in a field:
-    // working through the queue should not need the mouse.
     document.addEventListener('keydown', (e) => {
-        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        if (e.key !== 'Escape' || !clsDrawerOpen) return;
         const tab = document.getElementById('tab-categories');
         if (!tab || !tab.classList.contains('active')) return;
-        const a = document.activeElement;
-        if (a && (a.matches('input, select, textarea') || a.closest('.modal, details[open]'))) return;
-        e.preventDefault();
-        clsMove(e.key === 'ArrowDown' ? 1 : -1);
+        if (document.querySelector('.modal-overlay[style*="flex"], .modal-backdrop[style*="flex"]')) return;
+        closeClsDrawer();
     });
 
     // ===== Gestione stack (tab Dispositivi) =====
-    // I gruppi vivono in redundancy.db via /api/redundancy/groups (admin-only).
-    // Salvare a mano marca il gruppo 'manual': il rilevamento CLI non lo tocca più.
     async function saveStackGroup(n, members, groupId) {
         const res = await apiFetch(groupId ? `/api/redundancy/groups/${groupId}` : '/api/redundancy/groups', {
             method: groupId ? 'PUT' : 'POST',
@@ -7616,9 +7861,6 @@
         if (failed.length) alert(failed.join('\n'));
     }
 
-    // One location per tenant, asked once even for twenty devices; then one
-    // request each, so a device already in inventory fails alone. null when
-    // the location was not picked (nothing sent), else the failure messages.
     async function promoteNodes(nodes) {
         const locs = new Map();
         for (const g of new Set(nodes.map(n => n.group))) {
@@ -7634,8 +7876,6 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     node_id: n.id, ip: n.display_ip, vendor, group: n.group, location: locs.get(n.group),
-                    // Eredita ciò che è già stato scoperto via CDP/LLDP, incluso il
-                    // nome eventualmente rinominato.
                     model: n.model || '',
                     version: n.version || '',
                     device_type: n.device_type || '',
@@ -7648,7 +7888,6 @@
             }
         }
         await loadCategoriesData();
-        // Aggiorna la cache inventario così il nuovo gestito appare nel triage.
         try {
             const dres = await apiFetch('/api/local-devices');
             if (dres && dres.ok) {

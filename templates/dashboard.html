@@ -1366,14 +1366,20 @@
       <div class="page-head">
         <div class="page-head-text">
           <h2 data-i18n="titleCategories">Dispositivi scoperti</h2>
-          <p data-i18n="descCategories">Inventariati e scoperti via CDP/LLDP, per categoria. Scegli una coda o una categoria a sinistra, un dispositivo al centro, e correggilo a destra.</p>
+          <p data-i18n="descCategories">Scoperti via CDP/LLDP e apparati in inventario. Usa i filtri in alto, conferma o cambia categoria in riga, o apri i dettagli di un dispositivo.</p>
         </div>
         <div class="page-head-actions">
+          <span id="clsAiModePill" class="cls-mode-pill" hidden title="Nessun profilo AI attivo: la coda Promuovibili usa l'euristica locale (infrastruttura con IP)." data-i18n-title="clsAiModeOffHint">
+            <i class="fa-solid fa-microchip" aria-hidden="true"></i> <span data-i18n="clsAiModeOff">AI non configurata · Euristica locale</span>
+          </span>
           <select id="categoriesGroupSelect" class="cls-tenant" aria-label="Tenant delle categorie" data-i18n-aria-label="ariaCategoriesTenant">
             <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
           </select>
           <button type="button" class="btn btn-secondary btn-small requires-write" id="btnClsAiSuggest" title="Una richiesta AI per i dispositivi da classificare" data-i18n-title="clsAiSuggestTitle">
             <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> <span data-i18n="clsAiSuggest">Suggerisci con AI</span>
+          </button>
+          <button type="button" class="btn btn-primary btn-small requires-write" id="btnClsAiAcceptHigh" hidden>
+            <i class="fa-solid fa-check-double" aria-hidden="true"></i> <span id="btnClsAiAcceptHighLabel"></span>
           </button>
           <button type="button" class="btn btn-secondary btn-small requires-write" id="btnClsAiModels" title="Doppioni nel catalogo modelli" data-i18n-title="clsAiModelsTitle">
             <i class="fa-solid fa-broom" aria-hidden="true"></i> <span data-i18n="clsAiModels">Pulisci modelli</span>
@@ -1387,9 +1393,9 @@
         </div>
       </div>
 
-      <!-- Rail (queues + category tree) | read-only list | inspector of the
-           selected device. Edits happen in the inspector only, one device at
-           a time. -->
+      <div id="clsKpiBar" class="cls-kpis" role="region" aria-label="Riepilogo dispositivi scoperti" data-i18n-aria-label="titleCategories"></div>
+
+      <!-- Full-width workspace: horizontal category filter bar | triage table | slide-over drawer. -->
       <div class="panel cls-shell">
         <nav class="cls-rail" aria-label="Code e categorie" data-i18n-aria-label="clsRailAria">
           <div id="clsRail"></div>
@@ -1418,16 +1424,18 @@
                    data-i18n-placeholder="clsSearch" aria-label="Cerca nome, IP, modello"
                    data-i18n-aria-label="clsSearch" autocomplete="off" spellcheck="false">
           </div>
-          <!-- Text set per view by topology.js (queue, AI "to manage", any list). -->
           <p id="clsHint" class="cls-hint" hidden></p>
           <div id="clsBulkBar" class="cls-bulk" hidden>
             <span id="clsBulkInfo"></span>
+            <select id="clsBulkCatSelect" class="cls-bulk-cat requires-write" aria-label="Assegna categoria ai dispositivi selezionati" data-i18n-aria-label="clsBulkCatAria"></select>
+            <button type="button" class="btn btn-secondary btn-small requires-write" id="btnClsBulkConfirm" data-i18n="clsBulkConfirm">Conferma selezionati</button>
             <button type="button" class="btn btn-primary btn-small requires-write" id="btnClsBulkPromote" data-i18n="clsBulkPromoteShort">Aggiungi ai gestiti</button>
             <button type="button" class="btn btn-secondary btn-small" id="btnClsBulkClear" data-i18n="clsBulkClear">Annulla selezione</button>
           </div>
           <div id="categoriesDeviceList" class="cls-rows" aria-label="Dispositivi" data-i18n-aria-label="clsListAria"></div>
         </section>
 
+        <div id="clsDrawerScrim" class="cls-drawer-scrim" hidden></div>
         <section id="clsInspector" class="cls-insp" aria-label="Dettaglio dispositivo" data-i18n-aria-label="clsInspAria"></section>
       </div>
     </div>
