@@ -7,6 +7,7 @@ Endpoints for offline policy and route validation against stored device backups.
 Tenant-scoped via assert_device_allowed.
 """
 
+import os
 from typing import Any, Dict, List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException
 from routers.deps import require_tab
@@ -37,10 +38,10 @@ class FlowRequest(BaseModel):
     icmp_type: Optional[int] = Field(None, ge=0, le=255)
 
 
-def _load_device_backup(ip: str, current_user) -> Tuple[str, str]:
-    """Load backup text and detect config type for device IP.
+def _load_device_backup_detail(ip: str, current_user) -> Tuple[str, str, Optional[float]]:
+    """Load backup text, detected config type, and mtime timestamp for device IP.
 
-    Returns (content, config_type). Raises HTTP 404/403/500 as appropriate.
+    Returns (content, config_type, backup_ts). Raises HTTP 404/403/500 as appropriate.
     """
     device = assert_device_allowed(current_user, ip)
     if device is None:
@@ -51,6 +52,11 @@ def _load_device_backup(ip: str, current_user) -> Tuple[str, str]:
         raise HTTPException(status_code=404, detail=f"Nessun backup trovato per {ip}.")
 
     try:
+        backup_ts: Optional[float] = os.path.getmtime(path)
+    except OSError:
+        backup_ts = None
+
+    try:
         with open(path, encoding="utf-8", errors="ignore") as fh:
             raw_content = fh.read()
     except OSError:
@@ -58,6 +64,15 @@ def _load_device_backup(ip: str, current_user) -> Tuple[str, str]:
 
     content = "\n".join(config_analyzer.running_config(raw_content))
     config_type = config_analyzer.detect_config_type(content, device)
+    return content, config_type, backup_ts
+
+
+def _load_device_backup(ip: str, current_user) -> Tuple[str, str]:
+    """Load backup text and detect config type for device IP.
+
+    Returns (content, config_type). Raises HTTP 404/403/500 as appropriate.
+    """
+    content, config_type, _backup_ts = _load_device_backup_detail(ip, current_user)
     return content, config_type
 
 
@@ -197,8 +212,102 @@ def policy_findings(ip: str, current_user = Depends(get_current_user)):
     """Analyze device configuration for static policy and routing findings."""
     content, config_type = _load_device_backup(ip, current_user)
     env = _parse_environment(content, config_type)
-    findings = analyze_policy_findings(env)
+    findings = analyze_policy_findings(env, config_text=content, vendor=config_type)
     return [f.to_dict() for f in findings]
+
+
+@router.get("/api/policy-test/{ip}/metadata")
+def policy_metadata(ip: str, current_user = Depends(get_current_user)):
+    """Return parsed interfaces, ACLs, rule summaries, static routes, and backup metadata."""
+    content, config_type, backup_ts = _load_device_backup_detail(ip, current_user)
+    env = _parse_environment(content, config_type)
+
+    raw_ifaces = getattr(env, "interfaces", None) or {}
+    iface_to_zone = getattr(env, "iface_to_zone", None) or {}
+    interfaces: List[Dict[str, Any]] = []
+    for name in sorted(raw_ifaces.keys()):
+        info = raw_ifaces.get(name) or {}
+        if not isinstance(info, dict):
+            continue
+        interfaces.append({
+            "name": str(name),
+            "ip": str(info.get("ip") or ""),
+            "mask": str(info.get("mask") or ""),
+            "acl_in": str(info.get("acl_in") or ""),
+            "acl_out": str(info.get("acl_out") or ""),
+            "zone": str(iface_to_zone.get(name, "")),
+        })
+
+    zones = sorted(str(z) for z in (getattr(env, "zones", None) or {}).keys())
+
+    acls: List[Dict[str, Any]] = []
+    rules: List[Dict[str, Any]] = []
+    if hasattr(env, "policies"):
+        policies = list(getattr(env, "policies", None) or [])
+        acls.append({
+            "name": "firewall_policy",
+            "kind": "firewall_policy",
+            "rule_count": len(policies),
+            "bindings": [],
+        })
+        for r in policies[:500]:
+            rules.append({
+                "acl": "firewall_policy",
+                "id": str(r.id),
+                "name": str(r.name or ""),
+                "action": str(r.action),
+                "disabled": bool(r.disabled),
+                "raw_text": str(r.raw_text or ""),
+            })
+    else:
+        acls_map = getattr(env, "acls", None) or {}
+        for acl_name, ruleset in acls_map.items():
+            acls.append({
+                "name": str(acl_name),
+                "kind": str(ruleset.kind),
+                "rule_count": len(ruleset.rules),
+                "bindings": _acl_bindings(env, str(acl_name)),
+            })
+            for r in ruleset.rules:
+                if len(rules) >= 500:
+                    break
+                rules.append({
+                    "acl": str(acl_name),
+                    "id": str(r.id),
+                    "name": str(r.name or ""),
+                    "action": str(r.action),
+                    "disabled": bool(r.disabled),
+                    "raw_text": str(r.raw_text or ""),
+                })
+
+    rt = getattr(env, "route_table", None)
+    rt_routes = getattr(rt, "routes", None) or []
+    static_routes: List[Dict[str, Any]] = []
+    for route in rt_routes:
+        if getattr(route, "source", "") != "static":
+            continue
+        static_routes.append({
+            "prefix": str(route.prefix),
+            "next_hop": str(route.next_hop or ""),
+            "interface": str(route.interface or ""),
+            "distance": int(route.distance),
+            "vrf": str(route.vrf or ""),
+        })
+        if len(static_routes) >= 200:
+            break
+
+    return {
+        "device_ip": ip,
+        "config_type": config_type,
+        "backup_ts": backup_ts,
+        "dynamic_routing_present": bool(getattr(rt, "dynamic_routing_present", False)),
+        "protocols": [str(p) for p in (getattr(rt, "protocols", None) or [])],
+        "interfaces": interfaces,
+        "zones": zones,
+        "acls": acls,
+        "rules": rules,
+        "static_routes": static_routes,
+    }
 
 
 class ProofRequest(BaseModel):

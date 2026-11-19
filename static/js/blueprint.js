@@ -15,6 +15,10 @@
     let bpNetwork = null;     // vis.Network of the diagram
     let bpLocSave = null;     // save callback of the open location modal
     let bpLinkSave = null;    // save callback of the open link modal
+    let bpFindingsGroup = 'all';
+    let bpFindingsSev = 'all'; // 'all' | 'error'
+    let bpSelectedLocId = null;
+    let bpLastObserve = null;
 
     const KIND_COLORS = { vpn: '--primary', wan: '--text-muted', mpls: '--warning', lan: '--success' };
     const SEV_RANK = { error: 0, warning: 1, unknown: 2, info: 3 };
@@ -25,6 +29,7 @@
         device_outside_subnets: 'subnets', arp_uncovered: 'subnets', subnet_unused: 'subnets',
         link_no_route: 'routing', route_without_link: 'routing',
         vpn_link_down: 'vpn', tunnel_without_link: 'vpn',
+        purdue_dmz_bypass: 'purdue', purdue_layer_skip: 'purdue', purdue_subnet_overlap: 'purdue',
     };
     const EDITABLE = ['create_location', 'update_location', 'add_subnet', 'set_gateway', 'add_link'];
 
@@ -111,11 +116,14 @@
 
     function render() {
         renderBar();
+        renderCartouche();
+        renderObserveReport();
         renderSteps();
         renderDraftBar();
         renderLocations();
         renderLinks();
         renderDiagram();
+        renderNodeInspector();
         renderFindings();
     }
 
@@ -123,9 +131,59 @@
         // The bar's buttons ship disabled: every handler needs bpState, which only
         // exists once an organization has loaded.
         document.querySelectorAll('.bp-bar button').forEach((b) => { b.disabled = false; });
+        if ($('btnBpInstructions')) $('btnBpInstructions').disabled = false;
         const info = bpState.rev_info;
         $('bpRevInfo').textContent = info ? tr('bpRevInfo', { rev: info.rev, at: info.at, by: info.by || '—' }) : tr('bpRevNone');
         $('bpObsInfo').textContent = bpObservedAt ? tr('bpObsInfo', { at: bpObservedAt }) : tr('bpObsNone');
+    }
+
+    function renderCartouche() {
+        const box = $('bpCartouche');
+        if (!box || !bpState) return;
+        const m = model();
+        const locs = Object.keys(m.locations || {}).length;
+        const links = Object.keys(m.links || {}).length;
+        const errs = bpFindings.filter((f) => f.severity === 'error').length;
+        const warns = bpFindings.filter((f) => f.severity === 'warning').length;
+        const purdue = bpFindings.filter((f) => CODE_GROUP[f.code] === 'purdue').length;
+        const rev = bpState.rev ? `v${bpState.rev}` : '—';
+        const item = (lbl, val) => `<span>${escapeHtml(lbl)} <b>${escapeHtml(String(val))}</b></span>`;
+        box.innerHTML = item(tr('bpCartoucheLocations'), locs)
+            + item(tr('bpCartoucheLinks'), links)
+            + item(tr('bpCartoucheErrors'), errs)
+            + item(tr('bpCartoucheWarnings'), warns)
+            + item(tr('bpCartouchePurdue'), purdue)
+            + item(tr('bpCartoucheRev'), rev)
+            + item(tr('bpCartoucheSnap'), bpObservedAt || '—');
+    }
+
+    function renderObserveReport() {
+        const box = $('bpObserveReport');
+        if (!box) return;
+        if (!bpLastObserve || !Object.keys(bpLastObserve).length) {
+            box.hidden = true;
+            box.innerHTML = '';
+            return;
+        }
+        const cards = Object.entries(bpLastObserve).map(([ip, st]) => {
+            const rErr = st && st.routes_error ? String(st.routes_error) : '';
+            const tErr = st && st.tunnels_error ? String(st.tunnels_error) : '';
+            const hasErr = !!(rErr || tErr);
+            return `<div class="bp-obs-card${hasErr ? ' is-err' : ''}">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:4px;">
+                    <code class="bp-mono">${escapeHtml(ip)}</code>
+                    <span class="badge ${hasErr ? 'badge-danger' : 'badge-success'}">${escapeHtml(tr(hasErr ? 'bpObsGwErr' : 'bpObsGwOk'))}</span>
+                </div>
+                ${rErr ? `<div style="font-size:11.5px;">${escapeHtml(tr('bpObsRoutesErr', { err: rErr }))}</div>` : ''}
+                ${tErr ? `<div style="font-size:11.5px;">${escapeHtml(tr('bpObsTunnelsErr', { err: tErr }))}</div>` : ''}
+            </div>`;
+        }).join('');
+        box.hidden = false;
+        box.innerHTML = `<div class="bp-obs-head">
+                <strong>${escapeHtml(tr('bpObsReportTitle'))}</strong>
+                <button type="button" class="btn btn-secondary btn-small" data-action="bp-obs-dismiss" style="width:auto; margin:0;">${escapeHtml(tr('bpObsDismiss'))}</button>
+            </div>
+            <div class="bp-obs-grid">${cards}</div>`;
     }
 
     function renderSteps() {
@@ -140,6 +198,10 @@
             ['bpStep5', !!bpObservedAt, 'observe'],
             ['bpStep6', any && !bpFindings.some((f) => f.severity === 'error'), 'findings'],
         ];
+        const doneCount = steps.filter((s) => s[1]).length;
+        if ($('bpStepsProgress')) {
+            $('bpStepsProgress').textContent = tr('bpStepsProgress', { done: doneCount, total: steps.length });
+        }
         const label = { preset: 'btnBpPreset', observe: 'btnBpObserve', findings: 'btnBpSeeFindings' };
         $('bpSteps').hidden = steps.every((s) => s[1]);
         $('bpStepsList').innerHTML = steps.map(([key, done, action]) => `<li class="${done ? 'is-done' : ''}">
@@ -160,14 +222,32 @@
         return `<button type="button" class="inv-icon-btn${danger ? ' danger' : ''}" data-action="${action}" data-id="${escapeHtml(id)}" title="${escapeHtml(tr(key))}" aria-label="${escapeHtml(tr(key))}"><i class="fa-solid ${icon}"></i></button>`;
     }
 
+    function findDraftLocOpIndex(id, loc) {
+        return draftOps().findIndex((o) => o.op === 'create_location'
+            && (o.ref === id || o.id === id || o.name === loc.name));
+    }
+
+    function findDraftLinkOpIndex(k) {
+        return draftOps().findIndex((o) => o.op === 'add_link'
+            && o.a === k.a && o.b === k.b && o.kind === k.kind);
+    }
+
     function renderLocations() {
         const m = model();
         const ids = Object.keys(m.locations).sort((a, b) => m.locations[a].name.localeCompare(m.locations[b].name));
         $('bpLocationsBody').innerHTML = ids.map((id) => {
             const l = m.locations[id];
-            const actions = id in bpState.locations
-                ? iconBtn('bp-edit-loc', id, 'fa-pen', 'btnBpEditOp') + iconBtn('bp-del-loc', id, 'fa-trash-can', 'btnBpRemoveOp', true)
-                : `<span class="bp-draft-tag">${escapeHtml(tr('bpInDraft'))}</span>`;
+            let actions;
+            if (id in bpState.locations) {
+                actions = iconBtn('bp-edit-loc', id, 'fa-pen', 'btnBpEditOp') + iconBtn('bp-del-loc', id, 'fa-trash-can', 'btnBpRemoveOp', true);
+            } else {
+                const opIdx = findDraftLocOpIndex(id, l);
+                const draftBtns = opIdx >= 0
+                    ? iconBtn('bp-draft-op-edit', String(opIdx), 'fa-pen', 'btnBpEditOp')
+                        + iconBtn('bp-draft-op-del', String(opIdx), 'fa-trash-can', 'btnBpRemoveOp', true)
+                    : '';
+                actions = `<span class="bp-draft-tag">${escapeHtml(tr('bpInDraft'))}</span> ${draftBtns}`;
+            }
             return `<tr><td><strong>${escapeHtml(l.name)}</strong></td><td>${escapeHtml(roleLabel(l.role))}</td>
                 <td class="bp-mono">${(l.subnets || []).map(escapeHtml).join('<br>') || '—'}</td>
                 <td class="bp-mono">${escapeHtml(l.gateway || '—')}</td><td>${escapeHtml(probeName(l.probe))}</td>
@@ -178,9 +258,17 @@
     function renderLinks() {
         const m = model();
         $('bpLinksBody').innerHTML = Object.entries(m.links).map(([id, k]) => {
-            const actions = id in bpState.links
-                ? iconBtn('bp-edit-link', id, 'fa-pen', 'btnBpEditOp') + iconBtn('bp-del-link', id, 'fa-trash-can', 'btnBpRemoveOp', true)
-                : `<span class="bp-draft-tag">${escapeHtml(tr('bpInDraft'))}</span>`;
+            let actions;
+            if (id in bpState.links) {
+                actions = iconBtn('bp-edit-link', id, 'fa-pen', 'btnBpEditOp') + iconBtn('bp-del-link', id, 'fa-trash-can', 'btnBpRemoveOp', true);
+            } else {
+                const opIdx = findDraftLinkOpIndex(k);
+                const draftBtns = opIdx >= 0
+                    ? iconBtn('bp-draft-op-edit', String(opIdx), 'fa-pen', 'btnBpEditOp')
+                        + iconBtn('bp-draft-op-del', String(opIdx), 'fa-trash-can', 'btnBpRemoveOp', true)
+                    : '';
+                actions = `<span class="bp-draft-tag">${escapeHtml(tr('bpInDraft'))}</span> ${draftBtns}`;
+            }
             return `<tr><td>${escapeHtml(locName(k.a))}</td><td>${escapeHtml(locName(k.b))}</td>
                 <td>${escapeHtml(trEnum('bpKind_', k.kind))}</td><td style="white-space:nowrap;">${actions}</td></tr>`;
         }).join('') || `<tr><td colspan="4" class="inv-muted">${escapeHtml(tr('bpNoLinks'))}</td></tr>`;
@@ -217,10 +305,10 @@
                 color: { background: surface, border: cssVar(sev ? SEV_COLORS[sev] : '--border-strong'),
                     highlight: { background: surface, border: cssVar('--primary') },
                     hover: { background: surface, border: cssVar('--primary') } },
-                shapeProperties: { borderRadius: 8, borderDashes: id in bpState.locations ? false : [4, 4] },
+                shapeProperties: { borderRadius: 2, borderDashes: id in bpState.locations ? false : [4, 4] },
                 font: { multi: 'html', face: font, color: text, size: 13,
                     bold: { color: text, size: 14, face: font }, ital: { color: muted, size: 11, face: font } },
-                shadow: { enabled: true, color: 'rgba(0,0,0,0.25)', size: 8, x: 0, y: 2 },
+                shadow: false,
             };
         });
         const edges = Object.entries(m.links).map(([id, k]) => ({
@@ -242,9 +330,78 @@
             bpNetwork.fit({ animation: { duration: 300 } });
         });
         bpNetwork.on('click', (p) => {
-            if (p.nodes.length && p.nodes[0] in bpState.locations) editLocation(p.nodes[0]);
-            else if (p.edges.length && p.edges[0] in bpState.links) editLink(p.edges[0]);
+            if (p.nodes.length) {
+                bpSelectedLocId = p.nodes[0];
+                renderNodeInspector();
+            } else if (!p.edges.length) {
+                bpSelectedLocId = null;
+                renderNodeInspector();
+            }
         });
+        bpNetwork.on('doubleClick', (p) => {
+            if (p.nodes.length) {
+                const nid = p.nodes[0];
+                if (nid in bpState.locations) editLocation(nid);
+                else {
+                    const loc = model().locations[nid];
+                    if (loc) editDraftOpAt(findDraftLocOpIndex(nid, loc));
+                }
+            } else if (p.edges.length) {
+                const eid = p.edges[0];
+                if (eid in bpState.links) editLink(eid);
+                else {
+                    const lk = model().links[eid];
+                    if (lk) editDraftOpAt(findDraftLinkOpIndex(lk));
+                }
+            }
+        });
+    }
+
+    function renderNodeInspector() {
+        const box = $('bpNodeInspector');
+        if (!box) return;
+        const m = model();
+        const loc = bpSelectedLocId ? (m.locations || {})[bpSelectedLocId] : null;
+        if (!loc) {
+            box.hidden = true;
+            box.innerHTML = '';
+            return;
+        }
+        const inDraft = !(bpSelectedLocId in (bpState.locations || {}));
+        const locFindings = bpFindings.filter((f) => (f.subject || {}).location === bpSelectedLocId);
+        const subnetsHtml = (loc.subnets || []).length
+            ? (loc.subnets || []).map((s) => `<code class="bp-mono">${escapeHtml(s)}</code>`).join(', ')
+            : '—';
+        const findingsHtml = locFindings.length
+            ? locFindings.map((f) => `<div><span class="bp-sev bp-sev-${escapeHtml(f.severity)}">${escapeHtml(trEnum('bpSev_', f.severity))}</span> ${findingText(f)}</div>`).join('')
+            : `<span style="color:var(--text-muted);">${escapeHtml(tr('bpInspNoFindings'))}</span>`;
+        box.hidden = false;
+        box.innerHTML = `<div class="bp-insp-head">
+                <div>
+                    <span class="bp-group" style="margin:0 6px 0 0;">${escapeHtml(tr('bpInspTitle'))}</span>
+                    <strong>${escapeHtml(loc.name)}</strong>
+                    ${inDraft ? ` <span class="bp-draft-tag">${escapeHtml(tr('bpInDraft'))}</span>` : ''}
+                </div>
+                <button type="button" class="inv-icon-btn" data-action="bp-insp-close" aria-label="${escapeHtml(tr('bpInspClose'))}" title="${escapeHtml(tr('bpInspClose'))}"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="bp-insp-meta">
+                <div><span class="bp-meta">${escapeHtml(tr('bpInspRole'))}:</span> ${escapeHtml(roleLabel(loc.role))}</div>
+                <div><span class="bp-meta">${escapeHtml(tr('bpInspGateway'))}:</span> <span class="bp-mono">${escapeHtml(loc.gateway || '—')}</span></div>
+                <div><span class="bp-meta">${escapeHtml(tr('bpInspProbe'))}:</span> ${escapeHtml(probeName(loc.probe))}</div>
+                <div><span class="bp-meta">${escapeHtml(tr('bpInspSubnets'))}:</span> ${subnetsHtml}</div>
+            </div>
+            <div style="margin-bottom:8px; font-size:12px;">
+                <span class="bp-meta">${escapeHtml(tr('bpInspFindings'))}:</span>
+                <div style="margin-top:4px; display:flex; flex-direction:column; gap:4px;">${findingsHtml}</div>
+            </div>
+            <div class="bp-insp-actions">
+                <button type="button" class="btn btn-secondary btn-small" data-action="bp-insp-edit" data-id="${escapeHtml(bpSelectedLocId)}">
+                    <i class="fa-solid fa-pen" aria-hidden="true"></i> ${escapeHtml(tr('bpInspEdit'))}
+                </button>
+                ${loc.gateway ? `<button type="button" class="btn btn-primary btn-small" data-action="bp-insp-trace" data-id="${escapeHtml(bpSelectedLocId)}">
+                    <i class="fa-solid fa-route" aria-hidden="true"></i> ${escapeHtml(tr('bpInspTrace'))}
+                </button>` : ''}
+            </div>`;
     }
 
     function findingKey(f) {
@@ -288,19 +445,107 @@
         return escapeHtml(op.op);
     }
 
+    function firstUsableIp(cidr) {
+        const s = String(cidr || '').trim();
+        const m = /^(\d{1,3}\.\d{1,3}\.\d{1,3})\.(\d{1,3})(?:\/(\d{1,2}))?$/.exec(s);
+        if (!m) return '';
+        const prefix = m[3] ? parseInt(m[3], 10) : 32;
+        const last = parseInt(m[2], 10);
+        return prefix < 31 ? `${m[1]}.${Math.min(254, last + 1)}` : `${m[1]}.${last}`;
+    }
+
+    function openRouteTraceFromBlueprint(srcLocId, dstCidr) {
+        const m = model();
+        const locs = m.locations || {};
+        const srcGw = (locs[srcLocId] || {}).gateway || '';
+        const allGws = [...new Set(Object.values(locs).map((l) => l.gateway).filter(Boolean))];
+        if (!allGws.length) {
+            showToast(tr('bpFindingsEmptyFilter'), 'warning');
+            return;
+        }
+        let dstIp = firstUsableIp(dstCidr);
+        if (!dstIp) {
+            const otherSub = Object.entries(locs)
+                .filter(([lid, l]) => lid !== srcLocId && (l.subnets || []).length)
+                .map(([, l]) => l.subnets[0])[0];
+            dstIp = firstUsableIp(otherSub || '');
+        }
+        const srcSubnet = ((locs[srcLocId] || {}).subnets || [])[0] || '';
+        window.rtPendingTrace = {
+            tenant: bpOrg || 'all',
+            devices: allGws,
+            src: srcGw || allGws[0],
+            src_ip: firstUsableIp(srcSubnet),
+            dst: dstIp,
+            openView: 'trace',
+        };
+        if (typeof switchTab === 'function') switchTab('tab-routes');
+    }
+
+    function updateAcceptSelectedBtn() {
+        const box = $('bpFindings');
+        const btn = $('btnBpAcceptSelected');
+        const allChk = $('bpSelectAllProposals');
+        if (!box || !btn) return;
+        const boxes = [...box.querySelectorAll('input[type=checkbox][data-f]')];
+        const checked = boxes.filter((c) => c.checked).length;
+        btn.disabled = checked === 0;
+        btn.textContent = checked > 0 ? tr('bpAcceptSelectedCount', { n: checked }) : tr('btnBpAcceptSelected');
+        if (allChk) {
+            allChk.disabled = boxes.length === 0;
+            allChk.checked = boxes.length > 0 && checked === boxes.length;
+            allChk.indeterminate = checked > 0 && checked < boxes.length;
+        }
+    }
+
     function renderFindings() {
         const box = $('bpFindings');
-        if (!bpFindings.length) { box.innerHTML = `<p class="inv-muted">${escapeHtml(tr('bpNoFindings'))}</p>`; return; }
-        box.innerHTML = ['model', 'subnets', 'routing', 'vpn'].map((g) => {
-            const items = bpFindings.map((f, i) => [f, i]).filter(([f]) => CODE_GROUP[f.code] === g);
+        const bar = $('bpFindingsBar');
+        if (bar) bar.hidden = !bpFindings.length;
+        if (!bpFindings.length) {
+            box.innerHTML = `<p class="inv-muted">${escapeHtml(tr('bpNoFindings'))}</p>`;
+            updateAcceptSelectedBtn();
+            return;
+        }
+        if (bar) {
+            bar.querySelectorAll('[data-bp-group]').forEach((b) => {
+                b.setAttribute('aria-pressed', String(b.dataset.bpGroup === bpFindingsGroup));
+            });
+            const sevBtn = $('btnBpSevFilter');
+            if (sevBtn) sevBtn.setAttribute('aria-pressed', String(bpFindingsSev === 'error'));
+        }
+        const groups = ['model', 'subnets', 'routing', 'vpn', 'purdue'];
+        const rendered = groups.map((g) => {
+            if (bpFindingsGroup !== 'all' && bpFindingsGroup !== g) return '';
+            const items = bpFindings.map((f, i) => [f, i]).filter(([f]) =>
+                CODE_GROUP[f.code] === g
+                && (bpFindingsSev === 'all' || f.severity === bpFindingsSev));
             if (!items.length) return '';
-            return `<h4 class="bp-group">${escapeHtml(trEnum('bpGroup_', g))}</h4><ul class="bp-findings">${items.map(([f, i]) => `
-                <li><span class="bp-sev bp-sev-${escapeHtml(f.severity)}">${escapeHtml(trEnum('bpSev_', f.severity))}</span> ${findingText(f)}
+            return `<h4 class="bp-group">${escapeHtml(trEnum('bpGroup_', g))}</h4><ul class="bp-findings">${items.map(([f, i]) => {
+                const sub = f.subject || {};
+                const focusAttr = sub.location
+                    ? `data-focus-kind="location" data-focus-id="${escapeHtml(sub.location)}"`
+                    : (sub.link ? `data-focus-kind="link" data-focus-id="${escapeHtml(sub.link)}"` : '');
+                const traceLink = (f.code === 'link_no_route' && sub.link && (f.params || {}).subnet)
+                    ? `<button type="button" class="bp-link-btn" data-action="bp-trace-route" data-link="${escapeHtml(sub.link)}" data-subnet="${escapeHtml(f.params.subnet)}"><i class="fa-solid fa-route" aria-hidden="true"></i> ${escapeHtml(tr('bpTraceMissingRoute'))}</button>`
+                    : '';
+                const sevCls = f.severity === 'error' ? ' class="is-error"' : (f.severity === 'warning' ? ' class="is-warning"' : '');
+                return `<li${sevCls}><div class="bp-finding-top">
+                    <div><span class="bp-sev bp-sev-${escapeHtml(f.severity)}">${escapeHtml(trEnum('bpSev_', f.severity))}</span> ${findingText(f)}</div>
+                    <div class="bp-finding-tools">
+                        ${focusAttr ? `<button type="button" class="bp-link-btn" data-action="bp-focus-subject" ${focusAttr}>${escapeHtml(tr('bpFocusOnDiagram'))}</button>` : ''}
+                        ${traceLink}
+                    </div>
+                </div>
                 ${(f.proposal || []).map((op, j) => `<div class="bp-proposal">
                     <label><input type="checkbox" data-f="${i}" data-o="${j}" aria-label="${escapeHtml(tr('bpAcceptProposal'))}"> ${describeOp(op)}</label>
+                    <button type="button" class="btn btn-secondary btn-small" data-action="bp-accept-one" data-f="${i}" data-o="${j}" style="width:auto; margin:0;">${escapeHtml(tr('bpAcceptOne'))}</button>
                     ${EDITABLE.includes(op.op) ? `<button type="button" class="bp-link-btn" data-action="bp-edit-proposal" data-f="${i}" data-o="${j}">${escapeHtml(tr('btnBpEditOp'))}</button>` : ''}
-                </div>`).join('')}</li>`).join('')}</ul>`;
+                </div>`).join('')}</li>`;
+            }).join('')}</ul>`;
         }).join('');
+        box.innerHTML = rendered || `<p class="inv-muted">${escapeHtml(tr('bpFindingsEmptyFilter'))}</p>`;
+        updateAcceptSelectedBtn();
     }
 
     function renderDiff(d) {
@@ -350,6 +595,22 @@
         $('bpLocSubnets').value = (v.subnets || []).join('\n');
         $('bpLocProbe').replaceChildren(...(bpState.probes || []).map((p) => new Option(p.name, p.id)));
         $('bpLocProbe').value = v.probe || 'central';
+        const gwList = $('bpGatewayList');
+        if (gwList) {
+            const rank = (d) => {
+                const vnd = String(d.Vendor || '').toLowerCase();
+                return vnd === 'fortinet' ? 0 : (vnd === 'cisco' ? 1 : 2);
+            };
+            const candidates = (globalDevices || [])
+                .filter((d) => (d.Group || '') === bpOrg && d.IP)
+                .sort((a, b) => rank(a) - rank(b) || String(a.Hostname || '').localeCompare(String(b.Hostname || '')));
+            gwList.replaceChildren(...candidates.map((d) => {
+                const opt = document.createElement('option');
+                opt.value = d.IP;
+                opt.label = `${d.Hostname || d.IP} (${d.Vendor || ''}${d.Location ? ' · ' + d.Location : ''})`;
+                return opt;
+            }));
+        }
         $('bpLocGateway').value = v.gateway || '';
         $('bpLocError').textContent = '';
         bpLocSave = async () => {
@@ -417,6 +678,22 @@
     function editLocation(id) { openLocationModal(id, null, (next) => addOps([next])); }
     function editLink(id) { openLinkModal(bpState.links[id], (next) => addOps([{ op: 'remove_link', id }, next])); }
 
+    function editDraftOpAt(i) {
+        const ops = draftOps().slice();
+        if (i < 0 || !ops[i]) return;
+        openOpEditor(ops[i], async (next) => {
+            ops[i] = Object.assign({}, next, { source: ops[i].source });
+            return replaceOps(ops);
+        });
+    }
+
+    async function removeDraftOpAt(i) {
+        const ops = draftOps().slice();
+        if (i < 0 || !ops[i]) return;
+        ops.splice(i, 1);
+        await replaceOps(ops);
+    }
+
     async function acceptSelected() {
         const ops = [...$('bpFindings').querySelectorAll('input[type=checkbox][data-f]:checked')]
             .map((c) => bpFindings[+c.dataset.f].proposal[+c.dataset.o]);
@@ -431,12 +708,13 @@
             <button type="button" class="bp-link-btn danger" data-action="bp-op-remove" data-i="${i}">${escapeHtml(tr('btnBpRemoveOp'))}</button></li>`).join('');
     }
 
-    function openDraftModal() {
+    function openDraftModal(focusApply = false) {
         renderDraftOps();
         $('bpApplyNote').value = '';
         $('bpDraftError').textContent = '';
         $('bpConflict').hidden = true;
         openModal('bpDraftModal');
+        if (focusApply) $('bpApplyNote')?.focus();
     }
 
     async function showConflict() {
@@ -516,7 +794,8 @@
             const res = await send('/observe', 'POST', {});
             if (!res || !res.ok) { showToast(await errorText(res), 'error'); return; }
             const body = await res.json();
-            showToast(tr('bpObserved', { n: Object.keys(body.gateways || {}).length }), 'success');
+            bpLastObserve = body.gateways || {};
+            showToast(tr('bpObserved', { n: Object.keys(bpLastObserve).length }), 'success');
             await runChecks();
         } finally {
             btn.disabled = false;
@@ -572,7 +851,12 @@
 
     // ---- bindings (the module loads once, with its tab) ----------------------
 
-    $('bpOrgSelect').addEventListener('change', () => { bpOrg = $('bpOrgSelect').value; reloadBlueprint(); });
+    $('bpOrgSelect').addEventListener('change', () => {
+        bpOrg = $('bpOrgSelect').value;
+        bpSelectedLocId = null;
+        bpLastObserve = null;
+        reloadBlueprint();
+    });
     $('btnBpCheck').addEventListener('click', () => reloadBlueprint());
     $('btnBpObserve').addEventListener('click', observe);
     $('btnBpPreset').addEventListener('click', openPreset);
@@ -580,8 +864,8 @@
     $('btnBpAddLocation').addEventListener('click', () => openLocationModal(null, null, (next) => addOps([next])));
     $('btnBpAddLink').addEventListener('click', () => openLinkModal(null, (next) => addOps([next])));
     $('btnBpAcceptSelected').addEventListener('click', acceptSelected);
-    $('btnBpDraftReview').addEventListener('click', openDraftModal);
-    $('btnBpDraftApply').addEventListener('click', openDraftModal);
+    $('btnBpDraftReview').addEventListener('click', () => openDraftModal(false));
+    $('btnBpDraftApply').addEventListener('click', () => openDraftModal(true));
     $('btnBpDraftDiscard').addEventListener('click', async () => {
         if (!confirm(tr('bpConfirmDiscard'))) return;
         const res = await send('/draft/discard', 'POST', {});
@@ -602,6 +886,66 @@
         runAssistant('/assistant/derive', { use_ai: $('bpAssistUseAi').checked }, $('btnBpAssistDerive')));
     $('btnBpInstrSave').addEventListener('click', saveInstructions);
 
+    $('bpObserveReport')?.addEventListener('click', (e) => {
+        if (e.target.closest('[data-action="bp-obs-dismiss"]')) {
+            bpLastObserve = null;
+            renderObserveReport();
+        }
+    });
+    $('btnBpDiagFit')?.addEventListener('click', () => {
+        if (bpNetwork) bpNetwork.fit({ animation: { duration: 250 } });
+    });
+    $('btnBpDiagLegend')?.addEventListener('click', (e) => {
+        const pop = $('bpDiagLegendPop');
+        if (!pop) return;
+        pop.hidden = !pop.hidden;
+        e.currentTarget.setAttribute('aria-expanded', String(!pop.hidden));
+    });
+    $('btnBpDiagExport')?.addEventListener('click', () => {
+        const canvas = $('bpDiagram')?.querySelector('canvas');
+        if (!canvas || !(canvas instanceof HTMLCanvasElement)) return;
+        const a = document.createElement('a');
+        a.href = canvas.toDataURL('image/png');
+        a.download = `blueprint-${bpOrg || 'network'}.png`;
+        a.click();
+    });
+    $('bpNodeInspector')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const act = btn.dataset.action;
+        const id = btn.dataset.id || bpSelectedLocId;
+        if (act === 'bp-insp-close') {
+            bpSelectedLocId = null;
+            renderNodeInspector();
+        } else if (act === 'bp-insp-edit' && id) {
+            if (id in (bpState.locations || {})) editLocation(id);
+            else {
+                const loc = model().locations[id];
+                if (loc) editDraftOpAt(findDraftLocOpIndex(id, loc));
+            }
+        } else if (act === 'bp-insp-trace' && id) {
+            openRouteTraceFromBlueprint(id, '');
+        }
+    });
+    $('bpSelectAllProposals')?.addEventListener('change', (e) => {
+        const want = !!e.target.checked;
+        $('bpFindings')?.querySelectorAll('input[type=checkbox][data-f]').forEach((c) => {
+            c.checked = want;
+        });
+        updateAcceptSelectedBtn();
+    });
+    $('bpFindingsBar')?.addEventListener('click', (e) => {
+        const grpBtn = e.target.closest('[data-bp-group]');
+        if (grpBtn) {
+            bpFindingsGroup = grpBtn.dataset.bpGroup || 'all';
+            renderFindings();
+            return;
+        }
+        if (e.target.closest('#btnBpSevFilter')) {
+            bpFindingsSev = bpFindingsSev === 'error' ? 'all' : 'error';
+            renderFindings();
+        }
+    });
     $('bpSteps').addEventListener('click', (e) => {
         const b = e.target.closest('[data-bp-step]');
         if (!b) return;
@@ -613,23 +957,67 @@
         const b = e.target.closest('[data-action]');
         if (!b) return;
         const id = b.dataset.id;
-        if (b.dataset.action === 'bp-edit-loc') editLocation(id);
-        else if (b.dataset.action === 'bp-del-loc' && confirm(tr('bpConfirmDeleteLoc', { name: locName(id) }))) {
+        const act = b.dataset.action;
+        if (act === 'bp-edit-loc') editLocation(id);
+        else if (act === 'bp-del-loc' && confirm(tr('bpConfirmDeleteLoc', { name: locName(id) }))) {
             addOps([{ op: 'delete_location', id }]);
-        }
+        } else if (act === 'bp-draft-op-edit') editDraftOpAt(+id);
+        else if (act === 'bp-draft-op-del') removeDraftOpAt(+id);
     });
     $('bpLinksBody').addEventListener('click', (e) => {
         const b = e.target.closest('[data-action]');
         if (!b) return;
-        if (b.dataset.action === 'bp-edit-link') editLink(b.dataset.id);
-        else if (b.dataset.action === 'bp-del-link') addOps([{ op: 'remove_link', id: b.dataset.id }]);
+        const act = b.dataset.action;
+        if (act === 'bp-edit-link') editLink(b.dataset.id);
+        else if (act === 'bp-del-link') addOps([{ op: 'remove_link', id: b.dataset.id }]);
+        else if (act === 'bp-draft-op-edit') editDraftOpAt(+b.dataset.id);
+        else if (act === 'bp-draft-op-del') removeDraftOpAt(+b.dataset.id);
+    });
+    $('bpFindings').addEventListener('change', (e) => {
+        if (e.target.matches('input[type=checkbox][data-f]')) updateAcceptSelectedBtn();
     });
     $('bpFindings').addEventListener('click', (e) => {
-        const b = e.target.closest('[data-action="bp-edit-proposal"]');
-        if (!b) return;
-        const f = bpFindings[+b.dataset.f];
-        const j = +b.dataset.o;
-        openOpEditor(f.proposal[j], (next) => { f.proposal[j] = next; renderFindings(); return true; });
+        const editBtn = e.target.closest('[data-action="bp-edit-proposal"]');
+        if (editBtn) {
+            const f = bpFindings[+editBtn.dataset.f];
+            const j = +editBtn.dataset.o;
+            openOpEditor(f.proposal[j], (next) => { f.proposal[j] = next; renderFindings(); return true; });
+            return;
+        }
+        const oneBtn = e.target.closest('[data-action="bp-accept-one"]');
+        if (oneBtn) {
+            const f = bpFindings[+oneBtn.dataset.f];
+            const op = f && f.proposal ? f.proposal[+oneBtn.dataset.o] : null;
+            if (op) addOps([op], 'checks').then((ok) => { if (ok) showToast(tr('bpAddedToDraft', { n: 1 }), 'success'); });
+            return;
+        }
+        const focusBtn = e.target.closest('[data-action="bp-focus-subject"]');
+        if (focusBtn && bpNetwork) {
+            const kind = focusBtn.dataset.focusKind;
+            const id = focusBtn.dataset.focusId;
+            if (kind === 'location' && id) {
+                bpSelectedLocId = id;
+                renderNodeInspector();
+                bpNetwork.selectNodes([id]);
+                bpNetwork.focus(id, { scale: 1.05, animation: { duration: 300 } });
+            } else if (kind === 'link' && id) {
+                const k = model().links[id];
+                if (k) {
+                    bpSelectedLocId = k.a;
+                    renderNodeInspector();
+                    bpNetwork.selectEdges([id]);
+                    bpNetwork.fit({ nodes: [k.a, k.b], animation: { duration: 300 } });
+                }
+            }
+            $('bpDiagram')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+        const traceBtn = e.target.closest('[data-action="bp-trace-route"]');
+        if (traceBtn) {
+            const lk = model().links[traceBtn.dataset.link];
+            const srcLocId = lk ? lk.a : '';
+            openRouteTraceFromBlueprint(srcLocId, traceBtn.dataset.subnet || '');
+        }
     });
     $('bpDraftOps').addEventListener('click', (e) => {
         const b = e.target.closest('[data-action]');

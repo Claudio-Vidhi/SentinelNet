@@ -136,6 +136,8 @@ declare var resetTutorialsOnboarding: any;
 interface Window {
     loadBlueprintTab: any;   // blueprint.js, called by switchTab
     bpPendingOrg: any;       // devices.js -> blueprint.js: organization to open
+    rtPendingTrace: any;     // blueprint.js -> routes-view.js: trace target to open
+    ptPendingContext: any;   // routes-view.js -> policy-test.js: flow/device context to inspect
     clsPendingTwin: any;     // core.js openNameTwins -> topology.js: device to open in the twins queue
     openManualConfigWizard: any; // manual-config.js, opened from devices.js rows
     openAddDevices: any;     // add-devices.js, opened by the inventory button and the palette

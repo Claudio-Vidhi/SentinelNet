@@ -10,6 +10,60 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Tabelle di routing (layout B + drawer richiudibile A)**: navigazione a
+  sotto-tab (*Matrice*, *Analisi di percorso*, *Riepilogo apparati*, *Flussi
+  Sankey*), barra filtri unificata con densità tabella
+  (`Compatta`/`Normale`/`Ampia`), filtro *Solo buchi*, pillole filtri attivi
+  rimovibili, esportazione CSV della matrice, ispettore laterale richiudibile
+  (*Dettaglio & LPM*, *Percorso*, *Flussi*) e verifica asimmetria *Percorso di
+  ritorno* con *Swap* sorgente/destinazione.
+- **Cache RIB breve per Path Trace**: `GET /api/routes` popola una cache
+  thread-safe con TTL 180s per `(tenant, IP)` riusata da
+  `GET /api/routes/trace?use_cache=1` (con toggle *Forza rilettura live* nella
+  UI), evitando sessioni SSH/REST duplicate durante l'analisi di percorso.
+- **Endpoint `GET /api/policy-test/{ip}/metadata`**: restituisce metadati del
+  backup (`config_type`, timestamp, routing dinamico, interfacce, zone, ACL,
+  regole e rotte statiche) per popolare i picker/datalist di *Packet Tracer* e
+  *What-If*.
+- **Ponti operativi cross-tab**: collegamenti diretti *Blueprint -> Analisi di
+  percorso* (da ispettore sede e finding `link_no_route`), *Analisi di
+  percorso / Ispettore rotta -> Validazione policy* (instradando
+  automaticamente i firewall su *What-If*) ed *Esempi / Anomalie -> What-If*.
+
+### Changed
+
+- **Blueprint di rete**: cartiglio stato `.oneline-foot`, progress bar su
+  *Primi passi*, toolbar diagramma (*Adatta vista*, *Legenda*, *Esporta PNG*),
+  reticolo tecnico 24px, ispettore nodo al clic singolo, filtri
+  categoria/severità e selezione multipla proposte con contatore,
+  modifica/rimozione inline su sedi e collegamenti in bozza, datalist gateway
+  dall'inventario e *Istruzioni assistente* integrate nel modale Assistente.
+- **Validazione policy**: header `.page-head`, barra dispositivo con badge
+  backup/routing e avviso firewall esclusi (*Passa a What-If* / *FortiGate
+  Management*), navigazione secondaria segmentata, griglie responsive, filtri su
+  *Esempi* e *Anomalie*, verifica batch *Verifica tutte le prove*, CLI
+  dry-run/rollback copiabile e opzioni `position`, `src_intf`, `dst_intf`,
+  `distance` + filtro *Mostra solo flussi cambiati* in *What-If*.
+
+### Fixed
+
+- **Blueprint — violazioni Purdue OT / IEC 62443 visibili**: mappati
+  `purdue_dmz_bypass`, `purdue_layer_skip` e `purdue_subnet_overlap` in
+  `blueprint.js` (`bpGroup_purdue`) e reso visibile il report errori per
+  gateway dopo *Aggiorna dai gateway*.
+- **Validazione policy — igiene `unused_object` e pipeline dinamica**: passati
+  `config_text` e `vendor` a `analyze_policy_findings()` in
+  `GET /api/policy-test/{ip}/findings`, ricostruita la pipeline *Packet
+  Tracer* dinamicamente da `trace.steps` (evitando di mascherare `DENY` egress
+  dietro un `PERMIT` ingress), aggiunta sincronizzazione `globalTenantChanged`,
+  rimossi tutti gli `alert()` e portate tutte le stringhe nel dizionario
+  bilingue `i18n.js`.
+- **Analisi di percorso**: disabilitati `proto`/`dport` con suggerimento quando
+  `src_ip` è vuoto, esposti `data.errors`, `exit_local` e rami ECMP
+  `branches`, e aggiunti stati busy su lettura tabelle/trace/probe.
+
 ## [0.66.1] - 2026-11-19
 
 ### Fixed

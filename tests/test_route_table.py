@@ -695,6 +695,43 @@ class RouteApi(unittest.TestCase):
         self.assertEqual(len(out["errors"]), 1)
         self.assertEqual(out["errors"][0]["device_ip"], FGT_B["IP"])
 
+    def test_trace_reuses_cached_routes_when_requested(self):
+        from routers import route_table as rt_router
+        rt_router.clear_route_cache()
+        fake_rows = [
+            {**r, "device": SWITCH["Hostname"], "device_ip": SWITCH["IP"], "from_backup": False}
+            for r in route_table.parse_ios_routes(IOS_OUTPUT)
+        ]
+        try:
+            with mock.patch("services.inventory_manager.get_all_devices",
+                            return_value=[SWITCH]), \
+                 mock.patch.object(route_table, "_is_agent_probe", return_value=False), \
+                 mock.patch.object(route_table, "collect_for",
+                                   return_value={"device_ip": SWITCH["IP"],
+                                                 "rows": fake_rows,
+                                                 "source": "ssh"}) as collect_mock:
+                c = self._client("adm_rt")
+                r1 = c.get(f"/api/routes?device={SWITCH['IP']}")
+                self.assertEqual(r1.status_code, 200, r1.text)
+                self.assertEqual(collect_mock.call_count, 1)
+
+                r2 = c.get(
+                    f"/api/routes/trace?device={SWITCH['IP']}&src={SWITCH['IP']}&dst=10.2.0.5&use_cache=1"
+                )
+                self.assertEqual(r2.status_code, 200, r2.text)
+                body2 = r2.json()
+                self.assertTrue(body2["cached"])
+                self.assertEqual(collect_mock.call_count, 1, "cached trace must not re-query device")
+
+                r3 = c.get(
+                    f"/api/routes/trace?device={SWITCH['IP']}&src={SWITCH['IP']}&dst=10.2.0.5&use_cache=0"
+                )
+                self.assertEqual(r3.status_code, 200, r3.text)
+                self.assertFalse(r3.json()["cached"])
+                self.assertEqual(collect_mock.call_count, 2, "use_cache=0 forces fresh collection")
+        finally:
+            rt_router.clear_route_cache()
+
 
 class RoutesTabIsWiredEndToEnd(unittest.TestCase):
     """Il tab e il suo modulo.

@@ -8,7 +8,10 @@ normalizzazione stanno in services/route_table.py.
 """
 import asyncio
 import ipaddress
+import threading
+import time
 from datetime import datetime
+from typing import Any, Dict, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from routers.deps import require_tab
@@ -26,6 +29,53 @@ router = APIRouter(dependencies=[Depends(require_tab("tab-routes"))], tags=["Rou
 # altrettante sessioni REST: il tetto tiene il tab reattivo e non trasforma
 # l'apertura di una vista in una tempesta verso i firewall.
 MAX_CONCURRENT_DEVICES = 8
+
+# Short-TTL collection cache so Path Trace reuses RIB/context just fetched by /api/routes
+# without re-opening SSH/REST sessions to every device.
+_ROUTE_CACHE_TTL = 180.0
+_ROUTE_CACHE_MAX = 256
+_route_cache_lock = threading.Lock()
+_route_cache: Dict[Tuple[str, str], Dict[str, Any]] = {}
+
+
+def _cache_key(dev: dict) -> Tuple[str, str]:
+    return (str(dev.get("Group") or ""), str(dev.get("IP") or ""))
+
+
+def _cache_get(key: Tuple[str, str]) -> Optional[Dict[str, Any]]:
+    now = time.monotonic()
+    with _route_cache_lock:
+        entry = _route_cache.get(key)
+        if not entry:
+            return None
+        if now - float(entry.get("ts", 0.0)) > _ROUTE_CACHE_TTL:
+            _route_cache.pop(key, None)
+            return None
+        return dict(entry)
+
+
+def _cache_put(key: Tuple[str, str], updates: Dict[str, Any]) -> None:
+    now = time.monotonic()
+    with _route_cache_lock:
+        if len(_route_cache) >= _ROUTE_CACHE_MAX and key not in _route_cache:
+            # Evict expired entries first, then oldest
+            expired = [k for k, v in _route_cache.items()
+                       if now - float(v.get("ts", 0.0)) > _ROUTE_CACHE_TTL]
+            for k in expired:
+                _route_cache.pop(k, None)
+            if len(_route_cache) >= _ROUTE_CACHE_MAX:
+                oldest = min(_route_cache.items(), key=lambda kv: float(kv[1].get("ts", 0.0)))[0]
+                _route_cache.pop(oldest, None)
+        cur = _route_cache.get(key) or {"ts": now}
+        cur.update(updates)
+        cur["ts"] = now
+        _route_cache[key] = cur
+
+
+def clear_route_cache() -> None:
+    """Clear the in-memory route collection cache (used by tests or explicit reset)."""
+    with _route_cache_lock:
+        _route_cache.clear()
 
 
 @router.get("/api/routes/devices")
@@ -75,7 +125,16 @@ async def list_routes(
     async def one(dev):
         async with sem:
             answer = await run_ssh(route_table.collect_for, dev)
-            answer["context"] = await run_ssh(route_table.fortigate_context, dev, answer)
+            fctx = await run_ssh(route_table.fortigate_context, dev, answer)
+            if answer.get("rows"):
+                _cache_put(_cache_key(dev), {
+                    "answer": dict(answer),
+                    "fctx": dict(fctx),
+                    "addrs": list(fctx.get("addresses") or []) if fctx.get("addresses") else None,
+                    "hctx_base": None,
+                    "hctx_flow": None,
+                })
+            answer["context"] = fctx
             return answer
 
     answers = await asyncio.gather(*(one(d) for d in targets)) if targets else []
@@ -132,7 +191,7 @@ def _valid_ip(value: str) -> str:
                             detail=f"'{value}' non e' un indirizzo IPv4 valido.")
 
 
-async def _collect_selection(current_user, device: str, flow: bool = False):
+async def _collect_selection(current_user, device: str, flow: bool = False, use_cache: bool = False):
     """Rotte e indirizzi degli apparati scelti, in una passata sola.
 
     Gli indirizzi delle interfacce sono il dato che permette di dire quale
@@ -141,7 +200,6 @@ async def _collect_selection(current_user, device: str, flow: bool = False):
     wanted = {p.strip() for p in device.split(",") if p.strip()}
     targets = [d for d in route_table.routable_devices(devices_in_scope(current_user))
                if d.get("IP") in wanted]
-    _audit_read(current_user, targets)
 
     # Due clienti possono avere lo stesso IP. Qui le tabelle si indicizzano per
     # indirizzo, quindi una selezione ambigua non darebbe un percorso sbagliato
@@ -158,32 +216,75 @@ async def _collect_selection(current_user, device: str, flow: bool = False):
                        "restringere la selezione a uno solo.")
 
     sem = asyncio.Semaphore(MAX_CONCURRENT_DEVICES)
+    live_targets = []
+    cached_map: Dict[Tuple[str, str], Optional[Dict[str, Any]]] = {}
+    for dev in targets:
+        key = _cache_key(dev)
+        entry = _cache_get(key) if use_cache else None
+        cached_map[key] = entry
+        if not entry or not entry.get("answer"):
+            live_targets.append(dev)
+    _audit_read(current_user, live_targets)
 
     async def one(dev):
         async with sem:
-            answer = await run_ssh(route_table.collect_for, dev)
-            rows = answer.get("rows") or []
-            addrs = await run_ssh(path_trace.addresses_for, dev, rows)
-            # Reuse the addresses just read and skip HA (the trace never reads
-            # it): two REST calls less per FortiGate. Live policy lookup and IP
-            # pools only when a source IP asks for flow evaluation.
-            fctx = await run_ssh(route_table.fortigate_context, dev, answer, addrs, False)
-            hctx = await run_ssh(path_trace.collect_hop_context, dev, fctx, answer, flow)
+            key = _cache_key(dev)
+            entry = cached_map.get(key)
+            from_cache = bool(entry and entry.get("answer"))
+            if from_cache and entry is not None:
+                answer = dict(entry["answer"])
+                rows = [dict(r) for r in (answer.get("rows") or [])]
+                addrs = entry.get("addrs")
+                if addrs is None:
+                    addrs = await run_ssh(path_trace.addresses_for, dev, rows)
+                else:
+                    addrs = [dict(a) for a in addrs]
+                fctx = entry.get("fctx")
+                if fctx is None:
+                    fctx = await run_ssh(route_table.fortigate_context, dev, answer, addrs, False)
+                hctx_key = "hctx_flow" if flow else "hctx_base"
+                hctx = entry.get(hctx_key) or (entry.get("hctx_flow") if not flow else None)
+                if hctx is None:
+                    hctx = await run_ssh(path_trace.collect_hop_context, dev, fctx, answer, flow)
+                _cache_put(key, {
+                    "addrs": list(addrs),
+                    "fctx": fctx,
+                    hctx_key: hctx,
+                })
+            else:
+                answer = await run_ssh(route_table.collect_for, dev)
+                rows = [dict(r) for r in (answer.get("rows") or [])]
+                addrs = await run_ssh(path_trace.addresses_for, dev, rows)
+                # Reuse the addresses just read and skip HA (the trace never reads
+                # it): two REST calls less per FortiGate. Live policy lookup and IP
+                # pools only when a source IP asks for flow evaluation.
+                fctx = await run_ssh(route_table.fortigate_context, dev, answer, addrs, False)
+                hctx = await run_ssh(path_trace.collect_hop_context, dev, fctx, answer, flow)
+                if rows:
+                    _cache_put(key, {
+                        "answer": dict(answer),
+                        "addrs": list(addrs),
+                        "fctx": fctx,
+                        "hctx_flow" if flow else "hctx_base": hctx,
+                    })
             rows, addrs = path_trace.supplement_from_backup_env(dev, rows, addrs, hctx)
-            return dev, answer, rows, addrs, hctx
+            return dev, answer, rows, addrs, hctx, from_cache
 
     collected = await asyncio.gather(*(one(d) for d in targets)) if targets else []
 
     rows_by_device, addresses, devices_by_ip, hop_contexts, errors = {}, {}, {}, {}, []
-    for dev, answer, rows, addrs, hctx in collected:
+    cached_devices = 0
+    for dev, answer, rows, addrs, hctx, from_cache in collected:
         ip = dev.get("IP")
         rows_by_device[ip] = rows
         addresses[ip] = addrs
         devices_by_ip[ip] = dev
         hop_contexts[ip] = hctx
+        if from_cache:
+            cached_devices += 1
         if answer.get("error"):
             errors.append({"device_ip": ip, "error": answer["error"]})
-    return rows_by_device, addresses, devices_by_ip, hop_contexts, errors
+    return rows_by_device, addresses, devices_by_ip, hop_contexts, errors, cached_devices
 
 
 @router.get("/api/routes/trace")
@@ -195,6 +296,7 @@ async def trace_path(
     proto: str = Query("", max_length=16),
     dport: "int | None" = Query(None, ge=1, le=65535),
     vrf: str = Query("", max_length=64),
+    use_cache: bool = Query(False),
     current_user = Depends(get_current_user),
 ):
     """Il percorso verso ``dst`` a partire dall'apparato ``src``.
@@ -217,8 +319,8 @@ async def trace_path(
     if flow_proto and flow_proto not in ("tcp", "udp", "icmp", "ip"):
         raise HTTPException(status_code=400,
                             detail=f"Protocollo '{proto}' non valido (usa tcp, udp, icmp, ip).")
-    rows_by_device, addresses, devices_by_ip, hop_contexts, errors = await _collect_selection(
-        current_user, device, flow=bool(flow_src_ip))
+    rows_by_device, addresses, devices_by_ip, hop_contexts, errors, cached_devices = await _collect_selection(
+        current_user, device, flow=bool(flow_src_ip), use_cache=use_cache)
     if start_ip not in rows_by_device:
         raise HTTPException(
             status_code=404,
@@ -232,6 +334,8 @@ async def trace_path(
     result["src"] = start_ip
     result["dst"] = dst_ip
     result["devices_queried"] = len(rows_by_device)
+    result["cached"] = bool(rows_by_device and cached_devices == len(rows_by_device))
+    result["cached_devices"] = cached_devices
     return result
 
 

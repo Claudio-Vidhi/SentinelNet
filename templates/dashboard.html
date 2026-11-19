@@ -863,17 +863,23 @@
         <span id="bpRevInfo" class="bp-meta"></span>
         <span id="bpObsInfo" class="bp-meta"></span>
         <span class="bp-bar-actions">
+          <button type="button" class="btn btn-primary btn-small" id="btnBpObserve" disabled data-i18n="btnBpObserve">Aggiorna dai gateway</button>
           <button type="button" class="btn btn-secondary btn-small" id="btnBpCheck" disabled data-i18n="btnBpCheck">Verifica</button>
-          <button type="button" class="btn btn-secondary btn-small" id="btnBpObserve" disabled data-i18n="btnBpObserve">Aggiorna dai gateway</button>
           <button type="button" class="btn btn-secondary btn-small" id="btnBpPreset" disabled data-i18n="btnBpPreset">Preset…</button>
           <button type="button" class="btn btn-secondary btn-small" id="btnBpHistory" disabled data-i18n="btnBpHistory">Storico</button>
           <button type="button" class="btn btn-secondary btn-small" id="btnBpAssistant" disabled><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> <span data-i18n="btnBpAssistant">Assistente</span></button>
-          <button type="button" class="btn btn-secondary btn-small" id="btnBpInstructions" disabled data-i18n="btnBpInstructions">Istruzioni assistente</button>
         </span>
       </div>
 
+      <div id="bpCartouche" class="oneline-foot bp-cartouche"></div>
+
+      <section id="bpObserveReport" class="panel bp-obs-report" hidden></section>
+
       <section id="bpSteps" class="panel" hidden>
-        <h3 data-i18n="bpStepsTitle">Primi passi</h3>
+        <div class="bp-steps-head">
+          <h3 data-i18n="bpStepsTitle">Primi passi</h3>
+          <span id="bpStepsProgress" class="bp-steps-progress"></span>
+        </div>
         <ol id="bpStepsList" class="bp-steps"></ol>
       </section>
 
@@ -882,7 +888,7 @@
         <span class="bp-bar-actions">
           <button type="button" class="btn btn-secondary btn-small" id="btnBpDraftReview" data-i18n="btnBpDraftReview">Rivedi</button>
           <button type="button" class="btn btn-primary btn-small" id="btnBpDraftApply" data-i18n="btnBpDraftApply">Applica</button>
-          <button type="button" class="btn btn-secondary btn-small" id="btnBpDraftDiscard" data-i18n="btnBpDraftDiscard">Scarta</button>
+          <button type="button" class="btn btn-secondary btn-small bp-btn-danger-gap" id="btnBpDraftDiscard" data-i18n="btnBpDraftDiscard">Scarta</button>
         </span>
       </div>
 
@@ -890,7 +896,7 @@
         <section class="panel panel-flush">
           <div class="panel-head">
             <h3 data-i18n="bpLocations">Sedi</h3>
-            <button type="button" class="btn btn-secondary btn-small" id="btnBpAddLocation" style="width:auto;"><i class="fa-solid fa-plus"></i> <span data-i18n="btnBpAddLocation">Nuova sede</span></button>
+            <button type="button" class="btn btn-secondary btn-small" id="btnBpAddLocation" style="width:auto;"><i class="fa-solid fa-plus" aria-hidden="true"></i> <span data-i18n="btnBpAddLocation">Nuova sede</span></button>
           </div>
           <div class="table-wrap">
             <table>
@@ -903,7 +909,7 @@
           </div>
           <div class="panel-head">
             <h3 data-i18n="bpLinks">Collegamenti</h3>
-            <button type="button" class="btn btn-secondary btn-small" id="btnBpAddLink" style="width:auto;"><i class="fa-solid fa-plus"></i> <span data-i18n="btnBpAddLink">Nuovo collegamento</span></button>
+            <button type="button" class="btn btn-secondary btn-small" id="btnBpAddLink" style="width:auto;"><i class="fa-solid fa-plus" aria-hidden="true"></i> <span data-i18n="btnBpAddLink">Nuovo collegamento</span></button>
           </div>
           <div class="table-wrap">
             <table>
@@ -915,14 +921,49 @@
           </div>
         </section>
         <section class="panel bp-diagram-panel">
+          <div class="bp-diagram-toolbar">
+            <button type="button" class="btn btn-secondary btn-small" id="btnBpDiagFit">
+              <i class="fa-solid fa-expand" aria-hidden="true"></i> <span data-i18n="bpDiagFit">Adatta vista</span>
+            </button>
+            <button type="button" class="btn btn-secondary btn-small" id="btnBpDiagLegend" aria-expanded="false">
+              <i class="fa-solid fa-circle-info" aria-hidden="true"></i> <span data-i18n="bpDiagLegend">Legenda</span>
+            </button>
+            <button type="button" class="btn btn-secondary btn-small" id="btnBpDiagExport">
+              <i class="fa-solid fa-download" aria-hidden="true"></i> <span data-i18n="bpDiagExport">Esporta PNG</span>
+            </button>
+          </div>
+          <div id="bpDiagLegendPop" class="bp-diag-legend" hidden>
+            <span class="bp-leg-item"><span class="bp-leg-line" data-kind="vpn"></span> <span data-i18n="bpKind_vpn">VPN</span></span>
+            <span class="bp-leg-item"><span class="bp-leg-line" data-kind="wan"></span> <span data-i18n="bpKind_wan">WAN</span></span>
+            <span class="bp-leg-item"><span class="bp-leg-line" data-kind="mpls"></span> <span data-i18n="bpKind_mpls">MPLS</span></span>
+            <span class="bp-leg-item"><span class="bp-leg-line" data-kind="lan"></span> <span data-i18n="bpKind_lan">LAN</span></span>
+          </div>
           <div id="bpDiagram" class="bp-diagram" role="img" aria-label="Diagramma delle sedi e dei collegamenti" data-i18n-aria-label="bpDiagramAria"></div>
+          <aside id="bpNodeInspector" class="bp-node-inspector" hidden></aside>
         </section>
       </div>
 
       <section class="panel">
         <div class="panel-head">
           <h3 data-i18n="bpFindingsTitle">Verifiche</h3>
-          <button type="button" class="btn btn-primary btn-small" id="btnBpAcceptSelected" style="width:auto;" data-i18n="btnBpAcceptSelected">Aggiungi alla bozza</button>
+          <div class="bp-findings-actions">
+            <label class="bp-select-all">
+              <input type="checkbox" id="bpSelectAllProposals">
+              <span data-i18n="bpSelectAllProposals">Seleziona tutte le proposte</span>
+            </label>
+            <button type="button" class="btn btn-primary btn-small" id="btnBpAcceptSelected" disabled style="width:auto;" data-i18n="btnBpAcceptSelected">Aggiungi alla bozza</button>
+          </div>
+        </div>
+        <div id="bpFindingsBar" class="bp-findings-bar" hidden>
+          <div class="bp-filter-pills" role="group" aria-label="Categorie verifiche" data-i18n-aria-label="bpFindingsTitle">
+            <button type="button" class="chip-choice" data-bp-group="all" aria-pressed="true" data-i18n="bpFilterAll">Tutte</button>
+            <button type="button" class="chip-choice" data-bp-group="model" aria-pressed="false" data-i18n="bpGroup_model">Coerenza del modello</button>
+            <button type="button" class="chip-choice" data-bp-group="subnets" aria-pressed="false" data-i18n="bpGroup_subnets">Subnet e inventario</button>
+            <button type="button" class="chip-choice" data-bp-group="routing" aria-pressed="false" data-i18n="bpGroup_routing">Routing</button>
+            <button type="button" class="chip-choice" data-bp-group="vpn" aria-pressed="false" data-i18n="bpGroup_vpn">VPN</button>
+            <button type="button" class="chip-choice" data-bp-group="purdue" aria-pressed="false" data-i18n="bpGroup_purdue">Zone OT / IEC 62443</button>
+          </div>
+          <button type="button" class="chip-choice" id="btnBpSevFilter" data-bp-sev="all" aria-pressed="false" data-i18n="bpFilterErrors">Solo errori</button>
         </div>
         <div id="bpFindings"></div>
       </section>
@@ -4410,10 +4451,18 @@
        Qui c'e' la RIB viva di piu' apparati: la domanda e' "chi ha una rotta
        verso questa rete, e gli altri?", quindi la vista e' una matrice. -->
   <div id="tab-routes" class="tab-content" role="tabpanel" tabindex="0">
-    <div class="hero" style="margin-bottom:18px;">
-      <div class="hero-card" style="flex:1;">
+    <div class="page-head">
+      <div class="page-head-text">
         <h2 data-i18n="rtTitle">Tabelle di routing</h2>
         <p data-i18n="rtDesc">Le tabelle di routing di piu' apparati a confronto: un prefisso per riga, un apparato per colonna. Scrivi un indirizzo per vedere quale rotta lo prende su ciascuno. Sola lettura.</p>
+      </div>
+      <div class="page-head-actions">
+        <button type="button" id="btnRtExportCsv" class="btn btn-secondary btn-small" disabled>
+          <i class="fa-solid fa-file-csv" aria-hidden="true"></i> <span data-i18n="rtExportCsv">Esporta CSV</span>
+        </button>
+        <button type="button" id="btnRtRefresh" class="btn btn-primary btn-small">
+          <i class="fa-solid fa-download" aria-hidden="true"></i> <span data-i18n="rtRefresh">Leggi tabelle</span>
+        </button>
       </div>
     </div>
 
@@ -4422,71 +4471,161 @@
         <button class="btn btn-secondary ti-subtab" data-switch-tab="tab-policy-test" data-i18n="tabPolicyTest"></button>
     </div>
 
-    <div class="panel rt-board" style="margin-bottom:18px;">
-      <div class="rt-controls">
-        <div class="form-group rt-ctl-devices">
-          <span class="picker-label" id="rtDeviceFilterLabel" data-i18n="rtFilterDevice">Apparati</span>
-          <details class="picker" id="rtDeviceFilter">
-            <summary class="picker-summary" aria-labelledby="rtDeviceFilterLabel">
-              <span class="picker-value"></span>
-              <i class="fa-solid fa-chevron-down picker-caret" aria-hidden="true"></i>
-            </summary>
-            <div class="picker-menu">
-              <input type="search" class="picker-search" id="rtDeviceSearch"
-                     placeholder="Filtra" data-i18n-placeholder="pickerSearch"
-                     data-i18n-aria-label="pickerSearch" aria-label="Filtra">
-              <div class="picker-bulk">
-                <button type="button" class="picker-bulk-btn" data-picker="all" data-i18n="pickerAll">Tutti</button>
-                <button type="button" class="picker-bulk-btn" data-picker="none" data-i18n="pickerNoneBtn">Nessuno</button>
-              </div>
-              <ul class="picker-list"></ul>
-            </div>
-          </details>
-        </div>
-        <button id="btnRtRefresh" class="btn btn-primary rt-ctl-load">
-          <i class="fa-solid fa-download" aria-hidden="true"></i> <span data-i18n="rtRefresh">Leggi tabelle</span>
+    <div class="rt-viewbar">
+      <div id="rtViewTabs" class="rt-view-tabs" role="tablist" aria-label="Viste tabelle di routing" data-i18n-aria-label="rtTitle">
+        <button type="button" class="rt-vtab active" role="tab" aria-selected="true" data-rt-view="matrix">
+          <i class="fa-solid fa-table-cells" aria-hidden="true"></i> <span data-i18n="rtSubtabMatrix">Matrice</span>
         </button>
-        <div class="form-group rt-ctl-query">
-          <label for="rtSearch" data-i18n="rtFilterSearch">Indirizzo, prefisso o testo</label>
-          <input type="search" id="rtSearch" placeholder="es. 10.30.0.7 oppure 10.0.0.0/16"
-                 data-i18n-placeholder="rtSearchPl" autocomplete="off" spellcheck="false">
-        </div>
-        <button type="button" id="btnRtDiffOnly" class="chip-choice rt-ctl-diff" aria-pressed="false">
-          <span data-i18n="rtDiffOnly">Solo differenze</span>
+        <button type="button" class="rt-vtab" role="tab" aria-selected="false" data-rt-view="trace">
+          <i class="fa-solid fa-route" aria-hidden="true"></i> <span data-i18n="rtSubtabTrace">Analisi di percorso</span>
+        </button>
+        <button type="button" class="rt-vtab" role="tab" aria-selected="false" data-rt-view="summary">
+          <i class="fa-solid fa-chart-pie" aria-hidden="true"></i> <span data-i18n="rtSubtabSummary">Riepilogo apparati</span>
+        </button>
+        <button type="button" class="rt-vtab" role="tab" aria-selected="false" data-rt-view="flows">
+          <i class="fa-solid fa-diagram-project" aria-hidden="true"></i> <span data-i18n="rtSubtabFlows">Flussi Sankey</span>
         </button>
       </div>
-      <div id="rtErrors" style="display:none; margin-top:12px;"></div>
+      <button type="button" id="btnRtDrawerToggle" class="btn btn-secondary btn-small" aria-expanded="false">
+        <i class="fa-solid fa-table-columns" aria-hidden="true"></i> <span data-i18n="rtDrawerToggle">Ispettore</span>
+      </button>
     </div>
 
-    <!-- Analisi di percorso: dalle tabelle raccolte, non sondando la rete. -->
-    <div class="panel rt-trace" style="margin-bottom:18px;">
-      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
-        <h4 style="margin:0; font-size:14px; color:var(--text-muted);">
-          <i class="fa-solid fa-route"></i> <span data-i18n="rtTraceTitle">Analisi di percorso</span>
-        </h4>
-        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+    <div class="rt-rail-bar">
+      <div class="rt-search-box">
+        <label for="rtSearch" class="visually-hidden" data-i18n="rtFilterSearch">Indirizzo, prefisso o testo</label>
+        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+        <input type="search" id="rtSearch" placeholder="es. 10.30.0.7 oppure 10.0.0.0/16"
+               data-i18n-placeholder="rtSearchPl" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="rt-ctl-devices">
+        <span class="visually-hidden" id="rtDeviceFilterLabel" data-i18n="rtFilterDevice">Apparati</span>
+        <details class="picker" id="rtDeviceFilter">
+          <summary class="picker-summary" aria-labelledby="rtDeviceFilterLabel">
+            <span class="picker-value"></span>
+            <i class="fa-solid fa-chevron-down picker-caret" aria-hidden="true"></i>
+          </summary>
+          <div class="picker-menu">
+            <input type="search" class="picker-search" id="rtDeviceSearch"
+                   placeholder="Filtra" data-i18n-placeholder="pickerSearch"
+                   data-i18n-aria-label="pickerSearch" aria-label="Filtra">
+            <div class="picker-bulk">
+              <button type="button" class="picker-bulk-btn" data-picker="all" data-i18n="pickerAll">Tutti</button>
+              <button type="button" class="picker-bulk-btn" data-picker="none" data-i18n="pickerNoneBtn">Nessuno</button>
+            </div>
+            <ul class="picker-list"></ul>
+          </div>
+        </details>
+      </div>
+      <details class="rt-pop" id="rtTypePop">
+        <summary class="rt-pop-trigger">
+          <i class="fa-solid fa-filter" aria-hidden="true"></i>
+          <span id="rtTypePopLabel" data-i18n="rtTypeFilterBtn">Tipo rotta</span>
+          <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+        </summary>
+        <div class="rt-pop-panel">
+          <div id="rtTypeChips" class="rt-chips" role="group" aria-label="Tipo rotta" data-i18n-aria-label="rtFilterType"></div>
+        </div>
+      </details>
+      <button type="button" id="btnRtDiffOnly" class="chip-choice rt-ctl-diff" aria-pressed="false">
+        <span data-i18n="rtDiffOnly">Solo differenze</span>
+      </button>
+      <button type="button" id="btnRtHolesOnly" class="chip-choice rt-ctl-diff" aria-pressed="false">
+        <span data-i18n="rtHolesOnly">Solo buchi</span>
+      </button>
+      <div class="rt-density-wrap">
+        <label for="rtDensitySelect" class="visually-hidden" data-i18n="rtDensity">Densita' tabella</label>
+        <select id="rtDensitySelect" class="rt-density-sel" aria-label="Densita' tabella" data-i18n-aria-label="rtDensity">
+          <option value="dense" data-i18n="rtDensityDense">Compatta</option>
+          <option value="regular" selected data-i18n="rtDensityRegular">Normale</option>
+          <option value="comfy" data-i18n="rtDensityComfy">Ampia</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="rtActiveFilters" class="rt-active-pills" hidden></div>
+    <div id="rtErrors" style="display:none; margin:10px 0;"></div>
+    <div id="rtTally" class="oneline-foot rt-tally"></div>
+
+    <!-- Vista 1: Matrice borderless (B) + Ispettore laterale richiudibile (A) -->
+    <div id="rtViewMatrix" class="rt-view-pane">
+      <div id="rtSplit" class="rt-split" data-drawer="closed">
+        <div class="rt-matrix-stage">
+          <div class="table-container rt-mx-wrap">
+            <table class="rt-mx rt-mx-b rt-regular" id="rtMxTable" data-no-colpicker>
+              <thead id="rtMxHead"></thead>
+              <tbody id="rtMxBody"></tbody>
+            </table>
+          </div>
+          <div id="rtMxLegend" class="rt-legend"></div>
+        </div>
+        <aside id="rtDrawer" class="rt-drawer" hidden aria-label="Ispettore rotta" data-i18n-aria-label="rtDrawerTitle">
+          <div class="rt-drawer-head">
+            <div class="rt-drawer-title-wrap">
+              <span id="rtDrawerKicker" class="rt-drawer-kicker" data-i18n="rtDrawerTitle">Ispettore rotta</span>
+              <h3 id="rtDrawerTitle" class="rt-drawer-title"></h3>
+            </div>
+            <div class="rt-drawer-actions">
+              <button type="button" id="btnRtDrawerExpandTrace" class="btn btn-secondary btn-small" data-i18n="rtDrawerExpandTrace">Espandi percorso</button>
+              <button type="button" id="btnRtDrawerClose" class="inv-icon-btn" aria-label="Chiudi ispettore" data-i18n-aria-label="rtDrawerClose"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+            </div>
+          </div>
+          <div id="rtDrawerTabs" class="rt-drawer-tabs" role="tablist" aria-label="Sezioni ispettore" data-i18n-aria-label="rtDrawerTitle">
+            <button type="button" class="rt-dtab active" role="tab" aria-selected="true" data-rt-dtab="detail" data-i18n="rtDrawerTabDetail">Dettaglio &amp; LPM</button>
+            <button type="button" class="rt-dtab" role="tab" aria-selected="false" data-rt-dtab="trace" data-i18n="rtDrawerTabTrace">Percorso</button>
+            <button type="button" class="rt-dtab" role="tab" aria-selected="false" data-rt-dtab="flows" data-i18n="rtDrawerTabFlows">Flussi</button>
+          </div>
+          <div class="rt-drawer-body">
+            <div id="rtDrawerPaneDetail">
+              <div id="rtLookup" class="rt-lookup" aria-live="polite" hidden></div>
+              <div id="rtDrawerDetailBody"></div>
+            </div>
+            <div id="rtDrawerPaneTrace" hidden>
+              <div id="rtDrawerTraceBody"></div>
+            </div>
+            <div id="rtDrawerPaneFlows" hidden>
+              <div id="rtDrawerFlowsBody"></div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- Vista 2: Analisi di percorso full-width -->
+    <div id="rtViewTrace" class="rt-view-pane" hidden>
+      <div class="rt-trace-head">
+        <div>
+          <h4 class="rt-trace-heading">
+            <i class="fa-solid fa-route" aria-hidden="true"></i> <span data-i18n="rtTraceTitle">Analisi di percorso</span>
+          </h4>
+          <p class="rt-trace-desc" data-i18n="rtTraceDesc">Dove finisce un indirizzo partendo da un apparato, e quale rotta vince su ogni salto. Calcolato sulle tabelle gia' raccolte: nessun pacchetto viene inviato.</p>
+        </div>
+        <div class="rt-trace-badges">
+          <span id="rtTraceCacheBadge" class="badge" hidden data-i18n="rtTraceCached">Dalla cache RIB recente</span>
           <span id="rtTraceSecVerdict" class="badge rt-verdict"></span>
           <span id="rtTraceVerdict" class="badge rt-verdict"></span>
         </div>
       </div>
-      <p class="rt-trace-desc" data-i18n="rtTraceDesc">Dove finisce un indirizzo partendo da un apparato, e quale rotta vince su ogni salto. Calcolato sulle tabelle gia' raccolte: nessun pacchetto viene inviato.</p>
 
-      <div class="filterbar" style="align-items:flex-end; gap:14px; flex-wrap:wrap;">
+      <div class="filterbar rt-trace-form">
         <div class="form-group" style="margin-bottom:0; min-width:200px;">
           <label for="rtTraceSrc" data-i18n="rtTraceSrc">Apparato di partenza</label>
           <select id="rtTraceSrc"></select>
         </div>
-        <div class="form-group" style="margin-bottom:0; min-width:170px;">
+        <div class="form-group" style="margin-bottom:0; min-width:165px;">
           <label for="rtTraceSrcIp" data-i18n="rtTraceSrcIp">IP sorgente (opz.)</label>
           <input type="text" id="rtTraceSrcIp" placeholder="es. 192.0.2.30"
                  data-i18n-placeholder="rtTraceSrcIpPl" autocomplete="off" spellcheck="false">
         </div>
-        <div class="form-group" style="margin-bottom:0; min-width:170px;">
+        <button type="button" id="btnRtTraceSwap" class="btn btn-secondary btn-small rt-swap-btn" title="Scambia sorgente e destinazione" aria-label="Scambia sorgente e destinazione" data-i18n-title="rtTraceSwap" data-i18n-aria-label="rtTraceSwap">
+          <i class="fa-solid fa-right-left" aria-hidden="true"></i>
+        </button>
+        <div class="form-group" style="margin-bottom:0; min-width:165px;">
           <label for="rtTraceDst" data-i18n="rtTraceDst">Indirizzo di destinazione</label>
           <input type="text" id="rtTraceDst" placeholder="es. 10.30.0.7"
                  data-i18n-placeholder="rtTraceDstPl" autocomplete="off" spellcheck="false">
         </div>
-        <div class="form-group" style="margin-bottom:0; min-width:105px;">
+        <div class="form-group" style="margin-bottom:0; min-width:100px;">
           <label for="rtTraceProto" data-i18n="rtTraceProto">Protocollo</label>
           <select id="rtTraceProto">
             <option value="tcp">TCP</option>
@@ -4495,51 +4634,58 @@
             <option value="ip">IP</option>
           </select>
         </div>
-        <div class="form-group" style="margin-bottom:0; width:100px;">
+        <div class="form-group" style="margin-bottom:0; width:96px;">
           <label for="rtTraceDport" data-i18n="rtTraceDport">Porta (opz.)</label>
           <input type="number" id="rtTraceDport" min="1" max="65535" placeholder="443"
                  data-i18n-placeholder="rtTraceDportPl" autocomplete="off">
         </div>
-        <div class="form-group" style="margin-bottom:0; width:130px;">
+        <div class="form-group" style="margin-bottom:0; width:124px;">
           <label for="rtTraceVrf" data-i18n="rtTraceVrf">VRF (opz.)</label>
           <input type="text" id="rtTraceVrf" placeholder="global"
                  data-i18n-placeholder="rtTraceVrfPl" autocomplete="off" spellcheck="false">
         </div>
-        <button id="btnRtTrace" class="btn btn-secondary" style="width:auto; margin:0;">
-          <i class="fa-solid fa-diagram-project"></i> <span data-i18n="rtTraceRun">Analizza</span>
+        <label class="rt-live-check">
+          <input type="checkbox" id="rtTraceLiveOnly">
+          <span data-i18n="rtTraceLiveToggle">Forza rilettura live</span>
+        </label>
+        <button type="button" id="btnRtTrace" class="btn btn-primary btn-small" style="width:auto; margin:0;">
+          <i class="fa-solid fa-diagram-project" aria-hidden="true"></i> <span data-i18n="rtTraceRun">Analizza</span>
         </button>
-        <button id="btnRtTracePlay" class="btn btn-secondary" style="width:auto; margin:0; display:none;">
-          <i class="fa-solid fa-play"></i> <span data-i18n="rtTracePlay">Riproduci</span>
+        <button type="button" id="btnRtTraceReverse" class="btn btn-secondary btn-small" style="width:auto; margin:0;" hidden>
+          <i class="fa-solid fa-repeat" aria-hidden="true"></i> <span data-i18n="rtTraceReverse">Percorso di ritorno</span>
+        </button>
+        <button type="button" id="btnRtTracePlay" class="btn btn-secondary btn-small" style="width:auto; margin:0; display:none;">
+          <i class="fa-solid fa-play" aria-hidden="true"></i> <span data-i18n="rtTracePlay">Riproduci</span>
         </button>
       </div>
+      <p id="rtTraceFlowHint" class="form-hint rt-flow-hint" hidden></p>
 
+      <div id="rtTraceErrors" class="rt-trace-errors" hidden></div>
+      <div id="rtTraceExitNote" class="rt-trace-exit" hidden></div>
       <div id="rtTraceRail" class="rt-rail" style="display:none;"></div>
+      <div id="rtTraceReverseOut" class="rt-rev-box" hidden></div>
       <div id="rtTraceSteps" class="rt-steps"></div>
 
       <div id="rtProbeBox" class="rt-probe" style="display:none;">
         <div class="rt-probe-head">
           <span data-i18n="rtProbeNote">La prova sul campo lancia un traceroute vero dall'apparato di partenza: e' l'unica azione di questa vista che manda pacchetti.</span>
-          <button id="btnRtProbe" class="btn btn-secondary" style="width:auto; margin:0;">
-            <i class="fa-solid fa-satellite-dish"></i> <span data-i18n="rtProbeRun">Prova sul campo</span>
+          <button type="button" id="btnRtProbe" class="btn btn-secondary" style="width:auto; margin:0;">
+            <i class="fa-solid fa-satellite-dish" aria-hidden="true"></i> <span data-i18n="rtProbeRun">Prova sul campo</span>
           </button>
         </div>
         <div id="rtProbeOut" class="rt-probe-out" style="display:none;"></div>
       </div>
     </div>
 
-    <!-- Rings: the FortiGate Routing Monitor's summary, per device. -->
-    <div class="panel rt-rings-panel" style="margin-bottom:18px;">
-      <h3 data-i18n="rtRingsTitle">Riepilogo rotte</h3>
+    <!-- Vista 3: Riepilogo apparati -->
+    <div id="rtViewSummary" class="rt-view-pane" hidden>
       <p class="rt-trace-desc" data-i18n="rtRingsDesc">Come il Routing Monitor del FortiGate: le rotte di ogni apparato per tipo e per interfaccia di uscita. Clic su una voce per filtrare la tabella.</p>
       <div id="rtRings" class="rt-rings"></div>
     </div>
 
-    <!-- Sankey: device -> route type -> next hop, over the matrix's filters.
-         Collapsed: the rings above are the summary, this is for device chains. -->
-    <details id="rtSkPanel" class="panel rt-sankey-panel" style="margin-bottom:18px;">
-      <summary><h3 data-i18n="rtSkTitle">Flussi delle rotte</h3></summary>
+    <!-- Vista 4: Flussi Sankey -->
+    <div id="rtViewFlows" class="rt-view-pane" hidden>
       <p class="rt-trace-desc" data-i18n="rtSkDesc">Quante rotte escono da ogni apparato, di che tipo sono e verso quale next-hop vanno. Segue gli stessi filtri della tabella.</p>
-      <!-- Its own switches, labelled: the table's chips below look the same and filter both. -->
       <div class="rt-sk-types-row">
         <span class="rt-sk-types-label" data-i18n="rtSkTypesShort" aria-hidden="true">Nel grafico:</span>
         <div id="rtSkTypes" class="rt-chips" role="group" aria-label="Tipi nel grafico" data-i18n-aria-label="rtSkTypesLabel"></div>
@@ -4547,30 +4693,13 @@
       <p class="form-hint" data-i18n="rtSkHint">Doppio clic (o Invio) su un nodo o su una fascia per vedere le rotte che contiene.</p>
       <div id="rtSankey" class="rt-sankey"></div>
       <div id="rtSkDetail" class="rt-sk-detail" hidden></div>
-    </details>
-
-    <!-- Address lookup: filled by routes-view.js when the search holds one IP. -->
-    <div id="rtLookup" class="panel rt-lookup" aria-live="polite" hidden></div>
-
-    <div class="panel rt-matrix-panel">
-      <h3 data-i18n="rtTableTitle">Rotte per prefisso</h3>
-      <!-- Cartiglio: le quantita' e i tipi, che fanno anche da filtro. -->
-      <div id="rtTally" class="oneline-foot rt-tally"></div>
-      <div id="rtTypeChips" class="rt-chips" role="group" aria-label="Tipo rotta" data-i18n-aria-label="rtFilterType"></div>
-      <div class="table-container rt-mx-wrap">
-        <table class="rt-mx" data-no-colpicker>
-          <thead id="rtMxHead"></thead>
-          <tbody id="rtMxBody"></tbody>
-        </table>
-      </div>
-      <div id="rtMxLegend" class="rt-legend"></div>
     </div>
   </div> <!-- End #tab-routes -->
 
   <!-- TAB: POLICY & ROUTE VALIDATION -->
   <div id="tab-policy-test" class="tab-content" role="tabpanel" tabindex="0">
-    <div class="hero" style="margin-bottom:18px;">
-      <div class="hero-card" style="flex:1;">
+    <div class="page-head">
+      <div class="page-head-text">
         <h2 data-i18n="ptTitle">Validazione policy</h2>
         <p data-i18n="ptDesc">Tracciamento offline della raggiungibilità, generatore di flussi di test per regola e analisi difetti statici dai backup di configurazione.</p>
       </div>
@@ -4582,41 +4711,57 @@
     </div>
 
     <!-- Selettore Dispositivo Target -->
-    <div class="panel" style="display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:14px;">
-      <div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;">
-        <div class="form-group" style="margin-bottom:0; min-width:220px;">
-          <label for="ptTenantSelect" data-i18n="ptTenantLabel">Tenant</label>
-          <select id="ptTenantSelect"></select>
+    <div class="panel pt-device-bar">
+      <div class="pt-device-row">
+        <div class="pt-device-pickers">
+          <div class="form-group" style="margin-bottom:0; min-width:210px;">
+            <label for="ptTenantSelect" data-i18n="ptTenantLabel">Tenant</label>
+            <select id="ptTenantSelect"></select>
+          </div>
+          <div class="form-group" style="margin-bottom:0; min-width:280px;">
+            <label for="ptDeviceSelect" data-i18n="ptDeviceLabel">Dispositivo Target</label>
+            <select id="ptDeviceSelect"></select>
+          </div>
         </div>
-        <div class="form-group" style="margin-bottom:0; min-width:280px;">
-          <label for="ptDeviceSelect" data-i18n="ptDeviceLabel">Dispositivo Target</label>
-          <select id="ptDeviceSelect"></select>
+        <div id="ptDeviceMeta" class="pt-device-meta"></div>
+      </div>
+      <div id="ptFirewallNotice" class="pt-fw-notice" hidden>
+        <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+        <span id="ptFirewallNoticeText"></span>
+        <div class="pt-fw-notice-actions">
+          <button type="button" id="btnPtSwitchWhatIf" class="btn btn-secondary btn-small" data-i18n="ptSwitchToWhatIf">Passa a What-If</button>
+          <button type="button" id="btnPtOpenFgt" class="btn btn-secondary btn-small" data-i18n="ptOpenFgtMgmt">Apri FortiGate Management</button>
         </div>
       </div>
-      <div id="ptDeviceMeta" style="display:flex; gap:6px; padding-bottom:8px;"></div>
     </div>
 
-    <!-- Sotto-tab Navigazione -->
-    <div id="ptSubtabNav" class="subtab-bar">
-      <button id="ptSubtabBtnTracer" class="btn btn-secondary active" data-subtab="tracer">
-        <i class="fa-solid fa-play"></i> <span data-i18n="ptSubtabTracer">Packet Tracer</span>
+    <datalist id="ptIntfList"></datalist>
+    <datalist id="ptAclList"></datalist>
+    <datalist id="ptRuleList"></datalist>
+    <datalist id="ptRouteList"></datalist>
+
+    <!-- Sotto-tab Navigazione subordinata -->
+    <div id="ptSubtabNav" class="pt-seg-nav">
+      <button type="button" id="ptSubtabBtnTracer" class="pt-seg-btn active" data-subtab="tracer">
+        <i class="fa-solid fa-play" aria-hidden="true"></i> <span data-i18n="ptSubtabTracer">Packet Tracer</span>
       </button>
-      <button id="ptSubtabBtnExamples" class="btn btn-secondary" data-subtab="examples">
-        <i class="fa-solid fa-list-check"></i> <span data-i18n="ptSubtabExamples">Esempi per Regola</span>
+      <button type="button" id="ptSubtabBtnExamples" class="pt-seg-btn" data-subtab="examples">
+        <i class="fa-solid fa-list-check" aria-hidden="true"></i> <span data-i18n="ptSubtabExamples">Esempi per Regola</span>
       </button>
-      <button id="ptSubtabBtnFindings" class="btn btn-secondary" data-subtab="findings">
-        <i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="ptSubtabFindings">Anomalie &amp; Difetti</span>
+      <button type="button" id="ptSubtabBtnFindings" class="pt-seg-btn" data-subtab="findings">
+        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> <span data-i18n="ptSubtabFindings">Anomalie &amp; Difetti</span>
+        <span id="ptFindingsBadge" class="pt-tab-count" hidden>0</span>
       </button>
-      <button id="ptSubtabBtnWhatIf" class="btn btn-secondary" data-subtab="whatif">
-        <i class="fa-solid fa-code-branch"></i> <span data-i18n="ptSubtabWhatIf">What-If &amp; Rollback</span>
+      <button type="button" id="ptSubtabBtnWhatIf" class="pt-seg-btn" data-subtab="whatif">
+        <i class="fa-solid fa-code-branch" aria-hidden="true"></i> <span data-i18n="ptSubtabWhatIf">What-If &amp; Rollback</span>
       </button>
     </div>
 
     <!-- Sotto-tab 1: Packet Tracer -->
     <div id="ptSubtabTracer">
-      <div style="display:grid; grid-template-columns: 360px 1fr; gap:18px;">
+      <div class="pt-split">
         <div class="panel">
-          <h3><i class="fa-solid fa-sliders"></i> <span data-i18n="ptFormTitle">Parametri del Flusso</span></h3>
+          <h3><i class="fa-solid fa-sliders" aria-hidden="true"></i> <span data-i18n="ptFormTitle">Parametri del Flusso</span></h3>
           <div>
             <div class="form-group">
               <label for="ptSrcIp" data-i18n="ptSrcIpLabel">IP Sorgente *</label><input id="ptSrcIp" type="text" placeholder="es. 192.0.2.50" data-i18n-placeholder="ptSrcIpPh">
@@ -4624,7 +4769,7 @@
             <div class="form-group">
               <label for="ptDstIp" data-i18n="ptDstIpLabel">IP Destinazione *</label><input id="ptDstIp" type="text" placeholder="es. 198.51.100.10" data-i18n-placeholder="ptDstIpPh">
             </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <div class="pt-wi-grid-2">
               <div class="form-group">
                 <label for="ptProto" data-i18n="ptProtoLabel">Protocollo</label><select id="ptProto">
                   <option value="tcp" selected>TCP</option>
@@ -4646,30 +4791,34 @@
                 </select>
               </div>
             </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <div class="pt-wi-grid-2">
               <div class="form-group">
                 <label for="ptSport" data-i18n="ptSportLabel">Porta Sorg.</label><input id="ptSport" type="number" placeholder="opzionale" data-i18n-placeholder="ptOptionalPh" min="1" max="65535">
               </div>
               <div class="form-group">
-                <label for="ptIngressIntf" data-i18n="ptIngressLabel">Ingress Intf</label><input id="ptIngressIntf" type="text" placeholder="auto-derived">
+                <label for="ptIngressIntf" data-i18n="ptIngressLabel">Ingress Intf</label><input id="ptIngressIntf" type="text" list="ptIntfList" placeholder="auto-derived" autocomplete="off">
               </div>
+            </div>
+            <div class="form-group">
+              <label for="ptEgressIntf" data-i18n="ptEgressLabel">Egress Intf (opz.)</label>
+              <input id="ptEgressIntf" type="text" list="ptIntfList" placeholder="auto (da lookup LPM)" data-i18n-placeholder="ptEgressPh" autocomplete="off">
             </div>
             <div style="margin-top:4px;">
               <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer;">
                 <input id="ptEstablished" type="checkbox"> <span data-i18n="ptEstablishedLabel">Sessione TCP Stabilita (ACK/RST)</span>
               </label>
             </div>
-            <button id="btnPtRunTrace" class="btn btn-primary" style="width:100%; margin-top:8px;">
-              <i class="fa-solid fa-play"></i> <span data-i18n="ptBtnTrace">Traccia Flusso</span>
+            <button type="button" id="btnPtRunTrace" class="btn btn-primary" style="width:100%; margin-top:8px;">
+              <i class="fa-solid fa-play" aria-hidden="true"></i> <span data-i18n="ptBtnTrace">Traccia Flusso</span>
             </button>
           </div>
         </div>
         <div class="panel">
-          <h3><i class="fa-solid fa-diagram-project"></i> <span data-i18n="ptTraceResultTitle">Path Trace &amp; Risultato</span></h3>
+          <h3><i class="fa-solid fa-diagram-project" aria-hidden="true"></i> <span data-i18n="ptTraceResultTitle">Path Trace &amp; Risultato</span></h3>
           <div id="ptTraceResultsContainer">
             <div style="text-align:center; padding:40px 20px; color:var(--text-muted);">
-              <i class="fa-solid fa-route fa-2x" style="margin-bottom:12px; opacity:0.4;"></i>
-              <div>Imposta i parametri del flusso e clicca su <strong>Traccia Flusso</strong> per visualizzare il path decisionale.</div>
+              <i class="fa-solid fa-route fa-2x" style="margin-bottom:12px; opacity:0.4;" aria-hidden="true"></i>
+              <div data-i18n="ptEmptyHint">Imposta i parametri del flusso e clicca su Traccia Flusso per visualizzare il path decisionale.</div>
             </div>
           </div>
         </div>
@@ -4679,9 +4828,30 @@
     <!-- Sotto-tab 2: Rule Examples -->
     <div id="ptSubtabExamples" style="display:none;">
       <div class="panel">
-        <h3><i class="fa-solid fa-list-check"></i> <span data-i18n="ptSubtabExamples">Esempi per Regola</span></h3>
+        <div class="panel-head">
+          <h3><i class="fa-solid fa-list-check" aria-hidden="true"></i> <span data-i18n="ptSubtabExamples">Esempi per Regola</span></h3>
+        </div>
+        <div class="pt-filter-bar" id="ptExamplesFilterBar">
+          <div class="pt-filter-search">
+            <label for="ptExSearch" class="visually-hidden" data-i18n="ptExSearchPh">Filtra esempi</label>
+            <input type="search" id="ptExSearch" placeholder="Filtra per regola, IP, porta o testo ACL..." data-i18n-placeholder="ptExSearchPh">
+          </div>
+          <label for="ptExAclFilter" class="visually-hidden" data-i18n="ptFilterAllAcls">Tutte le ACL</label>
+          <select id="ptExAclFilter" aria-label="Filtra ACL" data-i18n-aria-label="ptFilterAllAcls">
+            <option value="" data-i18n="ptFilterAllAcls">Tutte le ACL / rulebase</option>
+          </select>
+          <label for="ptExActionFilter" class="visually-hidden" data-i18n="ptFilterAllActions">Tutte le azioni</label>
+          <select id="ptExActionFilter" aria-label="Filtra azione" data-i18n-aria-label="ptFilterAllActions">
+            <option value="" data-i18n="ptFilterAllActions">Tutte le azioni</option>
+            <option value="permit" data-i18n="ptFilterPermit">Solo PERMIT</option>
+            <option value="deny" data-i18n="ptFilterDeny">Solo DENY</option>
+          </select>
+          <button type="button" class="chip-choice" id="btnPtExCatchAll" aria-pressed="false" data-i18n="ptFilterCatchAll">Catch-all (ANY-ANY)</button>
+          <button type="button" class="chip-choice" id="btnPtExUnparsed" aria-pressed="false" data-i18n="ptFilterUnparsed">Non analizzate</button>
+          <button type="button" class="btn btn-secondary btn-small" id="btnPtExReset" data-i18n="ptFilterReset">Ripristina filtri</button>
+        </div>
         <div id="ptExamplesContainer">
-          <div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i> Caricamento esempi...</div>
+          <div style="text-align:center; padding:30px; color:var(--text-muted);" data-i18n="ptLoadingExamples">Sintesi flussi d'esempio in corso...</div>
         </div>
       </div>
     </div>
@@ -4689,18 +4859,40 @@
     <!-- Sotto-tab 3: Static Findings -->
     <div id="ptSubtabFindings" style="display:none;">
       <div class="panel">
-        <h3><i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="ptSubtabFindings">Anomalie &amp; Difetti</span></h3>
+        <div class="panel-head">
+          <h3><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> <span data-i18n="ptSubtabFindings">Anomalie &amp; Difetti</span></h3>
+          <button type="button" id="btnPtProveAll" class="btn btn-secondary btn-small" style="width:auto;" disabled>
+            <i class="fa-solid fa-vial" aria-hidden="true"></i> <span data-i18n="ptProveAllBtn">Verifica tutte le prove</span>
+          </button>
+        </div>
+        <div id="ptFindingsCartouche" class="oneline-foot pt-find-cartouche" hidden></div>
+        <div class="pt-filter-bar" id="ptFindingsFilterBar">
+          <div class="pt-filter-search">
+            <label for="ptFindSearch" class="visually-hidden" data-i18n="ptFindSearchPh">Filtra anomalie</label>
+            <input type="search" id="ptFindSearch" placeholder="Filtra anomalie per regola, ACL o prefisso..." data-i18n-placeholder="ptFindSearchPh">
+          </div>
+          <label for="ptFindTypeFilter" class="visually-hidden" data-i18n="ptFilterAllDefectTypes">Tutti i tipi</label>
+          <select id="ptFindTypeFilter" aria-label="Tipo difetto" data-i18n-aria-label="ptFilterAllDefectTypes">
+            <option value="" data-i18n="ptFilterAllDefectTypes">Tutti i tipi di difetto</option>
+            <option value="shadowed">shadowed</option>
+            <option value="unreachable">unreachable</option>
+            <option value="any_any">any_any</option>
+            <option value="route_to_nowhere">route_to_nowhere</option>
+            <option value="unresolved_object">unresolved_object</option>
+            <option value="unused_object">unused_object</option>
+          </select>
+        </div>
         <div id="ptFindingsContainer">
-          <div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i> Analisi difetti in corso...</div>
+          <div style="text-align:center; padding:30px; color:var(--text-muted);" data-i18n="ptLoadingFindings">Analisi difetti statici in corso...</div>
         </div>
       </div>
     </div>
 
     <!-- Sotto-tab 4: Change What-If & Safe Rollback -->
     <div id="ptSubtabWhatIf" style="display:none;">
-      <div style="display:grid; grid-template-columns: 380px 1fr; gap:18px;">
+      <div class="pt-split pt-split-wide">
         <div class="panel">
-          <h3><i class="fa-solid fa-code-branch"></i> <span data-i18n="ptWiTitle">Simulazione Modifica (What-If)</span></h3>
+          <h3><i class="fa-solid fa-code-branch" aria-hidden="true"></i> <span data-i18n="ptWiTitle">Simulazione Modifica (What-If)</span></h3>
           <div class="form-group">
             <label for="ptWiAction" data-i18n="ptWiAction">Operazione</label>
             <select id="ptWiAction">
@@ -4713,25 +4905,34 @@
             </select>
           </div>
           <div id="ptWiRuleFields">
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <div class="pt-wi-grid-2">
               <div class="form-group">
                 <label for="ptWiRuleId" data-i18n="ptWiRuleId">ID / Nome Regola</label>
-                <input id="ptWiRuleId" type="text" placeholder="es. 10">
+                <input id="ptWiRuleId" type="text" list="ptRuleList" placeholder="es. 10" autocomplete="off">
               </div>
               <div class="form-group">
                 <label for="ptWiAcl" data-i18n="ptWiAcl">Nome ACL (IOS/NX-OS)</label>
-                <input id="ptWiAcl" type="text" placeholder="es. OT-CELL-IN">
+                <input id="ptWiAcl" type="text" list="ptAclList" placeholder="es. OT-CELL-IN" autocomplete="off">
               </div>
             </div>
             <div id="ptWiRuleDetailFields">
-              <div class="form-group">
-                <label for="ptWiRuleAction" data-i18n="ptWiRuleAction">Azione Regola</label>
-                <select id="ptWiRuleAction">
-                  <option value="permit" data-i18n="ptWiRulePermit">PERMIT / ACCEPT</option>
-                  <option value="deny" data-i18n="ptWiRuleDeny">DENY</option>
-                </select>
+              <div class="pt-wi-grid-2">
+                <div class="form-group">
+                  <label for="ptWiRuleAction" data-i18n="ptWiRuleAction">Azione Regola</label>
+                  <select id="ptWiRuleAction">
+                    <option value="permit" data-i18n="ptWiRulePermit">PERMIT / ACCEPT</option>
+                    <option value="deny" data-i18n="ptWiRuleDeny">DENY</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="ptWiPosition" data-i18n="ptWiPosition">Posizione inserimento</label>
+                  <select id="ptWiPosition">
+                    <option value="top" data-i18n="ptWiPosTop">In cima (top)</option>
+                    <option value="bottom" data-i18n="ptWiPosBottom">In fondo (bottom)</option>
+                  </select>
+                </div>
               </div>
-              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div class="pt-wi-grid-2">
                 <div class="form-group">
                   <label for="ptWiSrcCidr" data-i18n="ptWiSrcCidr">Sorgente CIDR</label>
                   <input id="ptWiSrcCidr" type="text" placeholder="es. 10.20.0.0/24">
@@ -4741,7 +4942,17 @@
                   <input id="ptWiDstCidr" type="text" placeholder="es. 192.0.2.10/32">
                 </div>
               </div>
-              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div class="pt-wi-grid-2">
+                <div class="form-group">
+                  <label for="ptWiSrcIntf" data-i18n="ptWiSrcIntf">Interfaccia / Zona Src (opz.)</label>
+                  <input id="ptWiSrcIntf" type="text" list="ptIntfList" placeholder="auto / any" autocomplete="off">
+                </div>
+                <div class="form-group">
+                  <label for="ptWiDstIntf" data-i18n="ptWiDstIntf">Interfaccia / Zona Dst (opz.)</label>
+                  <input id="ptWiDstIntf" type="text" list="ptIntfList" placeholder="auto / any" autocomplete="off">
+                </div>
+              </div>
+              <div class="pt-wi-grid-2">
                 <div class="form-group">
                   <label for="ptWiProto" data-i18n="ptWiProto">Protocollo</label>
                   <select id="ptWiProto">
@@ -4759,18 +4970,24 @@
             </div>
           </div>
           <div id="ptWiRouteFields" style="display:none;">
-            <div class="form-group">
-              <label for="ptWiPrefix" data-i18n="ptWiPrefix">Prefisso Rotta (CIDR)</label>
-              <input id="ptWiPrefix" type="text" placeholder="es. 192.0.2.0/24">
+            <div class="pt-wi-grid-2">
+              <div class="form-group">
+                <label for="ptWiPrefix" data-i18n="ptWiPrefix">Prefisso Rotta (CIDR)</label>
+                <input id="ptWiPrefix" type="text" list="ptRouteList" placeholder="es. 192.0.2.0/24" autocomplete="off">
+              </div>
+              <div class="form-group">
+                <label for="ptWiDistance" data-i18n="ptWiDistance">Distanza amministrativa (AD)</label>
+                <input id="ptWiDistance" type="number" min="1" max="255" value="1">
+              </div>
             </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <div class="pt-wi-grid-2">
               <div class="form-group">
                 <label for="ptWiNextHop" data-i18n="ptWiNextHop">Next-Hop IP</label>
                 <input id="ptWiNextHop" type="text" placeholder="es. 172.16.10.2">
               </div>
               <div class="form-group">
                 <label for="ptWiIface" data-i18n="ptWiIface">Interfaccia Uscita</label>
-                <input id="ptWiIface" type="text" placeholder="es. port2">
+                <input id="ptWiIface" type="text" list="ptIntfList" placeholder="es. port2" autocomplete="off">
               </div>
             </div>
           </div>
@@ -4779,11 +4996,11 @@
             <textarea id="ptWiCustomFlows" rows="3" placeholder="10.20.0.5,192.0.2.10,tcp,502" style="width:100%; font-family:var(--font-code); font-size:12px;"></textarea>
           </div>
           <button type="button" id="btnPtRunWhatIf" class="btn btn-primary" style="width:100%;">
-            <i class="fa-solid fa-code-branch"></i> <span data-i18n="ptWiRunBtn">Simula Impatto &amp; Rollback</span>
+            <i class="fa-solid fa-code-branch" aria-hidden="true"></i> <span data-i18n="ptWiRunBtn">Simula Impatto &amp; Rollback</span>
           </button>
         </div>
         <div class="panel">
-          <h3><i class="fa-solid fa-shield-halved"></i> <span data-i18n="ptSubtabWhatIf">What-If &amp; Rollback</span></h3>
+          <h3><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> <span data-i18n="ptSubtabWhatIf">What-If &amp; Rollback</span></h3>
           <div id="ptWhatIfResultContainer"></div>
         </div>
       </div>
@@ -5849,7 +6066,7 @@
       </div>
       <div class="form-group"><label for="bpLocSubnets" data-i18n="lblBpLocSubnets">Subnet (una per riga, CIDR)</label><textarea id="bpLocSubnets" rows="4" placeholder="10.10.0.0/16" style="width:100%; font-family:var(--font-code); font-size:12px; padding:8px;"></textarea></div>
       <div class="form-group"><label for="bpLocProbe" data-i18n="lblBpLocProbe">Sonda predefinita</label><select id="bpLocProbe"></select></div>
-      <div class="form-group"><label for="bpLocGateway" data-i18n="lblBpLocGateway">Gateway (IP di un apparato della sede)</label><input id="bpLocGateway" type="text" placeholder="10.10.0.1" style="padding-left:12px;"></div>
+      <div class="form-group"><label for="bpLocGateway" data-i18n="lblBpLocGateway">Gateway (IP di un apparato della sede)</label><input id="bpLocGateway" type="text" list="bpGatewayList" placeholder="10.10.0.1" style="padding-left:12px;" autocomplete="off"><datalist id="bpGatewayList"></datalist><p class="form-hint" data-i18n="bpGatewayPickerHint">Puoi scegliere l'IP di un apparato dell'organizzazione dall'elenco suggerito.</p></div>
       <p id="bpLocError" class="form-hint" role="alert" style="color:var(--danger);"></p>
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" data-close-modal="bpLocationModal" data-i18n="uiCancel">Annulla</button>
@@ -5980,7 +6197,8 @@
       </section>
       <p id="bpAssistError" class="form-hint" role="alert" style="color:var(--danger);"></p>
       <pre id="bpAssistNotes" class="bp-assist-notes" hidden></pre>
-      <div class="modal-actions">
+      <div class="modal-actions" style="justify-content:space-between;">
+        <button type="button" class="btn btn-secondary btn-small" id="btnBpInstructions" disabled><i class="fa-solid fa-book" aria-hidden="true"></i> <span data-i18n="btnBpInstructions">Istruzioni assistente</span></button>
         <button type="button" class="btn btn-secondary" data-close-modal="bpAssistantModal" data-i18n="btnClose">Chiudi</button>
       </div>
     </div>

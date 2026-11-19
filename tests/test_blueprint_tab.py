@@ -54,6 +54,15 @@ class TheTabIsWired(unittest.TestCase):
                 self.assertRegex(it, rf"\n\s+{key}:")
                 self.assertRegex(en, rf"\n\s+{key}:")
 
+    def test_purdue_findings_are_mapped_and_translated(self):
+        for code in ("purdue_dmz_bypass", "purdue_layer_skip", "purdue_subnet_overlap"):
+            self.assertIn(f"{code}: 'purdue'", self.js, code)
+        self.assertIn("'purdue'", self.js)
+        it, en = self.i18n.split("\n    en: {", 1)
+        for key in ("bpGroup_purdue", "bpf_purdue_dmz_bypass", "bpf_purdue_layer_skip", "bpf_purdue_subnet_overlap"):
+            self.assertRegex(it, rf"\n\s+{key}:")
+            self.assertRegex(en, rf"\n\s+{key}:")
+
     def test_bar_buttons_wait_for_an_organization(self):
         # Their handlers read bpState, which is null until an organization loads.
         for button in ("btnBpCheck", "btnBpObserve", "btnBpPreset", "btnBpHistory", "btnBpAssistant",

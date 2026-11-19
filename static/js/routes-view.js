@@ -26,6 +26,12 @@
     const _rtLkOpen = new Set(); // lookup rows showing their candidate routes
     const _rtTypes = new Set();  // empty = every type
     let _rtDiffOnly = false;
+    let _rtHolesOnly = false;
+    let _rtDensity = 'regular';
+    let _rtView = 'matrix';
+    let _rtDrawerOpen = false;
+    let _rtDrawerTab = 'detail';
+    let _rtSelectedKey = '';
     let _rtIface = '';           // exit interface picked in the rings; '' = any
     const _rtOpen = new Set();
     // ponytail: rendering cap, a full BGP table would freeze the tab.
@@ -465,7 +471,7 @@
         } catch (e) { devices = []; }
         // Lo scope globale vale anche qui: senza filtro il picker elencava
         // tutti gli apparati di tutti i tenant.
-        const tenant = window.globalSelectedTenant || 'all';
+        const tenant = (window.rtPendingTrace && window.rtPendingTrace.tenant) || window.globalSelectedTenant || 'all';
         if (tenant !== 'all') devices = devices.filter(d => d.group === tenant);
         renderPickerItems('rtDeviceFilter', devices
             .sort((a, b) => (a.hostname || '').localeCompare(b.hostname || ''))
@@ -476,7 +482,33 @@
     // tutta la flotta e' esattamente quello che questa vista non deve fare.
     async function routesTabShown() {
         await loadRtDeviceList();
+        const pending = window.rtPendingTrace;
+        if (pending) {
+            window.rtPendingTrace = null;
+            const keep = new Set(pending.devices || []);
+            const filterRoot = document.getElementById('rtDeviceFilter');
+            if (filterRoot && keep.size) {
+                filterRoot.querySelectorAll('.picker-item input[type="checkbox"]').forEach(cb => {
+                    const box = /** @type {HTMLInputElement} */ (cb);
+                    box.checked = keep.has(box.value);
+                });
+                if (typeof pickerChanged === 'function') pickerChanged(filterRoot);
+            }
+            await loadRoutesTab();
+            rtTraceSyncSources();
+            const srcSel = /** @type {HTMLSelectElement|null} */ (document.getElementById('rtTraceSrc'));
+            const dstEl = /** @type {HTMLInputElement|null} */ (document.getElementById('rtTraceDst'));
+            const srcIpEl = /** @type {HTMLInputElement|null} */ (document.getElementById('rtTraceSrcIp'));
+            if (srcSel && pending.src) srcSel.value = pending.src;
+            if (dstEl && pending.dst) dstEl.value = pending.dst;
+            if (srcIpEl && pending.src_ip) srcIpEl.value = pending.src_ip;
+            syncRtTraceFlowInputs();
+            switchRtView(pending.openView || 'trace');
+            if (pending.dst) await loadRtTrace();
+            return;
+        }
         rtTraceSyncSources();
+        syncRtTraceFlowInputs();
         renderRtTrace();
         renderRtMatrix();
     }
@@ -486,6 +518,8 @@
         _rtOpen.clear();
         _skSel = '';
         _rtIface = '';
+        _rtSelectedKey = '';
+        _rtReverseTrace = null;
         if (!chosen.length) {
             // Nessun apparato scelto: nessuna sessione aperta.
             _rtRows = []; _rtErrors = []; _rtLoaded = []; _rtMatrix = []; _rtContext = {};
@@ -493,6 +527,8 @@
             renderRtMatrix();
             return;
         }
+        const btn = /** @type {HTMLButtonElement|null} */ (document.getElementById('btnRtRefresh'));
+        if (btn) btn.disabled = true;
         const body = document.getElementById('rtMxBody');
         if (body) {
             body.innerHTML = `<tr><td class="rt-mx-empty">${escapeHtml(tr('rtLoading'))}</td></tr>`;
@@ -508,6 +544,8 @@
         } catch (e) {
             _rtRows = []; _rtContext = {};
             _rtErrors = [{ device_ip: '', error: String(e) }];
+        } finally {
+            if (btn) btn.disabled = false;
         }
         _rtLoaded = chosen;
         // Only a live answer lets absence mean "no route": a device that went
@@ -545,6 +583,7 @@
     function rtVisible(q) {
         return _rtMatrix.filter(e =>
             (!_rtDiffOnly || e.missing > 0)
+            && (!_rtHolesOnly || e.holes > 0)
             && (!_rtTypes.size || Object.values(e.cells).some(rs => rs.some(r => _rtTypes.has(r.type))))
             && (!_rtIface || Object.values(e.cells).some(rs => rs.some(r => r.interface === _rtIface)))
             && rtMatches(e, q));
@@ -555,17 +594,92 @@
         return el ? el.value : '';
     }
 
+    function switchRtView(view) {
+        _rtView = view || 'matrix';
+        const tabs = document.getElementById('rtViewTabs');
+        if (tabs) {
+            tabs.querySelectorAll('[data-rt-view]').forEach(btn => {
+                const on = btn.getAttribute('data-rt-view') === _rtView;
+                btn.classList.toggle('active', on);
+                btn.setAttribute('aria-selected', String(on));
+            });
+        }
+        const map = { matrix: 'rtViewMatrix', trace: 'rtViewTrace', summary: 'rtViewSummary', flows: 'rtViewFlows' };
+        Object.entries(map).forEach(([k, id]) => {
+            const el = document.getElementById(id);
+            if (el) el.hidden = k !== _rtView;
+        });
+        const drwToggle = document.getElementById('btnRtDrawerToggle');
+        if (drwToggle) drwToggle.hidden = _rtView !== 'matrix';
+        if (_rtView === 'flows') renderRtSankey(rtVisible(rtQuery(rtSearchValue())));
+    }
+
+    function setRtDrawer(open, tab) {
+        _rtDrawerOpen = !!open;
+        if (tab) _rtDrawerTab = tab;
+        const split = document.getElementById('rtSplit');
+        const drawer = document.getElementById('rtDrawer');
+        const toggle = document.getElementById('btnRtDrawerToggle');
+        if (split) split.dataset.drawer = _rtDrawerOpen ? 'open' : 'closed';
+        if (drawer) drawer.hidden = !_rtDrawerOpen;
+        if (toggle) toggle.setAttribute('aria-expanded', String(_rtDrawerOpen));
+        const tabBar = document.getElementById('rtDrawerTabs');
+        if (tabBar) {
+            tabBar.querySelectorAll('[data-rt-dtab]').forEach(btn => {
+                const on = btn.getAttribute('data-rt-dtab') === _rtDrawerTab;
+                btn.classList.toggle('active', on);
+                btn.setAttribute('aria-selected', String(on));
+            });
+        }
+        const panes = { detail: 'rtDrawerPaneDetail', trace: 'rtDrawerPaneTrace', flows: 'rtDrawerPaneFlows' };
+        Object.entries(panes).forEach(([k, id]) => {
+            const el = document.getElementById(id);
+            if (el) el.hidden = k !== _rtDrawerTab;
+        });
+        if (_rtDrawerOpen) renderRtDrawer();
+    }
+
+    function renderRtActiveFilters() {
+        const box = document.getElementById('rtActiveFilters');
+        if (!box) return;
+        const pills = [];
+        const s = rtSearchValue().trim();
+        if (s) pills.push(`<button type="button" class="rt-pill" data-clear-filter="search">${escapeHtml(tr('rtPillSearch', { v: s }))} &times;</button>`);
+        for (const t of _rtTypes) {
+            pills.push(`<button type="button" class="rt-pill" data-clear-filter="type" data-val="${escapeHtml(t)}">${escapeHtml(tr('rtPillType', { v: t }))} &times;</button>`);
+        }
+        if (_rtIface) pills.push(`<button type="button" class="rt-pill" data-clear-filter="iface">${escapeHtml(tr('rtPillIface', { v: _rtIface }))} &times;</button>`);
+        if (_rtDiffOnly) pills.push(`<button type="button" class="rt-pill" data-clear-filter="diff">${escapeHtml(tr('rtPillDiff'))} &times;</button>`);
+        if (_rtHolesOnly) pills.push(`<button type="button" class="rt-pill" data-clear-filter="holes">${escapeHtml(tr('rtPillHoles'))} &times;</button>`);
+        if (!pills.length) {
+            box.hidden = true;
+            box.innerHTML = '';
+            return;
+        }
+        box.hidden = false;
+        box.innerHTML = `<span class="rt-col-tag" style="margin:0 4px 0 0;">${escapeHtml(tr('rtActiveFiltersLabel'))}:</span>`
+            + pills.join('')
+            + `<button type="button" class="rt-pill-clear" data-clear-filter="all">${escapeHtml(tr('rtClearFilters'))}</button>`;
+    }
+
     function renderRtMatrix() {
         const head = document.getElementById('rtMxHead');
         const body = document.getElementById('rtMxBody');
         if (!head || !body) return;
         const q = rtQuery(rtSearchValue());
         const devs = _rtLoaded;
+        const csvBtn = /** @type {HTMLButtonElement|null} */ (document.getElementById('btnRtExportCsv'));
+        if (csvBtn) csvBtn.disabled = devs.length === 0;
+        const typeLbl = document.getElementById('rtTypePopLabel');
+        if (typeLbl) typeLbl.textContent = _rtTypes.size ? tr('rtTypeFilterCount', { n: _rtTypes.size }) : tr('rtTypeFilterBtn');
+
+        renderRtActiveFilters();
         renderRtLookup(q);
         renderRtTally();
         renderRtRings();
         renderRtChips();
         renderRtLegend();
+        if (_rtDrawerOpen) renderRtDrawer();
 
         if (!devs.length) {
             renderRtSankey([]);
@@ -587,7 +701,7 @@
 
         const rows = rtVisible(q);
         // Same filters as the matrix: search, type chips, differences only.
-        renderRtSankey(rows);
+        if (_rtView === 'flows') renderRtSankey(rows);
         if (q.kind === 'ip') rows.sort((a, b) => b.net.len - a.net.len);
         const span = devs.length + 1;
         if (!rows.length) {
@@ -607,17 +721,16 @@
         }
         const html = [];
         for (const e of rows.slice(0, RT_MAX_ROWS)) {
-            const open = _rtOpen.has(e.key);
+            const sel = _rtDrawerOpen && _rtSelectedKey === e.key;
             const state = e.holes ? 'hole' : e.missing ? 'gap' : 'full';
-            html.push(`<tr class="rt-mx-row ${state}${open ? ' open' : ''}">
+            html.push(`<tr class="rt-mx-row ${state}${sel ? ' is-selected' : ''}" data-key="${escapeHtml(e.key)}">
                 <th scope="row" class="rt-mx-net">
                   <button type="button" class="rt-mx-toggle" data-action="rt-mx-toggle"
-                          data-key="${escapeHtml(e.key)}" aria-expanded="${open}">
+                          data-key="${escapeHtml(e.key)}" aria-expanded="${sel}">
                     <i class="fa-solid fa-chevron-right" aria-hidden="true"></i><span>${
                         escapeHtml(e.network)}</span>
                   </button>${e.vrf ? `<span class="rt-mx-vrf">${escapeHtml(e.vrf)}</span>` : ''}
                 </th>${devs.map(d => rtCell(e, d, winners)).join('')}</tr>`);
-            if (open) html.push(rtDetailRow(e, devs));
         }
         if (rows.length > RT_MAX_ROWS) {
             html.push(`<tr><td class="rt-mx-empty" colspan="${span}">${
@@ -694,10 +807,146 @@
                   <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
                   <span>${name}: ${escapeHtml(say + ecmp)}<span class="rt-lk-why">${escapeHtml(why)}${
                       a.candidates.length > 1 ? ' ' + escapeHtml(tr('rtLkCandidates', { n: a.candidates.length })) : ''}</span>${backup}</span>
-                </button>${detail}</li>`;
+                </button>${detail}
+                <div class="rt-drawer-btns" style="padding:0 12px 8px;">
+                  <button type="button" class="btn btn-secondary btn-small" data-action="rt-drawer-trace" data-src="${escapeHtml(dev)}" data-dst="${escapeHtml(q.text)}"><i class="fa-solid fa-route" aria-hidden="true"></i> ${escapeHtml(tr('rtDrawerTraceFrom'))}</button>
+                  <button type="button" class="btn btn-secondary btn-small" data-action="rt-open-policy" data-dev="${escapeHtml(dev)}" data-dst-ip="${escapeHtml(q.text)}"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> ${escapeHtml(tr('rtDrawerInspectPolicy'))}</button>
+                </div></li>`;
         }).join('');
         box.hidden = false;
         box.innerHTML = `<h3>${escapeHtml(tr('rtLkHead', { ip: q.text }))}</h3><ul class="rt-lk-list">${rows}</ul>`;
+    }
+
+    function firstUsableFromNet(network) {
+        const m = /^(\d{1,3}\.\d{1,3}\.\d{1,3})\.(\d{1,3})(?:\/(\d{1,2}))?/.exec(String(network || '').trim());
+        if (!m) return '';
+        const plen = m[3] ? parseInt(m[3], 10) : 32;
+        const last = parseInt(m[2], 10);
+        return plen < 31 ? `${m[1]}.${Math.min(254, last + 1)}` : `${m[1]}.${last}`;
+    }
+
+    function renderRtDrawer() {
+        const titleEl = document.getElementById('rtDrawerTitle');
+        const kickerEl = document.getElementById('rtDrawerKicker');
+        const detBox = document.getElementById('rtDrawerDetailBody');
+        const trBox = document.getElementById('rtDrawerTraceBody');
+        const flBox = document.getElementById('rtDrawerFlowsBody');
+        if (!detBox || !trBox || !flBox) return;
+
+        const q = rtQuery(rtSearchValue());
+        const entry = _rtSelectedKey ? _rtMatrix.find(e => e.key === _rtSelectedKey) : null;
+        if (kickerEl) kickerEl.textContent = q.kind === 'ip' ? tr('rtDrawerLookupMode') : tr('rtDrawerPrefixMode');
+        if (titleEl) titleEl.textContent = entry ? entry.network + (entry.vrf ? ` · VRF ${entry.vrf}` : '') : (q.kind === 'ip' ? q.text : tr('rtDrawerTitle'));
+
+        if (!entry && q.kind !== 'ip') {
+            detBox.innerHTML = `<p class="rt-mx-empty">${escapeHtml(tr('rtDrawerEmpty'))}</p>`;
+            trBox.innerHTML = `<p class="rt-mx-empty">${escapeHtml(tr('rtDrawerNoTraceYet'))}</p>`;
+            flBox.innerHTML = `<p class="rt-mx-empty">${escapeHtml(tr('rtDrawerEmpty'))}</p>`;
+            return;
+        }
+
+        if (entry) {
+            const devCards = _rtLoaded.map(d => {
+                const own = entry.cells[d.value] || [];
+                const targetIp = firstUsableFromNet(entry.network);
+                if (own.length) {
+                    const list = own.map(r => {
+                        const hop = r.gateway && r.gateway !== '0.0.0.0' ? r.gateway : rtIfaceName(_rtContext, d.value, r.interface || '?');
+                        return `<div style="font-family:var(--font-data); font-size:12px;">${rtKind(r.type)}<strong>${escapeHtml(hop)}</strong> <span style="color:var(--text-soft);">(${escapeHtml(r.raw_type || r.type || '')} · AD ${r.distance ?? 0} · M ${r.metric ?? 0})</span></div>`;
+                    }).join('');
+                    return `<div class="rt-drawer-card">
+                        <div class="rt-drawer-card-head"><strong>${escapeHtml(d.label)}</strong><span class="rt-col-ip">${escapeHtml(d.value)}</span></div>
+                        ${list}
+                        <div class="rt-drawer-btns">
+                            <button type="button" class="btn btn-secondary btn-small" data-action="rt-drawer-trace" data-src="${escapeHtml(d.value)}" data-dst="${escapeHtml(targetIp)}">${escapeHtml(tr('rtDrawerTraceFrom'))}</button>
+                            <button type="button" class="btn btn-secondary btn-small" data-action="rt-open-policy" data-dev="${escapeHtml(d.value)}" data-dst-ip="${escapeHtml(targetIp)}">${escapeHtml(tr('rtDrawerInspectPolicy'))}</button>
+                        </div>
+                    </div>`;
+                }
+                const c = entry.cover[d.value];
+                const covText = c === 'hole' ? tr('rtMxHole') : (c === 'unknown' ? tr('rtMxUnknown') : tr('rtMxCoveredBy', { net: c.network }));
+                return `<div class="rt-drawer-card">
+                    <div class="rt-drawer-card-head"><strong>${escapeHtml(d.label)}</strong><span class="rt-col-ip">${escapeHtml(d.value)}</span></div>
+                    <div style="font-size:12px; color:${c === 'hole' ? 'var(--lamp-fault-ink)' : 'var(--text-muted)'};">${escapeHtml(covText)}</div>
+                </div>`;
+            }).join('');
+            detBox.innerHTML = `<div class="rt-drawer-btns" style="margin-bottom:8px;">
+                <button type="button" class="btn btn-secondary btn-small" data-action="rt-copy-prefix" data-prefix="${escapeHtml(entry.network)}"><i class="fa-regular fa-copy" aria-hidden="true"></i> ${escapeHtml(tr('rtDrawerCopyPrefix'))}</button>
+            </div>${devCards}`;
+        } else {
+            detBox.innerHTML = '';
+        }
+
+        // Drawer Trace tab: show active _trace compact summary or quick trigger
+        const quickDst = q.kind === 'ip' ? q.text : (entry ? firstUsableFromNet(entry.network) : '');
+        const quickSrc = _rtLoaded[0] ? _rtLoaded[0].value : '';
+        if (_trace && (_trace.hops || []).length) {
+            const hopList = _trace.hops.map((h, i) => `<div class="rt-drawer-card">
+                <div class="rt-drawer-card-head"><strong>#${i + 1} ${escapeHtml(h.device || h.device_ip || '')}</strong><span class="rt-col-ip">${escapeHtml(h.device_ip || '')}</span></div>
+                <div style="font-family:var(--font-data); font-size:12px;">${h.best ? `${rtKind(h.best.type)}${escapeHtml(h.best.network || '')} → ${escapeHtml(h.best.gateway || h.best.interface || '?')}` : escapeHtml(tr('rtTraceNoRoute'))}</div>
+                ${rtHopChipsHtml(h)}
+            </div>`).join('');
+            trBox.innerHTML = `<div style="margin-bottom:8px; font-weight:600;">${escapeHtml(rtTraceOutcomeText(_trace))}</div>${hopList}`;
+        } else {
+            trBox.innerHTML = `<p class="rt-mx-empty" style="padding:8px 0;">${escapeHtml(tr('rtDrawerNoTraceYet'))}</p>
+                ${quickDst && quickSrc ? `<button type="button" class="btn btn-primary btn-small" data-action="rt-drawer-trace" data-src="${escapeHtml(quickSrc)}" data-dst="${escapeHtml(quickDst)}">${escapeHtml(tr('rtDrawerRunQuickTrace'))} (${escapeHtml(quickDst)})</button>` : ''}`;
+        }
+
+        // Drawer Flows tab: compact breakdown of next hops for selected prefix or filtered rows
+        const flowRows = entry
+            ? Object.values(entry.cells).flat()
+            : rtVisible(q).flatMap(e => Object.values(e.cells).flat());
+        const byType = new Map();
+        const byHop = new Map();
+        for (const r of flowRows) {
+            const t = r.type || 'unknown';
+            byType.set(t, (byType.get(t) || 0) + 1);
+            const h = (r.gateway && r.gateway !== '0.0.0.0') ? r.gateway : (r.interface || tr('rtSkDirect'));
+            byHop.set(h, (byHop.get(h) || 0) + 1);
+        }
+        const topHops = [...byHop.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+        flBox.innerHTML = `<div class="rt-drawer-card">
+            <div class="rt-drawer-card-head"><strong>${escapeHtml(tr('rtDrawerFlowSummary'))}</strong><span>${flowRows.length}</span></div>
+            <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;">
+                ${[...byType.entries()].map(([t, n]) => `<span class="badge">${rtKind(t)}${escapeHtml(t)}: ${n}</span>`).join('')}
+            </div>
+            <div style="display:flex; flex-direction:column; gap:4px; font-family:var(--font-data); font-size:12px;">
+                ${topHops.map(([h, n]) => `<div style="display:flex; justify-content:space-between;"><span>${escapeHtml(h)}</span><b>${n}</b></div>`).join('') || '—'}
+            </div>
+            <div class="rt-drawer-btns">
+                <button type="button" class="btn btn-secondary btn-small" data-action="rt-goto-flows">${escapeHtml(tr('rtSubtabFlows'))}</button>
+            </div>
+        </div>`;
+    }
+
+    function exportRtMatrixCsv() {
+        const q = rtQuery(rtSearchValue());
+        const rows = rtVisible(q);
+        const devs = _rtLoaded;
+        if (!devs.length) return;
+        const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+        const header = ['prefix', 'vrf', ...devs.map(d => `${d.label} (${d.value})`)].map(esc).join(',');
+        const lines = [header];
+        for (const e of rows) {
+            const cols = [e.network, e.vrf || ''];
+            for (const d of devs) {
+                const own = e.cells[d.value];
+                if (own && own.length) {
+                    cols.push(own.map(r => `${r.type}:${r.gateway && r.gateway !== '0.0.0.0' ? r.gateway : (r.interface || 'direct')}[${r.distance ?? 0}]`).join(' | '));
+                } else {
+                    const c = e.cover[d.value];
+                    cols.push(c === 'hole' ? 'NO_ROUTE' : (c === 'unknown' ? 'UNKNOWN' : `via:${c.network}`));
+                }
+            }
+            lines.push(cols.map(esc).join(','));
+        }
+        const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'routing-matrix.csv';
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
     function rtCell(e, d, winners) {
@@ -706,12 +955,17 @@
             const r = own[0];
             const win = winners.has(d.value + '|' + e.vrf + '|' + e.network);
             const more = own.length > 1 ? `<span class="rt-more">+${own.length - 1}</span>` : '';
+            const ifaceLabel = r.interface ? rtIfaceName(_rtContext, d.value, r.interface) : '';
             // FortiOS writes 0.0.0.0 for "no gateway": the interface is the hop.
-            const hop = (r.gateway && r.gateway !== '0.0.0.0' ? r.gateway : '')
-                || (r.interface && rtIfaceName(_rtContext, d.value, r.interface));
-            return `<td class="rt-cell${win ? ' win' : ''}"${win ? ` title="${escapeHtml(tr('rtMxWins'))}"` : ''}>${
-                rtKind(r.type)}<span class="visually-hidden">${escapeHtml(r.type)} </span>${
-                hop ? escapeHtml(hop) : '&mdash;'}${more}</td>`;
+            const hasGw = !!(r.gateway && r.gateway !== '0.0.0.0');
+            const hop = (hasGw ? r.gateway : '') || ifaceLabel;
+            const subParts = [r.raw_type || r.type || ''];
+            if (hasGw && ifaceLabel) subParts.push(ifaceLabel);
+            if (r.distance != null) subParts.push(`AD ${r.distance}`);
+            return `<td class="rt-cell${win ? ' win' : ''}"${win ? ` title="${escapeHtml(tr('rtMxWins'))}"` : ''}>
+                <div class="rt-cell-main">${rtKind(r.type)}<span class="visually-hidden">${escapeHtml(r.type)} </span><span>${hop ? escapeHtml(hop) : '&mdash;'}</span>${more}</div>
+                <div class="rt-cell-sub">${escapeHtml(subParts.filter(Boolean).join(' · '))}</div>
+            </td>`;
         }
         const c = e.cover[d.value];
         if (c === 'unknown') {
@@ -723,27 +977,6 @@
                 escapeHtml(tr('rtMxHole'))}</td>`;
         }
         return `<td class="rt-cell covered">${escapeHtml(tr('rtMxCoveredBy', { net: c.network }))}</td>`;
-    }
-
-    function rtDetailRow(e, devs) {
-        const dash = '&mdash;';
-        const lines = devs.flatMap(d => (e.cells[d.value] || []).map(r => `<tr>
-            <td>${escapeHtml(d.label)}</td>
-            <td>${rtKind(r.type)}${escapeHtml(r.raw_type || r.type || '')}</td>
-            <td>${r.gateway ? escapeHtml(r.gateway) : dash}</td>
-            <td>${r.interface ? escapeHtml(rtIfaceName(_rtContext, d.value, r.interface)) : dash}</td>
-            <td class="rt-num">${r.distance == null ? dash : escapeHtml(String(r.distance))}</td>
-            <td class="rt-num">${r.metric == null ? dash : escapeHtml(String(r.metric))}</td>
-          </tr>`)).join('');
-        return `<tr class="rt-mx-detail"><td colspan="${devs.length + 1}">
-            <table class="rt-cand" data-no-colpicker><thead><tr>
-              <th data-no-sort="1">${escapeHtml(tr('rtColDevice'))}</th>
-              <th data-no-sort="1">${escapeHtml(tr('rtColType'))}</th>
-              <th data-no-sort="1">${escapeHtml(tr('rtColGateway'))}</th>
-              <th data-no-sort="1">${escapeHtml(tr('rtColIface'))}</th>
-              <th data-no-sort="1" class="rt-num">${escapeHtml(tr('rtColDistance'))}</th>
-              <th data-no-sort="1" class="rt-num">${escapeHtml(tr('rtColMetric'))}</th>
-            </tr></thead><tbody>${lines}</tbody></table></td></tr>`;
     }
 
     // Interface colours: the conductor hues, never a status lamp; past five
@@ -1083,10 +1316,49 @@
     // vista non allarga la selezione da sola.
 
     let _trace = null;
+    let _rtReverseTrace = null;
     let _traceTimer = null;
     // Due analisi lanciate a distanza di un istante (clic e poi Invio): vale
     // quella chiesta per ultima, non quella che risponde per ultima.
     let _traceSeq = 0;
+
+    function syncRtTraceFlowInputs() {
+        const srcIpEl = /** @type {HTMLInputElement|null} */ (document.getElementById('rtTraceSrcIp'));
+        const protoEl = /** @type {HTMLSelectElement|null} */ (document.getElementById('rtTraceProto'));
+        const dportEl = /** @type {HTMLInputElement|null} */ (document.getElementById('rtTraceDport'));
+        const hintEl = document.getElementById('rtTraceFlowHint');
+        const hasSrcIp = !!(srcIpEl && srcIpEl.value.trim());
+        if (protoEl) protoEl.disabled = !hasSrcIp;
+        if (dportEl) dportEl.disabled = !hasSrcIp;
+        if (hintEl) {
+            hintEl.hidden = hasSrcIp;
+            if (!hasSrcIp) hintEl.textContent = tr('rtTraceNeedSrcIpHint');
+        }
+    }
+
+    function openPolicyFromRouteHop(devIp, overrideSrcIp, overrideDstIp, overrideProto, overrideDport) {
+        const flow = (_trace && (_trace.effective_flow || _trace.flow_init)) || {};
+        const devObj = (typeof globalDevices !== 'undefined' && Array.isArray(globalDevices))
+            ? globalDevices.find(d => d.IP === devIp) : null;
+        const vnd = String((devObj && (devObj.Vendor || devObj.Type)) || '').toLowerCase();
+        const isFw = ['fortinet', 'fortigate', 'paloalto', 'panos'].includes(vnd);
+        const subtab = isFw ? 'whatif' : 'tracer';
+        const srcIp = overrideSrcIp || flow.src_ip || '';
+        const dstIp = overrideDstIp || flow.dst_ip || (_trace && _trace.dst) || '';
+        const proto = overrideProto || flow.proto || 'tcp';
+        const dport = overrideDport || flow.dport || '';
+        window.ptPendingContext = {
+            tenant: (devObj && devObj.Group) || window.globalSelectedTenant || '',
+            device_ip: devIp,
+            src_ip: srcIp,
+            dst_ip: dstIp,
+            proto,
+            dport,
+            subtab,
+            autoRun: !isFw && !!srcIp && !!dstIp,
+        };
+        if (typeof switchTab === 'function') switchTab('tab-policy-test');
+    }
 
     // I tre criteri, nell'ordine in cui un apparato li guarda. Le etichette
     // sono chiamate letterali: tr() con una chiave costruita a runtime
@@ -1191,13 +1463,19 @@
             document.getElementById('rtTraceDport'));
         const vrfEl = /** @type {HTMLInputElement|null} */ (
             document.getElementById('rtTraceVrf'));
+        const liveChk = /** @type {HTMLInputElement|null} */ (
+            document.getElementById('rtTraceLiveOnly'));
+        const btn = /** @type {HTMLButtonElement|null} */ (
+            document.getElementById('btnRtTrace'));
         if (!src || !dst) return;
         clearInterval(_traceTimer);
+        _rtReverseTrace = null;
         const mine = ++_traceSeq;
         const devices = rtSelectedDevices().join(',');
         if (!devices || !src.value) { rtTraceVerdict('muted', tr('rtPickDevices')); return; }
         if (!dst.value.trim()) { rtTraceVerdict('muted', tr('rtTraceNeedDst')); return; }
 
+        if (btn) btn.disabled = true;
         rtTraceVerdict('muted', tr('rtTraceRunning'));
         rtTraceSecVerdict('');
         const params = new URLSearchParams({
@@ -1205,6 +1483,9 @@
             src: src.value,
             dst: dst.value.trim(),
         });
+        if (_rtLoaded.length && !(liveChk && liveChk.checked)) {
+            params.set('use_cache', '1');
+        }
         const srcIpVal = srcIpEl ? srcIpEl.value.trim() : '';
         const protoVal = protoEl ? protoEl.value.trim() : '';
         const dportVal = dportEl ? dportEl.value.trim() : '';
@@ -1233,21 +1514,104 @@
             renderRtTrace();
             rtTraceVerdict('bad', String(e));
             return;
+        } finally {
+            if (btn) btn.disabled = false;
         }
         renderRtTrace();
+        if (_rtDrawerOpen && _rtDrawerTab === 'trace') renderRtDrawer();
         rtTracePlay();
+    }
+
+    async function runRtReverseTrace() {
+        if (!_trace || !(_trace.hops || []).length) return;
+        const srcIpEl = /** @type {HTMLInputElement|null} */ (document.getElementById('rtTraceSrcIp'));
+        const eff = _trace.effective_flow || {};
+        const revDst = eff.src_ip || (srcIpEl ? srcIpEl.value.trim() : '');
+        if (!revDst) return;
+        const lastHop = _trace.hops[_trace.hops.length - 1];
+        const revSrc = (lastHop && lastHop.device_ip) || _trace.src;
+        const revBox = document.getElementById('rtTraceReverseOut');
+        const revBtn = /** @type {HTMLButtonElement|null} */ (document.getElementById('btnRtTraceReverse'));
+        if (revBtn) revBtn.disabled = true;
+        if (revBox) {
+            revBox.hidden = false;
+            revBox.className = 'rt-rev-box';
+            revBox.textContent = tr('rtTraceReverseRunning');
+        }
+        try {
+            const params = new URLSearchParams({
+                device: rtSelectedDevices().join(','),
+                src: revSrc,
+                dst: revDst,
+                use_cache: '1',
+            });
+            const res = await apiFetch(`/api/routes/trace?${params.toString()}`);
+            if (!res) return;
+            const data = await res.json();
+            if (!res.ok) {
+                if (revBox) revBox.innerHTML = `<span class="rt-ink-bad">${escapeHtml(data.detail || ('HTTP ' + res.status))}</span>`;
+                return;
+            }
+            _rtReverseTrace = data;
+            renderRtReverseBox();
+        } catch (e) {
+            if (revBox) revBox.innerHTML = `<span class="rt-ink-bad">${escapeHtml(String(e))}</span>`;
+        } finally {
+            if (revBtn) revBtn.disabled = false;
+        }
+    }
+
+    function renderRtReverseBox() {
+        const revBox = document.getElementById('rtTraceReverseOut');
+        if (!revBox) return;
+        if (!_rtReverseTrace || !(_rtReverseTrace.hops || []).length) {
+            revBox.hidden = true;
+            revBox.innerHTML = '';
+            return;
+        }
+        const fwdSeq = (_trace.hops || []).map(h => h.device_ip);
+        const revSeq = (_rtReverseTrace.hops || []).map(h => h.device_ip);
+        const symmetric = fwdSeq.length === revSeq.length && fwdSeq.every((ip, idx) => ip === revSeq[revSeq.length - 1 - idx]);
+        revBox.hidden = false;
+        revBox.className = `rt-rev-box ${symmetric ? 'is-sym' : 'is-asym'}`;
+        const chainText = (_rtReverseTrace.hops || []).map(h => `${h.device || h.device_ip} (${h.device_ip})`).join(' → ');
+        revBox.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:6px;">
+                <strong>${escapeHtml(tr('rtTraceReverseTitle', { src: _rtReverseTrace.src || '', dst: _rtReverseTrace.dst || '' }))}</strong>
+                <span class="badge ${symmetric ? 'badge-success' : 'badge-warning'}">${escapeHtml(tr(symmetric ? 'rtTraceSymmetric' : 'rtTraceAsymmetric'))}</span>
+            </div>
+            <div style="font-family:var(--font-data); font-size:12px;">${escapeHtml(chainText)} · ${escapeHtml(rtTraceOutcomeText(_rtReverseTrace))}</div>`;
     }
 
     function renderRtTrace() {
         const rail = document.getElementById('rtTraceRail');
         const steps = document.getElementById('rtTraceSteps');
         const play = document.getElementById('btnRtTracePlay');
+        const revBtn = document.getElementById('btnRtTraceReverse');
+        const cacheBadge = document.getElementById('rtTraceCacheBadge');
+        const errBox = document.getElementById('rtTraceErrors');
+        const exitBox = document.getElementById('rtTraceExitNote');
         const probe = document.getElementById('rtProbeBox');
         if (!rail || !steps) return;
+        if (cacheBadge) cacheBadge.hidden = !(_trace && _trace.cached);
+        if (errBox) {
+            const errs = (_trace && _trace.errors) || [];
+            if (errs.length) {
+                errBox.hidden = false;
+                errBox.innerHTML = `<div class="rt-partial"><strong>${escapeHtml(tr('rtTraceErrorsTitle'))}</strong><ul>${
+                    errs.map(e => `<li><span class="rt-code">${escapeHtml(e.device_ip || '?')}</span> &mdash; ${escapeHtml(e.error || '')}</li>`).join('')
+                }</ul></div>`;
+            } else {
+                errBox.hidden = true;
+                errBox.innerHTML = '';
+            }
+        }
         if (!_trace || !(_trace.hops || []).length) {
             rail.style.display = 'none';
             rail.innerHTML = '';
             rtTraceSecVerdict('');
+            if (exitBox) { exitBox.hidden = true; exitBox.innerHTML = ''; }
+            if (revBtn) revBtn.hidden = true;
+            renderRtReverseBox();
             // Non un vuoto: la vista dice cosa le serve per rispondere.
             steps.innerHTML = `<p class="rt-idle">${escapeHtml(tr('rtTraceIdle'))}</p>`;
             if (play) play.style.display = 'none';
@@ -1257,6 +1621,28 @@
         rtTraceVerdict(RT_VERDICTS[_trace.outcome] || 'muted',
                        tr((RT_END[_trace.outcome] || RT_END['non interrogato']).label));
         rtTraceSecVerdict(_trace.security_verdict || '');
+        if (exitBox) {
+            const parts = [];
+            if (_trace.outcome === 'fuori inventario' && _trace.exit_local !== undefined) {
+                parts.push(`<div>${escapeHtml(tr(_trace.exit_local ? 'rtTraceExitLocal' : 'rtTraceExitRemote'))}</div>`);
+            }
+            if (_trace.outcome === 'biforcazione' && (_trace.branches || []).length) {
+                const items = _trace.branches.map(b => {
+                    const r = b.route || {};
+                    const follow = b.next_device_ip
+                        ? `<button type="button" class="btn btn-secondary btn-small" data-action="rt-follow-branch" data-src="${escapeHtml(b.next_device_ip)}" style="width:auto; margin:0;">${escapeHtml(tr('rtTraceBranchFollow', { dev: b.next_device_ip }))}</button>`
+                        : '';
+                    return `<div class="rt-branch-item"><span>${rtKind(r.type)}${escapeHtml(r.network || '')} → ${escapeHtml(r.gateway || r.interface || '?')}</span>${follow}</div>`;
+                }).join('');
+                parts.push(`<div><strong>${escapeHtml(tr('rtTraceBranchesTitle'))}</strong><div class="rt-branches">${items}</div></div>`);
+            }
+            exitBox.hidden = parts.length === 0;
+            exitBox.innerHTML = parts.join('');
+        }
+        const effSrc = (_trace.effective_flow && _trace.effective_flow.src_ip)
+            || (/** @type {HTMLInputElement|null} */ (document.getElementById('rtTraceSrcIp'))?.value || '').trim();
+        if (revBtn) revBtn.hidden = !effSrc;
+        renderRtReverseBox();
         rail.style.display = '';
         rail.innerHTML = rtRailHtml(_trace);
         steps.innerHTML = rtStepsHtml(_trace);
@@ -1453,6 +1839,7 @@
                     ${hop.from_backup
                         ? `<span class="badge rt-badge-backup">${escapeHtml(tr('rtFromBackup'))}</span>`
                         : ''}
+                    ${hop.device_ip ? `<button type="button" class="btn btn-secondary btn-small" data-action="rt-open-policy" data-dev="${escapeHtml(hop.device_ip)}" style="width:auto; margin:0 0 0 auto;"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> ${escapeHtml(tr('rtTraceInspectPolicy'))}</button>` : ''}
                   </div>
                   ${chips}
                   <p class="rt-step-say">${escapeHtml(say)}${backup}</p>
@@ -1500,7 +1887,10 @@
         const dst = /** @type {HTMLInputElement|null} */ (
             document.getElementById('rtTraceDst'));
         const out = document.getElementById('rtProbeOut');
+        const btn = /** @type {HTMLButtonElement|null} */ (
+            document.getElementById('btnRtProbe'));
         if (!src || !dst || !out) return;
+        if (btn) btn.disabled = true;
         out.style.display = '';
         out.textContent = tr('rtProbeRunning');
         let data = null;
@@ -1519,6 +1909,8 @@
         } catch (e) {
             out.innerHTML = `<span class="rt-ink-bad">${escapeHtml(String(e))}</span>`;
             return;
+        } finally {
+            if (btn) btn.disabled = false;
         }
         if (data.error) {
             out.innerHTML = `<span class="rt-ink-bad">${escapeHtml(data.error)}</span>`;
@@ -1541,12 +1933,25 @@
     }
 
     document.getElementById('btnRtTrace')?.addEventListener('click', loadRtTrace);
+    document.getElementById('btnRtTraceReverse')?.addEventListener('click', runRtReverseTrace);
+    document.getElementById('btnRtTraceSwap')?.addEventListener('click', () => {
+        const srcIpEl = /** @type {HTMLInputElement|null} */ (document.getElementById('rtTraceSrcIp'));
+        const dstEl = /** @type {HTMLInputElement|null} */ (document.getElementById('rtTraceDst'));
+        if (!srcIpEl || !dstEl) return;
+        const tmp = srcIpEl.value;
+        srcIpEl.value = dstEl.value;
+        dstEl.value = tmp;
+        syncRtTraceFlowInputs();
+    });
+    document.getElementById('rtTraceSrcIp')?.addEventListener('input', syncRtTraceFlowInputs);
+    ['rtTraceSrcIp', 'rtTraceDst', 'rtTraceDport', 'rtTraceVrf'].forEach(id => {
+        document.getElementById(id)?.addEventListener('keydown', e => {
+            if (/** @type {KeyboardEvent} */ (e).key === 'Enter') loadRtTrace();
+        });
+    });
     document.getElementById('btnRtTracePlay')?.addEventListener('click', rtTracePlay);
     document.getElementById('btnRtProbe')?.addEventListener('click', runRtProbe);
     document.getElementById('rtDeviceFilter')?.addEventListener('picker-change', rtTraceSyncSources);
-    document.getElementById('rtTraceDst')?.addEventListener('keydown', e => {
-        if (/** @type {KeyboardEvent} */ (e).key === 'Enter') loadRtTrace();
-    });
 
     // Search re-renders what is already loaded. An address also becomes the
     // path analysis destination: the next question after "who routes it" is
@@ -1558,6 +1963,9 @@
             const q = rtQuery(rtSearchValue());
             const dst = /** @type {HTMLInputElement|null} */ (document.getElementById('rtTraceDst'));
             if (q.kind === 'ip' && dst) dst.value = q.text;
+            if (q.kind === 'ip' && _rtLoaded.length) {
+                setRtDrawer(true, 'detail');
+            }
             renderRtMatrix();
         }, 150);
     });
@@ -1566,14 +1974,104 @@
         /** @type {HTMLElement} */ (e.currentTarget).setAttribute('aria-pressed', String(_rtDiffOnly));
         renderRtMatrix();
     });
+    document.getElementById('btnRtHolesOnly')?.addEventListener('click', e => {
+        _rtHolesOnly = !_rtHolesOnly;
+        /** @type {HTMLElement} */ (e.currentTarget).setAttribute('aria-pressed', String(_rtHolesOnly));
+        renderRtMatrix();
+    });
+    document.getElementById('rtDensitySelect')?.addEventListener('change', e => {
+        _rtDensity = /** @type {HTMLSelectElement} */ (e.currentTarget).value || 'regular';
+        const tbl = document.getElementById('rtMxTable');
+        if (tbl) {
+            tbl.classList.remove('rt-dense', 'rt-regular', 'rt-comfy');
+            tbl.classList.add('rt-' + _rtDensity);
+        }
+    });
+    document.getElementById('btnRtExportCsv')?.addEventListener('click', exportRtMatrixCsv);
+    document.getElementById('rtViewTabs')?.addEventListener('click', e => {
+        const btn = /** @type {HTMLElement|null} */ (/** @type {HTMLElement} */ (e.target).closest('[data-rt-view]'));
+        if (btn) switchRtView(btn.getAttribute('data-rt-view') || 'matrix');
+    });
+    document.getElementById('btnRtDrawerToggle')?.addEventListener('click', () => {
+        setRtDrawer(!_rtDrawerOpen);
+    });
+    document.getElementById('btnRtDrawerClose')?.addEventListener('click', () => {
+        setRtDrawer(false);
+    });
+    document.getElementById('btnRtDrawerExpandTrace')?.addEventListener('click', () => {
+        switchRtView('trace');
+    });
+    document.getElementById('rtDrawerTabs')?.addEventListener('click', e => {
+        const btn = /** @type {HTMLElement|null} */ (/** @type {HTMLElement} */ (e.target).closest('[data-rt-dtab]'));
+        if (btn) setRtDrawer(true, btn.getAttribute('data-rt-dtab') || 'detail');
+    });
+    document.getElementById('rtActiveFilters')?.addEventListener('click', e => {
+        const btn = /** @type {HTMLElement|null} */ (/** @type {HTMLElement} */ (e.target).closest('[data-clear-filter]'));
+        if (!btn) return;
+        const kind = btn.getAttribute('data-clear-filter');
+        if (kind === 'search' || kind === 'all') {
+            const s = /** @type {HTMLInputElement|null} */ (document.getElementById('rtSearch'));
+            if (s) s.value = '';
+        }
+        if (kind === 'type') _rtTypes.delete(btn.getAttribute('data-val') || '');
+        if (kind === 'all') _rtTypes.clear();
+        if (kind === 'iface' || kind === 'all') _rtIface = '';
+        if (kind === 'diff' || kind === 'all') {
+            _rtDiffOnly = false;
+            document.getElementById('btnRtDiffOnly')?.setAttribute('aria-pressed', 'false');
+        }
+        if (kind === 'holes' || kind === 'all') {
+            _rtHolesOnly = false;
+            document.getElementById('btnRtHolesOnly')?.setAttribute('aria-pressed', 'false');
+        }
+        renderRtMatrix();
+    });
+    document.getElementById('rtDrawer')?.addEventListener('click', e => {
+        const btn = /** @type {HTMLElement|null} */ (/** @type {HTMLElement} */ (e.target).closest('[data-action]'));
+        if (!btn) return;
+        const act = btn.getAttribute('data-action');
+        if (act === 'rt-lk-toggle') {
+            const dev = btn.dataset.dev || '';
+            if (_rtLkOpen.has(dev)) _rtLkOpen.delete(dev); else _rtLkOpen.add(dev);
+            renderRtLookup(rtQuery(rtSearchValue()));
+        } else if (act === 'rt-drawer-trace') {
+            const srcSel = /** @type {HTMLSelectElement|null} */ (document.getElementById('rtTraceSrc'));
+            const dstEl = /** @type {HTMLInputElement|null} */ (document.getElementById('rtTraceDst'));
+            if (srcSel && btn.dataset.src) srcSel.value = btn.dataset.src;
+            if (dstEl && btn.dataset.dst) dstEl.value = btn.dataset.dst;
+            setRtDrawer(true, 'trace');
+            loadRtTrace();
+        } else if (act === 'rt-open-policy' && btn.dataset.dev) {
+            openPolicyFromRouteHop(btn.dataset.dev, '', btn.dataset.dstIp || '');
+        } else if (act === 'rt-goto-flows') {
+            switchRtView('flows');
+        } else if (act === 'rt-copy-prefix' && btn.dataset.prefix && navigator.clipboard) {
+            navigator.clipboard.writeText(btn.dataset.prefix);
+            if (typeof showToast === 'function') showToast(tr('rtDrawerCopied'), 'success');
+        }
+    });
+    document.getElementById('rtViewTrace')?.addEventListener('click', e => {
+        const btn = /** @type {HTMLElement|null} */ (/** @type {HTMLElement} */ (e.target).closest('[data-action]'));
+        if (!btn) return;
+        const act = btn.getAttribute('data-action');
+        if (act === 'rt-open-policy' && btn.dataset.dev) {
+            openPolicyFromRouteHop(btn.dataset.dev);
+        } else if (act === 'rt-follow-branch' && btn.dataset.src) {
+            const srcSel = /** @type {HTMLSelectElement|null} */ (document.getElementById('rtTraceSrc'));
+            if (srcSel) srcSel.value = btn.dataset.src;
+            loadRtTrace();
+        }
+    });
     document.getElementById('rtTypeChips')?.addEventListener('click', e => {
         const chip = /** @type {HTMLElement} */ (e.target).closest('[data-action="rt-type"]');
         if (!chip) return;
         const t = chip.getAttribute('data-type') || '';
         if (_rtTypes.has(t)) _rtTypes.delete(t); else _rtTypes.add(t);
         renderRtMatrix();
-        /** @type {HTMLElement|null} */ (document.querySelector(
-            `#rtTypeChips [data-type="${CSS.escape(t)}"]`))?.focus();
+        if (typeof document.querySelector === 'function') {
+            /** @type {HTMLElement|null} */ (document.querySelector(
+                `#rtTypeChips [data-type="${CSS.escape(t)}"]`))?.focus();
+        }
     });
     // Rings: a type is the same filter as its chip; an interface is its own,
     // exact (a search for "port1" would also match port10).
@@ -1586,10 +2084,6 @@
         if (i) _rtIface = _rtIface === i ? '' : i;
         renderRtMatrix();
     });
-    // Collapsed by default: drawn at its real width once opened.
-    document.getElementById('rtSkPanel')?.addEventListener('toggle', e => {
-        if (/** @type {HTMLDetailsElement} */ (e.currentTarget).open) renderRtSankey(rtVisible(rtQuery(rtSearchValue())));
-    });
     // Sankey: its own type switches (the table keeps its chips), and the
     // routes behind a node or ribbon on double click / Enter.
     document.getElementById('rtSkTypes')?.addEventListener('click', e => {
@@ -1598,13 +2092,16 @@
         const t = chip.getAttribute('data-type') || '';
         if (_skHidden.has(t)) _skHidden.delete(t); else _skHidden.add(t);
         renderRtSankey(rtVisible(rtQuery(rtSearchValue())));
-        /** @type {HTMLElement|null} */ (document.querySelector(
-            `#rtSkTypes [data-type="${CSS.escape(t)}"]`))?.focus();
+        if (typeof document.querySelector === 'function') {
+            /** @type {HTMLElement|null} */ (document.querySelector(
+                `#rtSkTypes [data-type="${CSS.escape(t)}"]`))?.focus();
+        }
     });
     const skTarget = e => /** @type {Element} */ (e.target).closest('[data-sk]');
     // Hovering (or focusing) a node keeps its own ribbons lit and dims the
     // rest: with a dozen hops the eye cannot follow one flow otherwise.
     const skFocus = e => {
+        if (typeof document.querySelector !== 'function') return;
         const svg = document.querySelector('#rtSankey svg');
         const el = skTarget(e);
         if (!svg) return;
@@ -1633,31 +2130,28 @@
     document.getElementById('rtSkDetail')?.addEventListener('click', e => {
         if (!/** @type {Element} */ (e.target).closest('[data-action="rt-sk-close"]')) return;
         _skSel = '';
-        document.querySelectorAll('#rtSankey .rt-sk-on').forEach(el => el.classList.remove('rt-sk-on'));
+        if (typeof document.querySelectorAll === 'function') {
+            document.querySelectorAll('#rtSankey .rt-sk-on').forEach(el => el.classList.remove('rt-sk-on'));
+        }
         renderRtSkDetail();
     });
     document.getElementById('rtMxBody')?.addEventListener('click', e => {
-        const btn = /** @type {HTMLElement} */ (e.target).closest('[data-action="rt-mx-toggle"]');
-        if (!btn) return;
-        const key = btn.getAttribute('data-key') || '';
-        if (_rtOpen.has(key)) _rtOpen.delete(key); else _rtOpen.add(key);
+        const trg = /** @type {HTMLElement} */ (e.target);
+        const btn = trg.closest('[data-action="rt-mx-toggle"]');
+        const row = trg.closest('tr.rt-mx-row');
+        const key = (btn && btn.getAttribute('data-key')) || (row && row.getAttribute('data-key')) || '';
+        if (!key) return;
+        if (_rtSelectedKey === key && _rtDrawerOpen && btn) {
+            setRtDrawer(false);
+        } else {
+            _rtSelectedKey = key;
+            setRtDrawer(true, 'detail');
+        }
         renderRtMatrix();
-        /** @type {HTMLElement|null} */ (document.querySelector(
-            `#rtMxBody [data-key="${CSS.escape(key)}"]`))?.focus();
     });
     // La selezione non fa partire da sola la query: si sceglie e si preme
     // Leggi tabelle. Ogni apparato in piu' e' una sessione in piu' aperta.
     document.getElementById('btnRtRefresh')?.addEventListener('click', loadRoutesTab);
-
-    document.getElementById('rtLookup')?.addEventListener('click', e => {
-        const btn = /** @type {HTMLElement|null} */ (/** @type {HTMLElement} */ (e.target).closest('[data-action="rt-lk-toggle"]'));
-        if (!btn) return;
-        const dev = btn.dataset.dev || '';
-        if (_rtLkOpen.has(dev)) _rtLkOpen.delete(dev); else _rtLkOpen.add(dev);
-        renderRtLookup(rtQuery(rtSearchValue()));
-        /** @type {HTMLElement|null} */ (document.querySelector(
-            `#rtLookup [data-dev="${CSS.escape(dev)}"]`))?.focus();
-    });
 
     // Cambiare tenant svuota la selezione: gli apparati scelti prima possono
     // non essere piu' in scope, e le righe gia' a schermo sarebbero di un
@@ -1667,6 +2161,9 @@
         _rtRows = []; _rtErrors = []; _rtLoaded = []; _rtMatrix = []; _rtContext = {};
         _rtOpen.clear();
         _rtIface = '';
+        _rtSelectedKey = '';
+        _rtReverseTrace = null;
+        setRtDrawer(false);
         routesTabShown();
     });
 

@@ -9,11 +9,62 @@
     let ptSelectedIp = null;
     let ptExamplesCache = {};
     let ptFindingsCache = {};
+    let ptMetaCache = {};
     let ptRenderedFindings = [];
+    let ptLastWhatIf = null;
+    let ptWiChangedOnly = true;
+    let ptExCatchAllOnly = false;
+    let ptExUnparsedOnly = false;
 
-    function loadPolicyTestTab() {
+    async function loadPolicyTestTab() {
+        const pending = window.ptPendingContext;
+        if (pending) window.ptPendingContext = null;
+
         populatePolicyTenantSelect();
+        if (pending && pending.tenant) {
+            const tenantSel = /** @type {HTMLSelectElement|null} */ (document.getElementById('ptTenantSelect'));
+            if (tenantSel && Array.from(tenantSel.options).some(o => o.value === pending.tenant)) {
+                tenantSel.value = pending.tenant;
+            }
+        }
+        if (pending && pending.subtab) {
+            ptActiveSubtab = pending.subtab;
+        }
         populatePolicyDeviceSelect();
+
+        if (pending && pending.device_ip) {
+            const devSel = /** @type {HTMLSelectElement|null} */ (document.getElementById('ptDeviceSelect'));
+            if (devSel && Array.from(devSel.options).some(o => o.value === pending.device_ip)) {
+                devSel.value = pending.device_ip;
+                ptSelectedIp = pending.device_ip;
+            }
+        }
+        switchPolicySubtab(ptActiveSubtab);
+        if (ptSelectedIp) {
+            await loadDeviceMetadata(ptSelectedIp);
+        } else {
+            updateDeviceMeta();
+        }
+        if (pending) {
+            if (pending.subtab === 'whatif') {
+                const flowsEl = /** @type {HTMLTextAreaElement|null} */ (document.getElementById('ptWiCustomFlows'));
+                if (flowsEl && pending.src_ip && pending.dst_ip) {
+                    flowsEl.value = `${pending.src_ip},${pending.dst_ip},${pending.proto || 'tcp'},${pending.dport || ''}`;
+                }
+            } else {
+                const sEl = /** @type {HTMLInputElement|null} */ (document.getElementById('ptSrcIp'));
+                const dEl = /** @type {HTMLInputElement|null} */ (document.getElementById('ptDstIp'));
+                const pEl = /** @type {HTMLSelectElement|null} */ (document.getElementById('ptProto'));
+                const dpEl = /** @type {HTMLInputElement|null} */ (document.getElementById('ptDport'));
+                if (sEl && pending.src_ip) sEl.value = pending.src_ip;
+                if (dEl && pending.dst_ip) dEl.value = pending.dst_ip;
+                if (pEl && pending.proto) pEl.value = String(pending.proto).toLowerCase();
+                if (dpEl && pending.dport) dpEl.value = String(pending.dport);
+                if (pending.autoRun && pending.src_ip && pending.dst_ip && ptSelectedIp) {
+                    runPolicyTrace();
+                }
+            }
+        }
         renderPolicySelectionState();
     }
 
@@ -102,12 +153,26 @@
                 : '');
         sel.value = devices.some(d => d.IP === cur) ? cur : '';
         ptSelectedIp = sel.value || null;
-        updateDeviceMeta();
+        const fwBanner = document.getElementById('ptFirewallNotice');
+        const fwBannerText = document.getElementById('ptFirewallNoticeText');
+        if (fwBanner && fwBannerText) {
+            fwBanner.hidden = hiddenFirewalls <= 0;
+            if (hiddenFirewalls > 0) {
+                fwBannerText.textContent = tr('ptFirewallsBanner', { n: hiddenFirewalls });
+            }
+        }
+        updateDeviceMeta(ptSelectedIp ? ptMetaCache[ptSelectedIp] : null);
     }
 
     /** Placeholder in every panel until a tenant AND a device are chosen.
      *  Returns true when it painted, i.e. when there is nothing to show yet. */
     function renderPolicySelectionState() {
+        const badge = document.getElementById('ptFindingsBadge');
+        if (badge) {
+            const cachedFindings = ptSelectedIp ? ptFindingsCache[ptSelectedIp] : null;
+            badge.hidden = !(cachedFindings && cachedFindings.length > 0);
+            if (cachedFindings) badge.textContent = String(cachedFindings.length);
+        }
         if (ptSelectedIp) return false;
         const L = i18n[currentLang];
         const msg = !policyTenant() ? L.ptChooseTenantFirst : L.ptChooseDeviceFirst;
@@ -120,10 +185,69 @@
                 const el = document.getElementById(id);
                 if (el) el.innerHTML = empty;
             });
+        const cart = document.getElementById('ptFindingsCartouche');
+        if (cart) cart.hidden = true;
         return true;
     }
 
-    function updateDeviceMeta() {
+    function populateDatalists(meta) {
+        const fill = (id, items) => {
+            const dl = document.getElementById(id);
+            if (!dl) return;
+            dl.replaceChildren(...items.map(({ value, label }) => {
+                const opt = document.createElement('option');
+                opt.value = value;
+                if (label) opt.label = label;
+                return opt;
+            }));
+        };
+        if (!meta) {
+            ['ptIntfList', 'ptAclList', 'ptRuleList', 'ptRouteList'].forEach(id => fill(id, []));
+            return;
+        }
+        fill('ptIntfList', (meta.interfaces || []).map(itf => ({
+            value: itf.name,
+            label: [itf.ip, itf.zone ? `zone:${itf.zone}` : '', itf.acl_in ? `in:${itf.acl_in}` : '', itf.acl_out ? `out:${itf.acl_out}` : ''].filter(Boolean).join(' · '),
+        })));
+        fill('ptAclList', (meta.acls || []).map(a => ({
+            value: a.name === 'firewall_policy' ? '' : a.name,
+            label: `${a.name} (${a.rule_count})`,
+        })).filter(x => x.value));
+        fill('ptRuleList', (meta.rules || []).map(r => ({
+            value: r.id,
+            label: `${r.acl !== 'firewall_policy' ? r.acl + ' · ' : ''}#${r.id}${r.name ? ' ' + r.name : ''} (${r.action})`,
+        })));
+        fill('ptRouteList', (meta.static_routes || []).map(r => ({
+            value: r.prefix,
+            label: `${r.next_hop || r.interface || 'direct'} · AD ${r.distance}${r.vrf ? ' · VRF ' + r.vrf : ''}`,
+        })));
+    }
+
+    async function loadDeviceMetadata(ip) {
+        if (!ip) {
+            populateDatalists(null);
+            updateDeviceMeta(null);
+            return;
+        }
+        if (ptMetaCache[ip]) {
+            populateDatalists(ptMetaCache[ip]);
+            updateDeviceMeta(ptMetaCache[ip]);
+            return;
+        }
+        try {
+            const res = await apiFetch(`/api/policy-test/${encodeURIComponent(ip)}/metadata`);
+            if (res && res.ok) {
+                const meta = await res.json();
+                ptMetaCache[ip] = meta;
+                if (ptSelectedIp === ip) {
+                    populateDatalists(meta);
+                    updateDeviceMeta(meta);
+                }
+            }
+        } catch (e) { /* keep basic inventory badges */ }
+    }
+
+    function updateDeviceMeta(meta) {
         const metaEl = document.getElementById('ptDeviceMeta');
         if (!metaEl) return;
         const dev = ptSelectedIp
@@ -131,7 +255,24 @@
         if (!dev) { metaEl.innerHTML = ''; return; }
         const group = dev.Group || '';
         const vendor = (dev.Vendor || dev.Type || 'cisco').toUpperCase();
-        metaEl.innerHTML = `<span class="badge">${escapeHtml(tr('ptTenantLabel'))}: ${escapeHtml(group)}</span> <span class="badge">Vendor: ${escapeHtml(vendor)}</span>`;
+        const chips = [
+            `<span class="badge">${escapeHtml(tr('ptTenantLabel'))}: ${escapeHtml(group)}</span>`,
+            `<span class="badge">Vendor: ${escapeHtml(vendor)}</span>`,
+        ];
+        if (meta) {
+            if (meta.config_type) {
+                chips.push(`<span class="badge">${escapeHtml(tr('ptConfigTypeBadge'))}: ${escapeHtml(String(meta.config_type).toUpperCase())}</span>`);
+            }
+            const tsLabel = meta.backup_ts
+                ? tr('ptBackupMeta', { at: new Date(meta.backup_ts * 1000).toLocaleString() })
+                : tr('ptBackupUnknown');
+            chips.push(`<span class="badge">${escapeHtml(tsLabel)}</span>`);
+            if (meta.dynamic_routing_present) {
+                const protos = (meta.protocols || []).join(', ');
+                chips.push(`<span class="badge badge-warning">${escapeHtml(tr('ptDynRoutingChip'))}${protos ? ` (${escapeHtml(protos)})` : ''}</span>`);
+            }
+        }
+        metaEl.innerHTML = chips.join(' ');
     }
 
     function switchPolicySubtab(subtab) {
@@ -176,8 +317,8 @@
 
     async function runPolicyTrace() {
         if (!ptSelectedIp) {
-            alert(policyTenant() ? tr('ptChooseDeviceFirst')
-                                 : tr('ptChooseTenantFirst'));
+            showToast(policyTenant() ? tr('ptChooseDeviceFirst')
+                                     : tr('ptChooseTenantFirst'), 'warning');
             return;
         }
 
@@ -187,17 +328,18 @@
         const dportRaw = (document.getElementById('ptDport')?.value || '').trim();
         const sportRaw = (document.getElementById('ptSport')?.value || '').trim();
         const ingress = (document.getElementById('ptIngressIntf')?.value || '').trim() || null;
+        const egress = (document.getElementById('ptEgressIntf')?.value || '').trim() || null;
         const established = !!document.getElementById('ptEstablished')?.checked;
         const icmpTypeRaw = (document.getElementById('ptIcmpType')?.value || '').trim();
 
         if (!srcIp || !dstIp) {
-            alert('Inserisci IP Sorgente e IP Destinazione.');
+            showToast(tr('ptNeedSrcDst'), 'warning');
             return;
         }
 
         const container = document.getElementById('ptTraceResultsContainer');
         if (container) {
-            container.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><div style="margin-top:10px;">Valutazione flow policy in corso...</div></div>`;
+            container.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><div style="margin-top:10px;">${escapeHtml(tr('ptLoadingTrace'))}</div></div>`;
         }
 
         const payload = {
@@ -207,6 +349,7 @@
             dport: dportRaw ? parseInt(dportRaw, 10) : null,
             sport: sportRaw ? parseInt(sportRaw, 10) : null,
             ingress_intf: ingress,
+            egress_intf: egress,
             established: established,
             // Only meaningful for ICMP, and only when the operator picked a
             // message: left unset the engine cannot tell an echo from a reply.
@@ -220,10 +363,10 @@
                 body: JSON.stringify(payload),
             });
 
-            if (!res.ok) {
-                const errData = await res.json().catch(() => ({}));
+            if (!res || !res.ok) {
+                const errData = res ? await res.json().catch(() => ({})) : {};
                 if (container) {
-                    container.innerHTML = `<div class="panel" style="padding:16px; background:var(--lamp-fault-wash); border-left:1px solid var(--danger);"><i class="fa-solid fa-triangle-exclamation" style="color:var(--danger);"></i> <strong>Errore:</strong> ${escapeHtml(errData.detail || 'Impossibile completare il trace.')}</div>`;
+                    container.innerHTML = `<div class="panel" style="padding:16px; background:var(--lamp-fault-wash); border-color:var(--danger);"><i class="fa-solid fa-triangle-exclamation" style="color:var(--danger);"></i> <strong>${escapeHtml(tr('ptErrorPrefix'))}</strong> ${escapeHtml(errData.detail || tr('ptTraceErrGeneric'))}</div>`;
                 }
                 return;
             }
@@ -232,9 +375,18 @@
             renderTraceResult(trace);
         } catch (e) {
             if (container) {
-                container.innerHTML = `<div class="panel" style="padding:16px; background:var(--lamp-fault-wash); border-left:1px solid var(--danger);"><i class="fa-solid fa-triangle-exclamation" style="color:var(--danger);"></i> Errore di rete durante il trace.</div>`;
+                container.innerHTML = `<div class="panel" style="padding:16px; background:var(--lamp-fault-wash); border-color:var(--danger);"><i class="fa-solid fa-triangle-exclamation" style="color:var(--danger);"></i> ${escapeHtml(tr('ptTraceNetErr'))}</div>`;
             }
         }
+    }
+
+    function stepKindTitle(kind) {
+        if (kind === 'acl_in') return tr('ptPipelineAclIn');
+        if (kind === 'route') return tr('ptPipelineRoute');
+        if (kind === 'acl_out') return tr('ptPipelineAclOut');
+        if (kind === 'policy') return tr('ptPipelinePolicy');
+        if (kind === 'skipped_policy') return tr('ptPipelineSkipped');
+        return kind || '';
     }
 
     function renderTraceResult(trace) {
@@ -248,19 +400,19 @@
         let vIcon = 'fa-circle-question';
 
         if (verdict === 'PERMIT') {
-            vColor = 'var(--success)';
+            vColor = 'var(--lamp-up-ink)';
             vBg = 'var(--lamp-up-wash)';
-            vBorder = 'var(--success)';
+            vBorder = 'var(--lamp-up-ink)';
             vIcon = 'fa-circle-check';
         } else if (verdict === 'DENY') {
-            vColor = 'var(--danger)';
+            vColor = 'var(--lamp-fault-ink)';
             vBg = 'var(--lamp-fault-wash)';
-            vBorder = 'var(--danger)';
+            vBorder = 'var(--lamp-fault-ink)';
             vIcon = 'fa-circle-xmark';
         } else if (verdict === 'UNKNOWN') {
-            vColor = 'var(--warning)';
+            vColor = 'var(--lamp-warn-ink)';
             vBg = 'var(--lamp-warn-wash)';
-            vBorder = 'var(--warning)';
+            vBorder = 'var(--lamp-warn-ink)';
             vIcon = 'fa-triangle-exclamation';
         }
 
@@ -269,18 +421,18 @@
             <div style="display:flex; align-items:center; gap:14px;">
                 <i class="fa-solid ${vIcon} fa-2x" style="color:${vColor};"></i>
                 <div>
-                    <div style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--text-muted);">Verdetto Finale</div>
+                    <div style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--text-muted);">${escapeHtml(tr('ptVerdictLabel'))}</div>
                     <div style="font-family:var(--font-legend); font-size:21px; font-weight:600; letter-spacing:0.06em; color:${vColor};">${escapeHtml(verdict)}</div>
                 </div>
             </div>
             <div>
-                ${trace.nat_applied ? '<span class="badge" style="background:var(--primary); color:#fff;"><i class="fa-solid fa-arrows-split-up-and-left"></i> Source NAT Attivo</span>' : ''}
+                ${trace.nat_applied ? `<span class="badge" style="background:var(--primary); color:var(--on-lamp);"><i class="fa-solid fa-arrows-split-up-and-left"></i> ${escapeHtml(tr('ptSourceNatActive'))}</span>` : ''}
             </div>
         </div>`;
 
         if (trace.dynamic_routing_present) {
             html += `
-            <div style="padding:10px 14px; margin-bottom:16px; border:1px solid var(--warning); background:var(--lamp-warn-wash); color:var(--warning); font-size:12px; display:flex; align-items:center; gap:10px;">
+            <div style="padding:10px 14px; margin-bottom:16px; border:1px solid var(--warning); background:var(--lamp-warn-wash); color:var(--lamp-warn-ink); font-size:12px; display:flex; align-items:center; gap:10px; border-radius:var(--radius);">
                 <i class="fa-solid fa-triangle-exclamation"></i>
                 <span>${escapeHtml(tr('ptDynamicRoutingWarning'))}</span>
             </div>`;
@@ -290,8 +442,8 @@
         const unresolved = trace.unresolved || [];
         if (unresolved.length) {
             html += `
-            <div style="padding:10px 14px; margin-bottom:16px; border:1px solid var(--warning); background:var(--lamp-warn-wash); font-size:12px;">
-                <div style="font-weight:600; margin-bottom:6px; color:var(--warning);">
+            <div style="padding:10px 14px; margin-bottom:16px; border:1px solid var(--warning); background:var(--lamp-warn-wash); font-size:12px; border-radius:var(--radius);">
+                <div style="font-weight:600; margin-bottom:6px; color:var(--lamp-warn-ink);">
                     <i class="fa-solid fa-circle-question"></i> ${escapeHtml(tr('ptUnresolvedTitle'))}
                 </div>
                 <ul style="margin:0; padding-left:18px; color:var(--text);">
@@ -302,54 +454,53 @@
 
         const steps = trace.steps || [];
         const routeStep = steps.find(s => s.kind === 'route');
-        const matchStep = steps.find(s => s.action === 'permit' || s.action === 'deny' || s.kind === 'policy' || s.kind === 'acl_in' || s.kind === 'acl_out') || steps[0];
-        const ingressLabel = (document.getElementById('ptIngressIntf')?.value || (routeStep && routeStep.ingress) || 'Auto / Ingress').trim();
-        const nextHopLabel = (routeStep && (routeStep.next_hop || routeStep.prefix)) ? `${routeStep.next_hop || 'Connected'} via ${routeStep.egress || 'auto'}` : 'Direct / Connected';
-        const matchLabel = matchStep ? `${matchStep.acl ? `[${matchStep.acl}] ` : ''}${matchStep.rule_id ? `Rule ${matchStep.rule_id}: ` : ''}${matchStep.raw_text || matchStep.action || 'Default Match'}` : 'Default Decision';
-        const egressLabel = (routeStep && routeStep.egress) || 'Target Egress Intf';
+        const ingressLabel = (document.getElementById('ptIngressIntf')?.value || (trace.flow && trace.flow.ingress_intf) || tr('ptAutoLabel')).trim();
+        const egressLabel = (routeStep && routeStep.egress) || (trace.flow && trace.flow.egress_intf) || '';
 
-        // Step-by-step visual flowchart decision pipeline
-        html += `
-        <div class="pt-pipeline">
-            <div class="pt-pipeline-node">
-                <div class="pt-pipeline-node-title"><i class="fa-solid fa-arrow-right-to-bracket" style="color:var(--primary);"></i> Ingress Interface</div>
+        // Dynamic visual flowchart pipeline derived strictly from actual trace.steps
+        const pipeNodes = [
+            `<div class="pt-pipeline-node">
+                <div class="pt-pipeline-node-title"><i class="fa-solid fa-arrow-right-to-bracket" style="color:var(--primary);"></i> ${escapeHtml(tr('ptPipelineIngress'))}</div>
                 <div class="pt-pipeline-node-body"><code>${escapeHtml(ingressLabel)}</code></div>
-            </div>
-            <div class="pt-pipeline-connector"><i class="fa-solid fa-arrow-down"></i></div>
-
-            <div class="pt-pipeline-node">
-                <div class="pt-pipeline-node-title"><i class="fa-solid fa-route" style="color:var(--accent);"></i> Route Lookup</div>
-                <div class="pt-pipeline-node-body"><code>${escapeHtml(nextHopLabel)}</code></div>
-            </div>
-            <div class="pt-pipeline-connector"><i class="fa-solid fa-arrow-down"></i></div>
-
-            <div class="pt-pipeline-node">
-                <div class="pt-pipeline-node-title"><i class="fa-solid fa-shield-halved" style="color:var(--warning);"></i> Policy &amp; ACL Match</div>
-                <div class="pt-pipeline-node-body" style="font-size:12px;">${escapeHtml(matchLabel)}</div>
-            </div>
-            <div class="pt-pipeline-connector"><i class="fa-solid fa-arrow-down"></i></div>
-
-            <div class="pt-pipeline-node" style="border-color:${vBorder}; background:${vBg};">
-                <div class="pt-pipeline-node-title" style="color:${vColor};"><i class="fa-solid ${vIcon}"></i> Verdict Decision</div>
-                <div class="pt-pipeline-node-body" style="font-weight:700; font-size:15px; color:${vColor}; letter-spacing:0.05em;">${escapeHtml(verdict)}</div>
-            </div>
-
-            ${trace.nat_applied ? `
-            <div class="pt-pipeline-connector"><i class="fa-solid fa-arrow-down"></i></div>
-            <div class="pt-pipeline-node" style="border-color:rgba(59,130,246,0.5); background:rgba(59,130,246,0.08);">
-                <div class="pt-pipeline-node-title" style="color:var(--primary);"><i class="fa-solid fa-shuffle"></i> Source NAT Applied</div>
-                <div class="pt-pipeline-node-body"><code>Translated: Source NAT</code></div>
-            </div>` : ''}
-
-            <div class="pt-pipeline-connector"><i class="fa-solid fa-arrow-down"></i></div>
-            <div class="pt-pipeline-node">
-                <div class="pt-pipeline-node-title"><i class="fa-solid fa-arrow-right-from-bracket" style="color:var(--success);"></i> Egress Interface</div>
+            </div>`,
+        ];
+        steps.forEach(step => {
+            const act = String(step.action || '').toLowerCase();
+            const stateCls = act === 'permit' ? 'is-permit' : (act === 'deny' ? 'is-deny' : (act === 'unknown' ? 'is-unknown' : ''));
+            let bodyText;
+            if (step.kind === 'route') {
+                const hop = step.next_hop || tr('ptConnectedLabel');
+                bodyText = `${hop} ${tr('ptViaLabel')} ${step.egress || tr('ptAutoLabel')}${step.prefix ? ` (${step.prefix})` : ''}`;
+            } else {
+                bodyText = `${step.acl ? `[${step.acl}] ` : ''}${step.rule_id ? `Rule ${step.rule_id}: ` : ''}${step.raw_text || step.action || tr('ptDefaultDecision')}`;
+            }
+            pipeNodes.push(`<div class="pt-pipeline-node ${stateCls}">
+                <div class="pt-pipeline-node-title">${escapeHtml(stepKindTitle(step.kind))}</div>
+                <div class="pt-pipeline-node-body">${escapeHtml(bodyText)}</div>
+            </div>`);
+        });
+        if (trace.nat_applied) {
+            pipeNodes.push(`<div class="pt-pipeline-node is-nat">
+                <div class="pt-pipeline-node-title" style="color:var(--cond-a);"><i class="fa-solid fa-shuffle"></i> ${escapeHtml(tr('ptPipelineNat'))}</div>
+                <div class="pt-pipeline-node-body"><code>${escapeHtml(tr('ptSourceNatActive'))}</code></div>
+            </div>`);
+        }
+        const vNodeCls = verdict === 'PERMIT' ? 'is-permit' : (verdict === 'DENY' ? 'is-deny' : 'is-unknown');
+        pipeNodes.push(`<div class="pt-pipeline-node ${vNodeCls}">
+            <div class="pt-pipeline-node-title" style="color:${vColor};"><i class="fa-solid ${vIcon}"></i> ${escapeHtml(tr('ptPipelineVerdict'))}</div>
+            <div class="pt-pipeline-node-body" style="font-weight:700; font-size:15px; color:${vColor}; letter-spacing:0.05em;">${escapeHtml(verdict)}</div>
+        </div>`);
+        if (verdict !== 'DENY' && egressLabel) {
+            pipeNodes.push(`<div class="pt-pipeline-node">
+                <div class="pt-pipeline-node-title"><i class="fa-solid fa-arrow-right-from-bracket" style="color:var(--lamp-up-ink);"></i> ${escapeHtml(tr('ptPipelineEgress'))}</div>
                 <div class="pt-pipeline-node-body"><code>${escapeHtml(egressLabel)}</code></div>
-            </div>
-        </div>`;
+            </div>`);
+        }
+
+        html += `<div class="pt-pipeline">${pipeNodes.join('<div class="pt-pipeline-connector"><i class="fa-solid fa-arrow-down" aria-hidden="true"></i></div>')}</div>`;
 
         if (steps.length > 0) {
-            html += `<h4 style="margin:20px 0 10px; font-size:14px; font-weight:700;"><i class="fa-solid fa-list-ol" style="color:var(--primary); margin-right:6px;"></i> Dettaglio Sequenza Step</h4>`;
+            html += `<h4 style="margin:20px 0 10px; font-size:14px; font-weight:700;"><i class="fa-solid fa-list-ol" style="color:var(--primary); margin-right:6px;"></i> ${escapeHtml(tr('ptStepsTitle'))}</h4>`;
             html += `<div style="display:flex; flex-direction:column; gap:10px;">`;
             steps.forEach((step, idx) => {
                 let stepBadge = step.action || '';
@@ -360,26 +511,21 @@
                 if (step.action === 'permit') {
                     badgeClass = 'badge badge-success';
                     stepWash = 'var(--lamp-up-wash)';
-                    stepRule = 'var(--success)';
+                    stepRule = 'var(--lamp-up-ink)';
                 } else if (step.action === 'deny') {
                     badgeClass = 'badge badge-danger';
                     stepWash = 'var(--lamp-fault-wash)';
-                    stepRule = 'var(--danger)';
+                    stepRule = 'var(--lamp-fault-ink)';
                 } else if (step.action === 'unknown') {
                     badgeClass = 'badge badge-warning';
                     stepWash = 'var(--lamp-warn-wash)';
-                    stepRule = 'var(--warning)';
+                    stepRule = 'var(--lamp-warn-ink)';
                 }
 
-                let kindLabel = step.kind;
-                if (step.kind === 'acl_in') kindLabel = 'Ingress ACL';
-                else if (step.kind === 'route') kindLabel = 'Route LPM';
-                else if (step.kind === 'acl_out') kindLabel = 'Egress ACL';
-                else if (step.kind === 'policy') kindLabel = 'Firewall Policy';
-                else if (step.kind === 'skipped_policy') kindLabel = 'Policy Disabilitata (Skipped)';
+                const kindLabel = stepKindTitle(step.kind);
 
                 html += `
-                <div style="border:1px solid var(--border); background:${stepWash}; padding:12px 16px; border-left:1px solid ${stepRule}; border-radius:var(--radius);">
+                <div style="border:1px solid ${stepRule}; background:${stepWash}; padding:12px 16px; border-radius:var(--radius);">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                         <div style="font-weight:600; font-size:13px;">
                             <span style="color:var(--text-muted); margin-right:6px;">#${idx + 1}</span>
@@ -392,7 +538,7 @@
                         </div>
                     </div>
                     ${step.raw_text ? `<div style="font-family:var(--font-data); font-size:12.5px; background:var(--surface); padding:6px 10px; margin-top:6px; border:1px solid var(--border);">${escapeHtml(step.raw_text)}</div>` : ''}
-                    ${step.prefix ? `<div style="font-size:12px; margin-top:4px;">Next-Hop: <code>${escapeHtml(step.next_hop || 'Connected')}</code> via <code>${escapeHtml(step.egress || 'Auto')}</code> <span style="color:var(--text-muted);">prefix</span> <code>${escapeHtml(step.prefix)}</code></div>` : ''}
+                    ${step.prefix ? `<div style="font-size:12px; margin-top:4px;">${escapeHtml(tr('ptNextHopLabel'))}: <code>${escapeHtml(step.next_hop || tr('ptConnectedLabel'))}</code> ${escapeHtml(tr('ptViaLabel'))} <code>${escapeHtml(step.egress || tr('ptAutoLabel'))}</code> <span style="color:var(--text-muted);">${escapeHtml(tr('ptPrefixLabel'))}</span> <code>${escapeHtml(step.prefix)}</code></div>` : ''}
                     ${step.note ? `<div style="font-size:11px; color:var(--text-muted); margin-top:4px;"><i class="fa-solid fa-circle-info"></i> ${escapeHtml(step.note)}</div>` : ''}
                 </div>`;
             });
@@ -406,21 +552,31 @@
         if (!ptSelectedIp) return;
         const container = document.getElementById('ptExamplesContainer');
         if (container) {
-            container.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><div style="margin-top:10px;">Sintesi flussi d'esempio in corso...</div></div>`;
+            container.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><div style="margin-top:10px;">${escapeHtml(tr('ptLoadingExamples'))}</div></div>`;
         }
 
         try {
             const res = await apiFetch(`/api/policy-test/${encodeURIComponent(ptSelectedIp)}/examples`);
-            if (!res.ok) {
-                if (container) container.innerHTML = `<div style="color:var(--danger); padding:20px;">Impossibile caricare gli esempi per il dispositivo.</div>`;
+            if (!res || !res.ok) {
+                if (container) container.innerHTML = `<div style="color:var(--danger); padding:20px;">${escapeHtml(tr('ptExamplesErr'))}</div>`;
                 return;
             }
             const examples = await res.json();
             ptExamplesCache[ptSelectedIp] = examples;
+            syncExamplesAclFilter(examples);
             renderExamples(examples);
         } catch (e) {
-            if (container) container.innerHTML = `<div style="color:var(--danger); padding:20px;">Errore di rete durante il caricamento degli esempi.</div>`;
+            if (container) container.innerHTML = `<div style="color:var(--danger); padding:20px;">${escapeHtml(tr('ptExamplesNetErr'))}</div>`;
         }
+    }
+
+    function syncExamplesAclFilter(groups) {
+        const sel = /** @type {HTMLSelectElement|null} */ (document.getElementById('ptExAclFilter'));
+        if (!sel) return;
+        const cur = sel.value;
+        sel.innerHTML = `<option value="">${escapeHtml(tr('ptFilterAllAcls'))}</option>`
+            + (groups || []).map(g => `<option value="${escapeHtml(g.name)}">${escapeHtml(g.name)}</option>`).join('');
+        if ((groups || []).some(g => g.name === cur)) sel.value = cur;
     }
 
     function renderExamples(groups) {
@@ -442,12 +598,32 @@
             <span>${escapeHtml(L.ptExamplesCaption)}</span>
         </div>`;
 
+        const searchVal = (document.getElementById('ptExSearch')?.value || '').trim().toLowerCase();
+        const aclVal = (document.getElementById('ptExAclFilter')?.value || '').trim();
+        const actVal = (document.getElementById('ptExActionFilter')?.value || '').trim().toLowerCase();
+
         // Grouped per rule set. A device carries several ACLs whose sequence
         // numbers each restart at 10, so a flat list of "Regola 10" cards left
         // the reader no way to tell which ACL a rule belonged to.
+        let renderedSections = 0;
         groups.forEach(group => {
+            if (aclVal && group.name !== aclVal) return;
             const bindings = group.bindings || [];
-            const examples = group.examples || [];
+            const allExamples = group.examples || [];
+            const examples = allExamples.filter(ex => {
+                if (actVal && String(ex.action || '').toLowerCase() !== actVal) return false;
+                if (ptExCatchAllOnly && !ex.matches_all) return false;
+                if (ptExUnparsedOnly && ex.matching_flow) return false;
+                if (searchVal) {
+                    const mf = ex.matching_flow || {};
+                    const hay = `${group.name} ${ex.rule_id || ''} ${ex.rule_name || ''} ${ex.raw_text || ''} ${mf.src_ip || ''} ${mf.dst_ip || ''} ${mf.dport || ''}`.toLowerCase();
+                    if (!hay.includes(searchVal)) return false;
+                }
+                return true;
+            });
+            if (!examples.length) return;
+            renderedSections += 1;
+            const aclOptName = group.kind === 'firewall_policy' ? '' : (group.name || '');
             // Where an ACL is applied is the context that makes every rule
             // under it readable: "governs traffic entering Vlan10" is the
             // difference between a list of ACEs and an understandable policy.
@@ -467,7 +643,7 @@
                     <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap;">
                         <span style="font-family:var(--font-legend); font-size:17px; font-weight:600; letter-spacing:0.02em; text-transform:uppercase;">${escapeHtml(group.name)}</span>
                         <span style="font-family:var(--font-legend); font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-soft);">
-                            ${examples.length} ${escapeHtml(L.ptRulesWord)} &middot; ${escapeHtml(L.ptDefaultWord)} ${escapeHtml(group.default_action || 'deny')}
+                            ${examples.length}/${allExamples.length} ${escapeHtml(L.ptRulesWord)} &middot; ${escapeHtml(L.ptDefaultWord)} ${escapeHtml(group.default_action || 'deny')}
                         </span>
                     </div>
                     ${group.declaration ? `<div style="margin-top:5px; font-family:var(--font-data); font-size:12.5px; color:var(--text-muted);">${escapeHtml(group.declaration)}</div>` : ''}
@@ -538,7 +714,14 @@
                         ${(!catchAll && ex.near_miss_reason) ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;"><i class="fa-solid fa-circle-info"></i> ${escapeHtml(ex.near_miss_reason)}</div>` : ''}
                     </div>
 
-                    <div style="margin-top:12px; display:flex; justify-content:flex-end; gap:8px;">
+                    <div style="margin-top:12px; display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
+                        <button type="button" class="btn btn-secondary btn-small" data-action="example-to-whatif"
+                            data-acl="${escapeHtml(aclOptName)}"
+                            data-rule="${escapeHtml(ex.rule_id || '')}"
+                            data-flow="${escapeHtml(`${mf.src_ip},${mf.dst_ip},${mf.proto || 'tcp'},${mf.dport || ''}`)}"
+                            style="width:auto; margin:0;">
+                            <i class="fa-solid fa-code-branch"></i> ${escapeHtml(tr('ptSimulateInWhatIf'))}
+                        </button>
                         <button class="btn btn-secondary btn-small" data-action="use-example"
                             data-src="${escapeHtml(mf.src_ip)}"
                             data-dst="${escapeHtml(mf.dst_ip)}"
@@ -570,6 +753,10 @@
 
             html += `</div></section>`;
         });
+
+        if (renderedSections === 0) {
+            html += `<div style="text-align:center; padding:30px; color:var(--text-muted);">${escapeHtml(tr('ptNoMatchingExamples'))}</div>`;
+        }
 
         container.innerHTML = html;
     }
@@ -606,21 +793,56 @@
         if (!ptSelectedIp) return;
         const container = document.getElementById('ptFindingsContainer');
         if (container) {
-            container.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><div style="margin-top:10px;">Analisi difetti statici in corso...</div></div>`;
+            container.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><div style="margin-top:10px;">${escapeHtml(tr('ptLoadingFindings'))}</div></div>`;
         }
 
         try {
             const res = await apiFetch(`/api/policy-test/${encodeURIComponent(ptSelectedIp)}/findings`);
-            if (!res.ok) {
-                if (container) container.innerHTML = `<div style="color:var(--danger); padding:20px;">Impossibile caricare i findings per il dispositivo.</div>`;
+            if (!res || !res.ok) {
+                if (container) container.innerHTML = `<div style="color:var(--danger); padding:20px;">${escapeHtml(tr('ptFindingsErr'))}</div>`;
                 return;
             }
             const findings = await res.json();
             ptFindingsCache[ptSelectedIp] = findings;
             renderFindings(findings);
         } catch (e) {
-            if (container) container.innerHTML = `<div style="color:var(--danger); padding:20px;">Errore di rete durante il caricamento dei findings.</div>`;
+            if (container) container.innerHTML = `<div style="color:var(--danger); padding:20px;">${escapeHtml(tr('ptFindingsNetErr'))}</div>`;
         }
+    }
+
+    function findingTitleDesc(f) {
+        const p = f.params || {};
+        if (f.key === 'shadowed') {
+            return [tr('ptFindShadowedTitle'), escapeHtml(tr('ptFindShadowedDesc', {
+                rule: p.rule_id || '', acl: p.acl || f.acl_name || '', by: p.shadowed_by || '',
+            }))];
+        }
+        if (f.key === 'unreachable') {
+            return [tr('ptFindUnreachableTitle'), escapeHtml(tr('ptFindUnreachableDesc', {
+                rule: p.rule_id || '', acl: p.acl || f.acl_name || '', by: p.blocked_by || '',
+            }))];
+        }
+        if (f.key === 'any_any') {
+            return [tr('ptFindAnyAnyTitle'), escapeHtml(tr('ptFindAnyAnyDesc', {
+                rule: p.rule_id || '', acl: p.acl || f.acl_name || '',
+            }))];
+        }
+        if (f.key === 'route_to_nowhere') {
+            return [tr('ptFindRouteNowhereTitle'), escapeHtml(tr('ptFindRouteNowhereDesc', {
+                prefix: p.prefix || '', nh: p.next_hop || '',
+            }))];
+        }
+        if (f.key === 'unresolved_object') {
+            return [tr('ptFindUnresolvedTitle'), escapeHtml(tr('ptFindUnresolvedDesc', {
+                rule: p.rule_id || '', objects: (p.objects || []).join(', '),
+            }))];
+        }
+        if (f.key === 'unused_object') {
+            return [tr('ptFindUnusedObjTitle'), escapeHtml(tr('ptFindUnusedObjDesc', {
+                obj: p.object || '', kind: p.kind || '', detail: p.detail || '',
+            }))];
+        }
+        return [f.key, ''];
     }
 
     function renderFindings(findings) {
@@ -629,59 +851,79 @@
         const L = i18n[currentLang];
         ptRenderedFindings = findings || [];
 
-        if (!findings || findings.length === 0) {
+        const badge = document.getElementById('ptFindingsBadge');
+        if (badge) {
+            badge.hidden = ptRenderedFindings.length === 0;
+            badge.textContent = String(ptRenderedFindings.length);
+        }
+        const cart = document.getElementById('ptFindingsCartouche');
+        if (cart) {
+            if (!ptRenderedFindings.length) {
+                cart.hidden = true;
+            } else {
+                const high = ptRenderedFindings.filter(f => f.severity === 'high').length;
+                const med = ptRenderedFindings.filter(f => f.severity === 'medium').length;
+                const low = ptRenderedFindings.filter(f => f.severity === 'low' || f.severity === 'info').length;
+                cart.hidden = false;
+                cart.innerHTML = `<span>${escapeHtml(tr('ptFindCartHigh'))} <b>${high}</b></span>`
+                    + `<span>${escapeHtml(tr('ptFindCartMed'))} <b>${med}</b></span>`
+                    + `<span>${escapeHtml(tr('ptFindCartLow'))} <b>${low}</b></span>`
+                    + `<span>${escapeHtml(tr('ptFindCartTotal'))} <b>${ptRenderedFindings.length}</b></span>`;
+            }
+        }
+
+        const proveAllBtn = /** @type {HTMLButtonElement|null} */ (document.getElementById('btnPtProveAll'));
+
+        if (!ptRenderedFindings.length) {
+            if (proveAllBtn) proveAllBtn.disabled = true;
             container.innerHTML = `
             <div style="text-align:center; padding:40px; color:var(--success);">
                 <i class="fa-solid fa-circle-check fa-3x" style="margin-bottom:14px; opacity:0.8;"></i>
-                <div style="font-size:15px; font-weight:600;">Nessun difetto di policy o routing rilevato</div>
-                <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">Nessuna regola oscurata, non raggiungibile o rotta statica orfana identificata.</div>
+                <div style="font-size:15px; font-weight:600;">${escapeHtml(tr('ptNoFindingsTitle'))}</div>
+                <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">${escapeHtml(tr('ptNoFindingsDesc'))}</div>
             </div>`;
+            return;
+        }
+
+        const q = (document.getElementById('ptFindSearch')?.value || '').trim().toLowerCase();
+        const typeFilter = (document.getElementById('ptFindTypeFilter')?.value || '').trim();
+        const indexed = ptRenderedFindings
+            .map((f, idx) => ({ f, idx }))
+            .filter(({ f }) => {
+                if (typeFilter && f.key !== typeFilter) return false;
+                if (q) {
+                    const p = f.params || {};
+                    const hay = `${f.key} ${f.acl_name || ''} ${p.rule_id || ''} ${p.acl || ''} ${p.prefix || ''} ${p.object || ''}`.toLowerCase();
+                    if (!hay.includes(q)) return false;
+                }
+                return true;
+            });
+
+        if (proveAllBtn) {
+            proveAllBtn.disabled = !indexed.some(({ f }) => f.witness && f.expected_rule_id);
+        }
+
+        if (!indexed.length) {
+            container.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">${escapeHtml(tr('ptNoMatchingFindings'))}</div>`;
             return;
         }
 
         let html = `<div style="display:flex; flex-direction:column; gap:12px;">`;
 
-        findings.forEach((f, idx) => {
-            // Severity carries a wash plus a 1px rule, per DESIGN.md "Schedules":
-            // the state is the fill, not a slab of colour down the edge.
+        indexed.forEach(({ f, idx }) => {
             let sevBadge = 'badge badge-warning';
-            let borderCol = 'var(--warning)';
-            let washCol = 'var(--lamp-warn-wash)';
+            let sevCardCls = 'is-medium';
             if (f.severity === 'high') {
                 sevBadge = 'badge badge-danger';
-                borderCol = 'var(--danger)';
-                washCol = 'var(--lamp-fault-wash)';
+                sevCardCls = 'is-high';
             } else if (f.severity === 'low') {
                 sevBadge = 'badge';
-                borderCol = 'var(--border)';
-                washCol = 'var(--surface-2)';
+                sevCardCls = '';
             }
 
-            let title = f.key;
-            let desc = '';
+            const [title, desc] = findingTitleDesc(f);
             const p = f.params || {};
 
-            if (f.key === 'shadowed') {
-                title = 'Regola Oscurata / Ridondante (Shadowed)';
-                desc = `La regola <strong>${escapeHtml(p.rule_id || '')}</strong> nella lista <code>${escapeHtml(p.acl || '')}</code> è interamente coperta dalla regola precedente <strong>${escapeHtml(p.shadowed_by || '')}</strong> e non verrà mai valutata per il traffico di match.`;
-            } else if (f.key === 'unreachable') {
-                title = 'Regola Non Raggiungibile (Unreachable)';
-                desc = `La regola <strong>${escapeHtml(p.rule_id || '')}</strong> nella lista <code>${escapeHtml(p.acl || '')}</code> si trova dopo la regola ANY-ANY <strong>${escapeHtml(p.blocked_by || '')}</strong> e non può essere mai raggiunta.`;
-            } else if (f.key === 'any_any') {
-                title = 'Permesso Troppo Ampio (ANY-ANY Permit)';
-                desc = `La regola <strong>${escapeHtml(p.rule_id || '')}</strong> nella lista <code>${escapeHtml(p.acl || '')}</code> autorizza traffico con sorgente, destinazione, protocollo e porte totalmente senza restrizioni (ANY-ANY).`;
-            } else if (f.key === 'route_to_nowhere') {
-                title = 'Rotta Statica Verso il Vuoto (Route to Nowhere)';
-                desc = `La rotta statica verso il prefisso <code>${escapeHtml(p.prefix || '')}</code> punta al next-hop <code>${escapeHtml(p.next_hop || '')}</code> che non appartiene ad alcuna subnet direttamente connessa sulle interfacce attive.`;
-            } else if (f.key === 'unresolved_object') {
-                title = 'Riferimento a Oggetto Non Definito';
-                desc = `La regola <strong>${escapeHtml(p.rule_id || '')}</strong> fa riferimento a oggetti indirizzo o servizio non definiti nel backup: <code>${escapeHtml((p.objects || []).join(', '))}</code>.`;
-            }
-
-            // A finding asserts a rule cannot fire. The witness turns that into
-            // something the reader can check: a packet the rule was written to
-            // catch, traced live by the same engine the tracer uses. Without it
-            // the panel only says "trust me".
             const w = f.witness;
             const proofBlock = (w && f.expected_rule_id) ? `
                 <div style="margin-top:10px; padding-top:10px; border-top:var(--seam) solid var(--border);">
@@ -693,26 +935,63 @@
                         <span style="color:var(--text-muted);">(${escapeHtml(ptFlowProto(w))})</span>
                         <div style="font-size:11px; color:var(--text-muted); margin-top:3px;">${escapeHtml(L.ptProofExplain.replace('{rule}', p.rule_id || '').replace('{by}', f.expected_rule_id))}</div>
                     </div>
-                    <button class="btn btn-secondary btn-small" data-action="prove-finding"
+                    <button type="button" class="btn btn-secondary btn-small" data-action="prove-finding"
                         data-idx="${escapeHtml(String(idx))}" style="width:auto; margin:0;">
                         <i class="fa-solid fa-vial"></i> ${escapeHtml(L.ptProofRun)}
                     </button>
                     <div id="ptProofResult${escapeHtml(String(idx))}" style="margin-top:8px;"></div>
                 </div>` : '';
 
+            const cliBlocks = f.key === 'unused_object' ? `
+                ${p.cli_dry_run ? `<div class="pt-cli-box">
+                    <div class="pt-cli-head"><span>${escapeHtml(tr('ptDryRunCli'))}</span><button type="button" class="btn btn-secondary btn-small" data-action="copy-cli" data-cli="${escapeHtml(p.cli_dry_run)}" style="width:auto; margin:0;">${escapeHtml(tr('ptCopyCli'))}</button></div>
+                    <pre>${escapeHtml(p.cli_dry_run)}</pre>
+                </div>` : ''}
+                ${p.cli_rollback ? `<div class="pt-cli-box">
+                    <div class="pt-cli-head"><span>${escapeHtml(tr('ptRollbackCli'))}</span><button type="button" class="btn btn-secondary btn-small" data-action="copy-cli" data-cli="${escapeHtml(p.cli_rollback)}" style="width:auto; margin:0;">${escapeHtml(tr('ptCopyCli'))}</button></div>
+                    <pre>${escapeHtml(p.cli_rollback)}</pre>
+                </div>` : ''}` : '';
+
+            const canWhatIf = ['shadowed', 'unreachable', 'any_any', 'route_to_nowhere'].includes(f.key);
+
             html += `
-            <div style="border:1px solid var(--border); background:${washCol}; padding:14px 18px; border-left:1px solid ${borderCol};">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <div class="pt-finding-card ${sevCardCls}">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px;">
                     <div style="font-weight:700; font-size:14px;">${escapeHtml(title)}</div>
-                    <span class="${sevBadge}">${escapeHtml((f.severity || 'medium').toUpperCase())}</span>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        ${canWhatIf ? `<button type="button" class="btn btn-secondary btn-small" data-action="finding-to-whatif" data-idx="${escapeHtml(String(idx))}" style="width:auto; margin:0;"><i class="fa-solid fa-code-branch"></i> ${escapeHtml(tr('ptSimulateInWhatIf'))}</button>` : ''}
+                        <span class="${sevBadge}">${escapeHtml((f.severity || 'medium').toUpperCase())}</span>
+                    </div>
                 </div>
                 <div style="font-size:13px; color:var(--text); line-height:1.5;">${desc}</div>
+                ${cliBlocks}
                 ${proofBlock}
             </div>`;
         });
 
         html += `</div>`;
         container.innerHTML = html;
+    }
+
+    async function proveAllFindings() {
+        const btn = /** @type {HTMLButtonElement|null} */ (document.getElementById('btnPtProveAll'));
+        const buttons = [...document.querySelectorAll('#ptFindingsContainer button[data-action="prove-finding"]')];
+        if (!buttons.length) return;
+        if (btn) btn.disabled = true;
+        try {
+            for (let i = 0; i < buttons.length; i++) {
+                const idx = parseInt(buttons[i].getAttribute('data-idx') || '-1', 10);
+                if (idx >= 0) {
+                    if (btn) btn.textContent = tr('ptProvingAll', { i: i + 1, n: buttons.length });
+                    await proveFinding(idx);
+                }
+            }
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-vial" aria-hidden="true"></i> ${escapeHtml(tr('ptProveAllBtn'))}`;
+            }
+        }
     }
 
     /** Run a finding's witness packet and show whether the claim held.
@@ -795,8 +1074,8 @@
 
     async function runPolicyWhatIf() {
         if (!ptSelectedIp) {
-            alert(policyTenant() ? tr('ptChooseDeviceFirst')
-                                 : tr('ptChooseTenantFirst'));
+            showToast(policyTenant() ? tr('ptChooseDeviceFirst')
+                                     : tr('ptChooseTenantFirst'), 'warning');
             return;
         }
         const box = document.getElementById('ptWhatIfResultContainer');
@@ -807,18 +1086,23 @@
 
         const action = (document.getElementById('ptWiAction')?.value || 'disable_rule').trim();
         const dportRaw = (document.getElementById('ptWiDport')?.value || '').trim();
+        const distRaw = parseInt(document.getElementById('ptWiDistance')?.value || '1', 10);
         const change = {
             action,
             rule_id: (document.getElementById('ptWiRuleId')?.value || '').trim() || null,
             acl: (document.getElementById('ptWiAcl')?.value || '').trim() || null,
             rule_action: (document.getElementById('ptWiRuleAction')?.value || 'permit').trim(),
+            position: (document.getElementById('ptWiPosition')?.value || 'top').trim(),
             src_cidr: (document.getElementById('ptWiSrcCidr')?.value || '').trim() || null,
             dst_cidr: (document.getElementById('ptWiDstCidr')?.value || '').trim() || null,
+            src_intf: (document.getElementById('ptWiSrcIntf')?.value || '').trim() || null,
+            dst_intf: (document.getElementById('ptWiDstIntf')?.value || '').trim() || null,
             proto: (document.getElementById('ptWiProto')?.value || 'tcp').trim(),
             dport: dportRaw ? parseInt(dportRaw, 10) : null,
             prefix: (document.getElementById('ptWiPrefix')?.value || '').trim() || null,
             next_hop: (document.getElementById('ptWiNextHop')?.value || '').trim() || null,
             interface: (document.getElementById('ptWiIface')?.value || '').trim() || null,
+            distance: (!Number.isNaN(distRaw) && distRaw >= 1 && distRaw <= 255) ? distRaw : 1,
         };
         const flows = parseCustomFlowsText(document.getElementById('ptWiCustomFlows')?.value || '');
 
@@ -831,18 +1115,28 @@
             if (!res || !res.ok) {
                 const err = await (res ? res.json().catch(() => ({})) : Promise.resolve({}));
                 if (box) {
-                    box.innerHTML = `<div class="panel" style="padding:14px; background:var(--lamp-fault-wash); border-left:2px solid var(--danger);"><i class="fa-solid fa-triangle-exclamation" style="color:var(--danger);"></i> ${escapeHtml(err.detail || 'Simulation failed')}</div>`;
+                    box.innerHTML = `<div class="panel" style="padding:14px; background:var(--lamp-fault-wash); border-color:var(--danger);"><i class="fa-solid fa-triangle-exclamation" style="color:var(--danger);"></i> ${escapeHtml(err.detail || tr('ptWiSimFailed'))}</div>`;
                 }
                 return;
             }
             const data = await res.json();
+            ptLastWhatIf = data;
+            const changedCount = (data.flows || []).filter(r => String(r.transition || 'unchanged') !== 'unchanged').length;
+            ptWiChangedOnly = changedCount > 0;
             if (box) box.dataset.hasResult = '1';
             renderWhatIfResult(data);
         } catch (e) {
             if (box) {
-                box.innerHTML = `<div class="panel" style="padding:14px; background:var(--lamp-fault-wash); border-left:2px solid var(--danger);">${escapeHtml(String(e))}</div>`;
+                box.innerHTML = `<div class="panel" style="padding:14px; background:var(--lamp-fault-wash); border-color:var(--danger);">${escapeHtml(String(e))}</div>`;
             }
         }
+    }
+
+    function transitionLabel(t) {
+        if (t === 'broken') return tr('ptWiTransBroken');
+        if (t === 'newly_allowed') return tr('ptWiTransNewlyAllowed');
+        if (t === 'rerouted_or_changed') return tr('ptWiTransRerouted');
+        return tr('ptWiTransUnchanged');
     }
 
     function renderWhatIfResult(data) {
@@ -853,7 +1147,7 @@
         const riskCls = risk === 'HIGH' ? 'badge-danger' : (risk === 'MEDIUM' ? 'badge-warning' : 'badge-success');
 
         const kpiCard = (label, val, col) => `
-            <div style="border:1px solid var(--border); background:var(--surface-2); padding:10px 12px;">
+            <div style="border:1px solid var(--border); background:var(--surface-2); padding:10px 12px; border-radius:var(--radius);">
                 <div style="font-size:11px; text-transform:uppercase; color:var(--text-muted);">${escapeHtml(label)}</div>
                 <div style="font-size:20px; font-weight:700; color:${col}; font-family:var(--font-code);">${escapeHtml(String(val || 0))}</div>
             </div>`;
@@ -868,10 +1162,15 @@
             const up = String(t || 'unchanged');
             const cls = up === 'broken' ? 'badge-danger'
                 : (up === 'newly_allowed' || up === 'rerouted_or_changed' ? 'badge-warning' : 'badge');
-            return `<span class="badge ${cls}">${escapeHtml(up)}</span>`;
+            return `<span class="badge ${cls}">${escapeHtml(transitionLabel(up))}</span>`;
         };
 
-        const rows = (data.flows || []).map(row => {
+        const allFlows = data.flows || [];
+        const visibleFlows = ptWiChangedOnly
+            ? allFlows.filter(row => String(row.transition || 'unchanged') !== 'unchanged')
+            : allFlows;
+
+        const rows = visibleFlows.map(row => {
             const f = row.flow || {};
             const b = row.before || {};
             const a = row.after || {};
@@ -889,32 +1188,40 @@
         const resolved = fDiff.resolved || [];
         const introduced = fDiff.introduced || [];
         const rb = data.rollback || {};
+        const applyText = `${rb.cli_apply || ''}${rb.api_dry_run ? '\n# API: ' + rb.api_dry_run : ''}`;
+        const rollbackText = rb.cli_rollback || '';
 
         box.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px; padding:10px 14px; border:1px solid var(--border); background:var(--surface-2);">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px; padding:10px 14px; border:1px solid var(--border); background:var(--surface-2); border-radius:var(--radius);">
                 <div style="font-family:var(--font-code); font-size:13px;"><strong>${escapeHtml(data.change_summary || '')}</strong> <span style="color:var(--text-muted);">(${escapeHtml(data.config_type || '')})</span></div>
                 <div><span style="font-size:11px; color:var(--text-muted); margin-right:6px;">${escapeHtml(tr('ptWiRisk'))}:</span><span class="badge ${riskCls}">${escapeHtml(risk)}</span></div>
             </div>
 
-            <div style="display:grid; grid-template-columns:repeat(4, minmax(110px, 1fr)); gap:10px; margin-bottom:14px;">
+            <div class="pt-wi-kpis">
                 ${kpiCard(tr('ptWiBroken'), s.broken, 'var(--danger)')}
                 ${kpiCard(tr('ptWiNewlyAllowed'), s.newly_allowed, 'var(--warning)')}
                 ${kpiCard(tr('ptWiRerouted'), s.rerouted_or_changed, 'var(--primary)')}
                 ${kpiCard(tr('ptWiUnchanged'), s.unchanged, 'var(--success)')}
             </div>
 
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
-                <div style="border:1px solid var(--border); padding:10px 12px; background:var(--lamp-up-wash);">
-                    <div style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--success); margin-bottom:4px;">${escapeHtml(tr('ptWiFindingsDiff'))} &mdash; ${escapeHtml(tr('ptWiResolved'))} (${escapeHtml(String(resolved.length))})</div>
+            <div class="pt-wi-grid-2" style="margin-bottom:14px;">
+                <div style="border:1px solid var(--border); padding:10px 12px; background:var(--lamp-up-wash); border-radius:var(--radius);">
+                    <div style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--lamp-up-ink); margin-bottom:4px;">${escapeHtml(tr('ptWiFindingsDiff'))} &mdash; ${escapeHtml(tr('ptWiResolved'))} (${escapeHtml(String(resolved.length))})</div>
                     <div style="font-size:12px;">${resolved.length ? resolved.map(x => `<div>&check; ${escapeHtml(x.key || '')} (${escapeHtml(String(x.rule_id || ''))})</div>`).join('') : '<span style="color:var(--text-muted);">—</span>'}</div>
                 </div>
-                <div style="border:1px solid var(--border); padding:10px 12px; background:var(--lamp-fault-wash);">
-                    <div style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--danger); margin-bottom:4px;">${escapeHtml(tr('ptWiFindingsDiff'))} &mdash; ${escapeHtml(tr('ptWiIntroduced'))} (${escapeHtml(String(introduced.length))})</div>
+                <div style="border:1px solid var(--border); padding:10px 12px; background:var(--lamp-fault-wash); border-radius:var(--radius);">
+                    <div style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--lamp-fault-ink); margin-bottom:4px;">${escapeHtml(tr('ptWiFindingsDiff'))} &mdash; ${escapeHtml(tr('ptWiIntroduced'))} (${escapeHtml(String(introduced.length))})</div>
                     <div style="font-size:12px;">${introduced.length ? introduced.map(x => `<div>! ${escapeHtml(x.key || '')} (${escapeHtml(String(x.rule_id || ''))})</div>`).join('') : '<span style="color:var(--text-muted);">—</span>'}</div>
                 </div>
             </div>
 
-            <h4 style="margin:0 0 8px; font-size:13px;">${escapeHtml(tr('ptWiDiffTable'))}</h4>
+            <div class="pt-wi-toolbar">
+                <h4 style="margin:0; font-size:13px;">${escapeHtml(tr('ptWiDiffTable'))}</h4>
+                <label class="pt-wi-toggle">
+                    <input type="checkbox" id="ptWiChangedOnlyChk" ${ptWiChangedOnly ? 'checked' : ''}>
+                    <span>${escapeHtml(tr('ptWiChangedOnly'))} (${escapeHtml(String(visibleFlows.length))}/${escapeHtml(String(allFlows.length))})</span>
+                </label>
+            </div>
             <div class="table-container" style="max-height:280px; overflow:auto; margin-bottom:14px;">
                 <table style="width:100%; border-collapse:collapse;">
                     <thead>
@@ -926,18 +1233,24 @@
                             <th style="text-align:left; padding:6px 8px;">${escapeHtml(tr('ptWiTransition'))}</th>
                         </tr>
                     </thead>
-                    <tbody>${rows || '<tr><td colspan="5" style="padding:12px; text-align:center; color:var(--text-muted);">—</td></tr>'}</tbody>
+                    <tbody>${rows || `<tr><td colspan="5" style="padding:12px; text-align:center; color:var(--text-muted);">${escapeHtml(ptWiChangedOnly ? tr('ptWiNoChangedFlows') : '—')}</td></tr>`}</tbody>
                 </table>
             </div>
 
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-                <div>
-                    <div style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--text-muted); margin-bottom:4px;">${escapeHtml(tr('ptWiApplyCli'))}</div>
-                    <pre style="margin:0; padding:10px; background:var(--surface-2); border:1px solid var(--border); font-size:11px; overflow:auto;">${escapeHtml(rb.cli_apply || '')}${rb.api_dry_run ? '\n# API: ' + escapeHtml(rb.api_dry_run) : ''}</pre>
+            <div class="pt-wi-grid-2">
+                <div class="pt-cli-box">
+                    <div class="pt-cli-head">
+                        <span>${escapeHtml(tr('ptWiApplyCli'))}</span>
+                        <button type="button" class="btn btn-secondary btn-small" data-action="copy-cli" data-cli="${escapeHtml(applyText)}" style="width:auto; margin:0;">${escapeHtml(tr('ptCopyCli'))}</button>
+                    </div>
+                    <pre>${escapeHtml(applyText)}</pre>
                 </div>
-                <div>
-                    <div style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--text-muted); margin-bottom:4px;">${escapeHtml(tr('ptWiRollbackCli'))}</div>
-                    <pre style="margin:0; padding:10px; background:var(--surface-2); border:1px solid var(--border); font-size:11px; overflow:auto;">${escapeHtml(rb.cli_rollback || '')}</pre>
+                <div class="pt-cli-box">
+                    <div class="pt-cli-head">
+                        <span>${escapeHtml(tr('ptWiRollbackCli'))}</span>
+                        <button type="button" class="btn btn-secondary btn-small" data-action="copy-cli" data-cli="${escapeHtml(rollbackText)}" style="width:auto; margin:0;">${escapeHtml(tr('ptCopyCli'))}</button>
+                    </div>
+                    <pre>${escapeHtml(rollbackText)}</pre>
                 </div>
             </div>`;
     }
@@ -976,6 +1289,9 @@
                 ptSelectedIp = null;
                 ptExamplesCache = {};
                 ptFindingsCache = {};
+                ptMetaCache = {};
+                ptLastWhatIf = null;
+                populateDatalists(null);
                 populatePolicyDeviceSelect();
                 renderPolicySelectionState();
             });
@@ -995,7 +1311,8 @@
         if (sel) {
             sel.addEventListener('change', (e) => {
                 ptSelectedIp = e.target.value || null;
-                updateDeviceMeta();
+                ptLastWhatIf = null;
+                loadDeviceMetadata(ptSelectedIp);
                 const wiBox = document.getElementById('ptWhatIfResultContainer');
                 if (wiBox) wiBox.dataset.hasResult = '';
                 if (renderPolicySelectionState()) return;
@@ -1010,11 +1327,114 @@
             });
         }
 
+        document.getElementById('btnPtSwitchWhatIf')?.addEventListener('click', () => switchPolicySubtab('whatif'));
+        document.getElementById('btnPtOpenFgt')?.addEventListener('click', () => {
+            if (typeof switchTab === 'function') switchTab('tab-fortigate');
+        });
+        document.getElementById('btnPtProveAll')?.addEventListener('click', proveAllFindings);
+        ['ptSrcIp', 'ptDstIp', 'ptDport', 'ptSport', 'ptIngressIntf', 'ptEgressIntf'].forEach(id => {
+            document.getElementById(id)?.addEventListener('keydown', (e) => {
+                if (/** @type {KeyboardEvent} */ (e).key === 'Enter') runPolicyTrace();
+            });
+        });
+
+        const rerenderExamples = () => {
+            if (ptSelectedIp && ptExamplesCache[ptSelectedIp]) renderExamples(ptExamplesCache[ptSelectedIp]);
+        };
+        document.getElementById('ptExSearch')?.addEventListener('input', rerenderExamples);
+        document.getElementById('ptExAclFilter')?.addEventListener('change', rerenderExamples);
+        document.getElementById('ptExActionFilter')?.addEventListener('change', rerenderExamples);
+        document.getElementById('btnPtExCatchAll')?.addEventListener('click', (e) => {
+            ptExCatchAllOnly = !ptExCatchAllOnly;
+            e.currentTarget.setAttribute('aria-pressed', String(ptExCatchAllOnly));
+            rerenderExamples();
+        });
+        document.getElementById('btnPtExUnparsed')?.addEventListener('click', (e) => {
+            ptExUnparsedOnly = !ptExUnparsedOnly;
+            e.currentTarget.setAttribute('aria-pressed', String(ptExUnparsedOnly));
+            rerenderExamples();
+        });
+        document.getElementById('btnPtExReset')?.addEventListener('click', () => {
+            ptExCatchAllOnly = false;
+            ptExUnparsedOnly = false;
+            const s = document.getElementById('ptExSearch');
+            const acl = document.getElementById('ptExAclFilter');
+            const act = document.getElementById('ptExActionFilter');
+            if (s) s.value = '';
+            if (acl) acl.value = '';
+            if (act) act.value = '';
+            document.getElementById('btnPtExCatchAll')?.setAttribute('aria-pressed', 'false');
+            document.getElementById('btnPtExUnparsed')?.setAttribute('aria-pressed', 'false');
+            rerenderExamples();
+        });
+
+        const rerenderFindings = () => {
+            if (ptSelectedIp && ptFindingsCache[ptSelectedIp]) renderFindings(ptFindingsCache[ptSelectedIp]);
+        };
+        document.getElementById('ptFindSearch')?.addEventListener('input', rerenderFindings);
+        document.getElementById('ptFindTypeFilter')?.addEventListener('change', rerenderFindings);
+
         const findingsBox = document.getElementById('ptFindingsContainer');
         if (findingsBox) {
             findingsBox.addEventListener('click', (e) => {
-                const btn = e.target.closest('button[data-action="prove-finding"]');
-                if (btn) proveFinding(parseInt(btn.dataset.idx, 10));
+                const proveBtn = e.target.closest('button[data-action="prove-finding"]');
+                if (proveBtn) {
+                    proveFinding(parseInt(proveBtn.dataset.idx, 10));
+                    return;
+                }
+                const copyBtn = e.target.closest('button[data-action="copy-cli"]');
+                if (copyBtn && copyBtn.dataset.cli && navigator.clipboard) {
+                    navigator.clipboard.writeText(copyBtn.dataset.cli);
+                    showToast(tr('ptCopied'), 'success');
+                    return;
+                }
+                const wiBtn = e.target.closest('button[data-action="finding-to-whatif"]');
+                if (wiBtn) {
+                    const f = ptRenderedFindings[parseInt(wiBtn.dataset.idx, 10)];
+                    if (!f) return;
+                    const p = f.params || {};
+                    const actEl = document.getElementById('ptWiAction');
+                    const ruleEl = document.getElementById('ptWiRuleId');
+                    const aclEl = document.getElementById('ptWiAcl');
+                    const prefixEl = document.getElementById('ptWiPrefix');
+                    const flowsEl = document.getElementById('ptWiCustomFlows');
+                    switchPolicySubtab('whatif');
+                    if (f.key === 'route_to_nowhere') {
+                        if (actEl) actEl.value = 'remove_route';
+                        if (prefixEl) prefixEl.value = p.prefix || '';
+                    } else if (f.key === 'any_any') {
+                        if (actEl) actEl.value = 'tighten_rule';
+                        if (ruleEl) ruleEl.value = p.rule_id || '';
+                        if (aclEl) aclEl.value = (p.acl && p.acl !== 'firewall_policy') ? p.acl : '';
+                    } else {
+                        if (actEl) actEl.value = 'delete_rule';
+                        if (ruleEl) ruleEl.value = p.rule_id || '';
+                        if (aclEl) aclEl.value = (p.acl && p.acl !== 'firewall_policy') ? p.acl : '';
+                    }
+                    if (flowsEl && f.witness) {
+                        const w = f.witness;
+                        flowsEl.value = `${w.src_ip},${w.dst_ip},${w.proto || 'tcp'},${w.dport || ''}`;
+                    }
+                    syncWhatIfFields();
+                    runPolicyWhatIf();
+                }
+            });
+        }
+
+        const wiBox = document.getElementById('ptWhatIfResultContainer');
+        if (wiBox) {
+            wiBox.addEventListener('click', (e) => {
+                const copyBtn = e.target.closest('button[data-action="copy-cli"]');
+                if (copyBtn && copyBtn.dataset.cli && navigator.clipboard) {
+                    navigator.clipboard.writeText(copyBtn.dataset.cli);
+                    showToast(tr('ptCopied'), 'success');
+                }
+            });
+            wiBox.addEventListener('change', (e) => {
+                if (e.target && e.target.id === 'ptWiChangedOnlyChk' && ptLastWhatIf) {
+                    ptWiChangedOnly = !!e.target.checked;
+                    renderWhatIfResult(ptLastWhatIf);
+                }
             });
         }
 
@@ -1047,6 +1467,20 @@
         const exContainer = document.getElementById('ptExamplesContainer');
         if (exContainer) {
             exContainer.addEventListener('click', (e) => {
+                const wiBtn = e.target.closest('button[data-action="example-to-whatif"]');
+                if (wiBtn) {
+                    switchPolicySubtab('whatif');
+                    const actEl = document.getElementById('ptWiAction');
+                    const ruleEl = document.getElementById('ptWiRuleId');
+                    const aclEl = document.getElementById('ptWiAcl');
+                    const flowsEl = document.getElementById('ptWiCustomFlows');
+                    if (actEl) actEl.value = 'disable_rule';
+                    if (ruleEl) ruleEl.value = wiBtn.dataset.rule || '';
+                    if (aclEl) aclEl.value = wiBtn.dataset.acl || '';
+                    if (flowsEl && wiBtn.dataset.flow) flowsEl.value = wiBtn.dataset.flow;
+                    syncWhatIfFields();
+                    return;
+                }
                 const btn = e.target.closest('button[data-action="use-example"]');
                 if (btn) {
                     usePolicyExample(
@@ -1065,6 +1499,17 @@
     }
 
     bindPolicyTestControls();
+
+    window.addEventListener('globalTenantChanged', () => {
+        ptSelectedIp = null;
+        ptExamplesCache = {};
+        ptFindingsCache = {};
+        ptMetaCache = {};
+        ptLastWhatIf = null;
+        if (document.getElementById('tab-policy-test')?.classList.contains('active')) {
+            loadPolicyTestTab();
+        }
+    });
 
     // Expose to window for cross-module dispatch
     window.loadPolicyTestTab = loadPolicyTestTab;

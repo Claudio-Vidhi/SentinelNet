@@ -222,5 +222,99 @@ class NumberedAclDeclarationTest(unittest.TestCase):
         )
 
 
+class PolicyRouterMetadataAndHygieneApi(unittest.TestCase):
+    """Verify /metadata hydration and /findings hygiene (unused_object) endpoints."""
+
+    @classmethod
+    def setUpClass(cls):
+        from security import user_manager
+        for user, role, grps in (("adm_pm", "admin", None), ("op_a_pm", "operator", ["tenant-a"])):
+            try:
+                user_manager.create_user(user, "PasswordSicura1!", role=role, groups=grps)
+            except Exception:
+                pass
+
+    def _client(self, user):
+        from fastapi.testclient import TestClient
+        import app_server
+        c = TestClient(app_server.app)
+        r = c.post("/api/auth/login", json={"username": user, "password": "PasswordSicura1!"})
+        assert r.status_code == 200, r.text
+        return c
+
+    def test_metadata_and_unused_object_findings_with_tenant_scope(self):
+        import os
+        import tempfile
+        from unittest import mock
+
+        dev_a = {"IP": "192.0.2.50", "Hostname": "fw-a", "Vendor": "fortinet", "Group": "tenant-a"}
+        dev_b = {"IP": "198.51.100.50", "Hostname": "fw-b", "Vendor": "fortinet", "Group": "tenant-b"}
+        cfg = (
+            "#config-version=FGT\n"
+            "config system interface\n"
+            "edit \"port1\"\n"
+            "set ip 192.0.2.50 255.255.255.0\n"
+            "next\n"
+            "end\n"
+            "config firewall address\n"
+            "edit \"used-net\"\n"
+            "set subnet 10.10.0.0 255.255.255.0\n"
+            "next\n"
+            "edit \"orphan-unused\"\n"
+            "set subnet 10.99.0.0 255.255.255.0\n"
+            "next\n"
+            "end\n"
+            "config firewall policy\n"
+            "edit 10\n"
+            "set srcintf \"port1\"\n"
+            "set dstintf \"port1\"\n"
+            "set srcaddr \"used-net\"\n"
+            "set dstaddr \"all\"\n"
+            "set service \"ALL\"\n"
+            "set action accept\n"
+            "set status enable\n"
+            "next\n"
+            "end\n"
+            "config router static\n"
+            "edit 1\n"
+            "set dst 10.20.0.0 255.255.255.0\n"
+            "set gateway 192.0.2.254\n"
+            "set device \"port1\"\n"
+            "next\n"
+            "end\n"
+        )
+        with tempfile.NamedTemporaryFile("w", suffix=".cfg", delete=False, encoding="utf-8") as tf:
+            tf.write(cfg)
+            cfg_path = tf.name
+
+        try:
+            with mock.patch("services.inventory_manager.get_all_devices", return_value=[dev_a, dev_b]), \
+                 mock.patch("ai.config_analyzer._find_freshest_backup", return_value=(cfg_path, "tenant-a")):
+                adm = self._client("adm_pm")
+                meta_res = adm.get("/api/policy-test/192.0.2.50/metadata")
+                self.assertEqual(meta_res.status_code, 200, meta_res.text)
+                meta = meta_res.json()
+                self.assertEqual(meta["config_type"], "fortios")
+                self.assertIsNotNone(meta["backup_ts"])
+                self.assertTrue(any(i["name"] == "port1" for i in meta["interfaces"]))
+                self.assertTrue(any(r["id"] == "10" for r in meta["rules"]))
+                self.assertTrue(any(r["prefix"] == "10.20.0.0/24" for r in meta["static_routes"]))
+
+                f_res = adm.get("/api/policy-test/192.0.2.50/findings")
+                self.assertEqual(f_res.status_code, 200, f_res.text)
+                unused = [f for f in f_res.json() if f["key"] == "unused_object"]
+                self.assertTrue(unused, "unused_object finding must be returned when config_text is passed")
+                self.assertTrue(any(f["params"].get("object") == "orphan-unused" for f in unused))
+
+                op = self._client("op_a_pm")
+                self.assertEqual(op.get("/api/policy-test/192.0.2.50/metadata").status_code, 200)
+                self.assertIn(op.get("/api/policy-test/198.51.100.50/metadata").status_code, (403, 404))
+        finally:
+            try:
+                os.unlink(cfg_path)
+            except OSError:
+                pass
+
+
 if __name__ == "__main__":
     unittest.main()
