@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.66.1] - 2026-11-19
+
 ### Fixed
 
 - **Filtro tenant nel tab Traffico**: tutte e tre le viste (*Igiene & Delta*,
