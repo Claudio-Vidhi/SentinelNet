@@ -238,6 +238,17 @@ class PolicyTrafficApi(unittest.TestCase):
         self.assertEqual(len(out["errors"]), 1)
         self.assertEqual(out["errors"][0]["device_ip"], FGT_B["IP"])
 
+    def test_devices_and_policies_filter_by_tenant_param(self):
+        with mock.patch("services.inventory_manager.get_all_devices",
+                        return_value=[FGT_A, FGT_B, SWITCH]):
+            r = self._client("adm_ft").get("/api/firewall-traffic/devices?tenant=sede-a")
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual({d["hostname"] for d in r.json()["devices"]}, {"fw-edge"})
+
+        out = self._get("adm_ft", f"?device={FGT_A['IP']},{FGT_B['IP']}&tenant=sede-a")
+        self.assertEqual({r["device"] for r in out["rows"]}, {"fw-edge"})
+        self.assertEqual(out["devices_queried"], 1)
+
 
 class TheCumulativeCaveatIsOnScreen(unittest.TestCase):
     """Il numero piu' pericoloso di questa vista.

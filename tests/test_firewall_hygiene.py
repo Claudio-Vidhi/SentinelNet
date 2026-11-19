@@ -202,6 +202,37 @@ class TestFirewallHygieneUnit(unittest.TestCase):
             res = firewall_traffic.analyze_hygiene([FGT_DEV], 7)
         self.assertEqual(res["window_days"], 7)
 
+    def test_analyze_hygiene_isolates_observed_flows_by_tenant_for_same_ip(self):
+        # Empty target list short-circuits with zeroed metrics.
+        empty = firewall_traffic.analyze_hygiene([], window_days=30)
+        self.assertEqual(empty["devices_analyzed"], 0)
+        self.assertEqual(empty["summary"]["policies_tracked"], 0)
+
+        dev_iso = {"IP": "192.0.2.99", "Hostname": "fw-iso-01", "Vendor": "fortinet", "Group": "tenant-iso-a"}
+        now = int(time.time())
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg_path = os.path.join(tmp, "fw-iso-01.cfg")
+            with open(cfg_path, "w", encoding="utf-8") as fh:
+                fh.write(FORTI_CFG)
+            conn = db.get_observability_connection()
+            try:
+                conn.execute(
+                    "INSERT OR REPLACE INTO events "
+                    "(ts, ingested_ts, tenant, source, event_type, entity_type, entity_id, severity, "
+                    "device_ip, interface, src_ip, dst_ip, dst_port, protocol, attrs_json, dedup_key) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (now - 100, now, "tenant-iso-b", "syslog", "flow", "flow", "10.20.0.5>192.0.2.10", 6,
+                     dev_iso["IP"], "", "10.20.0.5", "192.0.2.10", 502, "tcp", "{}", "hyg-iso-flow"),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+            with mock.patch("ai.config_analyzer._find_freshest_backup", return_value=(cfg_path, "tenant-iso-a")):
+                res = firewall_traffic.analyze_hygiene([dev_iso], window_days=30, now_ts=now)
+
+        self.assertEqual(res["tightenable_rules"], [])
+
 
 class TestFirewallHygieneApi(unittest.TestCase):
     @classmethod
@@ -240,6 +271,44 @@ class TestFirewallHygieneApi(unittest.TestCase):
             self.assertEqual(snap_res.json()["snapshots_saved"], 1)
             called_ips = {call.args[0]["IP"] for call in m_collect.call_args_list}
             self.assertEqual(called_ips, {FGT_DEV["IP"]})
+
+    def test_hygiene_and_snapshot_filter_by_tenant_param(self):
+        with mock.patch("services.inventory_manager.get_all_devices", return_value=[FGT_DEV, FGT_OTHER, PA_DEV]), \
+             mock.patch("ai.config_analyzer._find_freshest_backup", return_value=(None, None)):
+            adm = self._client("adm_hyg")
+            r_a = adm.get("/api/firewall-traffic/hygiene?tenant=tenant-a")
+            self.assertEqual(r_a.status_code, 200, r_a.text)
+            body_a = r_a.json()
+            self.assertEqual(body_a["devices_analyzed"], 2)
+            self.assertEqual({d["ip"] for d in body_a["eligible_devices"]}, {FGT_DEV["IP"], PA_DEV["IP"]})
+
+            r_b = adm.get("/api/firewall-traffic/hygiene?tenant=tenant-b")
+            self.assertEqual(r_b.status_code, 200, r_b.text)
+            body_b = r_b.json()
+            self.assertEqual(body_b["devices_analyzed"], 1)
+            self.assertEqual({d["ip"] for d in body_b["eligible_devices"]}, {FGT_OTHER["IP"]})
+
+            r_none = adm.get("/api/firewall-traffic/hygiene?tenant=nonexistent")
+            self.assertEqual(r_none.status_code, 200, r_none.text)
+            self.assertEqual(r_none.json()["devices_analyzed"], 0)
+            self.assertEqual(r_none.json()["eligible_devices"], [])
+
+            # Scoped operator (tenant-a only) cannot widen scope with ?tenant=tenant-b
+            r_op = self._client("op_hyg").get("/api/firewall-traffic/hygiene?tenant=tenant-b")
+            self.assertEqual(r_op.status_code, 200, r_op.text)
+            self.assertEqual(r_op.json()["devices_analyzed"], 0)
+            self.assertEqual(r_op.json()["eligible_devices"], [])
+
+            with mock.patch.object(firewall_traffic, "collect_for",
+                                   return_value={"rows": [{"policyid": 1, "name": "P1", "hit_count": 3, "bytes": 30}]}) as m_collect:
+                snap = adm.post(
+                    "/api/firewall-traffic/snapshot",
+                    json={"device": "", "tenant": "tenant-b"},
+                    headers={"X-Requested-With": "XMLHttpRequest"},
+                )
+            self.assertEqual(snap.status_code, 200, snap.text)
+            self.assertEqual(snap.json()["devices_snapshotted"], 1)
+            self.assertEqual({call.args[0]["IP"] for call in m_collect.call_args_list}, {FGT_OTHER["IP"]})
 
 
 if __name__ == "__main__":

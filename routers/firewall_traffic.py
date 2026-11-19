@@ -24,6 +24,15 @@ MAX_CONCURRENT_DEVICES = 8
 
 class SnapshotRequest(BaseModel):
     device: str = ""
+    tenant: str = ""
+
+
+def _filter_by_tenant(devices: list, tenant: str) -> list:
+    """Narrow an already-scoped device list to a single tenant when requested."""
+    t = (tenant or "").strip()
+    if not t or t.lower() == "all":
+        return devices
+    return [d for d in devices if (d.get("Group") or "") == t]
 
 
 def _enrich_with_deltas(rows: list) -> list:
@@ -40,15 +49,19 @@ def _enrich_with_deltas(rows: list) -> list:
 
 
 @router.get("/api/firewall-traffic/devices")
-def list_policy_devices(current_user = Depends(get_current_user)):
+def list_policy_devices(
+    tenant: str = Query("", max_length=120),
+    current_user = Depends(get_current_user),
+):
     """I firewall selezionabili, letti dall'inventario.
 
     La lista serve PRIMA della query: senza, l'unico modo di sapere quali
     apparati esistono era interrogarli tutti e guardare le righe tornate."""
+    in_scope = _filter_by_tenant(devices_in_scope(current_user), tenant)
     return {"devices": [
         {"ip": d.get("IP"), "hostname": d.get("Hostname") or d.get("IP"),
          "group": d.get("Group") or ""}
-        for d in firewall_traffic.policy_devices(devices_in_scope(current_user))]}
+        for d in firewall_traffic.policy_devices(in_scope)]}
 
 
 @router.get("/api/firewall-traffic/policies")
@@ -56,6 +69,7 @@ async def list_policy_traffic(
     device: str = Query("", max_length=2000),
     action: str = Query("", max_length=20),
     q: str = Query("", max_length=100),
+    tenant: str = Query("", max_length=120),
     current_user = Depends(get_current_user),
 ):
     """Byte, sessioni e hit per policy, sui firewall CHIESTI dal chiamante.
@@ -68,8 +82,9 @@ async def list_policy_traffic(
     totali, e un totale calcolato su righe gia' filtrate altrove e' un numero
     che non corrisponde a niente.
     """
+    in_scope = _filter_by_tenant(devices_in_scope(current_user), tenant)
     wanted = {p.strip() for p in device.split(",") if p.strip()}
-    targets = [d for d in firewall_traffic.policy_devices(devices_in_scope(current_user))
+    targets = [d for d in firewall_traffic.policy_devices(in_scope)
                if d.get("IP") in wanted]
 
     sem = asyncio.Semaphore(MAX_CONCURRENT_DEVICES)
@@ -110,12 +125,11 @@ async def list_policy_traffic(
     # traffico, e mette sotto gli occhi la policy che sposta i dati.
     rows.sort(key=lambda r: (-(r["bytes"] or 0), r["device"], r["policyid"] or 0))
     from services import purdue_model, segment_manager
-    scoped_devs = devices_in_scope(current_user)
     groups = {d.get("Group") for d in targets if d.get("Group")}
     segs = []
     for g in sorted(groups):
         segs.extend(segment_manager.list_segments(g).get("segments") or [])
-    ot_violations = purdue_model.check_policy_violations(rows, scoped_devs, segs)
+    ot_violations = purdue_model.check_policy_violations(rows, in_scope, segs)
     return {"total": len(rows), "rows": rows, "errors": errors,
             "devices_queried": len(targets),
             "total_bytes": sum(r["bytes"] or 0 for r in rows),
@@ -127,13 +141,15 @@ async def list_policy_traffic(
 async def get_firewall_hygiene(
     device: str = Query("", max_length=2000),
     days: int = Query(30, ge=1, le=365),
+    tenant: str = Query("", max_length=120),
     current_user = Depends(get_current_user),
 ):
     """Firewall Hygiene & Rule Delta Tracker across scoped firewalls/devices."""
-    scoped = firewall_traffic.hygiene_devices(devices_in_scope(current_user))
+    eligible = firewall_traffic.hygiene_devices(
+        _filter_by_tenant(devices_in_scope(current_user), tenant),
+    )
     wanted = {p.strip() for p in device.split(",") if p.strip()}
-    if wanted:
-        scoped = [d for d in scoped if d.get("IP") in wanted]
+    scoped = [d for d in eligible if d.get("IP") in wanted] if wanted else eligible
     report = await asyncio.to_thread(
         firewall_traffic.analyze_hygiene,
         scoped,
@@ -146,7 +162,7 @@ async def get_firewall_hygiene(
             "vendor": d.get("Vendor") or "",
             "group": d.get("Group") or "",
         }
-        for d in firewall_traffic.hygiene_devices(devices_in_scope(current_user))
+        for d in eligible
     ]
     return report
 
@@ -175,12 +191,16 @@ def _capture_device_snapshot_sync(dev: dict) -> dict:
 async def capture_policy_snapshot(
     req: Optional[SnapshotRequest] = Body(None),
     device: str = Query("", max_length=2000),
+    tenant: str = Query("", max_length=120),
     current_user = Depends(require_operator),
 ):
     """Persist a periodic policy hit/bytes snapshot for selected or scoped firewalls."""
     raw_filter = (req.device if req and req.device else "") or device
+    raw_tenant = (req.tenant if req and req.tenant else "") or tenant
     wanted = {p.strip() for p in raw_filter.split(",") if p.strip()}
-    targets = firewall_traffic.hygiene_devices(devices_in_scope(current_user))
+    targets = firewall_traffic.hygiene_devices(
+        _filter_by_tenant(devices_in_scope(current_user), raw_tenant),
+    )
     if wanted:
         targets = [d for d in targets if d.get("IP") in wanted]
 

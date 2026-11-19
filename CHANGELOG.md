@@ -10,6 +10,16 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Filtro tenant nel tab Traffico**: tutte e tre le viste (*Igiene & Delta*,
+  *Per policy* e *Ricerca / Flow SIEM*) filtrano ora coerentemente sul tenant
+  selezionato nella barra laterale. Aggiunto il parametro `tenant` sulle rotte
+  `/api/firewall-traffic/{devices,policies,hygiene,snapshot}` (applicato dopo lo
+  scope utente), isolati i flussi osservati per tenant in `analyze_hygiene`,
+  sincronizzato il tenant al lazy-load del tab e aggiunte guardie contro
+  risposte asincrone fuori ordine al cambio tenant.
+
 ## [0.66.0] - 2026-11-19
 
 ### Added

@@ -862,6 +862,11 @@ def _load_observed_flows(device_ips: List[str], tenants: List[str], since_ts: in
     """Query observed ``events`` rows carrying 4-tuple/5-tuple network flows."""
     import sqlite3
 
+    dev_set = {ip for ip in device_ips if ip}
+    ten_set = {t for t in tenants if t}
+    if not dev_set and not ten_set:
+        return []
+
     conn = db.get_observability_connection()
     try:
         try:
@@ -875,11 +880,11 @@ def _load_observed_flows(device_ips: List[str], tenants: List[str], since_ts: in
         except sqlite3.OperationalError:
             return []
         out = []
-        dev_set = set(device_ips)
-        ten_set = set(t for t in tenants if t)
         for r in rows:
             d = dict(r)
-            if (d.get("device_ip") in dev_set) or (not ten_set or d.get("tenant") in ten_set):
+            if ten_set and d.get("tenant") not in ten_set:
+                continue
+            if not dev_set or d.get("device_ip") in dev_set or not d.get("device_ip"):
                 out.append(d)
         return out
     finally:
@@ -916,6 +921,22 @@ def analyze_hygiene(
     now = int(now_ts if now_ts is not None else time.time())
     since_ts = now - int(window_days) * 86400
     targets = hygiene_devices(devices)
+    if not targets:
+        return {
+            "window_days": int(window_days),
+            "devices_analyzed": 0,
+            "summary": {
+                "dead_policies": 0,
+                "unused_objects": 0,
+                "tightenable_rules": 0,
+                "policies_tracked": 0,
+                "snapshots_available": 0,
+            },
+            "dead_policies": [],
+            "unused_objects": [],
+            "tightenable_rules": [],
+            "policy_deltas": [],
+        }
 
     dead_policies: List[Dict[str, Any]] = []
     unused_objects: List[Dict[str, Any]] = []
@@ -979,7 +1000,8 @@ def analyze_hygiene(
         # Scope observed events relevant to this device/tenant
         dev_flows = [
             ev for ev in observed
-            if ev.get("device_ip") == ip or (not ev.get("device_ip") and ev.get("tenant") == group)
+            if (not group or ev.get("tenant") == group)
+            and (ev.get("device_ip") == ip or not ev.get("device_ip"))
         ]
         # Fallback to tenant flows if device_ip had no direct tag
         if not dev_flows and group:

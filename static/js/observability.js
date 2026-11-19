@@ -186,7 +186,15 @@
     // --- TRAFFIC TAB ----------------------------------------------------------
     // Autenticazione via cookie HttpOnly (apiFetch): nessun token lato JS.
     let flowsRefreshTimer = null;
-    let _flowsSelectedTenants = new Set(Object.keys(globalGroups || {}));
+    let _flowsSelectedTenants = new Set();
+
+    function _syncFlowsSelectedTenants() {
+        const t = window.globalSelectedTenant;
+        _flowsSelectedTenants = (t && t !== 'all')
+            ? new Set([t])
+            : new Set(Object.keys(globalGroups || {}));
+    }
+    _syncFlowsSelectedTenants();
 
     // Single source of truth for the Traffico tab. Every view reads the window
     // and the tenant from here: the tab used to carry three independent window
@@ -231,6 +239,9 @@
 
     let _trafPolicies = [];
     let _trafPolErrors = [];
+    let _trafPolDevSeq = 0;
+    let _trafPolSeq = 0;
+    let _trafHygSeq = 0;
 
     function trafPolSelectedDevices() {
         return pickerValues('trafPolDevice');
@@ -249,14 +260,15 @@
     // I firewall scegliibili arrivano dall'inventario, non dalle righe
     // tornate: la lista deve esistere PRIMA di interrogare qualcuno.
     async function loadTrafPolDeviceList() {
+        const seq = ++_trafPolDevSeq;
+        const tenant = window.globalSelectedTenant || 'all';
+        const qs = tenant !== 'all' ? `?tenant=${encodeURIComponent(tenant)}` : '';
         let devices = [];
         try {
-            const res = await apiFetch('/api/firewall-traffic/devices');
+            const res = await apiFetch('/api/firewall-traffic/devices' + qs);
             if (res && res.ok) devices = (await res.json()).devices || [];
         } catch (e) { devices = []; }
-        // Lo scope globale vale anche qui: senza filtro il picker elencava i
-        // firewall di tutti i tenant.
-        const tenant = window.globalSelectedTenant || 'all';
+        if (seq !== _trafPolDevSeq) return;
         if (tenant !== 'all') devices = devices.filter(d => d.group === tenant);
         renderPickerItems('trafPolDevice', devices
             .sort((a, b) => (a.hostname || '').localeCompare(b.hostname || ''))
@@ -273,6 +285,7 @@
     }
 
     async function loadTrafPolicies() {
+        const seq = ++_trafPolSeq;
         const f = trafPolFilters();
         if (!f.device) {
             _trafPolicies = [];
@@ -281,8 +294,10 @@
             renderTrafPolicies(null);
             return;
         }
+        const tenant = window.globalSelectedTenant || 'all';
+        const tenantQs = tenant !== 'all' ? `&tenant=${encodeURIComponent(tenant)}` : '';
         const url = `/api/firewall-traffic/policies?device=${encodeURIComponent(f.device)}`
-            + `&action=${encodeURIComponent(f.action)}&q=${encodeURIComponent(f.q.trim())}`;
+            + `&action=${encodeURIComponent(f.action)}&q=${encodeURIComponent(f.q.trim())}${tenantQs}`;
         const body = document.getElementById('trafPolBody');
         if (body) {
             body.innerHTML = `<tr><td colspan="9" style="padding:20px; text-align:center;
@@ -293,10 +308,12 @@
             const res = await apiFetch(url);
             if (!res || !res.ok) throw new Error('HTTP ' + (res ? res.status : '?'));
             const data = await res.json();
+            if (seq !== _trafPolSeq) return;
             _trafPolicies = data.rows || [];
             _trafPolErrors = data.errors || [];
             totals = data;
         } catch (e) {
+            if (seq !== _trafPolSeq) return;
             _trafPolicies = [];
             _trafPolErrors = [{ device_ip: '', error: String(e) }];
         }
@@ -390,6 +407,7 @@
     // --- VISTA "IGIENE & DELTA TRACKER" -------------------------------------
 
     async function loadTrafHygiene() {
+        const seq = ++_trafHygSeq;
         const box = document.getElementById('trafHygBody');
         const devSel = document.getElementById('trafHygDevice');
         const daysEl = document.getElementById('trafHygDays');
@@ -403,10 +421,13 @@
         </div>`;
 
         try {
-            const url = `/api/firewall-traffic/hygiene?device=${encodeURIComponent(devFilter)}&days=${days}`;
+            const tenant = window.globalSelectedTenant || 'all';
+            const tenantQs = tenant !== 'all' ? `&tenant=${encodeURIComponent(tenant)}` : '';
+            const url = `/api/firewall-traffic/hygiene?device=${encodeURIComponent(devFilter)}&days=${days}${tenantQs}`;
             const res = await apiFetch(url);
             if (!res || !res.ok) throw new Error('HTTP ' + (res ? res.status : '?'));
             const data = await res.json();
+            if (seq !== _trafHygSeq) return;
             if (devSel && Array.isArray(data.eligible_devices)) {
                 const cur = devSel.value;
                 devSel.innerHTML = `<option value="">${escapeHtml(tr('trafHygAllDevices'))}</option>` +
@@ -417,6 +438,7 @@
             }
             renderTrafHygiene(data);
         } catch (e) {
+            if (seq !== _trafHygSeq) return;
             box.innerHTML = `<div class="panel" style="color:var(--danger); padding:16px;">${escapeHtml(String(e))}</div>`;
         }
     }
@@ -543,11 +565,12 @@
     async function captureTrafSnapshot() {
         const devSel = document.getElementById('trafHygDevice');
         const device = devSel ? devSel.value : '';
+        const tenant = window.globalSelectedTenant || 'all';
         try {
             const res = await apiFetch('/api/firewall-traffic/snapshot', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ device }),
+                body: JSON.stringify({ device, tenant: tenant !== 'all' ? tenant : '' }),
             });
             if (!res || !res.ok) throw new Error('HTTP ' + (res ? res.status : '?'));
             const d = await res.json();
@@ -631,7 +654,10 @@
     // Expose functions globally for UI
     window.loadObsHealth = loadObsHealth;
     window.pruneObsLogs = pruneObsLogs;
-    window.trafSelectedTenants = () => new Set(_flowsSelectedTenants);
+    window.trafSelectedTenants = () => {
+        _syncFlowsSelectedTenants();
+        return new Set(_flowsSelectedTenants);
+    };
     window.trafState = trafState;
     window.trafSwitchView = trafSwitchView;
     window.trafSetWindow = trafSetWindow;
@@ -670,6 +696,15 @@
         } else {
             _flowsSelectedTenants = new Set(Object.keys(globalGroups || {}));
         }
-        trafRefresh();
-        loadTrafPolDeviceList();
+        const hygDev = document.getElementById('trafHygDevice');
+        if (hygDev instanceof HTMLSelectElement) hygDev.value = '';
+        ++_trafPolSeq;
+        _trafPolicies = [];
+        _trafPolErrors = [];
+        if (document.getElementById('tab-flows')?.classList.contains('active')) {
+            trafRefresh();
+            if (_trafView !== 'policies') loadTrafPolDeviceList();
+        } else {
+            loadTrafPolDeviceList();
+        }
     });

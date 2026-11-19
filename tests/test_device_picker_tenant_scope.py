@@ -32,6 +32,7 @@ class TestPickersFollowTheGlobalTenant(unittest.TestCase):
     _PICKERS = [
         ("static/js/routes-view.js", "loadRtDeviceList"),
         ("static/js/observability.js", "loadTrafPolDeviceList"),
+        ("static/js/observability.js", "function loadTrafHygiene"),
         ("static/js/fortigate-management.js", "renderFgtTargetSelect"),
         ("static/js/netsec-audit.js", "populateAuditDeviceSelect"),
     ]

@@ -11,6 +11,7 @@
     let _activeQuery = '';
     let _streamTimer = null;
     let _selectedEventId = null;
+    let _siemSeq = 0;
 
     // The header lets several tenants be ticked, but /api/flow-siem/* scopes to
     // one tenant server-side, and facets/histogram are aggregated there — they
@@ -30,6 +31,7 @@
     }
 
     async function loadFlowSiemTab() {
+        const seq = ++_siemSeq;
         const windowVal = window.trafState ? window.trafState.window : '1h';
         const qParam = _activeQuery ? `&q=${encodeURIComponent(_activeQuery)}` : '';
         const tenantParam = siemTenantParam();
@@ -41,21 +43,31 @@
                 apiFetch(`/api/flow-siem/facets?window=${windowVal}${tenantParam}`)
             ]);
 
+            if (seq !== _siemSeq) return;
             if (eventsRes && eventsRes.ok) {
                 const data = await eventsRes.json();
+                if (seq !== _siemSeq) return;
                 _flowSiemData = data.events || [];
+                if (_selectedEventId !== null && !_flowSiemData.some(e => String(e.id) === String(_selectedEventId))) {
+                    _selectedEventId = null;
+                }
             }
             if (histRes && histRes.ok) {
                 const data = await histRes.json();
+                if (seq !== _siemSeq) return;
                 _flowSiemHistogram = data.buckets || [];
             }
             if (facetsRes && facetsRes.ok) {
-                _flowSiemFacets = await facetsRes.json();
+                const fdata = await facetsRes.json();
+                if (seq !== _siemSeq) return;
+                _flowSiemFacets = fdata;
             }
         } catch (e) {
+            if (seq !== _siemSeq) return;
             console.error("Errore durante il caricamento della telemetria Flow SIEM:", e);
         }
 
+        if (seq !== _siemSeq) return;
         renderSiemHistogram();
         renderSiemFacets();
         renderSiemTable();
@@ -74,14 +86,17 @@
             // streaming riprende alla chiusura del dettaglio.
             if (_selectedEventId !== null && _selectedEventId !== undefined) return;
 
+            const seq = _siemSeq;
             const windowVal = window.trafState ? window.trafState.window : '1h';
             const qParam = _activeQuery ? `&q=${encodeURIComponent(_activeQuery)}` : '';
             const tenantParam = siemTenantParam();
 
             try {
                 const res = await apiFetch(`/api/flow-siem/events?window=${windowVal}&limit=20${qParam}${tenantParam}`);
+                if (seq !== _siemSeq) return;
                 if (res && res.ok) {
                     const data = await res.json();
+                    if (seq !== _siemSeq) return;
                     if (data.events && data.events.length) {
                         // Deduplica per id. Il polling richiede sempre gli
                         // ultimi 20 eventi, quindi senza questo gli stessi
