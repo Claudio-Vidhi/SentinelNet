@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.66.0] - 2026-11-19
+
 ### Added
 
 - **Modalità Demo in-app**: workspace sintetico isolato (`data/demo`,
