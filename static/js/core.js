@@ -1537,6 +1537,7 @@ document.getElementById('btnChangePass').addEventListener('click', async () => {
 async function logout() {
     _sessionConfirmed = false;
     _meCache = null;
+    document.getElementById('btnExitDemo').hidden = true;
     // Pulisce campi sensibili in memoria nel DOM
     document.querySelectorAll('input[type="password"]').forEach(el => { el.value = ''; });
     // Cancella il cookie di sessione lato server (best-effort).
@@ -1804,6 +1805,8 @@ async function appInit() {
             currentRole = me.role || 'viewer';
             applyRoleUI(me.username, currentRole, me.allowed_tabs || [], me.groups || []);
             loadNavFavorites();
+            // Leaving the demo is super_admin only: before login it could only fail.
+            document.getElementById('btnExitDemo').hidden = currentRole !== 'super_admin';
         }
     } catch (e) { /* non bloccante */ }
 

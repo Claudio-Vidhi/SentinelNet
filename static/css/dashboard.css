@@ -2252,6 +2252,7 @@ body:not(.role-super_admin) .requires-super-admin { display: none !important; }
 }
 .demo-banner[hidden] { display: none; }
 .demo-banner .btn { width: auto; padding: 2px 10px; }
+.demo-banner .btn[hidden] { display: none; }
 body.is-demo { padding-top: 32px; }
 body.is-demo .topbar { top: 32px; }
 body.is-demo #setSecDemo,
