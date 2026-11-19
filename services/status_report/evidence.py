@@ -73,11 +73,16 @@ def collect_vulnerabilities(tenant: str, devices: list, period_days: int) -> dic
                         "devices_not_evaluated": len(detail) - len(evaluated),
                         "critical": row["counts"]["critical"], "high": row["counts"]["high"],
                         "exploited": sum(d["exploited"] for d in detail),
+                        "ics_advisories": row.get("ics_advisories_count", 0),
+                        "deferrable_devices": row.get("deferrable_devices", 0),
                         "data_age_hours": None if age is None else round(age, 1),
                         "not_evaluated": row["not_evaluated"]},
             "rows": [{"device": d["hostname"] or d["ip"], "ip": d["ip"], "firmware": d["version"],
                       "confidence": d["confidence"], "critical": d["counts"]["critical"],
                       "high": d["counts"]["high"], "exploited": d["exploited"],
+                      "ics_advisories": len(d.get("ics_advisories") or []),
+                      "process_criticality": d.get("process_criticality", ""),
+                      "maintenance_window": d.get("maintenance_window", ""),
                       "version_seen_at": d["version_seen_at"]} for d in detail]}
 
 
@@ -207,13 +212,74 @@ def collect_platform_access(tenant: str, devices: list, period_days: int) -> dic
             "rows": rows}
 
 
+def collect_ot_vault(tenant: str, devices: list, period_days: int) -> dict:
+    from services import ot_compliance
+    return ot_compliance.evaluate_ot_vault(tenant, devices, period_days)
+
+
+def collect_ot_insecure_protocols(tenant: str, devices: list, period_days: int) -> dict:
+    from services import ot_compliance
+    return ot_compliance.evaluate_insecure_protocols(tenant, devices, period_days)
+
+
+def collect_ot_unused_ports(tenant: str, devices: list, period_days: int) -> dict:
+    from services import ot_compliance
+    return ot_compliance.evaluate_unused_ports(tenant, devices, period_days)
+
+
+def collect_ot_remote_access(tenant: str, devices: list, period_days: int) -> dict:
+    from services import ot_compliance
+    return ot_compliance.evaluate_remote_access(tenant, devices, period_days)
+
+
+def collect_ot_compensating_controls(tenant: str, devices: list, period_days: int) -> dict:
+    from services import ot_compensating
+    res = ot_compensating.classify_tenant(tenant, devices)
+    rows, s = res["rows"], res["summary"]
+    mitigated = s["MITIGATED_BY_FIREWALL"] + s["MITIGATED_BY_IPS"]
+
+    def pct(n):
+        return round(100 * n / len(rows), 1) if rows else None
+
+    def detail(r) -> str:
+        if r["class"] == "EXPOSED":
+            x = r["exposure"]
+            return (f"{x['src']} ({x['src_level']}) -> {x['proto']}/{x['port']} "
+                    f"via {x['gateway']} rule {x['rule_id'] or x['rule_name']}"
+                    + (" (IPS present, CVE not verified)" if r["ips_present_unverified"] else ""))
+        if r["class"] == "NOT_EVALUATED":
+            return r["reason"]
+        return "; ".join(f"{e.get('gateway', '')} {e.get('sensor') or e.get('rule_name') or e['kind']}"
+                         f" {e.get('entry') or e.get('rule_id') or ''}".strip()
+                         for e in r["evidence"][:3])
+
+    return {"available": bool(rows),
+            "metrics": {"assets_evaluated": res["assets_evaluated"], "cves_in_scope": len(rows),
+                        "exposed": s["EXPOSED"],
+                        "kev_exposed": sum(1 for r in rows if r["class"] == "EXPOSED" and r["kev"]),
+                        "mitigated_by_firewall": s["MITIGATED_BY_FIREWALL"],
+                        "mitigated_by_ips": s["MITIGATED_BY_IPS"],
+                        "service_disabled": s["SERVICE_DISABLED"],
+                        "ot_not_evaluated": s["NOT_EVALUATED"],
+                        "exposed_pct": pct(s["EXPOSED"]), "mitigated_pct": pct(mitigated),
+                        "not_evaluated_pct": pct(s["NOT_EVALUATED"])},
+            "rows": [{"device": r["device"], "ip": r["ip"], "cve_id": r["cve_id"], "kev": r["kev"],
+                      "control_class": r["class"], "severity": r["severity"],
+                      "patch_planned": r["patch_planned"], "detail": detail(r)} for r in rows]}
+
+
 COLLECTORS = {
     "asset_inventory": collect_asset_inventory,
     "vulnerabilities": collect_vulnerabilities,
     "config_backup": collect_config_backup,
+    "ot_vault": collect_ot_vault,
     "config_drift": collect_config_drift,
     "hardening": collect_hardening,
     "segmentation": collect_segmentation,
+    "ot_insecure_protocols": collect_ot_insecure_protocols,
+    "ot_unused_ports": collect_ot_unused_ports,
+    "ot_remote_access": collect_ot_remote_access,
+    "ot_compensating_controls": collect_ot_compensating_controls,
     "logging": collect_logging,
     "platform_access": collect_platform_access,
 }

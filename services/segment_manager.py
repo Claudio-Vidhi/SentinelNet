@@ -12,6 +12,11 @@ import uuid
 COLORS = ("amber", "teal", "violet", "rose", "lime", "sky")
 DECISIONS = ("allowed", "gateway")
 _MAX_IDS = 2000
+_segment_version = 0
+
+
+def segment_version() -> int:
+    return _segment_version
 
 
 def _db():
@@ -46,9 +51,13 @@ def _subnets(values) -> list:
 
 
 def _row(r) -> dict:
+    cols = r.keys() if hasattr(r, "keys") else ()
+    raw_vlans = r["ot_vlans"] if "ot_vlans" in cols else "[]"
     return {"id": r["id"], "org": r["org"], "name": r["name"], "color": r["color"],
             "subnets": json.loads(r["subnets"]), "members": json.loads(r["members"]),
-            "excluded": json.loads(r["excluded"]), "cores": json.loads(r["cores"])}
+            "excluded": json.loads(r["excluded"]), "cores": json.loads(r["cores"]),
+            "purdue_level": (r["purdue_level"] or "") if "purdue_level" in cols else "",
+            "ot_vlans": json.loads(raw_vlans or "[]")}
 
 
 def list_segments(org: str) -> dict:
@@ -59,10 +68,12 @@ def list_segments(org: str) -> dict:
     return {"segments": segs, "links": links}
 
 
-def save_segment(org, seg_id, name, color, subnets=None, members=None, excluded=None, cores=None) -> dict:
+def save_segment(org, seg_id, name, color, subnets=None, members=None, excluded=None,
+                 cores=None, purdue_level="", ot_vlans=None) -> dict:
     """cores: the zone's cores, left then right (at most 2; empty = the map
     picks its firewalls). A core is not a member: the same firewall can be
     the core of two zones."""
+    from services import purdue_model
     _check_org(org)
     name = str(name or "").strip()
     if not name or len(name) > 60:
@@ -70,6 +81,8 @@ def save_segment(org, seg_id, name, color, subnets=None, members=None, excluded=
     if color not in COLORS:
         raise ValueError(f"Colore non valido: {color}")
     subnets, members, excluded = _subnets(subnets), _ids(members), _ids(excluded)
+    norm_level = purdue_model.normalize_purdue_level(purdue_level)
+    norm_vlans = purdue_model.normalize_ot_vlans(ot_vlans)
     # Order matters (left, right): not _ids, which sorts.
     cores = list(dict.fromkeys(str(v).strip()[:200] for v in cores or [] if str(v).strip()))
     if len(cores) > 2:
@@ -87,21 +100,26 @@ def save_segment(org, seg_id, name, color, subnets=None, members=None, excluded=
             left = [m for m in json.loads(r["members"]) if m not in taken]
             conn.execute("UPDATE segments SET members = ? WHERE id = ?", (json.dumps(left), r["id"]))
         conn.execute(
-            "INSERT INTO segments (id, org, name, color, subnets, members, excluded, cores) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "INSERT INTO segments (id, org, name, color, subnets, members, excluded, cores, purdue_level, ot_vlans) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (id) DO UPDATE SET name = excluded.name, color = excluded.color, "
             "subnets = excluded.subnets, members = excluded.members, excluded = excluded.excluded, "
-            "cores = excluded.cores",
+            "cores = excluded.cores, purdue_level = excluded.purdue_level, ot_vlans = excluded.ot_vlans",
             (seg_id, org, name, color, json.dumps(subnets), json.dumps(members), json.dumps(excluded),
-             json.dumps(cores)))
+             json.dumps(cores), norm_level, json.dumps(norm_vlans)))
+    global _segment_version
+    _segment_version += 1
     return {"id": seg_id, "org": org, "name": name, "color": color,
-            "subnets": subnets, "members": members, "excluded": excluded, "cores": cores}
+            "subnets": subnets, "members": members, "excluded": excluded, "cores": cores,
+            "purdue_level": norm_level, "ot_vlans": norm_vlans}
 
 
 def delete_segment(org: str, seg_id: str) -> None:
+    global _segment_version
     with _db() as conn, conn:
         if not conn.execute("DELETE FROM segments WHERE id = ? AND org = ?", (seg_id, org)).rowcount:
             raise ValueError(f"Segmento '{seg_id}' inesistente.")
+    _segment_version += 1
 
 
 def set_link_decision(org: str, a: str, b: str, decision) -> None:

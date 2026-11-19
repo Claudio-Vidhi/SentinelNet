@@ -48,6 +48,9 @@ WAIVED = {
         "Reads the tenant-scoped switch table; no device is contacted.",
     ("observability.py", "obs_api_context"):
         "Tenant-filtered SQL read of stored snapshots, not a device target.",
+    ("route_table.py", "trace_path"):
+        "src_ip is a simulated packet source header, not a device target; "
+        "selected devices are scoped via devices_in_scope(current_user) in _collect_selection.",
     ("triage.py", "ping_single"):
         "Probing an IP before it is in inventory is the point; when the IP IS "
         "known, assert_group_allowed runs.",

@@ -254,11 +254,17 @@ def _vpn_checks(locs: dict, links: dict, tunnels: dict, devices: list) -> list:
 
 
 def run(view: dict, observed: dict) -> list:
+    from services import purdue_model
     locs, links = view["locations"], view["links"]
     devices = observed.get("devices") or []
     routes, tunnels = observed.get("routes") or {}, observed.get("tunnels") or {}
     findings = (_model_checks(locs, links, devices)
                 + _subnet_checks(locs, devices, observed.get("arp") or [])
                 + _routing_checks(locs, links, routes, tunnels)
-                + _vpn_checks(locs, links, tunnels, devices))
+                + _vpn_checks(locs, links, tunnels, devices)
+                + purdue_model.check_purdue_blueprint(
+                    devices,
+                    observed.get("segments") or [],
+                    observed.get("segment_links") or [],
+                ))
     return sorted(findings, key=lambda f: (SEVERITY_ORDER[f["severity"]], f["code"]))

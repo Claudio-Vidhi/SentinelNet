@@ -329,15 +329,82 @@ def parse_panos(output: str) -> Counters:
     return {k: v for k, v in out.items() if v}
 
 
+_IND_PORT_HEADER = re.compile(
+    r"^\s*(?:Port|Interface)\s*:?\s*([A-Za-z0-9./\-]+)", re.I
+)
+_IND_PAIR = re.compile(
+    r"^\s*([A-Za-z][A-Za-z0-9 /_\-]*?)\s*(?::|=|\s{2,})\s*(\d[\d,]*)\s*$"
+)
+_IND_LABELS = {
+    "rx errors": "in_errors", "in errors": "in_errors", "input errors": "in_errors",
+    "errors rx": "in_errors", "rx error": "in_errors",
+    "tx errors": "out_errors", "out errors": "out_errors", "output errors": "out_errors",
+    "errors tx": "out_errors", "tx error": "out_errors",
+    "rx drops": "in_discards", "rx discards": "in_discards", "in discards": "in_discards",
+    "drops rx": "in_discards", "discards rx": "in_discards",
+    "tx drops": "out_discards", "tx discards": "out_discards", "out discards": "out_discards",
+    "drops tx": "out_discards", "discards tx": "out_discards",
+    "crc": "crc", "crc/fcs": "crc", "fcs errors": "crc", "crc errors": "crc",
+    "alignment errors": "alignment", "frame errors": "alignment",
+    "runts": "runts", "undersize": "runts", "undersize packets": "runts",
+    "giants": "giants", "oversize": "giants", "oversize packets": "giants",
+    "late collisions": "late_collisions", "excessive collisions": "excessive_collisions",
+}
+_IND_ROW = re.compile(
+    r"^\s*([A-Za-z0-9./\-]+)\s+(\d[\d,]*)\s+(\d[\d,]*)\s+(\d[\d,]*)(?:\s+(\d[\d,]*))?\s*$"
+)
+
+
+def parse_industrial_counters(output: str) -> Counters:
+    """Parse per-port error counters from industrial switch CLI output.
+
+    Supports both block-style (Port/Interface sections with label: value pairs)
+    and compact summary tables (Port  RxErrors  TxErrors  CRC [Drops]).
+    """
+    out: Counters = {}
+    port = None
+    for line in (output or "").splitlines():
+        m_row = _IND_ROW.match(line)
+        if m_row and not line.strip().lower().startswith(("port", "interface", "total")):
+            entry = {
+                "in_errors": _num(m_row.group(2)),
+                "out_errors": _num(m_row.group(3)),
+                "crc": _num(m_row.group(4)),
+            }
+            if m_row.group(5) is not None:
+                entry["in_discards"] = _num(m_row.group(5))
+            out[m_row.group(1)] = entry
+            port = None
+            continue
+        m_hdr = _IND_PORT_HEADER.match(line)
+        if m_hdr and not line.strip().lower().startswith("port summary"):
+            port = out.setdefault(m_hdr.group(1), {})
+            continue
+        if port is None:
+            continue
+        m_pair = _IND_PAIR.match(line)
+        if m_pair:
+            field = _IND_LABELS.get(m_pair.group(1).strip().lower())
+            if field:
+                port[field] = _num(m_pair.group(2))
+    return {k: v for k, v in out.items() if v}
+
+
 # driver -> (command, parser)
 COMMANDS = {
     "cisco_ios": ("show interfaces", parse_cisco),
+    "cisco_ie": ("show interfaces", parse_cisco),
     "cisco_9800": ("show interfaces", parse_cisco),
     "juniper_junos": ("show interfaces extensive | no-more", parse_junos),
     "hp_procurve": ("show interfaces", parse_procurve),
     "aruba_os": ("show interface", parse_aruba),
     "fortinet": ("diagnose netlink interface list", parse_fortios),
     "paloalto_panos": ("show counter interface all", parse_panos),
+    "siemens_scalance": ("show interfaces counters", parse_industrial_counters),
+    "hirschmann_hios": ("show port statistics", parse_industrial_counters),
+    "moxa_nos": ("show interface counters", parse_industrial_counters),
+    "westermo_weos": ("show ports statistics", parse_industrial_counters),
+    "phoenix_contact": ("show interfaces statistics", parse_industrial_counters),
 }
 
 

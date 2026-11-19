@@ -55,9 +55,11 @@ the standard that cites it.
 from typing import Any, Dict, List, Optional
 
 from . import cis_fortigate, cis_ios, cis_ubuntu, fortios_76, nist, pci
-from .vendors import FORTIOS, IOS, LINUX
+from .multivendor import cis_panos, cis_junos, cis_nxos, iec62443_ot
+from .vendors import FORTIOS, IOS, JUNOS, LINUX, NXOS, OT_SWITCH, PANOS
 
-_MODULES = (cis_fortigate, cis_ios, cis_ubuntu, fortios_76, nist, pci)
+_MODULES = (cis_fortigate, cis_ios, cis_ubuntu, fortios_76, nist, pci,
+            cis_panos, cis_junos, cis_nxos, iec62443_ot)
 
 BENCHMARKS: Dict[str, List[Dict[str, Any]]] = {m.KEY: m.RULES for m in _MODULES}
 BENCHMARK_TITLES: Dict[str, str] = {m.KEY: m.TITLE for m in _MODULES}
@@ -71,6 +73,7 @@ CIS_BY_VENDOR: Dict[str, str] = {
     for key, rules in BENCHMARKS.items()
     if BENCHMARK_GROUPS[key] == "cis" and rules
 }
+CIS_BY_VENDOR[OT_SWITCH] = iec62443_ot.KEY
 
 
 def vendors_of(key: str) -> List[str]:
@@ -85,4 +88,5 @@ def cis_for(vendor: Optional[str]) -> str:
 
 
 __all__ = ["BENCHMARKS", "BENCHMARK_TITLES", "BENCHMARK_GROUPS", "CIS_BY_VENDOR",
-           "FORTIOS", "IOS", "LINUX", "cis_for", "vendors_of"]
+           "FORTIOS", "IOS", "LINUX", "PANOS", "JUNOS", "NXOS", "OT_SWITCH",
+           "cis_for", "vendors_of"]

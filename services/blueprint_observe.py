@@ -82,5 +82,9 @@ def gather(org: str, view: dict) -> dict:
             backup = route_table.routes_from_backup(dev)
             if backup and backup.get("rows"):
                 routes[ip] = {"rows": _slim(backup["rows"]), "error": "", "from_backup": True}
+    from services import segment_manager
+    seg_data = segment_manager.list_segments(org)
     return {"devices": devices, "arp": arp, "routes": routes, "tunnels": tunnels,
+            "segments": seg_data.get("segments") or [],
+            "segment_links": seg_data.get("links") or [],
             "observed_at": obs["at"] if obs else None}

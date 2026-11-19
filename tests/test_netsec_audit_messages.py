@@ -21,14 +21,14 @@ import unittest
 
 from services import netsec_audit
 from services.netsec_audit import (guidance, ios_rules, linux_rules, messages,
-                                   rules)
+                                   multivendor_rules, rules)
 from services.netsec_audit.messages import LANGS, MESSAGES, render
 
 FIXTURES = os.path.join(os.path.dirname(__file__), "fixtures")
 SERVICE_DIR = os.path.dirname(os.path.abspath(rules.__file__))
 
 # Chiave di catalogo citata come stringa letterale, es. "fos.dns.no_section".
-_KEY_LITERAL = re.compile(r'"((?:fos|ios|lnx|ev|engine)\.[a-z0-9_.]+)"')
+_KEY_LITERAL = re.compile(r'"((?:fos|ios|lnx|mv|ev|engine)\.[a-z0-9_.]+)"')
 _PLACEHOLDER = re.compile(r"\{(\w+)\}")
 # Una frase resa che invece e' rimasta una chiave: nessuno spazio, un punto in
 # mezzo, tutta minuscola.
@@ -53,7 +53,7 @@ def _keys_cited_in_source():
     eseguita in test.
     """
     found = set()
-    for module in (rules, ios_rules, linux_rules):
+    for module in (rules, ios_rules, linux_rules, multivendor_rules):
         path = os.path.abspath(module.__file__)
         with open(path, encoding="utf-8") as fh:
             found.update(_KEY_LITERAL.findall(fh.read()))

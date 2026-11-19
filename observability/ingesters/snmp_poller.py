@@ -328,6 +328,10 @@ async def _poll_device(ip: str, community: str, port: int = 161) -> list:
         errors = await _error_counters(engine, auth, target, context)
 
         interfaces = _interfaces(columns)
+        from observability.ingesters import ring_monitor
+        ring_results, ring_metrics = await ring_monitor.poll_ring_snmp(
+            engine, auth, target, context, _walk_column
+        )
     except Exception as e:
         logger.debug("SNMP %s: giro fallito (%s)", ip, e)
         return []
@@ -352,10 +356,15 @@ async def _poll_device(ip: str, community: str, port: int = 161) -> list:
                      for if_index, counters in errors.items()
                      if int(if_index) in names
                      for field, value in counters.items()}
-    return [("snmp_system", dump({"results": system, "metrics": load})),
-            ("snmp_interfaces", dump({"results": interfaces,
-                                      "metrics": iface_metrics},
-                                     _MAX_IFACE_SUMMARY))]
+    out = [
+        ("snmp_system", dump({"results": system, "metrics": load})),
+        ("snmp_interfaces", dump({"results": interfaces,
+                                  "metrics": iface_metrics},
+                                 _MAX_IFACE_SUMMARY)),
+    ]
+    if ring_results:
+        out.append(("snmp_ring", dump({"results": ring_results, "metrics": ring_metrics})))
+    return out
 
 
 def _snmp_devices() -> list:
@@ -444,6 +453,19 @@ async def poll_once() -> int:
             n += 1
             continue
         for kind, summary in snapshots:
+            if kind == "snmp_ring":
+                try:
+                    from observability.ingesters import ring_monitor
+                    payload = json.loads(summary)
+                    ring_monitor.process_snmp_ring(
+                        device["ip"],
+                        device["tenant"],
+                        payload.get("results") or {},
+                        payload.get("metrics") or {},
+                        ts=ts,
+                    )
+                except Exception:
+                    logger.debug("Ring transition check failed for %s", device["ip"], exc_info=True)
             db.enqueue_write(
                 "INSERT INTO api_observations(ts, tenant, device_ip, kind, summary_json) "
                 "VALUES (?, ?, ?, ?, ?)",

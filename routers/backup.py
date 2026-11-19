@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Router Backup & Vulnerability Search Proxy (NVD NIST API v2.0)."""
 
+import base64
+import binascii
 import logging
 import re
 import os
@@ -10,15 +12,30 @@ import time
 import requests
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from routers.deps import require_tab
 from fastapi.responses import FileResponse, JSONResponse, Response
+from pydantic import BaseModel
 
-from core import core_engine, data_config
+from core import backup_store, core_engine, data_config
 from services import inventory_manager, nvd
 from security.security_manager import log_audit
-from routers.deps import get_current_user, require_operator, assert_device_allowed, user_group_scope
+from routers.deps import (
+    assert_device_allowed,
+    get_current_user,
+    require_admin,
+    require_operator,
+    require_tab,
+    user_group_scope,
+)
 
 router = APIRouter(tags=["Backup"])
+
+
+class OtVaultUploadSchema(BaseModel):
+    filename: str
+    content_b64: str
+    artifact_type: str = ""
+    project_version: str = ""
+    notes: str = ""
 
 
 log = logging.getLogger("sentinelnet.nvd")
@@ -35,6 +52,9 @@ _epss_down_until = 0.0
 
 def _epss_scores(cve_ids: list[str]) -> dict[str, float]:
     global _epss_down_until
+    from services import ot_vuln_intel
+    if ot_vuln_intel.is_airgap_mode():
+        return {}
     now = time.time()
     missing = [c for c in cve_ids if now - _epss_cache.get(c, (0.0, 0.0))[1] > _EPSS_TTL]
     if missing and now >= _epss_down_until:
@@ -375,3 +395,115 @@ async def proxy_enisa_search(request: Request, current_user = Depends(get_curren
 
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Errore connessione NVD NIST: {str(e)}")
+
+
+def _vault_device_or_404(current_user: dict, ip: str) -> dict:
+    device = assert_device_allowed(current_user, ip)
+    if not device:
+        raise HTTPException(status_code=404, detail=f"Apparato {ip} non trovato.")
+    return device
+
+
+@router.get("/api/ot-vault/summary", dependencies=[Depends(require_tab("tab-devices"))])
+def ot_vault_summary_route(tenant: str = "", current_user=Depends(require_operator)):
+    scope = user_group_scope(current_user)
+    devices = [
+        d for d in inventory_manager.get_all_devices()
+        if (scope is None or d.get("Group") in scope)
+        and (not tenant or tenant == "all" or d.get("Group") == tenant)
+    ]
+    return backup_store.ot_vault_summary(devices, verify=True)
+
+
+@router.get("/api/ot-vault/{ip}", dependencies=[Depends(require_tab("tab-devices"))])
+def ot_vault_list(ip: str, current_user=Depends(require_operator)):
+    device = _vault_device_or_404(current_user, ip)
+    versions = backup_store.list_ot_artifacts(device)
+    integrity = backup_store.verify_ot_artifact(device) if versions else {
+        "ok": True, "checked": 0, "corrupted": [], "missing": [], "results": [],
+    }
+    return {
+        "ip": ip,
+        "hostname": device.get("Hostname") or "",
+        "vendor": device.get("Vendor") or "",
+        "versions": versions,
+        "integrity": integrity,
+        "types": list(backup_store.OT_ARTIFACT_TYPES),
+    }
+
+
+@router.post("/api/ot-vault/{ip}", dependencies=[Depends(require_tab("tab-devices"))])
+def ot_vault_upload(ip: str, payload: OtVaultUploadSchema, current_user=Depends(require_admin)):
+    device = _vault_device_or_404(current_user, ip)
+    raw_b64 = (payload.content_b64 or "").strip()
+    if raw_b64.startswith("data:") and "," in raw_b64:
+        raw_b64 = raw_b64.split(",", 1)[1]
+    try:
+        data = base64.b64decode(raw_b64, validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(status_code=400, detail="Contenuto base64 non valido.")
+    if len(data) > backup_store.max_ot_artifact_bytes():
+        raise HTTPException(status_code=413, detail="Artefatto OT supera la dimensione massima consentita.")
+    try:
+        res = backup_store.save_ot_artifact(
+            device,
+            filename=payload.filename,
+            data=data,
+            uploaded_by=str(current_user.get("sub") or ""),
+            notes=payload.notes,
+            artifact_type=payload.artifact_type,
+            project_version=payload.project_version,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    log_audit(
+        f"Artefatto OT '{res['version']['filename']}' ({res['version']['sha256']}) "
+        f"archiviato per '{ip}' da '{current_user.get('sub')}'."
+    )
+    return res
+
+
+@router.post("/api/ot-vault/{ip}/verify", dependencies=[Depends(require_tab("tab-devices"))])
+def ot_vault_verify(ip: str, version_id: str = "", current_user=Depends(require_operator)):
+    device = _vault_device_or_404(current_user, ip)
+    try:
+        res = backup_store.verify_ot_artifact(device, version_id=version_id or None)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    if not res["ok"]:
+        log_audit(
+            f"Verifica SHA-256 OT Vault fallita su '{ip}' (utente '{current_user.get('sub')}'): "
+            f"corrotti={res['corrupted']}, mancanti={res['missing']}."
+        )
+    return res
+
+
+@router.get("/api/ot-vault/{ip}/download/{version_id}", dependencies=[Depends(require_tab("tab-devices"))])
+def ot_vault_download(ip: str, version_id: str, current_user=Depends(require_operator)):
+    device = _vault_device_or_404(current_user, ip)
+    try:
+        entry, data = backup_store.read_ot_artifact(device, version_id, verify=True)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        log_audit(f"Download artefatto OT '{version_id}' su '{ip}' bloccato per mismatch SHA-256.")
+        raise HTTPException(status_code=409, detail=str(e))
+    fname = backup_store.sanitize_filename(entry.get("filename") or "artifact.bin")
+    return Response(
+        content=data,
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{fname}"',
+            "X-Artifact-SHA256": str(entry.get("sha256") or ""),
+        },
+    )
+
+
+@router.delete("/api/ot-vault/{ip}/{version_id}", dependencies=[Depends(require_tab("tab-devices"))])
+def ot_vault_delete(ip: str, version_id: str, current_user=Depends(require_admin)):
+    device = _vault_device_or_404(current_user, ip)
+    deleted = backup_store.delete_ot_artifact(device, version_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Versione artefatto OT '{version_id}' non trovata.")
+    log_audit(f"Artefatto OT '{version_id}' rimosso per '{ip}' da '{current_user.get('sub')}'.")
+    return {"status": "deleted", "version_id": version_id}

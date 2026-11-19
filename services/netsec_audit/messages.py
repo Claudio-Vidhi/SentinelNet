@@ -1801,6 +1801,100 @@ MESSAGES: Dict[str, Dict[str, str]] = {
               "({count} parameter(s)): spoofing in progress leaves no trace.",
     },
 
+    # --- multi-vendor (PAN-OS, Junos, NX-OS, OT switches) ----------------
+    "mv.mgmt_insecure.found": {
+        "it": "Accesso di gestione non cifrato (Telnet/HTTP) abilitato su {count} voce/i.",
+        "en": "Unencrypted management access (Telnet/HTTP) enabled on {count} entry/entries.",
+    },
+    "mv.mgmt_insecure.ok": {
+        "it": "Nessun protocollo di gestione in chiaro abilitato.",
+        "en": "No cleartext management protocol enabled.",
+    },
+    "mv.ntp.ok": {
+        "it": "Sincronizzazione NTP configurata.",
+        "en": "NTP synchronization configured.",
+    },
+    "mv.ntp.missing": {
+        "it": "Nessun server NTP configurato.",
+        "en": "No NTP server configured.",
+    },
+    "mv.syslog.ok": {
+        "it": "Server Syslog remoto configurato.",
+        "en": "Remote Syslog server configured.",
+    },
+    "mv.syslog.missing": {
+        "it": "Nessun server Syslog remoto configurato.",
+        "en": "No remote Syslog server configured.",
+    },
+    "mv.any_any.found": {
+        "it": "Rilevate {count} policy permissive Any-Any in configurazione.",
+        "en": "Detected {count} permissive Any-Any policies in configuration.",
+    },
+    "mv.any_any.ok": {
+        "it": "Nessuna policy Any-Any trovata nella rulebase.",
+        "en": "No Any-Any policy found in the rulebase.",
+    },
+    "mv.log_end.missing": {
+        "it": "{count} policy non registrano il traffico a fine sessione.",
+        "en": "{count} policy rules do not log traffic at session end.",
+    },
+    "mv.log_end.ok": {
+        "it": "Tutte le policy registrano le sessioni a fine connessione.",
+        "en": "All security rules log sessions at connection end.",
+    },
+    "mv.root_ssh.allowed": {
+        "it": "Accesso SSH diretto come root consentito.",
+        "en": "Direct SSH login as root is allowed.",
+    },
+    "mv.root_ssh.ok": {
+        "it": "Accesso SSH diretto come root negato.",
+        "en": "Direct SSH login as root is denied.",
+    },
+    "mv.root_ssh.unset": {
+        "it": "Direttiva «root-login deny» non impostata esplicitamente.",
+        "en": "«root-login deny» directive is not explicitly set.",
+    },
+    "mv.aaa.ok": {
+        "it": "Autenticazione login AAA configurata.",
+        "en": "AAA login authentication configured.",
+    },
+    "mv.aaa.missing": {
+        "it": "Autenticazione login AAA non configurata.",
+        "en": "AAA login authentication is not configured.",
+    },
+    "mv.snmp_default.found": {
+        "it": "Trovate {count} community SNMP di default (public/private).",
+        "en": "Found {count} default SNMP communities (public/private).",
+    },
+    "mv.snmp_default.ok": {
+        "it": "Nessuna community SNMP predefinita public/private attiva.",
+        "en": "No default public/private SNMP community active.",
+    },
+    "mv.ot_time_log.ok": {
+        "it": "NTP e Syslog entrambi configurati per tracciamento eventi OT.",
+        "en": "Both NTP and Syslog configured for OT event tracking.",
+    },
+    "mv.ot_time_log.missing": {
+        "it": "Mancano {count} parametri di telemetria base (NTP/Syslog).",
+        "en": "Missing {count} baseline telemetry setting(s) (NTP/Syslog).",
+    },
+    "mv.ot_portsec.ok": {
+        "it": "Protezioni di livello 2 (Port Security / BPDU Guard / Storm Control) attive.",
+        "en": "Layer-2 port protections (Port Security / BPDU Guard / Storm Control) active.",
+    },
+    "mv.ot_portsec.missing": {
+        "it": "Nessuna protezione esplicita su porte access L2.",
+        "en": "No explicit L2 access port protection configured.",
+    },
+    "mv.ot_seg.ok": {
+        "it": "Segmentazione VLAN/ACL/VRF configurata.",
+        "en": "VLAN/ACL/VRF segmentation configured.",
+    },
+    "mv.ot_seg.missing": {
+        "it": "Nessuna segmentazione VLAN o ACL rilevata su switch OT.",
+        "en": "No VLAN or ACL segmentation detected on OT switch.",
+    },
+
     # --- motore -----------------------------------------------------------
     "engine.nothing_to_assess": {
         "it": "Nessuna configurazione da valutare: il testo fornito e' vuoto "

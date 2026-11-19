@@ -1550,7 +1550,8 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         # copia della stessa ripartizione per protocollo.
         # 0.65.0 removed the flow-only Overview (4 panels), Per IP (2) and
         # Flussi (1, with its two wrapped tables) views with the collectors.
-        self.assertEqual(tab.count('<div class="panel"'), 5)
+        # Pillar B (Hygiene & Delta) added 1 filter panel in #trafPane-hygiene.
+        self.assertEqual(tab.count('<div class="panel"'), 6)
         self.assertEqual(tab.count('<div class="panel" style="margin-bottom:18px;"'), 2)
         self.assertIn('class="filterbar"', tab)
         html = frontend_source()

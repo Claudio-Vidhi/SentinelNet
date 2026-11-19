@@ -132,7 +132,7 @@ def _valid_ip(value: str) -> str:
                             detail=f"'{value}' non e' un indirizzo IPv4 valido.")
 
 
-async def _collect_selection(current_user, device: str):
+async def _collect_selection(current_user, device: str, flow: bool = False):
     """Rotte e indirizzi degli apparati scelti, in una passata sola.
 
     Gli indirizzi delle interfacce sono il dato che permette di dire quale
@@ -164,19 +164,26 @@ async def _collect_selection(current_user, device: str):
             answer = await run_ssh(route_table.collect_for, dev)
             rows = answer.get("rows") or []
             addrs = await run_ssh(path_trace.addresses_for, dev, rows)
-            return dev, answer, rows, addrs
+            # Reuse the addresses just read and skip HA (the trace never reads
+            # it): two REST calls less per FortiGate. Live policy lookup and IP
+            # pools only when a source IP asks for flow evaluation.
+            fctx = await run_ssh(route_table.fortigate_context, dev, answer, addrs, False)
+            hctx = await run_ssh(path_trace.collect_hop_context, dev, fctx, answer, flow)
+            rows, addrs = path_trace.supplement_from_backup_env(dev, rows, addrs, hctx)
+            return dev, answer, rows, addrs, hctx
 
     collected = await asyncio.gather(*(one(d) for d in targets)) if targets else []
 
-    rows_by_device, addresses, devices_by_ip, errors = {}, {}, {}, []
-    for dev, answer, rows, addrs in collected:
+    rows_by_device, addresses, devices_by_ip, hop_contexts, errors = {}, {}, {}, {}, []
+    for dev, answer, rows, addrs, hctx in collected:
         ip = dev.get("IP")
         rows_by_device[ip] = rows
         addresses[ip] = addrs
         devices_by_ip[ip] = dev
+        hop_contexts[ip] = hctx
         if answer.get("error"):
             errors.append({"device_ip": ip, "error": answer["error"]})
-    return rows_by_device, addresses, devices_by_ip, errors
+    return rows_by_device, addresses, devices_by_ip, hop_contexts, errors
 
 
 @router.get("/api/routes/trace")
@@ -184,6 +191,10 @@ async def trace_path(
     device: str = Query("", max_length=2000),
     src: str = Query("", max_length=45),
     dst: str = Query("", max_length=45),
+    src_ip: str = Query("", max_length=45),
+    proto: str = Query("", max_length=16),
+    dport: "int | None" = Query(None, ge=1, le=65535),
+    vrf: str = Query("", max_length=64),
     current_user = Depends(get_current_user),
 ):
     """Il percorso verso ``dst`` a partire dall'apparato ``src``.
@@ -193,19 +204,32 @@ async def trace_path(
     l'esito "non interrogato" dice esattamente quando la selezione e' troppo
     stretta per rispondere.
 
+    Quando ``src_ip`` (ed eventualmente ``proto``, ``dport``, ``vrf``) sono
+    indicati, valuta ad ogni salto anche VRF, PBR, SD-WAN, NAT/VIP e
+    policy/ACL (Cisco IOS e FortiGate).
+
     Nessun pacchetto viene inviato: e' la tabella che viene interpretata. Per
     la prova sul campo c'e' l'endpoint separato qui sotto."""
     dst_ip = _valid_ip(dst)
-    src_ip = _valid_ip(src)
-    rows_by_device, addresses, devices_by_ip, errors = await _collect_selection(
-        current_user, device)
-    if src_ip not in rows_by_device:
+    start_ip = _valid_ip(src)
+    flow_src_ip = _valid_ip(src_ip) if (src_ip or "").strip() else ""
+    flow_proto = (proto or "").strip().lower()
+    if flow_proto and flow_proto not in ("tcp", "udp", "icmp", "ip"):
+        raise HTTPException(status_code=400,
+                            detail=f"Protocollo '{proto}' non valido (usa tcp, udp, icmp, ip).")
+    rows_by_device, addresses, devices_by_ip, hop_contexts, errors = await _collect_selection(
+        current_user, device, flow=bool(flow_src_ip))
+    if start_ip not in rows_by_device:
         raise HTTPException(
             status_code=404,
-            detail=f"{src_ip} non e' fra gli apparati selezionati e interrogabili.")
-    result = path_trace.trace(dst_ip, src_ip, rows_by_device, addresses, devices_by_ip)
+            detail=f"{start_ip} non e' fra gli apparati selezionati e interrogabili.")
+    result = path_trace.trace(
+        dst_ip, start_ip, rows_by_device, addresses, devices_by_ip,
+        src_ip=flow_src_ip, proto=flow_proto, dport=dport,
+        vrf=(vrf or "").strip(), hop_contexts=hop_contexts,
+    )
     result["errors"] = errors
-    result["src"] = src_ip
+    result["src"] = start_ip
     result["dst"] = dst_ip
     result["devices_queried"] = len(rows_by_device)
     return result

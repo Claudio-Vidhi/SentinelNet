@@ -386,7 +386,8 @@ def _same_device(row: dict, ip: str, group: str) -> bool:
 
 def _merged_row(devices, get_location, ip, vendor, profile, username, password, enable_secret, group,
                 probe=None, ssh_port=None, transports=None, snmp_community=None,
-                snmp_disabled=None, location=None, require_location=True, hostname=None) -> dict:
+                snmp_disabled=None, location=None, require_location=True, hostname=None,
+                purdue_level=None, process_criticality=None, maintenance_window=None) -> dict:
     # Validazione IP robusta
     match = IP_PATTERN.match(ip)
     if not match or not all(0 <= int(octet) <= 255 for octet in match.groups()):
@@ -471,6 +472,21 @@ def _merged_row(devices, get_location, ip, vendor, profile, username, password, 
         disabled_val = (existing.get('SNMP Disabled') if existing else '') or ''
     else:
         disabled_val = '1' if snmp_disabled else ''
+    if purdue_level is None:
+        resolved_purdue = (existing.get('Purdue Level') if existing else '') or ''
+    else:
+        from services import purdue_model
+        resolved_purdue = purdue_model.normalize_purdue_level(purdue_level)
+    if process_criticality is None:
+        resolved_crit = (existing.get('Process Criticality') if existing else '') or ''
+    else:
+        from services import ot_vuln_intel
+        resolved_crit = ot_vuln_intel.normalize_process_criticality(process_criticality)
+    if maintenance_window is None:
+        resolved_window = (existing.get('Maintenance Window') if existing else '') or ''
+    else:
+        from services import ot_vuln_intel
+        resolved_window = ot_vuln_intel.normalize_maintenance_window(maintenance_window)
     new_device = {
         'IP': ip, 'Vendor': vendor.lower(), 'Profile': profile,
         'Username': username, 'Password': enc_password, 'Enable Secret': enc_secret,
@@ -481,6 +497,9 @@ def _merged_row(devices, get_location, ip, vendor, profile, username, password, 
         'Transports': json.dumps(resolved_transports, separators=(',', ':')),
         'SNMP Community': enc_community,
         'SNMP Disabled': disabled_val,
+        'Purdue Level': resolved_purdue,
+        'Process Criticality': resolved_crit,
+        'Maintenance Window': resolved_window,
     }
     if existing_hostname:
         new_device['Hostname'] = existing_hostname
@@ -505,13 +524,16 @@ def upsert_devices(entries: list) -> None:
 
 def add_or_update_device(ip, vendor, profile, username, password, enable_secret, group,
                          probe=None, ssh_port=None, transports=None, snmp_community=None,
-                         snmp_disabled=None, location=None, require_location=True, hostname=None):
+                         snmp_disabled=None, location=None, require_location=True, hostname=None,
+                         purdue_level=None, process_criticality=None, maintenance_window=None):
     upsert_devices([dict(ip=ip, vendor=vendor, profile=profile, username=username,
                          password=password, enable_secret=enable_secret, group=group,
                          probe=probe, ssh_port=ssh_port, transports=transports,
                          snmp_community=snmp_community, snmp_disabled=snmp_disabled,
                          location=location, require_location=require_location,
-                         hostname=hostname)])
+                         hostname=hostname, purdue_level=purdue_level,
+                         process_criticality=process_criticality,
+                         maintenance_window=maintenance_window)])
 
 def delete_device(ip: str, group: Optional[str] = None):
     with _io_lock:
@@ -652,6 +674,30 @@ VENDOR_ALIASES = {
     "windows_server": "windows",
     "winsrv": "windows",
     "microsoft": "windows",
+    # Industrial networking vendors
+    "siemens": "siemens_scalance",
+    "scalance": "siemens_scalance",
+    "siemens scalance": "siemens_scalance",
+    "siemens-scalance": "siemens_scalance",
+    "belden": "hirschmann",
+    "hirschmann_hios": "hirschmann",
+    "hirschmann hios": "hirschmann",
+    "hios": "hirschmann",
+    "moxa_nos": "moxa",
+    "moxa eds": "moxa",
+    "moxa edr": "moxa",
+    "westermo_weos": "westermo",
+    "weos": "westermo",
+    "phoenix contact": "phoenix_contact",
+    "phoenix-contact": "phoenix_contact",
+    "phoenixcontact": "phoenix_contact",
+    "cisco-ie": "cisco_ie",
+    "cisco ie": "cisco_ie",
+    "cisco industrial ethernet": "cisco_ie",
+    "nxos": "cisco_nxos",
+    "nx-os": "cisco_nxos",
+    "cisco-nxos": "cisco_nxos",
+    "nexus": "cisco_nxos",
 }
 
 def normalize_vendor(raw_vendor: "str | None") -> str:
@@ -666,17 +712,24 @@ def normalize_vendor(raw_vendor: "str | None") -> str:
 def get_all_vendors() -> dict:
     """Returns {display_name: {driver: str|None}}"""
     defaults = {
-        "cisco":   {"driver": "cisco_ios"},
-        "cisco_cbs":{"driver": "cisco_s300"},
-        "hpe":     {"driver": "hp_procurve"},
-        "juniper": {"driver": "juniper_junos"},
-        "aruba":   {"driver": "aruba_os"},
-        "fortinet":{"driver": "fortinet"},
-        "paloalto":{"driver": "paloalto_panos"},
-        "cisco_wlc":{"driver": "cisco_wlc"},
-        "cisco_9800":{"driver": "cisco_9800"},
-        "linux":   {"driver": "linux"},
-        "windows": {"driver": "windows"},
+        "cisco":            {"driver": "cisco_ios"},
+        "cisco_ie":         {"driver": "cisco_ie"},
+        "cisco_nxos":       {"driver": "cisco_nxos"},
+        "cisco_cbs":        {"driver": "cisco_s300"},
+        "hpe":              {"driver": "hp_procurve"},
+        "juniper":          {"driver": "juniper_junos"},
+        "aruba":            {"driver": "aruba_os"},
+        "fortinet":         {"driver": "fortinet"},
+        "paloalto":         {"driver": "paloalto_panos"},
+        "cisco_wlc":        {"driver": "cisco_wlc"},
+        "cisco_9800":       {"driver": "cisco_9800"},
+        "siemens_scalance": {"driver": "siemens_scalance"},
+        "hirschmann":       {"driver": "hirschmann_hios"},
+        "moxa":             {"driver": "moxa_nos"},
+        "westermo":         {"driver": "westermo_weos"},
+        "phoenix_contact":  {"driver": "phoenix_contact"},
+        "linux":            {"driver": "linux"},
+        "windows":          {"driver": "windows"},
     }
     vendors_file = get_vendors_file()
     if not os.path.exists(vendors_file):
@@ -806,11 +859,13 @@ def _meta_connect() -> sqlite3.Connection:
     if path not in _meta_ready:
         with _io_lock:
             if path not in _meta_ready:
+                global _assign_cache
                 with conn:
                     conn.executescript(_META_SCHEMA)
                     if conn.execute("PRAGMA user_version").fetchone()[0] < _META_VERSION:
                         _import_legacy_json(conn)
                         conn.execute(f"PRAGMA user_version = {_META_VERSION}")
+                _assign_cache = (None, {})
                 _meta_ready.add(path)
     return conn
 
@@ -1051,7 +1106,33 @@ VENDOR_NVD_MAP = {
     "cisco_cbs": "cisco",
     "cisco_wlc": "cisco",
     "cisco_9800": "cisco",
+    "cisco_ie": "cisco",
     "fortinet": "fortinet",
+    "siemens_scalance": "siemens",
+    "siemens scalance": "siemens",
+    "scalance": "siemens",
+    "siemens": "siemens",
+    "hirschmann": "hirschmann",
+    "hirschmann_hios": "hirschmann",
+    "belden": "hirschmann",
+    "moxa": "moxa",
+    "moxa_nos": "moxa",
+    "westermo": "westermo",
+    "westermo_weos": "westermo",
+    "phoenix_contact": "phoenix contact",
+    "phoenix contact": "phoenix contact",
+    "phoenixcontact": "phoenix contact",
+    "rockwell": "rockwell automation",
+    "rockwell automation": "rockwell automation",
+    "allen-bradley": "rockwell automation",
+    "allen bradley": "rockwell automation",
+    "schneider": "schneider electric",  # check-private-data: ok
+    "schneider electric": "schneider electric",  # check-private-data: ok
+    "beckhoff": "beckhoff",
+    "omron": "omron",
+    "wago": "wago",
+    "fanuc": "fanuc",
+    "abb": "abb",
 }
 
 def resolve_euvd_term(vendor_display: str) -> str:

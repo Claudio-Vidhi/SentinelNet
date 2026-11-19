@@ -101,6 +101,16 @@ def _get_active_ai_profile():
     profiles, active = _get_ai_profiles_raw()
     return _find_ai_profile(profiles, active)
 
+
+def is_ai_profile_ready() -> bool:
+    profile = _get_active_ai_profile()
+    if profile is None:
+        return False
+    provider = (profile.get("provider") or "").strip().lower()
+    if provider == "ollama":
+        return True
+    return bool(profile.get("api_key_enc"))
+
 def chat_with_active_profile(messages):
     """Send ``messages`` with the active profile; HTTP errors the UI can show.
     Returns ``(reply, profile)``."""

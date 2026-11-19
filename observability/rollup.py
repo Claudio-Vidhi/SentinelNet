@@ -39,6 +39,8 @@ _TABLES = {
     # per device forever. Same window as the events they are projected into.
     "api_observations": ("ts", ""),
     "iface_counter_reads": ("ts", ""),
+    # Firewall policy hit snapshots: only the delta window is ever read.
+    "policy_hit_snapshots": ("ts", ""),
     # Legacy: the incidents engine was removed in 0.65.0 and new databases do
     # not create these tables. Older databases keep them; every row ages out
     # on its last activity, whatever its status, since nothing can resolve an

@@ -38,6 +38,7 @@ import sys
 import json
 import time
 import socket
+import struct
 import threading
 import collections
 import argparse
@@ -52,6 +53,264 @@ if _ROOT not in sys.path:
 from services import inventory_manager
 from core import core_engine, inventory_migration, probe_migration
 from collectors import arp_collector, mac_collector
+
+
+OT_SUPPORTED_PROBES = ("ethernet_ip", "modbus", "opc_ua", "bacnet")
+OT_DEFAULT_PORTS = {
+    "ethernet_ip": 44818,
+    "modbus": 502,
+    "opc_ua": 4840,
+    "bacnet": 47808,
+}
+OT_MIN_INTERVAL_FLOOR_S = 10
+OT_DEFAULT_MIN_INTERVAL_S = 300
+
+
+def build_enip_list_identity() -> bytes:
+    """Build a 24-byte read-only EtherNet/IP ListIdentity (0x0063) encapsulation header."""
+    return struct.pack("<HHII8sI", 0x0063, 0, 0, 0, b"SENTINEL", 0)
+
+
+def parse_enip_list_identity(data: bytes) -> dict:
+    """Parse an EtherNet/IP ListIdentity reply into a device identity dict."""
+    if len(data) < 24:
+        return {"protocol": "ethernet_ip", "command": "ListIdentity", "raw_len": len(data)}
+    cmd, length, _session, status, _ctx, _opts = struct.unpack("<HHII8sI", data[:24])
+    out: dict[str, object] = {
+        "protocol": "ethernet_ip",
+        "command": "ListIdentity",
+        "command_code": cmd,
+        "status": status,
+    }
+    body = data[24:24 + length]
+    if cmd != 0x0063 or len(body) < 6:
+        return out
+    item_count, item_type, item_len = struct.unpack("<HHH", body[:6])
+    if item_count < 1 or item_type != 0x000C:
+        return out
+    item = body[6:6 + item_len]
+    # CIP Identity Item: 2B encap_version + 16B socket_addr + 2B vendor + 2B dev_type
+    # + 2B prod_code + 2B rev + 2B status + 4B serial + 1B name_len + name
+    if len(item) < 33:
+        return out
+    vendor_id, dev_type, prod_code, rev_maj, rev_min, cip_status, serial = struct.unpack(
+        "<HHHBBHI", item[18:32]
+    )
+    name_len = item[32]
+    prod_name = item[33:33 + name_len].decode("utf-8", errors="replace").strip()
+    out.update({
+        "vendor_id": vendor_id,
+        "device_type": dev_type,
+        "product_code": prod_code,
+        "revision": f"{rev_maj}.{rev_min}",
+        "cip_status": cip_status,
+        "serial": f"{serial:08x}",
+        "product_name": prod_name,
+    })
+    return out
+
+
+def build_modbus_read_device_id(
+    unit_id: int = 1,
+    read_code: int = 1,
+    object_id: int = 0,
+    transaction_id: int = 1,
+) -> bytes:
+    """Build a read-only Modbus TCP FC 43 / MEI 14 (Read Device Identification) ADU.
+
+    Strictly restricted to Function Code 0x2B (43) and MEI Type 0x0E (14).
+    """
+    if read_code not in (1, 2, 3, 4):
+        raise ValueError(f"Invalid Modbus Read Device ID code: {read_code}")
+    if not (0 <= unit_id <= 255) or not (0 <= object_id <= 255):
+        raise ValueError("unit_id and object_id must be in 0..255")
+    # MBAP: Transaction ID (2B), Protocol ID = 0 (2B), Length = 5 (2B), Unit ID (1B)
+    # PDU:  Function Code = 0x2B (1B), MEI Type = 0x0E (1B), ReadDevId (1B), ObjectId (1B)
+    return struct.pack(
+        ">HHHBBBBB",
+        transaction_id & 0xFFFF,
+        0,
+        5,
+        unit_id,
+        0x2B,
+        0x0E,
+        read_code,
+        object_id,
+    )
+
+
+_MODBUS_OBJECT_NAMES = {
+    0x00: "vendor_name",
+    0x01: "product_code",
+    0x02: "revision",
+    0x03: "vendor_url",
+    0x04: "product_name",
+    0x05: "model_name",
+    0x06: "user_application_name",
+}
+
+
+def parse_modbus_read_device_id(data: bytes) -> dict:
+    """Parse a Modbus TCP FC 43 / MEI 14 response into device identification fields."""
+    if len(data) < 9:
+        return {"protocol": "modbus", "command": "ReadDeviceIdentification", "raw_len": len(data)}
+    tx_id, proto_id, _length, unit_id, func_code = struct.unpack(">HHHBB", data[:8])
+    out: dict[str, object] = {
+        "protocol": "modbus",
+        "command": "ReadDeviceIdentification",
+        "transaction_id": tx_id,
+        "protocol_id": proto_id,
+        "unit_id": unit_id,
+        "function_code": func_code,
+    }
+    if func_code == 0xAB:
+        out["exception_code"] = data[8]
+        return out
+    if func_code != 0x2B or len(data) < 14:
+        return out
+    mei_type, read_code, conformity, more_follows, next_obj, num_objs = struct.unpack(
+        ">BBBBBB", data[8:14]
+    )
+    if mei_type != 0x0E:
+        return out
+    out["mei_type"] = mei_type
+    out["read_code"] = read_code
+    out["conformity_level"] = conformity
+    objects: dict[str, str] = {}
+    pos = 14
+    for _ in range(num_objs):
+        if pos + 2 > len(data):
+            break
+        obj_id, obj_len = data[pos], data[pos + 1]
+        pos += 2
+        if pos + obj_len > len(data):
+            break
+        val = data[pos:pos + obj_len].decode("utf-8", errors="replace").strip()
+        pos += obj_len
+        key = _MODBUS_OBJECT_NAMES.get(obj_id, f"object_{obj_id:02x}")
+        objects[key] = val
+        out[key] = val
+    out["objects"] = objects
+    return out
+
+
+def build_opcua_hello(endpoint_url: str = "opc.tcp://localhost:4840") -> bytes:
+    """Build a read-only OPC-UA Binary Protocol HEL (Hello) chunk."""
+    url_bytes = endpoint_url.encode("utf-8")
+    total_len = 8 + 20 + 4 + len(url_bytes)
+    return (
+        b"HELF"
+        + struct.pack("<IIIIIII", total_len, 0, 65536, 65536, 0, 0, len(url_bytes))
+        + url_bytes
+    )
+
+
+def build_opcua_get_endpoints_request(endpoint_url: str = "opc.tcp://localhost:4840") -> bytes:
+    """Build a read-only OPC-UA GetEndpointsRequest (NodeId 428) message."""
+    url_bytes = endpoint_url.encode("utf-8")
+    # NodeId 428 in 4-byte numeric encoding: 0x01, namespace 0, 428 (0x01AC)
+    node_id = b"\x01\x00\xac\x01"
+    # RequestHeader minimal + EndpointUrl + LocaleIds (0) + ProfileUris (0)
+    payload = node_id + struct.pack("<i", len(url_bytes)) + url_bytes + struct.pack("<ii", 0, 0)
+    total_len = 8 + len(payload)
+    return b"MSGF" + struct.pack("<I", total_len) + payload
+
+
+def parse_opcua_response(data: bytes) -> dict:
+    """Parse an OPC-UA ACK, ERR, or GetEndpoints response chunk."""
+    if len(data) < 8:
+        return {"protocol": "opc_ua", "command": "GetEndpoints", "raw_len": len(data)}
+    msg_type = data[:3].decode("ascii", errors="replace")
+    chunk_type = chr(data[3])
+    msg_size = struct.unpack("<I", data[4:8])[0]
+    out: dict[str, object] = {
+        "protocol": "opc_ua",
+        "command": "GetEndpoints",
+        "message_type": msg_type,
+        "chunk_type": chunk_type,
+        "message_size": msg_size,
+    }
+    if msg_type == "ACK" and len(data) >= 28:
+        ver, rcv_buf, snd_buf, max_msg, max_chunks = struct.unpack("<IIIII", data[8:28])
+        out.update({
+            "protocol_version": ver,
+            "receive_buffer_size": rcv_buf,
+            "send_buffer_size": snd_buf,
+            "max_message_size": max_msg,
+            "max_chunk_count": max_chunks,
+        })
+    elif msg_type == "ERR" and len(data) >= 16:
+        err_code, reason_len = struct.unpack("<Ii", data[8:16])
+        reason = ""
+        if reason_len > 0 and len(data) >= 16 + reason_len:
+            reason = data[16:16 + reason_len].decode("utf-8", errors="replace")
+        out.update({"error_code": err_code, "reason": reason})
+    return out
+
+
+def build_bacnet_who_is() -> bytes:
+    """Build an 8-byte read-only BACnet/IP Unconfirmed Who-Is frame."""
+    # BVLC: Type 0x81 (BACnet/IP), Function 0x0A (Original-Unicast-NPDU), Length 0x0008
+    # NPDU: Version 0x01, Control 0x00
+    # APDU: PDU Type 0x10 (Unconfirmed-Request), Service Choice 0x08 (Who-Is)
+    return bytes((0x81, 0x0A, 0x00, 0x08, 0x01, 0x00, 0x10, 0x08))
+
+
+def parse_bacnet_i_am(data: bytes) -> dict:
+    """Parse a BACnet/IP I-Am Unconfirmed-Request response."""
+    out: dict[str, object] = {"protocol": "bacnet", "command": "Who-Is"}
+    if len(data) < 12 or data[0] != 0x81:
+        return out
+    bvlc_func = data[1]
+    bvlc_len = struct.unpack(">H", data[2:4])[0]
+    out["bvlc_function"] = bvlc_func
+    out["bvlc_length"] = bvlc_len
+    if data[4] != 0x01:
+        return out
+    npdu_ctrl = data[5]
+    pos = 6
+    # Skip DNET/DLEN/DADR if destination specifier bit (0x20) is set
+    if npdu_ctrl & 0x20:
+        if pos + 3 > len(data):
+            return out
+        dlen = data[pos + 2]
+        pos += 3 + dlen
+    # Skip SNET/SLEN/SADR if source specifier bit (0x08) is set
+    if npdu_ctrl & 0x08:
+        if pos + 3 > len(data):
+            return out
+        slen = data[pos + 2]
+        pos += 3 + slen
+    if npdu_ctrl & 0x20:
+        pos += 1  # hop count
+    if pos + 2 > len(data):
+        return out
+    apdu_type = data[pos]
+    service_choice = data[pos + 1]
+    if apdu_type != 0x10 or service_choice != 0x00:
+        return out
+    out["service"] = "I-Am"
+    pos += 2
+    # Application tag 12 (Object Identifier): 0xC4 followed by 4-byte uint32
+    if pos + 5 <= len(data) and data[pos] == 0xC4:
+        obj_raw = struct.unpack(">I", data[pos + 1:pos + 5])[0]
+        obj_type = (obj_raw >> 22) & 0x3FF
+        device_instance = obj_raw & 0x3FFFFF
+        out["object_type"] = obj_type
+        out["device_instance"] = device_instance
+        pos += 5
+    # Skip Max APDU Length Accepted + Segmentation Supported application tags to read Vendor ID
+    for _ in range(2):
+        if pos >= len(data):
+            break
+        tag_len = data[pos] & 0x07
+        pos += 1 + tag_len
+    if pos < len(data) and (data[pos] & 0xF0) == 0x20:
+        vlen = data[pos] & 0x07
+        if 1 <= vlen <= 4 and pos + 1 + vlen <= len(data):
+            vendor_id = int.from_bytes(data[pos + 1:pos + 1 + vlen], "big")
+            out["vendor_id"] = vendor_id
+    return out
 
 
 
@@ -178,6 +437,8 @@ def load_config():
     cfg.setdefault("data_dir", "./agent-data")
     cfg.setdefault("syslog_enabled", True)
     cfg.setdefault("syslog_port", 5514)
+    cfg.setdefault("ot_probes_enabled", False)
+    cfg.setdefault("ot_probe_min_interval_s", OT_DEFAULT_MIN_INTERVAL_S)
     if cfg.get("data_dir"):
         os.environ["SENTINELNET_DATA_DIR"] = cfg["data_dir"]
         # The agent never runs the central's lifespan, so its own inventory
@@ -198,6 +459,7 @@ class Agent:
         # Stessa regola del backup: 0.0 = mai eseguito, quindi la prima
         # raccolta parte subito e solo dopo comanda l'intervallo.
         self._last_l2 = 0.0
+        self._ot_probe_last_ts = {}
         self.cfg = cfg
         self.base = cfg["central_url"].rstrip("/")
         self.verify = cfg.get("verify_tls", True)
@@ -708,6 +970,180 @@ class Agent:
         except Exception as e:
             return {"status": "error", "result": str(e)}
 
+    @staticmethod
+    def _normalize_ot_protocol(protocol: str) -> str:
+        p = (protocol or "").strip().lower()
+        if p in ("modbus_tcp", "modbus-tcp"):
+            return "modbus"
+        if p in ("enip", "ethernet/ip", "ethernet-ip"):
+            return "ethernet_ip"
+        if p in ("opcua", "opc-ua"):
+            return "opc_ua"
+        return p
+
+    def _device_ot_protocols(self, device: dict) -> list:
+        """Return the list of OT probe protocols explicitly enabled for a device."""
+        raw = device.get("ot_probes") or device.get("OT Probes")
+        if isinstance(raw, (list, tuple, set)):
+            return [self._normalize_ot_protocol(str(x)) for x in raw if str(x).strip()]
+        if isinstance(raw, str) and raw.strip():
+            return [self._normalize_ot_protocol(x) for x in raw.split(",") if x.strip()]
+        return []
+
+    def _is_ot_probe_allowed(self, device: dict, protocol: str) -> bool:
+        """Check that read-only OT probing is explicitly enabled for both the
+        site (agent config) and the individual target device."""
+        if not isinstance(device, dict) or not (device.get("IP") or "").strip():
+            return False
+        if not bool(self.cfg.get("ot_probes_enabled", False)):
+            return False
+        if inventory_manager.is_manual(device):
+            return False
+        proto = self._normalize_ot_protocol(protocol)
+        if proto not in OT_SUPPORTED_PROBES:
+            return False
+        allowed_protos = self._device_ot_protocols(device)
+        flag = device.get("ot_probe_enabled")
+        if flag is None:
+            flag_str = str(device.get("OT Probe") or "").strip().lower()
+            flag = flag_str in ("1", "true", "yes", "on") if flag_str else False
+        if flag is False and not allowed_protos:
+            return False
+        if allowed_protos and proto not in allowed_protos:
+            return False
+        return bool(flag) or (proto in allowed_protos)
+
+    @staticmethod
+    def _probe_ethernet_ip(ip: str, port: int, timeout: float) -> dict:
+        req = build_enip_list_identity()
+        with socket.create_connection((ip, port), timeout=timeout) as sock:
+            sock.settimeout(timeout)
+            sock.sendall(req)
+            resp = sock.recv(4096)
+        return parse_enip_list_identity(resp)
+
+    @staticmethod
+    def _probe_modbus(ip: str, port: int, timeout: float, unit_id: int = 1) -> dict:
+        req = build_modbus_read_device_id(unit_id=unit_id, read_code=1, object_id=0)
+        with socket.create_connection((ip, port), timeout=timeout) as sock:
+            sock.settimeout(timeout)
+            sock.sendall(req)
+            resp = sock.recv(4096)
+        return parse_modbus_read_device_id(resp)
+
+    @staticmethod
+    def _probe_opc_ua(ip: str, port: int, timeout: float) -> dict:
+        endpoint_url = f"opc.tcp://{ip}:{port}"
+        req = build_opcua_hello(endpoint_url)
+        with socket.create_connection((ip, port), timeout=timeout) as sock:
+            sock.settimeout(timeout)
+            sock.sendall(req)
+            resp = sock.recv(4096)
+        out = parse_opcua_response(resp)
+        out["endpoint_url"] = endpoint_url
+        return out
+
+    @staticmethod
+    def _probe_bacnet(ip: str, port: int, timeout: float) -> dict:
+        req = build_bacnet_who_is()
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.settimeout(timeout)
+            sock.sendto(req, (ip, port))
+            resp, _addr = sock.recvfrom(4096)
+        finally:
+            sock.close()
+        return parse_bacnet_i_am(resp)
+
+    def run_ot_probe(self, device: dict, protocol: str, timeout: float = 2.0) -> dict:
+        """Execute a rate-limited, opt-in, read-only OT identity probe against device."""
+        ip = (device.get("IP") or "").strip() if isinstance(device, dict) else ""
+        proto = self._normalize_ot_protocol(protocol)
+        if proto not in OT_SUPPORTED_PROBES:
+            raise ValueError(f"Unsupported OT probe protocol: {protocol!r}")
+        if not self._is_ot_probe_allowed(device, proto):
+            return {
+                "status": "blocked",
+                "reason": "OT probe disabled for site or device",
+                "ip": ip,
+                "protocol": proto,
+            }
+        min_interval = max(
+            OT_MIN_INTERVAL_FLOOR_S,
+            int(self.cfg.get("ot_probe_min_interval_s", OT_DEFAULT_MIN_INTERVAL_S)),
+        )
+        now = time.time()
+        key = (ip, proto)
+        last_ts = getattr(self, "_ot_probe_last_ts", {}).get(key)
+        if last_ts is not None and (now - last_ts) < min_interval:
+            return {
+                "status": "rate_limited",
+                "retry_after_s": round(min_interval - (now - last_ts), 2),
+                "ip": ip,
+                "protocol": proto,
+            }
+        if not hasattr(self, "_ot_probe_last_ts"):
+            self._ot_probe_last_ts = {}
+        self._ot_probe_last_ts[key] = now
+        port = int(device.get("ot_port") or OT_DEFAULT_PORTS[proto])
+        try:
+            if proto == "ethernet_ip":
+                identity = self._probe_ethernet_ip(ip, port, timeout)
+            elif proto == "modbus":
+                unit_id = int(device.get("modbus_unit_id") or 1)
+                identity = self._probe_modbus(ip, port, timeout, unit_id=unit_id)
+            elif proto == "opc_ua":
+                identity = self._probe_opc_ua(ip, port, timeout)
+            else:
+                identity = self._probe_bacnet(ip, port, timeout)
+            return {
+                "status": "ok",
+                "ip": ip,
+                "protocol": proto,
+                "identity": identity,
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "ip": ip,
+                "protocol": proto,
+                "error": str(e),
+            }
+
+    def maybe_run_ot_probes(self, devices) -> list:
+        """Run opt-in read-only OT probes for explicitly enabled devices."""
+        if not bool(self.cfg.get("ot_probes_enabled", False)):
+            return []
+        results = []
+        for d in devices or []:
+            if not isinstance(d, dict) or not d.get("IP"):
+                continue
+            protos = self._device_ot_protocols(d) or list(OT_SUPPORTED_PROBES)
+            for proto in protos:
+                if not self._is_ot_probe_allowed(d, proto):
+                    continue
+                res = self.run_ot_probe(d, proto)
+                if res.get("status") in ("ok", "error"):
+                    results.append(res)
+        return results
+
+    def _execute_ot_probe_job(self, device: dict, spec_str: str) -> dict:
+        protocol = spec_str.strip()
+        timeout = 2.0
+        if protocol.startswith("{"):
+            try:
+                spec = json.loads(protocol)
+                protocol = spec.get("protocol", "")
+                timeout = float(spec.get("timeout", 2.0))
+            except (TypeError, ValueError):
+                return {"status": "error", "result": "Job OT probe malformato."}
+        try:
+            res = self.run_ot_probe(device, protocol, timeout=timeout)
+        except ValueError as e:
+            return {"status": "error", "result": str(e)}
+        status = "done" if res.get("status") == "ok" else "error"
+        return {"status": status, "result": json.dumps(res)}
+
     def run_jobs(self, devices):
         r = self._get("/api/agent/jobs")
         r.raise_for_status()
@@ -721,6 +1157,11 @@ class Agent:
                 out = ({"status": "error",
                         "result": f"Dispositivo {ip} non in inventario locale."}
                        if not device else self._execute_rest_job(device, cmd))
+            elif job.get("kind") == "ot_probe":
+                device = by_ip.get(ip)
+                out = ({"status": "error",
+                        "result": f"Dispositivo {ip} non in inventario locale."}
+                       if not device else self._execute_ot_probe_job(device, cmd))
             elif job.get("kind") == "triage":
                 device = by_ip.get(ip)
                 if not device:

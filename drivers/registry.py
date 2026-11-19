@@ -24,40 +24,61 @@ from drivers.cisco_wlc import CiscoWlcDriver
 from drivers.paloalto_panos import PaloAltoDriver
 from drivers.linux import LinuxDriver
 from drivers.windows import WindowsDriver
+from drivers.siemens_scalance import SiemensScalanceDriver
+from drivers.hirschmann import HirschmannDriver
+from drivers.moxa import MoxaDriver
+from drivers.westermo import WestermoDriver
+from drivers.phoenix_contact import PhoenixContactDriver
+from drivers.cisco_ie import CiscoIeDriver
+from drivers.cisco_nxos import CiscoNxosDriver
 
 # Maps the driver-name (vendor registry 'driver' field) to the driver class
 # and the corresponding netmiko device_type.
 DRIVER_REGISTRY = {
-    'cisco_ios':      (CiscoIosDriver,   'cisco_ios'),
-    'cisco_s300':     (CiscoCbsDriver,   'cisco_s300'),
-    'hp_procurve':    (HpProcurveDriver, 'hp_procurve'),
-    'juniper_junos':  (JuniperJunosDriver, 'juniper_junos'),
-    'aruba_os':       (ArubaOsDriver,    'aruba_os'),
-    'fortinet':       (FortinetDriver,   'fortinet'),
-    'paloalto_panos': (PaloAltoDriver,   'paloalto_panos'),
-    'cisco_wlc':      (CiscoWlcDriver,   'cisco_wlc_ssh'),   # AireOS
-    'cisco_9800':     (CiscoIosDriver,   'cisco_xe'),        # Catalyst 9800 (IOS-XE)
-    'linux':          (LinuxDriver,      'linux'),
+    'cisco_ios':        (CiscoIosDriver,        'cisco_ios'),
+    'cisco_ie':         (CiscoIeDriver,         'cisco_ios'),
+    'cisco_nxos':       (CiscoNxosDriver,       'cisco_nxos'),
+    'cisco_s300':       (CiscoCbsDriver,        'cisco_s300'),
+    'hp_procurve':      (HpProcurveDriver,      'hp_procurve'),
+    'juniper_junos':    (JuniperJunosDriver,    'juniper_junos'),
+    'aruba_os':         (ArubaOsDriver,         'aruba_os'),
+    'fortinet':         (FortinetDriver,        'fortinet'),
+    'paloalto_panos':   (PaloAltoDriver,        'paloalto_panos'),
+    'cisco_wlc':        (CiscoWlcDriver,        'cisco_wlc_ssh'),   # AireOS
+    'cisco_9800':       (CiscoIosDriver,        'cisco_xe'),        # Catalyst 9800 (IOS-XE)
+    'siemens_scalance': (SiemensScalanceDriver, 'generic_termserver'),
+    'hirschmann_hios':  (HirschmannDriver,      'hirschmann_hios'),
+    'moxa_nos':         (MoxaDriver,            'moxa_nos'),
+    'westermo_weos':    (WestermoDriver,        'generic_termserver'),
+    'phoenix_contact':  (PhoenixContactDriver,  'generic_termserver'),
+    'linux':            (LinuxDriver,           'linux'),
     # 'generic': netmiko apre una sessione senza grammatica di vendor,
     # che e' esattamente cio' che serve su una shell Windows.
-    'windows':        (WindowsDriver,    'generic'),
+    'windows':          (WindowsDriver,         'generic'),
 }
 
 # Fallback vendor-name → driver-name, used when the vendor registry does not
 # specify a driver (e.g. installations with legacy vendors.json or 'driver': null).
 VENDOR_DRIVER_DEFAULTS = {
-    'cisco':    'cisco_ios',
-    'cisco_cbs': 'cisco_s300',
-    'hpe':      'hp_procurve',
-    'hp':       'hp_procurve',
-    'juniper':  'juniper_junos',
-    'aruba':    'aruba_os',
-    'fortinet': 'fortinet',
-    'paloalto': 'paloalto_panos',
-    'cisco_wlc': 'cisco_wlc',
-    'cisco_9800': 'cisco_9800',
-    'linux':    'linux',
-    'windows':  'windows',
+    'cisco':            'cisco_ios',
+    'cisco_ie':         'cisco_ie',
+    'cisco_nxos':       'cisco_nxos',
+    'cisco_cbs':        'cisco_s300',
+    'hpe':              'hp_procurve',
+    'hp':               'hp_procurve',
+    'juniper':          'juniper_junos',
+    'aruba':            'aruba_os',
+    'fortinet':         'fortinet',
+    'paloalto':         'paloalto_panos',
+    'cisco_wlc':        'cisco_wlc',
+    'cisco_9800':       'cisco_9800',
+    'siemens_scalance': 'siemens_scalance',
+    'hirschmann':       'hirschmann_hios',
+    'moxa':             'moxa_nos',
+    'westermo':         'westermo_weos',
+    'phoenix_contact':  'phoenix_contact',
+    'linux':            'linux',
+    'windows':          'windows',
 }
 
 
@@ -115,14 +136,21 @@ def driver_name_for(vendor):
 # knowledge belongs to the drivers layer (plan item 15); the ARP collector
 # consumes this table instead of owning it.
 ARP_COMMANDS = {
-    'cisco_ios':      'show ip arp',
-    'cisco_s300':     'show arp',
-    'cisco_9800':     'show ip arp',
-    'cisco_wlc':      'show arp switch',
-    'hp_procurve':    'show arp',
-    'juniper_junos':  'show arp no-resolve',
-    'aruba_os':       'show arp',
-    'paloalto_panos': 'show arp all',
+    'cisco_ios':        'show ip arp',
+    'cisco_ie':         'show ip arp',
+    'cisco_nxos':       'show ip arp',
+    'cisco_s300':       'show arp',
+    'cisco_9800':       'show ip arp',
+    'cisco_wlc':        'show arp switch',
+    'hp_procurve':      'show arp',
+    'juniper_junos':    'show arp no-resolve',
+    'aruba_os':         'show arp',
+    'paloalto_panos':   'show arp all',
+    'siemens_scalance': 'show arp',
+    'hirschmann_hios':  'show arp',
+    'moxa_nos':         'show arp',
+    'westermo_weos':    'show arp',
+    'phoenix_contact':  'show arp',
 }
 
 
@@ -143,6 +171,8 @@ def arp_command_for(driver_name: "str | None") -> str:
 # plausible guess.
 CPE_PRODUCTS = {
     'cisco_ios':      ('o', 'cisco', 'ios'),                              # 615
+    'cisco_ie':       ('o', 'cisco', 'ios'),                              # 615
+    'cisco_nxos':     ('o', 'cisco', 'nx-os'),                            # NX-OS
     'cisco_s300':     ('o', 'cisco', 'ios'),                              # 615
     'cisco_9800':     ('o', 'cisco', 'ios_xe'),                           # 546
     'cisco_wlc':      ('o', 'cisco', 'wireless_lan_controller_software'),  # 73
@@ -397,6 +427,7 @@ def _services_fortios(config_text: str) -> dict:
 
 _SERVICE_EXTRACTORS = {
     "cisco_ios": _services_ios,
+    "cisco_ie": _services_ios,
     "cisco_9800": _services_ios,
     "fortinet": _services_fortios,
 }

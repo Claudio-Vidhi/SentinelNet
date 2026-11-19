@@ -197,7 +197,7 @@ class FlowOnlyViewsStayGone(unittest.TestCase):
         self.assertIn("let _trafView = 'search';", self.js)
         self.assertIn('class="ca-pill active" id="trafPill-search"', self.html)
         self.assertIn('<div id="trafPane-search" class="traf-pane">', self.html)
-        self.assertIn("const TRAF_VIEWS = ['search', 'policies']", self.js)
+        self.assertIn("const TRAF_VIEWS = ['search', 'policies', 'hygiene']", self.js)
 
     def test_the_status_banner_sits_outside_the_panes(self):
         # It used to live in the Overview pane; Ricerca needs it too

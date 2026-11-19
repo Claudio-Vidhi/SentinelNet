@@ -34,8 +34,9 @@ def maybe_enable(net_connect, netmiko_type: str, secret: str) -> None:
     """
     if netmiko_type == 'generic':
         return
-    if netmiko_type != 'linux' or secret:
-        net_connect.enable()
+    if netmiko_type in ('linux', 'generic_termserver') and not secret:
+        return
+    net_connect.enable()
 # Vendor → driver → netmiko mapping lives in the drivers layer (plan Phase 3
 # items 12/15); re-imported here because existing call sites import these
 # names from core_engine.
@@ -269,10 +270,53 @@ TRIAGE_EXTRA_COMMANDS = {
         ("show environment all",       "--- SHOW ENVIRONMENT ALL ---"),
         ("show license all",           "--- SHOW LICENSE ALL ---"),
     ],
+    'cisco_ie': [
+        ("show cdp neighbors",         "--- SHOW CDP NEIGHBORS ---"),
+        ("show cdp neighbors detail",  "--- SHOW CDP NEIGHBORS DETAIL ---"),
+        ("show lldp neighbors",        "--- SHOW LLDP NEIGHBORS ---"),
+        ("show lldp neighbors detail", "--- SHOW LLDP NEIGHBORS DETAIL ---"),
+        ("show inventory",             "--- SHOW INVENTORY ---"),
+        ("show vlan",                  "--- SHOW VLAN ---"),
+        ("show dlr ring",              "--- SHOW DLR RING ---"),
+        ("show rep topology",          "--- SHOW REP TOPOLOGY ---"),
+        ("show environment all",       "--- SHOW ENVIRONMENT ALL ---"),
+        ("show spanning-tree summary", "--- SHOW SPANNING-TREE SUMMARY ---"),
+        ("show mac address-table",     "--- SHOW MAC ADDRESS-TABLE ---"),
+        ("show version",               "--- SHOW VERSION ---"),
+        ("show interfaces status",     "--- SHOW INTERFACES STATUS ---"),
+    ],
+    'siemens_scalance': [
+        ("show lldp neighbors",        "--- SHOW LLDP NEIGHBORS ---"),
+        ("show mrp",                   "--- SHOW MRP ---"),
+        ("show interfaces",            "--- SHOW INTERFACES ---"),
+        ("show vlan",                  "--- SHOW VLAN ---"),
+    ],
+    'hirschmann': [
+        ("show version",               "--- SHOW VERSION ---"),
+        ("show lldp remote-data",      "--- SHOW LLDP NEIGHBORS ---"),
+        ("show mrp",                   "--- SHOW MRP ---"),
+        ("show interface",             "--- SHOW INTERFACES ---"),
+    ],
+    'moxa': [
+        ("show version",               "--- SHOW VERSION ---"),
+        ("show lldp neighbors",        "--- SHOW LLDP NEIGHBORS ---"),
+        ("show turbo-ring",            "--- SHOW TURBO-RING ---"),
+        ("show interfaces",            "--- SHOW INTERFACES ---"),
+    ],
+    'westermo': [
+        ("show lldp",                  "--- SHOW LLDP NEIGHBORS ---"),
+        ("show frnt",                  "--- SHOW FRNT ---"),
+        ("show ports",                 "--- SHOW PORTS ---"),
+    ],
+    'phoenix_contact': [
+        ("show lldp neighbors",        "--- SHOW LLDP NEIGHBORS ---"),
+        ("show mrp",                   "--- SHOW MRP ---"),
+        ("show interfaces",            "--- SHOW INTERFACES ---"),
+    ],
 }
 # read_timeout per vendor; absent = netmiko's default. Windows pays the .NET
 # runtime start on the first `powershell -Command`.
-TRIAGE_EXTRA_TIMEOUT = {'cisco': 30, 'cisco_9800': 30, 'cisco_wlc': 30, 'paloalto': 30, 'windows': 45}
+TRIAGE_EXTRA_TIMEOUT = {'cisco': 30, 'cisco_ie': 30, 'cisco_9800': 30, 'cisco_wlc': 30, 'paloalto': 30, 'windows': 45}
 # `hostname` comes out as a bare name: it is written in the form
 # `hostname <name>` so extract_hostname_from_config recognizes it
 # without a dedicated parser (the Linux prompt
@@ -630,6 +674,7 @@ AUTODETECT_VENDORS = {
     'cisco_wlc': 'cisco_wlc', 'cisco_wlc_85': 'cisco_wlc',
     'hp_procurve': 'hpe', 'juniper_junos': 'juniper', 'fortinet': 'fortinet',
     'paloalto_panos': 'paloalto', 'linux': 'linux',
+    'hirschmann_hios': 'hirschmann', 'moxa_nos': 'moxa',
 }
 
 
@@ -802,7 +847,7 @@ def run_bulk_command(device, commands, config_mode=False, save_after=False):
 # ---------------------------------------------------------------------------
 
 def extract_hostname_from_config(content: str) -> Optional[str]:
-    """Extracts the hostname from configuration lines (Cisco and HPE)."""
+    """Extracts the hostname from configuration lines (Cisco, HPE, and industrial switches)."""
     match = re.search(r'^\s*hostname\s+(\S+)', content, re.MULTILINE | re.IGNORECASE)
     if match:
         return match.group(1).strip().strip('"')
@@ -811,6 +856,11 @@ def extract_hostname_from_config(content: str) -> Optional[str]:
         return match.group(1).strip()
     # FortiOS: `set hostname "X"` inside config system global
     match = re.search(r'^\s*set\s+hostname\s+"?([^"\n]+)"?', content, re.MULTILINE | re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+    # Industrial CLI (`sysname X`, `system-name X`, or `System Name : X`)
+    match = re.search(r'^\s*(?:sysname|system-name|system\s+name\s*:)\s+"?([^\s"\r\n]+)"?',
+                      content, re.MULTILINE | re.IGNORECASE)
     if match:
         return match.group(1).strip()
     return None
@@ -1069,6 +1119,18 @@ def guess_vendor(platform: str = "", description: str = "", hostname: str = "") 
         return "fortinet"
     if "palo" in text or "pan-os" in text or "panos" in text or re.search(r'\bpa-\d', text):
         return "paloalto"
+    if "scalance" in text or "siemens" in text or re.search(r'\b6gk5\d', text):
+        return "siemens_scalance"
+    if "hirschmann" in text or "hios" in text or "belden" in text:
+        return "hirschmann"
+    if "moxa" in text or re.search(r'\b(eds|edr)-\d', text):
+        return "moxa"
+    if "westermo" in text or "weos" in text:
+        return "westermo"
+    if "phoenix contact" in text or "fl switch" in text or "mguard" in text:
+        return "phoenix_contact"
+    if re.search(r'\b(ie-\d{4}|cgs-\d{4})\b', text) or "industrial ethernet" in text:
+        return "cisco_ie"
     if "aruba" in text:
         return "aruba"
     if "procurve" in text or "hpe" in text or re.search(r'\bhp\b', text):
@@ -1974,7 +2036,7 @@ def _get_portchannel_report(group_filter=None) -> list:
     for root, _dirs, files in os.walk(BACKUP_FOLDER):
         # .history holds archived config versions, not current backups: without
         # this the report grows one row per archived version per switch.
-        _dirs[:] = [d for d in _dirs if d != ".history"]
+        _dirs[:] = [d for d in _dirs if d not in (".history", ".ot-vault")]
         for fn in files:
             if not fn.endswith('.txt'):
                 continue
@@ -2071,7 +2133,7 @@ def _netmap_signature():
     max_mtime = 0.0
     if os.path.exists(BACKUP_FOLDER):
         for root, _dirs, files in os.walk(BACKUP_FOLDER):
-            _dirs[:] = [d for d in _dirs if d != ".history"]
+            _dirs[:] = [d for d in _dirs if d not in (".history", ".ot-vault")]
             for f in files:
                 if not f.endswith('.txt'):
                     continue
@@ -2202,7 +2264,7 @@ def _generate_network_map(group_filter=None) -> dict:
             # .history holds archived config versions: os.walk is topdown, so
             # without this an archived file is visited after its current
             # backup and last-write-wins overwrites the map with stale data.
-            _dirs[:] = [d for d in _dirs if d != ".history"]
+            _dirs[:] = [d for d in _dirs if d not in (".history", ".ot-vault")]
             for f in files:
                 if f.endswith('.txt'):
                     backup_files.append(os.path.join(root, f))

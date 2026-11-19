@@ -276,6 +276,12 @@ def policy_findings(content, config_type='ios'):
         if config_type == 'fortios':
             from services.policy_test.fortios import parse_fortios_config
             env = parse_fortios_config(content)
+        elif config_type == 'panos':
+            from services.policy_test.panos import parse_panos_config
+            env = parse_panos_config(content)
+        elif config_type == 'junos':
+            from services.policy_test.junos import parse_junos_config
+            env = parse_junos_config(content)
         else:
             from services.policy_test.ios import parse_ios_config
             env = parse_ios_config(content)
@@ -573,6 +579,9 @@ def analyze_config(content):
 _FORTIOS_VENDORS = {'fortinet', 'fortigate', 'fortios'}
 _WLC_AIREOS_VENDORS = {'cisco_wlc'}
 _PANOS_VENDORS = {'palo_alto', 'paloalto', 'panos', 'pan-os', 'palo alto'}
+_JUNOS_VENDORS = {'juniper', 'junos', 'juniper_junos', 'srx', 'ex', 'qfx', 'mx'}
+_NXOS_VENDORS = {'cisco_nxos', 'nxos', 'nexus'}
+_OT_SWITCH_VENDORS = {'siemens_scalance', 'scalance', 'hirschmann', 'moxa', 'westermo', 'phoenix_contact', 'cisco_ie'}
 _LINUX_VENDORS = {'linux', 'ubuntu', 'debian', 'rhel', 'redhat', 'centos',
                   'rocky', 'almalinux', 'suse', 'proxmox'}
 _WINDOWS_VENDORS = {'windows', 'win', 'windows server', 'windows_server',
@@ -581,7 +590,7 @@ _WINDOWS_VENDORS = {'windows', 'win', 'windows server', 'windows_server',
 
 def detect_config_type(content, device=None):
     """Determines the configuration type: 'ios' | 'fortios' | 'wlc-aireos'
-    | 'panos' | 'linux' | 'windows'.
+    | 'panos' | 'junos' | 'nxos' | 'ot_switch' | 'linux' | 'windows'.
     Uses the Vendor field from inventory if available, otherwise recognizes
     the format from the content (sniffing). Tolerant: default 'ios'."""
     try:
@@ -593,6 +602,12 @@ def detect_config_type(content, device=None):
                 return 'wlc-aireos'
             if vendor in _PANOS_VENDORS:
                 return 'panos'
+            if vendor in _JUNOS_VENDORS:
+                return 'junos'
+            if vendor in _NXOS_VENDORS:
+                return 'nxos'
+            if vendor in _OT_SWITCH_VENDORS:
+                return 'ot_switch'
             if vendor in _LINUX_VENDORS:
                 return 'linux'
             if vendor in _WINDOWS_VENDORS:
@@ -607,10 +622,17 @@ def detect_config_type(content, device=None):
             return 'fortios'
         if re.search(r'^config system (global|interface)\b', text, re.MULTILINE):
             return 'fortios'
-        # PAN-OS (set-CLI): lines 'set deviceconfig ...' / 'set mgt-config ...'.
-        # NB: PAN-OS XML is not supported (v1) — 'set' format only.
-        if re.search(r'^set (deviceconfig|mgt-config) ', text, re.MULTILINE):
+        # PAN-OS (set-CLI or XML config)
+        if re.search(r'^set (deviceconfig|mgt-config|rulebase security) ', text, re.MULTILINE):
             return 'panos'
+        if re.search(r'<(?:config|response)\b.*<(?:rulebase|virtual-router|deviceconfig)\b', text, re.DOTALL):
+            return 'panos'
+        # Junos set CLI
+        if re.search(r'^set (system host-name|security zones|security policies|routing-options)\b', text, re.MULTILINE):
+            return 'junos'
+        # Cisco NX-OS
+        if re.search(r'^(?:feature\s+\S+|vpc domain\s+\d+|vrf context\s+\S+)', text, re.MULTILINE):
+            return 'nxos'
         # AireOS 'show run-config commands': lines 'config sysname/wlan/interface ...'
         if re.search(r'^config (sysname|wlan|interface|radius|mobility|network)\b',
                      text, re.MULTILINE):

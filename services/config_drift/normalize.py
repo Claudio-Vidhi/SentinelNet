@@ -40,6 +40,12 @@ _FORTIOS = (
     re.compile(r"^\s*#global_vdom=.*$", re.IGNORECASE),
 )
 
+_INDUSTRIAL_COMMON = (
+    re.compile(r"^\s*[#!]\s*(?:Configuration\s+generated|Generated\s+on|Saved\s+on|System\s+Up\s*Time|System\s+Time|Running\s+release).*$", re.IGNORECASE),
+    re.compile(r"^\s*[#!]\s*Last\s+configuration\s+change.*$", re.IGNORECASE),
+    re.compile(r"^\s*Current\s+time\s*:.*$", re.IGNORECASE),
+)
+
 # Keyed on the canonical vendor values (services.inventory_manager
 # .get_all_vendors()). normalize() below runs every vendor string through
 # normalize_vendor() first, so a raw CSV spelling like "cisco_ios" or
@@ -47,10 +53,16 @@ _FORTIOS = (
 # entry — one lookup table, not two.
 _BY_VENDOR = {
     "cisco": _IOS,
+    "cisco_ie": _IOS,
     "cisco_9800": _IOS,
     "cisco_cbs": _IOS,
     "cisco_wlc": _IOS,
     "fortinet": _FORTIOS,
+    "siemens_scalance": _INDUSTRIAL_COMMON,
+    "hirschmann": _INDUSTRIAL_COMMON,
+    "moxa": _INDUSTRIAL_COMMON,
+    "westermo": _INDUSTRIAL_COMMON,
+    "phoenix_contact": _INDUSTRIAL_COMMON,
 }
 
 

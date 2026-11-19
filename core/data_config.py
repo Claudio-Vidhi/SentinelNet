@@ -263,6 +263,9 @@ def obs_config() -> dict:
                                     or _app_adv("retention_flows_days") or 30),
             "iface_counter_reads": int(os.environ.get("SENTINELNET_OBS_RETENTION_FLOWS_DAYS")
                                        or _app_adv("retention_flows_days") or 30),
+            # Fixed: firewall_traffic.SNAPSHOT_HISTORY_DAYS is all the
+            # 7d/30d deltas ever read.
+            "policy_hit_snapshots": 45,
             # Legacy incident tables, pruned only where an older database
             # still has them.
             "evidence": int(os.environ.get("SENTINELNET_OBS_RETENTION_EVENTS_DAYS")

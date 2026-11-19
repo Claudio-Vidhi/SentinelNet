@@ -565,6 +565,7 @@ class Route:
     source: str = "static"  # connected | static | manual
     distance: int = 1
     metric: int = 0
+    vrf: str = ""
 
 
 @dataclass

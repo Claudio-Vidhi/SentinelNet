@@ -115,9 +115,14 @@ def test_snapshot_statuses_and_tenant_isolation(seeded):
         "asset_inventory": "gap",        # 1 of 2 firmware unknown: 50% > 10%
         "vulnerabilities": "not_available",
         "config_backup": "gap",          # switch-02 never backed up
+        "ot_vault": "not_available",     # no OT devices or artifacts in seeded tenant
         "config_drift": "not_available",  # no baseline
         "hardening": "partial",          # score 70 < 80
         "segmentation": "not_available",  # the zone belongs to the other tenant
+        "ot_insecure_protocols": "ok",   # no telnet/http/snmpv1-v2c/unsegregated OT flows
+        "ot_unused_ports": "not_available",  # no interface.state telemetry
+        "ot_remote_access": "not_available",  # no OT devices or remote bypasses
+        "ot_compensating_controls": "not_available",  # no OT asset with a CVE snapshot
         "logging": "ok",                 # both devices sent syslog
         "platform_access": "ok",
     }, status

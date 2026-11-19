@@ -617,6 +617,7 @@ class IOSPolicyEnvironment:
     interfaces: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     route_table: RouteTable = field(default_factory=RouteTable)
     object_groups: Dict[str, IOSObjectGroup] = field(default_factory=dict)
+    static_nats: List[Dict[str, Any]] = field(default_factory=list)
     unresolved: List[str] = field(default_factory=list)
 
 
@@ -657,10 +658,21 @@ def parse_ios_config(config_text: str) -> IOSPolicyEnvironment:
             elif low.startswith('ip access-list extended '):
                 current_block_type = "named_ext_acl"
                 current_block_header = s
+            elif low.startswith('ip access-list ') and len(s.split()) >= 3:
+                # NX-OS omits 'extended': `ip access-list NAME`
+                current_block_type = "named_ext_acl"
+                current_block_header = s
+            elif low.startswith('vrf context '):
+                current_block_type = "vrf_context"
+                current_block_header = s
             elif low.startswith('access-list '):
                 blocks.append(("numbered_acl", s, []))
             elif low.startswith('ip route '):
                 blocks.append(("static_route", s, []))
+            elif low.startswith('ip default-gateway '):
+                blocks.append(("default_gw", s, []))
+            elif low.startswith('ip nat inside source static '):
+                blocks.append(("static_nat", s, []))
             elif low.startswith('router '):
                 current_block_type = "router"
                 current_block_header = s
@@ -675,6 +687,56 @@ def parse_ios_config(config_text: str) -> IOSPolicyEnvironment:
     connected_routes: List[Route] = []
     static_routes: List[Route] = []
     dynamic_protocols: List[str] = []
+
+    def _add_static_route(rest_toks: List[str], vrf: str = "") -> None:
+        if len(rest_toks) >= 2 and '/' in rest_toks[0]:
+            # NX-OS CIDR format: ip route 10.0.0.0/8 192.0.2.1 [tag X] [pref]
+            try:
+                net_obj = ipaddress.IPv4Network(rest_toks[0], strict=False)
+                p_cube = Cube.from_netmask(str(net_obj.network_address), str(net_obj.netmask))
+                nexthop = rest_toks[1]
+                egress_iface = ""
+                next_hop_ip: Optional[str] = None
+                if _is_ip(nexthop):
+                    next_hop_ip = nexthop
+                else:
+                    egress_iface = nexthop
+                ad = _static_route_distance(rest_toks[2:])
+                static_routes.append(Route(
+                    prefix=str(net_obj),
+                    prefix_cube=p_cube,
+                    next_hop=next_hop_ip,
+                    interface=egress_iface,
+                    source="static",
+                    distance=ad,
+                    vrf=vrf,
+                ))
+            except Exception:
+                pass
+        elif len(rest_toks) >= 3:
+            net, mask, nexthop = rest_toks[0], rest_toks[1], rest_toks[2]
+            try:
+                p_cube = Cube.from_netmask(net, mask)
+                pfx_len = mask_to_prefix_len(p_cube.mask) or 0
+                pfx_str = f"{int_to_ip(p_cube.value)}/{pfx_len}"
+                egress_iface = ""
+                next_hop_ip = None
+                if _is_ip(nexthop):
+                    next_hop_ip = nexthop
+                else:
+                    egress_iface = nexthop
+                ad = _static_route_distance(rest_toks[3:])
+                static_routes.append(Route(
+                    prefix=pfx_str,
+                    prefix_cube=p_cube,
+                    next_hop=next_hop_ip,
+                    interface=egress_iface,
+                    source="static",
+                    distance=ad,
+                    vrf=vrf,
+                ))
+            except Exception:
+                pass
 
     for btype, header, body in blocks:
         if btype == "numbered_acl":
@@ -697,6 +759,17 @@ def parse_ios_config(config_text: str) -> IOSPolicyEnvironment:
                 if rule:
                     acl.rules.append(rule)
 
+        elif btype == "vrf_context":
+            vrf_name = header.split()[-1]
+            for b_line in body:
+                if b_line.lower().startswith("ip route "):
+                    _add_static_route(b_line.split()[2:], vrf=vrf_name)
+
+        elif btype == "default_gw":
+            toks = header.split()
+            if len(toks) >= 3 and _is_ip(toks[2]):
+                _add_static_route(["0.0.0.0", "0.0.0.0", toks[2]], vrf="")
+
         elif btype == "interface":
             intf_name = header[10:].strip()
             iface_info: Dict[str, Any] = {
@@ -707,15 +780,39 @@ def parse_ios_config(config_text: str) -> IOSPolicyEnvironment:
                 "secondary_ips": [],
                 "acl_in": None,
                 "acl_out": None,
+                "vrf": "",
+                "nat_role": "",
                 "shutdown": False,
             }
             for b_line in body:
                 low = b_line.lower()
                 if low == "shutdown":
                     iface_info["shutdown"] = True
+                elif low.startswith("ip vrf forwarding ") or low.startswith("vrf forwarding ") or low.startswith("vrf member "):
+                    toks = b_line.split()
+                    if toks:
+                        iface_info["vrf"] = toks[-1]
+                elif low == "ip nat inside":
+                    iface_info["nat_role"] = "inside"
+                elif low == "ip nat outside":
+                    iface_info["nat_role"] = "outside"
                 elif low.startswith("ip address "):
                     toks = b_line.split()
-                    if len(toks) >= 4 and toks[1].lower() == "address":
+                    if len(toks) >= 3 and '/' in toks[2] and toks[1].lower() == "address":
+                        try:
+                            ifc = ipaddress.IPv4Interface(toks[2])
+                            ip_val = str(ifc.ip)
+                            mask_val = str(ifc.netmask)
+                            cidr = str(ifc.network)
+                            if "secondary" in low:
+                                iface_info["secondary_ips"].append({"ip": ip_val, "mask": mask_val, "prefix": cidr})
+                            else:
+                                iface_info["ip"] = ip_val
+                                iface_info["mask"] = mask_val
+                                iface_info["prefix"] = cidr
+                        except ValueError:
+                            pass
+                    elif len(toks) >= 4 and toks[1].lower() == "address":
                         ip_val, mask_val = toks[2], toks[3]
                         pfx_len = mask_to_prefix_len(ip_to_int(mask_val)) if _is_ip(mask_val) else None
                         cidr = f"{ip_val}/{pfx_len}" if pfx_len is not None else ip_val
@@ -750,6 +847,7 @@ def parse_ios_config(config_text: str) -> IOSPolicyEnvironment:
                         interface=intf_name,
                         source="connected",
                         distance=0,
+                        vrf=iface_info["vrf"],
                     ))
                 except Exception:
                     pass
@@ -761,31 +859,41 @@ def parse_ios_config(config_text: str) -> IOSPolicyEnvironment:
             if rest[:1] == ['vrf'] and len(rest) >= 2:
                 vrf = rest[1]
                 rest = rest[2:]
-            if len(rest) >= 3:
-                net, mask, nexthop = rest[0], rest[1], rest[2]
-                try:
-                    p_cube = Cube.from_netmask(net, mask)
-                    pfx_len = mask_to_prefix_len(p_cube.mask) or 0
-                    pfx_str = f"{int_to_ip(p_cube.value)}/{pfx_len}"
-                    egress_iface = ""
-                    next_hop_ip: Optional[str] = None
-                    if _is_ip(nexthop):
-                        next_hop_ip = nexthop
-                    else:
-                        egress_iface = nexthop
+            _add_static_route(rest, vrf=vrf)
 
-                    ad = _static_route_distance(rest[3:])
-
-                    static_routes.append(Route(
-                        prefix=pfx_str,
-                        prefix_cube=p_cube,
-                        next_hop=next_hop_ip,
-                        interface=egress_iface,
-                        source="static",
-                        distance=ad,
-                    ))
-                except Exception:
-                    pass
+        elif btype == "static_nat":
+            # ip nat inside source static [tcp|udp] <local> [<lport>] <global> [<gport>] [vrf <name>]
+            toks = header.split()
+            rest = toks[5:]
+            nat_vrf = ""
+            for i in range(len(rest) - 1):
+                if rest[i].lower() == "vrf":
+                    nat_vrf = rest[i + 1]
+                    break
+            if len(rest) >= 5 and rest[0].lower() in ("tcp", "udp"):
+                proto_n = rest[0].lower()
+                local_ip, local_p, global_ip, global_p = rest[1], rest[2], rest[3], rest[4]
+                if (_is_ip(local_ip) and _is_ip(global_ip)
+                        and local_p.isdigit() and global_p.isdigit()):
+                    env.static_nats.append({
+                        "proto": proto_n,
+                        "local_ip": local_ip,
+                        "local_port": int(local_p),
+                        "global_ip": global_ip,
+                        "global_port": int(global_p),
+                        "vrf": nat_vrf,
+                        "raw_text": header,
+                    })
+            elif len(rest) >= 2 and _is_ip(rest[0]) and _is_ip(rest[1]):
+                env.static_nats.append({
+                    "proto": "",
+                    "local_ip": rest[0],
+                    "local_port": None,
+                    "global_ip": rest[1],
+                    "global_port": None,
+                    "vrf": nat_vrf,
+                    "raw_text": header,
+                })
 
         elif btype == "router":
             toks = header.split()
@@ -797,7 +905,11 @@ def parse_ios_config(config_text: str) -> IOSPolicyEnvironment:
     for sr in static_routes:
         if sr.next_hop and not sr.interface:
             nh_int = ip_to_int(sr.next_hop)
-            matched_conn = next((cr for cr in connected_routes if cr.prefix_cube.contains_ip(nh_int)), None)
+            matched_conn = next(
+                (cr for cr in connected_routes
+                 if cr.vrf == sr.vrf and cr.prefix_cube.contains_ip(nh_int)),
+                None,
+            )
             if matched_conn:
                 resolved_static.append(Route(
                     prefix=sr.prefix,
@@ -806,6 +918,7 @@ def parse_ios_config(config_text: str) -> IOSPolicyEnvironment:
                     interface=matched_conn.interface,
                     source=sr.source,
                     distance=sr.distance,
+                    vrf=sr.vrf,
                 ))
             else:
                 resolved_static.append(sr)

@@ -164,6 +164,239 @@ def parse_ios_routes(output: str) -> list:
     return rows
 
 
+_NXOS_VRF_RE = re.compile(r"^IP\s+Route\s+Table\s+for\s+VRF\s+\"?([^\"]+)\"?", re.IGNORECASE)
+_NXOS_NET_RE = re.compile(r"^(?P<net>\d{1,3}(?:\.\d{1,3}){3}/\d{1,2}),\s+ubest/mbest:", re.IGNORECASE)
+_NXOS_VIA_RE = re.compile(
+    r"^\s*\*?via\s+(?P<gw>\d{1,3}(?:\.\d{1,3}){3}|direct),\s*(?:(?P<intf>[A-Za-z0-9/._-]+),\s*)?"
+    r"\[(?P<dist>\d+)/(?P<metric>\d+)\],\s*\S+,\s*(?P<proto>\S+)",
+    re.IGNORECASE,
+)
+
+
+def parse_nxos_routes(output: str) -> list:
+    """Parse Cisco NX-OS `show ip route [vrf all]` into normalized route rows."""
+    rows: list = []
+    cur_vrf = ""
+    cur_net = ""
+    for raw in (output or "").splitlines():
+        s = raw.strip()
+        if not s:
+            continue
+        mvrf = _NXOS_VRF_RE.match(s)
+        if mvrf:
+            v = mvrf.group(1).strip()
+            cur_vrf = "" if v.lower() == "default" else v
+            cur_net = ""
+            continue
+        mnet = _NXOS_NET_RE.match(s)
+        if mnet:
+            cur_net = mnet.group("net")
+            continue
+        mvia = _NXOS_VIA_RE.match(raw)
+        if mvia and cur_net:
+            gw_raw = mvia.group("gw")
+            gw = "" if gw_raw.lower() == "direct" else gw_raw
+            intf = (mvia.group("intf") or "").strip(",")
+            proto_raw = mvia.group("proto").rstrip(",").lower()
+            if proto_raw.startswith("ospf"):
+                rtype = "ospf"
+            elif proto_raw.startswith("bgp"):
+                rtype = "bgp"
+            elif proto_raw in ("direct", "local", "static", "eigrp", "rip", "isis"):
+                rtype = normalize_type(proto_raw)
+            else:
+                rtype = "other"
+            rows.append({
+                "network": cur_net,
+                "gateway": gw,
+                "interface": intf,
+                "type": rtype,
+                "raw_type": proto_raw,
+                "vrf": cur_vrf,
+                "distance": int(mvia.group("dist")),
+                "metric": int(mvia.group("metric")),
+            })
+    return rows
+
+
+_JUNOS_TBL_RE = re.compile(r"^(?:(\S+)\.)?inet\.0:\s+\d+\s+destinations", re.IGNORECASE)
+_JUNOS_DEST_RE = re.compile(
+    r"^(?P<net>\d{1,3}(?:\.\d{1,3}){3}/\d{1,2})\s+"
+    r"\*?\[(?P<proto>[A-Za-z0-9_-]+)/(?P<pref>\d+)\]"
+)
+_JUNOS_NH_RE = re.compile(
+    r"^(?:>\s*)?(?:to\s+(?P<gw>\d{1,3}(?:\.\d{1,3}){3})\s+)?via\s+(?P<intf>\S+)"
+)
+
+
+def parse_junos_routes(output: str) -> list:
+    """Parse Juniper Junos `show route` into normalized route rows."""
+    rows: list = []
+    cur_vrf = ""
+    pending: "dict | None" = None
+    for raw in (output or "").splitlines():
+        s = raw.strip()
+        if not s:
+            continue
+        mtbl = _JUNOS_TBL_RE.match(s)
+        if mtbl:
+            cur_vrf = (mtbl.group(1) or "").strip()
+            pending = None
+            continue
+        md = _JUNOS_DEST_RE.match(s)
+        if md:
+            proto_raw = md.group("proto")
+            pending = {
+                "network": md.group("net"),
+                "type": normalize_type(proto_raw),
+                "raw_type": proto_raw,
+                "vrf": cur_vrf,
+                "distance": int(md.group("pref")),
+                "metric": 0,
+            }
+            mnh = _JUNOS_NH_RE.search(s)
+            if mnh:
+                rows.append({**pending, "gateway": mnh.group("gw") or "", "interface": mnh.group("intf")})
+                pending = None
+            continue
+        if pending:
+            mnh = _JUNOS_NH_RE.search(s)
+            if mnh:
+                rows.append({**pending, "gateway": mnh.group("gw") or "", "interface": mnh.group("intf")})
+                pending = None
+            elif s.startswith(">") and "Local" in pending.get("raw_type", ""):
+                m_via = re.search(r"via\s+(\S+)", s)
+                if m_via:
+                    rows.append({**pending, "gateway": "", "interface": m_via.group(1)})
+                    pending = None
+    return rows
+
+
+_PANOS_CLI_ROUTE_RE = re.compile(
+    r"^(?P<net>\d{1,3}(?:\.\d{1,3}){3}/\d{1,2})\s+"
+    r"(?P<gw>\d{1,3}(?:\.\d{1,3}){3}|discard|none|0\.0\.0\.0)\s+"
+    r"(?P<metric>\d+)\s+(?P<flags>\S+)\s+\S+\s+(?P<intf>\S+)",
+    re.IGNORECASE,
+)
+
+
+def parse_panos_routes(output: str) -> list:
+    """Parse PAN-OS routes from XML (<response>...) or CLI `show routing route`."""
+    text = (output or "").strip()
+    if text.startswith("<"):
+        from drivers.paloalto_panos import parse_panos_xml_routes
+        try:
+            return parse_panos_xml_routes(text)
+        except Exception:
+            return []
+    rows: list = []
+    cur_vrf = ""
+    for raw in text.splitlines():
+        s = raw.strip()
+        if not s:
+            continue
+        mvr = re.search(r"virtual router:\s*(\S+)", s, re.IGNORECASE)
+        if mvr:
+            vr = mvr.group(1)
+            cur_vrf = "" if vr.lower() == "default" else vr
+            continue
+        m = _PANOS_CLI_ROUTE_RE.match(s)
+        if not m:
+            continue
+        gw = m.group("gw")
+        if gw.lower() in ("discard", "none", "0.0.0.0"):
+            gw = ""
+        flags = m.group("flags").upper()
+        if "C" in flags:
+            rtype = "connected"
+        elif "H" in flags:
+            rtype = "local"
+        elif "S" in flags:
+            rtype = "static"
+        elif "O" in flags:
+            rtype = "ospf"
+        elif "B" in flags:
+            rtype = "bgp"
+        else:
+            rtype = "other"
+        rows.append({
+            "network": m.group("net"),
+            "gateway": gw,
+            "interface": m.group("intf"),
+            "type": rtype,
+            "raw_type": flags,
+            "vrf": cur_vrf,
+            "distance": int(m.group("metric")),
+            "metric": int(m.group("metric")),
+        })
+    return rows
+
+
+_OT_ROUTE_LINE_RE = re.compile(
+    r"^(?:(?P<code>[CSOBDR*]+)\s+)?"
+    r"(?P<dst>\d{1,3}(?:\.\d{1,3}){3})\s+"
+    r"(?:(?P<mask>\d{1,3}(?:\.\d{1,3}){3})|/(?P<plen>\d{1,2}))\s+"
+    r"(?P<gw>\d{1,3}(?:\.\d{1,3}){3}|direct|connected|local)\s*"
+    r"(?:(?P<metric>\d+)\s+)?(?P<intf>[A-Za-z0-9/._-]+)?",
+    re.IGNORECASE,
+)
+
+
+def parse_ot_switch_routes(output: str) -> list:
+    """Parse L2/L3 OT switch routing tables (SCALANCE, Hirschmann, Moxa, Westermo, Phoenix Contact)."""
+    # First try IOS format in case device outputs IOS-like `show ip route`
+    ios_rows = parse_ios_routes(output)
+    if ios_rows:
+        return ios_rows
+    import ipaddress as _ip
+    rows: list = []
+    for raw in (output or "").splitlines():
+        s = raw.strip()
+        if not s or s.lower().startswith(("destination", "---", "default gateway")):
+            m_dg = re.match(r"(?:ip\s+)?default[- ]gateway\s*:?\s*(\d{1,3}(?:\.\d{1,3}){3})", s, re.IGNORECASE)
+            if m_dg:
+                rows.append({
+                    "network": "0.0.0.0/0",
+                    "gateway": m_dg.group(1),
+                    "interface": "",
+                    "type": "static",
+                    "distance": 1,
+                    "metric": 0,
+                })
+            continue
+        m = _OT_ROUTE_LINE_RE.match(s)
+        if not m:
+            continue
+        dst = m.group("dst")
+        if m.group("plen"):
+            net_s = f"{dst}/{m.group('plen')}"
+        else:
+            try:
+                net_s = str(_ip.IPv4Network(f"{dst}/{m.group('mask')}", strict=False))
+            except ValueError:
+                continue
+        gw_raw = m.group("gw")
+        gw = "" if gw_raw.lower() in ("direct", "connected", "local") else gw_raw
+        code = (m.group("code") or "").upper().replace("*", "")
+        if not gw or "C" in code or gw_raw.lower() in ("direct", "connected"):
+            rtype = "connected"
+        elif "O" in code:
+            rtype = "ospf"
+        elif "B" in code:
+            rtype = "bgp"
+        else:
+            rtype = "static"
+        rows.append({
+            "network": net_s,
+            "gateway": gw,
+            "interface": (m.group("intf") or ""),
+            "type": rtype,
+            "distance": 0 if rtype == "connected" else 1,
+            "metric": int(m.group("metric")) if m.group("metric") else 0,
+        })
+    return rows
+
+
 def _row(device, entry: dict) -> dict:
     return {
         "device": device.get("Hostname") or device.get("IP"),
@@ -195,12 +428,25 @@ def _row(device, entry: dict) -> dict:
 # Cisco soltanto per il ramo CLI: il parser e' scritto sul formato di IOS, e
 # Aruba o ProCurve rispondono a `show ip route` con un'altra impaginazione.
 # Aggiungerli significa scrivere il loro parser, non allargare questa riga.
-ROUTE_SOURCES = {"fortinet": "rest", "cisco": "ios-cli"}
+ROUTE_SOURCES = {
+    "fortinet": "rest",
+    "cisco": "ios-cli",
+    "cisco_ie": "ios-cli",
+    "cisco_nxos": "nxos-cli",
+    "paloalto": "panos-xml",
+    "juniper": "junos-cli",
+    "siemens_scalance": "ot-cli",
+    "hirschmann": "ot-cli",
+    "moxa": "ot-cli",
+    "westermo": "ot-cli",
+    "phoenix_contact": "ot-cli",
+}
 
 
 def route_source(device) -> str:
-    """'rest', 'ios-cli' o '' se l'apparato non pubblica la sua tabella."""
-    return ROUTE_SOURCES.get((device.get("Vendor") or "").lower(), "")
+    """'rest', 'ios-cli', 'nxos-cli', 'junos-cli', 'panos-xml', 'ot-cli' o ''."""
+    norm = inventory_manager.normalize_vendor(device.get("Vendor") or "")
+    return ROUTE_SOURCES.get(norm, "")
 
 
 def routable_devices(devices) -> list:
@@ -253,12 +499,9 @@ def routes_from_backup(device) -> "dict | None":
                                               device.get("Group") or "")
     if not analysis:
         return None
+    static_list = (analysis.get("routing") or {}).get("static") or []
     entries = []
-    for r in (analysis.get("routing") or {}).get("static") or []:
-        # Le rotte di una VRF NON si scartano piu'. Venivano buttate perche'
-        # non c'era una colonna in cui dire di quale VRF fossero: adesso c'e',
-        # e su un apparato con le VRF erano la maggior parte delle statiche --
-        # l'analizzatore le leggeva bene e questa vista le nascondeva.
+    for r in static_list:
         gateway, interface = _hop(r.get("next_hop") or "")
         distance = r.get("distance") or r.get("ad")
         entries.append({
@@ -270,6 +513,41 @@ def routes_from_backup(device) -> "dict | None":
             "distance": int(distance) if str(distance or "").isdigit() else None,
             "from_backup": True,
         })
+    if not entries:
+        # Multi-vendor static-route extraction fallback (PAN-OS, Junos, NX-OS, OT switch)
+        try:
+            path, _ten = config_analyzer._find_freshest_backup(
+                device.get("IP"), device.get("Group") or ""
+            )
+            if path:
+                with open(path, encoding="utf-8", errors="ignore") as fh:
+                    raw_cfg = fh.read()
+                content = "\n".join(config_analyzer.running_config(raw_cfg))
+                cfg_kind = config_analyzer.detect_config_type(content, device)
+                if cfg_kind == "panos":
+                    from services.policy_test.panos import parse_panos_config
+                    penv = parse_panos_config(content)
+                elif cfg_kind == "junos":
+                    from services.policy_test.junos import parse_junos_config
+                    penv = parse_junos_config(content)
+                elif cfg_kind in ("ios", "nxos", "ot_switch"):
+                    from services.policy_test.ios import parse_ios_config
+                    penv = parse_ios_config(content)
+                else:
+                    penv = None
+                for rt in getattr(getattr(penv, "route_table", None), "routes", []) or []:
+                    if rt.source == "static":
+                        entries.append({
+                            "network": rt.prefix,
+                            "gateway": rt.next_hop or "",
+                            "interface": rt.interface or "",
+                            "type": "static",
+                            "vrf": getattr(rt, "vrf", "") or "",
+                            "distance": rt.ad,
+                            "from_backup": True,
+                        })
+        except Exception:
+            pass
     if not entries:
         return None
     return {"device_ip": device.get("IP"), "source": "backup",
@@ -323,8 +601,11 @@ def _collect_live(device) -> dict:
         return {"device_ip": ip,
                 "error": "sede in modalita' agent: il centrale non raggiunge "
                          "questo apparato"}
-    if route_source(device) == "ios-cli":
+    src = route_source(device)
+    if src == "ios-cli":
         return _collect_ios(device)
+    if src in ("nxos-cli", "junos-cli", "panos-xml", "ot-cli"):
+        return _collect_cli_routes(device, src)
     try:
         answer = fortigate_service.get_routes(device)
     except fortigate_service.FortiGateError as e:
@@ -340,6 +621,36 @@ def _collect_live(device) -> dict:
             "rows": [_row(device, e) for e in data if isinstance(e, dict)]}
 
 
+_CLI_ROUTE_CMDS = {
+    "nxos-cli": ("show ip route vrf all", parse_nxos_routes),
+    "junos-cli": ("show route", parse_junos_routes),
+    "panos-xml": ("show routing route", parse_panos_routes),
+    "ot-cli": ("show ip route", parse_ot_switch_routes),
+}
+
+
+def _collect_cli_routes(device, src: str) -> dict:
+    """Collect routing table over CLI for NX-OS, Junos, PAN-OS, and OT L2/L3 switches."""
+    from core import core_engine
+    from core.device_credentials import CredentialDecryptError, CredentialResolveError
+    ip = device.get("IP")
+    cmd, parser = _CLI_ROUTE_CMDS[src]
+    try:
+        answer = core_engine.send_custom_command(device, cmd, bypass_blacklist=True)
+    except (CredentialDecryptError, CredentialResolveError) as e:
+        return {"device_ip": ip, "error": str(e)}
+    if answer.get("status") != "success":
+        return {"device_ip": ip, "error": answer.get("message") or "SSH fallito"}
+    output = answer.get("output")
+    parsed = parser(output if isinstance(output, str) else "")
+    if not parsed:
+        return {"device_ip": ip, "source": "ssh",
+                "error": "nessuna rotta nella risposta: switch senza routing, "
+                         "oppure output in un formato non riconosciuto"}
+    return {"device_ip": ip, "source": "ssh",
+            "rows": [_row(device, e) for e in parsed]}
+
+
 def _collect_ios(device) -> dict:
     """`show ip route` su uno switch, letto dal parser IOS.
 
@@ -347,9 +658,13 @@ def _collect_ios(device) -> dict:
     una shell. bypass_blacklist=True perche' e' un comando di sola lettura
     scelto qui, non digitato da un utente."""
     from core import core_engine
+    from core.device_credentials import CredentialDecryptError, CredentialResolveError
     ip = device.get("IP")
-    answer = core_engine.send_custom_command(device, "show ip route",
-                                             bypass_blacklist=True)
+    try:
+        answer = core_engine.send_custom_command(device, "show ip route",
+                                                 bypass_blacklist=True)
+    except (CredentialDecryptError, CredentialResolveError) as e:
+        return {"device_ip": ip, "error": str(e)}
     if answer.get("status") != "success":
         return {"device_ip": ip, "error": answer.get("message") or "SSH fallito"}
     output = answer.get("output")
@@ -365,26 +680,32 @@ def _collect_ios(device) -> dict:
             "rows": [_row(device, e) for e in parsed]}
 
 
-def fortigate_context(device, answer: dict) -> dict:
+def fortigate_context(device, answer: dict, addresses: "list | None" = None,
+                      ha: bool = True) -> dict:
     """What lets the route graph name a next hop: interface addresses, HA
     cluster members, IPsec tunnels with their remote gateway.
 
     Asked only of a FortiGate that just answered over REST: one that timed out
     or is only known from its backup would time out again, three times, for
     data that would not be there anyway. Each part fails on its own and comes
-    back empty: a missing tunnel list must not hide the addresses."""
+    back empty: a missing tunnel list must not hide the addresses.
+
+    ``addresses`` already read by the caller are reused instead of asking the
+    interface list again; ``ha=False`` skips the HA call for callers (the
+    path trace) that never read it."""
     from services import path_trace
     rows = answer.get("rows") or []
     is_fortigate = (device.get("Vendor") or "").lower() == "fortinet"
     live_rest = is_fortigate and answer.get("source") == "api"
     # For a switch addresses_for() only reads its own local rows: no session.
-    out = {"addresses": path_trace.addresses_for(device, rows)
-                        if live_rest or not is_fortigate else [],
+    if addresses is None:
+        addresses = path_trace.addresses_for(device, rows) if live_rest or not is_fortigate else []
+    out = {"addresses": addresses,
            "ha": [], "tunnels": [], "sdwan": [], "policy_routes": []}
     if not live_rest:
         return out
     try:
-        peers = fortigate_service.get_ha_status(device).get("results") or []
+        peers = (fortigate_service.get_ha_status(device).get("results") or []) if ha else []
         out["ha"] = [{"hostname": p.get("hostname") or "", "serial": p.get("serial_no") or ""}
                      for p in peers if isinstance(p, dict)]
     except fortigate_service.FortiGateError as e:

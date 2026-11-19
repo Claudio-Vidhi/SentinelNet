@@ -37,7 +37,7 @@ class Extras(unittest.TestCase):
 
     def test_timeouts_match_the_old_branches(self):
         self.assertEqual(ce.TRIAGE_EXTRA_TIMEOUT,
-                         {"cisco": 30, "cisco_9800": 30, "cisco_wlc": 30, "paloalto": 30, "windows": 45})
+                         {"cisco": 30, "cisco_ie": 30, "cisco_9800": 30, "cisco_wlc": 30, "paloalto": 30, "windows": 45})
 
     def test_returned_list_is_a_copy(self):
         ce.triage_extra_commands("cisco").clear()

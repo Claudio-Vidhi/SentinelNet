@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
     // ===== Threat Intel: sub-tab switcher (Matcher interno vs Vendor Watch EUVD) =====
     const TI_VIEWS = { matcher: 'tiTabMatcher', priority: 'tiTabPriority',
-                       report: 'tiTabReport', watch: 'tiTabWatch' };
+                       report: 'tiTabReport', watch: 'tiTabWatch', ot: 'tiTabOt' };
 
     function tiSwitchView(v) {
         for (const name in TI_VIEWS) {
@@ -13,6 +13,7 @@
         if (v === 'watch' && !window._vwLoaded) { vwInit(); window._vwLoaded = true; }
         if (v === 'priority') cvePriorityLoad();
         if (v === 'report') cveReportLoad();
+        if (v === 'ot') otInitView();
     }
 
     // ===== Vendor Watch (EUVD globale per vendor, indipendente dall'inventario) =====
@@ -902,7 +903,7 @@
     // un punteggio senza perimetro viene letto come completo, e un ordinamento
     // letto come completo diventa un verdetto negativo per gli ultimi in lista.
 
-    const cveState = { rows: [], tenants: [], tenant: 'all' };
+    const cveState = { rows: [], total: 0, tenants: [], tenant: 'all' };
 
     // Le voci di not_evaluated arrivano dal backend come chiavi stabili:
     // tradurle qui evita che il testo mostrato dipenda dalla lingua del server.
@@ -936,6 +937,38 @@
         return tr('cveNotEvaluated', { list: list.map(cveNeLabel).join(', ') });
     }
 
+    function otCriticalityBadge(crit, windowLabel) {
+        if (!crit) return '';
+        let label = '';
+        let color = 'var(--text-muted)';
+        if (crit === 'hot_patchable') {
+            label = tr('otBadgeHotPatchable');
+            color = 'var(--success)';
+        } else if (crit === 'scheduled_shutdown') {
+            label = tr('otBadgeShutdown');
+            color = 'var(--warning)';
+        } else if (crit === 'mission_critical') {
+            label = tr('otBadgeMissionCritical');
+            color = 'var(--danger)';
+        }
+        if (!label) return '';
+        const winText = windowLabel ? ` (${windowLabel})` : '';
+        return `<span class="badge" title="${escapeHtml(label + winText)}" style="color:${color}; border-color:${color}; font-size:10px; margin-top:2px;">${escapeHtml(label + winText)}</span>`;
+    }
+
+    function otCveFlagsHtml(r) {
+        const parts = [];
+        if (r.exploited) {
+            parts.push(`<span class="badge" style="background:color-mix(in srgb, var(--danger) 18%, transparent); color:var(--danger); border-color:var(--danger); font-weight:700;">KEV</span>`);
+        }
+        const ics = Array.isArray(r.ics_advisories) ? r.ics_advisories : [];
+        if (ics.length) {
+            const label = ics[0] + (ics.length > 1 ? ` +${ics.length - 1}` : '');
+            parts.push(`<span class="badge" title="${escapeHtml(ics.join(', '))}" style="color:var(--primary); border-color:var(--primary);">${escapeHtml(label)}</span>`);
+        }
+        return parts.length ? ' ' + parts.join(' ') : '';
+    }
+
     // Eta' della lettura di versione, stessa formula del resto dell'app.
     // Oltre una settimana passa a var(--warning): e' il punto in cui il dato
     // smette di descrivere la rete di adesso.
@@ -946,6 +979,50 @@
         const ts = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) / 1000;
         const h = (Date.now() / 1000 - ts) / 3600;
         return `<span style="color:${h > 168 ? 'var(--warning)' : 'var(--text-muted)'};">${escapeHtml(relativeAge(h))}</span>`;
+    }
+
+    function cvePriorityRender() {
+        const body = document.getElementById('cvePrioBody');
+        const status = document.getElementById('cvePrioStatus');
+        if (!body || !status) return;
+        const allRows = cveState.rows || [];
+        if (!allRows.length) {
+            status.textContent = tr('cveNoSnapshot');
+            body.innerHTML = '';
+            return;
+        }
+        const hideDeferrable = !!document.getElementById('cvePrioHideDeferrable')?.checked;
+        const indexed = [];
+        allRows.forEach((r, idx) => {
+            if (hideDeferrable && r.maintenance_deferrable) return;
+            indexed.push({ r, idx });
+        });
+        if (hideDeferrable && indexed.length !== allRows.length) {
+            status.textContent = tr('cveRowCountFiltered', { shown: indexed.length, total: cveState.total || allRows.length });
+        } else {
+            status.textContent = (cveState.total || allRows.length) > allRows.length
+                ? tr('cveTruncated', { n: allRows.length, total: cveState.total })
+                : tr('cveRowCount', { n: cveState.total || allRows.length });
+        }
+
+        body.innerHTML = indexed.map(({ r, idx }) => {
+            const stale = r.stale
+                ? ` <span class="badge" style="background:color-mix(in srgb, var(--warning) 18%, transparent); color:var(--warning);">${escapeHtml(tr('cveStale'))}</span>`
+                : '';
+            const flags = otCveFlagsHtml(r);
+            const postureBadge = otCriticalityBadge(r.process_criticality, r.maintenance_window);
+            const cvss = (r.cvss === null || r.cvss === undefined) ? '&mdash;' : escapeHtml(String(r.cvss));
+            return `<tr data-action="cve-factors" data-idx="${idx}" style="cursor:pointer;">
+                <td>${escapeHtml(r.device || '')}<div style="font-size:11px; color:var(--text-muted);">${escapeHtml(r.tenant || '')}</div>${postureBadge ? `<div>${postureBadge}</div>` : ''}</td>
+                <td><code>${escapeHtml(r.id || '')}</code>${flags}${stale}</td>
+                <td>${cvss}</td>
+                <td>${escapeHtml(cveConfLabel(r.confidence))}</td>
+                <td>${escapeHtml(cveSvcLabel(r.service))}</td>
+                <td>${cveVersionAge(r.version_seen_at)}</td>
+                <td><b>${escapeHtml(String(r.score))}</b></td>
+            </tr>
+            <tr id="cveFactors-${idx}" hidden><td colspan="7" style="background:var(--surface-2); font-size:12px; line-height:1.6;"></td></tr>`;
+        }).join('');
     }
 
     async function cvePriorityLoad() {
@@ -962,34 +1039,12 @@
         if (!res || !res.ok) { status.textContent = tr('cveLoadError'); return; }
         const data = await res.json();
         cveState.rows = data.rows || [];
+        cveState.total = data.total || cveState.rows.length;
 
         const scope = document.getElementById('cvePrioScope');
         if (scope) scope.textContent = cveNotEvaluatedText(data.not_evaluated);
 
-        if (!cveState.rows.length) {
-            status.textContent = tr('cveNoSnapshot');
-            return;
-        }
-        status.textContent = data.total > cveState.rows.length
-            ? tr('cveTruncated', { n: cveState.rows.length, total: data.total })
-            : tr('cveRowCount', { n: data.total });
-
-        body.innerHTML = cveState.rows.map((r, i) => {
-            const stale = r.stale
-                ? ` <span class="badge" style="background:color-mix(in srgb, var(--warning) 18%, transparent); color:var(--warning);">${escapeHtml(tr('cveStale'))}</span>`
-                : '';
-            const cvss = (r.cvss === null || r.cvss === undefined) ? '&mdash;' : escapeHtml(String(r.cvss));
-            return `<tr data-action="cve-factors" data-idx="${i}" style="cursor:pointer;">
-                <td>${escapeHtml(r.device || '')}<div style="font-size:11px; color:var(--text-muted);">${escapeHtml(r.tenant || '')}</div></td>
-                <td><code>${escapeHtml(r.id || '')}</code>${stale}</td>
-                <td>${cvss}</td>
-                <td>${escapeHtml(cveConfLabel(r.confidence))}</td>
-                <td>${escapeHtml(cveSvcLabel(r.service))}</td>
-                <td>${cveVersionAge(r.version_seen_at)}</td>
-                <td><b>${escapeHtml(String(r.score))}</b></td>
-            </tr>
-            <tr id="cveFactors-${i}" hidden><td colspan="7" style="background:var(--surface-2); font-size:12px; line-height:1.6;"></td></tr>`;
-        }).join('');
+        cvePriorityRender();
     }
 
     // Il punteggio non e' un numero magico: si apre nei suoi fattori. Se un
@@ -1002,12 +1057,25 @@
         if (!row.hidden) { row.hidden = true; return; }
         const f = r.factors || {};
         const svcList = (r.services || []).join(', ') || tr('cveSvcNone');
+        const otExtra = [];
+        if (r.kev && typeof r.kev === 'object') {
+            const kevDue = r.kev.due_date ? ` (${r.kev.due_date})` : '';
+            otExtra.push(`<div><strong>CISA KEV:</strong> ${escapeHtml((r.kev.vulnerability_name || r.kev.product || 'Exploited') + kevDue)}${r.kev.required_action ? ' &mdash; ' + escapeHtml(r.kev.required_action) : ''}</div>`);
+        }
+        if (Array.isArray(r.ics_advisories) && r.ics_advisories.length) {
+            otExtra.push(`<div><strong>CISA ICS:</strong> <code>${escapeHtml(r.ics_advisories.join(', '))}</code></div>`);
+        }
+        if (r.process_criticality) {
+            otExtra.push(`<div>${otCriticalityBadge(r.process_criticality, r.maintenance_window)}</div>`);
+        }
         row.firstElementChild.innerHTML =
             `<div>${escapeHtml(tr('cveFactorFormula', { cvss: f.cvss, cf: f.confidence_factor, sf: f.service_factor, score: r.score }))}</div>`
             + `<div style="color:var(--text-muted);">${escapeHtml(tr('cveFactorConfidence', { v: cveConfLabel(r.confidence) }))}`
             + ` &middot; ${escapeHtml(tr('cveFactorService', { v: cveSvcLabel(r.service), list: svcList }))}`
             + (f.stale ? ` &middot; ${escapeHtml(tr('cveFactorStale'))}` : '')
-            + `</div><div style="margin-top:6px;">${escapeHtml(r.summary || '')}</div>`;
+            + `</div>`
+            + otExtra.join('')
+            + `<div style="margin-top:6px;">${escapeHtml(r.summary || '')}</div>`;
         row.hidden = false;
     }
 
@@ -1217,9 +1285,10 @@
             const stale = r.stale
                 ? ` <span style="color:var(--warning); font-size:10px;">${escapeHtml(tr('cveStale'))}</span>`
                 : '';
+            const flags = otCveFlagsHtml(r);
             const cvss = (r.cvss === null || r.cvss === undefined) ? '&mdash;' : escapeHtml(String(r.cvss));
             return `<tr>
-                <td><code style="font-size:11px;">${escapeHtml(r.id || '')}</code>${stale}</td>
+                <td><code style="font-size:11px;">${escapeHtml(r.id || '')}</code>${flags}${stale}</td>
                 <td>${cvss}</td>
                 <td>${escapeHtml(r.severity || '')}</td>
                 <td>${escapeHtml(cveSvcLabel(r.service))}</td>
@@ -1233,9 +1302,13 @@
         const moreLine = more > 0
             ? `<div style="font-size:12px; color:var(--text-muted); margin-top:6px;">${escapeHtml(tr('cveMoreRows', { n: more }))}</div>`
             : '';
+        const postureLine = (data.posture && data.posture.process_criticality)
+            ? `<div style="margin-bottom:6px;">${otCriticalityBadge(data.posture.process_criticality, data.posture.maintenance_window)}</div>`
+            : '';
 
         row.firstElementChild.innerHTML = `
             <div style="padding:10px 14px 14px 28px;">
+              ${postureLine}
               <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">${escapeHtml(tr('cveDevCveHint'))}</div>
               <div class="table-wrap"><table style="font-size:12px;">
                 <thead><tr>
@@ -1281,7 +1354,9 @@
 
     document.getElementById('tiTabPriority')?.addEventListener('click', () => tiSwitchView('priority'));
     document.getElementById('tiTabReport')?.addEventListener('click', () => tiSwitchView('report'));
+    document.getElementById('tiTabOt')?.addEventListener('click', () => tiSwitchView('ot'));
     document.getElementById('cvePrioTenant')?.addEventListener('change', cvePriorityLoad);
+    document.getElementById('cvePrioHideDeferrable')?.addEventListener('change', cvePriorityRender);
     document.getElementById('cvePrioRefresh')?.addEventListener('click', cvePriorityLoad);
     document.getElementById('cveReportRefresh')?.addEventListener('click', cveReportLoad);
     document.getElementById('cveReportExport')?.addEventListener('click', cveReportExport);
@@ -1644,3 +1719,346 @@
 
     document.getElementById('cveReportTenant')?.addEventListener('change', cveReportLoad);
     document.getElementById('cveReportPdf')?.addEventListener('click', cveReportPdf);
+
+    // ===== CISA ICS / KEV & Air-Gap Signed Bundles =====
+    let _otSearchTimer = null;
+
+    async function otInitView() {
+        await Promise.all([otLoadStatus(), otLoadIcsAdvisories()]);
+    }
+
+    function otSyncControlsByRole(airgapEnabled) {
+        const admin = typeof isAdminRole === 'function' ? isAdminRole(currentRole) : currentRole === 'admin';
+        const writer = currentRole !== 'viewer';
+        const toggle = document.getElementById('otAirgapToggle');
+        if (toggle instanceof HTMLInputElement) {
+            toggle.checked = !!airgapEnabled;
+            toggle.disabled = !admin;
+        }
+        const syncBtn = document.getElementById('otSyncFeedsBtn');
+        if (syncBtn instanceof HTMLButtonElement) syncBtn.disabled = !writer || !!airgapEnabled;
+        const expBtn = document.getElementById('otExportBundleBtn');
+        if (expBtn instanceof HTMLButtonElement) expBtn.disabled = !writer;
+        const impBtn = document.getElementById('otImportBundleBtn');
+        if (impBtn instanceof HTMLButtonElement) impBtn.disabled = !writer;
+        const trustNew = document.getElementById('otImportTrustNew');
+        if (trustNew instanceof HTMLInputElement) trustNew.disabled = !admin;
+        const addKeyBtn = document.getElementById('otAddTrustedKeyBtn');
+        if (addKeyBtn instanceof HTMLButtonElement) addKeyBtn.disabled = !admin;
+    }
+
+    function otRenderTrustedKeys(statusData) {
+        const listEl = document.getElementById('otTrustedKeysList');
+        if (!listEl) return;
+        const admin = typeof isAdminRole === 'function' ? isAdminRole(currentRole) : currentRole === 'admin';
+        const keys = Array.isArray(statusData.trusted_keys) ? statusData.trusted_keys : [];
+        const localRow = statusData.signing_key_id
+            ? `<div style="margin-bottom:6px; color:var(--text-muted);">${escapeHtml(tr('otLocalKeyLabel'))}: <code>${escapeHtml(statusData.signing_key_id)}</code></div>`
+            : '';
+        if (!keys.length) {
+            listEl.innerHTML = localRow + `<div style="color:var(--text-muted);">${escapeHtml(tr('otNoTrustedKeys'))}</div>`;
+            return;
+        }
+        listEl.innerHTML = localRow + keys.map(k => `
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:4px 0; border-top:1px solid var(--border);">
+                <div>
+                    <strong>${escapeHtml(k.label || k.key_id)}</strong>
+                    <code style="margin-left:6px; font-size:11px;">${escapeHtml(k.key_id || '')}</code>
+                    <span style="margin-left:6px; font-size:11px; color:var(--text-muted);">${escapeHtml((k.added_at || '').slice(0, 10))}</span>
+                </div>
+                ${admin ? `<button type="button" class="btn btn-secondary btn-small" data-action="ot-remove-key" data-key-id="${escapeHtml(k.key_id || '')}" style="width:auto; color:var(--danger);"><i class="fa-solid fa-trash-can"></i></button>` : ''}
+            </div>`).join('');
+    }
+
+    async function otLoadStatus() {
+        const statusEl = document.getElementById('otFeedStatusText');
+        const res = await apiFetch('/api/cve/ot/status');
+        if (!res || !res.ok) {
+            if (statusEl) statusEl.textContent = tr('otStatusLoadError');
+            return;
+        }
+        const st = await res.json();
+        otSyncControlsByRole(!!st.airgap_mode);
+        const mode = tr(st.airgap_mode ? 'otModeAirgap' : 'otModeOnline');
+        if (statusEl) {
+            statusEl.textContent = tr('otFeedStatusFmt', {
+                mode,
+                kev: st.kev_count ?? 0,
+                ics: st.ics_count ?? 0,
+                nvd: st.nvd_cached_queries ?? 0,
+                kid: st.signing_key_id || '—',
+            });
+        }
+        otRenderTrustedKeys(st);
+    }
+
+    async function otToggleAirgap() {
+        const toggle = document.getElementById('otAirgapToggle');
+        if (!(toggle instanceof HTMLInputElement)) return;
+        const enabled = toggle.checked;
+        const res = await apiFetch('/api/cve/ot/airgap', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled }),
+        });
+        if (!res || !res.ok) {
+            toggle.checked = !enabled;
+            const err = res ? await res.json().catch(() => ({})) : {};
+            showToast(err.detail || tr('uiError'), 'error');
+            return;
+        }
+        showToast(tr(enabled ? 'otAirgapEnabledMsg' : 'otAirgapDisabledMsg'), 'success');
+        await otLoadStatus();
+    }
+
+    async function otSyncFeeds() {
+        const btn = document.getElementById('otSyncFeedsBtn');
+        if (btn instanceof HTMLButtonElement) btn.disabled = true;
+        try {
+            const res = await apiFetch('/api/cve/ot/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fetch_kev: true, fetch_ics: true }),
+            });
+            const data = res ? await res.json().catch(() => ({})) : {};
+            if (!res || !res.ok) {
+                showToast(data.detail || tr('otSyncError'), 'error');
+                return;
+            }
+            showToast(tr('otSyncDone', { kev: data.kev_count ?? 0, ics: data.ics_count ?? 0 }), 'success');
+            await otInitView();
+        } finally {
+            await otLoadStatus();
+        }
+    }
+
+    async function otExportBundle() {
+        const res = await apiFetch('/api/cve/ot/bundle/export');
+        if (!res || !res.ok) {
+            const err = res ? await res.json().catch(() => ({})) : {};
+            showToast(err.detail || tr('uiError'), 'error');
+            return;
+        }
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'sentinelnet-ot-vuln-bundle-' + new Date().toISOString().slice(0, 10) + '.json';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        showToast(tr('otExportDone'), 'success');
+    }
+
+    async function otImportBundle() {
+        const fileEl = document.getElementById('otImportBundleFile');
+        const trustEl = document.getElementById('otImportTrustNew');
+        const msgEl = document.getElementById('otBundleStatus');
+        const file = (fileEl instanceof HTMLInputElement && fileEl.files) ? fileEl.files[0] : null;
+        if (!file) {
+            if (msgEl) msgEl.textContent = tr('otSelectBundleFile');
+            return;
+        }
+        let bundle = null;
+        try {
+            bundle = JSON.parse(await file.text());
+        } catch (_e) {
+            if (msgEl) msgEl.textContent = tr('otInvalidBundleJson');
+            return;
+        }
+        const trustBundleKey = trustEl instanceof HTMLInputElement ? !!trustEl.checked : false;
+        const res = await apiFetch('/api/cve/ot/bundle/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bundle, trust_bundle_key: trustBundleKey }),
+        });
+        const data = res ? await res.json().catch(() => ({})) : {};
+        if (!res || !res.ok) {
+            const msg = data.detail || tr('otImportError');
+            if (msgEl) msgEl.textContent = msg;
+            showToast(msg, 'error');
+            return;
+        }
+        const okMsg = tr('otImportDone', {
+            kev: data.kev_imported ?? 0,
+            ics: data.ics_imported ?? 0,
+            nvd: data.nvd_imported ?? 0,
+        });
+        if (msgEl) msgEl.textContent = okMsg;
+        showToast(okMsg, 'success');
+        if (fileEl instanceof HTMLInputElement) fileEl.value = '';
+        await otInitView();
+    }
+
+    async function otAddTrustedKey() {
+        const labelEl = document.getElementById('otTrustedKeyLabel');
+        const pemEl = document.getElementById('otTrustedKeyPem');
+        const label = labelEl instanceof HTMLInputElement ? labelEl.value.trim() : '';
+        const publicKey = pemEl instanceof HTMLTextAreaElement ? pemEl.value.trim() : '';
+        if (!publicKey) {
+            showToast(tr('otEnterPublicKey'), 'error');
+            return;
+        }
+        const res = await apiFetch('/api/cve/ot/trusted-keys', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ label, public_key: publicKey }),
+        });
+        const data = res ? await res.json().catch(() => ({})) : {};
+        if (!res || !res.ok) {
+            showToast(data.detail || tr('uiError'), 'error');
+            return;
+        }
+        if (labelEl instanceof HTMLInputElement) labelEl.value = '';
+        if (pemEl instanceof HTMLTextAreaElement) pemEl.value = '';
+        showToast(tr('otTrustedKeyAdded'), 'success');
+        await otLoadStatus();
+    }
+
+    async function otRemoveTrustedKey(keyId) {
+        if (!keyId) return;
+        const res = await apiFetch('/api/cve/ot/trusted-keys/' + encodeURIComponent(keyId), { method: 'DELETE' });
+        if (!res || !res.ok) {
+            const err = res ? await res.json().catch(() => ({})) : {};
+            showToast(err.detail || tr('uiError'), 'error');
+            return;
+        }
+        showToast(tr('otTrustedKeyRemoved'), 'success');
+        await otLoadStatus();
+    }
+
+    async function otLoadIcsAdvisories() {
+        const body = document.getElementById('otIcsBody');
+        if (!body) return;
+        const vEl = document.getElementById('otIcsVendorFilter');
+        const qEl = document.getElementById('otIcsSearch');
+        const params = new URLSearchParams();
+        if (vEl instanceof HTMLInputElement && vEl.value.trim()) params.set('vendor', vEl.value.trim());
+        if (qEl instanceof HTMLInputElement && qEl.value.trim()) params.set('q', qEl.value.trim());
+        const res = await apiFetch('/api/cve/ot/ics-advisories?' + params.toString());
+        if (!res || !res.ok) {
+            body.innerHTML = `<tr><td colspan="7" style="color:var(--danger);">${escapeHtml(tr('otIcsLoadError'))}</td></tr>`;
+            return;
+        }
+        const items = (await res.json()).advisories || [];
+        if (!items.length) {
+            body.innerHTML = `<tr><td colspan="7" style="color:var(--text-muted);">${escapeHtml(tr('otNoIcsAdvisories'))}</td></tr>`;
+            return;
+        }
+        body.innerHTML = items.map(a => {
+            const idCode = `<code>${escapeHtml(a.id || '')}</code>`;
+            const idCell = (a.url && /^https?:\/\//i.test(a.url))
+                ? `<a href="${escapeHtml(a.url)}" target="_blank" rel="noopener">${idCode}</a>`
+                : idCode;
+            const cves = (a.cves || []).map(c => `<code style="font-size:11px;">${escapeHtml(c)}</code>`).join(' ');
+            const cvss = (a.cvss === null || a.cvss === undefined) ? '—' : escapeHtml(String(a.cvss));
+            return `<tr>
+                <td>${idCell}</td>
+                <td>${escapeHtml(a.vendor || '—')}</td>
+                <td>${escapeHtml(a.product || '—')}</td>
+                <td>${escapeHtml(a.title || '')}</td>
+                <td>${cves || '—'}</td>
+                <td>${cvss}</td>
+                <td>${escapeHtml((a.published || '').slice(0, 10) || '—')}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    // ===== OT compensating controls (per asset x CVE) =====
+    // Literal keys, not 'prefix' + value: the i18n checks only see literals.
+    const OT_COMP_CLASS = {
+        EXPOSED: 'otCompClass_EXPOSED', MITIGATED_BY_FIREWALL: 'otCompClass_MITIGATED_BY_FIREWALL',
+        MITIGATED_BY_IPS: 'otCompClass_MITIGATED_BY_IPS', SERVICE_DISABLED: 'otCompClass_SERVICE_DISABLED',
+        NOT_EVALUATED: 'otCompClass_NOT_EVALUATED',
+    };
+    const OT_COMP_SEV = {
+        critical: 'otCompSev_critical', high: 'otCompSev_high', medium: 'otCompSev_medium', info: 'otCompSev_info',
+    };
+    const OT_COMP_REASON = {
+        no_gateway: 'otCompReason_no_gateway', gateway_no_backup: 'otCompReason_gateway_no_backup',
+        gateway_unsupported: 'otCompReason_gateway_unsupported',
+        undecidable_policy: 'otCompReason_undecidable_policy',
+        asset_unresolvable: 'otCompReason_asset_unresolvable',
+    };
+
+    function otCompEvidence(r) {
+        if (r.class === 'EXPOSED' && r.exposure) {
+            const x = r.exposure;
+            const text = tr('otCompExposureFmt', {
+                src: x.src, level: x.src_level, proto: x.proto, port: x.port,
+                gw: x.gateway, rule: x.rule_name || x.rule_id || '—',
+            });
+            return r.ips_present_unverified ? `${text} · ${tr('otCompIpsUnverified')}` : text;
+        }
+        if (r.class === 'NOT_EVALUATED') {
+            const [code, ip] = String(r.reason || '').split(':');
+            return tr(OT_COMP_REASON[code] || code) + (ip ? ` (${ip})` : '');
+        }
+        if (r.class === 'SERVICE_DISABLED') {
+            return tr('otCompSvcDisabled', { svc: ((r.evidence[0] || {}).services || []).join(', ') });
+        }
+        return (r.evidence || []).slice(0, 3).map(e => (e.kind === 'ips'
+            ? `${e.gateway} IPS ${e.sensor} #${e.entry} (${e.action})`
+            : `${e.gateway} ${e.rule_name || e.rule_id}${e.kind === 'jump_host' ? ' · ' + tr('otCompJump') : ''}`)).join('; ');
+    }
+
+    async function otCompLoad() {
+        const body = document.getElementById('otCompBody');
+        const sumEl = document.getElementById('otCompSummary');
+        if (!body) return;
+        const msgRow = (key, color) =>
+            `<tr><td colspan="7" style="color:var(${color});">${escapeHtml(tr(key))}</td></tr>`;
+        const tenant = window.globalSelectedTenant || 'all';
+        if (tenant === 'all') {
+            body.innerHTML = msgRow('otCompPickTenant', '--text-muted');
+            return;
+        }
+        body.innerHTML = msgRow('otCompLoading', '--text-muted');
+        const res = await apiFetch('/api/cve/ot/compensating?tenant=' + encodeURIComponent(tenant));
+        if (!res || !res.ok) {
+            body.innerHTML = msgRow('otCompLoadError', '--danger');
+            return;
+        }
+        const data = await res.json();
+        const s = data.summary || {};
+        if (sumEl) {
+            sumEl.textContent = tr('otCompSummaryFmt', {
+                assets: data.assets_evaluated ?? 0, exp: s.EXPOSED ?? 0,
+                fw: s.MITIGATED_BY_FIREWALL ?? 0, ips: s.MITIGATED_BY_IPS ?? 0,
+                svc: s.SERVICE_DISABLED ?? 0, ne: s.NOT_EVALUATED ?? 0,
+            });
+        }
+        const rows = data.rows || [];
+        if (!rows.length) {
+            body.innerHTML = msgRow('otCompEmpty', '--text-muted');
+            return;
+        }
+        body.innerHTML = rows.map(r => `<tr>
+                <td>${escapeHtml(r.device || '')} <code style="font-size:11px;">${escapeHtml(r.ip || '')}</code></td>
+                <td><code>${escapeHtml(r.cve_id || '')}</code> <span style="color:var(--text-muted);">${escapeHtml(r.cvss == null ? '' : String(r.cvss))}</span></td>
+                <td>${r.kev ? 'KEV' : '—'}</td>
+                <td>${escapeHtml(tr(OT_COMP_CLASS[r.class] || r.class))}</td>
+                <td>${escapeHtml(tr(OT_COMP_SEV[r.severity] || r.severity))}</td>
+                <td>${escapeHtml(tr(r.patch_planned ? 'otCompYes' : 'otCompNo'))}</td>
+                <td style="font-size:12px;">${escapeHtml(otCompEvidence(r))}</td>
+            </tr>`).join('');
+    }
+
+    document.getElementById('otCompLoad')?.addEventListener('click', otCompLoad);
+    document.getElementById('otAirgapToggle')?.addEventListener('change', otToggleAirgap);
+    document.getElementById('otSyncFeedsBtn')?.addEventListener('click', otSyncFeeds);
+    document.getElementById('otExportBundleBtn')?.addEventListener('click', otExportBundle);
+    document.getElementById('otImportBundleBtn')?.addEventListener('click', otImportBundle);
+    document.getElementById('otAddTrustedKeyBtn')?.addEventListener('click', otAddTrustedKey);
+    document.getElementById('otTrustedKeysList')?.addEventListener('click', (e) => {
+        const btn = e.target instanceof Element ? e.target.closest('[data-action="ot-remove-key"]') : null;
+        if (btn instanceof HTMLElement && btn.dataset.keyId) {
+            otRemoveTrustedKey(btn.dataset.keyId);
+        }
+    });
+    document.getElementById('otIcsRefresh')?.addEventListener('click', otLoadIcsAdvisories);
+    for (const fid of ['otIcsVendorFilter', 'otIcsSearch']) {
+        document.getElementById(fid)?.addEventListener('input', () => {
+            if (_otSearchTimer) clearTimeout(_otSearchTimer);
+            _otSearchTimer = setTimeout(otLoadIcsAdvisories, 250);
+        });
+    }
+

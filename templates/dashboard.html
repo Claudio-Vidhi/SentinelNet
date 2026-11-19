@@ -973,6 +973,7 @@
         <div class="map-seg" role="group" aria-label="Vista mappa" data-i18n-aria-label="ariaMapViewSwitch">
           <button type="button" id="mapViewMinimalBtn" class="map-view-btn" data-i18n="btnMapMinimal">Schema</button>
           <button type="button" id="mapViewLayeredBtn" class="map-view-btn" data-i18n="btnMapLayered">Gerarchia</button>
+          <button type="button" id="mapViewPurdueBtn" class="map-view-btn" data-i18n="btnMapPurdue">Purdue</button>
         </div>
         <!-- Shown when the site is mostly dual-homed to a core pair (schemaLadderPlan). -->
         <button type="button" id="mapLadderHint" class="map-tb-btn map-ladder-hint" hidden><i class="fa-solid fa-diagram-project" aria-hidden="true"></i> <span></span></button>
@@ -1026,6 +1027,11 @@
               <p class="map-view-hint" data-i18n="mapSegFindingsHint">Un cavo tra segmenti che non arriva su un gateway: possibile bypass del firewall.</p>
               <div id="mapSegFindingList" class="map-seg-list"></div>
             </section>
+            <!-- IEC 62443 / Purdue IT/OT boundary violations and rogue OT MAC alerts -->
+            <section id="mapSegOtSection" class="map-view-sec" hidden>
+              <h3 id="mapSegOtTitle" class="map-view-h"></h3>
+              <div id="mapSegOtList" class="map-seg-list"></div>
+            </section>
             <section id="mapSegEditor" class="map-view-sec" hidden>
               <h3 id="mapSegEditorTitle" class="map-view-h"></h3>
               <label for="mapSegName" class="map-view-h" data-i18n="lblMapSegName">Nome</label>
@@ -1038,6 +1044,18 @@
               <select id="mapSegSuggest"></select>
               <label for="mapSegSubnets" class="map-view-h" data-i18n="lblMapSegSubnets">Subnet, una per riga</label>
               <textarea id="mapSegSubnets" class="map-ai-note" rows="2" placeholder="10.20.0.0/24"></textarea>
+              <label for="mapSegPurdue" class="map-view-h" data-i18n="lblMapSegPurdue">Livello Purdue</label>
+              <select id="mapSegPurdue" aria-label="Livello Purdue del segmento" data-i18n-aria-label="ariaMapSegPurdue">
+                <option value="" data-i18n="optPurdueNone">— Nessuno —</option>
+                <option value="L4" data-i18n="optPurdueL4">L4 · Enterprise IT</option>
+                <option value="L3.5" data-i18n="optPurdueL35">L3.5 · DMZ IT/OT</option>
+                <option value="L3" data-i18n="optPurdueL3">L3 · Site Operations</option>
+                <option value="L2" data-i18n="optPurdueL2">L2 · Supervisione (SCADA)</option>
+                <option value="L1" data-i18n="optPurdueL1">L1 · Controllo (PLC/RTU)</option>
+                <option value="L0" data-i18n="optPurdueL0">L0 · Campo / Sensori</option>
+              </select>
+              <label for="mapSegOtVlans" class="map-view-h" data-i18n="lblMapSegOtVlans">VLAN OT protette (es. 100, 110)</label>
+              <input type="text" id="mapSegOtVlans" class="map-pop-search" placeholder="es. 100, 110" data-i18n-placeholder="phMapSegOtVlans" aria-label="VLAN OT protette" data-i18n-aria-label="ariaMapSegOtVlans">
               <label for="mapSegCoreL" class="map-view-h" data-i18n="lblMapSegCoreL">Core sinistro</label>
               <select id="mapSegCoreL" data-seg-core="0"></select>
               <label for="mapSegCoreR" class="map-view-h" data-i18n="lblMapSegCoreR">Core destro</label>
@@ -1348,14 +1366,20 @@
       <div class="page-head">
         <div class="page-head-text">
           <h2 data-i18n="titleCategories">Dispositivi scoperti</h2>
-          <p data-i18n="descCategories">Inventariati e scoperti via CDP/LLDP, per categoria. Scegli una coda o una categoria a sinistra, un dispositivo al centro, e correggilo a destra.</p>
+          <p data-i18n="descCategories">Scoperti via CDP/LLDP e apparati in inventario. Usa i filtri in alto, conferma o cambia categoria in riga, o apri i dettagli di un dispositivo.</p>
         </div>
         <div class="page-head-actions">
+          <span id="clsAiModePill" class="cls-mode-pill" hidden title="Nessun profilo AI attivo: la coda Promuovibili usa l'euristica locale (infrastruttura con IP)." data-i18n-title="clsAiModeOffHint">
+            <i class="fa-solid fa-microchip" aria-hidden="true"></i> <span data-i18n="clsAiModeOff">AI non configurata · Euristica locale</span>
+          </span>
           <select id="categoriesGroupSelect" class="cls-tenant" aria-label="Tenant delle categorie" data-i18n-aria-label="ariaCategoriesTenant">
             <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
           </select>
           <button type="button" class="btn btn-secondary btn-small requires-write" id="btnClsAiSuggest" title="Una richiesta AI per i dispositivi da classificare" data-i18n-title="clsAiSuggestTitle">
             <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> <span data-i18n="clsAiSuggest">Suggerisci con AI</span>
+          </button>
+          <button type="button" class="btn btn-primary btn-small requires-write" id="btnClsAiAcceptHigh" hidden>
+            <i class="fa-solid fa-check-double" aria-hidden="true"></i> <span id="btnClsAiAcceptHighLabel"></span>
           </button>
           <button type="button" class="btn btn-secondary btn-small requires-write" id="btnClsAiModels" title="Doppioni nel catalogo modelli" data-i18n-title="clsAiModelsTitle">
             <i class="fa-solid fa-broom" aria-hidden="true"></i> <span data-i18n="clsAiModels">Pulisci modelli</span>
@@ -1369,9 +1393,9 @@
         </div>
       </div>
 
-      <!-- Rail (queues + category tree) | read-only list | inspector of the
-           selected device. Edits happen in the inspector only, one device at
-           a time. -->
+      <div id="clsKpiBar" class="cls-kpis" role="region" aria-label="Riepilogo dispositivi scoperti" data-i18n-aria-label="titleCategories"></div>
+
+      <!-- Full-width workspace: horizontal category filter bar | triage table | slide-over drawer. -->
       <div class="panel cls-shell">
         <nav class="cls-rail" aria-label="Code e categorie" data-i18n-aria-label="clsRailAria">
           <div id="clsRail"></div>
@@ -1400,16 +1424,18 @@
                    data-i18n-placeholder="clsSearch" aria-label="Cerca nome, IP, modello"
                    data-i18n-aria-label="clsSearch" autocomplete="off" spellcheck="false">
           </div>
-          <!-- Text set per view by topology.js (queue, AI "to manage", any list). -->
           <p id="clsHint" class="cls-hint" hidden></p>
           <div id="clsBulkBar" class="cls-bulk" hidden>
             <span id="clsBulkInfo"></span>
+            <select id="clsBulkCatSelect" class="cls-bulk-cat requires-write" aria-label="Assegna categoria ai dispositivi selezionati" data-i18n-aria-label="clsBulkCatAria"></select>
+            <button type="button" class="btn btn-secondary btn-small requires-write" id="btnClsBulkConfirm" data-i18n="clsBulkConfirm">Conferma selezionati</button>
             <button type="button" class="btn btn-primary btn-small requires-write" id="btnClsBulkPromote" data-i18n="clsBulkPromoteShort">Aggiungi ai gestiti</button>
             <button type="button" class="btn btn-secondary btn-small" id="btnClsBulkClear" data-i18n="clsBulkClear">Annulla selezione</button>
           </div>
           <div id="categoriesDeviceList" class="cls-rows" aria-label="Dispositivi" data-i18n-aria-label="clsListAria"></div>
         </section>
 
+        <div id="clsDrawerScrim" class="cls-drawer-scrim" hidden></div>
         <section id="clsInspector" class="cls-insp" aria-label="Dettaglio dispositivo" data-i18n-aria-label="clsInspAria"></section>
       </div>
     </div>
@@ -1465,6 +1491,7 @@
         <button class="btn btn-secondary ti-subtab" id="tiTabPriority" data-i18n="tiTabPriority"><i class="fa-solid fa-list-ol"></i> Priorit&agrave;</button>
         <button class="btn btn-secondary ti-subtab" id="tiTabReport" data-i18n="tiTabReport"><i class="fa-solid fa-chart-pie"></i> Resoconto</button>
         <button class="btn btn-secondary ti-subtab" id="tiTabWatch" data-i18n="tiTabWatch"><i class="fa-solid fa-satellite-dish"></i> Vendor Watch</button>
+        <button class="btn btn-secondary ti-subtab" id="tiTabOt" data-i18n="tiTabOt"><i class="fa-solid fa-industry"></i> CISA ICS &amp; Air-Gap</button>
       </div>
 
       <div id="tiViewMatcher">
@@ -1540,6 +1567,10 @@
             <label for="cvePrioTenant" style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="cveLblTenant">Sede:</label><select id="cvePrioTenant">
               <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
             </select>
+            <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--text-muted); cursor:pointer;">
+              <input type="checkbox" id="cvePrioHideDeferrable" style="accent-color:var(--primary);">
+              <span data-i18n="cveHideDeferrable">Nascondi asset in fermo pianificato</span>
+            </label>
             <button class="btn btn-primary" id="cvePrioRefresh" style="width:auto; margin:0;" title="Aggiorna" data-i18n-title="titleBtnRefresh" aria-label="Aggiorna" data-i18n-aria-label="titleBtnRefresh"><i class="fa-solid fa-rotate"></i></button>
           </div>
         </div>
@@ -1597,6 +1628,104 @@
           <summary style="cursor:pointer; font-weight:700; font-size:14px;" data-i18n="cveMethTitle">Come si leggono questi numeri</summary>
           <div id="cveReportMethodBody" style="font-size:13px; line-height:1.6; margin-top:12px;"></div>
         </details>
+      </div>
+
+      <div id="tiViewOt" style="display:none;">
+        <div class="panel" style="margin-bottom:14px;">
+          <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
+            <div>
+              <h3 style="margin:0 0 4px;" data-i18n="otFeedsTitle">Feed CISA ICS / KEV &amp; Modalit&agrave; Air-Gap</h3>
+              <div id="otFeedStatusText" style="font-size:12px; color:var(--text-muted);">—</div>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; align-items:center; gap:10px;">
+              <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:700; cursor:pointer;">
+                <input type="checkbox" id="otAirgapToggle" style="accent-color:var(--warning);">
+                <span data-i18n="otAirgapToggleLbl">Modalit&agrave; Air-Gap (offline)</span>
+              </label>
+              <button type="button" class="btn btn-primary" id="otSyncFeedsBtn" style="width:auto; margin:0;" data-i18n="otBtnSyncFeeds"><i class="fa-solid fa-cloud-arrow-down"></i> Sincronizza KEV + ICS</button>
+              <button type="button" class="btn btn-secondary" id="otExportBundleBtn" style="width:auto; margin:0;" data-i18n="otBtnExportBundle"><i class="fa-solid fa-file-shield"></i> Esporta pacchetto firmato</button>
+            </div>
+          </div>
+
+          <div style="border-top:1px solid var(--border); padding-top:12px; display:flex; flex-wrap:wrap; align-items:center; gap:10px;">
+            <label for="otImportBundleFile" style="font-size:12px; font-weight:700; color:var(--text-muted);" data-i18n="otLblImportBundle">Importa pacchetto offline (.json):</label>
+            <input type="file" id="otImportBundleFile" accept=".json,application/json" style="font-size:12px;">
+            <label style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer;">
+              <input type="checkbox" id="otImportTrustNew" style="accent-color:var(--primary);">
+              <span data-i18n="otLblTrustBundleKey">Autorizza chiave firma se nuova (Admin)</span>
+            </label>
+            <button type="button" class="btn btn-primary" id="otImportBundleBtn" style="width:auto; margin:0;" data-i18n="otBtnImportBundle"><i class="fa-solid fa-upload"></i> Verifica e importa</button>
+            <span id="otBundleStatus" style="font-size:12px; color:var(--text-muted);"></span>
+          </div>
+
+          <details style="margin-top:12px; border-top:1px solid var(--border); padding-top:10px;">
+            <summary style="cursor:pointer; font-size:12px; font-weight:700; color:var(--text-muted);" data-i18n="otTrustedKeysSummary">Chiavi pubbliche Ed25519 attendibili</summary>
+            <div style="margin-top:10px; display:flex; flex-wrap:wrap; gap:8px; align-items:end;">
+              <div class="form-group" style="margin:0;">
+                <label for="otTrustedKeyLabel" data-i18n="otLblKeyLabel">Etichetta</label>
+                <input type="text" id="otTrustedKeyLabel" maxlength="80" placeholder="Online Collector" style="width:160px; padding-left:10px;">
+              </div>
+              <div class="form-group" style="margin:0; flex:1; min-width:240px;">
+                <label for="otTrustedKeyPem" data-i18n="otLblKeyPem">Chiave pubblica PEM</label>
+                <textarea id="otTrustedKeyPem" rows="2" placeholder="-----BEGIN PUBLIC KEY-----" style="width:100%; font-family:monospace; font-size:11px; padding:6px;"></textarea>
+              </div>
+              <button type="button" class="btn btn-secondary" id="otAddTrustedKeyBtn" style="width:auto; margin:0;" data-i18n="otBtnAddKey">Aggiungi chiave</button>
+            </div>
+            <div id="otTrustedKeysList" style="margin-top:8px; font-size:12px;"></div>
+          </details>
+        </div>
+
+        <div class="panel">
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:end; margin-bottom:12px;">
+            <div class="form-group" style="margin:0;">
+              <label for="otIcsVendorFilter" data-i18n="otLblIcsVendor">Vendor OT</label>
+              <input type="text" id="otIcsVendorFilter" placeholder="siemens, rockwell..." style="width:180px; padding-left:10px;">
+            </div>
+            <div class="form-group" style="margin:0; flex:1; min-width:200px;">
+              <label for="otIcsSearch" data-i18n="otLblIcsSearch">Cerca advisory / CVE</label>
+              <input type="text" id="otIcsSearch" placeholder="ICSA-, CVE-, Modbus..." style="width:100%; padding-left:10px;">
+            </div>
+            <button type="button" class="btn btn-primary" id="otIcsRefresh" style="width:auto; margin:0;" title="Aggiorna" data-i18n-title="titleBtnRefresh" aria-label="Aggiorna" data-i18n-aria-label="titleBtnRefresh"><i class="fa-solid fa-rotate"></i></button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th>ID</th>
+                <th data-i18n="otThVendor">Vendor</th>
+                <th data-i18n="otThProduct">Prodotto</th>
+                <th data-i18n="otThTitle">Titolo</th>
+                <th>CVE</th>
+                <th>CVSS</th>
+                <th data-i18n="otThPublished">Pubblicata</th>
+              </tr></thead>
+              <tbody id="otIcsBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:14px;">
+          <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
+            <div>
+              <h3 style="margin:0 0 4px;" data-i18n="otCompTitle">Controlli compensativi OT</h3>
+              <div id="otCompSummary" style="font-size:12px; color:var(--text-muted);" data-i18n="otCompHint">Per ogni CVE KEV o CVSS &ge; 7 di un asset L0-L2: il gateway della subnet la protegge?</div>
+            </div>
+            <button type="button" class="btn btn-primary" id="otCompLoad" style="width:auto; margin:0;" data-i18n="otCompLoadBtn"><i class="fa-solid fa-shield-halved"></i> Valuta</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th data-i18n="otCompThAsset">Asset</th>
+                <th>CVE</th>
+                <th>KEV</th>
+                <th data-i18n="otCompThClass">Classe</th>
+                <th data-i18n="otCompThSeverity">Gravit&agrave;</th>
+                <th data-i18n="otCompThPatch">Patch pianificata</th>
+                <th data-i18n="otCompThEvidence">Evidenza / motivo</th>
+              </tr></thead>
+              <tbody id="otCompBody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1973,6 +2102,7 @@
       <div id="trafPills" class="subtab-bar">
         <button type="button" class="ca-pill active" id="trafPill-search" data-traf-view="search" data-i18n="trafPillSearch">Ricerca</button>
         <button type="button" class="ca-pill" id="trafPill-policies" data-traf-view="policies" data-i18n="trafPillPolicies">Per policy</button>
+        <button type="button" class="ca-pill" id="trafPill-hygiene" data-traf-view="hygiene" data-i18n="trafPillHygiene">Igiene &amp; Delta</button>
       </div>
       <div id="flowsObsBanner" style="display:none; padding:10px 14px; margin-bottom:12px; border:1px solid var(--warning, var(--lamp-warn)); border-radius:0; color:var(--warning, var(--lamp-warn)); font-size:13px;"></div>
 
@@ -2037,6 +2167,7 @@
                 <th style="text-align:left; padding:6px 8px;" data-i18n="trafPolColService">Servizio</th>
                 <th style="text-align:left; padding:6px 8px;" data-i18n="trafPolColAction">Azione</th>
                 <th style="text-align:left; padding:6px 8px;" data-i18n="trafPolColTraffic">Traffico</th>
+                <th style="text-align:right; padding:6px 8px;" data-i18n="trafPolColDelta">Delta 7g / 30g</th>
                 <th style="text-align:right; padding:6px 8px;" data-i18n="trafPolColSessions">Sessioni</th>
               </tr>
             </thead>
@@ -2044,6 +2175,37 @@
           </table>
         </div>
       </div>
+      </div>
+
+      <div id="trafPane-hygiene" class="traf-pane" style="display:none;">
+        <div class="panel" style="margin-bottom:14px;">
+          <h4 style="margin:0 0 6px; font-size:14px;">
+            <i class="fa-solid fa-broom" style="color:var(--primary);"></i>
+            <span data-i18n="trafHygTitle">Igiene Firewall &amp; Delta Tracker</span>
+          </h4>
+          <p style="margin:0 0 12px; font-size:12px; color:var(--text-muted);" data-i18n="trafHygDesc">
+            Snapshot periodici 7g/30g, rilevazione policy morte (0 hit), oggetti inutilizzati e restringimento regole any-any dai flussi osservati.
+          </p>
+          <div class="filterbar" style="align-items:flex-end; gap:12px; flex-wrap:wrap; margin:0;">
+            <div class="form-group" style="margin-bottom:0; min-width:220px;">
+              <label for="trafHygDevice" data-i18n="trafHygDevice">Apparato</label>
+              <select id="trafHygDevice">
+                <option value="" data-i18n="trafHygAllDevices">Tutti gli apparati compatibili</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0; width:130px;">
+              <label for="trafHygDays" data-i18n="trafHygDays">Finestra (giorni)</label>
+              <input type="number" id="trafHygDays" min="1" max="365" value="30">
+            </div>
+            <button type="button" id="btnTrafHygRun" class="btn btn-primary btn-small" style="width:auto; margin:0;">
+              <i class="fa-solid fa-magnifying-glass-chart"></i> <span data-i18n="trafHygRun">Analizza Igiene</span>
+            </button>
+            <button type="button" id="btnTrafHygSnapshot" class="btn btn-secondary btn-small" style="width:auto; margin:0;">
+              <i class="fa-solid fa-camera"></i> <span data-i18n="trafHygSnapshotBtn">Acquisisci Snapshot Ora</span>
+            </button>
+          </div>
+        </div>
+        <div id="trafHygBody"></div>
       </div>
 
       <div id="trafPane-search" class="traf-pane">
@@ -4283,7 +4445,10 @@
         <h4 style="margin:0; font-size:14px; color:var(--text-muted);">
           <i class="fa-solid fa-route"></i> <span data-i18n="rtTraceTitle">Analisi di percorso</span>
         </h4>
-        <span id="rtTraceVerdict" class="badge rt-verdict"></span>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <span id="rtTraceSecVerdict" class="badge rt-verdict"></span>
+          <span id="rtTraceVerdict" class="badge rt-verdict"></span>
+        </div>
       </div>
       <p class="rt-trace-desc" data-i18n="rtTraceDesc">Dove finisce un indirizzo partendo da un apparato, e quale rotta vince su ogni salto. Calcolato sulle tabelle gia' raccolte: nessun pacchetto viene inviato.</p>
 
@@ -4292,10 +4457,34 @@
           <label for="rtTraceSrc" data-i18n="rtTraceSrc">Apparato di partenza</label>
           <select id="rtTraceSrc"></select>
         </div>
-        <div class="form-group" style="margin-bottom:0; min-width:200px;">
+        <div class="form-group" style="margin-bottom:0; min-width:170px;">
+          <label for="rtTraceSrcIp" data-i18n="rtTraceSrcIp">IP sorgente (opz.)</label>
+          <input type="text" id="rtTraceSrcIp" placeholder="es. 192.0.2.30"
+                 data-i18n-placeholder="rtTraceSrcIpPl" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="form-group" style="margin-bottom:0; min-width:170px;">
           <label for="rtTraceDst" data-i18n="rtTraceDst">Indirizzo di destinazione</label>
           <input type="text" id="rtTraceDst" placeholder="es. 10.30.0.7"
                  data-i18n-placeholder="rtTraceDstPl" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="form-group" style="margin-bottom:0; min-width:105px;">
+          <label for="rtTraceProto" data-i18n="rtTraceProto">Protocollo</label>
+          <select id="rtTraceProto">
+            <option value="tcp">TCP</option>
+            <option value="udp">UDP</option>
+            <option value="icmp">ICMP</option>
+            <option value="ip">IP</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0; width:100px;">
+          <label for="rtTraceDport" data-i18n="rtTraceDport">Porta (opz.)</label>
+          <input type="number" id="rtTraceDport" min="1" max="65535" placeholder="443"
+                 data-i18n-placeholder="rtTraceDportPl" autocomplete="off">
+        </div>
+        <div class="form-group" style="margin-bottom:0; width:130px;">
+          <label for="rtTraceVrf" data-i18n="rtTraceVrf">VRF (opz.)</label>
+          <input type="text" id="rtTraceVrf" placeholder="global"
+                 data-i18n-placeholder="rtTraceVrfPl" autocomplete="off" spellcheck="false">
         </div>
         <button id="btnRtTrace" class="btn btn-secondary" style="width:auto; margin:0;">
           <i class="fa-solid fa-diagram-project"></i> <span data-i18n="rtTraceRun">Analizza</span>
@@ -4399,6 +4588,9 @@
       <button id="ptSubtabBtnFindings" class="btn btn-secondary" data-subtab="findings">
         <i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="ptSubtabFindings">Anomalie &amp; Difetti</span>
       </button>
+      <button id="ptSubtabBtnWhatIf" class="btn btn-secondary" data-subtab="whatif">
+        <i class="fa-solid fa-code-branch"></i> <span data-i18n="ptSubtabWhatIf">What-If &amp; Rollback</span>
+      </button>
     </div>
 
     <!-- Sotto-tab 1: Packet Tracer -->
@@ -4481,6 +4673,99 @@
         <h3><i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="ptSubtabFindings">Anomalie &amp; Difetti</span></h3>
         <div id="ptFindingsContainer">
           <div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i> Analisi difetti in corso...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sotto-tab 4: Change What-If & Safe Rollback -->
+    <div id="ptSubtabWhatIf" style="display:none;">
+      <div style="display:grid; grid-template-columns: 380px 1fr; gap:18px;">
+        <div class="panel">
+          <h3><i class="fa-solid fa-code-branch"></i> <span data-i18n="ptWiTitle">Simulazione Modifica (What-If)</span></h3>
+          <div class="form-group">
+            <label for="ptWiAction" data-i18n="ptWiAction">Operazione</label>
+            <select id="ptWiAction">
+              <option value="disable_rule" data-i18n="ptWiActDisable">Disabilita regola</option>
+              <option value="delete_rule" data-i18n="ptWiActDelete">Elimina regola</option>
+              <option value="add_rule" data-i18n="ptWiActAddRule">Aggiungi regola</option>
+              <option value="tighten_rule" data-i18n="ptWiActTighten">Restringi regola (Tighten)</option>
+              <option value="add_route" data-i18n="ptWiActAddRoute">Aggiungi rotta statica</option>
+              <option value="remove_route" data-i18n="ptWiActRemoveRoute">Rimuovi rotta statica</option>
+            </select>
+          </div>
+          <div id="ptWiRuleFields">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div class="form-group">
+                <label for="ptWiRuleId" data-i18n="ptWiRuleId">ID / Nome Regola</label>
+                <input id="ptWiRuleId" type="text" placeholder="es. 10">
+              </div>
+              <div class="form-group">
+                <label for="ptWiAcl" data-i18n="ptWiAcl">Nome ACL (IOS/NX-OS)</label>
+                <input id="ptWiAcl" type="text" placeholder="es. OT-CELL-IN">
+              </div>
+            </div>
+            <div id="ptWiRuleDetailFields">
+              <div class="form-group">
+                <label for="ptWiRuleAction" data-i18n="ptWiRuleAction">Azione Regola</label>
+                <select id="ptWiRuleAction">
+                  <option value="permit" data-i18n="ptWiRulePermit">PERMIT / ACCEPT</option>
+                  <option value="deny" data-i18n="ptWiRuleDeny">DENY</option>
+                </select>
+              </div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <div class="form-group">
+                  <label for="ptWiSrcCidr" data-i18n="ptWiSrcCidr">Sorgente CIDR</label>
+                  <input id="ptWiSrcCidr" type="text" placeholder="es. 10.20.0.0/24">
+                </div>
+                <div class="form-group">
+                  <label for="ptWiDstCidr" data-i18n="ptWiDstCidr">Destinazione CIDR</label>
+                  <input id="ptWiDstCidr" type="text" placeholder="es. 192.0.2.10/32">
+                </div>
+              </div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <div class="form-group">
+                  <label for="ptWiProto" data-i18n="ptWiProto">Protocollo</label>
+                  <select id="ptWiProto">
+                    <option value="tcp" selected>TCP</option>
+                    <option value="udp">UDP</option>
+                    <option value="icmp">ICMP</option>
+                    <option value="ip">IP (Any)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="ptWiDport" data-i18n="ptWiDport">Porta Dest.</label>
+                  <input id="ptWiDport" type="number" min="1" max="65535" placeholder="502">
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="ptWiRouteFields" style="display:none;">
+            <div class="form-group">
+              <label for="ptWiPrefix" data-i18n="ptWiPrefix">Prefisso Rotta (CIDR)</label>
+              <input id="ptWiPrefix" type="text" placeholder="es. 192.0.2.0/24">
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div class="form-group">
+                <label for="ptWiNextHop" data-i18n="ptWiNextHop">Next-Hop IP</label>
+                <input id="ptWiNextHop" type="text" placeholder="es. 172.16.10.2">
+              </div>
+              <div class="form-group">
+                <label for="ptWiIface" data-i18n="ptWiIface">Interfaccia Uscita</label>
+                <input id="ptWiIface" type="text" placeholder="es. port2">
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="ptWiCustomFlows" data-i18n="ptWiCustomFlows">Flussi critici aggiuntivi (uno per riga: src,dst,proto,dport)</label>
+            <textarea id="ptWiCustomFlows" rows="3" placeholder="10.20.0.5,192.0.2.10,tcp,502" style="width:100%; font-family:var(--font-code); font-size:12px;"></textarea>
+          </div>
+          <button type="button" id="btnPtRunWhatIf" class="btn btn-primary" style="width:100%;">
+            <i class="fa-solid fa-code-branch"></i> <span data-i18n="ptWiRunBtn">Simula Impatto &amp; Rollback</span>
+          </button>
+        </div>
+        <div class="panel">
+          <h3><i class="fa-solid fa-shield-halved"></i> <span data-i18n="ptSubtabWhatIf">What-If &amp; Rollback</span></h3>
+          <div id="ptWhatIfResultContainer"></div>
         </div>
       </div>
     </div>
@@ -4759,6 +5044,43 @@
           <div class="input-wrapper">
             <i class="fa-solid fa-gears"></i>
             <select id="devVendor" aria-label="Vendor del dispositivo" data-i18n-aria-label="ariaDevVendor"></select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="devPurdueLevel" data-i18n="lblPurdueLevel">Livello Purdue (IEC 62443)</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-layer-group" aria-hidden="true"></i>
+            <select id="devPurdueLevel" aria-label="Livello Purdue del dispositivo" data-i18n-aria-label="ariaDevPurdue">
+              <option value="" data-i18n="optPurdueNone">— Nessuno —</option>
+              <option value="L4" data-i18n="optPurdueL4">L4 · Enterprise IT</option>
+              <option value="L3.5" data-i18n="optPurdueL35">L3.5 · DMZ IT/OT</option>
+              <option value="L3" data-i18n="optPurdueL3">L3 · Site Operations</option>
+              <option value="L2" data-i18n="optPurdueL2">L2 · Supervisione (SCADA)</option>
+              <option value="L1" data-i18n="optPurdueL1">L1 · Controllo (PLC/RTU)</option>
+              <option value="L0" data-i18n="optPurdueL0">L0 · Campo / Sensori</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="devProcessCriticality" data-i18n="lblProcessCriticality">Criticit&agrave; Processo / Patching</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-calendar-check" aria-hidden="true"></i>
+            <select id="devProcessCriticality" aria-label="Criticità processo del dispositivo" data-i18n-aria-label="ariaDevCriticality">
+              <option value="" data-i18n="optCritUnset">— Non specificata —</option>
+              <option value="hot_patchable" data-i18n="optCritHotPatchable">Aggiornabile a caldo</option>
+              <option value="scheduled_shutdown" data-i18n="optCritShutdown">Solo fermo impianto pianificato</option>
+              <option value="mission_critical" data-i18n="optCritMission">Processo critico (24/7)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="devMaintenanceWindow" data-i18n="lblMaintenanceWindow">Finestra di manutenzione</label>
+          <div class="input-wrapper">
+            <i class="fa-regular fa-clock" aria-hidden="true"></i>
+            <input id="devMaintenanceWindow" type="text" maxlength="128" placeholder="Dom 02:00-06:00 / Fermata agosto" aria-label="Finestra di manutenzione" data-i18n-aria-label="ariaDevMaintWindow">
           </div>
         </div>
 
@@ -5803,6 +6125,59 @@
       <button type="button" class="btn btn-secondary btn-small" id="btnProfLogoutAll" style="width:auto; margin:0; color:var(--danger);" data-i18n="btnProfLogoutAll">Esci da tutte le sessioni</button>
 
       <div id="profileMsg" role="status" style="display:none; font-size:12.5px; margin-top:14px;"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="otVaultModal">
+    <div class="modal" style="width: 720px; max-width: 96%; max-height: 88vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <h3 data-i18n="titleOtVault"><i class="fa-solid fa-vault" style="color: var(--primary);"></i> OT Project Vault</h3>
+        <button type="button" class="modal-close" id="btnCloseOtVaultModal" style="background: transparent; border: none; color: inherit; cursor: pointer;" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div id="otVaultDeviceSubtitle" style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;"></div>
+
+      <div class="requires-write" style="padding: 12px; border: 1px solid var(--border); background: var(--surface-2); margin-bottom: 14px;">
+        <div style="display: grid; grid-template-columns: 1fr 180px; gap: 10px; margin-bottom: 10px;">
+          <div>
+            <label for="otVaultFileInput" style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;" data-i18n="lblOtVaultFile">File progetto OT (.zap*, .acd, .scd, .icd, .hmi, .zip)</label>
+            <input type="file" id="otVaultFileInput" accept=".zap,.zap13,.zap14,.zap15,.zap16,.zap17,.zap18,.zap19,.zap20,.ap13,.ap14,.ap15,.ap16,.ap17,.ap18,.ap19,.ap20,.acd,.l5x,.l5k,.rss,.rsp,.scd,.icd,.cid,.ssd,.iid,.sed,.hmi,.mer,.apa,.eas,.s7p,.mwp,.gxw,.gx2,.gx3,.cxp,.cxr,.cxt,.smc,.pcw,.pro,.project,.tpw,.zip,.tar,.tgz,.gz,.7z,.bak,.bin,.cfg,.xml,.json,.txt" style="width: 100%; font-size: 12px;">
+          </div>
+          <div>
+            <label for="otVaultTypeSelect" style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;" data-i18n="lblOtVaultType">Tipo artefatto</label>
+            <select id="otVaultTypeSelect" style="width:100%; padding:6px 8px; background:var(--surface-1); border:1px solid var(--border); color:var(--text); font-size:12px;">
+              <option value="" data-i18n="optOtVaultAuto">Auto (da estensione)</option>
+              <option value="tia_portal">TIA Portal</option>
+              <option value="studio_5000">Studio 5000 / RSLogix</option>
+              <option value="iec_61850">IEC 61850 (SCL / ICD)</option>
+              <option value="hmi_backup">HMI Backup</option>
+              <option value="plc_project">PLC Project</option>
+              <option value="config_archive" data-i18n="optOtVaultArchive">Archivio / Config</option>
+            </select>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 160px 1fr auto; gap: 10px; align-items: end;">
+          <div>
+            <label for="otVaultVersionInput" style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;" data-i18n="lblOtVaultRev">Revisione progetto</label>
+            <input type="text" id="otVaultVersionInput" maxlength="64" placeholder="es. v2.4" style="width:100%; padding:6px 8px; background:var(--surface-1); border:1px solid var(--border); color:var(--text); font-size:12px;">
+          </div>
+          <div>
+            <label for="otVaultNotesInput" style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;" data-i18n="lblOtVaultNotes">Note</label>
+            <input type="text" id="otVaultNotesInput" maxlength="500" style="width:100%; padding:6px 8px; background:var(--surface-1); border:1px solid var(--border); color:var(--text); font-size:12px;">
+          </div>
+          <button type="button" class="btn btn-primary btn-small" id="btnOtVaultUpload" data-i18n="btnOtVaultUpload">
+            <i class="fa-solid fa-upload"></i> Archivia SHA-256
+          </button>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <span id="otVaultIntegrityBanner" style="font-size: 12px; color: var(--text-muted);"></span>
+        <button type="button" class="btn btn-secondary btn-small" id="btnOtVaultVerify" data-i18n="btnOtVaultVerify">
+          <i class="fa-solid fa-shield-check"></i> Verifica SHA-256
+        </button>
+      </div>
+
+      <div id="otVaultList" style="flex: 1; overflow-y: auto; border: 1px solid var(--border); background: var(--surface-2); padding: 8px;"></div>
     </div>
   </div>
 

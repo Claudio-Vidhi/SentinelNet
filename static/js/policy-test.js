@@ -69,7 +69,10 @@
 
         const inTenant = (globalDevices || []).filter(
             d => (d.Group || '') === tenant);
-        const devices = inTenant.filter(d => !ptIsFirewall(d));
+        const includeFirewalls = (ptActiveSubtab === 'whatif');
+        const devices = includeFirewalls
+            ? inTenant
+            : inTenant.filter(d => !ptIsFirewall(d));
         const hiddenFirewalls = inTenant.length - devices.length;
         sel.disabled = devices.length === 0;
 
@@ -112,7 +115,7 @@
             <i class="fa-solid fa-hand-pointer fa-2x" style="margin-bottom:12px; opacity:0.4;"></i>
             <div style="font-size:13px;">${escapeHtml(msg)}</div>
         </div>`;
-        ['ptTraceResultsContainer', 'ptExamplesContainer', 'ptFindingsContainer']
+        ['ptTraceResultsContainer', 'ptExamplesContainer', 'ptFindingsContainer', 'ptWhatIfResultContainer']
             .forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.innerHTML = empty;
@@ -132,6 +135,8 @@
     }
 
     function switchPolicySubtab(subtab) {
+        const wasWhatIf = (ptActiveSubtab === 'whatif');
+        const isWhatIf = (subtab === 'whatif');
         ptActiveSubtab = subtab;
         document.querySelectorAll('#ptSubtabNav button').forEach(b => {
             b.classList.toggle('active', b.dataset.subtab === subtab);
@@ -140,10 +145,16 @@
         const tracerEl = document.getElementById('ptSubtabTracer');
         const examplesEl = document.getElementById('ptSubtabExamples');
         const findingsEl = document.getElementById('ptSubtabFindings');
+        const whatifEl = document.getElementById('ptSubtabWhatIf');
 
         if (tracerEl) tracerEl.style.display = (subtab === 'tracer') ? '' : 'none';
         if (examplesEl) examplesEl.style.display = (subtab === 'examples') ? '' : 'none';
         if (findingsEl) findingsEl.style.display = (subtab === 'findings') ? '' : 'none';
+        if (whatifEl) whatifEl.style.display = isWhatIf ? '' : 'none';
+
+        if (wasWhatIf !== isWhatIf) {
+            populatePolicyDeviceSelect();
+        }
 
         if (renderPolicySelectionState()) return;
 
@@ -151,6 +162,15 @@
             loadPolicyExamples();
         } else if (subtab === 'findings' && !ptFindingsCache[ptSelectedIp]) {
             loadPolicyFindings();
+        } else if (subtab === 'whatif') {
+            syncWhatIfFields();
+            const wiBox = document.getElementById('ptWhatIfResultContainer');
+            if (wiBox && !wiBox.dataset.hasResult) {
+                wiBox.innerHTML = `<div style="text-align:center; padding:40px 20px; color:var(--text-muted); font-size:13px;">
+                    <i class="fa-solid fa-code-branch fa-2x" style="margin-bottom:12px; opacity:0.4;"></i>
+                    <div>${escapeHtml(tr('ptWiNoResult'))}</div>
+                </div>`;
+            }
         }
     }
 
@@ -739,6 +759,189 @@
         }
     }
 
+    function syncWhatIfFields() {
+        const actEl = document.getElementById('ptWiAction');
+        const ruleBox = document.getElementById('ptWiRuleFields');
+        const ruleDetailBox = document.getElementById('ptWiRuleDetailFields');
+        const routeBox = document.getElementById('ptWiRouteFields');
+        if (!actEl) return;
+        const act = actEl.value;
+        const isRoute = (act === 'add_route' || act === 'remove_route');
+        if (ruleBox) ruleBox.style.display = isRoute ? 'none' : '';
+        if (routeBox) routeBox.style.display = isRoute ? '' : 'none';
+        if (ruleDetailBox) {
+            ruleDetailBox.style.display = (act === 'add_rule' || act === 'tighten_rule') ? '' : 'none';
+        }
+    }
+
+    function parseCustomFlowsText(raw) {
+        const out = [];
+        String(raw || '').split(/\r?\n/).forEach(line => {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) return;
+            const parts = trimmed.split(/[\s,;]+/).filter(Boolean);
+            if (parts.length >= 2) {
+                const dportVal = parts[3] ? parseInt(parts[3], 10) : null;
+                out.push({
+                    src_ip: parts[0],
+                    dst_ip: parts[1],
+                    proto: (parts[2] || 'tcp').toLowerCase(),
+                    dport: (dportVal && !Number.isNaN(dportVal)) ? dportVal : null,
+                });
+            }
+        });
+        return out;
+    }
+
+    async function runPolicyWhatIf() {
+        if (!ptSelectedIp) {
+            alert(policyTenant() ? tr('ptChooseDeviceFirst')
+                                 : tr('ptChooseTenantFirst'));
+            return;
+        }
+        const box = document.getElementById('ptWhatIfResultContainer');
+        if (box) {
+            box.dataset.hasResult = '';
+            box.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i></div>`;
+        }
+
+        const action = (document.getElementById('ptWiAction')?.value || 'disable_rule').trim();
+        const dportRaw = (document.getElementById('ptWiDport')?.value || '').trim();
+        const change = {
+            action,
+            rule_id: (document.getElementById('ptWiRuleId')?.value || '').trim() || null,
+            acl: (document.getElementById('ptWiAcl')?.value || '').trim() || null,
+            rule_action: (document.getElementById('ptWiRuleAction')?.value || 'permit').trim(),
+            src_cidr: (document.getElementById('ptWiSrcCidr')?.value || '').trim() || null,
+            dst_cidr: (document.getElementById('ptWiDstCidr')?.value || '').trim() || null,
+            proto: (document.getElementById('ptWiProto')?.value || 'tcp').trim(),
+            dport: dportRaw ? parseInt(dportRaw, 10) : null,
+            prefix: (document.getElementById('ptWiPrefix')?.value || '').trim() || null,
+            next_hop: (document.getElementById('ptWiNextHop')?.value || '').trim() || null,
+            interface: (document.getElementById('ptWiIface')?.value || '').trim() || null,
+        };
+        const flows = parseCustomFlowsText(document.getElementById('ptWiCustomFlows')?.value || '');
+
+        try {
+            const res = await apiFetch(`/api/policy-test/${encodeURIComponent(ptSelectedIp)}/what-if`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ change, flows }),
+            });
+            if (!res || !res.ok) {
+                const err = await (res ? res.json().catch(() => ({})) : Promise.resolve({}));
+                if (box) {
+                    box.innerHTML = `<div class="panel" style="padding:14px; background:var(--lamp-fault-wash); border-left:2px solid var(--danger);"><i class="fa-solid fa-triangle-exclamation" style="color:var(--danger);"></i> ${escapeHtml(err.detail || 'Simulation failed')}</div>`;
+                }
+                return;
+            }
+            const data = await res.json();
+            if (box) box.dataset.hasResult = '1';
+            renderWhatIfResult(data);
+        } catch (e) {
+            if (box) {
+                box.innerHTML = `<div class="panel" style="padding:14px; background:var(--lamp-fault-wash); border-left:2px solid var(--danger);">${escapeHtml(String(e))}</div>`;
+            }
+        }
+    }
+
+    function renderWhatIfResult(data) {
+        const box = document.getElementById('ptWhatIfResultContainer');
+        if (!box) return;
+        const s = data.summary || {};
+        const risk = String(data.risk || 'LOW').toUpperCase();
+        const riskCls = risk === 'HIGH' ? 'badge-danger' : (risk === 'MEDIUM' ? 'badge-warning' : 'badge-success');
+
+        const kpiCard = (label, val, col) => `
+            <div style="border:1px solid var(--border); background:var(--surface-2); padding:10px 12px;">
+                <div style="font-size:11px; text-transform:uppercase; color:var(--text-muted);">${escapeHtml(label)}</div>
+                <div style="font-size:20px; font-weight:700; color:${col}; font-family:var(--font-code);">${escapeHtml(String(val || 0))}</div>
+            </div>`;
+
+        const badgeForVerdict = (v) => {
+            const up = String(v || 'UNKNOWN').toUpperCase();
+            const cls = up === 'PERMIT' ? 'badge-success' : (up === 'DENY' ? 'badge-danger' : 'badge-warning');
+            return `<span class="badge ${cls}">${escapeHtml(up)}</span>`;
+        };
+
+        const badgeForTransition = (t) => {
+            const up = String(t || 'unchanged');
+            const cls = up === 'broken' ? 'badge-danger'
+                : (up === 'newly_allowed' || up === 'rerouted_or_changed' ? 'badge-warning' : 'badge');
+            return `<span class="badge ${cls}">${escapeHtml(up)}</span>`;
+        };
+
+        const rows = (data.flows || []).map(row => {
+            const f = row.flow || {};
+            const b = row.before || {};
+            const a = row.after || {};
+            const dport = f.dport ? `:${f.dport}` : '';
+            return `<tr style="border-top:1px solid var(--border); font-size:12px;">
+                <td style="padding:6px 8px; font-family:var(--font-code);"><code>${escapeHtml(f.src_ip)}</code> &rarr; <code>${escapeHtml(f.dst_ip)}${escapeHtml(dport)}</code> <span style="color:var(--text-muted);">(${escapeHtml(ptFlowProto(f))})</span></td>
+                <td style="padding:6px 8px; font-size:11px; color:var(--text-muted);">${escapeHtml(row.origin || '')}</td>
+                <td style="padding:6px 8px;">${badgeForVerdict(b.verdict)} ${b.rule_id ? `<span style="font-size:11px; color:var(--text-muted);">#${escapeHtml(String(b.rule_id))}</span>` : ''}</td>
+                <td style="padding:6px 8px;">${badgeForVerdict(a.verdict)} ${a.rule_id ? `<span style="font-size:11px; color:var(--text-muted);">#${escapeHtml(String(a.rule_id))}</span>` : ''}</td>
+                <td style="padding:6px 8px;">${badgeForTransition(row.transition)}</td>
+            </tr>`;
+        }).join('');
+
+        const fDiff = data.findings_diff || {};
+        const resolved = fDiff.resolved || [];
+        const introduced = fDiff.introduced || [];
+        const rb = data.rollback || {};
+
+        box.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px; padding:10px 14px; border:1px solid var(--border); background:var(--surface-2);">
+                <div style="font-family:var(--font-code); font-size:13px;"><strong>${escapeHtml(data.change_summary || '')}</strong> <span style="color:var(--text-muted);">(${escapeHtml(data.config_type || '')})</span></div>
+                <div><span style="font-size:11px; color:var(--text-muted); margin-right:6px;">${escapeHtml(tr('ptWiRisk'))}:</span><span class="badge ${riskCls}">${escapeHtml(risk)}</span></div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:repeat(4, minmax(110px, 1fr)); gap:10px; margin-bottom:14px;">
+                ${kpiCard(tr('ptWiBroken'), s.broken, 'var(--danger)')}
+                ${kpiCard(tr('ptWiNewlyAllowed'), s.newly_allowed, 'var(--warning)')}
+                ${kpiCard(tr('ptWiRerouted'), s.rerouted_or_changed, 'var(--primary)')}
+                ${kpiCard(tr('ptWiUnchanged'), s.unchanged, 'var(--success)')}
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
+                <div style="border:1px solid var(--border); padding:10px 12px; background:var(--lamp-up-wash);">
+                    <div style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--success); margin-bottom:4px;">${escapeHtml(tr('ptWiFindingsDiff'))} &mdash; ${escapeHtml(tr('ptWiResolved'))} (${escapeHtml(String(resolved.length))})</div>
+                    <div style="font-size:12px;">${resolved.length ? resolved.map(x => `<div>&check; ${escapeHtml(x.key || '')} (${escapeHtml(String(x.rule_id || ''))})</div>`).join('') : '<span style="color:var(--text-muted);">—</span>'}</div>
+                </div>
+                <div style="border:1px solid var(--border); padding:10px 12px; background:var(--lamp-fault-wash);">
+                    <div style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--danger); margin-bottom:4px;">${escapeHtml(tr('ptWiFindingsDiff'))} &mdash; ${escapeHtml(tr('ptWiIntroduced'))} (${escapeHtml(String(introduced.length))})</div>
+                    <div style="font-size:12px;">${introduced.length ? introduced.map(x => `<div>! ${escapeHtml(x.key || '')} (${escapeHtml(String(x.rule_id || ''))})</div>`).join('') : '<span style="color:var(--text-muted);">—</span>'}</div>
+                </div>
+            </div>
+
+            <h4 style="margin:0 0 8px; font-size:13px;">${escapeHtml(tr('ptWiDiffTable'))}</h4>
+            <div class="table-container" style="max-height:280px; overflow:auto; margin-bottom:14px;">
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left; padding:6px 8px;">${escapeHtml(tr('ptWiFlow'))}</th>
+                            <th style="text-align:left; padding:6px 8px;">${escapeHtml(tr('ptWiOrigin'))}</th>
+                            <th style="text-align:left; padding:6px 8px;">${escapeHtml(tr('ptWiBefore'))}</th>
+                            <th style="text-align:left; padding:6px 8px;">${escapeHtml(tr('ptWiAfter'))}</th>
+                            <th style="text-align:left; padding:6px 8px;">${escapeHtml(tr('ptWiTransition'))}</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows || '<tr><td colspan="5" style="padding:12px; text-align:center; color:var(--text-muted);">—</td></tr>'}</tbody>
+                </table>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                <div>
+                    <div style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--text-muted); margin-bottom:4px;">${escapeHtml(tr('ptWiApplyCli'))}</div>
+                    <pre style="margin:0; padding:10px; background:var(--surface-2); border:1px solid var(--border); font-size:11px; overflow:auto;">${escapeHtml(rb.cli_apply || '')}${rb.api_dry_run ? '\n# API: ' + escapeHtml(rb.api_dry_run) : ''}</pre>
+                </div>
+                <div>
+                    <div style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--text-muted); margin-bottom:4px;">${escapeHtml(tr('ptWiRollbackCli'))}</div>
+                    <pre style="margin:0; padding:10px; background:var(--surface-2); border:1px solid var(--border); font-size:11px; overflow:auto;">${escapeHtml(rb.cli_rollback || '')}</pre>
+                </div>
+            </div>`;
+    }
+
     // Delegated event listener initialization.
     //
     // NOT inside a DOMContentLoaded handler: this module is lazy-loaded by
@@ -793,9 +996,17 @@
             sel.addEventListener('change', (e) => {
                 ptSelectedIp = e.target.value || null;
                 updateDeviceMeta();
+                const wiBox = document.getElementById('ptWhatIfResultContainer');
+                if (wiBox) wiBox.dataset.hasResult = '';
                 if (renderPolicySelectionState()) return;
                 if (ptActiveSubtab === 'examples') loadPolicyExamples();
                 else if (ptActiveSubtab === 'findings') loadPolicyFindings();
+                else if (ptActiveSubtab === 'whatif' && wiBox) {
+                    wiBox.innerHTML = `<div style="text-align:center; padding:40px 20px; color:var(--text-muted); font-size:13px;">
+                        <i class="fa-solid fa-code-branch fa-2x" style="margin-bottom:12px; opacity:0.4;"></i>
+                        <div>${escapeHtml(tr('ptWiNoResult'))}</div>
+                    </div>`;
+                }
             });
         }
 
@@ -820,6 +1031,17 @@
         const btnTrace = document.getElementById('btnPtRunTrace');
         if (btnTrace) {
             btnTrace.addEventListener('click', () => runPolicyTrace());
+        }
+
+        const wiActionSel = document.getElementById('ptWiAction');
+        if (wiActionSel) {
+            wiActionSel.addEventListener('change', syncWhatIfFields);
+            syncWhatIfFields();
+        }
+
+        const btnWhatIf = document.getElementById('btnPtRunWhatIf');
+        if (btnWhatIf) {
+            btnWhatIf.addEventListener('click', () => runPolicyWhatIf());
         }
 
         const exContainer = document.getElementById('ptExamplesContainer');
