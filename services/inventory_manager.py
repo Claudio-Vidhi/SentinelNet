@@ -176,6 +176,7 @@ _CSV_ALIASES: Dict[str, str] = {
     "transports": "Transports", "trasporti": "Transports",
     "snmpcommunity": "SNMP Community", "communitysnmp": "SNMP Community",
     "snmpdisabled": "SNMP Disabled", "snmpescluso": "SNMP Disabled",
+    "purduelevel": "Purdue Level", "purdue": "Purdue Level", "livellopurdue": "Purdue Level",
 }
 
 

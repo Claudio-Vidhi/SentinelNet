@@ -20,6 +20,7 @@ from collectors.network_scanner import parse_ipv4_network, scan_subnet
 from core import core_engine
 from security import crypto_vault, identity_manager
 from services import location_manager, probe_manager
+from services.tenant_telemetry import ot_safe_orgs_for_ips, ot_safe_orgs_for_network
 
 router = APIRouter(dependencies=[Depends(require_tab("tab-devices"))], tags=["Scan"])
 
@@ -104,6 +105,11 @@ def start_subnet_scan(
             status_code=403,
             detail="Rete non dichiarata su una sede delle tue organizzazioni: "
                    "aggiungi la subnet alla sede prima di scansionarla.")
+    ot_blocked = ot_safe_orgs_for_network(network, scope)
+    if ot_blocked:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Tenant in OT Safe Mode ({', '.join(ot_blocked)}): scansione attiva disabilitata.")
     hosts = [str(ip) for ip in network.hosts()]
 
     probe = _probe_for_network(hosts)
@@ -203,9 +209,14 @@ def start_scan_verify(
     # Visibility BEFORE decryption: without it an operator reads another site's
     # password by guessing an identity id. 404, not 403 — a 403 would confirm
     # that the identity exists.
-    if not identity_manager.identity_visible_to(payload.identity_id,
-                                                user_group_scope(current_user)):
+    scope = user_group_scope(current_user)
+    if not identity_manager.identity_visible_to(payload.identity_id, scope):
         raise HTTPException(status_code=404, detail="Identita' non trovata.")
+    ot_blocked = ot_safe_orgs_for_ips(payload.ips, scope)
+    if ot_blocked:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Tenant in OT Safe Mode ({', '.join(ot_blocked)}): verifica attiva disabilitata.")
 
     try:
         credentials = identity_manager.get_identity_credentials(payload.identity_id)

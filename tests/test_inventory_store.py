@@ -100,6 +100,39 @@ class TestInventoryStore(unittest.TestCase):
         self.addCleanup(conn.close)
         self.assertEqual(st.read_orgs(conn), {})
 
+    def test_purdue_level_migration_and_round_trip(self):
+        legacy_path = os.path.join(self.dir, "legacy.db")
+        raw = sqlite3.connect(legacy_path)
+        raw.executescript(
+            'CREATE TABLE organizations (key TEXT PRIMARY KEY, name TEXT, description TEXT NOT NULL DEFAULT "");'
+            'CREATE TABLE locations (id TEXT PRIMARY KEY, org TEXT NOT NULL, name TEXT NOT NULL, '
+            'role TEXT NOT NULL, subnets TEXT NOT NULL DEFAULT "[]", probe TEXT NOT NULL DEFAULT "central");'
+            'CREATE TABLE segments (id TEXT PRIMARY KEY, org TEXT NOT NULL, name TEXT NOT NULL, '
+            'color TEXT NOT NULL, subnets TEXT NOT NULL DEFAULT "[]", members TEXT NOT NULL DEFAULT "[]", '
+            'excluded TEXT NOT NULL DEFAULT "[]");'
+            'CREATE TABLE hosts ("IP" TEXT NOT NULL, "Vendor" TEXT NOT NULL DEFAULT "", "Profile" TEXT NOT NULL DEFAULT "", '
+            '"Username" TEXT NOT NULL DEFAULT "", "Password" TEXT NOT NULL DEFAULT "", "Enable Secret" TEXT NOT NULL DEFAULT "", '
+            '"Group" TEXT NOT NULL, "Hostname" TEXT NOT NULL DEFAULT "", "Probe" TEXT NOT NULL DEFAULT "", '
+            '"Location" TEXT, "SSH Port" TEXT NOT NULL DEFAULT "", "Transports" TEXT NOT NULL DEFAULT "", '
+            '"SNMP Community" TEXT NOT NULL DEFAULT "", "SNMP Disabled" TEXT NOT NULL DEFAULT "", PRIMARY KEY ("IP", "Group"));'
+            'CREATE TABLE decommissioned_hosts ("IP" TEXT NOT NULL, "Vendor" TEXT NOT NULL DEFAULT "", "Profile" TEXT NOT NULL DEFAULT "", '
+            '"Username" TEXT NOT NULL DEFAULT "", "Password" TEXT NOT NULL DEFAULT "", "Enable Secret" TEXT NOT NULL DEFAULT "", '
+            '"Group" TEXT NOT NULL, "Hostname" TEXT NOT NULL DEFAULT "", "Probe" TEXT NOT NULL DEFAULT "", '
+            '"Location" TEXT, "SSH Port" TEXT NOT NULL DEFAULT "", "Transports" TEXT NOT NULL DEFAULT "", '
+            '"SNMP Community" TEXT NOT NULL DEFAULT "", "SNMP Disabled" TEXT NOT NULL DEFAULT "", '
+            '"Decommissioned" TEXT NOT NULL DEFAULT "", "Decommissioned By" TEXT NOT NULL DEFAULT "", PRIMARY KEY ("IP", "Group"));'
+        )
+        raw.close()
+        conn = st.connect(legacy_path)
+        self.addCleanup(conn.close)
+        host_cols = {r["name"] for r in conn.execute("PRAGMA table_info(hosts)")}
+        seg_cols = {r["name"] for r in conn.execute("PRAGMA table_info(segments)")}
+        self.assertIn("Purdue Level", host_cols)
+        self.assertIn("purdue_level", seg_cols)
+
+        st.write_hosts(self.conn, "hosts", [], [_host("192.0.2.5", Location="roma", **{"Purdue Level": "L1"})])
+        self.assertEqual(st.read_hosts(self.conn, "hosts")[0]["Purdue Level"], "L1")
+
 
 if __name__ == "__main__":
     unittest.main()

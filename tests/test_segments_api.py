@@ -98,6 +98,17 @@ class TestSegmentManager(_Isolated):
         with self.assertRaises(ValueError):
             segment_manager.set_link_decision("acme", "switch-01", "switch-01", "allowed")
 
+    def test_purdue_level_validation(self):
+        s = segment_manager.save_segment(
+            "acme", None, "Cell-1", "amber",
+            subnets=["198.51.100.0/24"], purdue_level="L1",
+        )
+        self.assertEqual(s["purdue_level"], "L1")
+        listed = segment_manager.list_segments("acme")["segments"][0]
+        self.assertEqual(listed["purdue_level"], "L1")
+        with self.assertRaises(ValueError):
+            segment_manager.save_segment("acme", None, "Bad", "amber", purdue_level="L9")
+
 
 class TestSegmentsApi(_Isolated):
 
@@ -116,12 +127,16 @@ class TestSegmentsApi(_Isolated):
     def test_crud_roundtrip(self):
         h = self._h("op")
         r = self.client.post("/api/segments", headers=h, json={
-            "org": "acme", "name": "OT", "color": "amber", "subnets": ["10.20.0.0/24"], "members": ["switch-01"]})
+            "org": "acme", "name": "OT", "color": "amber", "subnets": ["10.20.0.0/24"],
+            "members": ["switch-01"], "purdue_level": "L2"})
         self.assertEqual(r.status_code, 200, r.text)
-        sid = r.json()["segment"]["id"]
+        seg = r.json()["segment"]
+        self.assertEqual(seg["purdue_level"], "L2")
+        sid = seg["id"]
         r = self.client.get("/api/segments", params={"org": "acme"}, headers=h)
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()["segments"][0]["id"], sid)
+        self.assertEqual(r.json()["segments"][0]["purdue_level"], "L2")
         r = self.client.post("/api/segments/link", headers=h,
                              json={"org": "acme", "a": "switch-01", "b": "switch-02", "decision": "allowed"})
         self.assertEqual(r.status_code, 200, r.text)
