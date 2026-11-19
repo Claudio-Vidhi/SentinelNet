@@ -184,7 +184,9 @@ class TestRouterParity(unittest.TestCase):
                     # Network segments on the maps (plan 2026-11-03).
                     "/api/segments",
                     # OT Config / Project Vault (versioned SHA-256 artifacts).
-                    "/api/ot-vault")
+                    "/api/ot-vault",
+                    # Demo mode on a synthetic workspace (docs/demo.md).
+                    "/api/demo/")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
@@ -369,7 +371,9 @@ class TestFullParity(unittest.TestCase):
                     # Network segments on the maps (plan 2026-11-03).
                     "/api/segments",
                     # OT Project Vault (plan OT expansion §5).
-                    "/api/ot-vault")
+                    "/api/ot-vault",
+                    # Demo mode on a synthetic workspace (docs/demo.md).
+                    "/api/demo/")
     # Come NEW_PREFIXES, filtra entrambi i lati: copre anche FortigatePreviewSchema,
     # rimosso insieme al flag di preview /api/settings/fortigate-preview.
     NEW_SCHEMAS = ("DeviceProbeSchema", "GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "ReportPdfSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection", "AgentBackupSchema", "AgentStatusItemSchema", "AgentStatusSchema", "FortigatePreviewSchema",

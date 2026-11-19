@@ -53,6 +53,7 @@ for user-facing strings, logs and comments, English for identifiers — see
 | [ubuntu-agent-install.md](ubuntu-agent-install.md) | Ubuntu Server 24.04 LTS: step-by-step Probe Agent deployment, token auth, systemd |
 | [provisioning-tutorial.md](provisioning-tutorial.md) | Day-0 walkthrough: generate a Cisco switch config, push it via SSH or console, and what to do when it fails |
 | [hardening.md](hardening.md) | TLS, reverse proxy, session cookie, listener exposure, MCP least privilege, roles/tenants/tab permissions |
+| [demo.md](demo.md) | Demo mode: synthetic workspace, how to start/exit it in the app or with the dev launcher, what is seeded, screens to check |
 | [data-protection.md](data-protection.md) | What personal data is stored, where, for how long, and what the operator has to decide |
 
 ### Building

@@ -44,6 +44,10 @@ if "--mcp" in sys.argv:
     sys.exit(0)
 
 from core import data_config
+from core import demo_guard
+
+# Before anything can open a socket: in demo mode only loopback is reachable.
+demo_guard.install()
 
 # With the Windows service installed the data directory belongs to SYSTEM and
 # Administrators only. The exe launched from the shortcut as a normal user then
@@ -74,6 +78,10 @@ async def lifespan(app: "FastAPI"):
     # persisted names carried the pre-0.52 spelling (spec 2026-10-09, renamed to probe).
     from core import probe_migration
     from security.security_manager import log_audit
+    if data_config.DEMO_MODE:
+        # First boot of the demo workspace: seed it before anything reads it.
+        from services import demo_seed
+        demo_seed.seed()
     data_dir = os.path.dirname(data_config.get_path("users.json"))
     for step in probe_migration.migrate(data_dir):
         log_audit(f"Migrazione sonde: {step}.")
@@ -141,14 +149,12 @@ async def lifespan(app: "FastAPI"):
     from services import audit_checklist
     audit_checklist.seed_default_template()
 
-    from services import ping_monitor
-    ping_monitor.start()
-
-    from services import notifications
-    notifications.start_notification_loop()
-
-    from services import triage_scheduler
-    triage_scheduler.start_triage_scheduler()
+    from services import ping_monitor, notifications, triage_scheduler
+    # Each one contacts devices or mails people: none of them in demo mode.
+    if not data_config.DEMO_MODE:
+        ping_monitor.start()
+        notifications.start_notification_loop()
+        triage_scheduler.start_triage_scheduler()
 
     yield
 
@@ -176,6 +182,20 @@ from core.device_credentials import CredentialDecryptError, CredentialResolveErr
 @app.exception_handler(CredentialDecryptError)
 async def _credential_error(request: Request, exc: Exception):
     return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+# A device connection attempted in demo mode, from any route that lets it
+# propagate (core/demo_guard.py).
+@app.exception_handler(demo_guard.DemoModeError)
+async def _demo_mode_error(request: Request, exc: Exception):
+    return JSONResponse(status_code=409, content={"detail": demo_guard.MESSAGE})
+
+
+@app.middleware("http")
+async def demo_mode_middleware(request: Request, call_next):
+    if demo_guard.blocked(request.method, request.url.path):
+        return JSONResponse(status_code=409, content={"detail": demo_guard.MESSAGE})
+    return await call_next(request)
 
 @app.get("/api/version")
 def get_app_version():
@@ -257,6 +277,8 @@ from routers import blueprint as _blueprint_router
 app.include_router(_blueprint_router.router)
 from routers import segments as _segments_router
 app.include_router(_segments_router.router)
+from routers import demo as _demo_router
+app.include_router(_demo_router.router)
 
 _default_origins = f"http://localhost:{effective_port()},http://127.0.0.1:{effective_port()}"
 ALLOWED_ORIGINS = [

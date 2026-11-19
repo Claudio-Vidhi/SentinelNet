@@ -1191,6 +1191,7 @@ async function checkAuthRequirements() {
         const res = await fetch('/api/auth/status');
         if (!res.ok) throw new Error('Status endpoint HTTP ' + res.status);
         const data = await res.json();
+        applyDemoMode(data.demo);
 
         if (!data.has_users) {
             // Nessun utente su disco: mostriamo la procedura guidata di primo setup
@@ -1222,6 +1223,66 @@ async function checkAuthRequirements() {
         return false;
     }
 }
+
+// --- Demo mode (docs/demo.md) ---
+
+// Restart, update, demo: the answer comes from the process about to go away.
+// Poll /api/version (public) until it has gone down and come back, then reload
+// (or run ``onBack`` instead).
+async function reloadWhenRestarted(statusEl, onBack) {
+    const start = Date.now();
+    let wentDown = false;
+    while (Date.now() - start < 5 * 60 * 1000) {
+        await new Promise(r => setTimeout(r, 2000));
+        let up = false;
+        try { up = (await fetch('/api/version', { cache: 'no-store' })).ok; } catch (e) { /* down */ }
+        if (!up) { wentDown = true; continue; }
+        if (wentDown) {
+            if (onBack) onBack(); else location.reload();
+            return;
+        }
+    }
+    if (statusEl) statusEl.textContent = tr('msgRestartNotBack');
+}
+
+function applyDemoMode(on) {
+    document.body.classList.toggle('is-demo', !!on);
+    const banner = document.getElementById('demoBanner');
+    if (banner) banner.hidden = !on;
+}
+
+async function startDemo(statusEl) {
+    const res = await fetch('/api/demo/start', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        if (statusEl) statusEl.textContent = typeof d.detail === 'string' ? d.detail : tr('uiError');
+        return;
+    }
+    if (statusEl) statusEl.textContent = tr('demoRestarting', { user: d.username, password: d.password });
+    // No reload: the credentials stay in this page and prefill the login form
+    // the demo instance shows (its session store does not know this one).
+    reloadWhenRestarted(statusEl, async () => {
+        closeModal('demoStartModal');
+        await checkAuthRequirements();
+        /** @type {HTMLInputElement} */ (document.getElementById('loginUser')).value = d.username;
+        /** @type {HTMLInputElement} */ (document.getElementById('loginPass')).value = d.password;
+    });
+}
+
+async function exitDemo() {
+    const statusEl = document.getElementById('demoBannerStatus');
+    const res = await fetch('/api/demo/stop', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        if (statusEl) statusEl.textContent = typeof d.detail === 'string' ? d.detail : tr('uiError');
+        return;
+    }
+    if (statusEl) statusEl.textContent = tr('demoExiting');
+    reloadWhenRestarted(statusEl);
+}
+
+document.getElementById('btnExitDemo').addEventListener('click', exitDemo);
+document.getElementById('btnTryDemo').addEventListener('click', () => startDemo(document.getElementById('demoStartStatus')));
 
 // Evento per la registrazione guidata del primo utente amministratore
 document.getElementById('btnRegisterAdmin').addEventListener('click', async () => {

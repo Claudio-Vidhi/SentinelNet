@@ -47,6 +47,8 @@ BASE_ROUTES: frozenset[tuple[str, str]] = frozenset({
     # Own MCP clients, from the profile: no tab owns them.
     ("GET", "/api/mcp/my-grants"),
     ("POST", "/api/mcp/my-grants/revoke"),
+    # Exit demo: the banner offers it from every tab.
+    ("POST", "/api/demo/stop"),
 })
 
 # PUBLIC: reachable before a session exists (first run, login screen,
@@ -67,6 +69,9 @@ PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset({
     # token, are the credentials (security/mcp_grants.py).
     ("POST", "/api/mcp/token"),
     ("POST", "/api/mcp/session"),
+    # Unauthenticated only while the user store is empty (first run), like
+    # /api/auth/register; otherwise the handler requires a super_admin.
+    ("POST", "/api/demo/start"),
 })
 
 # MACHINE: probe agents, authenticated by X-Probe-Token.

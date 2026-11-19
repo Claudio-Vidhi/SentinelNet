@@ -269,6 +269,8 @@ async def read_error_counters(ip: str, community: str, port: int = 161) -> dict:
     on-demand read. {} if the device does not answer."""
     from pysnmp.hlapi.v3arch.asyncio import (CommunityData, ContextData,
                                              SnmpEngine, UdpTransportTarget)
+    from core import demo_guard
+    demo_guard.refuse()
     engine = SnmpEngine()
     auth = CommunityData(community, mpModel=1)
     context = ContextData()
@@ -300,6 +302,8 @@ async def _poll_device(ip: str, community: str, port: int = 161) -> list:
                                              ObjectIdentity, ObjectType,
                                              SnmpEngine, UdpTransportTarget,
                                              get_cmd)
+    from core import demo_guard
+    demo_guard.refuse()
     engine = SnmpEngine()
     auth = CommunityData(community, mpModel=1)          # mpModel=1 = SNMPv2c
     context = ContextData()

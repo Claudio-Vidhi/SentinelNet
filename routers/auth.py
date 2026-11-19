@@ -70,7 +70,8 @@ class UserTabsSchema(BaseModel):
 
 @router.get("/api/auth/status")
 def setup_status():
-    return {"has_users": user_manager.has_any_user()}
+    from core import data_config
+    return {"has_users": user_manager.has_any_user(), "demo": data_config.DEMO_MODE}
 
 @router.post("/api/auth/register")
 def setup_admin(payload: UserSchema):

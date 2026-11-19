@@ -339,6 +339,8 @@ def detect_gateway_traceroute(target_ip: str, tenants=None) -> dict:
     cmd = (['tracert', '-d', '-h', '3', '-w', '800', clean_target] if sys.platform == 'win32'
            else ['traceroute', '-n', '-m', '3', '-w', '1', clean_target])
 
+    from core import demo_guard
+    demo_guard.refuse()
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         output = res.stdout or ""

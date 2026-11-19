@@ -19,6 +19,19 @@ DATA_DIR = (os.getenv("SENTINELNET_DATA_DIR")
                 and os.path.isdir(_INSTALLED_DATA_DIR) else None)
             or os.path.join(os.getcwd(), "data"))
 
+# Demo mode (docs/demo.md): a marker in the real data directory makes this
+# process run on <real>/demo instead. Decided once, here, before any module
+# binds a path: everything below and every get_path() caller then sees only the
+# demo workspace. The env var is overwritten because get_path() reads it first.
+REAL_DATA_DIR = DATA_DIR
+DEMO_MARKER = os.path.join(REAL_DATA_DIR, "demo-mode")
+DEMO_DIR = os.path.join(REAL_DATA_DIR, "demo")
+DEMO_MODE = os.path.isfile(DEMO_MARKER)
+if DEMO_MODE:
+    DATA_DIR = DEMO_DIR
+    os.environ["SENTINELNET_DATA_DIR"] = DEMO_DIR
+    os.makedirs(DEMO_DIR, exist_ok=True)
+
 # Known state files, candidates for one-time migration from CWD to DATA_DIR.
 _STATE_FILES = [
     "app_settings.json", "audit.log", "error_log.txt", "groups.json",
@@ -331,7 +344,8 @@ def _migrate_legacy_files():
     previous versions into DATA_DIR (without touching backup-config/ and
     templates/)."""
     cwd = os.getcwd()
-    if not DATA_DIR or os.path.abspath(DATA_DIR) == os.path.abspath(cwd):
+    # Stray files in CWD belong to the real installation, never to the demo.
+    if DEMO_MODE or not DATA_DIR or os.path.abspath(DATA_DIR) == os.path.abspath(cwd):
         return
     for name in _STATE_FILES:
         src = os.path.join(cwd, name)

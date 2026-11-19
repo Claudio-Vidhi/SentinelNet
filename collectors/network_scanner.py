@@ -56,6 +56,8 @@ def parse_ipv4_network(address: str) -> ipaddress.IPv4Network:
 
 
 def _ping(ip: str) -> bool:
+    from core import demo_guard
+    demo_guard.refuse()
     if sys.platform == 'win32':
         cmd = ['ping', '-n', '1', '-w', '1000', ip]
     else:

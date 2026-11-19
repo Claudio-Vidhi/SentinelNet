@@ -1872,16 +1872,7 @@
     async function watchFactoryReset() {
         const status = document.getElementById('factoryResetStatus');
         if (status) status.textContent = tr('frRestarting');
-        const start = Date.now();
-        let wentDown = false;
-        while (Date.now() - start < 5 * 60 * 1000) {
-            await new Promise(r => setTimeout(r, 2000));
-            let up = false;
-            try { up = (await fetch('/api/version', { cache: 'no-store' })).ok; } catch (e) { /* down */ }
-            if (!up) { wentDown = true; continue; }
-            if (wentDown) { location.reload(); return; }
-        }
-        if (status) status.textContent = tr('msgRestartNotBack');
+        reloadWhenRestarted(status);
     }
 
     async function cancelFactoryReset() {
@@ -2268,6 +2259,14 @@
     document.getElementById('btnCloseFactoryReset')?.addEventListener('click', () => closeModal('factoryResetModal'));
     ['frPassword', 'frConfirm'].forEach(id => document.getElementById(id)?.addEventListener('input', syncFactoryResetConfirm));
     document.getElementById('btnUpdateApp')?.addEventListener('click', updateApplication);
+    document.getElementById('btnStartDemo')?.addEventListener('click', () => {
+        const err = document.getElementById('demoStartError');
+        if (err) err.textContent = '';
+        openModal('demoStartModal');
+    });
+    document.getElementById('btnDemoStartConfirm')?.addEventListener('click', () => startDemo(document.getElementById('demoStartError')));
+    document.getElementById('btnDemoStartCancel')?.addEventListener('click', () => closeModal('demoStartModal'));
+    document.getElementById('btnCloseDemoStart')?.addEventListener('click', () => closeModal('demoStartModal'));
     document.getElementById('btnGenerateSelfSigned')?.addEventListener('click', generateSelfSignedCert);
 
     document.getElementById('appAdvBody')?.addEventListener('click', (e) => {

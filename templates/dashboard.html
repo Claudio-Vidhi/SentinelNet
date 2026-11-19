@@ -48,6 +48,13 @@
   <script src="/static/js/boot-ui-variant-late.js"></script>
   <script src="/static/js/boot-sidebar.js"></script>
 
+  <!-- Demo mode (docs/demo.md): shown on the login screen and in the app. -->
+  <div id="demoBanner" class="demo-banner" role="status" hidden>
+    <strong data-i18n="demoBannerText">DEMO — dati sintetici</strong>
+    <button type="button" id="btnExitDemo" class="btn btn-secondary btn-small" data-i18n="demoBtnExit">Esci dalla demo</button>
+    <span id="demoBannerStatus"></span>
+  </div>
+
   <!-- Overlay Login Glassmorphic / Setup Wizard -->
   <div id="authOverlay">
     <div class="login-card">
@@ -79,6 +86,8 @@
         <button class="btn btn-primary" id="btnRegisterAdmin" style="background: var(--cta); color: var(--cta-text);" data-i18n="btnRegisterAdmin">
           <i class="fa-solid fa-user-plus"></i> Completa Configurazione ed Entra
         </button>
+        <button type="button" class="btn btn-secondary" id="btnTryDemo" style="margin-top: 10px;" data-i18n="demoBtnTry">Prova con dati demo</button>
+        <div id="demoStartStatus" class="set-status" role="status"></div>
       </div>
 
       <!-- Sezione Login Standard -->
@@ -3358,6 +3367,7 @@
           <button type="button" data-settings-jump="aiSettingsPanel"><span data-i18n="setNavAi">Profili AI</span></button>
           <button type="button" data-settings-jump="cloudBackupPanel"><span data-i18n="setNavBackup">Copia offsite</span></button>
           <button type="button" data-settings-jump="setSecRestart"><span data-i18n="setNavRestart">Riavvio</span></button>
+          <button type="button" class="requires-super-admin" data-settings-jump="setSecDemo"><span data-i18n="setNavDemo">Modalità demo</span></button>
           <button type="button" class="requires-super-admin" data-settings-jump="setSecFactoryReset"><span data-i18n="setNavFactoryReset">Reset di fabbrica</span></button>
           <button type="button" data-settings-jump="setSecFleet"><span data-i18n="setNavFleet">Versioni</span></button>
         </nav>
@@ -3855,6 +3865,15 @@
         <div id="updateAvailable" class="set-status"></div>
         <div id="restartAppHint" class="set-status"></div>
         <div id="restartAppStatus" class="set-status"></div>
+      </section>
+
+      <!-- Demo mode (super-admin only): synthetic workspace, docs/demo.md -->
+      <section class="panel requires-super-admin set-section" id="setSecDemo">
+        <div class="panel-head"><h3><span data-i18n="demoTitle">Modalità demo</span></h3></div>
+        <p class="set-desc" data-i18n="demoDesc">Riavvia l'applicazione su un'area dati separata con organizzazioni, apparati e risultati sintetici, per provare ogni funzione. I dati reali non vengono letti né modificati e nessun apparato viene contattato. Si esce dal banner in alto.</p>
+        <div class="set-actions">
+          <button type="button" id="btnStartDemo" class="btn btn-secondary btn-small" style="width:auto;" data-i18n="demoBtnStart">Avvia la modalità demo</button>
+        </div>
       </section>
 
       <!-- Ambito: reset di fabbrica (solo super-admin) -->
@@ -4917,6 +4936,21 @@
 
   <!-- Subnet Scanner Modal -->
   <!-- Catalogo modelli: unioni di doppioni proposte dall'AI, una per una. -->
+  <div class="modal-overlay" id="demoStartModal">
+    <div class="modal" style="width: 520px; max-width: 96%;">
+      <div class="modal-header">
+        <h3 data-i18n="demoModalTitle">Avviare la modalità demo?</h3>
+        <i class="fa-solid fa-xmark modal-close" id="btnCloseDemoStart"></i>
+      </div>
+      <p data-i18n="demoModalBody">L'applicazione si riavvia sui dati sintetici: le sessioni aperte terminano. Le credenziali dell'account demo compaiono qui prima del riavvio.</p>
+      <div id="demoStartError" class="set-status" role="status"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" id="btnDemoStartCancel" data-i18n="btnCancel">Annulla</button>
+        <button type="button" class="btn btn-primary" id="btnDemoStartConfirm" data-i18n="demoBtnConfirm">Riavvia in demo</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="factoryResetModal">
     <div class="modal" style="width: 560px; max-width: 96%;">
       <div class="modal-header">

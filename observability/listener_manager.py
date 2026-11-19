@@ -110,6 +110,12 @@ async def apply_obs_config(cfg):
     global _linux_poller_task, _linux_poller_interval
     global _l2_poller_task, _l2_poller_interval
 
+    from core import data_config
+    if data_config.DEMO_MODE:
+        # Pollers contact devices and listeners would ingest real syslog into
+        # the demo workspace: neither runs in demo mode, whoever asks.
+        cfg = {**cfg, "enabled": False, "syslog": {**cfg["syslog"], "enabled": False}}
+
     await _apply_listeners(cfg)
 
     if cfg["enabled"]:
