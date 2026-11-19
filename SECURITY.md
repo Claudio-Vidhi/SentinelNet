@@ -29,8 +29,8 @@ latest released minor is supported: fixes land there, not in older tags.
 
 | Version | Supported |
 | --- | --- |
-| 0.24.x (current) | Yes |
-| < 0.24.0 | No — upgrade to the latest release |
+| 0.65.x (current) | Yes |
+| < 0.65.0 | No — upgrade to the latest release |
 
 ---
 
@@ -38,4 +38,4 @@ latest released minor is supported: fixes land there, not in older tags.
 
 1. **Zero Outbound Telemetry**: SentinelNet makes no outbound tracking, telemetry, or metric reporting calls.
 2. **Local Processing**: Network discovery (LLDP, ARP, MAC), SNMP polling, and the Syslog ingester operate entirely within the local host/network boundary.
-3. **Cryptographic Storage**: Sensitive device passwords, enable secrets, and API tokens are encrypted with AES-GCM via `security/crypto_vault.py` and are never logged or exported in plain text.
+3. **Cryptographic Storage**: Sensitive device passwords, enable secrets, and API tokens are encrypted with Fernet (AES-128-CBC + HMAC-SHA256) via `security/crypto_vault.py` and are never logged or exported in plain text.

@@ -217,8 +217,7 @@ the reasoning.
   everyone else.
 - **The access VLAN is collected too, and IF-MIB has no column for it.** Without
   it, moving a port to another VLAN produced *nothing*: the VLAN wasn't in the
-  snapshot, so it couldn't change, so `CFG_CHANGE_001` — which fires on
-  `interface.change` — had nothing to see. A port that is up in the wrong VLAN
+  snapshot, so `interface.change` and client diagnosis had nothing to see. A port that is up in the wrong VLAN
   is indistinguishable from a port that is up, and to whoever is plugged into
   it that is exactly an outage. Two sources, same "whoever answers wins" pattern
   as the CPU OIDs: `vmVlan` (CISCO-VLAN-MEMBERSHIP-MIB, indexed by `ifIndex` —
@@ -304,8 +303,8 @@ One SSH session per host, one command
 ([`PROBE_COMMAND`](../observability/ingesters/linux_poller.py)), snapshots into
 the same `api_observations` with `kind` `linux_health`. Nothing downstream
 changes: `normalize._from_api_observations` already projects them into
-`device.state`, and `DEVICE_LOAD_001` already reads `cpu_pct` / `memory_pct` /
-`disk_pct` from `events.metrics_json` without knowing where they came from.
+`device.state`, exposing `cpu_pct` / `memory_pct` / `disk_pct` in
+`events.metrics_json` alongside the other device snapshots.
 
 | Branch | Fields |
 |---|---|
@@ -332,8 +331,8 @@ changes: `normalize._from_api_observations` already projects them into
 The same loop and the same `linux_poll_s` interval also poll hosts with vendor
 `windows`, through [`windows_poller`](../observability/ingesters/windows_poller.py):
 one PowerShell command over SSH, `kind` `windows_health`, event `source`
-`windows`. Only `cpu_pct` / `memory_pct` / `disk_pct` (system drive), enough for
-`DEVICE_LOAD_001`; `results` stays empty.
+`windows`. Only `cpu_pct` / `memory_pct` / `disk_pct` (system drive) in
+`metrics`; `results` stays empty.
 
 - **SSH, not SNMP**: the SNMP service on Windows is a deprecated optional
   feature, OpenSSH is already a prerequisite of the platform.
@@ -343,6 +342,19 @@ one PowerShell command over SSH, `kind` `windows_health`, event `source`
 - **CPU is `LoadPercentage`**, which Windows already averages over roughly a
   second; several sockets are averaged together. A hypervisor that leaves it
   empty yields no `cpu_pct`, not zero.
+
+---
+
+## 7c. OT passive discovery & industrial ring monitoring
+
+Tenants with **OT Safe Mode** enabled (`services/tenant_telemetry.py`) suppress
+active ICMP, SNMP, REST, scheduled triage and active subnet scans, relying
+instead on passive telemetry and opt-in read-only checks:
+
+- **Industrial OUI lookup** ([collectors/industrial_oui.py](../collectors/industrial_oui.py)) — maps observed MAC OUIs to industrial control vendors without sending traffic.
+- **Passive OT protocol tagging** ([observability/ingesters/ot_protocols.py](../observability/ingesters/ot_protocols.py)) — classifies Modbus TCP, S7comm, EtherNet/IP, OPC-UA, PROFINET, BACnet, IEC 60870-5-104 and DNP3 from syslog and mirror metadata.
+- **Industrial ring monitoring** ([observability/ingesters/ring_monitor.py](../observability/ingesters/ring_monitor.py)) — combines SNMP ring state (MRP, DLR, PRP/HSR, RSTP) with syslog/SNMP-trap parsing for ring-open and ring-manager changes.
+- **Opt-in read-only OT probes** ([services/probe_agent.py](../services/probe_agent.py)) — rate-limited, explicitly enabled read-only identification probes (e.g. EtherNet/IP `ListIdentity`, Modbus FC 43/14, OPC-UA `GetEndpoints`, BACnet `Who-Is`) that never write registers or coils.
 
 ---
 
@@ -377,15 +389,15 @@ Both are pushed by remote probe agents too (`POST /api/agent/mac`,
 a switch port but no address — and Client Map, flow path and client diagnosis
 all start from the IP.
 
-**Both are collected on demand, not on a schedule.** Nothing in
-`listener_manager` triggers them; they run from the ARP/MAC scan buttons or
-from a probe agent's cycle. Anything reading this data should surface
+**Collected on demand by default**, with an opt-in periodic schedule
+([l2_scheduler.py](../collectors/l2_scheduler.py), `l2_poll_s`, off by default)
+or from a probe agent's cycle. Anything reading this data should surface
 `last_seen` / `port_last_seen` rather than presenting a three-week-old port as
 current — which is why the client diagnosis carries both dates into its report.
 
 **Mind the timestamps**: `mac_history.db` uses ISO-8601 text while
-`observability.db` uses unix integers. Conversion happens at the boundary, in
-[timeline.py](../observability/timeline.py). Never compare them directly.
+`observability.db` uses unix integers. Convert at the boundary; never compare
+them directly.
 
 ---
 

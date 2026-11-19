@@ -4,7 +4,6 @@
 // Manual config upload for devices SentinelNet cannot reach: the commands to
 // run, the session logs dropped in, one review card per file, then one POST
 // per device. Opened from the Import tab and from a manual device's row.
-// Spec: docs/superpowers/specs/2026-10-08-manual-config-repository-design.md
 (function () {
     const $ = (id) => document.getElementById(id);
     // fixed: a manual device being re-uploaded from its row (fields locked).

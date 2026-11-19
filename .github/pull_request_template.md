@@ -10,9 +10,9 @@
 
 Rules in full: [CONTRIBUTING.md](../CONTRIBUTING.md).
 
-- [ ] Targets `Dev`, not `master` — `master` is the public branch and carries no test suite.
+- [ ] Targets `Dev` — `Dev` and `master` carry the same tree; releases fast-forward `master` from `Dev`.
 - [ ] Tests added or updated on `Dev`, and `uv run pytest tests -n 4` is green.
-- [ ] Language convention respected: Italian for user-facing strings, logs, errors and comments; English for identifiers; English for `docs/`.
+- [ ] Language convention respected: English for identifiers, `docs/`, and new/rewritten comments; existing Italian comments left alone; bilingual `it`/`en` UI strings via `tr()`.
 - [ ] New user-facing strings go through the `it`/`en` dictionaries in `static/js/i18n.js` — no inline `currentLang === 'en' ? …` ternaries.
 - [ ] No `sqlite3` used directly on an async path (`await db.read(...)` / `db.enqueue_write(...)` instead).
 - [ ] Authorization uses the multi-group scope (`user_group_scope`), never a scalar `user.group`.

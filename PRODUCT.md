@@ -17,9 +17,7 @@ stand next to.
 - **In-house sysadmin or small IT team on one estate** — the current core.
   Tenants and groups are sites or departments.
 
-In-product roles: `admin`, `operator`, `viewer`. A user belongs to *multiple*
-groups (`user_group_scope`) — scope is a set, never a scalar, and it is an
-authorization boundary, not a filter.
+In-product roles: `super_admin`, `admin`, `operator`, `viewer`. A `super_admin` is unrestricted; every role below can be scoped to a subset of tenants (`user_group_scope`, a set, never a scalar, serving as an authorization boundary rather than a filter) and tabs.
 
 Accounts have a lifecycle the UI must show, not just roles: an accepted
 invitation waits for administrator approval before it can sign in, users manage
@@ -31,11 +29,14 @@ per browser.
 
 ## Product Purpose
 
-Self-hosted platform that centralizes management of network infrastructure:
-configuration backup, firmware and vulnerability triage against the
-NIST NVD database, passive telemetry collection (syslog, SNMP,
-FortiGate REST), and single-client L2+L3 diagnosis — all reachable from one
-browser console.
+Self-hosted platform that centralizes management of IT and OT (ICS/SCADA)
+network infrastructure: configuration backup and OT project vault, firmware and
+vulnerability triage against NIST NVD and CISA KEV/ICS (including air-gapped
+signed bundles and compensating-control assessment), passive telemetry
+collection (syslog, SNMP, FortiGate REST, industrial ring/OT protocols),
+Network Blueprint validation (including Purdue/IEC 62443 Zone & Conduit),
+end-to-end path trace, What-If firewall simulation, auditor status reports, and
+single-client L2+L3 diagnosis — all reachable from one browser console.
 
 The objective, taken from `docs/principles.md`: help the engineer understand
 **what is up, what changed, and what is degraded**, instead of presenting raw
@@ -55,11 +56,9 @@ out; anything that reads as **operational security** is core:
 
 - **Firewall management** — policy inspection, address objects, sessions,
   provisioning.
-- **Policy and configuration audit** — rule hygiene, drift against backups,
-  compliance checklists.
-- **Vulnerability triage** — firmware versions against the NIST NVD database.
-- **Status of the estate** — reachability, redundancy health, link quality,
-  configuration backups.
+- **Policy and configuration audit** — rule hygiene, What-If impact simulation, drift against backups, compliance checklists, and evidence-backed status reports (`.docx` + JSON) for auditors.
+- **Vulnerability triage** — firmware versions against NIST NVD and CISA KEV/ICS, with compensating-control classification for OT assets.
+- **Status of the estate** — reachability, redundancy/industrial ring health, link quality, configuration backups, and OT Safe Mode (passive-only) per tenant.
 
 Three things a neighboring product could not truthfully copy:
 
@@ -146,7 +145,7 @@ and SNMP from the management LAN; remote sites via probe agents.
 
 - Real engineering documentation: `docs/` (architecture, principles, collectors,
   operations, hardening, probes) and `docs/adr/` for decision rationale.
-- Public GitHub repository, MIT-licensed, plus a published Docker image.
+- Public GitHub repository, AGPL-3.0-only licensed (Apache-2.0 up to 0.38.0), plus a published Docker image.
 - Working product with real deployments behind it.
 - **Absent — must not be fabricated:** testimonials, named customers, logos,
   benchmark numbers, pricing, uptime or scale claims, case studies, certification

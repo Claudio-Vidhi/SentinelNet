@@ -30,7 +30,12 @@ goal and worth keeping distinct.
 | 5 | Full acknowledgement | **removed in 0.65.0** | was who, when and why on the incident (schema v11) |
 | 6 | Notification engine → escalation | **phase 1 done** | Email: per-user preferences, admin distribution rules, digest, quiet hours, 30-minute flood window ([notifications.py](../services/notifications.py), schema v12). Escalation still undecided |
 
-### 1.1 Why this order
+### 1.1 Why this order *(historical design notes — items 1, 3, 4, 5 removed in 0.65.0)*
+
+> Note: the prose below preserves the original pre-0.65.0 design reasoning in
+> the tense it was written; `IFACE_DOWN_001`, `BASELINE_NORMAL_RETRACT_001`,
+> `DEVICE_UNREACHABLE_001`, `RULES` and `incidents.status` were removed in
+> 0.65.0 with the incidents engine.
 
 **Flapping first.** The only item requiring no new data, and the noise already
 existed: an `IFACE_DOWN_001` on every drop, an `IFACE_RECOVERED_001` retracting
@@ -84,7 +89,7 @@ in the audit log, not on the incident.
 |---|---|
 | Continuous active checks | SentinelNet observes. The one exception is the poller, which collects state rather than verifying reachability |
 | OK/WARNING/CRITICAL states | Evidence with causal roles and confidence says more |
-| **Plugin architecture** | The equivalent already exists **twice**: a new source is an adapter in `normalize.py`, new logic is an entry in `RULES`. A third mechanism would only give three places to look |
+| **Plugin architecture** | The equivalent already exists **twice**: a new source is an adapter in `normalize.py`, and new checks/audits live in dedicated service modules (`netsec_audit`, `status_report`, `purdue_model`). A third mechanism would only give three places to look |
 
 "Passive checks" isn't an item: flows, syslog, API and SNMP *are* passive
 observations already.
@@ -202,7 +207,20 @@ credential ADR-0008 declined is the right answer.
 
 ---
 
-## 4. Known limitations tracked elsewhere
+## 4. Network Status Report — Phase B (periodic MSP diff)
+
+Phase A shipped in 0.65.0 (`services/status_report/`): on-demand `.docx` +
+self-contained JSON snapshot (`schema_version: 1`) for one tenant. What was
+deliberately deferred to Phase B without changing the snapshot schema:
+
+- **Snapshot storage, scheduling and month-over-month diff** — persist periodic
+  snapshots per tenant, run on a schedule, and diff two snapshots (comparing
+  evidence statuses as well as counts). Refuses to diff across incompatible
+  `schema_version` values.
+
+---
+
+## 5. Known limitations tracked elsewhere
 
 These are accepted trade-offs rather than roadmap items, but they are the things
 most likely to be mistaken for bugs:

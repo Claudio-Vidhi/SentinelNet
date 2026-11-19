@@ -10,8 +10,6 @@ policy test, routes, map) works on it unchanged.
 - guide(): the commands to run, per vendor — the triage's own list.
 - to_backup(): a terminal session log -> the triage's backup layout.
 - preview(): what an upload says about the device, for the review form.
-
-Spec: docs/superpowers/specs/2026-10-08-manual-config-repository-design.md
 """
 import re
 

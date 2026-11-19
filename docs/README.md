@@ -4,9 +4,10 @@ Documentation explains **why**; the code shows **how**. Where a decision is
 already argued in a module docstring, this folder links to it instead of
 copying it.
 
-All documentation is in English. (Code follows a different convention: Italian
-for user-facing strings, logs and comments, English for identifiers — see
-[CONTRIBUTING.md](../CONTRIBUTING.md) §1.)
+All documentation is in English. (Code convention: bilingual `it`/`en` UI strings
+via `static/js/i18n.js`, Italian for backend logs and user-facing errors,
+English for identifiers, and English for new or rewritten comments while leaving
+legacy Italian comments untouched — see [CONTRIBUTING.md](../CONTRIBUTING.md) §1.)
 
 ## Reading paths
 
@@ -48,8 +49,7 @@ for user-facing strings, logs and comments, English for identifiers — see
 
 | Document | Contents |
 |---|---|
-| [operations.md](operations.md) | Runbook: paths, logs, metrics, retention, symptoms and causes (incl. notifications, scheduled triage), backup |
-| [fedora-central-install.md](fedora-central-install.md) | Fedora Server: step-by-step Central server installation, systemd, SELinux, firewall |
+| [operations.md](operations.md) | Runbook: paths, logs, metrics, retention, symptoms and causes (incl. notifications, scheduled triage, Fedora/RHEL systemd & SELinux), backup |
 | [ubuntu-agent-install.md](ubuntu-agent-install.md) | Ubuntu Server 24.04 LTS: step-by-step Probe Agent deployment, token auth, systemd |
 | [provisioning-tutorial.md](provisioning-tutorial.md) | Day-0 walkthrough: generate a Cisco switch config, push it via SSH or console, and what to do when it fails |
 | [hardening.md](hardening.md) | TLS, reverse proxy, session cookie, listener exposure, MCP least privilege, roles/tenants/tab permissions |

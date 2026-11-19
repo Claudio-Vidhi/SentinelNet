@@ -8,9 +8,6 @@ Nessun CVE viene mai rimosso dalla lista, i segnali spostano soltanto la
 posizione, e ogni verdetto porta con se' l'elenco di cio' che NON e' stato
 valutato. Un falso positivo costa dieci minuti di verifica; un falso negativo
 e' un apparato bucato con scritto "a posto".
-
-Design: docs/superpowers/specs/2026-09-09-cve-correlation-design.md (F1, F2,
-F3, F5, F8, F9, F9b).
 """
 
 import json

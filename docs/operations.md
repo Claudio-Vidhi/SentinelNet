@@ -22,24 +22,26 @@ for `data/` next to *that*. First thing to check when "the data disappeared".
 
 | File | Contents |
 |---|---|
-| `network_hosts.csv` | Inventory, credentials **encrypted** with Fernet |
+| `inventory.db` (+ `-wal`, `-shm`) | Organizations, locations, active and decommissioned hosts with Fernet-encrypted credentials (legacy CSV/`groups.json` migrated once to `*.pre-sqlite`) |
 | `observability.db` (+ `-wal`, `-shm`) | Syslog, poller snapshots, events (plus the legacy incident tables of an older install) |
 | `mac_history.db` | MAC position history, ARP |
 | `redundancy.db` | HA group state |
 | `device_meta.db` | Manual device classification (category, name, vendor, model, HA group per tenant and node) and the per-vendor model catalogue. Replaces `device_categories.json` / `device_models.json`, imported once and left as `*.migrated` |
 | `users.json` | Local accounts, bcrypt |
-| `groups.json` / `probes.json` | Groups and probes |
-| `app_settings.json` | GUI configuration (observability, rule thresholds, suppressions, preview flags) |
+| `probes.json` | Probes and agent tokens |
+| `app_settings.json` | GUI configuration (observability, suppressions, per-tenant telemetry / OT Safe Mode, sessions, SMTP, SSO, AI profiles) |
 | `fortigate_tokens.json` | FortiGate API tokens, encrypted |
 | `secret.key` / `jwt_secret.key` | Local cryptographic keys |
+| `ssh_known_hosts` | Pinned device and bastion SSH host keys |
+| `demo-mode` | Marker redirecting runtime to `<DATA_DIR>/demo` |
 | `detected_versions.json` | Firmware triage cache |
 | `audit.log` | Security log, rotating |
 | `error_log.txt` | SSH engine exceptions |
-| `backup-config/<group>/<vendor>/` | Device running-configs |
+| `backup-config/<group>/<vendor>/` | Device running-configs and SHA-256 OT project vault (`_ot_vault/`) |
 
-`secret.key`, `jwt_secret.key`, `users.json`, `probes.json` and `mac_history.db`
-get restrictive ACLs at creation (best effort: `icacls` on Windows, `chmod 600`
-elsewhere).
+`secret.key`, `jwt_secret.key`, `users.json`, `probes.json`, `inventory.db`,
+`ssh_known_hosts` and `mac_history.db` get restrictive ACLs at creation (best
+effort: `icacls` on Windows, `chmod 600` elsewhere).
 
 **One-time migration:** state files found in the CWD are moved into `DATA_DIR`
 on first start. If a file exists in both places, `DATA_DIR` is authoritative.
@@ -274,25 +276,24 @@ exe is always this.
 
 ```powershell
 pwsh scripts/build_installer.ps1            # exe + installer
-pwsh scripts/build_installer.ps1 -SkipExe   # riusa dist\SentinelNet.exe
+pwsh scripts/build_installer.ps1 -SkipExe   # reuses dist\SentinelNet.exe
 ```
 
-Produce `dist\SentinelNet-Setup-<versione>.exe` (Inno Setup 6: `winget install
---id JRSoftware.InnoSetup`). La versione arriva da `core/version.py`, non si
-passa a mano.
+Produces `dist\SentinelNet-Setup-<version>.exe` (Inno Setup 6: `winget install
+--id JRSoftware.InnoSetup`). The version comes from `core/version.py`, never
+passed by hand.
 
-**Perche' esiste.** `DATA_DIR` ripiega su `<cwd>/data`, quindi un exe lanciato
-da una cartella ci tiene accanto `secret.key`, i database e i backup di
-configurazione. Aggiornare sostituendo quella cartella cancella tutto, e senza
-`secret.key` ogni password di apparato salvata resta cifrata e illeggibile per
-sempre.
+**Why it exists.** `DATA_DIR` falls back to `<cwd>/data`, so an exe launched from
+a folder keeps `secret.key`, the databases and the configuration backups next to
+it. Updating by replacing that folder wipes everything, and without `secret.key`
+every saved device password stays encrypted and permanently unreadable.
 
-L'installer separa le due cose:
+The installer separates program and data:
 
-| | Dove | Su aggiornamento | Su disinstallazione |
+| | Location | On upgrade | On uninstall |
 |---|---|---|---|
-| Programma | `C:\Program Files\SentinelNet` | sostituito | rimosso |
-| Dati | `C:\ProgramData\SentinelNet` | **intatti** | **conservati** |
+| Program | `C:\Program Files\SentinelNet` | replaced | removed |
+| Data | `C:\ProgramData\SentinelNet` | **intact** | **preserved** |
 
 The installed exe finds `C:\ProgramData\SentinelNet` by itself when
 `SENTINELNET_DATA_DIR` is unset; the Windows service sets the variable in its own
@@ -300,40 +301,37 @@ WinSW XML. Releases up to 0.42.7 wrote it machine-wide (HKLM), which also sent
 every source checkout on the same PC to the installed data; the installer now
 deletes that value on upgrade.
 
-Al primo avvio l'installer chiede se c'e' una cartella `data` di una copia
-precedente da importare; la copia e' in sola lettura sull'originale. La domanda
-non compare su un aggiornamento, dove i dati ci sono gia'.
+On first launch the installer asks whether there is a `data` folder from a
+previous copy to import (read-only copy from the source). The prompt does not
+appear on an upgrade, where data is already present.
 
-`AppId` in `installer/SentinelNet.iss` e' fisso: e' cio' che fa riconoscere a
-Windows l'esecuzione successiva come AGGIORNAMENTO invece che come seconda
-installazione. Non va cambiato.
+`AppId` in `installer/SentinelNet.iss` is fixed: it is what makes Windows treat
+a later install as an UPGRADE rather than a second installation. Never change
+it.
 
-#### Servizio Windows (opzionale)
+#### Windows service (optional)
 
-L'installer offre "Esegui SentinelNet come servizio Windows", **non spuntata**:
-registrare un servizio e' una modifica di macchina e un'installazione desktop
-non ne ha bisogno. Spuntandola l'app parte all'avvio **e** il pulsante
-"Riavvia l'applicazione" del pannello comincia a funzionare, perche'
-`supervisor()` trova finalmente qualcosa che rimetterebbe in piedi il processo.
-Senza servizio quel pulsante risponde 409, ed e' corretto: un riavvio senza
-supervisore sarebbe solo uno spegnimento.
+The installer offers "Run SentinelNet as a Windows service", **unchecked by
+default**: registering a service modifies the machine and a desktop install does
+not need it. Checking it starts the app at boot **and** enables the "Restart
+application" button in the panel, because `supervisor()` finally finds something
+to bring the process back up. Without a service that button answers 409, by
+design: a restart without a supervisor would just be a shutdown.
 
-Il wrapper e' WinSW (MIT), scaricato con hash verificato da
-`scripts/build_installer.ps1` e non versionato. Serve perche' un exe
-PyInstaller non e' un servizio: non risponde all'SCM, che lo ucciderebbe con
-"il servizio non ha risposto in tempo".
+The wrapper is WinSW (MIT), downloaded with verified hash by
+`scripts/build_installer.ps1` and not committed to the repo. It is needed
+because a PyInstaller executable is not a Windows service: it does not answer
+the SCM, which would kill it with "the service did not respond in time".
 
-`installer/SentinelNet-service.xml` e' un modello: `{app}` e `{commonappdata}`
-vengono sostituiti a installazione. La `workingdirectory` e' la cartella DATI,
-mai `{app}`, e il servizio parte con `SENTINELNET_NO_BROWSER=true` — gira in
-sessione 0, dove aprire un browser significa lasciare un processo invisibile
-che nessuno puo' chiudere.
+`installer/SentinelNet-service.xml` is a template: `{app}` and `{commonappdata}`
+are substituted at install time. `workingdirectory` is the DATA folder, never
+`{app}`, and the service starts with `SENTINELNET_NO_BROWSER=true` — it runs in
+session 0, where opening a browser would leave an invisible process nobody can
+close.
 
-Il servizio gira come LocalSystem. Se l'app viene poi avviata anche a mano
-dall'icona, trova la porta occupata e apre semplicemente l'interfaccia di
-quella gia' in esecuzione (`_port_in_use` in `app_server.main`).
-
-
+The service runs as `LocalSystem`. If the app is later launched manually from its
+icon, it detects the busy port and simply opens the UI of the already-running
+instance (`_port_in_use` in `app_server.main`).
 
 There is no CI: the build is local, deliberately.
 
@@ -342,9 +340,8 @@ There is no CI: the build is local, deliberately.
 ## 7. Backup and restore
 
 What to save: the entire `DATA_DIR`. Without `secret.key` the encrypted
-credentials in `network_hosts.csv` and the FortiGate tokens are
-**unrecoverable**; without `jwt_secret.key` all sessions drop (an annoyance, not
-a loss).
+credentials in `inventory.db` and the FortiGate tokens are **unrecoverable**;
+without `jwt_secret.key` all sessions drop (an annoyance, not a loss).
 
 The SQLite files are in WAL mode: copy them with the process stopped, or via
 `sqlite3 … ".backup"`. Copying just the `.db` and leaving behind the `-wal` of a
@@ -353,7 +350,7 @@ live process produces a stale backup without telling you.
 Restore: stop the process, put the directory back, restart. Migrations are
 forward-only and idempotent.
 
-## Pinning the mirror host key
+### Pinning the mirror host key
 
 Until `Host key (SHA256)` is filled in, the first connection accepts whatever
 key the server presents - a redirected DNS record is then enough to hand the
@@ -370,7 +367,7 @@ From then on a server presenting a different key is refused during the
 handshake, before any credential is sent. Rotating the server key means
 clearing the field, testing again and re-pinning.
 
-## Restoring from the offsite mirror
+### Restoring from the offsite mirror
 
 The mirror is write-only: the app never reads it back. Recovering is a manual,
 documented procedure - verify it once, by hand, before you need it.
@@ -420,8 +417,8 @@ Tick devices in the inventory and use the selection bar:
 
 - **Decommission** moves them to the *Decommissioned* tab. They leave
   polling, triage, ping, backups, alerts, probe-agent sync and the AI tools,
-  and keep their credentials. They are stored in
-  `decommissioned_hosts.csv` next to `network_hosts.csv`.
+  and keep their credentials. They are stored in the `decommissioned_hosts`
+  table of `inventory.db`.
 - **Reactivate** (in the *Decommissioned* tab) puts them back unchanged.
 - **Delete** removes them permanently, active or decommissioned.
 

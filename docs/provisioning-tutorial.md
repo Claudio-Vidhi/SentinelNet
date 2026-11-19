@@ -31,7 +31,7 @@ Two things this feature does **not** do, and you should plan around them:
   `configure replace`, no scheduled revert in the switch provisioner. If the
   push half-lands, you go and look.
 - **No inventory write.** A successful push does not add the device to
-  `network_hosts.csv`. That is a separate step (§8).
+  `inventory.db`. That is a separate step (§8).
 
 ---
 

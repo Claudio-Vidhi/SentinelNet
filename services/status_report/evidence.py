@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Network status report: evidence collectors and the JSON snapshot.
 
-Design: docs/superpowers/specs/2026-11-13-network-status-report-design.md.
 Each collector reads data SentinelNet already holds for ONE tenant and returns
 ``{"available", "metrics", "rows"}``; the status comes from the thresholds in
 mapping.json, never from code. The snapshot is self-contained (it carries the

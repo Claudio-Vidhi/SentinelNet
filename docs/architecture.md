@@ -195,8 +195,9 @@ the database declares a schema version newer than the code, startup fails rather
 than writing to a schema it doesn't understand.
 
 Outside the observability database, state lives in files resolved by
-[core/data_config.py](../core/data_config.py): the inventory CSV with encrypted
-credentials, `groups.json`, `users.json`, keys, `backup-config/`. See
+[core/data_config.py](../core/data_config.py): `inventory.db` (organizations,
+locations, active and decommissioned hosts with encrypted credentials),
+`probes.json`, `users.json`, keys, `backup-config/`. See
 [operations.md](operations.md) §1.
 
 ---
@@ -227,10 +228,10 @@ only identifying tuples, never volumes), is always aggregated or top-N, and
 passes through a single redaction choke-point in
 [security/redaction.py](../security/redaction.py) on the way out.
 
-When the model proposes a configuration it emits a fenced `sentinelnet-config`
-block: it **proposes, it does not execute**. Applying it goes through
-`/api/bulk-command` after explicit user confirmation, with CLI blacklist, RBAC
-and audit log unchanged.
+AI assists (the day-0 config generator, Blueprint assistant and config analyzer)
+only produce configuration text or Blueprint drafts for human review — they never
+execute commands on devices. Applying changes remains an explicit operator
+action subject to CLI blacklist, RBAC and audit logging.
 
 ---
 
@@ -238,14 +239,14 @@ and audit log unchanged.
 
 | Folder | Contents |
 |---|---|
-| [core/](../core/) | `db.py` (SQLite writer), `data_config.py` (paths and config), `app_settings.py`, `core_engine.py` (backup, triage, map), `net_ssh.py` (bastion-aware netmiko entry point), `ssh_pool.py` (dedicated executor for device SSH) |
-| [observability/](../observability/) | The whole §2 pipeline, plus `ingesters/` |
-| [collectors/](../collectors/) | ARP, MAC tables, MAC history, subnet scanner, `l2_scheduler.py` (scheduled L2 discovery, opt-in) |
-| [routers/](../routers/) | ~31 FastAPI routers, one per area |
-| [services/](../services/) | FortiGate, WLC, inventory, provisioners, probes, probe agent, Visio export, `netsec_audit/` (compliance engine & `netsec_audit_runs` history), `config_drift/` (§10: per-tenant history & baseline), `notifications.py` (email engine: preferences, admin rules, outbox, digest), `triage_scheduler.py` (scheduled triage), `tenant_telemetry.py` (per-tenant on/off for ping, SNMP, REST, triage) |
+| [core/](../core/) | `db.py` (SQLite writer), `data_config.py` (paths and config), `app_settings.py`, `backup_store.py` (config backups & SHA-256 OT project vault), `demo_guard.py`, `core_engine.py` (backup, triage, map), `net_ssh.py` (bastion-aware netmiko entry point), `ssh_pool.py` (dedicated executor for device SSH) |
+| [observability/](../observability/) | The whole §2 pipeline, plus `ingesters/` (incl. `ot_protocols.py`, `ring_monitor.py`) |
+| [collectors/](../collectors/) | ARP, MAC tables, MAC history, subnet scanner, `industrial_oui.py`, `l2_scheduler.py` (scheduled L2 discovery, opt-in) |
+| [routers/](../routers/) | 39 modules (one FastAPI router per functional area, plus shared deps/route classes) |
+| [services/](../services/) | FortiGate, WLC, `inventory_store.py` / `inventory_manager.py`, `location_manager.py`, `segment_manager.py`, `blueprint*` (model, checks, assistant, derive, observe), provisioners, probes, probe agent, Visio export, `netsec_audit/` (compliance engine & `netsec_audit_runs` history), `status_report/` (auditor evidence snapshot & `.docx`), `config_drift/` (§10: per-tenant history & baseline), `firewall_traffic.py` (policy counters & hygiene), `path_trace.py`, `whatif_simulator.py`, `purdue_model.py`, `ot_compensating.py`, `ot_compliance.py`, `ot_vuln_intel.py`, `demo_seed.py`, `notifications.py` (email engine: preferences, admin rules, outbox, digest), `triage_scheduler.py` (scheduled triage), `tenant_telemetry.py` (per-tenant on/off for ping, SNMP, REST, triage, OT Safe Mode) |
 | [security/](../security/) | JWT/RBAC/audit, credential encryption, keystore, identities, redaction, `command_policy.py` (the one dangerous-command policy) |
 | [ai/](../ai/) | Multi-provider assistant, config analyzer, MCP server and client |
-| [drivers/](../drivers/) | One driver per vendor, `BaseDriver` as the contract, `registry.py` (vendor → driver → netmiko mapping) |
+| [drivers/](../drivers/) | 19 modules: IT, Linux/Windows and industrial OT drivers, `BaseDriver` as the contract, `registry.py` (vendor → driver → netmiko mapping) |
 | [fw_analyzers/](../fw_analyzers/) | Firewall config analysis (FortiOS, PAN-OS) |
 | [redundancy/](../redundancy/) | HA group detection and state |
 | [static/js/](../static/js/) | One JS file per tab. Rendering, formatting and presentation helpers live here; decisions (verdicts, scoping, policy) stay server-side — the dashboard is a lens, never the logic |

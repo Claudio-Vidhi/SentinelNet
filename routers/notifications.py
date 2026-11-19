@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright 2026 Claudio Vidhi
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Router API per la gestione delle notifiche (preferenze, regole admin, storico invii).
-
-Design: docs/superpowers/specs/2026-09-16-email-notifications-design.md.
-"""
+"""Router API per la gestione delle notifiche (preferenze, regole admin, storico invii)."""
 
 import re
 from typing import Optional

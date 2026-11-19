@@ -35,9 +35,11 @@ populated demo.
 - **Automatic backup** — saves device running-configs to local text files,
   organized by group and vendor.
 - **Multi-vendor architecture** — pluggable drivers driven by a vendor registry:
-  Cisco IOS, HPE ProCurve, Juniper Junos, Aruba OS, Fortinet FortiOS and Palo
-  Alto PAN-OS. The vendor → driver → netmiko `device_type` mapping is
-  centralized and easy to extend.
+  Cisco IOS/IOS-XE/NX-OS/CBS/WLC/IE, HPE ProCurve, Aruba OS, Juniper Junos,
+  Fortinet FortiOS, Palo Alto PAN-OS, Linux, Windows, plus industrial OT
+  switches (Siemens SCALANCE, Hirschmann HiOS, Moxa EDS/EDR, Westermo, Phoenix
+  Contact). The vendor → driver → netmiko `device_type` mapping is centralized
+  and easy to extend.
 - **Config drift** — every changed running-config is archived as a new
   version, and each device is checked against a per-tenant baseline written
   for its configuration profile (IOS, AireOS WLC, FortiOS, PAN-OS, Linux,
@@ -99,6 +101,23 @@ populated demo.
   encryption of credentials at rest, rotating audit log, rate limiting with
   brute-force lockout, and a dangerous-CLI-command blacklist enforced on both the
   one-shot API and the interactive terminal.
+- **Operational Technology (OT / ICS)** — per-tenant *OT Safe Mode*
+  (passive-only, suppresses active scans), Purdue levels (`L0`–`L4` + `L3.5` DMZ)
+  and IEC 62443 Zone/Conduit checks, industrial OUI lookup and passive OT
+  protocol tagging, industrial ring monitoring (MRP/DLR/PRP/HSR/RSTP), CISA
+  KEV/ICS intel with signed offline air-gap bundles, SHA-256 OT project vault,
+  and compensating-control CVE classification.
+- **Path trace, Firewall Hygiene & What-If simulator** — offline end-to-end L3
+  + NAT + PBR + SD-WAN + ACL/policy path trace, 7d/30d policy hit-counter
+  deltas and dead/overpermissive-rule hygiene, plus What-If change simulation
+  with apply and rollback snippets across FortiOS, PAN-OS, Junos and
+  IOS/NX-OS.
+- **Network Blueprint & auditor status report** — expected vs. observed network
+  checks per organization ([docs/network-blueprint.md](docs/network-blueprint.md)),
+  plus an on-demand Network Status Report (`.docx` + JSON snapshot) mapping
+  technical evidence to NIS2, ISO/IEC 27001, CIS v8 and IEC 62443.
+- **Demo mode** — isolated synthetic workspace ([docs/demo.md](docs/demo.md))
+  to explore every IT and OT feature without real devices or touching real data.
 
 ---
 
@@ -114,6 +133,9 @@ Full index: [docs/README.md](docs/README.md).
 | Operations runbook (logs, diagnostics, retention, backup) | [docs/operations.md](docs/operations.md) |
 | Secure exposure (TLS, reverse proxy), roles and permissions | [docs/hardening.md](docs/hardening.md) |
 | Multi-site deployment | [docs/probes.md](docs/probes.md) |
+| Organizations & locations | [docs/organizations-locations.md](docs/organizations-locations.md) |
+| Network Blueprint (expected vs. observed) | [docs/network-blueprint.md](docs/network-blueprint.md) |
+| Demo mode (synthetic workspace) | [docs/demo.md](docs/demo.md) |
 | Layout, tests, build | [docs/development.md](docs/development.md) |
 | Architecture decisions and their rationale | [docs/adr/](docs/adr/) |
 
@@ -494,11 +516,13 @@ Available tools, by area:
 |---|---|
 | **Diagnosis** | `diagnose_client` — the L2+L3 report for one client; prefer it over the per-device tools when the question is about a client rather than about one box |
 | Inventory & topology | `list_devices`, `get_network_map`, `get_port_channels`, `list_probes` |
-| Identity & location | `locate_mac`, `search_mac`, `mac_to_ip`, `client_map`, `arp_scan` |
+| Identity & location | `locate_mac`, `search_mac`, `mac_to_ip`, `client_map`, `endpoint_inventory`, `arp_scan` |
 | FortiGate | `fortigate_status`, `_interfaces`, `_arp`, `_dhcp_leases`, `_device_inventory`, `_policies`, `_policy_stats`, `_firewall_addresses`, `_firewall_policy_objects`, `_firewall_services`, `_policy_lookup`, `_sessions`, `_routes`, `_traffic_logs`, `_wifi_clients`, `_managed_aps`, `_full_config`, `_diagnose_client` |
 | Cisco WLC | `wlc_status`, `_ap_summary`, `_client_summary`, `_client_detail`, `_wlan_summary`, `_rogue_aps`, `wlc_diagnose_client` |
 | Config & ops | `analyze_config`, `get_triage_status`, `send_cli_command` |
 | Provisioning | `generate_switch_config` |
+| Policy & hygiene | `policy_trace`, `policy_findings`, `simulate_policy_change`, `firewall_hygiene` |
+| Blueprint | `blueprint_get`, `blueprint_propose` |
 | Vulnerabilities | `cve_priority`, `cve_for_device`, `search_vulnerabilities` |
 | Config drift | `drift_summary`, `drift_versions`, `drift_diff` — operator account required |
 | Ports & routing | `interface_errors`, `interface_errors_port`, `get_routes`, `trace_route` |
@@ -517,14 +541,16 @@ disabled tools disappear from the list and every call to them is rejected.
 
 ## Credential security
 
-`network_hosts.csv` holds the encrypted credentials of physical devices and is
-excluded from Git tracking via `.gitignore`. Before publishing the repository,
-verify these files are excluded:
+`inventory.db` (inside the `data/` directory, excluded whole via `.gitignore`)
+holds organizations, locations and active/decommissioned device inventory with
+Fernet-encrypted credentials (CSV is import/export only). Before publishing the
+repository, run `uv run python scripts/check_no_private_data.py` and verify
+these state files under `data/` are excluded:
 
-- `network_hosts.csv` — inventory with encrypted credentials
-- `backup-config/` — device running-configs
+- `inventory.db` — organizations, locations and inventory with encrypted credentials
+- `backup-config/` — device running-configs and OT project vault
 - `detected_versions.json` — triage state cache
-- `groups.json` — configured groups and sites
+- `probes.json` — configured probes and agent tokens
 - `secret.key` / `jwt_secret.key` — local cryptographic keys
 - `users.json` — local user accounts, roles and permissions
 

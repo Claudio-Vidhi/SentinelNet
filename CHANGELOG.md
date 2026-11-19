@@ -10,6 +10,64 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Modalità Demo in-app**: workspace sintetico isolato (`data/demo`,
+  guardia anti-uscita `core/demo_guard.py`, seed con tre organizzazioni IT/OT
+  `acme-hq`, `plant-demo`, `plant-legacy`), avviabile da Impostazioni
+  (`super_admin`) o dalla schermata di primo avvio e via
+  `scripts/dev/run_demo.py`; guida in `docs/demo.md`.
+- **Espansione OT (ICS / SCADA) e conformità IEC 62443**:
+  - `OT Safe Mode` per tenant (solo passivo, blocca scansioni attive), livelli
+    Purdue (`L0`–`L4` + `L3.5` DMZ) su apparati e segmenti, controlli
+    Zone/Conduit nel Blueprint (`services/purdue_model.py`) e rilevamento
+    rogue MAC su VLAN OT, host dual-homed IT/OT, porte di accesso OT
+    multi-MAC ed esposizione WAN di asset OT.
+  - Discovery passiva OT: lookup OUI industriale (`collectors/industrial_oui.py`),
+    classificazione passiva protocolli OT (Modbus TCP, S7comm, EtherNet/IP,
+    OPC-UA, PROFINET, BACnet, IEC 104, DNP3) in
+    `observability/ingesters/ot_protocols.py` e probe read-only opt-in via
+    agent.
+  - Driver switch industriali (`siemens_scalance`, `hirschmann`, `moxa`,
+    `westermo`, `phoenix_contact`, `cisco_ie`) e monitoraggio anelli
+    MRP/DLR/PRP/HSR/RSTP (`observability/ingesters/ring_monitor.py`).
+  - Vulnerability intelligence OT (`services/ot_vuln_intel.py`,
+    `services/ot_compensating.py`): catalogo CISA KEV + ICS Advisories,
+    modalità air-gap con bundle firmati Ed25519 + SHA-256, criticità di
+    processo e finestre di manutenzione, e classificazione dei CVE critici/KEV
+    per controlli compensativi (firewall/ACL, IPS).
+  - OT Project Vault versionato con verifica SHA-256 e controlli automatici
+    IEC 62443 / NIS2 nel Network Status Report (`services/ot_compliance.py`).
+- **Path trace end-to-end (L3 + NAT + PBR + SD-WAN + ACL/Policy)**: traccia
+  offline hop-by-hop basata su backup e tabelle di routing
+  (`services/path_trace.py`).
+- **Firewall Hygiene, parità multi-vendor e simulatore What-If**: vista
+  *Traffico → Hygiene & Delta* con snapshot periodici (retention 45 giorni,
+  per tenant), individuazione policy morte/inutilizzate e regole
+  overpermissive; parità NetSec Audit e Policy Test per PAN-OS, Junos, NX-OS e
+  profili OT; simulatore *What-If* offline con snippet apply/rollback
+  (`services/whatif_simulator.py`) e nuovi tool MCP `firewall_hygiene` e
+  `simulate_policy_change`.
+
+### Changed
+
+- **Redesign tab Dispositivi scoperti**: nuovi KPI, tabella di triage e
+  drawer laterale di dettaglio.
+- **Documentazione**: rimossi piani storici e bozze superate (`docs/superpowers/`,
+  `docs/fortigate-management-plan.md`, `docs/linux-server-management-plan.md`,
+  `docs/ot-expansion-ideas.md`, `docs/Improvements`, `docs/reference/fortios/ztp.md`,
+  `docs/fedora-central-install.md`) e riallineata la documentazione viva.
+
+### Fixed
+
+- **Backup Cisco**: ripristinati `show vlan` e diagnostica Cisco nel backup
+  di triage.
+- **Performance path trace**: evitato il ricalcolo ripetuto di chiamate REST e
+  parsing backup a ogni traccia.
+- **Controlli compensativi OT ed esposizione WAN**: corretta risoluzione
+  ingress next-hop, esclusione della SVI di management degli switch L2 come
+  gateway compensativo e richiesta di permit PAN-OS per esposizione WAN.
+
 ## [0.65.1] - 2026-11-14
 
 ### Fixed

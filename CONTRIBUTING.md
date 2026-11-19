@@ -6,8 +6,9 @@ Binding rules for every change, human or AI-authored. Architectural context is i
 
 ## 1. Language
 
-- **User-facing strings, logs, error messages, comments and docstrings: Italian.**
+- **UI strings**: bilingual `it` + `en` via `tr()` in `static/js/i18n.js`; **backend logs and user-facing error messages: Italian.**
 - **Identifiers (functions, variables, modules, endpoints): English.**
+- **New and rewritten code comments and docstrings: English.** Most of the existing tree is commented in Italian: leave it alone (do not "fix" surrounding Italian comments as a drive-by).
 - **Documentation under `docs/`: English.**
 
 ```python
@@ -121,7 +122,7 @@ gate above.
 ### Do not launder gitignored data into tracked files
 
 `data/` is gitignored — `backup-config/`, `detected_versions.json`,
-`network_hosts.csv`, `mac_history.db` — because it holds real customer network
+`inventory.db`, `mac_history.db` — because it holds real customer network
 state. **Conclusions derived from it are as sensitive as the files themselves**
 and must not be written into tracked files, including documentation.
 

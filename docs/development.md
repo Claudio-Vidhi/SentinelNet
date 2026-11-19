@@ -48,10 +48,11 @@ response shape, the excess belongs in `services/` or `observability/`. The
 reason [app_server.py](../app_server.py) is 200-odd lines is that this line was
 held.
 
-**Naming convention:** Italian for user-facing strings, logs, errors, comments
-and docstrings; English for identifiers. See
-[CONTRIBUTING.md](../CONTRIBUTING.md) §1. New documentation in `docs/` is
-written in English.
+**Naming convention:** English for identifiers; bilingual `it` + `en` UI strings
+via `tr()` in `static/js/i18n.js`; Italian for backend logs and user-facing
+errors; English for new and rewritten code comments and docstrings (legacy
+Italian comments stay untouched). See [CONTRIBUTING.md](../CONTRIBUTING.md) §1.
+New documentation in `docs/` is written in English.
 
 ---
 
@@ -78,8 +79,7 @@ starves the latency assertion in `test_load_5kpps_loop_latency`.
 
 Run from the repository root. `uv run python tests/test_db.py` fails with
 `ModuleNotFoundError: core`, because that puts `tests/` on `sys.path` instead
-of the root. (The instruction in [CONTRIBUTING.md](../CONTRIBUTING.md) §7
-predates the move into `tests/`.)
+of the root.
 
 Every new module ships its own `test_<module>.py`. Tests never touch real state.
 Config drift is split into six focused files rather than one, matching its
@@ -221,7 +221,7 @@ another release. It also prints that undo.
 
 ---
 
-## 7. Knowledge graph
+## 8. Knowledge graph
 
 `graphify-out/` holds an AST-derived graph of the codebase. For "where is X"
 and "what touches Y" questions it's faster than grepping:

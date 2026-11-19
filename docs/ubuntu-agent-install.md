@@ -58,17 +58,20 @@ Create the configuration file (replace `<CENTRAL_IP>`, `<PROBE_ID>`, and `<TOKEN
 ```bash
 tee /opt/SentinelNet/agent.json << 'EOF'
 {
-  "central_url": "http://192.0.2.10:8000",
+  "central_url": "https://192.0.2.10:8000",
   "probe_id": "test-ub-agent",
   "token": "YOUR_GENERATED_TOKEN_HERE",
   "interval": 15,
-  "verify_tls": false,
+  "verify_tls": true,
   "data_dir": "/opt/SentinelNet/agent-data"
 }
 EOF
 
 chmod 600 /opt/SentinelNet/agent.json
 ```
+
+> Use `https://` with `"verify_tls": true` in production (for a self-signed lab
+> certificate only, switch to `"verify_tls": false` or `http://`).
 
 ---
 
@@ -77,7 +80,7 @@ chmod 600 /opt/SentinelNet/agent.json
 Test authentication from Ubuntu VM:
 
 ```bash
-curl -i -X POST http://192.0.2.10:8000/api/agent/heartbeat \
+curl -i -X POST https://192.0.2.10:8000/api/agent/heartbeat \
   -H "X-Probe-Id: test-ub-agent" \
   -H "X-Probe-Token: YOUR_GENERATED_TOKEN_HERE" \
   -H "Content-Type: application/json" \
@@ -124,7 +127,10 @@ sudo systemctl status sentinelnet-agent
 
 ## 7. Local Device Inventory (Optional)
 
-Create local device inventory file for the agent to manage:
+The agent stores its local inventory in `/opt/SentinelNet/agent-data/inventory.db`
+(SQLite). To seed devices initially via CSV, create `network_hosts.csv` — at
+startup the agent migrates it into `inventory.db` and renames the CSV to
+`network_hosts.csv.pre-sqlite` (see [probes.md](probes.md)):
 
 ```bash
 cat << 'EOF' > /opt/SentinelNet/agent-data/network_hosts.csv

@@ -127,7 +127,7 @@
             escapeHtml(i.username)})</option>`).join('');
     }
 
-    // --- Probe wizard (docs/superpowers/specs/2026-09-23-site-wizard-design.md) --- // check-site-name: ok
+    // --- Probe wizard ---
     // One side panel for create, edit and agent enrollment:
     // Mode → Details → Connection (jump only) → Summary → Enrollment (new token).
     const sw = {

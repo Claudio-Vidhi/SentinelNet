@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Motore di notifica email: preferenze utente, regole admin, dispatcher asincrono.
 
-Design: docs/superpowers/specs/2026-09-16-email-notifications-design.md.
 Punto di ingresso unico: emit(kind, device_ip, severity, title, ctx, dedup_key).
 """
 

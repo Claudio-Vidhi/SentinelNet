@@ -579,12 +579,10 @@ geometry change propagates to it automatically. Below that, the **title block**:
 fleet totals in a cartouche strip, where a technical drawing has always put its
 quantities.
 
-### Event strip (signature component)
+### Event strip *(removed in 0.65.0)*
 
-The control-room printer: one row per event, most recent first, a monospace time
-column, the event text, and a status pill. It has an empty state, and when the
-viewer lacks the privilege to read it the section stays on the page and says so
-rather than vanishing.
+Removed with the incidents engine in 0.65.0; the one-line diagram is the
+signature component on home.
 
 ### Instruments
 

@@ -62,9 +62,14 @@ the Service Control Manager, which would kill it), so a wrapper is required.
 | **Cryptography** | Apache-2.0 / BSD-3-Clause | Cryptographic primitives & vault |
 | **Bcrypt** | Apache-2.0 | Password hashing |
 | **PyJWT** | MIT | JSON Web Token encoding/decoding |
+| **Keyring** | MIT | OS keychain integration for MCP grants |
+| **ncclient** | Apache-2.0 | NETCONF client for device/L2 collection |
 | **Netmiko** | MIT | Multi-vendor network device SSH abstraction |
+| **OpenTelemetry API** | Apache-2.0 | Optional tracing instrumentation API (no-op unless configured) |
 | **Paramiko** | LGPL-2.1 | SSH2 protocol library |
+| **pySerial** | BSD-3-Clause | Serial console provisioning transport |
 | **PySNMP** | BSD-2-Clause | SNMP v1/v2c/v3 engine |
+| **python-docx** | MIT | Word (`.docx`) export for audits and status reports |
 | **WebSockets** | BSD-3-Clause | WebSocket protocol implementation |
 | **Requests** | Apache-2.0 | HTTP client library |
 

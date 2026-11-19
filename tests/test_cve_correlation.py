@@ -4,8 +4,7 @@
 """Correlazione CVE: il rischio di questo lavoro non e' il codice, e' il
 significato.
 
-Ogni test qui sotto difende una frase del design
-(docs/superpowers/specs/2026-09-09-cve-correlation-design.md), non un ramo:
+Ogni test qui sotto difende un'invariante di design, non un ramo:
 che i segnali riordinino e non filtrino, che 'servizi ignoti' non diventi
 'servizi spenti', che un aggregato non si legga come un tenant pulito.
 

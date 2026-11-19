@@ -22,8 +22,8 @@ most of what this product holds is about equipment. Three categories are not.
 | Data | Where | Why it is there |
 |---|---|---|
 | MAC addresses | `mac_history.db` (`mac_sightings`, `arp_entries`) | The MAC is the only stable identifier of a device on L2, and the product exists to answer "where is this device plugged in" |
-| IP addresses (private and public) | `mac_history.db`, `observability.db` (`syslog_events`, `events`), `network_hosts.csv`, `device_meta.db` (`assignments`, keyed by tenant and node) | Inventory, logs, and the correlation between them |
-| Hostnames | `network_hosts.csv`, `detected_versions.json`, `observability.db`, `device_meta.db` (names chosen by hand) | Naming an endpoint by hostname is what makes a report readable |
+| IP addresses (private and public) | `mac_history.db`, `observability.db` (`syslog_events`, `events`), `inventory.db`, `device_meta.db` (`assignments`, keyed by tenant and node) | Inventory, logs, and the correlation between them |
+| Hostnames | `inventory.db`, `detected_versions.json`, `observability.db`, `device_meta.db` (names chosen by hand) | Naming an endpoint by hostname is what makes a report readable |
 | Switch port and VLAN of an endpoint | `mac_history.db` | The physical position of a device |
 
 A MAC or an IP is personal data whenever it can be tied to a person — a
@@ -58,7 +58,7 @@ reason, and the shipped configuration does not receive syslog at all (see §2).
 | Notification send history: recipient, event title, status, error | `observability.db` → `notify_log` | 30 days. Non-admins see only their own rows |
 | Pending notifications | `observability.db` → `notify_outbox` | Deleted once sent, or after three failed attempts |
 
-Device credentials (`network_hosts.csv`, `identities.json`) are encrypted with
+Device credentials (`inventory.db`, `identities.json`) are encrypted with
 the Fernet key in `secret.key`. They are secrets rather than personal data, but
 they are why `SENTINELNET_DATA_DIR` deserves the protection of a password
 vault.
@@ -76,9 +76,8 @@ be inferred from the code:
   ([hardening.md](hardening.md) §4).
 - **The SNMP, Linux and L2 pollers are off** (`*_poll_s` default 0).
 - **No email is sent** until an SMTP server is configured.
-- **Two MCP tools plus `linux_health` are disabled by default**, so an AI
-  assistant does not reach flow data or host health until an admin enables them
-  ([hardening.md](hardening.md) §7).
+- **`linux_health` is disabled by default**, so an AI assistant does not reach
+  host health until an admin enables it ([hardening.md](hardening.md) §7).
 - **No telemetry leaves the installation.** The only outbound traffic the
   product initiates is to the devices it manages, to the vulnerability feeds
   when asked, and to an AI provider if one is configured.
@@ -93,7 +92,7 @@ stores MAC/IP/hostname and nothing from §1.2.
 These are choices the software cannot make:
 
 1. **Retention.** The defaults above are what the code applies; whether 30 days
-   of flows is proportionate to the purpose is a local decision. All four
+   of normalized events and poller snapshots is proportionate to the purpose is a local decision. All four
    windows are environment variables or advanced settings, and shortening one
    takes effect at the next hourly prune.
 2. **Whether to receive syslog at all.** It is the only source that can carry
@@ -122,7 +121,7 @@ These are choices the software cannot make:
 |---|---|
 | One endpoint's MAC/ARP history | No dedicated action: it disappears with retention. A targeted delete is a manual `DELETE` on `mac_history.db` |
 | Flows, syslog, events | Shorten the retention window; the hourly prune applies it |
-| An AI conversation | Delete it from the AI tab |
+| Legacy AI conversations (pre-0.65.0) | The AI tab was removed in 0.65.0; remove rows manually from `ai_conversations` in `observability.db` |
 | A user | Delete from the Users tab. Their sessions stop working immediately, and their name stays in the audit trail — which is the point of an audit trail |
 | Everything | Stop the service and remove `SENTINELNET_DATA_DIR` and `backup-config/`. There is no other copy unless cloud backup was configured |
 

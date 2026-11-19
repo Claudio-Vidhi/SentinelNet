@@ -93,6 +93,22 @@ Caveats:
 - **Tunnels** are read from FortiGate gateways only. A `vpn` link whose gateway
   is another vendor stays **sconosciuto**.
 
+### OT Purdue & Zone/Conduit checks
+
+`blueprint_checks.run()` also calls `services/purdue_model.check_purdue_blueprint()`
+against Purdue-tagged devices and network segments (`L0`–`L4` + `L3.5` DMZ) to
+flag IT/OT boundary risks:
+
+| Code | What it flags |
+|---|---|
+| `it_ot_dmz_bypass` | Traffic or segment conduit from `L0`–`L2` reaching `L4` or external networks bypassing `L3.5` DMZ |
+| `it_ot_layer_skip` | Adjacent Purdue layers skipped across segment links |
+| `ot_external_communication` | OT asset communicating with non-private external addresses |
+| `purdue_subnet_overlap` | Segment subnet overlap across Purdue layers |
+| `ot_dual_homed` / `ot_dual_homed_possible` | Host with interfaces spanning both IT and OT segments |
+| `ot_multi_mac_port` | Multiple MACs observed on a static OT access port |
+| `ot_wan_exposure` | OT asset exposed to WAN / untrusted zones |
+
 ## Aggiorna dai gateway
 
 Live collection, per gateway: the full route table and, for FortiGates, the
@@ -111,7 +127,7 @@ Three ways to fill the draft without typing every operation. All three only
 
 - **«Descrivi la rete»** (button «Assistente»): write the network in a sentence —
   «sede centrale a Milano con 10.10.0.0/16, filiali a Roma e Torino in VPN» — and
-  «Genera bozza». The active AI profile (AI tab) turns it into operations; an
+  «Genera bozza». The active AI profile (Settings → Profili AI) turns it into operations; an
   answer that does not validate is sent back once with the error, then refused.
   Needs an active AI profile; with Ollama nothing leaves the server.
 - **«Ricava dalle configurazioni»**: reads the latest backup of every device of
@@ -134,7 +150,7 @@ names, addressing plan, roles), up to 4000 characters, sent with every
 «Descrivi» and AI pass. They are not part of the revisions.
 
 The description, the model and the instructions reach the AI provider only when
-you press a button, through the active profile, as in the AI tab.
+you press a button, through the active profile configured under Settings → Profili AI.
 
 ## Primi passi
 

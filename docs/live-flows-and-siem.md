@@ -103,8 +103,8 @@ application stays alive**.
 
 ## 3. Data schema ([observability/storage/schema.sql](../observability/storage/schema.sql))
 
-Forward-only, idempotent migrations (`IF NOT EXISTS` everywhere).
-`SCHEMA_VERSION = 4`. **Downgrade guard**: if the database declares a version
+Forward-only, idempotent migrations (`IF NOT EXISTS` everywhere, [core/db.py](../core/db.py)).
+`SCHEMA_VERSION = 16`. **Downgrade guard**: if the database declares a version
 newer than the code, `migrate()` raises `SchemaTooNewError` and observability
 refuses to start.
 
@@ -177,7 +177,10 @@ The tab used to open on an **Overview** (KPI strip, top talkers, protocols and
 ports) and had **Per IP** and **Flussi** (top-talker table) views. All of them
 read only `flow_aggregates`. 0.65.0 removed them with the flow collectors,
 `/top` and the MCP tool `get_top_talkers`. The tab now has **Ricerca** (syslog,
-§5) and **Per policy**.
+§5), **Per policy** (`GET /api/firewall-traffic/policies`) and **Hygiene & Delta**
+(`GET /api/firewall-traffic/hygiene`, `POST /api/firewall-traffic/snapshot` —
+7d/30d hit-counter deltas from 45-day tenant-scoped `policy_hit_snapshots`,
+dead/unused rules, and overpermissive-rule tightening).
 
 ### 4.5 Frontend ([static/js/observability.js](../static/js/observability.js))
 
@@ -321,8 +324,8 @@ longer showed.
 - **Clickable facets**, each on its own field, writing `field:value` into the
   search box — the same syntax that can be typed by hand, so the filter stays
   visible and editable.
-- **Escaping**: project convention is `escapeHtml(...)` for content and
-  `jsStr(...)` inside inline handlers.
+- **Escaping**: project convention is `escapeHtml(...)` for HTML content (no
+  inline event handlers; delegated listeners only).
 - **DENY note in the detail drawer**: when the action is a block, the drawer
   clarifies that SentinelNet is a **passive** observability platform — the device
   did the blocking, not SentinelNet.
@@ -421,7 +424,7 @@ with a truncated sha1.
 | `tests/test_observability_ui.py` | Tab markup and wiring |
 
 Run from the repository root:
-`uv run python -m unittest discover -s tests -v`.
+`uv run pytest tests -n 4`.
 
 ---
 
@@ -446,5 +449,6 @@ Run from the repository root:
 1. **Traffic → Ricerca** → filter `src_ip:<ip>` or `dst_ip:<ip>` for the
    device's real ALLOW/DENY verdict, with facets and histogram.
 2. **Traffic → Per policy** → which firewall rule carries the sessions.
-3. Confirmed false positive → **suppress** (persisted, excluded from events and
+3. **Traffic → Hygiene & Delta** → dead/unused rules and 7d/30d hit deltas.
+4. Confirmed false positive → **suppress** (persisted, excluded from events and
    facets).
