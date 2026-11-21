@@ -465,7 +465,9 @@ class TestFullParity(unittest.TestCase):
                     # OT Project Vault upload body (routes under /api/ot-vault).
                     "OtVaultUploadSchema",
                     # Firewall Hygiene & Change What-If Simulator schemas.
-                    "SnapshotRequest", "WhatIfChange", "WhatIfRequest")
+                    "SnapshotRequest", "WhatIfChange", "WhatIfRequest",
+                    # Network status report phase B (routes under /api/reports/network-status).
+                    "StatusSnapshotSchema")
     ALLOWED_CHANGED_OPERATIONS = (
         # S1: il logout revoca il token, non solo il cookie. Cambia SOLO la
         # descrizione (la docstring che lo dice), e va detta a chi chiama la

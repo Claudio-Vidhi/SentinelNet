@@ -4117,6 +4117,7 @@
         <div class="page-head-actions">
           <!-- Evidence for auditors, for the tenant chosen in the global selector. -->
           <button id="btnNetworkStatusReport" class="btn btn-secondary" type="button"><i class="fa-solid fa-file-word"></i> <span data-i18n="nsaStatusReportBtn">Report stato rete (.docx)</span></button>
+          <button id="btnStatusSnapshots" class="btn btn-secondary" type="button"><i class="fa-solid fa-clock-rotate-left"></i> <span data-i18n="nssBtn">Storico e confronto</span></button>
         </div>
       </div>
 
@@ -5164,6 +5165,25 @@
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" id="btnDemoStartCancel" data-i18n="btnCancel">Annulla</button>
         <button type="button" class="btn btn-primary" id="btnDemoStartConfirm" data-i18n="demoBtnConfirm">Riavvia in demo</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="statusSnapshotsModal">
+    <div class="modal" style="width: 860px; max-width: 96%;">
+      <div class="modal-header">
+        <h3 data-i18n="nssTitle">Storico report stato rete</h3>
+        <button type="button" class="modal-close" data-close-modal="statusSnapshotsModal" aria-label="Chiudi" data-i18n-aria-label="btnClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <p data-i18n="nssIntro">Ogni mese viene salvato in automatico uno snapshot per tenant. Scegli «Da» e «A» per confrontarne due.</p>
+      <div style="margin-bottom:10px;">
+        <button type="button" class="btn btn-secondary" id="btnStatusSnapshotSave"><i class="fa-solid fa-camera"></i> <span data-i18n="nssSaveNow">Salva snapshot ora</span></button>
+      </div>
+      <div id="statusSnapshotsList" style="max-height:38vh; overflow:auto;"></div>
+      <div id="statusSnapshotsDiff" style="margin-top:12px; max-height:38vh; overflow:auto;"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal="statusSnapshotsModal" data-i18n="btnClose">Chiudi</button>
+        <button type="button" class="btn btn-primary" id="btnStatusSnapshotCompare" data-i18n="nssCompare">Confronta</button>
       </div>
     </div>
   </div>

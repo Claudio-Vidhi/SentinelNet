@@ -459,6 +459,15 @@ def _scheduler_tick():
         except Exception as e:
             logger.error("Errore esecuzione triage schedulato #%s: %s", sched_id, e)
 
+    # ponytail: rides this loop instead of owning one; it is one query when
+    # nothing is due. Own loop if snapshots ever need their own cadence.
+    try:
+        from services.status_report import snapshots
+        for tenant in snapshots.take_monthly_due():
+            log_audit(f"Snapshot mensile del report stato rete salvato per il tenant '{tenant}'.")
+    except Exception as e:
+        logger.warning("Snapshot mensili report stato rete non riusciti: %s", e)
+
 
 async def _triage_scheduler_loop():
     """Loop asincrono che verifica ogni 30s le pianificazioni dovute."""

@@ -172,3 +172,73 @@ def test_route_gate_and_formats(seeded):
     text = "\n".join(p.text for p in doc.paragraphs)
     assert "not a certification" in text
     assert "SentinelNet's own login has no multi-factor authentication" in text
+
+
+# --- Phase B: stored snapshots and diff ---
+
+def _clear_snapshots():
+    conn = db.get_observability_connection()
+    try:
+        conn.execute("DELETE FROM status_report_snapshots")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_diff_ranks_status_changes_and_refuses_incompatible():
+    from services.status_report import snapshots
+
+    def snap(statuses, metric, schema=1, tenant=T):
+        return {"schema_version": schema, "tenant": tenant, "generated_at": "x",
+                "generated_by": "t", "mapping_version": "m", "app_version": "v",
+                "evidence": {k: {"status": s, "title": {"en": k}, "metrics": {"n": metric}}
+                             for k, s in statuses.items()}}
+
+    a = snap({"backup": "gap", "logs": "ok", "vulns": "not_available", "gone": "ok"}, 5)
+    b = snap({"backup": "ok", "logs": "partial", "vulns": "gap", "new": "ok"}, 2)
+    d = snapshots.diff(a, b)
+    change = {e["key"]: e["change"] for e in d["evidence"]}
+    assert change == {"backup": "improved", "logs": "worsened", "vulns": "changed",
+                      "new": "added", "gone": "removed"}
+    backup = next(e for e in d["evidence"] if e["key"] == "backup")
+    assert backup["metrics"] == [{"metric": "n", "from": 5, "to": 2, "delta": -3}]
+    with pytest.raises(ValueError):
+        snapshots.diff(a, snap({}, 0, schema=2))
+    with pytest.raises(ValueError):
+        snapshots.diff(a, snap({}, 0, tenant=OTHER))
+
+
+def test_monthly_snapshot_once_per_tenant_with_devices(seeded, monkeypatch):
+    from services.status_report import snapshots
+    _clear_snapshots()
+    monkeypatch.setattr("services.inventory_manager.get_all_groups",
+                        lambda: {T: {}, OTHER: {}, "rpt-empty": {}})
+    assert set(snapshots.take_monthly_due()) == {T, OTHER}   # no devices, no snapshot
+    assert snapshots.take_monthly_due() == []                # same month: nothing due
+    assert [s["source"] for s in snapshots.list_for(T)] == ["scheduled"]
+
+
+def test_snapshot_routes_store_render_and_isolate(seeded):
+    _clear_snapshots()
+    base = "/api/reports/network-status"
+    scoped, foreign = _login("rpt_scoped"), _login("rpt_foreign")
+    r = scoped.post(base + "/snapshots", json={"tenant": T}, headers=CSRF)
+    assert r.status_code == 200, r.text
+    first = r.json()["id"]
+    second = scoped.post(base + "/snapshots", json={"tenant": T}, headers=CSRF).json()["id"]
+    assert scoped.post(base + "/snapshots", json={"tenant": OTHER}, headers=CSRF).status_code == 403
+
+    listed = scoped.get(base + "/snapshots", params={"tenant": T}, headers=CSRF).json()["snapshots"]
+    assert [s["id"] for s in listed] == [second, first]
+    assert listed[0]["statuses"]["hardening"] == "partial"
+
+    r = scoped.get(f"{base}/snapshots/{first}", params={"format": "json"}, headers=CSRF)
+    assert r.status_code == 200 and r.json()["tenant"] == T
+    assert scoped.get(f"{base}/snapshots/{first}", headers=CSRF).status_code == 200   # docx
+    # Another tenant's user cannot tell the id exists.
+    assert foreign.get(f"{base}/snapshots/{first}", headers=CSRF).status_code == 404
+    assert foreign.get(base + "/diff", params={"a": first, "b": second}, headers=CSRF).status_code == 404
+
+    d = scoped.get(base + "/diff", params={"a": first, "b": second}, headers=CSRF)
+    assert d.status_code == 200, d.text
+    assert d.json()["summary"].get("same") == len(evidence.COLLECTORS)

@@ -20,7 +20,7 @@ from core import db
 from ai import config_analyzer
 from services import inventory_manager
 from routers.deps import (get_current_user, user_group_scope, assert_device_allowed,
-                          assert_group_allowed, require_admin)
+                          assert_group_allowed, require_admin, require_operator)
 from security.security_manager import log_audit
 
 router = APIRouter(tags=["Analyzer"])
@@ -336,17 +336,37 @@ def network_status_report(tenant: str = "", format: str = "docx", lang: str = "i
     One tenant per report: the tenant scope is the security boundary, so
     'all' is refused instead of merging tenants into one document.
     """
-    from services.status_report import docx_render, evidence
-    if not tenant or tenant == "all":
-        raise HTTPException(status_code=400, detail="Select a single tenant.")
+    from services.status_report import evidence
+    _report_tenant(tenant, current_user)
     if format not in ("docx", "json"):
         raise HTTPException(status_code=400, detail="format must be docx or json.")
-    assert_group_allowed(current_user, tenant)
-    if tenant not in inventory_manager.get_all_groups():
-        raise HTTPException(status_code=404, detail=f"Tenant '{tenant}' not found.")
     user = current_user.get("sub", "")
     snapshot = evidence.build_snapshot(tenant, user)
     log_audit(f"Report stato rete del tenant '{tenant}' ({format}) generato da '{user}'.")
+    return _snapshot_response(snapshot, format, lang)
+
+
+def _report_tenant(tenant: str, current_user) -> None:
+    if not tenant or tenant == "all":
+        raise HTTPException(status_code=400, detail="Select a single tenant.")
+    assert_group_allowed(current_user, tenant)
+    if tenant not in inventory_manager.get_all_groups():
+        raise HTTPException(status_code=404, detail=f"Tenant '{tenant}' not found.")
+
+
+def _stored_snapshot(sid: int, current_user) -> dict:
+    from services.status_report import snapshots
+    found = snapshots.get(sid)
+    scope = user_group_scope(current_user)
+    # A snapshot of a tenant out of scope is 404, not 403: its id says nothing.
+    if found is None or (scope is not None and found[0] not in scope):
+        raise HTTPException(status_code=404, detail="Snapshot non trovato.")
+    return found[1]
+
+
+def _snapshot_response(snapshot: dict, format: str, lang: str) -> Response:
+    from services.status_report import docx_render
+    tenant = snapshot["tenant"]
     stem = "network-status-" + re.sub(r"[^A-Za-z0-9_.-]", "_", tenant) + "-" + snapshot["generated_at"][:10]
     if format == "json":
         return Response(content=json.dumps(snapshot, indent=1, ensure_ascii=False),
@@ -355,6 +375,48 @@ def network_status_report(tenant: str = "", format: str = "docx", lang: str = "i
     return Response(content=docx_render.render(snapshot, "en" if lang == "en" else "it"),
                     media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     headers={"Content-Disposition": f'attachment; filename="{stem}.docx"'})
+
+
+class StatusSnapshotSchema(BaseModel):
+    tenant: str
+
+
+@router.get("/api/reports/network-status/snapshots", dependencies=[Depends(require_tab("tab-netsec-audit"))])
+def network_status_snapshots(tenant: str = "", current_user=Depends(get_current_user)):
+    """Snapshot salvati del tenant (mensili e manuali), dal più recente."""
+    from services.status_report import snapshots
+    _report_tenant(tenant, current_user)
+    return {"tenant": tenant, "snapshots": snapshots.list_for(tenant)}
+
+
+@router.post("/api/reports/network-status/snapshots", dependencies=[Depends(require_tab("tab-netsec-audit"))])
+def network_status_snapshot_save(payload: StatusSnapshotSchema, current_user=Depends(require_operator)):
+    """Salva ora uno snapshot del tenant, da confrontare con i successivi."""
+    from services.status_report import snapshots
+    _report_tenant(payload.tenant, current_user)
+    user = current_user.get("sub", "")
+    sid = snapshots.save(payload.tenant, user, "manual")
+    log_audit(f"Snapshot report stato rete del tenant '{payload.tenant}' salvato da '{user}'.")
+    return {"status": "success", "id": sid}
+
+
+@router.get("/api/reports/network-status/snapshots/{sid}", dependencies=[Depends(require_tab("tab-netsec-audit"))])
+def network_status_snapshot_get(sid: int, format: str = "docx", lang: str = "it",
+                                current_user=Depends(get_current_user)):
+    """Uno snapshot salvato, come .docx o JSON: lo stesso documento di allora."""
+    if format not in ("docx", "json"):
+        raise HTTPException(status_code=400, detail="format must be docx or json.")
+    return _snapshot_response(_stored_snapshot(sid, current_user), format, lang)
+
+
+@router.get("/api/reports/network-status/diff", dependencies=[Depends(require_tab("tab-netsec-audit"))])
+def network_status_diff(a: int, b: int, current_user=Depends(get_current_user)):
+    """Cosa è cambiato dallo snapshot a allo snapshot b (stati e metriche)."""
+    from services.status_report import snapshots
+    try:
+        return snapshots.diff(_stored_snapshot(a, current_user), _stored_snapshot(b, current_user))
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
 @router.get("/api/netsec-audit/history", dependencies=[Depends(require_tab("tab-netsec-audit"))])

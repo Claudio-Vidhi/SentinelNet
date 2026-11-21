@@ -387,3 +387,18 @@ CREATE TABLE IF NOT EXISTS policy_hit_snapshots (
 CREATE INDEX IF NOT EXISTS idx_policy_hit_snapshots_dev_ts
     ON policy_hit_snapshots(device_ip, ts DESC);
 
+
+-- 18. NETWORK STATUS REPORT SNAPSHOTS (v17): stored JSON snapshots, one per
+-- tenant per month (scheduled) plus any saved by hand, for month-over-month diff.
+CREATE TABLE IF NOT EXISTS status_report_snapshots (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts              INTEGER NOT NULL,
+    tenant          TEXT NOT NULL,
+    generated_by    TEXT NOT NULL DEFAULT '',
+    source          TEXT NOT NULL CHECK (source IN ('manual', 'scheduled')),
+    schema_version  INTEGER NOT NULL,
+    snapshot_json   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_status_report_snapshots_tenant_ts
+    ON status_report_snapshots(tenant, ts DESC);
+

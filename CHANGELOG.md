@@ -12,6 +12,19 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ### Added
 
+- **Report stato rete — fase B (storico e confronto)**: gli snapshot JSON si
+  salvano nel database di osservabilità (schema v17,
+  `status_report_snapshots`). Uno al mese per tenant con apparati viene preso
+  in automatico (mese solare UTC, dal ciclo dello scheduler), altri a mano.
+  Il confronto tra due snapshot dà per ogni evidenza lo stato da/a
+  (migliorato, peggiorato, cambiato, invariato) e le metriche cambiate con il
+  delta; rifiuta con 409 snapshot di `schema_version` o tenant diversi. Uno
+  snapshot salvato si riscarica come `.docx` identico all'originale. Rotte:
+  `GET/POST /api/reports/network-status/snapshots`,
+  `GET /api/reports/network-status/snapshots/{id}`,
+  `GET /api/reports/network-status/diff?a=&b=`. UI: Audit di sicurezza →
+  *Storico e confronto*.
+
 - **Service health check**: nuovo campo inventario per apparato *Porte
   servizio da monitorare* (`Service Ports`, es. `22, 443, 3389`, max 16), anche
   in export/import CSV. A ogni ciclo il monitor ping aggiunge un TCP connect per

@@ -216,10 +216,13 @@ Phase A shipped in 0.65.0 (`services/status_report/`): on-demand `.docx` +
 self-contained JSON snapshot (`schema_version: 1`) for one tenant. What was
 deliberately deferred to Phase B without changing the snapshot schema:
 
-- **Snapshot storage, scheduling and month-over-month diff** — persist periodic
-  snapshots per tenant, run on a schedule, and diff two snapshots (comparing
-  evidence statuses as well as counts). Refuses to diff across incompatible
-  `schema_version` values.
+- ~~**Snapshot storage, scheduling and month-over-month diff**~~ **Shipped.**
+  [snapshots.py](../services/status_report/snapshots.py): one scheduled
+  snapshot per tenant with devices per calendar month (UTC), plus manual ones;
+  diff of statuses (improved/worsened/changed) and changed metrics; refuses
+  different `schema_version` or tenant (409). UI: Security audit → *History
+  and compare*. Not yet: the diff as a `.docx`, and retention (snapshots are
+  kept; ~12 per tenant per year).
 
 ---
 

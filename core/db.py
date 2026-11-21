@@ -35,7 +35,7 @@ from core import data_config
 
 logger = logging.getLogger("sentinelnet.db")
 
-SCHEMA_VERSION = 16         # schema version supported by this code (v16: policy_hit_snapshots)
+SCHEMA_VERSION = 17         # schema version supported by this code (v17: status_report_snapshots)
 QUEUE_MAX = 10_000          # max payloads in the write queue
 BATCH_SIZE = 500            # max payloads per single commit
 MAX_WRITER_RESTARTS = 5     # writer restarts allowed before fail-open

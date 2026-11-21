@@ -33,6 +33,111 @@
     let _droppedConfigText = null;
     let _droppedConfigName = '';
 
+    async function saveReportBlob(path, filename) {
+        const res = await apiFetch(path);
+        if (!res || !res.ok) throw new Error(res ? String(res.status) : '');
+        const url = URL.createObjectURL(await res.blob());
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    // --- Phase B: stored snapshots, month over month ---
+    const NSS_STATUS = { ok: ['nssStOk', 'ok'], partial: ['nssStPartial', 'warn'],
+                         gap: ['nssStGap', 'bad'], not_available: ['nssStNa', 'idle'] };
+    const NSS_CHANGE = { improved: ['nssChImproved', 'ok'], worsened: ['nssChWorsened', 'bad'],
+                         same: ['nssChSame', 'idle'], changed: ['nssChChanged', 'warn'],
+                         added: ['nssChAdded', 'idle'], removed: ['nssChRemoved', 'idle'] };
+    const nssChip = (map, k) => {
+        const [key, cls] = map[k] || [null, 'idle'];
+        return `<span class="status ${cls}">${escapeHtml(key ? tr(key) : (k || '—'))}</span>`;
+    };
+
+    async function openStatusSnapshots() {
+        const tenant = window.globalSelectedTenant;
+        if (!tenant || tenant === 'all') { showToast(tr('nsaStatusReportPickTenant'), 'warning'); return; }
+        document.getElementById('statusSnapshotsDiff').innerHTML = '';
+        openModal('statusSnapshotsModal');
+        await loadStatusSnapshots();
+    }
+
+    async function loadStatusSnapshots() {
+        const box = document.getElementById('statusSnapshotsList');
+        const tenant = window.globalSelectedTenant;
+        const res = await apiFetch('/api/reports/network-status/snapshots?' + new URLSearchParams({ tenant }));
+        if (!res || !res.ok) { box.textContent = tr('nssLoadFailed'); return; }
+        const list = (await res.json()).snapshots || [];
+        if (!list.length) { box.innerHTML = `<p style="color:var(--text-muted);">${escapeHtml(tr('nssEmpty'))}</p>`; return; }
+        // Default comparison: the previous snapshot against the latest.
+        const rows = list.map((s, i) => {
+            const counts = { ok: 0, partial: 0, gap: 0 };
+            Object.values(s.statuses).forEach(st => { if (st in counts) counts[st]++; });
+            const when = new Date(s.ts * 1000).toLocaleString();
+            return `<tr>
+                <td><input type="radio" name="nssFrom" value="${s.id}" ${i === Math.min(1, list.length - 1) ? 'checked' : ''} aria-label="${escapeHtml(tr('nssFrom') + ' ' + when)}"></td>
+                <td><input type="radio" name="nssTo" value="${s.id}" ${i === 0 ? 'checked' : ''} aria-label="${escapeHtml(tr('nssTo') + ' ' + when)}"></td>
+                <td>${escapeHtml(when)}</td>
+                <td>${escapeHtml(tr(s.source === 'scheduled' ? 'nssSourceScheduled' : 'nssSourceManual'))}</td>
+                <td>${escapeHtml(s.generated_by)}</td>
+                <td>${nssChip(NSS_STATUS, 'ok')} ${counts.ok} ${nssChip(NSS_STATUS, 'partial')} ${counts.partial} ${nssChip(NSS_STATUS, 'gap')} ${counts.gap}</td>
+                <td><button type="button" class="btn btn-secondary btn-sm" data-nss-docx="${s.id}" data-nss-date="${escapeHtml(s.generated_at.slice(0, 10))}"><i class="fa-solid fa-file-word"></i> .docx</button></td>
+            </tr>`;
+        }).join('');
+        box.innerHTML = `<table class="ui-table" style="width:100%; font-size:13px;">
+            <thead><tr><th>${escapeHtml(tr('nssFrom'))}</th><th>${escapeHtml(tr('nssTo'))}</th><th>${escapeHtml(tr('nssColDate'))}</th>
+            <th>${escapeHtml(tr('nssColSource'))}</th><th>${escapeHtml(tr('nssColBy'))}</th><th>${escapeHtml(tr('nssColStatuses'))}</th><th></th></tr></thead>
+            <tbody>${rows}</tbody></table>`;
+    }
+
+    async function saveStatusSnapshot() {
+        const btn = document.getElementById('btnStatusSnapshotSave');
+        btn.disabled = true;
+        try {
+            const res = await apiFetch('/api/reports/network-status/snapshots', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tenant: window.globalSelectedTenant }) });
+            if (!res || !res.ok) {
+                const err = res ? await res.json().catch(() => ({})) : {};
+                showToast(tr('nssSaveFailed') + (err.detail || (res ? res.status : '')), 'error');
+                return;
+            }
+            showToast(tr('nssSaved'), 'info');
+            await loadStatusSnapshots();
+        } finally { btn.disabled = false; }
+    }
+
+    async function compareStatusSnapshots() {
+        const from = document.querySelector('input[name="nssFrom"]:checked');
+        const to = document.querySelector('input[name="nssTo"]:checked');
+        const box = document.getElementById('statusSnapshotsDiff');
+        if (!from || !to || from.value === to.value) { showToast(tr('nssPickTwo'), 'warning'); return; }
+        const res = await apiFetch('/api/reports/network-status/diff?' + new URLSearchParams({ a: from.value, b: to.value }));
+        if (!res || !res.ok) {
+            const err = res ? await res.json().catch(() => ({})) : {};
+            box.textContent = tr('nssCompareFailed') + (err.detail || (res ? res.status : ''));
+            return;
+        }
+        const d = await res.json();
+        const rows = d.evidence.map(e => {
+            const metrics = e.metrics.map(m =>
+                `${escapeHtml(m.metric)}: ${escapeHtml(String(m.from ?? '—'))} → ${escapeHtml(String(m.to ?? '—'))}`
+                + (m.delta != null ? ` (${m.delta > 0 ? '+' : ''}${escapeHtml(String(m.delta))})` : '')).join('<br>');
+            return `<tr><td>${escapeHtml((e.title && (e.title[currentLang] || e.title.en)) || e.key)}</td>
+                <td>${nssChip(NSS_STATUS, e.from)} → ${nssChip(NSS_STATUS, e.to)}</td>
+                <td>${nssChip(NSS_CHANGE, e.change)}</td>
+                <td style="font-size:12px; color:var(--text-muted);">${metrics}</td></tr>`;
+        }).join('');
+        box.innerHTML = (d.mapping_changed ? `<p class="set-status" data-state="info">${escapeHtml(tr('nssMappingChanged'))}</p>` : '')
+            + `<table class="ui-table" style="width:100%; font-size:13px;">
+            <thead><tr><th>${escapeHtml(tr('nssColEvidence'))}</th><th>${escapeHtml(tr('nssColStatus'))}</th>
+            <th>${escapeHtml(tr('nssColChange'))}</th><th>${escapeHtml(tr('nssColMetrics'))}</th></tr></thead>
+            <tbody>${rows}</tbody></table>`;
+    }
+
     // Network status report: evidence for one tenant, never "all".
     async function downloadNetworkStatusReport() {
         const tenant = window.globalSelectedTenant;
@@ -44,17 +149,8 @@
         if (btn) btn.disabled = true;
         try {
             const qs = new URLSearchParams({ tenant, format: 'docx', lang: currentLang });
-            const res = await apiFetch('/api/reports/network-status?' + qs.toString());
-            if (!res || !res.ok) throw new Error(res ? String(res.status) : '');
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'network-status-' + tenant.replace(/[^A-Za-z0-9_.-]/g, '_') + '.docx';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            await saveReportBlob('/api/reports/network-status?' + qs.toString(),
+                'network-status-' + tenant.replace(/[^A-Za-z0-9_.-]/g, '_') + '.docx');
             showToast(tr('nsaStatusReportDone'), 'info');
         } catch (e) {
             showToast(tr('nsaStatusReportFailed') + (e.message || e), 'error');
@@ -1861,6 +1957,21 @@ ${pagesHtml}
     document.getElementById('btnRunAuditScan')?.addEventListener('click', runAuditScan);
     document.getElementById('btnExportAuditReport')?.addEventListener('click', exportAuditReport);
     document.getElementById('btnNetworkStatusReport')?.addEventListener('click', downloadNetworkStatusReport);
+    document.getElementById('btnStatusSnapshots')?.addEventListener('click', openStatusSnapshots);
+    document.getElementById('btnStatusSnapshotSave')?.addEventListener('click', saveStatusSnapshot);
+    document.getElementById('btnStatusSnapshotCompare')?.addEventListener('click', compareStatusSnapshots);
+    document.getElementById('statusSnapshotsList')?.addEventListener('click', async (e) => {
+        const btn = e.target.closest('[data-nss-docx]');
+        if (!btn) return;
+        const qs = new URLSearchParams({ format: 'docx', lang: currentLang });
+        const name = 'network-status-' + String(window.globalSelectedTenant).replace(/[^A-Za-z0-9_.-]/g, '_')
+                   + '-' + btn.dataset.nssDate + '.docx';
+        try {
+            await saveReportBlob(`/api/reports/network-status/snapshots/${btn.dataset.nssDocx}?${qs}`, name);
+        } catch (err) {
+            showToast(tr('nsaStatusReportFailed') + (err.message || err), 'error');
+        }
+    });
     document.getElementById('auditSevFilter')?.addEventListener('change', renderAuditRulesTable);
     document.getElementById('auditCatFilter')?.addEventListener('change', renderAuditRulesTable);
     document.getElementById('auditStatusFilter')?.addEventListener('change', renderAuditRulesTable);
