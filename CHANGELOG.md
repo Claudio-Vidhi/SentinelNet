@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.68.0] - 2026-11-21
+
 ### Security
 
 - **Agent sonda: l'autorità sugli apparati è dell'agente (ADR-0009).** Nuova

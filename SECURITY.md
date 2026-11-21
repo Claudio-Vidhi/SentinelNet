@@ -29,8 +29,8 @@ latest released minor is supported: fixes land there, not in older tags.
 
 | Version | Supported |
 | --- | --- |
-| 0.67.x (current) | Yes |
-| < 0.67.0 | No — upgrade to the latest release |
+| 0.68.x (current) | Yes |
+| < 0.68.0 | No — upgrade to the latest release |
 
 ---
 
