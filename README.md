@@ -114,8 +114,9 @@ populated demo.
   IOS/NX-OS.
 - **Network Blueprint & auditor status report** — expected vs. observed network
   checks per organization ([docs/network-blueprint.md](docs/network-blueprint.md)),
-  plus an on-demand Network Status Report (`.docx` + JSON snapshot) mapping
-  technical evidence to NIS2, ISO/IEC 27001, CIS v8 and IEC 62443.
+  plus a Network Status Report (`.docx` + JSON snapshot) mapping technical
+  evidence to NIS2, ISO/IEC 27001, CIS v8 and IEC 62443, saved monthly per
+  tenant and compared month over month.
 - **Demo mode** — isolated synthetic workspace ([docs/demo.md](docs/demo.md))
   to explore every IT and OT feature without real devices or touching real data.
 
