@@ -2057,11 +2057,13 @@
         // from the panel with no explanation. Same vocabulary and lamp as the
         // inventory KPI row for the state (invKpiUnknownLabel / led-discovered).
         const s = st.summary || { total: 0, up: 0, down: 0, unknown: 0 };
+        const svcDown = (st.devices || []).reduce((n, d) => n + (d.services || []).filter(x => !x.up).length, 0);
         summaryEl.innerHTML = `
             <span class="chip">${escapeHtml(L.lblPingMonitorTotal || 'Dispositivi')}: ${s.total}</span>
             <span class="status ok"><span class="led led-success"></span>${escapeHtml(L.lblPingMonitorUp || 'Up')}: ${s.up}</span>
             <span class="status bad"><span class="led led-danger"></span>${escapeHtml(L.lblPingMonitorDown || 'Down')}: ${s.down}</span>
-            <span class="status idle"><span class="led led-discovered"></span>${escapeHtml(L.invKpiUnknownLabel || 'Non misurabile')}: ${s.unknown || 0}</span>`;
+            <span class="status idle"><span class="led led-discovered"></span>${escapeHtml(L.invKpiUnknownLabel || 'Non misurabile')}: ${s.unknown || 0}</span>
+            ${svcDown ? `<span class="status warn"><span class="led led-warning"></span>${escapeHtml(tr('lblPingMonitorSvcDown'))}: ${svcDown}</span>` : ''}`;
     }
 
     // --- TELEMETRIA PER TENANT ---

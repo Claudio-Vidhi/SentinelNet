@@ -68,6 +68,16 @@ def _ping_one(ip: str) -> tuple:
         return ip, False
 
 
+def _check_one(item: tuple) -> tuple:
+    """ICMP plus one TCP connect per declared service port.
+    Returns (ip, icmp_up, {port: open})."""
+    from core.core_engine import is_reachable
+    ip, ports = item
+    _, icmp_up = _ping_one(ip)
+    # timeout=1 as in scan_subnet: this runs devices x ports every cycle.
+    return ip, icmp_up, {p: is_reachable(ip, p, timeout=1) for p in ports}
+
+
 def _run_cycle() -> None:
     """One ping round over the full inventory."""
     global _last_run
@@ -77,6 +87,7 @@ def _run_cycle() -> None:
     # Map IP -> Probe so a bastion-probe device can be excluded from ICMP without
     # losing its identity (a plain set of IPs would drop the Probe column).
     ip_probe = {}
+    ip_ports = {}   # ip -> declared service ports (union if the IP repeats across tenants)
     for d in devices:
         if inventory_manager.is_manual(d):
             continue  # never reachable by design: a ping would only paint it red
@@ -86,6 +97,7 @@ def _run_cycle() -> None:
         ip = (d.get("IP") or "").strip()
         if ip:
             ip_probe[ip] = d.get("Probe") or "central"
+            ip_ports.setdefault(ip, set()).update(inventory_manager.service_ports(d))
     if not ip_probe:
         with _lock:
             _state.clear()
@@ -100,12 +112,17 @@ def _run_cycle() -> None:
     unknown_ips = sorted(ip for ip in ip_probe if ip not in pingable_ips)
 
     results = {}
+    service_results = {}
     if pingable_ips:
         # Same parallelism level as subnet scan: enough to avoid serializing
         # hundreds of pings, low enough not to saturate the network.
+        work = [(ip, sorted(ip_ports.get(ip, ()))) for ip in pingable_ips]
         with ThreadPoolExecutor(max_workers=min(50, max(4, len(pingable_ips)))) as pool:
-            for ip, up in pool.map(_ping_one, pingable_ips):
-                results[ip] = up
+            for ip, icmp_up, services in pool.map(_check_one, work):
+                # A host that drops ICMP but answers on a declared port is up:
+                # Windows servers discard ping by default.
+                results[ip] = icmp_up or any(services.values())
+                service_results[ip] = services
 
     now = time.time()
     events_to_emit = []
@@ -114,7 +131,7 @@ def _run_cycle() -> None:
             new_status = "up" if up else "down"
             prev = _state.get(ip)
             if prev is None:
-                _state[ip] = {
+                prev = _state[ip] = {
                     "up": up, "status": new_status,
                     "last_check": now, "last_change": now,
                     "checks": 1, "fails": 0 if up else 1,
@@ -138,7 +155,8 @@ def _run_cycle() -> None:
                 # Conferma dopo 2 cicli consecutivi con lo stesso esito (anti-flapping)
                 if prev["consecutive_count"] == 2 and prev.get("reported_status") != new_status:
                     prev["reported_status"] = new_status
-                    events_to_emit.append((ip, new_status))
+                    events_to_emit.append((ip, None, new_status))
+            _update_services(prev, ip, up, service_results.get(ip, {}), events_to_emit)
         for ip in unknown_ips:
             # No history to carry forward: a bastion-probe device has nothing to
             # transition from/to, it is simply not measurable.
@@ -153,10 +171,23 @@ def _run_cycle() -> None:
                 del _state[ip]
         _last_run = now
 
-    for ip, stat in events_to_emit:
+    for ip, port, stat in events_to_emit:
         try:
             from services import notifications
-            if stat == "down":
+            if port is not None:
+                # Same kinds as the device events: a subscriber to device.down
+                # wants to hear that RDP died, and a new kind would be missing
+                # from every preference list already saved.
+                notifications.emit(
+                    kind="device.down" if stat == "down" else "device.up",
+                    device_ip=ip,
+                    severity="high" if stat == "down" else "low",
+                    title=(f"Servizio non raggiungibile: {ip}:{port}" if stat == "down"
+                           else f"Servizio tornato disponibile: {ip}:{port}"),
+                    ctx={"ip": ip, "port": port, "status": stat},
+                    dedup_key=f"svc:{ip}:{port}:{stat}",
+                )
+            elif stat == "down":
                 notifications.emit(
                     kind="device.down",
                     device_ip=ip,
@@ -176,6 +207,30 @@ def _run_cycle() -> None:
                 )
         except Exception:
             _log.warning("ping notification failed for %s", ip, exc_info=True)
+
+
+def _update_services(rec: dict, ip: str, host_up: bool, services: dict,
+                     events: list) -> None:
+    """Per-port state with the same 2-cycle confirmation as the host. While the
+    host is down its ports say nothing new: device.down already covers it, and
+    one alert per port on top would be noise."""
+    old = {s["port"]: s for s in rec.get("services", [])}
+    out = []
+    for port, is_open in sorted(services.items()):
+        status = "up" if is_open else "down"
+        s = old.get(port)
+        if s is None:
+            s = {"port": port, "up": is_open, "count": 1, "reported": status}
+        else:
+            s["count"] = s["count"] + 1 if s["up"] == is_open else 1
+            s["up"] = is_open
+            # >= 2, not == 2: a port that stayed closed through a host outage
+            # must still be reported once the host is back.
+            if host_up and s["count"] >= 2 and s["reported"] != status:
+                s["reported"] = status
+                events.append((ip, port, status))
+        out.append(s)
+    rec["services"] = out
 
 
 def _worker() -> None:
@@ -226,7 +281,8 @@ def get_status() -> dict:
     cfg = get_config()
     with _lock:
         devices = [
-            {"ip": ip, **st}
+            {"ip": ip, **st,
+             "services": [{"port": s["port"], "up": s["up"]} for s in st.get("services", [])]}
             for ip, st in sorted(_state.items())
         ]
         last_run = _last_run

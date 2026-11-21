@@ -2184,6 +2184,7 @@ def _enrich_map_with_redundancy(data: dict) -> dict:
             # no ICMP) — not measurable, must not render as a false "offline".
             pm_up = pm_devices[nid].get("up")
             node_copy["status"] = "online" if pm_up is True else "offline" if pm_up is False else "unknown"
+            node_copy["services"] = pm_devices[nid].get("services") or []
         elif nid in versions and versions[nid].get("status"):
             node_copy["status"] = versions[nid].get("status")
         elif n.get("status") != "discovered":

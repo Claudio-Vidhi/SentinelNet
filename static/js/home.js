@@ -72,6 +72,8 @@ function homeStatusInfo(status) {
 }
 
 let _pingRefreshTimer = null;
+// ip -> declared service ports the ping monitor found closed.
+let _homeSvcDown = {};
 
 async function loadHome() {
     // Reset any previous auto-refresh timer; it will be re-armed below if
@@ -89,12 +91,15 @@ async function loadHome() {
     }
     // When the continuous ping monitor is active, its results are the
     // authoritative source for up/down state — fresher than the last scan.
+    _homeSvcDown = {};
     try {
         const pmRes = await apiFetch('/api/ping-monitor/status');
         if (pmRes && pmRes.ok) {
             const pm = await pmRes.json();
             if (pm.enabled && pm.devices && pm.devices.length) {
                 pm.devices.forEach(d => {
+                    const down = (d.services || []).filter(s => !s.up).map(s => s.port);
+                    if (down.length && d.up) _homeSvcDown[d.ip] = down;
                     if (!globalVersions[d.ip]) globalVersions[d.ip] = {};
                     // d.status is the tri-state the ping monitor already computed
                     // server-side: for a bastion-probe device (bastion tunnel, no ICMP)
@@ -148,7 +153,10 @@ async function loadHome() {
             viaBastion.push(d);
             return;
         }
-        if (scan.status === 'online') online++;
+        if (scan.status === 'online') {
+            // A host that answers with a declared service closed is degraded, not online.
+            if (_homeSvcDown[d.IP]) attention.push(d); else online++;
+        }
         else attention.push(d); // auth_failed / offline / missing
     });
 
@@ -183,8 +191,11 @@ async function loadHome() {
         } else {
             body.innerHTML = attention.slice(0, 8).map(d => {
                 const scan  = globalVersions[d.IP] || {};
-                const info  = homeStatusInfo(scan.status);
-                const label = i18n[currentLang][info.key] || scan.status || 'offline';
+                const svcDown = scan.status === 'online' && _homeSvcDown[d.IP];
+                const info  = svcDown ? { cls: 'warn', led: 'led-warning', key: 'homeStServiceDown' }
+                                      : homeStatusInfo(scan.status);
+                const label = (i18n[currentLang][info.key] || scan.status || 'offline')
+                            + (svcDown ? ` (${svcDown.join(', ')})` : '');
                 const host  = d.Hostname ? escapeHtml(d.Hostname) : '<span style="color:var(--text-muted)">&mdash;</span>';
                 return `<tr>
                     <td><span class="status ${info.cls}"><span class="led ${info.led}"></span>${escapeHtml(label)}</span></td>

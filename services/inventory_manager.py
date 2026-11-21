@@ -77,6 +77,31 @@ def parse_transports(device) -> dict:
     return {"ssh": p}
 
 
+# Each port costs one TCP connect per monitor cycle per device.
+MAX_SERVICE_PORTS = 16
+
+
+def normalize_service_ports(value) -> str:
+    """'22, 3389 443' -> '22,443,3389'. Empty = no service checks.
+    Raises ValueError on a non-numeric or out-of-range port."""
+    ports = set()
+    for tok in re.split(r"[\s,;]+", str(value or "").strip()):
+        if not tok:
+            continue
+        if not tok.isdigit() or not (1 <= int(tok) <= 65535):
+            raise ValueError(f"Porta di servizio non valida: '{tok}'.")
+        ports.add(int(tok))
+    if len(ports) > MAX_SERVICE_PORTS:
+        raise ValueError(f"Troppe porte di servizio (max {MAX_SERVICE_PORTS}).")
+    return ",".join(str(p) for p in sorted(ports))
+
+
+def service_ports(device) -> list:
+    """The TCP ports the monitor checks on this device (stored normalized)."""
+    raw = (device.get("Service Ports") or "") if isinstance(device, dict) else ""
+    return [int(p) for p in raw.split(",") if p.isdigit()]
+
+
 def is_manual(device) -> bool:
     """A device SentinelNet never connects to: its config is uploaded by hand
     (services/manual_config.py), and nothing opens a session or a probe to it."""
@@ -177,6 +202,7 @@ _CSV_ALIASES: Dict[str, str] = {
     "snmpcommunity": "SNMP Community", "communitysnmp": "SNMP Community",
     "snmpdisabled": "SNMP Disabled", "snmpescluso": "SNMP Disabled",
     "purduelevel": "Purdue Level", "purdue": "Purdue Level", "livellopurdue": "Purdue Level",
+    "serviceports": "Service Ports", "porteservizio": "Service Ports",
 }
 
 
@@ -388,7 +414,8 @@ def _same_device(row: dict, ip: str, group: str) -> bool:
 def _merged_row(devices, get_location, ip, vendor, profile, username, password, enable_secret, group,
                 probe=None, ssh_port=None, transports=None, snmp_community=None,
                 snmp_disabled=None, location=None, require_location=True, hostname=None,
-                purdue_level=None, process_criticality=None, maintenance_window=None) -> dict:
+                purdue_level=None, process_criticality=None, maintenance_window=None,
+                service_ports=None) -> dict:
     # Validazione IP robusta
     match = IP_PATTERN.match(ip)
     if not match or not all(0 <= int(octet) <= 255 for octet in match.groups()):
@@ -488,6 +515,10 @@ def _merged_row(devices, get_location, ip, vendor, profile, username, password, 
     else:
         from services import ot_vuln_intel
         resolved_window = ot_vuln_intel.normalize_maintenance_window(maintenance_window)
+    if service_ports is None:
+        resolved_services = (existing.get('Service Ports') if existing else '') or ''
+    else:
+        resolved_services = normalize_service_ports(service_ports)
     new_device = {
         'IP': ip, 'Vendor': vendor.lower(), 'Profile': profile,
         'Username': username, 'Password': enc_password, 'Enable Secret': enc_secret,
@@ -501,6 +532,7 @@ def _merged_row(devices, get_location, ip, vendor, profile, username, password, 
         'Purdue Level': resolved_purdue,
         'Process Criticality': resolved_crit,
         'Maintenance Window': resolved_window,
+        'Service Ports': resolved_services,
     }
     if existing_hostname:
         new_device['Hostname'] = existing_hostname
@@ -526,7 +558,8 @@ def upsert_devices(entries: list) -> None:
 def add_or_update_device(ip, vendor, profile, username, password, enable_secret, group,
                          probe=None, ssh_port=None, transports=None, snmp_community=None,
                          snmp_disabled=None, location=None, require_location=True, hostname=None,
-                         purdue_level=None, process_criticality=None, maintenance_window=None):
+                         purdue_level=None, process_criticality=None, maintenance_window=None,
+                         service_ports=None):
     upsert_devices([dict(ip=ip, vendor=vendor, profile=profile, username=username,
                          password=password, enable_secret=enable_secret, group=group,
                          probe=probe, ssh_port=ssh_port, transports=transports,
@@ -534,7 +567,8 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
                          location=location, require_location=require_location,
                          hostname=hostname, purdue_level=purdue_level,
                          process_criticality=process_criticality,
-                         maintenance_window=maintenance_window)])
+                         maintenance_window=maintenance_window,
+                         service_ports=service_ports)])
 
 def delete_device(ip: str, group: Optional[str] = None):
     with _io_lock:

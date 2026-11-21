@@ -54,6 +54,8 @@ class DeviceSchema(BaseModel):
     # Optional OT patching criticality & planned maintenance window. None = keep existing.
     process_criticality: Optional[str] = Field(None, max_length=32)
     maintenance_window: Optional[str] = Field(None, max_length=128)
+    # TCP ports the ping monitor checks, e.g. "22,443,3389". None = keep existing.
+    service_ports: Optional[str] = Field(None, max_length=128)
 
 class DeviceDelete(BaseModel):
     ip: str
@@ -185,6 +187,7 @@ _EXPORT_COLUMNS = {
     "purdue_level": ("Purdue Level", lambda d, s, b, m: d.get("Purdue Level", "")),
     "process_criticality": ("Process Criticality", lambda d, s, b, m: d.get("Process Criticality", "")),
     "maintenance_window": ("Maintenance Window", lambda d, s, b, m: d.get("Maintenance Window", "")),
+    "service_ports": ("Service Ports", lambda d, s, b, m: d.get("Service Ports", "")),
     "redundancy_type":   ("Redundancy",        lambda d, s, b, m: (b or {}).get("type", "standalone")),
     "redundancy_role":   ("Redundancy Role",   lambda d, s, b, m: (b or {}).get("role", "")),
     "redundancy_health": ("Redundancy Health", lambda d, s, b, m: (b or {}).get("health", "")),
@@ -377,6 +380,7 @@ def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
             purdue_level=device.purdue_level,
             process_criticality=device.process_criticality,
             maintenance_window=device.maintenance_window,
+            service_ports=device.service_ports,
         )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))

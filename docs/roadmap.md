@@ -176,9 +176,12 @@ credential ADR-0008 declined is the right answer.
 
 ### Medium value
 
-4. **Service health checks.** Ping and TCP port checks (SSH 22, RDP 3389,
-   HTTP/S, database ports) against registered servers, with green/red state in
-   the dashboard and on the map. Reuses `network_scanner`.
+4. ~~**Service health checks.**~~ **Shipped.** Per-device *Service Ports*,
+   checked over TCP by the ping monitor every cycle
+   ([ping_monitor.py](../services/ping_monitor.py)); state in the Home
+   attention list, Settings and the map tooltip. Not yet: a distinct map lamp
+   for "up but a service is down", and checks for agent-probe devices (the
+   agent would have to run them).
 
 5. **Server vulnerabilities via NIST NVD.** **Linux: shipped** (`linux_kernel`
    CPE in `drivers/registry.py`). **Windows: shipped** — NVD files Windows by

@@ -977,6 +977,14 @@
                  size: Math.round(classicCardHeight(bands) * 0.45) };
     }
 
+    // Declared service ports from the ping monitor: green open, red closed.
+    function serviceRow(services) {
+        if (!services || !services.length) return '';
+        const ports = services.map(s =>
+            `<span style="color:var(--lamp-${s.up ? 'up' : 'fault'}-ink); font-weight:700;">● ${escapeHtml(String(s.port))}</span>`).join(' ');
+        return `<tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${escapeHtml(tr('topoServices'))}</td><td style="font-size: 11px; padding: 2px 0; border: none; background:none;">${ports}</td></tr>`;
+    }
+
     // Generatore dinamico del Tooltip HTML premium per ciascun apparato (al passaggio del mouse)
     function createNodeTooltip(n, scan, resolvedVendor) {
         let statusLed = "";
@@ -1021,6 +1029,7 @@
             ${nodePurdueLevel(n) ? `<tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${escapeHtml(tr('topoPurdueLevel'))}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:var(--primary);">${escapeHtml(nodePurdueLevel(n))}</td></tr>` : ''}
             ${stackRow}
             ${reportedRow}
+            ${serviceRow(n.services)}
           </table>
         </div>
         `;

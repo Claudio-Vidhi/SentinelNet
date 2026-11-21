@@ -5387,6 +5387,15 @@
           </details>
         </div>
 
+        <div class="form-group">
+          <label for="devServicePorts" data-i18n="lblServicePorts">Porte servizio da monitorare</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-heart-pulse" aria-hidden="true"></i>
+            <input id="devServicePorts" type="text" maxlength="128" placeholder="22, 443, 3389" aria-label="Porte servizio da monitorare" data-i18n-aria-label="ariaDevServicePorts">
+          </div>
+          <small style="color:var(--text-muted);" data-i18n="hintServicePorts">Controllo TCP a ogni ciclo del monitor ping. Vuoto = solo ping.</small>
+        </div>
+
         <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin:14px 0 8px; display:flex; align-items:center; gap:6px;">
           <i class="fa-solid fa-key"></i> <span data-i18n="secCredentials">4 · Credenziali</span>
         </h4>

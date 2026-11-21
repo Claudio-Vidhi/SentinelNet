@@ -10,6 +10,20 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Service health check**: nuovo campo inventario per apparato *Porte
+  servizio da monitorare* (`Service Ports`, es. `22, 443, 3389`, max 16), anche
+  in export/import CSV. A ogni ciclo il monitor ping aggiunge un TCP connect per
+  porta dichiarata. Un host che scarta l'ICMP ma risponde su una porta
+  dichiarata conta come up (Windows scarta il ping di default). Una porta
+  chiusa per 2 cicli consecutivi con l'host up notifica `device.down` con
+  `ip:porta` (`device.up` al ritorno); un host giù notifica solo sé stesso.
+  Visibile nella lista *da attenzionare* della Home, come chip nelle
+  Impostazioni e nel tooltip dei nodi in mappa. `GET /api/ping-monitor/status`
+  aggiunge `services: [{port, up}]` per apparato. Sonde bastion e agent escluse,
+  come per l'ICMP.
+
 ## [0.67.0] - 2026-11-19
 
 ### Added

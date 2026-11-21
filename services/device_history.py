@@ -26,7 +26,7 @@ from security import crypto_vault
 # and whether it changed.
 _SECRETS = ("Password", "Enable Secret", "SNMP Community")
 _FIELDS = ("IP", "Hostname", "Vendor", "Profile", "Group", "Probe", "Username",
-           "SSH Port", "Transports", "SNMP Disabled", "Purdue Level")
+           "SSH Port", "Transports", "SNMP Disabled", "Purdue Level", "Service Ports")
 
 _lock = threading.Lock()
 

@@ -652,6 +652,7 @@
             purdue_level: purdueSel ? purdueSel.value : '',
             process_criticality: critSel ? critSel.value : '',
             maintenance_window: maintInput ? maintInput.value.trim() : '',
+            service_ports: document.getElementById('devServicePorts').value.trim(),
             transports: readTransportsForm()
         };
 
@@ -776,6 +777,7 @@
         if (critSelEdit) critSelEdit.value = dev['Process Criticality'] || '';
         const maintEdit = document.getElementById('devMaintenanceWindow');
         if (maintEdit) maintEdit.value = dev['Maintenance Window'] || '';
+        document.getElementById('devServicePorts').value = (dev['Service Ports'] || '').replace(/,/g, ', ');
         updateDevSecretField();
         // Il segreto non torna dal server: il placeholder dice solo SE c'è.
         document.getElementById('devSnmp').value = '';
@@ -836,6 +838,7 @@
         if (critSelReset) critSelReset.value = '';
         const maintReset = document.getElementById('devMaintenanceWindow');
         if (maintReset) maintReset.value = '';
+        document.getElementById('devServicePorts').value = '';
         setTransportsForm(null, 22);
         document.getElementById('customCredsForm').style.display = 'none';
         document.getElementById('devUser').value = '';
