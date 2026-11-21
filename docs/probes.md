@@ -270,6 +270,18 @@ credentials through the agent's own inventory, not by pasting them into the
 file. The remote editor in the dashboard cannot encrypt them either — central
 does not hold the agent's key.
 
+**Write the device policy before the first start.** Put
+`device_policy.json` in the data directory with the site's real ranges:
+
+```json
+{"allowed_subnets": ["10.20.0.0/24"], "change": []}
+```
+
+Without it the agent writes a bootstrap policy that pins only the addresses
+already in the inventory. On a new install that may be none, and then the
+agent dials nothing. `change` stays empty unless this site should accept
+configuration changes from central. See §5.2.
+
 ### 3.4 Verify connectivity before starting
 
 ```bash
@@ -427,6 +439,11 @@ writes to it.
 - **The file is read at start.** Restart the agent after editing it. A file
   that does not parse stops the agent instead of letting it run without a
   boundary.
+- **Central refuses early.** A bypass command addressed to an agent whose
+  heartbeat reports no policy (an agent from before ADR-0009, which would
+  still honour the bypass) or no `change` grant at all is refused with 409
+  before it is queued. When some grants exist, the agent still decides per
+  device.
 
 Two more rules from the same ADR:
 

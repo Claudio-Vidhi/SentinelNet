@@ -93,6 +93,12 @@ class RemoteProbeE2E(unittest.TestCase):
     def _agent_headers(probe_id, token):
         return {"X-Probe-Id": probe_id, "X-Probe-Token": token}
 
+    def _report_policy(self, sid, token, change):
+        r = self.client.post("/api/agent/heartbeat", headers=self._agent_headers(sid, token),
+                             json={"policy": {"state": "reviewed", "allowed_subnets": 1,
+                                              "change": change}})
+        self.assertEqual(r.status_code, 200, r.text)
+
     # --- test ---
 
     def test_the_fleet_panel_lists_the_central_and_every_agent(self):
@@ -297,6 +303,11 @@ class RemoteProbeE2E(unittest.TestCase):
 
     def test_relay_blocks_dangerous_command(self):
         sid, token = self._create_agent_probe("Roma-Remota")
+        # ADR-0009: an agent reporting no policy gets no bypass job at all.
+        r = self.client.post(f"/api/probes/{sid}/command", headers=self.admin_h,
+                            json={"ip": "10.9.0.9", "command": "write erase"})
+        self.assertEqual(r.status_code, 409, r.text)
+        self._report_policy(sid, token, change=1)
         # L'admin BYPASSA la blacklist (M-1): il comando viene accodato.
         r = self.client.post(f"/api/probes/{sid}/command", headers=self.admin_h,
                             json={"ip": "10.9.0.9", "command": "write erase"})
@@ -741,13 +752,31 @@ class RemoteProbeE2E(unittest.TestCase):
         same admin and the same command behaved differently at an agent probe
         than at the central."""
         from services import probe_manager
-        sid, _token = self._create_agent_probe("Bypass-Relay-A")
+        sid, token = self._create_agent_probe("Bypass-Relay-A")
+        # ADR-0009: a policy without change grants is refused before queuing.
+        self._report_policy(sid, token, change=0)
+        r = self.client.post(f"/api/probes/{sid}/command",
+                             json={"ip": "10.9.0.63", "command": "reload"},
+                             headers=self.admin_h)
+        self.assertEqual(r.status_code, 409, r.text)
+        self.assertIn("change", r.json()["detail"])
+        self._report_policy(sid, token, change=1)
         r = self.client.post(f"/api/probes/{sid}/command",
                              json={"ip": "10.9.0.63", "command": "reload"},
                              headers=self.admin_h)
         self.assertEqual(r.status_code, 200, r.text)
         job = probe_manager.get_job(r.json()["job_id"])
         self.assertEqual(job["blacklist_bypass"], 1)
+
+    def test_send_command_refuses_a_bypass_the_agent_would_not_run(self):
+        # ADR-0009 §6 on the other entry point: the one-shot command API.
+        from services import inventory_manager
+        sid, token = self._create_agent_probe("Bypass-Send")
+        inventory_manager.add_or_update_device("10.9.0.66", "cisco", "custom", "", "", "",
+                                               "Generale", probe=sid, require_location=False)
+        r = self.client.post("/api/send-command", headers=self.admin_h,
+                             json={"ip": "10.9.0.66", "command": "reload"})
+        self.assertEqual(r.status_code, 409, r.text)
 
     def test_a_harmless_relayed_command_carries_no_bypass(self):
         from services import probe_manager

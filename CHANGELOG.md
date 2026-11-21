@@ -26,6 +26,9 @@ happened — `git log --grep="chore(release)"` is the record for those.
   si concede `change`; un apparato aggiunto dopo, localmente o dal centrale,
   non viene contattato finché la sua subnet non è nella policy.
   Vedi docs/probes.md §5.2.
+- **Il centrale rifiuta subito (409)** un comando con bypass verso un agente
+  che non riporta una policy (agente precedente, che onorerebbe ancora il
+  bypass) o che non concede `change` su nessun apparato.
 
 ### Added
 

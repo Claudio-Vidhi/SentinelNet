@@ -279,6 +279,9 @@ def probe_command_ep(probe_id: str, payload: ProbeCommandSchema,
                   f"sonda '{probe_id}' da '{current_user.get('sub')}'.")
         raise HTTPException(status_code=400, detail="Comando non consentito per motivi di sicurezza (in blacklist).")
     blacklist_bypass = not is_command_safe(payload.command)
+    refusal = blacklist_bypass and probe_manager.change_refusal(probe_id)
+    if refusal:
+        raise HTTPException(status_code=409, detail=refusal)
     if blacklist_bypass:
         log_audit(f"Relay comando in blacklist '{payload.command}' su '{payload.ip}' sonda '{probe_id}' "
                   f"consentito a '{current_user.get('sub')}' {_bypass_note(current_user)}.")

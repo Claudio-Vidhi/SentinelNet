@@ -164,6 +164,9 @@ async def send_command(payload: CommandRequest, current_user = Depends(require_o
         probe = await asyncio.to_thread(probe_manager.get_probe,
                                         target_device.get('Probe') or 'central')
         if probe and probe.get('mode') == 'agent':
+            refusal = blacklist_bypass and probe_manager.change_refusal(probe['id'])
+            if refusal:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=refusal)
             job = await asyncio.to_thread(
                 probe_manager.enqueue_job, probe['id'], payload.ip, payload.command,
                 requested_by=current_user.get('sub'),

@@ -436,6 +436,22 @@ def _init_jobs():
         _jobs_init_done = True
 
 
+def change_refusal(probe_id: str) -> Optional[str]:
+    """Why an agent would refuse a configuration change, said before queuing
+    it (ADR-0009 §6), or None. The agent's own check stays the boundary: this
+    only answers early with what the agent reported in its heartbeat."""
+    pol = (get_probe(probe_id) or {}).get("agent_policy") or {}
+    if pol.get("state") in (None, "", "none"):
+        # An agent too old to report a policy would still honour the bypass:
+        # refusing here is the only enforcement it has.
+        return ("L'agente della sonda non riporta una policy locale (versione precedente "
+                "all'ADR-0009): aggiornalo prima di inviare modifiche.")
+    if not pol.get("change"):
+        return ("La policy locale dell'agente non concede modifiche su nessun apparato "
+                "('change' in device_policy.json, da configurare in sede).")
+    return None
+
+
 def enqueue_job(probe_id: str, device_ip: str, command: str,
                 requested_by: str = "", kind: str = "cli",
                 blacklist_bypass: bool = False) -> dict:
