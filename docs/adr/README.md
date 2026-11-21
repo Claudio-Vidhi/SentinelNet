@@ -17,6 +17,7 @@ a new ADR that supersedes it and mark the old one.
 | [0006](0006-deterministic-correlation.md) | Correlation is deterministic; the AI narrates, it doesn't decide | Superseded (0.65.0) |
 | [0007](0007-numeric-snmp-oids.md) | SNMP uses numeric OIDs, no MIB resolution | Accepted |
 | [0008](0008-agent-rest-relay.md) | The probe agent relays read-only REST calls, restricted by an allowlist checked at both ends | Accepted |
+| [0009](0009-agent-device-plane-authority.md) | The probe agent is the authority for what it does to its devices; central only asks | Proposed |
 
 ## Template
 

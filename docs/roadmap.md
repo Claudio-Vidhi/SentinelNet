@@ -118,8 +118,10 @@ its probe and executes them using whichever local device record matches the
 requested IP. Agent identity therefore implies full device authority within the
 site.
 
-If this gets built, it belongs in an ADR — it changes an authority boundary, not
-just an implementation. See [probes.md](probes.md).
+The design is [ADR-0009](adr/0009-agent-device-plane-authority.md) (proposed):
+a local policy on the agent, which central cannot write, decides what the
+agent may do. Writes need a local grant, and credentials are bound to
+addresses. See [probes.md](probes.md).
 
 **Partially addressed, deliberately narrowly.** The job queue now also carries
 read-only REST calls, so client diagnosis works at agent probes
