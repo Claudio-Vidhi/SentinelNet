@@ -4,7 +4,8 @@ requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.12' and sys_platform == 'emscripten'",
     "python_full_version >= '3.12' and sys_platform != 'emscripten'",
-    "python_full_version < '3.12'",
+    "python_full_version >= '3.11.5' and python_full_version < '3.12'",
+    "python_full_version < '3.11.5'",
 ]
 
 [[package]]
@@ -495,13 +496,15 @@ wheels = [
 
 [[package]]
 name = "graphifyy"
-version = "0.9.89"
+version = "0.9.112"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version < '3.11.5'",
+]
 dependencies = [
-    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "networkx", version = "3.7", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" } },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" } },
+    { name = "pyyaml" },
     { name = "rapidfuzz" },
     { name = "tree-sitter" },
     { name = "tree-sitter-bash" },
@@ -530,9 +533,57 @@ dependencies = [
     { name = "tree-sitter-verilog" },
     { name = "tree-sitter-zig" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bd/fa/fbd10b1b53a7d0fa5e48ce9257023e01e1157a0602303a49ea2109d1daa3/graphifyy-0.9.89.tar.gz", hash = "sha256:17ac9acf8dc41040c74ed2aa497b8491675963fd8dd58c6e6430eda99233b8dc", size = 2766627, upload-time = "2026-10-13T10:44:19.567Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/77/92/294a37cbe6acafe8aa2186ec467ae94c0b069ee9044f67c1059bfe6a7597/graphifyy-0.9.112.tar.gz", hash = "sha256:67aad04f70aa3afc9ff6961f82d7cca5b04fb6b9446a3cddcb7b16483fbdb59b", size = 3526647, upload-time = "2026-11-17T15:42:37.184Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f8/9a/d6609f7e22ed4ad21610cfcbd0fc179f921b5e45e0421ebd172576454b9a/graphifyy-0.9.89-py3-none-any.whl", hash = "sha256:97d1ead42a7d6a2a052f5b09f732fb1226395a50c2647647e4079b2da74d2346", size = 1657253, upload-time = "2026-10-13T10:44:17.398Z" },
+    { url = "https://files.pythonhosted.org/packages/53/d6/8b722d56afbe44fd853c1d21d97f842857096e46146edc9c6d92bb1260e9/graphifyy-0.9.112-py3-none-any.whl", hash = "sha256:ad6a9152fb6d9c5d85a77ffcaf29e18c5634a7d5ca474edb218cbc68b062241d", size = 1997065, upload-time = "2026-11-17T15:42:34.924Z" },
+]
+
+[[package]]
+name = "graphifyy"
+version = "0.9.114"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.12' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.12' and sys_platform != 'emscripten'",
+    "python_full_version >= '3.11.5' and python_full_version < '3.12'",
+]
+dependencies = [
+    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "networkx", version = "3.7", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "pyyaml" },
+    { name = "rapidfuzz" },
+    { name = "tree-sitter" },
+    { name = "tree-sitter-bash" },
+    { name = "tree-sitter-c" },
+    { name = "tree-sitter-c-sharp" },
+    { name = "tree-sitter-cpp" },
+    { name = "tree-sitter-elixir" },
+    { name = "tree-sitter-fortran" },
+    { name = "tree-sitter-go" },
+    { name = "tree-sitter-groovy" },
+    { name = "tree-sitter-java" },
+    { name = "tree-sitter-javascript" },
+    { name = "tree-sitter-json" },
+    { name = "tree-sitter-julia" },
+    { name = "tree-sitter-kotlin" },
+    { name = "tree-sitter-lua" },
+    { name = "tree-sitter-objc" },
+    { name = "tree-sitter-php" },
+    { name = "tree-sitter-powershell" },
+    { name = "tree-sitter-python" },
+    { name = "tree-sitter-ruby" },
+    { name = "tree-sitter-rust" },
+    { name = "tree-sitter-scala" },
+    { name = "tree-sitter-swift" },
+    { name = "tree-sitter-typescript" },
+    { name = "tree-sitter-verilog" },
+    { name = "tree-sitter-zig" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5c/64/ff311c382e396b3c5901dcd1a6cc8f5573799f10744ad62d64c5e05551e0/graphifyy-0.9.114.tar.gz", hash = "sha256:69eb5cb6061983f7c8ad2c86dda0a0e47e305f8d565a4f82e744f33aebfb5333", size = 3571704, upload-time = "2026-11-20T21:23:18.134Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ef/4f/44f9f4271c4de7c9b65777a01f3ce28dc6a1ca04360f812fa942371a4827/graphifyy-0.9.114-py3-none-any.whl", hash = "sha256:cf3cb57e87840a0c6ef7399578a95ad7ff6a83539dc71dcef0465b1b7f3a3453", size = 2021035, upload-time = "2026-11-20T21:23:15.554Z" },
 ]
 
 [[package]]
@@ -562,8 +613,8 @@ name = "httpcore2"
 version = "2.13.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "h11", marker = "python_full_version < '3.12' or sys_platform != 'emscripten'" },
-    { name = "truststore", marker = "python_full_version < '3.12' or sys_platform != 'emscripten'" },
+    { name = "h11" },
+    { name = "truststore" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/cb/f3/1db7aa2bc2524062192bb0e0323969492d1883152a232fe36eea65f4e35c/httpcore2-2.13.1.tar.gz", hash = "sha256:e0aa977abe17e69a3b820a24542a6fa88702676d83880b8d194dcd18408e5103", size = 68071, upload-time = "2026-09-23T07:47:22.372Z" }
 wheels = [
@@ -625,7 +676,7 @@ name = "importlib-metadata"
 version = "9.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "zipp", marker = "python_full_version < '3.12'" },
+    { name = "zipp" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/6f/7e/1e7e8dc30634b93ebb3d58a3dea569ad146e656218d3960ab04f62047b29/importlib_metadata-9.0.1.tar.gz", hash = "sha256:ab830580bc0ef3db61ce8fae716389e5462b67e033018bab6d8f80ef17172f99", size = 59124, upload-time = "2026-08-28T15:30:34.646Z" }
 wheels = [
@@ -850,7 +901,7 @@ name = "macholib"
 version = "1.16.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "altgraph", marker = "python_full_version < '3.12' or sys_platform != 'emscripten'" },
+    { name = "altgraph" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/10/2f/97589876ea967487978071c9042518d28b958d87b17dceb7cdc1d881f963/macholib-1.16.4.tar.gz", hash = "sha256:f408c93ab2e995cd2c46e34fe328b130404be143469e41bc366c807448979362", size = 59427, upload-time = "2025-11-22T08:28:38.373Z" }
 wheels = [
@@ -923,7 +974,8 @@ name = "networkx"
 version = "3.6.1"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version < '3.12'",
+    "python_full_version >= '3.11.5' and python_full_version < '3.12'",
+    "python_full_version < '3.11.5'",
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/6a/51/63fe664f3908c97be9d2e4f1158eb633317598cfa6e1fc14af5383f17512/networkx-3.6.1.tar.gz", hash = "sha256:26b7c357accc0c8cde558ad486283728b65b6a95d85ee1cd66bafab4c8168509", size = 2517025, upload-time = "2025-12-08T17:02:39.908Z" }
 wheels = [
@@ -960,7 +1012,8 @@ name = "numpy"
 version = "2.4.6"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version < '3.12'",
+    "python_full_version >= '3.11.5' and python_full_version < '3.12'",
+    "python_full_version < '3.11.5'",
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/d0/ad/fed0499ce6a338d2a03ebae59cd15093910c8875328855781952abf6c2fe/numpy-2.4.6.tar.gz", hash = "sha256:f3a3570c4a2a16746ac2c31a7c7c7b0c186b95ce902e33db6f28094ed7387dda", size = 20735807, upload-time = "2026-05-18T23:37:14.07Z" }
 wheels = [
@@ -1724,8 +1777,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography", marker = "python_full_version < '3.12' or sys_platform != 'emscripten'" },
-    { name = "jeepney", marker = "python_full_version < '3.12' or sys_platform != 'emscripten'" },
+    { name = "cryptography" },
+    { name = "jeepney" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [
@@ -1757,7 +1810,8 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "graphifyy" },
+    { name = "graphifyy", version = "0.9.112", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11.5'" },
+    { name = "graphifyy", version = "0.9.114", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11.5'" },
     { name = "httpx" },
     { name = "httpx2" },
     { name = "opentelemetry-sdk" },
@@ -1789,7 +1843,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "graphifyy", specifier = ">=0.9.85" },
+    { name = "graphifyy", specifier = ">=0.9.112" },
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "httpx2", specifier = ">=2.12.0" },
     { name = "opentelemetry-sdk", specifier = ">=1.45.0" },

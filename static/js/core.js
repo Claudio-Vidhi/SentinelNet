@@ -1641,7 +1641,7 @@ function applyRoleUI(username, role, allowedTabs, groups) {
             `<span class="user-meta"><span class="user-name"><i class="fa-solid ${icon}"></i> ${escapeHtml(currentUsername)}</span>` +
             `<span class="role-pill role-pill-${currentRole}">${roleLabel(currentRole)}</span></span>`;
     }
-    // ponytail: restrizione solo lato frontend (nasconde i pulsanti); vuoto = tutte le tab.
+    // Hides the buttons; the server enforces the same list via require_tab. Empty = all tabs.
     const allowed = normalizeAllowedTabs(allowedTabs);
     currentAllowedTabs = allowed;
     if (allowed.length > 0) {

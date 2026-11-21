@@ -37,7 +37,7 @@ class TheMatcherIsATable(unittest.TestCase):
         # its first device's IP, which is the data-ip its button sends.
         self.assertIn('id="ti-detail-${sid}"', self.js)
         self.assertIn('<div id="results-${sid}"', self.js)
-        self.assertIn("g.id = g.rep.IP.replace(/\./g, '-')", self.js)
+        self.assertIn(r"g.id = g.rep.IP.replace(/\./g, '-')", self.js)
         self.assertIn('data-ip="${escapeHtml(g.rep.IP)}"', self.js)
         fn = self.js[self.js.index("async function runManagedVulnCheck"):]
         self.assertIn("`ti-detail-${safeIpId}`", fn[:400])

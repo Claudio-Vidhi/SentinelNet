@@ -549,9 +549,9 @@ def set_user_groups_ep(payload: UserGroupsSchema, current_user = Depends(require
 
 @router.post("/api/users/tabs", dependencies=[Depends(require_tab("tab-users"))])
 def set_user_tabs_ep(payload: UserTabsSchema, current_user = Depends(require_admin)):
-    """Assegna le tab della dashboard visibili a un utente (vuoto = tutte).
-    # ponytail: enforcement solo lato frontend (nasconde i pulsanti tab). Le API
-    # sensibili sono già protette da ruolo/gruppo indipendentemente da questo campo."""
+    """Assegna le tab della dashboard visibili a un utente (vuoto = tutte)."""
+    # Enforced server-side too: tab-owned routes carry require_tab (routers/deps.py,
+    # pinned by tests/test_tab_enforcement.py), so a hidden tab's API answers 403.
     assert_can_manage(current_user, payload.username)
     assert_tabs_within_grant(current_user, payload.allowed_tabs)
     if not user_manager.set_allowed_tabs(payload.username, payload.allowed_tabs):

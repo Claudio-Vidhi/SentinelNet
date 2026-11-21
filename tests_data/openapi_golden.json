@@ -7618,7 +7618,7 @@
   },
   "/api/users/tabs": {
    "post": {
-    "description": "Assegna le tab della dashboard visibili a un utente (vuoto = tutte).\n# ponytail: enforcement solo lato frontend (nasconde i pulsanti tab). Le API\n# sensibili sono gi\u00e0 protette da ruolo/gruppo indipendentemente da questo campo.",
+    "description": "Assegna le tab della dashboard visibili a un utente (vuoto = tutte).",
     "operationId": "set_user_tabs_ep_api_users_tabs_post",
     "requestBody": {
      "content": {
