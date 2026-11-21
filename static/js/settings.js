@@ -1957,6 +1957,11 @@
             if (a.behind) marks.push(`<span class="status bad"><span class="led led-danger"></span>${escapeHtml(tr('lblFleetBehind'))}</span>`);
             if (a.dirty) marks.push(`<span class="status bad"><span class="led led-warning"></span>${escapeHtml(tr('lblFleetDirty'))}</span>`);
             if (!marks.length) marks.push(`<span class="status ok"><span class="led led-success"></span>${escapeHtml(tr('lblFleetAligned'))}</span>`);
+            // ADR-0009: the site's local device policy, as the agent reports it.
+            const pol = a.policy || { state: 'none' };
+            if (pol.state === 'none') marks.push(`<span class="status warn"><span class="led led-warning"></span>${escapeHtml(tr('lblFleetPolicyNone'))}</span>`);
+            else if (pol.state === 'bootstrap') marks.push(`<span class="status warn"><span class="led led-warning"></span>${escapeHtml(tr('lblFleetPolicyBootstrap'))}</span>`);
+            if (pol.change > 0) marks.push(`<span class="chip">${escapeHtml(tr('lblFleetPolicyChange', { n: pol.change }))}</span>`);
             rows.push(`<tr>
                 <td>${escapeHtml(a.name || a.probe_id)}</td>
                 <td>${escapeHtml(a.version || dash)}</td>

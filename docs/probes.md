@@ -369,7 +369,9 @@ probe (Mode C, section 6) instead.
   curl -H "Authorization: Bearer $JWT" http://<CENTRAL_IP>:8000/api/command-jobs/job_1234567890_abc
   ```
 
-- Commands on the security blacklist are blocked during relay too.
+- Commands on the security blacklist are blocked during relay too. An admin's
+  audited bypass at central is only a request. The agent runs it only on
+  devices its local policy grants `change` for (§5.2).
 
 ### 5.1 REST relay (read-only)
 
@@ -394,6 +396,49 @@ central dictates gives that away. See
 Unlike the CLI relay, this path does **not** wait: the diagnosis queues the
 request, reports it as pending, and picks up the answer on a later run (the
 agent polls every `interval` seconds, 60 by default).
+
+### 5.2 Device policy (what central may ask for)
+
+The agent, not central, decides what it does to its devices
+([ADR-0009](adr/0009-agent-device-plane-authority.md)). The decision lives in
+`device_policy.json` in the agent's data directory. Only someone with access
+to the agent host can edit it: no RPC, heartbeat field or pushed record
+writes to it.
+
+```json
+{
+  "allowed_subnets": ["10.20.0.0/24", "10.20.1.0/24"],
+  "change": ["10.20.0.1/32"]
+}
+```
+
+- **`allowed_subnets`**: no credential (per-device, tenant identity or site
+  default) is resolved for an address outside these subnets. A device that
+  central or the local inventory names elsewhere is stored but never dialled,
+  and every attempt fails with a credential error that names the policy.
+- **`change`**: where a CLI job carrying a blacklist bypass may run.
+  Everywhere else the agent refuses the job with the reason, even when central
+  authorised and audited the bypass. Empty means read-only everywhere.
+- **First start of an upgraded agent**: with no file, the agent writes a
+  bootstrap one, with one `/32` per address already in its inventory and no
+  `change` grants, marked `"bootstrap": true`. Review it, widen the subnets to
+  the site's real ranges, then remove the flag. Until then, Settings → Fleet
+  shows the probe as *Local policy to review on site*.
+- **The file is read at start.** Restart the agent after editing it. A file
+  that does not parse stops the agent instead of letting it run without a
+  boundary.
+
+Two more rules from the same ADR:
+
+- The agent-settings RPC (`_agent_config`) accepts only the keys the dashboard
+  sets: `interval`, `backup_interval`, `l2_interval`, `syslog_port`,
+  `syslog_enabled`, each with its type. Anything else is refused and nothing
+  is merged. The central URL, token, probe id and data directory are never
+  writable from central.
+- Every job the agent receives is appended to `agent_jobs.jsonl` in its data
+  directory: id, kind, target, requester, whether it asked for a bypass, and
+  the outcome. This is the site's own record, independent of central's audit
+  log.
 
 Also pushed by the agent, alongside inventory and MAC tables: **ARP tables**
 (`POST /api/agent/arp`). Without them a remote client has a switch port but no

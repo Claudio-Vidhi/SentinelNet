@@ -1,6 +1,6 @@
 # ADR-0009 — The probe agent is the authority for what it does to its devices; central only asks
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-11-21
 
 ## Context
@@ -62,11 +62,13 @@ central cannot write, and refuses what the policy does not grant.
      device. Central's bypass flag remains an input. It is a request, and
      the audit line at central still records who asked.
 
-3. **Credentials are bound to addresses, not to records.** A locally held
-   credential (per-device, tenant identity, site default) is presented only to
-   an address inside `allowed_subnets`. A device record that originates from
-   central uses only the credentials that record itself carries. It never
-   falls back to the site default or to a local identity.
+3. **Credentials are bound to addresses, not to records.** No credential
+   (per-device, tenant identity, site default) is resolved for an address
+   outside `allowed_subnets`. The check sits in credential resolution itself,
+   so every dial path (SSH, REST, backup) passes through it. Who created the
+   record does not matter. The threat is the address the credential is sent
+   to, and inside the site's own subnets the site default is the intended
+   credential.
 
 4. **The config RPC has a key allowlist.** Central may set what the UI already
    offers: intervals, syslog port and listener state. It may never set the
@@ -92,17 +94,20 @@ central cannot write, and refuses what the policy does not grant.
   through agent CLI jobs stops being able to until someone on site grants
   `change`. Making that a deliberate local act is the purpose of this
   decision. It needs a release note and a version bump.
-- **No policy file yet** (an upgraded agent nobody has configured): `change`
-  is denied and `allowed_subnets` falls back to the addresses already in the
-  local inventory at first start. The heartbeat reports `policy: none`, and
-  central shows it per probe until the site writes a policy. This fails closed
-  on writes and does not break monitoring.
+- **No policy file yet** (an upgraded agent nobody has configured): at first
+  start the agent writes a bootstrap policy with one `/32` per address already
+  in its local inventory and no `change` grants, marked `"bootstrap": true`.
+  The heartbeat reports the state, and central shows it per probe until
+  someone on site reviews the file and removes the flag. This fails closed on
+  writes and on new addresses, and does not break monitoring of what was
+  already there. A device added later, locally or by central, needs its subnet
+  in the policy before the agent will dial it.
 - Enabling changes at a remote site needs access to the agent host. That
   access is exactly what the boundary is about, and also the friction this
   decision accepts.
-- `central_manages_devices` keeps working: its records carry their own
-  credentials. A pushed record whose address falls outside `allowed_subnets`
-  is refused and reported, instead of being dialled.
+- `central_manages_devices` keeps working inside `allowed_subnets`. A pushed
+  record outside them is stored but never dialled, and each attempt is
+  reported as a refused credential.
 - The allowlist logic and the policy check run on agent code. An outdated
   agent enforces the old, weaker model. The heartbeat's policy version makes
   that visible, and central can refuse `change` jobs to an agent that does

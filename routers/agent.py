@@ -146,6 +146,18 @@ def agent_heartbeat(request: Request, payload: Optional[dict] = None,
         for key in ("version", "commit", "branch", "dirty"):
             if key in payload:
                 updates[f"agent_{key}"] = payload[key]
+        # ADR-0009 §6: what the site's local policy allows, as the agent says.
+        # Shown to explain refusals; the agent's own check is the boundary.
+        pol = payload.get("policy")
+        if isinstance(pol, dict):
+            try:
+                updates["agent_policy"] = {
+                    "state": str(pol.get("state", ""))[:16],
+                    "allowed_subnets": int(pol.get("allowed_subnets") or 0),
+                    "change": int(pol.get("change") or 0)}
+            except (TypeError, ValueError):
+                pass  # a malformed report is not worth failing the heartbeat
+
         if updates:
             probe_manager.update_probe(probe_id, **updates)
     resp = {"ok": True, "probe_id": probe["id"], "name": probe["name"],

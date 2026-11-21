@@ -448,6 +448,8 @@ def get_fleet_versions(current_user = Depends(require_unscoped_admin)):
             # centrale e' esattamente cio' che l'operatore deve vedere, e non
             # serve un parser SemVer per dirlo.
             "behind": bool(v) and v != __version__,
+            # ADR-0009: absent = an agent too old to report a local policy.
+            "policy": s.get("agent_policy") or {"state": "none"},
         })
     # Il pannello deve poter DISABILITARE i pulsanti che qui non funzionano,
     # invece di lasciarli premere e rispondere 409. Erano gia' due rifiuti

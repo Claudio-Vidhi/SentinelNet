@@ -50,8 +50,8 @@ _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from services import inventory_manager
-from core import core_engine, inventory_migration, probe_migration
+from services import agent_policy, inventory_manager
+from core import core_engine, data_config, inventory_migration, probe_migration
 from collectors import arp_collector, mac_collector
 
 
@@ -449,6 +449,12 @@ def load_config():
     return cfg
 
 
+# The only keys central may set through _agent_config, with their type: the
+# fields of the dashboard's agent settings (routers/probes.AgentConfigUpdateSchema).
+AGENT_CONFIG_KEYS = {"syslog_port": int, "interval": int, "backup_interval": int,
+                     "l2_interval": int, "syslog_enabled": bool}
+
+
 class Agent:
     def __init__(self, cfg):
         self._start_ts = time.time()
@@ -536,6 +542,8 @@ class Agent:
             "backup_interval": int(self.cfg.get("backup_interval") or 0),
             "l2_interval": int(self.cfg.get("l2_interval") or 0),
             "uptime_s": int(time.time() - self._start_ts) if hasattr(self, "_start_ts") else 0,
+            # ADR-0009 §6: state and counts only, never the subnets themselves.
+            "policy": agent_policy.summary(),
         }
         r = self._post("/api/agent/heartbeat", payload)
         r.raise_for_status()
@@ -893,6 +901,17 @@ class Agent:
         elif action == "_agent_config":
             try:
                 new_cfg = json.loads(arg)
+                # ADR-0009 §4: central may set what the dashboard offers and
+                # nothing else. central_url, token, probe_id, data_dir and
+                # ot_probes_enabled stay a decision of whoever runs this host.
+                bad = [k for k, v in (new_cfg.items() if isinstance(new_cfg, dict) else [])
+                       if k not in AGENT_CONFIG_KEYS or not isinstance(v, AGENT_CONFIG_KEYS[k])
+                       or isinstance(v, bool) != (AGENT_CONFIG_KEYS[k] is bool)]
+                if not isinstance(new_cfg, dict) or bad:
+                    return {"status": "error",
+                            "result": f"Configurazione rifiutata dall'agente: chiavi non "
+                                      f"consentite o di tipo errato {bad}. Consentite: "
+                                      f"{sorted(AGENT_CONFIG_KEYS)}."}
                 self.cfg.update(new_cfg)
 
                 # Persiste su disco solo se l'agente e' stato avviato con
@@ -1144,6 +1163,22 @@ class Agent:
         status = "done" if res.get("status") == "ok" else "error"
         return {"status": status, "result": json.dumps(res)}
 
+    @staticmethod
+    def _log_job(job: dict, out: dict) -> None:
+        """ADR-0009 §5: the site's own record of what central asked for, kept
+        where central cannot edit it. The command, not its output."""
+        # ponytail: one append-only file, no rotation; rotate when sites run
+        # enough jobs for its size to matter.
+        rec = {"ts": int(time.time()), "id": job.get("id"), "kind": job.get("kind") or "cli",
+               "device_ip": job.get("device_ip"), "command": (job.get("command") or "")[:200],
+               "requested_by": job.get("requested_by", ""),
+               "bypass": bool(job.get("blacklist_bypass")), "status": out.get("status")}
+        try:
+            with open(data_config.get_path("agent_jobs.jsonl"), "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        except OSError as e:
+            print(f"[job] log locale non scritto: {e}")
+
     def run_jobs(self, devices):
         r = self._get("/api/agent/jobs")
         r.raise_for_status()
@@ -1181,6 +1216,12 @@ class Agent:
                 device = by_ip.get(ip)
                 if not device:
                     out = {"status": "error", "result": f"Dispositivo {ip} non in inventario locale."}
+                elif job.get("blacklist_bypass") and not agent_policy.allows_change(ip):
+                    # ADR-0009 §2: the bypass is central's request, the grant is
+                    # the local policy's. Refused outright, with the reason.
+                    out = {"status": "error",
+                           "result": f"Modifica non concessa dalla policy locale dell'agente "
+                                     f"per {ip} ('change' in {agent_policy.POLICY_FILE})."}
                 else:
                     # Il bypass della blacklist arriva dal centrale, che lo
                     # ha autorizzato e messo in audit (M-1). L'allowlist REST
@@ -1192,6 +1233,7 @@ class Agent:
                         out = {"status": "done", "result": res.get("output", "")}
                     else:
                         out = {"status": "error", "result": res.get("message", "errore")}
+            self._log_job(job, out)
             try:
                 self._post(f"/api/agent/jobs/{job['id']}/result", out).raise_for_status()
                 print(f"[job] {job['id']} '{cmd}': {out['status']}")
@@ -1279,6 +1321,16 @@ class Agent:
 
 def main():
     cfg = load_config()
+    # ADR-0009: the local device policy is loaded before anything dials. A
+    # broken file stops the agent here rather than running without a boundary.
+    from services import agent_policy
+    policy = agent_policy.load_or_bootstrap(
+        cfg["data_dir"], [d.get("IP") for d in inventory_manager.get_all_devices()])
+    agent_policy.install(policy)
+    print(f"[policy] {policy['path']}: {agent_policy.summary()}")
+    if policy["state"] == "bootstrap":
+        print("[policy] policy di bootstrap: rivedi allowed_subnets/change e togli "
+              "\"bootstrap\" dal file (docs/probes.md, Device policy).")
     Agent(cfg).run()
 
 

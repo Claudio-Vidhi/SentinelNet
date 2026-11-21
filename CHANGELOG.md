@@ -10,6 +10,23 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Security
+
+- **Agent sonda: l'autorità sugli apparati è dell'agente (ADR-0009).** Nuova
+  policy locale `device_policy.json` nella data dir dell'agente, modificabile
+  solo sull'host: `allowed_subnets` (nessuna credenziale viene risolta per un
+  indirizzo fuori) e `change` (dove un job CLI con bypass della blacklist può
+  girare). Il config RPC `_agent_config` accetta solo le cinque chiavi della
+  dashboard, con il loro tipo. Ogni job ricevuto finisce in
+  `agent_jobs.jsonl` sull'agente. L'heartbeat riporta stato e conteggi della
+  policy; Impostazioni → Flotta li mostra.
+- **Cambio di comportamento all'aggiornamento**: al primo avvio l'agente
+  scrive una policy di bootstrap (un `/32` per indirizzo già in inventario,
+  nessun `change`). I job CLI con bypass vengono rifiutati finché in sede non
+  si concede `change`; un apparato aggiunto dopo, localmente o dal centrale,
+  non viene contattato finché la sua subnet non è nella policy.
+  Vedi docs/probes.md §5.2.
+
 ### Added
 
 - **Report stato rete — fase B (storico e confronto)**: gli snapshot JSON si

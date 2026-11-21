@@ -89,6 +89,14 @@ def get_device_credentials(device):
     if inventory_manager.is_manual(device):
         raise CredentialResolveError(
             f"Il dispositivo {device.get('IP')} e' manuale: nessuna credenziale, nessuna sessione.")
+    # ADR-0009: on a probe agent a credential is only ever resolved for an
+    # address its local policy allows, whoever wrote the device record. A no-op
+    # on central, where no policy is installed.
+    from services import agent_policy
+    if not agent_policy.allows_address(device.get('IP') or ''):
+        raise CredentialResolveError(
+            f"Indirizzo {device.get('IP')} fuori da allowed_subnets della policy locale "
+            f"dell'agente ({agent_policy.POLICY_FILE}): nessuna credenziale.")
     profile = device.get('Profile', 'custom').lower()
     if profile == 'default':
         return _require_fallback(device)

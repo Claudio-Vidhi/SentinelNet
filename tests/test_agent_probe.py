@@ -111,6 +111,14 @@ class RemoteProbeE2E(unittest.TestCase):
         self.assertEqual(agent["version"], "0.25.0")
         # Il senso del pannello: un agente indietro rispetto al centrale si vede.
         self.assertTrue(agent["behind"])
+        # ADR-0009: an agent that reports no policy shows as such...
+        self.assertEqual(agent["policy"], {"state": "none"})
+        # ...and one that does shows its state and counts, never its subnets.
+        self.client.post("/api/agent/heartbeat", headers=self._agent_headers(sid, token),
+                         json={"policy": {"state": "bootstrap", "allowed_subnets": 3, "change": 0}})
+        body = self.client.get("/api/fleet/versions", headers=self.admin_h).json()
+        agent = next(a for a in body["agents"] if a["probe_id"] == sid)
+        self.assertEqual(agent["policy"], {"state": "bootstrap", "allowed_subnets": 3, "change": 0})
 
     def test_the_fleet_panel_is_admin_only(self):
         # Client dedicato: quello di classe porta il cookie di sessione
@@ -1573,9 +1581,14 @@ class RelayCarriesTheBlacklistDecision(unittest.TestCase):
                                        requested_by=ADMIN)
         self.assertEqual(probe_manager.get_job(job["id"])["blacklist_bypass"], 0)
 
-    def test_the_agent_honours_the_bypass_the_central_authorised(self):
+    def test_the_agent_honours_the_bypass_where_its_policy_grants_change(self):
+        # ADR-0009: central's bypass is a request; the local policy grants it.
+        import ipaddress
         from unittest import mock
-        from services import probe_agent
+        from services import agent_policy, probe_agent
+        net = [ipaddress.ip_network("10.9.0.62/32")]
+        agent_policy.install({"allowed": net, "change": net, "state": "reviewed", "path": ""})
+        self.addCleanup(agent_policy.install, None)
         agent = self._agent()
         seen = {}
 
