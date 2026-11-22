@@ -998,6 +998,100 @@ MESSAGES: Dict[str, Dict[str, str]] = {
         "en": "Local disk logging enabled.",
     },
 
+    # --- FortiOS: L7 security & SPU optimization --------------------------
+    "fos.vip_l7.none": {
+        "it": "Nessun Virtual IP esposto da interfacce WAN da valutare.",
+        "en": "No WAN-exposed Virtual IP policies to assess.",
+    },
+    "fos.vip_l7.missing": {
+        "it": "{count} policy WAN verso VIP senza sensore IPS attivo.",
+        "en": "{count} inbound WAN-to-VIP polic(ies) without an active IPS sensor.",
+    },
+    "fos.vip_l7.ok": {
+        "it": "Ogni policy WAN verso VIP applica un sensore IPS.",
+        "en": "Every inbound WAN-to-VIP policy applies an IPS sensor.",
+    },
+    "fos.dos_wan.no_wan": {
+        "it": "Nessuna interfaccia WAN rilevata: copertura DoS non valutabile.",
+        "en": "No WAN interface detected: DoS policy coverage cannot be assessed.",
+    },
+    "fos.dos_wan.missing": {
+        "it": "Nessuna DoS policy attiva sulle interfacce WAN.",
+        "en": "No active DoS policy covering WAN interfaces.",
+    },
+    "fos.dos_wan.ok": {
+        "it": "Almeno una DoS policy attiva protegge le interfacce WAN.",
+        "en": "At least one active DoS policy protects WAN interfaces.",
+    },
+    "fos.ssl_inspect.no_section": {
+        "it": "Sezioni firewall policy e profili SSL/SSH assenti: ispezione SSL non valutabile.",
+        "en": "Firewall policy and SSL/SSH profile sections absent: SSL inspection cannot be assessed.",
+    },
+    "fos.ssl_inspect.weak": {
+        "it": "{count} configurazioni di ispezione SSL/SSH assenti, deboli o su certificato di fabbrica.",
+        "en": "{count} missing, weak, or factory-certificate SSL/SSH inspection setting(s).",
+    },
+    "fos.ssl_inspect.ok": {
+        "it": "Ispezione SSL/SSH configurata con TLS >= 1.2 e certificati dedicati.",
+        "en": "SSL/SSH inspection configured with TLS >= 1.2 and dedicated certificates.",
+    },
+    "fos.ips_opt.none": {
+        "it": "Nessun sensore IPS o policy con IPS configurati.",
+        "en": "No IPS sensors or IPS-protected policies configured.",
+    },
+    "fos.ips_opt.suboptimal": {
+        "it": "{count} impostazioni IPS subottimali per CPU/RAM (packet logging o sensore generico).",
+        "en": "{count} suboptimal IPS setting(s) for CPU/RAM (packet logging or generic sensor).",
+    },
+    "fos.ips_opt.ok": {
+        "it": "Sensori IPS ottimizzati (nessun log-packet attivo ne' profili generici critici).",
+        "en": "IPS sensors optimized (no packet logging or critical generic profiles).",
+    },
+    "fos.asic_offload.vm_na": {
+        "it": "FortiGate-VM senza ASIC hardware: controllo offload NPU non applicabile.",
+        "en": "FortiGate-VM has no hardware ASIC: NPU offload check does not apply.",
+    },
+    "fos.asic_offload.disabled": {
+        "it": "{count} policy con «auto-asic-offload disable»: traffico forzato su CPU.",
+        "en": "{count} polic(ies) with «auto-asic-offload disable»: traffic forced onto CPU.",
+    },
+    "fos.asic_offload.ok": {
+        "it": "Nessuna policy disabilita l'offload hardware ASIC.",
+        "en": "No policy disables hardware ASIC offload.",
+    },
+    "fos.insp_mode.proxy_unsupported": {
+        "it": "{count} policy in modalita' «proxy» su apparato 2GB RAM (FortiOS 7.4.4+): passare a «flow».",
+        "en": "{count} polic(ies) in «proxy» mode on 2GB RAM unit (FortiOS 7.4.4+): switch to «flow».",
+    },
+    "fos.insp_mode.proxy": {
+        "it": "{count} policy in modalita' «proxy» invece di «flow» (bypassano l'accelerazione single-pass CP9).",
+        "en": "{count} polic(ies) in «proxy» mode instead of «flow» (bypass CP9 single-pass acceleration).",
+    },
+    "fos.insp_mode.ok": {
+        "it": "Tutte le policy operano in modalita' flow-based.",
+        "en": "All policies operate in flow-based mode.",
+    },
+    "fos.bypass_scope.broad": {
+        "it": "{count} policy di bypass offload prive di profili UTM con indirizzi o servizi troppo ampi.",
+        "en": "{count} UTM-less offload bypass polic(ies) with overly broad addresses or services.",
+    },
+    "fos.bypass_scope.ok": {
+        "it": "Le policy di bypass offload hanno perimetro ristretto.",
+        "en": "Offload bypass policies use narrow source/destination/service scopes.",
+    },
+    "fos.sip_helper.no_section": {
+        "it": "Sezione «config system session-helper» assente.",
+        "en": "«config system session-helper» section absent.",
+    },
+    "fos.sip_helper.enabled": {
+        "it": "{count} session-helper SIP attivo: il traffico VoIP corrispondente resta su CPU invece che su NPU.",
+        "en": "{count} SIP session-helper active: matching VoIP traffic stays on CPU instead of NPU.",
+    },
+    "fos.sip_helper.ok": {
+        "it": "Nessun session-helper SIP attivo.",
+        "en": "No active SIP session-helper.",
+    },
+
     # --- Cisco IOS: base --------------------------------------------------
     "ios.empty": {
         "it": "Configurazione vuota o non riconosciuta come Cisco IOS.",

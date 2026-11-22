@@ -54,12 +54,12 @@ the standard that cites it.
 
 from typing import Any, Dict, List, Optional
 
-from . import cis_fortigate, cis_ios, cis_ubuntu, fortios_76, nist, pci
+from . import cis_fortigate, cis_ios, cis_ubuntu, fortios_76, fortios_l7_spu, nist, pci
 from .multivendor import cis_panos, cis_junos, cis_nxos, iec62443_ot
 from .vendors import FORTIOS, IOS, JUNOS, LINUX, NXOS, OT_SWITCH, PANOS
 
-_MODULES = (cis_fortigate, cis_ios, cis_ubuntu, fortios_76, nist, pci,
-            cis_panos, cis_junos, cis_nxos, iec62443_ot)
+_MODULES = (cis_fortigate, cis_ios, cis_ubuntu, fortios_76, fortios_l7_spu,
+            nist, pci, cis_panos, cis_junos, cis_nxos, iec62443_ot)
 
 BENCHMARKS: Dict[str, List[Dict[str, Any]]] = {m.KEY: m.RULES for m in _MODULES}
 BENCHMARK_TITLES: Dict[str, str] = {m.KEY: m.TITLE for m in _MODULES}

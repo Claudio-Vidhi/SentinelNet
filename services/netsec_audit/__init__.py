@@ -25,6 +25,8 @@ sta lavorando — per questo ``lang`` e' un parametro, non una preferenza global
 
 from typing import Any, Dict, List, Optional
 
+from services.fortigate_hw_profiles import profile_to_dict, resolve_profile
+
 from .benchmarks import (BENCHMARK_GROUPS, BENCHMARK_TITLES, BENCHMARKS, FORTIOS,
                          IOS, JUNOS, LINUX, NXOS, OT_SWITCH, PANOS, cis_for)
 from .guidance import guidance_for
@@ -173,12 +175,18 @@ def run_netsec_audit(config_text: Optional[str] = None,
     # config, NIST on a Linux host) yields an empty matrix that looks like
     # "nothing to report". Name the benchmark that does apply instead.
     suggested = cis_for(vendor) if (vendor and not applicable) else None
+    hw_profile = (
+        profile_to_dict(resolve_profile(*getattr(cfg, "header", ("", ""))), code)
+        if (vendor or FORTIOS) == FORTIOS
+        else None
+    )
     return {
         "benchmark": key,
         "benchmark_title": BENCHMARK_TITLES.get(key, key.upper()),
         "lang": code,
         "vendor": vendor,
         "suggested_benchmark": suggested,
+        "hardware_profile": hw_profile,
         "score": score,
         "summary": summary,
         "rules": evaluated,

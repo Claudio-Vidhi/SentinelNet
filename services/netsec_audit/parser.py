@@ -15,6 +15,7 @@ righe malformate vengono saltati, mai sollevati.
 from typing import Dict, List, NamedTuple, Optional, Set, Tuple
 
 from fw_analyzers.fortios import _forti_tokens
+from services.fortigate_hw_profiles import parse_config_header
 
 
 class ConfigRecord(NamedTuple):
@@ -31,14 +32,18 @@ class ParsedConfig(NamedTuple):
     # Ogni path di blocco incontrato, anche se privo di 'set'. Serve a
     # distinguere "sezione assente" (UNKNOWN) da "sezione presente e vuota".
     sections: Set[Tuple[str, ...]]
+    header: Tuple[str, str] = ("", "")
 
 
 def parse_with_lines(text: Optional[str]) -> ParsedConfig:
     records: List[ConfigRecord] = []
     sections: Set[Tuple[str, ...]] = set()
     stack: List[str] = []
+    header: Tuple[str, str] = ("", "")
     for lineno, raw in enumerate((text or "").splitlines(), start=1):
         s = raw.strip()
+        if not header[0] and s.lower().startswith("#config-version="):
+            header = parse_config_header(s)
         if not s or s.startswith("#"):
             continue
         low = s.lower()
@@ -64,7 +69,7 @@ def parse_with_lines(text: Optional[str]) -> ParsedConfig:
                     ))
         except Exception:
             continue
-    return ParsedConfig(records=records, sections=sections)
+    return ParsedConfig(records=records, sections=sections, header=header)
 
 
 def _parts(section: str) -> Tuple[str, ...]:

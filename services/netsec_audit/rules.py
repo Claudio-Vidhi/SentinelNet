@@ -19,6 +19,8 @@ Benchmark v1.0.1*; il numero di raccomandazione di ogni regola sta in
 
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from services.fortigate_hw_profiles import resolve_profile
+
 from .model import (FAIL, PASS, UNKNOWN, WARN, Evidence, RuleOutcome, absent)
 from .parser import (ConfigRecord, ParsedConfig, section_entries,
                      section_present, setting)
@@ -1214,3 +1216,247 @@ def check_deny_match_vip(cfg: ParsedConfig) -> RuleOutcome:
         return RuleOutcome(WARN, "fos.match_vip.disabled", ev,
                            {"count": len(ev)})
     return RuleOutcome(PASS, "fos.match_vip.ok")
+
+
+# =============================================================================
+# FortiGate L7 Security, IPS/SSL Tuning & SPU/NPU Offload Checks
+# =============================================================================
+
+_L7_UTM_PROFILES = (
+    "av-profile", "ips-sensor", "webfilter-profile",
+    "application-list", "file-filter-profile", "emailfilter-profile",
+)
+_WEAK_SSL_INSPECT_VERSIONS = {"ssl-3.0", "tls-1.0", "tls-1.1"}
+_GENERIC_IPS_SENSORS = {"default", "high_security", "all_default", "all_default_pass"}
+
+
+def check_inbound_vip_l7_profiles(cfg: ParsedConfig) -> RuleOutcome:
+    """Inbound WAN-to-VIP accept policies protected by an IPS sensor."""
+    vips = (
+        {n.lower() for n in section_entries(cfg, "firewall vip")}
+        | {n.lower() for n in section_entries(cfg, "firewall vipgrp")}
+    )
+    wan = {w.lower() for w in wan_interfaces(cfg)}
+    if not vips or not wan or not section_entries(cfg, "firewall policy"):
+        return RuleOutcome(UNKNOWN, "fos.vip_l7.none")
+
+    matched = 0
+    ev: List[Evidence] = []
+    for pid, recs in _accept_policies(cfg):
+        vals = _policy_values(recs)
+        if "disable" in vals.get("status", []):
+            continue
+        if not (set(vals.get("srcintf", [])) & wan and set(vals.get("dstaddr", [])) & vips):
+            continue
+        matched += 1
+        if "ips-sensor" not in vals or "disable" in vals.get("utm-status", []):
+            line, raw = _policy_line(recs)
+            ev.append(Evidence(line, raw, _ctx("firewall policy", pid)))
+
+    if matched == 0:
+        return RuleOutcome(UNKNOWN, "fos.vip_l7.none")
+    if ev:
+        return RuleOutcome(WARN, "fos.vip_l7.missing", ev, {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.vip_l7.ok")
+
+
+def check_dos_policy_wan_coverage(cfg: ParsedConfig) -> RuleOutcome:
+    """Active DoS policy covering at least one WAN interface."""
+    wan = {w.lower() for w in wan_interfaces(cfg)}
+    if not wan:
+        return RuleOutcome(UNKNOWN, "fos.dos_wan.no_wan")
+
+    entries = {
+        **section_entries(cfg, "firewall dos-policy"),
+        **section_entries(cfg, "firewall DoS-policy"),
+    }
+    for recs in entries.values():
+        vals = _policy_values(recs)
+        if "disable" in vals.get("status", []):
+            continue
+        if set(vals.get("interface", [])) & (wan | {"any"}):
+            return RuleOutcome(PASS, "fos.dos_wan.ok")
+
+    return RuleOutcome(
+        WARN, "fos.dos_wan.missing",
+        [absent("ev.no_block", "firewall DoS-policy",
+                what="config firewall DoS-policy")],
+    )
+
+
+def check_ssl_inspection_profile(cfg: ParsedConfig) -> RuleOutcome:
+    """SSL/SSH inspection assigned to UTM policies and TLS/certificate hardening."""
+    policies = section_entries(cfg, "firewall policy")
+    profiles = section_entries(cfg, "firewall ssl-ssh-profile")
+    if not policies and not profiles:
+        return RuleOutcome(UNKNOWN, "fos.ssl_inspect.no_section")
+
+    ev: List[Evidence] = []
+    for pid, recs in _accept_policies(cfg):
+        vals = _policy_values(recs)
+        if "disable" in vals.get("status", []) or "disable" in vals.get("utm-status", []):
+            continue
+        if not any(k in vals for k in _L7_UTM_PROFILES):
+            continue
+        ssl_prof = vals.get("ssl-ssh-profile", [])
+        if not ssl_prof or "no-inspection" in ssl_prof:
+            line, raw = _policy_line(recs)
+            ev.append(Evidence(line, raw, _ctx("firewall policy", pid)))
+
+    profile_mode: Dict[str, str] = {}
+    profile_cert: Dict[str, ConfigRecord] = {}
+    for r in _records_under(cfg, "firewall ssl-ssh-profile"):
+        if r.key == "min-allowed-ssl-version" and (
+            {v.lower() for v in r.values} & _WEAK_SSL_INSPECT_VERSIONS
+        ):
+            ev.append(_ev1(r, *r.path))
+        elif len(r.path) == 2:
+            pname = r.path[1]
+            if r.key == "server-cert-mode" and r.values:
+                profile_mode[pname] = r.values[0].lower()
+            elif r.key == "server-cert":
+                profile_cert[pname] = r
+
+    for pname, mode in sorted(profile_mode.items()):
+        if mode != "replace":
+            continue
+        cert_rec = profile_cert.get(pname)
+        if cert_rec is not None and cert_rec.values and cert_rec.values[0].lower() in _FACTORY_CERTS:
+            ev.append(_ev1(cert_rec, *cert_rec.path))
+
+    if ev:
+        return RuleOutcome(WARN, "fos.ssl_inspect.weak", ev, {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.ssl_inspect.ok")
+
+
+def check_ips_sensor_optimization(cfg: ParsedConfig) -> RuleOutcome:
+    """IPS sensor tuning: disable packet logging and avoid generic sensors on VIPs/2GB units."""
+    sensors = section_entries(cfg, "ips sensor")
+    ips_pols = []
+    for pid, recs in _accept_policies(cfg):
+        vals = _policy_values(recs)
+        if "disable" in vals.get("status", []) or "disable" in vals.get("utm-status", []):
+            continue
+        if "ips-sensor" in vals:
+            ips_pols.append((pid, recs, vals))
+
+    if not sensors and not ips_pols:
+        return RuleOutcome(UNKNOWN, "fos.ips_opt.none")
+
+    ev: List[Evidence] = []
+    for r in _records_under(cfg, "ips sensor"):
+        if r.key == "log-packet" and "enable" in [v.lower() for v in r.values]:
+            ev.append(_ev1(r, *r.path))
+
+    wan = {w.lower() for w in wan_interfaces(cfg)}
+    vips = (
+        {n.lower() for n in section_entries(cfg, "firewall vip")}
+        | {n.lower() for n in section_entries(cfg, "firewall vipgrp")}
+    )
+    is_2gb = resolve_profile(*cfg.header).ram_tier == "2gb"
+
+    for pid, recs, vals in ips_pols:
+        sensor_vals = vals.get("ips-sensor", [])
+        sensor_name = sensor_vals[0] if sensor_vals else ""
+        is_wan_vip = bool(
+            wan and vips
+            and (set(vals.get("srcintf", [])) & wan)
+            and (set(vals.get("dstaddr", [])) & vips)
+        )
+        if (is_wan_vip and sensor_name in _GENERIC_IPS_SENSORS) or (
+            is_2gb and sensor_name in {"high_security", "all_default"}
+        ):
+            ips_rec = next((r for r in recs if r.key == "ips-sensor"), None)
+            if ips_rec is not None:
+                ev.append(_ev1(ips_rec, "firewall policy", pid))
+            else:
+                line, raw = _policy_line(recs)
+                ev.append(Evidence(line, raw, _ctx("firewall policy", pid)))
+
+    if ev:
+        return RuleOutcome(WARN, "fos.ips_opt.suboptimal", ev, {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.ips_opt.ok")
+
+
+def check_policy_asic_offload(cfg: ParsedConfig) -> RuleOutcome:
+    """Hardware ASIC offload enabled on firewall accept policies (non-VM units)."""
+    if resolve_profile(*cfg.header).is_vm:
+        return RuleOutcome(UNKNOWN, "fos.asic_offload.vm_na")
+    if not section_entries(cfg, "firewall policy"):
+        return RuleOutcome(UNKNOWN, "fos.policy.no_section")
+
+    ev: List[Evidence] = []
+    for pid, recs in _accept_policies(cfg):
+        vals = _policy_values(recs)
+        if "disable" in vals.get("status", []):
+            continue
+        for r in recs:
+            if r.key == "auto-asic-offload" and r.values and r.values[0].lower() == "disable":
+                ev.append(_ev1(r, "firewall policy", pid))
+
+    if ev:
+        return RuleOutcome(WARN, "fos.asic_offload.disabled", ev, {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.asic_offload.ok")
+
+
+def check_policy_inspection_mode(cfg: ParsedConfig) -> RuleOutcome:
+    """Flow-based inspection mode preferred for single-pass CP9 hardware acceleration."""
+    if not section_entries(cfg, "firewall policy"):
+        return RuleOutcome(UNKNOWN, "fos.policy.no_section")
+
+    ev: List[Evidence] = []
+    for pid, recs in _accept_policies(cfg):
+        vals = _policy_values(recs)
+        if "disable" in vals.get("status", []):
+            continue
+        for r in recs:
+            if r.key == "inspection-mode" and r.values and r.values[0].lower() == "proxy":
+                ev.append(_ev1(r, "firewall policy", pid))
+
+    if ev:
+        if resolve_profile(*cfg.header).proxy_removed_2gb:
+            return RuleOutcome(FAIL, "fos.insp_mode.proxy_unsupported", ev, {"count": len(ev)})
+        return RuleOutcome(WARN, "fos.insp_mode.proxy", ev, {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.insp_mode.ok")
+
+
+def check_policy_bypass_scope(cfg: ParsedConfig) -> RuleOutcome:
+    """Offloaded bypass policies without UTM profiles must use narrow addresses and services."""
+    if not section_entries(cfg, "firewall policy"):
+        return RuleOutcome(UNKNOWN, "fos.policy.no_section")
+
+    ev: List[Evidence] = []
+    for pid, recs in _accept_policies(cfg):
+        vals = _policy_values(recs)
+        if "disable" in vals.get("status", []):
+            continue
+        if any(k in vals for k in _SECURITY_PROFILES):
+            continue
+        if "enable" not in vals.get("auto-asic-offload", []):
+            continue
+        if (
+            (set(vals.get("srcaddr", [])) & _ANY_ADDR)
+            or (set(vals.get("dstaddr", [])) & _ANY_ADDR)
+            or (set(vals.get("service", [])) & _ANY_SERVICE)
+        ):
+            line, raw = _policy_line(recs)
+            ev.append(Evidence(line, raw, _ctx("firewall policy", pid)))
+
+    if ev:
+        return RuleOutcome(WARN, "fos.bypass_scope.broad", ev, {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.bypass_scope.ok")
+
+
+def check_sip_session_helper(cfg: ParsedConfig) -> RuleOutcome:
+    """SIP session-helper/ALG active: keeps matching VoIP traffic on CPU instead of NPU."""
+    if not section_present(cfg, "system session-helper"):
+        return RuleOutcome(UNKNOWN, "fos.sip_helper.no_section")
+    helpers = section_entries(cfg, "system session-helper")
+    ev: List[Evidence] = []
+    for hid in sorted(helpers, key=lambda k: (len(k), k)):
+        for r in helpers[hid]:
+            if r.key == "name" and "sip" in [v.lower() for v in r.values]:
+                ev.append(_ev1(r, "system session-helper", hid))
+    if ev:
+        return RuleOutcome(WARN, "fos.sip_helper.enabled", ev, {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.sip_helper.ok")

@@ -2351,6 +2351,146 @@ GUIDANCE: Dict[str, Dict[str, Dict[str, str]]] = {
         "default": {"it": "enable sulle nuove deny da 7.2.4.",
                     "en": "enable on new deny policies from 7.2.4."},
     },
+    "check_inbound_vip_l7_profiles": {
+        "why": {
+            "it": "Esporre un server via Virtual IP senza IPS espone le "
+                  "applicazioni pubblicate (HTTP/HTTPS, API) ad exploit diretti "
+                  "sulle porte consentite.",
+            "en": "Publishing a server via a Virtual IP without IPS exposes "
+                  "web applications and services to direct Layer-7 exploits on "
+                  "allowed ports.",
+        },
+        "impact": {
+            "it": "Attivare prima in modalita' Monitor con un sensore IPS "
+                  "mirato (location=server, OS e app reali) per verificare "
+                  "eventuali falsi positivi.",
+            "en": "Start in Monitor mode with a targeted IPS sensor "
+                  "(location=server, matching OS and app) to validate false "
+                  "positives before blocking.",
+        },
+        "default": {"it": "Nessun profilo UTM assegnato alle nuove policy.",
+                    "en": "No UTM profile attached to new policies."},
+    },
+    "check_dos_policy_wan_coverage": {
+        "why": {
+            "it": "Senza DoS policy sulla WAN, SYN flood o port scan esposti "
+                  "ai VIP consumano la tabella sessioni e la CPU dell'apparato.",
+            "en": "Without a WAN DoS policy, SYN floods or scans hitting "
+                  "exposed VIPs can exhaust the session table and CPU.",
+        },
+        "impact": {
+            "it": "Configurare le soglie prima in azione Monitor per tarare "
+                  "i picchi legittimi di traffico prima di passare a Block.",
+            "en": "Deploy thresholds in Monitor action first to baseline "
+                  "legitimate traffic bursts before enabling Block.",
+        },
+    },
+    "check_ssl_inspection_profile": {
+        "why": {
+            "it": "Senza ssl-ssh-profile i motori IPS/AV/WebFilter non vedono "
+                  "il payload HTTPS cifrato; versioni TLS < 1.2 o certificati "
+                  "di fabbrica su Protecting SSL Server indeboliscono la sessione.",
+            "en": "Without ssl-ssh-profile, IPS/AV/WebFilter cannot inspect "
+                  "encrypted HTTPS payloads; TLS < 1.2 or factory certs on "
+                  "Protecting SSL Server weaken transport security.",
+        },
+        "impact": {
+            "it": "certificate-inspection ha impatto nullo sui client; "
+                  "deep-inspection outbound richiede distribuzione della CA e "
+                  "esenzioni per finanza/sanita'/certificate pinning; inbound "
+                  "richiede certificato e chiave privata del server sul FortiGate.",
+            "en": "certificate-inspection has zero client impact; outbound "
+                  "deep-inspection requires endpoint CA trust and exemptions "
+                  "for finance/health/pinned apps; inbound requires uploading "
+                  "the server certificate and key to FortiGate.",
+        },
+        "default": {"it": "no-inspection se omesso; certificate-inspection consigliato come minimo.",
+                    "en": "no-inspection when omitted; certificate-inspection recommended minimum."},
+    },
+    "check_ips_sensor_optimization": {
+        "why": {
+            "it": "log-packet attiva la cattura pacchetti su disco/CPU per ogni "
+                  "evento; sensori generici ('default', 'high_security') su VIP "
+                  "o apparati 2GB RAM caricano migliaia di firme inutili.",
+            "en": "log-packet records raw packet captures on CPU/disk per event; "
+                  "generic sensors ('default', 'high_security') on VIPs or 2GB "
+                  "units load unnecessary signatures.",
+        },
+        "impact": {
+            "it": "Filtrare per location (client/server), OS, applicazione e "
+                  "severity riduce RAM/CPU e falsi positivi senza ridurre la "
+                  "protezione sui servizi reali.",
+            "en": "Scoping signatures by location, OS, application, and "
+                  "severity lowers RAM/CPU usage and false positives while "
+                  "keeping real services protected.",
+        },
+    },
+    "check_policy_asic_offload": {
+        "why": {
+            "it": "Disabilitare auto-asic-offload forza il forwarding L2-L4 "
+                  "sulla CPU generale bypassando l'NPU (no_ofld_reason=npu-disabled).",
+            "en": "Disabling auto-asic-offload forces L2-L4 packet forwarding "
+                  "onto the main CPU instead of the NPU (no_ofld_reason=npu-disabled).",
+        },
+        "impact": {
+            "it": "Riabilitarlo ripristina il throughput ASIC; lasciarlo "
+                  "disabilitato solo temporaneamente per troubleshooting mirato.",
+            "en": "Re-enabling restores ASIC line-rate throughput; keep disabled "
+                  "only temporarily during targeted troubleshooting.",
+        },
+        "default": {"it": "enable.", "en": "enable."},
+    },
+    "check_policy_inspection_mode": {
+        "why": {
+            "it": "La modalita' flow-based usa il motore single-pass e "
+                  "l'accelerazione hardware CP9; proxy-based trattiene i flussi "
+                  "su CPU e non e' piu' supportata su modelli 2GB da FortiOS 7.4.4+.",
+            "en": "Flow-based mode leverages the single-pass engine and CP9 "
+                  "hardware acceleration; proxy-based holds flows in CPU and "
+                  "is removed on 2GB models from FortiOS 7.4.4+.",
+        },
+        "impact": {
+            "it": "Verificare prima che la policy non usi funzioni esclusivamente "
+                  "proxy-based (es. ICAP o HTTP header rewrite avanzati).",
+            "en": "Verify the policy does not rely on proxy-only features (such "
+                  "as ICAP or advanced HTTP header rewrites) before switching.",
+        },
+        "default": {"it": "flow.", "en": "flow."},
+    },
+    "check_policy_bypass_scope": {
+        "why": {
+            "it": "Una policy senza UTM con offload esplicito pensata per backup "
+                  "o repliche non deve mai coprire subnet intere o service ALL, "
+                  "altrimenti apre un corridoio non ispezionato.",
+            "en": "A UTM-less offload bypass rule intended for backups or DB "
+                  "sync must never match broad subnets or service ALL, as it "
+                  "creates an uninspected fast-path.",
+        },
+        "impact": {
+            "it": "Restringere sorgente e destinazione a host /32 e alle sole "
+                  "porte applicative necessarie.",
+            "en": "Restrict source and destination to /32 host objects and "
+                  "exact required ports.",
+        },
+    },
+    "check_sip_session_helper": {
+        "why": {
+            "it": "Il session-helper SIP (ALG) forza l'ispezione in CPU "
+                  "(no_ofld_reason=helper) impedendo l'offload hardware e "
+                  "causando spesso problemi di audio unidirezionale su VoIP.",
+            "en": "The SIP session-helper (ALG) traps matching traffic on CPU "
+                  "(no_ofld_reason=helper), preventing NPU offload and often "
+                  "causing one-way audio issues.",
+        },
+        "impact": {
+            "it": "Prima di rimuoverlo verificare che PBX o SIP trunk non "
+                  "dipendano dal NAT payload rewriting svolto dal firewall.",
+            "en": "Before removing, confirm your PBX or SIP trunks do not rely "
+                  "on firewall SIP payload NAT rewriting.",
+        },
+        "default": {"it": "Attivo di default (voce SIP nella tabella session-helper).",
+                    "en": "Enabled by default (SIP entry in session-helper table)."},
+    },
     "check_panos_mgmt_https": {
         "why": {"it": "Profili di gestione con HTTP o Telnet espongono credenziali e token di sessione in chiaro.",
                 "en": "Management profiles with HTTP or Telnet expose credentials and session tokens in cleartext."},
