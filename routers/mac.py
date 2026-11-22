@@ -18,7 +18,10 @@ from collectors import mac_collector
 from collectors import mac_history
 from security import command_policy
 from security.security_manager import log_audit
-from routers.deps import get_current_user, require_operator, require_admin, require_unscoped_admin, user_group_scope, assert_group_allowed, assert_device_allowed
+from routers.deps import (
+    get_current_user, require_operator, require_admin, require_unscoped_admin,
+    select_scan_targets, user_group_scope, assert_group_allowed, assert_device_allowed,
+)
 
 router = APIRouter(dependencies=[Depends(require_tab("tab-endpoint"))], tags=["MAC"])
 
@@ -114,25 +117,8 @@ def _mac_group(rows):
 async def mac_scan(payload: MacScanSchema, current_user = Depends(require_operator)):
     """Raccoglie la MAC-table degli apparati selezionati (scoped per tenant) e la
     storicizza. Manuale, parallelizzato; al termine applica la retention."""
-    scope = user_group_scope(current_user)
-    devices = inventory_manager.get_all_devices()
-
-    # Insieme di IP richiesti esplicitamente (singolo 'ip' e/o multi-selezione 'ips').
-    want_ips = set(payload.ips or [])
-    if payload.ip:
-        want_ips.add(payload.ip)
-
-    def allowed(d):
-        g = d.get("Group") or ""
-        if scope is not None and g not in scope:
-            return False
-        if payload.group and payload.group != "all" and g != payload.group:
-            return False
-        if want_ips and d["IP"] not in want_ips:
-            return False
-        return True
-
-    targets = [d for d in devices if allowed(d)]
+    targets = select_scan_targets(current_user, group=payload.group,
+                                  ip=payload.ip, ips=payload.ips)
     if not targets:
         raise HTTPException(status_code=404, detail="Nessun dispositivo idoneo per la scansione MAC.")
 

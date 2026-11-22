@@ -13,7 +13,7 @@ REGOLA (CONTRIBUTING.md §4): lo scope utente è un SET di gruppi
 (``user_group_scope`` → set | None). Mai ridurlo a un singolo gruppo scalare.
 """
 
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import Depends, HTTPException, Request, Security, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -148,6 +148,29 @@ def devices_in_scope(current_user) -> list:
     if scope is None:
         return devices
     return [d for d in devices if d.get("Group") in scope]
+
+
+def select_scan_targets(current_user, group: Optional[str] = None,
+                        ip: Optional[str] = None,
+                        ips: Optional[List[str]] = None) -> list:
+    """Filter inventory devices for ARP/MAC scans by tenant scope, group, and IPs."""
+    scope = user_group_scope(current_user)
+    devices = inventory_manager.get_all_devices()
+    want_ips = set(ips or [])
+    if ip:
+        want_ips.add(ip)
+
+    def _allowed(d: dict) -> bool:
+        g = d.get("Group") or ""
+        if scope is not None and g not in scope:
+            return False
+        if group and group != "all" and g != group:
+            return False
+        if want_ips and d["IP"] not in want_ips:
+            return False
+        return True
+
+    return [d for d in devices if _allowed(d)]
 
 
 def assert_group_allowed(current_user, group):

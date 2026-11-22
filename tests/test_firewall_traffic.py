@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 # Nessun SENTINELNET_DATA_DIR nostro: conftest.py ha gia' scelto quello della
 # suite. Vedi la stessa nota in test_route_table.py.
 import app_server  # noqa: E402
+from core import db  # noqa: E402
 from security import user_manager  # noqa: E402
 from services import firewall_traffic, fortigate_service  # noqa: E402
 
@@ -114,6 +115,7 @@ class SingleDeviceCollection(unittest.TestCase):
 class PolicyTrafficApi(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        db.migrate()
         for user, role, groups in (("adm_ft", "admin", None),
                                    ("op_a_ft", "operator", ["sede-a"])):
             try:

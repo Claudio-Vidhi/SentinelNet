@@ -15,7 +15,9 @@ from core.ssh_pool import run_ssh
 from observability import endpoints
 from routers.mac import MacScanSchema
 from security.security_manager import log_audit
-from routers.deps import get_current_user, require_operator, user_group_scope
+from routers.deps import (
+    get_current_user, require_operator, select_scan_targets, user_group_scope,
+)
 
 router = APIRouter(tags=["ARP"])
 
@@ -28,24 +30,8 @@ async def arp_scan(payload: MacScanSchema, current_user = Depends(require_operat
     e storicizza i binding MAC<->IP. Nel mondo reale il gateway di una VLAN
     può essere uno switch L3 o un firewall: si interroga tutto ciò che è
     selezionato; chi non ruota VLAN torna vuoto ('empty'), non è un errore."""
-    scope = user_group_scope(current_user)
-    devices = inventory_manager.get_all_devices()
-
-    want_ips = set(payload.ips or [])
-    if payload.ip:
-        want_ips.add(payload.ip)
-
-    def allowed(d):
-        g = d.get("Group") or ""
-        if scope is not None and g not in scope:
-            return False
-        if payload.group and payload.group != "all" and g != payload.group:
-            return False
-        if want_ips and d["IP"] not in want_ips:
-            return False
-        return True
-
-    targets = [d for d in devices if allowed(d)]
+    targets = select_scan_targets(current_user, group=payload.group,
+                                  ip=payload.ip, ips=payload.ips)
     if not targets:
         raise HTTPException(status_code=404, detail="Nessun dispositivo idoneo per la scansione ARP.")
 

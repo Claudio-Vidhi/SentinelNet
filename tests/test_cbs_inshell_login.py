@@ -45,6 +45,11 @@ class InShellLogin(unittest.TestCase):
         with self.assertRaises(net_ssh.NetmikoAuthenticationException):
             conn.special_login_handler()
 
+    def test_get_ssh_client_instance_returns_fallback_client(self):
+        conn = net_ssh.CiscoS300InShellLogin.__new__(net_ssh.CiscoS300InShellLogin)
+        self.assertIsInstance(conn._get_ssh_client_instance(), net_ssh._PasswordThenNoneClient)
+        self.assertIs(net_ssh.CLASS_MAPPER["cisco_s300"], net_ssh.CiscoS300InShellLogin)
+
 
 if __name__ == "__main__":
     unittest.main()
