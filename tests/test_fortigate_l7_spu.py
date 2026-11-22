@@ -418,6 +418,31 @@ end
 """)
         self.assertEqual(PASS, rules.check_policy_bypass_scope(narrow).status)
 
+    def test_policy_bypass_scope_default_offload(self):
+        # A plain `show` backup omits auto-asic-offload (default enable).
+        implicit = _cfg("""config firewall policy
+    edit 1
+        set srcaddr "all"
+        set dstaddr "all"
+        set service "ALL"
+        set action accept
+    next
+end
+""")
+        self.assertEqual(WARN, rules.check_policy_bypass_scope(implicit).status)
+
+        not_offloaded = _cfg("""config firewall policy
+    edit 1
+        set srcaddr "all"
+        set dstaddr "all"
+        set service "ALL"
+        set action accept
+        set auto-asic-offload disable
+    next
+end
+""")
+        self.assertEqual(PASS, rules.check_policy_bypass_scope(not_offloaded).status)
+
     def test_sip_session_helper(self):
         self.assertEqual(UNKNOWN, rules.check_sip_session_helper(_cfg("config system global\nend\n")).status)
         with_sip = _cfg("""config system session-helper

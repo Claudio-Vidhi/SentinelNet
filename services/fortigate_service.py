@@ -389,25 +389,31 @@ def _parse_system_status_cli(out: str) -> dict:
     return info
 
 
+def _profile_for(device: dict, status: dict) -> FortiGateHWProfile:
+    """Resolve the hardware profile from a system-status dict.
+
+    REST ``monitor/system/status`` returns ``model_name: "FortiGate"`` (the
+    product line) next to ``model: "FGT60F"``: ``model_name`` alone always
+    resolves to the generic profile, so it is the last resort, not the first.
+    """
+    model = (
+        status.get("model")
+        or status.get("model_number")
+        or status.get("platform_name")
+        or device.get("Model")
+        or status.get("model_name")
+        or ""
+    )
+    version = status.get("version") or device.get("Version") or ""
+    serial = status.get("serial") or ""
+    return resolve_profile(model=str(model), version=str(version), serial=str(serial))
+
+
 def _attach_hardware_profile(device: dict, payload: Any, lang: str = "it") -> Any:
     """Attach resolved ``hardware_profile`` metadata to a status dict."""
     if not isinstance(payload, dict):
         return payload
-    model = (
-        payload.get("model_name")
-        or payload.get("model")
-        or payload.get("platform_name")
-        or (device.get("Model") if isinstance(device, dict) else "")
-        or ""
-    )
-    version = (
-        payload.get("version")
-        or (device.get("Version") if isinstance(device, dict) else "")
-        or ""
-    )
-    serial = payload.get("serial") or ""
-    prof = resolve_profile(model=str(model), version=str(version), serial=str(serial))
-    payload["hardware_profile"] = profile_to_dict(prof, lang=lang)
+    payload["hardware_profile"] = profile_to_dict(_profile_for(device, payload), lang=lang)
     return payload
 
 
@@ -1515,22 +1521,7 @@ def get_firewall_advisor(device, lang: str = "it") -> dict:
     except FortiGateError as e:
         errors["security_profiles"] = str(e)
 
-    model = (
-        status_data.get("model_name")
-        or status_data.get("model")
-        or status_data.get("platform_name")
-        or (device.get("Model") if isinstance(device, dict) else "")
-        or ""
-    )
-    version = (
-        status_data.get("version")
-        or (device.get("Version") if isinstance(device, dict) else "")
-        or ""
-    )
-    serial = status_data.get("serial") or ""
-    profile: FortiGateHWProfile = resolve_profile(
-        model=str(model), version=str(version), serial=str(serial),
-    )
+    profile = _profile_for(device, status_data)
 
     recs: list[Dict[str, Any]] = []
 
@@ -1547,6 +1538,20 @@ def get_firewall_advisor(device, lang: str = "it") -> dict:
             "detail": detail_en if en else detail_it,
             "cli": cli,
         })
+
+    # Move target per policy: the first enabled accept after the nearest
+    # enabled non-accept above it. Jumping a deny would open what it blocks.
+    order_target: Dict[str, str] = {}
+    anchor = ""
+    for row in policies:
+        if str(row.get("status") or "enable").strip().lower() == "disable":
+            continue
+        rpid = str(row.get("policyid") if row.get("policyid") is not None else "")
+        if str(row.get("action") or "").strip().lower() == "accept":
+            anchor = anchor or rpid
+        else:
+            anchor = ""
+        order_target[rpid] = anchor
 
     for idx, row in enumerate(policies):
         action = str(row.get("action") or "").strip().lower()
@@ -1659,13 +1664,18 @@ def get_firewall_advisor(device, lang: str = "it") -> dict:
                     f"config firewall policy\n    edit {pid}\n        set srcaddr <host_32>\n        set dstaddr <host_32>\n        set service <specific_port>\n    next\nend",
                 )
 
-        if idx >= 5 and int(row.get("bytes") or 0) >= _BYPASS_TOP_BYTES:
+        target = order_target.get(pid, "")
+        if (idx >= 5 and target and target != pid
+                and int(row.get("bytes") or 0) >= _BYPASS_TOP_BYTES):
             add_rec(
                 f"ADV-ORDER-{pid}", "INFO", "Policy Order", pid, pname,
                 "Policy ad alto volume in posizione bassa",
                 "High-volume policy positioned low in table",
-                "Regola oltre la 5a posizione con traffico >= 100 MB: valutare spostamento in cima o bypass /32 dedicato per sfruttare first-match.",
-                "Rule sits below position 5 with >= 100 MB traffic: consider moving higher or creating a /32 fast-path bypass for first-match efficiency.",
+                f"Regola oltre la 5a posizione con traffico >= 100 MB: valutare lo spostamento prima della policy {target} "
+                "(nessuna deny attraversata; verificare le accept sovrapposte per NAT/UTM) o un bypass /32 dedicato.",
+                f"Rule sits below position 5 with >= 100 MB traffic: consider moving it before policy {target} "
+                "(no deny rule crossed; review overlapping accepts for NAT/UTM changes) or a dedicated /32 bypass.",
+                f"config firewall policy\n    move {pid} before {target}\nend",
             )
 
     if profile_errors:

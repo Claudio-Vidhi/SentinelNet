@@ -794,6 +794,7 @@ class L7PoliciesSessionsAndAdvisorTest(unittest.TestCase):
         self.assertIn("ADV-IPS-1", ids)
         self.assertIn("ADV-BYPASS-3", ids)
         self.assertEqual(ids["ADV-ORDER-6"]["severity"], "INFO")
+        self.assertIn("move 6 before 1", ids["ADV-ORDER-6"]["cli"])
         self.assertEqual(ids["ADV-PROFILES-UNAVAIL"]["severity"], "INFO")
         self.assertNotEqual(res_it["data"]["recommendations"][0]["title"],
                             res_en["data"]["recommendations"][0]["title"])
@@ -807,6 +808,34 @@ class L7PoliciesSessionsAndAdvisorTest(unittest.TestCase):
         vm_ids = {r["id"] for r in vm_res["data"]["recommendations"]}
         self.assertNotIn("ADV-OFFLOAD-1", vm_ids)
         self.assertEqual(vm_res["data"]["sniffer_syntax"], "none")
+
+        # A deny above the heavy rule bounds the move target: never jump it.
+        deny_at_3 = [dict(p) for p in policies]
+        deny_at_3[2]["action"] = "deny"
+        deny_at_5 = [dict(p) for p in policies]
+        deny_at_5[4]["action"] = "deny"
+        targets = {}
+        for name, pols in (("d3", deny_at_3), ("d5", deny_at_5)):
+            with mock.patch.object(fgs, "get_system_status", return_value={"data": {"model": "FGT60F"}}), \
+                 mock.patch.object(fgs, "get_policies_with_stats", return_value={"data": pols}), \
+                 mock.patch.object(fgs, "get_vips", return_value={"data": []}), \
+                 mock.patch.object(fgs, "get_security_profiles", return_value={"data": {}, "errors": {}}):
+                recs = fgs.get_firewall_advisor(DEVICE, lang="en")["data"]["recommendations"]
+            targets[name] = {r["id"]: r for r in recs}.get("ADV-ORDER-6")
+        self.assertIn("move 6 before 4", targets["d3"]["cli"])
+        self.assertIsNone(targets["d5"])
+
+        # Real REST status: model_name is the product line, model the SKU.
+        rest_status = {"model_name": "FortiGate", "model_number": "60F",
+                       "model": "FGT60F", "version": "7.4.5"}
+        with mock.patch.object(fgs, "get_system_status", return_value={"data": rest_status}), \
+             mock.patch.object(fgs, "get_policies_with_stats", return_value={"data": []}), \
+             mock.patch.object(fgs, "get_vips", return_value={"data": []}), \
+             mock.patch.object(fgs, "get_security_profiles", return_value={"data": {}, "errors": {}}):
+            rest_res = fgs.get_firewall_advisor(DEVICE, lang="en")
+        self.assertEqual(rest_res["data"]["hardware_profile"]["family"], "entry_2gb")
+        self.assertEqual(fgs._attach_hardware_profile(DEVICE, dict(rest_status))
+                         ["hardware_profile"]["family"], "entry_2gb")
 
 
 if __name__ == "__main__":

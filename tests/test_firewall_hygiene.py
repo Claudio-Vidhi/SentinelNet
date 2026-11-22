@@ -420,6 +420,36 @@ end
         self.assertIn("BYPASS_Veeam-Replica", b7["cli_dry_run"])
         self.assertIn("delete <new_id>", b7["cli_rollback"])
 
+    def _opt_candidates(self, cfg_text, host):
+        dev = {"IP": "192.0.2.211", "Hostname": host, "Vendor": "fortinet", "Group": "tenant-opt"}
+        now = int(time.time())
+        firewall_traffic.record_policy_snapshots(dev, [
+            {"policyid": "6", "name": "Heavy-Proxy", "hit_count": 1000, "bytes": 300_000_000},
+            {"policyid": "7", "name": "Veeam-Replica", "hit_count": 800, "bytes": 500_000_000},
+        ], ts=now - 60)
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg_path = os.path.join(tmp, f"{host}.cfg")
+            with open(cfg_path, "w", encoding="utf-8") as fh:
+                fh.write(cfg_text)
+            with mock.patch("ai.config_analyzer._find_freshest_backup", return_value=(cfg_path, "tenant-opt")):
+                res = firewall_traffic.analyze_hygiene([dev], window_days=30, now_ts=now)
+        return {(str(c["policyid"]), c["kind"]): c for c in res["optimization_candidates"]}
+
+    def test_reorder_never_jumps_a_deny(self):
+        # Deny at position 2: the move target is the first accept below it.
+        d2 = self._opt_candidates(self.OPT_CFG.replace(
+            'set name "Rule-2"\n        set action accept',
+            'set name "Rule-2"\n        set action deny'), "fw-opt-d2")
+        self.assertIn("move 6 before 3", d2[("6", "reorder_top")]["cli_dry_run"])
+        self.assertIn("move <new_id> before 3", d2[("7", "spu_bypass")]["cli_dry_run"])
+
+        # Deny right above 6: 6 cannot move at all, 7 may only go before 6.
+        d5 = self._opt_candidates(self.OPT_CFG.replace(
+            'set name "Rule-5"\n        set action accept',
+            'set name "Rule-5"\n        set action deny'), "fw-opt-d5")
+        self.assertNotIn(("6", "reorder_top"), d5)
+        self.assertIn("move 7 before 6", d5[("7", "reorder_top")]["cli_dry_run"])
+
 
 if __name__ == "__main__":
     unittest.main()

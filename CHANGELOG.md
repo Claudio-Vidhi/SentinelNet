@@ -10,6 +10,23 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Reorder suggestions never jump a deny**: Firewall Hygiene `reorder_top`,
+  the `spu_bypass` placement and the advisor's `ADV-ORDER` used to propose
+  moving a high-volume accept before the *first* accept of the table, crossing
+  any deny in between and opening what it blocked. The target is now the first
+  accept after the nearest deny above the rule (per ACL on IOS/NX-OS); a rule
+  with a deny right above it gets no reorder suggestion.
+- **FortiGate hardware profile on the REST path**: `monitor/system/status`
+  returns `model_name: "FortiGate"` next to `model: "FGT60F"`; reading
+  `model_name` first resolved every live unit to the generic profile, so the
+  advisor lost its 2GB/proxy and VM-specific findings.
+- **NetSec Audit `SPU-BYP`**: the check required an explicit
+  `auto-asic-offload enable`, which a plain `show` backup omits (it is the
+  default), so any/any/ALL UTM-less policies passed. Absent now counts as
+  offloaded.
+
 ## [0.69.0] - 2026-11-22
 
 ### Added

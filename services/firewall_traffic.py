@@ -1120,22 +1120,26 @@ def analyze_hygiene(
         if not dev_flows and group:
             dev_flows = [ev for ev in observed if ev.get("tenant") == group]
 
+        # Move target per rule: the first enabled accept after the nearest
+        # enabled non-accept rule above it, within the same ACL. Jumping a
+        # deny would let through traffic that deny blocks today.
         ordered = sorted(enriched, key=lambda row: int(row.get("position") or 0))
-        first_pid = ""
+        target_by_pid: Dict[str, str] = {}
         prev_by_pid: Dict[str, str] = {}
-        last_pid = ""
+        anchor: Dict[str, str] = {}
+        last: Dict[str, str] = {}
         for row in ordered:
             pid_s = str(row.get("policyid") or "")
-            prev_by_pid[pid_s] = last_pid
-            last_pid = pid_s
-            if (
-                not first_pid
-                and (row.get("status") or "enable") == "enable"
-                and (row.get("action") or "").lower() in ("accept", "permit")
-            ):
-                first_pid = pid_s
-        if not first_pid and ordered:
-            first_pid = str(ordered[0].get("policyid") or "")
+            seq = str(row.get("acl") or "")
+            prev_by_pid[pid_s] = last.get(seq, "")
+            last[seq] = pid_s
+            if (row.get("status") or "enable") != "enable":
+                continue
+            if (row.get("action") or "").lower() in ("accept", "permit"):
+                anchor.setdefault(seq, pid_s)
+            else:
+                anchor.pop(seq, None)
+            target_by_pid[pid_s] = anchor.get(seq, "")
 
         for r in enriched:
             rule_obj = r.pop("_rule", None)
@@ -1218,11 +1222,12 @@ def analyze_hygiene(
             pos = int(r.get("position") or 0)
             vol = max(int(r.get("bytes") or 0), int(r.get("delta_bytes_30d") or 0))
             pid_s = str(r.get("policyid") or "")
+            target = target_by_pid.get(pid_s, "")
             if enabled and action in ("accept", "permit") and vol >= HIGH_VOLUME_BYTES:
-                if pos >= REORDER_MIN_POSITION and first_pid and pid_s != first_pid:
+                if pos >= REORDER_MIN_POSITION and target and pid_s != target:
                     cli, rb, api = _optimization_snippets(
                         vendor, r, "reorder_top",
-                        first_pid=first_pid, prev_pid=prev_by_pid.get(pid_s, ""),
+                        first_pid=target, prev_pid=prev_by_pid.get(pid_s, ""),
                     )
                     optimization_candidates.append({
                         "device": hostname,
@@ -1235,7 +1240,8 @@ def analyze_hygiene(
                         "bytes": vol,
                         "hit_count": r.get("hit_count") or 0,
                         "kind": "reorder_top",
-                        "reason": f"High-volume policy ({vol} B) at position #{pos}; move before #{first_pid}",
+                        "reason": (f"High-volume policy ({vol} B) at position #{pos}; move before #{target} "
+                                   "(no deny rule crossed; review overlapping accepts for NAT/UTM changes)"),
                         "cli_dry_run": cli,
                         "cli_rollback": rb,
                         "api_dry_run": api,
@@ -1256,7 +1262,7 @@ def analyze_hygiene(
                             opt_reason = "Bulk backup/replication service with UTM active; candidate for /32 NPU bypass"
                         cli, rb, api = _optimization_snippets(
                             vendor, r, "spu_bypass",
-                            first_pid=first_pid, prev_pid=prev_by_pid.get(pid_s, ""),
+                            first_pid=target, prev_pid=prev_by_pid.get(pid_s, ""),
                         )
                         optimization_candidates.append({
                             "device": hostname,

@@ -1432,7 +1432,8 @@ def check_policy_bypass_scope(cfg: ParsedConfig) -> RuleOutcome:
             continue
         if any(k in vals for k in _SECURITY_PROFILES):
             continue
-        if "enable" not in vals.get("auto-asic-offload", []):
+        # Offload defaults to enable and `show` omits defaults: absent = offloaded.
+        if "disable" in vals.get("auto-asic-offload", []):
             continue
         if (
             (set(vals.get("srcaddr", [])) & _ANY_ADDR)
