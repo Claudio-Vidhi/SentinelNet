@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.69.0] - 2026-11-22
+
 ### Added
 
 - **FortiGate L7/SPU — profili hardware e benchmark NetSec Audit**: aggiunto il
