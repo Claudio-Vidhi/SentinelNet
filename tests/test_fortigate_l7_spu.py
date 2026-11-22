@@ -488,9 +488,9 @@ end
 
 class TestSelectScanTargets(unittest.TestCase):
     DEVICES = [
-        {"IP": "192.0.2.10", "Group": "SiteA", "Hostname": "sw-a1"},
-        {"IP": "192.0.2.20", "Group": "SiteA", "Hostname": "sw-a2"},
-        {"IP": "198.51.100.10", "Group": "SiteB", "Hostname": "sw-b1"},
+        {"IP": "192.0.2.10", "Group": "TenantA", "Hostname": "sw-a1"},
+        {"IP": "192.0.2.20", "Group": "TenantA", "Hostname": "sw-a2"},
+        {"IP": "198.51.100.10", "Group": "TenantB", "Hostname": "sw-b1"},
         {"IP": "203.0.113.10", "Group": "", "Hostname": "sw-unassigned"},
     ]
 
@@ -501,14 +501,14 @@ class TestSelectScanTargets(unittest.TestCase):
 
     def test_unscoped_all_and_group_filter(self):
         self.assertEqual(["192.0.2.10", "192.0.2.20", "198.51.100.10", "203.0.113.10"], self._select(None, group="all"))
-        self.assertEqual(["198.51.100.10"], self._select(None, group="SiteB"))
+        self.assertEqual(["198.51.100.10"], self._select(None, group="TenantB"))
 
     def test_scoped_user_and_ip_filters(self):
-        self.assertEqual(["192.0.2.10", "192.0.2.20"], self._select({"SiteA"}, group="all"))
-        self.assertEqual([], self._select({"SiteA"}, group="SiteB"))
-        self.assertEqual(["192.0.2.20"], self._select({"SiteA"}, ip="192.0.2.20"))
-        self.assertEqual(["192.0.2.10", "192.0.2.20"], self._select({"SiteA"}, ip="192.0.2.10", ips=["192.0.2.20"]))
-        self.assertEqual([], self._select({"SiteA"}, ip="198.51.100.10"))
+        self.assertEqual(["192.0.2.10", "192.0.2.20"], self._select({"TenantA"}, group="all"))
+        self.assertEqual([], self._select({"TenantA"}, group="TenantB"))
+        self.assertEqual(["192.0.2.20"], self._select({"TenantA"}, ip="192.0.2.20"))
+        self.assertEqual(["192.0.2.10", "192.0.2.20"], self._select({"TenantA"}, ip="192.0.2.10", ips=["192.0.2.20"]))
+        self.assertEqual([], self._select({"TenantA"}, ip="198.51.100.10"))
 
 
 if __name__ == "__main__":
