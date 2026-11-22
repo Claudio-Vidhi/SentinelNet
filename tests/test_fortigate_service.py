@@ -879,9 +879,13 @@ class TestAdvisorProfileReuse(unittest.TestCase):
         self.assertEqual(fgs.pick_ssl_profile(self.SSL, {"deep-inspection": 3}, server=False),
                          "deep-inspection")
 
-    def _advisor(self, policies, sensors, ssl):
+    def _advisor(self, policies, sensors, ssl, av=(), app=(), ifaces=()):
+        by_path = {"cmdb/ips/sensor": sensors, "cmdb/firewall/ssl-ssh-profile": ssl,
+                   "cmdb/antivirus/profile": list(av), "cmdb/application/list": list(app),
+                   "cmdb/system/interface": list(ifaces)}
+
         def cmdb(_ip, path, *a, **k):
-            return {"results": sensors if path == "cmdb/ips/sensor" else ssl}
+            return {"results": by_path[path]}
         with mock.patch.object(fgs, "get_system_status", return_value={"data": {"model": "FGT100F"}}), \
              mock.patch.object(fgs, "get_policies_with_stats", return_value={"data": policies}), \
              mock.patch.object(fgs, "get_vips", return_value={"data": [{"name": "VIP_Web"}]}), \
@@ -914,6 +918,70 @@ class TestAdvisorProfileReuse(unittest.TestCase):
         self.assertEqual(ids["ADV-VIP-L7-1"]["reuses"], [])
         self.assertIn("config ips sensor", ids["ADV-VIP-L7-1"]["cli"])
         self.assertIn('edit "IPS_Server_Scoped"', ids["ADV-IPS-2"]["cli"])
+
+    # FortiOS 7.x REST shapes: per-protocol av-scan, app entries with action.
+    AV = [
+        {"name": "default", "http": {"av-scan": "block"}, "smtp": {"av-scan": "block"},
+         "ftp": {"av-scan": "monitor"}},
+        {"name": "AV_Strict", "http": {"av-scan": "block"}, "smtp": {"av-scan": "block"},
+         "ftp": {"av-scan": "block"}},
+        {"name": "AV_Monitor", "http": {"av-scan": "monitor"}, "smtp": {"av-scan": "block"}},
+        {"name": "AV_Legacy64", "http": {"options": "scan"}},
+    ]
+    APP = [
+        {"name": "default", "entries": [{"action": "block"}, {"action": "pass"}]},
+        {"name": "APP_Corp", "entries": [{"action": "block"}, {"action": "block"}]},
+        {"name": "APP_Watch", "entries": [{"action": "monitor"}], "other-application-action": "pass"},
+    ]
+
+    def test_pick_av_and_app(self):
+        self.assertEqual(fgs.pick_av_profile(self.AV, {}), "AV_Strict")
+        self.assertEqual(fgs.pick_av_profile(self.AV[2:], {}), "")
+        self.assertIsNone(fgs._av_weak_protocols(self.AV[3]))
+        self.assertEqual(fgs.pick_app_list(self.APP, {}), "APP_Corp")
+        self.assertEqual(fgs.pick_app_list(self.APP, {"default": 4}), "default")
+        self.assertEqual(fgs.pick_app_list(self.APP[2:], {}), "")
+        self.assertTrue(fgs._app_monitor_only(self.APP[2]))
+        self.assertFalse(fgs._app_monitor_only({"entries": [{}]}))  # unknown action
+
+    def test_advisor_av_and_app_control(self):
+        wan = {"dstintf": [{"name": "wan1"}]}
+        policies = [
+            # Broad, no UTM, to WAN: both missing.
+            {"policyid": 1, "action": "accept", "status": "enable", **wan,
+             "srcaddr": [{"name": "LAN_Net"}], "dstaddr": [{"name": "all"}], "service": [{"name": "ALL"}]},
+            # Narrow UTM-less bypass to WAN: deliberate, not flagged.
+            {"policyid": 2, "action": "accept", "status": "enable", **wan,
+             "srcaddr": [{"name": "Srv_32"}], "dstaddr": [{"name": "Cloud_32"}], "service": [{"name": "HTTPS"}]},
+            # UTM with monitor-only profiles in use.
+            {"policyid": 3, "action": "accept", "status": "enable", **wan, "utm-status": "enable",
+             "srcaddr": [{"name": "LAN_Net"}], "dstaddr": [{"name": "all"}], "service": [{"name": "HTTPS"}],
+             "av-profile": "AV_Monitor", "application-list": "APP_Watch", "ssl-ssh-profile": "certificate-inspection"},
+            # Internal traffic: not Internet-bound.
+            {"policyid": 4, "action": "accept", "status": "enable", "dstintf": [{"name": "dmz"}],
+             "srcaddr": [{"name": "all"}], "dstaddr": [{"name": "all"}], "service": [{"name": "ALL"}]},
+        ]
+        ifaces = [{"name": "wan1", "role": "wan"}, {"name": "dmz", "role": "dmz"},
+                  {"name": "wan2", "role": "lan"}]
+        _res, ids = self._advisor(policies, [], [], self.AV, self.APP, ifaces)
+
+        self.assertEqual(ids["ADV-AV-1"]["reuses"], ["AV_Strict"])
+        self.assertIn('set av-profile "AV_Strict"', ids["ADV-AV-1"]["cli"])
+        self.assertIn('set application-list "APP_Corp"', ids["ADV-APP-1"]["cli"])
+        for rid in ("ADV-AV-2", "ADV-APP-2", "ADV-AV-3", "ADV-APP-3", "ADV-AV-4", "ADV-APP-4"):
+            self.assertNotIn(rid, ids)
+
+        av_prof = ids["ADV-AV-PROFILE-AV_Monitor"]
+        self.assertIn("config http\n            set av-scan block", av_prof["cli"])
+        self.assertNotIn("config smtp", av_prof["cli"])
+        self.assertIn("ADV-APP-PROFILE-APP_Watch", ids)
+        # Profiles nobody uses are not reported.
+        self.assertNotIn("ADV-AV-PROFILE-default", ids)
+
+        # Nothing reusable: fall back to the built-in name, no reuse claimed.
+        _res, ids = self._advisor(policies[:1], [], [], self.AV[2:], self.APP[2:], ifaces)
+        self.assertEqual(ids["ADV-AV-1"]["reuses"], [])
+        self.assertIn('set av-profile "default"', ids["ADV-AV-1"]["cli"])
 
 
 if __name__ == "__main__":

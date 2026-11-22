@@ -1579,6 +1579,69 @@ def pick_ssl_profile(profiles: list, usage: Dict[str, int], server: bool) -> str
     return best[1] if best else ""
 
 
+_AV_KEY_PROTOCOLS = ("http", "smtp", "pop3", "imap", "ftp")
+
+
+def _av_weak_protocols(prof: dict) -> Optional[list]:
+    """Key protocols on which the AV profile does not block.
+
+    Reads the FortiOS 7.x per-protocol ``av-scan`` field. A 6.x profile
+    (``options`` flags) returns None: unknown shape, neither weak nor reusable.
+    """
+    weak, seen = [], False
+    for proto in _AV_KEY_PROTOCOLS:
+        block = prof.get(proto)
+        if not isinstance(block, dict) or "av-scan" not in block:
+            continue
+        seen = True
+        if str(block.get("av-scan") or "").lower() != "block":
+            weak.append(proto)
+    return weak if seen else None
+
+
+def pick_av_profile(profiles: list, usage: Dict[str, int]) -> str:
+    """Best existing AV profile blocking at least on HTTP, or ''.
+    Ranked by fewest non-blocking key protocols, then by policy usage."""
+    best: Optional[tuple[tuple[int, int, str], str]] = None
+    for p in profiles:
+        name = str(p.get("name") or "")
+        weak = _av_weak_protocols(p)
+        if not name or weak is None or "http" in weak:
+            continue
+        key = (len(weak), -usage.get(name, 0), name.lower())
+        if best is None or key < best[0]:
+            best = (key, name)
+    return best[1] if best else ""
+
+
+def _app_actions(lst: dict) -> list[str]:
+    return [str(e.get("action") or "").lower()
+            for e in (lst.get("entries") or []) if isinstance(e, dict)]
+
+
+def _app_monitor_only(lst: dict) -> bool:
+    """Every entry explicitly non-blocking and no catch-all block: the list
+    only observes. An absent action is not assumed either way."""
+    actions = _app_actions(lst)
+    return (bool(actions) and all(a and a != "block" for a in actions)
+            and str(lst.get("other-application-action") or "").lower() != "block")
+
+
+def pick_app_list(lists: list, usage: Dict[str, int]) -> str:
+    """Best existing application list with at least one explicit block entry,
+    or ''. Ranked by policy usage, then by number of block entries."""
+    best: Optional[tuple[tuple[int, int, str], str]] = None
+    for lst in lists:
+        name = str(lst.get("name") or "")
+        blocks = _app_actions(lst).count("block")
+        if not name or not blocks:
+            continue
+        key = (-usage.get(name, 0), -blocks, name.lower())
+        if best is None or key < best[0]:
+            best = (key, name)
+    return best[1] if best else ""
+
+
 def get_firewall_advisor(device, lang: str = "it") -> dict:
     """Hardware-aware live policy & security profile recommendations."""
     en = (lang or "it").strip().lower().startswith("en")
@@ -1635,8 +1698,29 @@ def get_firewall_advisor(device, lang: str = "it") -> dict:
 
     ips_sensors = cmdb_rows("ips", _SECURITY_PROFILES["ips"])
     ssl_profiles = cmdb_rows("ssl_ssh", _SECURITY_PROFILES["ssl_ssh"])
+    av_profiles = cmdb_rows("antivirus", _SECURITY_PROFILES["antivirus"])
+    app_lists = cmdb_rows("application", _SECURITY_PROFILES["application"])
     ips_use = _profile_usage(policies, "ips-sensor")
     ssl_use = _profile_usage(policies, "ssl-ssh-profile")
+    av_use = _profile_usage(policies, "av-profile")
+    app_use = _profile_usage(policies, "application-list")
+    av_pick = pick_av_profile(av_profiles, av_use)
+    app_pick = pick_app_list(app_lists, app_use)
+
+    # Internet-bound = dstintf with role wan, same fallback as the backup audit
+    # (rules.wan_interfaces) when no interface declares a role.
+    # ponytail: SD-WAN zones other than virtual-wan-link are not resolved;
+    # read cmdb/system/sdwan zones if custom zone names show up.
+    wan_names: set[str] = {"virtual-wan-link"}
+    try:
+        ifaces = api_get_cmdb(device["IP"], "cmdb/system/interface", fmt="name|role")
+        rows = ifaces.get("results", []) if isinstance(ifaces, dict) else []
+        names = [(str(i.get("name") or "").lower(), str(i.get("role") or "").lower())
+                 for i in rows if isinstance(i, dict)]
+        by_role = {n for n, role in names if role == "wan"}
+        wan_names |= by_role or {n for n, _r in names if n.startswith("wan") or n == "port1"}
+    except FortiGateError as e:
+        errors["interfaces"] = str(e)
 
     profile = _profile_for(device, status_data)
 
@@ -1811,6 +1895,43 @@ def get_firewall_advisor(device, lang: str = "it") -> dict:
                     f"config firewall policy\n    edit {pid}\n        set srcaddr <host_32>\n        set dstaddr <host_32>\n        set service <specific_port>\n    next\nend",
                 )
 
+        # Internet-bound traffic without AV / application control. A UTM-less
+        # rule scoped to specific hosts and service is a deliberate bypass
+        # (the broad ones are ADV-BYPASS): not flagged here.
+        to_wan = bool(set(_policy_member_names(row.get("dstintf"))) & wan_names)
+        broad = bool((src_names | dst_names | svc_names) & {"all", "any"})
+        if to_wan and (l7_summary or broad):
+            for code, key, use, pick, it_t, en_t, it_d, en_d in (
+                ("AV", "av-profile", av_use, av_pick,
+                 "Policy verso Internet senza antivirus",
+                 "Internet-bound policy without antivirus",
+                 "Il traffico verso Internet non e' analizzato dall'antivirus: download e allegati malevoli "
+                 "passano senza controllo. Per HTTPS serve anche un ssl-ssh-profile.",
+                 "Internet-bound traffic is not scanned by antivirus: malicious downloads and attachments "
+                 "pass unchecked. HTTPS also needs an ssl-ssh-profile."),
+                ("APP", "application-list", app_use, app_pick,
+                 "Policy verso Internet senza application control",
+                 "Internet-bound policy without application control",
+                 "Senza application control le applicazioni a rischio (P2P, proxy/anonymizer, accesso remoto) "
+                 "verso Internet non sono ne' visibili ne' bloccate.",
+                 "Without application control, risky applications (P2P, proxies/anonymizers, remote access) "
+                 "on Internet-bound traffic are neither visible nor blocked."),
+            ):
+                if not utm_disabled and _profile_name_val(row.get(key)):
+                    continue
+                note_it, note_en = reuse_note([(pick, use.get(pick, 0))] if pick else [])
+                add_rec(
+                    f"ADV-{code}-{pid}", "WARN", "Layer 7 / Internet", pid, pname,
+                    it_t, en_t, it_d + note_it, en_d + note_en,
+                    "config firewall policy\n"
+                    f"    edit {pid}\n"
+                    "        set utm-status enable\n"
+                    f'        set {key} "{pick or "default"}"\n'
+                    "    next\n"
+                    "end",
+                    [pick] if pick else [],
+                )
+
         target = order_target.get(pid, "")
         if (idx >= 5 and target and target != pid
                 and int(row.get("bytes") or 0) >= _BYPASS_TOP_BYTES):
@@ -1824,6 +1945,50 @@ def get_firewall_advisor(device, lang: str = "it") -> dict:
                 "(no deny rule crossed; review overlapping accepts for NAT/UTM changes) or a dedicated /32 bypass.",
                 f"config firewall policy\n    move {pid} before {target}\nend",
             )
+
+    # Profiles in use that do not actually block.
+    for p in av_profiles:
+        name = str(p.get("name") or "")
+        n = av_use.get(name, 0)
+        weak = _av_weak_protocols(p)
+        if not n or not weak or "http" not in weak:
+            continue
+        protos = ", ".join(weak)
+        add_rec(
+            f"ADV-AV-PROFILE-{name}", "WARN", "Antivirus", None, "",
+            f"Profilo antivirus '{name}' non blocca su HTTP",
+            f"Antivirus profile '{name}' does not block on HTTP",
+            f"Il profilo, usato da {n} policy, non blocca il malware su: {protos} (monitor o disabilitato).",
+            f"The profile, used by {n} policies, does not block malware on: {protos} (monitor or disabled).",
+            "config antivirus profile\n"
+            f'    edit "{name}"\n'
+            + "".join(f"        config {pr}\n            set av-scan block\n        end\n" for pr in weak)
+            + "    next\nend",
+        )
+    for lst in app_lists:
+        name = str(lst.get("name") or "")
+        n = app_use.get(name, 0)
+        if not n or not _app_monitor_only(lst):
+            continue
+        add_rec(
+            f"ADV-APP-PROFILE-{name}", "WARN", "Application Control", None, "",
+            f"Application list '{name}' solo in monitor",
+            f"Application list '{name}' is monitor-only",
+            f"La lista, usata da {n} policy, non blocca nessuna applicazione o categoria: aggiungere "
+            "un'entry block per le categorie a rischio (es. P2P, Proxy).",
+            f"The list, used by {n} policies, blocks no application or category: add a block entry "
+            "for risky categories (e.g. P2P, Proxy).",
+            "config application list\n"
+            f'    edit "{name}"\n'
+            "        config entries\n"
+            "            edit 0\n"
+            "                set category <P2P_id> <Proxy_id>\n"
+            "                set action block\n"
+            "            next\n"
+            "        end\n"
+            "    next\n"
+            "end",
+        )
 
     if profile_errors:
         fams = ", ".join(sorted(profile_errors))

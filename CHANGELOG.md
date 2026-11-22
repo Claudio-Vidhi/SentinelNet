@@ -10,6 +10,19 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **FortiGate advisor — antivirus and application control**: Internet-bound
+  accept policies (dstintf with role wan, or `virtual-wan-link`) without an AV
+  profile or application list get a finding whose CLI points at the best
+  existing profile (AV blocking on HTTP with the fewest non-blocking
+  protocols; application list with explicit block entries, most used first),
+  or the built-in `default`. UTM-less rules scoped to specific hosts and
+  service are treated as deliberate bypasses and not flagged. AV profiles in
+  use that do not block on HTTP and application lists in use that only
+  monitor are reported too. FortiOS 6.x AV profiles (`options` flags) are not
+  judged.
+
 ### Changed
 
 - **FortiGate advisor reuses existing profiles**: on VIP, SSL and IPS
