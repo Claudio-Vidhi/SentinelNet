@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.70.0] - 2026-11-22
+
 ### Added
 
 - **FortiGate advisor — antivirus and application control**: Internet-bound
