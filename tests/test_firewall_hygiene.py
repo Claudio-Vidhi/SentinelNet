@@ -311,5 +311,115 @@ class TestFirewallHygieneApi(unittest.TestCase):
             self.assertEqual({call.args[0]["IP"] for call in m_collect.call_args_list}, {FGT_OTHER["IP"]})
 
 
+class TestOptimizationCandidates(unittest.TestCase):
+    OPT_CFG = """#config-version=FGT400F-7.4.5-FW-build2702
+config firewall policy
+    edit 1
+        set name "First-Rule"
+        set srcintf "lan"
+        set dstintf "wan1"
+        set srcaddr "all"
+        set dstaddr "all"
+        set action accept
+        set service "HTTPS"
+    next
+    edit 2
+        set name "Rule-2"
+        set action accept
+        set srcaddr "all"
+        set dstaddr "all"
+        set service "HTTP"
+    next
+    edit 3
+        set name "Rule-3"
+        set action accept
+        set srcaddr "all"
+        set dstaddr "all"
+        set service "DNS"
+    next
+    edit 4
+        set name "Rule-4"
+        set action accept
+        set srcaddr "all"
+        set dstaddr "all"
+        set service "NTP"
+    next
+    edit 5
+        set name "Rule-5"
+        set action accept
+        set srcaddr "all"
+        set dstaddr "all"
+        set service "SSH"
+    next
+    edit 6
+        set name "Heavy-Proxy"
+        set srcintf "lan"
+        set dstintf "wan1"
+        set srcaddr "all"
+        set dstaddr "all"
+        set action accept
+        set service "HTTPS"
+        set inspection-mode proxy
+    next
+    edit 7
+        set name "Veeam-Replica"
+        set srcintf "lan"
+        set dstintf "wan1"
+        set srcaddr "all"
+        set dstaddr "all"
+        set action accept
+        set service "VEEAM_TCP"
+        set utm-status enable
+        set ips-sensor "default"
+    next
+    edit 8
+        set name "Low-Volume"
+        set action accept
+        set srcaddr "all"
+        set dstaddr "all"
+        set service "ICMP"
+    next
+end
+"""
+
+    def test_detects_reorder_top_and_spu_bypass_candidates(self):
+        dev = {"IP": "192.0.2.210", "Hostname": "fw-opt-01", "Vendor": "fortinet", "Group": "tenant-opt"}
+        now = int(time.time())
+        firewall_traffic.record_policy_snapshots(dev, [
+            {"policyid": "1", "name": "First-Rule", "hit_count": 500, "bytes": 250_000_000},
+            {"policyid": "6", "name": "Heavy-Proxy", "hit_count": 1000, "bytes": 300_000_000},
+            {"policyid": "7", "name": "Veeam-Replica", "hit_count": 800, "bytes": 500_000_000},
+            {"policyid": "8", "name": "Low-Volume", "hit_count": 5, "bytes": 1024},
+        ], ts=now - 60)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg_path = os.path.join(tmp, "fw-opt-01.cfg")
+            with open(cfg_path, "w", encoding="utf-8") as fh:
+                fh.write(self.OPT_CFG)
+            with mock.patch("ai.config_analyzer._find_freshest_backup", return_value=(cfg_path, "tenant-opt")):
+                res = firewall_traffic.analyze_hygiene([dev], window_days=30, now_ts=now)
+
+        cands = res["optimization_candidates"]
+        self.assertEqual(res["summary"]["optimization_candidates"], len(cands))
+        kinds_by_pid = {(str(c["policyid"]), c["kind"]): c for c in cands}
+
+        # Policy 1 at position 1 is NOT flagged for reorder; Policy 8 is low-volume
+        self.assertNotIn(("1", "reorder_top"), kinds_by_pid)
+        self.assertNotIn(("8", "reorder_top"), kinds_by_pid)
+
+        # Policy 6 & 7 at positions 6 & 7 >= 100MB -> reorder_top + spu_bypass
+        r6 = kinds_by_pid[("6", "reorder_top")]
+        self.assertIn("move 6 before 1", r6["cli_dry_run"])
+        self.assertIn("move 6 after 5", r6["cli_rollback"])
+
+        b6 = kinds_by_pid[("6", "spu_bypass")]
+        self.assertIn("set inspection-mode flow", b6["cli_dry_run"])
+        self.assertIn("set inspection-mode proxy", b6["cli_rollback"])
+
+        b7 = kinds_by_pid[("7", "spu_bypass")]
+        self.assertIn("BYPASS_Veeam-Replica", b7["cli_dry_run"])
+        self.assertIn("delete <new_id>", b7["cli_rollback"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -297,7 +297,7 @@ class TestFullParity(unittest.TestCase):
                     # Relay dell'agente: stato dei dispositivi e push della config.
                     "/api/agent/status", "/api/agent/backup", "/api/endpoints",
                     "/api/fortigate/{ip}/firewall/policies-with-stats", "/api/fortigate/{ip}/system", "/api/fortigate/{ip}/vpn", "/api/fortigate/{ip}/sdwan",
-                    "/api/fortigate/{ip}/firewall/address-groups", "/api/fortigate/{ip}/firewall/service-groups", "/api/fortigate/{ip}/firewall/vips", "/api/fortigate/{ip}/firewall/ip-pools", "/api/fortigate/{ip}/firewall/security-profiles",
+                    "/api/fortigate/{ip}/firewall/address-groups", "/api/fortigate/{ip}/firewall/service-groups", "/api/fortigate/{ip}/firewall/vips", "/api/fortigate/{ip}/firewall/ip-pools", "/api/fortigate/{ip}/firewall/security-profiles", "/api/fortigate/{ip}/firewall/advisor",
                     "/api/settings/snmp-defaults",
                     # Monitor ping continuo: configurazione (sotto /api/settings)
                     # e stato letto dal tab Impostazioni.

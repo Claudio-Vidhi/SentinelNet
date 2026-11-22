@@ -40,7 +40,8 @@ class AdminOnlyRoutesTest(unittest.TestCase):
     def test_read_only_views_are_open_to_authenticated_users(self):
         for path in ("/api/fortigate/{ip}/system/resources",
                      "/api/fortigate/{ip}/system/ha",
-                     "/api/fortigate/{ip}/system/certificates"):
+                     "/api/fortigate/{ip}/system/certificates",
+                     "/api/fortigate/{ip}/firewall/advisor"):
             names = _dependency_names(path)
             self.assertNotIn(deps.require_admin.__name__, names, path)
 
@@ -140,6 +141,31 @@ class ClientDiagnosisAnswersAboutTheClient(unittest.TestCase):
         proc = subprocess.run([shutil.which("node"), harness],
                               capture_output=True, text=True, cwd=self._ROOT)
         self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
+
+
+class AdvisorAndSnifferCliTest(unittest.TestCase):
+    _ROOT = PolicyLookupIsAnAnswerNotADict._ROOT
+
+    def test_advisor_and_sniffer_helpers_present_and_i18n_bilingual(self):
+        src = _js()
+        self.assertIn("function renderFgtAdvisor", src)
+        self.assertIn("if (key === 'advisor')", src)
+        self.assertIn("function fgtBuildSnifferCli", src)
+        i18n = open(os.path.join(self._ROOT, "static", "js", "i18n.js"),
+                    encoding="utf-8").read()
+        for key in (
+            "colFgtPolMode", "colFgtPolOffload", "colFgtPolProfiles", "colFgtSessNpu",
+            "fgtPillAdvisor", "btnFgtSnifferCli", "btnFgtCopyCli", "lblFgtSessIntf",
+            "fgtTileHardware", "fgtAdvisorHwTitle", "fgtAdvisorClean",
+            "fgtAdvisorCliRemediation", "fgtAdvisorPolicyRef", "fgtAdvisorAllPolicies",
+            "fgtAdvisorCount", "fgtCliCopied", "fgtAdvisorFamily", "fgtAdvisorNpu",
+            "fgtAdvisorRam", "fgtSnifferTitle", "fgtSnifferWarn", "fgtSnifferVmNote",
+            "fgtSnifferNeedFilter", "fgtNpuReasonIps", "fgtNpuReasonProxy",
+            "fgtNpuReasonDisabled", "fgtNpuReasonNonNpu", "fgtNpuReasonHelper",
+            "fgtNpuReasonLocal",
+        ):
+            self.assertEqual(2, i18n.count(key + ":"),
+                             f"{key} missing in it or en")
 
 
 if __name__ == "__main__":

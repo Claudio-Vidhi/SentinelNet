@@ -2832,6 +2832,7 @@
             <button type="button" class="ca-pill" id="fgtPill-ipPools" data-fgt-section="firewall" data-fgt-pill="ipPools" data-i18n="fgtPillIpPools">IP Pool</button>
             <button type="button" class="ca-pill" id="fgtPill-policies" data-fgt-section="firewall" data-fgt-pill="policies" data-i18n="fgtPillPolicies">Policy</button>
             <button type="button" class="ca-pill" id="fgtPill-policyLookup" data-fgt-section="firewall" data-fgt-pill="policyLookup" data-i18n="fgtPillPolicyLookup">Verifica Policy</button>
+            <button type="button" class="ca-pill" id="fgtPill-advisor" data-fgt-section="firewall" data-fgt-pill="advisor" data-i18n="fgtPillAdvisor">Consigli L7/SPU</button>
           </div>
           <button type="button" class="btn btn-secondary btn-small" data-action="fgt-refresh" style="width:auto; margin-bottom:10px;" data-i18n="btnFgtRefreshView">Aggiorna</button>
           <input id="fgtFilter-addresses" type="text" class="fgt-filter-input" data-fgt-dataset="addresses" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;" aria-label="phFgtObjFilter" data-i18n-aria-label="phFgtObjFilter">
@@ -2880,6 +2881,7 @@
           <div id="fgtView-ipPools" style="display:none;"></div>
           <div id="fgtView-policies" style="display:none;"></div>
           <div id="fgtView-policyLookup" style="display:none;"></div>
+          <div id="fgtView-advisor" style="display:none;"></div>
         </div>
       </div>
 
@@ -2907,6 +2909,10 @@
                 <label for="fgtSessPort" data-i18n="colFgtSessDport">Porta dest.</label>
                 <input id="fgtSessPort" type="number" min="1" max="65535" style="padding-left:12px; font-size:13px;">
               </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtSessIntf" data-i18n="lblFgtSessIntf">Interfaccia (sniffer)</label>
+                <input id="fgtSessIntf" type="text" style="padding-left:12px; font-size:13px;">
+              </div>
             </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
               <button type="button" id="btnFgtSessLoad" class="btn btn-secondary" style="width:auto;" data-i18n="btnFgtSessLoad">
@@ -2917,7 +2923,11 @@
               <button type="button" id="btnFgtSessionKill" class="btn btn-danger requires-write" style="width:auto;" data-i18n="btnFgtSessKill">
                 <i class="fa-solid fa-ban"></i> Termina sessioni
               </button>
+              <button type="button" id="btnFgtSnifferCli" class="btn btn-secondary" style="width:auto;" data-i18n="btnFgtSnifferCli">
+                <i class="fa-solid fa-terminal"></i> Genera CLI Sniffer NPU
+              </button>
             </div>
+            <div id="fgtSnifferCliBox" style="display:none; margin-top:10px;"></div>
           </div>
           <div id="fgtForm-logs" style="display:none; margin-bottom:12px;">
             <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:10px; margin-bottom:10px;">

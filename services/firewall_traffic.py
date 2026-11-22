@@ -724,6 +724,96 @@ def _rule_hygiene_snippets(
     return cli, rb, api
 
 
+HIGH_VOLUME_BYTES = 100_000_000
+REORDER_MIN_POSITION = 6
+_BULK_SERVICE_HINTS = (
+    "veeam", "backup", "rsync", "iscsi", "smb", "cifs", "nfs",
+    "sql", "mysql", "postgres", "oracle", "mssql", "replication",
+)
+_HYG_UTM_KEYS = (
+    "av-profile", "ips-sensor", "webfilter-profile",
+    "application-list", "dnsfilter-profile", "ssl-ssh-profile",
+)
+
+
+def _optimization_snippets(
+    vendor: str,
+    rule: Dict[str, Any],
+    kind: str,
+    first_pid: str = "",
+    prev_pid: str = "",
+    suggested_src: Optional[List[str]] = None,
+    suggested_dst: Optional[List[str]] = None,
+    suggested_svc: Optional[List[str]] = None,
+) -> Tuple[str, str, str]:
+    """Build (cli_dry_run, cli_rollback, api_dry_run) for reorder_top or spu_bypass."""
+    v = (vendor or "fortios").lower()
+    rid = str(rule.get("policyid") or rule.get("rule_id") or "")
+    rname = str(rule.get("name") or rid)
+
+    if kind == "reorder_top":
+        if v == "fortios":
+            cli = f"config firewall policy\n    move {rid} before {first_pid}\nend"
+            rb = (
+                f"config firewall policy\n    move {rid} after {prev_pid}\nend"
+                if prev_pid else f"# Restore original order for policy {rid}"
+            )
+            api = f"PUT /api/v2/cmdb/firewall/policy/{rid}?action=move&before={first_pid}"
+            return cli, rb, api
+        return (
+            f"# Move policy {rname} ({rid}) near top before {first_pid}",
+            f"# Move policy {rname} ({rid}) back after {prev_pid or 'original position'}",
+            f"PUT/PATCH reorder rule {rid} before {first_pid}",
+        )
+
+    # kind == "spu_bypass"
+    insp = str(rule.get("inspection_mode") or "flow").lower()
+    offload = str(rule.get("auto_asic_offload") or "enable").lower()
+    if v == "fortios" and (insp == "proxy" or offload == "disable"):
+        cli = (
+            "config firewall policy\n"
+            f"    edit {rid}\n"
+            "        set inspection-mode flow\n"
+            "        set auto-asic-offload enable\n"
+            "    next\n"
+            "end"
+        )
+        rb = (
+            "config firewall policy\n"
+            f"    edit {rid}\n"
+            f"        set inspection-mode {insp}\n"
+            f"        set auto-asic-offload {offload}\n"
+            "    next\n"
+            "end"
+        )
+        api = f'PATCH /api/v2/cmdb/firewall/policy/{rid}  {{"inspection-mode": "flow", "auto-asic-offload": "enable"}}'
+        return cli, rb, api
+
+    svc = (suggested_svc[0] if suggested_svc else (str(rule.get("service") or "ALL").split()[0] or "ALL"))
+    safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", rname)[:32] or rid
+    src_intf = str(rule.get("srcintf") or "lan").split()[0]
+    dst_intf = str(rule.get("dstintf") or "wan1").split()[0]
+    move_line = f"\n    move <new_id> before {first_pid}" if first_pid else ""
+    cli = (
+        "config firewall policy\n"
+        "    edit 0\n"
+        f'        set name "BYPASS_{safe_name}"\n'
+        f'        set srcintf "{src_intf}"\n'
+        f'        set dstintf "{dst_intf}"\n'
+        "        set srcaddr <host_32>\n"
+        "        set dstaddr <host_32>\n"
+        "        set action accept\n"
+        '        set schedule "always"\n'
+        f"        set service {svc}\n"
+        "        set auto-asic-offload enable\n"
+        f"    next{move_line}\n"
+        "end"
+    )
+    rb = "config firewall policy\n    delete <new_id>\nend"
+    api = 'POST /api/v2/cmdb/firewall/policy  {"auto-asic-offload": "enable", "utm-status": "disable"}'
+    return cli, rb, api
+
+
 def _format_svc(proto: str, dport: Optional[int]) -> str:
     p = (proto or "ip").upper()
     if dport is None:
@@ -769,7 +859,7 @@ def _extract_backup_rules(content: str, config_type: str, device: Dict[str, Any]
             return " ".join(toks) or default
 
         if isinstance(raw_pols, dict):
-            for pid, node in raw_pols.items():
+            for pos, (pid, node) in enumerate(raw_pols.items(), start=1):
                 if not isinstance(node, dict):
                     continue
                 body = node.get("sets", {}) if "sets" in node else node
@@ -780,11 +870,23 @@ def _extract_backup_rules(content: str, config_type: str, device: Dict[str, Any]
                 status = _fval(body, "status", "enable").lower()
                 action = _fval(body, "action", "accept").lower()
                 name = _fval(body, "name", "").strip('"')
+                insp_mode = _fval(body, "inspection-mode", "flow").lower()
+                asic_offload = _fval(body, "auto-asic-offload", "enable").lower()
+                utm_status = _fval(body, "utm-status", "disable").lower()
+                has_utm = (utm_status != "disable") and any(
+                    k in body and _fval(body, k, "") != "" for k in _HYG_UTM_KEYS
+                )
                 rows.append({
                     "device": hostname, "device_ip": ip, "group": group,
                     "vendor": "fortios", "policyid": str(pid), "name": name,
+                    "position": pos,
+                    "srcintf": _fval(body, "srcintf", "any"),
+                    "dstintf": _fval(body, "dstintf", "any"),
                     "srcaddr": src, "dstaddr": dst, "service": svc,
                     "action": action, "status": status,
+                    "inspection_mode": insp_mode,
+                    "auto_asic_offload": asic_offload,
+                    "has_utm": has_utm,
                     "bytes": 0, "hit_count": 0, "active_sessions": 0,
                     "last_used": None, "never_hit": False,
                     "is_broad": (
@@ -795,13 +897,15 @@ def _extract_backup_rules(content: str, config_type: str, device: Dict[str, Any]
                 })
     elif config_type == "panos":
         env = parse_panos_config(content)
-        for rule in env.policies:
+        for pos, rule in enumerate(env.policies, start=1):
             src_any = all(c.is_any() for c in rule.fields.src_ips)
             dst_any = all(c.is_any() for c in rule.fields.dst_ips)
             svc_any = rule.fields.dst_ports is None and rule.fields.protos is None
             rows.append({
                 "device": hostname, "device_ip": ip, "group": group,
                 "vendor": "panos", "policyid": str(rule.id), "name": rule.name or str(rule.id),
+                "position": pos,
+                "inspection_mode": "", "auto_asic_offload": "", "has_utm": False,
                 "srcaddr": "any" if src_any else "scoped",
                 "dstaddr": "any" if dst_any else "scoped",
                 "service": "any" if svc_any else "scoped",
@@ -815,13 +919,15 @@ def _extract_backup_rules(content: str, config_type: str, device: Dict[str, Any]
             })
     elif config_type == "junos":
         env = parse_junos_config(content)
-        for rule in env.policies:
+        for pos, rule in enumerate(env.policies, start=1):
             src_any = all(c.is_any() for c in rule.fields.src_ips)
             dst_any = all(c.is_any() for c in rule.fields.dst_ips)
             svc_any = rule.fields.dst_ports is None and rule.fields.protos is None
             rows.append({
                 "device": hostname, "device_ip": ip, "group": group,
                 "vendor": "junos", "policyid": str(rule.id), "name": rule.name or str(rule.id),
+                "position": pos,
+                "inspection_mode": "", "auto_asic_offload": "", "has_utm": False,
                 "srcaddr": "any" if src_any else "scoped",
                 "dstaddr": "any" if dst_any else "scoped",
                 "service": "any" if svc_any else "scoped",
@@ -835,8 +941,10 @@ def _extract_backup_rules(content: str, config_type: str, device: Dict[str, Any]
             })
     elif config_type in ("ios", "nxos", "ot_switch"):
         env = parse_ios_config(content)
+        pos = 0
         for acl_name, rs in env.acls.items():
             for rule in rs.rules:
+                pos += 1
                 src_any = all(c.is_any() for c in rule.fields.src_ips)
                 dst_any = all(c.is_any() for c in rule.fields.dst_ips)
                 svc_any = rule.fields.dst_ports is None and rule.fields.protos is None
@@ -844,6 +952,8 @@ def _extract_backup_rules(content: str, config_type: str, device: Dict[str, Any]
                     "device": hostname, "device_ip": ip, "group": group,
                     "vendor": config_type, "policyid": f"{acl_name}:{rule.id}",
                     "acl": acl_name, "name": f"{acl_name} seq {rule.id}",
+                    "position": pos,
+                    "inspection_mode": "", "auto_asic_offload": "", "has_utm": False,
                     "srcaddr": "any" if src_any else "scoped",
                     "dstaddr": "any" if dst_any else "scoped",
                     "service": "any" if svc_any else "scoped",
@@ -929,18 +1039,21 @@ def analyze_hygiene(
                 "dead_policies": 0,
                 "unused_objects": 0,
                 "tightenable_rules": 0,
+                "optimization_candidates": 0,
                 "policies_tracked": 0,
                 "snapshots_available": 0,
             },
             "dead_policies": [],
             "unused_objects": [],
             "tightenable_rules": [],
+            "optimization_candidates": [],
             "policy_deltas": [],
         }
 
     dead_policies: List[Dict[str, Any]] = []
     unused_objects: List[Dict[str, Any]] = []
     tightenable_rules: List[Dict[str, Any]] = []
+    optimization_candidates: List[Dict[str, Any]] = []
     policy_deltas: List[Dict[str, Any]] = []
     snapshots_available = 0
 
@@ -1006,6 +1119,23 @@ def analyze_hygiene(
         # Fallback to tenant flows if device_ip had no direct tag
         if not dev_flows and group:
             dev_flows = [ev for ev in observed if ev.get("tenant") == group]
+
+        ordered = sorted(enriched, key=lambda row: int(row.get("position") or 0))
+        first_pid = ""
+        prev_by_pid: Dict[str, str] = {}
+        last_pid = ""
+        for row in ordered:
+            pid_s = str(row.get("policyid") or "")
+            prev_by_pid[pid_s] = last_pid
+            last_pid = pid_s
+            if (
+                not first_pid
+                and (row.get("status") or "enable") == "enable"
+                and (row.get("action") or "").lower() in ("accept", "permit")
+            ):
+                first_pid = pid_s
+        if not first_pid and ordered:
+            first_pid = str(ordered[0].get("policyid") or "")
 
         for r in enriched:
             rule_obj = r.pop("_rule", None)
@@ -1084,6 +1214,67 @@ def analyze_hygiene(
                         "api_dry_run": api,
                     })
 
+            # 3. High-volume policy reorder and SPU bypass optimization candidates
+            pos = int(r.get("position") or 0)
+            vol = max(int(r.get("bytes") or 0), int(r.get("delta_bytes_30d") or 0))
+            pid_s = str(r.get("policyid") or "")
+            if enabled and action in ("accept", "permit") and vol >= HIGH_VOLUME_BYTES:
+                if pos >= REORDER_MIN_POSITION and first_pid and pid_s != first_pid:
+                    cli, rb, api = _optimization_snippets(
+                        vendor, r, "reorder_top",
+                        first_pid=first_pid, prev_pid=prev_by_pid.get(pid_s, ""),
+                    )
+                    optimization_candidates.append({
+                        "device": hostname,
+                        "device_ip": ip,
+                        "group": group,
+                        "vendor": vendor,
+                        "policyid": r.get("policyid"),
+                        "name": r.get("name") or f"Rule {r.get('policyid')}",
+                        "position": pos,
+                        "bytes": vol,
+                        "hit_count": r.get("hit_count") or 0,
+                        "kind": "reorder_top",
+                        "reason": f"High-volume policy ({vol} B) at position #{pos}; move before #{first_pid}",
+                        "cli_dry_run": cli,
+                        "cli_rollback": rb,
+                        "api_dry_run": api,
+                    })
+
+                if vendor == "fortios":
+                    insp = str(r.get("inspection_mode") or "flow").lower()
+                    offload = str(r.get("auto_asic_offload") or "enable").lower()
+                    has_utm = bool(r.get("has_utm"))
+                    txt = f"{r.get('name') or ''} {r.get('service') or ''}".lower()
+                    is_bulk = has_utm and any(h in txt for h in _BULK_SERVICE_HINTS)
+                    if insp == "proxy" or offload == "disable" or is_bulk:
+                        if insp == "proxy":
+                            opt_reason = "High-volume FortiOS policy using proxy inspection instead of flow/CP9"
+                        elif offload == "disable":
+                            opt_reason = "High-volume FortiOS policy with auto-asic-offload disabled"
+                        else:
+                            opt_reason = "Bulk backup/replication service with UTM active; candidate for /32 NPU bypass"
+                        cli, rb, api = _optimization_snippets(
+                            vendor, r, "spu_bypass",
+                            first_pid=first_pid, prev_pid=prev_by_pid.get(pid_s, ""),
+                        )
+                        optimization_candidates.append({
+                            "device": hostname,
+                            "device_ip": ip,
+                            "group": group,
+                            "vendor": vendor,
+                            "policyid": r.get("policyid"),
+                            "name": r.get("name") or f"Rule {r.get('policyid')}",
+                            "position": pos,
+                            "bytes": vol,
+                            "hit_count": r.get("hit_count") or 0,
+                            "kind": "spu_bypass",
+                            "reason": opt_reason,
+                            "cli_dry_run": cli,
+                            "cli_rollback": rb,
+                            "api_dry_run": api,
+                        })
+
     return {
         "window_days": int(window_days),
         "devices_analyzed": len(targets),
@@ -1091,12 +1282,14 @@ def analyze_hygiene(
             "dead_policies": len(dead_policies),
             "unused_objects": len(unused_objects),
             "tightenable_rules": len(tightenable_rules),
+            "optimization_candidates": len(optimization_candidates),
             "policies_tracked": len(policy_deltas),
             "snapshots_available": snapshots_available,
         },
         "dead_policies": dead_policies,
         "unused_objects": unused_objects,
         "tightenable_rules": tightenable_rules,
+        "optimization_candidates": optimization_candidates,
         "policy_deltas": policy_deltas,
     }
 

@@ -466,6 +466,7 @@
         const dead = data.dead_policies || [];
         const unused = data.unused_objects || [];
         const tighten = data.tightenable_rules || [];
+        const opt = data.optimization_candidates || [];
         const deltas = data.policy_deltas || [];
 
         const kpi = (label, val, col) => `
@@ -513,6 +514,17 @@
             </div>`).join('')
             : `<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">${escapeHtml(tr('trafHygEmptyTighten'))}</div>`;
 
+        const optHtml = opt.length ? opt.map(o => `
+            <div style="padding:10px 12px; border:1px solid var(--border); border-left:2px solid var(--primary); background:var(--surface-2); margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+                    <strong>${escapeHtml(o.device)} &middot; #${escapeHtml(String(o.policyid))} ${escapeHtml(o.name || '')}</strong>
+                    <span class="badge">${escapeHtml(o.kind === 'reorder_top' ? tr('trafHygOptReorder') : tr('trafHygOptBypass'))} &middot; ${escapeHtml(fmtBytes(o.bytes || 0))} &middot; ${escapeHtml(tr('trafHygOptPos', { pos: o.position || 0 }))}</span>
+                </div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">${escapeHtml(tr('trafHygReason'))}: ${escapeHtml(o.reason || '')}</div>
+                ${_renderSnippetDetails(o)}
+            </div>`).join('')
+            : `<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">${escapeHtml(tr('trafHygEmptyOptimize'))}</div>`;
+
         const deltaRows = deltas.slice(0, 30).map(r => `
             <tr style="border-top:1px solid var(--border); font-size:12px;">
                 <td style="padding:6px 8px;">${escapeHtml(r.device)}</td>
@@ -524,15 +536,20 @@
             </tr>`).join('');
 
         box.innerHTML = `
-            <div style="display:grid; grid-template-columns:repeat(4, minmax(140px, 1fr)); gap:12px; margin-bottom:14px;">
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin-bottom:14px;">
                 ${kpi(tr('trafHygKpiDead'), s.dead_policies, 'var(--warning)')}
                 ${kpi(tr('trafHygKpiUnused'), s.unused_objects, 'var(--primary)')}
                 ${kpi(tr('trafHygKpiTighten'), s.tightenable_rules, 'var(--danger)')}
+                ${kpi(tr('trafHygKpiOptimize'), s.optimization_candidates, 'var(--primary)')}
                 ${kpi(tr('trafHygKpiTracked'), s.policies_tracked, 'var(--success)')}
             </div>
             <div class="panel" style="margin-bottom:14px;">
                 <h4 style="margin:0 0 10px; font-size:13px;">${escapeHtml(tr('trafHygSecTighten'))}</h4>
                 ${tightenHtml}
+            </div>
+            <div class="panel" style="margin-bottom:14px;">
+                <h4 style="margin:0 0 10px; font-size:13px;">${escapeHtml(tr('trafHygSecOptimize'))}</h4>
+                ${optHtml}
             </div>
             <div class="panel" style="margin-bottom:14px;">
                 <h4 style="margin:0 0 10px; font-size:13px;">${escapeHtml(tr('trafHygSecDead'))}</h4>

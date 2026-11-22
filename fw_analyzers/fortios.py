@@ -118,6 +118,16 @@ def analyze(text):
                 "error": True}
 
 
+_L7_PROFILE_TAGS = (
+    ("AV", "av-profile"),
+    ("IPS", "ips-sensor"),
+    ("Web", "webfilter-profile"),
+    ("App", "application-list"),
+    ("DNS", "dnsfilter-profile"),
+    ("SSL", "ssl-ssh-profile"),
+)
+
+
 def _analyze(text):
     root = _forti_tree(text or '')
     sections = []
@@ -125,6 +135,15 @@ def _analyze(text):
     # 1) Policy
     rows = []
     for pid, n in _children(root, 'firewall policy'):
+        insp_mode = _forti_set1(n, 'inspection-mode', 'flow')
+        utm_status = _forti_set1(n, 'utm-status', 'disable')
+        asic_offload = _forti_set1(n, 'auto-asic-offload', 'enable')
+        prof_list = []
+        if utm_status.lower() != 'disable':
+            for tag, key in _L7_PROFILE_TAGS:
+                val = _forti_set1(n, key)
+                if val:
+                    prof_list.append(f"{tag}:{val}")
         rows.append({
             "id": pid,
             "name": _forti_set1(n, 'name'),
@@ -138,11 +157,16 @@ def _analyze(text):
             "status": _forti_set1(n, 'status', 'enable'),
             "schedule": _forti_set1(n, 'schedule'),
             "logtraffic": _forti_set1(n, 'logtraffic'),
+            "inspection_mode": insp_mode,
+            "utm_status": utm_status,
+            "auto_asic_offload": asic_offload,
+            "profiles": _multi(prof_list),
         })
     sections.append(_section(
         "policies",
         ["id", "name", "srcintf", "dstintf", "srcaddr", "dstaddr",
-         "service", "action", "nat", "status", "schedule", "logtraffic"],
+         "service", "action", "nat", "status", "schedule", "logtraffic",
+         "inspection_mode", "utm_status", "auto_asic_offload", "profiles"],
         rows))
 
     # 2) Address objects
@@ -315,6 +339,67 @@ def _analyze(text):
         })
     sections.append(_section(
         "authentication", ["name", "kind", "server", "sso"], rows))
+
+    # 13) IPS Sensors
+    rows = []
+    for name, n in _children(root, 'ips sensor'):
+        entries = (n["children"].get("entries") or {}).get("children", {})
+        locs = sorted({v for e in entries.values() for v in e["sets"].get("location", [])})
+        oses = sorted({v for e in entries.values() for v in e["sets"].get("os", [])})
+        sevs = sorted({v for e in entries.values() for v in e["sets"].get("severity", [])})
+        log_pkt = "enable" if any(
+            _forti_set1(e, "log-packet", "disable").lower() == "enable"
+            for e in entries.values()
+        ) else "disable"
+        rows.append({
+            "name": name,
+            "entries_count": len(entries),
+            "location": _multi(locs),
+            "os": _multi(oses),
+            "severity": _multi(sevs),
+            "log_packet": log_pkt,
+        })
+    sections.append(_section(
+        "ips_sensors",
+        ["name", "entries_count", "location", "os", "severity", "log_packet"],
+        rows))
+
+    # 14) SSL/SSH Inspection Profiles
+    rows = []
+    for name, n in _children(root, 'firewall ssl-ssh-profile'):
+        https = n["children"].get("https") or {"sets": {}}
+        rows.append({
+            "name": name,
+            "https_status": _forti_set1(https, "status"),
+            "min_tls": _forti_set1(https, "min-allowed-ssl-version"),
+            "server_cert_mode": _forti_set1(n, "server-cert-mode"),
+            "server_cert": _forti_set1(n, "server-cert"),
+        })
+    sections.append(_section(
+        "ssl_ssh_profiles",
+        ["name", "https_status", "min_tls", "server_cert_mode", "server_cert"],
+        rows))
+
+    # 15) DoS Policies
+    rows = []
+    seen_dos = set()
+    for sec in ('firewall DoS-policy', 'firewall dos-policy'):
+        for did, n in _children(root, sec):
+            if did in seen_dos:
+                continue
+            seen_dos.add(did)
+            rows.append({
+                "id": did,
+                "interface": _forti_set1(n, "interface"),
+                "srcaddr": _multi(n["sets"].get("srcaddr", [])),
+                "dstaddr": _multi(n["sets"].get("dstaddr", [])),
+                "service": _multi(n["sets"].get("service", [])),
+                "status": _forti_set1(n, "status", "enable"),
+            })
+    sections.append(_section(
+        "dos_policies",
+        ["id", "interface", "srcaddr", "dstaddr", "service", "status"],
+        rows))
 
     return {"vendor": "fortios", "sections": sections,
             "vlan_interfaces": vlan_ifaces}

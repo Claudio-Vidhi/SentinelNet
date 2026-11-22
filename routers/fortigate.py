@@ -351,6 +351,13 @@ def fgt_firewall_security_profiles(ip: str, current_user = Depends(get_current_u
     """Profili di sicurezza (antivirus, IPS, webfilter, application control)."""
     return _fgt_call(fortigate_service.get_security_profiles, _fgt_device(ip, current_user))
 
+@router.get("/api/fortigate/{ip}/firewall/advisor")
+def fgt_firewall_advisor(ip: str, lang: str = "it",
+                         current_user = Depends(get_current_user)):
+    """Hardware-aware live policy & security profile advisor."""
+    return _fgt_call(fortigate_service.get_firewall_advisor,
+                     _fgt_device(ip, current_user), lang=lang)
+
 @router.post("/api/fortigate/{ip}/policy-lookup")
 def fgt_policy_lookup(ip: str, payload: FgtPolicyLookupSchema,
                       current_user = Depends(get_current_user)):

@@ -35,6 +35,7 @@ import urllib3
 
 from core import data_config
 from security.crypto_vault import encrypt_password, decrypt_password
+from services.fortigate_hw_profiles import FortiGateHWProfile, profile_to_dict, resolve_profile
 
 TOKENS_FILE = data_config.get_path("fortigate_tokens.json")
 
@@ -388,6 +389,28 @@ def _parse_system_status_cli(out: str) -> dict:
     return info
 
 
+def _attach_hardware_profile(device: dict, payload: Any, lang: str = "it") -> Any:
+    """Attach resolved ``hardware_profile`` metadata to a status dict."""
+    if not isinstance(payload, dict):
+        return payload
+    model = (
+        payload.get("model_name")
+        or payload.get("model")
+        or payload.get("platform_name")
+        or (device.get("Model") if isinstance(device, dict) else "")
+        or ""
+    )
+    version = (
+        payload.get("version")
+        or (device.get("Version") if isinstance(device, dict) else "")
+        or ""
+    )
+    serial = payload.get("serial") or ""
+    prof = resolve_profile(model=str(model), version=str(version), serial=str(serial))
+    payload["hardware_profile"] = profile_to_dict(prof, lang=lang)
+    return payload
+
+
 def get_system_status(device):
     """Stato di sistema: hostname/version/serial. A differenza degli altri
     endpoint, per monitor/system/status version e serial stanno nella busta
@@ -404,13 +427,15 @@ def get_system_status(device):
                 merged["version"] = str(data["version"]).lstrip("v")
             if data.get("serial") and not merged.get("serial"):
                 merged["serial"] = data["serial"]
-        return {"source": "api", "data": merged or data}
+        out_data = merged or (dict(data) if isinstance(data, dict) else data)
+        return {"source": "api", "data": _attach_hardware_profile(device, out_data)}
     except FortiGateError as e:
         api_err = str(e)
     try:
         out = ssh_command(device, "get system status")
+        parsed = _parse_system_status_cli(out)
         return {"source": "ssh", "api_error": api_err,
-                "data": _parse_system_status_cli(out)}
+                "data": _attach_hardware_profile(device, parsed)}
     except FortiGateError as ssh_err:
         raise FortiGateError(f"API: {api_err} | SSH: {ssh_err}")
 
@@ -609,15 +634,47 @@ def _resolve_addr_field(value, amap: dict) -> Optional[str]:
     return ", ".join(parts) or None
 
 
+_L7_POLICY_PROFILE_TAGS = (
+    ("AV", "av-profile"),
+    ("IPS", "ips-sensor"),
+    ("Web", "webfilter-profile"),
+    ("App", "application-list"),
+    ("DNS", "dnsfilter-profile"),
+    ("SSL", "ssl-ssh-profile"),
+)
+
+
+def _profile_name_val(val: Any) -> str:
+    if isinstance(val, dict):
+        return str(val.get("name") or val.get("q_origin_key") or "").strip()
+    return str(val or "").strip()
+
+
+def _summarize_l7_profiles(row: dict) -> str:
+    if str(row.get("utm-status") or "").lower() == "disable":
+        return ""
+    parts = []
+    for tag, key in _L7_POLICY_PROFILE_TAGS:
+        name = _profile_name_val(row.get(key))
+        if name:
+            parts.append(f"{tag}:{name}")
+    return ", ".join(parts)
+
+
 def get_firewall_policy_objects(device):
     """Policy firewall (cmdb) con soli campi rilevanti per l'osservabilità
     (policyid, nome, interfacce, indirizzi, servizi, azione, stato,
-    logtraffic). Complementare a get_firewall_policies() (full config)."""
+    logtraffic, L7/SPU). Complementare a get_firewall_policies() (full config)."""
     ip = device["IP"]
     try:
-        data = api_get_cmdb(ip, "cmdb/firewall/policy",
-                            fmt="policyid|name|srcintf|dstintf|srcaddr|dstaddr|"
-                                "service|action|status|logtraffic")
+        data = api_get_cmdb(
+            ip,
+            "cmdb/firewall/policy",
+            fmt="policyid|name|srcintf|dstintf|srcaddr|dstaddr|"
+                "service|action|status|logtraffic|inspection-mode|"
+                "utm-status|auto-asic-offload|ips-sensor|av-profile|"
+                "webfilter-profile|application-list|dnsfilter-profile|ssl-ssh-profile",
+        )
         return {"source": "api", "data": data.get("results", data)}
     except FortiGateError as e:
         raise FortiGateError(f"firewall/policy (slim) disponibile solo via REST API: {e}")
@@ -656,6 +713,9 @@ def get_policies_with_stats(device):
         merged.append({**row,
                        "srcaddr_ips": _resolve_addr_field(row.get("srcaddr"), amap),
                        "dstaddr_ips": _resolve_addr_field(row.get("dstaddr"), amap),
+                       "inspection_mode": str(row.get("inspection-mode") or "flow"),
+                       "asic_offload": str(row.get("auto-asic-offload") or "enable"),
+                       "l7_profiles": _summarize_l7_profiles(row),
                        "hit_count": (s or {}).get("hit_count", 0),
                        "bytes": (s or {}).get("bytes", 0),
                        "active_sessions": (s or {}).get("active_sessions", 0),
@@ -712,6 +772,8 @@ _SECURITY_PROFILES = {
     "ips": "cmdb/ips/sensor",
     "webfilter": "cmdb/webfilter/profile",
     "application": "cmdb/application/list",
+    "dnsfilter": "cmdb/dnsfilter/profile",
+    "ssl_ssh": "cmdb/firewall/ssl-ssh-profile",
 }
 
 
@@ -802,6 +864,104 @@ def policy_lookup(device, src_ip: str, dest: str, protocol: str = "TCP",
         raise FortiGateError(f"policy-lookup disponibile solo via REST API: {e}")
 
 
+_PROTO_BY_NUM = {"6": "TCP", "17": "UDP", "1": "ICMP", "58": "ICMPv6"}
+
+
+def normalize_session_row(row: dict) -> dict:
+    """Attach normalized NPU offload metadata to a FortiGate session dict."""
+    if not isinstance(row, dict):
+        return row
+    reason = str(row.get("no_ofld_reason") or "").strip()
+    if not reason and isinstance(row.get("npu_info"), dict):
+        reason = str(row["npu_info"].get("no_ofld_reason") or "").strip()
+    if reason.lower() in ("none", "n/a", "-"):
+        reason = ""
+
+    offload_val = row.get("offload")
+    if offload_val is None and isinstance(row.get("npu_info"), dict):
+        offload_val = row["npu_info"].get("offload")
+    npu_state = str(row.get("npu_state") or row.get("npu") or "").strip().lower()
+
+    npu_offload = "unknown"
+    if reason:
+        npu_offload = "cpu"
+    elif offload_val is not None:
+        if isinstance(offload_val, bool):
+            npu_offload = "hardware" if offload_val else "cpu"
+        elif isinstance(offload_val, (int, float)):
+            npu_offload = "hardware" if offload_val > 0 else "cpu"
+        else:
+            s = str(offload_val).strip().lower()
+            if s in ("0", "0/0", "false", "no", "none", "disable", "disabled"):
+                npu_offload = "cpu"
+            elif s in ("true", "yes", "enable", "enabled", "ofld") or re.match(r"^[1-9]\d*/\d+$", s):
+                npu_offload = "hardware"
+    elif npu_state:
+        if "ofld" in npu_state or npu_state in ("true", "hardware", "npu"):
+            npu_offload = "hardware"
+        elif npu_state in ("false", "cpu", "none"):
+            npu_offload = "cpu"
+
+    if npu_offload == "hardware":
+        detail = "NPU"
+    elif npu_offload == "cpu":
+        detail = f"CPU ({reason})" if reason else "CPU"
+    else:
+        detail = ""
+
+    return {
+        **row,
+        "npu_offload": npu_offload,
+        "no_ofld_reason": reason,
+        "npu_detail": detail,
+    }
+
+
+def parse_sessions_cli(raw_text: str) -> list:
+    """Parse ``diagnose sys session list`` output into normalized session rows."""
+    if not raw_text or "session info:" not in raw_text:
+        return []
+    blocks = re.split(r"(?=^session info:)", raw_text.strip(), flags=re.MULTILINE)
+    rows = []
+    for blk in blocks:
+        if "session info:" not in blk:
+            continue
+        proto_m = re.search(r"\bproto=(\d+)", blk)
+        dur_m = re.search(r"\bduration=(\d+)", blk)
+        pol_m = re.search(r"\bpolicy_id=(\d+)", blk)
+        flow_m = re.search(
+            r"hook=pre\s+dir=org\s+act=\S+\s+([0-9a-fA-F:.]+):(\d+)->([0-9a-fA-F:.]+):(\d+)",
+            blk,
+        )
+        reason_m = re.search(r"\bno_ofld_reason[:=]\s*([A-Za-z0-9_.-]+)", blk)
+        ofld_m = re.search(r"\b(?:offload|ofld)[:=]\s*(\S+)", blk)
+        state_m = re.search(r"\bstate=([^\r\n]+)", blk)
+
+        if not (proto_m or flow_m):
+            continue
+
+        row: Dict[str, Any] = {
+            "protocol": _PROTO_BY_NUM.get(proto_m.group(1), proto_m.group(1)) if proto_m else "",
+            "duration": int(dur_m.group(1)) if dur_m else None,
+            "policy_id": int(pol_m.group(1)) if pol_m else None,
+        }
+        if flow_m:
+            row["source"] = flow_m.group(1)
+            row["source_port"] = int(flow_m.group(2))
+            row["destination"] = flow_m.group(3)
+            row["destination_port"] = int(flow_m.group(4))
+        if reason_m:
+            row["no_ofld_reason"] = reason_m.group(1)
+        if ofld_m:
+            row["offload"] = ofld_m.group(1)
+        elif state_m:
+            st_tokens = set(state_m.group(1).lower().split())
+            if "ofld" in st_tokens or "npu" in st_tokens:
+                row["npu_state"] = "ofld"
+        rows.append(normalize_session_row(row))
+    return rows
+
+
 def get_sessions(device, src_ip: Optional[str] = None, dst_ip: Optional[str] = None,
                  dst_port: Optional[int] = None, count: int = 100):
     """Sessioni attive (session table), filtrabili per src/dst/porta."""
@@ -827,9 +987,23 @@ def get_sessions(device, src_ip: Optional[str] = None, dst_ip: Optional[str] = N
     # .../session/select, che accetta proprio srcaddr/dstaddr/dstport/count.
     # Il path vecchio resta come secondo tentativo per le versioni che lo
     # servivano.
-    return _api_or_ssh(device,
-                       ("monitor/firewall/session/select", "monitor/firewall/session"),
-                       params, ssh_cmd)
+    res = _api_or_ssh(device,
+                      ("monitor/firewall/session/select", "monitor/firewall/session"),
+                      params, ssh_cmd)
+    data = res.get("data")
+    if res.get("source") == "api":
+        if isinstance(data, list):
+            res["data"] = [normalize_session_row(r) if isinstance(r, dict) else r for r in data]
+        elif isinstance(data, dict) and isinstance(data.get("details"), list):
+            res["data"] = {
+                **data,
+                "details": [normalize_session_row(r) if isinstance(r, dict) else r for r in data["details"]],
+            }
+    elif res.get("source") == "ssh" and isinstance(data, str):
+        parsed = parse_sessions_cli(data)
+        if parsed:
+            res["data"] = parsed
+    return res
 
 
 def delete_sessions(device, src_ip: Optional[str] = None, dst_ip: Optional[str] = None,
@@ -1236,3 +1410,290 @@ def diagnose_client(device, client: str, dest: Optional[str] = None,
                     protocol=protocol, dest_port=dest_port)
     section("wifi_clients", get_wifi_clients, device)
     return result
+
+
+# --- Advisor live L7/SPU ------------------------------------------------------
+
+_ADVISOR_SEVERITY_ORDER = {"CRITICAL": 0, "HIGH": 1, "WARN": 2, "INFO": 3}
+_GENERIC_IPS_NAMES = frozenset({"default", "high_security", "all_default", "all_default_pass"})
+_BYPASS_TOP_BYTES = 100_000_000
+
+
+def _policy_member_names(val: Any) -> list[str]:
+    if not val:
+        return []
+    items = val if isinstance(val, list) else [val]
+    out = []
+    for item in items:
+        if isinstance(item, dict):
+            name = str(item.get("name") or item.get("q_origin_key") or "").strip().lower()
+        else:
+            name = str(item or "").strip().lower()
+        if name:
+            out.append(name)
+    return out
+
+
+def _vip_remediation_cli(pid: str) -> str:
+    return (
+        "config firewall ssl-ssh-profile\n"
+        '    edit "SSL_Protect_WebServer"\n'
+        "        config https\n"
+        "            set ports 443\n"
+        "            set status deep-inspection\n"
+        "            set min-allowed-ssl-version tls-1.2\n"
+        "            set unsupported-ssl-version block\n"
+        "            set expired-server-cert block\n"
+        "        end\n"
+        "        set server-cert-mode replace\n"
+        '        set server-cert "Cert_WebServer_Prod"\n'
+        "    next\n"
+        "end\n"
+        "config ips sensor\n"
+        '    edit "IPS_WebServer_Linux"\n'
+        "        config entries\n"
+        "            edit 1\n"
+        "                set location server\n"
+        "                set severity high critical\n"
+        "                set os Linux\n"
+        "                set application Apache Nginx\n"
+        "                set status enable\n"
+        "                set action block\n"
+        "            next\n"
+        "        end\n"
+        "    next\n"
+        "end\n"
+        "config firewall policy\n"
+        f"    edit {pid}\n"
+        "        set inspection-mode flow\n"
+        "        set utm-status enable\n"
+        '        set ssl-ssh-profile "SSL_Protect_WebServer"\n'
+        '        set ips-sensor "IPS_WebServer_Linux"\n'
+        "    next\n"
+        "end"
+    )
+
+
+def get_firewall_advisor(device, lang: str = "it") -> dict:
+    """Hardware-aware live policy & security profile recommendations."""
+    en = (lang or "it").strip().lower().startswith("en")
+    errors: Dict[str, str] = {}
+
+    status_data: Dict[str, Any] = {}
+    try:
+        st_res = get_system_status(device)
+        if isinstance(st_res.get("data"), dict):
+            status_data = st_res["data"]
+    except FortiGateError as e:
+        errors["status"] = str(e)
+
+    policies: list[dict] = []
+    try:
+        pol_res = get_policies_with_stats(device)
+        raw_pols = pol_res.get("data")
+        if isinstance(raw_pols, list):
+            policies = [p for p in raw_pols if isinstance(p, dict)]
+        if pol_res.get("stats_error"):
+            errors["policy_stats"] = str(pol_res["stats_error"])
+    except FortiGateError as e:
+        errors["policies"] = str(e)
+
+    vip_names: set[str] = set()
+    try:
+        vip_res = get_vips(device)
+        for v in (vip_res.get("data") or []):
+            if isinstance(v, dict) and v.get("name"):
+                vip_names.add(str(v["name"]).strip().lower())
+    except FortiGateError as e:
+        errors["vips"] = str(e)
+
+    profile_errors: Dict[str, str] = {}
+    try:
+        sp_res = get_security_profiles(device)
+        if isinstance(sp_res.get("errors"), dict):
+            profile_errors = dict(sp_res["errors"])
+    except FortiGateError as e:
+        errors["security_profiles"] = str(e)
+
+    model = (
+        status_data.get("model_name")
+        or status_data.get("model")
+        or status_data.get("platform_name")
+        or (device.get("Model") if isinstance(device, dict) else "")
+        or ""
+    )
+    version = (
+        status_data.get("version")
+        or (device.get("Version") if isinstance(device, dict) else "")
+        or ""
+    )
+    serial = status_data.get("serial") or ""
+    profile: FortiGateHWProfile = resolve_profile(
+        model=str(model), version=str(version), serial=str(serial),
+    )
+
+    recs: list[Dict[str, Any]] = []
+
+    def add_rec(rec_id: str, severity: str, category: str, pid: Optional[str],
+                pname: str, title_it: str, title_en: str,
+                detail_it: str, detail_en: str, cli: str = "") -> None:
+        recs.append({
+            "id": rec_id,
+            "severity": severity,
+            "category": category,
+            "policy_id": pid,
+            "policy_name": pname,
+            "title": title_en if en else title_it,
+            "detail": detail_en if en else detail_it,
+            "cli": cli,
+        })
+
+    for idx, row in enumerate(policies):
+        action = str(row.get("action") or "").strip().lower()
+        status = str(row.get("status") or "enable").strip().lower()
+        if action != "accept" or status == "disable":
+            continue
+        pid = str(row.get("policyid") if row.get("policyid") is not None else "")
+        pname = str(row.get("name") or (f"Policy {pid}" if pid else ""))
+
+        insp_mode = str(row.get("inspection-mode") or row.get("inspection_mode") or "flow").strip().lower()
+        if insp_mode == "proxy":
+            sev = "CRITICAL" if profile.proxy_removed_2gb else "WARN"
+            add_rec(
+                f"ADV-PROXY-{pid}", sev, "SPU / Inspection", pid, pname,
+                "Modalita' proxy attiva",
+                "Proxy inspection mode enabled",
+                (
+                    "Su modelli 2GB con FortiOS 7.4.4+ la modalita' proxy non e' supportata: convertire a flow."
+                    if profile.proxy_removed_2gb else
+                    "La modalita' proxy trattiene le sessioni su CPU invece di usare il motore single-pass flow/CP9."
+                ),
+                (
+                    "Proxy mode is unsupported on 2GB RAM units running FortiOS 7.4.4+: switch to flow."
+                    if profile.proxy_removed_2gb else
+                    "Proxy mode traps sessions on CPU instead of using flow single-pass/CP9 acceleration."
+                ),
+                f"config firewall policy\n    edit {pid}\n        set inspection-mode flow\n    next\nend",
+            )
+
+        asic_offload = str(row.get("auto-asic-offload") or row.get("asic_offload") or "enable").strip().lower()
+        if not profile.is_vm and asic_offload == "disable":
+            add_rec(
+                f"ADV-OFFLOAD-{pid}", "WARN", "SPU / Offload", pid, pname,
+                "Offload ASIC disabilitato sulla policy",
+                "ASIC offload disabled on policy",
+                "auto-asic-offload disable forza il traffico sulla CPU (no_ofld_reason=npu-disabled).",
+                "auto-asic-offload disable forces forwarding onto CPU (no_ofld_reason=npu-disabled).",
+                f"config firewall policy\n    edit {pid}\n        set auto-asic-offload enable\n    next\nend",
+            )
+
+        dst_names = set(_policy_member_names(row.get("dstaddr")))
+        is_vip = bool(vip_names and (dst_names & vip_names))
+        utm_disabled = str(row.get("utm-status") or "").strip().lower() == "disable"
+        ips_name = _profile_name_val(row.get("ips-sensor"))
+        if is_vip and (not ips_name or utm_disabled):
+            add_rec(
+                f"ADV-VIP-L7-{pid}", "HIGH", "Layer 7 / VIP", pid, pname,
+                "Policy verso VIP senza sensore IPS attivo",
+                "Inbound VIP policy missing active IPS sensor",
+                "Pubblicare un VIP senza IPS espone i servizi ad exploit Layer 7. Applicare Protecting SSL Server + IPS mirato.",
+                "Publishing a VIP without IPS exposes services to Layer 7 exploits. Apply Protecting SSL Server + targeted IPS.",
+                _vip_remediation_cli(pid),
+            )
+
+        has_utm_prof = (
+            not utm_disabled
+            and any(_profile_name_val(row.get(k)) for k in ("av-profile", "ips-sensor", "webfilter-profile", "application-list"))
+        )
+        ssl_prof = _profile_name_val(row.get("ssl-ssh-profile"))
+        if has_utm_prof and (not ssl_prof or ssl_prof.lower() == "no-inspection"):
+            add_rec(
+                f"ADV-SSL-{pid}", "WARN", "SSL Inspection", pid, pname,
+                "Profili UTM attivi senza ispezione SSL/SSH",
+                "UTM profiles active without SSL/SSH inspection",
+                "Senza ssl-ssh-profile i motori L7 non ispezionano payload HTTPS. Impostare almeno certificate-inspection.",
+                "Without ssl-ssh-profile, L7 engines cannot inspect encrypted HTTPS. Enable at least certificate-inspection.",
+                f'config firewall policy\n    edit {pid}\n        set ssl-ssh-profile "certificate-inspection"\n    next\nend',
+            )
+
+        ips_low = ips_name.lower()
+        if not utm_disabled and ips_low and (
+            (is_vip and ips_low in _GENERIC_IPS_NAMES)
+            or (profile.ram_tier == "2gb" and ips_low in ("high_security", "all_default"))
+        ):
+            loc = "server" if is_vip else "client"
+            target_sensor = f"IPS_{loc.title()}_Scoped"
+            add_rec(
+                f"ADV-IPS-{pid}", "WARN", "IPS Tuning", pid, pname,
+                f"Sensore IPS generico '{ips_name}'",
+                f"Generic IPS sensor '{ips_name}'",
+                "Sostituire il profilo generico con un sensore mirato per location, OS, applicazione e severity (high/critical) per ridurre CPU/RAM.",
+                "Replace the generic profile with a sensor scoped by location, OS, application, and high/critical severity to reduce CPU/RAM load.",
+                (
+                    "config ips sensor\n"
+                    f'    edit "{target_sensor}"\n'
+                    "        config entries\n"
+                    "            edit 1\n"
+                    f"                set location {loc}\n"
+                    "                set severity high critical\n"
+                    "                set status enable\n"
+                    "                set action block\n"
+                    "            next\n"
+                    "        end\n"
+                    "    next\n"
+                    "end"
+                ),
+            )
+
+        l7_summary = _summarize_l7_profiles(row)
+        src_names = set(_policy_member_names(row.get("srcaddr")))
+        svc_names = set(_policy_member_names(row.get("service")))
+        if not l7_summary and asic_offload == "enable":
+            if (src_names & {"all", "any"}) or (dst_names & {"all", "any"}) or (svc_names & {"all", "any"}):
+                add_rec(
+                    f"ADV-BYPASS-{pid}", "WARN", "Bypass Scope", pid, pname,
+                    "Policy senza UTM con offload attivo troppo ampia",
+                    "UTM-less offloaded policy scope is overly broad",
+                    "Le regole di bypass offload vanno limitate a host /32 puntuali e porte applicative specifiche (mai all/ALL).",
+                    "Offloaded bypass rules should be scoped to exact /32 hosts and required ports (never all/ALL).",
+                    f"config firewall policy\n    edit {pid}\n        set srcaddr <host_32>\n        set dstaddr <host_32>\n        set service <specific_port>\n    next\nend",
+                )
+
+        if idx >= 5 and int(row.get("bytes") or 0) >= _BYPASS_TOP_BYTES:
+            add_rec(
+                f"ADV-ORDER-{pid}", "INFO", "Policy Order", pid, pname,
+                "Policy ad alto volume in posizione bassa",
+                "High-volume policy positioned low in table",
+                "Regola oltre la 5a posizione con traffico >= 100 MB: valutare spostamento in cima o bypass /32 dedicato per sfruttare first-match.",
+                "Rule sits below position 5 with >= 100 MB traffic: consider moving higher or creating a /32 fast-path bypass for first-match efficiency.",
+            )
+
+    if profile_errors:
+        fams = ", ".join(sorted(profile_errors))
+        add_rec(
+            "ADV-PROFILES-UNAVAIL", "INFO", "Licensing / Profiles", None, "",
+            f"Famiglie profili non disponibili via REST: {fams}",
+            f"Profile families unavailable via REST: {fams}",
+            "Feature non abilitate o licenza FortiGuard assente per queste famiglie su questo apparato.",
+            "Feature disabled or FortiGuard license unavailable for these profile families on this unit.",
+        )
+
+    recs.sort(key=lambda r: (_ADVISOR_SEVERITY_ORDER.get(r["severity"], 9), str(r.get("policy_id") or "")))
+    summary = {
+        "total": len(recs),
+        "critical": sum(1 for r in recs if r["severity"] == "CRITICAL"),
+        "high": sum(1 for r in recs if r["severity"] == "HIGH"),
+        "warn": sum(1 for r in recs if r["severity"] == "WARN"),
+        "info": sum(1 for r in recs if r["severity"] == "INFO"),
+        "policies_analyzed": len(policies),
+    }
+    return {
+        "source": "api",
+        "data": {
+            "hardware_profile": profile_to_dict(profile, lang=lang),
+            "summary": summary,
+            "recommendations": recs,
+            "sniffer_syntax": profile.sniffer_syntax,
+            "errors": errors,
+        },
+    }

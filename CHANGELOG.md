@@ -10,6 +10,26 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **FortiGate L7/SPU — profili hardware e benchmark NetSec Audit**: aggiunto il
+  catalogo profili hardware/ASIC (`services/fortigate_hw_profiles.py`), la
+  lettura dell'header `#config-version=` nei backup FortiOS e il nuovo
+  benchmark `fortios-l7-spu` con 8 controlli su ispezione flow/proxy,
+  `auto-asic-offload`, deep SSL, sensori IPS, profili SSL/SSH e DoS policy, con
+  guidance contestuale per modello e versione FortiOS.
+- **FortiGate Live — Advisor L7/SPU, stato offload NPU e sniffer CLI**: nuovo
+  endpoint `GET /api/fortigate/{ip}/firewall/advisor` e pill `Consigli L7/SPU`
+  in dashboard; tile hardware/ASIC nello stato del firewall; colonne L7/SPU
+  sulle policy; 6 famiglie di profili di sicurezza (`dnsfilter`, `ssl_ssh`);
+  stato offload NPU con badge e tooltip sulle sessioni live (REST e CLI) e
+  generatore CLI sola-copia per sniffer NPU (`diagnose npu sniffer`).
+- **Config Analyzer & Firewall Hygiene FortiOS**: aggiunti campi L7/SPU sulle
+  policy e sezioni `ips_sensors`, `ssl_ssh_profiles`, `dos_policies` in
+  `fw_analyzers/fortios.py`; nuovi candidati di ottimizzazione
+  (`reorder_top` e `spu_bypass`) con snippet dry-run/rollback e KPI dedicato
+  nella vista Firewall Hygiene.
+
 ## [0.68.0] - 2026-11-21
 
 ### Security

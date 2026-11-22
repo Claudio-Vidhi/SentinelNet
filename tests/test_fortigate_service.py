@@ -662,22 +662,151 @@ class FirewallObjectsTest(unittest.TestCase):
             self.assertEqual(mock_cmdb.call_args[0][1], path)
 
     @mock.patch("services.fortigate_service.api_get_cmdb")
-    def test_security_profiles_aggregate_four_families(self, mock_cmdb):
+    def test_security_profiles_aggregate_six_families(self, mock_cmdb):
         mock_cmdb.return_value = {"results": [{"name": "default"}]}
         res = fgs.get_security_profiles(DEVICE)
-        self.assertEqual(set(res["data"]), {"antivirus", "ips", "webfilter", "application"})
+        self.assertEqual(
+            set(res["data"]),
+            {"antivirus", "ips", "webfilter", "application", "dnsfilter", "ssl_ssh"},
+        )
         self.assertEqual(res["data"]["antivirus"], [{"name": "default"}])
+        self.assertEqual(res["data"]["dnsfilter"], [{"name": "default"}])
+        self.assertEqual(res["data"]["ssl_ssh"], [{"name": "default"}])
 
     @mock.patch("services.fortigate_service.api_get_cmdb")
     def test_a_missing_profile_family_does_not_sink_the_others(self, mock_cmdb):
         # Una licenza senza IPS non deve svuotare antivirus e webfilter.
         mock_cmdb.side_effect = [{"results": [{"name": "av"}]},
                                  fgs.FortiGateError("404 ips"),
+                                 {"results": []}, {"results": []},
                                  {"results": []}, {"results": []}]
         res = fgs.get_security_profiles(DEVICE)
         self.assertEqual(res["data"]["antivirus"], [{"name": "av"}])
         self.assertEqual(res["data"]["ips"], [])
         self.assertIn("ips", res["errors"])
+
+
+class L7PoliciesSessionsAndAdvisorTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._orig = fgs.TOKENS_FILE
+        fgs.TOKENS_FILE = os.path.join(self._tmp.name, "t.json")
+        fgs.set_api_token(DEVICE["IP"], "tok")
+
+    def tearDown(self):
+        fgs.TOKENS_FILE = self._orig
+        self._tmp.cleanup()
+
+    def test_policies_with_stats_includes_l7_and_spu_fields(self):
+        cfg = [{
+            "policyid": 10,
+            "name": "web-in",
+            "action": "accept",
+            "status": "enable",
+            "srcaddr": [{"name": "all"}],
+            "dstaddr": [{"name": "VIP_Web"}],
+            "inspection-mode": "flow",
+            "utm-status": "enable",
+            "auto-asic-offload": "enable",
+            "ips-sensor": "IPS_WebServer_Linux",
+            "ssl-ssh-profile": {"name": "SSL_Protect_WebServer"},
+        }]
+        with mock.patch.object(fgs, "get_firewall_policy_objects", return_value={"source": "api", "data": cfg}), \
+             mock.patch.object(fgs, "get_policy_stats", return_value={"source": "api", "data": []}), \
+             mock.patch.object(fgs, "_address_map", return_value={}):
+            res = fgs.get_policies_with_stats(DEVICE)
+        row = res["data"][0]
+        self.assertEqual(row["inspection_mode"], "flow")
+        self.assertEqual(row["asic_offload"], "enable")
+        self.assertIn("IPS:IPS_WebServer_Linux", row["l7_profiles"])
+        self.assertIn("SSL:SSL_Protect_WebServer", row["l7_profiles"])
+
+    def test_policy_objects_requests_extended_l7_fields(self):
+        with mock.patch.object(fgs.requests, "request", return_value=_resp(200, {"results": []})) as m:
+            fgs.get_firewall_policy_objects(DEVICE)
+        fmt = m.call_args.kwargs["params"]["format"]
+        for field in ("inspection-mode", "utm-status", "auto-asic-offload", "ips-sensor", "dnsfilter-profile", "ssl-ssh-profile"):
+            self.assertIn(field, fmt)
+
+    def test_normalize_session_row_and_cli_parsing(self):
+        hw_row = fgs.normalize_session_row({"policy_id": 1, "offload": "8/8"})
+        self.assertEqual(hw_row["npu_offload"], "hardware")
+        self.assertEqual(hw_row["npu_detail"], "NPU")
+
+        cpu_row = fgs.normalize_session_row({"policy_id": 2, "no_ofld_reason": "redir-to-ips"})
+        self.assertEqual(cpu_row["npu_offload"], "cpu")
+        self.assertEqual(cpu_row["no_ofld_reason"], "redir-to-ips")
+        self.assertEqual(cpu_row["npu_detail"], "CPU (redir-to-ips)")
+
+        cli_text = (
+            "session info: proto=6 proto_state=01 duration=45 expire=3555\n"
+            "policy_id=12 vd=0\n"
+            "hook=pre dir=org act=noop 10.10.20.10:51234->198.51.100.20:443(0.0.0.0:0)\n"
+            "ofld=8/8\n"
+            "session info: proto=17 proto_state=00 duration=10 expire=170\n"
+            "policy_id=15 vd=0\n"
+            "hook=pre dir=org act=noop 10.10.20.11:5060->203.0.113.5:5060(0.0.0.0:0)\n"
+            "no_ofld_reason: helper\n"
+        )
+        rows = fgs.parse_sessions_cli(cli_text)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["protocol"], "TCP")
+        self.assertEqual(rows[0]["npu_offload"], "hardware")
+        self.assertEqual(rows[0]["destination_port"], 443)
+        self.assertEqual(rows[1]["protocol"], "UDP")
+        self.assertEqual(rows[1]["npu_offload"], "cpu")
+        self.assertEqual(rows[1]["npu_detail"], "CPU (helper)")
+
+    def test_advisor_2gb_vs_vm_and_vip_recommendations(self):
+        policies = [
+            {"policyid": 1, "name": "proxy-rule", "action": "accept", "status": "enable",
+             "srcaddr": [{"name": "LAN"}], "dstaddr": [{"name": "all"}], "service": [{"name": "HTTPS"}],
+             "inspection-mode": "proxy", "auto-asic-offload": "disable",
+             "ips-sensor": "high_security", "ssl-ssh-profile": ""},
+            {"policyid": 2, "name": "vip-in", "action": "accept", "status": "enable",
+             "srcaddr": [{"name": "all"}], "dstaddr": [{"name": "VIP_Web"}], "service": [{"name": "HTTPS"}],
+             "inspection-mode": "flow", "auto-asic-offload": "enable"},
+            {"policyid": 3, "name": "bypass-wide", "action": "accept", "status": "enable",
+             "srcaddr": [{"name": "all"}], "dstaddr": [{"name": "all"}], "service": [{"name": "ALL"}],
+             "inspection-mode": "flow", "auto-asic-offload": "enable"},
+            {"policyid": 4, "name": "ok-a", "action": "accept", "status": "enable",
+             "srcaddr": [{"name": "A"}], "dstaddr": [{"name": "B"}], "service": [{"name": "HTTPS"}],
+             "inspection-mode": "flow", "auto-asic-offload": "enable"},
+            {"policyid": 5, "name": "ok-b", "action": "accept", "status": "enable",
+             "srcaddr": [{"name": "A"}], "dstaddr": [{"name": "B"}], "service": [{"name": "HTTPS"}],
+             "inspection-mode": "flow", "auto-asic-offload": "enable"},
+            {"policyid": 6, "name": "heavy-bottom", "action": "accept", "status": "enable",
+             "srcaddr": [{"name": "H1"}], "dstaddr": [{"name": "H2"}], "service": [{"name": "SSH"}],
+             "inspection-mode": "flow", "auto-asic-offload": "enable", "bytes": 250_000_000},
+        ]
+        with mock.patch.object(fgs, "get_system_status", return_value={"data": {"model": "FGT60F", "version": "7.4.5"}}), \
+             mock.patch.object(fgs, "get_policies_with_stats", return_value={"data": policies}), \
+             mock.patch.object(fgs, "get_vips", return_value={"data": [{"name": "VIP_Web"}]}), \
+             mock.patch.object(fgs, "get_security_profiles", return_value={"data": {}, "errors": {"dnsfilter": "404"}}):
+            res_it = fgs.get_firewall_advisor(DEVICE, lang="it")
+            res_en = fgs.get_firewall_advisor(DEVICE, lang="en")
+
+        ids = {r["id"]: r for r in res_en["data"]["recommendations"]}
+        self.assertEqual(ids["ADV-PROXY-1"]["severity"], "CRITICAL")
+        self.assertEqual(ids["ADV-OFFLOAD-1"]["severity"], "WARN")
+        self.assertEqual(ids["ADV-VIP-L7-2"]["severity"], "HIGH")
+        self.assertIn("ADV-SSL-1", ids)
+        self.assertIn("ADV-IPS-1", ids)
+        self.assertIn("ADV-BYPASS-3", ids)
+        self.assertEqual(ids["ADV-ORDER-6"]["severity"], "INFO")
+        self.assertEqual(ids["ADV-PROFILES-UNAVAIL"]["severity"], "INFO")
+        self.assertNotEqual(res_it["data"]["recommendations"][0]["title"],
+                            res_en["data"]["recommendations"][0]["title"])
+
+        # VM unit skips auto-asic-offload warning
+        with mock.patch.object(fgs, "get_system_status", return_value={"data": {"model": "FGVM64", "version": "7.6.0"}}), \
+             mock.patch.object(fgs, "get_policies_with_stats", return_value={"data": [policies[0]]}), \
+             mock.patch.object(fgs, "get_vips", return_value={"data": []}), \
+             mock.patch.object(fgs, "get_security_profiles", return_value={"data": {}, "errors": {}}):
+            vm_res = fgs.get_firewall_advisor(DEVICE, lang="en")
+        vm_ids = {r["id"] for r in vm_res["data"]["recommendations"]}
+        self.assertNotIn("ADV-OFFLOAD-1", vm_ids)
+        self.assertEqual(vm_res["data"]["sniffer_syntax"], "none")
 
 
 if __name__ == "__main__":

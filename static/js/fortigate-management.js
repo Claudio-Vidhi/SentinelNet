@@ -62,7 +62,9 @@ const FGT_DATASETS = {
                            ['srcaddr','colFgtPolSrcAddr'], ['srcaddr_ips','colFgtPolSrcAddrIps'],
                            ['dstaddr','colFgtPolDstAddr'], ['dstaddr_ips','colFgtPolDstAddrIps'],
                            ['service','colFgtPolService'], ['action','colFgtPolAction','badge'],
-                           ['status','colFgtPolStatus','badge'], ['hit_count','colFgtPolHits'],
+                           ['status','colFgtPolStatus','badge'], ['inspection_mode','colFgtPolMode','badge'],
+                           ['asic_offload','colFgtPolOffload','badge'], ['l7_profiles','colFgtPolProfiles'],
+                           ['hit_count','colFgtPolHits'],
                            ['active_sessions','colFgtPolSessions'], ['last_used','colFgtPolLastUsed','time']] },
     // Quale policy matcherebbe un flusso: risposta a oggetto singolo, resa
     // come tabella chiave/valore (cols vuoto -> ramo isKv del renderer).
@@ -72,6 +74,7 @@ const FGT_DATASETS = {
                                    dest_port: parseInt(_fgtVal('fgtLookupPort')) || 443,
                                    srcintf: _fgtVal('fgtLookupIntf') || null }),
                     requires: 'fgtLookupSrc', cols: [] },
+    advisor:      { url: ip => `/api/fortigate/${ip}/firewall/advisor`, withLang: true, cols: [] },
     securityProfiles: { url: ip => `/api/fortigate/${ip}/firewall/security-profiles`, cols: [] },
     // --- Traffic ---
     deviceInventory:{ url: ip => `/api/fortigate/${ip}/device-inventory`,
@@ -80,9 +83,11 @@ const FGT_DATASETS = {
     sessions:     { url: ip => `/api/fortigate/${ip}/sessions`, method: 'POST',
                     body: () => ({ src_ip: _fgtVal('fgtSessSrc') || null, dst_ip: _fgtVal('fgtSessDst') || null,
                                    dst_port: parseInt(_fgtVal('fgtSessPort')) || null, count: 100 }),
+                    pick: d => (d && Array.isArray(d.details)) ? d.details : d,
                     cols: [['protocol','colFgtSessProto'], ['source','colFgtSessSrc'], ['source_port','colFgtSessSport'],
                            ['destination','colFgtSessDst'], ['destination_port','colFgtSessDport'],
-                           ['policy_id','colFgtSessPolicy'], ['duration','colFgtSessDuration']] },
+                           ['policy_id','colFgtSessPolicy'], ['duration','colFgtSessDuration'],
+                           ['npu_detail','colFgtSessNpu','npu']] },
     logs:         { url: ip => `/api/fortigate/${ip}/logs`, method: 'POST',
                     body: () => ({ src_ip: _fgtVal('fgtLogSrc') || null, dst_ip: _fgtVal('fgtLogDst') || null,
                                    action: _fgtVal('fgtLogAction') || null,
@@ -143,6 +148,7 @@ function _fgtVal(id) {
 
 let fgtDatasetRows = {};   // key -> { rows, source, apiError, error }
 let fgtConnectedTarget = ''; // target IP per cui sono state autorizzate le chiamate API
+let fgtCurrentHwProfile = null; // hardware profile resolved for connected target
 
 // Un solo loader per tutte le viste. Un dataset che fallisce non è un
 // errore della tab: su un FortiGate senza SD-WAN o senza controller WiFi
@@ -226,7 +232,11 @@ async function loadFgtDataset(key) {
             body: JSON.stringify(sent) }
         : undefined;
     try {
-        const res = await apiFetch(spec.url(encodeURIComponent(ip)), opts);
+        let url = spec.url(encodeURIComponent(ip));
+        if (spec.withLang) {
+            url += `?lang=${encodeURIComponent(currentLang || 'it')}`;
+        }
+        const res = await apiFetch(url, opts);
         if (res && res.ok) {
             const body = await res.json();
             // Secondo argomento: il corpo intero, per le rotte che non usano
@@ -325,6 +335,7 @@ function renderFgtDataset(key) {
         return;
     }
     if (key === 'clientDiagnosis') { renderFgtClientDiagnosis(host, st, head); return; }
+    if (key === 'advisor') { renderFgtAdvisor(host, st, head); return; }
     if (!st.rows.length) { host.innerHTML = head + _fgtEmpty(L.msgFgtObjEmpty || (tr('fgtNoData'))); return; }
 
     // Le risorse sono serie storiche, non un dict piatto: hanno un renderer
@@ -363,8 +374,19 @@ function _fgtCell(v) {
 // formattatore che dimentica di farlo è una XSS con sorgente il firewall.
 
 // Stati che il FortiOS scrive in mille modi diversi per dire la stessa cosa.
-const _FGT_OK = ['up', 'enable', 'enabled', 'online', 'accept', 'in-sync', 'insync', 'true', 'ok', 'valid'];
+const _FGT_OK = ['up', 'enable', 'enabled', 'online', 'accept', 'in-sync', 'insync', 'true', 'ok', 'valid', 'flow', 'hardware'];
 const _FGT_BAD = ['down', 'disable', 'disabled', 'offline', 'deny', 'out-of-sync', 'false', 'expired', 'blocked', 'error'];
+
+function _fgtNpuReasonHint(raw) {
+    const low = String(raw || '').toLowerCase();
+    if (low.includes('redir-to-ips')) return tr('fgtNpuReasonIps');
+    if (low.includes('proxy') || low.includes('redir-to-av')) return tr('fgtNpuReasonProxy');
+    if (low.includes('npu-disabled')) return tr('fgtNpuReasonDisabled');
+    if (low.includes('non-npu-intf')) return tr('fgtNpuReasonNonNpu');
+    if (low.includes('helper')) return tr('fgtNpuReasonHelper');
+    if (low.includes('local')) return tr('fgtNpuReasonLocal');
+    return '';
+}
 
 const FGT_FMT = {
     // Pastiglia verde/rossa/gialla. Riusa .status del design system invece di
@@ -374,6 +396,16 @@ const FGT_FMT = {
         const raw = String(typeof v === 'boolean' ? v : v).toLowerCase().trim();
         const kind = _FGT_OK.includes(raw) ? 'ok' : _FGT_BAD.includes(raw) ? 'bad' : 'warn';
         return `<span class="status ${kind}">${escapeHtml(String(v))}</span>`;
+    },
+    npu(v) {
+        if (v === null || v === undefined || v === '') return '—';
+        const raw = String(v).trim();
+        if (!raw) return '—';
+        if (raw.toUpperCase() === 'NPU') {
+            return '<span class="status ok">NPU</span>';
+        }
+        const hint = _fgtNpuReasonHint(raw);
+        return `<span class="status warn"${hint ? ` title="${escapeHtml(hint)}"` : ''}>${escapeHtml(raw)}</span>`;
     },
     // Barra 0-100. FortiOS restituisce spesso [{current: N}] invece di N.
     meter(v) {
@@ -774,6 +806,133 @@ function _fgtKvTable(obj, errors) {
     return `<div class="table-wrap" style="margin-top:0;"><table style="width:100%; font-size:13px; border-collapse:collapse;"><tbody>${rows}</tbody></table></div>`;
 }
 
+function renderFgtAdvisor(host, st, head) {
+    const data = st.raw || {};
+    const hw = data.hardware_profile || null;
+    if (hw) fgtCurrentHwProfile = hw;
+    const summary = data.summary || {};
+    const recs = Array.isArray(data.recommendations) ? data.recommendations : [];
+
+    let hwHtml = '';
+    if (hw) {
+        const notesHtml = Array.isArray(hw.notes) && hw.notes.length
+            ? `<ul style="margin:8px 0 0 18px; padding:0; font-size:12px; color:var(--text-muted);">${
+                hw.notes.map(n => `<li>${escapeHtml(n)}</li>`).join('')}</ul>`
+            : '';
+        hwHtml = `<div class="panel" style="margin:0 0 12px; padding:12px 14px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+              <strong><i class="fa-solid fa-microchip" style="color:var(--primary);"></i> ${escapeHtml(tr('fgtAdvisorHwTitle'))}</strong>
+              <span style="font-family:var(--font-code); font-size:12px;">${escapeHtml(hw.model || '—')}${hw.version ? ' · v' + escapeHtml(hw.version) : ''}</span>
+            </div>
+            <div style="display:flex; gap:14px; flex-wrap:wrap; margin-top:6px; font-size:12px; color:var(--text-muted);">
+              <span>${escapeHtml(tr('fgtAdvisorFamily'))}: <strong style="color:var(--text);">${escapeHtml(hw.family || 'generic')}</strong></span>
+              <span>${escapeHtml(tr('fgtAdvisorNpu'))}: <strong style="color:var(--text);">${escapeHtml((hw.npu || '?') + ' / ' + (hw.cp || '?'))}</strong></span>
+              <span>${escapeHtml(tr('fgtAdvisorRam'))}: <strong style="color:var(--text);">${escapeHtml(hw.ram_tier || 'unknown')}</strong></span>
+            </div>
+            ${notesHtml}
+          </div>`;
+    }
+
+    const countBanner = `<div style="margin-bottom:10px; font-size:12px; color:var(--text-muted);">
+        ${escapeHtml(tr('fgtAdvisorCount', {
+            total: summary.total != null ? summary.total : recs.length,
+            policies: summary.policies_analyzed != null ? summary.policies_analyzed : 0,
+        }))}</div>`;
+
+    if (!recs.length) {
+        host.innerHTML = head + hwHtml + countBanner +
+            `<div class="panel" style="margin:0; padding:14px; color:var(--success);"><i class="fa-solid fa-circle-check"></i> ${escapeHtml(tr('fgtAdvisorClean'))}</div>`;
+        return;
+    }
+
+    const cards = recs.map(r => {
+        const sev = String(r.severity || 'INFO').toUpperCase();
+        const cls = (sev === 'CRITICAL' || sev === 'HIGH') ? 'bad' : sev === 'WARN' ? 'warn' : 'ok';
+        const polLabel = r.policy_id
+            ? tr('fgtAdvisorPolicyRef', { id: r.policy_id }) + (r.policy_name ? ' · ' + r.policy_name : '')
+            : tr('fgtAdvisorAllPolicies');
+        const cliBlock = r.cli ? `<div class="fgt-cli-wrap" style="margin-top:10px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px;">
+              <span style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:600;">${escapeHtml(tr('fgtAdvisorCliRemediation'))}</span>
+              <button type="button" class="btn btn-secondary btn-small" style="width:auto;" data-action="fgt-copy-cli">
+                <i class="fa-regular fa-copy"></i> ${escapeHtml(tr('btnFgtCopyCli'))}
+              </button>
+            </div>
+            <pre class="fgt-cli-snippet" style="font-family:var(--font-code); font-size:12px; background:var(--surface-2); border:1px solid var(--border); padding:10px; margin:0; white-space:pre-wrap; overflow:auto;">${escapeHtml(r.cli)}</pre>
+          </div>` : '';
+        return `<div class="panel" style="margin:0 0 10px; padding:12px 14px;">
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span class="status ${cls}">${escapeHtml(sev)}</span>
+              <span class="badge">${escapeHtml(r.category || '')}</span>
+              <span style="font-family:var(--font-code); font-size:12px; color:var(--text-muted);">${escapeHtml(polLabel)}</span>
+            </div>
+            <div style="margin-top:6px; font-weight:600; font-size:14px;">${escapeHtml(r.title || '')}</div>
+            <div style="margin-top:4px; font-size:12.5px; color:var(--text-muted);">${escapeHtml(r.detail || '')}</div>
+            ${cliBlock}
+          </div>`;
+    }).join('');
+
+    host.innerHTML = head + hwHtml + countBanner + cards;
+}
+
+function fgtBuildSnifferCli(filters, hwProfile) {
+    const src = String((filters && filters.src) || '').trim();
+    const dst = String((filters && filters.dst) || '').trim();
+    const port = String((filters && filters.port) || '').trim();
+    const intf = String((filters && filters.intf) || '').trim();
+    if (!src && !dst && !port && !intf) {
+        return { error: tr('fgtSnifferNeedFilter'), cli: '', note: '' };
+    }
+    const exprParts = [];
+    if (src) exprParts.push(`host ${src}`);
+    if (dst && dst !== src) exprParts.push(`host ${dst}`);
+    if (port) exprParts.push(`port ${port}`);
+    const pktExpr = exprParts.join(' and ');
+    const pktIntf = intf || 'any';
+    const stdLine = `diagnose sniffer packet ${pktIntf} "${pktExpr}" 4 0 l`;
+    if (hwProfile && hwProfile.is_vm) {
+        return { error: '', cli: stdLine, note: tr('fgtSnifferVmNote') };
+    }
+    const lines = ['diagnose npu sniffer filter clear'];
+    if (intf) lines.push(`diagnose npu sniffer filter intf ${intf}`);
+    if (src) lines.push(`diagnose npu sniffer filter srcip ${src}`);
+    if (dst) lines.push(`diagnose npu sniffer filter dstip ${dst}`);
+    if (port) lines.push(`diagnose npu sniffer filter dport ${port}`);
+    lines.push('diagnose npu sniffer start');
+    lines.push(stdLine);
+    lines.push('diagnose npu sniffer stop');
+    lines.push('diagnose npu sniffer filter clear');
+    return { error: '', cli: lines.join('\n'), note: tr('fgtSnifferWarn') };
+}
+
+function fgtRenderSnifferCli() {
+    const box = document.getElementById('fgtSnifferCliBox');
+    if (!box) return;
+    const res = fgtBuildSnifferCli({
+        src: _fgtVal('fgtSessSrc'),
+        dst: _fgtVal('fgtSessDst'),
+        port: _fgtVal('fgtSessPort'),
+        intf: _fgtVal('fgtSessIntf'),
+    }, fgtCurrentHwProfile);
+    if (res.error) {
+        box.style.display = 'none';
+        box.innerHTML = '';
+        showToast(res.error, 'warning');
+        return;
+    }
+    box.style.display = '';
+    box.innerHTML = `<div class="panel fgt-cli-wrap" style="margin:0; padding:12px 14px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
+          <strong style="font-size:13px;"><i class="fa-solid fa-terminal" style="color:var(--primary);"></i> ${escapeHtml(tr('fgtSnifferTitle'))}</strong>
+          <button type="button" class="btn btn-secondary btn-small" style="width:auto;" data-action="fgt-copy-cli">
+            <i class="fa-regular fa-copy"></i> ${escapeHtml(tr('btnFgtCopyCli'))}
+          </button>
+        </div>
+        ${res.note ? `<div style="font-size:12px; color:var(--warning); margin-bottom:8px;">${escapeHtml(res.note)}</div>` : ''}
+        <pre class="fgt-cli-snippet" style="font-family:var(--font-code); font-size:12px; background:var(--surface-2); border:1px solid var(--border); padding:10px; margin:0; white-space:pre-wrap; overflow:auto;">${escapeHtml(res.cli)}</pre>
+      </div>`;
+}
+
 // `key` serve al dettaglio riga: la riga cliccata è ritrovata per indice
 // nell'array ORIGINALE (non in quello filtrato), altrimenti con un filtro
 // attivo si aprirebbe il dettaglio di un'altra riga.
@@ -1058,7 +1217,10 @@ function renderFgtTargetSelect() {
 async function onFgtTargetSelectChange() {
     const ip = document.getElementById('fgtTargetSelect')?.value;
     fgtConnectedTarget = '';
+    fgtCurrentHwProfile = null;
     fgtDatasetRows = {};
+    const sbox = document.getElementById('fgtSnifferCliBox');
+    if (sbox) { sbox.style.display = 'none'; sbox.innerHTML = ''; }
     if (ip) {
         await apiFetch('/api/fortigate/targets/active', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1345,6 +1507,7 @@ async function renderFgtOverview() {
     ]);
 
     const s = (status && status.data) || {};
+    fgtCurrentHwProfile = s.hardware_profile || null;
     const u = (resources && resources.data && resources.data.usage) || {};
     const num = v => (Array.isArray(v) ? (v[0] || {}).current : v);
 
@@ -1370,12 +1533,16 @@ async function renderFgtOverview() {
         : FGT_FMT.badge(hstat) + (inSync === null ? '' :
             ` ${FGT_FMT.badge(inSync ? (tr('fgtInSync')) : 'out-of-sync')}`);
 
+    const hw = s.hardware_profile || null;
+    const hwLabel = hw ? [hw.model, hw.npu, hw.ram_tier].filter(Boolean).join(' · ') : '';
+
     host.style.display = 'grid';
     host.style.gridTemplateColumns = 'repeat(auto-fit, minmax(190px, 1fr))';
     host.style.gap = '12px';
     host.innerHTML =
         tile('Hostname', plain(s.hostname)) +
         tile('FortiOS', plain(s.version)) +
+        (hwLabel ? tile(tr('fgtTileHardware'), plain(hwLabel)) : '') +
         tile('HA', haBody) +
         tile('CPU', gauge(u.cpu)) +
         tile(tr('fgtMemory'), gauge(u.mem)) +
@@ -1455,6 +1622,26 @@ document.getElementById('tab-fortigate')?.addEventListener('click', (e) => {
         refreshFgtView();
         return;
     }
+    const copyBtn = e.target.closest('[data-action="fgt-copy-cli"]');
+    if (copyBtn) {
+        const wrap = copyBtn.closest('.fgt-cli-wrap');
+        const pre = wrap ? wrap.querySelector('.fgt-cli-snippet') : null;
+        const txt = pre ? (pre.textContent || '') : '';
+        if (txt) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(txt).then(() => showToast(tr('fgtCliCopied'), 'success')).catch(() => {});
+            } else {
+                const ta = document.createElement('textarea');
+                ta.value = txt;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                showToast(tr('fgtCliCopied'), 'success');
+            }
+        }
+        return;
+    }
     const winBtn = e.target.closest('[data-fgt-res-win]');
     if (winBtn && winBtn.dataset.fgtResWin) {
         fgtSetResWindow(winBtn.dataset.fgtResWin);
@@ -1490,6 +1677,7 @@ document.getElementById('fgtMgrTableBody')?.addEventListener('click', (e) => {
 document.getElementById('btnFgtLookupRun')?.addEventListener('click', () => loadFgtDataset('policyLookup'));
 document.getElementById('btnFgtSessLoad')?.addEventListener('click', () => loadFgtDataset('sessions'));
 document.getElementById('btnFgtSessionKill')?.addEventListener('click', fgtKillSessions);
+document.getElementById('btnFgtSnifferCli')?.addEventListener('click', fgtRenderSnifferCli);
 document.getElementById('btnFgtLogLoad')?.addEventListener('click', () => loadFgtDataset('logs'));
 document.getElementById('btnFgtDiagRun')?.addEventListener('click', () => loadFgtDataset('clientDiagnosis'));
 // ICMP has no port: a live 443 next to it looked like part of the question.

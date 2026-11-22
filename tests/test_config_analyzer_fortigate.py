@@ -156,6 +156,7 @@ class TestFortiosEnvelope(unittest.TestCase):
             "policies", "addresses", "address_groups", "services",
             "schedules", "vips", "ippools", "interfaces", "vpn_ipsec",
             "vpn_ssl", "administrators", "authentication",
+            "ips_sensors", "ssl_ssh_profiles", "dos_policies",
         ])
 
     def test_sections_have_label_keys_and_columns(self):
@@ -300,6 +301,86 @@ end
                    if s["id"] == "interfaces")
         self.assertEqual([c["key"] for c in sec["columns"]],
                          ["name", "ip", "zone", "vdom", "allowaccess", "status"])
+
+
+class TestFortiosL7AndSpuSections(unittest.TestCase):
+    CONF = """#config-version=FGT400F-7.4.5-FW-build2702
+config firewall policy
+    edit 5
+        set name "vip-web-in"
+        set srcintf "wan1"
+        set dstintf "dmz"
+        set srcaddr "all"
+        set dstaddr "VIP_Web_443"
+        set action accept
+        set schedule "always"
+        set service "HTTPS"
+        set inspection-mode flow
+        set utm-status enable
+        set auto-asic-offload enable
+        set ssl-ssh-profile "SSL_Protect_WebServer"
+        set ips-sensor "IPS_WebServer_Linux"
+    next
+end
+config ips sensor
+    edit "IPS_WebServer_Linux"
+        config entries
+            edit 1
+                set location server
+                set severity high critical
+                set os Linux
+                set log-packet enable
+            next
+        end
+    next
+end
+config firewall ssl-ssh-profile
+    edit "SSL_Protect_WebServer"
+        config https
+            set status deep-inspection
+            set min-allowed-ssl-version tls-1.2
+        end
+        set server-cert-mode replace
+        set server-cert "Cert_WebServer_Prod"
+    next
+end
+config firewall DoS-policy
+    edit 1
+        set interface "wan1"
+        set srcaddr "all"
+        set dstaddr "all"
+        set service "ALL"
+        set status enable
+    next
+end
+"""
+
+    def test_l7_policy_columns_and_new_sections(self):
+        env = fortios.analyze(self.CONF)
+        pol = _rows(env, "policies")[0]
+        self.assertEqual(pol["inspection_mode"], "flow")
+        self.assertEqual(pol["utm_status"], "enable")
+        self.assertEqual(pol["auto_asic_offload"], "enable")
+        self.assertEqual(pol["profiles"], ["IPS:IPS_WebServer_Linux", "SSL:SSL_Protect_WebServer"])
+
+        ips = _rows(env, "ips_sensors")[0]
+        self.assertEqual(ips["name"], "IPS_WebServer_Linux")
+        self.assertEqual(ips["entries_count"], 1)
+        self.assertEqual(ips["location"], ["server"])
+        self.assertEqual(ips["os"], ["Linux"])
+        self.assertEqual(ips["severity"], ["critical", "high"])
+        self.assertEqual(ips["log_packet"], "enable")
+
+        ssl = _rows(env, "ssl_ssh_profiles")[0]
+        self.assertEqual(ssl["https_status"], "deep-inspection")
+        self.assertEqual(ssl["min_tls"], "tls-1.2")
+        self.assertEqual(ssl["server_cert_mode"], "replace")
+        self.assertEqual(ssl["server_cert"], "Cert_WebServer_Prod")
+
+        dos = _rows(env, "dos_policies")[0]
+        self.assertEqual(dos["id"], "1")
+        self.assertEqual(dos["interface"], "wan1")
+        self.assertEqual(dos["status"], "enable")
 
 
 if __name__ == "__main__":
