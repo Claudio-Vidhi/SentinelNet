@@ -10,6 +10,18 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Changed
+
+- **FortiGate advisor reuses existing profiles**: on VIP, SSL and IPS
+  findings the advisor now reads the unit's IPS sensors and SSL/SSH profiles
+  and points the remediation CLI at a suitable one already there (badge
+  "Riusa"/"Reuses", with how many policies already use it) instead of a
+  template name. IPS: scoped to the right location, no packet logging,
+  high/critical first. SSL server side: deep inspection, `replace` with a
+  non-factory certificate, TLS >= 1.2; client side: certificate-inspection
+  unless a deep-inspection profile is already in use. No suitable profile:
+  the template stays.
+
 ### Fixed
 
 - **Reorder suggestions never jump a deny**: Firewall Hygiene `reorder_top`,

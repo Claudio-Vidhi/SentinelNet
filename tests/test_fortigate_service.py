@@ -757,7 +757,8 @@ class L7PoliciesSessionsAndAdvisorTest(unittest.TestCase):
         self.assertEqual(rows[1]["npu_offload"], "cpu")
         self.assertEqual(rows[1]["npu_detail"], "CPU (helper)")
 
-    def test_advisor_2gb_vs_vm_and_vip_recommendations(self):
+    @mock.patch.object(fgs, "api_get_cmdb", return_value={"results": []})
+    def test_advisor_2gb_vs_vm_and_vip_recommendations(self, _cmdb):
         policies = [
             {"policyid": 1, "name": "proxy-rule", "action": "accept", "status": "enable",
              "srcaddr": [{"name": "LAN"}], "dstaddr": [{"name": "all"}], "service": [{"name": "HTTPS"}],
@@ -836,6 +837,83 @@ class L7PoliciesSessionsAndAdvisorTest(unittest.TestCase):
         self.assertEqual(rest_res["data"]["hardware_profile"]["family"], "entry_2gb")
         self.assertEqual(fgs._attach_hardware_profile(DEVICE, dict(rest_status))
                          ["hardware_profile"]["family"], "entry_2gb")
+
+
+class TestAdvisorProfileReuse(unittest.TestCase):
+    # REST cmdb shapes: multi-value options are space-separated strings,
+    # server-cert a member table.
+    SENSORS = [
+        {"name": "default", "entries": [{"location": "server", "severity": "high critical"}]},
+        {"name": "IPS_Logging", "entries": [{"location": "server", "severity": "critical",
+                                             "log-packet": "enable"}]},
+        {"name": "IPS_Wide", "entries": [{"location": "all", "severity": "high critical"}]},
+        {"name": "IPS_DMZ_Loose", "entries": [{"location": "server", "severity": "medium high critical"}]},
+        {"name": "IPS_DMZ_Web", "entries": [{"location": "server", "severity": "high critical",
+                                             "log-packet": "disable"}]},
+        {"name": "IPS_Users", "entries": [{"location": "client", "severity": "high critical"}]},
+    ]
+    SSL = [
+        {"name": "certificate-inspection", "https": {"status": "certificate-inspection"}},
+        {"name": "deep-inspection", "https": {"status": "deep-inspection"}, "server-cert-mode": "re-sign"},
+        {"name": "SSL_Factory", "https": {"status": "deep-inspection", "min-allowed-ssl-version": "tls-1.2"},
+         "server-cert-mode": "replace", "server-cert": [{"name": "Fortinet_Factory"}]},
+        {"name": "SSL_Old_TLS", "https": {"status": "deep-inspection", "min-allowed-ssl-version": "tls-1.0"},
+         "server-cert-mode": "replace", "server-cert": [{"name": "Cert_Web"}]},
+        {"name": "SSL_Web_Server", "https": {"status": "deep-inspection", "min-allowed-ssl-version": "tls-1.2"},
+         "server-cert-mode": "replace", "server-cert": [{"name": "Cert_Web"}]},
+    ]
+
+    def test_pick_ips_sensor(self):
+        self.assertEqual(fgs.pick_ips_sensor(self.SENSORS, "server", {}), "IPS_DMZ_Web")
+        self.assertEqual(fgs.pick_ips_sensor(self.SENSORS, "client", {}), "IPS_Users")
+        # Usage breaks ties only among equally tight sensors, never over severity.
+        self.assertEqual(fgs.pick_ips_sensor(self.SENSORS, "server", {"IPS_DMZ_Loose": 9}), "IPS_DMZ_Web")
+        self.assertEqual(fgs.pick_ips_sensor(self.SENSORS[:4], "server", {}), "IPS_DMZ_Loose")
+        self.assertEqual(fgs.pick_ips_sensor(self.SENSORS[:3], "server", {}), "")
+
+    def test_pick_ssl_profile(self):
+        self.assertEqual(fgs.pick_ssl_profile(self.SSL, {}, server=True), "SSL_Web_Server")
+        self.assertEqual(fgs.pick_ssl_profile(self.SSL[:4], {}, server=True), "")
+        # Client side: certificate-inspection unless deep is already in use.
+        self.assertEqual(fgs.pick_ssl_profile(self.SSL, {}, server=False), "certificate-inspection")
+        self.assertEqual(fgs.pick_ssl_profile(self.SSL, {"deep-inspection": 3}, server=False),
+                         "deep-inspection")
+
+    def _advisor(self, policies, sensors, ssl):
+        def cmdb(_ip, path, *a, **k):
+            return {"results": sensors if path == "cmdb/ips/sensor" else ssl}
+        with mock.patch.object(fgs, "get_system_status", return_value={"data": {"model": "FGT100F"}}), \
+             mock.patch.object(fgs, "get_policies_with_stats", return_value={"data": policies}), \
+             mock.patch.object(fgs, "get_vips", return_value={"data": [{"name": "VIP_Web"}]}), \
+             mock.patch.object(fgs, "get_security_profiles", return_value={"data": {}, "errors": {}}), \
+             mock.patch.object(fgs, "api_get_cmdb", side_effect=cmdb):
+            res = fgs.get_firewall_advisor(DEVICE, lang="en")["data"]
+        return res, {r["id"]: r for r in res["recommendations"]}
+
+    def test_advisor_reuses_existing_profiles(self):
+        policies = [
+            {"policyid": 1, "action": "accept", "status": "enable", "dstaddr": [{"name": "VIP_Web"}]},
+            {"policyid": 2, "action": "accept", "status": "enable", "dstaddr": [{"name": "VIP_Web"}],
+             "utm-status": "enable", "ips-sensor": "default", "ssl-ssh-profile": "SSL_Web_Server"},
+            {"policyid": 3, "action": "accept", "status": "enable", "dstaddr": [{"name": "all"}],
+             "utm-status": "enable", "av-profile": "default"},
+        ]
+        res, ids = self._advisor(policies, self.SENSORS, self.SSL)
+        vip = ids["ADV-VIP-L7-1"]
+        self.assertEqual(vip["reuses"], ["SSL_Web_Server", "IPS_DMZ_Web"])
+        self.assertNotIn("config ips sensor", vip["cli"])
+        self.assertNotIn("config firewall ssl-ssh-profile", vip["cli"])
+        self.assertIn('set ips-sensor "IPS_DMZ_Web"', vip["cli"])
+        self.assertIn("'SSL_Web_Server' (1)", vip["detail"])
+        self.assertIn('set ips-sensor "IPS_DMZ_Web"', ids["ADV-IPS-2"]["cli"])
+        self.assertEqual(ids["ADV-SSL-3"]["reuses"], ["certificate-inspection"])
+        self.assertEqual(res["errors"], {})
+
+        # Nothing suitable on the unit: templates, no reuse claimed.
+        _res, ids = self._advisor(policies, self.SENSORS[:3], self.SSL[:1])
+        self.assertEqual(ids["ADV-VIP-L7-1"]["reuses"], [])
+        self.assertIn("config ips sensor", ids["ADV-VIP-L7-1"]["cli"])
+        self.assertIn('edit "IPS_Server_Scoped"', ids["ADV-IPS-2"]["cli"])
 
 
 if __name__ == "__main__":

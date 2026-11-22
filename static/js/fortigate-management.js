@@ -865,6 +865,8 @@ function renderFgtAdvisor(host, st, head) {
               <span class="status ${cls}">${escapeHtml(sev)}</span>
               <span class="badge">${escapeHtml(r.category || '')}</span>
               <span style="font-family:var(--font-code); font-size:12px; color:var(--text-muted);">${escapeHtml(polLabel)}</span>
+              ${Array.isArray(r.reuses) && r.reuses.length
+                ? `<span class="status ok">${escapeHtml(tr('fgtAdvisorReuse', { names: r.reuses.join(', ') }))}</span>` : ''}
             </div>
             <div style="margin-top:6px; font-weight:600; font-size:14px;">${escapeHtml(r.title || '')}</div>
             <div style="margin-top:4px; font-size:12.5px; color:var(--text-muted);">${escapeHtml(r.detail || '')}</div>

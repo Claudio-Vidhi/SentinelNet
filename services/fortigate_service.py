@@ -1440,44 +1440,143 @@ def _policy_member_names(val: Any) -> list[str]:
     return out
 
 
-def _vip_remediation_cli(pid: str) -> str:
-    return (
-        "config firewall ssl-ssh-profile\n"
-        '    edit "SSL_Protect_WebServer"\n'
-        "        config https\n"
-        "            set ports 443\n"
-        "            set status deep-inspection\n"
-        "            set min-allowed-ssl-version tls-1.2\n"
-        "            set unsupported-ssl-version block\n"
-        "            set expired-server-cert block\n"
-        "        end\n"
-        "        set server-cert-mode replace\n"
-        '        set server-cert "Cert_WebServer_Prod"\n'
-        "    next\n"
-        "end\n"
-        "config ips sensor\n"
-        '    edit "IPS_WebServer_Linux"\n'
-        "        config entries\n"
-        "            edit 1\n"
-        "                set location server\n"
-        "                set severity high critical\n"
-        "                set os Linux\n"
-        "                set application Apache Nginx\n"
-        "                set status enable\n"
-        "                set action block\n"
-        "            next\n"
-        "        end\n"
-        "    next\n"
-        "end\n"
+_SSL_SERVER_TEMPLATE = (
+    "config firewall ssl-ssh-profile\n"
+    '    edit "SSL_Protect_WebServer"\n'
+    "        config https\n"
+    "            set ports 443\n"
+    "            set status deep-inspection\n"
+    "            set min-allowed-ssl-version tls-1.2\n"
+    "            set unsupported-ssl-version block\n"
+    "            set expired-server-cert block\n"
+    "        end\n"
+    "        set server-cert-mode replace\n"
+    '        set server-cert "Cert_WebServer_Prod"\n'
+    "    next\n"
+    "end"
+)
+_IPS_SERVER_TEMPLATE = (
+    "config ips sensor\n"
+    '    edit "IPS_WebServer_Linux"\n'
+    "        config entries\n"
+    "            edit 1\n"
+    "                set location server\n"
+    "                set severity high critical\n"
+    "                set os Linux\n"
+    "                set application Apache Nginx\n"
+    "                set status enable\n"
+    "                set action block\n"
+    "            next\n"
+    "        end\n"
+    "    next\n"
+    "end"
+)
+
+
+def _vip_remediation_cli(pid: str, ssl_name: str = "", ips_name: str = "") -> str:
+    """Policy fix for an inbound VIP; a profile is created from the template
+    only when no suitable one already exists on the unit."""
+    parts = []
+    if not ssl_name:
+        parts.append(_SSL_SERVER_TEMPLATE)
+        ssl_name = "SSL_Protect_WebServer"
+    if not ips_name:
+        parts.append(_IPS_SERVER_TEMPLATE)
+        ips_name = "IPS_WebServer_Linux"
+    parts.append(
         "config firewall policy\n"
         f"    edit {pid}\n"
         "        set inspection-mode flow\n"
         "        set utm-status enable\n"
-        '        set ssl-ssh-profile "SSL_Protect_WebServer"\n'
-        '        set ips-sensor "IPS_WebServer_Linux"\n'
+        f'        set ssl-ssh-profile "{ssl_name}"\n'
+        f'        set ips-sensor "{ips_name}"\n'
         "    next\n"
         "end"
     )
+    return "\n".join(parts)
+
+
+# --- Existing-profile selection -----------------------------------------------
+# With many profiles on the unit, the advisor points at one already there
+# instead of a template name. Unknown field shapes simply disqualify a profile:
+# the fallback is the template, never a wrong reuse.
+
+_WEAK_TLS = frozenset({"ssl-3.0", "tls-1.0", "tls-1.1"})
+_SSL_INSPECTING = ("deep-inspection", "certificate-inspection")
+
+
+def _tok(val: Any) -> set[str]:
+    """FortiOS multi-value option ("high critical") or member table, lowercased."""
+    if isinstance(val, (list, dict)):
+        return set(_policy_member_names(val))
+    return set(str(val or "").lower().split())
+
+
+def _profile_usage(policies: list, key: str) -> Dict[str, int]:
+    """How many policies reference each profile name under ``key``."""
+    use: Dict[str, int] = {}
+    for p in policies:
+        name = _profile_name_val(p.get(key))
+        if name:
+            use[name] = use.get(name, 0) + 1
+    return use
+
+
+def pick_ips_sensor(sensors: list, loc: str, usage: Dict[str, int]) -> str:
+    """Best existing IPS sensor scoped to ``loc`` (server|client), or ''.
+
+    Qualifies: not a generic built-in, no packet logging, at least one entry
+    scoped to ``loc`` (not "all"). Ranked by high/critical-only severity, then
+    by how many policies already use it."""
+    best: Optional[tuple[tuple[bool, int, str], str]] = None
+    for s in sensors:
+        name = str(s.get("name") or "")
+        entries = [e for e in (s.get("entries") or []) if isinstance(e, dict)]
+        if not name or name.lower() in _GENERIC_IPS_NAMES or not entries:
+            continue
+        if any("enable" in _tok(e.get("log-packet")) for e in entries):
+            continue
+        scoped = [e for e in entries
+                  if loc in _tok(e.get("location")) and "all" not in _tok(e.get("location"))]
+        if not scoped:
+            continue
+        tight = all(_tok(e.get("severity")) and _tok(e.get("severity")) <= {"high", "critical"}
+                    for e in scoped)
+        key = (not tight, -usage.get(name, 0), name.lower())
+        if best is None or key < best[0]:
+            best = (key, name)
+    return best[1] if best else ""
+
+
+def pick_ssl_profile(profiles: list, usage: Dict[str, int], server: bool) -> str:
+    """Best existing SSL/SSH profile, or ''.
+
+    server=True (inbound VIP, "Protecting SSL Server"): deep inspection,
+    ``server-cert-mode replace`` with a non-factory certificate, TLS >= 1.2.
+    server=False (outbound UTM): deep or certificate inspection in re-sign
+    mode; at equal usage certificate-inspection wins, since deep inspection
+    breaks HTTPS for clients that do not trust the unit's CA."""
+    from services.netsec_audit.rules import _FACTORY_CERTS
+    best: Optional[tuple[tuple[int, bool, str], str]] = None
+    for p in profiles:
+        name = str(p.get("name") or "")
+        https = p.get("https") if isinstance(p.get("https"), dict) else {}
+        status = str(https.get("status") or "").lower()
+        mode = str(p.get("server-cert-mode") or "re-sign").lower()
+        if not name or status not in _SSL_INSPECTING:
+            continue
+        if server:
+            certs = _tok(p.get("server-cert"))
+            min_tls = str(https.get("min-allowed-ssl-version") or "").lower()
+            if (status != "deep-inspection" or mode != "replace" or not certs
+                    or certs & _FACTORY_CERTS or not min_tls or min_tls in _WEAK_TLS):
+                continue
+        elif mode == "replace":
+            continue
+        key = (-usage.get(name, 0), status == "deep-inspection", name.lower())
+        if best is None or key < best[0]:
+            best = (key, name)
+    return best[1] if best else ""
 
 
 def get_firewall_advisor(device, lang: str = "it") -> dict:
@@ -1521,13 +1620,32 @@ def get_firewall_advisor(device, lang: str = "it") -> dict:
     except FortiGateError as e:
         errors["security_profiles"] = str(e)
 
+    # Full objects (entries, https block) of the two families the advisor can
+    # reuse. A family already missing above (404/licence) is not asked twice.
+    def cmdb_rows(family: str, path: str) -> list:
+        if family in profile_errors:
+            return []
+        try:
+            res = api_get_cmdb(device["IP"], path)
+        except FortiGateError as e:
+            errors[f"{family}_detail"] = str(e)
+            return []
+        rows = res.get("results", res) if isinstance(res, dict) else res
+        return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+
+    ips_sensors = cmdb_rows("ips", _SECURITY_PROFILES["ips"])
+    ssl_profiles = cmdb_rows("ssl_ssh", _SECURITY_PROFILES["ssl_ssh"])
+    ips_use = _profile_usage(policies, "ips-sensor")
+    ssl_use = _profile_usage(policies, "ssl-ssh-profile")
+
     profile = _profile_for(device, status_data)
 
     recs: list[Dict[str, Any]] = []
 
     def add_rec(rec_id: str, severity: str, category: str, pid: Optional[str],
                 pname: str, title_it: str, title_en: str,
-                detail_it: str, detail_en: str, cli: str = "") -> None:
+                detail_it: str, detail_en: str, cli: str = "",
+                reuses: Optional[list] = None) -> None:
         recs.append({
             "id": rec_id,
             "severity": severity,
@@ -1537,7 +1655,16 @@ def get_firewall_advisor(device, lang: str = "it") -> dict:
             "title": title_en if en else title_it,
             "detail": detail_en if en else detail_it,
             "cli": cli,
+            "reuses": reuses or [],
         })
+
+    def reuse_note(picks: list) -> tuple[str, str]:
+        """(it, en) sentence naming the reused profiles and their usage."""
+        if not picks:
+            return "", ""
+        items = ", ".join(f"'{name}' ({n})" for name, n in picks)
+        return (f" Profili esistenti riutilizzati (policy che gia' li usano): {items}.",
+                f" Reusing existing profiles (policies already using them): {items}.")
 
     # Move target per policy: the first enabled accept after the nearest
     # enabled non-accept above it. Jumping a deny would open what it blocks.
@@ -1597,13 +1724,22 @@ def get_firewall_advisor(device, lang: str = "it") -> dict:
         utm_disabled = str(row.get("utm-status") or "").strip().lower() == "disable"
         ips_name = _profile_name_val(row.get("ips-sensor"))
         if is_vip and (not ips_name or utm_disabled):
+            ssl_pick = pick_ssl_profile(ssl_profiles, ssl_use, server=True)
+            ips_pick = pick_ips_sensor(ips_sensors, "server", ips_use)
+            picks = ([(ssl_pick, ssl_use.get(ssl_pick, 0))] if ssl_pick else []) + \
+                    ([(ips_pick, ips_use.get(ips_pick, 0))] if ips_pick else [])
+            note_it, note_en = reuse_note(picks)
+            if ssl_pick:
+                note_it += " Verificare che il certificato del profilo SSL sia quello del server pubblicato."
+                note_en += " Check that the SSL profile's certificate belongs to the published server."
             add_rec(
                 f"ADV-VIP-L7-{pid}", "HIGH", "Layer 7 / VIP", pid, pname,
                 "Policy verso VIP senza sensore IPS attivo",
                 "Inbound VIP policy missing active IPS sensor",
-                "Pubblicare un VIP senza IPS espone i servizi ad exploit Layer 7. Applicare Protecting SSL Server + IPS mirato.",
-                "Publishing a VIP without IPS exposes services to Layer 7 exploits. Apply Protecting SSL Server + targeted IPS.",
-                _vip_remediation_cli(pid),
+                "Pubblicare un VIP senza IPS espone i servizi ad exploit Layer 7. Applicare Protecting SSL Server + IPS mirato." + note_it,
+                "Publishing a VIP without IPS exposes services to Layer 7 exploits. Apply Protecting SSL Server + targeted IPS." + note_en,
+                _vip_remediation_cli(pid, ssl_pick, ips_pick),
+                [name for name, _n in picks],
             )
 
         has_utm_prof = (
@@ -1612,13 +1748,16 @@ def get_firewall_advisor(device, lang: str = "it") -> dict:
         )
         ssl_prof = _profile_name_val(row.get("ssl-ssh-profile"))
         if has_utm_prof and (not ssl_prof or ssl_prof.lower() == "no-inspection"):
+            ssl_pick = pick_ssl_profile(ssl_profiles, ssl_use, server=False)
+            note_it, note_en = reuse_note([(ssl_pick, ssl_use.get(ssl_pick, 0))] if ssl_pick else [])
             add_rec(
                 f"ADV-SSL-{pid}", "WARN", "SSL Inspection", pid, pname,
                 "Profili UTM attivi senza ispezione SSL/SSH",
                 "UTM profiles active without SSL/SSH inspection",
-                "Senza ssl-ssh-profile i motori L7 non ispezionano payload HTTPS. Impostare almeno certificate-inspection.",
-                "Without ssl-ssh-profile, L7 engines cannot inspect encrypted HTTPS. Enable at least certificate-inspection.",
-                f'config firewall policy\n    edit {pid}\n        set ssl-ssh-profile "certificate-inspection"\n    next\nend',
+                "Senza ssl-ssh-profile i motori L7 non ispezionano payload HTTPS. Impostare almeno certificate-inspection." + note_it,
+                "Without ssl-ssh-profile, L7 engines cannot inspect encrypted HTTPS. Enable at least certificate-inspection." + note_en,
+                f'config firewall policy\n    edit {pid}\n        set ssl-ssh-profile "{ssl_pick or "certificate-inspection"}"\n    next\nend',
+                [ssl_pick] if ssl_pick else [],
             )
 
         ips_low = ips_name.lower()
@@ -1627,14 +1766,14 @@ def get_firewall_advisor(device, lang: str = "it") -> dict:
             or (profile.ram_tier == "2gb" and ips_low in ("high_security", "all_default"))
         ):
             loc = "server" if is_vip else "client"
-            target_sensor = f"IPS_{loc.title()}_Scoped"
-            add_rec(
-                f"ADV-IPS-{pid}", "WARN", "IPS Tuning", pid, pname,
-                f"Sensore IPS generico '{ips_name}'",
-                f"Generic IPS sensor '{ips_name}'",
-                "Sostituire il profilo generico con un sensore mirato per location, OS, applicazione e severity (high/critical) per ridurre CPU/RAM.",
-                "Replace the generic profile with a sensor scoped by location, OS, application, and high/critical severity to reduce CPU/RAM load.",
-                (
+            ips_pick = pick_ips_sensor(ips_sensors, loc, ips_use)
+            if ips_pick:
+                note_it, note_en = reuse_note([(ips_pick, ips_use.get(ips_pick, 0))])
+                cli = f'config firewall policy\n    edit {pid}\n        set ips-sensor "{ips_pick}"\n    next\nend'
+            else:
+                note_it = note_en = ""
+                target_sensor = f"IPS_{loc.title()}_Scoped"
+                cli = (
                     "config ips sensor\n"
                     f'    edit "{target_sensor}"\n'
                     "        config entries\n"
@@ -1647,7 +1786,15 @@ def get_firewall_advisor(device, lang: str = "it") -> dict:
                     "        end\n"
                     "    next\n"
                     "end"
-                ),
+                )
+            add_rec(
+                f"ADV-IPS-{pid}", "WARN", "IPS Tuning", pid, pname,
+                f"Sensore IPS generico '{ips_name}'",
+                f"Generic IPS sensor '{ips_name}'",
+                "Sostituire il profilo generico con un sensore mirato per location, OS, applicazione e severity (high/critical) per ridurre CPU/RAM." + note_it,
+                "Replace the generic profile with a sensor scoped by location, OS, application, and high/critical severity to reduce CPU/RAM load." + note_en,
+                cli,
+                [ips_pick] if ips_pick else [],
             )
 
         l7_summary = _summarize_l7_profiles(row)
