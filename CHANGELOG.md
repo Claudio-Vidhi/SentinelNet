@@ -22,6 +22,12 @@ happened — `git log --grep="chore(release)"` is the record for those.
   use that do not block on HTTP and application lists in use that only
   monitor are reported too. FortiOS 6.x AV profiles (`options` flags) are not
   judged.
+- **FortiGate advisor — web filter and DNS filter**: same treatment for
+  `webfilter-profile` (when the service can carry HTTP/HTTPS) and
+  `dnsfilter-profile` (when it can carry DNS): reuse of the most used profile
+  with explicit FortiGuard block categories, and a finding for profiles in use
+  whose `ftgd-wf` / `ftgd-dns` filters only monitor or warn. Category IDs in
+  the remediation CLI stay placeholders.
 
 ### Changed
 

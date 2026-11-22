@@ -1614,26 +1614,40 @@ def pick_av_profile(profiles: list, usage: Dict[str, int]) -> str:
     return best[1] if best else ""
 
 
-def _app_actions(lst: dict) -> list[str]:
+# Where each rule-based family keeps its rules: application list entries,
+# FortiGuard web categories (ftgd-wf), FortiGuard DNS categories (ftgd-dns).
+_RULE_TABLES = {"application": None, "webfilter": "ftgd-wf", "dnsfilter": "ftgd-dns"}
+
+
+def _rule_actions(family: str, prof: dict) -> list[str]:
+    sub = _RULE_TABLES[family]
+    if sub is None:
+        rows = prof.get("entries")
+    else:
+        block = prof.get(sub)
+        rows = block.get("filters") if isinstance(block, dict) else None
     return [str(e.get("action") or "").lower()
-            for e in (lst.get("entries") or []) if isinstance(e, dict)]
+            for e in (rows or []) if isinstance(e, dict)]
 
 
-def _app_monitor_only(lst: dict) -> bool:
-    """Every entry explicitly non-blocking and no catch-all block: the list
-    only observes. An absent action is not assumed either way."""
-    actions = _app_actions(lst)
-    return (bool(actions) and all(a and a != "block" for a in actions)
-            and str(lst.get("other-application-action") or "").lower() != "block")
+def _monitor_only(family: str, prof: dict) -> bool:
+    """Every rule explicitly non-blocking (monitor/warning/pass) and, for an
+    application list, no catch-all block: the profile only observes. An
+    absent action is not assumed either way."""
+    actions = _rule_actions(family, prof)
+    catchall = (family == "application"
+                and str(prof.get("other-application-action") or "").lower() == "block")
+    return bool(actions) and all(a and a != "block" for a in actions) and not catchall
 
 
-def pick_app_list(lists: list, usage: Dict[str, int]) -> str:
-    """Best existing application list with at least one explicit block entry,
-    or ''. Ranked by policy usage, then by number of block entries."""
+def pick_blocking_profile(family: str, profiles: list, usage: Dict[str, int]) -> str:
+    """Best existing application list / web filter / DNS filter with at least
+    one explicit block rule, or ''. Ranked by policy usage, then by number of
+    block rules."""
     best: Optional[tuple[tuple[int, int, str], str]] = None
-    for lst in lists:
-        name = str(lst.get("name") or "")
-        blocks = _app_actions(lst).count("block")
+    for prof in profiles:
+        name = str(prof.get("name") or "")
+        blocks = _rule_actions(family, prof).count("block")
         if not name or not blocks:
             continue
         key = (-usage.get(name, 0), -blocks, name.lower())
@@ -1699,13 +1713,17 @@ def get_firewall_advisor(device, lang: str = "it") -> dict:
     ips_sensors = cmdb_rows("ips", _SECURITY_PROFILES["ips"])
     ssl_profiles = cmdb_rows("ssl_ssh", _SECURITY_PROFILES["ssl_ssh"])
     av_profiles = cmdb_rows("antivirus", _SECURITY_PROFILES["antivirus"])
-    app_lists = cmdb_rows("application", _SECURITY_PROFILES["application"])
     ips_use = _profile_usage(policies, "ips-sensor")
     ssl_use = _profile_usage(policies, "ssl-ssh-profile")
     av_use = _profile_usage(policies, "av-profile")
-    app_use = _profile_usage(policies, "application-list")
     av_pick = pick_av_profile(av_profiles, av_use)
-    app_pick = pick_app_list(app_lists, app_use)
+    # Rule-based families (block/monitor per entry), keyed by policy field.
+    rule_key = {"application": "application-list", "webfilter": "webfilter-profile",
+                "dnsfilter": "dnsfilter-profile"}
+    rule_profiles = {fam: cmdb_rows(fam, _SECURITY_PROFILES[fam]) for fam in rule_key}
+    rule_use = {fam: _profile_usage(policies, key) for fam, key in rule_key.items()}
+    rule_pick = {fam: pick_blocking_profile(fam, rule_profiles[fam], rule_use[fam])
+                 for fam in rule_key}
 
     # Internet-bound = dstintf with role wan, same fallback as the backup audit
     # (rules.wan_interfaces) when no interface declares a role.
@@ -1895,29 +1913,47 @@ def get_firewall_advisor(device, lang: str = "it") -> dict:
                     f"config firewall policy\n    edit {pid}\n        set srcaddr <host_32>\n        set dstaddr <host_32>\n        set service <specific_port>\n    next\nend",
                 )
 
-        # Internet-bound traffic without AV / application control. A UTM-less
-        # rule scoped to specific hosts and service is a deliberate bypass
-        # (the broad ones are ADV-BYPASS): not flagged here.
+        # Internet-bound traffic without AV / app control / web / DNS filter.
+        # A UTM-less rule scoped to specific hosts and service is a deliberate
+        # bypass (the broad ones are ADV-BYPASS): not flagged here. Web and
+        # DNS filter only matter when the service can carry web or DNS.
         to_wan = bool(set(_policy_member_names(row.get("dstintf"))) & wan_names)
         broad = bool((src_names | dst_names | svc_names) & {"all", "any"})
+        any_svc = bool(svc_names & {"all", "any"})
+        carries_web = any_svc or bool(svc_names & {"http", "https", "web access"})
+        carries_dns = any_svc or "dns" in svc_names
         if to_wan and (l7_summary or broad):
-            for code, key, use, pick, it_t, en_t, it_d, en_d in (
-                ("AV", "av-profile", av_use, av_pick,
+            for code, key, use, pick, applies, it_t, en_t, it_d, en_d in (
+                ("AV", "av-profile", av_use, av_pick, True,
                  "Policy verso Internet senza antivirus",
                  "Internet-bound policy without antivirus",
                  "Il traffico verso Internet non e' analizzato dall'antivirus: download e allegati malevoli "
                  "passano senza controllo. Per HTTPS serve anche un ssl-ssh-profile.",
                  "Internet-bound traffic is not scanned by antivirus: malicious downloads and attachments "
                  "pass unchecked. HTTPS also needs an ssl-ssh-profile."),
-                ("APP", "application-list", app_use, app_pick,
+                ("APP", "application-list", rule_use["application"], rule_pick["application"], True,
                  "Policy verso Internet senza application control",
                  "Internet-bound policy without application control",
                  "Senza application control le applicazioni a rischio (P2P, proxy/anonymizer, accesso remoto) "
                  "verso Internet non sono ne' visibili ne' bloccate.",
                  "Without application control, risky applications (P2P, proxies/anonymizers, remote access) "
                  "on Internet-bound traffic are neither visible nor blocked."),
+                ("WEB", "webfilter-profile", rule_use["webfilter"], rule_pick["webfilter"], carries_web,
+                 "Policy verso Internet senza web filter",
+                 "Internet-bound policy without web filter",
+                 "Senza web filter la navigazione verso siti malevoli, phishing e categorie non consentite "
+                 "non e' filtrata. Per HTTPS serve anche un ssl-ssh-profile.",
+                 "Without web filtering, browsing to malicious, phishing and disallowed categories is not "
+                 "filtered. HTTPS also needs an ssl-ssh-profile."),
+                ("DNS", "dnsfilter-profile", rule_use["dnsfilter"], rule_pick["dnsfilter"], carries_dns,
+                 "Policy verso Internet senza DNS filter",
+                 "Internet-bound policy without DNS filter",
+                 "Le query DNS verso Internet non sono filtrate: domini malevoli e C&C botnet si risolvono "
+                 "senza controllo.",
+                 "Internet-bound DNS queries are not filtered: malicious and botnet C&C domains resolve "
+                 "unchecked."),
             ):
-                if not utm_disabled and _profile_name_val(row.get(key)):
+                if not applies or (not utm_disabled and _profile_name_val(row.get(key))):
                     continue
                 note_it, note_en = reuse_note([(pick, use.get(pick, 0))] if pick else [])
                 add_rec(
@@ -1965,30 +2001,50 @@ def get_firewall_advisor(device, lang: str = "it") -> dict:
             + "".join(f"        config {pr}\n            set av-scan block\n        end\n" for pr in weak)
             + "    next\nend",
         )
-    for lst in app_lists:
-        name = str(lst.get("name") or "")
-        n = app_use.get(name, 0)
-        if not n or not _app_monitor_only(lst):
-            continue
-        add_rec(
-            f"ADV-APP-PROFILE-{name}", "WARN", "Application Control", None, "",
-            f"Application list '{name}' solo in monitor",
-            f"Application list '{name}' is monitor-only",
-            f"La lista, usata da {n} policy, non blocca nessuna applicazione o categoria: aggiungere "
-            "un'entry block per le categorie a rischio (es. P2P, Proxy).",
-            f"The list, used by {n} policies, blocks no application or category: add a block entry "
-            "for risky categories (e.g. P2P, Proxy).",
-            "config application list\n"
-            f'    edit "{name}"\n'
-            "        config entries\n"
-            "            edit 0\n"
-            "                set category <P2P_id> <Proxy_id>\n"
-            "                set action block\n"
-            "            next\n"
-            "        end\n"
-            "    next\n"
-            "end",
-        )
+    # Category IDs stay placeholders: FortiGuard numbering is not hardcoded.
+    monitor_only_specs = {
+        "application": ("APP", "Application Control", "Application list", "Application list",
+                        "applicazione o categoria", "application or category",
+                        "P2P, Proxy", "config application list"),
+        "webfilter": ("WEB", "Web Filter", "Profilo web filter", "Web filter profile",
+                      "categoria web", "web category",
+                      "malware, phishing", "config webfilter profile"),
+        "dnsfilter": ("DNS", "DNS Filter", "Profilo DNS filter", "DNS filter profile",
+                      "categoria DNS", "DNS category",
+                      "malware, phishing, botnet C&C", "config dnsfilter profile"),
+    }
+    for fam, (code, cat, it_kind, en_kind, it_what, en_what, examples,
+              cfg_head) in monitor_only_specs.items():
+        sub = _RULE_TABLES[fam]
+        body = ("        config entries\n"
+                "            edit 0\n"
+                "                set category <P2P_id> <Proxy_id>\n"
+                "                set action block\n"
+                "            next\n"
+                "        end\n") if sub is None else (
+                f"        config {sub}\n"
+                "            config filters\n"
+                "                edit 0\n"
+                "                    set category <category_id>\n"
+                "                    set action block\n"
+                "                next\n"
+                "            end\n"
+                "        end\n")
+        for prof in rule_profiles[fam]:
+            name = str(prof.get("name") or "")
+            n = rule_use[fam].get(name, 0)
+            if not n or not _monitor_only(fam, prof):
+                continue
+            add_rec(
+                f"ADV-{code}-PROFILE-{name}", "WARN", cat, None, "",
+                f"{it_kind} '{name}' solo in monitor",
+                f"{en_kind} '{name}' is monitor-only",
+                f"Il profilo, usato da {n} policy, non blocca nessuna {it_what}: aggiungere un blocco "
+                f"per le categorie a rischio (es. {examples}).",
+                f"The profile, used by {n} policies, blocks no {en_what}: add a block rule "
+                f"for risky categories (e.g. {examples}).",
+                f'{cfg_head}\n    edit "{name}"\n{body}    next\nend',
+            )
 
     if profile_errors:
         fams = ", ".join(sorted(profile_errors))

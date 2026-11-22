@@ -879,10 +879,11 @@ class TestAdvisorProfileReuse(unittest.TestCase):
         self.assertEqual(fgs.pick_ssl_profile(self.SSL, {"deep-inspection": 3}, server=False),
                          "deep-inspection")
 
-    def _advisor(self, policies, sensors, ssl, av=(), app=(), ifaces=()):
+    def _advisor(self, policies, sensors, ssl, av=(), app=(), ifaces=(), web=(), dns=()):
         by_path = {"cmdb/ips/sensor": sensors, "cmdb/firewall/ssl-ssh-profile": ssl,
                    "cmdb/antivirus/profile": list(av), "cmdb/application/list": list(app),
-                   "cmdb/system/interface": list(ifaces)}
+                   "cmdb/system/interface": list(ifaces),
+                   "cmdb/webfilter/profile": list(web), "cmdb/dnsfilter/profile": list(dns)}
 
         def cmdb(_ip, path, *a, **k):
             return {"results": by_path[path]}
@@ -938,11 +939,34 @@ class TestAdvisorProfileReuse(unittest.TestCase):
         self.assertEqual(fgs.pick_av_profile(self.AV, {}), "AV_Strict")
         self.assertEqual(fgs.pick_av_profile(self.AV[2:], {}), "")
         self.assertIsNone(fgs._av_weak_protocols(self.AV[3]))
-        self.assertEqual(fgs.pick_app_list(self.APP, {}), "APP_Corp")
-        self.assertEqual(fgs.pick_app_list(self.APP, {"default": 4}), "default")
-        self.assertEqual(fgs.pick_app_list(self.APP[2:], {}), "")
-        self.assertTrue(fgs._app_monitor_only(self.APP[2]))
-        self.assertFalse(fgs._app_monitor_only({"entries": [{}]}))  # unknown action
+        pick = fgs.pick_blocking_profile
+        self.assertEqual(pick("application", self.APP, {}), "APP_Corp")
+        self.assertEqual(pick("application", self.APP, {"default": 4}), "default")
+        self.assertEqual(pick("application", self.APP[2:], {}), "")
+        self.assertTrue(fgs._monitor_only("application", self.APP[2]))
+        self.assertFalse(fgs._monitor_only("application", {"entries": [{}]}))  # unknown action
+        self.assertFalse(fgs._monitor_only("application", {
+            "entries": [{"action": "monitor"}], "other-application-action": "block"}))
+
+    # Web/DNS filter: FortiGuard category rules under ftgd-wf / ftgd-dns.
+    WEB = [
+        {"name": "WF_Corp", "ftgd-wf": {"filters": [{"category": 26, "action": "block"},
+                                                    {"category": 61, "action": "block"}]}},
+        {"name": "WF_Watch", "ftgd-wf": {"filters": [{"category": 26, "action": "monitor"},
+                                                     {"category": 61, "action": "warning"}]}},
+    ]
+    DNS = [
+        {"name": "DNS_Corp", "ftgd-dns": {"filters": [{"category": 26, "action": "block"}]}},
+        {"name": "DNS_Watch", "ftgd-dns": {"filters": [{"category": 26, "action": "monitor"}]}},
+    ]
+
+    def test_pick_web_and_dns(self):
+        pick = fgs.pick_blocking_profile
+        self.assertEqual(pick("webfilter", self.WEB, {"WF_Watch": 9}), "WF_Corp")
+        self.assertEqual(pick("dnsfilter", self.DNS, {}), "DNS_Corp")
+        self.assertTrue(fgs._monitor_only("webfilter", self.WEB[1]))
+        self.assertTrue(fgs._monitor_only("dnsfilter", self.DNS[1]))
+        self.assertFalse(fgs._monitor_only("webfilter", {"name": "x"}))  # no rules: unknown
 
     def test_advisor_av_and_app_control(self):
         wan = {"dstintf": [{"name": "wan1"}]}
@@ -982,6 +1006,35 @@ class TestAdvisorProfileReuse(unittest.TestCase):
         _res, ids = self._advisor(policies[:1], [], [], self.AV[2:], self.APP[2:], ifaces)
         self.assertEqual(ids["ADV-AV-1"]["reuses"], [])
         self.assertIn('set av-profile "default"', ids["ADV-AV-1"]["cli"])
+
+    def test_advisor_web_and_dns_filter(self):
+        wan = {"dstintf": [{"name": "wan1"}], "srcaddr": [{"name": "LAN_Net"}],
+               "dstaddr": [{"name": "all"}]}
+        policies = [
+            # ALL carries web and DNS: both missing.
+            {"policyid": 1, "action": "accept", "status": "enable", **wan, "service": [{"name": "ALL"}]},
+            # HTTPS only: web filter applies, DNS filter does not.
+            {"policyid": 2, "action": "accept", "status": "enable", **wan, "service": [{"name": "HTTPS"}]},
+            # DNS only, with a monitor-only DNS filter in use.
+            {"policyid": 3, "action": "accept", "status": "enable", **wan, "service": [{"name": "DNS"}],
+             "utm-status": "enable", "dnsfilter-profile": "DNS_Watch"},
+            {"policyid": 4, "action": "accept", "status": "enable", **wan, "service": [{"name": "HTTP"}],
+             "utm-status": "enable", "webfilter-profile": "WF_Watch"},
+        ]
+        _res, ids = self._advisor(policies, [], [], ifaces=[{"name": "wan1", "role": "wan"}],
+                                  web=self.WEB, dns=self.DNS)
+
+        self.assertEqual(ids["ADV-WEB-1"]["reuses"], ["WF_Corp"])
+        self.assertIn('set webfilter-profile "WF_Corp"', ids["ADV-WEB-1"]["cli"])
+        self.assertIn('set dnsfilter-profile "DNS_Corp"', ids["ADV-DNS-1"]["cli"])
+        self.assertIn("ADV-WEB-2", ids)
+        for rid in ("ADV-DNS-2", "ADV-WEB-3", "ADV-DNS-3", "ADV-DNS-4", "ADV-WEB-4"):
+            self.assertNotIn(rid, ids)
+
+        wf = ids["ADV-WEB-PROFILE-WF_Watch"]
+        self.assertIn('config webfilter profile\n    edit "WF_Watch"\n        config ftgd-wf', wf["cli"])
+        self.assertIn("config ftgd-dns", ids["ADV-DNS-PROFILE-DNS_Watch"]["cli"])
+        self.assertNotIn("ADV-WEB-PROFILE-WF_Corp", ids)
 
 
 if __name__ == "__main__":
