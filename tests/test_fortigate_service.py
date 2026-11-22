@@ -791,6 +791,7 @@ class L7PoliciesSessionsAndAdvisorTest(unittest.TestCase):
         self.assertEqual(ids["ADV-PROXY-1"]["severity"], "CRITICAL")
         self.assertEqual(ids["ADV-OFFLOAD-1"]["severity"], "WARN")
         self.assertEqual(ids["ADV-VIP-L7-2"]["severity"], "HIGH")
+        self.assertNotIn("ADV-BYPASS-2", ids)  # published service: source "all" is expected
         self.assertIn("ADV-SSL-1", ids)
         self.assertIn("ADV-IPS-1", ids)
         self.assertIn("ADV-BYPASS-3", ids)

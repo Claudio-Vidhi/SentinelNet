@@ -1902,7 +1902,9 @@ def get_firewall_advisor(device, lang: str = "it") -> dict:
         l7_summary = _summarize_l7_profiles(row)
         src_names = set(_policy_member_names(row.get("srcaddr")))
         svc_names = set(_policy_member_names(row.get("service")))
-        if not l7_summary and asic_offload == "enable":
+        # A VIP policy is a published service: source "all" is the point, and
+        # ADV-VIP-L7 already covers its missing protection.
+        if not l7_summary and asic_offload == "enable" and not is_vip:
             if (src_names & {"all", "any"}) or (dst_names & {"all", "any"}) or (svc_names & {"all", "any"}):
                 add_rec(
                     f"ADV-BYPASS-{pid}", "WARN", "Bypass Scope", pid, pname,

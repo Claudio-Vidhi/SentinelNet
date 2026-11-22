@@ -53,6 +53,9 @@ happened — `git log --grep="chore(release)"` is the record for those.
   returns `model_name: "FortiGate"` next to `model: "FGT60F"`; reading
   `model_name` first resolved every live unit to the generic profile, so the
   advisor lost its 2GB/proxy and VM-specific findings.
+- **Advisor `ADV-BYPASS` on VIP policies**: an inbound policy to a VIP is a
+  published service, where source `all` is expected; it no longer gets the
+  "scope the bypass to /32" finding (`ADV-VIP-L7` already covers it).
 - **NetSec Audit `SPU-BYP`**: the check required an explicit
   `auto-asic-offload enable`, which a plain `show` backup omits (it is the
   default), so any/any/ALL UTM-less policies passed. Absent now counts as
