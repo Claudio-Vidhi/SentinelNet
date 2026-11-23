@@ -10,6 +10,30 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **FortiGate advisor on configuration backups**: the Security Audit tab runs
+  the same advisor as the FortiGate tab on a FortiOS backup and shows its
+  recommendations (per-policy CLI, reuse of existing IPS/SSL/AV/application/
+  web/DNS filter profiles, hardware-aware) in a separate section below the
+  benchmark. One engine (`advise()`) serves both the REST and the backup
+  input. A normal backup is flagged (defaults assumed, prefer
+  `show full-configuration`); checks that need traffic counters (policy order
+  by volume) are listed as live-only.
+- **Multi-VDOM**: the backup advisor, the live REST advisor and the benchmark
+  rules work per VDOM. Recommendations carry their VDOM and CLI wrapped in
+  `config vdom` / `edit <vd>`; benchmark rules are evaluated per VDOM
+  (global + VDOM scope) and folded into one verdict (FAIL > WARN > PASS >
+  UNKNOWN) with VDOM-prefixed evidence. Live: `vdom-mode` is detected with one
+  extra call; a VDOM the token cannot read is reported in `errors` without
+  stopping the others.
+
+### Fixed
+
+- Audit export: VDOM-prefixed evidence renders as "VDOM <vd> · Policy ID #N";
+  the DOCX evidence line label ("Line N") and footer follow the report
+  language.
+
 ## [0.70.0] - 2026-11-22
 
 ### Added
