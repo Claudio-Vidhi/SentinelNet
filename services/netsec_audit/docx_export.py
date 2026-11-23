@@ -318,7 +318,7 @@ def generate_audit_docx(data: Dict[str, Any]) -> bytes:
             for ev in ev_list:
                 p_item = c1.add_paragraph()
                 p_item.paragraph_format.space_after = Pt(1)
-                line_str = f"Riga {ev.get('line')}" if ev.get("line") else "—"
+                line_str = f"{'Line' if is_en else 'Riga'} {ev.get('line')}" if ev.get("line") else "—"
                 raw_ctx = ev.get("context", "")
                 # Multi-VDOM evidence: "vdom <vd> / firewall policy / N".
                 vd_m = re.match(r"vdom (\S+) / (.*)$", raw_ctx)
@@ -380,7 +380,9 @@ def generate_audit_docx(data: Dict[str, Any]) -> bytes:
     # Footer
     p_foot = doc.add_paragraph()
     p_foot.paragraph_format.space_before = Pt(16)
-    r_foot = p_foot.add_run("SentinelNet Security Audit Engine  •  Generato automaticamente da configurazione apparato")
+    r_foot = p_foot.add_run("SentinelNet Security Audit Engine  •  "
+                            + ("Automatically generated from device configuration" if is_en
+                               else "Generato automaticamente da configurazione apparato"))
     r_foot.font.size = Pt(8)
     r_foot.font.color.rgb = C_MUTED
     r_foot.font.name = "Arial"

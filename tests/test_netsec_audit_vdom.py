@@ -153,6 +153,15 @@ class TestDocxPolicyLabel(unittest.TestCase):
                       [ln.split("] ", 1)[-1] for ln in lines])
         self.assertTrue(any("VDOM vd-b · Policy ID #1" in ln for ln in lines))
 
+    def test_line_label_follows_report_language(self):
+        en = _docx_lines(_rules()[0])
+        self.assertTrue(any(ln.startswith("[Line ") for ln in en))
+        self.assertFalse(any(ln.startswith("[Riga ") for ln in en))
+        it = netsec_audit.run_netsec_audit(config_text=MULTI, benchmark="cis", lang="it")
+        it_lines = _docx_lines(it)
+        self.assertTrue(any(ln.startswith("[Riga ") for ln in it_lines))
+        self.assertFalse(any(ln.startswith("[Line ") for ln in it_lines))
+
     def test_single_vdom_label_unchanged(self):
         p = os.path.join(os.path.dirname(__file__), "fixtures", "fortigate_violations.conf")
         with open(p, encoding="utf-8") as fh:
