@@ -118,9 +118,11 @@ def _wan_names(ifaces: List[Dict[str, Any]]) -> set:
 
 
 def _scope_inputs(scope: Dict[str, Any]) -> tuple:
-    """Policies, VIP names and profiles of one scope (whole file or one VDOM)."""
+    """Policies, VIP name -> mapping and profiles of one scope (whole file or
+    one VDOM). A VIP group has no mapping of its own."""
+    from services.fortigate_service import _vip_mapping
     policies = [{**e, "policyid": e["_key"]} for e in _entries(scope, "firewall policy")]
-    vip_names = {str(e["_key"]).strip().lower()
+    vip_names = {str(e["_key"]).strip().lower(): _vip_mapping(e) if path == "firewall vip" else ""
                  for path in ("firewall vip", "firewall vipgrp")
                  for e in _entries(scope, path)}
     profiles = {fam: [{**e, "name": e["_key"]} for e in _entries(scope, path)]

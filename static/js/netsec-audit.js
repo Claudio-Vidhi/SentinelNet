@@ -305,21 +305,14 @@
         }
         const src = adv.source || {};
         const recs = Array.isArray(adv.recommendations) ? adv.recommendations : [];
-        const summary = adv.summary || {};
         const banner = (key) => `<div class="nsa-partial"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(tr(key))}</div>`;
         let html = '';
         if (src.full_config === false) html += banner('nsaAdvNotFullConfig');
         if (Array.isArray(src.live_only) && src.live_only.includes('ADV-ORDER')) {
             html += `<div style="margin-bottom:10px; font-size:12px; color:var(--text-muted);"><i class="fa-solid fa-circle-info"></i> ${escapeHtml(tr('nsaAdvLiveOnly'))}</div>`;
         }
-        html += `<div style="margin-bottom:10px; font-size:12px; color:var(--text-muted);">${escapeHtml(tr('fgtAdvisorCount', {
-            total: summary.total != null ? summary.total : recs.length,
-            policies: summary.policies_analyzed != null ? summary.policies_analyzed : 0,
-        }))}</div>`;
-        html += recs.length
-            ? window.fgtAdvisorCardsHtml(recs)
-            : `<div class="panel" style="margin:0; padding:14px; color:var(--success);"><i class="fa-solid fa-circle-check"></i> ${escapeHtml(tr('fgtAdvisorClean'))}</div>`;
-        body.innerHTML = html;
+        body.innerHTML = html + '<div class="fgt-adv"></div>';
+        window.fgtAdvisorMount(body.querySelector('.fgt-adv'), recs, adv.summary);
         panel.style.display = '';
     }
 

@@ -148,7 +148,7 @@ interface Window {
     orgLabel: any;           // core.js, display name of a tenant key
     redundancyTenantChanged: any; // redundancy.js, called by applyGlobalTenant
     globalDeviceContext: any; // core.js
-    fgtAdvisorCardsHtml: any; // fortigate-management.js, reused by netsec-audit.js
+    fgtAdvisorMount: any;     // fortigate-management.js, reused by netsec-audit.js
     fgtCopyCli: any;          // fortigate-management.js, reused by netsec-audit.js
     setGlobalDeviceContext: any; // core.js
     clearGlobalDeviceContext: any; // core.js

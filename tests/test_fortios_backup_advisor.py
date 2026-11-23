@@ -158,6 +158,31 @@ class TestBackupAdvisor(unittest.TestCase):
         self.assertIn("ADV-VIP-L7-1", self.ids)
         self.assertEqual(self.by_id["ADV-VIP-L7-1"]["severity"], "HIGH")
 
+    def test_vip_rec_carries_ui_fields(self):
+        rec = self.by_id["ADV-VIP-L7-1"]
+        pol = rec["policy"]
+        self.assertEqual(pol["id"], "1")
+        self.assertEqual(pol["position"], 1)
+        self.assertEqual(pol["srcintf"], ["wan1"])
+        self.assertEqual(pol["dstaddr"], ["VIP_Web"])
+        self.assertTrue(pol["src_is_wan"])
+        self.assertFalse(pol["dst_is_wan"])
+        self.assertTrue(pol["is_vip"])
+        self.assertEqual(pol["vip"], "VIP_Web: 203.0.113.10 → 192.168.10.10")
+        self.assertEqual(pol["nat"], "disable")
+        self.assertIsNone(pol["bytes"])  # a backup has no counters
+        self.assertIn("dstaddr", rec["highlight"])
+        problems = [c["field"] for c in rec["checks"] if not c["ok"]]
+        self.assertEqual(problems, ["dstaddr", "ips-sensor"])
+        fine = [c for c in rec["checks"] if c["ok"]]
+        self.assertEqual([(c["field"], c["value"]) for c in fine], [("srcaddr", "all")])
+        changes = {c["field"]: (c["old"], c["new"]) for c in rec["changes"]}
+        # inspection-mode is already flow: not a change.
+        self.assertNotIn("inspection-mode", changes)
+        self.assertEqual(changes["ips-sensor"], ("", "IPS_WebServer_Linux"))
+        self.assertTrue(rec["risk"])
+        self.assertTrue(rec["detail"].startswith(rec["risk"]))
+
     def test_proxy_and_offload(self):
         # FGT60F on 7.4.5: 2GB unit, proxy mode removed.
         self.assertEqual(self.by_id["ADV-PROXY-3"]["severity"], "CRITICAL")
@@ -309,6 +334,14 @@ class TestMultiVdom(unittest.TestCase):
         # port5 is WAN in vd-b only: policy 2 of root is not internet-bound.
         self.assertIn("root:ADV-BYPASS-2", self.by_id)
         self.assertNotIn("root:ADV-AV-2", self.by_id)
+
+    def test_ui_fields_survive_the_merge(self):
+        rec = self.by_id["vd-b:ADV-VIP-L7-1"]
+        self.assertEqual(rec["policy"]["id"], "1")
+        self.assertTrue(rec["policy"]["is_vip"])
+        self.assertTrue(rec["checks"])
+        self.assertTrue(rec["changes"])
+        self.assertTrue(rec["highlight"])
 
     def test_cli_wrapped_in_vdom(self):
         cli = self.by_id["vd-b:ADV-VIP-L7-1"]["cli"]

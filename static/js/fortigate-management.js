@@ -833,56 +833,268 @@ function renderFgtAdvisor(host, st, head) {
           </div>`;
     }
 
-    const countBanner = `<div style="margin-bottom:10px; font-size:12px; color:var(--text-muted);">
-        ${escapeHtml(tr('fgtAdvisorCount', {
-            total: summary.total != null ? summary.total : recs.length,
-            policies: summary.policies_analyzed != null ? summary.policies_analyzed : 0,
-        }))}</div>`;
+    host.innerHTML = head + hwHtml + '<div class="fgt-adv"></div>';
+    fgtAdvisorMount(host.querySelector('.fgt-adv'), recs, summary);
+}
 
-    if (!recs.length) {
-        host.innerHTML = head + hwHtml + countBanner +
-            `<div class="panel" style="margin:0; padding:14px; color:var(--success);"><i class="fa-solid fa-circle-check"></i> ${escapeHtml(tr('fgtAdvisorClean'))}</div>`;
+// --- Advisor: master-detail view ---------------------------------------------
+// Shared with the Security Audit tab, which runs the same advisor on a config
+// backup (netsec-audit.js). Selection, severity filter and grouping live per
+// container element: rendering the container again starts from scratch.
+const FGT_ADV_SEVS = ['CRITICAL', 'HIGH', 'WARN', 'INFO'];
+const FGT_ADV_PROFILES = [['ssl-ssh-profile', 'SSL'], ['av-profile', 'AV'], ['webfilter-profile', 'Web'],
+    ['application-list', 'App'], ['dnsfilter-profile', 'DNS'], ['ips-sensor', 'IPS']];
+const _fgtAdvState = new WeakMap();
+
+const _fgtAdvSev = (r) => String(r.severity || 'INFO').toUpperCase();
+const _fgtAdvList = (v) => Array.isArray(v) ? v.join(', ') : String(v == null ? '' : v);
+const _fgtAdvDot = (sev) => `<span class="fgt-adv-dot sev-${escapeHtml(sev)}" aria-hidden="true"></span>`;
+const _fgtAdvCause = () => `<span class="fgt-adv-cause">● ${escapeHtml(tr('fgtAdvCause'))}</span>`;
+const _fgtAdvVdom = (vd) => vd ? `<span class="badge">${escapeHtml(tr('fgtAdvisorVdom', { name: vd }))}</span>` : '';
+
+function _fgtAdvGroupKey(r) {
+    const vd = r.vdom || '';
+    if (r.policy_id) return `p|${vd}|${r.policy_id}`;
+    if (r.profile) return `f|${vd}|${r.profile.kind}|${r.profile.name}`;
+    return `g|${vd}`;
+}
+
+function fgtAdvisorMount(el, recs, summary) {
+    if (!el) return;
+    const list = Array.isArray(recs) ? recs : [];
+    _fgtAdvState.set(el, { recs: list, summary: summary || {}, sev: '', mode: 'policy',
+                           sel: list.length ? list[0].id : '' });
+    el.addEventListener('click', (e) => _fgtAdvClick(el, e));
+    _fgtAdvRender(el);
+}
+window.fgtAdvisorMount = fgtAdvisorMount;
+
+function _fgtAdvClick(el, e) {
+    const st = _fgtAdvState.get(el);
+    const b = e.target.closest('[data-action^="fgt-adv-"]');
+    if (!st || !b) return;
+    const act = b.dataset.action;
+    const val = b.dataset.id || b.dataset.sev || b.dataset.mode || '';
+    if (act === 'fgt-adv-pick') {
+        st.sel = val;
+        const r = st.recs.find(x => x.id === val);
+        if (r && st.sev && _fgtAdvSev(r) !== st.sev) st.sev = '';
+    } else if (act === 'fgt-adv-sev') {
+        st.sev = val;
+        const vis = st.recs.filter(r => !st.sev || _fgtAdvSev(r) === st.sev);
+        if (vis.length && !vis.some(r => r.id === st.sel)) st.sel = vis[0].id;
+    } else if (act === 'fgt-adv-mode') {
+        st.mode = val === 'sev' ? 'sev' : 'policy';
+    } else {
         return;
     }
-
-    const cards = fgtAdvisorCardsHtml(recs);
-
-    host.innerHTML = head + hwHtml + countBanner + cards;
+    _fgtAdvRender(el);
+    // The clicked button was replaced: put keyboard focus back on its twin, or
+    // on the detail when the list sits above it (narrow screens).
+    if (act === 'fgt-adv-pick' && window.matchMedia('(max-width: 1000px)').matches) {
+        const h = el.querySelector('.fgt-adv-title');
+        if (h) { h.focus(); h.scrollIntoView({ block: 'start' }); }
+        return;
+    }
+    const twin = Array.from(el.querySelectorAll(`[data-action="${act}"]`))
+        .find(x => (x.dataset.id || x.dataset.sev || x.dataset.mode || '') === val);
+    if (twin) twin.focus();
 }
 
-// One card per recommendation. Shared with the Security Audit tab, which
-// runs the same advisor on a config backup (netsec-audit.js).
-function fgtAdvisorCardsHtml(recs) {
-    return recs.map(r => {
-        const sev = String(r.severity || 'INFO').toUpperCase();
-        const cls = (sev === 'CRITICAL' || sev === 'HIGH') ? 'bad' : sev === 'WARN' ? 'warn' : 'ok';
-        const polLabel = r.policy_id
-            ? tr('fgtAdvisorPolicyRef', { id: r.policy_id }) + (r.policy_name ? ' · ' + r.policy_name : '')
-            : tr('fgtAdvisorAllPolicies');
-        const cliBlock = r.cli ? `<div class="fgt-cli-wrap" style="margin-top:10px;">
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px;">
-              <span style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:600;">${escapeHtml(tr('fgtAdvisorCliRemediation'))}</span>
-              <button type="button" class="btn btn-secondary btn-small" style="width:auto;" data-action="fgt-copy-cli">
-                <i class="fa-regular fa-copy"></i> ${escapeHtml(tr('btnFgtCopyCli'))}
-              </button>
-            </div>
-            <pre class="fgt-cli-snippet" style="font-family:var(--font-code); font-size:12px; background:var(--surface-2); border:1px solid var(--border); padding:10px; margin:0; white-space:pre-wrap; overflow:auto;">${escapeHtml(r.cli)}</pre>
-          </div>` : '';
-        return `<div class="panel" style="margin:0 0 10px; padding:12px 14px;">
-            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-              <span class="status ${cls}">${escapeHtml(sev)}</span>
-              <span class="badge">${escapeHtml(r.category || '')}</span>${r.vdom ? `<span class="badge">${escapeHtml(tr('fgtAdvisorVdom', { name: r.vdom }))}</span>` : ''}
-              <span style="font-family:var(--font-code); font-size:12px; color:var(--text-muted);">${escapeHtml(polLabel)}</span>
-              ${Array.isArray(r.reuses) && r.reuses.length
-                ? `<span class="status ok">${escapeHtml(tr('fgtAdvisorReuse', { names: r.reuses.join(', ') }))}</span>` : ''}
-            </div>
-            <div style="margin-top:6px; font-weight:600; font-size:14px;">${escapeHtml(r.title || '')}</div>
-            <div style="margin-top:4px; font-size:12.5px; color:var(--text-muted);">${escapeHtml(r.detail || '')}</div>
-            ${cliBlock}
-          </div>`;
+function _fgtAdvRender(el) {
+    const st = _fgtAdvState.get(el);
+    if (!st) return;
+    const recs = st.recs, summary = st.summary;
+    const count = `<span class="fgt-adv-count">${escapeHtml(tr('fgtAdvisorCount', {
+        total: summary.total != null ? summary.total : recs.length,
+        policies: summary.policies_analyzed != null ? summary.policies_analyzed : 0,
+    }))}</span>`;
+    if (!recs.length) {
+        el.innerHTML = `<div class="fgt-adv-bar">${count}</div>
+          <div class="panel" style="margin:0; padding:14px; color:var(--success);"><i class="fa-solid fa-circle-check"></i> ${escapeHtml(tr('fgtAdvisorClean'))}</div>`;
+        return;
+    }
+    const chip = (sev, label, n) => `<button type="button" class="chip-choice fgt-adv-chip" data-action="fgt-adv-sev"
+        data-sev="${escapeHtml(sev)}" aria-pressed="${st.sev === sev}">${sev ? _fgtAdvDot(sev) : ''}${escapeHtml(label)} <b>${n}</b></button>`;
+    const seg = (mode, key) => `<button type="button" class="chip-choice" data-action="fgt-adv-mode"
+        data-mode="${mode}" aria-pressed="${st.mode === mode}">${escapeHtml(tr(key))}</button>`;
+    const bar = `<div class="fgt-adv-bar">
+        <div class="fgt-adv-chips" role="group" aria-label="${escapeHtml(tr('fgtAdvSevFilter'))}">${
+            chip('', tr('fgtAdvSevAll'), recs.length)}${
+            FGT_ADV_SEVS.map(s => chip(s, s, recs.filter(r => _fgtAdvSev(r) === s).length)).join('')}</div>
+        ${count}
+        <div class="fgt-adv-seg" role="group" aria-label="${escapeHtml(tr('fgtAdvGroupBy'))}">${
+            seg('policy', 'fgtAdvByPolicy')}${seg('sev', 'fgtAdvBySeverity')}</div>
+      </div>`;
+    const vis = recs.filter(r => !st.sev || _fgtAdvSev(r) === st.sev);
+    const sel = vis.find(r => r.id === st.sel);
+    el.innerHTML = bar + `<div class="fgt-adv-md">
+        <div class="fgt-adv-list">${_fgtAdvListHtml(vis, st)}</div>
+        <div class="fgt-adv-detail">${sel ? _fgtAdvDetailHtml(sel, recs)
+            : `<div class="fgt-adv-empty">${escapeHtml(tr('fgtAdvNone'))}</div>`}</div>
+      </div>`;
+}
+
+function _fgtAdvItem(r, st) {
+    const sev = _fgtAdvSev(r);
+    const meta = [r.category || ''];
+    if (st.mode === 'sev') {
+        if (r.vdom) meta.push(tr('fgtAdvisorVdom', { name: r.vdom }));
+        meta.push(r.policy_id ? tr('fgtAdvisorPolicyRef', { id: r.policy_id })
+            : r.profile ? tr('fgtAdvProfileGroup', { name: r.profile.name }) : tr('fgtAdvisorAllPolicies'));
+    }
+    return `<button type="button" class="fgt-adv-item" data-action="fgt-adv-pick" data-id="${escapeHtml(r.id)}"
+        aria-pressed="${r.id === st.sel}">${_fgtAdvDot(sev)}<span class="visually-hidden">${escapeHtml(sev)}</span>
+        <span><span class="fgt-adv-ti">${escapeHtml(r.title || '')}</span>
+        <span class="fgt-adv-ca">${escapeHtml(meta.filter(Boolean).join(' · '))}</span></span></button>`;
+}
+
+function _fgtAdvFlowMini(p) {
+    const a = (k) => escapeHtml(_fgtAdvList(p[k]) || '—');
+    return `${a('srcintf')} <i>→</i> ${a('dstintf')} <i>·</i> ${a('srcaddr')} <i>→</i> ${a('dstaddr')} <i>·</i> ${a('service')}`;
+}
+
+function _fgtAdvListHtml(vis, st) {
+    if (st.mode === 'sev') return vis.map(r => _fgtAdvItem(r, st)).join('');
+    const groups = new Map();
+    vis.forEach(r => {
+        const k = _fgtAdvGroupKey(r);
+        if (!groups.has(k)) groups.set(k, []);
+        groups.get(k).push(r);
+    });
+    return Array.from(groups.values()).map(rs => {
+        const r0 = rs[0];  // recs arrive sorted by severity: the first is the worst
+        let title, sub = '';
+        if (r0.policy_id) {
+            title = `<span class="fgt-adv-mono">#${escapeHtml(r0.policy_id)}</span> ${escapeHtml(r0.policy_name || '')}`;
+            if (r0.policy) sub = _fgtAdvFlowMini(r0.policy);
+        } else if (r0.profile) {
+            title = escapeHtml(tr('fgtAdvProfileGroup', { name: r0.profile.name }));
+            sub = escapeHtml([r0.category || '',
+                tr('fgtAdvUsedBy', { n: (r0.profile.used_by || []).length })].filter(Boolean).join(' · '));
+        } else {
+            title = escapeHtml(tr('fgtAdvisorAllPolicies'));
+        }
+        return `<div class="fgt-adv-grp"><div class="fgt-adv-grp-h">
+            <div class="fgt-adv-grp-t">${_fgtAdvDot(_fgtAdvSev(r0))}<span>${title}</span>${_fgtAdvVdom(r0.vdom)}</div>
+            ${sub ? `<div class="fgt-adv-flowmini">${sub}</div>` : ''}</div>
+            ${rs.map(r => _fgtAdvItem(r, st)).join('')}</div>`;
     }).join('');
 }
-window.fgtAdvisorCardsHtml = fgtAdvisorCardsHtml;
+
+function _fgtAdvPolicyCard(p, hl, vdom) {
+    const L = _fgtAdvList;
+    const hit = (...keys) => keys.some(k => hl.has(k));
+    const node = (on, label, v, s) => `<div class="fgt-adv-node${on ? ' hit' : ''}">
+        <div class="k">${escapeHtml(label)}${on ? _fgtAdvCause() : ''}</div><div class="v">${escapeHtml(v || '—')}</div>
+        ${s ? `<div class="s">${escapeHtml(s)}</div>` : ''}</div>`;
+    const row = (on, label, v) => `<div class="k${on ? ' hit' : ''}">${escapeHtml(label)}</div>
+        <div class="v${on ? ' hit' : ''}">${v}${on ? _fgtAdvCause() : ''}</div>`;
+    const traffic = p.bytes != null ? [
+        FGT_FMT.bytes(p.bytes),
+        p.hit_count != null ? escapeHtml(tr('fgtAdvHits', { n: p.hit_count })) : '',
+        p.last_used ? escapeHtml(tr('fgtAdvLastUsed')) + ' ' + FGT_FMT.time(p.last_used) : '',
+    ].filter(Boolean).join(' · ') : '';
+    const action = String(p.action || '').toUpperCase();
+    const prof = FGT_ADV_PROFILES.map(([k, lab]) => `<span class="fgt-adv-prof${p[k] ? '' : ' none'}${
+        hl.has(k) ? ' hit' : ''}"><b>${lab}</b>${escapeHtml(p[k] || '—')}</span>`).join('');
+    return `<div class="fgt-adv-card">
+      <div class="fgt-adv-card-top"><b class="fgt-adv-mono">#${escapeHtml(p.id)}</b><b>${escapeHtml(p.name || '')}</b>
+        ${_fgtAdvVdom(vdom)}<span class="badge">${escapeHtml(tr('fgtAdvPositionTag', { n: p.position }))}</span>
+        ${traffic ? `<span class="fgt-adv-traffic">${traffic}</span>` : ''}</div>
+      <div class="fgt-adv-flow">
+        ${node(hit('srcintf', 'srcaddr'), tr('fgtAdvFrom') + (p.src_is_wan ? ' · WAN' : ''), L(p.srcintf), L(p.srcaddr))}
+        <span class="fgt-adv-arrow" aria-hidden="true">→</span>
+        <div class="fgt-adv-gate"><span class="status ${action === 'ACCEPT' ? 'ok' : 'bad'}">${escapeHtml(action || '—')}</span>
+          <div class="s">${escapeHtml(L(p.service))}</div></div>
+        <span class="fgt-adv-arrow" aria-hidden="true">→</span>
+        ${node(hit('dstintf', 'dstaddr'), tr('fgtAdvTo') + (p.dst_is_wan ? ' · WAN' : '') + (p.is_vip ? ' · VIP' : ''),
+               L(p.dstintf), p.vip || L(p.dstaddr))}
+      </div>
+      <div class="fgt-adv-kv">
+        ${row(hit('service'), tr('fgtAdvService'), escapeHtml(L(p.service) || '—'))}
+        ${row(hit('nat'), 'NAT', escapeHtml(p.nat || '—'))}
+        ${row(hit('inspection-mode', 'auto-asic-offload'), tr('fgtAdvInspection'),
+              escapeHtml(`${p['inspection-mode'] || '—'} · asic-offload ${p['auto-asic-offload'] || '—'}`))}
+        ${row(hit('utm-status', ...FGT_ADV_PROFILES.map(x => x[0])), tr('fgtAdvProfiles'),
+              `<span class="fgt-adv-soft">utm ${escapeHtml(p['utm-status'] || '—')}</span>${prof}`)}
+        ${row(hit('position'), tr('fgtAdvPosition'),
+              escapeHtml('#' + p.position) + (p.bytes != null ? ' · ' + FGT_FMT.bytes(p.bytes) : ''))}
+      </div></div>`;
+}
+
+function _fgtAdvProfileCard(f, hl, category) {
+    const rows = (f.fields || []).map(x => {
+        const on = hl.has(x.key);
+        return `<div class="k${on ? ' hit' : ''}">${escapeHtml(x.key)}</div>
+          <div class="v${on ? ' hit' : ''}">${escapeHtml(x.value || tr('fgtAdvEmpty'))}${on ? _fgtAdvCause() : ''}</div>`;
+    }).join('');
+    const used = (f.used_by || []).map(u =>
+        `<span class="fgt-adv-prof">#${escapeHtml(u.id)}${u.name ? ' ' + escapeHtml(u.name) : ''}</span>`).join('');
+    return `<div class="fgt-adv-card">
+      <div class="fgt-adv-card-top"><b class="fgt-adv-mono">${escapeHtml(f.name || '')}</b>
+        <span class="badge">${escapeHtml(category || f.kind || '')}</span></div>
+      <div class="fgt-adv-kv">${rows}
+        <div class="k">${escapeHtml(tr('fgtAdvUsedByPolicies'))}</div><div class="v">${used || '—'}</div></div></div>`;
+}
+
+function _fgtAdvDetailHtml(r, recs) {
+    const sev = _fgtAdvSev(r);
+    const hl = new Set(r.highlight || []);
+    const sec = (key, body) => `<section class="fgt-adv-sec"><h4>${escapeHtml(tr(key))}</h4>${body}</section>`;
+    const checks = Array.isArray(r.checks) ? r.checks : [];
+    const fv = (c) => c.field ? `${c.field} = ${c.value || tr('fgtAdvEmpty')}` : (c.value || '');
+    const sevCls = (sev === 'CRITICAL' || sev === 'HIGH') ? 'bad' : sev === 'WARN' ? 'warn' : 'idle';
+    let html = `<div class="fgt-adv-dh"><span class="status ${sevCls}">${escapeHtml(sev)}</span>
+        <span class="badge">${escapeHtml(r.category || '')}</span>${_fgtAdvVdom(r.vdom)}
+        <span class="fgt-adv-mono fgt-adv-id">${escapeHtml(r.id)}</span></div>
+      <h3 class="fgt-adv-title" tabindex="-1">${escapeHtml(r.title || '')}</h3>`;
+    if (r.policy) html += sec('fgtAdvPolicyInUse', _fgtAdvPolicyCard(r.policy, hl, r.vdom));
+    else if (r.profile) html += sec('fgtAdvProfileInUse', _fgtAdvProfileCard(r.profile, hl, r.category));
+
+    const bad = checks.filter(c => !c.ok), good = checks.filter(c => c.ok);
+    let why = '';
+    if (bad.length) {
+        why += `<ul class="fgt-adv-why">${bad.map(c => `<li><span class="fgt-adv-ic" aria-hidden="true">!</span>
+            <div><div>${escapeHtml(c.text || '')}</div>${fv(c) ? `<div class="fgt-adv-f">${escapeHtml(fv(c))}</div>` : ''}</div></li>`).join('')}</ul>`;
+    }
+    if (good.length) {
+        why += `<div class="fgt-adv-ok"><div class="fgt-adv-ok-h">${escapeHtml(tr('fgtAdvNotProblems'))}</div>${
+            good.map(c => `<div><span class="fgt-adv-tick" aria-hidden="true">✓</span> ${escapeHtml(c.text || '')}${
+                fv(c) ? ` <span class="fgt-adv-f">· ${escapeHtml(fv(c))}</span>` : ''}</div>`).join('')}</div>`;
+    }
+    const risk = r.risk || r.detail || '';
+    if (risk) why += `<div class="fgt-adv-risk"><b>${escapeHtml(tr('fgtAdvRisk'))}:</b> ${escapeHtml(risk)}</div>`;
+    if (why) html += sec('fgtAdvProblems', why);
+
+    const changes = Array.isArray(r.changes) ? r.changes : [];
+    let fix = '';
+    if (changes.length) {
+        fix += `<table class="fgt-adv-diff"><thead><tr><th scope="col">${escapeHtml(tr('fgtAdvField'))}</th>
+            <th scope="col">${escapeHtml(tr('fgtAdvCurrent'))}</th><th scope="col">${escapeHtml(tr('fgtAdvProposed'))}</th></tr></thead>
+            <tbody>${changes.map(c => `<tr><td>${escapeHtml(c.field || '')}</td><td class="old">${escapeHtml(c.old || '—')}</td>
+            <td class="new">${escapeHtml(c.new || '—')}</td></tr>`).join('')}</tbody></table>`;
+    }
+    if (r.reuse_note) fix += `<div class="fgt-adv-reuse"><i class="fa-solid fa-recycle" aria-hidden="true"></i> ${escapeHtml(r.reuse_note)}</div>`;
+    if (r.cli) {
+        // The copy button sits beside the <summary>, not inside it: a button
+        // nested in the summary's own button role is unreachable to a reader.
+        fix += `<div class="fgt-cli-wrap fgt-adv-cli">
+            <button type="button" class="btn btn-secondary btn-small" data-action="fgt-copy-cli">
+              <i class="fa-regular fa-copy" aria-hidden="true"></i> ${escapeHtml(tr('btnFgtCopyCli'))}</button>
+            <details><summary>${escapeHtml(tr('fgtAdvisorCliRemediation'))}</summary>
+              <pre class="fgt-cli-snippet">${escapeHtml(r.cli)}</pre></details></div>`;
+    }
+    if (fix) html += sec('fgtAdvChange', fix);
+
+    const key = _fgtAdvGroupKey(r);
+    const sib = r.policy_id ? recs.filter(x => x.id !== r.id && _fgtAdvGroupKey(x) === key) : [];
+    if (sib.length) {
+        html += sec('fgtAdvMore', `<div class="fgt-adv-sib">${sib.map(s => `<button type="button" class="chip-choice"
+            data-action="fgt-adv-pick" data-id="${escapeHtml(s.id)}">${_fgtAdvDot(_fgtAdvSev(s))}${escapeHtml(s.title || '')}</button>`).join('')}</div>`);
+    }
+    return html;
+}
 
 // Copy the CLI snippet next to a [data-action="fgt-copy-cli"] button.
 function fgtCopyCli(copyBtn) {

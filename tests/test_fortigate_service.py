@@ -798,6 +798,24 @@ class L7PoliciesSessionsAndAdvisorTest(unittest.TestCase):
         self.assertEqual(ids["ADV-ORDER-6"]["severity"], "INFO")
         self.assertIn("move 6 before 1", ids["ADV-ORDER-6"]["cli"])
         self.assertEqual(ids["ADV-PROFILES-UNAVAIL"]["severity"], "INFO")
+        # Structured fields for the advisor UI.
+        order = ids["ADV-ORDER-6"]
+        self.assertEqual(order["policy"]["position"], 6)
+        self.assertEqual(order["highlight"], ["position"])
+        self.assertEqual([(c["ok"], c["field"]) for c in order["checks"]],
+                         [(False, "position"), (False, "bytes"), (True, "target")])
+        self.assertEqual(order["checks"][1]["value"], "238.4 MB")
+        self.assertEqual(order["changes"], [{"field": "position", "old": "6", "new": "before policy 1"}])
+        self.assertEqual(ids["ADV-PROXY-1"]["changes"],
+                         [{"field": "inspection-mode", "old": "proxy", "new": "flow"}])
+        bypass = ids["ADV-BYPASS-3"]
+        self.assertEqual(set(bypass["highlight"]), {"srcaddr", "dstaddr", "service", "auto-asic-offload"})
+        self.assertEqual(bypass["policy"]["srcaddr"], ["all"])
+        self.assertEqual(bypass["policy"]["service"], ["ALL"])  # original case kept
+        self.assertEqual([c["field"] for c in ids["ADV-PROFILES-UNAVAIL"]["checks"]], ["dnsfilter"])
+        self.assertIsNone(ids["ADV-PROFILES-UNAVAIL"]["policy"])
+        it_order = {r["id"]: r for r in res_it["data"]["recommendations"]}["ADV-ORDER-6"]
+        self.assertEqual(it_order["changes"][0]["new"], "prima della policy 1")
         self.assertNotEqual(res_it["data"]["recommendations"][0]["title"],
                             res_en["data"]["recommendations"][0]["title"])
 
@@ -999,6 +1017,23 @@ class TestAdvisorProfileReuse(unittest.TestCase):
         av_prof = ids["ADV-AV-PROFILE-AV_Monitor"]
         self.assertIn("config http\n            set av-scan block", av_prof["cli"])
         self.assertNotIn("config smtp", av_prof["cli"])
+        self.assertIsNone(av_prof["policy"])
+        self.assertEqual(av_prof["profile"]["used_by"], [{"id": "3", "name": ""}])
+        self.assertEqual(av_prof["profile"]["fields"],
+                         [{"key": "http.av-scan", "value": "monitor"},
+                          {"key": "smtp.av-scan", "value": "block"}])
+        self.assertEqual(av_prof["highlight"], ["http.av-scan"])
+        self.assertEqual(av_prof["changes"], [{"field": "http.av-scan", "old": "monitor", "new": "block"}])
+        self.assertEqual([(c["ok"], c["field"]) for c in av_prof["checks"]],
+                         [(False, "http.av-scan"), (True, "smtp.av-scan")])
+        app_prof = ids["ADV-APP-PROFILE-APP_Watch"]
+        self.assertEqual(app_prof["profile"]["kind"], "application")
+        self.assertIn({"key": "other-application-action", "value": "pass"}, app_prof["profile"]["fields"])
+        # The reuse note is split from the risk; detail keeps both.
+        av1 = ids["ADV-AV-1"]
+        self.assertIn("AV_Strict", av1["reuse_note"])
+        self.assertNotIn("AV_Strict", av1["risk"])
+        self.assertEqual(av1["detail"], av1["risk"] + " " + av1["reuse_note"])
         self.assertIn("ADV-APP-PROFILE-APP_Watch", ids)
         # Profiles nobody uses are not reported.
         self.assertNotIn("ADV-AV-PROFILE-default", ids)

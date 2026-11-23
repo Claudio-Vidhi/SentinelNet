@@ -689,7 +689,7 @@ def get_firewall_policy_objects(device):
             ip,
             "cmdb/firewall/policy",
             fmt="policyid|name|srcintf|dstintf|srcaddr|dstaddr|"
-                "service|action|status|logtraffic|inspection-mode|"
+                "service|action|status|logtraffic|nat|inspection-mode|"
                 "utm-status|auto-asic-offload|ips-sensor|av-profile|"
                 "webfilter-profile|application-list|dnsfilter-profile|ssl-ssh-profile",
         )
@@ -1437,19 +1437,92 @@ _GENERIC_IPS_NAMES = frozenset({"default", "high_security", "all_default", "all_
 _BYPASS_TOP_BYTES = 100_000_000
 
 
-def _policy_member_names(val: Any) -> list[str]:
+def _member_labels(val: Any) -> list[str]:
+    """Member names of a policy table field, original case."""
     if not val:
         return []
     items = val if isinstance(val, list) else [val]
     out = []
     for item in items:
         if isinstance(item, dict):
-            name = str(item.get("name") or item.get("q_origin_key") or "").strip().lower()
+            name = str(item.get("name") or item.get("q_origin_key") or "").strip()
         else:
-            name = str(item or "").strip().lower()
+            name = str(item or "").strip()
         if name:
             out.append(name)
     return out
+
+
+def _policy_member_names(val: Any) -> list[str]:
+    return [n.lower() for n in _member_labels(val)]
+
+
+# Policy fields the advisor UI shows in its policy card; keys are the FortiOS
+# field names, so a rec's ``highlight`` indexes straight into the snapshot.
+_SNAPSHOT_PROFILES = ("ssl-ssh-profile", "av-profile", "webfilter-profile",
+                      "application-list", "dnsfilter-profile", "ips-sensor")
+
+
+def _vip_mapping(vip: dict) -> str:
+    """'extip[:port] -> mappedip[:port]' of a VIP row (REST or backup), or ''."""
+    def flat(val: Any) -> str:
+        items = val if isinstance(val, list) else [val]
+        return ", ".join(str(i.get("range") or "") if isinstance(i, dict) else str(i)
+                         for i in items if i)
+    ext, mapped = flat(vip.get("extip")), flat(vip.get("mappedip"))
+    if not ext or not mapped:
+        return ""
+    if str(vip.get("portforward") or "").lower() == "enable":
+        if vip.get("extport"):
+            ext += f":{vip['extport']}"
+        if vip.get("mappedport"):
+            mapped += f":{vip['mappedport']}"
+    return f"{ext} → {mapped}"
+
+
+def _policy_snapshot(row: dict, position: int, wan_names: set, vips: Dict[str, str]) -> Dict[str, Any]:
+    """The policy as it is now, for the advisor's policy card."""
+    snap: Dict[str, Any] = {
+        "id": str(row.get("policyid") if row.get("policyid") is not None else ""),
+        "name": str(row.get("name") or ""),
+        "position": position,
+        "action": str(row.get("action") or "").lower(),
+    }
+    for k in ("srcintf", "dstintf", "srcaddr", "dstaddr", "service"):
+        snap[k] = _member_labels(row.get(k))
+    snap["nat"] = str(row.get("nat") or "disable").lower()
+    snap["inspection-mode"] = str(row.get("inspection-mode") or row.get("inspection_mode") or "flow").lower()
+    snap["auto-asic-offload"] = str(row.get("auto-asic-offload") or row.get("asic_offload") or "enable").lower()
+    snap["utm-status"] = str(row.get("utm-status") or "").lower()
+    for k in _SNAPSHOT_PROFILES:
+        snap[k] = _profile_name_val(row.get(k))
+    for k in ("bytes", "hit_count", "last_used"):
+        snap[k] = row.get(k)
+    snap["src_is_wan"] = bool({n.lower() for n in snap["srcintf"]} & wan_names)
+    snap["dst_is_wan"] = bool({n.lower() for n in snap["dstintf"]} & wan_names)
+    dst_vips = [n for n in snap["dstaddr"] if n.lower() in vips]
+    snap["is_vip"] = bool(dst_vips)
+    snap["vip"] = "; ".join(f"{n}: {vips[n.lower()]}" for n in dst_vips if vips[n.lower()])
+    return snap
+
+
+def _profile_users(policies: list, key: str) -> Dict[str, list]:
+    """Policies referencing each profile name under ``key``, as {id, name}."""
+    out: Dict[str, list] = {}
+    for p in policies:
+        name = _profile_name_val(p.get(key))
+        if name:
+            pid = str(p.get("policyid") if p.get("policyid") is not None else "")
+            out.setdefault(name, []).append({"id": pid, "name": str(p.get("name") or "")})
+    return out
+
+
+def _fmt_bytes(n: Any) -> str:
+    """Same rendering as FGT_FMT.bytes in fortigate-management.js."""
+    x, i, units = float(n or 0), 0, ("B", "KB", "MB", "GB", "TB")
+    while x >= 1024 and i < len(units) - 1:
+        x, i = x / 1024, i + 1
+    return f"{x:.1f} {units[i]}" if i else f"{int(x)} B"
 
 
 _SSL_SERVER_TEMPLATE = (
@@ -1797,8 +1870,8 @@ def merge_vdom_advice(per: list) -> dict:
 
 
 def _advisor_inputs(device, errors: Dict[str, str]) -> tuple:
-    """Policies (with stats), VIP names, full profiles and profile-family
-    errors of the current scope, failures recorded in ``errors``."""
+    """Policies (with stats), VIP name -> mapping, full profiles and
+    profile-family errors of the current scope, failures recorded in ``errors``."""
     policies: list[dict] = []
     try:
         pol_res = get_policies_with_stats(device)
@@ -1810,12 +1883,12 @@ def _advisor_inputs(device, errors: Dict[str, str]) -> tuple:
     except FortiGateError as e:
         errors["policies"] = str(e)
 
-    vip_names: set[str] = set()
+    vip_names: Dict[str, str] = {}
     try:
         vip_res = get_vips(device)
         for v in (vip_res.get("data") or []):
             if isinstance(v, dict) and v.get("name"):
-                vip_names.add(str(v["name"]).strip().lower())
+                vip_names[str(v["name"]).strip().lower()] = _vip_mapping(v)
     except FortiGateError as e:
         errors["vips"] = str(e)
 
@@ -1849,14 +1922,20 @@ def _advisor_inputs(device, errors: Dict[str, str]) -> tuple:
 _ADVISOR_FAMILIES = ("ips", "ssl_ssh", "antivirus", "application", "webfilter", "dnsfilter")
 
 
-def advise(policies: list, vip_names: set, profiles: Dict[str, list],
+def advise(policies: list, vip_names: Dict[str, str], profiles: Dict[str, list],
            profile_errors: Dict[str, str], wan_names: set,
            profile: FortiGateHWProfile, lang: str, errors: Dict[str, str]) -> dict:
     """The advisor rules on REST-shaped rows, whatever their source.
 
     Fed by the live REST fetch (``get_firewall_advisor``) and by a config
     backup (``services.netsec_audit.fortios_advisor``): one rule set, two inputs.
-    ``profiles`` maps each family of ``_ADVISOR_FAMILIES`` to its full rows."""
+    ``profiles`` maps each family of ``_ADVISOR_FAMILIES`` to its full rows,
+    ``vip_names`` each VIP name (lowercase) to its mapping ('' if unknown).
+
+    Besides title/detail/cli, each rec carries what the advisor UI draws:
+    ``policy`` (snapshot) or ``profile``, ``checks`` (conditions evaluated,
+    ok=False the problems), ``changes`` (field old -> new, as the CLI does),
+    ``highlight`` (fields that caused it), ``risk`` and ``reuse_note``."""
     en = (lang or "it").strip().lower().startswith("en")
     ips_sensors = profiles.get("ips", [])
     ssl_profiles = profiles.get("ssl_ssh", [])
@@ -1874,11 +1953,38 @@ def advise(policies: list, vip_names: set, profiles: Dict[str, list],
                  for fam in rule_key}
 
     recs: list[Dict[str, Any]] = []
+    av_users = _profile_users(policies, "av-profile")
+    rule_users = {fam: _profile_users(policies, key) for fam, key in rule_key.items()}
+    vip_set = set(vip_names)
+    hw_label = f"{profile.model} {profile.version}".strip()
+
+    def L(it: str, en_text: str) -> str:
+        return en_text if en else it
+
+    def chk(ok: bool, it: str, en_text: str, field: str, value: Any) -> Dict[str, Any]:
+        """One condition the rule evaluated: ok=False is a problem, ok=True a
+        condition considered and found not to be one."""
+        if isinstance(value, (list, tuple)):
+            value = ", ".join(str(v) for v in value)
+        return {"ok": ok, "text": L(it, en_text), "field": field,
+                "value": "" if value is None else str(value)}
+
+    def chg(field: str, old: Any, new: Any) -> Dict[str, str]:
+        if isinstance(old, (list, tuple)):
+            old = ", ".join(str(v) for v in old)
+        return {"field": field, "old": str(old or ""), "new": str(new or "")}
 
     def add_rec(rec_id: str, severity: str, category: str, pid: Optional[str],
                 pname: str, title_it: str, title_en: str,
                 detail_it: str, detail_en: str, cli: str = "",
-                reuses: Optional[list] = None) -> None:
+                reuses: Optional[list] = None, *, note: tuple = ("", ""),
+                policy: Optional[dict] = None, profile: Optional[dict] = None,
+                checks: Optional[list] = None, changes: Optional[list] = None,
+                highlight: Optional[list] = None) -> None:
+        # ``detail`` (risk + reuse note) stays for the docx export and older
+        # consumers; the advisor UI shows ``risk`` and ``reuse_note`` apart.
+        risk = L(detail_it, detail_en)
+        extra = L(*note)
         recs.append({
             "id": rec_id,
             "severity": severity,
@@ -1886,9 +1992,16 @@ def advise(policies: list, vip_names: set, profiles: Dict[str, list],
             "policy_id": pid,
             "policy_name": pname,
             "title": title_en if en else title_it,
-            "detail": detail_en if en else detail_it,
+            "detail": risk + extra,
             "cli": cli,
             "reuses": reuses or [],
+            "risk": risk,
+            "reuse_note": extra.strip(),
+            "policy": policy,
+            "profile": profile,
+            "checks": checks or [],
+            "changes": [c for c in (changes or []) if c["old"] != c["new"]],
+            "highlight": highlight or [],
         })
 
     def reuse_note(picks: list) -> tuple[str, str]:
@@ -1920,6 +2033,7 @@ def advise(policies: list, vip_names: set, profiles: Dict[str, list],
             continue
         pid = str(row.get("policyid") if row.get("policyid") is not None else "")
         pname = str(row.get("name") or (f"Policy {pid}" if pid else ""))
+        snap = _policy_snapshot(row, idx + 1, wan_names, vip_names)
 
         insp_mode = str(row.get("inspection-mode") or row.get("inspection_mode") or "flow").strip().lower()
         if insp_mode == "proxy":
@@ -1939,6 +2053,18 @@ def advise(policies: list, vip_names: set, profiles: Dict[str, list],
                     "Proxy mode traps sessions on CPU instead of using flow single-pass/CP9 acceleration."
                 ),
                 f"config firewall policy\n    edit {pid}\n        set inspection-mode flow\n    next\nend",
+                policy=snap, highlight=["inspection-mode"],
+                checks=[
+                    chk(False, "Inspection in modalita' proxy: sessioni elaborate dalla CPU",
+                        "Proxy inspection mode: sessions handled by the CPU", "inspection-mode", "proxy"),
+                    chk(False, "Modello 2GB con FortiOS 7.4.4+: proxy non supportato",
+                        "2GB model on FortiOS 7.4.4+: proxy unsupported", "model", hw_label)
+                    if profile.proxy_removed_2gb else
+                    chk(True, "Proxy ancora supportato su questo modello/versione: e' un problema di prestazioni, non di compatibilita'",
+                        "Proxy still supported on this model/version: a performance issue, not a compatibility one",
+                        "model", hw_label),
+                ],
+                changes=[chg("inspection-mode", "proxy", "flow")],
             )
 
         asic_offload = str(row.get("auto-asic-offload") or row.get("asic_offload") or "enable").strip().lower()
@@ -1950,12 +2076,24 @@ def advise(policies: list, vip_names: set, profiles: Dict[str, list],
                 "auto-asic-offload disable forza il traffico sulla CPU (no_ofld_reason=npu-disabled).",
                 "auto-asic-offload disable forces forwarding onto CPU (no_ofld_reason=npu-disabled).",
                 f"config firewall policy\n    edit {pid}\n        set auto-asic-offload enable\n    next\nend",
+                policy=snap, highlight=["auto-asic-offload"],
+                checks=[
+                    chk(False, "Offload ASIC disabilitato: inoltro sulla CPU",
+                        "ASIC offload disabled: forwarding on the CPU", "auto-asic-offload", "disable"),
+                    chk(False, "Unita' fisica con NPU (non una VM)",
+                        "Hardware unit with an NPU (not a VM)", "model", hw_label),
+                ],
+                changes=[chg("auto-asic-offload", "disable", "enable")],
             )
 
         dst_names = set(_policy_member_names(row.get("dstaddr")))
-        is_vip = bool(vip_names and (dst_names & vip_names))
+        src_names = set(_policy_member_names(row.get("srcaddr")))
+        svc_names = set(_policy_member_names(row.get("service")))
+        is_vip = bool(vip_set and (dst_names & vip_set))
+        vip_dsts = [n for n in snap["dstaddr"] if n.lower() in vip_set]
         utm_disabled = str(row.get("utm-status") or "").strip().lower() == "disable"
         ips_name = _profile_name_val(row.get("ips-sensor"))
+        ssl_prof = _profile_name_val(row.get("ssl-ssh-profile"))
         if is_vip and (not ips_name or utm_disabled):
             ssl_pick = pick_ssl_profile(ssl_profiles, ssl_use, server=True)
             ips_pick = pick_ips_sensor(ips_sensors, "server", ips_use)
@@ -1965,21 +2103,39 @@ def advise(policies: list, vip_names: set, profiles: Dict[str, list],
             if ssl_pick:
                 note_it += " Verificare che il certificato del profilo SSL sia quello del server pubblicato."
                 note_en += " Check that the SSL profile's certificate belongs to the published server."
+            checks = [chk(False, "La destinazione e' un VIP: servizio pubblicato",
+                          "Destination is a VIP: a published service", "dstaddr", vip_dsts)]
+            if not ips_name:
+                checks.append(chk(False, "Nessun sensore IPS sulla policy",
+                                  "No IPS sensor on the policy", "ips-sensor", ""))
+            if utm_disabled:
+                checks.append(chk(False, "UTM disabilitato: nessun profilo applicato",
+                                  "UTM disabled: no profile applied", "utm-status", "disable"))
+            if src_names & {"all", "any"}:
+                checks.append(chk(True, "Sorgente 'all' attesa per un servizio pubblico",
+                                  "Source 'all' is expected for a published service",
+                                  "srcaddr", snap["srcaddr"]))
+            # Same defaults as _vip_remediation_cli when nothing is reusable.
             add_rec(
                 f"ADV-VIP-L7-{pid}", "HIGH", "Layer 7 / VIP", pid, pname,
                 "Policy verso VIP senza sensore IPS attivo",
                 "Inbound VIP policy missing active IPS sensor",
-                "Pubblicare un VIP senza IPS espone i servizi ad exploit Layer 7. Applicare Protecting SSL Server + IPS mirato." + note_it,
-                "Publishing a VIP without IPS exposes services to Layer 7 exploits. Apply Protecting SSL Server + targeted IPS." + note_en,
+                "Pubblicare un VIP senza IPS espone i servizi ad exploit Layer 7. Applicare Protecting SSL Server + IPS mirato.",
+                "Publishing a VIP without IPS exposes services to Layer 7 exploits. Apply Protecting SSL Server + targeted IPS.",
                 _vip_remediation_cli(pid, ssl_pick, ips_pick),
                 [name for name, _n in picks],
+                note=(note_it, note_en), policy=snap,
+                highlight=["dstaddr", "ips-sensor"] + (["utm-status"] if utm_disabled else []),
+                checks=checks,
+                changes=[chg("inspection-mode", snap["inspection-mode"], "flow"),
+                         chg("utm-status", snap["utm-status"], "enable"),
+                         chg("ssl-ssh-profile", ssl_prof, ssl_pick or "SSL_Protect_WebServer"),
+                         chg("ips-sensor", ips_name, ips_pick or "IPS_WebServer_Linux")],
             )
 
-        has_utm_prof = (
-            not utm_disabled
-            and any(_profile_name_val(row.get(k)) for k in ("av-profile", "ips-sensor", "webfilter-profile", "application-list"))
-        )
-        ssl_prof = _profile_name_val(row.get("ssl-ssh-profile"))
+        l7_keys = [k for k in ("av-profile", "ips-sensor", "webfilter-profile", "application-list")
+                   if _profile_name_val(row.get(k))]
+        has_utm_prof = not utm_disabled and bool(l7_keys)
         if has_utm_prof and (not ssl_prof or ssl_prof.lower() == "no-inspection"):
             ssl_pick = pick_ssl_profile(ssl_profiles, ssl_use, server=False)
             note_it, note_en = reuse_note([(ssl_pick, ssl_use.get(ssl_pick, 0))] if ssl_pick else [])
@@ -1987,22 +2143,32 @@ def advise(policies: list, vip_names: set, profiles: Dict[str, list],
                 f"ADV-SSL-{pid}", "WARN", "SSL Inspection", pid, pname,
                 "Profili UTM attivi senza ispezione SSL/SSH",
                 "UTM profiles active without SSL/SSH inspection",
-                "Senza ssl-ssh-profile i motori L7 non ispezionano payload HTTPS. Impostare almeno certificate-inspection." + note_it,
-                "Without ssl-ssh-profile, L7 engines cannot inspect encrypted HTTPS. Enable at least certificate-inspection." + note_en,
+                "Senza ssl-ssh-profile i motori L7 non ispezionano payload HTTPS. Impostare almeno certificate-inspection.",
+                "Without ssl-ssh-profile, L7 engines cannot inspect encrypted HTTPS. Enable at least certificate-inspection.",
                 f'config firewall policy\n    edit {pid}\n        set ssl-ssh-profile "{ssl_pick or "certificate-inspection"}"\n    next\nend',
                 [ssl_pick] if ssl_pick else [],
+                note=(note_it, note_en), policy=snap,
+                highlight=["ssl-ssh-profile"] + l7_keys,
+                checks=[
+                    chk(False, "Profili UTM attivi sulla policy", "UTM profiles active on the policy",
+                        "", [f"{k} = {_profile_name_val(row.get(k))}" for k in l7_keys]),
+                    chk(False, "Nessuna ispezione SSL/SSH: per i motori L7 l'HTTPS resta cifrato",
+                        "No SSL/SSH inspection: HTTPS stays encrypted to the L7 engines",
+                        "ssl-ssh-profile", ssl_prof),
+                ],
+                changes=[chg("ssl-ssh-profile", ssl_prof, ssl_pick or "certificate-inspection")],
             )
 
         ips_low = ips_name.lower()
-        if not utm_disabled and ips_low and (
-            (is_vip and ips_low in _GENERIC_IPS_NAMES)
-            or (profile.ram_tier == "2gb" and ips_low in ("high_security", "all_default"))
-        ):
+        vip_generic = is_vip and ips_low in _GENERIC_IPS_NAMES
+        heavy_2gb = profile.ram_tier == "2gb" and ips_low in ("high_security", "all_default")
+        if not utm_disabled and ips_low and (vip_generic or heavy_2gb):
             loc = "server" if is_vip else "client"
             ips_pick = pick_ips_sensor(ips_sensors, loc, ips_use)
             if ips_pick:
                 note_it, note_en = reuse_note([(ips_pick, ips_use.get(ips_pick, 0))])
                 cli = f'config firewall policy\n    edit {pid}\n        set ips-sensor "{ips_pick}"\n    next\nend'
+                changes = [chg("ips-sensor", ips_name, ips_pick)]
             else:
                 note_it = note_en = ""
                 target_sensor = f"IPS_{loc.title()}_Scoped"
@@ -2020,44 +2186,68 @@ def advise(policies: list, vip_names: set, profiles: Dict[str, list],
                     "    next\n"
                     "end"
                 )
+                changes = [chg("ips sensor", "", f"{target_sensor} ({L('nuovo', 'new')})")]
+            checks = [chk(False, "Sensore IPS generico (built-in, non mirato)",
+                          "Generic built-in IPS sensor (not scoped)", "ips-sensor", ips_name)]
+            if vip_generic:
+                checks.append(chk(False, "Destinazione VIP: serve un sensore mirato lato server",
+                                  "VIP destination: needs a server-side scoped sensor", "dstaddr", vip_dsts))
+            if heavy_2gb:
+                checks.append(chk(False, "Modello 2GB: sensore pesante per RAM e CPU",
+                                  "2GB model: a heavy sensor for RAM and CPU", "ram", "2gb"))
             add_rec(
                 f"ADV-IPS-{pid}", "WARN", "IPS Tuning", pid, pname,
                 f"Sensore IPS generico '{ips_name}'",
                 f"Generic IPS sensor '{ips_name}'",
-                "Sostituire il profilo generico con un sensore mirato per location, OS, applicazione e severity (high/critical) per ridurre CPU/RAM." + note_it,
-                "Replace the generic profile with a sensor scoped by location, OS, application, and high/critical severity to reduce CPU/RAM load." + note_en,
+                "Sostituire il profilo generico con un sensore mirato per location, OS, applicazione e severity (high/critical) per ridurre CPU/RAM.",
+                "Replace the generic profile with a sensor scoped by location, OS, application, and high/critical severity to reduce CPU/RAM load.",
                 cli,
                 [ips_pick] if ips_pick else [],
+                note=(note_it, note_en), policy=snap, highlight=["ips-sensor"],
+                checks=checks, changes=changes,
             )
 
         l7_summary = _summarize_l7_profiles(row)
-        src_names = set(_policy_member_names(row.get("srcaddr")))
-        svc_names = set(_policy_member_names(row.get("service")))
+        broad_fields = [k for k, names in (("srcaddr", src_names), ("dstaddr", dst_names),
+                                           ("service", svc_names)) if names & {"all", "any"}]
         # A VIP policy is a published service: source "all" is the point, and
         # ADV-VIP-L7 already covers its missing protection.
-        if not l7_summary and asic_offload == "enable" and not is_vip:
-            if (src_names & {"all", "any"}) or (dst_names & {"all", "any"}) or (svc_names & {"all", "any"}):
-                add_rec(
-                    f"ADV-BYPASS-{pid}", "WARN", "Bypass Scope", pid, pname,
-                    "Policy senza UTM con offload attivo troppo ampia",
-                    "UTM-less offloaded policy scope is overly broad",
-                    "Le regole di bypass offload vanno limitate a host /32 puntuali e porte applicative specifiche (mai all/ALL).",
-                    "Offloaded bypass rules should be scoped to exact /32 hosts and required ports (never all/ALL).",
-                    f"config firewall policy\n    edit {pid}\n        set srcaddr <host_32>\n        set dstaddr <host_32>\n        set service <specific_port>\n    next\nend",
-                )
+        if not l7_summary and asic_offload == "enable" and not is_vip and broad_fields:
+            too_broad = {"srcaddr": ("Sorgente troppo ampia", "Source too broad"),
+                         "dstaddr": ("Destinazione troppo ampia", "Destination too broad"),
+                         "service": ("Servizio troppo ampio", "Service too broad")}
+            add_rec(
+                f"ADV-BYPASS-{pid}", "WARN", "Bypass Scope", pid, pname,
+                "Policy senza UTM con offload attivo troppo ampia",
+                "UTM-less offloaded policy scope is overly broad",
+                "Le regole di bypass offload vanno limitate a host /32 puntuali e porte applicative specifiche (mai all/ALL).",
+                "Offloaded bypass rules should be scoped to exact /32 hosts and required ports (never all/ALL).",
+                f"config firewall policy\n    edit {pid}\n        set srcaddr <host_32>\n        set dstaddr <host_32>\n        set service <specific_port>\n    next\nend",
+                policy=snap, highlight=broad_fields + ["auto-asic-offload"],
+                checks=[chk(False, "Nessun profilo L7 applicato", "No L7 profile applied", "", ""),
+                        chk(False, "Offload ASIC attivo: il traffico non passa dalla CPU",
+                            "ASIC offload on: traffic skips the CPU", "auto-asic-offload", "enable")]
+                + [chk(False, *too_broad[k], k, snap[k]) for k in broad_fields]
+                + [chk(True, "La destinazione non e' un VIP: non e' un servizio pubblicato",
+                       "Destination is not a VIP: not a published service", "dstaddr", snap["dstaddr"])],
+                changes=[chg("srcaddr", snap["srcaddr"], "<host_32>"),
+                         chg("dstaddr", snap["dstaddr"], "<host_32>"),
+                         chg("service", snap["service"], "<specific_port>")],
+            )
 
         # Internet-bound traffic without AV / app control / web / DNS filter.
         # A UTM-less rule scoped to specific hosts and service is a deliberate
         # bypass (the broad ones are ADV-BYPASS): not flagged here. Web and
         # DNS filter only matter when the service can carry web or DNS.
-        to_wan = bool(set(_policy_member_names(row.get("dstintf"))) & wan_names)
-        broad = bool((src_names | dst_names | svc_names) & {"all", "any"})
+        to_wan = snap["dst_is_wan"]
+        broad = bool(broad_fields)
         any_svc = bool(svc_names & {"all", "any"})
         carries_web = any_svc or bool(svc_names & {"http", "https", "web access"})
         carries_dns = any_svc or "dns" in svc_names
         if to_wan and (l7_summary or broad):
-            for code, key, use, pick, applies, it_t, en_t, it_d, en_d in (
+            for code, key, use, pick, applies, kind, it_t, en_t, it_d, en_d in (
                 ("AV", "av-profile", av_use, av_pick, True,
+                 ("profilo antivirus", "antivirus profile"),
                  "Policy verso Internet senza antivirus",
                  "Internet-bound policy without antivirus",
                  "Il traffico verso Internet non e' analizzato dall'antivirus: download e allegati malevoli "
@@ -2065,6 +2255,7 @@ def advise(policies: list, vip_names: set, profiles: Dict[str, list],
                  "Internet-bound traffic is not scanned by antivirus: malicious downloads and attachments "
                  "pass unchecked. HTTPS also needs an ssl-ssh-profile."),
                 ("APP", "application-list", rule_use["application"], rule_pick["application"], True,
+                 ("application list", "application list"),
                  "Policy verso Internet senza application control",
                  "Internet-bound policy without application control",
                  "Senza application control le applicazioni a rischio (P2P, proxy/anonymizer, accesso remoto) "
@@ -2072,6 +2263,7 @@ def advise(policies: list, vip_names: set, profiles: Dict[str, list],
                  "Without application control, risky applications (P2P, proxies/anonymizers, remote access) "
                  "on Internet-bound traffic are neither visible nor blocked."),
                 ("WEB", "webfilter-profile", rule_use["webfilter"], rule_pick["webfilter"], carries_web,
+                 ("profilo web filter", "web filter profile"),
                  "Policy verso Internet senza web filter",
                  "Internet-bound policy without web filter",
                  "Senza web filter la navigazione verso siti malevoli, phishing e categorie non consentite "
@@ -2079,6 +2271,7 @@ def advise(policies: list, vip_names: set, profiles: Dict[str, list],
                  "Without web filtering, browsing to malicious, phishing and disallowed categories is not "
                  "filtered. HTTPS also needs an ssl-ssh-profile."),
                 ("DNS", "dnsfilter-profile", rule_use["dnsfilter"], rule_pick["dnsfilter"], carries_dns,
+                 ("profilo DNS filter", "DNS filter profile"),
                  "Policy verso Internet senza DNS filter",
                  "Internet-bound policy without DNS filter",
                  "Le query DNS verso Internet non sono filtrate: domini malevoli e C&C botnet si risolvono "
@@ -2086,12 +2279,34 @@ def advise(policies: list, vip_names: set, profiles: Dict[str, list],
                  "Internet-bound DNS queries are not filtered: malicious and botnet C&C domains resolve "
                  "unchecked."),
             ):
-                if not applies or (not utm_disabled and _profile_name_val(row.get(key))):
+                prof_val = _profile_name_val(row.get(key))
+                if not applies or (not utm_disabled and prof_val):
                     continue
                 note_it, note_en = reuse_note([(pick, use.get(pick, 0))] if pick else [])
+                checks = [chk(False, "Destinazione verso Internet (interfaccia WAN)",
+                              "Internet-bound (WAN interface)", "dstintf", snap["dstintf"])]
+                if utm_disabled and prof_val:
+                    checks.append(chk(False, f"UTM disabilitato: '{prof_val}' non e' applicato",
+                                      f"UTM disabled: '{prof_val}' is not applied", "utm-status", "disable"))
+                else:
+                    checks.append(chk(False, f"Nessun {kind[0]}", f"No {kind[1]}", key, ""))
+                if code == "WEB":
+                    checks.append(chk(False, "Il servizio puo' trasportare traffico web",
+                                      "The service can carry web traffic", "service", snap["service"]))
+                elif code == "DNS":
+                    checks.append(chk(False, "Il servizio puo' trasportare query DNS",
+                                      "The service can carry DNS queries", "service", snap["service"]))
+                if broad:
+                    checks.append(chk(False, "Ambito ampio (all): non e' un bypass mirato",
+                                      "Broad scope (all): not a scoped bypass",
+                                      broad_fields[0], snap[broad_fields[0]]))
+                else:
+                    checks.append(chk(False, "La policy ha gia' altri profili L7: non e' un bypass deliberato",
+                                      "The policy already has other L7 profiles: not a deliberate bypass",
+                                      "", l7_summary))
                 add_rec(
                     f"ADV-{code}-{pid}", "WARN", "Layer 7 / Internet", pid, pname,
-                    it_t, en_t, it_d + note_it, en_d + note_en,
+                    it_t, en_t, it_d, en_d,
                     "config firewall policy\n"
                     f"    edit {pid}\n"
                     "        set utm-status enable\n"
@@ -2099,6 +2314,13 @@ def advise(policies: list, vip_names: set, profiles: Dict[str, list],
                     "    next\n"
                     "end",
                     [pick] if pick else [],
+                    note=(note_it, note_en), policy=snap,
+                    highlight=["dstintf", key]
+                    + (["service"] if code in ("WEB", "DNS") else [])
+                    + (["utm-status"] if utm_disabled else []),
+                    checks=checks,
+                    changes=[chg("utm-status", snap["utm-status"], "enable"),
+                             chg(key, prof_val, pick or "default")],
                 )
 
         target = order_target.get(pid, "")
@@ -2113,6 +2335,14 @@ def advise(policies: list, vip_names: set, profiles: Dict[str, list],
                 f"Rule sits below position 5 with >= 100 MB traffic: consider moving it before policy {target} "
                 "(no deny rule crossed; review overlapping accepts for NAT/UTM changes) or a dedicated /32 bypass.",
                 f"config firewall policy\n    move {pid} before {target}\nend",
+                policy=snap, highlight=["position"],
+                checks=[
+                    chk(False, "Posizione oltre la 5a", "Below position 5", "position", idx + 1),
+                    chk(False, "Traffico >= 100 MB", "Traffic >= 100 MB", "bytes", _fmt_bytes(row.get("bytes"))),
+                    chk(True, f"Spostandola prima della policy {target} non si attraversa nessuna deny",
+                        f"Moving it before policy {target} crosses no deny rule", "target", target),
+                ],
+                changes=[chg("position", idx + 1, L(f"prima della policy {target}", f"before policy {target}"))],
             )
 
     # Profiles in use that do not actually block.
@@ -2123,6 +2353,8 @@ def advise(policies: list, vip_names: set, profiles: Dict[str, list],
         if not n or not weak or "http" not in weak:
             continue
         protos = ", ".join(weak)
+        scan = {pr: str(p[pr].get("av-scan") or "") for pr in _AV_KEY_PROTOCOLS
+                if isinstance(p.get(pr), dict) and "av-scan" in p[pr]}
         add_rec(
             f"ADV-AV-PROFILE-{name}", "WARN", "Antivirus", None, "",
             f"Profilo antivirus '{name}' non blocca su HTTP",
@@ -2133,6 +2365,16 @@ def advise(policies: list, vip_names: set, profiles: Dict[str, list],
             f'    edit "{name}"\n'
             + "".join(f"        config {pr}\n            set av-scan block\n        end\n" for pr in weak)
             + "    next\nend",
+            profile={"name": name, "kind": "antivirus",
+                     "fields": [{"key": f"{pr}.av-scan", "value": v} for pr, v in scan.items()],
+                     "used_by": av_users.get(name, [])},
+            highlight=[f"{pr}.av-scan" for pr in weak],
+            checks=[chk(False, f"{pr.upper()}: il malware non viene bloccato",
+                        f"{pr.upper()}: malware is not blocked", f"{pr}.av-scan", scan[pr] or "disable")
+                    for pr in weak]
+            + [chk(True, f"{pr.upper()} blocca gia'", f"{pr.upper()} already blocks", f"{pr}.av-scan", v)
+               for pr, v in scan.items() if pr not in weak],
+            changes=[chg(f"{pr}.av-scan", scan[pr] or "disable", "block") for pr in weak],
         )
     # Category IDs stay placeholders: FortiGuard numbering is not hardcoded.
     monitor_only_specs = {
@@ -2163,11 +2405,23 @@ def advise(policies: list, vip_names: set, profiles: Dict[str, list],
                 "                next\n"
                 "            end\n"
                 "        end\n")
+        table = f"{sub}.filters" if sub else "entries"
         for prof in rule_profiles[fam]:
             name = str(prof.get("name") or "")
             n = rule_use[fam].get(name, 0)
             if not n or not _monitor_only(fam, prof):
                 continue
+            actions = _rule_actions(fam, prof)
+            # ponytail: first 12 rules shown; the CLI and checks cover them all.
+            fields = [{"key": f"{table}[{i + 1}].action", "value": a} for i, a in enumerate(actions[:12])]
+            checks = [chk(False, f"Nessuna regola in block ({len(actions)})",
+                          f"No rule blocks ({len(actions)})", f"{table}[*].action", sorted(set(actions)))]
+            if fam == "application":
+                other = str(prof.get("other-application-action") or "")
+                fields.append({"key": "other-application-action", "value": other})
+                checks.append(chk(False, "Nessun blocco catch-all per le altre applicazioni",
+                                  "No catch-all block for other applications",
+                                  "other-application-action", other))
             add_rec(
                 f"ADV-{code}-PROFILE-{name}", "WARN", cat, None, "",
                 f"{it_kind} '{name}' solo in monitor",
@@ -2177,6 +2431,12 @@ def advise(policies: list, vip_names: set, profiles: Dict[str, list],
                 f"The profile, used by {n} policies, blocks no {en_what}: add a block rule "
                 f"for risky categories (e.g. {examples}).",
                 f'{cfg_head}\n    edit "{name}"\n{body}    next\nend',
+                profile={"name": name, "kind": fam, "fields": fields,
+                         "used_by": rule_users[fam].get(name, [])},
+                highlight=[f["key"] for f in fields],
+                checks=checks,
+                changes=[chg(table, sorted(set(actions)),
+                             L(f"+ regola block ({examples})", f"+ block rule ({examples})"))],
             )
 
     if profile_errors:
@@ -2187,6 +2447,8 @@ def advise(policies: list, vip_names: set, profiles: Dict[str, list],
             f"Profile families unavailable via REST: {fams}",
             "Feature non abilitate o licenza FortiGuard assente per queste famiglie su questo apparato.",
             "Feature disabled or FortiGuard license unavailable for these profile families on this unit.",
+            checks=[chk(False, "Non disponibile via REST", "Unavailable via REST", fam, err)
+                    for fam, err in sorted(profile_errors.items())],
         )
 
     recs.sort(key=lambda r: (_ADVISOR_SEVERITY_ORDER.get(r["severity"], 9), str(r.get("policy_id") or "")))

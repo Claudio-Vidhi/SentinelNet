@@ -162,10 +162,30 @@ class AdvisorAndSnifferCliTest(unittest.TestCase):
             "fgtAdvisorRam", "fgtSnifferTitle", "fgtSnifferWarn", "fgtSnifferVmNote",
             "fgtSnifferNeedFilter", "fgtNpuReasonIps", "fgtNpuReasonProxy",
             "fgtNpuReasonDisabled", "fgtNpuReasonNonNpu", "fgtNpuReasonHelper",
-            "fgtNpuReasonLocal",
+            "fgtNpuReasonLocal", "fgtAdvPolicyInUse", "fgtAdvProfileInUse", "fgtAdvProblems",
+            "fgtAdvNotProblems", "fgtAdvRisk", "fgtAdvChange", "fgtAdvMore", "fgtAdvByPolicy",
+            "fgtAdvBySeverity", "fgtAdvCause", "fgtAdvField", "fgtAdvCurrent", "fgtAdvProposed",
         ):
             self.assertEqual(2, i18n.count(key + ":"),
                              f"{key} missing in it or en")
+
+
+    def test_advisor_view_shared_and_old_cards_gone(self):
+        src = _js()
+        self.assertIn("window.fgtAdvisorMount = fgtAdvisorMount;", src)
+        self.assertNotIn("fgtAdvisorCardsHtml", src)
+        audit = open(os.path.join(self._ROOT, "static", "js", "netsec-audit.js"),
+                     encoding="utf-8").read()
+        self.assertIn("window.fgtAdvisorMount(", audit)
+        i18n = open(os.path.join(self._ROOT, "static", "js", "i18n.js"), encoding="utf-8").read()
+        self.assertNotIn("fgtAdvisorReuse:", i18n)
+
+    @unittest.skipUnless(shutil.which("node"), "node non disponibile")
+    def test_advisor_view_runs_for_real(self):
+        harness = os.path.join(self._ROOT, "tests", "js", "test_fgt_advisor_view.mjs")
+        proc = subprocess.run([shutil.which("node"), harness],
+                              capture_output=True, text=True, cwd=self._ROOT)
+        self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
 
 
 if __name__ == "__main__":

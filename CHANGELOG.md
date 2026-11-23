@@ -10,6 +10,18 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Changed
+
+- **FortiGate advisor UI**: master-detail view (FortiGate tab and Security
+  Audit backup advisor). Recommendations are grouped by policy or profile,
+  filterable by severity; the detail shows the policy in use (interfaces,
+  addresses, service, NAT, inspection, security profiles, traffic) with the
+  fields that triggered the rule highlighted, the problems found and the
+  conditions ruled out, the risk, and the proposed change as a field diff
+  (current → proposed) above the CLI. Recommendations now carry `policy`,
+  `profile`, `checks`, `risk`, `changes` and `highlight`; existing fields are
+  unchanged.
+
 ## [0.70.1] - 2026-11-23
 
 ### Added

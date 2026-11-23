@@ -109,6 +109,15 @@ class TestLiveMultiVdom(unittest.TestCase):
         self.assertTrue(cli.startswith("config vdom\n    edit vd-b\n        config "))
         self.assertTrue(cli.endswith("\n    next\nend"))
 
+    def test_ui_fields_survive_the_merge(self):
+        by_id = {r["id"]: r for r in _Unit().run()["data"]["recommendations"]}
+        av = by_id["root:ADV-AV-1"]
+        self.assertEqual(av["policy"]["dstintf"], ["wan1"])
+        self.assertTrue(av["policy"]["dst_is_wan"])
+        self.assertEqual({c["field"] for c in av["changes"]}, {"utm-status", "av-profile"})
+        self.assertIn("av-profile", av["highlight"])
+        self.assertFalse(all(c["ok"] for c in av["checks"]))
+
     def test_wan_is_per_vdom(self):
         ids = {r["id"] for r in _Unit().run()["data"]["recommendations"]}
         self.assertIn("root:ADV-BYPASS-2", ids)
