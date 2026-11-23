@@ -70,8 +70,13 @@ def parse_tree(text: Optional[str]) -> Dict[str, Any]:
                 node = []
                 parent[key] = node
                 stack[-1] = (node, parent, key)
-            entry: Dict[str, Any] = {"_key": s[5:].strip().strip('"')}
-            if isinstance(node, list):
+            ek = s[5:].strip().strip('"')
+            # Re-editing a key re-enters its entry, as FortiOS does: a
+            # multi-VDOM backup declares the VDOMs in a first ``config vdom``
+            # and fills them in a second one.
+            found = [e for e in node if e.get("_key") == ek] if isinstance(node, list) else []
+            entry: Dict[str, Any] = found[0] if found else {"_key": ek}
+            if isinstance(node, list) and not found:
                 node.append(entry)
             stack.append((entry, node, None))
         elif low in ("next", "end"):
@@ -90,50 +95,93 @@ def _entries(tree: Dict[str, Any], path: str) -> List[Dict[str, Any]]:
     return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
 
 
-def _is_full_config(tree: Dict[str, Any], policies: List[Dict[str, Any]]) -> bool:
+def _is_full_config(glob: Any, policies: List[Dict[str, Any]]) -> bool:
     """True for a ``show full-configuration`` dump.
 
     Policies first: ``set status enable`` is the default, so a normal backup
     never writes it while a full dump writes it on every enabled policy
     (``disable`` shows up in both, so it proves nothing). No enabled policy:
-    the size of ``system global``, which a full dump prints whole. A key that happens to be default-valued (admintimeout,
-    language) is no marker: an admin can set it and a normal backup then
-    carries it too."""
+    the size of ``system global``, which a full dump prints whole. A key that
+    happens to be default-valued (admintimeout, language) is no marker: an
+    admin can set it and a normal backup then carries it too."""
     if any(str(p.get("status") or "").lower() == "enable" for p in policies):
         return True
-    glob = tree.get("system global")
     return isinstance(glob, dict) and len(glob) >= _FULL_GLOBAL_KEYS
+
+
+def _wan_names(ifaces: List[Dict[str, Any]]) -> set:
+    """Same WAN resolution as the live path: role wan, else conventional names."""
+    names = [(str(e["_key"]).lower(), str(e.get("role") or "").lower()) for e in ifaces]
+    by_role = {n for n, role in names if role == "wan"}
+    return {"virtual-wan-link"} | (
+        by_role or {n for n, _r in names if n.startswith("wan") or n == "port1"})
+
+
+def _scope_inputs(scope: Dict[str, Any]) -> tuple:
+    """Policies, VIP names and profiles of one scope (whole file or one VDOM)."""
+    policies = [{**e, "policyid": e["_key"]} for e in _entries(scope, "firewall policy")]
+    vip_names = {str(e["_key"]).strip().lower()
+                 for path in ("firewall vip", "firewall vipgrp")
+                 for e in _entries(scope, path)}
+    profiles = {fam: [{**e, "name": e["_key"]} for e in _entries(scope, path)]
+                for fam, path in _FAMILY_PATHS.items()}
+    return policies, vip_names, profiles
+
+
+def _in_vdom(vdom: str, cli: str) -> str:
+    """A VDOM's CLI snippet wrapped so it pastes into a multi-VDOM unit."""
+    body = "\n".join("        " + line for line in cli.splitlines())
+    return f"config vdom\n    edit {vdom}\n{body}\n    next\nend"
 
 
 def backup_advisor(config_text: str, lang: str = "it") -> Dict[str, Any]:
     """Advisor recommendations for a FortiOS backup, same shape as the live data.
 
-    Only top-level sections are read, as the audit rules do
-    (``rules.section_entries``): a multi-VDOM backup keeps its policies under
-    ``config vdom`` and yields none here; ``source.multi_vdom`` says so."""
-    from services.fortigate_service import advise
+    A multi-VDOM backup runs ``advise`` once per VDOM, on that VDOM's
+    sections and on the interfaces ``config global`` assigns to it; each
+    recommendation then carries its ``vdom`` and an id prefixed with it."""
+    from services.fortigate_service import _ADVISOR_SEVERITY_ORDER, advise
 
     tree = parse_tree(config_text)
-    policies = [{**e, "policyid": e["_key"]} for e in _entries(tree, "firewall policy")]
-    vip_names = {str(e["_key"]).strip().lower()
-                 for path in ("firewall vip", "firewall vipgrp")
-                 for e in _entries(tree, path)}
-    profiles = {fam: [{**e, "name": e["_key"]} for e in _entries(tree, path)]
-                for fam, path in _FAMILY_PATHS.items()}
+    hw = detect_from_config(config_text)
+    # A VDOM entry with nothing but its key is only the declaration list.
+    vdoms = [e for e in _entries(tree, "vdom") if len(e) > 1]
+    if not vdoms:
+        policies, vip_names, profiles = _scope_inputs(tree)
+        data = advise(policies, vip_names, profiles, {},
+                      _wan_names(_entries(tree, "system interface")), hw, lang, {})
+        data["source"] = {
+            "kind": "backup",
+            "full_config": _is_full_config(tree.get("system global"), policies),
+            "vdoms": [],
+            "live_only": LIVE_ONLY,
+        }
+        return data
 
-    # Same WAN resolution as the live path: role wan, else conventional names.
-    names = [(str(e["_key"]).lower(), str(e.get("role") or "").lower())
-             for e in _entries(tree, "system interface")]
-    by_role = {n for n, role in names if role == "wan"}
-    wan_names = {"virtual-wan-link"} | (
-        by_role or {n for n, _r in names if n.startswith("wan") or n == "port1"})
-
-    data = advise(policies, vip_names, profiles, {}, wan_names,
-                  detect_from_config(config_text), lang, {})
+    glob = tree.get("global") if isinstance(tree.get("global"), dict) else {}
+    ifaces = _entries(glob, "system interface")
+    recs: List[Dict[str, Any]] = []
+    all_policies: List[Dict[str, Any]] = []
+    summary: Dict[str, int] = {}
+    data: Dict[str, Any] = {}
+    for vd in vdoms:
+        name = str(vd["_key"])
+        policies, vip_names, profiles = _scope_inputs(vd)
+        own = [i for i in ifaces if str(i.get("vdom") or "").lower() == name.lower()]
+        data = advise(policies, vip_names, profiles, {}, _wan_names(own), hw, lang, {})
+        for r in data["recommendations"]:
+            recs.append({**r, "id": f"{name}:{r['id']}", "vdom": name,
+                         "cli": _in_vdom(name, r["cli"]) if r["cli"] else ""})
+        for k, v in data["summary"].items():
+            summary[k] = summary.get(k, 0) + v
+        all_policies += policies
+    # Stable sort: severity first, VDOM order and per-VDOM order kept within it.
+    recs.sort(key=lambda r: _ADVISOR_SEVERITY_ORDER.get(r["severity"], 9))
+    data.update(recommendations=recs, summary=summary)
     data["source"] = {
         "kind": "backup",
-        "full_config": _is_full_config(tree, policies),
-        "multi_vdom": "vdom" in tree and "firewall policy" not in tree,
+        "full_config": _is_full_config(glob.get("system global"), all_policies),
+        "vdoms": [str(vd["_key"]) for vd in vdoms],
         "live_only": LIVE_ONLY,
     }
     return data

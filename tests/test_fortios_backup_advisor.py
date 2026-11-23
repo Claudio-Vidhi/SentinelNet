@@ -202,15 +202,125 @@ class TestBackupAdvisor(unittest.TestCase):
         self.assertFalse(backup_advisor("config system global\n    set hostname x\nend\n")
                          ["source"]["full_config"])
 
-    def test_multi_vdom_flagged(self):
-        text = ("config vdom\n    edit root\n    next\nend\nconfig global\nend\n"
-                "config vdom\n    edit root\n        config firewall policy\n"
-                "            edit 1\n                set action accept\n            next\n"
-                "        end\n    next\nend\n")
-        data = backup_advisor(text)
-        self.assertTrue(data["source"]["multi_vdom"])
-        self.assertEqual(data["summary"]["policies_analyzed"], 0)
-        self.assertFalse(backup_advisor(BACKUP)["source"]["multi_vdom"])
+    def test_single_vdom_has_no_vdom_fields(self):
+        self.assertEqual(self.data["source"]["vdoms"], [])
+        self.assertFalse(any("vdom" in r for r in self.data["recommendations"]))
+
+
+# Multi-VDOM layout: VDOM declarations, config global (interfaces carry their
+# VDOM), then the per-VDOM sections in a second config vdom.
+MULTI = """#config-version=FGT100F-7.4.5-FW-build2702:opmode=0:vdom=1:user=admin
+config vdom
+edit root
+next
+edit vd-b
+next
+end
+config global
+config system global
+    set hostname "switch-01"
+end
+config system interface
+    edit "wan1"
+        set vdom "root"
+        set role wan
+    next
+    edit "internal"
+        set vdom "root"
+        set role lan
+    next
+    edit "port5"
+        set vdom "vd-b"
+        set role wan
+    next
+    edit "port6"
+        set vdom "vd-b"
+        set role lan
+    next
+end
+end
+config vdom
+edit root
+config firewall policy
+    edit 1
+        set name "lan-out"
+        set srcintf "internal"
+        set dstintf "wan1"
+        set action accept
+        set srcaddr "all"
+        set dstaddr "all"
+        set service "HTTPS"
+    next
+    edit 2
+        set name "to-port5"
+        set srcintf "internal"
+        set dstintf "port5"
+        set action accept
+        set srcaddr "all"
+        set dstaddr "all"
+        set service "HTTPS"
+    next
+end
+next
+edit vd-b
+config firewall vip
+    edit "VIP_B"
+        set extip 198.51.100.10
+        set mappedip "10.0.20.10"
+    next
+end
+config firewall policy
+    edit 1
+        set name "vip-in"
+        set srcintf "port5"
+        set dstintf "port6"
+        set action accept
+        set srcaddr "all"
+        set dstaddr "VIP_B"
+        set service "HTTPS"
+    next
+end
+next
+end
+"""
+
+
+class TestMultiVdom(unittest.TestCase):
+    def setUp(self):
+        self.data = backup_advisor(MULTI, lang="en")
+        self.recs = self.data["recommendations"]
+        self.by_id = {r["id"]: r for r in self.recs}
+
+    def test_parse_tree_merges_vdom_blocks(self):
+        vdoms = parse_tree(MULTI)["vdom"]
+        self.assertEqual([v["_key"] for v in vdoms], ["root", "vd-b"])
+        self.assertEqual([p["_key"] for p in vdoms[0]["firewall policy"]], ["1", "2"])
+        self.assertIn("firewall vip", vdoms[1])
+
+    def test_recs_from_both_vdoms_with_unique_ids(self):
+        self.assertEqual(self.by_id["root:ADV-AV-1"]["vdom"], "root")
+        self.assertEqual(self.by_id["vd-b:ADV-VIP-L7-1"]["vdom"], "vd-b")
+        self.assertEqual(len(self.by_id), len(self.recs))
+        self.assertEqual(self.data["source"]["vdoms"], ["root", "vd-b"])
+        self.assertEqual(self.data["summary"]["policies_analyzed"], 3)
+        self.assertEqual(self.data["summary"]["total"], len(self.recs))
+
+    def test_wan_is_per_vdom(self):
+        # port5 is WAN in vd-b only: policy 2 of root is not internet-bound.
+        self.assertIn("root:ADV-BYPASS-2", self.by_id)
+        self.assertNotIn("root:ADV-AV-2", self.by_id)
+
+    def test_cli_wrapped_in_vdom(self):
+        cli = self.by_id["vd-b:ADV-VIP-L7-1"]["cli"]
+        self.assertTrue(cli.startswith("config vdom\n    edit vd-b\n        config "))
+        self.assertTrue(cli.endswith("\n    next\nend"))
+        self.assertIn("\n            edit 1\n", cli)
+
+    def test_full_config_looks_at_all_vdoms(self):
+        self.assertFalse(self.data["source"]["full_config"])
+        full = MULTI.replace('        set name "vip-in"\n',
+                             '        set name "vip-in"\n        set status enable\n')
+        self.assertTrue(backup_advisor(full)["source"]["full_config"])
 
 
 class TestRestParity(unittest.TestCase):

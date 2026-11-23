@@ -871,7 +871,7 @@ function fgtAdvisorCardsHtml(recs) {
         return `<div class="panel" style="margin:0 0 10px; padding:12px 14px;">
             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
               <span class="status ${cls}">${escapeHtml(sev)}</span>
-              <span class="badge">${escapeHtml(r.category || '')}</span>
+              <span class="badge">${escapeHtml(r.category || '')}</span>${r.vdom ? `<span class="badge">${escapeHtml(tr('fgtAdvisorVdom', { name: r.vdom }))}</span>` : ''}
               <span style="font-family:var(--font-code); font-size:12px; color:var(--text-muted);">${escapeHtml(polLabel)}</span>
               ${Array.isArray(r.reuses) && r.reuses.length
                 ? `<span class="status ok">${escapeHtml(tr('fgtAdvisorReuse', { names: r.reuses.join(', ') }))}</span>` : ''}

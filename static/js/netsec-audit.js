@@ -309,7 +309,6 @@
         const banner = (key) => `<div class="nsa-partial"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(tr(key))}</div>`;
         let html = '';
         if (src.full_config === false) html += banner('nsaAdvNotFullConfig');
-        if (src.multi_vdom) html += banner('nsaAdvMultiVdom');
         if (Array.isArray(src.live_only) && src.live_only.includes('ADV-ORDER')) {
             html += `<div style="margin-bottom:10px; font-size:12px; color:var(--text-muted);"><i class="fa-solid fa-circle-info"></i> ${escapeHtml(tr('nsaAdvLiveOnly'))}</div>`;
         }
