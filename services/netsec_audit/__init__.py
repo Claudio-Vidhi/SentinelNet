@@ -35,7 +35,9 @@ from .linux_parser import parse_linux
 from .messages import DEFAULT_LANG, LANGS, normalize_lang, render
 from .model import UNKNOWN, RuleOutcome, score_rules
 from .multivendor_parser import parse_multivendor
-from .parser import parse_with_lines
+from .parser import ParsedConfig, parse_with_lines
+from .vdom_scopes import evaluate as vdom_evaluate
+from .vdom_scopes import same_detail, split_vdoms
 
 __all__ = ["run_netsec_audit", "detect_vendor", "BENCHMARKS",
            "BENCHMARK_TITLES", "BENCHMARK_GROUPS", "FORTIOS", "IOS", "LINUX",
@@ -109,6 +111,18 @@ def _render_evidence(outcome: RuleOutcome, lang: str) -> List[Dict[str, Any]]:
     return out
 
 
+def _vdom_detail(verdict: List[Any], n_scopes: int, lang: str) -> str:
+    """Detail of a folded multi-VDOM outcome: plain when every VDOM says the
+    same thing, otherwise prefixed with the VDOM(s) that carry the verdict."""
+    if same_detail(verdict):
+        _vd, o = verdict[0]
+        text = render(o.message, lang, o.params)
+        if len(verdict) == n_scopes:
+            return text
+        return f"[{', '.join(vd for vd, _o in verdict)}] {text}"
+    return " · ".join(f"[{vd}] {render(o.message, lang, o.params)}" for vd, o in verdict)
+
+
 def run_netsec_audit(config_text: Optional[str] = None,
                      device_name: Optional[str] = None,
                      benchmark: str = _DEFAULT_BENCHMARK,
@@ -131,6 +145,9 @@ def run_netsec_audit(config_text: Optional[str] = None,
         cfg = parse_multivendor(config_text, vendor)
     else:
         cfg = parse_with_lines(config_text)
+    # Multi-VDOM FortiOS backup: every rule runs once per VDOM (global +
+    # that VDOM) and the outcomes are folded, see vdom_scopes. [] otherwise.
+    scopes = split_vdoms(cfg) if isinstance(cfg, ParsedConfig) else []
     device = device_name or "-"
 
     applicable = [t for t in BENCHMARKS[key]
@@ -148,7 +165,12 @@ def run_netsec_audit(config_text: Optional[str] = None,
     evaluated: List[Dict[str, Any]] = []
     for tmpl in applicable:
         check = tmpl["check"]
-        outcome = check(cfg) if parsed_anything else nothing
+        if scopes:
+            outcome, verdict = vdom_evaluate(check, scopes)
+            detail = _vdom_detail(verdict, len(scopes), code)
+        else:
+            outcome = check(cfg) if parsed_anything else nothing
+            detail = render(outcome.message, code, outcome.params)
         evaluated.append({
             "id": tmpl["id"],
             "title": _localized(tmpl["title"], code),
@@ -161,7 +183,7 @@ def run_netsec_audit(config_text: Optional[str] = None,
             "audit": tmpl["audit"],
             "status": outcome.status,
             "device": device,
-            "detail": render(outcome.message, code, outcome.params),
+            "detail": detail,
             "remediation": _localized(tmpl["remediation"], code),
             # Perche' l'impostazione dovrebbe essere in un certo modo, cosa
             # comporta cambiarla e qual e' il default di fabbrica. Dizionario
@@ -180,7 +202,7 @@ def run_netsec_audit(config_text: Optional[str] = None,
         if (vendor or FORTIOS) == FORTIOS
         else None
     )
-    return {
+    result: Dict[str, Any] = {
         "benchmark": key,
         "benchmark_title": BENCHMARK_TITLES.get(key, key.upper()),
         "lang": code,
@@ -197,6 +219,10 @@ def run_netsec_audit(config_text: Optional[str] = None,
         # report viene consegnato. Sta nel documento, non nel voto.
         "policy_defects": _policy_defects(config_text, vendor),
     }
+    # Only on a multi-VDOM backup: a single-VDOM result keeps its old shape.
+    if scopes:
+        result["vdoms"] = [vd for vd, _cfg in scopes]
+    return result
 
 
 def _policy_defects(config_text: Optional[str],

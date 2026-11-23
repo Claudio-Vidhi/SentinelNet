@@ -143,6 +143,20 @@ class TestNetSecAuditScan(unittest.TestCase):
         self.assertEqual(r.json()["vendor"], netsec_audit.IOS)
         self.assertNotIn("advisor", r.json())
 
+    def test_multi_vdom_scan(self):
+        """Benchmark rules run per VDOM on a multi-VDOM backup."""
+        from tests.test_netsec_audit_vdom import MULTI
+        r = self._client().post("/api/netsec-audit/scan", headers=CSRF,
+                                json={"benchmark": "cis", "config_text": MULTI, "lang": "en"})
+        self.assertEqual(r.status_code, 200, r.text)
+        body = r.json()
+        self.assertEqual(body["vdoms"], ["root", "vd-b"])
+        rules = {x["id"]: x for x in body["rules"]}
+        self.assertEqual(rules["AUD-CIS-02"]["status"], "FAIL")
+        self.assertEqual(rules["AUD-CIS-02"]["evidence"][0]["context"],
+                         "vdom root / firewall policy / 1")
+        self.assertEqual(body["advisor"]["source"]["vdoms"], ["root", "vd-b"])
+
 
 class TestAuditEngineResults(unittest.TestCase):
     def _cfg(self, name):
