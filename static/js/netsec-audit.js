@@ -884,8 +884,11 @@
         function renderRuleCard(r) {
             const ev = (r.evidence || []).map(e => {
                 const rawCtx = e.context || '';
-                const ctxClean = rawCtx.replace(/^firewall policy\s*\/\s*(\d+)$/i, 'Policy ID #$1')
-                                       .replace(/^policy\s*\/\s*(\d+)$/i, 'Policy ID #$1');
+                // Multi-VDOM evidence: "vdom <vd> / firewall policy / N".
+                const vdM = rawCtx.match(/^vdom (\S+) \/ (.*)$/);
+                const ctxClean = (vdM ? tr('fgtAdvisorVdom', { name: vdM[1] }) + ' \u00b7 ' : '')
+                    + (vdM ? vdM[2] : rawCtx).replace(/^firewall policy\s*\/\s*(\d+)$/i, 'Policy ID #$1')
+                                             .replace(/^policy\s*\/\s*(\d+)$/i, 'Policy ID #$1');
                 return `<div class="evidence-item">`
                     + `<span class="evidence-line">${e.line ? (T.line + ' ' + escapeHtml(String(e.line))) : '—'}</span>`
                     + `<span class="evidence-ctx">${escapeHtml(ctxClean)}</span>`

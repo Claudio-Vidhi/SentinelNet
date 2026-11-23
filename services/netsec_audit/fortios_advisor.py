@@ -128,19 +128,13 @@ def _scope_inputs(scope: Dict[str, Any]) -> tuple:
     return policies, vip_names, profiles
 
 
-def _in_vdom(vdom: str, cli: str) -> str:
-    """A VDOM's CLI snippet wrapped so it pastes into a multi-VDOM unit."""
-    body = "\n".join("        " + line for line in cli.splitlines())
-    return f"config vdom\n    edit {vdom}\n{body}\n    next\nend"
-
-
 def backup_advisor(config_text: str, lang: str = "it") -> Dict[str, Any]:
     """Advisor recommendations for a FortiOS backup, same shape as the live data.
 
     A multi-VDOM backup runs ``advise`` once per VDOM, on that VDOM's
     sections and on the interfaces ``config global`` assigns to it; each
     recommendation then carries its ``vdom`` and an id prefixed with it."""
-    from services.fortigate_service import _ADVISOR_SEVERITY_ORDER, advise
+    from services.fortigate_service import advise, merge_vdom_advice
 
     tree = parse_tree(config_text)
     hw = detect_from_config(config_text)
@@ -160,24 +154,16 @@ def backup_advisor(config_text: str, lang: str = "it") -> Dict[str, Any]:
 
     glob = tree.get("global") if isinstance(tree.get("global"), dict) else {}
     ifaces = _entries(glob, "system interface")
-    recs: List[Dict[str, Any]] = []
     all_policies: List[Dict[str, Any]] = []
-    summary: Dict[str, int] = {}
-    data: Dict[str, Any] = {}
+    per = []
     for vd in vdoms:
         name = str(vd["_key"])
         policies, vip_names, profiles = _scope_inputs(vd)
         own = [i for i in ifaces if str(i.get("vdom") or "").lower() == name.lower()]
-        data = advise(policies, vip_names, profiles, {}, _wan_names(own), hw, lang, {})
-        for r in data["recommendations"]:
-            recs.append({**r, "id": f"{name}:{r['id']}", "vdom": name,
-                         "cli": _in_vdom(name, r["cli"]) if r["cli"] else ""})
-        for k, v in data["summary"].items():
-            summary[k] = summary.get(k, 0) + v
+        per.append((name, advise(policies, vip_names, profiles, {}, _wan_names(own),
+                                 hw, lang, {})))
         all_policies += policies
-    # Stable sort: severity first, VDOM order and per-VDOM order kept within it.
-    recs.sort(key=lambda r: _ADVISOR_SEVERITY_ORDER.get(r["severity"], 9))
-    data.update(recommendations=recs, summary=summary)
+    data = merge_vdom_advice(per)
     data["source"] = {
         "kind": "backup",
         "full_config": _is_full_config(glob.get("system global"), all_policies),

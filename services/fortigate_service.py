@@ -28,6 +28,7 @@ import re
 import threading
 import time
 import warnings
+from contextvars import ContextVar
 from typing import Optional, Any, Dict
 
 import requests
@@ -271,8 +272,19 @@ def api_request(ip: str, method: str, path: str, params: Optional[dict] = None,
         return {"raw": r.text}
 
 
+# VDOM every GET in the current context is scoped to (``?vdom=``). Set only
+# by the multi-VDOM advisor around one VDOM's fetch, so the getters it reuses
+# need no vdom parameter of their own. Unset: requests exactly as before.
+# ponytail: a context variable, not a parameter threaded through six getters;
+# thread it explicitly if other features start querying per VDOM.
+_VDOM: ContextVar[Optional[str]] = ContextVar("fortigate_vdom", default=None)
+
+
 def api_get(ip: str, path: str, params: Optional[dict] = None, timeout: int = 30):
     """GET su /api/v2/<path> con Bearer token. Solleva FortiGateError."""
+    vdom = _VDOM.get()
+    if vdom:
+        params = {**(params or {}), "vdom": vdom}
     return api_request(ip, "GET", path, params=params, timeout=timeout)
 
 
@@ -1657,7 +1669,10 @@ def pick_blocking_profile(family: str, profiles: list, usage: Dict[str, int]) ->
 
 
 def get_firewall_advisor(device, lang: str = "it") -> dict:
-    """Hardware-aware live policy & security profile recommendations."""
+    """Hardware-aware live policy & security profile recommendations.
+
+    A multi-VDOM unit gets one advisor run per VDOM (``?vdom=<name>``),
+    merged like a multi-VDOM backup (``merge_vdom_advice``)."""
     errors: Dict[str, str] = {}
 
     status_data: Dict[str, Any] = {}
@@ -1668,6 +1683,122 @@ def get_firewall_advisor(device, lang: str = "it") -> dict:
     except FortiGateError as e:
         errors["status"] = str(e)
 
+    vdoms = _advisor_vdoms(device)
+    if vdoms:
+        return _advisor_multi_vdom(device, vdoms, status_data, lang, errors)
+
+    policies, vip_names, profiles, profile_errors = _advisor_inputs(device, errors)
+
+    # Internet-bound = dstintf with role wan, same fallback as the backup audit
+    # (rules.wan_interfaces) when no interface declares a role.
+    # ponytail: SD-WAN zones other than virtual-wan-link are not resolved;
+    # read cmdb/system/sdwan zones if custom zone names show up.
+    wan_names: set[str] = {"virtual-wan-link"}
+    try:
+        ifaces = api_get_cmdb(device["IP"], "cmdb/system/interface", fmt="name|role")
+        rows = ifaces.get("results", []) if isinstance(ifaces, dict) else []
+        wan_names = _wan_from(rows if isinstance(rows, list) else [])
+    except FortiGateError as e:
+        errors["interfaces"] = str(e)
+
+    profile = _profile_for(device, status_data)
+    return {"source": "api",
+            "data": advise(policies, vip_names, profiles, profile_errors, wan_names,
+                           profile, lang, errors)}
+
+
+def _wan_from(rows: list) -> set:
+    """WAN interface names: role wan, else wan*/port1, plus virtual-wan-link."""
+    names = [(str(i.get("name") or "").lower(), str(i.get("role") or "").lower())
+             for i in rows if isinstance(i, dict)]
+    by_role = {n for n, role in names if role == "wan"}
+    return {"virtual-wan-link"} | (
+        by_role or {n for n, _r in names if n.startswith("wan") or n == "port1"})
+
+
+def _advisor_vdoms(device) -> list[str]:
+    """VDOM names of a multi-VDOM unit, or [] (no-vdom, or not detectable).
+
+    ``cmdb/system/global`` ``vdom-mode`` (no-vdom / split-vdom / multi-vdom)
+    is the switch itself, present on 7.x; ``cmdb/system/vdom`` lists the
+    VDOMs. A single-VDOM unit pays one call. Either call failing (a token
+    scoped to some VDOMs cannot read global objects) falls back to the
+    single-scope advisor, i.e. the token's own VDOM, as before."""
+    try:
+        res = api_get_cmdb(device["IP"], "cmdb/system/global", fmt="vdom-mode")
+        glob = res.get("results") if isinstance(res, dict) else None
+        if isinstance(glob, list):
+            glob = glob[0] if glob else None
+        mode = str(glob.get("vdom-mode") or "") if isinstance(glob, dict) else ""
+        if mode.lower() not in ("multi-vdom", "split-vdom"):
+            return []
+        res = api_get_cmdb(device["IP"], "cmdb/system/vdom", fmt="name")
+    except FortiGateError:
+        return []
+    rows = res.get("results", []) if isinstance(res, dict) else []
+    return [str(r["name"]) for r in rows if isinstance(r, dict) and r.get("name")]
+
+
+def _advisor_multi_vdom(device, vdoms: list, status_data: dict, lang: str,
+                        errors: Dict[str, str]) -> dict:
+    """One advise() per VDOM, merged. Interfaces are global objects: fetched
+    once, then split by their ``vdom`` field like the backup path. A VDOM
+    the token cannot read only adds ``<vdom>:<what>`` errors."""
+    try:
+        res = api_get_cmdb(device["IP"], "cmdb/system/interface", fmt="name|role|vdom")
+        ifaces = res.get("results", []) if isinstance(res, dict) else []
+    except FortiGateError as e:
+        errors["interfaces"] = str(e)
+        ifaces = []
+    if not isinstance(ifaces, list):
+        ifaces = []
+    profile = _profile_for(device, status_data)
+    per = []
+    for vd in vdoms:
+        vd_errors: Dict[str, str] = {}
+        token = _VDOM.set(vd)
+        try:
+            policies, vip_names, profiles, profile_errors = _advisor_inputs(device, vd_errors)
+        finally:
+            _VDOM.reset(token)
+        own = [i for i in ifaces if isinstance(i, dict)
+               and str(i.get("vdom") or "").lower() == vd.lower()]
+        per.append((vd, advise(policies, vip_names, profiles, profile_errors,
+                               _wan_from(own), profile, lang, {})))
+        errors.update({f"{vd}:{k}": v for k, v in vd_errors.items()})
+    data = merge_vdom_advice(per)
+    data["errors"] = errors
+    data["source"] = {"kind": "api", "vdoms": list(vdoms)}
+    return {"source": "api", "data": data}
+
+
+def _in_vdom(vdom: str, cli: str) -> str:
+    """A VDOM's CLI snippet wrapped so it pastes into a multi-VDOM unit."""
+    body = "\n".join("        " + line for line in cli.splitlines())
+    return f"config vdom\n    edit {vdom}\n{body}\n    next\nend"
+
+
+def merge_vdom_advice(per: list) -> dict:
+    """Merge per-VDOM ``advise`` results: each rec gets ``vdom``, an id
+    prefixed ``<vdom>:`` and its CLI wrapped in ``config vdom``; summary
+    counts summed; stable severity sort keeps VDOM order within a severity.
+    Shared by the live advisor and the backup adapter."""
+    recs: list = []
+    summary: Dict[str, int] = {}
+    data: Dict[str, Any] = {}
+    for name, data in per:
+        for r in data["recommendations"]:
+            recs.append({**r, "id": f"{name}:{r['id']}", "vdom": name,
+                         "cli": _in_vdom(name, r["cli"]) if r["cli"] else ""})
+        for k, v in data["summary"].items():
+            summary[k] = summary.get(k, 0) + v
+    recs.sort(key=lambda r: _ADVISOR_SEVERITY_ORDER.get(r["severity"], 9))
+    return {**data, "recommendations": recs, "summary": summary}
+
+
+def _advisor_inputs(device, errors: Dict[str, str]) -> tuple:
+    """Policies (with stats), VIP names, full profiles and profile-family
+    errors of the current scope, failures recorded in ``errors``."""
     policies: list[dict] = []
     try:
         pol_res = get_policies_with_stats(device)
@@ -1710,26 +1841,7 @@ def get_firewall_advisor(device, lang: str = "it") -> dict:
         return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
 
     profiles = {fam: cmdb_rows(fam, _SECURITY_PROFILES[fam]) for fam in _ADVISOR_FAMILIES}
-
-    # Internet-bound = dstintf with role wan, same fallback as the backup audit
-    # (rules.wan_interfaces) when no interface declares a role.
-    # ponytail: SD-WAN zones other than virtual-wan-link are not resolved;
-    # read cmdb/system/sdwan zones if custom zone names show up.
-    wan_names: set[str] = {"virtual-wan-link"}
-    try:
-        ifaces = api_get_cmdb(device["IP"], "cmdb/system/interface", fmt="name|role")
-        rows = ifaces.get("results", []) if isinstance(ifaces, dict) else []
-        names = [(str(i.get("name") or "").lower(), str(i.get("role") or "").lower())
-                 for i in rows if isinstance(i, dict)]
-        by_role = {n for n, role in names if role == "wan"}
-        wan_names |= by_role or {n for n, _r in names if n.startswith("wan") or n == "port1"}
-    except FortiGateError as e:
-        errors["interfaces"] = str(e)
-
-    profile = _profile_for(device, status_data)
-    return {"source": "api",
-            "data": advise(policies, vip_names, profiles, profile_errors, wan_names,
-                           profile, lang, errors)}
+    return policies, vip_names, profiles, profile_errors
 
 
 # Profile families the advisor reads in full (entries, https block, per-protocol

@@ -366,7 +366,7 @@ class TestRestParity(unittest.TestCase):
         }
 
         def fake_cmdb(_ip, path, **_kw):
-            return {"results": cmdb[path]}
+            return {"results": cmdb.get(path, [])}
 
         with mock.patch.object(fgs, "api_get_cmdb", side_effect=fake_cmdb), \
              mock.patch.object(fgs, "get_system_status",

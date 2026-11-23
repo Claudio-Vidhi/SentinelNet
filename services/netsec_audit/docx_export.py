@@ -4,6 +4,7 @@
 """Generatore di report Word (.docx) per NetSec Audit."""
 
 import io
+import re
 from typing import Any, Dict
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
@@ -319,7 +320,12 @@ def generate_audit_docx(data: Dict[str, Any]) -> bytes:
                 p_item.paragraph_format.space_after = Pt(1)
                 line_str = f"Riga {ev.get('line')}" if ev.get("line") else "—"
                 raw_ctx = ev.get("context", "")
-                ctx_clean = raw_ctx.replace("firewall policy / ", "Policy ID #").replace("policy / ", "Policy ID #")
+                # Multi-VDOM evidence: "vdom <vd> / firewall policy / N".
+                vd_m = re.match(r"vdom (\S+) / (.*)$", raw_ctx)
+                base_ctx = vd_m.group(2) if vd_m else raw_ctx
+                ctx_clean = base_ctx.replace("firewall policy / ", "Policy ID #").replace("policy / ", "Policy ID #")
+                if vd_m:
+                    ctx_clean = f"VDOM {vd_m.group(1)} \u00b7 {ctx_clean}"
 
                 r_ev_l = p_item.add_run(f"[{line_str}] ")
                 r_ev_l.font.size = Pt(7.5)

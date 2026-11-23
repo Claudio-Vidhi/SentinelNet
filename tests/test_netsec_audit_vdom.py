@@ -138,5 +138,29 @@ class TestSingleVdomUnchanged(unittest.TestCase):
         self.assertNotIn("vdoms", netsec_audit.run_netsec_audit(config_text=text))
 
 
+def _docx_lines(result):
+    import io
+    from docx import Document
+    from services.netsec_audit.docx_export import generate_audit_docx
+    doc = Document(io.BytesIO(generate_audit_docx({**result, "device_name": "switch-01"})))
+    return [p.text for t in doc.tables for row in t.rows for c in row.cells for p in c.paragraphs]
+
+
+class TestDocxPolicyLabel(unittest.TestCase):
+    def test_vdom_prefixed_policy_label(self):
+        lines = _docx_lines(_rules()[0])
+        self.assertIn("VDOM root · Policy ID #1: set action accept",
+                      [ln.split("] ", 1)[-1] for ln in lines])
+        self.assertTrue(any("VDOM vd-b · Policy ID #1" in ln for ln in lines))
+
+    def test_single_vdom_label_unchanged(self):
+        p = os.path.join(os.path.dirname(__file__), "fixtures", "fortigate_violations.conf")
+        with open(p, encoding="utf-8") as fh:
+            res = netsec_audit.run_netsec_audit(config_text=fh.read())
+        lines = [ln for ln in _docx_lines(res) if "Policy ID #" in ln]
+        self.assertTrue(lines)
+        self.assertFalse(any("VDOM" in ln for ln in lines))
+
+
 if __name__ == "__main__":
     unittest.main()

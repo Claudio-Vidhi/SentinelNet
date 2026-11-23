@@ -887,7 +887,7 @@ class TestAdvisorProfileReuse(unittest.TestCase):
                    "cmdb/webfilter/profile": list(web), "cmdb/dnsfilter/profile": list(dns)}
 
         def cmdb(_ip, path, *a, **k):
-            return {"results": by_path[path]}
+            return {"results": by_path.get(path, [])}
         with mock.patch.object(fgs, "get_system_status", return_value={"data": {"model": "FGT100F"}}), \
              mock.patch.object(fgs, "get_policies_with_stats", return_value={"data": policies}), \
              mock.patch.object(fgs, "get_vips", return_value={"data": [{"name": "VIP_Web"}]}), \
