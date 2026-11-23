@@ -691,7 +691,9 @@ def get_firewall_policy_objects(device):
             fmt="policyid|name|srcintf|dstintf|srcaddr|dstaddr|"
                 "service|action|status|logtraffic|nat|inspection-mode|"
                 "utm-status|auto-asic-offload|ips-sensor|av-profile|"
-                "webfilter-profile|application-list|dnsfilter-profile|ssl-ssh-profile",
+                "webfilter-profile|application-list|dnsfilter-profile|ssl-ssh-profile|"
+                "icap-profile|waf-profile|videofilter-profile|casb-profile|ssh-filter-profile|"
+                "emailfilter-profile|dlp-profile|file-filter-profile",
         )
         return {"source": "api", "data": data.get("results", data)}
     except FortiGateError as e:
@@ -1461,6 +1463,12 @@ def _policy_member_names(val: Any) -> list[str]:
 # field names, so a rec's ``highlight`` indexes straight into the snapshot.
 _SNAPSHOT_PROFILES = ("ssl-ssh-profile", "av-profile", "webfilter-profile",
                       "application-list", "dnsfilter-profile", "ips-sensor")
+# Policy profiles FortiOS only applies in proxy mode (unavailable in flow).
+_PROXY_ONLY_PROFILES = ("icap-profile", "waf-profile", "videofilter-profile",
+                        "casb-profile", "ssh-filter-profile")
+# Policy fields of the families the advisor reads only for feature-set; the
+# snapshot carries them only when set, like the proxy-only ones.
+_FS_EXTRA_PROFILES = ("emailfilter-profile", "dlp-profile", "file-filter-profile")
 
 
 def _vip_mapping(vip: dict) -> str:
@@ -1496,6 +1504,9 @@ def _policy_snapshot(row: dict, position: int, wan_names: set, vips: Dict[str, s
     snap["utm-status"] = str(row.get("utm-status") or "").lower()
     for k in _SNAPSHOT_PROFILES:
         snap[k] = _profile_name_val(row.get(k))
+    for k in _PROXY_ONLY_PROFILES + _FS_EXTRA_PROFILES:
+        if _profile_name_val(row.get(k)):
+            snap[k] = _profile_name_val(row.get(k))
     for k in ("bytes", "hit_count", "last_used"):
         snap[k] = row.get(k)
     snap["src_is_wan"] = bool({n.lower() for n in snap["srcintf"]} & wan_names)
@@ -1682,6 +1693,27 @@ def _av_weak_protocols(prof: dict) -> Optional[list]:
         if str(block.get("av-scan") or "").lower() != "block":
             weak.append(proto)
     return weak if seen else None
+
+
+def _proxy_feature_set(prof: dict) -> bool:
+    return str(prof.get("feature-set") or "").strip().lower() == "proxy"
+
+
+def _av_cdr(prof: dict) -> bool:
+    """Content Disarm & Reconstruction enabled on any protocol block of an AV
+    profile (``config http`` ... ``set content-disarm enable``). Proxy-only."""
+    return any(isinstance(v, dict) and str(v.get("content-disarm") or "").strip().lower() == "enable"
+               for v in prof.values())
+
+
+def _most_used_flow(profiles: list, usage: Dict[str, int]) -> str:
+    """Most used profile without feature-set proxy, or ''."""
+    names = [str(p.get("name") or "") for p in profiles if not _proxy_feature_set(p)]
+    return min((n for n in names if n), key=lambda n: (-usage.get(n, 0), n.lower()), default="")
+
+
+def _insp_mode(row: dict) -> str:
+    return str(row.get("inspection-mode") or row.get("inspection_mode") or "flow").strip().lower()
 
 
 def pick_av_profile(profiles: list, usage: Dict[str, int]) -> str:
@@ -1914,12 +1946,27 @@ def _advisor_inputs(device, errors: Dict[str, str]) -> tuple:
         return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
 
     profiles = {fam: cmdb_rows(fam, _SECURITY_PROFILES[fam]) for fam in _ADVISOR_FAMILIES}
+    # Feature-set-only families: not in the Security Profiles panel, and a
+    # unit without them (404, no DLP before 7.2) is no finding.
+    # ponytail: any error is silent here, a timeout too; they only feed ADV-FEATURESET/ADV-PROXY.
+    for fam, path in _ADVISOR_FS_FAMILIES.items():
+        try:
+            res = api_get_cmdb(device["IP"], path)
+            rows = res.get("results", res) if isinstance(res, dict) else res
+            profiles[fam] = [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+        except FortiGateError:
+            profiles[fam] = []
     return policies, vip_names, profiles, profile_errors
 
 
 # Profile families the advisor reads in full (entries, https block, per-protocol
 # AV), in the order the live path fetches them.
 _ADVISOR_FAMILIES = ("ips", "ssl_ssh", "antivirus", "application", "webfilter", "dnsfilter")
+# Families read only for their feature-set (advisor-only, cmdb paths). DLP is
+# the 7.2+ ``dlp profile``; the older ``dlp sensor`` is not covered.
+_ADVISOR_FS_FAMILIES = {"emailfilter": "cmdb/emailfilter/profile",
+                        "dlp": "cmdb/dlp/profile",
+                        "file_filter": "cmdb/file-filter/profile"}
 
 
 def advise(policies: list, vip_names: Dict[str, str], profiles: Dict[str, list],
@@ -1951,6 +1998,29 @@ def advise(policies: list, vip_names: Dict[str, str], profiles: Dict[str, list],
     rule_use = {fam: _profile_usage(policies, key) for fam, key in rule_key.items()}
     rule_pick = {fam: pick_blocking_profile(fam, rule_profiles[fam], rule_use[fam])
                  for fam in rule_key}
+    # A flow policy silently ignores a profile with ``feature-set proxy``
+    # (FortiOS only warns), so flow policies get picks among the others.
+    # A missing feature-set is the flow default.
+    av_pick_flow = pick_av_profile([p for p in av_profiles if not _proxy_feature_set(p)], av_use)
+    web_pick_flow = pick_blocking_profile(
+        "webfilter", [p for p in rule_profiles["webfilter"] if not _proxy_feature_set(p)],
+        rule_use["webfilter"])
+    av_by_name = {str(p.get("name") or ""): p for p in av_profiles}
+    fs_families = [
+        ("av-profile", av_by_name, "config antivirus profile", av_pick_flow, av_use),
+        ("webfilter-profile", {str(p.get("name") or ""): p for p in rule_profiles["webfilter"]},
+         "config webfilter profile", web_pick_flow, rule_use["webfilter"]),
+    ]
+    # Families the advisor never proposes adding: on reassign, the most used
+    # flow profile of the family, else a placeholder.
+    for fam, key, head in (("emailfilter", "emailfilter-profile", "config emailfilter profile"),
+                           ("dlp", "dlp-profile", "config dlp profile"),
+                           ("file_filter", "file-filter-profile", "config file-filter profile")):
+        rows, use = profiles.get(fam, []), _profile_usage(policies, key)
+        fs_families.append((key, {str(p.get("name") or ""): p for p in rows}, head,
+                            _most_used_flow(rows, use), use))
+    proxy_pols = [p for p in policies if _insp_mode(p) == "proxy"]
+    proxy_users = {key: _profile_users(proxy_pols, key) for key, *_r in fs_families}
 
     recs: list[Dict[str, Any]] = []
     av_users = _profile_users(policies, "av-profile")
@@ -2012,6 +2082,49 @@ def advise(policies: list, vip_names: Dict[str, str], profiles: Dict[str, list],
         return (f" Profili esistenti riutilizzati (policy che gia' li usano): {items}.",
                 f" Reusing existing profiles (policies already using them): {items}.")
 
+    def featureset_fix(row: dict, pid: str) -> tuple:
+        """Profiles of ``row`` with feature-set proxy, as they would run in
+        flow: (checks, changes, profile CLI blocks, policy set lines, reused
+        picks). A profile no other proxy policy uses is switched to flow; one
+        they rely on stays, and the policy gets a flow one. A CDR AV profile
+        is never switched: that would silently drop the configured CDR."""
+        checks, changes, prof_cli, pol_sets, picks = [], [], [], [], []
+        for key, by_name, cfg_head, flow_pick, use in fs_families:
+            name = _profile_name_val(row.get(key))
+            if not name or not _proxy_feature_set(by_name.get(name, {})):
+                continue
+            checks.append(chk(False, f"'{name}' ha feature-set proxy: in flow le sue funzioni proxy non operano",
+                              f"'{name}' has feature-set proxy: its proxy features do not work in flow",
+                              key, name))
+            cdr = key == "av-profile" and _av_cdr(by_name[name])
+            if cdr:
+                checks.append(
+                    chk(False, f"CDR attivo su '{name}': non disponibile in flow, la conversione lo disattiva",
+                        f"CDR active on '{name}': not available in flow, converting disables it", key, name)
+                    if _insp_mode(row) == "proxy" else
+                    chk(False, f"CDR attivo su '{name}': in una policy flow non viene applicato",
+                        f"CDR active on '{name}': not applied on a flow policy", key, name))
+                checks.append(chk(True, f"'{name}' non passa a flow per non perdere il CDR: mantenerlo richiede inspection-mode proxy",
+                                  f"'{name}' is not switched to flow so its CDR is kept: keeping CDR needs proxy inspection mode",
+                                  key, name))
+            others = [u["id"] for u in proxy_users[key].get(name, []) if u["id"] != pid]
+            if others or cdr:
+                target = flow_pick or f"<{key}_flow>"
+                if others:
+                    checks.append(chk(True, f"'{name}' serve alle policy proxy {', '.join(others)}: il profilo non si cambia",
+                                      f"'{name}' serves proxy policies {', '.join(others)}: the profile stays as is",
+                                      key, name))
+                pol_sets.append(f'        set {key} "{target}"\n')
+                changes.append(chg(key, name, target))
+                if flow_pick:
+                    picks.append((flow_pick, use.get(flow_pick, 0)))
+            else:
+                checks.append(chk(True, f"Nessuna policy proxy usa '{name}': si puo' passare a flow",
+                                  f"No proxy policy uses '{name}': it can switch to flow", key, name))
+                prof_cli.append(f'{cfg_head}\n    edit "{name}"\n        set feature-set flow\n    next\nend')
+                changes.append(chg(f"{name}: feature-set", "proxy", "flow"))
+        return checks, changes, prof_cli, pol_sets, picks
+
     # Move target per policy: the first enabled accept after the nearest
     # enabled non-accept above it. Jumping a deny would open what it blocks.
     order_target: Dict[str, str] = {}
@@ -2035,9 +2148,24 @@ def advise(policies: list, vip_names: Dict[str, str], profiles: Dict[str, list],
         pname = str(row.get("name") or (f"Policy {pid}" if pid else ""))
         snap = _policy_snapshot(row, idx + 1, wan_names, vip_names)
 
-        insp_mode = str(row.get("inspection-mode") or row.get("inspection_mode") or "flow").strip().lower()
-        if insp_mode == "proxy":
+        insp_mode = _insp_mode(row)
+        utm_disabled = str(row.get("utm-status") or "").strip().lower() == "disable"
+        # Profiles flow cannot run justify proxy, unless the unit cannot keep it.
+        proxy_only = [k for k in _PROXY_ONLY_PROFILES if _profile_name_val(row.get(k))]
+        av_name = _profile_name_val(row.get("av-profile"))
+        cdr_av = av_name if _av_cdr(av_by_name.get(av_name, {})) else ""
+        if insp_mode == "proxy" and (profile.proxy_removed_2gb or not (proxy_only or cdr_av)):
             sev = "CRITICAL" if profile.proxy_removed_2gb else "WARN"
+            fs_checks, fs_changes, fs_cli, fs_sets, fs_picks = featureset_fix(row, pid)
+            lost_it = lost_en = ""
+            if proxy_only:
+                lost = ", ".join(f"{k} = {_profile_name_val(row.get(k))}" for k in proxy_only)
+                lost_it = f" La conversione disattiva i profili non disponibili in flow: {lost}."
+                lost_en = f" Converting disables the profiles flow does not support: {lost}."
+            if cdr_av:
+                lost_it += f" CDR attivo su '{cdr_av}': non disponibile in flow, la conversione lo disattiva."
+                lost_en += f" CDR active on '{cdr_av}': not available in flow, converting disables it."
+            note_it, note_en = reuse_note(fs_picks)
             add_rec(
                 f"ADV-PROXY-{pid}", sev, "SPU / Inspection", pid, pname,
                 "Modalita' proxy attiva",
@@ -2046,14 +2174,18 @@ def advise(policies: list, vip_names: Dict[str, str], profiles: Dict[str, list],
                     "Su modelli 2GB con FortiOS 7.4.4+ la modalita' proxy non e' supportata: convertire a flow."
                     if profile.proxy_removed_2gb else
                     "La modalita' proxy trattiene le sessioni su CPU invece di usare il motore single-pass flow/CP9."
-                ),
+                ) + lost_it,
                 (
                     "Proxy mode is unsupported on 2GB RAM units running FortiOS 7.4.4+: switch to flow."
                     if profile.proxy_removed_2gb else
                     "Proxy mode traps sessions on CPU instead of using flow single-pass/CP9 acceleration."
-                ),
-                f"config firewall policy\n    edit {pid}\n        set inspection-mode flow\n    next\nend",
-                policy=snap, highlight=["inspection-mode"],
+                ) + lost_en,
+                "\n".join(fs_cli + [f"config firewall policy\n    edit {pid}\n        set inspection-mode flow\n"
+                                    + "".join(fs_sets) + "    next\nend"]),
+                [n for n, _u in fs_picks],
+                note=(note_it, note_en), policy=snap,
+                highlight=["inspection-mode"] + proxy_only
+                + [k for k, *_r in fs_families if any(c["field"] == k for c in fs_checks)],
                 checks=[
                     chk(False, "Inspection in modalita' proxy: sessioni elaborate dalla CPU",
                         "Proxy inspection mode: sessions handled by the CPU", "inspection-mode", "proxy"),
@@ -2063,9 +2195,36 @@ def advise(policies: list, vip_names: Dict[str, str], profiles: Dict[str, list],
                     chk(True, "Proxy ancora supportato su questo modello/versione: e' un problema di prestazioni, non di compatibilita'",
                         "Proxy still supported on this model/version: a performance issue, not a compatibility one",
                         "model", hw_label),
-                ],
-                changes=[chg("inspection-mode", "proxy", "flow")],
+                ]
+                + [chk(False, "Non disponibile in flow: la conversione lo disattiva",
+                       "Not available in flow: converting disables it", k, _profile_name_val(row.get(k)))
+                   for k in proxy_only]
+                + fs_checks,
+                changes=[chg("inspection-mode", "proxy", "flow")] + fs_changes,
             )
+        elif insp_mode != "proxy" and not utm_disabled:
+            fs_checks, fs_changes, fs_cli, fs_sets, fs_picks = featureset_fix(row, pid)
+            if fs_checks:
+                if fs_sets:
+                    fs_cli.append(f"config firewall policy\n    edit {pid}\n" + "".join(fs_sets) + "    next\nend")
+                note_it, note_en = reuse_note(fs_picks)
+                add_rec(
+                    f"ADV-FEATURESET-{pid}", "WARN", "Inspection / Feature set", pid, pname,
+                    "Policy flow con profilo in feature-set proxy",
+                    "Flow policy with a proxy feature-set profile",
+                    "FortiOS accetta il profilo con un solo avviso ('Proxy feature will not work in flow policy'): "
+                    "le funzioni proxy del profilo non vengono applicate, una lacuna di protezione silenziosa.",
+                    "FortiOS accepts the profile with only a warning ('Proxy feature will not work in flow policy'): "
+                    "the profile's proxy features are not applied, a silent protection gap.",
+                    "\n".join(fs_cli),
+                    [n for n, _u in fs_picks],
+                    note=(note_it, note_en), policy=snap,
+                    highlight=["inspection-mode"]
+                    + [k for k, *_r in fs_families if any(c["field"] == k for c in fs_checks)],
+                    checks=[chk(False, "Policy in modalita' flow", "Flow-mode policy", "inspection-mode", insp_mode)]
+                    + fs_checks,
+                    changes=fs_changes,
+                )
 
         asic_offload = str(row.get("auto-asic-offload") or row.get("asic_offload") or "enable").strip().lower()
         if not profile.is_vm and asic_offload == "disable":
@@ -2091,7 +2250,6 @@ def advise(policies: list, vip_names: Dict[str, str], profiles: Dict[str, list],
         svc_names = set(_policy_member_names(row.get("service")))
         is_vip = bool(vip_set and (dst_names & vip_set))
         vip_dsts = [n for n in snap["dstaddr"] if n.lower() in vip_set]
-        utm_disabled = str(row.get("utm-status") or "").strip().lower() == "disable"
         ips_name = _profile_name_val(row.get("ips-sensor"))
         ssl_prof = _profile_name_val(row.get("ssl-ssh-profile"))
         if is_vip and (not ips_name or utm_disabled):
@@ -2246,7 +2404,7 @@ def advise(policies: list, vip_names: Dict[str, str], profiles: Dict[str, list],
         carries_dns = any_svc or "dns" in svc_names
         if to_wan and (l7_summary or broad):
             for code, key, use, pick, applies, kind, it_t, en_t, it_d, en_d in (
-                ("AV", "av-profile", av_use, av_pick, True,
+                ("AV", "av-profile", av_use, av_pick if insp_mode == "proxy" else av_pick_flow, True,
                  ("profilo antivirus", "antivirus profile"),
                  "Policy verso Internet senza antivirus",
                  "Internet-bound policy without antivirus",
@@ -2262,7 +2420,8 @@ def advise(policies: list, vip_names: Dict[str, str], profiles: Dict[str, list],
                  "verso Internet non sono ne' visibili ne' bloccate.",
                  "Without application control, risky applications (P2P, proxies/anonymizers, remote access) "
                  "on Internet-bound traffic are neither visible nor blocked."),
-                ("WEB", "webfilter-profile", rule_use["webfilter"], rule_pick["webfilter"], carries_web,
+                ("WEB", "webfilter-profile", rule_use["webfilter"],
+                 rule_pick["webfilter"] if insp_mode == "proxy" else web_pick_flow, carries_web,
                  ("profilo web filter", "web filter profile"),
                  "Policy verso Internet senza web filter",
                  "Internet-bound policy without web filter",

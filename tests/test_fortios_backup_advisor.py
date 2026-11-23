@@ -227,6 +227,55 @@ class TestBackupAdvisor(unittest.TestCase):
         self.assertFalse(backup_advisor("config system global\n    set hostname x\nend\n")
                          ["source"]["full_config"])
 
+    def test_featureset_families_and_cdr_from_sections(self):
+        text = """#config-version=FGT100F-7.4.5-FW-build2702:opmode=0:vdom=0:user=admin
+config antivirus profile
+    edit "AV_CDR"
+        set feature-set proxy
+        config http
+            set av-scan block
+            set content-disarm enable
+        end
+    next
+end
+config emailfilter profile
+    edit "EF_Proxy"
+        set feature-set proxy
+    next
+end
+config dlp profile
+    edit "DLP_Proxy"
+        set feature-set proxy
+    next
+end
+config file-filter profile
+    edit "FF_Proxy"
+        set feature-set proxy
+    next
+end
+config firewall policy
+    edit 1
+        set action accept
+        set utm-status enable
+        set emailfilter-profile "EF_Proxy"
+        set dlp-profile "DLP_Proxy"
+        set file-filter-profile "FF_Proxy"
+    next
+    edit 2
+        set action accept
+        set utm-status enable
+        set inspection-mode proxy
+        set av-profile "AV_CDR"
+    next
+end
+"""
+        by_id = {r["id"]: r for r in backup_advisor(text, lang="en")["recommendations"]}
+        cli = by_id["ADV-FEATURESET-1"]["cli"]
+        for head, name in (("emailfilter", "EF_Proxy"), ("dlp", "DLP_Proxy"), ("file-filter", "FF_Proxy")):
+            self.assertIn(f'config {head} profile\n    edit "{name}"\n        set feature-set flow', cli)
+        # CDR justifies proxy on a unit that still supports it.
+        self.assertNotIn("ADV-PROXY-2", by_id)
+
     def test_single_vdom_has_no_vdom_fields(self):
         self.assertEqual(self.data["source"]["vdoms"], [])
         self.assertFalse(any("vdom" in r for r in self.data["recommendations"]))

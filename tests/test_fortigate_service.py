@@ -898,15 +898,21 @@ class TestAdvisorProfileReuse(unittest.TestCase):
         self.assertEqual(fgs.pick_ssl_profile(self.SSL, {"deep-inspection": 3}, server=False),
                          "deep-inspection")
 
-    def _advisor(self, policies, sensors, ssl, av=(), app=(), ifaces=(), web=(), dns=()):
+    def _advisor(self, policies, sensors, ssl, av=(), app=(), ifaces=(), web=(), dns=(),
+                 status=None, extra=None):
         by_path = {"cmdb/ips/sensor": sensors, "cmdb/firewall/ssl-ssh-profile": ssl,
                    "cmdb/antivirus/profile": list(av), "cmdb/application/list": list(app),
                    "cmdb/system/interface": list(ifaces),
-                   "cmdb/webfilter/profile": list(web), "cmdb/dnsfilter/profile": list(dns)}
+                   "cmdb/webfilter/profile": list(web), "cmdb/dnsfilter/profile": list(dns),
+                   **(extra or {})}
 
         def cmdb(_ip, path, *a, **k):
-            return {"results": by_path.get(path, [])}
-        with mock.patch.object(fgs, "get_system_status", return_value={"data": {"model": "FGT100F"}}), \
+            rows = by_path.get(path, [])
+            if isinstance(rows, Exception):
+                raise rows
+            return {"results": rows}
+        with mock.patch.object(fgs, "get_system_status",
+                               return_value={"data": status or {"model": "FGT100F"}}), \
              mock.patch.object(fgs, "get_policies_with_stats", return_value={"data": policies}), \
              mock.patch.object(fgs, "get_vips", return_value={"data": [{"name": "VIP_Web"}]}), \
              mock.patch.object(fgs, "get_security_profiles", return_value={"data": {}, "errors": {}}), \
@@ -938,6 +944,154 @@ class TestAdvisorProfileReuse(unittest.TestCase):
         self.assertEqual(ids["ADV-VIP-L7-1"]["reuses"], [])
         self.assertIn("config ips sensor", ids["ADV-VIP-L7-1"]["cli"])
         self.assertIn('edit "IPS_Server_Scoped"', ids["ADV-IPS-2"]["cli"])
+
+    # feature-set: a proxy profile on a flow policy is accepted with a warning
+    # only, its proxy features silently skipped.
+    AV_FS = [
+        {"name": "AV_Proxy", "feature-set": "proxy", "http": {"av-scan": "block"},
+         "smtp": {"av-scan": "block"}, "ftp": {"av-scan": "block"}},
+        {"name": "AV_Flow", "feature-set": "flow", "http": {"av-scan": "block"}, "smtp": {"av-scan": "block"},
+         "ftp": {"av-scan": "monitor"}},
+    ]
+
+    def test_featureset_profile_level_fix(self):
+        pols = [{"policyid": 1, "action": "accept", "status": "enable", "utm-status": "enable",
+                 "av-profile": "AV_Proxy"}]
+        _res, ids = self._advisor(pols, [], [], av=self.AV_FS)
+        rec = ids["ADV-FEATURESET-1"]
+        self.assertEqual(rec["severity"], "WARN")
+        self.assertEqual(rec["category"], "Inspection / Feature set")
+        self.assertIn('config antivirus profile\n    edit "AV_Proxy"\n        set feature-set flow', rec["cli"])
+        self.assertNotIn("config firewall policy", rec["cli"])
+        self.assertEqual(rec["changes"], [{"field": "AV_Proxy: feature-set", "old": "proxy", "new": "flow"}])
+        self.assertIn("av-profile", rec["highlight"])
+
+    def test_featureset_policy_level_when_proxy_policy_relies(self):
+        pols = [{"policyid": 1, "action": "accept", "status": "enable", "utm-status": "enable",
+                 "av-profile": "AV_Proxy"},
+                {"policyid": 2, "action": "accept", "status": "enable", "utm-status": "enable",
+                 "inspection-mode": "proxy", "av-profile": "AV_Proxy"}]
+        _res, ids = self._advisor(pols, [], [], av=self.AV_FS)
+        rec = ids["ADV-FEATURESET-1"]
+        self.assertNotIn("set feature-set", rec["cli"])
+        self.assertIn('edit 1\n        set av-profile "AV_Flow"', rec["cli"])
+        self.assertEqual(rec["reuses"], ["AV_Flow"])
+        self.assertIn({"field": "av-profile", "old": "AV_Proxy", "new": "AV_Flow"}, rec["changes"])
+        # Converting the only proxy user to flow: nobody else relies on it, flip it.
+        prox = ids["ADV-PROXY-2"]
+        self.assertIn("set feature-set flow", prox["cli"])
+        self.assertIn("set inspection-mode flow", prox["cli"])
+        self.assertTrue(any(not c["ok"] and c["field"] == "av-profile" for c in prox["checks"]))
+        self.assertIn({"field": "AV_Proxy: feature-set", "old": "proxy", "new": "flow"}, prox["changes"])
+
+    def test_av_pick_respects_policy_mode(self):
+        self.assertEqual(fgs.pick_av_profile(self.AV_FS, {}), "AV_Proxy")
+        wan = {"dstintf": [{"name": "wan1"}], "dstaddr": [{"name": "all"}], "service": [{"name": "ALL"}]}
+        pols = [{"policyid": 3, "action": "accept", "status": "enable", **wan},
+                {"policyid": 4, "action": "accept", "status": "enable", "inspection-mode": "proxy", **wan}]
+        _res, ids = self._advisor(pols, [], [], av=self.AV_FS, ifaces=[{"name": "wan1", "role": "wan"}])
+        self.assertEqual(ids["ADV-AV-3"]["reuses"], ["AV_Flow"])
+        self.assertEqual(ids["ADV-AV-4"]["reuses"], ["AV_Proxy"])
+
+    def test_proxy_only_profiles_justify_proxy(self):
+        pols = [{"policyid": 5, "action": "accept", "status": "enable", "utm-status": "enable",
+                 "inspection-mode": "proxy", "icap-profile": "ICAP_Srv", "av-profile": "AV_Flow"}]
+        _res, ids = self._advisor(pols, [], [], av=self.AV_FS)
+        self.assertNotIn("ADV-PROXY-5", ids)
+        self.assertNotIn("ADV-FEATURESET-5", ids)  # proxy policy + flow profile: fine
+        # 2GB on 7.4.4+: proxy is gone, the conversion is forced and loses ICAP.
+        _res, ids = self._advisor(pols, [], [], av=self.AV_FS,
+                                  status={"model": "FGT60F", "version": "7.4.5"})
+        rec = ids["ADV-PROXY-5"]
+        self.assertEqual(rec["severity"], "CRITICAL")
+        self.assertTrue(any(not c["ok"] and c["field"] == "icap-profile" and c["value"] == "ICAP_Srv"
+                            for c in rec["checks"]))
+        self.assertIn("icap-profile = ICAP_Srv", rec["risk"])
+        self.assertIn("icap-profile", rec["highlight"])
+        self.assertEqual(rec["policy"]["icap-profile"], "ICAP_Srv")
+        self.assertNotIn("waf-profile", rec["policy"])  # proxy-only fields only when set
+
+    def test_proxy_policy_with_flow_profile_is_quiet(self):
+        pols = [{"policyid": 6, "action": "accept", "status": "enable", "utm-status": "enable",
+                 "inspection-mode": "proxy", "waf-profile": "WAF_Web", "av-profile": "AV_Flow",
+                 "ssl-ssh-profile": "certificate-inspection"}]
+        _res, ids = self._advisor(pols, [], [], av=self.AV_FS)
+        self.assertFalse([i for i in ids if i.endswith("-6")])
+
+    # Families read only for feature-set: email filter, DLP (7.2+), file filter.
+    FS_EXTRA = {
+        "cmdb/emailfilter/profile": [{"name": "EF_Proxy", "feature-set": "proxy"},
+                                     {"name": "EF_Flow", "feature-set": "flow"}],
+        "cmdb/dlp/profile": [{"name": "DLP_Proxy", "feature-set": "proxy"}],
+        "cmdb/file-filter/profile": [{"name": "FF_Proxy", "feature-set": "proxy"},
+                                     {"name": "FF_Flow"}],
+    }
+
+    def test_featureset_extra_families_on_flow_policy(self):
+        pols = [{"policyid": 7, "action": "accept", "status": "enable", "utm-status": "enable",
+                 "emailfilter-profile": "EF_Proxy", "dlp-profile": "DLP_Proxy",
+                 "file-filter-profile": "FF_Proxy"},
+                {"policyid": 8, "action": "accept", "status": "enable", "utm-status": "enable",
+                 "inspection-mode": "proxy", "emailfilter-profile": "EF_Proxy",
+                 "dlp-profile": "DLP_Proxy", "file-filter-profile": "FF_Flow"}]
+        _res, ids = self._advisor(pols, [], [], extra=self.FS_EXTRA)
+        rec = ids["ADV-FEATURESET-7"]
+        # Proxy policy 8 relies on EF/DLP: reassign (existing flow one, else placeholder).
+        self.assertIn('set emailfilter-profile "EF_Flow"', rec["cli"])
+        self.assertIn('set dlp-profile "<dlp-profile_flow>"', rec["cli"])
+        self.assertIn("EF_Flow", rec["reuses"])
+        # Nobody proxy uses FF_Proxy: flip it.
+        self.assertIn('config file-filter profile\n    edit "FF_Proxy"\n        set feature-set flow', rec["cli"])
+        for k in ("emailfilter-profile", "dlp-profile", "file-filter-profile"):
+            self.assertIn(k, rec["highlight"])
+        self.assertEqual(rec["policy"]["dlp-profile"], "DLP_Proxy")
+        self.assertNotIn("icap-profile", rec["policy"])
+        # Proxy policy 8 with nothing proxy-only: ADV-PROXY flips the profiles it alone uses.
+        prox = ids["ADV-PROXY-8"]
+        self.assertIn('config emailfilter profile\n    edit "EF_Proxy"\n        set feature-set flow', prox["cli"])
+        self.assertIn('config dlp profile\n    edit "DLP_Proxy"\n        set feature-set flow', prox["cli"])
+        self.assertTrue(any(not c["ok"] and c["field"] == "dlp-profile" for c in prox["checks"]))
+
+    def test_featureset_extra_family_missing_is_silent(self):
+        pols = [{"policyid": 9, "action": "accept", "status": "enable", "utm-status": "enable",
+                 "dlp-profile": "DLP_Proxy"}]
+        res, ids = self._advisor(pols, [], [], extra={
+            "cmdb/dlp/profile": fgs.FortiGateError("HTTP 404"),
+            "cmdb/emailfilter/profile": fgs.FortiGateError("HTTP 404"),
+            "cmdb/file-filter/profile": fgs.FortiGateError("HTTP 404")})
+        self.assertNotIn("ADV-FEATURESET-9", ids)
+        self.assertNotIn("ADV-PROFILES-UNAVAIL", ids)
+        self.assertFalse(res.get("errors"))
+
+    # CDR (content-disarm) is proxy-only, set per protocol in the AV profile.
+    AV_CDR = [{"name": "AV_CDR", "feature-set": "proxy", "http": {"av-scan": "block"},
+               "smtp": {"av-scan": "block", "content-disarm": "enable"}}] + AV_FS
+
+    def test_cdr_justifies_proxy_unless_2gb(self):
+        pols = [{"policyid": 10, "action": "accept", "status": "enable", "utm-status": "enable",
+                 "inspection-mode": "proxy", "av-profile": "AV_CDR"}]
+        _res, ids = self._advisor(pols, [], [], av=self.AV_CDR)
+        self.assertNotIn("ADV-PROXY-10", ids)
+        _res, ids = self._advisor(pols, [], [], av=self.AV_CDR,
+                                  status={"model": "FGT60F", "version": "7.4.5"})
+        rec = ids["ADV-PROXY-10"]
+        self.assertIn("CDR active on 'AV_CDR'", rec["risk"])
+        self.assertTrue(any(not c["ok"] and c["text"].startswith("CDR active on 'AV_CDR'")
+                            for c in rec["checks"]))
+        # Never flipped: the policy gets a flow AV profile instead.
+        self.assertNotIn("set feature-set flow", rec["cli"])
+        self.assertIn('set av-profile "AV_Flow"', rec["cli"])
+        self.assertTrue(any(c["ok"] and "proxy inspection mode" in c["text"] for c in rec["checks"]))
+
+    def test_cdr_on_flow_policy_not_applied(self):
+        pols = [{"policyid": 11, "action": "accept", "status": "enable", "utm-status": "enable",
+                 "av-profile": "AV_CDR"}]
+        _res, ids = self._advisor(pols, [], [], av=self.AV_CDR[:1])
+        rec = ids["ADV-FEATURESET-11"]
+        self.assertTrue(any(not c["ok"] and "CDR active on 'AV_CDR': not applied" in c["text"]
+                            for c in rec["checks"]))
+        self.assertNotIn("set feature-set flow", rec["cli"])
+        self.assertIn('set av-profile "<av-profile_flow>"', rec["cli"])
 
     # FortiOS 7.x REST shapes: per-protocol av-scan, app entries with action.
     AV = [

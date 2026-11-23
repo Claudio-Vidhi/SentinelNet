@@ -10,6 +10,23 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **FortiGate advisor: feature-set (flow/proxy) awareness.** A flow policy
+  with an antivirus, web filter, email filter, DLP or file filter profile in
+  `feature-set proxy` gets `ADV-FEATURESET`: FortiOS accepts it with only a
+  warning and the profile's proxy features silently stop working. The fix
+  switches the profile to flow when no proxy policy uses it, otherwise
+  assigns the policy a flow profile. Profiles reused by other
+  recommendations follow the policy's inspection mode.
+- `ADV-PROXY` no longer proposes flow for a policy that needs proxy (ICAP,
+  WAF, video filter, inline CASB, SSH filter, or an antivirus profile with
+  content disarm); on 2GB units with 7.4.4+ it lists what the forced
+  conversion disables, and fixes proxy feature-set profiles along with the
+  policy. Email filter, DLP (7.2+ `dlp-profile`) and file filter profiles are
+  now read by the advisor (live and backup); a family the unit lacks is
+  skipped silently.
+
 ## [0.70.2] - 2026-11-23
 
 ### Changed

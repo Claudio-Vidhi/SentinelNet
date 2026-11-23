@@ -844,6 +844,10 @@ function renderFgtAdvisor(host, st, head) {
 const FGT_ADV_SEVS = ['CRITICAL', 'HIGH', 'WARN', 'INFO'];
 const FGT_ADV_PROFILES = [['ssl-ssh-profile', 'SSL'], ['av-profile', 'AV'], ['webfilter-profile', 'Web'],
     ['application-list', 'App'], ['dnsfilter-profile', 'DNS'], ['ips-sensor', 'IPS']];
+// Proxy-only and feature-set-only profiles: the snapshot carries them only when set.
+const FGT_ADV_PROXY_PROFILES = [['icap-profile', 'ICAP'], ['waf-profile', 'WAF'],
+    ['videofilter-profile', 'Video'], ['casb-profile', 'CASB'], ['ssh-filter-profile', 'SSH'],
+    ['emailfilter-profile', 'Email'], ['dlp-profile', 'DLP'], ['file-filter-profile', 'File']];
 const _fgtAdvState = new WeakMap();
 
 const _fgtAdvSev = (r) => String(r.severity || 'INFO').toUpperCase();
@@ -997,7 +1001,9 @@ function _fgtAdvPolicyCard(p, hl, vdom) {
     ].filter(Boolean).join(' · ') : '';
     const action = String(p.action || '').toUpperCase();
     const prof = FGT_ADV_PROFILES.map(([k, lab]) => `<span class="fgt-adv-prof${p[k] ? '' : ' none'}${
-        hl.has(k) ? ' hit' : ''}"><b>${lab}</b>${escapeHtml(p[k] || '—')}</span>`).join('');
+        hl.has(k) ? ' hit' : ''}"><b>${lab}</b>${escapeHtml(p[k] || '—')}</span>`).join('')
+        + FGT_ADV_PROXY_PROFILES.filter(([k]) => p[k]).map(([k, lab]) => `<span class="fgt-adv-prof${
+            hl.has(k) ? ' hit' : ''}"><b>${lab}</b>${escapeHtml(p[k])}</span>`).join('');
     return `<div class="fgt-adv-card">
       <div class="fgt-adv-card-top"><b class="fgt-adv-mono">#${escapeHtml(p.id)}</b><b>${escapeHtml(p.name || '')}</b>
         ${_fgtAdvVdom(vdom)}<span class="badge">${escapeHtml(tr('fgtAdvPositionTag', { n: p.position }))}</span>
@@ -1016,7 +1022,7 @@ function _fgtAdvPolicyCard(p, hl, vdom) {
         ${row(hit('nat'), 'NAT', escapeHtml(p.nat || '—'))}
         ${row(hit('inspection-mode', 'auto-asic-offload'), tr('fgtAdvInspection'),
               escapeHtml(`${p['inspection-mode'] || '—'} · asic-offload ${p['auto-asic-offload'] || '—'}`))}
-        ${row(hit('utm-status', ...FGT_ADV_PROFILES.map(x => x[0])), tr('fgtAdvProfiles'),
+        ${row(hit('utm-status', ...FGT_ADV_PROFILES.map(x => x[0]), ...FGT_ADV_PROXY_PROFILES.map(x => x[0])), tr('fgtAdvProfiles'),
               `<span class="fgt-adv-soft">utm ${escapeHtml(p['utm-status'] || '—')}</span>${prof}`)}
         ${row(hit('position'), tr('fgtAdvPosition'),
               escapeHtml('#' + p.position) + (p.bytes != null ? ' · ' + FGT_FMT.bytes(p.bytes) : ''))}

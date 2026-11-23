@@ -32,6 +32,10 @@ _FAMILY_PATHS = {
     "application": "application list",
     "webfilter": "webfilter profile",
     "dnsfilter": "dnsfilter profile",
+    # Read only for their feature-set; an absent section is an empty family.
+    "emailfilter": "emailfilter profile",
+    "dlp": "dlp profile",
+    "file_filter": "file-filter profile",
 }
 
 # A full-configuration dump prints every system global key (several hundred on
