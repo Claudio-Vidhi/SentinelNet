@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.70.3] - 2026-11-23
+
 ### Added
 
 - **FortiGate advisor: feature-set (flow/proxy) awareness.** A flow policy
