@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.70.1] - 2026-11-23
+
 ### Added
 
 - **FortiGate advisor on configuration backups**: the Security Audit tab runs
