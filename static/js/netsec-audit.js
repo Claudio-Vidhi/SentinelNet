@@ -289,6 +289,40 @@
     // client vorrebbe dire prima o poi farle divergere.
     let _auditSummary = null;
     let _auditScore = null;
+    // Advisor recommendations of a FortiOS scan (the live FortiGate advisor
+    // run on the backup); null for any other platform.
+    let _auditAdvisor = null;
+
+    function renderAuditAdvisor() {
+        const panel = document.getElementById('auditAdvisorPanel');
+        const body = document.getElementById('auditAdvisorBody');
+        if (!panel || !body) return;
+        const adv = _auditAdvisor;
+        if (!adv) {
+            panel.style.display = 'none';
+            body.innerHTML = '';
+            return;
+        }
+        const src = adv.source || {};
+        const recs = Array.isArray(adv.recommendations) ? adv.recommendations : [];
+        const summary = adv.summary || {};
+        const banner = (key) => `<div class="nsa-partial"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(tr(key))}</div>`;
+        let html = '';
+        if (src.full_config === false) html += banner('nsaAdvNotFullConfig');
+        if (src.multi_vdom) html += banner('nsaAdvMultiVdom');
+        if (Array.isArray(src.live_only) && src.live_only.includes('ADV-ORDER')) {
+            html += `<div style="margin-bottom:10px; font-size:12px; color:var(--text-muted);"><i class="fa-solid fa-circle-info"></i> ${escapeHtml(tr('nsaAdvLiveOnly'))}</div>`;
+        }
+        html += `<div style="margin-bottom:10px; font-size:12px; color:var(--text-muted);">${escapeHtml(tr('fgtAdvisorCount', {
+            total: summary.total != null ? summary.total : recs.length,
+            policies: summary.policies_analyzed != null ? summary.policies_analyzed : 0,
+        }))}</div>`;
+        html += recs.length
+            ? window.fgtAdvisorCardsHtml(recs)
+            : `<div class="panel" style="margin:0; padding:14px; color:var(--success);"><i class="fa-solid fa-circle-check"></i> ${escapeHtml(tr('fgtAdvisorClean'))}</div>`;
+        body.innerHTML = html;
+        panel.style.display = '';
+    }
 
     function renderAuditOverview() {
         const s = _auditSummary || { total: 0, passed: 0, failed: 0, warned: 0, unknown: 0 };
@@ -571,9 +605,11 @@
                     showToast(tr('nsaBenchSwitched', {title: benchSel.options[benchSel.selectedIndex].text}), 'info');
                     return runAuditScan();
                 }
+                _auditAdvisor = data.advisor || null;
                 syncBenchmarkResolved();
                 renderAuditOverview();
                 renderAuditRulesTable();
+                renderAuditAdvisor();
                 if (data.saved_id) {
                     loadAuditHistory();
                 }
@@ -1907,8 +1943,10 @@ ${pagesHtml}
             _auditVendor = data.vendor || null;
             _auditDeviceName = data.device_name || data.run_name || data.device_ip || 'Audit';
             _auditBenchmarkName = data.benchmark_title || data.benchmark || 'CIS';
+            _auditAdvisor = data.advisor || null;
             renderAuditOverview();
             renderAuditRulesTable();
+            renderAuditAdvisor();
             showToast(tr('nsaAuditRunLoadedFrom'), 'info');
 
             if (openReport) {
@@ -1985,6 +2023,10 @@ ${pagesHtml}
         sel.dispatchEvent(new Event('change'));
     });
     document.getElementById('btnRefreshAuditHistory')?.addEventListener('click', loadAuditHistory);
+    document.getElementById('auditAdvisorBody')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action="fgt-copy-cli"]');
+        if (btn) window.fgtCopyCli(btn);
+    });
     window.addEventListener('globalTenantChanged', populateAuditDeviceSelect);
 
     document.getElementById('auditRulesTableBody')?.addEventListener('click', (e) => {

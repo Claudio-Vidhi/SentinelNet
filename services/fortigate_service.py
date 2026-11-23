@@ -1658,7 +1658,6 @@ def pick_blocking_profile(family: str, profiles: list, usage: Dict[str, int]) ->
 
 def get_firewall_advisor(device, lang: str = "it") -> dict:
     """Hardware-aware live policy & security profile recommendations."""
-    en = (lang or "it").strip().lower().startswith("en")
     errors: Dict[str, str] = {}
 
     status_data: Dict[str, Any] = {}
@@ -1710,20 +1709,7 @@ def get_firewall_advisor(device, lang: str = "it") -> dict:
         rows = res.get("results", res) if isinstance(res, dict) else res
         return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
 
-    ips_sensors = cmdb_rows("ips", _SECURITY_PROFILES["ips"])
-    ssl_profiles = cmdb_rows("ssl_ssh", _SECURITY_PROFILES["ssl_ssh"])
-    av_profiles = cmdb_rows("antivirus", _SECURITY_PROFILES["antivirus"])
-    ips_use = _profile_usage(policies, "ips-sensor")
-    ssl_use = _profile_usage(policies, "ssl-ssh-profile")
-    av_use = _profile_usage(policies, "av-profile")
-    av_pick = pick_av_profile(av_profiles, av_use)
-    # Rule-based families (block/monitor per entry), keyed by policy field.
-    rule_key = {"application": "application-list", "webfilter": "webfilter-profile",
-                "dnsfilter": "dnsfilter-profile"}
-    rule_profiles = {fam: cmdb_rows(fam, _SECURITY_PROFILES[fam]) for fam in rule_key}
-    rule_use = {fam: _profile_usage(policies, key) for fam, key in rule_key.items()}
-    rule_pick = {fam: pick_blocking_profile(fam, rule_profiles[fam], rule_use[fam])
-                 for fam in rule_key}
+    profiles = {fam: cmdb_rows(fam, _SECURITY_PROFILES[fam]) for fam in _ADVISOR_FAMILIES}
 
     # Internet-bound = dstintf with role wan, same fallback as the backup audit
     # (rules.wan_interfaces) when no interface declares a role.
@@ -1741,6 +1727,39 @@ def get_firewall_advisor(device, lang: str = "it") -> dict:
         errors["interfaces"] = str(e)
 
     profile = _profile_for(device, status_data)
+    return {"source": "api",
+            "data": advise(policies, vip_names, profiles, profile_errors, wan_names,
+                           profile, lang, errors)}
+
+
+# Profile families the advisor reads in full (entries, https block, per-protocol
+# AV), in the order the live path fetches them.
+_ADVISOR_FAMILIES = ("ips", "ssl_ssh", "antivirus", "application", "webfilter", "dnsfilter")
+
+
+def advise(policies: list, vip_names: set, profiles: Dict[str, list],
+           profile_errors: Dict[str, str], wan_names: set,
+           profile: FortiGateHWProfile, lang: str, errors: Dict[str, str]) -> dict:
+    """The advisor rules on REST-shaped rows, whatever their source.
+
+    Fed by the live REST fetch (``get_firewall_advisor``) and by a config
+    backup (``services.netsec_audit.fortios_advisor``): one rule set, two inputs.
+    ``profiles`` maps each family of ``_ADVISOR_FAMILIES`` to its full rows."""
+    en = (lang or "it").strip().lower().startswith("en")
+    ips_sensors = profiles.get("ips", [])
+    ssl_profiles = profiles.get("ssl_ssh", [])
+    av_profiles = profiles.get("antivirus", [])
+    ips_use = _profile_usage(policies, "ips-sensor")
+    ssl_use = _profile_usage(policies, "ssl-ssh-profile")
+    av_use = _profile_usage(policies, "av-profile")
+    av_pick = pick_av_profile(av_profiles, av_use)
+    # Rule-based families (block/monitor per entry), keyed by policy field.
+    rule_key = {"application": "application-list", "webfilter": "webfilter-profile",
+                "dnsfilter": "dnsfilter-profile"}
+    rule_profiles = {fam: profiles.get(fam, []) for fam in rule_key}
+    rule_use = {fam: _profile_usage(policies, key) for fam, key in rule_key.items()}
+    rule_pick = {fam: pick_blocking_profile(fam, rule_profiles[fam], rule_use[fam])
+                 for fam in rule_key}
 
     recs: list[Dict[str, Any]] = []
 
@@ -2068,12 +2087,9 @@ def get_firewall_advisor(device, lang: str = "it") -> dict:
         "policies_analyzed": len(policies),
     }
     return {
-        "source": "api",
-        "data": {
-            "hardware_profile": profile_to_dict(profile, lang=lang),
-            "summary": summary,
-            "recommendations": recs,
-            "sniffer_syntax": profile.sniffer_syntax,
-            "errors": errors,
-        },
+        "hardware_profile": profile_to_dict(profile, lang=lang),
+        "summary": summary,
+        "recommendations": recs,
+        "sniffer_syntax": profile.sniffer_syntax,
+        "errors": errors,
     }

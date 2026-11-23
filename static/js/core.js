@@ -1902,8 +1902,9 @@ const LAZY_TAB_SCRIPTS = {
     'tab-interfaces': ['/static/js/interfaces.js'],
     'tab-redundancy': ['/static/js/redundancy.js'],
     // The Firewall Audit Checklist is a sub-tab of NetSec Audit: its module
-    // has to load together with the tab that contains it.
-    'tab-netsec-audit': ['/static/vendor/html2pdf/html2pdf.bundle.min.js', '/static/js/netsec-audit.js', '/static/js/audit_checklist.js'],
+    // has to load together with the tab that contains it. The FortiGate module
+    // renders the advisor section of a FortiOS backup scan.
+    'tab-netsec-audit': ['/static/vendor/html2pdf/html2pdf.bundle.min.js', '/static/js/netsec-audit.js', '/static/js/audit_checklist.js', '/static/js/fortigate-management.js'],
     'tab-policy-test': ['/static/js/policy-test.js'],
     'tab-config-drift': ['/static/js/config-drift.js'],
     'tab-blueprint': ['/static/vendor/vis/vis-network.min.js', '/static/js/blueprint.js'],

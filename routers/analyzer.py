@@ -292,6 +292,11 @@ def netsec_audit_scan(payload: NetSecAuditSchema, current_user = Depends(get_cur
         benchmark=payload.benchmark,
         lang=payload.lang,
     )
+    # Same recommendations as the live FortiGate advisor, from the backup.
+    # Kept out of the benchmark rules and the score: it is advice, not a check.
+    if result.get("vendor") == netsec_audit.FORTIOS:
+        from services.netsec_audit.fortios_advisor import backup_advisor
+        result["advisor"] = backup_advisor(text, payload.lang)
     if payload.save:
         from services.netsec_audit import history
         from core.app_settings import get_app_settings

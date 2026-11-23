@@ -845,7 +845,15 @@ function renderFgtAdvisor(host, st, head) {
         return;
     }
 
-    const cards = recs.map(r => {
+    const cards = fgtAdvisorCardsHtml(recs);
+
+    host.innerHTML = head + hwHtml + countBanner + cards;
+}
+
+// One card per recommendation. Shared with the Security Audit tab, which
+// runs the same advisor on a config backup (netsec-audit.js).
+function fgtAdvisorCardsHtml(recs) {
+    return recs.map(r => {
         const sev = String(r.severity || 'INFO').toUpperCase();
         const cls = (sev === 'CRITICAL' || sev === 'HIGH') ? 'bad' : sev === 'WARN' ? 'warn' : 'ok';
         const polLabel = r.policy_id
@@ -873,9 +881,28 @@ function renderFgtAdvisor(host, st, head) {
             ${cliBlock}
           </div>`;
     }).join('');
-
-    host.innerHTML = head + hwHtml + countBanner + cards;
 }
+window.fgtAdvisorCardsHtml = fgtAdvisorCardsHtml;
+
+// Copy the CLI snippet next to a [data-action="fgt-copy-cli"] button.
+function fgtCopyCli(copyBtn) {
+    const wrap = copyBtn.closest('.fgt-cli-wrap');
+    const pre = wrap ? wrap.querySelector('.fgt-cli-snippet') : null;
+    const txt = pre ? (pre.textContent || '') : '';
+    if (!txt) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt).then(() => showToast(tr('fgtCliCopied'), 'success')).catch(() => {});
+    } else {
+        const ta = document.createElement('textarea');
+        ta.value = txt;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showToast(tr('fgtCliCopied'), 'success');
+    }
+}
+window.fgtCopyCli = fgtCopyCli;
 
 function fgtBuildSnifferCli(filters, hwProfile) {
     const src = String((filters && filters.src) || '').trim();
@@ -1626,22 +1653,7 @@ document.getElementById('tab-fortigate')?.addEventListener('click', (e) => {
     }
     const copyBtn = e.target.closest('[data-action="fgt-copy-cli"]');
     if (copyBtn) {
-        const wrap = copyBtn.closest('.fgt-cli-wrap');
-        const pre = wrap ? wrap.querySelector('.fgt-cli-snippet') : null;
-        const txt = pre ? (pre.textContent || '') : '';
-        if (txt) {
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(txt).then(() => showToast(tr('fgtCliCopied'), 'success')).catch(() => {});
-            } else {
-                const ta = document.createElement('textarea');
-                ta.value = txt;
-                document.body.appendChild(ta);
-                ta.select();
-                document.execCommand('copy');
-                document.body.removeChild(ta);
-                showToast(tr('fgtCliCopied'), 'success');
-            }
-        }
+        fgtCopyCli(copyBtn);
         return;
     }
     const winBtn = e.target.closest('[data-fgt-res-win]');

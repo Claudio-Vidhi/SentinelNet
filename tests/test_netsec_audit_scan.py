@@ -121,6 +121,28 @@ class TestNetSecAuditScan(unittest.TestCase):
         self.assertIn("score", body)
         self.assertTrue(body["rules"])
 
+    def test_fortios_scan_carries_advisor(self):
+        """A FortiOS config gets the live advisor's recommendations too."""
+        from tests.test_fortios_backup_advisor import BACKUP
+        r = self._client().post("/api/netsec-audit/scan", headers=CSRF,
+                                json={"benchmark": "cis", "config_text": BACKUP, "lang": "en"})
+        self.assertEqual(r.status_code, 200, r.text)
+        adv = r.json()["advisor"]
+        self.assertEqual(adv["source"]["kind"], "backup")
+        self.assertFalse(adv["source"]["full_config"])
+        ids = {rec["id"] for rec in adv["recommendations"]}
+        self.assertIn("ADV-VIP-L7-1", ids)
+        self.assertEqual(adv["recommendations"][0]["title"], "Proxy inspection mode enabled")
+
+    def test_non_fortios_scan_has_no_advisor(self):
+        cfg = ("hostname switch-01\nservice password-encryption\naaa new-model\n"
+               "line vty 0 4\n transport input ssh\n")
+        r = self._client().post("/api/netsec-audit/scan", headers=CSRF,
+                                json={"benchmark": "cis", "config_text": cfg})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["vendor"], netsec_audit.IOS)
+        self.assertNotIn("advisor", r.json())
+
 
 class TestAuditEngineResults(unittest.TestCase):
     def _cfg(self, name):
