@@ -4,7 +4,13 @@
 """FortiGate config file identity: hostname and management IP candidates."""
 import unittest
 
-from core.core_engine import extract_hostname_from_config
+import os
+import tempfile
+
+os.environ.setdefault("SENTINELNET_DATA_DIR", tempfile.mkdtemp(prefix="sentinelnet_fortiid_"))
+
+from core.core_engine import extract_hostname_from_config  # noqa: E402
+from services.manual_config import ip_candidates  # noqa: E402
 
 HEADER = "#config-version=FGT60F-7.4.4-FW-build2662-240514:opmode=0\n"
 
@@ -69,6 +75,66 @@ class TestFortiosHostname(unittest.TestCase):
 
     def test_cisco_unchanged(self):
         self.assertEqual(extract_hostname_from_config("hostname switch-01\n"), "switch-01")
+
+
+def _interfaces(body):
+    return HEADER + "config system interface\n" + body + "end\n"
+
+
+class TestFortiosIpCandidates(unittest.TestCase):
+    def test_candidates_gui_public_first(self):
+        cfg = _interfaces(
+            '    edit "port1"\n'
+            "        set ip 10.0.0.1 255.255.255.0\n"
+            "        set allowaccess ping\n"
+            "    next\n"
+            '    edit "internal"\n'
+            "        set ip 192.168.1.99 255.255.255.0\n"
+            "        set allowaccess ping https ssh\n"
+            "    next\n"
+            '    edit "wan1"\n'
+            "        set ip 203.0.113.10 255.255.255.248\n"
+            "        set allowaccess ping https\n"
+            "    next\n"
+        )
+        self.assertEqual(ip_candidates(cfg), ["203.0.113.10", "192.168.1.99", "10.0.0.1"])
+
+    def test_candidates_secondaryip(self):
+        cfg = _interfaces(
+            '    edit "wan1"\n'
+            "        set ip 198.51.100.2 255.255.255.0\n"
+            "        set secondary-IP enable\n"
+            "        config secondaryip\n"
+            "            edit 1\n"
+            "                set ip 203.0.113.20 255.255.255.255\n"
+            "                set allowaccess https\n"
+            "            next\n"
+            "        end\n"
+            "    next\n"
+        )
+        self.assertEqual(ip_candidates(cfg)[0], "203.0.113.20")
+
+    def test_candidates_dhcp_interface_skipped(self):
+        cfg = _interfaces(
+            '    edit "wan2"\n'
+            "        set mode dhcp\n"
+            "        set allowaccess https\n"
+            "    next\n"
+            '    edit "internal"\n'
+            "        set ip 192.168.1.99 255.255.255.0\n"
+            "    next\n"
+        )
+        self.assertEqual(ip_candidates(cfg), ["192.168.1.99"])
+
+    def test_candidates_ios_unchanged(self):
+        cfg = (
+            "hostname switch-01\n"
+            "interface Vlan1\n"
+            " ip address 192.168.1.10 255.255.255.0\n"
+            "interface GigabitEthernet0/0\n"
+            " ip address 10.0.0.1 255.255.255.0\n"
+        )
+        self.assertEqual(ip_candidates(cfg), ["192.168.1.10", "10.0.0.1"])
 
 
 if __name__ == "__main__":

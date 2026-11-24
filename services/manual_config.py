@@ -11,6 +11,7 @@ policy test, routes, map) works on it unchanged.
 - to_backup(): a terminal session log -> the triage's backup layout.
 - preview(): what an upload says about the device, for the review form.
 """
+import ipaddress
 import re
 
 from core import core_engine
@@ -238,7 +239,46 @@ def to_backup(vendor: str, text: str) -> dict:
     }
 
 
+_LAN_NETS = tuple(ipaddress.ip_network(n) for n in (
+    "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16"))
+
+
+def _fortios_ip_candidates(text: str) -> list:
+    """Interface IPs (secondaryip included), GUI-reachable first, then
+    non-LAN ones, then file order.
+    ponytail: a GUI published through upstream NAT is not in the config, so
+    the public address it answers on cannot be proposed."""
+    from fw_analyzers.fortios import _forti_tree
+    root = _forti_tree(text)["children"]
+    ifaces = (root.get("system interface")
+              or root.get("global", {}).get("children", {}).get("system interface")
+              or {"children": {}})
+    nodes = []
+    for iface in ifaces["children"].values():
+        nodes.append(iface)
+        nodes.extend(iface["children"].get("secondaryip", {}).get("children", {}).values())
+    ranked, seen = [], set()
+    for index, node in enumerate(nodes):
+        ip = (node["sets"].get("ip") or [""])[0].split("/")[0]
+        if not ip or ip in seen or ip.startswith(("127.", "0.")):
+            continue
+        try:
+            addr = ipaddress.ip_address(ip)
+        except ValueError:
+            continue
+        seen.add(ip)
+        access = node["sets"].get("allowaccess", [])
+        gui = "https" in access or "http" in access
+        # Not is_global: that rejects the RFC 5737 ranges too.
+        public = not any(addr in net for net in _LAN_NETS)
+        ranked.append(((not gui, not public, index), ip))
+    return [ip for _, ip in sorted(ranked)]
+
+
 def ip_candidates(text: str) -> list:
+    from ai.config_analyzer import detect_config_type
+    if detect_config_type(text) == 'fortios':
+        return _fortios_ip_candidates(text)
     out = []
     for pattern in _IP_PATTERNS:
         for ip in pattern.findall(text or ""):
