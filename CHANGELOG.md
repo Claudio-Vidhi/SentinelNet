@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.70.5] - 2026-11-24
+
 ### Added
 
 - **Routing tables: route summary and anomalies.** The "Riepilogo apparati"
