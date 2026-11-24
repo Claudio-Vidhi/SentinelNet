@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.70.6] - 2026-11-24
+
 ### Fixed
 
 - Dialogs opened on their own (audit report preview, device PDF summary and
