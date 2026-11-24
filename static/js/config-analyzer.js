@@ -795,8 +795,21 @@
         }
     }
 
+    // Rules whose coverage cannot be computed offline: one line with an
+    // asterisk and a legend, instead of one long sentence per rule.
+    function caSplitUnresolved(findings) {
+        const rest = [], rules = [];
+        for (const f of findings || []) {
+            if (f.key === 'unresolved_object') rules.push(String(f.rule_id || (f.params || {}).rule_id || '?'));
+            else rest.push(f);
+        }
+        return { rest, rules };
+    }
+
     function caPolicyDefectsSection(defects, L) {
         const order = { high: 0, medium: 1, low: 2, info: 3 };
+        const split = caSplitUnresolved(defects);
+        defects = split.rest;
         const sorted = defects.slice().sort(
             (a, b) => (order[a.severity] ?? 9) - (order[b.severity] ?? 9));
         const rows = sorted.map(f => {
@@ -806,7 +819,11 @@
                 <span>${escapeHtml(caDefectLine(f, L))}</span>
             </div>`;
         }).join('');
-        return `<h4 style="font-size:12px; margin:10px 0 4px; color:var(--danger);">${L.titleCaPolicyDefects}</h4><div>${rows}</div>`;
+        const unresolved = split.rules.length
+            ? `<div style="padding:7px 10px; font-size:12px;">${escapeHtml(L.caUnresolvedRules.replace('{rules}', split.rules.join(', ')))}</div>
+               <div style="padding:0 10px 4px; font-size:11px; color:var(--text-muted);">${escapeHtml(L.caUnresolvedLegend)}</div>`
+            : '';
+        return `<h4 style="font-size:12px; margin:10px 0 4px; color:var(--danger);">${L.titleCaPolicyDefects}</h4><div>${rows}${unresolved}</div>`;
     }
 
     function caRenderValidation(dev, L, en) {

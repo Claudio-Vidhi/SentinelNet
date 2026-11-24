@@ -18,6 +18,13 @@ globalThis.i18n = { it: {}, en: {} };
 globalThis.currentLang = 'it';
 globalThis.caMvValLabels = {};
 globalThis.caDefectLine = f => `defect:${f.key}:${f.rule_id}`;
+// The real splitter from config-analyzer.js: the PDF and the Validation view share it.
+{
+    const ca = readFileSync(new URL('../../static/js/config-analyzer.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+    const start = ca.indexOf('function caSplitUnresolved(');
+    assert.ok(start >= 0, 'missing caSplitUnresolved');
+    globalThis.caSplitUnresolved = (0, eval)(`(${ca.slice(start, ca.indexOf('\n    }\n', start) + 6)})`);
+}
 for (const name of ['dsTable', 'dsSection', 'dsRingSvg', 'dsRouteRing', 'dsMatrixTable', 'dsFindings', 'dsItemText', 'dsCss', 'zoneMatrix'])
     globalThis[name] = fn(name);
 const zoneMatrix = globalThis.zoneMatrix;
@@ -61,6 +68,16 @@ assert.ok(!/https?:\/\//.test(h), 'no external URL');
 assert.ok(h.includes('<svg'), 'route ring drawn');
 assert.ok(h.includes('defect:any_any:7') && h.includes('to-branch') && h.includes('203.0.113.10'));
 assert.ok(!h.includes('@font-face'), 'no fonts passed: fallback stacks only');
+
+// Rules not assessable offline: one asterisk line plus the legend, not one sentence each.
+const fu = deviceSummaryHtml({ ...forti, validation: { policy_findings: [
+    { key: 'unresolved_object', severity: 'info', rule_id: '12' },
+    { key: 'unresolved_object', severity: 'info', params: { rule_id: '34' } },
+    { key: 'any_any', severity: 'high', rule_id: '7' }] } }, 'it');
+assert.ok(fu.includes('caUnresolvedRules{&quot;rules&quot;:&quot;12, 34&quot;}'), 'one line lists the rules');
+assert.ok(fu.includes('caUnresolvedLegend'), 'legend explains the asterisk');
+assert.ok(!fu.includes('defect:unresolved_object'), 'no per-rule sentence');
+assert.ok(fu.includes('defect:any_any:7'), 'other findings untouched');
 
 // Fonts embedded: data: URIs only, the print CSP admits nothing else.
 const uri = 'data:font/woff2;base64,d09GMgABAAAAA';

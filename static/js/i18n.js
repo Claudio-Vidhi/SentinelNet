@@ -3466,6 +3466,8 @@ const i18n = {
         msgCaDefectUnreachable: "ACL {acl}: la regola {rule} e' irraggiungibile, la {by} intercetta gia' tutto il traffico.",
         msgCaDefectAnyAny: "ACL {acl}: la regola {rule} consente qualunque sorgente verso qualunque destinazione su qualunque servizio.",
         msgCaDefectUnresolved: "ACL {acl}: la regola {rule} riferisce oggetti non risolvibili dal backup ({objects}): la sua copertura e' ignota.",
+        caUnresolvedRules: "Regole non valutabili offline*: {rules}",
+        caUnresolvedLegend: "* Filtrano per utenti o gruppi, oppure usano oggetti FQDN, dinamici o geografici. SentinelNet non fa risoluzioni DNS e dal backup non puo' sapere quali IP coprono: queste regole restano fuori dal controllo di regole oscurate o ridondanti.",
         msgCaDefectRouteNowhere: "Rotta statica {prefix} via {next_hop}: il next-hop non appartiene ad alcuna subnet connessa.",
         // Cisco WLC Live Observability
         wlcDesc: "Monitoraggio in tempo reale di Access Point Cisco, client wireless associati, WLAN/SSID e rilevamento Rogue AP.",
@@ -8243,6 +8245,8 @@ const i18n = {
         msgCaDefectUnreachable: "ACL {acl}: rule {rule} is unreachable, rule {by} already catches all traffic.",
         msgCaDefectAnyAny: "ACL {acl}: rule {rule} permits any source to any destination on any service.",
         msgCaDefectUnresolved: "ACL {acl}: rule {rule} references objects that cannot be resolved from the backup ({objects}): its coverage is unknown.",
+        caUnresolvedRules: "Rules not assessable offline*: {rules}",
+        caUnresolvedLegend: "* They match users or groups, or use FQDN, dynamic or geography objects. SentinelNet does no DNS resolution and the backup does not say which IPs they cover: these rules are left out of the shadowed/redundant rule check.",
         msgCaDefectRouteNowhere: "Static route {prefix} via {next_hop}: the next hop is in no connected subnet.",
         // Cisco WLC Live Observability
         wlcDesc: "Real-time monitoring of Cisco access points, associated wireless clients, WLAN/SSIDs and rogue AP detection.",

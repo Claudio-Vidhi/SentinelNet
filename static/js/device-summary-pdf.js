@@ -107,8 +107,12 @@ function dsFindings(validation, lang) {
         undefined_vlans: 'titleCaUndefinedVlans', route_acl_refs: 'titleCaRouteAclRefs' };
     const v = validation || {};
     const rows = [];
-    for (const f of v.policy_findings || []) {
+    const split = caSplitUnresolved(v.policy_findings);
+    for (const f of split.rest) {
         rows.push([`<span class="sev sev-${escapeHtml(f.severity)}">${escapeHtml(f.severity)}</span>`, escapeHtml(caDefectLine(f, i18n[currentLang] || i18n.it))]);
+    }
+    if (split.rules.length) {
+        rows.push(['<span class="sev sev-info">*</span>', escapeHtml(tr('caUnresolvedRules', { rules: split.rules.join(', ') }))]);
     }
     for (const [key, val] of Object.entries(v)) {
         if (key === 'policy_findings') continue;
@@ -116,7 +120,8 @@ function dsFindings(validation, lang) {
         if (val === true) rows.push(['<span class="sev sev-high">!</span>', escapeHtml(label)]);
         else if (Array.isArray(val) && val.length) rows.push([`<span class="sev sev-medium">${escapeHtml(val.length)}</span>`, `<b>${escapeHtml(label)}</b>: ${escapeHtml(val.map(dsItemText).join(', '))}`]);
     }
-    return { count: rows.length, html: dsTable([tr('dsColSeverity'), tr('dsColFinding')], rows) };
+    const legend = split.rules.length ? `<p class="footnote">${escapeHtml(tr('caUnresolvedLegend'))}</p>` : '';
+    return { count: rows.length, html: dsTable([tr('dsColSeverity'), tr('dsColFinding')], rows, [0]) + legend };
 }
 
 // fonts: optional { saira, azeret } data: URIs (see dsFonts). Without them the
@@ -182,6 +187,7 @@ td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: 
 .nw { white-space: nowrap; }
 tbody tr:nth-child(even) td { background: var(--surface-2); }
 .none, .hint { color: var(--ink-soft); margin: 2px 0 10px; }
+.footnote { font-size: 9pt; color: var(--ink-soft); margin: 6px 0 0; }
 .matrix { width: auto; margin: 4px 0; }
 .matrix th, .matrix td { text-align: center; min-width: 76px; padding: 10px 12px; border: 1px solid var(--border); font-size: 10.5pt; }
 .matrix tbody th { text-align: right; }
