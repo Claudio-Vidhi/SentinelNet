@@ -307,7 +307,10 @@ _CSP = (
     "default-src 'self'; "
     "script-src 'self'; "
     "style-src 'self' 'unsafe-inline'; "
-    "font-src 'self'; "
+    # data: for the device PDF summary: its preview is a srcdoc iframe, which
+    # inherits this policy, and it embeds the fonts it prints with. A data:
+    # font is inline bytes, it reaches no host.
+    "font-src 'self' data:; "
     "img-src 'self' data:; "
     # Bare ws:/wss: means a socket to ANY host — an exfiltration channel after
     # an XSS. CSP3 'self' already matches same-origin ws(s), and the terminal

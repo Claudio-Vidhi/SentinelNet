@@ -60,6 +60,15 @@ assert.ok(!/http-equiv/i.test(h), 'no http-equiv: the print route refuses it');
 assert.ok(!/https?:\/\//.test(h), 'no external URL');
 assert.ok(h.includes('<svg'), 'route ring drawn');
 assert.ok(h.includes('defect:any_any:7') && h.includes('to-branch') && h.includes('203.0.113.10'));
+assert.ok(!h.includes('@font-face'), 'no fonts passed: fallback stacks only');
+
+// Fonts embedded: data: URIs only, the print CSP admits nothing else.
+const uri = 'data:font/woff2;base64,d09GMgABAAAAA';
+const hf = deviceSummaryHtml(forti, 'en', { saira: uri, azeret: uri });
+assert.equal((hf.match(/@font-face/g) || []).length, 2, 'Saira and Azeret faces');
+assert.ok(hf.includes('url("data:font/woff2;base64,'), 'font as data: URI');
+assert.ok(!/url\(\s*["']?(https?:|\/)/i.test(hf), 'no font fetched from a URL');
+assert.ok(!/<script/i.test(hf) && !/http-equiv/i.test(hf) && !/https?:\/\//.test(hf));
 
 const ios = {
     ip: '192.0.2.2', hostname: 'switch-01', config_type: 'ios', backup_ts: 1700000000,
