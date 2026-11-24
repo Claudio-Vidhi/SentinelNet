@@ -560,13 +560,17 @@ def routes_from_backup(device) -> "dict | None":
             "rows": [_row(device, e) for e in entries]}
 
 
-def collect_for(device) -> dict:
+def collect_for(device, backup_only: bool = False) -> dict:
     """Rotte di UN apparato: ``{"rows": [...]}`` oppure ``{"error": ...}``.
 
     Non solleva: un apparato irraggiungibile e' una riga di errore accanto
     agli altri, non una tabella vuota per tutti. Se pero' un backup c'e', le
     sue statiche arrivano lo stesso, marcate, con l'errore che resta accanto:
     dire perche' l'apparato non ha risposto conta quanto mostrare le righe."""
+    if backup_only:
+        # No session at all: only the static routes of the last backup.
+        return (routes_from_backup(device)
+                or {"device_ip": device.get("IP"), "error": "nessun backup"})
     answer = _collect_live(device)
     fallback = routes_from_backup(device)
     if not fallback:

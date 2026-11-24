@@ -105,6 +105,7 @@ async def list_routes(
     device: str = Query("", max_length=2000),
     type: str = Query("", max_length=20),
     q: str = Query("", max_length=100),
+    backup_only: bool = Query(False),
     current_user = Depends(get_current_user),
 ):
     """Le tabelle di routing degli apparati CHIESTI, in una sola risposta.
@@ -118,15 +119,19 @@ async def list_routes(
     wanted = {p.strip() for p in device.split(",") if p.strip()}
     targets = [d for d in route_table.routable_devices(devices_in_scope(current_user))
                if d.get("IP") in wanted]
-    _audit_read(current_user, targets)
+    if not backup_only:  # backup-only opens no SSH session: nothing to audit
+        _audit_read(current_user, targets)
 
     sem = asyncio.Semaphore(MAX_CONCURRENT_DEVICES)
 
     async def one(dev):
         async with sem:
-            answer = await run_ssh(route_table.collect_for, dev)
+            answer = await run_ssh(route_table.collect_for, dev, backup_only)
+            # A backup answer has no "api" source, so fortigate_context asks
+            # the device nothing for it.
             fctx = await run_ssh(route_table.fortigate_context, dev, answer)
-            if answer.get("rows"):
+            # Backup-only answers stay out of the cache the live views reuse.
+            if answer.get("rows") and not backup_only:
                 _cache_put(_cache_key(dev), {
                     "answer": dict(answer),
                     "fctx": dict(fctx),

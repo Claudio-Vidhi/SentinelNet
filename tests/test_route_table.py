@@ -561,6 +561,38 @@ end
         self.assertIs(rows["203.0.113.0/24"]["disabled"], True)
         self.assertIs(rows["203.0.113.0/24"]["blackhole"], False)
 
+    def test_backup_only_never_asks_the_device(self):
+        with mock.patch.object(route_table, "_collect_live",
+                               side_effect=AssertionError("live call")),              mock.patch("ai.config_analyzer.analyze_device",
+                        return_value=self._analysis(self.IOS_CONFIG)):
+            out = route_table.collect_for(SWITCH, backup_only=True)
+        self.assertEqual(out["source"], "backup")
+        self.assertTrue(out["rows"])
+
+    def test_backup_only_without_a_backup_says_so(self):
+        with mock.patch.object(route_table, "_collect_live",
+                               side_effect=AssertionError("live call")),              mock.patch("ai.config_analyzer.analyze_device", return_value=None):
+            out = route_table.collect_for(SWITCH, backup_only=True)
+        self.assertEqual(out, {"device_ip": SWITCH["IP"], "error": "nessun backup"})
+
+    def test_the_api_backup_only_reads_no_device_and_caches_nothing(self):
+        client = TestClient(app_server.app)
+        r = client.post("/api/auth/login",
+                        json={"username": "adm_rt", "password": PASS})
+        assert r.status_code == 200, r.text
+        from ai import config_analyzer
+        analysis = dict(config_analyzer.analyze_fortios_config(self.FORTIOS_CONFIG))
+        analysis["backup_ts"] = 1_756_000_000
+        with mock.patch("services.inventory_manager.get_all_devices",
+                        return_value=[FGT_A]),              mock.patch.object(route_table, "_collect_live",
+                               side_effect=AssertionError("live call")),              mock.patch("routers.route_table._cache_put") as put,              mock.patch("ai.config_analyzer.analyze_device", return_value=analysis):
+            r = client.get(f"/api/routes?device={FGT_A['IP']}&backup_only=1")
+        self.assertEqual(r.status_code, 200, r.text)
+        out = r.json()
+        self.assertEqual({row["network"] for row in out["rows"]},
+                         {"198.51.100.0/24", "203.0.113.0/24"})
+        put.assert_not_called()
+
     def test_without_a_backup_the_error_stays_the_answer(self):
         with self._unreachable(), \
              mock.patch("ai.config_analyzer.analyze_device", return_value=None):
