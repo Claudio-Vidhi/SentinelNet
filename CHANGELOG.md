@@ -10,6 +10,31 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Manual config import, FortiGate: one command per section.** For the GUI
+  CLI console, whose scrollback cannot hold `show full-configuration`, the
+  guide lists `show <section>` commands (system, log, firewall, user, VPN,
+  security profiles, routing) with their own "Copia tutto". A text file made
+  of those outputs is rejoined into one backup on upload. `user local` and
+  local certificates are left out.
+- Manual import warns when a FortiOS file has neither `system global` nor
+  interfaces (a truncated capture) instead of showing zero interfaces.
+
+### Changed
+
+- Config validation and the device PDF list rules that cannot be assessed
+  offline (user/group matches, FQDN, dynamic or geography objects) on one line
+  marked with an asterisk, explained once by a legend: SentinelNet does no DNS
+  resolution.
+
+### Fixed
+
+- Device PDF: short columns (id, action, NAT, log, distance, status) are no
+  longer split letter by letter.
+- FortiOS values in single quotes (`set name ''`) are read as values, not as
+  literal quotes.
+
 ## [0.70.6] - 2026-11-24
 
 ### Fixed
