@@ -71,6 +71,15 @@
         </span>`;
     }
 
+    // Firewall and switch get a printable summary; a server or a WLC has no
+    // layout of its own in device-summary-pdf.js. Not requires-write: printing
+    // reads only what the viewer already sees.
+    function caPdfButton(dev, L) {
+        if (isServerDevice(dev) || dev.config_type === 'wlc-aireos') return '';
+        return `<button type="button" class="btn btn-secondary btn-small" style="margin:0 0 0 8px; padding:4px 8px; width:auto;"
+                title="${escapeHtml(L.dsBtnPdf)}" data-action="ca-pdf-summary" data-ip="${escapeHtml(dev.ip)}"><i class="fa-solid fa-file-pdf"></i> ${escapeHtml(L.dsBtnPdf)}</button>`;
+    }
+
     // Il bottone vive dentro <summary>: senza preventDefault il click aprirebbe
     // e chiuderebbe anche l'accordion.
     async function caTriageDevice(ip, btnEl, ev) {
@@ -198,7 +207,7 @@
                     <span style="color:var(--text-muted); font-family:var(--font-code); font-size:12px;">${escapeHtml(dev.ip)}</span>
                     ${tenant}
                     <span style="margin-left:auto; color:var(--text-muted); font-size:12px;">${count}</span>
-                    ${caTriageButton(dev, L)}
+                    ${caPdfButton(dev, L)}${caTriageButton(dev, L)}
                 </summary>
                 <div style="padding:0 14px 14px;">${body}</div>
             </details>`;
@@ -809,7 +818,7 @@
                     <span style="color:var(--text-muted); font-family:var(--font-code); font-size:12px;">${escapeHtml(dev.ip)}</span>
                     ${tenantMv}
                     <span style="margin-left:auto; color:var(--text-muted); font-size:12px;">${mv.total}</span>
-                    ${caTriageButton(dev, L)}
+                    ${caPdfButton(dev, L)}${caTriageButton(dev, L)}
                 </summary>
                 <div style="padding:0 14px 14px;">${mv.body}</div>
             </details>`;
@@ -849,7 +858,7 @@
                 <span style="color:var(--text-muted); font-family:var(--font-code); font-size:12px;">${escapeHtml(dev.ip)}</span>
                 ${tenant}
                 <span style="margin-left:auto; color:var(--text-muted); font-size:12px;">${total}</span>
-                ${caTriageButton(dev, L)}
+                ${caPdfButton(dev, L)}${caTriageButton(dev, L)}
             </summary>
             <div style="padding:0 14px 14px;">${body}</div>
         </details>`;
@@ -1004,7 +1013,7 @@
                     <strong>${escapeHtml(dev.hostname || dev.ip)}</strong>
                     <span style="color:var(--text-muted); font-family:var(--font-code); font-size:12px;">${escapeHtml(dev.ip)}</span>
                     ${tenant}
-                    <span style="margin-left:auto;">${caTriageButton(dev, L)}</span>
+                    <span style="margin-left:auto;">${caPdfButton(dev, L)}${caTriageButton(dev, L)}</span>
                 </summary>
                 <div style="padding:0 14px 14px;">${inner}</div>
             </details>`;
@@ -1043,6 +1052,13 @@
     });
 
     document.getElementById('caResults')?.addEventListener('click', (e) => {
+        const pdfBtn = e.target.closest('[data-action="ca-pdf-summary"]');
+        if (pdfBtn && pdfBtn.dataset.ip) {
+            // Inside <summary>: without this the click also toggles the card.
+            e.preventDefault(); e.stopPropagation();
+            window.openDeviceSummary(pdfBtn.dataset.ip);
+            return;
+        }
         const triageBtn = e.target.closest('[data-action="ca-triage"]');
         if (triageBtn && triageBtn.dataset.ip) {
             caTriageDevice(triageBtn.dataset.ip, triageBtn, e);

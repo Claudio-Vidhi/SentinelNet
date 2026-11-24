@@ -1887,7 +1887,7 @@ const LAZY_TAB_SCRIPTS = {
     'tab-categories': ['/static/js/topology.js'],
     'tab-flows': ['/static/js/flow-analytics.js', '/static/js/observability.js'],
     // vis-network: the Routing sub-tab draws its route map with it.
-    'tab-config': ['/static/vendor/vis/vis-network.min.js', '/static/js/config-analyzer.js'],
+    'tab-config': ['/static/vendor/vis/vis-network.min.js', '/static/js/config-analyzer.js', '/static/js/device-summary-pdf.js'],
     // The AI config generator is a panel of the Provisioner sub-tab; the
     // AI profiles panel lives in Settings. ai.js binds both.
     'tab-provisioner': ['/static/js/ai.js'],

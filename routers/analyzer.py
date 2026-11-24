@@ -164,7 +164,7 @@ def _print_argv(exe: str, src: str, out: str, profile_dir: str) -> list:
     ]
 
 
-@router.post("/api/netsec-audit/report/pdf", dependencies=[Depends(require_tab("tab-netsec-audit", "tab-security"))])
+@router.post("/api/netsec-audit/report/pdf", dependencies=[Depends(require_tab("tab-netsec-audit", "tab-security", "tab-config"))])
 def netsec_audit_report_pdf(payload: ReportPdfSchema,
                             current_user = Depends(get_current_user)):
     """Stampa in PDF l'HTML dell'anteprima, con il browser di sistema."""

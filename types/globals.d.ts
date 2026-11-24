@@ -141,6 +141,7 @@ interface Window {
     clsPendingTwin: any;     // core.js openNameTwins -> topology.js: device to open in the twins queue
     openManualConfigWizard: any; // manual-config.js, opened from devices.js rows
     openAddDevices: any;     // add-devices.js, opened by the inventory button and the palette
+    openDeviceSummary: any;  // device-summary-pdf.js, opened from config-analyzer.js device cards
     loadAssetOnce: any;      // core.js
     createWizard: any;       // ui-wizard.js
     enhanceDeviceSelects: any; // ui-select-search.js

@@ -180,6 +180,19 @@ class TestTabGateOnRoutes(unittest.TestCase):
                 self.assertFalse(self._tab_denied(lim.get(path)), path)
                 self.assertFalse(self._tab_denied(root.get(path)), path)
 
+    def test_pdf_print_reachable_from_config_tab(self):
+        # The Config Analyzer device summary prints through the compliance
+        # report's endpoint: a tab-config-only user must get past the gate
+        # (422 on the empty body proves the handler's schema ran).
+        from security import user_manager
+        lim = self._as("lim")
+        user_manager.set_allowed_tabs("lim", ["tab-home"])
+        from routers.deps import CSRF_HEADER
+        pdf = lambda: lim.post("/api/netsec-audit/report/pdf", json={}, headers={CSRF_HEADER: "1"})
+        self.assertTrue(self._tab_denied(pdf()))
+        user_manager.set_allowed_tabs("lim", ["tab-config"])
+        self.assertEqual(422, pdf().status_code)
+
     def test_home_tab_always_granted(self):
         # The frontend never offers tab-home as a grant, yet home loads for
         # everyone: a restricted list must not 403 its boot calls.
