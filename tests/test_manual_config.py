@@ -62,6 +62,18 @@ class Guide(unittest.TestCase):
         self.assertEqual(rows["fortinet"]["commands"][0], "show full-configuration")
         self.assertIn("get system status", rows["fortinet"]["commands"])
 
+    def test_fortinet_section_commands(self):
+        rows = {g["vendor"]: g for g in mc.guide()}
+        sections = rows["fortinet"]["sections"]
+        self.assertTrue(sections)
+        self.assertTrue(all(c.startswith("show ") for c in sections))
+        self.assertNotIn("show full-configuration", sections)
+        self.assertFalse([c for c in sections if "user local" in c])
+        self.assertEqual(len(sections), len(set(sections)))
+        for vendor, g in rows.items():
+            if vendor != "fortinet":
+                self.assertEqual(g["sections"], [], vendor)
+
     def test_commands_are_not_repeated(self):
         for g in mc.guide():
             self.assertEqual(len(g["commands"]), len(set(g["commands"])), g["vendor"])
@@ -177,6 +189,92 @@ class SessionLog(unittest.TestCase):
         self.assertEqual(out["hostname"], "srv-01")
 
 
+FORTI_SECTIONS_LOG = (
+    "fw-01 # show system global\r\n"
+    "config system global\r\n"
+    "    set hostname \"fw-01\"\r\n"
+    "end\r\n"
+    "\r\n"
+    "fw-01 # show system interface\r\n"
+    "config system interface\r\n"
+    "    edit \"port1\"\r\n"
+    "        set ip 192.0.2.1 255.255.255.0\r\n"
+    "        set allowaccess ping https\r\n"
+    "    next\r\n"
+    "    edit \"port2\"\r\n"
+    "        set ip 198.51.100.1 255.255.255.0\r\n"
+    "    next\r\n"
+    "end\r\n"
+    "\r\n"
+    "fw-01 # show firewall policy\r\n"
+    "config firewall policy\r\n"
+    "    edit 1\r\n"
+    "        set srcintf \"port1\"\r\n"
+    "        set dstintf \"port2\"\r\n"
+    "        set srcaddr \"all\"\r\n"
+    "        set dstaddr \"all\"\r\n"
+    "        set action accept\r\n"
+    "        set service \"ALL\"\r\n"
+    "    next\r\n"
+    "end\r\n"
+    "\r\n"
+    "fw-01 # get system status\r\n"
+    "Version: FortiGate-60F v7.2.5,build1517,230606 (GA)\r\n"
+    "Serial-Number: FGT60FTK00000000\r\n"
+    "fw-01 # \r\n"
+)
+
+
+class SectionLog(unittest.TestCase):
+    """GUI console without SSH: one `show <section>` per command, no header."""
+
+    def test_sections_become_one_config(self):
+        out = mc.to_backup("fortinet", FORTI_SECTIONS_LOG)
+        self.assertTrue(out["structured"])
+        config, marker, _ = out["backup"].partition(f"\n\n{TRIAGE_MARKER}\n")
+        self.assertTrue(marker)
+        self.assertTrue(config.startswith("config system global\n"))
+        starts = [config.index(f"config {s}\n") for s in
+                  ("system global", "system interface", "firewall policy")]
+        self.assertEqual(starts, sorted(starts))
+        self.assertNotIn("fw-01 #", out["backup"])
+        self.assertNotIn("Version:", out["backup"])
+        self.assertEqual(out["hostname"], "fw-01")
+        self.assertEqual(out["version"], "7.2.5")
+        self.assertEqual(out["model"], "FortiGate-60F")
+        self.assertEqual(out["serial"], "FGT60FTK00000000")
+
+    def test_out_of_order_sections_follow_the_guide(self):
+        head, _, tail = FORTI_SECTIONS_LOG.partition("fw-01 # show system interface")
+        iface, _, rest = tail.partition("fw-01 # show firewall policy")
+        policy, _, status = rest.partition("fw-01 # get system status")
+        log = ("fw-01 # show firewall policy" + policy + head
+               + "fw-01 # show system interface" + iface + "fw-01 # get system status" + status)
+        config = mc.to_backup("fortinet", log)["backup"]
+        self.assertLess(config.index("config system interface"), config.index("config firewall policy"))
+
+    def test_stored_backup_reads_as_fortios(self):
+        from ai.config_analyzer import analyze_fortios_config, detect_config_type
+        backup = mc.to_backup("fortinet", FORTI_SECTIONS_LOG)["backup"]
+        self.assertEqual(detect_config_type(backup, {"Vendor": "fortinet"}), "fortios")
+        self.assertEqual(detect_config_type(backup), "fortios")
+        parsed = analyze_fortios_config(backup)
+        self.assertEqual([i["name"] for i in parsed["interfaces"]], ["port1", "port2"])
+        self.assertEqual(len(parsed["policies"]), 1)
+        self.assertEqual(parsed["hostname"], "fw-01")
+        p = mc.preview(FORTI_SECTIONS_LOG, "fortinet")
+        self.assertEqual(p["config_type"], "fortios")
+        self.assertEqual(p["ip_candidates"][0], "192.0.2.1")
+        self.assertEqual(p["warnings"], [])
+
+    def test_truncated_fortios_text_is_flagged(self):
+        truncated = ("config firewall policy\n    edit 1\n        set action accept\n"
+                     "    next\nend\n")
+        self.assertEqual(mc.preview(truncated, "fortinet")["warnings"], ["mcWarnFortiPartial"])
+        self.assertEqual(mc.preview(FORTI_GUI)["warnings"], [])
+        self.assertEqual(mc.preview(IOS_LOG, "cisco")["warnings"], [])
+
+
 class PlainFiles(unittest.TestCase):
     def test_fortigate_gui_backup_is_stored_as_is(self):
         """Review focus 2."""
@@ -236,6 +334,21 @@ class Preview(unittest.TestCase):
         # An HPE/Aruba/CBS log falls into the IOS fallback: no vendor claim, no false warning.
         p = mc.preview(IOS_LOG, "hpe")
         self.assertEqual((p["vendor"], p["sniffed_vendor"]), ("hpe", ""))
+
+
+class GuideUi(unittest.TestCase):
+    def test_section_block_is_rendered_and_copied(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parent.parent
+        js = (root / "static/js/manual-config.js").read_text(encoding="utf-8")
+        html = (root / "templates/dashboard.html").read_text(encoding="utf-8")
+        i18n = (root / "static/js/i18n.js").read_text(encoding="utf-8")
+        self.assertTrue("v.sections" in js and "'mc-copy-sections'" in js)
+        self.assertTrue("r.warnings" in js)
+        self.assertEqual(i18n.count("mcWarnFortiPartial:"), 2)  # it + en
+        self.assertIn('id="mcSectionsBlock"', html)
+        self.assertIn('id="mcSections"', html)
+        self.assertIn('data-action="mc-copy-sections"', html)
 
 
 if __name__ == "__main__":

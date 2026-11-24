@@ -45,6 +45,9 @@
         if (!v) return;
         $('mcPaging').textContent = v.paging || tr('mcNoPaging');
         $('mcCommands').textContent = v.commands.join('\n');
+        // Per-section commands replace the backup command (commands[0]); the info ones stay.
+        $('mcSectionsBlock').hidden = !v.sections.length;
+        $('mcSections').textContent = [...v.sections, ...v.commands.slice(1)].join('\n');
         $('mcNotes').innerHTML = v.notes.map((k) => `<li>${escapeHtml(tr(k))}</li>`).join('');
     }
 
@@ -77,6 +80,7 @@
             structured: !!p?.structured,
             analyses: p?.analyses || [],
             sniffed: p?.sniffed_vendor || '',
+            warnings: p?.warnings || [],
             error: p ? '' : tr('mcPreviewFailed'),
         };
     }
@@ -150,6 +154,7 @@
           <fieldset class="mc-card" data-row="${i}">
             <legend>${escapeHtml(r.file.webkitRelativePath || r.file.name)}</legend>
             ${r.error ? `<p class="form-hint" role="alert">${escapeHtml(r.error)}</p>` : ''}
+            ${r.warnings.map((k) => `<p class="form-hint" role="alert">${escapeHtml(tr(k))}</p>`).join('')}
             ${r.sniffed && r.sniffed !== r.vendor ? `<p class="form-hint" role="alert">${escapeHtml(tr('mcVendorMismatch', { chosen: r.vendor.toUpperCase(), detected: r.sniffed.toUpperCase() }))}</p>` : ''}
             <div class="mc-grid">
               <label>${escapeHtml(tr('mcLblVendor'))}<select data-field="vendor"${lock}>${optionsHtml(vendorItems(), r.vendor)}</select></label>
@@ -298,8 +303,9 @@
         // core.js switches the tab on the same click; the sheet must not stay over it.
         if (t.dataset.switchTab) { wizard.close(); return; }
         const action = t.dataset.action;
-        if (action === 'mc-copy') {
-            const text = [$('mcPaging').textContent, $('mcCommands').textContent].filter(Boolean).join('\n');
+        if (action === 'mc-copy' || action === 'mc-copy-sections') {
+            const list = action === 'mc-copy' ? 'mcCommands' : 'mcSections';
+            const text = [$('mcPaging').textContent, $(list).textContent].filter(Boolean).join('\n');
             navigator.clipboard?.writeText(text)
                 .then(() => showToast(tr('mcCopied'), 'success'))
                 .catch(() => showToast(tr('alertError'), 'error'));

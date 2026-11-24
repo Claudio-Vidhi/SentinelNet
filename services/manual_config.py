@@ -47,6 +47,36 @@ PAGING = {
     "phoenix_contact": "terminal length 0",
 }
 
+# One `show <section>` per section, for a console whose scrollback cannot hold
+# `show full-configuration` (the FortiGate GUI CLI widget). Every section an
+# analyzer, audit rule, policy test or traffic view reads; roughly the order
+# FortiOS prints them, which is also the order the upload stores them in.
+# Absent from it on purpose: `user local` (password hashes, nothing reads it).
+# The ones listed still print ENC secrets (admin, ha, ldap, radius, tacacs+,
+# snmp user, ipsec psk), exactly as show full-configuration does.
+SECTION_COMMANDS = {
+    "fortinet": [f"show {s}" for s in (
+        "system global", "system interface", "system password-policy", "system ha",
+        "system dns", "system snmp community", "system snmp user", "system admin",
+        "system session-helper", "system auto-install", "system ntp", "system zone",
+        "log disk setting", "log fortianalyzer setting", "log syslogd setting",
+        "log eventfilter", "log fortiguard setting",
+        "firewall address", "firewall addrgrp", "firewall service custom",
+        "firewall service group", "firewall schedule recurring", "firewall schedule onetime",
+        "ips sensor",
+        "user radius", "user tacacs+", "user ldap", "user fsso", "user group",
+        "vpn ssl web portal", "vpn ssl settings",
+        "antivirus profile", "webfilter profile", "dnsfilter profile", "application list",
+        "dlp profile", "emailfilter profile", "firewall ssl-ssh-profile",
+        "vpn ipsec phase1-interface", "vpn ipsec phase2-interface",
+        "vpn ipsec phase1", "vpn ipsec phase2",
+        "firewall vip", "firewall vipgrp", "firewall ippool",
+        "firewall policy", "firewall local-in-policy", "firewall DoS-policy",
+        "firewall central-snat-map",
+        "router static", "router policy", "router ospf", "router bgp",
+    )],
+}
+
 # Per-vendor notes, as i18n keys the UI translates.
 NOTES = {
     "fortinet": ["mcNoteFortiGui"],
@@ -74,6 +104,7 @@ _ANALYSES = {
 _ECHO = re.compile(r"^(?P<prompt>\S[^\r\n]*?[#>$])\s*(?P<cmd>\S.*?)\s*$")
 _STEM = re.compile(r"[^\s(#>$]*")
 _BARE = re.compile(r"^\S[^\r\n]*[#>$]\s*$")
+_FORTI_HEAD = re.compile(r"^config system (global|interface)\s*$", re.MULTILINE)
 _FORTI_HEADER = re.compile(r"^#config-version=([A-Za-z0-9]+)-(\d+\.\d+\.\d+)", re.MULTILINE)
 _HOSTNAMES = (
     re.compile(r"^set deviceconfig system hostname (\S+)", re.MULTILINE),  # PAN-OS
@@ -155,6 +186,7 @@ def guide() -> list:
         backup, info, extras = _commands(vendor)
         out.append({"vendor": vendor, "paging": PAGING.get(vendor, ""),
                     "commands": [backup, *info, *(c for c, _ in extras)],
+                    "sections": SECTION_COMMANDS.get(vendor, []),
                     "notes": NOTES.get(vendor, [])})
     return out
 
@@ -212,8 +244,14 @@ def to_backup(vendor: str, text: str) -> dict:
     """The upload as the triage would have stored it, plus what it says."""
     text = _clean(text)
     backup_cmd, info, extras = _commands(vendor)
-    sections, prompt = parse_session(text, [backup_cmd, *info, *(c for c, _ in extras)])
+    per_section = SECTION_COMMANDS.get(vendor, [])
+    sections, prompt = parse_session(
+        text, [backup_cmd, *info, *(c for c, _ in extras), *per_section])
     config = sections.get(_norm(backup_cmd))
+    if config is None:
+        # One command per section (GUI console): rejoined in guide order.
+        parts = [sections[_norm(c)] for c in per_section if _norm(c) in sections]
+        config = "\n".join(parts) if parts else None
     if config is None:
         # No echo of the backup command: a plain config file, stored as is.
         stored, structured = text, False
@@ -313,6 +351,9 @@ def preview(text: str, vendor: str = "") -> dict:
     result = to_backup(vendor, text)
     backup = result.pop("backup")
     config_type = detect_config_type(backup, {"Vendor": vendor})
+    # Neither global nor interfaces: the start of the config scrolled away.
+    partial = config_type == "fortios" and not _FORTI_HEAD.search(backup)
     return {**result, "vendor": vendor, "sniffed_vendor": sniffed, "config_type": config_type,
+            "warnings": ["mcWarnFortiPartial"] if partial else [],
             "ip_candidates": ip_candidates(backup),
             "analyses": analyses_for(vendor, config_type, result["version"])}

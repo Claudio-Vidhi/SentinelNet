@@ -6033,6 +6033,12 @@
           <h4 data-i18n="mcLblCommands">Comandi</h4>
           <pre id="mcCommands" class="enroll-block"></pre>
           <button type="button" class="btn btn-secondary" data-action="mc-copy" data-i18n="btnCopyProbeEnroll"><i class="fa-solid fa-copy"></i> Copia tutto</button>
+          <div id="mcSectionsBlock" hidden>
+            <h4 data-i18n="mcLblSections">Console GUI senza SSH: un comando per sezione</h4>
+            <p class="form-hint" data-i18n="mcSectionsHint">Se la console non tiene tutto l'output di show full-configuration, lancia questi uno alla volta, incolla ogni risultato nello stesso file di testo e caricalo al passo 2.</p>
+            <pre id="mcSections" class="enroll-block"></pre>
+            <button type="button" class="btn btn-secondary" data-action="mc-copy-sections" aria-label="Copia i comandi per sezione" data-i18n-aria-label="mcCopySectionsAria"><i class="fa-solid fa-copy"></i> <span data-i18n="btnCopyProbeEnroll">Copia tutto</span></button>
+          </div>
           <ul id="mcNotes" class="mc-notes"></ul>
         </section>
         <section data-step="files" hidden>
