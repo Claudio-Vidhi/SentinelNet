@@ -209,6 +209,31 @@ class TestTabGateOnRoutes(unittest.TestCase):
         self.assertEqual(audit.call_args.args[0],
                          "Riepilogo apparato 'summary-switch-01' stampato in PDF dall'utente 'lim'.")
 
+    def test_audit_report_pdf_reachable_from_audit_tab(self):
+        from security import user_manager
+        from routers.deps import CSRF_HEADER
+        from unittest import mock
+        lim = self._as("lim")
+        user_manager.set_allowed_tabs("lim", ["tab-netsec-audit"])
+        with mock.patch("routers.analyzer._render_pdf", return_value=b"%PDF-1.7") as render, \
+             mock.patch("routers.analyzer.log_audit") as audit:
+            r = lim.post("/api/netsec-audit/report/pdf",
+                         json={"html": "<!doctype html><p>x</p>", "filename": "audit-switch-01"},
+                         headers={CSRF_HEADER: "1"})
+            bad = lim.post("/api/netsec-audit/report/pdf",
+                           json={"html": "<p>x</p><script>1</script>"},
+                           headers={CSRF_HEADER: "1"})
+        self.assertEqual(200, r.status_code, r.text)
+        self.assertEqual(b"%PDF-1.7", r.content)
+        self.assertEqual(400, bad.status_code)
+        self.assertEqual(1, render.call_count)
+        html = render.call_args.args[0]
+        self.assertTrue(html.startswith('<!doctype html><meta http-equiv="Content-Security-Policy"'))
+        self.assertIn("script-src 'nonce-", html)
+        self.assertFalse(render.call_args.kwargs.get("no_script"))
+        self.assertEqual(audit.call_args.args[0],
+                         "Report di audit 'audit-switch-01' stampato in PDF dall'utente 'lim'.")
+
     def test_home_tab_always_granted(self):
         # The frontend never offers tab-home as a grant, yet home loads for
         # everyone: a restricted list must not 403 its boot calls.

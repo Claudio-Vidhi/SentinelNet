@@ -134,6 +134,8 @@ declare var resetTutorialsOnboarding: any;
 // also re-exposed on window: only the 'window' half belongs here, otherwise the
 // identifier is declared twice.
 interface Window {
+    downloadModalPdf: any;   // report-paginate.js, read from the audit preview iframe's parent
+    downloadModalDocx: any;  // netsec-audit.js, read from the audit preview iframe's parent
     loadBlueprintTab: any;   // blueprint.js, called by switchTab
     bpPendingOrg: any;       // devices.js -> blueprint.js: organization to open
     rtPendingTrace: any;     // blueprint.js -> routes-view.js: trace target to open

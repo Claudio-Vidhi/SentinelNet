@@ -7,7 +7,9 @@ import asyncio
 import json
 import os
 import re
+import secrets
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -206,29 +208,49 @@ def _pdf_response(data: bytes, name: str) -> Response:
 def netsec_audit_report_pdf(payload: ReportPdfSchema,
                             current_user = Depends(get_current_user)):
     """Stampa in PDF l'HTML dell'anteprima, con il browser di sistema."""
-    data = _render_pdf(payload.html)
+    data = _render_pdf(_report_html(payload.html))
     name = re.sub(r"[^\w.-]+", "_", payload.filename) or "compliance-report"
     log_audit(f"Report di audit '{name}' stampato in PDF "
               f"dall'utente '{current_user.get('sub')}'.")
     return _pdf_response(data, name)
 
 
-_SUMMARY_CSP = ('<!doctype html><meta http-equiv="Content-Security-Policy" '
-                'content="default-src \'none\'; style-src \'unsafe-inline\'; '
-                'img-src data:; font-src data:; base-uri \'none\'; form-action \'none\'">')
 _LEADING_DOCTYPE = re.compile(r"^\s*<!doctype[^>]*>", re.IGNORECASE)
+# Resolved like app_server.get_resource_path, but from this file rather than
+# the working directory.
+_PAGINATE_JS = os.path.join(
+    getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "static", "js", "report-paginate.js")
+
+
+def _print_html(html: str, script_src: str = "") -> str:
+    """Client HTML as printed: a CSP no client byte can precede, and nothing
+    from the client that runs or navigates. Any http-equiv is refused,
+    whatever its value: a value can be entity-encoded (`&#114;efresh`), an
+    attribute name cannot, and CSP does not stop a meta refresh."""
+    low = html.lower()
+    if "http-equiv" in low or "<script" in low:
+        raise HTTPException(status_code=400, detail="HTML non ammesso per la stampa.")
+    return ('<!doctype html><meta http-equiv="Content-Security-Policy" '
+            'content="default-src \'none\'; style-src \'unsafe-inline\'; '
+            f'img-src data:; font-src data:; {script_src}'
+            'base-uri \'none\'; form-action \'none\'">'
+            + _LEADING_DOCTYPE.sub("", html, count=1))
 
 
 def _summary_html(html: str) -> str:
-    """The device summary as printed: a CSP no client byte can precede, and
-    nothing that runs or navigates (the summary has neither). Any http-equiv
-    is refused, whatever its value: a value can be entity-encoded
-    (`&#114;efresh`), an attribute name cannot, and CSP does not stop a
-    meta refresh."""
-    low = html.lower()
-    if "http-equiv" in low or "<script" in low:
-        raise HTTPException(status_code=400, detail="HTML del riepilogo non ammesso.")
-    return _SUMMARY_CSP + _LEADING_DOCTYPE.sub("", html, count=1)
+    """The device summary: printed with scripts off, it has none."""
+    return _print_html(html)
+
+
+def _report_html(html: str) -> str:
+    """The audit report: the only script that runs is the trusted pagination
+    file, appended by the server under a nonce fresh to this request."""
+    nonce = secrets.token_urlsafe(16)
+    with open(_PAGINATE_JS, encoding="utf-8") as fh:
+        js = fh.read()
+    return (_print_html(html, f"script-src 'nonce-{nonce}'; ")
+            + f'<script nonce="{nonce}">{js}</script>')
 
 
 @router.post("/api/config-analyzer/summary/pdf", dependencies=[Depends(require_tab("tab-config"))])
