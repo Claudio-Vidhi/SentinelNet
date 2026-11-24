@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.70.4] - 2026-11-24
+
 ### Added
 
 - **Map: "Salva disposizione".** One button, shown in every view, saves the
