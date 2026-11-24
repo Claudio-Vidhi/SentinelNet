@@ -139,11 +139,15 @@ def _browser_executable() -> Optional[str]:
     return next((c for c in candidates if os.path.isfile(c)), None)
 
 
-def _print_argv(exe: str, src: str, out: str, profile_dir: str) -> list:
+def _print_argv(exe: str, src: str, out: str, profile_dir: str,
+                no_script: bool = False) -> list:
     """Argv for the headless print. Extracted so the isolation flag below has a
-    check that does not need a browser installed."""
+    check that does not need a browser installed. ``no_script`` turns
+    JavaScript off: the compliance report paginates with a script, the device
+    summary has none."""
     return [
-        exe, "--headless=new", "--disable-gpu", "--disable-extensions",
+        exe, *(["--blink-settings=scriptEnabled=false"] if no_script else []),
+        "--headless=new", "--disable-gpu", "--disable-extensions",
         "--no-first-run", f"--user-data-dir={profile_dir}",
         # The report HTML arrives from the client. Without this, the browser
         # would resolve and fetch any subresource it names -- an authenticated
@@ -164,11 +168,9 @@ def _print_argv(exe: str, src: str, out: str, profile_dir: str) -> list:
     ]
 
 
-@router.post("/api/netsec-audit/report/pdf", dependencies=[Depends(require_tab("tab-netsec-audit", "tab-security", "tab-config"))])
-def netsec_audit_report_pdf(payload: ReportPdfSchema,
-                            current_user = Depends(get_current_user)):
-    """Stampa in PDF l'HTML dell'anteprima, con il browser di sistema."""
-    if len(payload.html) > 40_000_000:
+def _render_pdf(html: str, no_script: bool = False) -> bytes:
+    """Prints ``html`` with the system browser and returns the PDF bytes."""
+    if len(html) > 40_000_000:
         raise HTTPException(status_code=413, detail="Report troppo grande per la stampa.")
     exe = _browser_executable()
     if exe is None:
@@ -181,8 +183,8 @@ def netsec_audit_report_pdf(payload: ReportPdfSchema,
         src = os.path.join(tmp, "report.html")
         out = os.path.join(tmp, "report.pdf")
         with open(src, "w", encoding="utf-8") as fh:
-            fh.write(payload.html)
-        cmd = _print_argv(exe, src, out, os.path.join(tmp, "profile"))
+            fh.write(html)
+        cmd = _print_argv(exe, src, out, os.path.join(tmp, "profile"), no_script)
         try:
             proc = subprocess.run(cmd, capture_output=True, timeout=180)
         except subprocess.TimeoutExpired:
@@ -192,13 +194,49 @@ def netsec_audit_report_pdf(payload: ReportPdfSchema,
             raise HTTPException(status_code=500,
                                 detail=f"Stampa del report fallita. {err}")
         with open(out, "rb") as fh:
-            data = fh.read()
+            return fh.read()
 
+
+def _pdf_response(data: bytes, name: str) -> Response:
+    return Response(content=data, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{name}.pdf"'})
+
+
+@router.post("/api/netsec-audit/report/pdf", dependencies=[Depends(require_tab("tab-netsec-audit", "tab-security"))])
+def netsec_audit_report_pdf(payload: ReportPdfSchema,
+                            current_user = Depends(get_current_user)):
+    """Stampa in PDF l'HTML dell'anteprima, con il browser di sistema."""
+    data = _render_pdf(payload.html)
     name = re.sub(r"[^\w.-]+", "_", payload.filename) or "compliance-report"
     log_audit(f"Report di audit '{name}' stampato in PDF "
               f"dall'utente '{current_user.get('sub')}'.")
-    return Response(content=data, media_type="application/pdf",
-                    headers={"Content-Disposition": f'attachment; filename="{name}.pdf"'})
+    return _pdf_response(data, name)
+
+
+_SUMMARY_CSP = ('<!doctype html><meta http-equiv="Content-Security-Policy" '
+                'content="default-src \'none\'; style-src \'unsafe-inline\'; '
+                'img-src data:; font-src data:; base-uri \'none\'; form-action \'none\'">')
+_REFRESH_META = re.compile(r"""http-equiv\s*=\s*["']?\s*refresh""", re.IGNORECASE)
+_LEADING_DOCTYPE = re.compile(r"^\s*<!doctype[^>]*>", re.IGNORECASE)
+
+
+def _summary_html(html: str) -> str:
+    """The device summary as printed: a CSP no client byte can precede, and
+    nothing that runs or navigates (the summary has neither)."""
+    if _REFRESH_META.search(html) or "<script" in html.lower():
+        raise HTTPException(status_code=400, detail="HTML del riepilogo non ammesso.")
+    return _SUMMARY_CSP + _LEADING_DOCTYPE.sub("", html, count=1)
+
+
+@router.post("/api/config-analyzer/summary/pdf", dependencies=[Depends(require_tab("tab-config"))])
+def config_analyzer_summary_pdf(payload: ReportPdfSchema,
+                                current_user = Depends(get_current_user)):
+    """The Config Analyzer device summary, printed to PDF with scripts off."""
+    data = _render_pdf(_summary_html(payload.html), no_script=True)
+    name = re.sub(r"[^\w.-]+", "_", payload.filename) or "device-summary"
+    log_audit(f"Riepilogo apparato '{name}' stampato in PDF "
+              f"dall'utente '{current_user.get('sub')}'.")
+    return _pdf_response(data, name)
 
 
 class NetSecAuditSchema(BaseModel):

@@ -267,8 +267,8 @@ async function downloadDeviceSummary() {
     const btn = document.getElementById('devSummaryBtnPdf');
     if (btn) btn.disabled = true;
     try {
-        // Same printer as the compliance report: the PDF is the preview.
-        const res = await apiFetch('/api/netsec-audit/report/pdf', {
+        // Same printer as the compliance report (own route, scripts off): the PDF is the preview.
+        const res = await apiFetch('/api/config-analyzer/summary/pdf', {
             method: 'POST', body: JSON.stringify(dsCurrent),
         });
         if (!res || !res.ok) {

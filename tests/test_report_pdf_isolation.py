@@ -58,6 +58,45 @@ class TestPrintArgv(unittest.TestCase):
         # A shared profile would carry cookies into the rendered page.
         self.assertIn(f"--user-data-dir={self.profile}", self.argv)
 
+    def test_scripts_stay_on_by_default(self):
+        # The compliance report paginates with a script: only the device
+        # summary prints with scripts off.
+        self.assertFalse(any(a.startswith("--blink-settings") for a in self.argv))
+        argv = analyzer._print_argv("/usr/bin/chromium", self.src, self.out,
+                                    self.profile, no_script=True)
+        self.assertIn("--blink-settings=scriptEnabled=false", argv)
+        self.assertTrue(argv[-1].startswith("file://"))
+
+
+class TestSummaryHtml(unittest.TestCase):
+    """The device summary wrapper: a CSP the client cannot precede, no script,
+    no refresh."""
+
+    CSP = ('<!doctype html><meta http-equiv="Content-Security-Policy" '
+           'content="default-src \'none\'; style-src \'unsafe-inline\'; '
+           'img-src data:; font-src data:; base-uri \'none\'; form-action \'none\'">')
+
+    def test_csp_comes_first_and_client_doctype_is_dropped(self):
+        out = analyzer._summary_html('<!DOCTYPE html>\n<html><body>x</body></html>')
+        self.assertTrue(out.startswith(self.CSP))
+        self.assertEqual(out[len(self.CSP):].lstrip(), '<html><body>x</body></html>')
+        self.assertEqual(out.lower().count('<!doctype'), 1)
+
+    def test_refresh_meta_is_refused(self):
+        from fastapi import HTTPException
+        for bad in ('<meta http-equiv="refresh" content="0;url=http://192.0.2.1/">',
+                    "<META HTTP-EQUIV = 'Refresh' content=0>",
+                    '<meta http-equiv=refresh content=0>'):
+            with self.assertRaises(HTTPException) as cm:
+                analyzer._summary_html(bad)
+            self.assertEqual(cm.exception.status_code, 400)
+
+    def test_script_is_refused(self):
+        from fastapi import HTTPException
+        with self.assertRaises(HTTPException) as cm:
+            analyzer._summary_html('<html><SCRIPT>1</SCRIPT></html>')
+        self.assertEqual(cm.exception.status_code, 400)
+
 
 if __name__ == "__main__":
     unittest.main()

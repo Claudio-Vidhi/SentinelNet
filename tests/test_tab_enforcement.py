@@ -180,18 +180,34 @@ class TestTabGateOnRoutes(unittest.TestCase):
                 self.assertFalse(self._tab_denied(lim.get(path)), path)
                 self.assertFalse(self._tab_denied(root.get(path)), path)
 
-    def test_pdf_print_reachable_from_config_tab(self):
-        # The Config Analyzer device summary prints through the compliance
-        # report's endpoint: a tab-config-only user must get past the gate
-        # (422 on the empty body proves the handler's schema ran).
+    def test_device_summary_pdf_reachable_from_config_tab(self):
+        # The Config Analyzer device summary has its own print route: a
+        # tab-config-only user reaches it (422 on the empty body proves the
+        # handler's schema ran) but not the compliance report's.
         from security import user_manager
         lim = self._as("lim")
         user_manager.set_allowed_tabs("lim", ["tab-home"])
         from routers.deps import CSRF_HEADER
-        pdf = lambda: lim.post("/api/netsec-audit/report/pdf", json={}, headers={CSRF_HEADER: "1"})
-        self.assertTrue(self._tab_denied(pdf()))
+        summary = lambda: lim.post("/api/config-analyzer/summary/pdf", json={}, headers={CSRF_HEADER: "1"})
+        report = lambda: lim.post("/api/netsec-audit/report/pdf", json={}, headers={CSRF_HEADER: "1"})
+        self.assertTrue(self._tab_denied(summary()))
         user_manager.set_allowed_tabs("lim", ["tab-config"])
-        self.assertEqual(422, pdf().status_code)
+        self.assertEqual(422, summary().status_code)
+        self.assertTrue(self._tab_denied(report()))
+        # The print itself: wrapped HTML, scripts off, its own audit line.
+        from unittest import mock
+        with mock.patch("routers.analyzer._render_pdf", return_value=b"%PDF-1.7") as render, \
+             mock.patch("routers.analyzer.log_audit") as audit:
+            r = lim.post("/api/config-analyzer/summary/pdf",
+                         json={"html": "<!doctype html><p>x</p>", "filename": "summary-switch-01"},
+                         headers={CSRF_HEADER: "1"})
+        self.assertEqual(200, r.status_code, r.text)
+        self.assertEqual(b"%PDF-1.7", r.content)
+        html, no_script = render.call_args.args[0], render.call_args.kwargs.get("no_script")
+        self.assertTrue(html.startswith('<!doctype html><meta http-equiv="Content-Security-Policy"'))
+        self.assertIs(no_script, True)
+        self.assertEqual(audit.call_args.args[0],
+                         "Riepilogo apparato 'summary-switch-01' stampato in PDF dall'utente 'lim'.")
 
     def test_home_tab_always_granted(self):
         # The frontend never offers tab-home as a grant, yet home loads for
