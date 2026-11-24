@@ -77,4 +77,20 @@ assert.ok(!hi.includes('dsSecMatrix'), 'no policy matrix on a switch');
 assert.ok(hi.includes('vty 0 4') && hi.includes('GONE'));
 assert.ok(!/<script/i.test(hi) && !/https?:\/\//.test(hi));
 
+// The PDF button (config-analyzer.js): only firewalls with a layout of their
+// own (FortiOS) and switches; a PAN-OS firewall would print as a switch.
+const ca = readFileSync(new URL('../../static/js/config-analyzer.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const caFn = name => {
+    const start = ca.indexOf(`    function ${name}(`);
+    assert.ok(start >= 0, `missing ${name}`);
+    return (0, eval)(`(${ca.slice(start, ca.indexOf('\n    }\n', start) + 6)})`);
+};
+for (const name of ['isFirewallDevice', 'isServerDevice']) globalThis[name] = caFn(name);
+const caPdfButton = caFn('caPdfButton');
+const L = { dsBtnPdf: 'PDF' };
+assert.ok(caPdfButton({ ip: '192.0.2.1', config_type: 'fortios' }, L).includes('ca-pdf-summary'));
+assert.ok(caPdfButton({ ip: '192.0.2.2', config_type: 'ios' }, L).includes('ca-pdf-summary'));
+assert.equal(caPdfButton({ ip: '192.0.2.3', config_type: 'panos' }, L), '');
+assert.equal(caPdfButton({ ip: '192.0.2.4', config_type: 'ios', vendor: 'paloalto' }, L), '');
+
 console.log('device_summary: ok');

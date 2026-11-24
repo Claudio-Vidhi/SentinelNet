@@ -73,9 +73,11 @@
 
     // Firewall and switch get a printable summary; a server or a WLC has no
     // layout of its own in device-summary-pdf.js. Not requires-write: printing
-    // reads only what the viewer already sees.
+    // reads only what the viewer already sees. The firewall layout is FortiOS
+    // only: another firewall would print as a switch with empty VLAN/ACL.
     function caPdfButton(dev, L) {
         if (isServerDevice(dev) || dev.config_type === 'wlc-aireos') return '';
+        if (isFirewallDevice(dev) && dev.config_type !== 'fortios') return '';
         return `<button type="button" class="btn btn-secondary btn-small" style="margin:0 0 0 8px; padding:4px 8px; width:auto;"
                 title="${escapeHtml(L.dsBtnPdf)}" data-action="ca-pdf-summary" data-ip="${escapeHtml(dev.ip)}"><i class="fa-solid fa-file-pdf"></i> ${escapeHtml(L.dsBtnPdf)}</button>`;
     }

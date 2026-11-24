@@ -910,6 +910,8 @@ body.sidebar-collapsed .sidebar-toggle i { transform: rotate(180deg); }
 }
 .select-search[hidden] { display: none; }
 .form-group > .select-search, .if-field > .select-search { max-width: none; }
+/* Beats `.form-group input:not(...)`, whose 30px left gutter is for an icon. */
+.form-group input.select-search:not([type="checkbox"]):not([type="radio"]) { padding: 4px 8px; }
 
 /* Standardized Dropdown (Select) UI System */
 select {
