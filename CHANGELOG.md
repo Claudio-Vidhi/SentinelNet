@@ -45,6 +45,15 @@ happened — `git log --grep="chore(release)"` is the record for those.
   are no longer reported as default routes, also in `show full-configuration`
   backups; blackhole and disabled routes are marked.
 
+### Security
+
+- The audit report PDF print (`POST /api/netsec-audit/report/pdf`) no longer
+  runs client-supplied scripts: client HTML with `<script` or `http-equiv` is
+  refused, the page is printed under a CSP that blocks every external and
+  local resource, and the pagination script is injected by the server with a
+  per-request nonce. Before, a crafted report could pull internal HTTP
+  services (by IP) or local files into the returned PDF.
+
 ## [0.70.4] - 2026-11-24
 
 ### Added
