@@ -891,9 +891,14 @@ body.sidebar-collapsed .sidebar-toggle i { transform: rotate(180deg); }
 }
 
 /* Search box injected above device dropdowns by ui-select-search.js */
+/* It is a sibling of the select, so in flex rows (.ep-field, .page-head-actions)
+   it must stay a compact item; full width only in column forms. */
 .select-search {
   display: block;
-  width: 100%;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 120px;
+  max-width: 200px;
   box-sizing: border-box;
   margin-bottom: 4px;
   padding: 4px 8px;
@@ -904,6 +909,7 @@ body.sidebar-collapsed .sidebar-toggle i { transform: rotate(180deg); }
   font-size: 12px;
 }
 .select-search[hidden] { display: none; }
+.form-group > .select-search, .if-field > .select-search { max-width: none; }
 
 /* Standardized Dropdown (Select) UI System */
 select {
