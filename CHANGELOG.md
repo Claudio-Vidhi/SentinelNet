@@ -10,6 +10,41 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Routing tables: route summary and anomalies.** The "Riepilogo apparati"
+  view opens with a per-device table (total, per type, default routes, top
+  next-hops, ECMP, live/backup source with date) and an anomaly list: no
+  default route, duplicate routes, next-hop outside the connected networks,
+  static routes in the backup but missing from the live table. A click on an
+  anomaly filters the matrix.
+- **Routing tables: "Solo backup (senza SSH)".** `GET /api/routes?backup_only=1`
+  reads the static routes of the last config backup without opening any
+  session; the read is audited as a backup read.
+- **Config Analyzer: PDF summary per device.** A "Riepilogo PDF" button on
+  FortiGate and switch/router cards previews and downloads an A4 summary:
+  interfaces, zone→zone policy matrix, policies, static routes, VIPs, IPsec
+  tunnels and findings (FortiGate); VLANs/SVIs, routes, ACLs and interfaces
+  (switch). Printed through its own route, `POST /api/config-analyzer/summary/pdf`,
+  with a CSP-locked, script-off document.
+- **Search box on device dropdowns.** Device selects with 10 or more entries
+  get a filter field; it hides non-matching entries and never changes the
+  selection by itself.
+- **Security audit: "Advisor FortiGate" sub-tab.** The advisor of the last
+  FortiGate scan has its own sub-tab next to Scan and Checklist.
+
+### Fixed
+
+- FortiGate hostname read from a config file is taken only from
+  `config system global` (also under `config global`): a `set hostname` in
+  webfilter rules or automation scripts no longer wins.
+- Manual config import proposes the FortiGate address the GUI is reachable on
+  first: interfaces with HTTPS/HTTP admin access and a public IP, then private
+  ones, then the rest (secondary IPs included).
+- FortiOS static routes to an address object, internet service or SD-WAN zone
+  are no longer reported as default routes, also in `show full-configuration`
+  backups; blackhole and disabled routes are marked.
+
 ## [0.70.4] - 2026-11-24
 
 ### Added
