@@ -28,12 +28,13 @@ _SECRET_KEYS = {
 }
 _MASK = _envelope.MASK
 
-_FORTI_TOKEN = re.compile(r'"[^"]*"|\S+')
+_FORTI_TOKEN = re.compile(r'"[^"]*"|\'[^\']*\'|\S+')
 
 
 def _forti_tokens(s):
-    """Tokenizes a FortiOS line, respecting double-quoted strings."""
-    return [t[1:-1] if t.startswith('"') and t.endswith('"') and len(t) >= 2 else t
+    """Tokenizes a FortiOS line, respecting quoted strings. The CLI accepts
+    single quotes too: an empty `set name ''` is an empty value, not a name."""
+    return [t[1:-1] if len(t) >= 2 and t[0] == t[-1] and t[0] in '"\'' else t
             for t in _FORTI_TOKEN.findall(s)]
 
 

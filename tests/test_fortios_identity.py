@@ -146,5 +146,14 @@ class TestFortiosIpCandidates(unittest.TestCase):
         self.assertEqual(ip_candidates(cfg), ["192.168.1.10", "10.0.0.1"])
 
 
+class TestFortiTokens(unittest.TestCase):
+    def test_single_quotes_are_quotes(self):
+        from fw_analyzers.fortios import _forti_tokens
+        self.assertEqual(_forti_tokens("set name ''"), ["set", "name", ""])
+        self.assertEqual(_forti_tokens("set name 'lan out'"), ["set", "name", "lan out"])
+        self.assertEqual(_forti_tokens('set name "lan out"'), ["set", "name", "lan out"])
+        self.assertEqual(_forti_tokens("set comments it's"), ["set", "comments", "it's"])
+
+
 if __name__ == "__main__":
     unittest.main()

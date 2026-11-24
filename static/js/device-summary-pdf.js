@@ -28,10 +28,13 @@ function zoneMatrix(policies) {
 }
 
 // headers: labels (already translated); rows: arrays of cell HTML (already escaped).
-function dsTable(headers, rows) {
+// nowrap: indexes of short columns (id, action, flags) that must never be split
+// letter by letter when a long text column takes the width.
+function dsTable(headers, rows, nowrap = []) {
     if (!rows.length) return `<p class="none">${escapeHtml(tr('dsNone'))}</p>`;
-    return `<table><thead><tr>${headers.map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr></thead>
-        <tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    const cls = i => (nowrap.includes(i) ? ' class="nw"' : '');
+    return `<table><thead><tr>${headers.map((h, i) => `<th${cls(i)}>${escapeHtml(h)}</th>`).join('')}</tr></thead>
+        <tbody>${rows.map(r => `<tr>${r.map((c, i) => `<td${cls(i)}>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
 }
 
 // A long table starts on a fresh page rather than leaving its header orphaned.
@@ -175,7 +178,8 @@ table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
 thead { display: table-header-group; }
 tr { break-inside: avoid; }
 th { text-align: left; font-size: 9pt; color: var(--ink-muted); background: var(--surface-3); padding: 7px 10px; border-bottom: 1px solid var(--border-strong); }
-td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; font-family: var(--font-data); word-break: break-word; }
+td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; font-family: var(--font-data); overflow-wrap: break-word; }
+.nw { white-space: nowrap; }
 tbody tr:nth-child(even) td { background: var(--surface-2); }
 .none, .hint { color: var(--ink-soft); margin: 2px 0 10px; }
 .matrix { width: auto; margin: 4px 0; }
@@ -230,7 +234,7 @@ function deviceSummaryHtml(dev, lang, fonts) {
             [tr('dsColId'), tr('dsColName'), tr('dsColIntf'), tr('dsColAddr'), tr('dsColService'), tr('dsColAction'), tr('dsColNat'), tr('dsColLog')],
             pols.map(p => [e(p.id), e(p.name || '—'), `${join(p.srcintf)} → ${join(p.dstintf)}`, `${join(p.srcaddr)} → ${join(p.dstaddr)}`,
                 join(p.service), `<span class="act-${p.action === 'accept' ? 'accept' : 'deny'}">${e(p.action)}</span>${p.status === 'disable' ? ` (${e(tr('dsDisabled'))})` : ''}`,
-                e(p.nat), e(p.logtraffic || '—')]))));
+                e(p.nat), e(p.logtraffic || '—')]), [0, 5, 6, 7])));
     } else {
         const vlans = dev.vlans || [];
         sections.push(dsSection('dsSecVlans', vlans.length, dsTable(
@@ -244,7 +248,7 @@ function deviceSummaryHtml(dev, lang, fonts) {
            : [tr('dsColPrefix'), tr('dsColNextHop'), tr('dsColAd'), tr('dsColVrf'), tr('dsColName')],
         routes.map(r => fw
             ? [e(r.prefix), e(r.blackhole ? 'blackhole' : (r.next_hop || '—')), e(r.device || '—'), e(r.distance || '—'), e(r.status || '—')]
-            : [e(r.prefix), e(r.next_hop || '—'), e(r.ad ?? '—'), e(r.vrf || '—'), e(r.name || '—')]))));
+            : [e(r.prefix), e(r.next_hop || '—'), e(r.ad ?? '—'), e(r.vrf || '—'), e(r.name || '—')]), fw ? [3, 4] : [2])));
 
     if (fw) {
         const vips = dev.vips || [];
