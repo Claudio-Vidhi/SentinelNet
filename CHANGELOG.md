@@ -10,6 +10,19 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Map: "Salva disposizione".** One button, shown in every view, saves the
+  map view, positions and choices on the server for the current user
+  (`GET`/`PUT /api/map/layout`); opening the map in another browser, after a
+  cleared cache or on another port restores them.
+- Purdue view: dragged devices stay where they were put, across redraws and
+  reloads; a device new since then goes at the right end of its level's band
+  instead of over a moved one.
+- Hierarchy view: a horizontal drag keeps its left-to-right order across
+  reloads, opened or closed groups and new devices. "Azzera livelli" also
+  resets the order.
+
 ## [0.70.3] - 2026-11-23
 
 ### Added

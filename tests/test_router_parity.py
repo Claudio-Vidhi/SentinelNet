@@ -181,6 +181,8 @@ class TestRouterParity(unittest.TestCase):
                     "/api/settings/factory-reset",
                     # Schema map layout proposed by the AI (anonymous graph only).
                     "/api/map/ai-layout",
+                    # Map layout saved on the server per user ("Salva disposizione").
+                    "/api/map/layout",
                     # Network segments on the maps (plan 2026-11-03).
                     "/api/segments",
                     # OT Config / Project Vault (versioned SHA-256 artifacts).
@@ -368,6 +370,8 @@ class TestFullParity(unittest.TestCase):
                     "/api/settings/factory-reset",
                     # Schema map layout proposed by the AI (anonymous graph only).
                     "/api/map/ai-layout",
+                    # Map layout saved on the server per user ("Salva disposizione").
+                    "/api/map/layout",
                     # Network segments on the maps (plan 2026-11-03).
                     "/api/segments",
                     # OT Project Vault (plan OT expansion §5).
@@ -458,6 +462,7 @@ class TestFullParity(unittest.TestCase):
                     "AssistantDescribeSchema", "AssistantDeriveSchema", "InstructionsSchema", "AssistantDraftSchema",
                     # AI layout of the Schema map.
                     "AiLayoutSchema", "AiLayoutNode", "AiLayoutLink",
+                    "MapLayoutSchema",
                     # Network segments (routes under /api/segments).
                     "SegmentSaveSchema", "SegmentDeleteSchema", "SegmentLinkSchema",
                     # OT vulnerability intelligence / air-gap bundles (routes under /api/cve/ot).

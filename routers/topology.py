@@ -8,6 +8,8 @@ import asyncio
 import json
 import logging
 import os
+import threading
+from datetime import datetime, timezone
 from typing import Annotated, Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,7 +18,7 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from services import inventory_manager
-from core import core_engine, db
+from core import core_engine, db, data_config
 from services import visio_export
 from security.security_manager import log_audit
 from routers.deps import get_current_user, require_admin, filter_map_to_scope, user_group_scope, require_operator, assert_group_allowed
@@ -204,6 +206,63 @@ def ai_map_layout(payload: AiLayoutSchema, current_user = Depends(get_current_us
     except ValueError as e:
         raise HTTPException(status_code=502, detail=f"Risposta AI non utilizzabile: {e}")
     return {"rows": rows, "note": note}
+
+# Interactive map layout, saved per user on the server ("Salva disposizione").
+# The browser keeps these keys in localStorage; this is a copy that survives
+# another browser, a cleared cache or a changed port. Only the map's own keys.
+MAP_LAYOUT_KEYS = frozenset({
+    "mapViewMode", "schemaPositions", "purduePositions",
+    "layeredLevels", "layeredLevelNames", "layeredRoots", "layeredExpanded",
+    "layeredFree", "layeredFreePos", "layeredRowOrder", "layeredTagCfg", "layeredTagFlip", "layeredTagAdjust",
+    "mapCatVis", "deviceFilterHidden", "mapBackbones", "mapRenew", "mapAccessOk",
+    "minimalLinkColors", "minimalCustomCats", "minimalLabelAdjust", "minimalHoverInfo",
+    "mapTitleBlock", "schemaFocus", "schemaWrap", "schemaGroupUplinks", "schemaCorePortNear",
+    "schemaPortLabels", "schemaApMode", "schemaLayout", "cableColors",
+})
+MAP_LAYOUT_MAX_BYTES = 4 * 1024 * 1024   # the title block logo is a data: URL
+MAP_LAYOUT_FILE = "map_layouts.json"
+# ponytail: one lock for every user's layout, per-user files if saves ever contend.
+_map_layout_lock = threading.Lock()
+
+
+class MapLayoutSchema(BaseModel):
+    keys: Dict[str, str]
+
+
+def _read_map_layouts() -> dict:
+    try:
+        with open(data_config.get_path(MAP_LAYOUT_FILE), encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+
+@router.get("/api/map/layout", dependencies=[Depends(require_tab("tab-map-interactive"))])
+def get_map_layout(current_user = Depends(get_current_user)):
+    """The current user's saved map layout, or nulls if none was saved."""
+    with _map_layout_lock:
+        saved = _read_map_layouts().get(current_user["sub"])
+    if not saved:
+        return {"layout": None, "saved_at": None}
+    return {"layout": saved["keys"], "saved_at": saved["saved_at"]}
+
+
+@router.put("/api/map/layout", dependencies=[Depends(require_tab("tab-map-interactive"))])
+def put_map_layout(payload: MapLayoutSchema, current_user = Depends(get_current_user)):
+    """Replaces the current user's saved map layout."""
+    unknown = sorted(set(payload.keys) - MAP_LAYOUT_KEYS)
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"Chiavi non ammesse: {', '.join(unknown[:5])}")
+    size = sum(len(k) + len(v.encode("utf-8")) for k, v in payload.keys.items())
+    if size > MAP_LAYOUT_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Disposizione troppo grande.")
+    saved_at = datetime.now(timezone.utc).isoformat()
+    with _map_layout_lock:
+        layouts = _read_map_layouts()
+        layouts[current_user["sub"]] = {"keys": payload.keys, "saved_at": saved_at}
+        data_config.atomic_write(data_config.get_path(MAP_LAYOUT_FILE), layouts, indent=0)
+    log_audit(f"Disposizione mappa salvata dall'utente '{current_user.get('sub')}'.")
+    return {"ok": True, "saved_at": saved_at}
 
 @router.get("/api/portchannels", dependencies=[Depends(require_tab("tab-map", "tab-map-interactive"))])
 async def get_portchannels(group: str = "all",

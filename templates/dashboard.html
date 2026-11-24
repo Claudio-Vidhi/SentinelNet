@@ -1141,6 +1141,13 @@
               <label id="minimalHoverWrap" class="map-opt" for="toggleMinimalHover" style="display:none;"><input type="checkbox" id="toggleMinimalHover"> <span data-i18n="lblHoverInfo">Info al passaggio</span></label>
             </section>
 
+            <!-- Every view: saves this arrangement and the map choices on the
+                 server for this user (topology.js saveMapLayout). -->
+            <section class="map-view-sec">
+              <button type="button" id="mapLayoutSaveBtn" class="map-tb-btn map-tb-full" data-i18n="btnMapLayoutSave">Salva disposizione</button>
+              <p id="mapLayoutHint" class="map-view-hint" role="status" aria-live="polite"></p>
+            </section>
+
             <!-- Schema readability: two presets and four controls. -->
             <section id="schemaReadWrap" class="map-view-sec" style="display:none;">
               <h3 class="map-view-h" data-i18n="lblMapReadability">Leggibilità</h3>

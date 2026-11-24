@@ -170,9 +170,6 @@
     let layeredGroup = 'all';
     // Row a dragged card would land in ({ lv, y }), drawn under the map.
     let layeredDrop = null;
-    // Card just moved to another level: the redraw puts it back at the x it
-    // was dropped at, not where the tidy tree would centre it.
-    let layeredDropX = null;
     // Hierarchy view: selected cards whose cables run animated towards their
     // neighbours (drawLayeredLinks); the rest of the map fades.
     let layeredFocus = new Set(), layeredAnimRaf = 0;
@@ -203,11 +200,15 @@
     let lastRenderedNodeIds = [];
     let lastNetworkView = null;   // view of the instance being replaced (renderNetwork)
     let viewPositions = {}, viewPosGroup = null;   // view -> {id: {x, y}}, for one site selection
+    // Map state parsed from localStorage: each reader runs now and again
+    // when a layout saved on the server is written back (syncMapLayout).
+    const mapStateReaders = [];
+    function readMapState(read) { read(); mapStateReaders.push(read); }
 
     // Optional names of the hierarchy levels, per site selection:
     // {"<gruppo>": ["", "Core", ...]}. Empty by default: no "Level 1" text.
     let layeredLevelNames = {};
-    try { layeredLevelNames = JSON.parse(localStorage.getItem('layeredLevelNames') || '{}'); } catch (e) { layeredLevelNames = {}; }
+    readMapState(() => { try { layeredLevelNames = JSON.parse(localStorage.getItem('layeredLevelNames') || '{}'); } catch (e) { layeredLevelNames = {}; } });
 
     // Generatore dinamico di schede SVG ad alta tecnologia per i nodi del network
     // Metadati per tipo di apparato: colore distintivo (feature: colori per tipo
@@ -242,7 +243,7 @@
     // Override manuali per Sede: {"<gruppo>": {"<id>": livello}}. Stessa forma e
     // stessa persistenza della checklist dispositivi.
     let layeredLevels = {};
-    try { layeredLevels = JSON.parse(localStorage.getItem('layeredLevels') || '{}'); } catch (e) { layeredLevels = {}; }
+    readMapState(() => { try { layeredLevels = JSON.parse(localStorage.getItem('layeredLevels') || '{}'); } catch (e) { layeredLevels = {}; } });
     function saveLayeredLevels() { localStorage.setItem('layeredLevels', JSON.stringify(layeredLevels)); }
     function setLayeredLevel(group, id, level) {
         const m = layeredLevels[group] || (layeredLevels[group] = {});
@@ -308,6 +309,8 @@
     function resetLayeredLevels(group) {
         delete layeredLevels[group];
         saveLayeredLevels();
+        delete layeredRowOrder[group];
+        saveLayeredRowOrder();
         redrawInteractiveMap();
     }
 
@@ -317,7 +320,7 @@
     // best connected device; where that is not the real core of a site, the
     // user names it and that site's levels are redone from there.
     let layeredRoots = {};
-    try { layeredRoots = JSON.parse(localStorage.getItem('layeredRoots') || '{}'); } catch (e) { layeredRoots = {}; }
+    readMapState(() => { try { layeredRoots = JSON.parse(localStorage.getItem('layeredRoots') || '{}'); } catch (e) { layeredRoots = {}; } });
     // Older saves: a bare id per tenant, then one id per location.
     const rootsOf = group => {
         const r = layeredRoots[group];
@@ -386,7 +389,7 @@
 
     // Gruppi aperti per Sede: {"<gruppo>": ["grp:<padre>:<tipo>", ...]}
     let layeredExpanded = {};
-    try { layeredExpanded = JSON.parse(localStorage.getItem('layeredExpanded') || '{}'); } catch (e) { layeredExpanded = {}; }
+    readMapState(() => { try { layeredExpanded = JSON.parse(localStorage.getItem('layeredExpanded') || '{}'); } catch (e) { layeredExpanded = {}; } });
     function saveLayeredExpanded() { localStorage.setItem('layeredExpanded', JSON.stringify(layeredExpanded)); }
     function toggleLayeredGroup(group, key) {
         const arr = layeredExpanded[group] || (layeredExpanded[group] = []);
@@ -398,13 +401,18 @@
     // Free move: cards go anywhere and stay there, per site:
     // {"<site>": {"<id>": {x, y}}}. Off, the automatic layout is back;
     // "Riordina mappa" forgets the site's positions.
-    let layeredFree = localStorage.getItem('layeredFree') === '1';
+    let layeredFree = false;
+    readMapState(() => { layeredFree = localStorage.getItem('layeredFree') === '1'; });
     // Hierarchy-map cable labels: toolbar settings, per-link size flips (a
     // click on a tag) and hand offsets (a drag). Browser-only conveniences.
     const loadTagJson = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') || d; } catch (e) { return d; } };
-    let layeredTagCfg = Object.assign({ size: 'big', form: 'abbr', place: 'auto', lane: true }, loadTagJson('layeredTagCfg', {}));
-    let layeredTagFlip = loadTagJson('layeredTagFlip', {});
-    let layeredTagAdjust = loadTagJson('layeredTagAdjust', {});
+    const LAYERED_TAG_DEFAULTS = { size: 'big', form: 'abbr', place: 'auto', lane: true };
+    let layeredTagCfg = { ...LAYERED_TAG_DEFAULTS }, layeredTagFlip = {}, layeredTagAdjust = {};
+    readMapState(() => {
+        layeredTagCfg = Object.assign({ ...LAYERED_TAG_DEFAULTS }, loadTagJson('layeredTagCfg', {}));
+        layeredTagFlip = loadTagJson('layeredTagFlip', {});
+        layeredTagAdjust = loadTagJson('layeredTagAdjust', {});
+    });
     let layeredTagHits = [];   // rebuilt on every draw: {key, link, x, y, w, h}
     function saveLayeredTags() {
         try {
@@ -414,8 +422,23 @@
         } catch (e) { /* private window: settings last until reload */ }
     }
     let layeredFreePos = {};
-    try { layeredFreePos = JSON.parse(localStorage.getItem('layeredFreePos') || '{}'); } catch (e) { layeredFreePos = {}; }
+    readMapState(() => { try { layeredFreePos = JSON.parse(localStorage.getItem('layeredFreePos') || '{}'); } catch (e) { layeredFreePos = {}; } });
     function saveLayeredFreePos() { localStorage.setItem('layeredFreePos', JSON.stringify(layeredFreePos)); }
+    // Free move off: the left-to-right order of a site's cards, set by a
+    // horizontal drag and kept by tidyLayeredTree: {"<site>": [ids]}.
+    let layeredRowOrder = {};
+    readMapState(() => { try { layeredRowOrder = JSON.parse(localStorage.getItem('layeredRowOrder') || '{}'); } catch (e) { layeredRowOrder = {}; } });
+    function saveLayeredRowOrder() { localStorage.setItem('layeredRowOrder', JSON.stringify(layeredRowOrder)); }
+    // Cards drawn now, by x; the ones not drawn (filtered out, say) keep their
+    // old order after them. The other side of a group drawn now (its card, or
+    // its members) is dropped: tidy derives it from this side.
+    function recordLayeredRowOrder() {
+        const now = networkInstance.getPositions(), ids = Object.keys(now).sort((a, b) => now[a].x - now[b].x);
+        const openGroups = new Set(ids.map(id => layeredGroupOfChild[id]));
+        layeredRowOrder[layeredGroup] = ids.concat((layeredRowOrder[layeredGroup] || [])
+            .filter(id => !now[id] && !now[layeredGroupOfChild[id]] && !openGroups.has(id)));
+        saveLayeredRowOrder();
+    }
     function collapseAllLayeredGroups(group) {
         delete layeredExpanded[group];
         saveLayeredExpanded();
@@ -755,11 +778,13 @@
     // infrastruttura (switch/router/firewall/wlc); il resto si abilita a scelta.
     const MAP_DEFAULT_CATS = ['switch', 'router', 'firewall', 'wlc'];
     let mapCatVis;
-    try { mapCatVis = JSON.parse(localStorage.getItem('mapCatVis')); } catch (e) { mapCatVis = null; }
-    if (!mapCatVis || typeof mapCatVis !== 'object') {
-        mapCatVis = {};
-        Object.keys(DEVICE_TYPE_META).forEach(k => { mapCatVis[k] = MAP_DEFAULT_CATS.includes(k); });
-    }
+    readMapState(() => {
+        try { mapCatVis = JSON.parse(localStorage.getItem('mapCatVis')); } catch (e) { mapCatVis = null; }
+        if (!mapCatVis || typeof mapCatVis !== 'object') {
+            mapCatVis = {};
+            Object.keys(DEVICE_TYPE_META).forEach(k => { mapCatVis[k] = MAP_DEFAULT_CATS.includes(k); });
+        }
+    });
     function isMapCatVisible(c) {
         // Categorie note (DEVICE_TYPE_META) sono sempre seminate in mapCatVis.
         // Le categorie dinamiche (custom o "client") non ancora viste vengono
@@ -1043,7 +1068,7 @@
     // indicizzate per Sede così la scelta non si mescola tra tenant diversi.
     // {"<gruppo>": ["id1","id2", ...]}
     let deviceFilterHidden = {};
-    try { deviceFilterHidden = JSON.parse(localStorage.getItem('deviceFilterHidden') || '{}'); } catch (e) { deviceFilterHidden = {}; }
+    readMapState(() => { try { deviceFilterHidden = JSON.parse(localStorage.getItem('deviceFilterHidden') || '{}'); } catch (e) { deviceFilterHidden = {}; } });
     function saveDeviceFilterHidden() { localStorage.setItem('deviceFilterHidden', JSON.stringify(deviceFilterHidden)); }
     function isDeviceHidden(group, id) {
         const arr = deviceFilterHidden[group];
@@ -1137,6 +1162,7 @@
         const groupSelect = document.getElementById('interactiveGroupSelect');
         const selectedGroup = groupSelect ? groupSelect.value : '';
         if (!selectedGroup) { showMapPlaceholder(); return; }
+        await (mapLayoutSync = mapLayoutSync || syncMapLayout());
         const fromCache = !!(opts && opts.fromCache) && lastMapPayload
                           && lastMapGroup === selectedGroup;
 
@@ -1524,7 +1550,8 @@
     // The overview is gone: a saved 'classic' opens the hierarchy, whose
     // free move does what the overview was kept for.
     const MAP_VIEWS = ['minimal', 'layered', 'purdue'];
-    let mapViewMode = MAP_VIEWS.includes(localStorage.getItem('mapViewMode')) ? localStorage.getItem('mapViewMode') : 'layered';
+    let mapViewMode = 'layered';
+    readMapState(() => { mapViewMode = MAP_VIEWS.includes(localStorage.getItem('mapViewMode')) ? localStorage.getItem('mapViewMode') : 'layered'; });
     function getMapView() { return mapViewMode; }
     function updateMapViewButtons() {
         const m = document.getElementById('mapViewMinimalBtn');
@@ -1611,6 +1638,54 @@
         loadInteractiveMap();
     }
 
+    // "Salva disposizione": the map's localStorage keys, copied to the server
+    // for this user. routers/topology.py MAP_LAYOUT_KEYS holds the same list
+    // and refuses any other key.
+    const MAP_LAYOUT_KEYS = ['mapViewMode', 'schemaPositions', 'purduePositions',
+        'layeredLevels', 'layeredLevelNames', 'layeredRoots', 'layeredExpanded',
+        'layeredFree', 'layeredFreePos', 'layeredRowOrder', 'layeredTagCfg', 'layeredTagFlip', 'layeredTagAdjust',
+        'mapCatVis', 'deviceFilterHidden', 'mapBackbones', 'mapRenew', 'mapAccessOk',
+        'minimalLinkColors', 'minimalCustomCats', 'minimalLabelAdjust', 'minimalHoverInfo',
+        'mapTitleBlock', 'schemaFocus', 'schemaWrap', 'schemaGroupUplinks', 'schemaCorePortNear',
+        'schemaPortLabels', 'schemaApMode', 'schemaLayout', 'cableColors'];
+    let mapLayoutSync = null;   // the first map load of the page waits for it
+    // A save newer than the one this browser last saw replaces the local keys;
+    // the same one leaves them, so autosaves made since then stay.
+    async function syncMapLayout() {
+        try {
+            const res = await apiFetch('/api/map/layout');
+            if (!res || !res.ok) return;
+            const data = await res.json();
+            if (!data.layout || data.saved_at === localStorage.getItem('mapLayoutSyncedAt')) return;
+            Object.entries(data.layout).forEach(([k, v]) => localStorage.setItem(k, String(v)));
+            localStorage.setItem('mapLayoutSyncedAt', data.saved_at);
+            mapStateReaders.forEach(read => read());
+            // Controls set once at load from the old values.
+            [['layeredTagSize', 'size'], ['layeredTagForm', 'form'], ['layeredTagPlace', 'place']].forEach(([id, f]) => {
+                const el = /** @type {HTMLSelectElement|null} */ (document.getElementById(id));
+                if (el) el.value = layeredTagCfg[f];
+            });
+            const lane = /** @type {HTMLInputElement|null} */ (document.getElementById('toggleLayeredPcLane'));
+            if (lane) lane.checked = !!layeredTagCfg.lane;
+            updateMapViewButtons();
+        } catch (e) { /* the map draws from what this browser holds */ }
+    }
+    async function saveMapLayout() {
+        const hint = document.getElementById('mapLayoutHint');
+        const say = t => { if (hint) hint.textContent = t; };
+        // Positions kept only in the drawing go to storage first (the ladder's are not saved: it is recomputed).
+        saveSchemaPositions();
+        savePurduePositions();
+        const keys = {};
+        try { MAP_LAYOUT_KEYS.forEach(k => { const v = localStorage.getItem(k); if (v !== null) keys[k] = v; }); } catch (e) { /* nothing stored */ }
+        const res = await apiFetch('/api/map/layout', { method: 'PUT', body: JSON.stringify({ keys }) });
+        if (!res) { say(tr('mapLayoutSaveFailed', { detail: tr('errServerUnreachable') })); return; }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { say(tr('mapLayoutSaveFailed', { detail: typeof data.detail === 'string' ? data.detail : res.status })); return; }
+        try { localStorage.setItem('mapLayoutSyncedAt', data.saved_at); } catch (e) { /* the next load just applies it again */ }
+        say(tr('mapLayoutSaved'));
+    }
+
     // Hierarchy view: same cards, data, tooltips and drawer as the overview.
     // vis.js packs each subtree under its parent from the levels we assign;
     // a hand-made row layout spread a large site over a sparse, unreadable
@@ -1651,10 +1726,10 @@
             ? { scale: networkInstance.getScale(), position: networkInstance.getViewPosition() } : null;
         if (viewPosGroup !== group) { viewPositions = {}; viewPosGroup = group; }
         if (networkInstance && lastNetworkView) viewPositions[lastNetworkView] = networkInstance.getPositions();
-        const prevPos = viewPositions[view] || (view === 'minimal' ? loadSchemaPositions(group) : null);
-        // Hierarchy view: the layout owns y (the level) and the column; only a
-        // horizontal drag inside the same row survives a refresh (re-applied
-        // after tidyLayeredTree, below).
+        const prevPos = viewPositions[view] || (view === 'minimal' ? loadSchemaPositions(group)
+            : view === 'purdue' ? loadSchemaPositions(group, 'purduePositions') : null);
+        // Hierarchy view: the layout owns y (the level) and x; a horizontal
+        // drag survives as the row order tidyLayeredTree follows.
         if (prevPos && !hierarchy) {
             nodes.forEach(nd => {
                 const p = prevPos[nd.id];
@@ -1720,8 +1795,8 @@
             });
         }
         // Vista "A livelli": trascinare un nodo IN VERTICALE lo sposta di piano e
-        // la scelta resta (per Sede). Uno spostamento solo orizzontale non
-        // ridisegna nulla, così il nodo resta dove l'utente lo lascia.
+        // la scelta resta (per Sede). A horizontal move changes the card's
+        // place in the row order, also kept per site (layeredRowOrder).
         layeredFocus = new Set();
         if (getMapView() === 'layered') {
             // Selection = focus: a click lights the card's cables, Ctrl+click
@@ -1769,10 +1844,12 @@
                 const steps = Math.round((to.y - dragFrom.y) / LAYERED_SEPARATION);
                 const fromY = dragFrom.y;
                 dragFrom = null;
-                // Same level: back onto its row, keeping the new x.
-                if (!steps) { networkInstance.moveNode(id, to.x, fromY); networkInstance.redraw(); return; }
+                // The drop x sets the card's place in the order; the tidy
+                // layout then gives it its slot (on this row, or the new one).
+                recordLayeredRowOrder();
+                // Same level: back onto its row, in its new place.
+                if (!steps) { networkInstance.moveNode(id, to.x, fromY); tidyLayeredTree(); networkInstance.redraw(); return; }
                 setLayeredLevel(layeredGroup, id, Math.max(0, (layeredAssigned[id] || 0) + steps));
-                layeredDropX = { id, x: to.x };
                 redrawInteractiveMap();
             });
         }
@@ -1857,7 +1934,7 @@
             networkInstance.once('afterDrawing', placeSchemaColumns);
         }
         // Hierarchy view: vis.js lays the rows out again on every render, so
-        // the tidy pass always runs; a horizontal drag is put back on top.
+        // the tidy pass always runs, in the saved row order.
         // vis.js fits the cards only, which cuts the site headers drawn
         // above them; step back a little on the first frame.
         if (hierarchy) {
@@ -1868,21 +1945,6 @@
                 // The rows are ours anyway (tidy pass): let the card follow
                 // the mouse, dragEnd snaps it to a level.
                 Object.values(networkInstance.body.nodes).forEach(n => { if (n.options.fixed) n.options.fixed.y = false; });
-                // Only when the same cards come back: after a group opens or
-                // closes the tidy layout moved everyone, and the old x put the
-                // known cards on top of the new ones.
-                const drop = layeredDropX;
-                layeredDropX = null;
-                if (allKnown && Object.keys(prevPos).length === nodes.length) {
-                    const now = networkInstance.getPositions();
-                    Object.keys(now).forEach(id => {
-                        const p = prevPos[id];
-                        if (p && Math.abs(p.y - now[id].y) < 1) networkInstance.moveNode(id, p.x, now[id].y);
-                    });
-                    // A card moved to another level stays at the x it was
-                    // dropped at; its y is the new row's.
-                    if (drop && now[drop.id]) networkInstance.moveNode(drop.id, drop.x, now[drop.id].y);
-                }
                 const free = layeredFree && layeredFreePos[layeredGroup];
                 if (free) Object.keys(free).forEach(id => { if (nodes.some(nd => nd.id === id)) networkInstance.moveNode(id, free[id].x, free[id].y); });
                 // A first draw fits the site (vis.js centred the cards before
@@ -1892,8 +1954,15 @@
                 networkInstance.moveTo({ scale: networkInstance.getScale() * 0.85 });
             });
         } else if (view === 'purdue') {
+            networkInstance.on('dragEnd', p => { if (p.nodes && p.nodes.length) savePurduePositions(); });
             networkInstance.once('afterDrawing', () => {
                 Object.values(networkInstance.body.nodes).forEach(n => { if (n.options.fixed) n.options.fixed.y = false; });
+                // The hierarchical layout ignores the x/y given to the nodes:
+                // the dragged (or saved) positions go back on top of it.
+                if (prevPos) {
+                    Object.keys(prevPos).forEach(id => { if (networkInstance.body.nodes[id]) networkInstance.moveNode(id, prevPos[id].x, prevPos[id].y); });
+                    if (!allKnown) placeNewPurdueNodes(prevPos);
+                }
                 if (keepView) { networkInstance.moveTo({ ...keepView, animation: false }); return; }
                 networkInstance.fit();
                 networkInstance.moveTo({ scale: networkInstance.getScale() * 0.88 });
@@ -1926,7 +1995,19 @@
             (adj[e.from] || (adj[e.from] = [])).push(e.to);
             (adj[e.to] || (adj[e.to] = [])).push(e.from);
         });
-        ids.sort((a, b) => pos[a].x - pos[b].x).forEach(id => {
+        // Saved row order (layeredRowOrder): ranked cards by rank, unranked
+        // ones (new devices) after them by x; equal ranks by x. A group just
+        // opened takes its card's rank, a group just closed its best member's.
+        // tidy spaces the cards, so the order never makes them overlap.
+        const rank = {};
+        (layeredRowOrder[layeredGroup] || []).forEach((id, i) => { rank[id] = i; });
+        const own = { ...rank };
+        Object.entries(layeredGroupOfChild).forEach(([m, g]) => {
+            if (own[m] === undefined && own[g] !== undefined) rank[m] = own[g];
+            if (own[g] === undefined && own[m] !== undefined) rank[g] = Math.min(rank[g] ?? Infinity, own[m]);
+        });
+        const byOrder = (a, b) => ((rank[a] ?? Infinity) - (rank[b] ?? Infinity)) || (pos[a].x - pos[b].x);
+        ids.sort(byOrder).forEach(id => {
             const ups = (adj[id] || []).filter(n => pos[n] && pos[n].y < pos[id].y - 1 && tenantOf(n) === tenantOf(id))
                 .sort((a, b) => (pos[b].y - pos[a].y) || (Math.abs(pos[a].x - pos[id].x) - Math.abs(pos[b].x - pos[id].x)));
             if (!ups.length) return;
@@ -1971,7 +2052,7 @@
         };
         let left = 0, prevTenant = null;
         ids.filter(id => !isKid[id] && !beside.includes(id))
-            .sort((a, b) => tenantOf(a).localeCompare(tenantOf(b)) || (pos[a].x - pos[b].x))
+            .sort((a, b) => tenantOf(a).localeCompare(tenantOf(b)) || byOrder(a, b))
             .forEach(id => {
                 if (prevTenant !== null && tenantOf(id) !== prevTenant) left += LAYERED_TENANT_GAP;
                 prevTenant = tenantOf(id);
@@ -2163,14 +2244,14 @@
         return CABLE_PALETTE[k] ? k : null;
     }
     let mapBackbones = new Set();
-    try { mapBackbones = new Set(JSON.parse(localStorage.getItem('mapBackbones') || '[]')); } catch (e) { mapBackbones = new Set(); }
+    readMapState(() => { try { mapBackbones = new Set(JSON.parse(localStorage.getItem('mapBackbones') || '[]')); } catch (e) { mapBackbones = new Set(); } });
     // Devices marked by hand "to be replaced": yellow, as in the project legend.
     let mapRenew = new Set();
-    try { mapRenew = new Set(JSON.parse(localStorage.getItem('mapRenew') || '[]')); } catch (e) { mapRenew = new Set(); }
+    readMapState(() => { try { mapRenew = new Set(JSON.parse(localStorage.getItem('mapRenew') || '[]')); } catch (e) { mapRenew = new Set(); } });
     let mapRenewShown = false;
     // Uplinks in access the user accepted as intended (a customer's design): not flagged.
     let mapAccessOk = new Set();
-    try { mapAccessOk = new Set(JSON.parse(localStorage.getItem('mapAccessOk') || '[]')); } catch (e) { mapAccessOk = new Set(); }   // the map drawn now has one: the legend lists it
+    readMapState(() => { try { mapAccessOk = new Set(JSON.parse(localStorage.getItem('mapAccessOk') || '[]')); } catch (e) { mapAccessOk = new Set(); } });   // the map drawn now has one: the legend lists it
     const cableColorMode = () => (schemaPref('cableColors', 'type') === 'media' ? 'media' : 'type');
     // Style of a cable under the project legend, or null for the usual one.
     function cableStyle(b, baseLw) {
@@ -4792,9 +4873,10 @@
         const hit = (a, b) => a && b && a.left < b.right - 2 && b.left < a.right - 2 && a.top < b.bottom - 2 && b.top < a.bottom - 2;
         return ids.filter((id, i) => bb.some((b, k) => k !== i && hit(bb[i], b)));
     }
-    function loadSchemaPositions(group) {
+    // Purdue keeps its drags the same way, under 'purduePositions'.
+    function loadSchemaPositions(group, key = 'schemaPositions') {
         try {
-            const m = (JSON.parse(localStorage.getItem('schemaPositions') || '{}') || {})[group];
+            const m = (JSON.parse(localStorage.getItem(key) || '{}') || {})[group];
             if (!m) return null;
             const out = {};
             Object.entries(m).forEach(([id, p]) => { out[id] = { x: p[0], y: p[1] }; });
@@ -4805,12 +4887,18 @@
         // The ladder is laid out from its plan on every render: its positions
         // are not the user's, and reused without it they pile the boxes up.
         if (!networkInstance || getMapView() !== 'minimal' || schemaLadderActive()) return;
+        storeViewPositions('schemaPositions');
+    }
+    function savePurduePositions() {
+        if (networkInstance && getMapView() === 'purdue') storeViewPositions('purduePositions');
+    }
+    function storeViewPositions(key) {
         try {
-            const all = JSON.parse(localStorage.getItem('schemaPositions') || '{}') || {};
+            const all = JSON.parse(localStorage.getItem(key) || '{}') || {};
             const m = {};
             Object.entries(networkInstance.getPositions()).forEach(([id, p]) => { m[id] = [Math.round(p.x), Math.round(p.y)]; });
             all[lastMapGroup || ''] = m;
-            localStorage.setItem('schemaPositions', JSON.stringify(all));
+            localStorage.setItem(key, JSON.stringify(all));
         } catch (e) { /* storage full or blocked: the layout just is not remembered */ }
     }
 
@@ -4840,6 +4928,23 @@
             networkInstance.moveNode(nd.id, x, rowTop[lv] + h / 2);
         });
         saveSchemaPositions();
+    }
+    // Purdue, same idea: a device new since the saved layout keeps its band
+    // (its automatic y) and goes right of the band's restored devices. A
+    // band with none of them keeps the layout's spot.
+    function placeNewPurdueNodes(prevPos) {
+        const ds = networkInstance.body.data.nodes, right = {};
+        ds.forEach(nd => {
+            if (prevPos[nd.id]) right[nd.level] = Math.max(right[nd.level] ?? -Infinity, networkInstance.getBoundingBox(nd.id).right);
+        });
+        ds.forEach(nd => {
+            if (prevPos[nd.id] || right[nd.level] === undefined) return;
+            const b = networkInstance.getBoundingBox(nd.id), w = b.right - b.left;
+            const x = right[nd.level] + SCHEMA_GAP + w / 2;
+            right[nd.level] = x + w / 2;
+            networkInstance.moveNode(nd.id, x, networkInstance.getPosition(nd.id).y);
+        });
+        savePurduePositions();
     }
 
     // ===== Nuova mappa minimalista (stile diagramma Visio) =====
@@ -4895,7 +5000,7 @@
         { key: 'link',      it: 'Link semplice',     en: 'Simple link',       def: MINIMAL_MAP_STYLE.edge.color }
     ];
     let minimalLinkColors = {};
-    try { minimalLinkColors = JSON.parse(localStorage.getItem('minimalLinkColors') || '{}'); } catch (e) { minimalLinkColors = {}; }
+    readMapState(() => { try { minimalLinkColors = JSON.parse(localStorage.getItem('minimalLinkColors') || '{}'); } catch (e) { minimalLinkColors = {}; } });
     function linkColor(key) {
         if (minimalLinkColors[key]) return minimalLinkColors[key];
         const t = MINIMAL_LINK_TYPES.find(x => x.key === key);
@@ -5061,11 +5166,13 @@
     // già usata per le pillole Port-Channel spostabili (pillKey), così un solo
     // formato di chiave copre entrambe le feature.
     let minimalCustomCats = { categories: {}, assignments: {} };
-    try {
-        const parsed = JSON.parse(localStorage.getItem('minimalCustomCats') || '{}');
-        minimalCustomCats.categories = parsed.categories || {};
-        minimalCustomCats.assignments = parsed.assignments || {};
-    } catch (e) { /* mantiene i default vuoti */ }
+    readMapState(() => {
+        try {
+            const parsed = JSON.parse(localStorage.getItem('minimalCustomCats') || '{}');
+            minimalCustomCats.categories = parsed.categories || {};
+            minimalCustomCats.assignments = parsed.assignments || {};
+        } catch (e) { /* mantiene i default vuoti */ }
+    });
     function saveMinimalCustomCats() { localStorage.setItem('minimalCustomCats', JSON.stringify(minimalCustomCats)); }
     function dashArrFor(style) { return style === 'dashed' ? [6, 4] : style === 'dotted' ? [2, 3] : null; }
     // Stile di una categoria personalizzata assegnata a un arco (se presente):
@@ -6147,7 +6254,7 @@
     // Scostamento delle ETICHETTE di testo (es. "po1"), indipendente dalla
     // pillola: ogni cartiglio è trascinabile per conto suo e viene persistito.
     let labelAdjust = {};
-    try { labelAdjust = JSON.parse(localStorage.getItem('minimalLabelAdjust') || '{}'); } catch (e) { labelAdjust = {}; }
+    readMapState(() => { try { labelAdjust = JSON.parse(localStorage.getItem('minimalLabelAdjust') || '{}'); } catch (e) { labelAdjust = {}; } });
     let labelHitboxes = [];    // ricostruiti a ogni disegno: {key, x,y,w,h}
     const labelAdj = key => labelAdjust[key] || { dx: 0, dy: 0 };
     // ponytail: hit-test per l'assegnazione categoria via click destro sul cavo.
@@ -8143,7 +8250,7 @@
     // author, company, colour and logo to whoever draws, for every tenant.
     const TB_PER_TENANT = ['customer', 'title', 'rev'];
     const tbTenant = () => /** @type {HTMLSelectElement|null} */ (document.getElementById('interactiveGroupSelect'))?.value || '';
-    try { Object.assign(tbCfg, JSON.parse(localStorage.getItem('mapTitleBlock') || '{}')); } catch (e) { /* defaults */ }
+    readMapState(() => { try { Object.assign(tbCfg, JSON.parse(localStorage.getItem('mapTitleBlock') || '{}')); } catch (e) { /* defaults */ } });
     let tbLogoImg = null;   // tbCfg.logo, decoded
     let tbFormat = 'png';
 
@@ -8870,6 +8977,7 @@
     document.getElementById('mapViewLayeredBtn')?.addEventListener('click', () => setMapView('layered'));
     document.getElementById('mapViewPurdueBtn')?.addEventListener('click', () => setMapView('purdue'));
     document.getElementById('mapAiRunBtn')?.addEventListener('click', runMapAiLayout);
+    document.getElementById('mapLayoutSaveBtn')?.addEventListener('click', saveMapLayout);
     document.getElementById('mapViewMenu')?.addEventListener('toggle', e => {
         if (/** @type {HTMLDetailsElement} */ (e.target).open) renderMapAiZones();
     });
@@ -8986,6 +9094,8 @@
     document.getElementById('layeredTidyBtn')?.addEventListener('click', () => {
         delete layeredFreePos[layeredGroup];
         saveLayeredFreePos();
+        delete layeredRowOrder[layeredGroup];
+        saveLayeredRowOrder();
         redrawInteractiveMap();
     });
     document.getElementById('layeredCollapseBtn')?.addEventListener('click', () => {

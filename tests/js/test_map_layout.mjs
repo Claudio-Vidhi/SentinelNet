@@ -67,15 +67,18 @@ const T = (0, eval)(`(function () {
     const topoZone = n => ({ key: n.group || '' });
     const initLayeredTagInteraction = () => {};
     const segFindingOpen = () => false, SEGMENT_FINDING_COLOR = '#f97316';
+    const layeredGroup = 'all', layeredGroupOfChild = {}, layeredRowOrder = {};
+    let purdueSaved = 0;
+    const savePurduePositions = () => { purdueSaved++; };
+    ${line('const SCHEMA_GAP =')}
     ${line('const LAYERED_PITCH =')}
     ${line('const LAYERED_TENANT_GAP =')}
     ${line('const PC_COPPER =')}
     ${line('const LINK_R =')}
     ${extract('function roundedRun(')}
     ${line('const loadTagJson =')}
+    ${line('const LAYERED_TAG_DEFAULTS =')}
     ${line('let layeredTagCfg =')}
-    ${line('let layeredTagFlip =')}
-    ${line('let layeredTagAdjust =')}
     ${line('let layeredTagHits =')}
     const layeredFocus = new Set();   // selected cards: empty = no focus overlay
     ${extract('function roundRectPath(')}
@@ -86,7 +89,9 @@ const T = (0, eval)(`(function () {
     ${extract('function endTagRect(')}
     ${extract('function tidyLayeredTree(')}
     ${extract('function drawLayeredLinks(')}
-    return { tidyLayeredTree, drawLayeredLinks, LAYERED_PITCH, cfg: layeredTagCfg, hits: () => layeredTagHits, focus: layeredFocus };
+    ${extract('function placeNewPurdueNodes(')}
+    return { tidyLayeredTree, drawLayeredLinks, placeNewPurdueNodes, LAYERED_PITCH, SCHEMA_GAP, cfg: layeredTagCfg,
+             hits: () => layeredTagHits, focus: layeredFocus, order: layeredRowOrder, purdueSaved: () => purdueSaved };
 })()`);
 const { tidyLayeredTree, drawLayeredLinks, LAYERED_PITCH } = T;
 
@@ -160,6 +165,46 @@ assert.equal(T.hits().length, edges.length, 'one tag per link');
     drawLayeredLinks(fctx);
     assert.ok(strokes.some(([c, d]) => c === '#dc2626' && !d), 'core to a1: solid red');
     T.focus.clear();
+}
+
+// Saved row order: a3 dragged before a1 comes out first under the core,
+// although its x says it is the rightmost; the unranked siblings follow by
+// x, and no card overlaps another.
+{
+    T.order.all = ['a3', 'a1'];
+    tidyLayeredTree();
+    const under = ['a1', 'a2', 'a3', 'wlc', 'one'].sort((a, b) => pos[a].x - pos[b].x);
+    assert.deepEqual(under, ['a3', 'a1', 'a2', 'one', 'wlc'], 'saved order first, the rest by x');
+    const r = {};
+    Object.values(pos).forEach(p => (r[p.y] || (r[p.y] = [])).push(p.x));
+    Object.values(r).forEach(xs => {
+        xs.sort((a, b) => a - b);
+        xs.slice(1).forEach((x, i) => assert.ok(x - xs[i] >= LAYERED_PITCH - 0.5, `ordered cards ${xs[i]} and ${x} overlap`));
+    });
+    delete T.order.all;
+}
+
+// Purdue: a device new since the saved layout keeps its band (y) and goes
+// right of the band's restored devices; a band with no restored device
+// keeps the layout's spot.
+{
+    const pp = { old1: { x: 0, y: 0 }, old2: { x: 900, y: 0 }, fresh: { x: 450, y: 0 }, fresh2: { x: 450, y: 0 },
+                 low: { x: 300, y: 500 } };
+    const lv = { old1: 0, old2: 0, fresh: 0, fresh2: 0, low: 3 };
+    const saved = globalThis.networkInstance;
+    globalThis.networkInstance = {
+        getPosition: id => ({ ...pp[id] }),
+        getBoundingBox: id => ({ left: pp[id].x - CARD_W / 2, right: pp[id].x + CARD_W / 2, top: pp[id].y - 30, bottom: pp[id].y + 30 }),
+        moveNode: (id, x, y) => { pp[id] = { x, y }; },
+        body: { data: { nodes: { forEach: f => Object.keys(pp).forEach(id => f({ id, level: lv[id] })) } } },
+    };
+    T.placeNewPurdueNodes({ old1: pp.old1, old2: pp.old2 });
+    globalThis.networkInstance = saved;
+    assert.equal(pp.fresh.y, 0, 'band kept');
+    assert.equal(pp.fresh.x, 900 + CARD_W + T.SCHEMA_GAP, 'right of the rightmost restored device');
+    assert.equal(pp.fresh2.x, pp.fresh.x + CARD_W + T.SCHEMA_GAP, 'new devices stack to the right');
+    assert.deepEqual(pp.low, { x: 300, y: 500 }, 'band with nothing restored: layout spot');
+    assert.equal(T.purdueSaved(), 1, 'placement saved');
 }
 
 console.log('ok');
