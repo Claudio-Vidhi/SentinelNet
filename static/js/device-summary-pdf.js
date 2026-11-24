@@ -167,8 +167,8 @@ h1 { margin: 2px 0 12px; font: 600 26pt/1.1 var(--font-legend); letter-spacing: 
 .meta b { font: 500 10.5pt var(--font-data); }
 section { margin: 0 0 26px; }
 section.big { break-before: page; }
-h2 { display: flex; align-items: baseline; gap: 10px; font-size: 15pt; margin: 0 0 10px; padding: 0 0 6px 12px;
-     border-left: 4px solid var(--cta); border-bottom: 1px solid var(--border); break-after: avoid; }
+h2 { display: flex; align-items: baseline; gap: 10px; font-size: 15pt; margin: 0 0 10px; padding: 0 0 6px;
+     border-bottom: 2px solid var(--cta); break-after: avoid; }
 h2 .n { margin-left: auto; font: 500 10pt var(--font-data); color: var(--ink-muted); background: var(--surface-3); padding: 1px 8px; border-radius: 2px; }
 h3 { font-size: 11pt; margin: 0 0 8px; color: var(--ink-muted); }
 table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
