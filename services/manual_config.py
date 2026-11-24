@@ -278,7 +278,10 @@ def _fortios_ip_candidates(text: str) -> list:
 def ip_candidates(text: str) -> list:
     from ai.config_analyzer import detect_config_type
     if detect_config_type(text) == 'fortios':
-        return _fortios_ip_candidates(text)
+        ranked = _fortios_ip_candidates(text)
+        if ranked:
+            return ranked
+        # Partial paste without `config system interface`: generic regexes.
     out = []
     for pattern in _IP_PATTERNS:
         for ip in pattern.findall(text or ""):

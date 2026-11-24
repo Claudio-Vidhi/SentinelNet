@@ -740,18 +740,23 @@ def analyze_fortios_config(content):
     rst = _forti_get(root, 'router static')
     if rst:
         for seq, n in rst["children"].items():
-            dst = n["sets"].get('dst') or []
-            # A route to an address object or an internet service has no
-            # `set dst`: reading it as 0.0.0.0/0 invented a default route.
-            dst_kind, prefix = "prefix", _ip_addr_to_cidr(dst) or ' '.join(dst)
+            # An object/internet-service destination wins over `dst`: a
+            # `show full-configuration` backup prints the default
+            # `set dst 0.0.0.0 0.0.0.0` and `set internet-service 0` on
+            # every route, so `dst` alone would invent a default route.
             obj = _forti_set1(n, 'dstaddr')
-            isvc = _forti_set1(n, 'internet-service') or _forti_set1(n, 'internet-service-custom')
-            if not prefix and obj:
+            isvc = next((v for v in (_forti_set1(n, 'internet-service'),
+                                     _forti_set1(n, 'internet-service-custom'))
+                         if v not in ('', '0')), '')
+            if obj:
                 dst_kind, prefix = "addr", obj
-            elif not prefix and isvc:
+            elif isvc:
                 dst_kind, prefix = "internet-service", isvc
-            elif _forti_set1(n, 'sdwan-zone') or _forti_set1(n, 'sdwan') == 'enable':
-                dst_kind = "sdwan"
+            else:
+                dst = n["sets"].get('dst') or []
+                dst_kind, prefix = "prefix", _ip_addr_to_cidr(dst) or ' '.join(dst)
+                if _forti_set1(n, 'sdwan-zone') or _forti_set1(n, 'sdwan') == 'enable':
+                    dst_kind = "sdwan"
             static_routes.append({
                 "seq": seq,
                 "prefix": prefix or '0.0.0.0/0',

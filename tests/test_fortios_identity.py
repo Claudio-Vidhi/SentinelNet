@@ -12,7 +12,7 @@ os.environ.setdefault("SENTINELNET_DATA_DIR", tempfile.mkdtemp(prefix="sentineln
 from core.core_engine import extract_hostname_from_config  # noqa: E402
 from services.manual_config import ip_candidates  # noqa: E402
 
-HEADER = "#config-version=FGT60F-7.4.4-FW-build2662-240514:opmode=0\n"
+HEADER = "#config-version=FGT-7.4.1-FW-build2463-230314:opmode=0\n"
 
 SYSTEM_GLOBAL = (
     "config system global\n"
@@ -125,6 +125,15 @@ class TestFortiosIpCandidates(unittest.TestCase):
             "    next\n"
         )
         self.assertEqual(ip_candidates(cfg), ["192.168.1.99"])
+
+    def test_candidates_partial_paste_falls_back_to_generic(self):
+        # FortiOS detected, but the paste has no `config system interface`
+        # block: the generic `set ip` regex still proposes the address.
+        cfg = HEADER + (
+            "        set ip 192.0.2.10 255.255.255.0\n"
+            "        set allowaccess https\n"
+        )
+        self.assertEqual(ip_candidates(cfg), ["192.0.2.10"])
 
     def test_candidates_ios_unchanged(self):
         cfg = (

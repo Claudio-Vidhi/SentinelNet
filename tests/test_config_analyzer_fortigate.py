@@ -446,5 +446,94 @@ end
         self.assertEqual(r["prefix"], "327781")
 
 
+class TestFortiosStaticRoutesFullConfiguration(unittest.TestCase):
+    """SSH backups are `show full-configuration`: defaults are printed, so an
+    object route also carries `set dst 0.0.0.0 0.0.0.0` and every route
+    carries `set internet-service 0`."""
+
+    CONFIG = '''
+config router static
+    edit 1
+        set status enable
+        set dst 0.0.0.0 0.0.0.0
+        set src 0.0.0.0 0.0.0.0
+        set gateway 192.0.2.1
+        set distance 10
+        set weight 0
+        set priority 1
+        set device "wan1"
+        set comment ""
+        set blackhole disable
+        set dynamic-gateway disable
+        set sdwan-zone ""
+        set dstaddr "branch-nets"
+        set internet-service 0
+        set internet-service-custom ""
+        set link-monitor-exempt disable
+        set vrf 0
+        set bfd disable
+    next
+    edit 2
+        set status enable
+        set dst 0.0.0.0 0.0.0.0
+        set gateway 192.0.2.1
+        set distance 10
+        set device "wan1"
+        set blackhole disable
+        set sdwan-zone ""
+        set dstaddr ""
+        set internet-service 0
+        set internet-service-custom ""
+    next
+    edit 3
+        set status enable
+        set dst 198.51.100.0 255.255.255.0
+        set gateway 192.0.2.254
+        set device "port1"
+        set blackhole disable
+        set sdwan-zone ""
+        set dstaddr ""
+        set internet-service 0
+        set internet-service-custom ""
+    next
+    edit 4
+        set status enable
+        set dst 0.0.0.0 0.0.0.0
+        set gateway 192.0.2.1
+        set blackhole disable
+        set dstaddr ""
+        set internet-service 327781
+        set internet-service-custom ""
+    next
+end
+'''
+
+    def setUp(self):
+        from ai import config_analyzer
+        routes = config_analyzer.analyze_fortios_config(self.CONFIG)["routing"]["static"]
+        self.by_seq = {r["seq"]: r for r in routes}
+
+    def test_object_route_with_default_dst_printed(self):
+        r = self.by_seq["1"]
+        self.assertEqual(r["dst_kind"], "addr")
+        self.assertEqual(r["prefix"], "branch-nets")
+
+    def test_plain_default_route(self):
+        r = self.by_seq["2"]
+        self.assertEqual(r["dst_kind"], "prefix")
+        self.assertEqual(r["prefix"], "0.0.0.0/0")
+        self.assertIs(r["blackhole"], False)
+
+    def test_normal_prefix_route(self):
+        r = self.by_seq["3"]
+        self.assertEqual(r["dst_kind"], "prefix")
+        self.assertEqual(r["prefix"], "198.51.100.0/24")
+
+    def test_internet_service_route_with_default_dst_printed(self):
+        r = self.by_seq["4"]
+        self.assertEqual(r["dst_kind"], "internet-service")
+        self.assertEqual(r["prefix"], "327781")
+
+
 if __name__ == "__main__":
     unittest.main()
