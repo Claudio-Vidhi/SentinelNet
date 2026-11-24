@@ -91,7 +91,7 @@ class TestWizardCreatesTenantAndLocation(unittest.TestCase):
         # with equal z-index they opened hidden behind it.
         modal = ROOT.joinpath("static", "js", "ui-modal.js").read_text(encoding="utf-8")
         body = modal[modal.index("function openModal("):modal.index("function closeModal(")]
-        self.assertIn("el.style.zIndex = below", body)
+        self.assertIn("getComputedStyle(below.el).zIndex, 10) || 0) + 1", body)
 
 
 class TestFortigateKeepaliveUi(unittest.TestCase):
