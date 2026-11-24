@@ -741,12 +741,27 @@ def analyze_fortios_config(content):
     if rst:
         for seq, n in rst["children"].items():
             dst = n["sets"].get('dst') or []
+            # A route to an address object or an internet service has no
+            # `set dst`: reading it as 0.0.0.0/0 invented a default route.
+            dst_kind, prefix = "prefix", _ip_addr_to_cidr(dst) or ' '.join(dst)
+            obj = _forti_set1(n, 'dstaddr')
+            isvc = _forti_set1(n, 'internet-service') or _forti_set1(n, 'internet-service-custom')
+            if not prefix and obj:
+                dst_kind, prefix = "addr", obj
+            elif not prefix and isvc:
+                dst_kind, prefix = "internet-service", isvc
+            elif _forti_set1(n, 'sdwan-zone') or _forti_set1(n, 'sdwan') == 'enable':
+                dst_kind = "sdwan"
             static_routes.append({
                 "seq": seq,
-                "prefix": _ip_addr_to_cidr(dst) or ' '.join(dst) or '0.0.0.0/0',
+                "prefix": prefix or '0.0.0.0/0',
                 "next_hop": _forti_set1(n, 'gateway'),
                 "device": _forti_set1(n, 'device'),
                 "distance": _forti_set1(n, 'distance'),
+                "dst_kind": dst_kind,
+                "blackhole": _forti_set1(n, 'blackhole') == 'enable',
+                "status": _forti_set1(n, 'status', 'enable'),
+                "priority": _forti_set1(n, 'priority'),
             })
 
     # --- IPsec VPN (phase 1 / phase 2 names; phase-1 peers) ---

@@ -383,5 +383,68 @@ end
         self.assertEqual(dos["status"], "enable")
 
 
+class TestFortiosStaticRoutes(unittest.TestCase):
+    """analyze_fortios_config static routes: object destinations, blackhole,
+    status. A route to an address object is not a default route."""
+
+    CONFIG = '''
+config router static
+    edit 1
+        set dstaddr "branch-nets"
+        set device "wan1"
+    next
+    edit 2
+        set sdwan-zone "virtual-wan-link"
+    next
+    edit 3
+        set dst 198.51.100.0 255.255.255.0
+        set blackhole enable
+    next
+    edit 4
+        set dst 203.0.113.0 255.255.255.0
+        set gateway 192.0.2.254
+        set device "port1"
+        set status disable
+    next
+    edit 5
+        set internet-service 327781
+        set gateway 192.0.2.1
+    next
+end
+'''
+
+    def setUp(self):
+        from ai import config_analyzer
+        routes = config_analyzer.analyze_fortios_config(self.CONFIG)["routing"]["static"]
+        self.by_seq = {r["seq"]: r for r in routes}
+
+    def test_address_object_destination(self):
+        r = self.by_seq["1"]
+        self.assertEqual(r["prefix"], "branch-nets")
+        self.assertEqual(r["dst_kind"], "addr")
+        self.assertEqual(r["device"], "wan1")
+
+    def test_sdwan_route_without_dst_is_default(self):
+        r = self.by_seq["2"]
+        self.assertEqual(r["dst_kind"], "sdwan")
+        self.assertEqual(r["prefix"], "0.0.0.0/0")
+
+    def test_blackhole(self):
+        r = self.by_seq["3"]
+        self.assertIs(r["blackhole"], True)
+        self.assertEqual(r["prefix"], "198.51.100.0/24")
+        self.assertEqual(r["dst_kind"], "prefix")
+        self.assertIs(self.by_seq["4"]["blackhole"], False)
+
+    def test_status(self):
+        self.assertEqual(self.by_seq["4"]["status"], "disable")
+        self.assertEqual(self.by_seq["3"]["status"], "enable")
+
+    def test_internet_service_destination(self):
+        r = self.by_seq["5"]
+        self.assertEqual(r["dst_kind"], "internet-service")
+        self.assertEqual(r["prefix"], "327781")
+
+
 if __name__ == "__main__":
     unittest.main()

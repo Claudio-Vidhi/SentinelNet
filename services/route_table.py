@@ -421,6 +421,9 @@ def _row(device, entry: dict) -> dict:
         # preso. La vista la marca, perche' altrimenti una configurazione
         # vecchia di un mese si legge come la tabella di adesso.
         "from_backup": bool(entry.get("from_backup")),
+        # Only a backup row can say these: a live table lists what is active.
+        "disabled": bool(entry.get("disabled")),
+        "blackhole": bool(entry.get("blackhole")),
     }
 
 
@@ -512,6 +515,8 @@ def routes_from_backup(device) -> "dict | None":
             "vrf": r.get("vrf") or "",
             "distance": int(distance) if str(distance or "").isdigit() else None,
             "from_backup": True,
+            "disabled": r.get("status") == "disable",
+            "blackhole": bool(r.get("blackhole")),
         })
     if not entries:
         # Multi-vendor static-route extraction fallback (PAN-OS, Junos, NX-OS, OT switch)

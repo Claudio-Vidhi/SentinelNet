@@ -535,6 +535,32 @@ end
         self.assertFalse(same[0].get("from_backup"),
                          "vince la riga viva, non quella del backup")
 
+    FORTIOS_CONFIG = """config router static
+    edit 3
+        set dst 198.51.100.0 255.255.255.0
+        set blackhole enable
+    next
+    edit 4
+        set dst 203.0.113.0 255.255.255.0
+        set gateway 192.0.2.254
+        set device "port1"
+        set status disable
+    next
+end
+"""
+
+    def test_fortios_blackhole_and_disabled_flags_reach_the_rows(self):
+        from ai import config_analyzer
+        analysis = dict(config_analyzer.analyze_fortios_config(self.FORTIOS_CONFIG))
+        analysis["backup_ts"] = 1_756_000_000
+        with mock.patch("ai.config_analyzer.analyze_device", return_value=analysis):
+            out = route_table.routes_from_backup(FGT_A)
+        rows = {r["network"]: r for r in out["rows"]}
+        self.assertIs(rows["198.51.100.0/24"]["blackhole"], True)
+        self.assertIs(rows["198.51.100.0/24"]["disabled"], False)
+        self.assertIs(rows["203.0.113.0/24"]["disabled"], True)
+        self.assertIs(rows["203.0.113.0/24"]["blackhole"], False)
+
     def test_without_a_backup_the_error_stays_the_answer(self):
         with self._unreachable(), \
              mock.patch("ai.config_analyzer.analyze_device", return_value=None):
