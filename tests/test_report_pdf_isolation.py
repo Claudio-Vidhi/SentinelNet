@@ -86,10 +86,16 @@ class TestSummaryHtml(unittest.TestCase):
         from fastapi import HTTPException
         for bad in ('<meta http-equiv="refresh" content="0;url=http://192.0.2.1/">',
                     "<META HTTP-EQUIV = 'Refresh' content=0>",
-                    '<meta http-equiv=refresh content=0>'):
+                    '<meta http-equiv=refresh content=0>',
+                    # The parser decodes the entity; a value regex would not.
+                    '<meta http-equiv="&#114;efresh" content="0;url=file:///etc/x">'):
             with self.assertRaises(HTTPException) as cm:
                 analyzer._summary_html(bad)
             self.assertEqual(cm.exception.status_code, 400)
+
+    def test_plain_meta_is_accepted(self):
+        out = analyzer._summary_html('<meta charset="utf-8"><p>x</p>')
+        self.assertTrue(out.endswith('<meta charset="utf-8"><p>x</p>'))
 
     def test_script_is_refused(self):
         from fastapi import HTTPException

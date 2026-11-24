@@ -216,14 +216,17 @@ def netsec_audit_report_pdf(payload: ReportPdfSchema,
 _SUMMARY_CSP = ('<!doctype html><meta http-equiv="Content-Security-Policy" '
                 'content="default-src \'none\'; style-src \'unsafe-inline\'; '
                 'img-src data:; font-src data:; base-uri \'none\'; form-action \'none\'">')
-_REFRESH_META = re.compile(r"""http-equiv\s*=\s*["']?\s*refresh""", re.IGNORECASE)
 _LEADING_DOCTYPE = re.compile(r"^\s*<!doctype[^>]*>", re.IGNORECASE)
 
 
 def _summary_html(html: str) -> str:
     """The device summary as printed: a CSP no client byte can precede, and
-    nothing that runs or navigates (the summary has neither)."""
-    if _REFRESH_META.search(html) or "<script" in html.lower():
+    nothing that runs or navigates (the summary has neither). Any http-equiv
+    is refused, whatever its value: a value can be entity-encoded
+    (`&#114;efresh`), an attribute name cannot, and CSP does not stop a
+    meta refresh."""
+    low = html.lower()
+    if "http-equiv" in low or "<script" in low:
         raise HTTPException(status_code=400, detail="HTML del riepilogo non ammesso.")
     return _SUMMARY_CSP + _LEADING_DOCTYPE.sub("", html, count=1)
 

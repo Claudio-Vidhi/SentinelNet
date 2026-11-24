@@ -56,6 +56,7 @@ for (const sec of ['dsSecInterfaces', 'dsSecMatrix', 'dsSecPolicies', 'dsSecRout
     assert.ok(h.includes(sec), `section ${sec}`);
 assert.ok(h.includes('&lt;b&gt;bold&lt;/b&gt;') && !h.includes('<b>bold'), 'policy name escaped');
 assert.ok(!/<script/i.test(h), 'no script');
+assert.ok(!/http-equiv/i.test(h), 'no http-equiv: the print route refuses it');
 assert.ok(!/https?:\/\//.test(h), 'no external URL');
 assert.ok(h.includes('<svg'), 'route ring drawn');
 assert.ok(h.includes('defect:any_any:7') && h.includes('to-branch') && h.includes('203.0.113.10'));
@@ -75,7 +76,7 @@ assert.ok(hi.includes('switch-01'));
 assert.ok(hi.includes('dsSecVlans') && hi.includes('dsSecAcls'), 'VLAN and ACL sections');
 assert.ok(!hi.includes('dsSecMatrix'), 'no policy matrix on a switch');
 assert.ok(hi.includes('vty 0 4') && hi.includes('GONE'));
-assert.ok(!/<script/i.test(hi) && !/https?:\/\//.test(hi));
+assert.ok(!/<script/i.test(hi) && !/https?:\/\//.test(hi) && !/http-equiv/i.test(hi));
 
 // The PDF button (config-analyzer.js): only firewalls with a layout of their
 // own (FortiOS) and switches; a PAN-OS firewall would print as a switch.
