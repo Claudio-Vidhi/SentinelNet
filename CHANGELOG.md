@@ -10,6 +10,8 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+## [0.70.8] - 2026-11-24
+
 ### Added
 
 - **Manual config import, FortiGate multi-VDOM.** Below the per-section
