@@ -294,17 +294,22 @@
     let _auditAdvisor = null;
 
     function renderAuditAdvisor() {
-        const panel = document.getElementById('auditAdvisorPanel');
+        const empty = document.getElementById('auditAdvisorEmpty');
         const body = document.getElementById('auditAdvisorBody');
-        if (!panel || !body) return;
+        const count = document.getElementById('auditAdvisorCount');
+        if (!empty || !body || !count) return;
         const adv = _auditAdvisor;
+        // The panel always shows in its sub-tab: without a FortiOS result it
+        // holds the empty state, and the sub-tab badge stays blank.
+        empty.style.display = adv ? 'none' : '';
         if (!adv) {
-            panel.style.display = 'none';
             body.innerHTML = '';
+            count.textContent = '';
             return;
         }
         const src = adv.source || {};
         const recs = Array.isArray(adv.recommendations) ? adv.recommendations : [];
+        count.textContent = String(recs.length);
         const banner = (key) => `<div class="nsa-partial"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(tr(key))}</div>`;
         let html = '';
         if (src.full_config === false) html += banner('nsaAdvNotFullConfig');
@@ -313,7 +318,6 @@
         }
         body.innerHTML = html + '<div class="fgt-adv"></div>';
         window.fgtAdvisorMount(body.querySelector('.fgt-adv'), recs, adv.summary);
-        panel.style.display = '';
     }
 
     function renderAuditOverview() {
@@ -1903,23 +1907,16 @@ ${pagesHtml}
     }
 
     function switchNetSecSubtab(sub) {
-        const btnScan = document.getElementById('subtabBtnAuditScan');
-        const btnChecklist = document.getElementById('subtabBtnChecklist');
-        const paneScan = document.getElementById('netsecSubtabScan');
-        const paneChecklist = document.getElementById('netsecSubtabChecklist');
-        if (!btnScan || !btnChecklist || !paneScan || !paneChecklist) return;
-
+        const panes = { scan: 'netsecSubtabScan', checklist: 'netsecSubtabChecklist', advisor: 'netsecSubtabAdvisor' };
+        const buttons = { scan: 'subtabBtnAuditScan', checklist: 'subtabBtnChecklist', advisor: 'subtabBtnAuditAdvisor' };
+        if (!panes[sub]) sub = 'scan';
+        for (const key of Object.keys(panes)) {
+            document.getElementById(panes[key]).style.display = key === sub ? 'block' : 'none';
+            document.getElementById(buttons[key]).classList.toggle('active', key === sub);
+        }
         if (sub === 'checklist') {
-            btnScan.classList.remove('active');
-            btnChecklist.classList.add('active');
-            paneScan.style.display = 'none';
-            paneChecklist.style.display = 'block';
             if (typeof loadAuditChecklistTab === 'function') loadAuditChecklistTab();
-        } else {
-            btnChecklist.classList.remove('active');
-            btnScan.classList.add('active');
-            paneChecklist.style.display = 'none';
-            paneScan.style.display = 'block';
+        } else if (sub === 'scan') {
             loadAuditHistory();
         }
     }
