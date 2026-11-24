@@ -575,6 +575,17 @@ end
             out = route_table.collect_for(SWITCH, backup_only=True)
         self.assertEqual(out, {"device_ip": SWITCH["IP"], "error": "nessun backup"})
 
+    def test_backup_only_with_a_backup_without_statics_says_so(self):
+        analysis = {"routing": {"static": []}}
+        with mock.patch.object(route_table, "_collect_live",
+                               side_effect=AssertionError("live call")), \
+             mock.patch("ai.config_analyzer.analyze_device", return_value=analysis), \
+             mock.patch("ai.config_analyzer._find_freshest_backup",
+                        return_value=(os.devnull, "")):
+            out = route_table.collect_for(SWITCH, backup_only=True)
+        self.assertEqual(out, {"device_ip": SWITCH["IP"],
+                               "error": "nessuna rotta statica nel backup"})
+
     def test_the_api_backup_only_reads_no_device_and_caches_nothing(self):
         client = TestClient(app_server.app)
         r = client.post("/api/auth/login",

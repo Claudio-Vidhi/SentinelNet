@@ -419,8 +419,11 @@
     function rtIsHop(gw) { return !!gw && gw !== '0.0.0.0' && ip4(gw) !== null; }
 
     /** One line per device for the summary table, devices in first-seen order.
-     *  A disabled default is not a default; an address-object name never is. */
-    function rtSummaryByDevice(rows) {
+     *  A disabled default is not a default; an address-object name never is.
+     *  For a device in `liveIps` ECMP and defaults come from its live rows
+     *  only: a backup static (SD-WAN member '' vs the live gateway) would
+     *  double them. */
+    function rtSummaryByDevice(rows, liveIps = new Set()) {
         const by = new Map();
         for (const r of rows) {
             if (!by.has(r.device_ip)) by.set(r.device_ip, []);
@@ -428,17 +431,21 @@
         }
         return [...by.entries()].map(([ip, own]) => {
             const byType = {}, hops = new Map(), gws = new Map();
+            const routed = liveIps.has(ip) ? own.filter(r => !r.from_backup) : own;
             for (const r of own) {
                 const t = r.type || 'unknown';
                 byType[t] = (byType[t] || 0) + 1;
                 if (rtIsHop(r.gateway)) hops.set(r.gateway, (hops.get(r.gateway) || 0) + 1);
+            }
+            for (const r of routed) {
                 const k = (r.vrf || '') + '|' + r.network;
                 if (!gws.has(k)) gws.set(k, new Set());
-                gws.get(k).add(r.gateway || '');
+                // On-link (tunnel) routes differ by interface, not gateway.
+                gws.get(k).add(r.gateway && r.gateway !== '0.0.0.0' ? r.gateway : (r.interface || ''));
             }
             return {
                 ip, total: own.length, byType,
-                defaults: own.filter(r => !r.disabled && (parseNet(r.network) || { len: -1 }).len === 0)
+                defaults: routed.filter(r => !r.disabled && (parseNet(r.network) || { len: -1 }).len === 0)
                     .map(r => ({ gateway: r.gateway || '', interface: r.interface || '' })),
                 topHops: [...hops.entries()].map(([hop, n]) => ({ hop, n }))
                     .sort((a, b) => b.n - a.n || a.hop.localeCompare(b.hop, undefined, { numeric: true }))
@@ -455,12 +462,13 @@
      *  An address-object name cannot be matched against the RIB: skipped. */
     function rtAnomalies(rows, liveIps) {
         const out = [];
-        for (const s of rtSummaryByDevice(rows)) {
+        for (const s of rtSummaryByDevice(rows, liveIps)) {
             const own = rows.filter(r => r.device_ip === s.ip);
-            if (!s.defaults.length) out.push({ ip: s.ip, kind: 'no-default' });
+            // A backup-only device: a DHCP/PPPoE default is not in the config.
+            if (!s.defaults.length && liveIps.has(s.ip)) out.push({ ip: s.ip, kind: 'no-default' });
             const seen = new Map();
             for (const r of own) {
-                const k = (r.vrf || '') + '|' + r.network + '|' + (r.gateway || '');
+                const k = (r.vrf || '') + '|' + r.network + '|' + (r.gateway || '') + '|' + (r.interface || '');
                 seen.set(k, (seen.get(k) || 0) + 1);
                 if (seen.get(k) === 2) out.push({ ip: s.ip, kind: 'duplicate', network: r.network, gateway: r.gateway || '' });
             }
@@ -475,9 +483,12 @@
                 }
             }
             if (!liveIps.has(s.ip)) continue;
+            // A live row for the same prefix: the backup static is there, its
+            // gateway just reads differently (SD-WAN, interface-only, floating).
+            const livePrefixes = new Set(own.filter(r => !r.from_backup).map(r => (r.vrf || '') + '|' + r.network));
             for (const r of own) {
                 if (r.from_backup && r.type === 'static' && !r.disabled && !r.blackhole && !r.vrf
-                    && parseNet(r.network)) {
+                    && parseNet(r.network) && !livePrefixes.has('|' + r.network)) {
                     out.push({ ip: s.ip, kind: 'static-missing', network: r.network, gateway: r.gateway || '' });
                 }
             }
@@ -1107,10 +1118,10 @@
     function renderRtSummary() {
         const box = document.getElementById('rtSummary');
         if (!box) return;
-        const sums = rtSummaryByDevice(_rtRows);
+        const live = new Set(_rtRows.filter(r => !r.from_backup).map(r => r.device_ip));
+        const sums = rtSummaryByDevice(_rtRows, live);
         if (!sums.length) { box.innerHTML = ''; return; }
         const label = new Map(_rtLoaded.map(d => [d.value, d.label]));
-        const live = new Set(_rtRows.filter(r => !r.from_backup).map(r => r.device_ip));
         const dash = '&mdash;';
         const body = sums.map(s => {
             const types = RT_TYPE_ORDER.concat(Object.keys(s.byType).filter(t => !RT_TYPE_ORDER.includes(t)))
@@ -1125,7 +1136,7 @@
             const ts = _rtBackupTs[s.ip];
             const src = !s.fromBackup ? escapeHtml(tr('rtSumLive'))
                 : `<span class="rt-col-tag warn">${escapeHtml(tr(live.has(s.ip) ? 'rtSumMixed' : 'rtFromBackup'))}</span>${
-                    ts ? ` <span class="rt-col-ip">${escapeHtml(new Date(ts * 1000).toLocaleString())}</span>` : ''}`;
+                    ts ? ` <span class="rt-col-ip">${escapeHtml(new Date(ts * 1000).toLocaleString(currentLang))}</span>` : ''}`;
             return `<tr><td><span class="rt-col-name">${escapeHtml(label.get(s.ip) || s.ip)}</span>
                     <span class="rt-col-ip">${escapeHtml(s.ip)}</span></td>
                 <td class="rt-num">${s.total}</td><td>${types}</td><td>${def}</td><td>${hops}</td>

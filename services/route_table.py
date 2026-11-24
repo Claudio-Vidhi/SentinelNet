@@ -569,8 +569,14 @@ def collect_for(device, backup_only: bool = False) -> dict:
     dire perche' l'apparato non ha risposto conta quanto mostrare le righe."""
     if backup_only:
         # No session at all: only the static routes of the last backup.
-        return (routes_from_backup(device)
-                or {"device_ip": device.get("IP"), "error": "nessun backup"})
+        found = routes_from_backup(device)
+        if found:
+            return found
+        from ai import config_analyzer
+        path, _ten = config_analyzer._find_freshest_backup(device.get("IP"),
+                                                           device.get("Group") or "")
+        return {"device_ip": device.get("IP"),
+                "error": "nessuna rotta statica nel backup" if path else "nessun backup"}
     answer = _collect_live(device)
     fallback = routes_from_backup(device)
     if not fallback:

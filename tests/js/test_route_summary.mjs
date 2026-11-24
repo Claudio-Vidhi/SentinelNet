@@ -99,4 +99,33 @@ assert.ok(!rtSummaryByDevice(many)[0].topHops.some(h => h.hop === '0.0.0.0'));
 // Devices keep their first-seen order.
 assert.deepEqual(rtSummaryByDevice([...rowsB, ...rowsA]).map(s => s.ip), [B, A]);
 
+// --- SD-WAN default: backup gw '' vs live member gw on the same prefix -> no static-missing.
+const sdwan = [row(A, '192.0.2.0/24', '0.0.0.0', 'connected'),
+               row(A, '0.0.0.0/0', '192.0.2.1', 'static'),
+               row(A, '0.0.0.0/0', '', 'static', { from_backup: true, interface: 'virtual-wan-link' })];
+an = rtAnomalies(sdwan, new Set([A]));
+assert.deepEqual(an, []);
+
+// --- Device answered live: ECMP and defaults ignore its backup rows.
+const sLive = rtSummaryByDevice(sdwan, new Set([A]))[0];
+assert.equal(sLive.ecmp, 0);
+assert.deepEqual(sLive.defaults, [{ gateway: '192.0.2.1', interface: 'port1' }]);
+assert.equal(sLive.total, 3);
+// Not live: the backup rows are all there is.
+assert.equal(rtSummaryByDevice(sdwan, new Set())[0].defaults.length, 2);
+
+// --- Dual-tunnel ECMP: same prefix, on-link gw, two tunnel interfaces.
+const tun = [row(B, '0.0.0.0/0', '192.0.2.1', 'static'),
+             row(B, '10.0.0.0/8', '0.0.0.0', 'static', { interface: 'tun1' }),
+             row(B, '10.0.0.0/8', '0.0.0.0', 'static', { interface: 'tun2' })];
+assert.equal(rtAnomalies(tun, new Set([B])).filter(x => x.kind === 'duplicate').length, 0);
+assert.equal(rtSummaryByDevice(tun)[0].ecmp, 1);
+// '' and '0.0.0.0' on the same interface are the same next hop: not ECMP.
+assert.equal(rtSummaryByDevice([row(B, '10.0.0.0/8', '0.0.0.0', 'static', { interface: 'tun1' }),
+                                row(B, '10.0.0.0/8', '', 'static', { interface: 'tun1' })])[0].ecmp, 0);
+
+// --- Backup-only device without 0/0 -> no no-default (DHCP/PPPoE default is not in the config).
+assert.deepEqual(rtAnomalies([row(C, '10.0.0.0/8', '192.0.2.1', 'static', { from_backup: true })],
+                             new Set()), []);
+
 console.log('route summary: ok');
