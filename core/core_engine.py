@@ -848,6 +848,8 @@ def run_bulk_command(device, commands, config_mode=False, save_after=False):
 
 def extract_hostname_from_config(content: str) -> Optional[str]:
     """Extracts the hostname from configuration lines (Cisco, HPE, and industrial switches)."""
+    if re.search(r'^\s*config system global\s*$', content, re.MULTILINE):
+        return _fortios_global_hostname(content)
     match = re.search(r'^\s*hostname\s+(\S+)', content, re.MULTILINE | re.IGNORECASE)
     if match:
         return match.group(1).strip().strip('"')
@@ -863,6 +865,32 @@ def extract_hostname_from_config(content: str) -> Optional[str]:
                       content, re.MULTILINE | re.IGNORECASE)
     if match:
         return match.group(1).strip()
+    return None
+
+
+def _fortios_global_hostname(content: str) -> Optional[str]:
+    """`set hostname` directly inside `config system global` (also nested in
+    `config global` on multi-VDOM). Other blocks (webfilter, auto-script, ...)
+    carry their own `set hostname`; multi-line quoted strings are skipped."""
+    stack: List[str] = []
+    in_quote = False
+    for raw in content.splitlines():
+        line = raw.strip()
+        odd = len(re.findall(r'(?<!\\)"', line)) % 2 == 1
+        if in_quote:
+            in_quote = not odd
+            continue
+        in_quote = odd
+        low = line.lower()
+        if low.startswith(('config ', 'edit ')):
+            stack.append(low)
+        elif low in ('next', 'end'):
+            if stack:
+                stack.pop()
+        elif not odd and stack and stack[-1] == 'config system global':
+            m = re.match(r'set\s+hostname\s+"?([^"]+)"?\s*$', line, re.IGNORECASE)
+            if m:
+                return m.group(1).strip()
     return None
 
 
