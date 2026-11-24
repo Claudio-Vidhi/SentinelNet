@@ -10,6 +10,15 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Fixed
+
+- Dialogs opened on their own (audit report preview, device PDF summary and
+  the other full-screen previews) no longer slide under the topbar, the page
+  cards and sticky table headers: opening a dialog kept clearing the z-index
+  its template sets.
+- Device PDF summary: section headings use an accent rule instead of a side
+  bar.
+
 ## [0.70.5] - 2026-11-24
 
 ### Added
