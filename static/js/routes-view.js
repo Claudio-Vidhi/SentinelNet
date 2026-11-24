@@ -20,6 +20,7 @@
     // Per device, from /api/routes: interface addresses, HA members, IPsec
     // tunnels. The route graph names next hops with it.
     let _rtContext = {};
+    let _rtBackupTs = {};        // device ip -> backup mtime, for devices read from a backup
     let _rtLoaded = [];          // [{value, label}] devices of the last read
     let _rtMatrix = [];
     let _rtUnknown = new Set();  // devices whose absence proves nothing (silent / backup only)
@@ -414,6 +415,76 @@
             .sort((a, b) => { const x = key(a), y = key(b); return x[0] - y[0] || x[1] - y[1]; });
     }
 
+    /** A real next hop: an address, not the on-link 0.0.0.0 or an empty one. */
+    function rtIsHop(gw) { return !!gw && gw !== '0.0.0.0' && ip4(gw) !== null; }
+
+    /** One line per device for the summary table, devices in first-seen order.
+     *  A disabled default is not a default; an address-object name never is. */
+    function rtSummaryByDevice(rows) {
+        const by = new Map();
+        for (const r of rows) {
+            if (!by.has(r.device_ip)) by.set(r.device_ip, []);
+            by.get(r.device_ip).push(r);
+        }
+        return [...by.entries()].map(([ip, own]) => {
+            const byType = {}, hops = new Map(), gws = new Map();
+            for (const r of own) {
+                const t = r.type || 'unknown';
+                byType[t] = (byType[t] || 0) + 1;
+                if (rtIsHop(r.gateway)) hops.set(r.gateway, (hops.get(r.gateway) || 0) + 1);
+                const k = (r.vrf || '') + '|' + r.network;
+                if (!gws.has(k)) gws.set(k, new Set());
+                gws.get(k).add(r.gateway || '');
+            }
+            return {
+                ip, total: own.length, byType,
+                defaults: own.filter(r => !r.disabled && (parseNet(r.network) || { len: -1 }).len === 0)
+                    .map(r => ({ gateway: r.gateway || '', interface: r.interface || '' })),
+                topHops: [...hops.entries()].map(([hop, n]) => ({ hop, n }))
+                    .sort((a, b) => b.n - a.n || a.hop.localeCompare(b.hop, undefined, { numeric: true }))
+                    .slice(0, 5),
+                ecmp: [...gws.values()].filter(s => s.size > 1).length,
+                fromBackup: own.some(r => r.from_backup),
+            };
+        });
+    }
+
+    /** What deserves a look, per device. `liveIps`: devices with at least one
+     *  live row; only for those a backup static left over means the RIB lacks
+     *  it (collect_for adds from the backup only what the device did not say).
+     *  An address-object name cannot be matched against the RIB: skipped. */
+    function rtAnomalies(rows, liveIps) {
+        const out = [];
+        for (const s of rtSummaryByDevice(rows)) {
+            const own = rows.filter(r => r.device_ip === s.ip);
+            if (!s.defaults.length) out.push({ ip: s.ip, kind: 'no-default' });
+            const seen = new Map();
+            for (const r of own) {
+                const k = (r.vrf || '') + '|' + r.network + '|' + (r.gateway || '');
+                seen.set(k, (seen.get(k) || 0) + 1);
+                if (seen.get(k) === 2) out.push({ ip: s.ip, kind: 'duplicate', network: r.network, gateway: r.gateway || '' });
+            }
+            // ponytail: one level of next-hop only, no recursive resolution;
+            // a static via a hop reached through another route is flagged.
+            const nets = own.filter(r => RT_ATTACHED.includes(r.type)).map(r => parseNet(r.network)).filter(Boolean);
+            for (const r of own) {
+                if (!nets.length || r.type !== 'static' || r.disabled || r.blackhole || !rtIsHop(r.gateway)) continue;
+                const hop = /** @type {number} */ (ip4(r.gateway));
+                if (!nets.some(n => netContains(n, hop))) {
+                    out.push({ ip: s.ip, kind: 'hop-unreachable', network: r.network, gateway: r.gateway });
+                }
+            }
+            if (!liveIps.has(s.ip)) continue;
+            for (const r of own) {
+                if (r.from_backup && r.type === 'static' && !r.disabled && !r.blackhole && !r.vrf
+                    && parseNet(r.network)) {
+                    out.push({ ip: s.ip, kind: 'static-missing', network: r.network, gateway: r.gateway || '' });
+                }
+            }
+        }
+        return out;
+    }
+
     /** FortiGate policy routes as pseudo-rows for the graph only: one per
      *  enabled 'permit' policy route, type 'policy'. They are matched before
      *  the routing table, so leaving them out draws a path traffic may not
@@ -522,7 +593,7 @@
         _rtReverseTrace = null;
         if (!chosen.length) {
             // Nessun apparato scelto: nessuna sessione aperta.
-            _rtRows = []; _rtErrors = []; _rtLoaded = []; _rtMatrix = []; _rtContext = {};
+            _rtRows = []; _rtErrors = []; _rtLoaded = []; _rtMatrix = []; _rtContext = {}; _rtBackupTs = {};
             renderRtErrors();
             renderRtMatrix();
             return;
@@ -534,15 +605,18 @@
             body.innerHTML = `<tr><td class="rt-mx-empty">${escapeHtml(tr('rtLoading'))}</td></tr>`;
         }
         try {
+            const backupOnly = /** @type {HTMLInputElement|null} */ (document.getElementById('rtBackupOnly'))?.checked;
             const res = await apiFetch('/api/routes?device='
-                + encodeURIComponent(chosen.map(d => d.value).join(',')));
+                + encodeURIComponent(chosen.map(d => d.value).join(','))
+                + (backupOnly ? '&backup_only=1' : ''));
             if (!res || !res.ok) throw new Error('HTTP ' + (res ? res.status : '?'));
             const data = await res.json();
             _rtRows = data.rows || [];
             _rtErrors = data.errors || [];
             _rtContext = data.context || {};
+            _rtBackupTs = data.backup_ts || {};
         } catch (e) {
-            _rtRows = []; _rtContext = {};
+            _rtRows = []; _rtContext = {}; _rtBackupTs = {};
             _rtErrors = [{ device_ip: '', error: String(e) }];
         } finally {
             if (btn) btn.disabled = false;
@@ -1025,7 +1099,62 @@
             color: 'var(--text-soft)', on: false, action: '', attr: '' });
     }
 
+    const RT_ANOM_KEYS = { 'no-default': 'rtAnomNoDefault', 'duplicate': 'rtAnomDuplicate',
+                           'hop-unreachable': 'rtAnomHopUnreachable', 'static-missing': 'rtAnomStaticMissing' };
+
+    // Summary table and anomaly list above the rings: the same rows, one line
+    // per device, then what deserves a look.
+    function renderRtSummary() {
+        const box = document.getElementById('rtSummary');
+        if (!box) return;
+        const sums = rtSummaryByDevice(_rtRows);
+        if (!sums.length) { box.innerHTML = ''; return; }
+        const label = new Map(_rtLoaded.map(d => [d.value, d.label]));
+        const live = new Set(_rtRows.filter(r => !r.from_backup).map(r => r.device_ip));
+        const dash = '&mdash;';
+        const body = sums.map(s => {
+            const types = RT_TYPE_ORDER.concat(Object.keys(s.byType).filter(t => !RT_TYPE_ORDER.includes(t)))
+                .filter(t => s.byType[t])
+                .map(t => `<span class="rt-sum-type">${rtKind(t)}${escapeHtml(t)} ${s.byType[t]}</span>`).join(' ');
+            const d = s.defaults[0];
+            const def = d ? escapeHtml(d.gateway || d.interface || '0.0.0.0')
+                + (d.gateway && d.interface ? ` <span class="rt-col-ip">${escapeHtml(d.interface)}</span>` : '')
+                + (s.defaults.length > 1 ? ` <span class="rt-col-ip">+${s.defaults.length - 1}</span>` : '') : dash;
+            const hops = s.topHops.length
+                ? s.topHops.map(h => `<span class="rt-sum-type">${escapeHtml(h.hop)} (${h.n})</span>`).join(' ') : dash;
+            const ts = _rtBackupTs[s.ip];
+            const src = !s.fromBackup ? escapeHtml(tr('rtSumLive'))
+                : `<span class="rt-col-tag warn">${escapeHtml(tr(live.has(s.ip) ? 'rtSumMixed' : 'rtFromBackup'))}</span>${
+                    ts ? ` <span class="rt-col-ip">${escapeHtml(new Date(ts * 1000).toLocaleString())}</span>` : ''}`;
+            return `<tr><td><span class="rt-col-name">${escapeHtml(label.get(s.ip) || s.ip)}</span>
+                    <span class="rt-col-ip">${escapeHtml(s.ip)}</span></td>
+                <td class="rt-num">${s.total}</td><td>${types}</td><td>${def}</td><td>${hops}</td>
+                <td class="rt-num">${s.ecmp || dash}</td><td>${src}</td></tr>`;
+        }).join('');
+        const anomalies = rtAnomalies(_rtRows, live);
+        const list = anomalies.map(a => {
+            const text = escapeHtml(tr(RT_ANOM_KEYS[a.kind], {
+                dev: label.get(a.ip) || a.ip, net: a.network || '', gw: a.gateway || '' }));
+            return a.network
+                ? `<li><button type="button" class="rt-anom" data-action="rt-anom" data-prefix="${escapeHtml(a.network)}">${text}</button></li>`
+                : `<li><span class="rt-anom">${text}</span></li>`;
+        }).join('');
+        box.innerHTML = `<div class="rt-monitor-wrap"><table class="rt-cand rt-monitor rt-sum-table" data-no-colpicker><thead><tr>
+              <th data-no-sort="1">${escapeHtml(tr('rtSumDevice'))}</th>
+              <th data-no-sort="1" class="rt-num">${escapeHtml(tr('rtRingTotal'))}</th>
+              <th data-no-sort="1">${escapeHtml(tr('rtRingType'))}</th>
+              <th data-no-sort="1">${escapeHtml(tr('rtSumDefault'))}</th>
+              <th data-no-sort="1">${escapeHtml(tr('rtSumTopHops'))}</th>
+              <th data-no-sort="1" class="rt-num">${escapeHtml(tr('rtSumEcmp'))}</th>
+              <th data-no-sort="1">${escapeHtml(tr('rtSumSource'))}</th>
+            </tr></thead><tbody>${body}</tbody></table></div>
+            <h4 class="rt-sum-h">${escapeHtml(tr('rtAnomTitle', { n: anomalies.length }))}</h4>
+            ${anomalies.length ? `<ul class="rt-anom-list">${list}</ul>`
+                : `<p class="rt-mx-empty">${escapeHtml(tr('rtAnomNone'))}</p>`}`;
+    }
+
     function renderRtRings() {
+        renderRtSummary();
         const box = document.getElementById('rtRings');
         if (!box) return;
         const data = rtRingData(_rtRows, _rtLoaded);
@@ -2084,6 +2213,15 @@
         if (i) _rtIface = _rtIface === i ? '' : i;
         renderRtMatrix();
     });
+    // Anomaly: its prefix becomes the search, shown in the matrix.
+    document.getElementById('rtSummary')?.addEventListener('click', e => {
+        const el = /** @type {Element} */ (e.target).closest('[data-action="rt-anom"]');
+        const s = /** @type {HTMLInputElement|null} */ (document.getElementById('rtSearch'));
+        if (!el || !s) return;
+        s.value = el.getAttribute('data-prefix') || '';
+        switchRtView('matrix');
+        renderRtMatrix();
+    });
     // Sankey: its own type switches (the table keeps its chips), and the
     // routes behind a node or ribbon on double click / Enter.
     document.getElementById('rtSkTypes')?.addEventListener('click', e => {
@@ -2158,7 +2296,7 @@
     // altro cliente.
     window.addEventListener('globalTenantChanged', () => {
         _rtLkOpen.clear(); _rtUnknown = new Set();
-        _rtRows = []; _rtErrors = []; _rtLoaded = []; _rtMatrix = []; _rtContext = {};
+        _rtRows = []; _rtErrors = []; _rtLoaded = []; _rtMatrix = []; _rtContext = {}; _rtBackupTs = {};
         _rtOpen.clear();
         _rtIface = '';
         _rtSelectedKey = '';
@@ -2171,5 +2309,6 @@
     // The pure model, for tests/js/test_routes_matrix.mjs.
     window.rtModel = { ip4, parseNet, rtLpm, rtLookup, rtBuildMatrix, rtQuery, rtMatches,
                        rtBuildSankey, rtDeviceOwners, rtDeviceDepths, rtHopResolver,
-                       rtPolicyRows, rtPolicyMatches, rtIfaceName, rtRingData, rtMonitorRows };
+                       rtPolicyRows, rtPolicyMatches, rtIfaceName, rtRingData, rtMonitorRows,
+                       rtSummaryByDevice, rtAnomalies };
 })();

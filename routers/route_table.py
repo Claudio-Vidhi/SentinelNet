@@ -148,9 +148,12 @@ async def list_routes(
     # graph uses them to tell which selected device a next hop is.
     context = {a["device_ip"]: a.pop("context") for a in answers}
     rows, errors = [], []
+    # Per device answered from a backup: the file's mtime, for the summary.
+    backup_ts = {}
     for a in answers:
         note = a.get("error") or ""
         if a.get("source") == "backup":
+            backup_ts[a["device_ip"]] = a.get("backup_ts")
             # Le righe ci sono, ma non vengono dall'apparato: senza dirlo qui,
             # una configurazione vecchia di un mese si legge come la tabella
             # di adesso.
@@ -176,6 +179,7 @@ async def list_routes(
     rows.sort(key=lambda r: (r["device"], r["type"], r["network"]))
     return {"total": len(rows), "rows": rows, "errors": errors,
             "devices_queried": len(targets), "context": context,
+            "backup_ts": backup_ts,
             "counts": route_table.group_counts(rows),
             "breakdown": route_table.breakdown(rows)}
 

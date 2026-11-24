@@ -596,6 +596,7 @@ end
         out = r.json()
         self.assertEqual({row["network"] for row in out["rows"]},
                          {"198.51.100.0/24", "203.0.113.0/24"})
+        self.assertEqual(out["backup_ts"], {FGT_A["IP"]: 1_756_000_000})
         put.assert_not_called()
 
     def test_an_object_name_in_network_is_never_matched(self):
@@ -874,6 +875,13 @@ class RoutesTabIsWiredEndToEnd(unittest.TestCase):
     @unittest.skipUnless(shutil.which("node"), "node non disponibile")
     def test_the_matrix_model(self):
         harness = os.path.join(self._ROOT, "tests", "js", "test_routes_matrix.mjs")
+        proc = subprocess.run([shutil.which("node"), harness],
+                              capture_output=True, text=True, cwd=self._ROOT)
+        self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
+
+    @unittest.skipUnless(shutil.which("node"), "node non disponibile")
+    def test_the_route_summary_and_anomalies(self):
+        harness = os.path.join(self._ROOT, "tests", "js", "test_route_summary.mjs")
         proc = subprocess.run([shutil.which("node"), harness],
                               capture_output=True, text=True, cwd=self._ROOT)
         self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)

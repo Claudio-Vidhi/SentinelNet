@@ -3820,6 +3820,16 @@ tr:hover .inv-rename, .inv-rename:focus-visible { opacity: 1; }
 .rt-ring-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 .rt-ring-n { margin-left: auto; padding-left: 12px; font-variant-numeric: tabular-nums; color: var(--text-muted); }
 .rt-monitor { margin-top: 12px; }
+.rt-backup-only { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; cursor: pointer; }
+.rt-summary { margin-bottom: 14px; }
+.rt-summary .rt-monitor-wrap { max-height: 320px; }
+.rt-sum-table td { white-space: normal; }
+.rt-sum-type { white-space: nowrap; }
+.rt-sum-h { margin: 12px 0 6px; font-size: 13px; }
+.rt-anom-list { margin: 0; padding-left: 18px; font-size: 13px; }
+.rt-anom-list li { margin: 2px 0; }
+button.rt-anom { background: none; border: 0; padding: 0; color: var(--primary); cursor: pointer; text-align: left; font: inherit; }
+button.rt-anom:hover { text-decoration: underline; }
 /* Long tables (a core switch) scroll inside the card, header kept in view. */
 .rt-monitor-wrap { min-width: 0; overflow: auto; max-height: 420px; }
 .rt-monitor-wrap .rt-monitor thead th { position: sticky; top: 0; background: var(--surface-2); }

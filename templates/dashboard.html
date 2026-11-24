@@ -4494,6 +4494,7 @@
         <button type="button" id="btnRtExportCsv" class="btn btn-secondary btn-small" disabled>
           <i class="fa-solid fa-file-csv" aria-hidden="true"></i> <span data-i18n="rtExportCsv">Esporta CSV</span>
         </button>
+        <label class="rt-backup-only" for="rtBackupOnly"><input type="checkbox" id="rtBackupOnly"> <span data-i18n="rtBackupOnly">Solo backup (senza SSH)</span></label>
         <button type="button" id="btnRtRefresh" class="btn btn-primary btn-small">
           <i class="fa-solid fa-download" aria-hidden="true"></i> <span data-i18n="rtRefresh">Leggi tabelle</span>
         </button>
@@ -4714,6 +4715,7 @@
     <!-- Vista 3: Riepilogo apparati -->
     <div id="rtViewSummary" class="rt-view-pane" hidden>
       <p class="rt-trace-desc" data-i18n="rtRingsDesc">Come il Routing Monitor del FortiGate: le rotte di ogni apparato per tipo e per interfaccia di uscita. Clic su una voce per filtrare la tabella.</p>
+      <div id="rtSummary" class="rt-summary"></div>
       <div id="rtRings" class="rt-rings"></div>
     </div>
 
