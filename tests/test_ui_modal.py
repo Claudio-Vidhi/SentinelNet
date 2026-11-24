@@ -60,6 +60,14 @@ class TestModalManager(unittest.TestCase):
         for needle in ('role', 'aria-modal', 'Escape', 'Tab', 'focus('):
             self.assertIn(needle, src, f"manca {needle} nel gestore modali")
 
+    def test_manager_keeps_the_template_z_index(self):
+        # .modal-backdrop has no z-index in CSS: the template's inline one is
+        # all there is. Clearing it on open dropped the audit report preview
+        # under sticky table headers and the topbar.
+        src = (JS_DIR / "ui-modal.js").read_text(encoding="utf-8")
+        self.assertNotRegex(src, r"zIndex\s*=[^;]*:\s*''")
+        self.assertIn("dataset.baseZ", src)
+
 
 if __name__ == "__main__":
     unittest.main()

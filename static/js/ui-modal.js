@@ -92,10 +92,15 @@ function openModal(id, onClose) {
     // document order decided, and a dialog declared earlier in the template
     // (new tenant, new location) opened hidden behind the side panel.
     const below = _modalStack[_modalStack.length - 1];
-    el.style.zIndex = below
-        ? String(Math.max((parseInt(getComputedStyle(below.el).zIndex, 10) || 0) + 1,
-                          parseInt(getComputedStyle(el).zIndex, 10) || 0))
-        : '';
+    // The template's own inline z-index is the base: clearing it ('') left a
+    // first-level modal at z-index auto, under sticky table headers and the
+    // topbar.
+    if (el.dataset.baseZ === undefined) el.dataset.baseZ = el.style.zIndex;
+    el.style.zIndex = el.dataset.baseZ;
+    if (below) {
+        el.style.zIndex = String(Math.max((parseInt(getComputedStyle(below.el).zIndex, 10) || 0) + 1,
+                                          parseInt(getComputedStyle(el).zIndex, 10) || 0));
+    }
     el.style.display = 'flex';
     _modalStack.push({ el, opener: document.activeElement, onClose });
     if (_modalStack.length === 1) document.addEventListener('keydown', _onModalKeydown, true);
