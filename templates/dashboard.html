@@ -1880,7 +1880,7 @@
             </p>
             <div class="mac-row">
               <div class="mac-field">
-                <label for="macOvDevice" data-i18n="lblMacSwitch">Switch (IP)</label><select id="macOvDevice" class="ui-input" style="width:220px;"></select>
+                <label for="macOvDevice" data-i18n="lblMacSwitch">Switch (IP)</label><select id="macOvDevice" data-device-search class="ui-input" style="width:220px;"></select>
               </div>
               <div class="mac-field">
                 <label for="macOvCommand" data-i18n="lblMacAdhocCmd">Comando CLI</label><input id="macOvCommand" class="ui-input" type="text" placeholder="show bridge-domain" style="width:220px;">
@@ -1947,7 +1947,7 @@
       <div id="locPane-porte" class="loc-pane" role="tabpanel" aria-labelledby="locTab-porte" hidden>
         <div class="ep-toolbar">
           <label class="ep-field" for="ptSwitch"><span data-i18n="peDevice">Apparato</span>
-            <select id="ptSwitch"></select></label>
+            <select id="ptSwitch" data-device-search></select></label>
           <label class="ep-field" for="ptWindow"><span data-i18n="ifErrWindow">Finestra errori</span>
             <select id="ptWindow">
               <option value="1h" data-i18n="ifErrWin1h">Ultima ora</option>
@@ -1986,7 +1986,7 @@
       <div class="ep-toolbar">
         <span id="epQueryChip"></span>
         <label class="ep-field" for="epFilterSwitch"><span data-i18n="epThSwitch">Switch</span>
-          <select id="epFilterSwitch"></select></label>
+          <select id="epFilterSwitch" data-device-search></select></label>
         <label class="ep-field" for="epFilterVlan">VLAN
           <input id="epFilterVlan" type="text" inputmode="numeric" placeholder="10"></label>
         <label class="ep-field" for="epFilterProbe"><span data-i18n="epFilterProbe">Probe</span>
@@ -2029,7 +2029,7 @@
           <select id="wlcTenantSelect" class="head-select" aria-label="Tenant del WLC" data-i18n-aria-label="ariaWlcTenant">
             <option value="" data-i18n="wlcOptTenant">-- Seleziona tenant --</option>
           </select>
-          <select id="wlcTargetSelect" class="head-select" disabled aria-label="Controller WLC di destinazione" data-i18n-aria-label="ariaWlcTarget">
+          <select id="wlcTargetSelect" data-device-search class="head-select" disabled aria-label="Controller WLC di destinazione" data-i18n-aria-label="ariaWlcTarget">
             <option value="" data-i18n="wlcOptTargetFirst">-- Scegli prima un tenant --</option>
           </select>
           <button id="btnRefreshWlcData" class="btn btn-primary" data-i18n="btnConnectWlc"><i class="fa-solid fa-bolt"></i> Interroga WLC</button>
@@ -2246,7 +2246,7 @@
           <div class="filterbar" style="align-items:flex-end; gap:12px; flex-wrap:wrap; margin:0;">
             <div class="form-group" style="margin-bottom:0; min-width:220px;">
               <label for="trafHygDevice" data-i18n="trafHygDevice">Apparato</label>
-              <select id="trafHygDevice">
+              <select id="trafHygDevice" data-device-search>
                 <option value="" data-i18n="trafHygAllDevices">Tutti gli apparati compatibili</option>
               </select>
             </div>
@@ -2392,7 +2392,7 @@
             <label for="genCfgTenant" data-i18n="lblGenCfgTenant">Tenant</label><select id="genCfgTenant"></select>
           </div>
           <div class="form-group" style="min-width:220px; margin:0;">
-            <label for="genCfgTemplate" data-i18n="lblGenCfgTemplate">Switch template (opzionale)</label><select id="genCfgTemplate">
+            <label for="genCfgTemplate" data-i18n="lblGenCfgTemplate">Switch template (opzionale)</label><select id="genCfgTemplate" data-device-search>
               <option value="" data-i18n="optGenCfgNoTemplate">-- usa parametri comuni del tenant --</option>
             </select>
           </div>
@@ -3095,7 +3095,7 @@
             <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; margin-bottom:12px;">
               <div class="form-group" style="margin-bottom:0;">
                 <label for="fgtPrevTokenDevice" data-i18n="lblFgtTokenDevice">Dispositivo FortiGate</label>
-                <select id="fgtPrevTokenDevice">
+                <select id="fgtPrevTokenDevice" data-device-search>
                   <option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>
                 </select>
               </div>
@@ -4045,7 +4045,7 @@
           </div>
           <div class="if-field">
             <label class="if-field-label" for="ifDeviceFilter" data-i18n="ifScopeDevice">Apparato</label>
-            <select id="ifDeviceFilter" class="if-select">
+            <select id="ifDeviceFilter" data-device-search class="if-select">
               <option value="all" data-i18n="ifScopeAll">Tutti</option>
             </select>
           </div>
@@ -4150,7 +4150,7 @@
             <div class="nsa-source-row">
               <div class="form-group nsa-field">
                 <label for="auditDeviceSelect" data-i18n="nsaTargetLabel">Apparato Target dall'Inventario</label>
-                <select id="auditDeviceSelect">
+                <select id="auditDeviceSelect" data-device-search>
                   <!-- La scansione multi-dispositivo non e' implementata: questa
                        voce e' un segnaposto, non una promessa di funzionalita'. -->
                   <option value="all" data-i18n="nsaSelectDevice">— Seleziona un dispositivo —</option>
@@ -4754,7 +4754,7 @@
           </div>
           <div class="form-group" style="margin-bottom:0; min-width:280px;">
             <label for="ptDeviceSelect" data-i18n="ptDeviceLabel">Dispositivo Target</label>
-            <select id="ptDeviceSelect"></select>
+            <select id="ptDeviceSelect" data-device-search></select>
           </div>
         </div>
         <div id="ptDeviceMeta" class="pt-device-meta"></div>
@@ -5160,7 +5160,7 @@
               </button>
               <div class="form-group requires-admin" style="margin:0 0 0 auto; min-width:220px;">
                 <label for="driftSeedDeviceSelect" data-i18n="driftSeedFromLabel">Proponi regole dal dispositivo</label>
-                <select id="driftSeedDeviceSelect"></select>
+                <select id="driftSeedDeviceSelect" data-device-search></select>
               </div>
               <button id="btnDriftSeedBaseline" class="btn btn-secondary requires-admin" style="width:auto;">
                 <i class="fa-solid fa-wand-magic-sparkles"></i> <span data-i18n="driftBtnSeed">Genera</span>
@@ -5721,7 +5721,7 @@
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label for="fgtMgrIp" data-i18n="lblFgtMgrIp">IP dispositivo</label>
-            <select id="fgtMgrIp">
+            <select id="fgtMgrIp" data-device-search>
               <option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>
             </select>
           </div>
@@ -7185,6 +7185,7 @@
        che li usa: vedi LAZY_TAB_SCRIPTS. -->
   <script src="/static/js/i18n.js"></script>
   <script src="/static/js/ui-modal.js"></script>
+  <script src="/static/js/ui-select-search.js"></script>
   <script src="/static/js/ui-wizard.js"></script>
   <script src="/static/js/core.js"></script>
   <script src="/static/js/add-devices.js"></script>

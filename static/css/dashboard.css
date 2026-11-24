@@ -890,6 +890,21 @@ body.sidebar-collapsed .sidebar-toggle i { transform: rotate(180deg); }
   transition: border-color var(--transition);
 }
 
+/* Search box injected above device dropdowns by ui-select-search.js */
+.select-search {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius);
+  border: var(--seam) solid var(--border);
+  background-color: var(--surface-2);
+  color: var(--text);
+  font-size: 12px;
+}
+.select-search[hidden] { display: none; }
+
 /* Standardized Dropdown (Select) UI System */
 select {
   height: 36px !important;

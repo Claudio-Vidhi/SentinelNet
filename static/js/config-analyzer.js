@@ -295,7 +295,7 @@
         return `<div style="border:1px solid var(--border); border-radius:0; background:var(--surface-2); padding:16px;">
             <div style="font-weight:600; margin-bottom:12px;"><i class="fa-solid fa-right-left" style="color:var(--primary); margin-right:8px;"></i>${escapeHtml(L.caConvertTitle)}</div>
             <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
-                <select id="caConvDevice" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px; min-width:240px;">
+                <select id="caConvDevice" data-device-search style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px; min-width:240px;">
                     ${caDeviceOptions(L, 'caConvDevicePick')}
                 </select>
                 <label style="font-size:12px; color:var(--text-muted);">${escapeHtml(L.caConvSource)}</label>
