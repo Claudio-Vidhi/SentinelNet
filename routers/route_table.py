@@ -92,11 +92,12 @@ def list_routable_devices(current_user = Depends(get_current_user)):
         for d in route_table.routable_devices(devices_in_scope(current_user))]}
 
 
-def _audit_read(current_user, targets) -> None:
+def _audit_read(current_user, targets, backup_only: bool = False) -> None:
     """Who opened the SSH sessions: send_custom_command logs the command and
     the device, not the user who asked (security review 2026-10-12, L2)."""
     if targets:
-        log_audit(f"Tabelle di routing lette via SSH da '{current_user.get('sub')}' su: "
+        how = "dai backup" if backup_only else "via SSH"
+        log_audit(f"Tabelle di routing lette {how} da '{current_user.get('sub')}' su: "
                   f"{', '.join(str(d.get('IP')) for d in targets)}.")
 
 
@@ -119,8 +120,7 @@ async def list_routes(
     wanted = {p.strip() for p in device.split(",") if p.strip()}
     targets = [d for d in route_table.routable_devices(devices_in_scope(current_user))
                if d.get("IP") in wanted]
-    if not backup_only:  # backup-only opens no SSH session: nothing to audit
-        _audit_read(current_user, targets)
+    _audit_read(current_user, targets, backup_only)
 
     sem = asyncio.Semaphore(MAX_CONCURRENT_DEVICES)
 

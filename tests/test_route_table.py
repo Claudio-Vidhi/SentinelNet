@@ -585,13 +585,30 @@ end
         analysis["backup_ts"] = 1_756_000_000
         with mock.patch("services.inventory_manager.get_all_devices",
                         return_value=[FGT_A]),              mock.patch.object(route_table, "_collect_live",
-                               side_effect=AssertionError("live call")),              mock.patch("routers.route_table._cache_put") as put,              mock.patch("ai.config_analyzer.analyze_device", return_value=analysis):
+                               side_effect=AssertionError("live call")),              mock.patch("routers.route_table._cache_put") as put,              mock.patch("routers.route_table.log_audit") as audit,              mock.patch("ai.config_analyzer.analyze_device", return_value=analysis):
             r = client.get(f"/api/routes?device={FGT_A['IP']}&backup_only=1")
+        audit.assert_called_once()
+        text = audit.call_args.args[0]
+        self.assertIn("adm_rt", text)
+        self.assertIn(FGT_A["IP"], text)
+        self.assertNotIn("SSH", text)
         self.assertEqual(r.status_code, 200, r.text)
         out = r.json()
         self.assertEqual({row["network"] for row in out["rows"]},
                          {"198.51.100.0/24", "203.0.113.0/24"})
         put.assert_not_called()
+
+    def test_an_object_name_in_network_is_never_matched(self):
+        # A FortiOS route to an address object carries the object's name, not
+        # a CIDR: the lookup must skip it, not raise or read it as 0.0.0.0/0.
+        from services import path_trace
+        rows = [{"network": "branch-nets", "type": "static", "gateway": "",
+                 "interface": "wan1", "vrf": ""},
+                {"network": "198.51.100.0/24", "type": "static",
+                 "gateway": "192.0.2.254", "interface": "port1", "vrf": ""}]
+        self.assertEqual(path_trace.candidates(rows, "203.0.113.7"), [])
+        hit = path_trace.candidates(rows, "198.51.100.7")
+        self.assertEqual([r["network"] for r in hit], ["198.51.100.0/24"])
 
     def test_without_a_backup_the_error_stays_the_answer(self):
         with self._unreachable(), \
