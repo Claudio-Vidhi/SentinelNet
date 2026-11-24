@@ -74,6 +74,47 @@ class Guide(unittest.TestCase):
             if vendor != "fortinet":
                 self.assertEqual(g["sections"], [], vendor)
 
+    def test_single_vdom_sections_unchanged(self):
+        """The scope tags must not reorder or change the single-VDOM list."""
+        expected = [f"show {s}" for s in (
+            'system global', 'system interface', 'system password-policy', 'system ha',
+            'system dns', 'system snmp community', 'system snmp user', 'system admin',
+            'system session-helper', 'system auto-install', 'system ntp', 'system zone',
+            'log disk setting', 'log fortianalyzer setting', 'log syslogd setting',
+            'log eventfilter', 'log fortiguard setting', 'firewall address', 'firewall addrgrp',
+            'firewall service custom', 'firewall service group', 'firewall schedule recurring',
+            'firewall schedule onetime', 'ips sensor', 'user radius', 'user tacacs+', 'user ldap',
+            'user fsso', 'user group', 'vpn ssl web portal', 'vpn ssl settings',
+            'antivirus profile', 'webfilter profile', 'dnsfilter profile', 'application list',
+            'dlp profile', 'emailfilter profile', 'firewall ssl-ssh-profile',
+            'vpn ipsec phase1-interface', 'vpn ipsec phase2-interface', 'vpn ipsec phase1',
+            'vpn ipsec phase2', 'firewall vip', 'firewall vipgrp', 'firewall ippool',
+            'firewall policy', 'firewall local-in-policy', 'firewall DoS-policy',
+            'firewall central-snat-map', 'router static', 'router policy', 'router ospf',
+            'router bgp')]
+        rows = {g["vendor"]: g for g in mc.guide()}
+        self.assertEqual(rows["fortinet"]["sections"], expected)
+
+    def test_fortinet_multi_vdom_split(self):
+        rows = {g["vendor"]: g for g in mc.guide()}
+        split = rows["fortinet"]["sections_vdom"]
+        glob, vdom = split["global"], split["vdom"]
+        for c in ("show system global", "show system interface", "show system admin",
+                  "show log syslogd setting"):
+            self.assertIn(c, glob)
+        for c in ("show firewall policy", "show system zone", "show log eventfilter",
+                  "show router static", "show user group", "show ips sensor"):
+            self.assertIn(c, vdom)
+        self.assertFalse(set(glob) & set(vdom))
+        self.assertEqual(sorted(glob + vdom), sorted(rows["fortinet"]["sections"]))
+        # Each scope keeps the single-VDOM order.
+        order = rows["fortinet"]["sections"]
+        for part in (glob, vdom):
+            self.assertEqual(part, [c for c in order if c in part])
+        for vendor, g in rows.items():
+            if vendor != "fortinet":
+                self.assertEqual(g["sections_vdom"], {}, vendor)
+
     def test_commands_are_not_repeated(self):
         for g in mc.guide():
             self.assertEqual(len(g["commands"]), len(set(g["commands"])), g["vendor"])
@@ -275,6 +316,106 @@ class SectionLog(unittest.TestCase):
         self.assertEqual(mc.preview(IOS_LOG, "cisco")["warnings"], [])
 
 
+FORTI_VDOM_LOG = (
+    "fw-01 # config global\r\n"
+    "\r\n"
+    "fw-01 (global) # config system console\r\n"
+    "fw-01 (console) # set output standard\r\n"
+    "fw-01 (console) # end\r\n"
+    "fw-01 (global) # show system global\r\n"
+    "config system global\r\n"
+    "    set hostname \"fw-01\"\r\n"
+    "    set vdom-mode multi-vdom\r\n"
+    "end\r\n"
+    "\r\n"
+    "fw-01 (global) # show system interface\r\n"
+    "config system interface\r\n"
+    "    edit \"port1\"\r\n"
+    "        set vdom \"root\"\r\n"
+    "        set ip 192.0.2.1 255.255.255.0\r\n"
+    "        set allowaccess ping https\r\n"
+    "    next\r\n"
+    "    edit \"port2\"\r\n"
+    "        set vdom \"root\"\r\n"
+    "        set ip 198.51.100.1 255.255.255.0\r\n"
+    "    next\r\n"
+    "end\r\n"
+    "\r\n"
+    "fw-01 (global) # get system status\r\n"
+    "Version: FortiGate-100F v7.4.3,build2573,240201 (GA.F)\r\n"
+    "Serial-Number: FG100FTK00000000\r\n"
+    "Virtual domain configuration: multiple\r\n"
+    "fw-01 (global) # end\r\n"
+    "\r\n"
+    "fw-01 # config vdom\r\n"
+    "\r\n"
+    "fw-01 (vdom) # edit root\r\n"
+    "current vf=root:0\r\n"
+    "\r\n"
+    "fw-01 (root) # show firewall policy\r\n"
+    "config firewall policy\r\n"
+    "    edit 1\r\n"
+    "        set srcintf \"port1\"\r\n"
+    "        set dstintf \"port2\"\r\n"
+    "        set srcaddr \"all\"\r\n"
+    "        set dstaddr \"all\"\r\n"
+    "        set action accept\r\n"
+    "        set service \"ALL\"\r\n"
+    "    next\r\n"
+    "end\r\n"
+    "\r\n"
+    "fw-01 (root) # show system zone\r\n"
+    "config system zone\r\n"
+    "end\r\n"
+    "\r\n"
+    "fw-01 (root) # end\r\n"
+    "fw-01 # \r\n"
+)
+
+
+class VdomLog(unittest.TestCase):
+    """Multi-VDOM GUI console: global sections under config global, the rest
+    under config vdom / edit <name>; stored as one flat config."""
+
+    def test_global_and_vdom_sections_become_one_config(self):
+        out = mc.to_backup("fortinet", FORTI_VDOM_LOG)
+        self.assertTrue(out["structured"])
+        config, marker, _ = out["backup"].partition(f"\n\n{TRIAGE_MARKER}\n")
+        self.assertTrue(marker)
+        self.assertTrue(config.startswith("#vdom=root\nconfig system global\n"))
+        # Global first, then the VDOM, each in guide order (zone before policy).
+        starts = [config.index(f"config {s}\n") for s in
+                  ("system global", "system interface", "system zone", "firewall policy")]
+        self.assertEqual(starts, sorted(starts))
+        for echo in ("fw-01 ", "current vf", "config global", "config vdom", "edit root",
+                     "Version:", "config system console"):
+            self.assertNotIn(echo, out["backup"])
+        self.assertEqual(out["hostname"], "fw-01")
+        self.assertEqual(out["version"], "7.4.3")
+        self.assertEqual(out["model"], "FortiGate-100F")
+        self.assertEqual(out["serial"], "FG100FTK00000000")
+
+    def test_vdom_name_other_than_root(self):
+        log = FORTI_VDOM_LOG.replace("edit root", "edit dmz-vdom").replace("(root)", "(dmz-vdom)")
+        backup = mc.to_backup("fortinet", log)["backup"]
+        self.assertTrue(backup.startswith("#vdom=dmz-vdom\n"))
+
+    def test_stored_backup_reads_as_fortios(self):
+        from ai.config_analyzer import analyze_fortios_config, detect_config_type
+        backup = mc.to_backup("fortinet", FORTI_VDOM_LOG)["backup"]
+        self.assertEqual(detect_config_type(backup), "fortios")
+        parsed = analyze_fortios_config(backup)
+        self.assertEqual([i["name"] for i in parsed["interfaces"]], ["port1", "port2"])
+        self.assertEqual(len(parsed["policies"]), 1)
+        self.assertEqual(parsed["hostname"], "fw-01")
+        p = mc.preview(FORTI_VDOM_LOG, "fortinet")
+        self.assertEqual(p["warnings"], [])
+        self.assertEqual(p["ip_candidates"][0], "192.0.2.1")
+
+    def test_single_vdom_log_gets_no_vdom_comment(self):
+        self.assertNotIn("#vdom=", mc.to_backup("fortinet", FORTI_SECTIONS_LOG)["backup"])
+
+
 class PlainFiles(unittest.TestCase):
     def test_fortigate_gui_backup_is_stored_as_is(self):
         """Review focus 2."""
@@ -349,6 +490,20 @@ class GuideUi(unittest.TestCase):
         self.assertIn('id="mcSectionsBlock"', html)
         self.assertIn('id="mcSections"', html)
         self.assertIn('data-action="mc-copy-sections"', html)
+
+    def test_vdom_block_is_rendered_and_copied(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parent.parent
+        js = (root / "static/js/manual-config.js").read_text(encoding="utf-8")
+        html = (root / "templates/dashboard.html").read_text(encoding="utf-8")
+        i18n = (root / "static/js/i18n.js").read_text(encoding="utf-8")
+        self.assertTrue("v.sections_vdom" in js and "'mc-copy-vdom'" in js)
+        for key in ("mcLblVdom:", "mcVdomHint:", "mcLblVdomName:", "mcCopyVdomAria:"):
+            self.assertEqual(i18n.count(key), 2, key)  # it + en
+        for frag in ('id="mcVdomBlock"', 'id="mcVdomCommands"', 'data-action="mc-copy-vdom"',
+                     '<label for="mcVdomName"', 'id="mcVdomName"', 'value="root"'):
+            self.assertIn(frag, html)
+        self.assertIn("$('mcVdomName')?.addEventListener('input'", js)
 
 
 if __name__ == "__main__":

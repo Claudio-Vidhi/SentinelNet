@@ -6039,6 +6039,16 @@
             <pre id="mcSections" class="enroll-block"></pre>
             <button type="button" class="btn btn-secondary" data-action="mc-copy-sections" aria-label="Copia i comandi per sezione" data-i18n-aria-label="mcCopySectionsAria"><i class="fa-solid fa-copy"></i> <span data-i18n="btnCopyProbeEnroll">Copia tutto</span></button>
           </div>
+          <div id="mcVdomBlock" hidden>
+            <h4 data-i18n="mcLblVdom">FortiGate multi-VDOM</h4>
+            <p class="form-hint" data-i18n="mcVdomHint">Su un FortiGate con più VDOM: le impostazioni globali stanno in config global, policy, oggetti e rotte nel VDOM. Un caricamento per VDOM.</p>
+            <div class="form-group">
+              <label for="mcVdomName" data-i18n="mcLblVdomName">Nome VDOM</label>
+              <input id="mcVdomName" type="text" value="root" maxlength="31" spellcheck="false" autocomplete="off">
+            </div>
+            <pre id="mcVdomCommands" class="enroll-block"></pre>
+            <button type="button" class="btn btn-secondary" data-action="mc-copy-vdom" aria-label="Copia i comandi multi-VDOM" data-i18n-aria-label="mcCopyVdomAria"><i class="fa-solid fa-copy"></i> <span data-i18n="btnCopyProbeEnroll">Copia tutto</span></button>
+          </div>
           <ul id="mcNotes" class="mc-notes"></ul>
         </section>
         <section data-step="files" hidden>

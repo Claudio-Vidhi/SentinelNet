@@ -54,28 +54,39 @@ PAGING = {
 # Absent from it on purpose: `user local` (password hashes, nothing reads it).
 # The ones listed still print ENC secrets (admin, ha, ldap, radius, tacacs+,
 # snmp user, ipsec psk), exactly as show full-configuration does.
-SECTION_COMMANDS = {
-    "fortinet": [f"show {s}" for s in (
-        "system global", "system interface", "system password-policy", "system ha",
-        "system dns", "system snmp community", "system snmp user", "system admin",
-        "system session-helper", "system auto-install", "system ntp", "system zone",
-        "log disk setting", "log fortianalyzer setting", "log syslogd setting",
-        "log eventfilter", "log fortiguard setting",
-        "firewall address", "firewall addrgrp", "firewall service custom",
-        "firewall service group", "firewall schedule recurring", "firewall schedule onetime",
-        "ips sensor",
-        "user radius", "user tacacs+", "user ldap", "user fsso", "user group",
-        "vpn ssl web portal", "vpn ssl settings",
-        "antivirus profile", "webfilter profile", "dnsfilter profile", "application list",
-        "dlp profile", "emailfilter profile", "firewall ssl-ssh-profile",
-        "vpn ipsec phase1-interface", "vpn ipsec phase2-interface",
-        "vpn ipsec phase1", "vpn ipsec phase2",
-        "firewall vip", "firewall vipgrp", "firewall ippool",
-        "firewall policy", "firewall local-in-policy", "firewall DoS-policy",
-        "firewall central-snat-map",
-        "router static", "router policy", "router ospf", "router bgp",
-    )],
-}
+# Scope in multi-VDOM mode: "g" under `config global`, "v" under
+# `config vdom` / `edit <name>` (FortiOS 7.x; see the multi-VDOM report).
+_FORTI_SECTIONS = (
+    ("system global", "g"), ("system interface", "g"), ("system password-policy", "g"),
+    ("system ha", "g"), ("system dns", "g"), ("system snmp community", "g"),
+    ("system snmp user", "g"), ("system admin", "g"), ("system session-helper", "g"),
+    ("system auto-install", "g"), ("system ntp", "g"), ("system zone", "v"),
+    ("log disk setting", "g"), ("log fortianalyzer setting", "g"),
+    ("log syslogd setting", "g"), ("log eventfilter", "v"), ("log fortiguard setting", "g"),
+    ("firewall address", "v"), ("firewall addrgrp", "v"), ("firewall service custom", "v"),
+    ("firewall service group", "v"), ("firewall schedule recurring", "v"),
+    ("firewall schedule onetime", "v"),
+    ("ips sensor", "v"),
+    ("user radius", "v"), ("user tacacs+", "v"), ("user ldap", "v"), ("user fsso", "v"),
+    ("user group", "v"),
+    ("vpn ssl web portal", "v"), ("vpn ssl settings", "v"),
+    ("antivirus profile", "v"), ("webfilter profile", "v"), ("dnsfilter profile", "v"),
+    ("application list", "v"), ("dlp profile", "v"), ("emailfilter profile", "v"),
+    ("firewall ssl-ssh-profile", "v"),
+    ("vpn ipsec phase1-interface", "v"), ("vpn ipsec phase2-interface", "v"),
+    ("vpn ipsec phase1", "v"), ("vpn ipsec phase2", "v"),
+    ("firewall vip", "v"), ("firewall vipgrp", "v"), ("firewall ippool", "v"),
+    ("firewall policy", "v"), ("firewall local-in-policy", "v"), ("firewall DoS-policy", "v"),
+    ("firewall central-snat-map", "v"),
+    ("router static", "v"), ("router policy", "v"), ("router ospf", "v"), ("router bgp", "v"),
+)
+SECTION_COMMANDS = {"fortinet": [f"show {s}" for s, _ in _FORTI_SECTIONS]}
+# Same commands split by scope: an upload of a multi-VDOM console is rejoined
+# global first, then the VDOM, into the flat shape a single-VDOM one has.
+VDOM_SECTION_COMMANDS = {"fortinet": {
+    "global": [f"show {s}" for s, scope in _FORTI_SECTIONS if scope == "g"],
+    "vdom": [f"show {s}" for s, scope in _FORTI_SECTIONS if scope == "v"],
+}}
 
 # Per-vendor notes, as i18n keys the UI translates.
 NOTES = {
@@ -105,6 +116,9 @@ _ECHO = re.compile(r"^(?P<prompt>\S[^\r\n]*?[#>$])\s*(?P<cmd>\S.*?)\s*$")
 _STEM = re.compile(r"[^\s(#>$]*")
 _BARE = re.compile(r"^\S[^\r\n]*[#>$]\s*$")
 _FORTI_HEAD = re.compile(r"^config system (global|interface)\s*$", re.MULTILINE)
+# Echo of `config vdom` then of `edit <name>`: the VDOM the sections came from.
+_FORTI_VDOM = re.compile(r"^\S[^\n]*?[#>$][ \t]*config vdom\s+\S[^\n]*?[#>$][ \t]*edit[ \t]+"
+                         r'"?([A-Za-z0-9_-]{1,31})"?[ \t\r]*$', re.MULTILINE)
 _FORTI_HEADER = re.compile(r"^#config-version=([A-Za-z0-9]+)-(\d+\.\d+\.\d+)", re.MULTILINE)
 _HOSTNAMES = (
     re.compile(r"^set deviceconfig system hostname (\S+)", re.MULTILINE),  # PAN-OS
@@ -187,6 +201,7 @@ def guide() -> list:
         out.append({"vendor": vendor, "paging": PAGING.get(vendor, ""),
                     "commands": [backup, *info, *(c for c, _ in extras)],
                     "sections": SECTION_COMMANDS.get(vendor, []),
+                    "sections_vdom": VDOM_SECTION_COMMANDS.get(vendor, {}),
                     "notes": NOTES.get(vendor, [])})
     return out
 
@@ -249,9 +264,18 @@ def to_backup(vendor: str, text: str) -> dict:
         text, [backup_cmd, *info, *(c for c, _ in extras), *per_section])
     config = sections.get(_norm(backup_cmd))
     if config is None:
-        # One command per section (GUI console): rejoined in guide order.
-        parts = [sections[_norm(c)] for c in per_section if _norm(c) in sections]
+        # One command per section (GUI console): rejoined in guide order;
+        # from a multi-VDOM console global first, then the VDOM, flat.
+        vdom = _FORTI_VDOM.search(text) if vendor in VDOM_SECTION_COMMANDS else None
+        order = per_section
+        if vdom:
+            split = VDOM_SECTION_COMMANDS[vendor]
+            order = split["global"] + split["vdom"]
+        parts = [sections[_norm(c)] for c in order if _norm(c) in sections]
         config = "\n".join(parts) if parts else None
+        if config is not None and vdom:
+            # A FortiOS comment: every parser skips '#' lines.
+            config = f"#vdom={vdom.group(1)}\n{config}"
     if config is None:
         # No echo of the backup command: a plain config file, stored as is.
         stored, structured = text, False

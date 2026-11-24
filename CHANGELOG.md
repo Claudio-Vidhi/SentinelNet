@@ -10,6 +10,15 @@ happened — `git log --grep="chore(release)"` is the record for those.
 
 ## [Unreleased]
 
+### Added
+
+- **Manual config import, FortiGate multi-VDOM.** Below the per-section
+  commands, a multi-VDOM block takes a VDOM name (default `root`) and prints
+  the same commands split into `config global` and `config vdom` / `edit
+  <name>`, with its own "Copia tutto". On upload the global and VDOM outputs
+  are rejoined into one flat backup, global first, with a `#vdom=<name>`
+  comment on top. One upload per VDOM.
+
 ## [0.70.7] - 2026-11-24
 
 ### Added

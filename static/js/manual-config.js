@@ -8,7 +8,8 @@
     const $ = (id) => document.getElementById(id);
     // fixed: a manual device being re-uploaded from its row (fields locked).
     // gen: bumped on every (re)open and review entry so a slower async run can tell it is stale.
-    const mc = { guide: null, files: [], rows: [], results: null, fixed: null, gen: 0 };
+    // vdom: the last valid name typed in the multi-VDOM block.
+    const mc = { guide: null, files: [], rows: [], results: null, fixed: null, gen: 0, vdom: 'root' };
 
     // Analysis id -> [label key, tab that shows it].
     const ANALYSIS_TABS = {
@@ -48,7 +49,30 @@
         // Per-section commands replace the backup command (commands[0]); the info ones stay.
         $('mcSectionsBlock').hidden = !v.sections.length;
         $('mcSections').textContent = [...v.sections, ...v.commands.slice(1)].join('\n');
+        $('mcVdomBlock').hidden = !v.sections_vdom.global;
+        renderVdom();
         $('mcNotes').innerHTML = v.notes.map((k) => `<li>${escapeHtml(tr(k))}</li>`).join('');
+    }
+
+    // A VDOM name FortiOS accepts; anything else keeps the last valid one.
+    function vdomName(value, last) {
+        const v = String(value || '').trim();
+        return /^[A-Za-z0-9_-]{1,31}$/.test(v) ? v : last;
+    }
+
+    // Multi-VDOM: paging (system console is global) and global sections under
+    // config global, the rest in the VDOM; the info commands run in global.
+    function vdomCommands(split, paging, info, name) {
+        return ['config global', ...(paging ? [paging] : []), ...split.global, ...info, 'end',
+            'config vdom', `edit ${name}`, ...split.vdom, 'end'].join('\n');
+    }
+
+    function renderVdom() {
+        const v = (mc.guide?.vendors || []).find((x) => x.vendor === vendorValue());
+        if (!v?.sections_vdom.global) return;
+        const input = $('mcVdomName');
+        mc.vdom = vdomName(input instanceof HTMLInputElement ? input.value : '', mc.vdom);
+        $('mcVdomCommands').textContent = vdomCommands(v.sections_vdom, v.paging, v.commands.slice(1), mc.vdom);
     }
 
     function addFiles(list) {
@@ -288,6 +312,9 @@
         zone.classList.remove('is-over');
         addFiles(e.dataTransfer?.files);
     });
+    $('mcVdomName')?.addEventListener('input', renderVdom);
+    // Enter in the VDOM name (the guide step's only text field) must not submit the page.
+    $('mcForm')?.addEventListener('submit', (e) => e.preventDefault());
     for (const id of ['mcFileInput', 'mcFolderInput']) {
         $(id)?.addEventListener('change', (e) => {
             const t = e.target;
@@ -303,9 +330,11 @@
         // core.js switches the tab on the same click; the sheet must not stay over it.
         if (t.dataset.switchTab) { wizard.close(); return; }
         const action = t.dataset.action;
-        if (action === 'mc-copy' || action === 'mc-copy-sections') {
+        if (action === 'mc-copy' || action === 'mc-copy-sections' || action === 'mc-copy-vdom') {
             const list = action === 'mc-copy' ? 'mcCommands' : 'mcSections';
-            const text = [$('mcPaging').textContent, $(list).textContent].filter(Boolean).join('\n');
+            // The multi-VDOM block already holds the paging, inside config global.
+            const text = action === 'mc-copy-vdom' ? $('mcVdomCommands').textContent
+                : [$('mcPaging').textContent, $(list).textContent].filter(Boolean).join('\n');
             navigator.clipboard?.writeText(text)
                 .then(() => showToast(tr('mcCopied'), 'success'))
                 .catch(() => showToast(tr('alertError'), 'error'));
